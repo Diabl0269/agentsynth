@@ -284,7 +284,7 @@ the model accepts an alternative shape function. This is deliberate: the curve t
 exactly what the envelope's DSP plays, never a separately re-derived approximation.
 
 **Keyboard.** The editor is a Tab stop with the accent focus ring; the keys act only inside it and
-are not rebindable actions.
+are not rebindable actions. They are the shared point-editor map ([`control/point-editing.md`](../control/point-editing.md)).
 
 | Key | Effect |
 |---|---|
@@ -292,7 +292,9 @@ are not rebindable actions.
 | Shift+Left / Shift+Right | Extend or shrink the selection toward that side, like text selection: the cursor moves one point and everything between it and the anchor is selected. A fully pinned point is never selected |
 | Alt+Left / Alt+Right | Move every selected point in time |
 | Alt+Up / Alt+Down | Move every selected point in level |
-| Shift added to those | A fifth of the step, and no snapping |
+| Up / Down | The same level move without Alt (nothing selected: the key falls through to the app) |
+| Shift added to the Alt moves | A fifth of the step, and no snapping |
+| Ctrl+T | Free mode only: insert a point halfway (time and level) between the cursor point and the next; it becomes the selection. One undo step. A press with no room (the last point, a full curve) does nothing. The physical Control key on the Mac; Cmd+T stays the app's Add Track |
 | Delete / Backspace | Remove every selected point (Free mode only; a Fixed curve leaves the key to the app). The cursor goes to the next remaining movable point |
 | Cmd+A | Select every movable point |
 | Cmd+C | Copy the selected points (spacing from the first, level, the bend between neighbours) to one process-wide curve clipboard; with nothing selected the key falls through to the app |

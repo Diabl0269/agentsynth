@@ -8,6 +8,7 @@
 #include "CurveEditorComponent.h"
 
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/PointEditorKeys.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
 
 namespace synth::ui {
@@ -100,6 +101,8 @@ bool CurveEditorComponent::handleChord(const juce::KeyPress& key) {
     const auto mods = key.getModifiers();
     if (mods.isShiftDown() || mods.isAltDown())
         return false;
+    if (isInsertPointKey(key))
+        return insertAfterCursor();
     switch (key.getKeyCode()) {
     case 'A':
         return selectAllMovable();
@@ -138,6 +141,14 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
         const double dx = left ? -step.x * scale : (right ? step.x * scale : 0.0);
         const double dy = down ? -step.y * scale : (up ? step.y * scale : 0.0);
         nudgeSelectedNode(dx, (float)dy, fine);
+        return true;
+    }
+    if ((up || down) && !mods.isShiftDown()) {
+        // Plain Up/Down move the value like Alt+Up/Down; with nothing selected the key is left to the app.
+        if (selectedIndex_ < 0)
+            return false;
+        const double dy = down ? -keyboardStep().y : keyboardStep().y;
+        nudgeSelectedNode(0.0, (float)dy, false);
         return true;
     }
     if ((code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) &&

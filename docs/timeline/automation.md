@@ -653,8 +653,12 @@ is both a removal and an addition, so it lands at once, as does everything under
 editor follows the doc through `laneDocChanged()` (from `TimelineAutomationLanes::refreshPooled`) and lazily from
 paint and the input entry points by `TimelineDoc::getRevision()`.
 
-Each point is reachable from the keyboard: Tab into the editor, Alt+Left/Right walk the points, Shift+Left/Right add
-the next point past the selection on that side to it (the cursor moves there), Delete removes the one the cursor is on,
+Each point is reachable from the keyboard, following the shared map in [`control/point-editing.md`](../control/point-editing.md): Tab into the editor, Left/Right walk the points
+(nothing moves in time), Shift+Left/Right add the next point past the selection on that side (the cursor moves there),
+Alt+Left/Right move the selection by a grid step, Up/Down and Alt+Up/Down move its value by 1% of the range
+(Shift+Up/Down: 10%), Alt+Shift+arrows move a lone point a quarter of that (two or more stretch instead, below), Ctrl+T
+inserts a point halfway to the next one at the linear midpoint of the values (one `editBreakpoints`, one undo step, the
+new point selected; nothing after the last point, so it does nothing there), Delete removes the one the cursor is on,
 and Cmd+D copies the selected points one grid step past the last one as ONE undo step (the copies become the
 selection; the clipboard is untouched, and with no point selected Cmd+D duplicates the lane). The focus ring (`paintFocusRing`) sits on the cursor point, or around the lane when there is
 none. The editor's screen-reader description is rewritten on every selection change (point count, how many are

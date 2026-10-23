@@ -219,10 +219,8 @@ TEST(AutomationLanesPointValueFieldTest, ReturnWithTheKeyboardCursorOnAPointOpen
         << "no cursor point: Return belongs to someone else";
     EXPECT_FALSE(f.field().isOpen());
 
-    ASSERT_TRUE(f.editor->keyPressed(
-        juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(juce::ModifierKeys::altModifier), 0)));
-    ASSERT_TRUE(f.editor->keyPressed(
-        juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(juce::ModifierKeys::altModifier), 0)));
+    ASSERT_TRUE(f.editor->keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
+    ASSERT_TRUE(f.editor->keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
     EXPECT_TRUE(f.editor->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     ASSERT_TRUE(f.field().isOpen());
     EXPECT_EQ(f.field().getText(), "6.0 dB") << "the second point holds the cursor";

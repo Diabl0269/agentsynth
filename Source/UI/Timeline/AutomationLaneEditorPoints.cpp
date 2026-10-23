@@ -3,6 +3,7 @@
 
 #include "AutomationLaneEditor.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/PointEditorKeys.h"
 #include "UI/PianoRoll/NoteAccessibilityText.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
 #include <algorithm>
@@ -14,10 +15,7 @@ namespace {
 constexpr double kFineValueStep = 0.01;   // of the lane's range, per Up/Down press
 constexpr double kCoarseValueStep = 0.10; // with Shift
 constexpr double kFreeBeatStep = 0.25;    // a sixteenth, when snap is off
-
-bool isPlain(const juce::KeyPress& key, int code, int mods = 0) {
-    return key == juce::KeyPress(code, juce::ModifierKeys(mods), 0);
-}
+constexpr double kFineBeatScale = 0.25;   // Alt+Shift: a quarter of the plain step, in time and in value
 
 std::vector<double> beatsOf(const std::vector<LaneBreakpoint>& points) {
     std::vector<double> beats;
@@ -130,7 +128,8 @@ juce::String AutomationLaneEditor::describePoints() const {
     } else {
         text += juce::String(selected) + " selected.";
     }
-    text += " Arrow keys nudge the selection, Alt with Left or Right picks another point, Delete removes it.";
+    text += " Left and Right pick another point, Shift with them selects several, Up and Down change the value, Alt "
+            "with an arrow moves the selection, Control T inserts a point after the current one, Delete removes it.";
     if (selected >= 2)
         text += " Alt and Shift with Left or Right stretch or squeeze the selection in time, with Up or Down they "
                 "scale its values.";
@@ -228,29 +227,67 @@ bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
     if (stretchKey(key))
         return true;
 
+    if (isInsertPointKey(key))
+        return insertAfterCursor();
+
     const auto* points = lanePoints();
     if (points == nullptr || points->empty())
         return false;
     using K = juce::KeyPress;
-    if (isPlain(key, K::leftKey, juce::ModifierKeys::altModifier))
-        return stepCursor(-1);
-    if (isPlain(key, K::rightKey, juce::ModifierKeys::altModifier))
-        return stepCursor(1);
-    if (isPlain(key, K::leftKey, juce::ModifierKeys::shiftModifier))
-        return extendSelection(-1);
-    if (isPlain(key, K::rightKey, juce::ModifierKeys::shiftModifier))
-        return extendSelection(1);
-    if (isPlain(key, K::leftKey) || isPlain(key, K::rightKey)) {
-        const int direction = key.getKeyCode() == K::rightKey ? 1 : -1;
-        if (selection_.isEmpty()) // Tabbing in: the first press picks the nearest end
-            return stepCursor(direction);
-        return nudgePoints(direction, 0, false);
+    const bool left = key.getKeyCode() == K::leftKey;
+    const bool right = key.getKeyCode() == K::rightKey;
+    const bool up = key.getKeyCode() == K::upKey;
+    const bool down = key.getKeyCode() == K::downKey;
+    if (!left && !right && !up && !down)
+        return false;
+    const int side = right || up ? 1 : -1;
+    const auto mods =
+        key.getModifiers().getRawFlags() & (juce::ModifierKeys::shiftModifier | juce::ModifierKeys::altModifier |
+                                            juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::commandModifier);
+    constexpr int shift = juce::ModifierKeys::shiftModifier;
+    constexpr int alt = juce::ModifierKeys::altModifier;
+
+    if (mods == 0) {
+        // Left/Right pick the neighbouring point (the first press with nothing selected picks the nearest end);
+        // Up/Down move the selection's value.
+        if (left || right)
+            return stepCursor(side);
+        return nudgePoints(0, side, NudgeSize::Normal);
     }
-    if (isPlain(key, K::upKey) || isPlain(key, K::downKey))
-        return nudgePoints(0, key.getKeyCode() == K::upKey ? 1 : -1, false);
-    if (isPlain(key, K::upKey, juce::ModifierKeys::shiftModifier) ||
-        isPlain(key, K::downKey, juce::ModifierKeys::shiftModifier))
-        return nudgePoints(0, key.getKeyCode() == K::upKey ? 1 : -1, true);
+    if (mods == shift) {
+        if (left || right)
+            return extendSelection(side);
+        return nudgePoints(0, side, NudgeSize::Coarse);
+    }
+    if (mods == alt) // Alt moves the selection: Left/Right in time, Up/Down in value
+        return nudgePoints(left || right ? side : 0, up || down ? side : 0, NudgeSize::Normal);
+    if (mods == (alt | shift)) // with one point selected (two or more stretch, see stretchKey): the fine move
+        return nudgePoints(left || right ? side : 0, up || down ? side : 0, NudgeSize::Fine);
+    return false;
+}
+
+// Inserts a point halfway between the cursor point and the next one, at the level halfway between them, as one edit,
+// and selects it. Consumed only when a point went in: nothing to insert after the last point.
+bool AutomationLaneEditor::insertAfterCursor() {
+    const auto* points = lanePoints();
+    const auto cursor = selection_.getCursor();
+    if (points == nullptr || !cursor.has_value())
+        return false;
+    for (std::size_t i = 0; i + 1 < points->size(); ++i) {
+        const auto& from = (*points)[i];
+        const auto& to = (*points)[i + 1];
+        if (from.beat != *cursor)
+            continue;
+        LaneBreakpoint added = from;
+        added.beat = from.beat + (to.beat - from.beat) * 0.5;
+        added.value = from.value + (to.value - from.value) * 0.5;
+        added.tension = 0.0f;
+        added.curve = static_cast<int>(synth::BreakpointCurve::Linear);
+        if (!commitPointEdit(editTarget(), {}, {added}))
+            return false;
+        selectOnly(added);
+        return true;
+    }
     return false;
 }
 
@@ -263,7 +300,7 @@ double AutomationLaneEditor::gridStepBeats() const {
 // One grid step (a sixteenth with snap off) for the whole block, stopping at beat 0 as a unit; Up/Down move every value
 // by a fraction of the lane's range, each clamped on its own. Consumed whenever something is selected, even when a
 // limit left nothing to do.
-bool AutomationLaneEditor::nudgePoints(double beatDirection, double valueDirection, bool coarse) {
+bool AutomationLaneEditor::nudgePoints(double beatDirection, double valueDirection, NudgeSize size) {
     const auto* points = lanePoints();
     if (points == nullptr || selection_.isEmpty())
         return false;
@@ -272,9 +309,12 @@ bool AutomationLaneEditor::nudgePoints(double beatDirection, double valueDirecti
         return false;
 
     const auto& range = doc_->getLane(laneId_)->range;
-    const double beatDelta = clampBeatDelta(picked, beatDirection * gridStepBeats());
-    const double valueDelta =
-        valueDirection * (coarse ? kCoarseValueStep : kFineValueStep) * (double)(range.maxValue - range.minValue);
+    const double beatDelta =
+        clampBeatDelta(picked, beatDirection * gridStepBeats() * (size == NudgeSize::Fine ? kFineBeatScale : 1.0));
+    const double valueStep = size == NudgeSize::Coarse ? kCoarseValueStep
+                             : size == NudgeSize::Fine ? kFineValueStep * kFineBeatScale
+                                                       : kFineValueStep;
+    const double valueDelta = valueDirection * valueStep * (double)(range.maxValue - range.minValue);
     const auto moved = movePoints(picked, beatDelta, valueDelta, range.minValue, range.maxValue);
 
     bool same = true;

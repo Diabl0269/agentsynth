@@ -15,6 +15,7 @@ namespace {
 constexpr int kShift = juce::ModifierKeys::shiftModifier;
 constexpr int kAlt = juce::ModifierKeys::altModifier;
 constexpr int kCmd = juce::ModifierKeys::commandModifier;
+constexpr int kCtrl = juce::ModifierKeys::ctrlModifier;
 
 juce::KeyPress key(int code, int mods = 0) { return juce::KeyPress(code, juce::ModifierKeys(mods), 0); }
 
@@ -260,4 +261,77 @@ TEST(CurveEditorMultiSelect, TheSpokenValueSaysHowManyPointsAreSelected) {
     Rig rig(freeModel(3));
     rig.selectFirstTwoInterior();
     EXPECT_EQ(rig.editor.getAccessibilityValueText(), "2 points selected, Point 3 of 5, time 0.5, level 0.50");
+}
+
+// Regression test for FRO957: plain Up/Down did nothing in the curve editor while the lanes moved the value.
+TEST(CurveEditorMultiSelect, PlainUpAndDownMoveTheSelectionsLevelLikeAltUpAndDownAsOneGesture) {
+    Rig rig(freeModel(3));
+    EXPECT_FALSE(rig.press(juce::KeyPress::upKey)) << "nothing selected: the key stays with the app";
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    ASSERT_EQ(rig.selected(), (std::vector<int>{1}));
+    rig.events.clear();
+
+    EXPECT_TRUE(rig.press(juce::KeyPress::upKey));
+    EXPECT_NEAR(rig.node(1).y, 0.55f, 1e-5f);
+    EXPECT_NEAR(rig.node(1).x, 0.25, 1e-12) << "nothing moves in time";
+    EXPECT_EQ(rig.events, (std::vector<juce::String>{"start", "node", "end"}));
+    EXPECT_TRUE(rig.press(juce::KeyPress::downKey));
+    EXPECT_NEAR(rig.node(1).y, 0.5f, 1e-5f);
+
+    Rig alt(freeModel(3));
+    alt.press(juce::KeyPress::rightKey);
+    alt.press(juce::KeyPress::rightKey);
+    alt.press(juce::KeyPress::upKey, kAlt);
+    EXPECT_NEAR(alt.node(1).y, 0.55f, 1e-5f) << "the same step as Alt+Up";
+}
+
+// Regression test for FRO957: a point could only be added with the mouse.
+TEST(CurveEditorMultiSelect, CtrlTInsertsAPointHalfwayAfterTheCursorSelectsItAndIsOneUndoStep) {
+    Rig rig(freeModel(3)); // 0, 0.25, 0.5, 0.75, 1
+    EXPECT_FALSE(rig.press('T', kCtrl)) << "no cursor point: nothing to insert after";
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey); // the cursor on x 0.25
+    rig.events.clear();
+
+    EXPECT_TRUE(rig.press('T', kCtrl));
+    ASSERT_EQ(rig.editor.getModel().getNumNodes(), 6);
+    EXPECT_NEAR(rig.node(2).x, 0.375, 1e-12);
+    EXPECT_NEAR(rig.node(2).y, 0.5f, 1e-5f);
+    EXPECT_EQ(rig.selected(), (std::vector<int>{2})) << "the new point is the selection and the cursor";
+    EXPECT_EQ(rig.editor.getSelectedIndex(), 2);
+    EXPECT_EQ(rig.events, (std::vector<juce::String>{"start", "points", "end"})) << "one undo step";
+}
+
+TEST(CurveEditorMultiSelect, CtrlTHalvesTheLevelBetweenTwoPointsAndRefusesWhereThereIsNoRoom) {
+    CurveModel model(CurveMode::Free);
+    model.setNodes({CurveNode{0.0, 0.2f, false, true}, CurveNode{1.0, 0.8f, false, true}});
+    Rig rig(std::move(model));
+    rig.press(juce::KeyPress::rightKey); // the first point
+    ASSERT_TRUE(rig.press('T', kCtrl));
+    EXPECT_NEAR(rig.node(1).x, 0.5, 1e-12);
+    EXPECT_NEAR(rig.node(1).y, 0.5f, 1e-5f) << "the linear midpoint of 0.2 and 0.8";
+
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey); // the last point: the range ends there
+    ASSERT_EQ(rig.editor.getSelectedIndex(), 2);
+    rig.events.clear();
+    EXPECT_FALSE(rig.press('T', kCtrl));
+    EXPECT_TRUE(rig.events.empty()) << "a refused press opens no undo step";
+}
+
+TEST(CurveEditorMultiSelect, CtrlTDoesNothingOnAFixedCurveAndCommandTStaysWithTheApp) {
+    Rig fixed(buildEnvelopeModel());
+    fixed.press(juce::KeyPress::rightKey);
+    fixed.events.clear();
+    EXPECT_FALSE(fixed.press('T', kCtrl));
+    EXPECT_EQ(fixed.editor.getModel().getNumNodes(), 5);
+    EXPECT_TRUE(fixed.events.empty());
+
+#if JUCE_MAC
+    Rig rig(freeModel(3));
+    rig.press(juce::KeyPress::rightKey);
+    EXPECT_FALSE(rig.press('T', kCmd)) << "Cmd+T is the app's Add Track";
+    EXPECT_EQ(rig.editor.getModel().getNumNodes(), 5);
+#endif
 }

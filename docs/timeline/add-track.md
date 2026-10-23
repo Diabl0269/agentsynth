@@ -8,7 +8,7 @@ The header rows it creates are [tracks](tracks.md); the channel chains it builds
 
 `"+ Track"` is the first keyboard stop of the header column: Down from the bottom-panel tab strip (Timeline selected) or from the Timeline region root lands on it
 and Down again on the first track; it is also the stop below the last track (the arrow-key table is in
-[shortcuts](../control/shortcuts.md#timeline)). Its tooltip names the live **Add Track...** shortcut (Ctrl+T on
+[shortcuts](../control/shortcuts.md#timeline)). Its tooltip names the live **Add Track...** shortcut (Cmd+T on
 macOS, Ctrl+Alt+T elsewhere, rebindable). Pressing it, or the shortcut, opens a **searchable picker** in a call-out
 under the button: the same shared list as a module card's "Replace with..." (`synth::ui::ModMatrixPicker`). The search
 field has focus, so typing filters at once (all words, any order); Up/Down move, Return picks the first match until

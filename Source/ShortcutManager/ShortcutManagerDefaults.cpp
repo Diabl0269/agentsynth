@@ -131,11 +131,11 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // entirely), and no component keyPressed() override hardcodes either chord.
     bindings["focusTimeline"] =
         juce::KeyPress('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
-    // Ctrl+T opens the Add Track menu. On the Mac a REAL ctrlModifier (a distinct physical key from Cmd, the same
-    // trick as toggleAiPanel). Off the Mac Cmd IS Ctrl, so the key stays on Ctrl+Alt+T, where installs that
-    // already saved it hold it (Cmd+T itself is unbound by default).
+    // Cmd+T opens the Add Track menu on the Mac. The physical Control+T is the point editors' "insert a point" key
+    // (curve editor and automation lanes), so the app-level chord is the Cmd one. Off the Mac Cmd IS Ctrl, so the
+    // key stays on Ctrl+Alt+T, where installs that already saved it hold it.
     bindings["openAddTrackMenu"] =
-        isMac ? juce::KeyPress('t', juce::ModifierKeys::ctrlModifier, 0)
+        isMac ? juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0)
               : juce::KeyPress('t', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier, 0);
     // Cmd+Shift+F opens the Send feedback window. Free: Cmd+F is Focus Library Search and bare F is Follow Playhead;
     // Cmd+Ctrl+F was the first ask but is macOS's Enter Full Screen.

@@ -108,6 +108,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/control/midi-remote-mcu-hui.md`](control/midi-remote-mcu-hui.md) — Controllers v2 design (not built): Mackie Control / HUI protocol surfaces, sourced protocol tables, a source-routing sink, the motor-fader/LCD renderer
 - [`docs/control/midi-remote-osc.md`](control/midi-remote-osc.md) — Controllers v2 design (not built): OSC as a second source, with address keys, learn by address, feedback to host:port and the network trust boundary
 - [`docs/control/midi-remote-device-handshake.md`](control/midi-remote-device-handshake.md) — FRO339: a profile's optional open/close handshake bytes (e.g. the Launch Control XL 3's DAW-mode SysEx), `ControllerHandshakeCoordinator`, and its lifecycle wiring
+- [`docs/control/point-editing.md`](control/point-editing.md) — the one key and mouse map every point editor follows (curve editor, automation lanes; the morph map is the exception), Ctrl+T insert, and a checklist for a new one
 - [`docs/control/plugin-card-layout.md`](control/plugin-card-layout.md) — hosted plugin cards showing a chosen set of parameters as knobs: `CardLayout`, instance/type/automatic precedence, `HostedParameterAttachment`, the knob picker with presets; and what carries over to editing any module's layout
 
 ## AI

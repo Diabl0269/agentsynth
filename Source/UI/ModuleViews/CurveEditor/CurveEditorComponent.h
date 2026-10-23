@@ -24,14 +24,15 @@ namespace synth::ui {
  *  without synthesising `juce::MouseEvent`s (though the real mouse path is exercised too — see
  *  Tests/UI/ModuleViews/CurveEditor/CurveEditorInteractionTests.cpp).
  *
- *  Keyboard (a Tab stop with the accent focus ring): Left/Right select the previous/next movable point
- *  (clamped at the ends), Shift+Left/Right extend or shrink the selection toward that side, Alt+Left/Right
- *  move every selected point in time and Alt+Up/Down in level (one grid cell while snap-to-grid is on, else a
- *  small step; Shift: a fifth of the step, unsnapped), Delete/Backspace remove them in Free mode. Cmd+A selects
- *  every movable point, Cmd+C copies the selection, and in Free mode Cmd+V pastes it after the cursor point and
- *  Cmd+D duplicates it. Every press is one gesture bracket, so one undo step, and runs the same callbacks a
- *  drag does. A screen reader reads the cursor point, e.g. "Point 3 of 5, time 0.25, level 0.80", led by
- *  "3 points selected" when several are.
+ *  Keyboard (the shared point-editor key map, docs/control/point-editing.md; a Tab stop with the accent focus ring):
+ * Left/Right select the previous/next movable point (clamped at the ends), Shift+Left/Right extend or shrink the
+ * selection toward that side, Alt+Left/Right move every selected point in time and Alt+Up/Down in level (one grid cell
+ * while snap-to-grid is on, else a small step; Shift: a fifth of the step, unsnapped), plain Up/Down move the level
+ * like Alt+Up/Down, Ctrl+T inserts a point halfway between the cursor point and the next, Delete/Backspace remove them
+ * in Free mode. Cmd+A selects every movable point, Cmd+C copies the selection, and in Free mode Cmd+V pastes it after
+ * the cursor point and Cmd+D duplicates it. Every press is one gesture bracket, so one undo step, and runs the same
+ * callbacks a drag does. A screen reader reads the cursor point, e.g. "Point 3 of 5, time 0.25, level 0.80", led by "3
+ * points selected" when several are.
  *
  *  Mouse selection: Shift- or Cmd-click toggles a point; dragging a selected point moves the whole selection.
  *
@@ -189,6 +190,11 @@ public:
     /** Free mode only: pastes a copy of the selection just after its last point without touching the
      *  clipboard. False when nothing is selected. */
     bool duplicateSelection();
+
+    /** Free mode only: inserts a point halfway (in time and level) between the cursor point and the next one, or
+     *  halfway to the end of the range when the cursor is the last point; the new point becomes the selection.
+     *  One gesture. False when there is no cursor, the curve is full, or there is no room between the points. */
+    bool insertAfterCursor();
 
     /** The cursor point: where Left/Right continue from and what a screen reader reads. -1 when none. */
     int getSelectedIndex() const noexcept { return selectedIndex_; }
