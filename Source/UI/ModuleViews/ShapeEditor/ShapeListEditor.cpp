@@ -5,6 +5,7 @@
 #include "ShapeListEditorInternal.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
+#include "UI/Settings/AccountButtonStyle.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 
@@ -69,11 +70,12 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     styleButton(drawButton_, "Draw: replace the selected shape's curve with a line, sine, triangle, saw or square");
     styleButton(doneButton_, "Done: close this window (Esc)");
     int order = 4;
-    for (auto* b : {&addButton_, &duplicateButton_, &deleteButton_, &renameButton_, &startFromButton_, &drawButton_,
+    for (auto* b : {&addButton_, &duplicateButton_, &renameButton_, &startFromButton_, &drawButton_, &deleteButton_,
                     &doneButton_}) {
         b->setExplicitFocusOrder(order++);
         addAndMakeVisible(*b);
     }
+    applyDestructiveLook(deleteButton_);
     addButton_.onClick = [this] { controller_.addShapeInFreeSpot(); };
     duplicateButton_.onClick = [this] { controller_.duplicateShape(selected_); };
     deleteButton_.onClick = [this] { controller_.deleteShape(selected_); };
@@ -255,6 +257,8 @@ bool ShapeListEditor::keyPressed(const juce::KeyPress& key) {
     return true;
 }
 
+void ShapeListEditor::lookAndFeelChanged() { applyDestructiveLook(deleteButton_); }
+
 void ShapeListEditor::paint(juce::Graphics& g) { g.fillAll(synth::theme::themeOf(*this).colors.surface); }
 
 void ShapeListEditor::resized() {
@@ -278,10 +282,11 @@ void ShapeListEditor::resized() {
     area.removeFromBottom(kGap);
     curve_.setBounds(area);
 
-    const int widths[] = {88, 88, 72, 72, 96, 72};
-    juce::TextButton* order[] = {&addButton_,    &duplicateButton_, &deleteButton_,
-                                 &renameButton_, &startFromButton_, &drawButton_};
-    for (int i = 0; i < 6; ++i) {
+    // Delete is the destructive action: alone at the right end of the row, apart from the others.
+    deleteButton_.setBounds(buttons.removeFromRight(64));
+    const int widths[] = {80, 88, 64, 88, 64};
+    juce::TextButton* order[] = {&addButton_, &duplicateButton_, &renameButton_, &startFromButton_, &drawButton_};
+    for (int i = 0; i < 5; ++i) {
         order[i]->setBounds(buttons.removeFromLeft(widths[i]));
         buttons.removeFromLeft(kGap);
     }
