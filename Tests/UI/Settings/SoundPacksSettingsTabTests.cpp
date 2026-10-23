@@ -18,6 +18,27 @@ struct TabRig : Rig {
     synth::ui::SoundPackRow& row() { return tab.getRowForTest(0); }
 };
 
+synth::soundpacks::SoundPackInstaller::Row packWithInstruments(int count) {
+    synth::soundpacks::SoundPackInstaller::Row row;
+    row.id = "big";
+    row.name = "Big pack";
+    row.downloadBytes = 40 * 1024 * 1024;
+    for (int i = 1; i <= count; ++i) {
+        synth::soundpacks::IndexInstrument instrument;
+        instrument.id = "i" + juce::String(i);
+        instrument.name = "Instrument" + juce::String(i);
+        row.instruments.push_back(instrument);
+    }
+    return row;
+}
+
+juce::String fullListWithSize(int count, const juce::String& size) {
+    juce::StringArray names;
+    for (int i = 1; i <= count; ++i)
+        names.add("Instrument" + juce::String(i));
+    return names.joinIntoString(", ") + " - " + size;
+}
+
 } // namespace
 
 TEST(SoundPacksSettingsTab, ShowsOneRowPerPackWithItsStateOnceTheListLoads) {
@@ -211,4 +232,47 @@ TEST_F(SoundPacksSettingsWindowTest, TheTabIsOnlyThereWhenTheWindowIsGivenTheIns
                         nullptr, true, {}, {}, &installer);
     EXPECT_EQ(with.getTabName(with.getNumTabs() - 1), "Sound packs");
     EXPECT_EQ(with.getNumTabs(), without.getNumTabs() + 1);
+}
+
+// Regression test for FRO1034: the instrument line was cut to six names and "and N more", so the rest were unreadable.
+TEST(SoundPackRowDetail, ANarrowRowKeepsEveryInstrumentAndOffersTheFullListAsATooltip) {
+    synth::ui::SoundPackRow row("big", {});
+    row.setSize(300, synth::ui::SoundPackRow::kHeight);
+    row.update(packWithInstruments(9));
+    const auto full = fullListWithSize(9, row.getDetailText().fromLastOccurrenceOf(" - ", false, false));
+    EXPECT_EQ(row.getDetailText(), full);
+    EXPECT_FALSE(row.getDetailText().contains("more"));
+    EXPECT_EQ(row.getDetailTooltip(), full);
+    EXPECT_TRUE(row.getDetailTooltip().contains("Instrument9"));
+    EXPECT_TRUE(row.getDetailTooltip().contains(" MB"));
+    EXPECT_TRUE(row.getTitle().startsWith("Big pack, not installed"));
+}
+
+TEST(SoundPackRowDetail, AWideRowShowsTheWholeLineWithNoTooltip) {
+    synth::ui::SoundPackRow row("big", {});
+    row.setSize(2400, synth::ui::SoundPackRow::kHeight);
+    row.update(packWithInstruments(9));
+    EXPECT_TRUE(row.getDetailText().contains("Instrument9"));
+    EXPECT_TRUE(row.getDetailTooltip().isEmpty());
+}
+
+TEST(SoundPackRowDetail, AShortListIsTheSameTextWithNoTooltipAndWideningDropsTheTooltip) {
+    synth::ui::SoundPackRow row("big", {});
+    row.setSize(500, synth::ui::SoundPackRow::kHeight);
+    row.update(packWithInstruments(2));
+    EXPECT_EQ(row.getDetailText(), fullListWithSize(2, row.getDetailText().fromLastOccurrenceOf(" - ", false, false)));
+    EXPECT_TRUE(row.getDetailTooltip().isEmpty());
+
+    row.update(packWithInstruments(9));
+    EXPECT_TRUE(row.getDetailTooltip().isNotEmpty());
+    row.setSize(2400, synth::ui::SoundPackRow::kHeight);
+    EXPECT_TRUE(row.getDetailTooltip().isEmpty()) << "a resize re-decides the tooltip";
+}
+
+TEST(SoundPackRowDetail, TheLineNeverReachesTheButtonsAtTheNarrowestWidth) {
+    synth::ui::SoundPackRow row("big", {});
+    row.setSize(300, synth::ui::SoundPackRow::kHeight);
+    row.update(packWithInstruments(9));
+    EXPECT_LE(row.getDetailBounds().getRight(), row.getUpdateButton().getX());
+    EXPECT_GT(row.getDetailBounds().getWidth(), 0);
 }
