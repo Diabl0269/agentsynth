@@ -165,17 +165,13 @@ void SoundBrowserComponent::rebuildRows() {
     } else if (placeId_ == kShapesId) {
         rebuildShapeRows();
     } else if (placeId_ == kFavouritesId || placeId_ == kRecentId) {
-        std::vector<SoundEntry> entries;
-        for (const auto& path : placeId_ == kFavouritesId ? lists_.favourites() : lists_.recent())
-            if (const auto entry = index_.find(path); entry && synth::soundbrowser::soundPassesFilter(*entry, filter))
-                entries.push_back(*entry);
-        appendSoundRows(entries);
+        appendListedRows(placeId_ == kFavouritesId ? lists_.favourites() : lists_.recent(), filter);
         if (rows_.empty())
             rows_.push_back({RowKind::Hint,
-                             filter.isActive()
-                                 ? "No sounds match the filters"
-                                 : (placeId_ == kFavouritesId ? "No favourites yet. Select a sound and press F."
-                                                              : "Nothing used yet."),
+                             filter.isActive() ? "No sounds match the filters"
+                                               : (placeId_ == kFavouritesId
+                                                      ? "No favourites yet. Select a sound or shape and press F."
+                                                      : "Nothing used yet."),
                              {},
                              {},
                              {},

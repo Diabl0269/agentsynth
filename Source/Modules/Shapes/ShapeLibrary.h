@@ -18,6 +18,10 @@ const char* kindWord(ShapeKind kind);
 /** The kind a word names; none for any other text. */
 std::optional<ShapeKind> kindFromWord(const juce::String& word);
 
+/** The id the drag payload, Favourites and Used recently use for a shape: "shape:<filter|lfo>:<factory|user>:<name>".
+ */
+juce::String shapeId(ShapeKind kind, bool factory, const juce::String& name);
+
 struct LibraryShape {
     ShapeKind kind = ShapeKind::Filter;
     juce::String name;
@@ -32,6 +36,8 @@ public:
         virtual ~Listener() = default;
         /** A shape was saved or removed. */
         virtual void shapeLibraryChanged() = 0;
+        /** A shape was stamped onto a chip or a card (by drag, Start from or Return). */
+        virtual void shapeLibraryUsed(const LibraryShape&) {}
     };
 
     static constexpr int kMaxNameLength = 24;
@@ -46,6 +52,8 @@ public:
     /** `<user settings folder>/Shapes`. */
     static juce::File defaultRoot();
 
+    /** The file a saved shape of that name lives in (it may not exist); empty when the name is unusable. */
+    juce::File fileOf(ShapeKind kind, const juce::String& name) const { return fileFor(kind, name); }
     /** Where this library keeps its files. Not created until the first save. */
     juce::File root() const;
     /** Tests only: keeps this library's files under `root` (empty restores the default folder). */
@@ -70,6 +78,13 @@ public:
     SaveResult save(ShapeKind kind, const juce::String& name, const LfoCustomWave& curve, bool replace = false);
     /** Deletes a saved shape; false when there was none. */
     bool remove(ShapeKind kind, const juce::String& name);
+
+    enum class RenameResult { Renamed, Exists, EmptyName, Missing, Failed };
+    /** Gives the saved shape `from` the name `to`. A name already taken by another shape is left alone (Exists); a
+     *  change of letter case only is a rename. */
+    RenameResult rename(ShapeKind kind, const juce::String& from, const juce::String& to);
+    /** Tells the listeners `shape` was stamped (it changes nothing on disk). */
+    void noteUsed(const LibraryShape& shape);
 
     void addListener(Listener* listener);
     void removeListener(Listener* listener);

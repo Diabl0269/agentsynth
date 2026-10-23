@@ -58,9 +58,12 @@ void SoundDropAdapter::itemDropped(const SourceDetails& details) {
         if (shapeTarget == nullptr || !ref.has_value())
             return;
         shapeTarget->shapeDragOver(false, {});
-        if (const auto shape = synth::shapes::ShapeLibrary::shared().find(ref->kind, ref->factory, ref->name);
-            shape.has_value() && shapeTarget->acceptsShapeDrop(ref->kind))
+        auto& library = synth::shapes::ShapeLibrary::shared();
+        if (const auto shape = library.find(ref->kind, ref->factory, ref->name);
+            shape.has_value() && shapeTarget->acceptsShapeDrop(ref->kind)) {
             shapeTarget->shapeDropped(*shape);
+            library.noteUsed(*shape);
+        }
         return;
     }
     if (auto* target = fileTarget())

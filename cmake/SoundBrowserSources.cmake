@@ -33,6 +33,10 @@ set(SOUND_BROWSER_UI_SOURCES
     Source/UI/Library/LibrarySidebarViews.h
     Source/UI/Controls/RangeSlider/RangeSlider.cpp
     Source/UI/Controls/RangeSlider/RangeSlider.h
+    Source/UI/Library/SoundBrowser/ShapeCurveView.cpp
+    Source/UI/Library/SoundBrowser/ShapeCurveView.h
+    Source/UI/Library/SoundBrowser/ShapeStamp.cpp
+    Source/UI/Library/SoundBrowser/ShapeStamp.h
     Source/UI/Library/SoundBrowser/SoundBrowserAccessibility.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserComponent.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserComponent.h
@@ -45,6 +49,7 @@ set(SOUND_BROWSER_UI_SOURCES
     Source/UI/Library/SoundBrowser/SoundBrowserPacks.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserPainting.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserPreview.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserShapeActions.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserShapes.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserText.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserText.h

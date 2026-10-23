@@ -40,3 +40,23 @@ TEST(SoundListsTest, ASettingStringRoundTripsAndAnOversizedSavedListIsTrimmed) {
     lists.setRecent(many);
     EXPECT_EQ(lists.recent().size(), 50);
 }
+
+TEST(SoundListsTest, ForgetTakesAnIdOffBothListsAndReplaceKeepsItsPlace) {
+    SoundLists lists;
+    int changes = 0;
+    lists.onChanged = [&] { ++changes; };
+    lists.toggleFavourite("a");
+    lists.toggleFavourite("b");
+    lists.noteUsed("b");
+    changes = 0;
+    lists.replace("b", "c");
+    EXPECT_EQ(lists.favourites()[1], "c");
+    EXPECT_EQ(lists.recent()[0], "c");
+    lists.forget("c");
+    EXPECT_EQ(lists.favourites().size(), 1);
+    EXPECT_TRUE(lists.recent().isEmpty());
+    EXPECT_EQ(changes, 2);
+    lists.forget("zzz");
+    lists.replace("zzz", "y");
+    EXPECT_EQ(changes, 2) << "nothing held it: nothing changed";
+}

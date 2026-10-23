@@ -277,3 +277,35 @@ TEST(ShapeFactoryTest, AFactoryShapeIsFoundByNameIgnoringCase) {
     EXPECT_TRUE(found->factory);
     EXPECT_FALSE(library.find(ShapeKind::Lfo, true, "tilt").has_value());
 }
+
+TEST(ShapeLibraryTest, RenameMovesTheFileRefusesATakenNameAndAllowsACaseChange) {
+    TempLibrary t;
+    t.library.save(ShapeKind::Filter, "one", sampleCurve());
+    t.library.save(ShapeKind::Filter, "two", sampleCurve());
+    using R = ShapeLibrary::RenameResult;
+    int heard = 0;
+    struct L : ShapeLibrary::Listener {
+        int* n;
+        void shapeLibraryChanged() override { ++*n; }
+    } listener;
+    listener.n = &heard;
+    t.library.addListener(&listener);
+
+    EXPECT_EQ(t.library.rename(ShapeKind::Filter, "one", "two"), R::Exists);
+    EXPECT_EQ(t.library.rename(ShapeKind::Filter, "one", "  "), R::EmptyName);
+    EXPECT_EQ(t.library.rename(ShapeKind::Filter, "nope", "x"), R::Missing);
+    EXPECT_EQ(heard, 0);
+    EXPECT_EQ(t.library.rename(ShapeKind::Filter, "one", "three"), R::Renamed);
+    EXPECT_FALSE(t.library.exists(ShapeKind::Filter, "one"));
+    ASSERT_TRUE(t.library.find(ShapeKind::Filter, false, "three").has_value());
+    EXPECT_EQ(t.library.find(ShapeKind::Filter, false, "three")->curve, sampleCurve());
+    EXPECT_EQ(heard, 1);
+    EXPECT_EQ(t.library.rename(ShapeKind::Filter, "three", "Three"), R::Renamed);
+    EXPECT_EQ(t.library.userShapes(ShapeKind::Filter).size(), 2u);
+    t.library.removeListener(&listener);
+}
+
+TEST(ShapeLibraryTest, ShapeIdIsTheDragPayloadSpelling) {
+    EXPECT_EQ(synth::shapes::shapeId(ShapeKind::Lfo, true, "ramp up"), "shape:lfo:factory:ramp up");
+    EXPECT_EQ(synth::shapes::shapeId(ShapeKind::Filter, false, "mine"), "shape:filter:user:mine");
+}

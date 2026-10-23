@@ -182,6 +182,10 @@ void SoundBrowserComponent::showFolderMenu(int rowIndex, std::optional<juce::Rec
 }
 
 bool SoundBrowserComponent::showContextMenuForKeyboardFocus() {
+    if (selected_ >= 0 && selected_ < (int)rows_.size() && buildShapeMenu(selected_).getNumItems() > 0) {
+        showShapeMenu(selected_, localAreaToGlobal(getRowBounds(selected_)));
+        return true;
+    }
     if (selected_ < 0 || selected_ >= (int)rows_.size() || !rows_[(size_t)selected_].userFolder)
         return false;
     showFolderMenu(selected_, localAreaToGlobal(getRowBounds(selected_)));
@@ -219,6 +223,9 @@ bool SoundBrowserComponent::beginRename(int rowIndex) {
         return false;
     const auto& row = rows_[(size_t)rowIndex];
     renaming_ = folderOfPlace(row.placeId);
+    renamingShape_.reset();
+    renameLabel_.setTitle("Folder name");
+    renameLabel_.setTooltip("Type a new name for this folder. It changes only the name shown here.");
     scrollSelectionIntoView();
     const auto bounds = getRowBounds(rowIndex);
     renameLabel_.setBounds(bounds.getX() + kSoundRowSideMargin - 4, bounds.getY() + 3,
@@ -231,6 +238,10 @@ bool SoundBrowserComponent::beginRename(int rowIndex) {
 
 // Only the displayed name changes: the folder on disk, its files and its place in the index keep their paths.
 void SoundBrowserComponent::commitRename() {
+    if (renamingShape_.has_value()) {
+        commitShapeRename();
+        return;
+    }
     if (folderBook_ != nullptr && renaming_ != juce::File())
         folderBook_->rename(renaming_, renameLabel_.getText());
 }

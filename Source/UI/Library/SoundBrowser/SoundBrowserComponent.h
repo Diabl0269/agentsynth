@@ -148,6 +148,24 @@ public:
     void setShapeLibrary(synth::shapes::ShapeLibrary* library);
     /** Starts dragging the Shape row `index` as the payload `shape:<kind>:<origin>:<name>`; false for any other row. */
     bool beginShapeDrag(int index);
+    enum class ShapeAction { Rename, ShowInFinder, Delete };
+    /** The right-click menu of a saved shape's row: Rename, Show in Finder (File Explorer on Windows), Delete. Built-in
+     *  shapes and every other row get an empty menu. */
+    juce::PopupMenu buildShapeMenu(int rowIndex) const;
+    /** Opens that menu at the pointer (`anchor` empty) or at `anchor`, a screen area. */
+    void showShapeMenu(int rowIndex, std::optional<juce::Rectangle<int>> anchor);
+    /** Does what a menu item does to the saved shape shown at `rowIndex`; false for any other row. Delete asks first.
+     */
+    bool applyShapeAction(int rowIndex, ShapeAction action);
+    /** Return on a Shape row: asks `onShapeActivated` to stamp it and notes it as used when it did; false when it did
+     *  not. */
+    bool activateSelectedShape();
+    /** Delete or Backspace on a saved shape: asks, then deletes it; false for any other row. */
+    bool deleteSelectedShape();
+    /** Stamps the shape onto the selected card for Return; true when it landed (set by the app window). */
+    std::function<bool(const synth::shapes::LibraryShape&)> onShapeActivated;
+    /** The footer's text for a shape ("Filter shape, yours"), from the selected row; empty for any other row. */
+    juce::String getShapeFooterText() const;
 
     // ---- Packs you do not have (SoundBrowserPacks.cpp) ----------------------------------------------------------
     /** Starts the shared installer's download of GetPack row `index`, or cancels it while it runs; false for any other
@@ -254,6 +272,7 @@ private:
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
     void soundIndexChanged() override;
     void shapeLibraryChanged() override;
+    void shapeLibraryUsed(const synth::shapes::LibraryShape& shape) override;
     void soundPacksChanged() override;
     void soundFoldersChanged() override;
     void globalFocusChanged(juce::Component* focused) override;
@@ -277,6 +296,16 @@ private:
     int shapeCount() const;
     void paintShapeRow(juce::Graphics& g, const Row& row, juce::Rectangle<int> area) const;
     juce::String shapeTooltip(const Row& row) const;
+    Row makeShapeRow(const synth::shapes::LibraryShape& shape, bool inMixedList) const;
+    const synth::shapes::LibraryShape* cachedShape(synth::shapes::ShapeKind kind, bool factory,
+                                                   const juce::String& name) const;
+    void appendListedRows(const juce::StringArray& ids, const synth::soundbrowser::SoundFilter& filter);
+    void deleteShape(const synth::shapes::LibraryShape& shape);
+    bool beginShapeRename(int rowIndex);
+    void commitShapeRename();
+    void selectNearest(int before);
+    juce::String favouriteKeyOf(const Row& row) const;
+    bool onShapeLibraryRowsShowing() const;
 
     // Painting (SoundBrowserPainting.cpp)
     void paintRows(juce::Graphics& g, int width) const;
@@ -375,6 +404,7 @@ private:
     std::unique_ptr<juce::FileChooser> chooser_;
     NonModalLabel renameLabel_;
     juce::File renaming_;
+    std::optional<std::pair<synth::shapes::ShapeKind, juce::String>> renamingShape_; // a saved shape's inline rename
     juce::String pendingSelection_; // a row to select once it exists (a folder just added)
     bool appWasForeground_ = true;
     int packButtonHot_ = -1; // the GetPack row whose button the pointer is over

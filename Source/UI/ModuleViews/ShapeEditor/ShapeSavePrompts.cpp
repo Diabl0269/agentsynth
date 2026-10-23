@@ -15,6 +15,10 @@ std::function<void(const juce::String&, std::function<void(bool)>)>& shapeReplac
     static std::function<void(const juce::String&, std::function<void(bool)>)> hook;
     return hook;
 }
+std::function<void(const juce::String&, std::function<void(bool)>)>& shapeDeletePromptHookForTest() {
+    static std::function<void(const juce::String&, std::function<void(bool)>)> hook;
+    return hook;
+}
 } // namespace test_hooks
 
 // The same async AlertWindow idiom as saving a snippet; the window frees itself when the callback has run.
@@ -50,6 +54,24 @@ void askShapeReplace(const juce::String& name, std::function<void(bool)> done) {
                        .withMessage("A shape called \"" + name + "\" is already saved. Replace it?")
                        .withButton("Replace")
                        .withButton("Cancel");
+    juce::AlertWindow::showAsync(options, [done = std::move(done)](int result) {
+        if (done)
+            done(result == 1);
+    });
+}
+
+void askShapeDelete(const juce::String& name, std::function<void(bool)> done) {
+    if (auto& hook = test_hooks::shapeDeletePromptHookForTest()) {
+        hook(name, std::move(done));
+        return;
+    }
+    auto options =
+        juce::MessageBoxOptions()
+            .withIconType(juce::MessageBoxIconType::WarningIcon)
+            .withTitle("Delete shape")
+            .withMessage("Delete the saved shape \"" + name + "\"? This removes its file and cannot be undone.")
+            .withButton("Delete")
+            .withButton("Cancel");
     juce::AlertWindow::showAsync(options, [done = std::move(done)](int result) {
         if (done)
             done(result == 1);

@@ -207,6 +207,8 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
         sub = row.entry->placeName;
         if (row.entry->folder.isNotEmpty())
             sub += " > " + row.entry->folder.replace("/", " > ");
+    } else if (row.kind == RowKind::Shape) {
+        sub = shapeKindAndSource(*row.shape);
     } else if (row.kind == RowKind::GetPack) {
         sub = row.busy ? row.detail : "Not downloaded - " + synth::soundpacks::formatPackSize(row.bytes);
     } else if (row.kind == RowKind::AddFolder) {

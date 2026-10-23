@@ -88,6 +88,11 @@ juce::String describeShapeForAccessibility(const juce::String& name, const juce:
            juce::String(position) + " of " + juce::String(count);
 }
 
+juce::String shapeKindAndSource(const synth::shapes::LibraryShape& shape) {
+    return juce::String(shape.kind == synth::shapes::ShapeKind::Filter ? "Filter" : "LFO") + " shape, " +
+           (shape.factory ? "factory" : "yours");
+}
+
 juce::String fileManagerName() {
 #if JUCE_MAC
     return "Finder";

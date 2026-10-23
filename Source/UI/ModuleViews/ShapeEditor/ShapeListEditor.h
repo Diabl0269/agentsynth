@@ -127,6 +127,7 @@ private:
     void writeCurve();
     void edit(const std::function<void(std::vector<ShapeItem>&)>& mutate);
     void stampCurveOnSelected(const LfoCustomWave& curve);
+    void noteStartFromUsed(const juce::String& name, const LfoCustomWave& curve, bool saved);
     void finishSave(const juce::String& typed, const LfoCustomWave& curve);
     void writeShape(const juce::String& name, const LfoCustomWave& curve, bool replace);
     void openStartFromMenu();

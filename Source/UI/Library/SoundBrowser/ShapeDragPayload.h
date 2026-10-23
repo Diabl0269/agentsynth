@@ -20,8 +20,7 @@ struct ShapeRef {
 };
 
 inline juce::String makeShapePayload(const ShapeRef& ref) {
-    return juce::String(kShapePayloadPrefix) + synth::shapes::kindWord(ref.kind) +
-           (ref.factory ? ":factory:" : ":user:") + ref.name;
+    return synth::shapes::shapeId(ref.kind, ref.factory, ref.name);
 }
 
 /** True for a payload made by makeShapePayload. */

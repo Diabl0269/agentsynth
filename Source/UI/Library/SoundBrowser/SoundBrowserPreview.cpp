@@ -66,9 +66,15 @@ bool SoundBrowserComponent::togglePreview() {
 
 void SoundBrowserComponent::syncFooterToSelection() {
     std::optional<synth::soundbrowser::SoundEntry> entry;
-    if (selected_ >= 0 && selected_ < (int)rows_.size() && rows_[(size_t)selected_].kind == RowKind::Sound)
-        entry = rows_[(size_t)selected_].entry;
+    std::optional<synth::shapes::LibraryShape> shape;
+    if (selected_ >= 0 && selected_ < (int)rows_.size()) {
+        if (rows_[(size_t)selected_].kind == RowKind::Sound)
+            entry = rows_[(size_t)selected_].entry;
+        else if (rows_[(size_t)selected_].kind == RowKind::Shape)
+            shape = rows_[(size_t)selected_].shape;
+    }
     footer_.showSound(entry);
+    footer_.showShape(shape);
 }
 
 // Showing the view loads the hosted pack list (for "Get more") when it is not loaded and looks again at the user's

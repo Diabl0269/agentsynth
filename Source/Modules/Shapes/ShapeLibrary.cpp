@@ -38,6 +38,10 @@ std::optional<ShapeKind> kindFromWord(const juce::String& word) {
     return std::nullopt;
 }
 
+juce::String shapeId(ShapeKind kind, bool factory, const juce::String& name) {
+    return juce::String("shape:") + kindWord(kind) + (factory ? ":factory:" : ":user:") + name;
+}
+
 ShapeLibrary::ShapeLibrary(juce::File root)
     : root_(std::move(root)) {}
 
@@ -175,6 +179,33 @@ bool ShapeLibrary::remove(ShapeKind kind, const juce::String& name) {
         return false;
     listeners_.call([](Listener& l) { l.shapeLibraryChanged(); });
     return true;
+}
+
+// The old file goes first so a change of letter case works on a case-insensitive disk; if the new file cannot be
+// written the old shape is put back.
+ShapeLibrary::RenameResult ShapeLibrary::rename(ShapeKind kind, const juce::String& from, const juce::String& to) {
+    const auto source = fileFor(kind, from);
+    const auto shape = source == juce::File() ? std::nullopt : loadFile(kind, source);
+    if (!shape.has_value())
+        return RenameResult::Missing;
+    const auto safe = sanitiseName(to);
+    if (safe.isEmpty())
+        return RenameResult::EmptyName;
+    if (safe == shape->name)
+        return RenameResult::Renamed;
+    if (!safe.equalsIgnoreCase(shape->name) && exists(kind, safe))
+        return RenameResult::Exists;
+    if (!source.deleteFile())
+        return RenameResult::Failed;
+    const auto saved = save(kind, safe, shape->curve, false);
+    if (saved == SaveResult::Saved)
+        return RenameResult::Renamed;
+    save(kind, shape->name, shape->curve, true);
+    return RenameResult::Failed;
+}
+
+void ShapeLibrary::noteUsed(const LibraryShape& shape) {
+    listeners_.call([&shape](Listener& l) { l.shapeLibraryUsed(shape); });
 }
 
 void ShapeLibrary::addListener(Listener* listener) { listeners_.add(listener); }

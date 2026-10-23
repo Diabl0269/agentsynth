@@ -1,6 +1,9 @@
 #pragma once
 
+#include "Modules/Shapes/ShapeLibrary.h"
 #include "SoundBrowser/SoundEntry.h"
+#include "UI/Layout/UIAnimation.h"
+#include "UI/Library/SoundBrowser/ShapeCurveView.h"
 #include "UI/Library/SoundBrowser/SoundWaveformView.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -9,16 +12,26 @@
 namespace synth::ui {
 
 /** The lower part of the Sounds view's footer: the selected sound's waveform with its playhead, a Stop button, the
- *  preview's own volume and the Auto-play switch. It owns no audio: the browser tells it what plays. */
+ *  preview's own volume and the Auto-play switch. For a selected shape it shows the shape's curve in a larger box
+ *  instead and fades the transport out. It owns no audio: the browser tells it what plays. */
 class SoundPreviewFooter : public juce::Component {
 public:
     static constexpr int kHeight = 108;
     static constexpr int kCompactHeight = 36;
 
     SoundPreviewFooter();
+    ~SoundPreviewFooter() override;
 
     /** Shows the waveform of `entry` (none clears it). */
     void showSound(const std::optional<synth::soundbrowser::SoundEntry>& entry);
+    /** Shows `shape`'s curve in place of the waveform and hides Stop, Auto-play and the volume, fading over 120 ms;
+     * none brings the transport back (the waveform is whatever showSound last set). */
+    void showShape(const std::optional<synth::shapes::LibraryShape>& shape);
+    /** A shape (not a sound) is what the footer is about; true from the moment showShape gets one. */
+    bool isShowingShape() const { return shapeTarget_; }
+    ShapeCurveView& getShapeCurve() { return curve_; }
+    bool isShapeMotionRunning() const { return shapeAnim_.isRunning(); }
+    void finishShapeMotionForTest();
     void setPlayer(const synth::soundbrowser::SoundPreviewPlayer* player) { wave_.setPlayer(player); }
     void followRequest(std::uint64_t requestId) { wave_.followRequest(requestId); }
 
@@ -47,7 +60,14 @@ public:
     void resized() override;
 
 private:
+    void applyShapeMix();
+
     bool compact_ = false;
+    bool shapeTarget_ = false;
+    float shapeMix_ = 0.0f; // 0 = the sound's controls, 1 = the shape's picture
+    juce::VBlankAnimatorUpdater vblank_{this};
+    AnimationDriver shapeAnim_;
+    ShapeCurveView curve_;
     juce::Rectangle<int> compactName_;
     SoundWaveformView wave_;
     juce::TextButton stop_{"Stop"};

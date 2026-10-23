@@ -7,6 +7,7 @@
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Library/SoundBrowser/ShapeStamp.h"
 #include "UI/Library/SoundBrowser/SoundDragPayload.h"
 
 namespace {
@@ -48,4 +49,15 @@ void MainComponentAudioImport::loadSoundFromBrowser(MainComponent& mc, const juc
     }
     if (mc.toast_ && message.isNotEmpty())
         mc.toast_->show(message);
+}
+
+// Return on a shape: the selected Filter on Custom or LFO with a Custom wave of the same kind takes it, as a drop on
+// the card would. A toast says where it went; with no fitting card nothing happens (the row's tooltip says why).
+bool MainComponentAudioImport::stampShapeFromBrowser(MainComponent& mc, const synth::shapes::LibraryShape& shape) {
+    const auto card = synth::ui::stampShapeOnSelectedCard(mc.graphEditor, shape);
+    if (card.isEmpty())
+        return false;
+    if (mc.toast_)
+        mc.toast_->show("Stamped " + shape.name + " onto the selected " + card);
+    return true;
 }

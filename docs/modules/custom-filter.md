@@ -277,7 +277,9 @@ Named curves outside any one Filter: the user's saved shapes and a factory set, 
   peaks at or below 0 dB (the vowels at most +2.3 dB), under the gain audit's +6 dB ceiling.
 - **Stamping**: a library shape replaces one shape's curve (the name and map position stay) as ONE undo step, from Start
   from, by [dragging](../layout/sound-browser.md#dragging-a-shape) it onto a shape chip in the window, or onto a Filter
-  card on its Custom type (the shape nearest the cursor).
+  card on its Custom type (the shape nearest the cursor), or with Return on a shape row in the Sounds view while that
+  card is the selected one. Each stamp adds the shape to Used recently. `rename` and `remove` change a saved shape's file
+  (`remove` is what the Sounds view's Delete calls after asking); `noteUsed` tells listeners a shape was stamped.
 
 ## Shape editor window
 

@@ -54,12 +54,35 @@ void ShapeListEditor::openStartFromMenu() {
             menu.addSeparator();
             menu.addSectionHeader("Factory shapes");
         }
-        menu.addItem(entries[(size_t)i].name, [safe, curve = entries[(size_t)i].curve] {
-            if (safe != nullptr)
-                safe->stampCurveOnSelected(curve);
-        });
+        const bool saved = i >= builtIn && i < builtIn + saved;
+        menu.addItem(entries[(size_t)i].name,
+                     [safe, saved, name = entries[(size_t)i].name, curve = entries[(size_t)i].curve] {
+                         if (safe == nullptr)
+                             return;
+                         safe->stampCurveOnSelected(curve);
+                         safe->noteStartFromUsed(name, curve, saved);
+                     });
     }
     showMenuNow(menu, startFromButton_);
+}
+
+// The library entry a Start from item came from (a saved shape by name; a built-in or factory one by name and curve),
+// so Used recently lists it. A built-in curve with no library twin is not a library shape and notes nothing.
+void ShapeListEditor::noteStartFromUsed(const juce::String& name, const LfoCustomWave& curve, bool saved) {
+    const auto kind = libraryKind();
+    if (!kind.has_value())
+        return;
+    auto& library = ShapeLibrary::shared();
+    if (saved) {
+        if (const auto shape = library.find(*kind, false, name))
+            library.noteUsed(*shape);
+        return;
+    }
+    for (const auto& shape : ShapeLibrary::factoryShapes(*kind))
+        if (shape.name.equalsIgnoreCase(name) && shape.curve == curve) {
+            library.noteUsed(shape);
+            return;
+        }
 }
 
 void ShapeListEditor::stampCurveOnSelected(const LfoCustomWave& curve) {

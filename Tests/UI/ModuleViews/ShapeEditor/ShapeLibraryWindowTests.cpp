@@ -6,6 +6,7 @@
 #include "ShapeEditorTestHelpers.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Library/SoundBrowser/ShapeDragPayload.h"
+#include "UI/Library/SoundBrowser/ShapeStamp.h"
 #include "UI/Library/SoundBrowser/SoundDragState.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeSavePrompts.h"
@@ -250,4 +251,35 @@ TEST(ShapeLibraryWindow, ADroppedShapeReplacesTheCardsCurveInOneUndoStep) {
 TEST(ShapeLibraryWindow, TheCanvasRefusesAShapeSoNoModuleIsMadeFromItsPayload) {
     cardbody_test::CardCanvas canvas;
     EXPECT_FALSE(canvas.editor.isInterestedInDragSource(dragOf(ShapeKind::Filter, true, "tilt")));
+}
+
+// Regression test for FRO1118: Return on a shape row had no keyboard path to a card; it stamps the selected card.
+TEST(ShapeLibraryWindow, ReturnStampsTheSelectedFilterCardInOneUndoStepAndDoesNothingWithoutATarget) {
+    TempShapes shapes;
+    cardbody_test::CardCanvas canvas;
+    const auto filterId = canvas.add(std::make_unique<FilterModule>(), 0, 0);
+    const auto lfoId = canvas.add(std::make_unique<LFOModule>(), 400, 0);
+    canvas.editor.updateComponents();
+    setChoice(*canvas.processor(filterId), "filterType", FilterModule::kCustomTypeIndex);
+    const auto shape = *ShapeLibrary::shared().find(ShapeKind::Filter, true, "comb");
+    const auto readShapes = [&] { return dynamic_cast<FilterModule*>(canvas.processor(filterId))->getCustomShapes(); };
+    const auto before = readShapes();
+    const int serial = canvas.undo.getEditSerial();
+
+    canvas.editor.clearSelection();
+    EXPECT_TRUE(stampShapeOnSelectedCard(canvas.editor, shape).isEmpty()) << "no card selected";
+    canvas.editor.setSelectedNodes({lfoId});
+    EXPECT_TRUE(stampShapeOnSelectedCard(canvas.editor, shape).isEmpty()) << "an LFO does not take a filter shape";
+    EXPECT_EQ(readShapes(), before);
+    EXPECT_EQ(canvas.undo.getEditSerial(), serial);
+
+    canvas.editor.setSelectedNodes({filterId});
+    EXPECT_EQ(stampShapeOnSelectedCard(canvas.editor, shape), "Filter");
+    EXPECT_EQ(canvas.undo.getEditSerial(), serial + 1);
+    EXPECT_NE(readShapes(), before);
+    ASSERT_TRUE(canvas.undo.undo());
+    EXPECT_EQ(readShapes(), before);
+
+    setChoice(*canvas.processor(filterId), "filterType", 0);
+    EXPECT_TRUE(stampShapeOnSelectedCard(canvas.editor, shape).isEmpty()) << "the filter is not on Custom";
 }

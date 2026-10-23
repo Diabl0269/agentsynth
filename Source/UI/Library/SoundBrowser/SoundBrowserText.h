@@ -3,6 +3,7 @@
 // What the Sounds view shows and says for a sound, a folder or a place. Pure, so the wording is unit-testable
 // without a component or a native accessibility peer.
 
+#include "Modules/Shapes/ShapeLibrary.h"
 #include "SoundBrowser/SoundEntry.h"
 
 namespace synth::ui {
@@ -32,6 +33,8 @@ juce::String describeAddFolderForAccessibility(int position, int count);
 /** "ah, filter shape, built in, 3 of 20"; `kindWord` is "filter" or "lfo". Saved shapes read "saved by you". */
 juce::String describeShapeForAccessibility(const juce::String& name, const juce::String& kindWord, bool factory,
                                            int position, int count);
+/** "Filter shape, yours" or "LFO shape, factory": what the footer says under a shape's name. */
+juce::String shapeKindAndSource(const synth::shapes::LibraryShape& shape);
 /** What this platform calls its file browser: "Finder", "File Explorer", or "the file manager" on Linux. */
 juce::String fileManagerName();
 /** "Path, Places, Core instruments, Drums". */
