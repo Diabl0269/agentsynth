@@ -11,7 +11,7 @@ namespace undo_glide_test {
 
 namespace {
 
-/** Track header rows: a track dragged to the bottom, then restored. The glide is clock-driven, so stepping sleeps. */
+/** Track header rows: a track moved to the bottom, then restored, on a pinned glide clock. */
 class TrackRowSurface : public Surface {
 public:
     TrackRowSurface() {
@@ -24,7 +24,9 @@ public:
         for (const auto& track : mc_.getTimelineDoc().getTracks())
             first_ = first_.isValid() ? first_ : track.id;
         panel_->forceTrackGlideForTest(true);
+        panel_->setTrackGlideClockForTest([this] { return nowMs_; });
     }
+    ~TrackRowSurface() override { panel_->setTrackGlideClockForTest({}); }
 
     void move() override {
         auto& doc = mc_.getTimelineDoc();
@@ -40,16 +42,14 @@ public:
     }
     bool gliding() const override { return panel_->isTrackReorderActiveForTest(); }
     void stepTo(double elapsedMs) override {
-        const double target = std::min(elapsedMs, 250.0);
-        if (target > sleptMs_)
-            juce::Thread::sleep((int)(target - sleptMs_));
-        sleptMs_ = std::max(sleptMs_, target);
+        nowMs_ = startMs_ + elapsedMs;
         panel_->advanceTrackGlideForTest();
     }
 
 private:
+    // Pinned, not slept: a slow CI runner finished the 140 ms glide before the first sample.
     bool restore(bool forward) {
-        sleptMs_ = 0.0;
+        startMs_ = nowMs_;
         return forward ? mc_.getUndoManager().redo() : mc_.getUndoManager().undo();
     }
 
@@ -57,7 +57,8 @@ private:
     MainComponent mc_{std::make_unique<MockProviderTL>()};
     synth::ui::TimelinePanelComponent* panel_ = nullptr;
     synth::TrackId first_;
-    double sleptMs_ = 0.0;
+    double nowMs_ = 1000.0;
+    double startMs_ = 1000.0;
 };
 
 juce::KeyPress commandAlt(int keyCode) {
