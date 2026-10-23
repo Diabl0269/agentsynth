@@ -353,6 +353,8 @@ accent wash, repainting only the rows involved and only when the row actually ch
 last row neither highlight nor accept a drop. `filesDropped` reports the FIRST readable audio file
 — a multi-file drop makes one clip, not N.
 
+**Under the last track.** When `onAudioFileDroppedBelowTracks` is set, the empty space under the last row (the whole area when there are no tracks) takes an audio file too: a "New audio track" strip (an outlined, rounded strip) lights up under the pointer and `MainComponent::addAudioTrackWithClip(beat, file)` makes the track, its mixer channel and the clip in ONE undo step (the file is imported first; a failed import changes nothing). A Sound dragged out of the Sounds view takes the same rows and the same strip ([sound-browser](../layout/sound-browser.md#dragging-a-sound)), through `SoundDropAdapter`. The strip needs room under the rows; a lane filled to the bottom has none.
+
 **Who imports.** Neither gesture imports anything here: `onAudioFileDropped(TrackId, snappedBeat,
 File)` hands the decision outwards and `MainComponent::importAudioFileToClip` does the work, for
 the same reason **Relink audio…** does — the lane area owns no `AssetManager` and no bundle root.
