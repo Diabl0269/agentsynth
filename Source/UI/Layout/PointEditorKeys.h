@@ -16,7 +16,9 @@ inline bool isInsertPointKey(const juce::KeyPress& key) {
     if (mods.isCommandDown())
         return false;
 #endif
-    return juce::CharacterFunctions::toUpperCase((juce::juce_wchar)key.getKeyCode()) == (juce::juce_wchar)'T';
+    const auto code = (juce::juce_wchar)key.getKeyCode();
+    const auto upper = juce::CharacterFunctions::toUpperCase(code); // not-ui-text: key code, not displayed
+    return upper == (juce::juce_wchar)'T';
 }
 
 } // namespace synth::ui
