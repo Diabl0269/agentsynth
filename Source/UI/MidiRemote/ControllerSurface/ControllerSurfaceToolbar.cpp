@@ -146,6 +146,11 @@ int ControllerSurfaceToolbar::getPreferredHeight() const noexcept {
 void ControllerSurfaceToolbar::resized() {
     auto bounds = getLocalBounds();
     auto row = bounds.removeFromTop(kRowHeight).reduced(6, 3);
+    // The right end is claimed first, so at a narrow width it is the left buttons that give way, never this one.
+    if (dockBack_ != nullptr) {
+        dockBack_->setBounds(row.removeFromRight(DockBackSlot::kButtonWidth));
+        row.removeFromRight(4);
+    }
     detectButton_.setBounds(row.removeFromLeft(72));
     row.removeFromLeft(6);
     assignButton_.setBounds(row.removeFromLeft(84));

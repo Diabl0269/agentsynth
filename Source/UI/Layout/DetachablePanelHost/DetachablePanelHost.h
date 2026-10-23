@@ -1,6 +1,8 @@
 #pragma once
 
 #include "DetachedPanelWindow.h"
+#include "DockBackButton.h"
+#include "DockBackSlot.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -22,9 +24,9 @@ namespace synth::ui {
 // the slot where `panel` lives -- UNLESS setEmbeddedHeader(true) is set, in which case this host
 // draws NO header of its own while docked (its owner has embedded its own equivalent control into
 // its own chrome instead -- see BottomDockComponent's tab strip in Tab placement). Detached, `panel`
-// (and the header's button + title) are reparented into a DetachedPanelWindow, which carries its
-// own copy of the header strip with the button now in "Dock back" state; closing that window (or
-// clicking the button again) redocks everything here.
+// is reparented into a DetachedPanelWindow that has no header of its own: the panel fills it, and the
+// host hands its "Dock back" button to the panel (DockBackSlot) for its toolbar's right end. Closing that
+// window (or clicking the button) redocks the panel here.
 class DetachablePanelHost : public juce::Component {
 public:
     // `boundsKey` is the ApplicationProperties key a detached window's position/size persists
@@ -65,8 +67,7 @@ public:
 
     /** When true, this host draws no header strip of its own while DOCKED -- its owner has
      *  embedded getDetachButton() into its own chrome (BottomDockComponent's tab strip in Tab
-     *  placement). Has no effect on the DETACHED window's header, which always shows one
-     *  regardless. Safe to flip at runtime (a live Preferences placement change). */
+     *  placement). Safe to flip at runtime (a live Preferences placement change). */
     void setEmbeddedHeader(bool embedded);
     bool isEmbeddedHeader() const noexcept { return embeddedHeader_; }
 
@@ -109,6 +110,8 @@ public:
     DetachedPanelWindow* getDetachedWindowForTest() const { return window_.get(); }
     // Not const: juce::SettableTooltipClient::getTooltip() isn't const either.
     juce::String getButtonTooltipForTest() { return detachButton_.getTooltip(); }
+    /** The "Dock back" button handed to the panel's toolbar while detached. */
+    DockBackButton& getDockBackButtonForTest() noexcept { return dockBackButton_; }
     juce::String getButtonTextForTest() const { return detachButton_.getButtonText(); }
     bool isDetachButtonVisibleForTest() const noexcept { return detachButton_.isVisible(); }
     /** Where the panel starts, i.e. the header strip's current height (0 when hidden, kHeaderStripHeight when shown;
@@ -152,8 +155,9 @@ private:
 
     juce::Label titleLabel_;
     juce::DrawableButton detachButton_{"detachPanel", juce::DrawableButton::ImageFitted};
+    DockBackButton dockBackButton_; // lives on the panel's toolbar while detached, owned here
     /// The docked header strip (title and detach button) fades when a host's header goes in or out of the tab strip;
-    /// the panel's room follows its progress. A detached panel's window borrows these, so it lands first.
+    /// the panel's room follows its progress.
     FadeVisibility headerFade_{&titleLabel_, &detachButton_};
     bool embeddedHeader_ = false;
     bool createsNativeWindows_ = false;

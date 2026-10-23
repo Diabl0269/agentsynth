@@ -99,13 +99,27 @@ public:
     /** The swap icon's action: setMainView(view), then the view that was in the main area becomes the active tab.
      *  False, and nothing changes, when setMainView() refuses. */
     bool swapTabToMain(Tab view);
-    /** The rebindable action behind each view's "show it in the main area" key (the swap icon's shortcut). */
-    static const char* swapActionIdForTab(Tab view) noexcept;
+    /** How many digit keys the dock owns: Cmd+1..3 show a tab and Opt+Cmd+1..3 swap it into the main area. */
+    static constexpr int kKeyPositions = 3;
+    /** The number of the key that opens `view`: its place, counting from 1, in the user's tab order among the three
+     *  views that are not in the main area. A detached or Mixer-elsewhere tab keeps its number. 0 for the main-area
+     *  view (Cmd+0 reaches that one). The one source of every shown and dispatched digit. */
+    int keyPositionOf(Tab view) const noexcept;
+    /** The view Cmd+`position` opens right now (1..kKeyPositions), nullopt out of range. */
+    std::optional<Tab> tabAtKeyPosition(int position) const noexcept;
+    /** The rebindable ids of the positional keys: "showDockTab<N>" and "swapDockTab<N>ToMain"; nullptr out of range. */
+    static const char* showActionIdForPosition(int position) noexcept;
+    static const char* swapActionIdForPosition(int position) noexcept;
+    /** The action id of the key that shows / swaps `view` now (empty for the main-area view). */
+    juce::String showActionIdForTab(Tab view) const;
+    juce::String swapActionIdForTab(Tab view) const;
     /** What a screen reader is told after a swap, e.g. "Timeline in the main area". */
     static juce::String mainViewAnnouncement(Tab view);
-    /** The key shown in `view`'s swap icon tooltip (its swap action's binding, empty when unbound). Pushed by
-     *  MainComponent on every shortcut change: the dock is built before the shortcut table exists. */
-    void setSwapShortcutText(Tab view, const juce::String& text);
+    /** Resolves an action id to the key shown in the swap icon tooltips (empty when unbound). MainComponent sets it
+     *  once: the dock is built before the shortcut table exists. */
+    void setShortcutTextSource(std::function<juce::String(const juce::String& actionId)> source);
+    /** Re-derives the swap icon tooltips; MainComponent calls it on every shortcut change. */
+    void refreshShortcutTexts() { refreshSwapIcons(); }
     /** Fires after every successful setMainView(), once the dock has laid out; MainComponent relays out the main area.
      */
     std::function<void()> onMainViewChanged;
@@ -325,7 +339,7 @@ public:
     /** One tab currently offered in the strip, for the Cmd-hold shortcut hints. */
     struct StripTab {
         juce::TextButton* button{nullptr};
-        juce::String actionId; // the shortcut action that shows this tab
+        juce::String actionId; // the positional shortcut action that shows this tab (showDockTab<N>)
         juce::String name;
     };
     /** The tabs offered in the strip right now, in the user's tab order; a tab detached to its own
@@ -493,6 +507,7 @@ private:
     bool pressActiveDetachIcon();
     /** Re-derives each swap icon's enabled state, tooltip and name. */
     void refreshSwapIcons();
+    juce::String shortcutTextFor(const juce::String& actionId) const;
     /** Re-derives each detach icon's tooltip and name (it reads "Close ..." while the Mixer's second view is open). */
     void refreshDetachIcons();
     void setLiftedTab(std::optional<Tab> tab);
@@ -571,7 +586,6 @@ private:
     float pointerXInDock(const juce::MouseEvent& e);
     void persistTabOrder();
     void persistMainView();
-    static const char* actionIdForTab(Tab tab) noexcept;
 
     TimelinePanelComponent& timelinePanel_;
     std::unique_ptr<MixerPanelComponent> mixer_;
@@ -611,7 +625,7 @@ private:
     juce::ApplicationProperties* appProperties_ = nullptr;
     ShortcutManager* shortcutManager_ = nullptr;
     std::function<void(const juce::String&)> announceHook_;
-    juce::String swapShortcutTexts_[4];
+    std::function<juce::String(const juce::String&)> shortcutTextSource_;
     static constexpr const char* kActiveTabKey = "bottomDockActiveTab";
     // The user-controlled strip order (a permutation of all four views, the main view and detached
     // tabs keeping their slots) and the main view.

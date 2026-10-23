@@ -230,6 +230,14 @@ public:
         nameLabel_.setTooltip(enabled ? "Double-click to rename this channel" : juce::String());
     }
 
+    /** Opens the inline name editor, as a double-click does (Rename key); false when this header cannot be renamed. */
+    bool beginNameEdit() {
+        if (!nameLabel_.isEditableOnDoubleClick())
+            return false;
+        nameLabel_.showEditor();
+        return true;
+    }
+
     /** Test seam: the real juce::Label a double-click opens an editor on -- a test drives it with
      *  Label's own mouseDoubleClick()/showEditor()/getCurrentTextEditor()/hideEditor(), exactly the
      *  gestures a live double-click and Return key produce, rather than calling setDisplayName()

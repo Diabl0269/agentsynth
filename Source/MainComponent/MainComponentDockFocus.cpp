@@ -7,7 +7,10 @@
 
 namespace {
 constexpr const char* kDockTabsRegion = "dockTabs";
+int mainWindowRaiseCount = 0;
 } // namespace
+
+int MainComponent::getMainWindowRaiseCountForTest() noexcept { return mainWindowRaiseCount; }
 
 // Focus goes only to a strip that is on screen: the "dockTabs" region is open while the dock is showing
 // with at least one docked tab, so a detached tab (its window is raised instead) or a hidden pane is
@@ -45,23 +48,54 @@ void MainComponent::focusMainViewIfOpen() {
         focusRegions_.focusRegionById(mainRegion);
 }
 
-// Cmd+1/2/3/4. A tab that is detached raises its own window and focuses its panel, and the Mixer outside the Tab
+// Raises the app window over any detached panel window, taking keyboard focus with it.
+void MainComponent::raiseMainWindow() {
+    ++mainWindowRaiseCount;
+    if (auto* top = getTopLevelComponent())
+        top->toFront(true);
+}
+
+// Cmd+N. A tab that is detached raises its own window and focuses its panel, and the Mixer outside the Tab
 // placement is revealed elsewhere (its own panel or window): neither has a docked strip to focus. With "show it in
 // both places" on, the Mixer's second window is raised and the docked copy gets the focus. The view in the
-// main area has no tab; the key focuses it there instead.
+// main area has no tab; the key focuses it there instead. Everything but a detached tab first raises the main
+// window, because the key may have been pressed in a detached one.
 void MainComponent::showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab) {
     using Tab = synth::ui::BottomDockComponent::Tab;
+    const auto* host = bottomDock.hostForTab(tab);
+    const bool detached = host != nullptr && host->isDetached();
+    if (!detached)
+        raiseMainWindow();
     if (bottomDock.getMainView() == tab) {
         focusMainViewIfOpen();
         return;
     }
     const bool mixerRevealedElsewhere =
         tab == Tab::Mixer && mixerPlacement_.getPlacement() != synth::ui::MixerPlacementController::Placement::Tab;
-    const auto* host = bottomDock.hostForTab(tab);
-    const bool detached = host != nullptr && host->isDetached();
     showBottomDockTab(tab);
     if (tab == Tab::Mixer && !mixerRevealedElsewhere)
         bottomDock.raiseMixerMirror(); // before the focus moves: raising takes none
     if (!mixerRevealedElsewhere && !detached)
         focusDockTabStripIfShowing();
+}
+
+void MainComponent::showDockTabAtPosition(int position) {
+    if (const auto tab = bottomDock.tabAtKeyPosition(position))
+        showBottomDockTabFromShortcut(*tab);
+}
+
+// A tab in its own window cannot be swapped (setMainView refuses it), so only the others raise the main window.
+void MainComponent::swapDockTabAtPositionToMain(int position) {
+    const auto tab = bottomDock.tabAtKeyPosition(position);
+    if (!tab)
+        return;
+    const auto* host = bottomDock.hostForTab(*tab);
+    if (host == nullptr || !host->isDetached())
+        raiseMainWindow();
+    bottomDock.swapTabToMain(*tab);
+}
+
+void MainComponent::focusMainView() {
+    raiseMainWindow();
+    focusMainViewIfOpen();
 }

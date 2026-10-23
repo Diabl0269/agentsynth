@@ -66,20 +66,6 @@ void BottomDockComponent::DockTabButton::resized() {
     getProperties().set(synth::theme::AppLookAndFeel::kTextInsetRightProperty, reserved);
 }
 
-const char* BottomDockComponent::actionIdForTab(Tab tab) noexcept {
-    switch (tab) {
-    case Tab::Mixer:
-        return "toggleMixerPanel";
-    case Tab::MidiRemote:
-        return "toggleMidiRemotePanel";
-    case Tab::Canvas:
-        return "showCanvas";
-    case Tab::Timeline:
-        break;
-    }
-    return "toggleTimelinePanel";
-}
-
 // The pointer's x in dock coordinates, read straight from the event: JUCE re-derives
 // getMouseDownPosition() in the event component's CURRENT local space, and the pressed button moves
 // under the pointer as tabs shift, so only a value captured once (and converted here) stays true.
@@ -291,7 +277,7 @@ std::vector<BottomDockComponent::StripTab> BottomDockComponent::getStripTabs() {
     std::vector<StripTab> tabs;
     for (Tab t : tabModel_.getOrder())
         if (isTabOfferedInStrip(t))
-            tabs.push_back({&buttonForTab(t), actionIdForTab(t), buttonForTab(t).getButtonText()});
+            tabs.push_back({&buttonForTab(t), showActionIdForTab(t), buttonForTab(t).getButtonText()});
     return tabs;
 }
 
@@ -389,12 +375,12 @@ void BottomDockComponent::refreshSwapIcons() {
         icon.setEnabled(!inOwnWindow);
         icon.setTitle(title);
         icon.setTooltip(inOwnWindow ? juce::String(nameForTab(t)) + " is open in its own window"
-                                    : formatShortcutHint(title, swapShortcutTexts_[static_cast<size_t>(t)]));
+                                    : formatShortcutHint(title, shortcutTextFor(swapActionIdForTab(t))));
     }
 }
 
-void BottomDockComponent::setSwapShortcutText(Tab view, const juce::String& text) {
-    swapShortcutTexts_[static_cast<size_t>(view)] = text;
+void BottomDockComponent::setShortcutTextSource(std::function<juce::String(const juce::String&)> source) {
+    shortcutTextSource_ = std::move(source);
     refreshSwapIcons();
 }
 

@@ -375,7 +375,9 @@ void BottomDockComponent::persistActiveTab() {
     appProperties_->getUserSettings()->saveIfNeeded();
 }
 
+// The order decides which digit opens which tab, so the swap icons' key text is re-derived with it.
 void BottomDockComponent::persistTabOrder() {
+    refreshSwapIcons();
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
     appProperties_->getUserSettings()->setValue(kTabOrderKey, BottomDockTabModel::serializeOrder(tabModel_.getOrder()));

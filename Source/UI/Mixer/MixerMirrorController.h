@@ -2,6 +2,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
+#include "UI/Layout/DetachablePanelHost/DockBackButton.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -43,12 +44,11 @@ class MixerPanelComponent;
 // steal each other's peak reads, flickering both meters.
 //
 // The window itself reuses DetachedPanelWindow directly (not through a second DetachablePanelHost
-// -- there is nothing to dock the mirror INTO; it only ever exists as a window). `headerButton_`/
-// `headerTitle_` are owned here and borrowed by the window exactly the way DetachablePanelHost's
-// own detachButton_/titleLabel_ are borrowed by a real detach -- see DetachedPanelWindow's class
-// comment. `window_` is declared LAST so it is destroyed FIRST (reverse declaration order): its
-// Content wrapper holds references into mirror_/headerButton_/headerTitle_ that must still be
-// alive while it unwinds.
+// -- there is nothing to dock the mirror INTO; it only ever exists as a window). `dockBackButton_` is
+// owned here and handed to the mirror panel's toolbar while the window is open, the way DetachablePanelHost
+// hands its own (it closes the window; the docked mixer is already there). `window_` is declared LAST so it is
+// destroyed FIRST (reverse declaration order): its Content wrapper holds a reference into mirror_ that must
+// still be alive while it unwinds.
 class MixerMirrorController {
 public:
     /** Configures a freshly created mirror view against the same model the docked panel uses --
@@ -110,8 +110,7 @@ private:
     juce::ApplicationProperties& appProperties_;
     ConfigureFn configure_;
     std::unique_ptr<MixerPanelComponent> mirror_;
-    juce::DrawableButton headerButton_{"closeMixerMirror", juce::DrawableButton::ImageFitted};
-    juce::Label headerTitle_;
+    DockBackButton dockBackButton_;
     // Declared LAST -- see the class comment on destruction order.
     std::unique_ptr<DetachedPanelWindow> window_;
 

@@ -131,6 +131,15 @@ enum CommandIDs {
     swapMixerToMain,
     swapMidiRemoteToMain,
     swapCanvasToMain,
+    // Positional dock keys: the tab at a place of the tab order (Cmd+1..3), the same swapped into the main area
+    // (Opt+Cmd+1..3), and the main view itself (Cmd+0).
+    showDockTab1,
+    showDockTab2,
+    showDockTab3,
+    swapDockTab1ToMain,
+    swapDockTab2ToMain,
+    swapDockTab3ToMain,
+    focusMainView,
     // Grid division set outright to a triplet or dotted value; unbound by default.
     snapSetWholeTriplet,
     snapSetHalfTriplet,

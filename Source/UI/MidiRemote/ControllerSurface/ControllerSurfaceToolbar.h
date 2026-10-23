@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/FadeVisibility.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -23,6 +24,11 @@ public:
     void setDetectOn(bool on);
     bool isDetectOn() const noexcept { return detectOn_; }
 
+    /** The "Dock back" button at the right end of the button row (see DockBackSlot); nullptr takes it away. */
+    void setDockBackButton(juce::Button* button) {
+        DockBackSlot::adopt(*this, dockBack_, button);
+        resized();
+    }
     /** The right-aligned undo cue on the button row; empty hides it. */
     void setUndoHint(const juce::String& text);
     juce::String getUndoHint() const { return undoFade_.isShown() ? undoHintLabel_.getText() : juce::String(); }
@@ -57,6 +63,7 @@ public:
 private:
     void relayoutForHintFade();
     bool detectOn_ = false;
+    juce::Button* dockBack_ = nullptr; // borrowed; a child while set
     juce::TextButton detectButton_;
     juce::TextButton assignButton_;
     juce::TextButton templatesButton_;

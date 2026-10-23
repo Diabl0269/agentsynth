@@ -313,8 +313,11 @@ inline void applyNodePresentation(juce::AudioProcessorGraph::Node* node, const j
     applyCardLayoutToNode(node, nObj, trusted);
 }
 
-// Snapshot-restore form of the above (snapshots are always trusted; see restoreCardLayoutOnNode).
+// Snapshot-restore form of the above (snapshots are always trusted; see restoreCardLayoutOnNode). A snapshot
+// without a "displayName" is the whole truth too: undoing a node's first rename must clear the title it gained.
 inline void restoreNodePresentation(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj) {
+    if (node != nullptr && nObj != nullptr && !nObj->hasProperty("displayName"))
+        node->properties.remove("displayName");
     applyDisplayNameToNode(node, nObj);
     restoreCardLayoutOnNode(node, nObj);
 }

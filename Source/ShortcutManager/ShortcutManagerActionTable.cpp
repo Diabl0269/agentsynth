@@ -24,6 +24,20 @@ void spliceSnapRows(std::vector<Entry>& rows) {
     rows.insert(at, snapRows.begin(), snapRows.end());
 }
 
+// The positional dock keys sit right before the per-view show actions they replace as the digit owners: show the tab
+// at a place of the tab order (default Cmd+1/2/3, so a reorder re-keys them), focus the main view (Cmd+0), and swap
+// the tab at a place into the main area (default Opt+Cmd+1..3).
+template <class Entry>
+void spliceDockKeyRows(std::vector<Entry>& rows) {
+    std::vector<Entry> dockRows;
+    for (const char* id : {"showDockTab1", "showDockTab2", "showDockTab3", "focusMainView", "swapDockTab1ToMain",
+                           "swapDockTab2ToMain", "swapDockTab3ToMain"})
+        dockRows.push_back({id, ShortcutCategory::General});
+    const auto at = std::find_if(rows.begin(), rows.end(),
+                                 [](const Entry& row) { return std::string_view(row.id) == "toggleTimelinePanel"; });
+    rows.insert(at, dockRows.begin(), dockRows.end());
+}
+
 } // namespace
 
 /** One row per rebindable action: the persisted id, and the category that decides both its
@@ -53,12 +67,10 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"toggleSoundBrowser", ShortcutCategory::General},
             // The ONE bottom-dock open/close toggle (docs/layout/chrome.md); the rows below only SHOW or SWAP a view.
             {"toggleBottomPanel", ShortcutCategory::General},
-            // Show a view: default Cmd+1/2/3/4, one fixed key per view (a tab reorder never re-keys them).
             {"toggleTimelinePanel", ShortcutCategory::General},
             {"toggleMixerPanel", ShortcutCategory::General},
             {"toggleMidiRemotePanel", ShortcutCategory::General},
             {"showCanvas", ShortcutCategory::General},
-            // Swap a view into the main area: default Opt+Cmd+1..4, the digit of the view's own show key.
             {"swapTimelineToMain", ShortcutCategory::General},
             {"swapMixerToMain", ShortcutCategory::General},
             {"swapMidiRemoteToMain", ShortcutCategory::General},
@@ -117,6 +129,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"foldAndPackMacros", ShortcutCategory::Graph},
             {"locateMaster", ShortcutCategory::Graph},
             {"renameSelectedModule", ShortcutCategory::Graph},
+            {"renameSelectedModuleAlt", ShortcutCategory::Graph},
             {"replaceSelectedModule", ShortcutCategory::Graph},
             // The canvas's card keys -- consulted by CanvasCardKeyboard::keyPressed only.
             {"canvasSelectCardLeft", ShortcutCategory::Graph},
@@ -230,6 +243,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"layoutEditorRemoveControl", ShortcutCategory::LayoutEditor},
         };
         spliceSnapRows(rows);
+        spliceDockKeyRows(rows);
         return rows;
     }();
     return table;

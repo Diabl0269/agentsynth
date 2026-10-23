@@ -29,7 +29,7 @@ protected:
     // The tooltip is the name plus the swap action's live key.
     juce::String tooltipWithKey(Tab view, const juce::String& name) {
         const auto key = ShortcutManager::keyPressToDisplayString(
-            mc_->getShortcutManager().getBinding(BottomDockComponent::swapActionIdForTab(view)));
+            mc_->getShortcutManager().getBinding(dock().swapActionIdForTab(view)));
         return synth::ui::formatShortcutHint(name, key);
     }
     void SetUp() override {

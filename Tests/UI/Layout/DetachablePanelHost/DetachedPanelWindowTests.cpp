@@ -32,9 +32,6 @@ protected:
         options.filenameSuffix = "test";
         options.storageFormat = juce::PropertiesFile::storeAsXML;
         appProperties.setStorageParameters(options);
-
-        button.setButtonText({});
-        title.setText("Test Panel", juce::dontSendNotification);
     }
 
     void TearDown() override {
@@ -43,8 +40,7 @@ protected:
     }
 
     StubPanel panel;
-    juce::DrawableButton button{"detach", juce::DrawableButton::ImageFitted};
-    juce::Label title;
+    juce::String title{"Test Panel"};
     juce::ApplicationProperties appProperties;
     ShortcutManager shortcutManager;
 };
@@ -56,7 +52,7 @@ protected:
 // ============================================================================
 
 TEST_F(DetachedPanelWindowTest, AddToDesktopFalseCreatesNoPeer) {
-    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
+    DetachedPanelWindow window(panel, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
     EXPECT_EQ(window.getPeer(), nullptr) << "constructing must never create a native peer";
     EXPECT_EQ(window.getContentForTest(), window.getPanelForTest().getParentComponent())
         << "the borrowed panel must already be reparented into this window's own content";
@@ -68,20 +64,18 @@ TEST_F(DetachedPanelWindowTest, AddToDesktopFalseCreatesNoPeer) {
 
 TEST_F(DetachedPanelWindowTest, BoundsRoundTripThroughPersistedKey) {
     {
-        DetachedPanelWindow windowA(panel, button, title, "testWindowBounds", &appProperties, nullptr,
-                                    &shortcutManager);
+        DetachedPanelWindow windowA(panel, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
         windowA.setBounds(50, 60, 500, 350); // triggers moved()+resized() -> persistBounds()
         ASSERT_EQ(windowA.getBounds(), juce::Rectangle<int>(50, 60, 500, 350));
     } // windowA destroyed -- panel/button/title are borrowed, never deleted by it
 
-    DetachedPanelWindow windowB(panel, button, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
+    DetachedPanelWindow windowB(panel, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
     EXPECT_EQ(windowB.getBounds(), juce::Rectangle<int>(50, 60, 500, 350))
         << "a fresh window with the same boundsKey must restore the persisted position/size";
 }
 
 TEST_F(DetachedPanelWindowTest, NoPersistedKeyFallsBackToACentredDefault) {
-    DetachedPanelWindow window(panel, button, title, "neverPersistedWindowBounds", &appProperties, nullptr,
-                               &shortcutManager);
+    DetachedPanelWindow window(panel, title, "neverPersistedWindowBounds", &appProperties, nullptr, &shortcutManager);
     EXPECT_GT(window.getWidth(), 0);
     EXPECT_GT(window.getHeight(), 0);
 }
@@ -97,7 +91,7 @@ TEST_F(DetachedPanelWindowTest, TinyPersistedBoundsRejectedFallsBackToCentredDef
     if (auto* settings = appProperties.getUserSettings())
         settings->setValue("testWindowBounds", juce::Rectangle<int>(0, 62, 128, 128).toString());
 
-    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
+    DetachedPanelWindow window(panel, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
     EXPECT_EQ(window.getWidth(), 640) << "a 128x128 persisted rect must be rejected as implausible";
     EXPECT_EQ(window.getHeight(), 420);
 }
@@ -115,7 +109,7 @@ TEST_F(DetachedPanelWindowTest, OffscreenPersistedBoundsRejectedFallsBackToCentr
     if (auto* settings = appProperties.getUserSettings())
         settings->setValue("testWindowBounds", juce::Rectangle<int>(200000, 200000, 640, 420).toString());
 
-    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
+    DetachedPanelWindow window(panel, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
     EXPECT_EQ(window.getWidth(), 640) << "a persisted rect off every display must be rejected too";
     EXPECT_EQ(window.getHeight(), 420);
 }
@@ -125,8 +119,8 @@ TEST_F(DetachedPanelWindowTest, OffscreenPersistedBoundsRejectedFallsBackToCentr
 // ============================================================================
 
 TEST_F(DetachedPanelWindowTest, CloseButtonFiresCallbackAndNeverSelfDestroys) {
-    auto window = std::make_unique<DetachedPanelWindow>(panel, button, title, "testWindowBounds", &appProperties,
-                                                        nullptr, &shortcutManager);
+    auto window = std::make_unique<DetachedPanelWindow>(panel, title, "testWindowBounds", &appProperties, nullptr,
+                                                        &shortcutManager);
     bool closeRequested = false;
     window->onCloseRequested = [&] { closeRequested = true; };
 
@@ -145,8 +139,7 @@ TEST_F(DetachedPanelWindowTest, NeverTouchesTheProcessGlobalDefaultLookAndFeel) 
     auto* defaultBefore = &juce::Desktop::getInstance().getDefaultLookAndFeel();
 
     {
-        DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, &handedInstance,
-                                   &shortcutManager);
+        DetachedPanelWindow window(panel, title, "testWindowBounds", &appProperties, &handedInstance, &shortcutManager);
         EXPECT_EQ(&window.getLookAndFeel(), &handedInstance)
             << "must set its OWN LookAndFeel to the instance its owner handed it";
         EXPECT_EQ(&juce::Desktop::getInstance().getDefaultLookAndFeel(), defaultBefore)
@@ -171,7 +164,7 @@ TEST_F(DetachedPanelWindowTest, NeverTouchesTheProcessGlobalDefaultLookAndFeel) 
 // ============================================================================
 
 TEST_F(DetachedPanelWindowTest, TabCyclesOnlyItsOwnOneRegionRegistry) {
-    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
+    DetachedPanelWindow window(panel, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
     window.registerHostedPanelFocusRegion("mixer", panel);
 
     ASSERT_EQ(window.getFocusRegionsForTest().getRegions().size(), 1u);
@@ -186,7 +179,7 @@ TEST_F(DetachedPanelWindowTest, TabCyclesOnlyItsOwnOneRegionRegistry) {
 }
 
 TEST_F(DetachedPanelWindowTest, UnboundKeyIsNotHandled) {
-    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
+    DetachedPanelWindow window(panel, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
     window.registerHostedPanelFocusRegion("mixer", panel);
 
     const juce::KeyPress unbound('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
@@ -214,7 +207,7 @@ TEST_F(DetachedPanelWindowTest, BackgroundColourMatchesThemeSurfaceWhenLookAndFe
     synth::theme::AppLookAndFeel lf;
     lf.applyTheme(themeWithDistinctiveSurface(distinctiveSurface));
 
-    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, &lf, &shortcutManager);
+    DetachedPanelWindow window(panel, title, "testWindowBounds", &appProperties, &lf, &shortcutManager);
     EXPECT_EQ(window.getBackgroundColour(), distinctiveSurface)
         << "must read the theme's OWN surface token, not the darkgrey literal or Theme.h's default";
 }
@@ -227,7 +220,7 @@ TEST_F(DetachedPanelWindowTest, BackgroundColourUpdatesAfterLookAndFeelSwap) {
     synth::theme::AppLookAndFeel lfB;
     lfB.applyTheme(themeWithDistinctiveSurface(secondSurface));
 
-    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, &lfA, &shortcutManager);
+    DetachedPanelWindow window(panel, title, "testWindowBounds", &appProperties, &lfA, &shortcutManager);
     ASSERT_EQ(window.getBackgroundColour(), firstSurface);
 
     // lookAndFeelChanged() must re-read the CURRENT LookAndFeel, not a value cached at

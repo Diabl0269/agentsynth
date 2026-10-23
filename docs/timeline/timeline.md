@@ -86,10 +86,10 @@ immediately before `ToggleTheme`) and the **Cmd+J** shortcut (action id `toggleB
 [`shortcuts.md`](../control/shortcuts.md)) flip `MainComponent::isBottomDockVisible` — show/hide the
 whole dock, reopening on whichever tab was last active. It replaced the former separate
 Show-Timeline/Show-MIDI-Remote toolbar buttons, whose own close-on-second-press behaviour is gone:
-**Cmd+1/2/3** (`toggleTimelinePanel`/`toggleMixerPanel`/`toggleMidiRemotePanel`) now each only SHOW
-their own tab (`MainComponent::showBottomDockTab`), opening the dock if it was hidden but never
-closing it — see [`shortcuts.md`](../control/shortcuts.md) for the migration (each tab keeps its
-key when the strip is reordered). Visibility persists under the `bottomDockVisible` key in `juce::ApplicationProperties`,
+**Cmd+1/2/3** (`showDockTab1`..`3`) now each only SHOW
+the tab at that place of the strip (`MainComponent::showBottomDockTab`), opening the dock if it was hidden but never
+closing it — see [`shortcuts.md`](../control/shortcuts.md) for the migration (the keys follow
+the strip order when it is reordered). Visibility persists under the `bottomDockVisible` key in `juce::ApplicationProperties`,
 default `false`.
 
 **The key and the flag gate the whole bottom dock, not just this panel.**
@@ -109,7 +109,7 @@ window (`Source/UI/Layout/DetachablePanelHost/`) leaves the strip entirely — i
 disappear from here — and if it was the active tab, `BottomDockComponent` falls back to the next tab
 still offered; only once every tab has been detached (or Mixer disabled by its own placement
 preference too) does `MainComponent` hide the whole dock, reopening it automatically the moment a
-tab redocks. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows).
+tab redocks. A detached Timeline has no header strip; its transport row ends with the "Dock back" button. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows).
 
 **Why the names stayed.** They match settings files already on disk. The cost is that a
 component-local `TimelinePanelComponent::isVisible()` check does not tell you whether the dock is

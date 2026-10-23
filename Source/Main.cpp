@@ -1,6 +1,7 @@
 #include "AutomationLaunch.h"
 #include "Branding.h"
 #include "MainComponent/MainComponent.h"
+#include "MainComponent/WindowKeyForward.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "Project/ProjectCommandLine.h"
 #include "SettingsMigration.h"
@@ -221,6 +222,12 @@ private:
         }
 
         void closeButtonPressed() override { JUCEApplication::getInstance()->systemRequestedQuit(); }
+
+        // With nothing focused (right after launch, or once an in-place editor closes) a key lands on this window,
+        // not on a component under MainComponent; forward it so Cmd+N and the like still run.
+        bool keyPressed(const juce::KeyPress& key) override {
+            return synth::forwardWindowKeyToMainComponent(getContentComponent(), key);
+        }
 
         juce::StringArray getMenuBarNames() override { return {"File", "Edit", "Help"}; }
 

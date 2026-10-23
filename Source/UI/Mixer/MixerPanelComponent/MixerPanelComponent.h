@@ -4,6 +4,7 @@
 #include "Mixer/MixerViewDoc.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/KeyboardContextMenu.h"
@@ -58,6 +59,7 @@ namespace synth::ui {
 
 class MixerPanelComponent
     : public juce::Component
+    , public DockBackSlot
     , public KeyboardContextMenuProvider {
 public:
     MixerPanelComponent();
@@ -89,6 +91,7 @@ public:
 
     /** The pane at the left of the panel, which travels with it into a detached window. */
     SidePane& getSidePane() noexcept { return sidePane_; }
+    void setDockBackButton(juce::Button* button) override { toolbar_.setDockBackButton(button); }
     /** The toolbar button that shows and hides it. */
     SidePaneToggleButton& getSidePaneButton() noexcept { return toolbar_.getSidePaneButton(); }
     /** The toolbar's Inserts / Sends / EQ toggle and the shortcut action it mirrors (shortcut hints). */
@@ -114,6 +117,7 @@ public:
     void soloShowChannel(const juce::String& channelId);
 
     MixerZonesPane& getZonesPaneForTest() noexcept { return zonesPane_; }
+    int getColumnIndexContainingForTest(const juce::Component* focused) const { return columnIndexContaining(focused); }
     juce::Viewport& getLeftZoneViewportForTest() noexcept { return leftZone_.viewport; }
     juce::Viewport& getRightZoneViewportForTest() noexcept { return rightZone_.viewport; }
     /** The zone the Nth laid-out column (see getFocusedColumnIndexForTest) sits in. */
@@ -458,6 +462,8 @@ private:
     bool toggleFocusedMuted();
     bool toggleFocusedSoloed();
     bool armFocusedTrack();
+    int columnIndexContaining(const juce::Component* focused) const;
+    bool renameFocusedColumn(); // the Rename key: the focused column's header name editor
 
     // ---- Row focus -- implemented in MixerPanelRowKeyboard.cpp ---------------------------------
     /** The focused column's insert / send lists while their sections are shown; null otherwise. */

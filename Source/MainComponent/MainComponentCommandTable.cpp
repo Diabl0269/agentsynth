@@ -9,11 +9,16 @@
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/RenameKey.h"
 #include "UI/Timeline/TimelineSnapNames.h"
 #include <algorithm>
 #include <iterator>
 
 namespace {
+// Option+R types a symbol in a text field, so a focused editor keeps the key.
+bool renameUnlessTyping(CanvasCardKeyboard& cards) {
+    return !synth::ui::isTextEditorFocused() && cards.renameSelectedModule();
+}
 
 // The current marker beats, for jumpToAdjacentMarker (MarkerJump.h) -- getMarkers() is
 // already sorted by beat, but the search itself doesn't require that, so this stays a plain copy
@@ -600,10 +605,10 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
         {AppCommands::locateMaster, "Go to Output", "Select Master (or Audio Output) and frame the whole output dock",
          "View", "locateMaster", [](const MainComponent& m) { return m.graphEditor.hasLocatableMasterOrOutput(); },
          [](MainComponent& m) { return m.performLocateMaster(); }},
-        {AppCommands::renameSelectedModule, "Rename Module", "Rename the selected module card", "Edit",
+        {AppCommands::renameSelectedModule, "Rename", "Rename the focused name, else the selected module card", "Edit",
          "renameSelectedModule",
          [](const MainComponent& m) { return m.graphEditor.getCardKeyboard().canRenameSelectedModule(); },
-         [](MainComponent& m) { return m.graphEditor.getCardKeyboard().renameSelectedModule(); }},
+         [](MainComponent& m) { return renameUnlessTyping(m.graphEditor.getCardKeyboard()); }},
         {AppCommands::replaceSelectedModule, "Replace Module With...",
          "Swap the selected module for another type or hosted plugin", "Edit", "replaceSelectedModule",
          [](const MainComponent& m) { return m.canReplaceModuleFromShortcut(); },

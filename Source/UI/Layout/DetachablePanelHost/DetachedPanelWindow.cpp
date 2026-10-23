@@ -39,11 +39,10 @@ bool isPlausibleRestoredBounds(const juce::Rectangle<int>& rect) {
 }
 } // namespace
 
-DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableButton& headerButton,
-                                         juce::Label& headerTitle, juce::String boundsKey,
+DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, const juce::String& title, juce::String boundsKey,
                                          juce::ApplicationProperties* appProperties,
                                          synth::theme::AppLookAndFeel* lookAndFeel, ShortcutManager* shortcutManager)
-    : juce::DocumentWindow(headerTitle.getText(), juce::Colours::darkgrey, juce::DocumentWindow::closeButton,
+    : juce::DocumentWindow(title, juce::Colours::darkgrey, juce::DocumentWindow::closeButton,
                            /*addToDesktop*/ false)
     , panel_(panel)
     , boundsKey_(std::move(boundsKey))
@@ -64,11 +63,9 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
     setUsingNativeTitleBar(true);
     setResizable(true, false);
 
-    // Borrows panel/button/title -- see the header comment on why this is setContentNonOwned, not
-    // setContentOwned: none of the three are ours to delete. Built BEFORE setLookAndFeel() below so
-    // applyHeaderButtonIcon() (called from the lookAndFeelChanged() that setLookAndFeel() fires
-    // synchronously) already has a real content_->button to apply the icon to.
-    content_ = std::make_unique<Content>(panel, headerButton, headerTitle);
+    // Borrows the panel -- see the header comment on why this is setContentNonOwned, not setContentOwned: the
+    // panel is not ours to delete.
+    content_ = std::make_unique<Content>(panel);
     setContentNonOwned(content_.get(), /*resizeToFit*/ false);
 
     // Plugin-mode seam (docs/mixer/panel.md): our OWN scope, never Desktop::setDefaultLookAndFeel.
@@ -78,8 +75,8 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
         setLookAndFeel(lookAndFeel);
 
     // MainComponent's TooltipWindow only covers its own component tree -- a second top-level
-    // window needs its own, or the detach button's tooltip (and every control inside the hosted
-    // panel) never shows here.
+    // window needs its own, or no tooltip of a control inside the hosted panel (the dock-back button
+    // included) ever shows here.
     tooltipWindow_ = std::make_unique<synth::ui::AppTooltipWindow>(this, appProperties);
 
     // Repaints our own focus-region root's accent outline on focus changes -- see
@@ -97,7 +94,7 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
 DetachedPanelWindow::~DetachedPanelWindow() {
     juce::Desktop::getInstance().removeFocusChangeListener(this);
     // Drop our reference to the borrowed content BEFORE our members (content_, and the panel/
-    // button/title it never owned) unwind below -- setContentNonOwned means ~ResizableWindow would
+    // panel it never owned) unwind below -- setContentNonOwned means ~ResizableWindow would
     // never touch it anyway, but this keeps the window in a content-less state for the rest of its
     // own teardown rather than relying on that.
     setContentNonOwned(nullptr, false);
@@ -160,27 +157,7 @@ void DetachedPanelWindow::lookAndFeelChanged() {
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& colors = lf->getTheme().colors;
         setBackgroundColour(colors.bg0.withAlpha(1.0f).overlaidWith(colors.surface));
-        applyHeaderButtonIcon(*lf);
     }
-}
-
-void DetachedPanelWindow::applyHeaderButtonIcon(synth::theme::AppLookAndFeel& lf) {
-    // The header button is BORROWED from DetachablePanelHost (this class's own header
-    // comment) -- DetachablePanelHost::applyIcon() only ever runs from ITS OWN lookAndFeelChanged(),
-    // which stops reaching this button the moment setDetached(true) reparents it in here (an
-    // icon-only ImageFitted DrawableButton with no Drawable ever assigned to it paints nothing at
-    // all, not a placeholder). Re-applying the SAME icon that method uses, from THIS window's own
-    // lookAndFeelChanged() instead, keeps the button correct regardless of whether the host's own
-    // callback ran before or after the reparent.
-    if (content_ == nullptr)
-        return;
-    auto base = lf.getIcon(synth::theme::Icon::ActionDetachWindow);
-    if (base == nullptr)
-        return;
-    const auto& colors = lf.getTheme().colors;
-    auto hoverIcon = base->createCopy();
-    hoverIcon->replaceColour(colors.textMuted, colors.textPrimary);
-    content_->button.setImages(base.get(), hoverIcon.get(), hoverIcon.get());
 }
 
 bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {

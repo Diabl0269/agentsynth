@@ -10,12 +10,7 @@ namespace synth::ui {
 MixerMirrorController::MixerMirrorController(juce::ApplicationProperties& appProperties, ConfigureFn configure)
     : appProperties_(appProperties)
     , configure_(std::move(configure)) {
-    headerTitle_.setText("Mixer", juce::dontSendNotification);
-    headerButton_.setClickingTogglesState(false);
-    headerButton_.setButtonText({}); // icon-only -- same convention DetachablePanelHost's own button uses
-    headerButton_.setTooltip("Close mixer window");
-    headerButton_.setTitle("Close mixer window");
-    headerButton_.onClick = [this] { close(); };
+    dockBackButton_.onClick = [this] { close(); };
 }
 
 MixerMirrorController::~MixerMirrorController() = default;
@@ -79,8 +74,9 @@ void MixerMirrorController::open(MixerPanelComponent& sourcePanel, synth::theme:
     mirror_->onLiveMixerStateChanged = [&sourcePanel] { sourcePanel.refreshLiveMixerVisuals(); };
     mirror_->rebuild();
 
-    window_ = std::make_unique<DetachedPanelWindow>(*mirror_, headerButton_, headerTitle_, "mixerMirrorWindowBounds",
-                                                    &appProperties_, lookAndFeel, shortcutManager);
+    window_ = std::make_unique<DetachedPanelWindow>(*mirror_, "Mixer", "mixerMirrorWindowBounds", &appProperties_,
+                                                    lookAndFeel, shortcutManager);
+    mirror_->setDockBackButton(&dockBackButton_);
     window_->onCloseRequested = [this] { close(); };
     window_->onAppShortcut = std::move(appShortcutFallback);
     window_->registerHostedPanelFocusRegion("mixerMirror", *mirror_);
@@ -99,6 +95,7 @@ void MixerMirrorController::open(MixerPanelComponent& sourcePanel, synth::theme:
 void MixerMirrorController::close() {
     if (window_ == nullptr)
         return;
+    mirror_->setDockBackButton(nullptr);
     window_.reset();
     if (onOpenedOrClosed)
         onOpenedOrClosed();

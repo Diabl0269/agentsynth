@@ -209,6 +209,20 @@ juce::String drawShapeActionName(const juce::String& actionId) {
 // The four views' own "show" actions (the three bottom-panel tabs and the canvas) and their "show in the main area"
 // twins.
 juce::String dockViewActionName(const juce::String& actionId) {
+    if (actionId == "showDockTab1")
+        return "Show Tab 1";
+    if (actionId == "showDockTab2")
+        return "Show Tab 2";
+    if (actionId == "showDockTab3")
+        return "Show Tab 3";
+    if (actionId == "focusMainView")
+        return "Focus Main View";
+    if (actionId == "swapDockTab1ToMain")
+        return "Show Tab 1 in the Main Area";
+    if (actionId == "swapDockTab2ToMain")
+        return "Show Tab 2 in the Main Area";
+    if (actionId == "swapDockTab3ToMain")
+        return "Show Tab 3 in the Main Area";
     if (actionId == "toggleTimelinePanel")
         return "Show Timeline Tab";
     if (actionId == "toggleMixerPanel")
@@ -237,7 +251,9 @@ juce::String addRenameReplaceActionName(const juce::String& actionId) {
     if (actionId == "openFeedback")
         return "Send Feedback";
     if (actionId == "renameSelectedModule")
-        return "Rename Module";
+        return "Rename";
+    if (actionId == "renameSelectedModuleAlt")
+        return "Rename (second key)";
     if (actionId == "replaceSelectedModule")
         return "Replace Module With...";
     return {};

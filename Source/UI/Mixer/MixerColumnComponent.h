@@ -104,6 +104,8 @@ public:
      *  the two paths can never diverge. A no-op after unbindFromGraph() (graph_/undoManager_/
      *  audioEngine_ null then), same guard the former inline lambdas already had. */
     void toggleMuted();
+    /** The Rename key: opens the header's inline name editor; false for a column with nothing to rename. */
+    bool beginHeaderRename() { return header_.beginNameEdit(); }
     void toggleSoloed();
 
     /** The fader nudged one undo step, or false when nothing is bound (Direct-column-style

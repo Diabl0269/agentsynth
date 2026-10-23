@@ -30,6 +30,7 @@ DetachablePanelHost::DetachablePanelHost(juce::Component& panel, juce::String ti
     // reports button text (Button::getButtonText() otherwise returns that name verbatim).
     detachButton_.setButtonText({});
     detachButton_.onClick = [this] { toggleDetach(); };
+    dockBackButton_.onClick = [this] { setDetached(false); };
     addAndMakeVisible(detachButton_);
 
     addAndMakeVisible(panel_);
@@ -74,11 +75,13 @@ void DetachablePanelHost::setDetached(bool detached) {
         return;
 
     if (detached) {
-        headerFade_.snapTo(headerFade_.isShown()); // the window borrows the strip: no fade runs on it
-        window_ = std::make_unique<DetachedPanelWindow>(panel_, detachButton_, titleLabel_, boundsKey_, appProperties_,
-                                                        lookAndFeel_, shortcutManager_);
+        headerFade_.snapTo(headerFade_.isShown()); // no fade runs on the strip while the panel is away
+        window_ = std::make_unique<DetachedPanelWindow>(panel_, title_, boundsKey_, appProperties_, lookAndFeel_,
+                                                        shortcutManager_);
         window_->onCloseRequested = [this] { setDetached(false); };
         window_->onAppShortcut = onAppShortcutFallback;
+        if (auto* slot = dynamic_cast<DockBackSlot*>(&panel_))
+            slot->setDockBackButton(&dockBackButton_);
         if (editsBlocked_)
             window_->setEditsBlocked(true, onEditRefused_);
         if (focusRegionRoot_ != nullptr)
@@ -95,11 +98,11 @@ void DetachablePanelHost::setDetached(bool detached) {
         window_->setVisible(true);
         window_->toFront(true);
     } else {
-        // Reparents titleLabel_/detachButton_/panel_ back into OUR OWN tree -- addAndMakeVisible
+        // The toolbar gives the button back, then panel_ returns to OUR OWN tree -- addAndMakeVisible
         // auto-detaches a child from whatever parent (the window's Content) currently holds it,
         // same idiom BottomDockComponent's own constructor uses to take timelinePanel_ in.
-        addAndMakeVisible(titleLabel_);
-        addAndMakeVisible(detachButton_);
+        if (auto* slot = dynamic_cast<DockBackSlot*>(&panel_))
+            slot->setDockBackButton(nullptr);
         addAndMakeVisible(panel_);
         window_.reset();
         headerFade_.snapTo(!embeddedHeader_); // back docked: the strip is as the host wants it, no fade
@@ -154,9 +157,8 @@ void DetachablePanelHost::applyTooltip() {
     // fallback getTitle() otherwise uses), so without an explicit title this icon-only button was
     // unnamed to a screen reader both docked AND inside its own DetachedPanelWindow -- same fix as
     // BottomDockComponent::refreshDetachButton()'s own detach button.
-    const juce::String label = isDetached() ? "Dock back" : "Open in window";
-    detachButton_.setTooltip(label);
-    detachButton_.setTitle(label);
+    detachButton_.setTooltip("Open in window");
+    detachButton_.setTitle("Open in window");
 }
 
 } // namespace synth::ui

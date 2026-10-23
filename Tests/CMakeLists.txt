@@ -706,6 +706,8 @@ add_executable(Tests
     UI/Layout/BottomDockDetachedFocusTests.cpp
     UI/Layout/BottomDockTabMotionTests.cpp
     UI/Layout/BottomDockSwapKeysTests.cpp
+    UI/Layout/BottomDockPositionalKeysTests.cpp
+    UI/Layout/RenameKeyTests.cpp
     UI/Layout/BottomDockMainSuspendTests.cpp
     UI/Layout/BottomDockSwapMotionTests.cpp
     UI/Layout/BottomDockMainViewTests.cpp
@@ -766,6 +768,7 @@ add_executable(Tests
     UI/Layout/DetachablePanelHost/DetachedPanelWindowTests.cpp
     UI/Layout/DetachablePanelHost/DetachedPanelWindowCloseKeysTests.cpp
     UI/Layout/DetachablePanelHost/DetachedPanelWindowLayoutTests.cpp
+    UI/Layout/DetachablePanelHost/DockBackToolbarTests.cpp
     UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp
     UI/Mixer/MixerPanelKeyboardFocusTests.cpp
     UI/Mixer/MixerAccessibilityTests.cpp

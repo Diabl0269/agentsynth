@@ -202,3 +202,18 @@ TEST_F(ShortcutManagerTest, GetActionsForKeyPressReportsEveryMatch) {
     EXPECT_TRUE(both.contains("timelineClipPrevious"));
     EXPECT_TRUE(both.contains("autoArrange"));
 }
+
+// Regression test for FRO1088: on Windows F2 is 0x10071, and folding its case through a 16-bit towlower made it 'q'
+// (0x71), so the Rename key fired on Q. The codes are spelled out so the check runs on every platform.
+TEST_F(ShortcutManagerTest, AnExtendedKeyNeverMatchesTheLetterInItsLowBits) {
+    const juce::KeyPress windowsF2(0x10071, juce::ModifierKeys::noModifiers, 0);
+    const juce::KeyPress letterQ('q', juce::ModifierKeys::noModifiers, 0);
+    EXPECT_FALSE(ShortcutManager::keyPressMatches(windowsF2, letterQ));
+    EXPECT_FALSE(ShortcutManager::keyPressMatches(letterQ, windowsF2));
+    EXPECT_TRUE(ShortcutManager::keyPressMatches(windowsF2, windowsF2));
+    EXPECT_TRUE(ShortcutManager::keyPressMatches(juce::KeyPress('Q', juce::ModifierKeys::noModifiers, 0), letterQ))
+        << "letters still match whatever their case";
+
+    manager.setBinding("renameSelectedModule", windowsF2);
+    EXPECT_NE(manager.getActionForKeyPress(letterQ), "renameSelectedModule");
+}

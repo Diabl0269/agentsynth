@@ -279,7 +279,8 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     for (const auto& actionId : shortcuts.getActionIds())
         if (AppCommands::getCommandForAction(actionId) != AppCommands::kNoCommand)
             expectedActions.add(actionId);
-    auto expectedCommandCount = expectedActions.size();
+    // renameSelectedModuleAlt is a second key for the rename command: it maps to that command, which one row serves.
+    auto expectedCommandCount = expectedActions.size() - 1;
 #if JUCE_MAC || JUCE_WINDOWS
     expectedCommandCount += 1; // checkForUpdates
 #endif

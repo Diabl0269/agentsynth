@@ -69,7 +69,7 @@ TEST_F(BottomDockMainViewTest, SetMainViewPutsTheCanvasTabInTheSlotOfTheViewThat
 
     EXPECT_EQ(dock().getMainView(), Tab::Mixer);
     EXPECT_EQ(stripNames(), (Names{"Timeline", "Canvas", "Controllers"}));
-    EXPECT_EQ(dock().getStripTabs()[1].actionId, "showCanvas");
+    EXPECT_EQ(dock().getStripTabs()[1].actionId, "showDockTab2") << "the Canvas tab sits in the Mixer's old place";
     EXPECT_EQ(dock().getActiveTab(), Tab::Canvas) << "the view that came down takes over the active tab";
     EXPECT_EQ(dock().getActivePanelRoot(), nullptr) << "no canvas panel lives in the dock yet";
 

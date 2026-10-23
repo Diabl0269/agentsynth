@@ -7,6 +7,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/RenameKey.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 
 namespace synth::ui {
@@ -31,6 +32,10 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
         return nudgeFocusedFader(key.getModifiers().isShiftDown() ? -0.1f : -1.0f);
     if (key.isKeyCode(juce::KeyPress::returnKey))
         return selectFocusedOnCanvas();
+
+    // The Rename key (F2 / Option+R) renames the focused column's name in place; a text editor keeps its own keys.
+    if (isRenameKeyPress(shortcuts_, key) && !isTextEditorFocused())
+        return renameFocusedColumn();
 
     // Rebindable, Timeline category -- the SAME action ids the timeline track-header row already
     // binds (TimelineTrackHeaderComponent::matchesAction), deliberately: a new id would not
@@ -125,6 +130,26 @@ bool MixerPanelComponent::selectFocusedOnCanvas() {
         return false; // Direct boxes no macro/node -- nothing to select.
     selectOnCanvas(entry.uuid);
     return true;
+}
+
+// The column holding keyboard focus: the one whose component contains the focused widget (a click lands focus on a
+// colour dot, fader or button inside a column, which never moves focusedColumnIndex_), else the arrow-key column.
+int MixerPanelComponent::columnIndexContaining(const juce::Component* focused) const {
+    for (auto* c = focused; c != nullptr && c != this; c = c->getParentComponent())
+        for (size_t i = 0; i < columnEntries_.size(); ++i)
+            if (columnEntries_[i].component == c)
+                return (int)i;
+    return focusedColumnIndex_;
+}
+
+// Direct and Master have no name to edit, so the key falls through there.
+bool MixerPanelComponent::renameFocusedColumn() {
+    const int index = columnIndexContaining(juce::Component::getCurrentlyFocusedComponent());
+    if (index < 0 || index >= (int)columnEntries_.size())
+        return false;
+    const auto& entry = columnEntries_[(size_t)index];
+    return entry.kind == ColumnEntry::Kind::Strip &&
+           static_cast<MixerColumnComponent*>(entry.component)->beginHeaderRename();
 }
 
 bool MixerPanelComponent::toggleFocusedMuted() {

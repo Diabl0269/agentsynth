@@ -82,6 +82,9 @@ enum class Icon : int {
     TogglePanel,
     // The mixer insert list's split row (parallel paths) -- appended, as above.
     MixerSplit,
+    // The "dock back" button on a detached panel's toolbar: an arrow pointing into a window (the inverse of
+    // ActionDetachWindow's arrow out of it) -- appended, as above.
+    ActionDockBack,
     kCount
 };
 

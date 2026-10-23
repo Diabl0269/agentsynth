@@ -77,6 +77,7 @@ public:
         migrateBottomPanelToggleKeys(*settings);
         migrateBottomPanelCmdJ(*settings);
         migrateTransportCtrlChords(*settings);
+        migrateDockDigitKeys(*settings);
         persistMigratedBindings(*settings, loaded);
     }
 
@@ -157,6 +158,27 @@ public:
         const auto cmdJ = juce::KeyPress('j', juce::ModifierKeys::commandModifier, 0);
         if (bindings["toggleBottomPanel"] == cmdT && getConflictingAction("toggleBottomPanel", cmdJ).isEmpty())
             bindings["toggleBottomPanel"] = cmdJ;
+    }
+
+    /** One-shot: the digit chords moved from the per-view actions (Cmd+1 Timeline ... Cmd+4 Canvas, Opt+Cmd+1..4
+     *  their swaps) to the positional ones (showDockTab1..3, swapDockTab1..3ToMain), which follow the tab order.
+     *  A saved install still holds the old digits on the per-view actions, so each is cleared where it still holds
+     *  its old default (a user's own rebind stays) and the positional action owns the chord. */
+    void migrateDockDigitKeys(juce::PropertiesFile& settings) {
+        constexpr auto flag = "shortcutMigration_dockDigitKeys";
+        if (settings.getBoolValue(flag, false))
+            return;
+        settings.setValue(flag, true);
+        const char* const views[] = {"toggleTimelinePanel", "toggleMixerPanel", "toggleMidiRemotePanel", "showCanvas"};
+        const char* const swaps[] = {"swapTimelineToMain", "swapMixerToMain", "swapMidiRemoteToMain",
+                                     "swapCanvasToMain"};
+        const auto cmdAlt = juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier;
+        for (int i = 0; i < 4; ++i) {
+            if (bindings[views[i]] == juce::KeyPress('1' + i, juce::ModifierKeys::commandModifier, 0))
+                bindings[views[i]] = juce::KeyPress();
+            if (bindings[swaps[i]] == juce::KeyPress('1' + i, cmdAlt, 0))
+                bindings[swaps[i]] = juce::KeyPress();
+        }
     }
 
     /** One-shot: Record and Metronome gained default chords (Ctrl+R / Ctrl+M) on every platform, but
@@ -280,7 +302,7 @@ public:
         // digits clear of the Ctrl+Shift grid commands they share key codes with.
         if (binding.getModifiers() != pressed.getModifiers())
             return false;
-        if (towlower(binding.getKeyCode()) == towlower(pressed.getKeyCode()))
+        if (foldKeyCodeCase(binding.getKeyCode()) == foldKeyCodeCase(pressed.getKeyCode()))
             return true;
         if (!binding.getModifiers().isShiftDown() || !pressed.getModifiers().isShiftDown())
             return false;
@@ -496,8 +518,14 @@ private:
      *  Settings tab's auto-swap would then quietly steal one of them. An invalid binding (an action
      *  the user cleared) collides with nothing. */
     static bool bindingsCollide(const juce::KeyPress& binding, const juce::KeyPress& key) {
-        return binding.isValid() && towlower(binding.getKeyCode()) == towlower(key.getKeyCode()) &&
+        return binding.isValid() && foldKeyCodeCase(binding.getKeyCode()) == foldKeyCodeCase(key.getKeyCode()) &&
                binding.getModifiers() == key.getModifiers();
+    }
+
+    /** `keyCode` lower-cased when it is a character; an extended key (arrows, F-keys: above 0xFFFF on Windows) comes
+     *  back unchanged. towlower takes a 16-bit wint_t on Windows, so F2 (0x10071) would fold to 'q' (0x71). */
+    static int foldKeyCodeCase(int keyCode) {
+        return keyCode >= 0 && keyCode <= 0xFFFF ? static_cast<int>(towlower(static_cast<wint_t>(keyCode))) : keyCode;
     }
 
     /** The US-ANSI unshifted character on the same physical key as `keyCode`: the digit row, plus

@@ -255,48 +255,22 @@ TEST(BottomDockComponentTests, DefaultTabOrderIsTimelineMixerControllers) {
     EXPECT_EQ(strip, (std::vector<juce::String>{"Timeline", "Mixer", "Controllers"})) << "the strip is unchanged";
 }
 
-// Dragging a tab past another swaps their order and persists it; each view keeps its own Cmd+digit.
-TEST(BottomDockComponentTests, DragReorderSwapsTabOrderAndKeepsEachViewsKey) {
+// Dragging a tab past another swaps their order and persists it; the Cmd+digits follow the places, so the tabs re-key.
+TEST(BottomDockComponentTests, DragReorderSwapsTabOrderAndTheKeysFollowThePlaces) {
     BottomDockActiveTabResetGuardMDT resetGuard;
     MainComponent mc(std::make_unique<MockProviderMDCT>());
     mc.setSize(1400, 900);
     auto& dock = mc.getBottomDock();
     using Tab = synth::ui::BottomDockComponent::Tab;
 
-    const auto cmd = [](int digit) { return juce::KeyPress('0' + digit, juce::ModifierKeys::commandModifier, 0); };
     dock.reorderTabsForTest(Tab::Timeline, Tab::Mixer);
 
     const std::vector<Tab> expected{Tab::Mixer, Tab::Timeline, Tab::MidiRemote, Tab::Canvas};
     EXPECT_EQ(dock.getTabOrderForTest(), expected);
-    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleTimelinePanel"), cmd(1));
-    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleMixerPanel"), cmd(2));
-    EXPECT_EQ(mc.getShortcutManager().getBinding("toggleMidiRemotePanel"), cmd(3));
-    EXPECT_EQ(mc.getShortcutManager().getBinding("showCanvas"), cmd(4));
-}
-
-// The saved tab order and the key bindings are separate stores; loading an order never re-keys a
-// binding, so a user who swapped Cmd+1 and Cmd+2 (or whose older build did on a reorder) keeps them.
-TEST(BottomDockComponentTests, LoadingATabOrderNeverRekeysTheCmdDigits) {
-    BottomDockActiveTabResetGuardMDT resetGuard;
-    MainComponent mc(std::make_unique<MockProviderMDCT>());
-    mc.setSize(1400, 900);
-    auto& shortcuts = mc.getShortcutManager();
-    const auto cmd = [](int digit) { return juce::KeyPress('0' + digit, juce::ModifierKeys::commandModifier, 0); };
-    shortcuts.setBinding("toggleMixerPanel", cmd(1));
-    shortcuts.setBinding("toggleTimelinePanel", cmd(2));
-    auto* settings = mc.getAppPropertiesForTest().getUserSettings();
-    ASSERT_NE(settings, nullptr);
-    settings->setValue("bottomDockTabOrder", "timeline,mixer,midiRemote");
-
-    mc.getBottomDock().setApplicationProperties(&mc.getAppPropertiesForTest());
-
-    EXPECT_EQ(shortcuts.getBinding("toggleMixerPanel"), cmd(1));
-    EXPECT_EQ(shortcuts.getBinding("toggleTimelinePanel"), cmd(2));
-    EXPECT_EQ(shortcuts.getBinding("toggleMidiRemotePanel"), cmd(3));
-
-    shortcuts.setBinding("toggleMixerPanel", cmd(2));
-    shortcuts.setBinding("toggleTimelinePanel", cmd(1));
-    shortcuts.saveToProperties();
+    EXPECT_EQ(dock.keyPositionOf(Tab::Mixer), 1);
+    EXPECT_EQ(dock.keyPositionOf(Tab::Timeline), 2);
+    EXPECT_EQ(dock.keyPositionOf(Tab::MidiRemote), 3);
+    EXPECT_EQ(dock.keyPositionOf(Tab::Canvas), 0) << "the view in the main area has no number";
 }
 
 // Detaching the ACTIVE tab must never leave the dock showing nothing -- it falls
@@ -516,9 +490,7 @@ TEST(BottomDockComponentTests, ADragKeepsTheOrderUntilReleaseThenSavesItAndClear
     auto* settings = f.mc.getAppPropertiesForTest().getUserSettings();
     ASSERT_NE(settings, nullptr);
     EXPECT_EQ(settings->getValue("bottomDockTabOrder"), "mixer,timeline,midiRemote,canvas");
-    EXPECT_EQ(f.mc.getShortcutManager().getBinding("toggleMixerPanel"),
-              juce::KeyPress('2', juce::ModifierKeys::commandModifier, 0))
-        << "a reorder never re-keys a view";
+    EXPECT_EQ(f.dock().keyPositionOf(Tab::Mixer), 1) << "a reorder re-keys the tabs";
 }
 
 TEST(BottomDockComponentTests, APlainClickNeverShowsTheLiftedTab) {

@@ -189,10 +189,13 @@ public:
     synth::HostedPluginWindowManager& getPluginWindowManager() { return pluginWindowManager; }
     /** Opens the dock if hidden (never closes it) and switches to `tab`; a detached tab's window is raised instead. */
     void showBottomDockTab(synth::ui::BottomDockComponent::Tab tab);
-    /** The Cmd+1/2/3 actions: showBottomDockTab(), then keyboard focus onto the dock's tab strip when the tab
-     *  is docked and showing; a detached tab's window is raised and its panel focused, and a Mixer shown outside the
-     *  dock is left alone. */
+    /** Cmd+N for `tab`: showBottomDockTab(), then the dock's strip takes focus; a detached tab's window is raised
+     *  and focused, a Mixer outside the dock is left alone, any other target raises the main window first. */
     void showBottomDockTabFromShortcut(synth::ui::BottomDockComponent::Tab tab);
+    void showDockTabAtPosition(int position);             // Cmd+N: the tab at place 1..3 of the tab order
+    void swapDockTabAtPositionToMain(int position);       // Opt+Cmd+N: the same tab, swapped into the main area
+    void focusMainView();                                 // Cmd+0: raises the main window, focuses the main-area view
+    static int getMainWindowRaiseCountForTest() noexcept; // all windows; tests compare before and after
     /** The Cmd+J action: toggles the pane; an opened pane gets keyboard focus on its tab strip, and a pane that
      *  closes around the focus hands it to the view in the main area. */
     void toggleBottomPanelFromShortcut();
@@ -938,6 +941,7 @@ private:
     bool isViewOnScreen(synth::ui::BottomDockComponent::Tab view) const;
     // Focuses the main view's region when it is open (a main area left empty has none open).
     void focusMainViewIfOpen();
+    void raiseMainWindow(); // toFront(true); counted for tests
     // Greys out the Minimap toggle (tooltip "Needs a taller canvas") while the canvas is under the size floor.
     void refreshMinimapButton();
     // Restores the zoom and pan the canvas had in the main area (see canvasMainView_).

@@ -57,19 +57,49 @@ bool BottomDockComponent::changeMainView(Tab view, bool showLeavingView) {
 
 void BottomDockComponent::setResizeHandleActive(bool active) { resizeHandle_.setInterceptsMouseClicks(active, false); }
 
-// One fixed key per view (Opt+Cmd+1..4, matching the view's own Cmd+digit), named by view so a swap never re-keys.
-const char* BottomDockComponent::swapActionIdForTab(Tab view) noexcept {
-    switch (view) {
-    case Tab::Mixer:
-        return "swapMixerToMain";
-    case Tab::MidiRemote:
-        return "swapMidiRemoteToMain";
-    case Tab::Canvas:
-        return "swapCanvasToMain";
-    case Tab::Timeline:
-        break;
+// The digit keys follow the tab order: position N is the N-th view of the user's order that is not in the main
+// area, so dragging a tab to a new place re-keys it. The main-area view has no number (Cmd+0 focuses it), and a
+// tab in its own window keeps its slot, so its key still raises that window.
+std::optional<BottomDockComponent::Tab> BottomDockComponent::tabAtKeyPosition(int position) const noexcept {
+    int seen = 0;
+    for (Tab t : tabModel_.getOrder()) {
+        if (tabModel_.isInMain(t))
+            continue;
+        if (++seen == position)
+            return t;
     }
-    return "swapTimelineToMain";
+    return std::nullopt;
+}
+
+int BottomDockComponent::keyPositionOf(Tab view) const noexcept {
+    for (int position = 1; position <= kKeyPositions; ++position)
+        if (tabAtKeyPosition(position) == view)
+            return position;
+    return 0;
+}
+
+const char* BottomDockComponent::showActionIdForPosition(int position) noexcept {
+    static constexpr const char* ids[] = {"showDockTab1", "showDockTab2", "showDockTab3"};
+    return position >= 1 && position <= kKeyPositions ? ids[position - 1] : nullptr;
+}
+
+const char* BottomDockComponent::swapActionIdForPosition(int position) noexcept {
+    static constexpr const char* ids[] = {"swapDockTab1ToMain", "swapDockTab2ToMain", "swapDockTab3ToMain"};
+    return position >= 1 && position <= kKeyPositions ? ids[position - 1] : nullptr;
+}
+
+juce::String BottomDockComponent::showActionIdForTab(Tab view) const {
+    const char* id = showActionIdForPosition(keyPositionOf(view));
+    return id != nullptr ? id : "";
+}
+
+juce::String BottomDockComponent::swapActionIdForTab(Tab view) const {
+    const char* id = swapActionIdForPosition(keyPositionOf(view));
+    return id != nullptr ? id : "";
+}
+
+juce::String BottomDockComponent::shortcutTextFor(const juce::String& actionId) const {
+    return shortcutTextSource_ && actionId.isNotEmpty() ? shortcutTextSource_(actionId) : juce::String();
 }
 
 juce::String BottomDockComponent::mainViewAnnouncement(Tab view) {

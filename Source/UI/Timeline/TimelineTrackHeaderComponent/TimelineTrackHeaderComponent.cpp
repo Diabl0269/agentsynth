@@ -5,6 +5,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/RenameKey.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TrackColour.h"
 #include "UI/Timeline/TrackColourPicker.h"
@@ -489,6 +490,13 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
     // The "Next Clip" key carries focus from the row into its track's clips.
     if (onEnterClipsRequested && matchesAction(key, "timelineClipNext", plainKey(juce::KeyPress::rightKey)))
         return onEnterClipsRequested();
+
+    // The Rename key (F2 / Option+R) opens THIS row's inline name editor, the double-click's own gesture; a text editor
+    // keeps its own keys, and a row whose name cannot be edited lets the key bubble.
+    if (isRenameKeyPress(shortcuts_, key) && !isTextEditorFocused() && nameLabel_.isEditableOnDoubleClick()) {
+        nameLabel_.showEditor();
+        return true;
+    }
 
     // M/S/R toggle THIS row's track — rebindable, bare-letter defaults matching the J/L/P/F
     // convention. With no ShortcutManager installed (headless embeddings, or a test that never

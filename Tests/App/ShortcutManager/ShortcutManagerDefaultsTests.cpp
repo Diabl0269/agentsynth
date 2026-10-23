@@ -132,6 +132,15 @@ const juce::StringArray& surfaceResolvedActionIds() {
 // (see EveryActionIdHasABindingACategoryAndADescription below), so this is the one exception list.
 const juce::StringArray& intentionallyUnboundActionIds() {
     static const juce::StringArray ids{
+        // The per-view show/swap actions: the digits belong to the positional showDockTab / swapDockTab actions.
+        "toggleTimelinePanel",
+        "toggleMixerPanel",
+        "toggleMidiRemotePanel",
+        "showCanvas",
+        "swapTimelineToMain",
+        "swapMixerToMain",
+        "swapMidiRemoteToMain",
+        "swapCanvasToMain",
         "transportPlay",
         "transportStop",
         "transportToggleLoop",
