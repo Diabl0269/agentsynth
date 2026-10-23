@@ -248,7 +248,7 @@ TEST(ReducedMotion, TestOverrideWinsOverTheSystemSetting) {
         ReducedMotionOverrideGuard off(false);
         EXPECT_FALSE(prefersReducedMotion());
     }
-    EXPECT_EQ(prefersReducedMotion(), detail::systemPrefersReducedMotion()); // override cleared
+    EXPECT_FALSE(prefersReducedMotion()); // override cleared: back to the system answer, which the test run pins off
 }
 
 // ----------------------------------------------------------------------------------------------
