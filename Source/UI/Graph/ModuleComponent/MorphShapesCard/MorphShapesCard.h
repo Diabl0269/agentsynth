@@ -34,6 +34,8 @@ public:
         std::function<std::vector<MorphMap::StripModulation>(int channel)> stripModulation;
         /** The tooltip of the mod dot of `channel` (empty when it has none); unset gives the map's own. */
         std::function<juce::String(int channel)> modDotTooltip;
+        /** Where the shape window keeps its grid and spectrum choices; unset (or null) remembers nothing. */
+        std::function<juce::ApplicationProperties*()> appProperties;
         float landingDotDiameter = 7.0f; ///< the dot the canvas paints where a cable lands on a slider
     };
 

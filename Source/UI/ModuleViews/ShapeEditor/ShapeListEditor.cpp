@@ -16,6 +16,7 @@ constexpr int kMargin = 14;
 constexpr int kGap = 8;
 constexpr int kMapSize = 340;
 constexpr int kButtonHeight = 28;
+constexpr int kToolbarHeight = 26;
 constexpr int kBottomBarHeight = 36;
 constexpr int kPollHz = 10;
 
@@ -47,7 +48,6 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     curve_.setTimeLabelFormatter([](double) { return juce::String(); });
     curve_.setAxisGuides(adapter_->getAxisGuides());
     curve_.setFillBaselineLevel(adapter_->getReferenceLevel());
-    curve_.setExplicitFocusOrder(3);
     addAndMakeVisible(curve_);
     curve_.onGestureStart = [this] {
         curveGestureOpen_ = true;
@@ -69,7 +69,9 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     styleButton(startFromButton_, "Start from: replace the selected shape's curve with a vowel or an animal call");
     styleButton(drawButton_, "Draw: replace the selected shape's curve with a line, sine, triangle, saw or square");
     styleButton(doneButton_, "Done: close this window (Esc)");
-    int order = 4;
+    int order = 3;
+    buildToolbar(order);
+    curve_.setExplicitFocusOrder(order++);
     for (auto* b : {&addButton_, &duplicateButton_, &renameButton_, &startFromButton_, &drawButton_, &deleteButton_,
                     &doneButton_}) {
         b->setExplicitFocusOrder(order++);
@@ -259,7 +261,15 @@ bool ShapeListEditor::keyPressed(const juce::KeyPress& key) {
 
 void ShapeListEditor::lookAndFeelChanged() { applyDestructiveLook(deleteButton_); }
 
-void ShapeListEditor::paint(juce::Graphics& g) { g.fillAll(synth::theme::themeOf(*this).colors.surface); }
+void ShapeListEditor::paint(juce::Graphics& g) {
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    g.fillAll(colors.surface);
+    if (!gridLabelArea_.isEmpty()) {
+        g.setColour(colors.textMuted);
+        g.setFont(juce::Font(juce::FontOptions(12.0f)));
+        g.drawText("Grid", gridLabelArea_, juce::Justification::centredLeft, false);
+    }
+}
 
 void ShapeListEditor::resized() {
     auto area = getLocalBounds().reduced(kMargin);
@@ -277,6 +287,10 @@ void ShapeListEditor::resized() {
 
     chips_->setBounds(area.removeFromTop(chips_->getRequiredHeight(area.getWidth())));
     area.removeFromTop(kGap);
+    if (hasToolbar()) {
+        layoutToolbar(area.removeFromTop(kToolbarHeight));
+        area.removeFromTop(kGap);
+    }
 
     auto buttons = area.removeFromBottom(kButtonHeight);
     area.removeFromBottom(kGap);

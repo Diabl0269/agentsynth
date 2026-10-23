@@ -18,12 +18,52 @@ CurveEditorComponent::ThemeColours CurveEditorComponent::resolveThemeColours() c
     return {juce::Colour(0xff1a1a2e), juce::Colour(0xff2a2a3e), juce::Colour(0xff6a6a7e), juce::Colour(0xff00b4d8)};
 }
 
+std::vector<double> CurveEditorComponent::gridXPositions() const {
+    std::vector<double> out;
+    if (!grid_.has_value())
+        return out;
+    const double minX = model_.getMinX();
+    const double maxX = model_.getMaxX();
+    if (grid_->xStep > 0.0) {
+        const double first = std::ceil((minX - grid_->xOrigin) / grid_->xStep - 1e-9);
+        for (double k = first; grid_->xOrigin + k * grid_->xStep <= maxX + 1e-9; k += 1.0)
+            out.push_back(grid_->xOrigin + k * grid_->xStep);
+        return out;
+    }
+    const int xDiv = juce::jmax(1, grid_->xDivisions);
+    for (int i = 0; i <= xDiv; ++i)
+        out.push_back(minX + (maxX - minX) * ((double)i / (double)xDiv));
+    return out;
+}
+
+// The grid's own lines, unlabelled: the vertical cells and the horizontal levels, the middle level brighter.
+void CurveEditorComponent::paintGridLines(juce::Graphics& g, const CurveEditorGeometry& geometry,
+                                          const ThemeColours& colours) const {
+    const float h = (float)getHeight();
+    const int yDiv = juce::jmax(1, grid_->yDivisions);
+
+    g.setColour(colours.grid);
+    for (const double t : gridXPositions())
+        g.drawVerticalLine((int)geometry.xForTime(t), 0.0f, h);
+    for (int i = 0; i <= yDiv; ++i) {
+        const float y = geometry.yForLevel((float)i / (float)yDiv);
+        // The middle line (yDiv even) is the zero/centre reference -- drawn brighter so it
+        // stays visible even with Grid set to Off's own faint reference grid.
+        const bool isMiddle = (yDiv % 2 == 0) && (i == yDiv / 2);
+        g.setColour(isMiddle ? colours.grid.withAlpha(0.7f) : colours.grid);
+        g.drawHorizontalLine((int)y, 0.0f, (float)getWidth());
+    }
+}
+
 void CurveEditorComponent::paintGrid(juce::Graphics& g, const CurveEditorGeometry& geometry,
                                      const ThemeColours& colours) const {
     const float h = (float)getHeight();
 
-    // guides_ set (the Filter shape editor): exactly its labelled lines, wherever the caller put them.
+    // guides_ set (the Filter shape editor): exactly its labelled lines, wherever the caller put them. While the
+    // editor snaps, the snap lines are drawn first, under the guides.
     if (guides_.has_value()) {
+        if (grid_.has_value() && snapToGrid_)
+            paintGridLines(g, geometry, colours);
         g.setFont(juce::Font(9.0f));
         for (const auto& guide : guides_->x) {
             const int x = (int)geometry.xForTime(guide.position);
@@ -45,29 +85,10 @@ void CurveEditorComponent::paintGrid(juce::Graphics& g, const CurveEditorGeometr
     // grid_ set (the LFO card): a fixed xDivisions x yDivisions grid, in place of the nice-tick
     // time grid every other caller (the envelope card) still gets below.
     if (grid_.has_value()) {
-        const int xDiv = juce::jmax(1, grid_->xDivisions);
-        const int yDiv = juce::jmax(1, grid_->yDivisions);
-        const double minX = model_.getMinX();
-        const double maxX = model_.getMaxX();
-
-        g.setColour(colours.grid);
-        for (int i = 0; i <= xDiv; ++i) {
-            const double t = minX + (maxX - minX) * ((double)i / (double)xDiv);
-            g.drawVerticalLine((int)geometry.xForTime(t), 0.0f, h);
-        }
-        for (int i = 0; i <= yDiv; ++i) {
-            const float y = geometry.yForLevel((float)i / (float)yDiv);
-            // The middle line (yDiv even) is the zero/centre reference -- drawn brighter so it
-            // stays visible even with Grid set to Off's own faint reference grid.
-            const bool isMiddle = (yDiv % 2 == 0) && (i == yDiv / 2);
-            g.setColour(isMiddle ? colours.grid.withAlpha(0.7f) : colours.grid);
-            g.drawHorizontalLine((int)y, 0.0f, (float)getWidth());
-        }
-
+        paintGridLines(g, geometry, colours);
         g.setFont(juce::Font(9.0f));
         g.setColour(colours.mutedText);
-        for (int i = 0; i <= xDiv; ++i) {
-            const double t = minX + (maxX - minX) * ((double)i / (double)xDiv);
+        for (const double t : gridXPositions()) {
             const float x = geometry.xForTime(t);
             const juce::String label = timeLabelFormatter_(t); // LFO's own formatter returns {}
             g.drawText(label, (int)x + 2, (int)h - 12, 48, 11, juce::Justification::left, false);
@@ -180,6 +201,8 @@ void CurveEditorComponent::paint(juce::Graphics& g) {
     g.fillAll(colours.background);
 
     const CurveEditorGeometry geometry = currentGeometry();
+    if (backdrop_)
+        backdrop_(g, geometry);
     paintGrid(g, geometry, colours);
     paintCurve(g, geometry, colours);
     paintHandles(g, geometry, colours);

@@ -142,6 +142,7 @@ juce::DialogWindow* MorphShapesCard::openEditor(int shapeIndex) {
         return window_.getComponent();
     }
     adapter_->setModuleName(host_.title());
+    adapter_->setApplicationProperties(host_.appProperties ? host_.appProperties() : nullptr);
     window_ = openShapeEditorWindow(adapter_, shapeIndex, host_.card);
     return window_.getComponent();
 }

@@ -1,6 +1,7 @@
 // LfoShapesAdapter.cpp -- the LFO's Custom shapes behind the generic shape list interface.
 #include "LfoShapesAdapter.h"
 #include "Modules/Lfo/LfoShapeBlender.h"
+#include "UI/ModuleViews/CurveEditor/CurveGridNoteLength.h"
 
 namespace synth::ui {
 
@@ -71,6 +72,22 @@ std::vector<ShapeStartFrom> LfoShapesAdapter::getStartFrom() const {
     for (int i = 0; i < 7; ++i)
         out.push_back({kPresetNames[i], LfoCustomWave::preset(static_cast<LfoCustomWave::Preset>(i))});
     return out;
+}
+
+/** The time axis is one cycle, so the grid is the LFO card's: the shared note lengths, triplets included. */
+std::optional<ShapeGridOffer> LfoShapesAdapter::getGridOffer() const {
+    ShapeGridOffer offer;
+    offer.control = ShapeGridOffer::Control::noteLengthBox;
+    offer.names = curvegrid::noteLengthNames();
+    offer.title = "Shape grid";
+    offer.tooltip = "Grid: snap points to a note length across the cycle (Off: free)";
+    offer.gridFor = [](const juce::String& name) -> std::optional<CurveEditorComponent::CurveGrid> {
+        const int divisions = curvegrid::noteLengthDivisions(name);
+        if (divisions <= 0)
+            return std::nullopt;
+        return curvegrid::gridForDivisions(divisions);
+    };
+    return offer;
 }
 
 juce::String LfoShapesAdapter::getWindowTitle() const { return "LFO shapes: " + moduleName_; }

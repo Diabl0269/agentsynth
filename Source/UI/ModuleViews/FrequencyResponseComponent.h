@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FilterSpectrumAnalyser.h"
 #include "FrequencyGrid.h"
 #include "Modules/Filter/CustomFilterBlend.h"
 #include "Modules/FilterModule.h"
@@ -18,8 +19,6 @@ public:
     FrequencyResponseComponent(FilterModule& filter)
         : filterModule(filter) {
         magnitudes.resize(numPoints, 0.0f);
-        fftData.resize(fftSize * 2, 0.0f);
-        spectrumMagnitudes.resize(numPoints, -80.0f);
         setTitle("Filter response");
         setDescription("Frequency response curve of the filter");
         setTooltip("Filter response: the filter's gain across 20 Hz to 20 kHz");
@@ -104,46 +103,7 @@ public:
 
         // Update spectrum from audio data
         if (showSpectrum && filterModule.getVisualBuffer()) {
-            auto* vb = filterModule.getVisualBuffer();
-            std::vector<float> samples(vb->getSize(), 0.0f);
-            vb->copyTo(samples);
-
-            // Fill FFT buffer (zero-pad if needed)
-            std::fill(fftData.begin(), fftData.end(), 0.0f);
-            int copySize = std::min((int)samples.size(), fftSize);
-            for (int i = 0; i < copySize; ++i)
-                fftData[i] = samples[i];
-
-            // Apply window and perform FFT
-            window.multiplyWithWindowingTable(fftData.data(), fftSize);
-            fft.performFrequencyOnlyForwardTransform(fftData.data());
-
-            // Convert to dB at log-spaced frequency points
-            double sampleRate = filterModule.getLastSampleRate();
-            float binWidth = static_cast<float>(sampleRate) / static_cast<float>(fftSize);
-            float normFactor = 2.0f / static_cast<float>(fftSize);
-
-            for (int i = 0; i < numPoints; ++i) {
-                float freq = indexToFreq(i);
-                float exactBin = freq / binWidth;
-                int bin0 = static_cast<int>(exactBin);
-                int bin1 = bin0 + 1;
-                float frac = exactBin - static_cast<float>(bin0);
-
-                float mag = 0.0f;
-                if (bin0 >= 0 && bin1 < fftSize / 2) {
-                    mag = fftData[bin0] * (1.0f - frac) + fftData[bin1] * frac;
-                } else if (bin0 >= 0 && bin0 < fftSize / 2) {
-                    mag = fftData[bin0];
-                }
-                mag *= normFactor;
-
-                float db = 20.0f * std::log10(std::max(mag, 0.00001f));
-                float target = juce::jlimit(-80.0f, 0.0f, db);
-                // Smooth the spectrum (exponential moving average)
-                spectrumMagnitudes[i] += 0.3f * (target - spectrumMagnitudes[i]);
-            }
-
+            spectrum.analyse(*filterModule.getVisualBuffer(), filterModule.getLastSampleRate());
             repaint();
         }
     }
@@ -154,6 +114,8 @@ public:
         if (lastFilterType == FilterModule::kCustomTypeIndex && onCustomDoubleClick)
             onCustomDoubleClick();
     }
+    /** The smoothed spectrum points (1024 values in dB), for tests. */
+    const std::vector<float>& getSpectrumDbForTest() const { return spectrum.getDb(); }
     /** The plotted dB at curve point `index` (of 1024), for tests. */
     float getMagnitudeDbForTest(int index) const { return magnitudes[(size_t)index]; }
 
@@ -283,8 +245,8 @@ public:
 
         // Draw live spectrum (green) — uses its own dB range for visibility
         if (showSpectrum) {
-            constexpr float specMinDb = -80.0f;
-            constexpr float specMaxDb = 0.0f;
+            constexpr float specMinDb = synth::ui::FilterSpectrumAnalyser::kMinDb;
+            constexpr float specMaxDb = synth::ui::FilterSpectrumAnalyser::kMaxDb;
 
             juce::Path specPath;
             juce::Path specFill;
@@ -293,7 +255,7 @@ public:
                 float freq = indexToFreq(i);
                 float x = freqToX(freq, w);
                 // Map spectrum dB to full component height
-                float normY = (spectrumMagnitudes[i] - specMaxDb) / (specMinDb - specMaxDb);
+                float normY = (spectrum.getDb()[(size_t)i] - specMaxDb) / (specMinDb - specMaxDb);
                 float y = juce::jlimit(0.0f, h, normY * h);
 
                 if (specFirst) {
@@ -346,12 +308,7 @@ private:
 
     // Spectrum analyzer
     bool showSpectrum = false;
-    static constexpr int fftOrder = 10; // 1024-point FFT
-    static constexpr int fftSize = 1 << fftOrder;
-    juce::dsp::FFT fft{fftOrder};
-    juce::dsp::WindowingFunction<float> window{fftSize, juce::dsp::WindowingFunction<float>::hann};
-    std::vector<float> fftData;
-    std::vector<float> spectrumMagnitudes;
+    synth::ui::FilterSpectrumAnalyser spectrum;
 
     float indexToFreq(int i) const { return synth::ui::FrequencyGrid::indexToFreq(i, numPoints); }
 

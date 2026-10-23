@@ -673,6 +673,7 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 # Source list in cmake/AppUISources.cmake (APPUI_SOURCES) -- split out to keep this file
 # under the repo's 1,000-line file-size cap (scripts/check-file-sizes.sh).
 include(cmake/AppUISources.cmake)
+include(cmake/ShapeWindowSources.cmake)
 add_library(AppUI STATIC ${APPUI_SOURCES})
 
 # FRO337: the mac-only NSEvent monitor half of "Esc/Cmd+W closes a focused hosted-plugin window"

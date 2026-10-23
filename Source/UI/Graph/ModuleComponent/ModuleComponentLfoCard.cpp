@@ -13,6 +13,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
+#include "UI/ModuleViews/CurveEditor/CurveGridNoteLength.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
@@ -36,29 +37,6 @@ constexpr int kLfoToolbarGap = 6;
 const char* const kLfoPresetNames[] = {"Triangle",  "Ramp Up",   "Ramp Down", "Square",
                                        "Pulse 1/4", "Steps (4)", "Soft Sine"};
 const char* const kLfoToolNames[] = {"Invert", "Reverse", "Straighten", "Clear", "Reset to Default"};
-// The grid box lists "Off", then the straight steps 1/4 .. 1/128, then the triplets 1/4T .. 1/128T (a dotted step does
-// not divide the cycle evenly, so the box offers none). A step "1/N" is N divisions per axis; a triplet "1/NT" packs
-// three steps into two straight ones, so it is N * 3 / 2.
-const char* const kLfoGridStraightNames[] = {"1/4", "1/8", "1/16", "1/32", "1/64", "1/128"};
-const juce::String kLfoGridDefaultName = "1/8";
-const char* const kLfoGridOffName = "Off";
-
-juce::StringArray lfoGridNames() {
-    juce::StringArray names{kLfoGridOffName};
-    for (const char* name : kLfoGridStraightNames)
-        names.add(name);
-    for (const char* name : kLfoGridStraightNames)
-        names.add(juce::String(name) + "T");
-    return names;
-}
-
-int lfoGridDivisionsFor(const juce::String& name) {
-    const auto note = synth::parseNoteLength(name);
-    if (!note.has_value())
-        return 0; // "Off"
-    return note->kind == synth::NoteKind::triplet ? note->denominator * 3 / 2 : note->denominator;
-}
-
 LFOModule* asLfo(juce::AudioProcessor* module) { return dynamic_cast<LFOModule*>(module); }
 
 /** The shape the morph cursor is on: the one the small curve editor shows and edits (shape 0 with one shape). */
@@ -117,15 +95,13 @@ void ModuleComponent::createLfoCardControls() {
     };
 
     lfoGridCombo = std::make_unique<synth::ui::NoteLengthBox>();
-    lfoGridCombo->setChoices(lfoGridNames(), "Grid ");
-    lfoGridCombo->setCurrentName(kLfoGridDefaultName, juce::dontSendNotification); // 1/8, the default
-    lfoGridCombo->setKindUnavailableTip(synth::NoteKind::dotted,
-                                        "No dotted grid: a dotted step does not divide the cycle evenly");
+    synth::ui::curvegrid::setUpNoteLengthBox(*lfoGridCombo);
+    lfoGridCombo->setCurrentName(synth::ui::curvegrid::defaultNoteLengthName(), juce::dontSendNotification);
     lfoGridCombo->setTitle("LFO custom wave grid");
     lfoGridCombo->setTooltip("Grid: the snap grid of the custom wave editor");
     lfoGridCombo->onChange = [this] {
         if (lfoGridCombo != nullptr)
-            setLfoGridDivisions(lfoGridDivisionsFor(lfoGridCombo->getCurrentName()));
+            setLfoGridDivisions(synth::ui::curvegrid::noteLengthDivisions(lfoGridCombo->getCurrentName()));
     };
     addChildComponent(lfoGridCombo.get()); // the custom section's fade shows it
 
@@ -262,15 +238,8 @@ void ModuleComponent::applyLfoWaveTool(int toolIndex) {
 }
 
 void ModuleComponent::setLfoGridDivisions(int n) {
-    if (lfoCurveEditor == nullptr)
-        return;
-    if (n <= 0) {
-        lfoCurveEditor->setGrid(synth::ui::CurveEditorComponent::CurveGrid{4, 2});
-        lfoCurveEditor->setSnapToGrid(false);
-    } else {
-        lfoCurveEditor->setGrid(synth::ui::CurveEditorComponent::CurveGrid{n, juce::jmin(n, 8)});
-        lfoCurveEditor->setSnapToGrid(true);
-    }
+    if (lfoCurveEditor != nullptr)
+        synth::ui::curvegrid::applyDivisions(*lfoCurveEditor, n, synth::ui::CurveEditorComponent::CurveGrid{4, 2});
 }
 
 void ModuleComponent::showLfoWaveContextMenu(const juce::MouseEvent&, CurveHitResult hit) {
@@ -305,8 +274,8 @@ void ModuleComponent::showLfoWaveContextMenu(const juce::MouseEvent&, CurveHitRe
         });
 
     juce::PopupMenu gridMenu;
-    for (const auto& name : lfoGridNames()) {
-        const int divisions = lfoGridDivisionsFor(name);
+    for (const auto& name : synth::ui::curvegrid::noteLengthNames()) {
+        const int divisions = synth::ui::curvegrid::noteLengthDivisions(name);
         gridMenu.addItem(name, [safeThis, divisions] {
             if (safeThis != nullptr)
                 safeThis->setLfoGridDivisions(divisions);

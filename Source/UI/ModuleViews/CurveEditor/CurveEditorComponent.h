@@ -62,10 +62,13 @@ public:
 
     /** `xDivisions`/`yDivisions`: how many even cells `paintGrid` draws when a grid is set (a
      *  vertical line at every `1/xDivisions` of the visible range, horizontal at every
-     *  `1/yDivisions` of the level range). */
+     *  `1/yDivisions` of the level range). A positive `xStep` replaces the even x cells with lines at
+     *  `xOrigin + k * xStep` in model units (a log axis whose octaves are not a whole number of cells). */
     struct CurveGrid {
         int xDivisions = 4;
         int yDivisions = 2;
+        double xStep = 0.0;
+        double xOrigin = 0.0;
     };
     /** `nullopt` (the default) draws today's nice-tick time grid instead -- an ordinary envelope
      *  card never calls this. */
@@ -93,6 +96,11 @@ public:
      *  sets 0.5 for a bipolar wave (so the fill reads from the zero line, not the bottom) and 0
      *  for unipolar. */
     void setFillBaselineLevel(float level);
+
+    /** Paints behind the grid and the curve (a live spectrum under a response). Unset (the default) paints nothing,
+     *  so the editor looks as it did. The caller repaints the editor when what it draws changes. */
+    using BackdropPainter = std::function<void(juce::Graphics&, const CurveEditorGeometry&)>;
+    void setBackdropPainter(BackdropPainter painter);
 
     /** `nullopt` hides the playhead marker. Repaints only if the value actually changed. */
     void setPlayhead(std::optional<CurvePlayhead> playhead);
@@ -263,6 +271,9 @@ private:
     };
     ThemeColours resolveThemeColours() const;
     void paintGrid(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
+    void paintGridLines(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
+    /** The x of every vertical grid line, in model units. */
+    std::vector<double> gridXPositions() const;
     void paintCurve(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
     void paintHandles(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
     void paintPlayheadMarker(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
@@ -273,6 +284,7 @@ private:
 
     std::optional<CurveGrid> grid_;
     std::optional<AxisGuides> guides_;
+    BackdropPainter backdrop_;
     bool snapToGrid_ = false;
     float fillBaselineLevel_ = 0.0f;
 
