@@ -49,8 +49,8 @@ public:
     void sync();
     /** The card's gated tick: follows undo, the editor window, automation and the knobs. */
     void poll();
-    /** Lays the parts out from `y` and returns the y below them. */
-    int layout(int y, int x, int width, bool apply);
+    /** Lays the parts out from `y`, `topGap` (faded with the button) above the first, and returns the y below them. */
+    int layout(int y, int x, int width, bool apply, int topGap = 0);
     /** A dragged library shape is taken while the module is on its Custom type and the kinds match. */
     bool acceptsShapeDrop(synth::shapes::ShapeKind kind) const override;
     void shapeDragOver(bool over, const juce::String& name) override;
