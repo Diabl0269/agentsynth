@@ -167,11 +167,12 @@ TEST(ShortcutManagerBottomPanelMigrationTests, ACmdTBoundOnPurposeAfterTheMigrat
     EXPECT_EQ(loadSavedPanelKey(), kCmdT);
 }
 
-TEST(ShortcutManagerBottomPanelMigrationTests, CmdTIsUnboundByDefaultAndCmdJIsThePanelKey) {
+TEST(ShortcutManagerBottomPanelMigrationTests, NoPanelKeyHoldsCmdTAndCmdJIsThePanelKey) {
     ShortcutManager manager;
     EXPECT_EQ(manager.getBinding("toggleBottomPanel"), kCmdJ);
     for (const auto& id : manager.getActionIds())
-        EXPECT_NE(manager.getBinding(id), kCmdT) << id;
+        if (id != "openAddTrackMenu") // Add Track took Cmd+T on the Mac
+            EXPECT_NE(manager.getBinding(id), kCmdT) << id;
 }
 
 // ---------------------------------------------------------------------------
