@@ -35,7 +35,7 @@ A download is restarted from the beginning after an interruption; HTTP Range res
 
 ## Settings > Sound packs
 
-`SoundPacksSettingsTab` (`Source/UI/Settings/SoundPacks/`) is the last Settings tab. It fetches the list each time the tab is shown. One `SoundPackRow` per pack (hosted packs, then installed packs the list does not know): name, instruments, size, state, and Download / Cancel (with a bar) / Update / Remove buttons that fade where they stand. Remove asks first. Offline, the line "Couldn't reach the pack list." and a Retry link show while installed packs stay listed. Below the rows, Credits lists every pack (including CC0 ones): credit text, licence, "View licence" and, for an installed pack with `LICENSES/SOURCES.md`, "Show sources".
+`SoundPacksSettingsTab` (`Source/UI/Settings/SoundPacks/`) is the last Settings tab. It fetches the list each time the tab is shown. One `SoundPackRow` per pack (hosted packs, then installed packs the list does not know): name, every instrument and the size on one line (elided with an ellipsis when the row is too narrow, and then the full list is that line's tooltip), state, and Download / Cancel (with a bar) / Update / Remove buttons that fade where they stand. Remove asks first. Offline, the line "Couldn't reach the pack list." and a Retry link show while installed packs stay listed. Below the rows, Credits lists every pack (including CC0 ones): credit text, licence, "View licence" and, for an installed pack with `LICENSES/SOURCES.md`, "Show sources".
 
 Accessibility: every button and link is a Tab stop with a name and tooltip naming the pack; a row reads "<pack>, downloading, 42 percent"; the bar's name carries the percentage.
 

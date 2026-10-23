@@ -17,21 +17,17 @@ constexpr int kNameH = 18;
 constexpr int kLineH = 16;
 constexpr float kNameSize = 13.0f;
 constexpr float kLineSize = 11.5f;
-constexpr int kMaxListedInstruments = 6;
 
-juce::String instrumentSummary(const synth::soundpacks::SoundPackInstaller::Row& row) {
+juce::String instrumentList(const synth::soundpacks::SoundPackInstaller::Row& row) {
     juce::StringArray names;
-    for (size_t i = 0; i < row.instruments.size() && (int)i < kMaxListedInstruments; ++i)
-        names.add(row.instruments[i].name);
-    juce::String text = names.joinIntoString(", ");
-    if ((int)row.instruments.size() > kMaxListedInstruments)
-        text << " and " << juce::String((int)row.instruments.size() - kMaxListedInstruments) << " more";
-    return text;
+    for (const auto& instrument : row.instruments)
+        names.add(instrument.name);
+    return names.joinIntoString(", ");
 }
 
 juce::String detailText(const synth::soundpacks::SoundPackInstaller::Row& row) {
     juce::StringArray parts;
-    const juce::String list = instrumentSummary(row);
+    const juce::String list = instrumentList(row);
     if (list.isNotEmpty())
         parts.add(list);
     if (row.downloadBytes > 0)
@@ -98,6 +94,7 @@ SoundPackRow::SoundPackRow(juce::String packId, Actions actions)
         addAndMakeVisible(*label);
     setUpLabel(name_, kNameSize, true);
     setUpLabel(detail_, kLineSize, false);
+    detail_.setInterceptsMouseClicks(true, false); // hovering it shows the full list when the line is elided
     setUpLabel(status_, kLineSize, false);
     for (auto* button : {&download_, &update_, &remove_, &cancel_})
         addChildComponent(*button);
@@ -142,6 +139,8 @@ void SoundPackRow::update(const synth::soundpacks::SoundPackInstaller::Row& row)
     hasError_ = row.state == State::NotInstalled && row.error.isNotEmpty();
     name_.setText(row.name, juce::dontSendNotification);
     detail_.setText(detailText(row), juce::dontSendNotification);
+    setDescription(detail_.getText());
+    fitDetail();
     status_.setText(statusText(row), juce::dontSendNotification);
     applyColours();
 
@@ -163,6 +162,12 @@ void SoundPackRow::update(const synth::soundpacks::SoundPackInstaller::Row& row)
     showControls(row);
 }
 
+void SoundPackRow::fitDetail() {
+    const int needed = juce::GlyphArrangement::getStringWidthInt(detail_.getFont(), detail_.getText());
+    const bool fits = needed <= detail_.getWidth();
+    detail_.setTooltip(fits ? juce::String() : detail_.getText());
+}
+
 void SoundPackRow::resized() {
     auto area = getLocalBounds().reduced(kPad, kPad);
     auto buttons = area.removeFromRight(kButtonW * 2 + kGap);
@@ -178,6 +183,7 @@ void SoundPackRow::resized() {
     name_.setBounds(area.removeFromTop(kNameH));
     detail_.setBounds(area.removeFromTop(kLineH));
     status_.setBounds(area.removeFromTop(kLineH));
+    fitDetail();
 }
 
 void SoundPackRow::paint(juce::Graphics& g) {

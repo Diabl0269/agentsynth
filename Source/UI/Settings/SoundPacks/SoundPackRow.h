@@ -37,12 +37,17 @@ public:
     ProgressStrip& getProgress() noexcept { return progress_; }
     juce::String getStatusText() const { return status_.getText(); }
     juce::String getDetailText() const { return detail_.getText(); }
+    juce::Rectangle<int> getDetailBounds() const { return detail_.getBounds(); }
+    juce::String getDetailTooltip() { return detail_.getTooltip(); }
     juce::String getNameText() const { return name_.getText(); }
     bool isButtonShown(const juce::Button& button) const;
 
 private:
     void showControls(const synth::soundpacks::SoundPackInstaller::Row& row);
     void applyColours();
+    /** The line shows every instrument; when it is wider than its label (elided with ...) the full text is its tooltip.
+     */
+    void fitDetail();
 
     juce::String packId_;
     Actions actions_;
