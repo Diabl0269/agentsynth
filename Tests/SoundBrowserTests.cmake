@@ -8,6 +8,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundBrowserLayoutTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFilterTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFilterViewTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundBrowserKeyboardReachTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundPreviewPlayerTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundPreviewViewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Controls/RangeSliderTests.cpp

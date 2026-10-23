@@ -32,6 +32,7 @@ set(SOUND_BROWSER_UI_SOURCES
     Source/UI/Library/SoundBrowser/SoundBrowserComponent.h
     Source/UI/Library/SoundBrowser/SoundBrowserFilters.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserInput.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserKeyboardReach.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserNavigation.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserPainting.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserPreview.cpp

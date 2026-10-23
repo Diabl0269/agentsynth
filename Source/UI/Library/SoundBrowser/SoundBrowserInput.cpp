@@ -190,8 +190,11 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
     const auto mods = key.getModifiers();
     if (mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
         return false;
-    if (key.isKeyCode(juce::KeyPress::upKey))
+    if (key.isKeyCode(juce::KeyPress::upKey)) {
+        if (!mods.isAnyModifierKeyDown() && atFirstListRow())
+            return climbToHeader();
         return moveSelection(-1);
+    }
     if (key.isKeyCode(juce::KeyPress::downKey))
         return moveSelection(+1);
     if (key.isKeyCode(juce::KeyPress::pageUpKey) || key.isKeyCode(juce::KeyPress::pageDownKey)) {

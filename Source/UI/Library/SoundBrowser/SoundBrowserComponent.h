@@ -10,6 +10,7 @@
 #include "UI/Library/SoundBrowser/SoundFilterPanel.h"
 #include "UI/Library/SoundBrowser/SoundFiltersButton.h"
 #include "UI/Library/SoundBrowser/SoundPreviewFooter.h"
+#include <algorithm>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -25,6 +26,7 @@ class SoundBrowserComponent
     , public juce::SettableTooltipClient
     , private juce::ScrollBar::Listener
     , private juce::FocusChangeListener
+    , private juce::KeyListener
     , private synth::soundbrowser::SoundIndex::Listener {
 public:
     static constexpr int kSearchHeight = 32;
@@ -104,6 +106,18 @@ public:
     /** What the footer shows at this height: the whole strip, the one-row strip, or nothing. */
     enum class FooterMode { Full, Compact, Hidden };
     FooterMode getFooterMode() const { return footerMode_; }
+
+    /** The control last asked to take focus by an Up or Down step (the list is this view); headless windows cannot
+     *  hold real focus, so tests read it here. */
+    juce::Component* lastFocusRequestForTest() const { return lastFocusRequest_; }
+    /** Whether Up and Down from `control` reach this view's stepping (it is a key listener there). */
+    bool listensForStepKeysForTest(juce::Component& control) const {
+        return std::find(reachAttached_.begin(), reachAttached_.end(), &control) != reachAttached_.end();
+    }
+    /** Offers `key` to the stepping as `origin`'s key listener: what the peer does before origin's own keyPressed. */
+    bool offerStepKeyForTest(const juce::KeyPress& key, juce::Component& origin) {
+        return listensForStepKeysForTest(origin) && keyPressed(key, &origin);
+    }
 
     void focusSearchField();
     void focusList();
@@ -200,6 +214,14 @@ private:
     synth::soundbrowser::SoundFilter currentFilter();
     void finishFilterClose();
 
+    // Keyboard reach (SoundBrowserKeyboardReach.cpp)
+    bool keyPressed(const juce::KeyPress& key, juce::Component* origin) override;
+    std::vector<juce::Component*> headerStops();
+    void attachReachListeners();
+    void focusStop(juce::Component& stop);
+    bool climbToHeader();
+    bool atFirstListRow() const;
+
     // Preview (SoundBrowserPreview.cpp)
     void setupPreview();
     void syncFooterToSelection();
@@ -230,6 +252,8 @@ private:
     int listReserve_ = kMinListRows * kRowHeight; // list height kept before the open panel may take it
     int listTop_ = kSearchHeight + kPathHeight;
     bool animateOffscreenForTest_ = false;
+    juce::Component* lastFocusRequest_ = nullptr;
+    std::vector<juce::Component*> reachAttached_;
     PanelSlide panelSlide_;
     synth::ui::AnimationDriver panelAnim_;
     juce::ScrollBar scrollBar_{true};

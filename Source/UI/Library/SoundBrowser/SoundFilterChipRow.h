@@ -8,9 +8,10 @@
 
 namespace synth::ui {
 
-/** The one row of small removable chips under the search, with "Clear all" at its end. It is ONE Tab stop: Left and
- *  Right move across the chips, Space, Return, Delete or Backspace removes the focused one. A new chip grows in at the
- *  end, a removed one shrinks out and the rest slide along (190 ms; an 80 ms fade under Reduce Motion). */
+/** The one row of small removable chips under the search, with "Clear all" at its end. It is ONE stop (reached with Up
+ * and Down): Left and Right move across the chips, Space, Return, Delete or Backspace removes the focused one. A new
+ * chip grows in at the end, a removed one shrinks out and the rest slide along (190 ms; an 80 ms fade under Reduce
+ * Motion). */
 class SoundFilterChipRow
     : public juce::Component
     , public juce::SettableTooltipClient {

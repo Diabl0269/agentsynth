@@ -11,7 +11,7 @@
 namespace synth::ui {
 
 /** The Filters panel of the Sounds view: Kind, Sound, Tempo, Key, Length and Place, each a control that edits one
- *  `SoundFilterModel`. Tab moves from group to group; Esc asks to close the panel. */
+ *  `SoundFilterModel`. Up and Down step from control to control (see the Sounds view); Esc asks to close the panel. */
 class SoundFilterPanel : public juce::Component {
 public:
     static constexpr int kPad = 10;

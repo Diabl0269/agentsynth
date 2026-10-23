@@ -164,6 +164,7 @@ void SoundBrowserComponent::layoutTop() {
     layoutPanel(chipHeight);
     layoutPathParts();
     updateScrollBar();
+    attachReachListeners();
     repaint();
 }
 
@@ -191,7 +192,7 @@ void SoundBrowserComponent::setFiltersOpen(bool open, bool animate) {
         filterPanel_.syncFromModel();
     } else if (auto* focused = juce::Component::getCurrentlyFocusedComponent();
                focused != nullptr && (focused == &filterPanel_ || filterPanel_.isParentOf(focused))) {
-        filtersButton_.grabKeyboardFocus(); // the panel's controls are about to go
+        focusStop(filtersButton_); // the panel's controls are about to go
     }
     refreshFilterButton();
 
