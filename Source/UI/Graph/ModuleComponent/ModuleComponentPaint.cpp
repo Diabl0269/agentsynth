@@ -10,6 +10,7 @@
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardOutline.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -79,6 +80,12 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 24.0f, 2.0f);
         if (instrumentChrome_ != nullptr)
             instrumentChrome_->paintDropHint(g, getLocalBounds());
+    } else if (isShowingSoundOutline()) {
+        // A sound is being dragged and this card would take it: a faint outline until the pointer is over it.
+        const auto& theme = synth::theme::themeOf(*this);
+        g.setColour(theme.colors.accent.withAlpha(0.35f));
+        g.drawRoundedRectangle(synth::ui::cardBodyRect(getLocalBounds().toFloat()), theme.metrics.cornerRadius,
+                               theme.metrics.borderWidth);
     }
 
     // Activity LED in header — recolored to the theme's success token when available.

@@ -32,7 +32,7 @@ public:
 
     /** Places both sets of components from `y` (the card's content origin) and returns the y below the chrome. */
     int layout(int y, int contentX, int contentW, int narrowX, int narrowW, bool apply) override;
-    /** The card's gated tick: follows the instrument and lights the sounding notes. */
+    /** The card's gated tick: follows the instrument and the sample name, and lights the sounding notes. */
     void poll() override;
     /** Re-reads the sample name and the instrument (after a project's deferred loads landed). */
     void refreshLoaded() override;
@@ -52,6 +52,11 @@ public:
     /** The hint over the drop highlight while two or more recordings are dragged over the card. */
     void paintDropHint(juce::Graphics& g, juce::Rectangle<int> cardBounds) const override;
     int getDragFileCount() const noexcept { return dragFileCount_; }
+
+    // ---- Sample loading ----
+    /** Replaces the sample with `file` as ONE undo step, redraws the waveform with its replace motion and reports a
+     *  failure on the name label. False (the old sample stays) when the file cannot be read. */
+    bool loadSampleUndoably(const juce::File& file);
 
     // ---- Instrument loading ----
     /** Runs `load` as ONE undo step (the instrument and the mode come back together) and reports its messages. */
@@ -98,6 +103,7 @@ private:
     std::unique_ptr<juce::ParameterAttachment> modeAttachment_;
     std::unique_ptr<juce::FileChooser> chooser_;
     int dragFileCount_ = 0;
+    int shownSampleGeneration_ = -1;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(SamplerChrome)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SamplerChrome)

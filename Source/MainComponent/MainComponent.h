@@ -663,7 +663,7 @@ private:
     void promptRelinkClipAsset(synth::ClipId id);
     void relinkClipAsset(synth::ClipId id, const juce::File& chosenFile);
     void importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile);
-    double audioFileLengthInBeats(const juce::File& file) const;
+    friend struct MainComponentAudioImport; // audio import and the Sounds view's load
     int cleanUnusedAssets();
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;
     /** The node a track's "module" is: its instrument when it has one, else its bound node; null when unbound. */

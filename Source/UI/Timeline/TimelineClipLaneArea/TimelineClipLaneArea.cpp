@@ -407,11 +407,16 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
         // only ever shows on a row that has none).
         if (trackIndex == fileDropRow_)
             paintFileDropHighlight(g, bounds);
+        else if (isShowingSoundOutline() && track.kind == synth::TrackKind::Audio)
+            paintSoundDropOutline(g, bounds);
         if (track.clips.empty())
             paintEmptyRowHint(g, track, bounds);
         for (const auto& clip : track.clips)
             paintClip(g, clip, track, trackIndex, layout);
     }
+
+    if (belowTracksHint_ || isShowingSoundOutline())
+        paintBelowTracksStrip(g);
 
     paintKeyboardClipRing(g);
 
@@ -550,6 +555,28 @@ void TimelineClipLaneArea::paintFileDropHighlight(juce::Graphics& g, juce::Recta
     g.fillRect(bounds);
     g.setColour(accent.withAlpha(0.7f));
     g.drawRect(bounds, 2);
+}
+
+void TimelineClipLaneArea::paintSoundDropOutline(juce::Graphics& g, juce::Rectangle<int> bounds) {
+    g.setColour(synth::theme::themeOf(*this).colors.accent.withAlpha(0.35f));
+    g.drawRect(bounds.reduced(1), 1);
+}
+
+void TimelineClipLaneArea::paintBelowTracksStrip(juce::Graphics& g) {
+    const auto strip = belowTracksStrip();
+    if (strip.isEmpty())
+        return;
+    const auto& theme = synth::theme::themeOf(*this);
+    const float radius = theme.metrics.cornerRadiusSmall;
+    if (belowTracksHint_) {
+        g.setColour(theme.colors.accent.withAlpha(0.15f));
+        g.fillRoundedRectangle(strip.toFloat(), radius);
+    }
+    g.setColour(theme.colors.accent.withAlpha(belowTracksHint_ ? 0.7f : 0.35f));
+    g.drawRoundedRectangle(strip.toFloat().reduced(0.5f), radius, belowTracksHint_ ? 2.0f : theme.metrics.borderWidth);
+    g.setColour(belowTracksHint_ ? theme.colors.textPrimary : theme.colors.textMuted);
+    g.setFont(juce::Font{juce::FontOptions(kHintFontHeight)});
+    g.drawText("New audio track", strip, juce::Justification::centred, false);
 }
 
 void TimelineClipLaneArea::paintMarquee(juce::Graphics& g) {

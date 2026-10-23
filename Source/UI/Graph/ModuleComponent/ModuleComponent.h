@@ -11,6 +11,7 @@
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
 #include "UI/Layout/SplitButton.h"
+#include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
@@ -53,6 +54,7 @@ class ModuleComponent
     : public juce::Component
     , public juce::Timer
     , public juce::FileDragAndDropTarget
+    , public synth::ui::SoundDropAdapter
     , public juce::TooltipClient
     , public juce::AudioProcessorParameter::Listener {
 public:

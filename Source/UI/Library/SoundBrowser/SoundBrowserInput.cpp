@@ -8,7 +8,8 @@ namespace synth::ui {
 
 namespace {
 constexpr const char* kDefaultTooltip =
-    "Sounds. Up and Down move, Right opens a folder, Left goes back, F adds to Favourites.";
+    "Sounds. Up and Down move, Right opens a folder, Left goes back, F adds to Favourites. Return loads it into the "
+    "selected Sampler or audio track.";
 }
 
 juce::Rectangle<int> SoundBrowserComponent::getRowBounds(int index) const {
@@ -31,7 +32,8 @@ int SoundBrowserComponent::getRowIndexAt(juce::Point<int> p) const {
 juce::String SoundBrowserComponent::tooltipForRow(int index) const {
     const auto& row = rows_[(size_t)index];
     if (row.kind == RowKind::Sound)
-        return row.entry->path;
+        return row.entry->path + "\nDrag it onto a Sampler or an audio track, or press Return to load it into the "
+                                 "selected one.";
     if (row.kind == RowKind::Hint)
         return kDefaultTooltip;
     return "Open " + row.text;
@@ -85,6 +87,8 @@ void SoundBrowserComponent::mouseDown(const juce::MouseEvent& e) {
     selectRow(row);
     if (rows_[(size_t)row].kind != RowKind::Sound)
         openSelected();
+    else if (!e.mods.isRightButtonDown())
+        pressedSound_ = row;
 }
 
 void SoundBrowserComponent::mouseDoubleClick(const juce::MouseEvent& e) {

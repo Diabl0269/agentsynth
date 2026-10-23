@@ -94,6 +94,10 @@ public:
     bool isInterestedInFileDrag(const juce::StringArray& files);
     void filesDropped(const juce::StringArray& files, int x, int y);
 
+    /** Adds a Sampler at `canvasPos` already holding `file` (a recording; an .sfz loads as its instrument), as ONE undo
+     *  step. The one path an OS file drop, a dragged Sound and the Sounds view's Return share. */
+    void addSamplerLoadedWith(const juce::File& file, juce::Point<int> canvasPos);
+
 private:
     /** The expanded macro a plain-module library drop at `details` would join, or empty. */
     juce::String macroJoinTargetForDrop(const juce::DragAndDropTarget::SourceDetails& details) const;

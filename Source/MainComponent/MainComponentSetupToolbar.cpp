@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
 #include "MainComponent.h"
+#include "MainComponentAudioImport.h"
 #include "MainComponentShortcutHints.h"
 #include "Telemetry/UsageStatsChoice.h"
 #include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"
@@ -26,6 +27,9 @@ void MainComponent::addCanvasAndPanels() {
     librarySidebar_->onLayoutChanged = [this] { resized(); };
     // The Sounds view previews through the engine, after the master; Near song tempo reads the transport's tempo.
     librarySidebar_->getSounds().setPreviewPlayer(&audioEngine.getSoundPreview());
+    librarySidebar_->getSounds().onSoundActivated = [this](const synth::soundbrowser::SoundEntry& sound) {
+        MainComponentAudioImport::loadSoundFromBrowser(*this, juce::File(sound.path));
+    };
     librarySidebar_->getSounds().songTempoProvider = [this] {
         return audioEngine.getTransport().getDocumentState().bpm;
     };

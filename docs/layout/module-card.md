@@ -718,4 +718,6 @@ chooser and calls `setWavetableFolder()`, `<` and `>` step the folder cursor, an
 the loaded file name and `index/total`. Both completion lambdas hold a `Component::SafePointer` and
 re-derive the module via `dynamic_cast`, since the card can be destroyed while the dialog is open.
 The card also implements `FileDragAndDropTarget` for audio files, routing drops through the same
-import path as the Load button.
+import path as the Load button. A Sampler's single-file drop and its Load Sample button replace the sample in ONE undo step
+(`SamplerChrome::loadSampleUndoably`), and the waveform plays its replace motion. The card is a `SoundDropAdapter` too,
+so a Sound dragged from the Sounds view lands the same way ([sound-browser](sound-browser.md#dragging-a-sound)).

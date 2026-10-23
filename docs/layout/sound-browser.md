@@ -54,6 +54,23 @@ Selecting a sound plays it when **Auto-play** is on (the default). The next sele
 - **Playhead**: the moving line repaints a strip a few pixels wide at 30 Hz while the preview plays, and moves under Reduce Motion (it shows a position). It is a permitted exception in [animation](animation.md#the-time-bounded-animation-rule).
 - **Audio**: the preview is summed after the master and never goes through the graph, so the song's volume, mute and effects do not touch it, a bounce never contains it, and plugin mode mixes it into the plugin's output. See [audio-engine](../architecture/audio-engine.md#sound-preview).
 
+## Dragging a sound
+
+Drag a Sound row (past 4 px) and a small chip with its name follows the pointer. The payload is the string `sound:` plus the file's absolute path (`SoundDragPayload.h`: `makeSoundPayload`, `isSoundPayload`, `soundFileFromPayload`), apart from module names, snippets and plugin identities. Every target is a file-drop target that also takes a Sound as a one-file drop, so the rules, the highlight and the undo are the OS file drop's own (`SoundDropAdapter` hands the sound to the component's `isInterestedInFileDrag`, `fileDragMove` and `filesDropped`).
+
+| Drop on | What happens | Undo |
+| --- | --- | --- |
+| Empty canvas | A new Sampler holding the sound (an .sfz loads as its instrument). The ghost is a Sampler's size. `GraphDragDropController::addSamplerLoadedWith` is the one path the OS file drop uses too. | one step |
+| A Sampler card | Replaces its sample (an .sfz, or the Load Sample button, goes through the same path); the old waveform fades out while the new one draws in left to right over 220 ms (80 ms cross-fade under Reduce Motion, instant with Animations off). | one step |
+| An audio track row | A clip at the snapped beat under the pointer, like an OS file drop. | one step |
+| Empty space under the last track | A "New audio track" strip lights up; the drop makes an audio track (with its mixer channel) and the clip at that beat. An OS file dropped there does the same. | one step for both |
+
+An .sfz is an instrument, so only a Sampler card and the canvas take it; no track does. A drop on nothing flies the chip back to its row (the drag container's own snap-back).
+
+**Outlines.** While a sound is dragged, every card and lane that would take it shows a faint accent outline (the audio rows and the "New audio track" strip in the lanes); the target under the pointer gets the full highlight. One app-wide flag (`SoundDragState`) tells the targets when a drag starts and ends, and each repaints once for each; nothing repaints per mouse move. None of the hints is a focus stop.
+
+**Keyboard.** Return (or a double-click) on a Sound is the keyboard way to do the same: it loads the sound into the one selected Sampler on the canvas (one undo step); else adds a clip at the playhead to the selected audio track; else adds a new Sampler in the middle of the visible canvas. A short toast says what happened. The view's tooltip reads "Return loads it into the selected Sampler or audio track."
+
 ## Shortcuts
 
 | Key | Action |

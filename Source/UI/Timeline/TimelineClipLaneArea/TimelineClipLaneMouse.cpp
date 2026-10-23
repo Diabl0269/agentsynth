@@ -640,26 +640,54 @@ bool TimelineClipLaneArea::isInterestedInFileDrag(const juce::StringArray& files
     return firstAudioFileIn(files) != juce::File();
 }
 
+// The empty space under the last track (or the whole area when there are no tracks): a drop there makes a new audio
+// track. It needs the owner's callback, so a lane area with none shows no hint and takes no drop there.
+bool TimelineClipLaneArea::isBelowTracks(juce::Point<int> pos) const {
+    return doc_ != nullptr && onAudioFileDroppedBelowTracks && pos.y >= 0 &&
+           pos.y + (int)std::llround(viewState_.trackScrollY) >= getRowLayout().totalHeight();
+}
+
+juce::Rectangle<int> TimelineClipLaneArea::belowTracksStrip() const {
+    if (doc_ == nullptr)
+        return {};
+    constexpr int kInset = 3;
+    const int top = getRowLayout().totalHeight() - (int)std::llround(viewState_.trackScrollY);
+    return juce::Rectangle<int>(kInset, top + kInset, getWidth() - 2 * kInset, getRowHeight() - 2 * kInset)
+        .getIntersection(getLocalBounds());
+}
+
+void TimelineClipLaneArea::setBelowTracksHint(bool on) {
+    if (on == belowTracksHint_)
+        return;
+    belowTracksHint_ = on;
+    repaint(belowTracksStrip());
+}
+
 void TimelineClipLaneArea::fileDragMove(const juce::StringArray& files, int x, int y) {
     setFileDropRow(dropRowFor(files, x, y));
+    setBelowTracksHint(firstAudioFileIn(files) != juce::File() && isBelowTracks({x, y}));
 }
 
 void TimelineClipLaneArea::fileDragExit(const juce::StringArray& files) {
     juce::ignoreUnused(files);
     setFileDropRow(-1);
+    setBelowTracksHint(false);
 }
 
 void TimelineClipLaneArea::filesDropped(const juce::StringArray& files, int x, int y) {
+    const auto file = firstAudioFileIn(files);
+    const bool below = file != juce::File() && isBelowTracks({x, y});
     const int row = dropRowFor(files, x, y);
     setFileDropRow(-1);
-    if (row < 0 || doc_ == nullptr || !onAudioFileDropped)
+    setBelowTracksHint(false);
+    if (file == juce::File() || doc_ == nullptr)
         return;
 
-    const auto file = firstAudioFileIn(files);
-    if (file == juce::File())
-        return;
-
-    onAudioFileDropped(doc_->getTracks()[(std::size_t)row].id, floorSnappedBeatAt(viewState_.xToBeat((double)x)), file);
+    const double startBeat = floorSnappedBeatAt(viewState_.xToBeat((double)x));
+    if (below)
+        onAudioFileDroppedBelowTracks(startBeat, file);
+    else if (row >= 0 && onAudioFileDropped)
+        onAudioFileDropped(doc_->getTracks()[(std::size_t)row].id, startBeat, file);
 }
 
 void TimelineClipLaneArea::mouseMove(const juce::MouseEvent& e) {

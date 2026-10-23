@@ -14,6 +14,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/SelectionModel.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/Library/SoundBrowser/SoundDragPayload.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -260,9 +261,25 @@ SmartConnectionEngine::DragPreviewState GraphDragDropController::buildDragPrevie
     return state;
 }
 
-bool GraphDragDropController::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails&) { return true; }
+// A dragged Sound is taken when a Sampler can load it; every other payload is the canvas's own kind.
+bool GraphDragDropController::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details) {
+    if (!synth::ui::isSoundPayload(details.description))
+        return true;
+    const auto file = synth::ui::soundFileFromPayload(details.description);
+    return synth::ui::isAudioSound(file) || synth::ui::isInstrumentSound(file);
+}
 
 void GraphDragDropController::itemDragEnter(const juce::DragAndDropTarget::SourceDetails& dragSourceDetails) {
+    if (synth::ui::isSoundPayload(dragSourceDetails.description)) {
+        // A Sound is a Sampler about to exist: sized like one, no probe (it joins no macro and is never a module type).
+        dragPreviewIsSnippet_ = false;
+        dragPreviewIsPlainModule_ = false;
+        dragPreviewProbe_.reset();
+        const auto size = host_.estimateModuleSizeForType("Sampler");
+        beginDragPreview(size.x, size.y, juce::AudioProcessorGraph::NodeID{});
+        updateDragPreview(ghostTopLeftForCursor(host_.canvasPositionOfLocalPoint(dragSourceDetails.localPosition)));
+        return;
+    }
     juce::String name = dragSourceDetails.description.toString();
 
     // A snippet covers a whole group, so size the ghost from the snippet's own bounding box
@@ -325,6 +342,17 @@ void GraphDragDropController::itemDragExit(const juce::DragAndDropTarget::Source
 
 void GraphDragDropController::itemDropped(const juce::DragAndDropTarget::SourceDetails& dragSourceDetails) {
     const juce::String name = dragSourceDetails.description.toString();
+    if (synth::ui::isSoundPayload(dragSourceDetails.description)) {
+        // Checked before every module kind: the payload is a path, never a module type name.
+        const auto soundPos =
+            (dragPreviewActive_ && !dragPreviewGhost_.isEmpty())
+                ? dragPreviewGhost_.getPosition()
+                : ghostTopLeftForCursor(host_.canvasPositionOfLocalPoint(dragSourceDetails.localPosition));
+        host_.setMacroDropCandidate({});
+        addSamplerLoadedWith(synth::ui::soundFileFromPayload(dragSourceDetails.description), soundPos);
+        endDragPreview();
+        return;
+    }
     // The drop lands exactly where the preview showed: the ghost rect is already snapped and
     // de-overlapped, so taking its position (rather than re-deriving one from the cursor) makes it
     // impossible for the two to disagree. Falls back to the centred cursor if there is no live ghost
@@ -388,19 +416,30 @@ void GraphDragDropController::filesDropped(const juce::StringArray& files, int x
         if (!SamplerModule::isSupportedAudioFile(file))
             continue;
 
-        // Load into the processor BEFORE it joins the graph: recordStructuralChange snapshots the
-        // graph afterwards, and that snapshot is what undo/redo replays — so the file path has to be
-        // in place by then or the sample is lost on the first Cmd+Z.
-        host_.addModuleAtCanvasPosition("Sampler", canvasPos,
-                                        [file](juce::AudioProcessor& processor) {
-                                            if (auto* sampler = dynamic_cast<SamplerModule*>(&processor))
-                                                sampler->loadSampleFile(file);
-                                        },
-                                        {});
+        addSamplerLoadedWith(file, canvasPos);
 
         // Cascade multiple files so they do not all land on the same spot.
         canvasPos += juce::Point<int>(32, 32);
     }
 
     endDragPreview();
+}
+
+// Load into the processor BEFORE it joins the graph: recordStructuralChange snapshots the graph afterwards, and that
+// snapshot is what undo/redo replays - so the file path has to be in place by then or the sample is lost on the first
+// Cmd+Z. A card pushed apart by the gap the drag opened takes the macro that gap is in, as a library module does.
+void GraphDragDropController::addSamplerLoadedWith(const juce::File& file, juce::Point<int> canvasPos) {
+    const bool inGap = insertGap_ != nullptr && insertGap_->isOpen();
+    host_.addModuleAtCanvasPosition(
+        "Sampler", canvasPos,
+        [file](juce::AudioProcessor& processor) {
+            auto* sampler = dynamic_cast<SamplerModule*>(&processor);
+            if (sampler == nullptr)
+                return;
+            if (synth::ui::isInstrumentSound(file))
+                sampler->loadInstrumentFromSfz(file);
+            else
+                sampler->loadSampleFile(file);
+        },
+        inGap ? insertGap_->container() : juce::String());
 }

@@ -3,6 +3,7 @@
 #include "Timeline/PeaksFile.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/EditTool.h"
@@ -141,6 +142,7 @@ inline juce::Colour gridLineColourFor(GridLineLevel level, juce::Colour base, ju
 class TimelineClipLaneArea
     : public juce::Component
     , public juce::FileDragAndDropTarget
+    , public SoundDropAdapter
     , public KeyboardContextMenuProvider
     , public juce::TooltipClient
     , private juce::Timer {
@@ -263,6 +265,11 @@ public:
     using AudioFileChooser = std::function<void(std::function<void(const juce::File&)> onChosen)>;
     void setAudioFileChooser(AudioFileChooser chooser) { audioFileChooser_ = std::move(chooser); }
 
+    // Fired with (floor-snapped start beat, the dropped file) when an audio file (from the OS or a dragged Sound) is
+    // dropped on the empty space under the last track: the OWNER makes a new audio track holding the clip. Unset: that
+    // space takes no drop and shows no hint.
+    std::function<void(double startBeat, juce::File)> onAudioFileDroppedBelowTracks;
+
     // ---- juce::FileDragAndDropTarget: dropping audio files from the OS ----
     // Interested when at least one dragged file has an extension a juce::AudioFormatManager can
     // read (extension only — nothing here opens a dragged file).
@@ -279,6 +286,10 @@ public:
     // The track row currently highlighted for a file drop, or -1. Test hook (the drop highlight is
     // otherwise only observable as pixels).
     int getFileDropRowForTest() const noexcept { return fileDropRow_; }
+    // True while the "New audio track" strip under the last track is highlighted for a drop. Test hook.
+    bool isBelowTracksHintForTest() const noexcept { return belowTracksHint_; }
+    // The strip under the last track that marks where a new audio track would be made. Test hook.
+    juce::Rectangle<int> getBelowTracksStripForTest() const { return belowTracksStrip(); }
 
     // ---- Empty-row hint ----
     // The hint line an EMPTY row of this kind paints (empty String for Automation — nothing to
@@ -702,6 +713,13 @@ private:
     void paintEmptyRowHint(juce::Graphics& g, const synth::Track& track, juce::Rectangle<int> bounds);
     // The accent wash marking the audio row an OS file drop would land on.
     void paintFileDropHighlight(juce::Graphics& g, juce::Rectangle<int> bounds);
+    // The faint outline of an audio row that would take the Sound being dragged.
+    void paintSoundDropOutline(juce::Graphics& g, juce::Rectangle<int> bounds);
+    // The "New audio track" strip under the last track: faint while a Sound is dragged, full while a drop would land.
+    void paintBelowTracksStrip(juce::Graphics& g);
+    juce::Rectangle<int> belowTracksStrip() const;
+    bool isBelowTracks(juce::Point<int> pos) const;
+    void setBelowTracksHint(bool on);
     // The backdrops of the rows that are not clip rows: a track's automation lanes, the Automation
     // track's section row.
     void paintAutomationRows(juce::Graphics& g, const TimelineRowLayout& layout);
@@ -823,6 +841,7 @@ private:
     AudioFileChooser audioFileChooser_;
     std::unique_ptr<juce::FileChooser> fileChooser_; // kept alive for the duration of launchAsync
     int fileDropRow_ = -1;                           // -1 = nothing highlighted
+    bool belowTracksHint_ = false;                   // a drop would make a new audio track
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineClipLaneArea)
 };

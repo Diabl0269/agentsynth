@@ -3,6 +3,7 @@
 // SoundBrowserInput.cpp, the screen-reader list in SoundBrowserAccessibility.cpp.
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Library/SoundBrowser/SoundDragState.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -18,7 +19,8 @@ SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& in
     : index_(index)
     , lists_(lists) {
     setTitle("Sounds");
-    setTooltip("Sounds. Up and Down move, Right opens a folder, Left goes back, F adds to Favourites.");
+    setTooltip("Sounds. Up and Down move, Right opens a folder, Left goes back, F adds to Favourites. Return loads it "
+               "into the selected Sampler or audio track.");
     setWantsKeyboardFocus(true);
 
     addChildComponent(scrollBar_);
@@ -52,6 +54,8 @@ SoundBrowserComponent::~SoundBrowserComponent() {
     // The members go after this body while this is still the dynamic type: a focused child (a footer or panel control)
     // that goes then hands the keyboard to this view, and focusGained would read rows that are already gone.
     tearingDown_ = true;
+    if (soundDragging_)
+        SoundDragState::end();
     if (hasKeyboardFocus(true))
         giveAwayKeyboardFocus();
     juce::Desktop::getInstance().removeFocusChangeListener(this);
