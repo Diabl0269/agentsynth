@@ -184,6 +184,12 @@ The WAV itself needs no correction — it was recorded at its own (pre-change) r
 
 **UI refresh.** `MainComponent`'s existing device-state-changed callback already calls `graphEditor.refreshIoModulesAfterDeviceChange()` on any device change; nothing new is needed there. The lane area's cached waveform **peaks are source-sample-based** (bucketed from the file's own samples via `PeaksFile`, never the engine's sample rate) and are deliberately **not** invalidated on a rate change — a naive port of "invalidate caches on device change" here would be wrong, not merely wasteful. The status bar's `RT <n> ms` readout needs no special handling either: it already reads `getRecordingLatencySamples()` and the transport's *current* sample rate fresh on every poll tick, so it reflects the new rate on its very next 5 Hz update with no cache to invalidate.
 
+### Quitting with a dialog open
+
+JUCE deletes a dialog launched with `launchAsync` (Settings) only at the very end of shutdown, after the application
+object and `MainComponent` are gone, so a dialog destructor that writes settings or unregisters from the theme manager
+would crash. `shutdown()` in `Source/Main.cpp` first calls `synth::ui::deleteOpenModalDialogs()` (`PopupMotion.h`).
+
 ### Waveform peaks and clip rendering
 
 **`synth::PeaksFile` (`Source/Timeline/PeaksFile.h/.cpp`) is the single place that knows the `.agpk` format** — read AND write. It was factored out of `RecordTapModule`, which originated the format and now delegates to it rather than keeping a second implementation: `RecordTapModule` owns a `PeaksFile::Accumulator` (the same bucket math — min/max per channel every `bucketSize` source samples, a short final bucket — just no longer duplicated), the writer thread's drain step calls its `addSamples()`/`flushPartial()`, and `stopCapture()` calls `PeaksFile::write()`. `PeaksFile::kMagic`/`kVersion` are what `RecordTapModule::kPeaksMagic`/`kPeaksVersion` now alias, so every file ever written by this build still parses unchanged. `PeaksFile::read()` is tolerant of a musically-short final bucket (that's the format, not a defect) but rejects anything structurally broken: bad magic/version, a zero bucketSize/numChannels, or a payload that isn't a whole number of (min,max) pairs forming whole buckets.

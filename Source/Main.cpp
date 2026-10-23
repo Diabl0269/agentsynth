@@ -6,6 +6,7 @@
 #include "Project/ProjectCommandLine.h"
 #include "SettingsMigration.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UserSettings.h"
@@ -94,6 +95,8 @@ public:
     // 3. themeManager / lookAndFeel are data members declared BEFORE mainWindow,
     //    so they are destroyed AFTER mainWindow — they outlive the clear.
     void shutdown() override {
+        // Dialogs launched async (Settings) are otherwise deleted by JUCE after this object is gone.
+        synth::ui::deleteOpenModalDialogs();
         mainWindow = nullptr;
         juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);
     }
