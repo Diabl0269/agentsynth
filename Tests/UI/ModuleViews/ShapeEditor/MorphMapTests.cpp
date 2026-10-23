@@ -857,3 +857,46 @@ TEST(MorphMapMotion, AnimationsOffLandsAtOnce) {
     rig.controller.deleteShape(3);
     EXPECT_EQ(rig.map.getNumLeavingDots(), 0);
 }
+
+// Regression test for FRO1061: pressing a dot or the cursor off its centre made it jump under the pointer.
+TEST(MorphMap, PressingADotOffCentreAndDraggingOnePixelMovesItOnePixel) {
+    MapRig rig;
+    const auto centre = rig.map.getDotCentre(0);
+    const auto press = centre + juce::Point<float>(5.0f, 3.0f);
+
+    rig.map.mouseDown(curveLeftClick(rig.map, press));
+    rig.map.mouseDrag(curveLeftDrag(rig.map, press + juce::Point<float>(1.0f, 0.0f), press));
+    rig.map.mouseUp(curveLeftDrag(rig.map, press + juce::Point<float>(1.0f, 0.0f), press));
+
+    const auto now = rig.map.getDotCentre(0);
+    EXPECT_NEAR(now.x - centre.x, 1.0f, 0.01f);
+    EXPECT_NEAR(now.y - centre.y, 0.0f, 0.01f);
+}
+
+TEST(MorphMap, PressingTheCursorOffCentreAndDraggingOnePixelMovesItOnePixel) {
+    MapRig rig;
+    const auto centre = rig.map.getCursorCentre();
+    const auto press = centre + juce::Point<float>(-4.0f, 4.0f);
+
+    rig.map.mouseDown(curveLeftClick(rig.map, press));
+    rig.map.mouseDrag(curveLeftDrag(rig.map, press + juce::Point<float>(0.0f, 1.0f), press));
+    rig.map.mouseUp(curveLeftDrag(rig.map, press + juce::Point<float>(0.0f, 1.0f), press));
+
+    const auto now = rig.map.getCursorCentre();
+    EXPECT_NEAR(now.x - centre.x, 0.0f, 0.01f);
+    EXPECT_NEAR(now.y - centre.y, 1.0f, 0.01f);
+}
+
+TEST(MorphMap, ClickingADotOrTheCursorOffCentreMovesNothingAndRecordsNoUndoStep) {
+    MapRig rig;
+    const auto dot = rig.map.getDotCentre(0);
+    const auto cursor = rig.map.getCursorCentre();
+    const int serial = rig.undo.getEditSerial();
+
+    click(rig.map, dot + juce::Point<float>(6.0f, 0.0f));
+    click(rig.map, cursor + juce::Point<float>(0.0f, 6.0f));
+
+    EXPECT_EQ(rig.map.getDotCentre(0), dot);
+    EXPECT_EQ(rig.map.getCursorCentre(), cursor);
+    EXPECT_EQ(rig.undo.getEditSerial(), serial);
+}

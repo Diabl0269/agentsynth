@@ -233,6 +233,7 @@ private:
 
     std::vector<Dot> dots_;
     juce::Point<float> cursor_{0.5f, 0.5f};
+    juce::Point<float> grabOffset_; ///< pixels from the pointer to the centre of the dot or cursor being dragged
     bool cursorVisible_ = true;
     bool showLabels_ = false;
     int selected_ = -1;

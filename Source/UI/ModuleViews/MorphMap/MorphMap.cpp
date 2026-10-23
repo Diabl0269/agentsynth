@@ -335,10 +335,12 @@ void MorphMap::mouseDown(const juce::MouseEvent& e) {
         moveToStrip(strip, e.position);
     } else if (onCursor) {
         drag_ = Drag::Cursor;
+        grabOffset_ = getCursorCentre() - e.position;
         takeFocus(*cursorStop_);
     } else if (dot >= 0) {
         drag_ = Drag::Dot;
         dragIndex_ = dot;
+        grabOffset_ = getDotCentre(dot) - e.position;
         takeFocus(*dotStops_[(size_t)dot]);
         select(dot);
     } else {
@@ -358,7 +360,7 @@ void MorphMap::mouseDrag(const juce::MouseEvent& e) {
     }
     if (drag_ != Drag::Dot && drag_ != Drag::Cursor)
         return;
-    const auto to = toMap(e.position);
+    const auto to = toMap(e.position + grabOffset_);
     if (!dragMoved_) {
         dragMoved_ = true;
         gestureOpen_ = true;
