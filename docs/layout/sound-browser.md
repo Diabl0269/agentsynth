@@ -1,6 +1,6 @@
 # The sound browser
 
-One place to find a recording: the **sound index** (Core, no UI) lists every sound in the installed packs and the user's own folders, and the **Sounds view** (the left sidebar's second view) browses and searches it. This doc covers the index, the view, its filters, the preview, dragging a sound out, the packs you can download from the view and your own folders.
+One place to find a recording (and, in the Shapes place, a named curve): the **sound index** (Core, no UI) lists every sound in the installed packs and the user's own folders, and the **Sounds view** (the left sidebar's second view) browses and searches it. This doc covers the index, the view, its filters, the preview, dragging a sound out, the packs you can download from the view and your own folders.
 
 ## The sound index
 
@@ -91,6 +91,28 @@ An .sfz is an instrument, so only a Sampler card and the canvas take it; no trac
 
 **Keyboard.** Return (or a double-click) on a Sound is the keyboard way to do the same: it loads the sound into the one selected Sampler on the canvas (one undo step); else adds a clip at the playhead to the selected audio track; else adds a new Sampler in the middle of the visible canvas. A short toast says what happened. The view's tooltip reads "Return loads it into the selected Sampler or audio track."
 
+## Shapes
+
+The Places screen has a **Shapes** place after Favourites and Used recently (its count is every listed shape). Opening it lists two groups, each under a heading row: **Filter shapes** then **LFO shapes**. A group lists your saved shapes of that kind first (marked "yours"), then the factory set; a row is a small curve thumbnail (the shape drawn in the accent colour) and the name. The library is `synth::shapes::ShapeLibrary` ([custom-filter.md](../modules/custom-filter.md#shape-library)); the view reads it when it changes (a Save shape in a shape window adds the row at once), never while painting. Searching and the Filters panel list sounds only (an active filter leaves shapes out of Favourites and Used recently). The tooltip of a shape row says what Return needs. The screen reader says "ah, filter shape, built in, 3 of 20" (`describeShapeForAccessibility`).
+
+### Footer, Favourites, Delete, Rename and Return
+
+- **Footer**: a shape row has its own footer. The name, then "Filter shape, yours" or "LFO shape, factory", and the curve in a larger box (`ShapeCurveView`, drawn in from the left over 190 ms). Stop, Auto-play and the volume fade out over 120 ms (a fade of 80 ms under Reduce Motion, at once with Animations off) and are then hidden, so they are no focus stops; they fade back when a sound is selected. Selecting a shape ends a preview still playing.
+- **Favourites and Used recently** hold shapes next to sounds, keyed `shape:<kind>:<factory|user>:<name>` (the drag payload's id; `ShapeLibrary::shapeId`) in the same `soundBrowserFavourites` and `soundBrowserRecent` lists. F stars a shape row (a star is painted like a sound's). A shape whose file is gone is not listed; deleting or renaming a shape removes or renames its entries. Stamping a shape (a drop, Start from, or Return) puts it first in Used recently (`ShapeLibrary::noteUsed`). Return or a double-click on a sound adds the sound there too.
+- **Saved shapes only** (built-in shapes are read-only) have a right-click menu, or Shift+F10: **Rename**, **Show in Finder** (**Show in File Explorer** on Windows) and **Delete**. Delete or Backspace on the row is the same as the menu's Delete. Delete asks first ("Delete shape", with Delete and Cancel) and then calls `ShapeLibrary::remove`; the list fades to its new rows and the selection lands on the neighbour. Rename edits the name in place over the row (Return commits, Esc cancels); a name that is empty, unchanged or taken leaves the shape as it was, and the result is announced.
+- **Return** stamps the selected shape onto the one selected card (`stampShapeOnSelectedCard`) when it is a Filter set to Custom or an LFO with a Custom wave of the same kind, onto the shape nearest the morph cursor, as one undo step, and a toast says so. With no fitting card selected nothing happens.
+
+### Dragging a shape
+
+Drag a Shape row (past 4 px) and the same name chip follows the pointer, carried by the payload `shape:<filter|lfo>:<factory|user>:<name>` (`ShapeDragPayload.h`; the curve is looked up by name when the drop lands, so a shape deleted meanwhile drops nothing). It reuses the sound drag: `SoundDragState` also says "a shape of this kind is being dragged" (`beginShape`; `isActive()` stays false, so the lanes' "New audio track" strip does not light), the chip is started with `allowDraggingToOtherJuceWindows` because the shape window is a window of its own, and every target is a `SoundDropAdapter` that returns a `ShapeDropTarget` from `shapeDropTarget()` (null for all that do not take shapes: tracks, Sampler cards, the canvas, which refuses the payload so no module is made from it).
+
+| Drop on | What happens | Undo |
+| --- | --- | --- |
+| A chip in a Filter shapes window / an LFO shapes window | Replaces that shape's curve with the dragged one, when the kinds match; the chip is outlined while the pointer is over it and its tooltip reads "Drop to stamp ah onto oo". | one step |
+| A Filter card on its Custom type / an LFO card whose shape is Custom | Replaces the curve of the shape nearest the morph cursor (the one the card's curve editor shows). The card shows a faint outline while a matching shape is dragged, and the full highlight with the label "Stamp ah here" while the pointer is over it. | one step |
+
+A shape of the other kind, and a card that is not on Custom, are refused (no outline, no drop).
+
 ## Shortcuts
 
 | Key | Action |
@@ -110,6 +132,6 @@ The toolbar's library button opens or closes the column on the last-used view, a
 | `soundBrowserWidth` | the column's width while Sounds shows; default 280, clamped 200 to 400 |
 | `soundBrowserFolders` | the user's own sound folders, one absolute path per line |
 | `soundBrowserFolderNames` | the names given to those folders: a JSON object from path to name; absent while none is renamed |
-| `soundBrowserFavourites`, `soundBrowserRecent` | file paths, one per line |
+| `soundBrowserFavourites`, `soundBrowserRecent` | file paths and shape ids, one per line |
 | `soundBrowserAutoPlay` | play a sound when it is selected; default on |
 | `soundBrowserPreviewGainDb` | the preview volume in dB; default -6, clamped -60 to +6 |

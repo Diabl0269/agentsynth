@@ -3,6 +3,7 @@
 #include "Modules/Shapes/MorphShapes.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -254,6 +255,49 @@ juce::String MorphShapesCard::stripTooltipAt(juce::Point<float> point) const {
                 return text;
     }
     return {};
+}
+
+bool MorphShapesCard::acceptsShapeDrop(synth::shapes::ShapeKind kind) const {
+    return host_.customActive && host_.customActive() &&
+           synth::shapes::kindFromWord(adapter_->getPreferenceKind()) == kind;
+}
+
+void MorphShapesCard::shapeDragOver(bool over, const juce::String& name) {
+    dropOver_ = over;
+    dropName_ = over ? name : juce::String();
+    if (host_.card != nullptr)
+        host_.card->repaint();
+}
+
+// The shape under the cursor is the one the card's curve editor shows, so that is the one the drop replaces.
+void MorphShapesCard::shapeDropped(const synth::shapes::LibraryShape& shape) {
+    auto shapes = adapter_->getShapes();
+    if (shapes.empty() || !acceptsShapeDrop(shape.kind))
+        return;
+    const auto index = (size_t)juce::jlimit(0, (int)shapes.size() - 1, nearestShapeToCursor());
+    adapter_->beginEdit();
+    shapes[index].curve = shape.curve;
+    adapter_->setShapes(shapes);
+    adapter_->endEdit();
+    if (host_.card != nullptr)
+        host_.card->repaint();
+}
+
+void MorphShapesCard::paintShapeDropHint(juce::Graphics& g, juce::Rectangle<float> bounds) const {
+    const auto& theme = synth::theme::themeOf(*host_.card);
+    g.setColour(theme.colors.accent.withAlpha(0.12f));
+    g.fillRoundedRectangle(bounds, theme.metrics.cornerRadius);
+    g.setColour(theme.colors.accent);
+    g.drawRoundedRectangle(bounds.reduced(1.0f), theme.metrics.cornerRadius, theme.metrics.borderWidth * 2.0f);
+    const juce::Font font{juce::FontOptions(13.0f)};
+    const auto label = "Stamp " + dropName_ + " here";
+    const float width = juce::jmin(bounds.getWidth() - 16.0f, font.getStringWidthFloat(label) + 20.0f);
+    const auto pill = juce::Rectangle<float>(width, 24.0f).withCentre(bounds.getCentre());
+    g.setColour(theme.colors.surfaceHi.withAlpha(0.95f));
+    g.fillRoundedRectangle(pill, theme.metrics.cornerRadiusSmall);
+    g.setColour(theme.colors.textPrimary);
+    g.setFont(font);
+    g.drawText(label, pill.reduced(8.0f, 0.0f), juce::Justification::centred, true);
 }
 
 } // namespace synth::ui

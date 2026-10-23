@@ -22,6 +22,31 @@ void SoundLists::noteUsed(const juce::String& path) {
         onChanged();
 }
 
+void SoundLists::forget(const juce::String& id) {
+    const bool inFavourites = favourites_.contains(id);
+    const bool inRecent = recent_.contains(id);
+    favourites_.removeString(id);
+    recent_.removeString(id);
+    if ((inFavourites || inRecent) && onChanged)
+        onChanged();
+}
+
+void SoundLists::replace(const juce::String& from, const juce::String& to) {
+    bool changed = false;
+    for (auto* list : {&favourites_, &recent_}) {
+        const int at = list->indexOf(from);
+        if (at < 0)
+            continue;
+        if (list->contains(to))
+            list->remove(at);
+        else
+            list->set(at, to);
+        changed = true;
+    }
+    if (changed && onChanged)
+        onChanged();
+}
+
 void SoundLists::setFavourites(const juce::StringArray& paths) { favourites_ = paths; }
 
 void SoundLists::setRecent(const juce::StringArray& paths) {

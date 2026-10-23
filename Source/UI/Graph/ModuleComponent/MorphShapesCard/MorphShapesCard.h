@@ -7,6 +7,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/CardBlockFade.h"
 #include "UI/Graph/CardWidgets/CardControlGestures.h"
+#include "UI/Library/SoundBrowser/ShapeDropTarget.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ShapeEditor/ModuleShapesAdapter.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeMapController.h"
@@ -17,7 +18,7 @@
 
 namespace synth::ui {
 
-class MorphShapesCard {
+class MorphShapesCard : public ShapeDropTarget {
 public:
     struct Host {
         juce::Component* card = nullptr;
@@ -42,7 +43,7 @@ public:
     /** The card, module and adapter must outlive this (detach() first). Message thread only for every member. */
     MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<ModuleShapesAdapter> adapter, int morphXChannel,
                     int morphYChannel);
-    ~MorphShapesCard();
+    ~MorphShapesCard() override;
 
     /** Re-reads the type, the shape count and the remembered choice and shows or hides the parts. */
     void sync();
@@ -50,6 +51,15 @@ public:
     void poll();
     /** Lays the parts out from `y` and returns the y below them. */
     int layout(int y, int x, int width, bool apply);
+    /** A dragged library shape is taken while the module is on its Custom type and the kinds match. */
+    bool acceptsShapeDrop(synth::shapes::ShapeKind kind) const override;
+    void shapeDragOver(bool over, const juce::String& name) override;
+    /** Replaces the curve of the shape nearest the cursor, as one undo step. */
+    void shapeDropped(const synth::shapes::LibraryShape& shape) override;
+    /** The pointer is over the card carrying a shape it would take. */
+    bool isShapeDropOver() const noexcept { return dropOver_; }
+    /** Paints the full drop highlight and the label saying what the drop does, over the card's `bounds`. */
+    void paintShapeDropHint(juce::Graphics& g, juce::Rectangle<float> bounds) const;
     /** Closes the editor window and drops everything that references the module. */
     void detach();
 
@@ -114,6 +124,8 @@ private:
     juce::Component::SafePointer<juce::DialogWindow> window_;
     int lastGeneration_ = -1;
     bool lastCustom_ = false; // the type as of the last sync
+    bool dropOver_ = false;
+    juce::String dropName_;
 };
 
 } // namespace synth::ui

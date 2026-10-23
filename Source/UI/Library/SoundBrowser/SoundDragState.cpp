@@ -6,6 +6,9 @@ namespace synth::ui {
 namespace {
 struct State {
     bool active = false;
+    bool shapeActive = false;
+    synth::shapes::ShapeKind shapeKind = synth::shapes::ShapeKind::Filter;
+    juce::String shapeName;
     juce::File file;
     juce::ListenerList<SoundDragState::Listener> listeners;
 };
@@ -19,19 +22,37 @@ State& state() {
 
 void SoundDragState::begin(const juce::File& file) {
     state().active = true;
+    state().shapeActive = false;
     state().file = file;
     state().listeners.call([](Listener& l) { l.soundDragChanged(); });
 }
 
+void SoundDragState::beginShape(synth::shapes::ShapeKind kind, const juce::String& name) {
+    state().active = false;
+    state().file = juce::File();
+    state().shapeActive = true;
+    state().shapeKind = kind;
+    state().shapeName = name;
+    state().listeners.call([](Listener& l) { l.soundDragChanged(); });
+}
+
 void SoundDragState::end() {
-    if (!state().active)
+    if (!state().active && !state().shapeActive)
         return;
     state().active = false;
+    state().shapeActive = false;
+    state().shapeName = {};
     state().file = juce::File();
     state().listeners.call([](Listener& l) { l.soundDragChanged(); });
 }
 
 bool SoundDragState::isActive() { return state().active; }
+
+bool SoundDragState::isShapeActive() { return state().shapeActive; }
+
+synth::shapes::ShapeKind SoundDragState::shapeKind() { return state().shapeKind; }
+
+juce::String SoundDragState::shapeName() { return state().shapeName; }
 
 juce::File SoundDragState::file() { return state().file; }
 

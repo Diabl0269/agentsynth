@@ -124,6 +124,8 @@ void ModuleComponent::wireMorphStripGestures() {
     }
 }
 
+synth::ui::ShapeDropTarget* ModuleComponent::shapeDropTarget() { return morphCard_.get(); }
+
 void ModuleComponent::createMorphShapesCard() {
     auto* filter = dynamic_cast<FilterModule*>(module);
     auto* lfo = dynamic_cast<LFOModule*>(module);

@@ -3,6 +3,7 @@
 // ShapeListEditorInternal.h -- the shape chips (a colour dot and a name per shape) and the strip that wraps them.
 #include "ShapeListEditor.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/ModuleViews/MorphMap/MorphMapPalette.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -33,13 +34,23 @@ private:
 };
 
 /** One chip: pressing it selects its shape. A radio button, so exactly one chip is lit. */
-class ShapeListEditor::Chip : public juce::Button {
+class ShapeListEditor::Chip
+    : public juce::Button
+    , public SoundDropAdapter
+    , private ShapeDropTarget {
 public:
     static constexpr int kHeight = 26;
 
-    Chip(int shapeIndex, const juce::String& shapeName)
+    /** What the chip asks of the editor when a library shape is dragged over it. */
+    struct DropHooks {
+        std::function<bool(synth::shapes::ShapeKind)> accepts;
+        std::function<void(const synth::shapes::LibraryShape&)> dropped;
+    };
+
+    Chip(int shapeIndex, const juce::String& shapeName, DropHooks hooks)
         : juce::Button(shapeName)
-        , index_(shapeIndex) {
+        , index_(shapeIndex)
+        , hooks_(std::move(hooks)) {
         setClickingTogglesState(true);
         setRadioGroupId(7411);
         setWantsKeyboardFocus(true);
@@ -60,6 +71,10 @@ public:
         g.fillRoundedRectangle(bounds, bounds.getHeight() * 0.5f);
         g.setColour(getToggleState() ? colors.accent : colors.border.withAlpha(highlighted ? 1.0f : 0.7f));
         g.drawRoundedRectangle(bounds, bounds.getHeight() * 0.5f, 1.0f);
+        if (dropOver_ || isShowingSoundOutline()) {
+            g.setColour(colors.accent.withAlpha(dropOver_ ? 1.0f : 0.35f));
+            g.drawRoundedRectangle(bounds, bounds.getHeight() * 0.5f, dropOver_ ? 2.0f : 1.0f);
+        }
         const float dot = 10.0f;
         g.setColour(morphShapeColour(colors, index_));
         g.fillEllipse(bounds.getX() + 9.0f, bounds.getCentreY() - dot * 0.5f, dot, dot);
@@ -70,8 +85,26 @@ public:
         paintFocusRing(g, getLocalBounds().toFloat(), *this, bounds.getHeight() * 0.5f);
     }
 
+    ShapeDropTarget* shapeDropTarget() override { return this; }
+    bool isDropHighlighted() const noexcept { return dropOver_; }
+
 private:
+    bool acceptsShapeDrop(synth::shapes::ShapeKind kind) const override {
+        return hooks_.accepts && hooks_.accepts(kind);
+    }
+    void shapeDragOver(bool over, const juce::String& name) override {
+        dropOver_ = over;
+        setTooltip(over ? "Drop to stamp " + name + " onto " + getButtonText() : "Select " + getButtonText());
+        repaint();
+    }
+    void shapeDropped(const synth::shapes::LibraryShape& shape) override {
+        if (hooks_.dropped)
+            hooks_.dropped(shape);
+    }
+
     int index_;
+    DropHooks hooks_;
+    bool dropOver_ = false;
 };
 
 /** The chips in a wrapping row; it grows downwards as shapes are added. */
@@ -91,7 +124,10 @@ public:
             return;
         chips_.clear();
         for (int i = 0; i < (int)shapes.size(); ++i) {
-            auto chip = std::make_unique<Chip>(i, shapes[(size_t)i].name);
+            Chip::DropHooks hooks;
+            hooks.accepts = [this](synth::shapes::ShapeKind kind) { return owner_.acceptsLibraryShape(kind); };
+            hooks.dropped = [this, i](const synth::shapes::LibraryShape& shape) { owner_.stampLibraryShape(i, shape); };
+            auto chip = std::make_unique<Chip>(i, shapes[(size_t)i].name, std::move(hooks));
             chip->onClick = [this, i] { owner_.setSelected(i); };
             addAndMakeVisible(*chip);
             chips_.push_back(std::move(chip));

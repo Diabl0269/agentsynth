@@ -125,3 +125,55 @@ TEST(ToastComponentTests, ReducedMotionFadesWithoutMoving) {
     synth::ui::setReducedMotionForTest(std::nullopt);
     synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }
+
+namespace {
+// How many glyphs of `message` draw before the ellipsis, given the width paint() leaves for the text.
+int glyphsDrawn(const juce::String& message, int textWidth) {
+    juce::GlyphArrangement glyphs;
+    glyphs.addCurtailedLineOfText(juce::Font(juce::FontOptions(12.0f)), message, 0.0f, 0.0f, (float)textWidth, true);
+    return glyphs.getNumGlyphs();
+}
+float measuredWidth(const juce::String& message) {
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(juce::Font(juce::FontOptions(12.0f)), message, 0.0f, 0.0f);
+    return glyphs.getBoundingBox(0, -1, true).getWidth();
+}
+int glyphsInFull(const juce::String& message) {
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(juce::Font(juce::FontOptions(12.0f)), message, 0.0f, 0.0f);
+    return glyphs.getNumGlyphs();
+}
+} // namespace
+
+// Regression test for FRO1118: a toast cut its message short in a wide window
+TEST(ToastComponentTests, AToastIsWideEnoughForItsWholeMessageWhereThereIsRoom) {
+    // A 1600 px window with the Sounds sidebar open (about 370 px) leaves the canvas about 1230 px, as MainComponent
+    // places the toast.
+    juce::Component parent;
+    parent.setSize(1600, 900);
+    synth::ui::ToastComponent toast;
+    parent.addChildComponent(toast);
+    toast.placeIn({370, 44, 1230, 800});
+    for (const char* text : {"Stamped ee on Filter", "Stamped ee onto the selected Filter",
+                             "Stamped a shape with a rather long name on the selected Filter card"}) {
+        toast.show(text);
+        const int textWidth = toast.getWidth() - 28;
+        EXPECT_EQ(glyphsDrawn(text, textWidth), glyphsInFull(text))
+            << text << " was shortened in " << textWidth << " px";
+    }
+}
+
+TEST(ToastComponentTests, AMessageTooLongForTheAreaIsCappedWithAnEllipsis) {
+    juce::Component parent;
+    parent.setSize(600, 400);
+    synth::ui::ToastComponent toast;
+    parent.addChildComponent(toast);
+    toast.placeIn({0, 0, 600, 400});
+    // Repeat words until the line measures well past the area in this machine's font, so the test holds on any font.
+    juce::String text("This message is far too long to fit in a toast placed in a narrow window");
+    while (measuredWidth(text) < 600.0f + 100.0f)
+        text += ", and it keeps going";
+    toast.show(text);
+    EXPECT_EQ(toast.getWidth(), 600 - 40);
+    EXPECT_LT(glyphsDrawn(text, toast.getWidth() - 28), glyphsInFull(text));
+}

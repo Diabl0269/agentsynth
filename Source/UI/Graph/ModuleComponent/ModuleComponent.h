@@ -256,6 +256,7 @@ public:
     int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
     synth::ui::ModRingFades& getModRingFades() noexcept { return ringFades_; }
     synth::ui::MorphShapesCard* getMorphCard() const noexcept { return morphCard_.get(); }
+    synth::ui::ShapeDropTarget* shapeDropTarget() override;
     /** A SamplerChrome or DrumKitChrome; null unless the module is a Sampler or a Drum Kit. */
     synth::ui::InstrumentChrome* getInstrumentChrome() const noexcept { return instrumentChrome_.get(); }
 

@@ -2,10 +2,13 @@
 #include "UI/Library/SoundBrowser/SoundPreviewFooter.h"
 #include "SoundBrowser/SoundPreviewPlayer.h"
 
+#include "UI/Layout/ReducedMotion.h"
+
 namespace synth::ui {
 
 SoundPreviewFooter::SoundPreviewFooter() {
     addAndMakeVisible(wave_);
+    addChildComponent(curve_);
 
     stop_.setTitle("Stop preview");
     stop_.setTooltip("Stop the preview (Space)");
@@ -41,6 +44,8 @@ SoundPreviewFooter::SoundPreviewFooter() {
     addAndMakeVisible(volume_);
 }
 
+SoundPreviewFooter::~SoundPreviewFooter() { shapeAnim_.stop(vblank_); }
+
 void SoundPreviewFooter::showSound(const std::optional<synth::soundbrowser::SoundEntry>& entry) {
     wave_.setFile(entry.has_value() ? juce::File(entry->path) : juce::File());
 }
@@ -49,9 +54,52 @@ void SoundPreviewFooter::setCompact(bool compact) {
     if (compact_ == compact)
         return;
     compact_ = compact;
-    wave_.setVisible(!compact);
-    autoPlay_.setVisible(!compact);
+    applyShapeMix();
     resized();
+}
+
+void SoundPreviewFooter::showShape(const std::optional<synth::shapes::LibraryShape>& shape) {
+    if (shape.has_value())
+        curve_.setShape(shape);
+    if (shape.has_value() == shapeTarget_)
+        return;
+    shapeTarget_ = shape.has_value();
+    const float from = shapeMix_;
+    const float to = shapeTarget_ ? 1.0f : 0.0f;
+    shapeAnim_.start(
+        vblank_, motionMs(120.0, 80.0), easeOutCubic,
+        [this, from, to](float t) {
+            shapeMix_ = from + (to - from) * t;
+            applyShapeMix();
+        },
+        [this, to] {
+            shapeMix_ = to;
+            applyShapeMix();
+        });
+}
+
+void SoundPreviewFooter::finishShapeMotionForTest() {
+    shapeAnim_.completeForTest();
+    shapeMix_ = shapeTarget_ ? 1.0f : 0.0f;
+    applyShapeMix();
+}
+
+// The transport (and the waveform) is on screen while any of it is left; the shape's picture while any of it shows.
+// A control that is faded out entirely is hidden, so it is no focus stop and no screen reader reaches it.
+void SoundPreviewFooter::applyShapeMix() {
+    const bool transport = shapeMix_ < 1.0f;
+    const bool picture = shapeMix_ > 0.0f && !compact_;
+    const float transportAlpha = 1.0f - shapeMix_;
+    for (juce::Component* c : {static_cast<juce::Component*>(&stop_), static_cast<juce::Component*>(&volume_)}) {
+        c->setVisible(transport);
+        c->setAlpha(transportAlpha);
+    }
+    for (juce::Component* c : {static_cast<juce::Component*>(&autoPlay_), static_cast<juce::Component*>(&wave_)}) {
+        c->setVisible(transport && !compact_);
+        c->setAlpha(transportAlpha);
+    }
+    curve_.setVisible(picture);
+    curve_.setAlpha(shapeMix_);
 }
 
 void SoundPreviewFooter::resized() {
@@ -64,6 +112,7 @@ void SoundPreviewFooter::resized() {
         return;
     }
     compactName_ = {};
+    curve_.setBounds(getLocalBounds().reduced(12, 6));
     auto area = getLocalBounds().reduced(12, 6);
     wave_.setBounds(area.removeFromTop(40));
     area.removeFromTop(6);

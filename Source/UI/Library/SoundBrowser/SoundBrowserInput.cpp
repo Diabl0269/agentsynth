@@ -38,6 +38,8 @@ juce::String SoundBrowserComponent::tooltipForRow(int index) const {
         return kDefaultTooltip;
     if (row.kind == RowKind::GetPack)
         return packTooltip(row);
+    if (row.kind == RowKind::Shape)
+        return shapeTooltip(row);
     if (row.kind == RowKind::AddFolder)
         return "Add a folder of sounds. You can also drag a folder here from " + fileManagerName() + ".";
     if (row.missing)
@@ -71,8 +73,9 @@ void SoundBrowserComponent::mouseMove(const juce::MouseEvent& e) {
     }
     const bool leadsSomewhere =
         part >= 0 ||
-        (row >= 0 &&
-         (rows_[(size_t)row].kind == RowKind::GetPack ? hotButton >= 0 : rows_[(size_t)row].kind != RowKind::Sound));
+        (row >= 0 && (rows_[(size_t)row].kind == RowKind::GetPack
+                          ? hotButton >= 0
+                          : rows_[(size_t)row].kind != RowKind::Sound && rows_[(size_t)row].kind != RowKind::Shape));
     setMouseCursor(leadsSomewhere ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
 }
 
@@ -105,7 +108,9 @@ void SoundBrowserComponent::mouseDown(const juce::MouseEvent& e) {
     if (e.mods.isPopupMenu()) { // a right-click selects; it never opens, downloads or starts a drag
         if (rows_[(size_t)row].userFolder)
             showFolderMenu(row, std::nullopt);
-    } else if (kind == RowKind::Sound) {
+        else if (kind == RowKind::Shape)
+            showShapeMenu(row, std::nullopt);
+    } else if (kind == RowKind::Sound || kind == RowKind::Shape) {
         pressedSound_ = row;
     } else if (kind == RowKind::GetPack) {
         if (packButtonHit(row, e.getPosition()))
@@ -119,11 +124,15 @@ void SoundBrowserComponent::mouseDown(const juce::MouseEvent& e) {
 
 void SoundBrowserComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     const int row = getRowIndexAt(e.getPosition());
-    if (row >= 0 && rows_[(size_t)row].kind == RowKind::Sound && onSoundActivated)
+    if (row >= 0 && rows_[(size_t)row].kind == RowKind::Sound && onSoundActivated) {
+        lists_.noteUsed(rows_[(size_t)row].entry->path);
         onSoundActivated(*rows_[(size_t)row].entry);
+    }
 }
 
 void SoundBrowserComponent::notifySelected() {
+    if (selected_ >= 0 && selected_ < (int)rows_.size() && rows_[(size_t)selected_].kind == RowKind::Shape)
+        stopPreview(); // the footer shows no Stop for a shape, so a sound still playing ends here
     if (selected_ < 0 || selected_ >= (int)rows_.size() || rows_[(size_t)selected_].kind != RowKind::Sound)
         return;
     if (onSoundSelected)
@@ -165,17 +174,15 @@ bool SoundBrowserComponent::moveSelection(int delta) {
 }
 
 void SoundBrowserComponent::toggleSelectedFavourite() {
-    if (selected_ < 0 || rows_[(size_t)selected_].kind != RowKind::Sound)
+    if (selected_ < 0)
+        return;
+    const auto key = favouriteKeyOf(rows_[(size_t)selected_]);
+    if (key.isEmpty())
         return;
     const int before = selected_;
-    lists_.toggleFavourite(rows_[(size_t)selected_].entry->path);
+    lists_.toggleFavourite(key);
     rebuildRows();
-    if (selected_ < 0 && !rows_.empty()) // the row left the Favourites list: land on its neighbour
-        for (int i = juce::jmin(before, (int)rows_.size() - 1); i >= 0; --i)
-            if (rows_[(size_t)i].navigable()) {
-                selected_ = i;
-                break;
-            }
+    selectNearest(before); // the row left the Favourites list: land on its neighbour
     refreshAccessibilityValue();
     repaint();
 }
@@ -244,8 +251,14 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
         return openSelected();
     if (key.isKeyCode(juce::KeyPress::returnKey)) {
         if (selected_ >= 0 && rows_[(size_t)selected_].kind == RowKind::Sound) {
-            if (onSoundActivated)
+            if (onSoundActivated) {
+                lists_.noteUsed(rows_[(size_t)selected_].entry->path);
                 onSoundActivated(*rows_[(size_t)selected_].entry);
+            }
+            return true;
+        }
+        if (selected_ >= 0 && rows_[(size_t)selected_].kind == RowKind::Shape) {
+            activateSelectedShape(); // with no card that fits, nothing happens; the row's tooltip says what it needs
             return true;
         }
         return activateSelectedAction() || openSelected();
@@ -255,7 +268,7 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
     const auto ch = key.getTextCharacter();
-    if ((ch == 'f' || ch == 'F') && selected_ >= 0 && rows_[(size_t)selected_].kind == RowKind::Sound) {
+    if ((ch == 'f' || ch == 'F') && selected_ >= 0 && !favouriteKeyOf(rows_[(size_t)selected_]).isEmpty()) {
         toggleSelectedFavourite();
         return true;
     }
@@ -265,9 +278,11 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
     }
     if (key.isKeyCode(juce::KeyPress::spaceKey) && selected_ >= 0)
         return rows_[(size_t)selected_].kind == RowKind::Sound ? togglePreview() : activateSelectedAction();
-    if ((key.isKeyCode(juce::KeyPress::deleteKey) || key.isKeyCode(juce::KeyPress::backspaceKey)) && selected_ >= 0 &&
-        rows_[(size_t)selected_].kind == RowKind::GetPack && rows_[(size_t)selected_].busy)
-        return toggleDownload(selected_);
+    if ((key.isKeyCode(juce::KeyPress::deleteKey) || key.isKeyCode(juce::KeyPress::backspaceKey)) && selected_ >= 0) {
+        if (rows_[(size_t)selected_].kind == RowKind::GetPack && rows_[(size_t)selected_].busy)
+            return toggleDownload(selected_);
+        return deleteSelectedShape();
+    }
     return false;
 }
 

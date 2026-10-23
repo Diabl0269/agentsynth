@@ -14,6 +14,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/SelectionModel.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/Library/SoundBrowser/ShapeDragPayload.h"
 #include "UI/Library/SoundBrowser/SoundDragPayload.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -261,8 +262,11 @@ SmartConnectionEngine::DragPreviewState GraphDragDropController::buildDragPrevie
     return state;
 }
 
-// A dragged Sound is taken when a Sampler can load it; every other payload is the canvas's own kind.
+// A dragged Sound is taken when a Sampler can load it; a Shape only stamps onto a card, never the canvas; every other
+// payload is the canvas's own kind.
 bool GraphDragDropController::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details) {
+    if (synth::ui::isShapePayload(details.description))
+        return false;
     if (!synth::ui::isSoundPayload(details.description))
         return true;
     const auto file = synth::ui::soundFileFromPayload(details.description);

@@ -68,14 +68,17 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     styleButton(duplicateButton_, "Duplicate: a copy of the selected shape");
     styleButton(deleteButton_, "Delete: remove the selected shape (one always stays)");
     styleButton(renameButton_, "Rename: name the selected shape");
-    styleButton(startFromButton_, "Start from: replace the selected shape's curve with a vowel or an animal call");
+    styleButton(startFromButton_,
+                "Start from: replace the selected shape's curve with a built-in, a saved shape or a factory shape");
     styleButton(drawButton_, "Draw: replace the selected shape's curve with a line, sine, triangle, saw or square");
+    styleButton(saveShapeButton_,
+                "Save shape: keep the selected shape's curve under a name, in the Sounds tab's Shapes");
     styleButton(doneButton_, "Done: close this window (Esc)");
     int order = 3;
     buildToolbar(order);
     curve_.setExplicitFocusOrder(order++);
-    for (auto* b : {&addButton_, &duplicateButton_, &renameButton_, &startFromButton_, &drawButton_, &deleteButton_,
-                    &doneButton_}) {
+    for (auto* b : {&addButton_, &duplicateButton_, &renameButton_, &startFromButton_, &drawButton_, &saveShapeButton_,
+                    &deleteButton_, &doneButton_}) {
         b->setExplicitFocusOrder(order++);
         addAndMakeVisible(*b);
     }
@@ -86,6 +89,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     renameButton_.onClick = [this] { map_.beginRename(selected_); };
     startFromButton_.onClick = [this] { openStartFromMenu(); };
     drawButton_.onClick = [this] { openDrawFlyout(); };
+    saveShapeButton_.onClick = [this] { saveSelectedShape(); };
     doneButton_.onClick = [this] {
         if (onDone)
             onDone();
@@ -199,7 +203,7 @@ void ShapeListEditor::edit(const std::function<void(std::vector<ShapeItem>&)>& m
 }
 
 void ShapeListEditor::applyStartFrom(int index) {
-    const auto entries = adapter_->getStartFrom();
+    const auto entries = startFromEntries();
     if (index < 0 || index >= (int)entries.size() || shapes_.empty())
         return;
     const auto curve = entries[(size_t)index].curve;
@@ -220,18 +224,6 @@ void ShapeListEditor::showMenuNow(juce::PopupMenu& menu, juce::Component& target
         showMenu(menu);
     else
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target));
-}
-
-void ShapeListEditor::openStartFromMenu() {
-    juce::PopupMenu menu;
-    juce::Component::SafePointer<ShapeListEditor> safe(this);
-    const auto entries = adapter_->getStartFrom();
-    for (int i = 0; i < (int)entries.size(); ++i)
-        menu.addItem(entries[(size_t)i].name, [safe, i] {
-            if (safe != nullptr)
-                safe->applyStartFrom(i);
-        });
-    showMenuNow(menu, startFromButton_);
 }
 
 /** The lane Draw tool's own flyout, so the six shapes, their icons and their order are the lane's. Headless tests
@@ -300,9 +292,10 @@ void ShapeListEditor::resized() {
 
     // Delete is the destructive action: alone at the right end of the row, apart from the others.
     deleteButton_.setBounds(buttons.removeFromRight(64));
-    const int widths[] = {80, 88, 64, 88, 64};
-    juce::TextButton* order[] = {&addButton_, &duplicateButton_, &renameButton_, &startFromButton_, &drawButton_};
-    for (int i = 0; i < 5; ++i) {
+    const int widths[] = {80, 88, 64, 88, 64, 92};
+    juce::TextButton* order[] = {&addButton_,       &duplicateButton_, &renameButton_,
+                                 &startFromButton_, &drawButton_,      &saveShapeButton_};
+    for (int i = 0; i < 6; ++i) {
         order[i]->setBounds(buttons.removeFromLeft(widths[i]));
         buttons.removeFromLeft(kGap);
     }

@@ -288,6 +288,28 @@ values per shape, a name cut to 24 characters of `[A-Za-z0-9 -]`, at most 16 sha
 ignored, and unusable input leaves the current shapes alone (see `docs/ai/patch-safety.md`). Of `"perNote"` the
 untrusted path reads only `mode` and `smoothness`, never the key map ([patch format](../ai/patch-format.md)).
 
+## Shape library
+
+Named curves outside any one Filter: the user's saved shapes and a factory set, listed in the Sounds view's
+[Shapes place](../layout/sound-browser.md#shapes) and in each shape window's Start from menu. `synth::shapes::ShapeLibrary`
+(`Source/Modules/Shapes/`, Core) owns it; the Filter and the LFO share it and tell their shapes apart by kind.
+
+- **Storage**: one JSON file per saved shape, `<settings folder>/Shapes/Filter/<name>.json` or `.../LFO/<name>.json`:
+  `{"version":1,"kind":"filter","name":..,"curve":{LfoCustomWave::toVar}}`. Names are made safe as file names and cut to
+  24 characters; "already saved" is decided on the file, which the disk compares ignoring case.
+- **Untrusted files**: a file over 64 KB, not JSON, newer than version 1, of the other kind, or without two finite
+  curve points is skipped; the curve goes through `LfoCustomWave::sanitise` (clamped, finite, at most 64 points); at
+  most 500 files a kind are read.
+- **Factory set** (compiled in, read-only, `FactoryShapes.cpp`): Filter `ah`, `ee`, `oo`, `eh`, `ih` (the preset curves
+  above), `telephone band` (a band-pass, -3 dB at 300 Hz and 3.4 kHz, below -30 dB at 100 Hz and 8 kHz), `comb` (a
+  24 dB notch every kHz from 1 to 19 kHz) and `tilt` (0 dB at 20 Hz sloping to -12 dB at 20 kHz). Every Filter shape
+  peaks at or below 0 dB (the vowels at most +2.3 dB), under the gain audit's +6 dB ceiling.
+- **Stamping**: a library shape replaces one shape's curve (the name and map position stay) as ONE undo step, from Start
+  from, by [dragging](../layout/sound-browser.md#dragging-a-shape) it onto a shape chip in the window, or onto a Filter
+  card on its Custom type (the shape nearest the cursor), or with Return on a shape row in the Sounds view while that
+  card is the selected one. Each stamp adds the shape to Used recently. `rename` and `remove` change a saved shape's file
+  (`remove` is what the Sounds view's Delete calls after asking); `noteUsed` tells listeners a shape was stamped.
+
 ## Shape editor window
 
 The big editor for the drawn shapes, `Source/UI/ModuleViews/ShapeEditor/`. It is a window titled "Filter shapes:
@@ -335,7 +357,13 @@ slider drag is one undo step (the settings are part of the module's extra state)
   spectrum, the curve, the buttons.
 - **Start from** stamps the vowel (ah, ee, oo, eh, ih) or animal (wolf, crow, frog) curve onto the selected shape. Its
   name and map position stay. The curves are `CustomFilterShapes::presetCurve`; a new Filter starts with the three
-  vowels, which are the same curves.
+  vowels, which are the same curves. After the built-ins the menu lists **Your shapes** (the Filter shapes saved with
+  Save shape) and **Factory shapes** (the [factory set](#shape-library) that is not already a built-in's curve:
+  telephone band, comb, tilt). Each item carries its curve, so a library that changes while the menu is open cannot
+  change what an item stamps.
+- **Save shape** (right of Draw) saves the selected shape's curve to the [shape library](#shape-library) under a name
+  typed in the usual alert prompt (it starts from the shape's name, is cut to 24 characters and refuses an empty
+  name by asking again). A name already saved asks "Replace it?" first. A Tab stop named "Save shape" with a tooltip.
 - **Draw** opens the automation lane's own shape flyout (`DrawShapeFlyout`) and applies the pick to the curve through
   `LaneShapeGenerator`'s points, so a sine here is a lane's sine: Free changes nothing, Line joins the first and last
   levels, Sine, Triangle, Saw and Square repeat three times between -18 and +6 dB (a hold becomes a vertical step).
