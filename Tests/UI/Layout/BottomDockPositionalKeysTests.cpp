@@ -58,6 +58,11 @@ protected:
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
         return used;
     }
+    // The platform's spelling of Cmd+<digit> ("Cmd + 1" on macOS, "Ctrl + 1" elsewhere).
+    static juce::String cmdDigit(int digit) {
+        return ShortcutManager::keyPressToDisplayString(
+            juce::KeyPress('0' + digit, juce::ModifierKeys::commandModifier, 0));
+    }
     juce::String hintFor(Tab tab) {
         const auto& order = dock().getTabOrderForTest();
         const auto buttons = dock().getTabButtons(); // parallel to the order
@@ -79,15 +84,15 @@ TEST_F(BottomDockPositionalKeysTest, CmdNOpensTheTabAtPositionNInTheCurrentOrder
 }
 
 TEST_F(BottomDockPositionalKeysTest, ReorderingTheTabsChangesWhichViewEachNumberOpensAndWhatTheHintsShow) {
-    EXPECT_EQ(hintFor(Tab::Timeline), "Cmd + 1");
-    EXPECT_EQ(hintFor(Tab::Mixer), "Cmd + 2");
+    EXPECT_EQ(hintFor(Tab::Timeline), cmdDigit(1));
+    EXPECT_EQ(hintFor(Tab::Mixer), cmdDigit(2));
 
     dock().reorderTabsForTest(Tab::Timeline, Tab::MidiRemote); // order: Controllers, Mixer, Timeline
 
     EXPECT_EQ(dock().keyPositionOf(Tab::MidiRemote), 1);
     EXPECT_EQ(dock().keyPositionOf(Tab::Timeline), 3);
-    EXPECT_EQ(hintFor(Tab::MidiRemote), "Cmd + 1") << "the hint overlay's key is the one that opens the tab";
-    EXPECT_EQ(hintFor(Tab::Timeline), "Cmd + 3");
+    EXPECT_EQ(hintFor(Tab::MidiRemote), cmdDigit(1)) << "the hint overlay's key is the one that opens the tab";
+    EXPECT_EQ(hintFor(Tab::Timeline), cmdDigit(3));
     EXPECT_TRUE(press(cmd('1')));
     EXPECT_EQ(dock().getActiveTab(), Tab::MidiRemote);
     EXPECT_TRUE(press(cmd('3')));
@@ -114,7 +119,7 @@ TEST_F(BottomDockPositionalKeysTest, ASwapRenumbersTheTabsAndTheMainViewHasNoNum
     EXPECT_EQ(dock().keyPositionOf(Tab::Timeline), 1);
     EXPECT_EQ(dock().keyPositionOf(Tab::Canvas), 2);
     EXPECT_EQ(dock().keyPositionOf(Tab::MidiRemote), 3);
-    EXPECT_EQ(hintFor(Tab::Canvas), "Cmd + 2");
+    EXPECT_EQ(hintFor(Tab::Canvas), cmdDigit(2));
     EXPECT_TRUE(press(cmd('2')));
     EXPECT_EQ(dock().getActiveTab(), Tab::Canvas);
 }
