@@ -400,21 +400,22 @@ public:
 
     // ---- The live-recording strip ----
 
-    // What updateLiveRecording() needs to know about an in-flight audio take. A default-
-    // constructed (or `active == false`) value means "nothing recording" — the strip (if any) is
-    // cleared. `tap` is non-owning and read for the DURATION OF THE CALL ONLY (copyLivePeaks() is
-    // called synchronously inside updateLiveRecording()); nothing here holds it across calls.
+    // One in-flight audio take. `active == false` means "nothing recording". The peaks come from `copyPeaks`
+    // when set, else from `tap`; both are used only during the update call, never held across calls.
     struct LiveRecordingInfo {
         bool active = false;
         synth::TrackId track;     // the armed track the strip paints on
         double punchBeat = 0.0;   // the strip's fixed left edge
         double currentBeat = 0.0; // the strip's growing right edge — the transport's current position
         const RecordTapModule* tap = nullptr;
+        std::function<void(std::vector<std::pair<float, float>>&)> copyPeaks;
+        int numChannels = 2; // channels per peak bucket in the source
     };
 
-    // THE 10 Hz update for an in-flight take (see LiveRecordingInfo) — call every tick regardless
-    // of whether anything is actually recording; cheap when it isn't. See
-    // TimelineClipLanePainting.cpp for the repaint-on-data-arrival policy.
+    // THE 10 Hz update for every in-flight take, one strip each — call every tick, even with nothing
+    // recording (an empty list clears the strips).
+    void updateLiveRecordings(const std::vector<LiveRecordingInfo>& takes);
+    // A single take (or none, when `info.active` is false); same as a one-entry updateLiveRecordings().
     void updateLiveRecording(const LiveRecordingInfo& info);
 
     // Test hook: how many times updateLiveRecording() has actually issued a repaint (as opposed to
@@ -707,7 +708,12 @@ private:
     // The diagonal-hatch / dimmed-fill treatment for a clip whose assetRef does not resolve, plus a
     // "missing: <name>" label when the clip is wide enough.
     void paintMissingAssetPlaceholder(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
-    void paintLiveRecordingStrip(juce::Graphics& g);
+    struct LiveStrip {
+        LiveRecordingInfo info;
+        std::vector<std::pair<float, float>> peaks;
+        juce::Rectangle<int> rect;
+    };
+    void paintLiveRecordingStrip(juce::Graphics& g, const LiveStrip& strip);
     // The dim "how do I put something here" line for a row with no clips (see emptyRowHintFor).
     // Skipped when the row is too short or too narrow to render the line legibly.
     void paintEmptyRowHint(juce::Graphics& g, const synth::Track& track, juce::Rectangle<int> bounds);
@@ -828,9 +834,7 @@ private:
     std::map<std::int64_t, int> linkGroupSizes_; // rebuilt at the top of every paint()
 
     // ---- The live-recording strip ----
-    LiveRecordingInfo liveRecording_;
-    std::vector<std::pair<float, float>> livePeaks_;
-    juce::Rectangle<int> liveStripRect_;
+    std::vector<LiveStrip> liveStrips_;
     int liveStripRepaintCount_ = 0;
     int clipsPainted_ = 0;
 

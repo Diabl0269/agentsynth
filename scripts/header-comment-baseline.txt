@@ -12,12 +12,12 @@
 30 Source/AI/PatchDiff.h
 11 Source/AI/RemoteProvider.h
 87 Source/AppUndoManager.h
-96 Source/AudioEngine/AudioEngine.h
+83 Source/AudioEngine/AudioEngine.h
 45 Source/MacroSet.h
 87 Source/Mixer/ChannelFlows/ChannelFlows.h
 22 Source/Mixer/MixerModel/MixerModel.h
 49 Source/Mixer/TrackPresetManager.h
-45 Source/Modules/RecordTapModule.h
+32 Source/Modules/RecordTapModule.h
 38 Source/Plugin/Hosting/HostedPluginBackend.h
 66 Source/Plugin/Hosting/HostedPluginModule.h
 147 Source/Plugin/Hosting/PluginScanService.h
@@ -31,7 +31,7 @@
 32 Source/Timeline/MidiClipFile.h
 14 Source/Timeline/MidiRecorder.h
 33 Source/Timeline/PeaksFile.h
-99 Source/Timeline/TimelineDoc/TimelineDoc.h
+82 Source/Timeline/TimelineDoc/TimelineDoc.h
 15 Source/Timeline/TimelineOps.h
 49 Source/Timeline/TimelineValidator.h
 26 Source/Transport/BounceExporter.h
@@ -40,7 +40,7 @@
 117 Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
 33 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h
 24 Source/UI/Mixer/MeterColourStops.h
-36 Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
+28 Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
 23 Source/UI/Timeline/TimelinePlayheadOverlay.h
 43 Source/UI/Timeline/TimelineRulerComponent.h
 3 Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h

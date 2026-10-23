@@ -16,7 +16,6 @@
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
 #include "Timeline/AutomationBinding.h"
-#include "Timeline/TakePlacement.h"
 #include "Timeline/TimelineReconciler.h"
 #include "UserSettings.h"
 #include <algorithm>
@@ -24,13 +23,7 @@
 
 namespace {
 
-// Upper bound on the take-number search. A folder with 10000 takes in it is a bug report, not a
-// session, and an unbounded loop on a stat() call is not something a UI click should be able to do.
-constexpr int kMaxTakeNumber = 10000;
-// Floor on a committed audio clip's length, so a take stopped the instant it started still produces
-// a clip the model accepts (addClip requires a strictly positive length). Same value and same
-// reasoning as synth::MidiRecorder::kMinNoteLengthBeats.
-constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
+constexpr double kMinAudioClipLengthBeats = detail::kMinAudioClipLengthBeats;
 
 } // namespace
 
@@ -268,145 +261,6 @@ juce::AudioProcessorGraph::Node* MainComponent::ensureMasterRecordTap() {
 
     graphEditor.updateComponents();
     return created;
-}
-
-// The live master tap, or nullptr. Resolves the take's NodeID first and falls back to a scan —
-// an undo taken mid-take rebuilds the graph and renumbers nodes, and losing the tap that way
-// must lose the take, not crash.
-RecordTapModule* MainComponent::findMasterRecordTap() const {
-    auto& graph = const_cast<MainComponent*>(this)->audioEngine.getGraph();
-    if (auto* node = graph.getNodeForId(audioTake_.tapNode))
-        if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor()))
-            return tap;
-
-    // The id no longer resolves — an undo/redo mid-take rebuilds the graph and renumbers nodes.
-    // The tap is a singleton, so a scan still identifies it unambiguously.
-    for (auto* node : graph.getNodes())
-        if (node != nullptr)
-            if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor()))
-                return tap;
-    return nullptr;
-}
-
-// Where this take's files go: `<bundle>/Audio/take-N.wav` + `<bundle>/Peaks/take-N.agpk` for a
-// saved project, `<app data>/Recordings/take-N.wav` + `.../Recordings/take-N.agpk` for one that
-// has never been saved (see the unsaved-project policy on ProjectBundle). N is the first free
-// number in whichever folder. Fills the file/assetRef fields of `take`; returns false if the
-// directories could not be created.
-bool MainComponent::chooseTakeFiles(AudioTake& take) const {
-    juce::File audioDir;
-    juce::File peaksDir;
-    juce::String refPrefix;
-
-    if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
-        audioDir = currentBundleDir_.getChildFile(synth::ProjectBundle::kAudioSubdirName);
-        peaksDir = currentBundleDir_.getChildFile(synth::ProjectBundle::kPeaksSubdirName);
-        refPrefix = juce::String(synth::ProjectBundle::kAudioSubdirName) + "/";
-    } else {
-        // An UNSAVED project has no bundle to write into, so takes land in app data and the clip's
-        // assetRef carries the reserved "Recordings/" prefix, which resolves against
-        // <app data>/<settings folder> rather than a bundle root. saveToFile() runs
-        // synth::AssetManager::adoptRecordingsAssets BEFORE ProjectBundle::save, which
-        // moves these into the bundle on the first save and rewrites the refs to "Audio/..." — a
-        // project.json never carries a "Recordings/" ref. Until saved, the ref is still
-        // bundle-RELATIVE in form (isValidAssetRef accepts it), which is what keeps the one path
-        // rule — no absolute paths, ever — true for both cases.
-        auto root = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
-        audioDir = root;
-        peaksDir = root;
-        refPrefix = juce::String(detail::kRecordingsFolderName) + "/";
-    }
-
-    if (!audioDir.exists() && !audioDir.createDirectory().wasOk())
-        return false;
-    if (!peaksDir.exists() && !peaksDir.createDirectory().wasOk())
-        return false;
-
-    // First free take number in whichever folder pair this is. Both files are checked so a take
-    // never half-overwrites an earlier one.
-    for (int n = 1; n <= kMaxTakeNumber; ++n) {
-        const juce::String stem = "take-" + juce::String(n);
-        const auto wav = audioDir.getChildFile(stem + ".wav");
-        const auto peaks = peaksDir.getChildFile(stem + ".agpk");
-        if (wav.exists() || peaks.exists())
-            continue;
-        take.wavFile = wav;
-        take.peaksFile = peaks;
-        take.assetRef = refPrefix + stem + ".wav";
-        return true;
-    }
-    return false;
-}
-
-// Counterpart to commitMidiRecording(): the ONE place an audio take ever commits. Stops
-// the tap, then creates the clip in a single recordTimelineChange. A no-op unless a take is
-// actually in flight, so both callers (the Record-off click and the poll's commit-on-stop) can
-// call it unconditionally.
-void MainComponent::commitAudioRecording() {
-    if (!audioTake_.capturing)
-        return;
-
-    // Cleared FIRST: every path out of here means the take is over, and leaving the state set would
-    // let the 10 Hz poll re-enter this on the next tick.
-    const AudioTake take = audioTake_;
-    audioTake_ = {};
-
-    RecordTapModule::TakeResult result;
-    if (auto* tap = findMasterRecordTap())
-        result = tap->stopCapture();
-
-    timelinePanel.getTransportBar().setRecordingState(false);
-    // Every stop (explicit or auto-committed) ends any in-flight count-in pre-roll — unconditional
-    // and idempotent, exactly like commitMidiRecording's own call.
-    audioEngine.getMetronome().setForcedOn(false);
-
-    // Nothing captured: record was disengaged during the count-in, or the tap never armed. No clip
-    // and no undo step, mirroring MidiRecorder's "an empty take commits nothing" contract.
-    if (!result.ok || result.lengthSamples <= 0)
-        return;
-
-    // Where the take lands. Samples -> beats through the transport's tempo. The rate,
-    // bpm and round-trip latency used here are the ones FROZEN at record-on (take.captureSampleRate /
-    // captureBpm / captureRecordingLatencySamples), not read live off the transport/engine — a
-    // device/sample-rate change mid-take forces an early commit (see
-    // AudioEngine::handleStreamFormatChange), and by the time that commit reaches here the engine may
-    // already be on the NEW rate while every anchor field above (captureStartTimelineSample, the WAV
-    // itself) is still in the OLD one. Reading live values would silently convert an OLD-rate sample
-    // count with a NEW-rate samples-per-beat, which is wrong by exactly the rate ratio. The frozen
-    // fields make this correct unconditionally: for the ordinary take (no rate change), they equal
-    // the live values anyway. The whole of the arithmetic lives in synth::computeTakePlacement so it
-    // can be asserted to the sample without going through this component. See
-    // Source/Timeline/TakePlacement.h.
-    synth::TakePlacementInput placementInput;
-    placementInput.takeLengthSamples = result.lengthSamples;
-    placementInput.captureStartValid = result.captureStartValid;
-    placementInput.captureStartTimelineSample = result.captureStartTimelineSample;
-    placementInput.captureStartBlockOffset = result.captureStartBlockOffset;
-    placementInput.punchInBeat = take.punchInBeat;
-    placementInput.recordingLatencySamples = take.captureRecordingLatencySamples;
-    placementInput.sampleRate = take.captureSampleRate > 0.0 ? take.captureSampleRate : 44100.0;
-    placementInput.bpm = take.captureBpm > 0.0 ? take.captureBpm : 120.0;
-    placementInput.minClipLengthBeats = kMinAudioClipLengthBeats;
-
-    const auto placement = synth::computeTakePlacement(placementInput);
-    // Everything recorded sits before the punch (record disengaged during the count-in): the file
-    // stays, the clip is not created — the same "an empty take commits nothing" rule as above.
-    if (!placement.hasContent)
-        return;
-
-    // ONE undo step for the clip AND its asset binding: recordTimelineChange snapshots the doc
-    // before and after the whole lambda, so the two mutations inside are a single entry.
-    undoManager.recordTimelineChange(timelineDoc, [&] {
-        const auto clip = timelineDoc.addClip(take.track, placement.clipStartBeat, placement.clipLengthBeats, "Take");
-        if (!clip.isValid())
-            return; // the track went away, or it is at kMaxClipsPerTrack: a no-op commit
-        // The pre-roll (and the latency shift's overhang at timeline 0) is excluded by the WINDOW,
-        // not by rewriting the WAV: the file keeps every frame that was captured.
-        timelineDoc.setClipAsset(clip, take.assetRef, placement.sourceStartSeconds);
-    });
-
-    if (result.overran)
-        statusBar.showMessage("Dropped audio during recording");
 }
 
 // New Patch empties the timeline as well as the canvas, as its own undoable step.

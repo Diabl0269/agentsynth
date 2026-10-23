@@ -122,9 +122,13 @@ void MainComponent::setAutosaveElapsedMsForTest(juce::uint32 elapsedMs) {
 // True once an audio or MIDI take is capturing (see isRecordingActive()).
 bool MainComponent::isRecordingActiveForTest() const { return isRecordingActive(); }
 
-// Forces AudioTake::capturing without the real record-arm machinery, to verify the autosave gate
+// Puts one placeholder take in flight (or none) without the real record-arm machinery, to verify the autosave gate
 // respects this flag. Never commits a clip; the caller must reset it before the test ends.
-void MainComponent::setAudioTakeCapturingForTest(bool capturing) { audioTake_.capturing = capturing; }
+void MainComponent::setAudioTakeCapturingForTest(bool capturing) {
+    audioTakes_.clear();
+    if (capturing)
+        audioTakes_.emplace_back();
+}
 
 // What performSaveProject(false) will do next: true if there is no bundle to resave to silently,
 // so Cmd+S is about to prompt for a location.

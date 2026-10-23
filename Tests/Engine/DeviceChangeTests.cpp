@@ -462,6 +462,7 @@ TEST_F(DeviceChangeFlowTest, AudioTakeCommittedAtFormatChange) {
     const int frozenLatency = engine.getRecordingLatencySamples(); // what the commit must have used
 
     const auto track = doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(doc.setTrackAudioInput(track, {synth::AudioInputChoice::Kind::WholeMix})); // records the master
     ASSERT_TRUE(doc.setTrackArmed(track, true));
     mc.timerCallback(); // arms input monitoring so the input reaches the tap
 
@@ -540,6 +541,7 @@ TEST_F(DeviceChangeFlowTest, AudioTakeCapturesNothingAfterTheRateBoundary) {
     engine.audioDeviceAboutToStart(&fake48);
 
     const auto track = doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(doc.setTrackAudioInput(track, {synth::AudioInputChoice::Kind::WholeMix})); // records the master
     ASSERT_TRUE(doc.setTrackArmed(track, true));
     mc.timerCallback(); // arms input monitoring so the input reaches the tap
 

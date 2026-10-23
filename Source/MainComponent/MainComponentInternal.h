@@ -37,6 +37,10 @@ inline juce::String peaksRefForAssetRef(const juce::String& assetRef) {
 // policy. Used by both MainComponentFileIO.cpp (saveToFile) and MainComponentTimeline.cpp
 // (chooseTakeFiles, promptRelinkClipAsset, relinkClipAsset, importAudioFileToClip).
 inline constexpr const char* kRecordingsFolderName = "Recordings";
+// Floor on a committed audio clip's length, so a take stopped the instant it started still produces a clip the
+// model accepts (addClip requires a strictly positive length). Same value and reasoning as
+// synth::MidiRecorder::kMinNoteLengthBeats.
+inline constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
 
 // The add-track flow's auto-wire target set: MIDI-DRIVEN INSTRUMENTS only.
 //

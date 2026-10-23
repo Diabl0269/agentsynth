@@ -196,6 +196,56 @@ bool readTrackMidiInput(const juce::DynamicObject& tObj, Track& track) {
     return track.midiInputChannel >= 0 && track.midiInputChannel <= Track::kMaxMidiInputChannel;
 }
 
+// A track's audio input: absent = None (files written before the field existed). Like the MIDI channel it is a
+// recording setting, so an unknown kind or channels out of range fail the load. Read only for Audio tracks.
+bool readTrackAudioInput(const juce::DynamicObject& tObj, Track& track) {
+    const juce::var v = tObj.getProperty("audioInput");
+    if (v.isVoid() || track.kind != TrackKind::Audio)
+        return true;
+    const auto* obj = v.getDynamicObject();
+    juce::String kind;
+    if (obj == nullptr || !readString(obj->getProperty("kind"), kind))
+        return false;
+    AudioInputChoice choice;
+    if (kind == "mix") {
+        choice.kind = AudioInputChoice::Kind::WholeMix;
+    } else if (kind == "device") {
+        int channel = 0;
+        int channels = 1;
+        if (!readInt(obj->getProperty("channel"), channel) ||
+            !readOptionalInt(obj->getProperty("channels"), channels) ||
+            !readOptionalString(obj->getProperty("device"), choice.deviceName))
+            return false;
+        if (channel < 1 || channel > AudioInputChoice::kMaxChannel)
+            return false;
+        choice.kind = AudioInputChoice::Kind::Device;
+        choice.firstChannel = channel - 1;
+        choice.numChannels = channels;
+        if (!choice.isValid())
+            return false;
+    } else {
+        return false;
+    }
+    track.audioInput = choice;
+    return true;
+}
+
+void writeTrackAudioInput(juce::DynamicObject& t, const Track& track) {
+    const auto& input = track.audioInput;
+    if (input.kind == AudioInputChoice::Kind::None)
+        return; // left out at the default, like the MIDI input keys
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    if (input.kind == AudioInputChoice::Kind::WholeMix) {
+        obj->setProperty("kind", "mix");
+    } else {
+        obj->setProperty("kind", "device");
+        obj->setProperty("channel", input.firstChannel + 1);
+        obj->setProperty("channels", input.numChannels);
+        obj->setProperty("device", input.deviceName);
+    }
+    t.setProperty("audioInput", juce::var(obj.get()));
+}
+
 // A track's plain fields (everything but its id, kind, clips and lanes). A colour outside 32 bits or a
 // non-finite height is refused; a height outside its range is clamped, it is display data.
 bool readTrackFields(const juce::DynamicObject& tObj, Track& track) {
@@ -212,7 +262,7 @@ bool readTrackFields(const juce::DynamicObject& tObj, Track& track) {
         return false;
     track.colourArgb = static_cast<juce::uint32>(colourValue);
     track.heightScale = std::clamp(track.heightScale, Track::kMinHeightScale, Track::kMaxHeightScale);
-    return readTrackMidiInput(tObj, track);
+    return readTrackMidiInput(tObj, track) && readTrackAudioInput(tObj, track);
 }
 
 } // namespace
@@ -249,6 +299,7 @@ juce::var TimelineDoc::toVar() const {
         }
         if (track.midiInputChannel != 0)
             t->setProperty("midiInputChannel", track.midiInputChannel);
+        writeTrackAudioInput(*t, track);
 
         juce::Array<juce::var> clipVars;
         for (const auto& clip : track.clips) {

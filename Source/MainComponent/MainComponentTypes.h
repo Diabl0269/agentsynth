@@ -59,18 +59,22 @@ struct InstrumentChainBuild {
     std::vector<juce::String> insertUuids; // effect inserts, in chain order (timelineOps only)
 };
 
-/** Message-thread state of one armed-Audio-track take, from the Record-on click to the commit.
- *  Capture starts at the click, so a take is either rolling or not. The punch is the earliest beat
- *  the COMMITTED CLIP may start at; pre-roll frames are recorded, then trimmed out of the clip
- *  window. The capture* fields are FROZEN at capture start and never re-read at commit. */
+/** Message-thread state of one armed-Audio-track take, from the Record-on click to the commit. Every take in
+ *  MainComponent's list is rolling. The punch is the earliest beat the COMMITTED CLIP may start at; pre-roll
+ *  frames are recorded, then trimmed out of the clip window. The capture* fields are FROZEN at capture start
+ *  and never re-read at commit. */
 struct AudioTake {
-    bool capturing = false;   // the tap is writing
-    synth::TrackId track;     // the armed Audio track the clip lands on
-    double punchInBeat = 0.0; // earliest beat the committed clip may start at
-    juce::File wavFile;       // absolute path being written
-    juce::File peaksFile;     // its .agpk sidecar
-    juce::String assetRef;    // what the committed clip stores (see synth::Clip::assetRef)
-    juce::AudioProcessorGraph::NodeID tapNode;
+    enum class Source { Input, WholeMix };
+    Source source = Source::WholeMix;          // the track's own input (an engine input slot) or the master Rec Tap
+    int inputSlot = -1;                        // Input only: the synth::InputTakeRecorder slot
+    int firstChannel = 0;                      // Input only: 0-based device input
+    int numChannels = 2;                       // channels in the WAV
+    synth::TrackId track;                      // the armed Audio track the clip lands on
+    double punchInBeat = 0.0;                  // earliest beat the committed clip may start at
+    juce::File wavFile;                        // absolute path being written
+    juce::File peaksFile;                      // its .agpk sidecar
+    juce::String assetRef;                     // what the committed clip stores (see synth::Clip::assetRef)
+    juce::AudioProcessorGraph::NodeID tapNode; // WholeMix only
 
     double captureSampleRate = 44100.0;
     double captureBpm = 120.0;

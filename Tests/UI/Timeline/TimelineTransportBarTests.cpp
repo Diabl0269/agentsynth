@@ -422,6 +422,7 @@ TEST_F(TimelineTransportBarAppWiringTest, AnAudioTakeWaitsForPlayWhenThePreferen
     auto& transport = mc.getAudioEngine().getTransport();
     auto& bar = mc.getTimelinePanel().getTransportBar();
     const auto trackId = mc.getTimelineDoc().addTrack(synth::TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(mc.getTimelineDoc().setTrackAudioInput(trackId, {synth::AudioInputChoice::Kind::WholeMix}));
     ASSERT_TRUE(mc.getTimelineDoc().setTrackArmed(trackId, true));
 
     bar.getRecordButton().onClick();

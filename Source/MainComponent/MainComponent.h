@@ -525,9 +525,12 @@ private:
     // ---- Audio recording ----
     using AudioTake = synth::maincomponent::AudioTake;
     juce::AudioProcessorGraph::Node* ensureMasterRecordTap();
-    RecordTapModule* findMasterRecordTap() const;
-    bool chooseTakeFiles(AudioTake& take) const;
+    RecordTapModule* findMasterRecordTap(juce::AudioProcessorGraph::NodeID hint) const;
+    bool chooseTakeFiles(AudioTake& take, const std::vector<AudioTake>& reserved) const;
+    bool resolveAudioTakes(std::vector<AudioTake>& takes, juce::String& notice);
+    bool startAudioTakes(std::vector<AudioTake>& takes, double punchInBeat, double sampleRate, double bpm);
     void commitAudioRecording();
+    void updateLiveRecordingStrips(double currentBeat);
 
     /** RAII suspension of automation capture for the duration of a programmatic rewrite. */
     struct ProgrammaticApplyScope {
@@ -857,8 +860,7 @@ private:
     juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> soundPackInstaller_;
     synth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
-    bool isLibraryVisible{true};
-    bool isAlignmentGuidesEnabled{true};
+    bool isLibraryVisible{true}, isAlignmentGuidesEnabled{true};
 
     synth::ui::TrackChannelLinkController trackChannelLink_{audioEngine, timelineDoc, undoManager, graphEditor};
 
@@ -875,11 +877,9 @@ private:
     bool wasTransportPlaying_ = false;             // playing->stopped edge for the MIDI recorder's auto-commit
     synth::TransportNudgeState transportNudge_;    // message-thread memory of the last cursor-move request
 
-    bool feedbackGuardLatched_ = false; // re-arm latch; cleared on the none-armed -> armed edge
-    bool wasAnyAudioTrackArmed_ = false;
-
-    AudioTake audioTake_;
-    juce::File currentBundleDir_; // invalid File = never saved; decides where a take is written
+    bool feedbackGuardLatched_ = false, wasAnyAudioTrackArmed_ = false; // re-arm latch; cleared on none -> armed
+    std::vector<AudioTake> audioTakes_; // every take rolling now, one per recording Audio track
+    juce::File currentBundleDir_;       // invalid File = never saved; decides where a take is written
 
     std::vector<std::unique_ptr<ProgrammaticApplyScope>> programmaticApplyScopes; // stack: undo/redo restore span
     std::unique_ptr<ProgrammaticApplyScope>

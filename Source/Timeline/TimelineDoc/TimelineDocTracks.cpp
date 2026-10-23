@@ -91,6 +91,7 @@ TrackId TimelineDoc::duplicateTrack(TrackId source, const juce::String& name, ju
         copy.midiInputId = original->midiInputId;
         copy.midiInputName = original->midiInputName;
         copy.midiInputChannel = original->midiInputChannel;
+        copy.audioInput = original->audioInput;
         copy.bindingUuid = remap(original->bindingUuid);
         // Linked clips on the copy stay linked to each other, in fresh groups, never to the originals.
         std::map<std::int64_t, std::int64_t> groupRemap;
@@ -252,6 +253,23 @@ bool TimelineDoc::setTrackMidiInput(TrackId id, const juce::String& deviceId, co
         track->midiInputId = deviceId;
         track->midiInputName = name;
         track->midiInputChannel = channel;
+        return true;
+    });
+}
+
+// Same rule as the MIDI input: a recording setting is refused on a track that cannot record audio. Only a Device
+// choice carries channels and a device name, so the others are stored in one canonical form and compare equal.
+bool TimelineDoc::setTrackAudioInput(TrackId id, const AudioInputChoice& choice) {
+    auto* track = findTrack(id);
+    if (track == nullptr || track->kind != TrackKind::Audio || !choice.isValid())
+        return false;
+    AudioInputChoice stored = choice;
+    if (stored.kind != AudioInputChoice::Kind::Device)
+        stored = AudioInputChoice{stored.kind};
+    if (track->audioInput == stored)
+        return true;
+    return applyMutation([&] {
+        track->audioInput = stored;
         return true;
     });
 }

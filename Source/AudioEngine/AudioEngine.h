@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/InputTakeRecorder.h"
 #include "AudioEngine/MidiInputSources.h"
 #include "AudioEngine/ModulationRoutingTypes.h"
 #include "Mixer/MixerPanLaw.h"
@@ -21,6 +22,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_core/juce_core.h>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -435,6 +437,27 @@ public:
     // instead of waiting for the audio thread to render a block with the new layout.
     int getDeviceInputChannelCount() const noexcept { return deviceInputChannelCount_.load(std::memory_order_relaxed); }
 
+    // ---- Recording from the input (AudioEngineInputRecording.cpp) ----
+    // What the UI needs to offer an input. `deviceName` is the input device (or the one enableDeviceInputs()
+    // would open while inputs are off); empty in Hosted mode, where the host's inputs are all there is.
+    struct AudioInputInfo {
+        juce::String deviceName;
+        int deviceInputs = 0; // inputs the device has
+        int activeInputs = 0; // inputs turned on and reaching the engine
+        bool hosted = false;
+    };
+    // MESSAGE THREAD.
+    AudioInputInfo getAudioInputInfo();
+    // Any thread. Whether 0-based input `channel` is turned on and reaches the engine's input snapshot.
+    bool isInputChannelActive(int channel) const noexcept;
+    // MESSAGE THREAD. The loudest sample on 0-based input `channel` since the last read; resets it.
+    float readInputPeak(int channel) noexcept;
+    // MESSAGE THREAD, Standalone only (a no-op Hosted). Asks for microphone access, then turns on every input
+    // of the chosen device (at most 8); the change persists through onDeviceStateChanged.
+    void enableDeviceInputs();
+    // Takes recorded straight from the input; their WAVs are finalised by shutdown().
+    synth::InputTakeRecorder& getInputRecorder() noexcept { return inputRecorder_; }
+
     // Value types shared with the graph UI; defined in ModulationRoutingTypes.h so UI headers can
     // hold them without including this header.
     using ModRoutingInfo = ::ModRoutingInfo;
@@ -692,6 +715,19 @@ private:
     std::atomic<int> deviceInputChannelCount_{0};
 
     void prepareDeviceInputSnapshot(int numInputChannels, int blockSize);
+
+    // Input-take state; see AudioEngineInputRecording.cpp. The channel map turns a device input number into its
+    // index in the (packed, active-only) input snapshot, -1 when that input is off.
+    synth::InputTakeRecorder inputRecorder_;
+    std::array<std::atomic<int>, synth::InputTakeRecorder::kMaxInputChannels> inputChannelToSnapshot_{};
+    std::array<std::atomic<float>, synth::TransportService::kMaxDeviceInputChannels> inputPeaks_{};
+    std::array<const float*, synth::InputTakeRecorder::kMaxInputChannels> inputTakePointers_{};
+    std::map<juce::String, int> deviceInputCountCache_; // message thread only
+    void mapActiveInputs(const juce::BigInteger& activeInputs) noexcept;
+    void pushInputTakes(int sampleOffset, int numSamples) noexcept;
+    void storeInputPeaks(int channels, int numSamples) noexcept;
+    int countDeviceInputs(const juce::String& deviceName);
+    juce::String applyInputEnabledSetup();
     // AUDIO THREAD, once per callback, BEFORE the graph runs. Copies the caller's input channels
     // into deviceInputSnapshot_ and records how many landed there.
     void captureDeviceInput(const float* const* inputChannelData, int numInputChannels, int numSamples) noexcept;
@@ -723,5 +759,6 @@ private:
     // MESSAGE THREAD, Standalone only. Returns whether the open set changed.
     bool reconcileMidiInputs();
 
+    JUCE_DECLARE_WEAK_REFERENCEABLE(AudioEngine)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)
 };

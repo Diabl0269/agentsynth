@@ -666,6 +666,7 @@ TEST_F(RecordFlowTest, RecordFlowCreatesAudioClip) {
     ASSERT_TRUE(synth::ProjectBundle::isBundle(bundleDir));
 
     const auto track = doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(doc.setTrackAudioInput(track, {synth::AudioInputChoice::Kind::WholeMix})); // records the master
     ASSERT_TRUE(doc.setTrackArmed(track, true));
 
     // The default patch's master bus, before the splice.
@@ -829,6 +830,7 @@ TEST_F(RecordFlowTest, AudioRecordWithoutAnAudioOutputIsRefused) {
 
     auto& doc = mc.getTimelineDoc();
     const auto track = doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(doc.setTrackAudioInput(track, {synth::AudioInputChoice::Kind::WholeMix})); // records the master
     ASSERT_TRUE(doc.setTrackArmed(track, true));
 
     auto& bar = mc.getTimelinePanel().getTransportBar();

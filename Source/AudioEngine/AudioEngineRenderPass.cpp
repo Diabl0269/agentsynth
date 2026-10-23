@@ -346,6 +346,8 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // Point the playhead at this pass's slice of the captured input before the graph runs, and
     // take it away immediately after — nothing outside a render pass may read those pointers.
     publishDeviceInputForPass(inputSampleOffset, buffer.getNumSamples());
+    // This pass's slice of the same snapshot goes to every input take, anchored where the tap anchors.
+    pushInputTakes(inputSampleOffset, buffer.getNumSamples());
 
     // Deliberately OUTSIDE the timeline flag for the same reason as the device-input
     // publish above: whether Audio Input's graph output is gated is an input-path property, not a
@@ -498,6 +500,7 @@ void AudioEngine::captureDeviceInput(const float* const* inputChannelData, int n
     }
 
     deviceInputChannelsThisBlock_ = channels;
+    storeInputPeaks(channels, numSamples);
 }
 
 void AudioEngine::publishDeviceInputForPass(int sampleOffset, int numSamples) noexcept {
