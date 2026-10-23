@@ -42,6 +42,9 @@ public:
     double meltStartBeat() const noexcept { return meltStart_; }
     double meltEndBeat() const noexcept { return meltEnd_; }
 
+    // The points as last fed in (what the lane showed before the change being fed now).
+    const std::vector<LaneBreakpoint>& shown() const noexcept { return shown_; }
+
     bool isRunning() const noexcept { return running_; }
     // Eased progress: 0 where the change started, 1 settled.
     float amount() const noexcept { return amount_; }

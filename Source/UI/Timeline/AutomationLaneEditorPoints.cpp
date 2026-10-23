@@ -59,10 +59,15 @@ void AutomationLaneEditor::syncToDoc() {
     if (ownEdits_ == 0)
         selection_.retainOnly(points != nullptr ? beatsOf(*points) : std::vector<double>{});
     std::vector<LaneBreakpoint> now = points != nullptr ? *points : std::vector<LaneBreakpoint>{};
-    if (first)
+    const bool restored = restoreSinceLastSync();
+    if (first) {
         glide_.reset(std::move(now));
-    else
-        glide_.pointsChanged(std::move(now));
+    } else {
+        const auto before = glide_.shown();
+        glide_.pointsChanged(now);
+        if (restored)
+            glideRestoredPoints(before, now);
+    }
     refreshDescription();
     closeValueFieldIfPointGone();
     if (ownEdits_ == 0)

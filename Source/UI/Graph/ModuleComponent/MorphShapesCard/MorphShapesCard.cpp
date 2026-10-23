@@ -12,7 +12,6 @@ namespace {
 constexpr int kMapWidth = 252;
 // 150 plus the 9 px the landing dots and modulation bars take from the plot, so the plot keeps its height.
 constexpr int kMapHeight = 159;
-constexpr float kCursorEpsilon = 1.0e-4f;
 
 int blockHeight(const synth::CardBlockFade& block, bool settling, int full) {
     return block.isAttached() ? block.height(full, settling) : full;
@@ -109,10 +108,7 @@ void MorphShapesCard::poll() {
         sync();
     }
     pushStripModulation();
-    const auto cursor = adapter_->getCursor();
-    if (std::abs(map_.getCursor().x - cursor.x) > kCursorEpsilon ||
-        std::abs(map_.getCursor().y - cursor.y) > kCursorEpsilon)
-        map_.setCursor(cursor.x, cursor.y);
+    controller_->syncCursor();
 }
 
 int MorphShapesCard::layout(int y, int x, int width, bool apply, int topGap) {

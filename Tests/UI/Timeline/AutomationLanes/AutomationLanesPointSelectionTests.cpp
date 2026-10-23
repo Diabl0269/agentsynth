@@ -986,3 +986,33 @@ TEST(AutomationLanesSelectionBox, DuringAKeyHoldTheBoxFollowsThePreviewAndEscape
     EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::escapeKey)));
     EXPECT_FLOAT_EQ(f.editor->getStretchForTest().boxAlpha(), 0.0f);
 }
+
+// Regression test for FRO1065: undo and redo of a point move snapped the point, since only a pure add or remove glided.
+TEST(AutomationLanesPointSelectionTest, UndoAndRedoOfAPointMoveGlideTheDotBackAndForth) {
+    SelectLane f;
+    auto& tween = f.editor->getPointTweenForTest();
+    tween.forceAnimateForTest(true);
+    const auto home = f.at(2.0, 60.0);
+    f.drag(home, f.at(2.0, 15.0));
+    ASSERT_NEAR(f.values()[1], 15.0, 3.0);
+    EXPECT_FALSE(tween.isAnimating()) << "the move itself lands at once";
+    const float movedY = f.at(2.0, f.values()[1]).y;
+
+    ASSERT_TRUE(f.undo.undo());
+    ASSERT_TRUE(tween.isAnimating());
+    const auto key = synth::ui::lane_key::tweenKey(2.0);
+    EXPECT_NEAR(tween.drawnAt(key, home).y, movedY, 1e-3f) << "drawn where it stood";
+    tween.stepForTest(40.0);
+    EXPECT_GT(tween.drawnAt(key, home).y, std::min(home.y, movedY) + 1.0f);
+    EXPECT_LT(tween.drawnAt(key, home).y, std::max(home.y, movedY) - 1.0f);
+    tween.stepForTest(400.0);
+    EXPECT_FALSE(tween.isAnimating());
+
+    ASSERT_TRUE(f.undo.redo());
+    EXPECT_TRUE(tween.isAnimating()) << "redo glides too";
+    tween.stepForTest(400.0);
+
+    ReducedMotionGuard reduced;
+    ASSERT_TRUE(f.undo.undo());
+    EXPECT_FALSE(tween.isAnimating()) << "Reduce Motion lands at once";
+}

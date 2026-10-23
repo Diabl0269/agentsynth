@@ -109,4 +109,8 @@ target_sources(Tests PRIVATE
     # Holding a key to move points: the shared glide model, its frame glue and the eased drawn offsets.
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyGlide/KeyGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyGlide/KeyedPointTweenTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfaces.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesRows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneRestoreGlideTests.cpp
 )

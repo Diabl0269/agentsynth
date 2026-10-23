@@ -117,6 +117,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     shapes_ = adapter_->getShapes();
     selected_ = juce::jlimit(0, juce::jmax(0, (int)shapes_.size() - 1), selected);
     lastGeneration_ = adapter_->getGeneration();
+    curveWatch_ = RestoreWatch(adapter_->restoreSerial());
     setSize(kWidth, perNote_ != nullptr ? kPerNoteHeight : kHeight);
     syncAll();
     startTimerHz(kPollHz);
@@ -141,7 +142,8 @@ void ShapeListEditor::setSelected(int index) {
 void ShapeListEditor::loadSelectedCurve() {
     if (curveGestureOpen_ || shapes_.empty())
         return;
-    curve_.setModel(curveModelFromWave(shapes_[(size_t)selected_].curve));
+    const bool restored = curveWatch_.take(adapter_->isRestoring(), adapter_->restoreSerial());
+    curve_.setModel(curveModelFromWave(shapes_[(size_t)selected_].curve), restored);
 }
 
 /** Everything the list drives: the chips, the map and the curve. */

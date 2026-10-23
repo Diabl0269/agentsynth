@@ -509,6 +509,32 @@ TEST(CurveEditorKeyHold, TheCurveLineAndItsBendHandlesFollowTheGlidingPoints) {
     }
     tween.stepForTest(400.0);
     EXPECT_NEAR(pathYAt(rig.editor.getDrawnCurvePathForTest(), rig.posOf(1).x), rig.posOf(1).y, 1.0f);
+// Regression test for FRO1065: an undo or redo swapped the model at once, so the points snapped.
+TEST(CurveEditorRestoreGlide, ARestoredModelOfTheSameShapeGlidesItsPointsAndAnotherShapeLandsAtOnce) {
+    Rig rig(freeModel(3));
+    auto& tween = rig.editor.getPointTweenForTest();
+    tween.forceAnimateForTest(true);
+    const auto moved = [&] {
+        auto model = rig.editor.getModel();
+        model.setNodeY(2, 0.9f);
+        return model;
+    }();
+    const auto home = rig.posOf(2);
+
+    rig.editor.setModel(moved);
+    EXPECT_FALSE(tween.isAnimating()) << "an ordinary change lands at once";
+    const auto there = rig.posOf(2);
+    rig.editor.setModel(freeModel(3), true);
+    ASSERT_TRUE(tween.isAnimating());
+    EXPECT_NEAR(tween.drawnAt(2, home).y, there.y, 1e-3f) << "drawn where it stood";
+    tween.stepForTest(40.0);
+    EXPECT_GT(tween.drawnAt(2, home).y, std::min(home.y, there.y) + 1.0f);
+    EXPECT_LT(tween.drawnAt(2, home).y, std::max(home.y, there.y) - 1.0f);
+    tween.stepForTest(400.0);
+    EXPECT_FALSE(tween.isAnimating());
+
+    rig.editor.setModel(freeModel(4), true);
+    EXPECT_FALSE(tween.isAnimating()) << "a different point count lands at once";
 }
 
 //==============================================================================

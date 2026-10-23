@@ -369,7 +369,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
   levels, Sine, Triangle, Saw and Square repeat three times between -18 and +6 dB (a hold becomes a vertical step).
 - **Live and undoable.** Every curve change goes to the module at once (the engine renders a new table; the audio
   thread picks it up at the next block), and each drag, button or menu pick is one undo step recorded as the module's
-  extra state. The window follows changes made elsewhere (undo, the card's map) by polling
+  extra state. The window follows changes made elsewhere (undo, the card's map, gliding the curve's points when an undo or redo moved them) by polling
   `FilterModule::getCustomShapesGeneration`, which every replacement of the list bumps.
 - **Reuse.** The window edits a `ShapeListAdapter` (read and write the list, bracket an undo step, describe the axes,
   the Start from entries, the draw range, the grid it offers and whether it has a spectrum), not the Filter: `FilterShapesAdapter` is the Filter's and
@@ -385,7 +385,7 @@ double-click a dot to delete it, press Return on a dot (or choose Edit in its ri
 Rename and Delete) to open the editor on it. Delete on a focused dot removes it and focuses the next dot; the last shape
 never goes, by any of these routes. A dot that is added (or brought back by an undo) grows in with the 8% bounce over
 200 ms and a removed one shrinks out over 180 ms (`MorphMap.cpp`, dots keyed by name, one `AnimationDriver`); Reduce
-Motion makes both an 80 ms fade and Animations: Off lands at once. Pressing a dot or the cursor off its centre keeps the
+Motion makes both an 80 ms fade and Animations: Off lands at once. Cmd+Z and Cmd+Shift+Z of a dot or cursor move glide it back and forth (160 ms `easeOutCubic`, `MorphMap::setDots`/`setCursor` with the restore flag `ShapeMapController` passes; a plain Reduce Motion or Animations: Off lands at once; [undo-glide.md](../layout/undo-glide.md)). Pressing a dot or the cursor off its centre keeps the
 offset between pointer and centre, so it never jumps under the pointer. On a
 focused dot, the cursor or a slider an arrow moves it one step (Shift: a bigger one) and, held, glides it on:
 slowly at first (about 0.15 map units a second), faster the longer it is held (about 1.2 a second after two seconds),

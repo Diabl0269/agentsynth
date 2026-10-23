@@ -4,6 +4,7 @@
 // its undo bracket, and the map is refreshed from the adapter. The card's map and the editor window's map both use
 // it, so they behave identically.
 #include "ShapeListAdapter.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include <functional>
 
@@ -21,8 +22,10 @@ public:
     /** The list changed through this controller; the owner re-reads whatever else shows it. */
     std::function<void()> onChanged;
 
-    /** Pushes the adapter's shapes and cursor into the map. */
+    /** Pushes the adapter's shapes and cursor into the map; what an undo or redo moved glides. */
     void refresh();
+    /** Pushes only the cursor (a glide after an undo or redo, otherwise at once). */
+    void syncCursor();
 
     /** Each is one undo step. Add and duplicate return the new index, or -1 at the shape cap. */
     int addShapeAt(float x, float y);
@@ -35,8 +38,12 @@ private:
     juce::String uniqueName(const std::vector<ShapeItem>& shapes, const juce::String& wanted) const;
     void changed();
 
+    bool restoreSince(RestoreWatch& watch) const;
+
     MorphMap& map_;
     ShapeListAdapter& adapter_;
+    RestoreWatch shapesWatch_;
+    RestoreWatch cursorWatch_;
 };
 
 } // namespace synth::ui

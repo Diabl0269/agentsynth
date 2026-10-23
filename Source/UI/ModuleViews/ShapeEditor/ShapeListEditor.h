@@ -148,6 +148,7 @@ private:
     std::vector<ShapeItem> shapes_;
     int selected_ = 0;
     int lastGeneration_ = -1;
+    RestoreWatch curveWatch_;
     bool curveGestureOpen_ = false;
 
     MorphMap map_;

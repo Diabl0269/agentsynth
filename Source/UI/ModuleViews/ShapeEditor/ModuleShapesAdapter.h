@@ -18,6 +18,9 @@ public:
     void beginEdit() override;
     void endEdit() override;
 
+    bool isRestoring() const override { return undo_ != nullptr && undo_->isRestoring(); }
+    int restoreSerial() const override { return undo_ != nullptr ? undo_->getRestoreSerial() : 0; }
+
     bool hasCursor() const override { return true; }
     juce::Point<float> getCursor() const override;
     void setCursor(juce::Point<float> position) override;
