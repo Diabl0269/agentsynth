@@ -5,7 +5,7 @@
 namespace synth::ui {
 
 IconButton::IconButton(const juce::String& name, synth::theme::Glyph glyph, Style style)
-    : juce::Button(name)
+    : SpaceClaimingButton<juce::Button>(name)
     , glyph_(glyph)
     , style_(style) {}
 

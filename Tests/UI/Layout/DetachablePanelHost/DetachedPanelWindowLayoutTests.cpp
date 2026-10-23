@@ -201,3 +201,15 @@ TEST_F(DetachedPanelWindowLayoutTest, TranslucentThemeSurfaceStillGivesAnOpaqueB
     EXPECT_TRUE(window.getBackgroundColour().isOpaque());
     EXPECT_EQ(window.getBackgroundColour(), theme.colors.bg0.overlaidWith(theme.colors.surface));
 }
+
+// Regression test for FRO974: the button registered Space as a window-wide shortcut, so Space anywhere in a detached
+// panel's window docked it back instead of reaching the transport.
+TEST_F(DetachedPanelWindowLayoutTest, SpacePressesTheDockBackButtonOnlyWhileItHasFocus) {
+    EXPECT_FALSE(button.isRegisteredForShortcut(juce::KeyPress(juce::KeyPress::spaceKey)))
+        << "no window-wide Space shortcut";
+    int clicks = 0;
+    button.onClick = [&] { ++clicks; };
+    EXPECT_TRUE(button.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey))) << "a focused button consumes Space";
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20); // triggerClick posts its click
+    EXPECT_EQ(clicks, 1);
+}

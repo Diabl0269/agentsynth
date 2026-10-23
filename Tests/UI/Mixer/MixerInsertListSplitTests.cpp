@@ -139,6 +139,20 @@ TEST(MixerInsertListSplitTests, RemovingAPathModuleRewiresItsPathAndTheSplitRowC
 TEST(MixerInsertListSplitTests, ABranchTheMixerCannotListStaysReadOnly) {
     SplitListRig r;
     const auto delay = r.add("Delay", 300, 250);
+    const auto foreign = r.add("Chorus", 300, 550);
+    r.wire(r.source, delay);
+    r.wire(foreign, delay); // a second feeder from outside the chain: a merge the list cannot show
+    r.wire(delay, r.strip);
+    r.refresh();
+    EXPECT_FALSE(r.list.isEditable());
+    EXPECT_FALSE(r.list.hasAddRow());
+    EXPECT_EQ(r.list.getAddRowIndex(), -1);
+}
+
+// A branch that ends at some other output, never reaching this strip, is no path of the chain.
+TEST(MixerInsertListSplitTests, ABranchToAnotherOutputIsIgnoredAndTheChainStaysEditable) {
+    SplitListRig r;
+    const auto delay = r.add("Delay", 300, 250);
     const auto reverb = r.add("Reverb", 300, 550);
     const auto elsewhere = r.add("Audio Output", 600, 550);
     r.wire(r.source, delay);
@@ -146,7 +160,6 @@ TEST(MixerInsertListSplitTests, ABranchTheMixerCannotListStaysReadOnly) {
     r.wire(delay, r.strip);
     r.graph.addConnection({{reverb, 0}, {elsewhere, 0}});
     r.refresh();
-    EXPECT_FALSE(r.list.isEditable());
-    EXPECT_FALSE(r.list.hasAddRow());
-    EXPECT_EQ(r.list.getAddRowIndex(), -1);
+    EXPECT_TRUE(r.list.isEditable());
+    EXPECT_TRUE(r.list.hasAddRow());
 }

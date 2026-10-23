@@ -14,11 +14,10 @@ constexpr float kFocusRadius = 3.0f;
 } // namespace
 
 MixerColourDot::MixerColourDot()
-    : juce::Button("mixerColourDot") {
+    : SpaceClaimingButton<juce::Button>("mixerColourDot") {
     setComponentID("mixerColourDot");
     setClickingTogglesState(false);
     setWantsKeyboardFocus(true);
-    addShortcut(juce::KeyPress(juce::KeyPress::spaceKey)); // Return is a Button's own
 }
 
 void MixerColourDot::setColour(juce::Colour colour) {

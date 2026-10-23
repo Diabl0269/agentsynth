@@ -65,6 +65,11 @@ public:
     MixerPanelComponent();
     ~MixerPanelComponent() override;
 
+    /** An insert row's "Show on canvas" or a send row menu's "Show <bus> on canvas": selects THE module (never its
+     * channel's macro), unfolding any collapsed macro that hides it first, then centres its card once the unfold has
+     * landed. */
+    void revealModuleOnCanvas(const juce::String& moduleUuid);
+
     // `meterReader` -- own consume-on-read latch slot per live view (see .cpp).
     void configure(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc, synth::MacroSet& macros,
                    AppUndoManager& undoManager, GraphEditor& graphEditor, AudioEngine& audioEngine,
@@ -167,6 +172,12 @@ public:
     };
     PendingSendSettle pendingSendSettle_;
 
+    // The same for a moved insert row: set by the list just before its commit, played on the rebuilt column.
+    PendingSendSettle pendingInsertSettle_;
+    // Hands `list` (of the column whose strip or Master node is `columnNode`) the panel's rebuild hold and settle.
+    void playInsertSettle();
+    void wireInsertReorder(MixerInsertList& list, juce::AudioProcessorGraph::NodeID columnNode);
+
     // Nullable MidiRemoteProjectDoc moveSendRow swaps a moved send's mappings on; unset == does less.
     void setMidiRemoteDoc(synth::MidiRemoteProjectDoc* doc) noexcept { midiRemoteDoc_ = doc; }
 
@@ -258,13 +269,16 @@ public:
     /** How many times rebuild() has laid the columns out. */
     int getRebuildCountForTest() const noexcept { return rebuildCount_; }
 
-    /** Delete and undo motion (MixerPanelColumnMotion.cpp), the horizontal twin of the timeline's rows: call
-     *  noteColumnsLeaving() before a change that may remove a track's column and finishColumnChange() once it and
-     *  its rebuilds have landed. The columns after a removed one close the gap; a column an undo brings back is made
-     *  room for, grows back and gets a fading outline. Only the scrolling group moves; no-ops off screen. */
+    /** Column motion (MixerPanelColumnMotion.cpp), the horizontal twin of the timeline's rows. A rebuild of a
+     *  showing panel that adds or removes one scrolling column animates it by itself, in every mixer instance and
+     *  whichever path made the change; a load, a catch-up on becoming visible and a change that adds and removes
+     *  together land at once. noteColumnsLeaving() before a change that may remove a track's column and
+     *  finishColumnChange() once it and its rebuilds have landed group several rebuilds into one motion. The columns
+     *  after a removed one close the gap; a column an undo brings back is made room for, grows back and gets a fading
+     *  outline. Only the scrolling group moves; no-ops off screen. */
     void noteColumnsLeaving();
-    /** Before an add or duplicate: the column that arrives grows in (the columns after it make room first). The arm
-     *  lasts until the next finishColumnChange(). */
+    /** Before an add or duplicate that spans several rebuilds: the column that arrives grows in once they have all
+     *  landed. The arm lasts until the next finishColumnChange(). */
     void armColumnInsertMotion() noexcept { columnInsertArmed_ = true; }
     void finishColumnChange();
     /** Test seam: animate even though the panel is not showing. */
@@ -480,6 +494,7 @@ private:
     bool foldFocusedRow(bool open);
     bool removeFocusedRow();
     bool toggleFocusedRowBypass();
+    bool moveFocusedRow(int delta);
     bool openFocusedRow();
     bool openFocusedEq();
     void openEqWindowOnCanvas(juce::AudioProcessorGraph::NodeID nodeId);
@@ -644,10 +659,14 @@ private:
     std::vector<synth::ui::ExitEnterListRow> scrollingColumnRows() const;
     bool canAnimateColumnMotion() const { return isShowing() || columnMotionForced_; }
     void noteColumnSetChange(const std::vector<juce::String>& added, const std::vector<juce::String>& removed);
+    void noteColumnSetComing(const synth::MixerSnapshot& snapshot);
     std::optional<ColumnPicture> pendingColumnPicture_;
     std::vector<juce::String> columnsAdded_, columnsRemoved_;
     bool columnInsertArmed_ = false; // an add or duplicate is under way: the rebuild's new columns grow in
     bool columnMotionForced_ = false;
+    bool autoColumnFinish_ = false;      // this rebuild started the motion itself and ends it
+    bool catchingUp_ = false;            // a rebuild that only catches up on edits made while hidden
+    std::int64_t replaceCountSeen_ = -1; // the doc's replace count at the last rebuild: a move means a load
     synth::ui::ExitEnterListMotion columnMotion_{*this};
 
     ReorderDragAnimator columnReorder_;

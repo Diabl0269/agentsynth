@@ -7,6 +7,7 @@
 #include "UI/Layout/ExitEnterList/ExitEnterListPlan.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReorderDrag/ReorderDragSession.h"
+#include "UI/Layout/SpaceClaimingButton.h"
 #include "UI/Mixer/MixerHeader/MixerIconButton.h"
 #include <cmath>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -63,6 +64,10 @@ public:
      *  node id, or an invalid id on failure. Supplied by MixerPanelComponent, which is the one that
      *  can size canvas cards. */
     std::function<juce::AudioProcessorGraph::NodeID()> createBus;
+
+    /** The row menu's "Show <bus> on canvas" item: the uuid of the bus strip the send feeds. The owner selects that
+     * module and brings its card into view. */
+    std::function<void(const juce::String& moduleUuid)> onFocusModule;
 
     /** Drag-reorder a row -- fired ONCE, on release; `fromRow`/`toRow` are VISIBLE row indices (positions in
      *  `entries_`, same addressing as removeRow/retargetRow above). Supplied by MixerPanelComponent,
@@ -145,7 +150,7 @@ public:
      *  through the real mouse path; a test that wants to skip the gesture can call it directly.
      *  onMutated() normally rebuilds the mixer and destroys this list: nothing may follow moveRow(). The
      *  panel holds its own stale-check rebuild while moveSendRow runs, so the list outlives that call. */
-    void moveRow(int fromRow, int toRow);
+    bool moveRow(int fromRow, int toRow);
     std::vector<juce::AudioProcessorGraph::NodeID> availableTargets() const;
     /** Modules whose Key input this strip may feed (synth::enumerateKeySendTargets). */
     std::vector<juce::AudioProcessorGraph::NodeID> availableKeyTargets() const;
@@ -219,7 +224,7 @@ private:
         // MixerColumnComponent's own "M" button type/LookAndFeel (setClickingTogglesState(false),
         // manual setToggleState mirroring the strip's own mute button convention) so mute gets the
         // same real hit area, accessibility role and on/off colouring with no new ad-hoc paint.
-        std::unique_ptr<juce::TextButton> muteButton;
+        std::unique_ptr<SpaceClaimingButton<juce::TextButton>> muteButton;
         // The bypass icon toggle, sitting between the knobs and the M button.
         std::unique_ptr<MixerIconButton> bypassButton;
     };
@@ -248,6 +253,7 @@ private:
     void commitRowDrag(int pressedRow);
     void rebuildKnobs();
     void showTargetMenu(int rowIndex);
+    void showRowTargetOnCanvas(int rowIndex);
     void showAddMenu();
     void mutateAndNotify(const std::function<bool()>& mutation);
     juce::String targetNameFor(juce::AudioProcessorGraph::NodeID target) const;

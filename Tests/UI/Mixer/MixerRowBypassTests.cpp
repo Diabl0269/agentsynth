@@ -76,8 +76,8 @@ TEST(MixerRowBypassTest, EveryInsertAndSendRowHasANamedBypassButtonWhoseTooltipN
 TEST(MixerRowBypassTest, TheBypassButtonsAlsoActOnSpace) {
     HeaderRig rig;
     const juce::KeyPress space(juce::KeyPress::spaceKey);
-    EXPECT_TRUE(rig.firstColumn().getInsertList().getBypassButtonForTest(0)->isRegisteredForShortcut(space));
-    EXPECT_TRUE(rig.firstColumn().getSendList().getBypassButtonForTest(0)->isRegisteredForShortcut(space));
+    EXPECT_TRUE(rig.firstColumn().getInsertList().getBypassButtonForTest(0)->keyPressed(space));
+    EXPECT_TRUE(rig.firstColumn().getSendList().getBypassButtonForTest(0)->keyPressed(space));
 }
 
 TEST(MixerRowBypassTest, TheTooltipFollowsARebindOfTheKeyWithoutARebuild) {

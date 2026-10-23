@@ -50,6 +50,10 @@ MixerMasterColumn::MixerMasterColumn() {
         if (onEditOnCanvas)
             onEditOnCanvas(editOnCanvasTarget_);
     };
+    insertList_.onFocusModule = [this](const juce::String& uuid) {
+        if (onFocusModule)
+            onFocusModule(uuid);
+    };
     insertList_.onMutated = [this] {
         if (onMutated)
             onMutated();

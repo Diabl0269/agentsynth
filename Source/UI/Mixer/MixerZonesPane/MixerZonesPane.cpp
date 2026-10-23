@@ -52,7 +52,6 @@ MixerZonesPane::MixerZonesPane() {
         chip.setRadioGroupId(kChipRadioGroup);
         chip.setClickingTogglesState(true);
         chip.setWantsKeyboardFocus(true);
-        chip.addShortcut(juce::KeyPress(juce::KeyPress::spaceKey));
         chip.setToggleState(i == 0, juce::dontSendNotification);
         chip.onClick = [this, i] { setChip(static_cast<Chip>(i)); };
         addAndMakeVisible(chip);

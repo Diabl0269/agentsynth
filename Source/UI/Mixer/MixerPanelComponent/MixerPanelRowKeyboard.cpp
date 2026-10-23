@@ -78,6 +78,12 @@ bool MixerPanelComponent::handleRowKey(const juce::KeyPress& key) {
         exitRows();
         return true;
     }
+    // Before the arrows: a bare Up and an Alt+Up share a key code, and only the bound modifier moves the row.
+    if (matchesAction(key, "mixerMoveRowUp", juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::altModifier, 0)))
+        return moveFocusedRow(-1);
+    if (matchesAction(key, "mixerMoveRowDown",
+                      juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::altModifier, 0)))
+        return moveFocusedRow(1);
     if (key.isKeyCode(juce::KeyPress::upKey))
         return stepRow(-1);
     if (key.isKeyCode(juce::KeyPress::downKey))
@@ -170,6 +176,40 @@ bool MixerPanelComponent::toggleFocusedRowBypass() {
     return true;
 }
 
+// Moves the focused row one place within its own list and keeps the focus on it: an insert only within its path (the
+// list says where it may go), a send within the sends. The move is one undo step through the list's own path, so it
+// settles like a drop; a move that cannot happen is swallowed rather than walking anything else.
+bool MixerPanelComponent::moveFocusedRow(int delta) {
+    if (!rowFocus_.has_value())
+        return true;
+    const auto row = *rowFocus_;
+    bool moved = false;
+    if (row.kind == MixerRowKind::Insert) {
+        auto* inserts = focusedInsertList();
+        const int target = inserts != nullptr ? inserts->keyboardMoveTarget(row.index, delta) : -1;
+        if (target < 0)
+            return true;
+        if (inserts->onSettlePending)
+            inserts->onSettlePending(target, (float)inserts->getRowBounds(row.index).getY());
+        moved = inserts->moveRowTo(row.index, target);
+        if (!moved && inserts->onSettlePending)
+            inserts->onSettlePending(-1, 0.0f);
+    } else if (auto* sends = focusedSendList()) {
+        const int target = row.index + delta;
+        if (target < 0 || target >= sends->getRowCount())
+            return true;
+        pendingSendSettle_ = {};
+        if (sends->onSettlePending)
+            sends->onSettlePending(target, (float)sends->getRowBounds(row.index).getY());
+        moved = sends->moveRow(row.index, target);
+    }
+    if (moved)
+        setRowFocus(MixerRowRef{row.kind, row.index + delta});
+    reconcileRowFocus();
+    refreshRowAccessibility();
+    return true;
+}
+
 // An insert opens the way the EQ thumbnail's click does -- it selects the module's channel on the
 // canvas; a split row opens or folds its paths, and "+ Insert" opens the effect picker. A send has nothing to open.
 bool MixerPanelComponent::openFocusedRow() {
@@ -178,6 +218,8 @@ bool MixerPanelComponent::openFocusedRow() {
             const int row = rowFocus_->index;
             if (row == inserts->getAddRowIndex()) {
                 inserts->activateAddRow();
+            } else if (inserts->isDryRow(row)) {
+                inserts->activateDryRow(row);
             } else if (inserts->isSplitRow(row)) {
                 inserts->setSplitOpen(row, !inserts->isSplitOpen(row));
                 refreshRowAccessibility();

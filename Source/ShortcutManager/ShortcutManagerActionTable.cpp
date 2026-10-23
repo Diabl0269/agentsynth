@@ -94,11 +94,9 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"focusLibrarySearch", ShortcutCategory::General},
             {"openContextMenu", ShortcutCategory::General},
             {"openAddTrackMenu", ShortcutCategory::General},
-            // Opens the Send feedback window from anywhere (Cmd+Shift+F), the top bar's Feedback button.
             {"openFeedback", ShortcutCategory::General},
             // Transport verbs as command-dispatched actions (docs/control/midi-remote.md#action-targets), UNBOUND by
-            // default (see resetToDefaults()). "transportTogglePlayStop" has no row: it is an alias id that
-            // AppCommands::getCommandForAction resolves to "togglePlayback" (own row, Space binding unchanged).
+            // default. "transportTogglePlayStop" has no row: an alias AppCommands resolves to "togglePlayback".
             {"transportPlay", ShortcutCategory::General},
             {"transportStop", ShortcutCategory::General},
             {"transportToggleLoop", ShortcutCategory::General},
@@ -226,6 +224,8 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"mixerEnterRows", ShortcutCategory::Mixer},
             {"mixerOpenEq", ShortcutCategory::Mixer},
             {"mixerToggleRowBypass", ShortcutCategory::Mixer},
+            {"mixerMoveRowUp", ShortcutCategory::Mixer},
+            {"mixerMoveRowDown", ShortcutCategory::Mixer},
             // Layout Editor -- the card layout editor's list (CardLayoutEditorComponent) and the on-card
             // editor's nudge keys (CardLayoutOnCardEditor), live only while an editor is open.
             {"layoutEditorToggleShown", ShortcutCategory::LayoutEditor},

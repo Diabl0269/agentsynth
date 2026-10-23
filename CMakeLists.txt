@@ -675,6 +675,7 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 include(cmake/AppUISources.cmake)
 include(cmake/ShapeWindowSources.cmake)
 add_library(AppUI STATIC ${APPUI_SOURCES})
+include(cmake/MixerRowSources.cmake)
 
 # FRO337: the mac-only NSEvent monitor half of "Esc/Cmd+W closes a focused hosted-plugin window"
 # (Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.{h,mm}) — Objective-C++, so it can't sit

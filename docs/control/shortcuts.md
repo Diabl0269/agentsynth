@@ -593,11 +593,10 @@ announces it ("Send to Reverb Bus, -6.0 dB", "Insert 2, Compressor").
 | Return | On an insert, select its channel on the canvas, exactly what the EQ thumbnail's click does |
 | Delete / Backspace | Remove the focused send or insert through the same path its menu uses; one undo step. A branching insert chain is read-only and keeps its rows. Focus moves to a surviving row, or back to the column when none is left |
 | B | Bypass the focused row (`mixerToggleRowBypass`): an insert's module, or the send's own bypass. One undo step; B again toggles it back. Claimed only in row mode |
+| Alt+Up / Alt+Down | Move the focused insert or send up or down one place (`mixerMoveRowUp` / `mixerMoveRowDown`, rebindable); one undo step, focus follows the row. Swallowed where the drag would refuse (split and dry rows, across paths, front of a bus chain) |
 | Esc | Back to column mode |
 
-Tab never traps: it is claimed only when a column is focused and one of its shown sections has rows, and it falls
-through to the app-wide region cycle otherwise. Row mode also ends when the panel loses real focus, and is kept
-valid when a rebuild or a section toggle removes the row it names.
+Tab never traps: claimed only when a focused column has rows shown, else the region cycle gets it. Row mode ends when the panel loses focus.
 
 **Why E and not Return opens the EQ.** Return already selects the focused column on the canvas, so the EQ action
 defaults to a bare E (Ctrl+E, the section toggle, is unaffected). It does what the card's "Open EQ Window" button
@@ -790,6 +789,7 @@ name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind. The other
 | Tab | Tab | Enter Mixer Send and Insert Rows (`mixerEnterRows`) |
 | E | E | Open Mixer EQ (`mixerOpenEq`) |
 | B | B | Bypass Mixer Send or Insert (`mixerToggleRowBypass`) |
+| Alt+Up / Alt+Down | Alt+Up / Alt+Down | Move Mixer Row Up / Down (`mixerMoveRowUp`, `mixerMoveRowDown`) |
 
 **Real Control on macOS, Ctrl+Alt elsewhere.** Cmd+S is Save and Cmd+I / Cmd+E are taken, so macOS uses
 the physical Control key, as `pianoRollToggleScalePanel` does. On Windows and Linux JUCE's Cmd *is* Ctrl,

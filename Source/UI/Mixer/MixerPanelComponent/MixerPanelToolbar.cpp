@@ -27,7 +27,6 @@ MixerPanelToolbar::MixerPanelToolbar() {
         toggle.setTitle(MixerSectionLayout::nameOf(sectionAt(i)));
         toggle.setClickingTogglesState(false); // the layout is the source of truth, see refresh()
         toggle.setWantsKeyboardFocus(true);
-        toggle.addShortcut(juce::KeyPress(juce::KeyPress::spaceKey));
         toggle.onClick = [this, i] {
             if (layout_ != nullptr)
                 layout_->toggleHidden(sectionAt(i));
@@ -38,7 +37,6 @@ MixerPanelToolbar::MixerPanelToolbar() {
     for (auto* button : {&resetMetersButton_, &addBusButton_}) {
         button->setClickingTogglesState(false);
         button->setWantsKeyboardFocus(true);
-        button->addShortcut(juce::KeyPress(juce::KeyPress::spaceKey)); // Return is a Button's own
         addAndMakeVisible(*button);
     }
     resetMetersButton_.setTitle("Reset meters");

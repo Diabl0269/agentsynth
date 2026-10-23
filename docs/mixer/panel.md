@@ -889,8 +889,8 @@ labelled by the Cmd-hold [shortcut hints](../control/shortcuts.md#shortcut-hints
 The toolbar's Inserts, Sends and EQ toggles, Reset Meters and + Bus, the side pane's Filter channels field and
 its All / Tracks / Buses chips are each their own Tab stop, with a `setTitle` name and a tooltip. A key that
 one of them does not use bubbles to the panel, so the column keys still work after a click on one. Return
-triggers a button (`juce::Button::keyPressed`); Space is registered as a button shortcut
-(`addShortcut`), because JUCE buttons do not react to Space on their own. The toggles' tooltips name their
+triggers a button (`juce::Button::keyPressed`); Space presses it and is consumed (`SpaceClaimingButton`, see
+[accessibility](../development/accessibility.md#space-on-a-focused-button)), so it never also plays. The toggles' tooltips name their
 shortcut (`"Hide Sends  (Ctrl+S)"`) and follow a rebind. `AppLookAndFeel::drawDrawableButton` paints the focus
 ring for the toggles.
 

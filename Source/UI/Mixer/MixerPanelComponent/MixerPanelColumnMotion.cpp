@@ -44,6 +44,47 @@ void MixerPanelComponent::noteColumnsLeaving() {
     pendingColumnPicture_ = std::move(picture);
 }
 
+// Called at the top of rebuildFrom(), while the old columns still stand: works out what the new snapshot adds and
+// removes among the shown strip and bus columns and prepares the motion for a change that is a single kind of
+// move (a removal needs the picture of the old columns, so it is taken now). A load (the doc was replaced), the
+// catch-up after the panel was hidden, a first fill with several columns, and a clear leave it alone and land at once.
+void MixerPanelComponent::noteColumnSetComing(const synth::MixerSnapshot& snapshot) {
+    autoColumnFinish_ = false;
+    const bool restoring = undoManager_ != nullptr && undoManager_->isRestoring();
+    const bool loaded = doc_ != nullptr && doc_->getReplaceCount() != replaceCountSeen_ && !restoring;
+    if (doc_ != nullptr)
+        replaceCountSeen_ = doc_->getReplaceCount();
+    if (loaded || catchingUp_ || !canAnimateColumnMotion() || viewport_.getBounds().isEmpty() || viewDoc_ == nullptr)
+        return;
+
+    std::vector<juce::String> existing, incoming;
+    for (const auto& entry : columnEntries_)
+        if (entry.kind == ColumnEntry::Kind::Strip)
+            existing.push_back(entry.uuid);
+    for (const auto& column : snapshot.columns)
+        if ((column.kind == synth::MixerColumn::Kind::Strip || column.kind == synth::MixerColumn::Kind::Bus) &&
+            !viewDoc_->isHidden(channelIdFor(column)))
+            incoming.push_back(column.uuid);
+    auto contains = [](const std::vector<juce::String>& list, const juce::String& key) {
+        return std::find(list.begin(), list.end(), key) != list.end();
+    };
+    const auto added = static_cast<size_t>(std::count_if(
+        incoming.begin(), incoming.end(), [&](const juce::String& key) { return !contains(existing, key); }));
+    const auto removed = static_cast<size_t>(std::count_if(
+        existing.begin(), existing.end(), [&](const juce::String& key) { return !contains(incoming, key); }));
+    if ((added == 0) == (removed == 0))
+        return; // nothing came or went, or both did
+    if ((added > 1 && existing.empty()) || (removed > 1 && incoming.empty()))
+        return; // the first fill or a clear of the whole panel
+
+    const bool scopeOpen = pendingColumnPicture_.has_value() || columnInsertArmed_;
+    if (removed > 0 && !pendingColumnPicture_)
+        noteColumnsLeaving();
+    else if (added > 0)
+        columnInsertArmed_ = true;
+    autoColumnFinish_ = !scopeOpen;
+}
+
 // Called by rebuild(): which strip and bus columns it had to build new and which it let go. Only a delete (a picture is
 // waiting), an undo/redo, or an add or duplicate (armColumnInsertMotion) is animated; a column added any other way
 // lands at once.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Layout/SpaceClaimingButton.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -10,7 +11,7 @@
 // treating them as a click.
 namespace synth::ui {
 
-class MixerColourDot : public juce::Button {
+class MixerColourDot : public SpaceClaimingButton<juce::Button> {
 public:
     MixerColourDot();
 

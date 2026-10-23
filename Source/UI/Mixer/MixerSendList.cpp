@@ -8,6 +8,7 @@
 #include "MixerDbAccessibilityText.h"
 #include "MixerPanAccessibilityText.h"
 #include "Modules/ChannelStripModule.h"
+#include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
@@ -70,7 +71,7 @@ void MixerSendList::rebuildKnobs() {
         // setToggleState kept in step by rebuildKnobs() re-running after every mutation, so its
         // paint (and AX toggle role) come from AppLookAndFeel's buttonOnColourId, not a bespoke
         // colour here.
-        row.muteButton = std::make_unique<juce::TextButton>("M");
+        row.muteButton = std::make_unique<SpaceClaimingButton<juce::TextButton>>("M");
         row.muteButton->setClickingTogglesState(false);
         // JUCE's default text indent is ~5 px a side on an unconnected button, which leaves no room
         // for the "M" at this width (it rendered as a squashed "_"); connected edges halve it.
@@ -496,6 +497,11 @@ void MixerSendList::showTargetMenu(int rowIndex) {
     // A ticked toggle, not a new row button -- the row has no width budget left for one
     // (see this file's own header comment and MixerSendList.h's kMonoMarkerWidth).
     menu.addItem("Mono", true, mono, [this, rowIndex] { toggleMonoForRow(rowIndex); });
+    // The row has no width budget for a button, so "show on canvas" lives here, first in the menu.
+    const auto& entry = entries_[(size_t)rowIndex];
+    menu.addItem("Show " + (entry.targetName.isEmpty() ? juce::String("target") : entry.targetName) + " on canvas",
+                 onFocusModule != nullptr && entry.targetNodeId != NodeID{} && graph_ != nullptr, false,
+                 [this, rowIndex] { showRowTargetOnCanvas(rowIndex); });
     menu.addSeparator();
     menu.addItem("New bus...", createBus != nullptr, false, [this, rowIndex] {
         if (createBus != nullptr)
@@ -633,14 +639,25 @@ juce::String MixerSendList::bypassTitle(const synth::MixerSendEntry& entry) {
     return target + ", " + (entry.bypassed ? "on" : "off");
 }
 
-void MixerSendList::moveRow(int fromRow, int toRow) {
-    if (moveSendRow == nullptr)
+// The bus strip's own uuid: the owner unfolds whatever macro boxes it and selects that module.
+void MixerSendList::showRowTargetOnCanvas(int rowIndex) {
+    if (graph_ == nullptr || rowIndex < 0 || rowIndex >= (int)entries_.size() || !onFocusModule)
         return;
+    auto* node = graph_->getNodeForId(entries_[(size_t)rowIndex].targetNodeId);
+    if (auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr)
+        onFocusModule(juce::String(module->getNodeUuid()));
+}
+
+bool MixerSendList::moveRow(int fromRow, int toRow) {
+    if (moveSendRow == nullptr)
+        return false;
     // The whole drag is ONE undo step owned by MixerPanelComponent (graph + timeline + macro
     // together) -- this list only reports whether it happened, same as every other row mutation's
     // onMutated() call below.
-    if (moveSendRow(stripNodeId_, fromRow, toRow) && onMutated)
+    const bool moved = moveSendRow(stripNodeId_, fromRow, toRow);
+    if (moved && onMutated)
         onMutated();
+    return moved; // a plain bool: onMutated() may have rebuilt the mixer and freed this list
 }
 
 void MixerSendList::toggleMonoForRow(int rowIndex) {

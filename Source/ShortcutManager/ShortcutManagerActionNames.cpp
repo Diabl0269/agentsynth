@@ -92,6 +92,10 @@ juce::String mixerActionName(const juce::String& actionId) {
         return "Open Mixer EQ";
     if (actionId == "mixerToggleRowBypass")
         return "Bypass Mixer Send or Insert";
+    if (actionId == "mixerMoveRowUp")
+        return "Move Mixer Send or Insert Up";
+    if (actionId == "mixerMoveRowDown")
+        return "Move Mixer Send or Insert Down";
     return {};
 }
 

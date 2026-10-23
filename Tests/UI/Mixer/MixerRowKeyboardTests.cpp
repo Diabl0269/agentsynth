@@ -556,17 +556,16 @@ TEST(MixerHeaderControlsTest, ASectionToggleActsOnReturnAndFollowsTheLayout) {
 }
 
 TEST(MixerHeaderControlsTest, HeaderButtonsAlsoActOnSpace) {
-    // juce::Button reacts to Space through keyStateChanged against the physical key state, which a
-    // test cannot press; the registered shortcut is what makes Space count.
     RowRig rig;
     const juce::KeyPress space(juce::KeyPress::spaceKey);
     auto& toolbar = rig.panel().getToolbarForTest();
     for (const auto section :
          {synth::ui::MixerSection::Inserts, synth::ui::MixerSection::Sends, synth::ui::MixerSection::Eq})
-        EXPECT_TRUE(toolbar.getSectionToggle(section).isRegisteredForShortcut(space));
-    EXPECT_TRUE(toolbar.getAddBusButtonForTest().isRegisteredForShortcut(space));
-    EXPECT_TRUE(toolbar.getResetMetersButtonForTest().isRegisteredForShortcut(space));
+        EXPECT_TRUE(static_cast<juce::Component&>(toolbar.getSectionToggle(section)).keyPressed(space));
+    EXPECT_TRUE(static_cast<juce::Component&>(toolbar.getAddBusButtonForTest()).keyPressed(space));
+    EXPECT_TRUE(static_cast<juce::Component&>(toolbar.getResetMetersButtonForTest()).keyPressed(space));
     for (const auto chip : {synth::ui::MixerZonesPane::Chip::All, synth::ui::MixerZonesPane::Chip::Tracks,
                             synth::ui::MixerZonesPane::Chip::Buses})
-        EXPECT_TRUE(rig.panel().getZonesPaneForTest().getChipForTest(chip).isRegisteredForShortcut(space));
+        EXPECT_TRUE(
+            static_cast<juce::Component&>(rig.panel().getZonesPaneForTest().getChipForTest(chip)).keyPressed(space));
 }

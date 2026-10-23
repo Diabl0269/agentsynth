@@ -72,6 +72,12 @@ MixerColumnComponent::MixerColumnComponent() {
         if (onMutated)
             onMutated();
     };
+    auto focusModule = [this](const juce::String& uuid) {
+        if (onFocusModule)
+            onFocusModule(uuid);
+    };
+    insertList_.onFocusModule = focusModule;
+    sendList_.onFocusModule = focusModule;
     insertList_.onPreferredHeightChanged = [this] {
         insertViewport_.setContentHeight(insertList_.getPreferredHeight());
     };

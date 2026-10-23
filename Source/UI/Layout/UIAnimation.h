@@ -16,9 +16,12 @@
 // ============================================================================
 
 #include "UI/Layout/ReducedMotion.h"
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <juce_animation/juce_animation.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 
 namespace synth::ui {
 
@@ -143,15 +146,13 @@ public:
             return;
         }
 
-        animator = juce::ValueAnimatorBuilder{}
-                       .withDurationMs(durationMs)
-                       .withEasing(std::move(easingFn))
-                       .withValueChangedCallback(std::move(onUpdate))
-                       .withOnCompleteCallback(std::move(onComplete))
-                       .build();
-
-        updater.addAnimator(*animator);
-        animator->start();
+        run = std::make_shared<Run>();
+        run->updater = &updater;
+        run->durationMs = durationMs;
+        run->easing = easingFn ? std::move(easingFn) : [](float t) { return t; };
+        run->onUpdate = std::move(onUpdate);
+        run->onComplete = std::move(onComplete);
+        run->launch();
     }
 
     // -------------------------------------------------------------------------
@@ -159,37 +160,58 @@ public:
      *  Safe to call even if no animation is in progress.
      */
     void stop(juce::VBlankAnimatorUpdater& updater) {
-        if (animator.has_value()) {
-            updater.removeAnimator(*animator);
-            animator.reset();
+        if (run != nullptr) {
+            ++run->generation;
+            if (run->animator.has_value())
+                updater.removeAnimator(*run->animator);
+            run.reset();
         }
     }
 
     /** Returns true if an animation is currently in progress. A finished one is not: the animator stays held after its
      *  last frame, and a layout pass that defers to "the running tween" must not wait on one that already landed. */
-    bool isRunning() const noexcept { return animator.has_value() && !animator->isComplete(); }
+    bool isRunning() const noexcept {
+        return run != nullptr && run->animator.has_value() && !run->animator->isComplete();
+    }
 
     /** Test seam: lands a running animation on its final frame and runs its complete callback, standing in for the
      *  VBlank frames that never reach an off-screen component. A no-op when nothing runs. */
     void completeForTest() {
-        if (!animator.has_value())
+        if (run == nullptr || !run->animator.has_value())
             return;
+        run->testClock = true; // synthetic frame times: the stall guard must not mistake the jump for a stall
+        const auto keepAlive = run;
+        const juce::Animator current = *run->animator;
         const double now = juce::Time::getMillisecondCounterHiRes();
-        animator->update(now);                                   // the frame that starts it
-        animator->update(now + animator->getDurationMs() + 1.0); // and the one past its end
+        current.update(now);                                 // the frame that starts it
+        current.update(now + current.getDurationMs() + 1.0); // and the one past its end
     }
 
     /** Test seam: advances a running animation to `ms` after its first frame, standing in for the VBlank frames that
      *  never reach an off-screen component, so a test can read the values between the start and the end. The first
-     *  call starts the clock; later calls move it. A no-op when nothing runs. */
+     *  call starts the clock; later calls move it. A no-op when nothing runs. After a stall restart (see
+     *  `stallGuardForTest`) the clock starts again at the next call, so `ms` counts from the restart. */
     void stepForTest(double ms) {
-        if (!animator.has_value())
+        if (run == nullptr || !run->animator.has_value())
             return;
+        run->testClock = true;
+        const auto generationBefore = run->generation;
+        const auto keepAlive = run; // a stall restart replaces the animator inside its own update()
+        const juce::Animator current = *run->animator;
         if (!testClockStart.has_value()) {
             testClockStart = juce::Time::getMillisecondCounterHiRes();
-            animator->update(*testClockStart); // the frame that starts it
+            current.update(*testClockStart); // the frame that starts it
         }
-        animator->update(*testClockStart + ms);
+        current.update(*testClockStart + ms);
+        if (run != nullptr && run->generation != generationBefore)
+            testClockStart.reset();
+    }
+
+    /** Test seam: makes the stall guard act on stepForTest's synthetic frame times too (it ignores them otherwise, so
+     *  a test may jump the clock). Call after start(). */
+    void stallGuardForTest(bool on) noexcept {
+        if (run != nullptr)
+            run->guardInTest = on;
     }
 
     // -------------------------------------------------------------------------
@@ -213,9 +235,71 @@ public:
     }
 
 private:
-    // The Animator is held as optional so we can cheaply test "is active".
-    // The shared_ptr inside Animator keeps the underlying impl alive.
-    std::optional<juce::Animator> animator;
+    // One running animation. Frames come from a VBlank clock, and a message-thread stall (a graph rebuild, a plugin
+    // load) lets the next frame arrive far past the last. juce::Animator would answer with a jump to the end, so a
+    // frame that arrives later than kStallMs after the previous one moves the animation by one nominal frame instead
+    // and the rest of it is re-launched from there: the motion is still seen, it just ends later.
+    struct Run : std::enable_shared_from_this<Run> {
+        static constexpr double kStallMs = 80.0;
+        static constexpr double kFrameMs = 16.0;
+
+        juce::VBlankAnimatorUpdater* updater = nullptr;
+        double durationMs = 0.0;
+        std::function<float(float)> easing;
+        std::function<void(float)> onUpdate;
+        std::function<void()> onComplete;
+        std::optional<juce::Animator> animator;
+        double baseProgress = 0.0; // overall progress at which the current animator began
+        double lastProgress = 0.0; // overall progress applied by the last frame
+        bool hasFrame = false;     // a frame has been applied
+        std::uint64_t generation = 0;
+        bool testClock = false;   // frames come from stepForTest
+        bool guardInTest = false; // act on stepForTest's frames too
+
+        void launch() {
+            const double remaining = durationMs * (1.0 - baseProgress);
+            const auto gen = generation;
+            // Weak, so the animator does not own the run; locked per call so a callback that stops or restarts the
+            // driver cannot free the run (and the very function it is executing) under itself.
+            const std::weak_ptr<Run> weak = weak_from_this();
+            animator = juce::ValueAnimatorBuilder{}
+                           .withDurationMs(std::max(remaining, 1.0))
+                           .withEasing([](float t) { return t; })
+                           .withValueChangedCallback([weak, gen](float p) {
+                               if (const auto self = weak.lock())
+                                   self->onFrame(p, gen);
+                           })
+                           .withOnCompleteCallback([weak, gen] {
+                               if (const auto self = weak.lock();
+                                   self != nullptr && gen == self->generation && self->onComplete)
+                                   self->onComplete();
+                           })
+                           .build();
+            updater->addAnimator(*animator);
+            animator->start();
+        }
+
+        void onFrame(float p, std::uint64_t gen) {
+            if (gen != generation)
+                return;
+            double progress = baseProgress + static_cast<double>(p) * (1.0 - baseProgress);
+            const bool guardOn = !testClock || guardInTest;
+            const bool stalled = guardOn && hasFrame && (progress - lastProgress) * durationMs > kStallMs;
+            if (stalled) {
+                progress = lastProgress + kFrameMs / durationMs;
+                baseProgress = progress;
+                ++generation;
+                updater->removeAnimator(*animator);
+                launch();
+            }
+            lastProgress = progress;
+            hasFrame = true;
+            if (onUpdate)
+                onUpdate(easing(static_cast<float>(progress)));
+        }
+    };
+
+    std::shared_ptr<Run> run;
     std::optional<double> testClockStart; // stepForTest's clock; reset with each animation
 };
 
