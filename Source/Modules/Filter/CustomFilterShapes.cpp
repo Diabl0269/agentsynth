@@ -36,11 +36,13 @@ LfoCustomWave curveFromHzDbBend(const HzDbBend (&points)[N]) {
 
 /** The vowels, drawn from the Csound manual's tenor formant table (formant frequency, level and -3 dB
     bandwidth for a, e, i and u; "ih" is not in that table and uses Peterson and Barney's male F1-F3 of
-    390 / 1990 / 2550 Hz). Each formant is a narrow tent of three points (the -3 dB points either side
-    of its peak) with a bent skirt down to a deep valley shared with its neighbour, so the peak sits at
-    the table frequency with about the table bandwidth. F1 is at +2 dB and the rest follow the table's
-    relative levels, so stamping a vowel never adds gain. The floor falls away below F1 and above the
-    last formant. */
+    390 / 1990 / 2550 Hz). Each formant is a tent of three points (the -3 dB points either side of its
+    peak) with a bent skirt down to a deep valley shared with its neighbour, so the peak sits at the
+    table frequency. The widths are filter-style (F1 about a third of an octave), wider than the table's
+    sung-voice widths: a filter's peak narrower than a note's harmonic spacing falls between harmonics
+    and passes almost nothing. The other formants follow the table's relative levels, and each vowel is
+    offset so a saw comes out at about the same loudness through any of them, with the loudest peak
+    under +3 dB. The floor falls away below F1 and above the last formant. */
 static constexpr HzDbBend kAh[] = {
     {20.0f, -39.7f, -1.00f},   {572.0f, -0.7f, 0.20f},   {650.0f, 2.3f, -0.25f},   {728.0f, -0.7f, -0.10f},
     {863.0f, -20.3f, 0.05f},   {988.0f, -6.7f, 0.25f},   {1080.0f, -3.7f, -0.25f}, {1172.0f, -6.7f, -0.15f},
@@ -93,8 +95,8 @@ LfoCustomWave CustomFilterShapes::flatCurve() {
 }
 
 /** The named starting shapes: five vowels as formant curves (a narrow peak at each of the first formants over a
-    floor that falls away at both ends) and three animal calls. Peaks stay at or below
-    +2 dB so stamping one never adds gain. */
+    floor that falls away at both ends) and three animal calls. Peaks stay under +3 dB, well inside the
+    gain audit's +6 dB, so stamping one never makes a patch jump in level. */
 const char* CustomFilterShapes::presetName(Preset preset) {
     switch (preset) {
     case Preset::Ah:
