@@ -302,7 +302,7 @@ public:
         // digits clear of the Ctrl+Shift grid commands they share key codes with.
         if (binding.getModifiers() != pressed.getModifiers())
             return false;
-        if (towlower(binding.getKeyCode()) == towlower(pressed.getKeyCode()))
+        if (foldKeyCodeCase(binding.getKeyCode()) == foldKeyCodeCase(pressed.getKeyCode()))
             return true;
         if (!binding.getModifiers().isShiftDown() || !pressed.getModifiers().isShiftDown())
             return false;
@@ -518,8 +518,14 @@ private:
      *  Settings tab's auto-swap would then quietly steal one of them. An invalid binding (an action
      *  the user cleared) collides with nothing. */
     static bool bindingsCollide(const juce::KeyPress& binding, const juce::KeyPress& key) {
-        return binding.isValid() && towlower(binding.getKeyCode()) == towlower(key.getKeyCode()) &&
+        return binding.isValid() && foldKeyCodeCase(binding.getKeyCode()) == foldKeyCodeCase(key.getKeyCode()) &&
                binding.getModifiers() == key.getModifiers();
+    }
+
+    /** `keyCode` lower-cased when it is a character; an extended key (arrows, F-keys: above 0xFFFF on Windows) comes
+     *  back unchanged. towlower takes a 16-bit wint_t on Windows, so F2 (0x10071) would fold to 'q' (0x71). */
+    static int foldKeyCodeCase(int keyCode) {
+        return keyCode >= 0 && keyCode <= 0xFFFF ? static_cast<int>(towlower(static_cast<wint_t>(keyCode))) : keyCode;
     }
 
     /** The US-ANSI unshifted character on the same physical key as `keyCode`: the digit row, plus
