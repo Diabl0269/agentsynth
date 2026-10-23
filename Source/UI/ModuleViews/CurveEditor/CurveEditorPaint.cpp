@@ -165,7 +165,7 @@ void CurveEditorComponent::paintHandles(juce::Graphics& g, const CurveEditorGeom
 
     for (int i = 0; i < model_.getNumNodes(); ++i) {
         const auto& node = model_.getNode(i);
-        const juce::Point<float> pos = geometry.nodePosition(i);
+        const juce::Point<float> pos = geometry.nodePosition(i) + pointTween_.offsetFor(i);
         const bool active = isSelected(i) || (hoveredKind_ == CurveHitKind::Node && hoveredIndex_ == i);
         const float radius = active ? kNodeRadius + 1.5f : kNodeRadius;
 

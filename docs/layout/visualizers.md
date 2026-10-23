@@ -290,7 +290,7 @@ are not rebindable actions. They are the shared point-editor map ([`control/poin
 |---|---|
 | Left / Right | Select the previous / next point that can move (a pinned origin is skipped; stops at the ends), collapsing any selection to it. Tabbing in selects the first |
 | Shift+Left / Shift+Right | Extend or shrink the selection toward that side, like text selection: the cursor moves one point and everything between it and the anchor is selected. A fully pinned point is never selected |
-| Alt+Left / Alt+Right | Move every selected point in time |
+| Alt+Left / Alt+Right | Move every selected point in time. A tap is one step; holding the key glides (below) |
 | Alt+Up / Alt+Down | Move every selected point in level |
 | Up / Down | The same level move without Alt (nothing selected: the key falls through to the app) |
 | Shift added to the Alt moves | A fifth of the step, and no snapping |
@@ -299,7 +299,7 @@ are not rebindable actions. They are the shared point-editor map ([`control/poin
 | Cmd+A | Select every movable point |
 | Cmd+C | Copy the selected points (spacing from the first, level, the bend between neighbours) to one process-wide curve clipboard; with nothing selected the key falls through to the app |
 | Cmd+V | Free mode only: paste the clipboard so the group starts just after the cursor point, keeping its spacing, clamped to the curve's range and the room left (the curve holds at most `CurveModel::kMaxNodes`); the pasted points become the selection |
-| Cmd+D | Free mode only: paste a copy of the selection just after its last point, leaving the clipboard alone |
+| Cmd+D | Free mode only: paste a copy of the selection, leaving the clipboard alone. Where it starts is the Timeline preference Duplicate points (default: one tick, 1/960 of the x range, past the last selected point; or one point-spacing after; or whole grid cells on while snapping). One selected point is copied a fiftieth of the range on, in every choice ([`timeline/automation-points.md`](../timeline/automation-points.md#duplicating)) |
 
 **Selection.** The selection is a set of point indices (`getSelectedIndices()`) plus a cursor
 (`getSelectedIndex()`, what Left/Right continue from and what a screen reader reads) and an anchor
@@ -320,6 +320,15 @@ and LFO cards record one undo step per press, whatever the number of points. A p
 nothing (a pinned axis, a limit) opens no gesture. A screen reader reads the cursor point, e.g. "Point 3
 of 5, time 0.25, level 0.80", led by "3 points selected" when several are ("Curve with 5 points" before
 one is picked). The keys and handler live in `CurveEditorKeyboard.cpp`.
+
+**Holding an Alt+arrow or Up/Down** glides instead of repeating (`CurveEditorKeyGlide.cpp`, the shared `KeyGlide`
+model the lanes and the morph map use). The press is the one step above; if the key is physically down the hold then
+carries the cursor point on (the group rigidly, by the same move path as a press) at 0.15 of the axis range per second
+rising to 1.2 over two seconds, Shift (fine) a fifth of that, and with snap-to-grid on in whole grid cells, jumping from
+line to line. The gesture opens at the first real move and closes at the key-up, so the tap and the hold are one
+`onGestureStart` / `onGestureEnd` pair and one undo step; a hold against a limit opens none. A tap and a snapped step
+ease the drawn points 160 ms `easeOutCubic` (`KeyedPointTween`; the model is final at once); nothing eases under Reduce
+Motion or Animations Off ([motion rule](animation.md#motion-rules)).
 
 Five display and interaction rules:
 

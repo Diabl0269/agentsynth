@@ -3,6 +3,7 @@
 // selection, Alt+arrows and a mouse drag move the group rigidly as one gesture, Delete removes it, and
 // Cmd+A / C / V / D select, copy, paste and duplicate it.
 
+#include "../../Layout/KeyGlide/KeyGlideTestHost.h"
 #include "CurveEditorTestHelpers.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
 #include <gtest/gtest.h>
@@ -335,3 +336,136 @@ TEST(CurveEditorMultiSelect, CtrlTDoesNothingOnAFixedCurveAndCommandTStaysWithTh
     EXPECT_EQ(rig.editor.getModel().getNumNodes(), 5);
 #endif
 }
+
+//==============================================================================
+// Holding an arrow: the selection glides and the whole hold is one gesture
+
+namespace {
+// A rig whose arrows are "physically" held through the editor's key-hold host.
+struct HeldRig : Rig {
+    key_glide_test::FakeKeys keys;
+
+    explicit HeldRig(CurveModel model)
+        : Rig(std::move(model)) {
+        editor.getKeyHoldForTest().host = keys.host();
+    }
+    void hold(int code, int mods = 0) {
+        keys.down = {code};
+        keys.alt = (mods & kAlt) != 0;
+        keys.shift = (mods & kShift) != 0;
+        EXPECT_TRUE(press(code, mods));
+    }
+    void frame(double glideMs) {
+        keys.now = 1000.0 + 150.0 + glideMs;
+        editor.getKeyHoldForTest().tick();
+    }
+    void release() {
+        keys.down.clear();
+        editor.getKeyHoldForTest().checkKeyUp();
+    }
+    int count(const juce::String& event) const { return (int)std::count(events.begin(), events.end(), event); }
+};
+} // namespace
+
+TEST(CurveEditorKeyHold, HoldingUpMovesTheLevelContinuouslyAcceleratesAndIsOneGesture) {
+    HeldRig rig(freeModel(3));
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    rig.events.clear();
+    const float start = rig.node(1).y;
+
+    rig.hold(juce::KeyPress::upKey);
+    const float afterTap = rig.node(1).y;
+    EXPECT_NEAR(afterTap - start, 0.05f, 1e-5f) << "the tap is the existing one step";
+    rig.frame(0.0);
+    rig.frame(500.0);
+    const float half = rig.node(1).y;
+    rig.frame(1000.0);
+    const float full = rig.node(1).y;
+    EXPECT_GT(half, afterTap);
+    EXPECT_GT(full - half, half - afterTap) << "the second half covers more than the first";
+    EXPECT_NE(std::fmod((double)full, 0.05), 0.0) << "continuous, not in steps";
+
+    EXPECT_EQ(rig.count("start"), 1);
+    EXPECT_EQ(rig.count("end"), 0) << "the gesture stays open while the key is down";
+    rig.release();
+    EXPECT_EQ(rig.count("start"), 1);
+    EXPECT_EQ(rig.count("end"), 1) << "one undo step for the tap and the hold";
+    EXPECT_FALSE(rig.editor.getKeyHoldForTest().active());
+}
+
+TEST(CurveEditorKeyHold, ATapIsOneStepAndAHoldAgainstALimitOpensNoGesture) {
+    HeldRig rig(freeModel(3));
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    rig.events.clear();
+    EXPECT_TRUE(rig.press(juce::KeyPress::upKey)) << "no key physically down: a plain step";
+    EXPECT_EQ(rig.count("start"), 1);
+    EXPECT_EQ(rig.count("end"), 1);
+    EXPECT_FALSE(rig.editor.getKeyHoldForTest().active());
+
+    HeldRig edge(freeModel(3));
+    edge.press(juce::KeyPress::rightKey);
+    edge.press(juce::KeyPress::rightKey);
+    edge.hold(juce::KeyPress::upKey);
+    for (int i = 0; i < 4; ++i)
+        edge.frame(1000.0 * (i + 1));
+    ASSERT_NEAR(edge.node(1).y, 1.0f, 1e-6f);
+    edge.events.clear();
+    edge.release();
+    EXPECT_EQ(edge.count("end"), 1) << "it moved before the limit, so the gesture closes";
+
+    HeldRig pinned(freeModel(3));
+    pinned.press(juce::KeyPress::rightKey);
+    pinned.press(juce::KeyPress::rightKey);
+    pinned.editor.getModel().setNodeY(1, 1.0f);
+    pinned.events.clear();
+    pinned.hold(juce::KeyPress::upKey);
+    pinned.frame(500.0);
+    pinned.release();
+    EXPECT_EQ(pinned.count("start"), 0) << "a hold that never moved reaches no undo step";
+    EXPECT_EQ(pinned.count("end"), 0);
+}
+
+TEST(CurveEditorKeyHold, WithSnapOnAHoldStepsFromGridLineToGridLine) {
+    HeldRig rig(freeModel(1));
+    rig.editor.setGrid(CurveEditorComponent::CurveGrid{8, 2, 0.0, 0.0});
+    rig.editor.setSnapToGrid(true);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    rig.hold(juce::KeyPress::rightKey, kAlt);
+    EXPECT_NEAR(rig.node(1).x, 0.625, 1e-9) << "the tap is one grid cell";
+    for (const double glideMs : {200.0, 800.0, 1500.0}) {
+        rig.frame(glideMs);
+        EXPECT_NEAR(rig.node(1).x * 8.0, std::round(rig.node(1).x * 8.0), 1e-9) << "on a grid line at " << glideMs;
+    }
+    EXPECT_GT(rig.node(1).x, 0.625);
+    rig.release();
+    EXPECT_EQ(rig.count("end"), 1);
+}
+
+TEST(CurveEditorKeyHold, ATapEasesTheDrawnPointAndPlainlyLandsUnderReduceMotion) {
+    HeldRig rig(freeModel(3));
+    rig.editor.getPointTweenForTest().forceAnimateForTest(true);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+
+    auto& tween = rig.editor.getPointTweenForTest();
+    const float before = rig.posOf(1).y;
+    rig.press(juce::KeyPress::upKey);
+    ASSERT_TRUE(tween.isAnimating());
+    EXPECT_GT(tween.offsetFor(1).y, 0.0f) << "drawn below its new place, at the old one";
+    EXPECT_NEAR(tween.drawnAt(1, rig.posOf(1)).y, before, 1e-3f);
+    tween.stepForTest(40.0);
+    EXPECT_GT(tween.offsetFor(1).y, 0.0f);
+    EXPECT_LT(tween.offsetFor(1).y, before - rig.posOf(1).y);
+    tween.stepForTest(300.0);
+    EXPECT_FALSE(tween.isAnimating());
+
+    synth::ui::setReducedMotionForTest(true);
+    rig.press(juce::KeyPress::upKey);
+    EXPECT_FALSE(tween.isAnimating());
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+//==============================================================================

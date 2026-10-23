@@ -21,13 +21,13 @@ the focused dot (Shift: a bigger step; held, they glide on), and Tab steps to th
 |---|---|
 | Left / Right | Pick the previous / next dot. The cursor and the selection move to it; nothing moves in time. With nothing picked, the first press lands on the nearest end |
 | Shift+Left / Shift+Right | Extend the selection one dot toward that side (the cursor moves with it) |
-| Alt+Left / Alt+Right | Move the selection in time (a grid step with snap on, else a small step) |
-| Alt+Up / Alt+Down | Move the selection's value |
-| Alt+Shift+arrows | The fine move: a fifth of the step in the curve editor, a quarter in a lane, never snapped. In a lane with two or more points selected, Alt+Shift+arrows stretch or scale the selection instead ([`timeline/automation.md`](../timeline/automation.md#stretching-a-selection)) |
+| Alt+Left / Alt+Right | Move the selection in time (a grid step with snap on, else a small step: four pixels in a lane). Hold the key and it glides, one undo step ([`timeline/automation-points.md`](../timeline/automation-points.md#keyboard-moves)) |
+| Alt+Up / Alt+Down | Move the selection's value (holding glides, like Alt+Left / Right) |
+| Alt+Shift+arrows | The fine move: a fifth of the step in the curve editor, a quarter in a lane, never snapped. In a lane with two or more points selected, Alt+Shift+arrows stretch or scale the selection instead ([`timeline/automation.md`](../timeline/automation-points.md#stretching-a-selection)) |
 | Up / Down | Move the selection's value (the same step as Alt+Up / Down). A lane also takes Shift+Up / Down for a coarse step. With nothing selected the key is left to the app |
 | Cmd+A | Select every dot that can move |
 | Cmd+C / Cmd+V | Copy the selection; paste it at the cursor (the curve editor) or at the transport position (a lane) |
-| Cmd+D | Duplicate the selection just after its last dot; the copies become the selection |
+| Cmd+D | Duplicate the selection; the copies become the selection. Where they start is the Timeline preference Duplicate points: right after the last dot (default, one tick past it), one dot-spacing after, or the next grid line after the selection ([`timeline/automation-points.md`](../timeline/automation-points.md#duplicating)) |
 | Ctrl+T | Insert a new dot halfway between the cursor dot and the next one (value: the midpoint of the two); the new dot becomes the selection and the cursor. A curve's last dot has no room after it (the range ends there) and a lane's last point has no next one, so the key does nothing there |
 | Delete / Backspace | Remove the selection |
 | Cmd+Z | Undo. Every press above that changes something is exactly one undo step; a press that changes nothing (a clamped end, a pinned axis, a full curve) opens none |

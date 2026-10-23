@@ -5,6 +5,7 @@
 #include "Transport/TransportService.h"
 #include "UI/Layout/PointEditorKeys.h"
 #include "UI/PianoRoll/NoteAccessibilityText.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
 #include <algorithm>
 #include <cmath>
@@ -252,17 +253,17 @@ bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
         // Up/Down move the selection's value.
         if (left || right)
             return stepCursor(side);
-        return nudgePoints(0, side, NudgeSize::Normal);
+        return nudgePoints(key.getKeyCode(), 0, side, NudgeSize::Normal);
     }
     if (mods == shift) {
         if (left || right)
             return extendSelection(side);
-        return nudgePoints(0, side, NudgeSize::Coarse);
+        return nudgePoints(key.getKeyCode(), 0, side, NudgeSize::Coarse);
     }
     if (mods == alt) // Alt moves the selection: Left/Right in time, Up/Down in value
-        return nudgePoints(left || right ? side : 0, up || down ? side : 0, NudgeSize::Normal);
+        return nudgePoints(key.getKeyCode(), left || right ? side : 0, up || down ? side : 0, NudgeSize::Normal);
     if (mods == (alt | shift)) // with one point selected (two or more stretch, see stretchKey): the fine move
-        return nudgePoints(left || right ? side : 0, up || down ? side : 0, NudgeSize::Fine);
+        return nudgePoints(key.getKeyCode(), left || right ? side : 0, up || down ? side : 0, NudgeSize::Fine);
     return false;
 }
 
@@ -297,23 +298,36 @@ double AutomationLaneEditor::gridStepBeats() const {
     return grid > 0.0 ? grid : kFreeBeatStep;
 }
 
-// One grid step (a sixteenth with snap off) for the whole block, stopping at beat 0 as a unit; Up/Down move every value
-// by a fraction of the lane's range, each clamped on its own. Consumed whenever something is selected, even when a
-// limit left nothing to do.
-bool AutomationLaneEditor::nudgePoints(double beatDirection, double valueDirection, NudgeSize size) {
+// One keyboard step in time: a grid step, or four pixels at the current zoom with snap off (a free move should be a
+// nudge, not a jump of a sixteenth).
+double AutomationLaneEditor::keyStepBeats() const {
+    const double grid = viewState_.divisionBeats(currentBeatsPerBar());
+    return grid > 0.0 ? grid : lane_key::kTapPixels / viewState_.pixelsPerBeat;
+}
+
+// A tap moves the block one step (stopping at beat 0 as a unit); Up/Down move every value by a fraction of the lane's
+// range, each clamped on its own. A press whose key is physically down starts a keyboard drag
+// (AutomationLaneEditorKeyGlide.cpp) that the hold carries on; a press that is not (a synthesised event) is this one
+// committed step. Consumed whenever something is selected, even when a limit left nothing to do.
+bool AutomationLaneEditor::nudgePoints(int keyCode, double beatDirection, double valueDirection, NudgeSize size) {
+    if (keyHold_.active()) {
+        if (keyHold_.keyIsDown(keyHold_.keyCode()))
+            return true; // auto-repeat or a second key: the running hold picks the direction up
+        keyHold_.end();  // a hold whose key-up was missed
+    }
     const auto* points = lanePoints();
     if (points == nullptr || selection_.isEmpty())
         return false;
     const auto picked = selection_.selectedPoints(*points);
     if (picked.empty())
         return false;
+    if (keyHold_.keyIsDown(keyCode))
+        return beginKeyDrag(keyCode, picked, beatDirection, valueDirection, size);
 
     const auto& range = doc_->getLane(laneId_)->range;
-    const double beatDelta =
-        clampBeatDelta(picked, beatDirection * gridStepBeats() * (size == NudgeSize::Fine ? kFineBeatScale : 1.0));
-    const double valueStep = size == NudgeSize::Coarse ? kCoarseValueStep
-                             : size == NudgeSize::Fine ? kFineValueStep * kFineBeatScale
-                                                       : kFineValueStep;
+    const double fine = size == NudgeSize::Fine ? lane_key::kFineScale : 1.0;
+    const double beatDelta = clampBeatDelta(picked, beatDirection * keyStepBeats() * fine);
+    const double valueStep = size == NudgeSize::Coarse ? lane_key::kCoarseValueStep : lane_key::kFineValueStep * fine;
     const double valueDelta = valueDirection * valueStep * (double)(range.maxValue - range.minValue);
     const auto moved = movePoints(picked, beatDelta, valueDelta, range.minValue, range.maxValue);
 

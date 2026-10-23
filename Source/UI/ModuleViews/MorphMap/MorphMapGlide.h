@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Transport/CursorGlide.h"
+#include "UI/Layout/KeyGlide/KeyGlide.h"
 
 namespace synth::ui {
 
@@ -28,7 +29,7 @@ public:
     /** Starts a hold at `start`. Returns false and changes nothing while a hold is in progress. */
     bool press(double nowMs, GlidePoint start) noexcept;
 
-    bool isHeld() const noexcept { return held_; }
+    bool isHeld() const noexcept { return glide_.isHeld(); }
     /** True once the key has been down past the tap threshold, i.e. the position is moving. */
     bool isGliding(double nowMs) const noexcept;
     /** Units per second (>= 0, before the Shift factor): 0 before the glide starts, then a cubic ease-in to the cap. */
@@ -43,11 +44,8 @@ public:
     GlidePoint release() noexcept;
 
 private:
-    double distanceAt(double nowMs) const noexcept;
-
-    bool held_ = false;
-    double pressedAtMs_ = 0.0;
-    double lastDistance_ = 0.0;
+    KeyGlide glide_{KeyGlideConfig{morph_glide::kStartUnitsPerSecond, morph_glide::kMaxUnitsPerSecond,
+                                   morph_glide::kTapMs, morph_glide::kRampMs}};
     GlidePoint position_;
 };
 

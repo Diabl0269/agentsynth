@@ -11,6 +11,7 @@
 #include "UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h"
 #include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
 #include "UI/Timeline/ToolCursors.h"
 #include "UI/Timeline/TrackColour.h"
@@ -32,10 +33,15 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
                "Shift+Left/Right select several, Up/Down change the value, Alt+arrows move the selection "
                "(Alt+Shift: finely), Ctrl+T inserts a point after the current one");
     selection_.onChange = [this] { selectionChanged(); };
+    keyHold_.speedFactor = [this] { return keyDragSpeedFactor(); };
+    keyHold_.onFrame = [this] { applyKeyDrag(false); };
+    keyHold_.onEnd = [this] { endKeyDrag(); };
     refreshDescription();
 }
 
 void AutomationLaneEditor::setActiveLane(synth::LaneId id) {
+    cancelKeyDrag();
+    pointTween_.clear();
     laneId_ = id;
     dragMode_ = DragMode::None;
     hoveredBeat_.reset();
@@ -120,6 +126,7 @@ void AutomationLaneEditor::focusGained(juce::Component::FocusChangeType) {
 }
 
 void AutomationLaneEditor::focusLost(juce::Component::FocusChangeType) {
+    keyHold_.end();
     if (hoveredBeat_ == std::nullopt)
         bubble_.hide();
     repaint();
@@ -449,7 +456,8 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
         const bool selected = selection_.contains(bp.beat);
         if (!visible[i] && !active && !erased && !hovered && !selected)
             continue;
-        drawDot((float)viewState_.beatToX(beat), (float)valueToY(value),
+        const auto eased = pointTween_.offsetFor(lane_key::tweenKey(bp.beat));
+        drawDot((float)viewState_.beatToX(beat) + eased.x, (float)valueToY(value) + eased.y,
                 erased ? erase : (active || selected ? accent : normal), glide_.presence(bp.beat));
     }
     for (const auto& gone : glide_.leaving()) // removed points shrink and fade out where they were
@@ -822,6 +830,10 @@ bool AutomationLaneEditor::keyPressed(const juce::KeyPress& key) {
     if (shapeGesture_.keyPressed(key))
         return true;
     if (key == juce::KeyPress::escapeKey) {
+        if (keyHold_.active()) {
+            cancelKeyDrag();
+            return true;
+        }
         if (dragMode_ != DragMode::None || selection_.isBoxActive()) {
             dragMode_ = DragMode::None;
             cancelStretch();

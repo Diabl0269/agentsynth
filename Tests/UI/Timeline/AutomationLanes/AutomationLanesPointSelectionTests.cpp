@@ -2,10 +2,12 @@
 // a box on empty space, Escape, moving and deleting the selection as one undo step, arrow nudging, the keyboard
 // cursor, copy/paste and how the selection follows the doc. Real events on the real panel's editor.
 
+#include "../../Layout/KeyGlide/KeyGlideTestHost.h"
 #include "AutomationLanesTestFixture.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 
 using namespace automation_lanes_test;
 using synth::TrackKind;
@@ -294,12 +296,13 @@ TEST(AutomationLanesPointSelectionTest, DuplicateCopiesTheSelectionPastItsLastPo
     EXPECT_FALSE(f.editor->duplicateSelectedPoints()) << "nothing selected, nothing duplicated";
     f.editor->getPointSelection().setSelection({2.0, 3.0});
     const auto rev = f.doc.getRevision();
+    const double tick = synth::ui::tickBeats();
 
     ASSERT_TRUE(f.editor->duplicateSelectedPoints());
     EXPECT_EQ(f.doc.getRevision(), rev + 1);
-    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0, 4.0, 5.0}));
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0, 3.0 + tick, 4.0 + tick})) << "right after the last point, spacing kept";
     EXPECT_EQ(f.values(), (std::vector<double>{20.0, 60.0, 40.0, 60.0, 40.0}));
-    EXPECT_EQ(f.selected(), Beats({4.0, 5.0})) << "the copies become the selection";
+    EXPECT_EQ(f.selected(), Beats({3.0 + tick, 4.0 + tick})) << "the copies become the selection";
 
     f.undo.undo();
     EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0})) << "one undo takes both copies back";
@@ -547,3 +550,191 @@ TEST(AutomationLanesPointSelectionTest, TheSameKeyScriptGivesTheSameSelectionCou
     lane.undo.undo();
     EXPECT_EQ(lane.beats().size(), 5u) << "one Cmd+Z brings the copies back";
 }
+
+//==============================================================================
+// Holding an arrow: a keyboard drag of the selected points (docs/timeline/automation.md "Keyboard moves")
+
+namespace {
+
+const int kAltMod = juce::ModifierKeys::altModifier;
+
+// A lane whose Alt+Right / Up is physically held: the clock and the keys are the test's.
+struct HeldKeys : SelectLane {
+    key_glide_test::FakeKeys keys;
+
+    HeldKeys() { editor->getKeyHoldForTest().host = keys.host(); }
+
+    void hold(int code, int mods = 0) {
+        keys.down = {code};
+        keys.alt = (mods & kAltMod) != 0;
+        keys.shift = (mods & juce::ModifierKeys::shiftModifier) != 0;
+        EXPECT_TRUE(key(juce::KeyPress(code, juce::ModifierKeys(mods), 0)));
+    }
+    void frame(double glideMs) {
+        keys.now = 1000.0 + synth::ui::lane_key::kTapMs + glideMs;
+        editor->getKeyHoldForTest().tick();
+    }
+    void release() {
+        keys.down.clear();
+        editor->getKeyHoldForTest().checkKeyUp();
+    }
+    double previewBeat() const { return editor->getPreviewBeatForTest(); }
+};
+
+} // namespace
+
+TEST(AutomationLanesKeyboardDrag, WithSnapOffATapIsFourPixelsNotASixteenth) {
+    HeldKeys f;
+    f.panel.getViewState().snapEnabled = false;
+    f.editor->getPointSelection().setSelection({2.0});
+    const auto rev = f.doc.getRevision();
+
+    f.hold(juce::KeyPress::rightKey, kAltMod);
+    const double tap = f.previewBeat() - 2.0;
+    EXPECT_NEAR(tap, 4.0 / f.panel.getViewState().pixelsPerBeat, 1e-9);
+    EXPECT_LT(tap, 0.25) << "less than the old sixteenth at the default zoom";
+    EXPECT_EQ(f.doc.getRevision(), rev) << "nothing is committed while the key is down";
+    f.release();
+    EXPECT_NEAR(f.beats()[1], 2.0 + tap, 1e-9);
+    EXPECT_EQ(f.doc.getRevision(), rev + 1);
+}
+
+TEST(AutomationLanesKeyboardDrag, AHoldMovesContinuouslyAcceleratesAndIsOneUndoStepIncludingTheTap) {
+    HeldKeys f;
+    f.panel.getViewState().snapEnabled = false;
+    f.editor->getPointSelection().setSelection({2.0});
+    f.hold(juce::KeyPress::rightKey, kAltMod);
+    const double afterTap = f.previewBeat();
+
+    f.frame(0.0);
+    f.frame(1000.0);
+    const double afterOneSecond = f.previewBeat();
+    f.frame(2000.0);
+    const double afterTwoSeconds = f.previewBeat();
+    EXPECT_GT(afterOneSecond, afterTap);
+    EXPECT_GT(afterTwoSeconds - afterOneSecond, afterOneSecond - afterTap) << "the second second covers more";
+    EXPECT_NE(std::fmod(afterOneSecond, 0.25), 0.0) << "not stepping in sixteenths";
+
+    const auto preview = f.editor->getDragMovedPointsForTest();
+    const auto rev = f.doc.getRevision();
+    f.release();
+    EXPECT_EQ(f.doc.getRevision(), rev + 1) << "release commits once";
+    ASSERT_EQ(f.theLane().points.size(), 3u);
+    EXPECT_DOUBLE_EQ(f.beats().back(), preview.front().beat)
+        << "the committed point is the last preview (it passed beat 3)";
+    EXPECT_EQ(f.selected(), Beats({preview.front().beat}));
+    EXPECT_FALSE(f.editor->isDragActiveForTest());
+
+    f.undo.undo();
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0})) << "one undo takes the tap and the hold back";
+}
+
+TEST(AutomationLanesKeyboardDrag, ASnappedHoldLandsOnGridLinesAndATapIsOneGridStep) {
+    HeldKeys f;
+    f.editor->getPointSelection().setSelection({3.0});
+    f.hold(juce::KeyPress::rightKey, kAltMod);
+    EXPECT_DOUBLE_EQ(f.previewBeat(), 4.0) << "the tap is one grid step (a beat here)";
+    f.frame(2500.0);
+    const double beat = f.previewBeat();
+    EXPECT_GT(beat, 4.0);
+    EXPECT_NEAR(beat, std::round(beat), 1e-9) << "on a grid line";
+    f.frame(3000.0);
+    EXPECT_NEAR(f.previewBeat(), std::round(f.previewBeat()), 1e-9);
+    const double last = f.previewBeat();
+    f.release();
+    EXPECT_DOUBLE_EQ(f.beats().back(), last);
+}
+
+TEST(AutomationLanesKeyboardDrag, UpHoldsTheValueAndShiftIsThreeTimesAsFast) {
+    HeldKeys plain, shifted;
+    plain.editor->getPointSelection().setSelection({2.0});
+    shifted.editor->getPointSelection().setSelection({2.0});
+    plain.hold(juce::KeyPress::upKey);
+    shifted.hold(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier);
+    const double tapPlain = plain.editor->getPreviewValueForTest() - 60.0;
+    const double tapShifted = shifted.editor->getPreviewValueForTest() - 60.0;
+    EXPECT_NEAR(tapPlain, 1.0, 1e-9);
+    EXPECT_NEAR(tapShifted, 10.0, 1e-9);
+
+    plain.frame(1000.0);
+    shifted.frame(1000.0);
+    const double glidePlain = plain.editor->getPreviewValueForTest() - 60.0 - tapPlain;
+    const double glideShifted = shifted.editor->getPreviewValueForTest() - 60.0 - tapShifted;
+    EXPECT_GT(glidePlain, 0.0);
+    EXPECT_NEAR(glideShifted / glidePlain, 3.0, 1e-6);
+    plain.release();
+    EXPECT_GT(plain.theLane().points[1].value, 61.0);
+    EXPECT_EQ(plain.beats(), Beats({1.0, 2.0, 3.0})) << "a value hold leaves the beats alone";
+    shifted.release();
+}
+
+TEST(AutomationLanesKeyboardDrag, ATapReleasedBeforeTheGlideStartsCommitsTheOneStepAndAHoldAtTheEdgeCommitsNothing) {
+    HeldKeys f;
+    f.editor->getPointSelection().setSelection({2.0});
+    f.hold(juce::KeyPress::rightKey, kAltMod);
+    f.release();
+    EXPECT_EQ(f.beats(), Beats({1.0, 3.0})) << "one grid step: it landed on the point at beat 3 and replaced it";
+
+    HeldKeys edge;
+    edge.doc.addBreakpoint(edge.lane, 0.0, 10.0);
+    edge.editor->getPointSelection().setSelection({0.0});
+    const auto rev = edge.doc.getRevision();
+    edge.hold(juce::KeyPress::leftKey, kAltMod);
+    edge.frame(1000.0);
+    edge.release();
+    EXPECT_EQ(edge.doc.getRevision(), rev) << "a hold that never moved reaches no undo step";
+}
+
+TEST(AutomationLanesKeyboardDrag, ASynthesisedPressWithNoKeyDownIsOneCommittedStep) {
+    HeldKeys f;
+    f.panel.getViewState().snapEnabled = false;
+    f.editor->getPointSelection().setSelection({2.0});
+    const auto rev = f.doc.getRevision();
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAltMod), 0)));
+    EXPECT_EQ(f.doc.getRevision(), rev + 1);
+    EXPECT_FALSE(f.editor->getKeyHoldForTest().active());
+    EXPECT_NEAR(f.beats()[1], 2.0 + 4.0 / f.panel.getViewState().pixelsPerBeat, 1e-9);
+}
+
+TEST(AutomationLanesKeyboardDrag, AutoRepeatKeepsTheRunningHoldAndEscapeCancelsItWithoutAnEdit) {
+    HeldKeys f;
+    f.editor->getPointSelection().setSelection({3.0});
+    f.hold(juce::KeyPress::rightKey, kAltMod);
+    const double beat = f.previewBeat();
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAltMod), 0)))
+        << "the OS repeating the key";
+    EXPECT_DOUBLE_EQ(f.previewBeat(), beat) << "does not step again";
+
+    const auto rev = f.doc.getRevision();
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_EQ(f.doc.getRevision(), rev);
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0}));
+    EXPECT_FALSE(f.editor->isDragActiveForTest());
+}
+
+TEST(AutomationLanesKeyboardDrag, ATapEasesTheDrawnPointAndPlainlyLandsUnderReduceMotion) {
+    HeldKeys f;
+    f.editor->forceGlideAnimateForTest(true);
+    f.editor->getPointSelection().setSelection({2.0});
+    const auto key2 = synth::ui::lane_key::tweenKey(2.0);
+
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAltMod), 0)));
+    const auto key3 = synth::ui::lane_key::tweenKey(3.0);
+    auto& tween = f.editor->getPointTweenForTest();
+    ASSERT_TRUE(tween.isAnimating());
+    const float start = tween.offsetFor(key3).x;
+    EXPECT_NEAR(start, -(float)f.panel.getViewState().pixelsPerBeat, 1e-3f) << "drawn at the old place first";
+    tween.stepForTest(40.0);
+    EXPECT_GT(tween.offsetFor(key3).x, start);
+    EXPECT_LT(tween.offsetFor(key3).x, 0.0f);
+    (void)key2;
+    tween.stepForTest(200.0);
+    EXPECT_FALSE(tween.isAnimating());
+
+    ReducedMotionGuard reduced;
+    f.editor->getPointSelection().setSelection({3.0});
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAltMod), 0)));
+    EXPECT_FALSE(tween.isAnimating()) << "no ease under Reduce Motion";
+}
+
+//==============================================================================
