@@ -12,6 +12,7 @@
 #include "../FakeAudioIODevice.h"
 #include "../Mixer/ChannelFlow/ChannelFlowTestFixture.h"
 
+#include "../UniqueTempDir.h"
 #include "Modules/AttenuverterModule.h"
 #include <algorithm>
 #include <bit>
@@ -30,8 +31,7 @@ double nowUs() { return juce::Time::getMillisecondCounterHiRes() * 1000.0; }
 struct ProjectCopy {
     juce::File dir;
     explicit ProjectCopy(const juce::File& original)
-        : dir(juce::File::getSpecialLocation(juce::File::tempDirectory)
-                  .getNonexistentChildFile("ModuleCpuBench", ".agsproj")) {
+        : dir(synth::test::uniqueTempPath("ModuleCpuBench", ".agsproj")) {
         if (!original.copyDirectoryTo(dir)) {
             dir = juce::File();
             return;

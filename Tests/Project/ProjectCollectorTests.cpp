@@ -4,6 +4,7 @@
 // the module (never moving, deleting or overwriting a source), and Archive zips the bundle so an
 // unzipped copy opens standalone with no reference to the original paths.
 
+#include "../UniqueTempDir.h"
 #include "MacroSet.h"
 #include "MidiRemote/RemoteModel.h"
 #include "Modules/SamplerModule.h"
@@ -41,8 +42,7 @@ bool writeWav(const juce::File& file, int numFrames, float frequency = 0.05f) {
 class ProjectCollectorTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root = juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("agentsynth-pc", "");
-        root.createDirectory();
+        root = synth::test::makeUniqueTempDir("agentsynth-pc");
         bundle = root.getChildFile("Song.agsproj");
         bundle.createDirectory();
     }

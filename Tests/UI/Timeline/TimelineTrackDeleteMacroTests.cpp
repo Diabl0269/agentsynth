@@ -2,6 +2,7 @@
 // in the same undo step, and Cmd+Z brings all of it back in place with nothing extra on the canvas. Drives a real
 // off-screen MainComponent through the row menu's Delete Track item, then the app's undo manager, so the real command
 // path runs; the unit rule is in Timeline/TrackRemovalSetTests.cpp.
+#include "../../UniqueTempDir.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -274,8 +275,7 @@ TEST(TimelineTrackDeleteMacro, UndoLeavesNoLooseNodeEvenWithoutAnyModulator) {
 // The project as a fresh app opens it after a save, so a restore that left something the file format drops, or a node
 // outside its macro, shows up as a difference from the same save taken before the delete.
 static State savedAndReopened(Rig& rig, bool* freeStandingMatches = nullptr) {
-    auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                   .getNonexistentChildFile("fro656-project", ".agsproj", false);
+    auto dir = synth::test::uniqueTempPath("fro656-project", ".agsproj");
     EXPECT_TRUE(rig.mc.saveProjectForTest(dir));
     Rig loaded(0);
     EXPECT_TRUE(loaded.mc.openProjectForTest(dir));

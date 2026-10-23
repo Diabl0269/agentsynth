@@ -5,6 +5,7 @@
 // and follows the bundle when it moves, an outside sample stays absolute, an old absolute-path
 // project loads unchanged, and a relative ref that escapes the bundle is dropped, never resolved.
 
+#include "../UniqueTempDir.h"
 #include "MacroSet.h"
 #include "MidiRemote/RemoteModel.h"
 #include "Modules/SamplerModule.h"
@@ -57,8 +58,7 @@ juce::String sampleFileOf(const juce::var& patch) {
 class ModuleFileRefsTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root = juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("agentsynth-mfr", "");
-        root.createDirectory();
+        root = synth::test::makeUniqueTempDir("agentsynth-mfr");
         bundle = root.getChildFile("Song.agsproj");
     }
     void TearDown() override { root.deleteRecursively(); }
