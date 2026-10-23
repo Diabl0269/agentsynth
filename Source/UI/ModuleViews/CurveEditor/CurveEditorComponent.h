@@ -62,10 +62,13 @@ public:
 
     /** `xDivisions`/`yDivisions`: how many even cells `paintGrid` draws when a grid is set (a
      *  vertical line at every `1/xDivisions` of the visible range, horizontal at every
-     *  `1/yDivisions` of the level range). */
+     *  `1/yDivisions` of the level range). A positive `xStep` replaces the even x cells with lines at
+     *  `xOrigin + k * xStep` in model units (a log axis whose octaves are not a whole number of cells). */
     struct CurveGrid {
         int xDivisions = 4;
         int yDivisions = 2;
+        double xStep = 0.0;
+        double xOrigin = 0.0;
     };
     /** `nullopt` (the default) draws today's nice-tick time grid instead -- an ordinary envelope
      *  card never calls this. */
@@ -263,6 +266,9 @@ private:
     };
     ThemeColours resolveThemeColours() const;
     void paintGrid(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
+    void paintGridLines(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
+    /** The x of every vertical grid line, in model units. */
+    std::vector<double> gridXPositions() const;
     void paintCurve(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
     void paintHandles(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
     void paintPlayheadMarker(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;

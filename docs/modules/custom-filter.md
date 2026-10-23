@@ -252,6 +252,13 @@ slider drag is one undo step (the settings are part of the module's extra state)
 - **Curve axes.** Across: 20 Hz to 20 kHz on a log axis, with 100, 1k and 10k labelled. Up: dB, with the 0 dB line
   (curve y = 0.8) drawn bright and +6, -12, -24 and -36 dB marked; the fill runs to the 0 dB line. A curve holds at most
   64 points.
+- **Grid.** A row above the curve starts with **Grid**, a segmented choice: Off (the default), 1 oct, 1/2 oct, 1/3 oct.
+  Off leaves points free. A choice snaps points when they are added, dragged or moved with Alt+arrows (Shift while
+  dragging bypasses it) to lines at every octave fraction counted from 1 kHz (so 1 oct has lines at 250, 500, 1k, 2k
+  and 4k Hz, not at a whole number of cells from 20 Hz) and to 6 dB steps in level (-48 to +12 dB, 0 dB is a line). The
+  lines are drawn faintly under the labelled guides. The choice is remembered for Filter shapes across windows and
+  launches (a user setting, not part of the patch); the LFO's window remembers its own. Tab order: the map, the chips, Grid, the curve, the buttons. The curve editor's
+  `CurveGrid` takes `xStep` and `xOrigin` for lines that do not divide the visible range evenly.
 - **Start from** stamps the vowel (ah, ee, oo) or animal (wolf, crow, frog) curve onto the selected shape. Its
   name and map position stay. The curves are `CustomFilterShapes::presetCurve`; a new Filter starts with the three
   vowels, which are the same curves.
@@ -263,7 +270,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
   extra state. The window follows changes made elsewhere (undo, the card's map) by polling
   `FilterModule::getCustomShapesGeneration`, which every replacement of the list bumps.
 - **Reuse.** The window edits a `ShapeListAdapter` (read and write the list, bracket an undo step, describe the axes,
-  the Start from entries and the draw range), not the Filter: `FilterShapesAdapter` is the Filter's and
+  the Start from entries, the draw range and the grid it offers), not the Filter: `FilterShapesAdapter` is the Filter's and
   `LfoShapesAdapter` the LFO's. Both share `ModuleShapesAdapter` (the undo bracket and the morph cursor's parameters). The window and the card's map edit the adapter through `ShapeMapController`, so every edit is one undo step.
 
 ## Morph map

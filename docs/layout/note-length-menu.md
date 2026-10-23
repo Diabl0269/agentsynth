@@ -1,7 +1,7 @@
 # Note-length menu
 
 Every box that picks a musical length (the LFO's sync rate, the ADSR stage divisions, the Delay's time division, the
-custom-wave grid, the modulator row's rate) is one shared control, `NoteLengthBox`
+custom-wave grid (the LFO card's and the LFO shape window's), the modulator row's rate) is one shared control, `NoteLengthBox`
 (`Source/UI/Layout/NoteLengthMenu/`), never a plain `juce::ComboBox`. It offers straight, triplet and dotted values in
 one small popup.
 

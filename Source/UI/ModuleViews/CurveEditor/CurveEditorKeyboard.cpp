@@ -25,7 +25,8 @@ juce::Point<double> CurveEditorComponent::keyboardStep() const {
     if (snapToGrid_ && grid_.has_value()) {
         const double xDiv = (double)juce::jmax(1, grid_->xDivisions);
         const double yDiv = (double)juce::jmax(1, grid_->yDivisions);
-        return {(model_.getMaxX() - model_.getMinX()) / xDiv, 1.0 / yDiv};
+        const double xStep = grid_->xStep > 0.0 ? grid_->xStep : (model_.getMaxX() - model_.getMinX()) / xDiv;
+        return {xStep, 1.0 / yDiv};
     }
     return {currentGeometry().getVisibleRange() * kTimeStepFraction, kLevelStep};
 }

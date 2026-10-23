@@ -26,12 +26,16 @@ public:
 
     /** The name the window title carries; the card refreshes it before opening. */
     void setModuleName(juce::String name) { moduleName_ = std::move(name); }
+    /** Where the window keeps its grid choice; the card supplies it before opening. May be null. */
+    void setApplicationProperties(juce::ApplicationProperties* properties) noexcept { appProperties_ = properties; }
+    juce::ApplicationProperties* getApplicationProperties() const override { return appProperties_; }
 
 protected:
     ModuleBase& module_;
     juce::String moduleName_;
 
 private:
+    juce::ApplicationProperties* appProperties_ = nullptr;
     AppUndoManager* undo_;
     juce::AudioProcessorGraph& graph_;
     juce::AudioProcessorGraph::NodeID nodeId_;

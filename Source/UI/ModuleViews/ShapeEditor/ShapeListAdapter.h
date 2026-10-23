@@ -6,6 +6,8 @@
 #include "Modules/Filter/CustomFilterPerNote.h"
 #include "Modules/Lfo/LfoCustomWave.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include <functional>
+#include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 #include <vector>
@@ -44,6 +46,18 @@ enum class PitchInput {
     NotPoly          ///< The module is mono, so notes cannot sit apart at all.
 };
 
+/** The grid control a shape list offers above its curve. `names` are the choices, the first being Off. */
+struct ShapeGridOffer {
+    /** The shared note-length box, or a short row of segments for a small choice. */
+    enum class Control { noteLengthBox, segments };
+    Control control = Control::noteLengthBox;
+    juce::StringArray names;
+    juce::String title;
+    juce::String tooltip;
+    /** The curve editor's grid for a choice; nullopt means free (no grid, no snapping). */
+    std::function<std::optional<CurveEditorComponent::CurveGrid>(const juce::String& name)> gridFor;
+};
+
 class ShapeListAdapter {
 public:
     virtual ~ShapeListAdapter() = default;
@@ -68,6 +82,12 @@ public:
     virtual void endCursorGesture() {}
 
     virtual std::optional<CurveEditorComponent::AxisGuides> getAxisGuides() const { return std::nullopt; }
+    /** The grid the curve can snap to; none means the window shows no grid control. */
+    virtual std::optional<ShapeGridOffer> getGridOffer() const { return std::nullopt; }
+    /** Names the kind of list in the settings the window remembers its choices under ("lfo", "filter"). */
+    virtual juce::String getPreferenceKind() const { return {}; }
+    /** Where those choices are kept; null remembers nothing. */
+    virtual juce::ApplicationProperties* getApplicationProperties() const { return nullptr; }
     virtual std::vector<ShapeStartFrom> getStartFrom() const { return {}; }
     virtual ShapeDrawRange getDrawRange() const { return {}; }
     virtual juce::String getWindowTitle() const = 0;

@@ -30,6 +30,8 @@ public:
     ShapeItem makeShapeAt(float x, float y) const override;
 
     std::optional<CurveEditorComponent::AxisGuides> getAxisGuides() const override;
+    std::optional<ShapeGridOffer> getGridOffer() const override;
+    juce::String getPreferenceKind() const override { return "filter"; }
     std::vector<ShapeStartFrom> getStartFrom() const override;
     ShapeDrawRange getDrawRange() const override;
     juce::String getWindowTitle() const override;

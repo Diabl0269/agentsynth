@@ -152,6 +152,7 @@ void ModuleComponent::createMorphShapesCard() {
         auto* button = getModDotButton(channel);
         return button != nullptr ? button->getTooltip() : juce::String();
     };
+    host.appProperties = [this] { return owner.getModDot().host.appProperties; };
     auto& graph = owner.getAudioEngine().getGraph();
     // The constructor styles the footer toggles before this card exists, so its pill is styled here.
     const auto stylePill = [this] {

@@ -21,6 +21,8 @@ public:
     ShapeItem makeShapeAt(float x, float y) const override;
 
     std::vector<ShapeStartFrom> getStartFrom() const override;
+    std::optional<ShapeGridOffer> getGridOffer() const override;
+    juce::String getPreferenceKind() const override { return "lfo"; }
     juce::String getWindowTitle() const override;
 
 private:

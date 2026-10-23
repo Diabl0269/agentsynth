@@ -283,7 +283,7 @@ TEST(ShapeEditor, TheWindowHookReceivesTheEditorOnTheRequestedShape) {
     EXPECT_EQ(received->getSelected(), 2);
 }
 
-TEST(ShapeEditor, TabVisitsTheMapChipsCurveButtonsAndDoneInVisualOrder) {
+TEST(ShapeEditor, TabVisitsTheMapChipsGridCurveButtonsAndDoneInVisualOrder) {
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
     const auto walk = synth::test::walkTabOrder(editor);
@@ -300,6 +300,7 @@ TEST(ShapeEditor, TabVisitsTheMapChipsCurveButtonsAndDoneInVisualOrder) {
                                             "ah shape",
                                             "ee shape",
                                             "oo shape",
+                                            "Grid",
                                             "Shape curve",
                                             "Add shape",
                                             "Duplicate",

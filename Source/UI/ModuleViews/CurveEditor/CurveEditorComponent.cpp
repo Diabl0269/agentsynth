@@ -119,7 +119,10 @@ juce::Point<double> CurveEditorComponent::snapModelPoint(const CurveEditorGeomet
     const double yDiv = (double)juce::jmax(1, grid_->yDivisions);
 
     double x = point.x;
-    if (maxX > minX) {
+    if (grid_->xStep > 0.0) {
+        const double origin = grid_->xOrigin;
+        x = juce::jlimit(minX, maxX, origin + std::round((x - origin) / grid_->xStep) * grid_->xStep);
+    } else if (maxX > minX) {
         const double frac = juce::jlimit(0.0, 1.0, (x - minX) / (maxX - minX));
         x = minX + (std::round(frac * xDiv) / xDiv) * (maxX - minX);
     }

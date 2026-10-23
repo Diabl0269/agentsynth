@@ -3,12 +3,15 @@
 #include "PerNoteBar.h"
 #include "ShapeListAdapter.h"
 #include "ShapeMapController.h"
+#include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace synth::ui {
@@ -20,8 +23,13 @@ namespace synth::ui {
  *  It edits whatever the `ShapeListAdapter` holds, so it is not tied to the Filter. Edits are heard live (every
  *  change goes to the adapter at once) and each gesture or button is one undo step.
  *
- *  Keyboard: Tab visits the map and its dots and cursor, the chips, the curve editor, the buttons, the per-note
- *  controls and Done, in that order. Escape closes the window (`onDone`, else the hosting window).
+ *  A row above the curve holds what the adapter offers: a grid choice the curve snaps to (note lengths for the
+ *  LFO, octaves for the Filter). The choice is remembered per kind of list in the adapter's
+ *  settings.
+ *
+ *  Keyboard: Tab visits the map and its dots and cursor, the chips, the grid choice, the curve
+ *  editor, the buttons, the per-note controls and Done, in that order. Escape closes the window (`onDone`, else the
+ * hosting window).
  */
 class ShapeListEditor
     : public juce::Component
@@ -70,6 +78,14 @@ public:
     juce::Component* getChip(int index) const;
     /** The per-note settings in the bottom bar; null when the adapter has none. */
     PerNoteBar* getPerNoteBar() noexcept { return perNote_.get(); }
+    /** The grid choice the adapter offers as the note-length box or as segments; null when it offers the other (or
+     *  no grid). */
+    NoteLengthBox* getGridBox() noexcept { return gridBox_.get(); }
+    CardSegmentedSwitch* getGridSwitch() noexcept { return gridSwitch_.get(); }
+    /** The chosen grid name ("Off" when free or when there is no grid control). */
+    juce::String getGridName() const;
+    /** Picks a grid choice by name as a click would; an unknown name changes nothing. */
+    void setGridName(const juce::String& name);
     ShapeDrawRange getDrawRange() const;
     juce::String getWindowTitle() const { return adapter_->getWindowTitle(); }
 
@@ -91,6 +107,11 @@ private:
     void showMenuNow(juce::PopupMenu& menu, juce::Component& target);
     void syncAll();
     void updateButtonStates();
+    // ShapeListEditorToolbar.cpp
+    bool hasToolbar() const;
+    void buildToolbar(int& focusOrder);
+    void layoutToolbar(juce::Rectangle<int> row);
+    void applyGridChoice(const juce::String& name, bool remember);
 
     std::shared_ptr<ShapeListAdapter> adapter_;
     std::vector<ShapeItem> shapes_;
@@ -110,6 +131,10 @@ private:
     juce::TextButton drawButton_{"Draw"};
     juce::TextButton doneButton_{"Done"};
     std::unique_ptr<PerNoteBar> perNote_;
+    std::optional<ShapeGridOffer> gridOffer_;
+    std::unique_ptr<NoteLengthBox> gridBox_;
+    std::unique_ptr<CardSegmentedSwitch> gridSwitch_;
+    juce::Rectangle<int> gridLabelArea_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShapeListEditor)
 };

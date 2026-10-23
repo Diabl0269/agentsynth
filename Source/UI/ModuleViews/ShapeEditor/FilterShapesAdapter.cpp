@@ -2,6 +2,7 @@
 #include "FilterShapesAdapter.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/Filter/CustomFilterBlend.h"
+#include <cmath>
 
 namespace synth::ui {
 
@@ -61,6 +62,30 @@ std::optional<CurveEditorComponent::AxisGuides> FilterShapesAdapter::getAxisGuid
                 {CustomFilterShapes::dbToY(-24.0f), "-24"},
                 {CustomFilterShapes::dbToY(-36.0f), "-36"}};
     return guides;
+}
+
+/** Frequency is a log axis, so the choices are fractions of an octave counted from 1 kHz (a line at every octave of
+    1 kHz, not at a whole number of cells from 20 Hz), and the level axis steps 6 dB from -48 to +12 dB (0 dB is a
+   line). */
+std::optional<ShapeGridOffer> FilterShapesAdapter::getGridOffer() const {
+    ShapeGridOffer offer;
+    offer.control = ShapeGridOffer::Control::segments;
+    offer.names = {"Off", "1 oct", "1/2 oct", "1/3 oct"};
+    offer.title = "Shape grid";
+    offer.tooltip = "Grid: snap points to octave lines across frequency and 6 dB steps in level (Off: free)";
+    offer.gridFor = [](const juce::String& name) -> std::optional<CurveEditorComponent::CurveGrid> {
+        const int parts = name == "1 oct" ? 1 : name == "1/2 oct" ? 2 : name == "1/3 oct" ? 3 : 0;
+        if (parts == 0)
+            return std::nullopt;
+        constexpr int kLevelCells = (int)((CustomFilterShapes::kMaxDb - CustomFilterShapes::kMinDb) / 6.0f);
+        CurveEditorComponent::CurveGrid grid;
+        grid.xDivisions = kLevelCells;
+        grid.yDivisions = kLevelCells;
+        grid.xStep = std::log(2.0) / std::log((double)CustomFilterShapes::kMaxHz / CustomFilterShapes::kMinHz) / parts;
+        grid.xOrigin = CustomFilterShapes::hzToX(1000.0f);
+        return grid;
+    };
+    return offer;
 }
 
 std::vector<ShapeStartFrom> FilterShapesAdapter::getStartFrom() const {
