@@ -845,7 +845,7 @@ duration that branches on the mode (full, reduced, or 0 under Off). Off is insta
 (`reallyClose` runs at once), and the self-clocked motions (the Card Layout Editor's fades and shrink ghost, the
 automation marker fade) land at once. A new non-essential animation asks `prefersReducedMotion()` before it starts, uses
 `AnimationDriver` or `motionMs` for its duration, and lands on its final state at once under Off.
-Tests: `setAnimationMode` sets the mode (restore `followSystem` afterwards); `setReducedMotionForTest` forces the OS's answer.
+Tests: `setAnimationMode` sets the mode (restore `followSystem` afterwards); `setReducedMotionForTest` forces the OS's answer. The test run itself pins the OS's answer to off (`setSystemReducedMotionForTest(false)` in `Tests/TestMain.cpp`), so no test reads the machine's own Reduce Motion setting, which differs between CI runners and developer Macs; a test that wants it on forces it.
 
 ## formatShortcutHint
 

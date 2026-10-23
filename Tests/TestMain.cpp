@@ -2,6 +2,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "SoundPacks/SoundPackFetch.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
 #include <cstdlib>
 #include <gtest/gtest.h>
@@ -55,6 +56,10 @@ int main(int argc, char** argv) {
         settingsDirOverride = ownedSettingsDir.getFullPathName();
     }
     synth::setSettingsDirOverrideForTests(settingsDirOverride);
+
+    // No test may read the machine's own Reduce Motion setting: CI runners and developer Macs differ, so a test that
+    // expects motion without pinning it passed locally and failed on CI. Tests that want it on say so.
+    synth::ui::setSystemReducedMotionForTest(false);
 
     // No test may reach the real sound pack host: the default fetcher answers "offline" (tests inject their own).
     synth::soundpacks::setHttpBlockedForTesting(true);

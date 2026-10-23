@@ -36,6 +36,9 @@ double motionMs(double full, double reduced);
 /** Test seam: forces the answer; an empty value restores the OS's own. */
 void setReducedMotionForTest(std::optional<bool> value);
 
+/** Test seam: stands in for the OS's own answer, the one an empty override falls back to. */
+void setSystemReducedMotionForTest(std::optional<bool> value);
+
 namespace detail {
 /** The macOS answer (ReducedMotionMac.mm); false everywhere else. */
 bool systemPrefersReducedMotion();
