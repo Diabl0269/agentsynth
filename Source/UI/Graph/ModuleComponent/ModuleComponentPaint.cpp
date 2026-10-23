@@ -80,6 +80,8 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 24.0f, 2.0f);
         if (instrumentChrome_ != nullptr)
             instrumentChrome_->paintDropHint(g, getLocalBounds());
+    } else if (morphCard_ != nullptr && morphCard_->isShapeDropOver()) {
+        morphCard_->paintShapeDropHint(g, synth::ui::cardBodyRect(getLocalBounds().toFloat()));
     } else if (isShowingSoundOutline()) {
         // A sound is being dragged and this card would take it: a faint outline until the pointer is over it.
         const auto& theme = synth::theme::themeOf(*this);

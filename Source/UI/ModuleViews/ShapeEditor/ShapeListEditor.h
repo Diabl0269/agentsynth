@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Modules/Shapes/ShapeLibrary.h"
 #include "PerNoteBar.h"
 #include "ShapeListAdapter.h"
 #include "ShapeMapController.h"
@@ -35,7 +36,7 @@ class ShapeListEditor
     : public juce::Component
     , private juce::Timer {
 public:
-    static constexpr int kWidth = 880;
+    static constexpr int kWidth = 984;
     static constexpr int kHeight = 560; // without per-note settings
     static constexpr int kPerNoteHeight = kHeight + PerNoteBar::kHeight - PerNoteBar::kRowHeight; // with them
 
@@ -59,8 +60,21 @@ public:
      *  shortcuts on to the main window this way). */
     std::function<bool(const juce::KeyPress&)> onAppShortcut;
 
-    /** Stamps the curve of start-from entry `index` onto the selected shape. */
+    /** Stamps the curve of start-from entry `index` (the built-ins, then the library's) onto the selected shape. */
     void applyStartFrom(int index);
+    /** The Start from menu's entries: the adapter's built-in curves, then the user's saved shapes of this kind, then
+     *  the factory shapes that are not a built-in's curve. `savedCount` gets how many of the library's are the user's.
+     */
+    std::vector<ShapeStartFrom> startFromEntries(int* builtInCount = nullptr, int* savedCount = nullptr) const;
+    /** Which library kind this editor's shapes belong to; none when the adapter names no kind. */
+    std::optional<synth::shapes::ShapeKind> libraryKind() const;
+    /** Whether a dragged library shape of `kind` can be stamped on a chip here. */
+    bool acceptsLibraryShape(synth::shapes::ShapeKind kind) const { return libraryKind() == kind; }
+    /** Replaces shape `index`'s curve with the library shape's, as one undo step. */
+    void stampLibraryShape(int index, const synth::shapes::LibraryShape& shape);
+    /** Save shape: asks for a name (refusing an empty one), asks before replacing a saved shape, then writes the
+     *  selected shape's curve to the library. */
+    void saveSelectedShape();
     /** Applies a draw shape to the selected shape's curve. Free only returns the editor to point editing. */
     void applyDrawShape(DrawShape shape);
 
@@ -74,6 +88,7 @@ public:
     juce::TextButton& getRenameButton() noexcept { return renameButton_; }
     juce::TextButton& getStartFromButton() noexcept { return startFromButton_; }
     juce::TextButton& getDrawButton() noexcept { return drawButton_; }
+    juce::TextButton& getSaveShapeButton() noexcept { return saveShapeButton_; }
     juce::TextButton& getDoneButton() noexcept { return doneButton_; }
     juce::Component* getChip(int index) const;
     /** The per-note settings in the bottom bar; null when the adapter has none. */
@@ -111,6 +126,9 @@ private:
     void loadSelectedCurve();
     void writeCurve();
     void edit(const std::function<void(std::vector<ShapeItem>&)>& mutate);
+    void stampCurveOnSelected(const LfoCustomWave& curve);
+    void finishSave(const juce::String& typed, const LfoCustomWave& curve);
+    void writeShape(const juce::String& name, const LfoCustomWave& curve, bool replace);
     void openStartFromMenu();
     void openDrawFlyout();
     void showMenuNow(juce::PopupMenu& menu, juce::Component& target);
@@ -141,6 +159,7 @@ private:
     juce::TextButton renameButton_{"Rename"};
     juce::TextButton startFromButton_{"Start from"};
     juce::TextButton drawButton_{"Draw"};
+    juce::TextButton saveShapeButton_{"Save shape"};
     juce::TextButton doneButton_{"Done"};
     std::unique_ptr<PerNoteBar> perNote_;
     std::optional<ShapeGridOffer> gridOffer_;

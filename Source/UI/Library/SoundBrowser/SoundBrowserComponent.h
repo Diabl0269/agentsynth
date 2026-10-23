@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Modules/Shapes/ShapeLibrary.h"
 #include "SoundBrowser/SoundFolderBook.h"
 #include "SoundBrowser/SoundIndex.h"
 #include "SoundBrowser/SoundLists.h"
@@ -35,6 +36,7 @@ class SoundBrowserComponent
     , private synth::soundbrowser::SoundFolderBook::Listener
     , private juce::FocusChangeListener
     , private juce::KeyListener
+    , private synth::shapes::ShapeLibrary::Listener
     , private synth::soundbrowser::SoundIndex::Listener {
 public:
     static constexpr int kSearchHeight = 32;
@@ -49,9 +51,11 @@ public:
 
     static constexpr const char* kFavouritesId = "@favourites";
     static constexpr const char* kRecentId = "@recent";
+    static constexpr const char* kShapesId = "@shapes";
 
-    /** GetPack is a pack you have not downloaded (greyed, with its size); AddFolder is the "Add folder..." row. */
-    enum class RowKind { Hint, Place, Folder, Sound, GetPack, AddFolder };
+    /** GetPack is a pack you have not downloaded (greyed, with its size); AddFolder is the "Add folder..." row; Shape
+     * is a saved or built-in curve under the Shapes place. */
+    enum class RowKind { Hint, Place, Folder, Sound, GetPack, AddFolder, Shape };
 
     struct Row {
         RowKind kind = RowKind::Hint;
@@ -69,6 +73,7 @@ public:
         bool userFolder = false;                              ///< Place rows: one of the user's own folders.
         bool missing = false;                                 ///< Place rows: the folder is not there now.
         bool scanning = false;                                ///< Place rows: its sounds are still being found.
+        std::optional<synth::shapes::LibraryShape> shape;     ///< Shape rows only.
         bool navigable() const { return kind != RowKind::Hint; }
     };
 
@@ -136,6 +141,13 @@ public:
     /** Starts dragging the Sound row `index` as the drag-and-drop payload `sound:<path>`; false for any other row. */
     bool beginSoundDrag(int index);
     bool isSoundDragging() const { return soundDragging_; }
+
+    // ---- Shapes (SoundBrowserShapes.cpp) ------------------------------------------------------------------------
+    /** Lists the library's shapes under a Shapes place and follows its changes. Null (the default) lists none. The
+     *  library must outlive the view. */
+    void setShapeLibrary(synth::shapes::ShapeLibrary* library);
+    /** Starts dragging the Shape row `index` as the payload `shape:<kind>:<origin>:<name>`; false for any other row. */
+    bool beginShapeDrag(int index);
 
     // ---- Packs you do not have (SoundBrowserPacks.cpp) ----------------------------------------------------------
     /** Starts the shared installer's download of GetPack row `index`, or cancels it while it runs; false for any other
@@ -241,6 +253,7 @@ public:
 private:
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
     void soundIndexChanged() override;
+    void shapeLibraryChanged() override;
     void soundPacksChanged() override;
     void soundFoldersChanged() override;
     void globalFocusChanged(juce::Component* focused) override;
@@ -257,6 +270,13 @@ private:
     juce::String placeNameOf(const juce::String& placeId) const;
     void capturePreviousList();
     void playListMotion(int direction);
+
+    // Shapes (SoundBrowserShapes.cpp)
+    void rebuildShapeRows();
+    void refreshShapeCache();
+    int shapeCount() const;
+    void paintShapeRow(juce::Graphics& g, const Row& row, juce::Rectangle<int> area) const;
+    juce::String shapeTooltip(const Row& row) const;
 
     // Painting (SoundBrowserPainting.cpp)
     void paintRows(juce::Graphics& g, int width) const;
@@ -344,6 +364,8 @@ private:
 
     synth::soundbrowser::SoundIndex& index_;
     synth::soundbrowser::SoundLists& lists_;
+    synth::shapes::ShapeLibrary* shapeLibrary_ = nullptr;
+    std::vector<synth::shapes::LibraryShape> filterShapes_, lfoShapes_; // the library as of the last change
     synth::soundpacks::SoundPackInstaller* installer_ = nullptr;
     synth::soundbrowser::SoundFolderBook* folderBook_ = nullptr;
     juce::String packSignature_;

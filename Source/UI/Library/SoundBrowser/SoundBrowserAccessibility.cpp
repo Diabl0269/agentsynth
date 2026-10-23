@@ -54,6 +54,9 @@ juce::String SoundBrowserComponent::getAccessibilityValueText() const {
                                                  position, count);
     case RowKind::AddFolder:
         return describeAddFolderForAccessibility(position, count);
+    case RowKind::Shape:
+        return describeShapeForAccessibility(row.text, synth::shapes::kindWord(row.shape->kind), row.shape->factory,
+                                             position, count);
     case RowKind::Hint:
         break;
     }

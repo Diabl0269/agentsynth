@@ -1,6 +1,6 @@
 # The sound browser
 
-One place to find a recording: the **sound index** (Core, no UI) lists every sound in the installed packs and the user's own folders, and the **Sounds view** (the left sidebar's second view) browses and searches it. This doc covers the index, the view, its filters, the preview, dragging a sound out, the packs you can download from the view and your own folders.
+One place to find a recording (and, in the Shapes place, a named curve): the **sound index** (Core, no UI) lists every sound in the installed packs and the user's own folders, and the **Sounds view** (the left sidebar's second view) browses and searches it. This doc covers the index, the view, its filters, the preview, dragging a sound out, the packs you can download from the view and your own folders.
 
 ## The sound index
 
@@ -90,6 +90,21 @@ An .sfz is an instrument, so only a Sampler card and the canvas take it; no trac
 **Outlines.** While a sound is dragged, every card and lane that would take it shows a faint accent outline (the audio rows and the "New audio track" strip in the lanes); the target under the pointer gets the full highlight. One app-wide flag (`SoundDragState`) tells the targets when a drag starts and ends, and each repaints once for each; nothing repaints per mouse move. None of the hints is a focus stop.
 
 **Keyboard.** Return (or a double-click) on a Sound is the keyboard way to do the same: it loads the sound into the one selected Sampler on the canvas (one undo step); else adds a clip at the playhead to the selected audio track; else adds a new Sampler in the middle of the visible canvas. A short toast says what happened. The view's tooltip reads "Return loads it into the selected Sampler or audio track."
+
+## Shapes
+
+The Places screen has a **Shapes** place after Favourites and Used recently (its count is every listed shape). Opening it lists two groups, each under a heading row: **Filter shapes** then **LFO shapes**. A group lists your saved shapes of that kind first (marked "yours"), then the factory set; a row is a small curve thumbnail (the shape drawn in the accent colour) and the name. The library is `synth::shapes::ShapeLibrary` ([custom-filter.md](../modules/custom-filter.md#shape-library)); the view reads it when it changes (a Save shape in a shape window adds the row at once), never while painting. Searching and the Filters panel list sounds only; Favourites and Used recently hold sounds only, so a shape row has no F key; Return does nothing on a shape (the keyboard way to stamp one is Start from in the shape window, which lists the same library). The screen reader says "ah, filter shape, built in, 3 of 20" (`describeShapeForAccessibility`).
+
+### Dragging a shape
+
+Drag a Shape row (past 4 px) and the same name chip follows the pointer, carried by the payload `shape:<filter|lfo>:<factory|user>:<name>` (`ShapeDragPayload.h`; the curve is looked up by name when the drop lands, so a shape deleted meanwhile drops nothing). It reuses the sound drag: `SoundDragState` also says "a shape of this kind is being dragged" (`beginShape`; `isActive()` stays false, so the lanes' "New audio track" strip does not light), the chip is started with `allowDraggingToOtherJuceWindows` because the shape window is a window of its own, and every target is a `SoundDropAdapter` that returns a `ShapeDropTarget` from `shapeDropTarget()` (null for all that do not take shapes: tracks, Sampler cards, the canvas, which refuses the payload so no module is made from it).
+
+| Drop on | What happens | Undo |
+| --- | --- | --- |
+| A chip in a Filter shapes window / an LFO shapes window | Replaces that shape's curve with the dragged one, when the kinds match; the chip is outlined while the pointer is over it and its tooltip reads "Drop to stamp ah onto oo". | one step |
+| A Filter card on its Custom type / an LFO card whose shape is Custom | Replaces the curve of the shape nearest the morph cursor (the one the card's curve editor shows). The card shows a faint outline while a matching shape is dragged, and the full highlight with the label "Stamp ah here" while the pointer is over it. | one step |
+
+A shape of the other kind, and a card that is not on Custom, are refused (no outline, no drop).
 
 ## Shortcuts
 

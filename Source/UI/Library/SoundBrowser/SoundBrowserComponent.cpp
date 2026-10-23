@@ -61,6 +61,8 @@ SoundBrowserComponent::~SoundBrowserComponent() {
         giveAwayKeyboardFocus();
     juce::Desktop::getInstance().removeFocusChangeListener(this);
     index_.removeListener(this);
+    if (shapeLibrary_ != nullptr)
+        shapeLibrary_->removeListener(this);
     if (installer_ != nullptr)
         installer_->removeListener(this);
     if (folderBook_ != nullptr)

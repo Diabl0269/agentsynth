@@ -68,12 +68,14 @@ LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::
     folderBook_.addListener(this);
     sounds_.setPackInstaller(&*installer_);
     sounds_.setFolderBook(&folderBook_);
+    sounds_.setShapeLibrary(&synth::shapes::ShapeLibrary::shared());
     layoutViews();
 }
 
 LibrarySidebarViews::~LibrarySidebarViews() {
     sounds_.setPackInstaller(nullptr); // the shared installer may go with this column
     sounds_.setFolderBook(nullptr);
+    sounds_.setShapeLibrary(nullptr);
     folderBook_.removeListener(this);
     installer_->removeListener(this);
     if (vblank_.has_value())

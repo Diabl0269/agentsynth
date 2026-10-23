@@ -17,6 +17,8 @@ juce::String SoundBrowserComponent::placeNameOf(const juce::String& placeId) con
         return "Favourites";
     if (placeId == kRecentId)
         return "Used recently";
+    if (placeId == kShapesId)
+        return "Shapes";
     for (const auto& place : index_.snapshot()->places)
         if (place.id == placeId)
             return place.name;
@@ -38,6 +40,9 @@ juce::String SoundBrowserComponent::selectionKey(int index) const {
         return "g:" + row.packId;
     case RowKind::AddFolder:
         return "a:add";
+    case RowKind::Shape:
+        return "h:" + juce::String(synth::shapes::kindWord(row.shape->kind)) + (row.shape->factory ? ":f:" : ":u:") +
+               row.shape->name;
     case RowKind::Hint:
         break;
     }
@@ -90,6 +95,8 @@ void SoundBrowserComponent::rebuildPlaceRows(const synth::soundbrowser::SoundSna
     };
     listRow(kFavouritesId, "Favourites", lists_.favourites().size());
     listRow(kRecentId, "Used recently", lists_.recent().size());
+    if (shapeLibrary_ != nullptr)
+        listRow(kShapesId, "Shapes", shapeCount());
     for (const auto& p : snap.places)
         if (p.isPack)
             place(p, p.soundCount, false);
@@ -155,6 +162,8 @@ void SoundBrowserComponent::rebuildRows() {
             rows_.push_back({RowKind::Hint, "No matching sounds", {}, {}, {}, 0, std::nullopt});
     } else if (placeId_.isEmpty()) {
         rebuildPlaceRows(*snap);
+    } else if (placeId_ == kShapesId) {
+        rebuildShapeRows();
     } else if (placeId_ == kFavouritesId || placeId_ == kRecentId) {
         std::vector<SoundEntry> entries;
         for (const auto& path : placeId_ == kFavouritesId ? lists_.favourites() : lists_.recent())

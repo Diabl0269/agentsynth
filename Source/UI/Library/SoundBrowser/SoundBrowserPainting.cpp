@@ -128,6 +128,8 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
         paintPackRow(g, row, index, area);
     } else if (row.kind == RowKind::AddFolder) {
         paintAddFolderRow(g, area);
+    } else if (row.kind == RowKind::Shape) {
+        paintShapeRow(g, row, area);
     } else {
         paintPlaceRow(g, row, area);
     }

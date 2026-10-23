@@ -29,6 +29,9 @@ juce::String describePackOfferForAccessibility(const juce::String& name, const j
                                                int position, int count);
 /** "Add folder, press Return to choose a folder, 7 of 8". */
 juce::String describeAddFolderForAccessibility(int position, int count);
+/** "ah, filter shape, built in, 3 of 20"; `kindWord` is "filter" or "lfo". Saved shapes read "saved by you". */
+juce::String describeShapeForAccessibility(const juce::String& name, const juce::String& kindWord, bool factory,
+                                           int position, int count);
 /** What this platform calls its file browser: "Finder", "File Explorer", or "the file manager" on Linux. */
 juce::String fileManagerName();
 /** "Path, Places, Core instruments, Drums". */

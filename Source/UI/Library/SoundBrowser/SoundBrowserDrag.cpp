@@ -58,7 +58,8 @@ void SoundBrowserComponent::mouseDrag(const juce::MouseEvent& e) {
         return;
     const int row = pressedSound_;
     pressedSound_ = -1;
-    beginSoundDrag(row);
+    if (!beginShapeDrag(row))
+        beginSoundDrag(row);
 }
 
 // The container's drag image listens to the same release and drops after this returns; clearing the outlines first

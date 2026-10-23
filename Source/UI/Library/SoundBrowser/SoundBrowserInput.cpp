@@ -38,6 +38,8 @@ juce::String SoundBrowserComponent::tooltipForRow(int index) const {
         return kDefaultTooltip;
     if (row.kind == RowKind::GetPack)
         return packTooltip(row);
+    if (row.kind == RowKind::Shape)
+        return shapeTooltip(row);
     if (row.kind == RowKind::AddFolder)
         return "Add a folder of sounds. You can also drag a folder here from " + fileManagerName() + ".";
     if (row.missing)
@@ -71,8 +73,9 @@ void SoundBrowserComponent::mouseMove(const juce::MouseEvent& e) {
     }
     const bool leadsSomewhere =
         part >= 0 ||
-        (row >= 0 &&
-         (rows_[(size_t)row].kind == RowKind::GetPack ? hotButton >= 0 : rows_[(size_t)row].kind != RowKind::Sound));
+        (row >= 0 && (rows_[(size_t)row].kind == RowKind::GetPack
+                          ? hotButton >= 0
+                          : rows_[(size_t)row].kind != RowKind::Sound && rows_[(size_t)row].kind != RowKind::Shape));
     setMouseCursor(leadsSomewhere ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
 }
 
@@ -105,7 +108,7 @@ void SoundBrowserComponent::mouseDown(const juce::MouseEvent& e) {
     if (e.mods.isPopupMenu()) { // a right-click selects; it never opens, downloads or starts a drag
         if (rows_[(size_t)row].userFolder)
             showFolderMenu(row, std::nullopt);
-    } else if (kind == RowKind::Sound) {
+    } else if (kind == RowKind::Sound || kind == RowKind::Shape) {
         pressedSound_ = row;
     } else if (kind == RowKind::GetPack) {
         if (packButtonHit(row, e.getPosition()))

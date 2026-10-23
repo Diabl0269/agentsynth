@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Library/SoundBrowser/ShapeDropTarget.h"
 #include "UI/Library/SoundBrowser/SoundDragState.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -9,7 +10,8 @@ namespace synth::ui {
  *  the same way: a sound is offered to the file target as `{path}`, so the rules, the highlight and the drop are the
  *  file drop's own. Takes nothing but a sound (a module or snippet drag falls through to the canvas). While a sound
  *  drag is live, isShowingSoundOutline() is true when the file target would take it; the owner paints the faint
- *  outline from it. */
+ *  outline from it. A component that also takes a dragged Shape returns a ShapeDropTarget from shapeDropTarget(); a
+ *  shape is then offered to it the same way, and a component without one refuses every shape. */
 class SoundDropAdapter
     : public juce::DragAndDropTarget
     , private SoundDragState::Listener {
@@ -23,8 +25,10 @@ public:
     void itemDragExit(const SourceDetails& details) override;
     void itemDropped(const SourceDetails& details) override;
 
-    /** True while a sound drag is live and this component would take it. */
+    /** True while a sound or shape drag is live and this component would take it. */
     bool isShowingSoundOutline() const noexcept { return outline_; }
+    /** The part of this component that takes a dragged Shape; null (the default) refuses shapes. */
+    virtual ShapeDropTarget* shapeDropTarget() { return nullptr; }
 
 private:
     void soundDragChanged() override;
