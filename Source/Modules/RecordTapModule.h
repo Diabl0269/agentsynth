@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Timeline/PeaksFile.h"
+#include "../Timeline/TakeCaptureWriter.h"
 #include "ModuleBase.h"
 #include <atomic>
 #include <cstdint>
@@ -40,6 +41,9 @@
  * A take never spans a sample-rate change: the WAV header is written at startCapture()'s rate, so
  * `prepareToPlay` at any other rate halts the push at that boundary (see `captureHalted_`) and the
  * message thread commits the short take through its ordinary path.
+ *
+ * The ring, writer client, WAV and peaks machinery is `synth::TakeCaptureWriter`, shared with the engine's
+ * input recorder; this module owns one writer and the thread it drains on.
  *
  * Peaks sidecar (".agpk"): format and accumulation live in `synth::PeaksFile`
  * (`Source/Timeline/PeaksFile.h/.cpp`); this module owns a `PeaksFile::Accumulator` (writer thread
@@ -94,34 +98,10 @@ public:
 
     // ---- Message thread ----
 
-    /** What a finished take amounts to.
-     *  @param ok            a capture was running and both files were finalised
-     *  @param lengthSamples frames actually written per channel — exactly the WAV's length
-     *  @param overran       the ring filled at some point, so `lengthSamples` is short of what was
-     *                       played. The take is still committed; the caller warns.
-     *  @param captureStartValid          whether the two fields below mean anything (see below)
-     *  @param captureStartTimelineSample the TRANSPORT sample position at which the take's frame 0
-     *                       was captured — `BlockTimeInfo::blockStartSample` of the first block this
-     *                       tap pushed, read on the AUDIO thread. This is the sample-honest anchor
-     *                       the commit places the clip from; without it a take can only be placed
-     *                       at whatever beat the message thread happened to observe.
-     *
-     *                       Invalid (`captureStartValid == false`) when no block was ever captured,
-     *                       or when the tap is not running under a synth::TransportService playhead
-     *                       (a bare unit test, a foreign host) — the commit then falls back to the
-     *                       punch beat.
-     *  @param captureStartBlockOffset frames of that first block that were NOT captured. Always 0
-     *                       today: `capturing_` is read once at the top of processBlock, so a take
-     *                       always begins at sample 0 of a block. It is reported rather than assumed
-     *                       so the commit's arithmetic states its anchor in full. */
-    struct TakeResult {
-        bool ok = false;
-        juce::int64 lengthSamples = 0;
-        bool overran = false;
-        bool captureStartValid = false;
-        juce::int64 captureStartTimelineSample = 0;
-        int captureStartBlockOffset = 0;
-    };
+    /** What a finished take amounts to; see synth::TakeCaptureWriter::TakeResult. `captureStartTimelineSample`
+     *  is `BlockTimeInfo::blockStartSample` of the first captured block, invalid without a
+     *  synth::TransportService playhead (the commit then falls back to the punch beat). */
+    using TakeResult = synth::TakeCaptureWriter::TakeResult;
 
     /** MESSAGE THREAD. Opens `wavFile` (32-bit IEEE-float WAV at `sampleRate`) and arms the audio
      *  thread. `peaksFile` is remembered and written by stopCapture(), not now. Returns false — and
@@ -135,30 +115,27 @@ public:
     TakeResult stopCapture();
 
     /** Any thread. True between a successful startCapture() and the matching stopCapture(). */
-    bool isCapturing() const noexcept { return capturing_.load(std::memory_order_acquire); }
+    bool isCapturing() const noexcept { return capture_.isCapturing(); }
 
     /** Any thread. Frames PUSHED INTO THE RING so far this take (dropped samples excluded) — a live
      *  progress figure. It can run a block ahead of what is actually in the file; the authoritative
      *  file length is TakeResult::lengthSamples, which is counted on the writing side. */
-    juce::int64 getCapturedSamples() const noexcept { return capturedFrames_.load(std::memory_order_relaxed); }
+    juce::int64 getCapturedSamples() const noexcept { return capture_.getCapturedSamples(); }
 
     /** Any thread. True if the ring has filled at any point since the last startCapture(). */
-    bool hadOverrun() const noexcept { return overrun_.load(std::memory_order_relaxed); }
+    bool hadOverrun() const noexcept { return capture_.hadOverrun(); }
 
     /** Any thread. True once the prepared sample rate stopped matching the rate the take was armed
      *  at: the audio thread stopped pushing at that exact boundary, so the file holds only samples
      *  recorded at its own header rate. `isCapturing()` stays true — the take is still the message
      *  thread's to commit (see prepareToPlay). Cleared by the next startCapture(). */
-    bool wasCaptureHaltedByFormatChange() const noexcept { return captureHalted_.load(std::memory_order_acquire); }
+    bool wasCaptureHaltedByFormatChange() const noexcept { return capture_.wasHaltedByFormatChange(); }
 
     /** Any thread. The take's frame-0 anchor as described on TakeResult — available WHILE the
      *  take is still rolling (the live recording strip wants it), not only at stopCapture(). Returns
      *  false, leaving `timelineSample` untouched, until the first block has actually been captured. */
     bool getCaptureStartTimelineSample(juce::int64& timelineSample) const noexcept {
-        if (!captureStartValid_.load(std::memory_order_acquire))
-            return false;
-        timelineSample = captureStartTimelineSample_.load(std::memory_order_relaxed);
-        return true;
+        return capture_.getCaptureStartTimelineSample(timelineSample);
     }
 
     /** MESSAGE THREAD, after stopCapture(). The peaks exactly as they were written to the sidecar,
@@ -175,19 +152,9 @@ public:
      *  `kPeakBucketSize` samples or the take stops, so a live strip updates in ~`kPeakBucketSize /
      *  sampleRate` steps, not sample-by-sample. `out` is cleared and replaced (a plain copy, not
      *  merged) whether or not anything has accumulated yet. */
-    void copyLivePeaks(std::vector<std::pair<float, float>>& out) const;
+    void copyLivePeaks(std::vector<std::pair<float, float>>& out) const { capture_.copyLivePeaks(out); }
 
 private:
-    // The TimeSliceThread's one client. A separate object rather than making the module itself a
-    // TimeSliceClient, so "the module" and "the thing the writer thread calls" are never confused
-    // for each other at a call site.
-    struct WriterClient : public juce::TimeSliceClient {
-        explicit WriterClient(RecordTapModule& o)
-            : owner(o) {}
-        int useTimeSlice() override;
-        RecordTapModule& owner;
-    };
-
     static LogicalPort audioPort(int rawChannel) noexcept {
         LogicalPort p;
         p.visibleJackIndex = juce::jlimit(0, kNumChannels - 1, rawChannel);
@@ -197,77 +164,9 @@ private:
         return p;
     }
 
-    // WRITER THREAD (and, after the client is detached, the message thread inside stopCapture()).
-    // Moves up to kDrainChunkFrames frames out of the ring into the writer, accumulating peaks.
-    // Returns true if it moved anything.
-    bool drainOnce();
-
-    // Peak accumulation over one de-interleaved chunk, and the flush of a partially-filled bucket
-    // at end-of-take. Writer/message thread only — never the audio thread. Both just delegate to
-    // peaksAccumulator_ under peaksLock_ — see that member's comment for why the lock exists.
-    void accumulatePeaks(const juce::AudioBuffer<float>& chunk, int numFrames);
-    void flushPartialBucket();
-
-    // MESSAGE THREAD, from stopCapture(). Writes the .agpk sidecar described in the class comment.
-    bool writePeaksFile() const;
-
-    const int ringCapacityFrames_;
-
-    // SPSC ring: the audio thread writes (processBlock), the writer thread reads (drainOnce).
-    // Interleaved, kNumChannels floats per frame. Modelled on synth::MidiRecorder's ring — a
-    // fixed-size juce::AbstractFifo over storage allocated once, in the constructor.
-    juce::AbstractFifo ring_;
-    std::vector<float> ringStorage_;
-
-    // De-interleaving scratch for the drain, sized once in the constructor.
-    juce::AudioBuffer<float> drainScratch_;
-
-    // Armed flag. Release/acquire (not relaxed): it publishes captureChannels_ and the writer's
-    // existence to the audio thread, which must not read a half-set-up capture.
-    std::atomic<bool> capturing_{false};
-    std::atomic<bool> overrun_{false};
-    std::atomic<juce::int64> capturedFrames_{0};
-    // Frames handed to the writer — the file's true length. Written only from inside drainOnce(),
-    // i.e. by the writer thread and (after the client is detached) by stopCapture() on the message
-    // thread; never by both at once. Atomic so the hand-off between those two needs no reasoning.
-    std::atomic<juce::int64> writtenFrames_{0};
-    // Written by startCapture() BEFORE capturing_ goes true and never touched again until the next
-    // startCapture(), so the audio thread always sees the value belonging to the take it is in.
-    std::atomic<int> captureChannels_{kNumChannels};
-
-    // The rate the take was ARMED at, stored by startCapture() on the same before-arming rule as
-    // captureChannels_. The WAV header carries it for the whole file, which is what makes it the
-    // only rate whose samples may go in.
-    std::atomic<double> captureSampleRate_{0.0};
-    // Latched by prepareToPlay() the moment the prepared rate stops matching captureSampleRate_,
-    // and the one thing processBlock checks to stop pushing. Deliberately NOT `capturing_`: the
-    // take still has to be finalised by the message thread's normal commit path, which goes through
-    // stopCapture() and would no-op on a disarmed tap.
-    std::atomic<bool> captureHalted_{false};
-
-    // The take's frame-0 anchor. Cleared by startCapture() BEFORE arming; written exactly
-    // once per take by the audio thread, on the first block it pushes, sample-then-flag with a
-    // release so a message-thread reader that sees the flag also sees the sample. Read by
-    // getCaptureStartTimelineSample() / stopCapture(). See TakeResult for what it means.
-    std::atomic<bool> captureStartValid_{false};
-    std::atomic<juce::int64> captureStartTimelineSample_{0};
-    std::atomic<int> captureStartBlockOffset_{0};
-
-    // Message-thread-only bookkeeping.
-    double preparedSampleRate_ = 44100.0;
-    juce::File peaksFile_;
-    std::unique_ptr<juce::AudioFormatWriter> writer_;
-
-    // Peak accumulation state, carried across drains so a bucket may span two of them. Guards
-    // BOTH the writer thread's appends (accumulatePeaks/flushPartialBucket) and the message
-    // thread's reads (copyLivePeaks(), mid-take; writePeaksFile(), only after stopCapture() has
-    // already detached the writer client, so uncontended there but locked anyway for one uniform
-    // rule) — never taken on the audio thread, which never touches either member.
-    mutable juce::CriticalSection peaksLock_;
-    synth::PeaksFile::Accumulator peaksAccumulator_{kPeakBucketSize, kNumChannels};
-
+    // Declared before capture_ so the writer (which detaches its client on destruction) dies first.
     juce::TimeSliceThread writerThread_{"Rec Tap Writer"};
-    WriterClient writerClient_{*this};
+    synth::TakeCaptureWriter capture_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RecordTapModule)
 };

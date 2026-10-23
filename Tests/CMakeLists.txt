@@ -982,7 +982,7 @@ target_compile_definitions(Tests PRIVATE
 include(${CMAKE_CURRENT_SOURCE_DIR}/ProjectLoadTests.cmake) # the project-load reveal tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/ClickAuditTests.cmake) # the headless click audit of module edges
 include(${CMAKE_CURRENT_SOURCE_DIR}/TimelineTests.cmake) # the timeline UI tests
-include(${CMAKE_CURRENT_SOURCE_DIR}/MidiRecordingTests.cmake) # MIDI recording and each track's MIDI input
+include(${CMAKE_CURRENT_SOURCE_DIR}/RecordingTests.cmake) # MIDI and audio recording, each track's input
 include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutFoldTests.cmake) # the Keyboard Shortcuts fold motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/OscillatorVoiceTests.cmake) # the Oscillator voice feel tests

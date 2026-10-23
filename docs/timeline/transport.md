@@ -140,7 +140,7 @@ reflects record-ON, not "a take is capturing".
 Cubase, Logic, Pro Tools, Reaper and Ableton). Off, pressing Record from a stop only engages recording; the transport is
 left alone and the take starts when the user presses Play. A MIDI take is armed at once with punch-in 0:
 `MidiRecorder::captureBlock` is a no-op while the transport is stopped, so nothing records until Play, a relocation before
-Play cannot drop notes, and the playing -> stopped edge commits it as usual. An audio take is deferred, because its tap would
+Play cannot drop notes, and the playing -> stopped edge commits it as usual. Audio takes are deferred, because their captures would
 record the stopped input: the indicator lights, a status message says to press Play, and the 10 Hz poll re-enters
 `handleRecordToggle(true)` once the transport rolls, so the take begins up to one poll (about 100 ms) after Play. The count-in
 only applies when Record itself starts the transport. Pressing Record again cancels either kind with nothing recorded. The record
@@ -150,15 +150,18 @@ the preference changes nothing.
 `MainComponent`'s implementation, installed in `initialiseCommon()`:
 
 - **ON does NOT require an armed track.** It iterates `timelineDoc.getTracks()` for the first armed
-  Audio track or armed MIDI track that records every input (`Track::recordsEveryMidiInput`) —
-  first-armed-wins among those — and adds every armed MIDI track with
-  [an input of its own](#recording-from-one-input) (`collectMidiTakeTargets`). Either way the
-  transport rolls: **record implies roll** (a DAW convention — the record button starts the transport
-  if it is not already playing) and `setRecordingState(true)` fire unconditionally. MIDI targets
-  call `midiRecorder.startRecording(targets, currentPpq)`; an armed Audio track resolves a
-  `RecordTapModule` tap and take files *before* the transport moves — a request that cannot be
-  honoured (no Audio Output in the patch, or the take file cannot be created or opened) must not
-  leave the transport rolling — and then starts its capture.
+  MIDI track that records every input (`Track::recordsEveryMidiInput`) — first-armed-wins among those —
+  and adds every armed MIDI track with [an input of its own](#recording-from-one-input)
+  (`collectMidiTakeTargets`). **Every armed audio track** records too, each from
+  [its own input](#recording-audio-from-each-tracks-input). Either way the transport rolls: **record implies
+  roll** (a DAW convention — the record button starts the transport if it is not already playing) and
+  `setRecordingState(true)` fire unconditionally. MIDI targets call
+  `midiRecorder.startRecording(targets, currentPpq)`; the audio takes are resolved, and their files chosen,
+  *before* the transport moves (`resolveAudioTakes`) — a request that cannot be honoured (no Audio Output to
+  tap for Whole mix, or a take file that cannot be created or opened) must not leave the transport rolling —
+  and then start their captures (`startAudioTakes`). Record-on also tells the engine at once
+  (`AudioEngine::setRecordingEngaged`) so a track [monitoring](tracks.md#monitoring) on Auto keeps hearing
+  its input when the transport starts.
 
   **With nothing armed**, the transport still rolls and the indicator still lights, identical to
   Play plus a lit record indicator; no take of either kind starts, and
@@ -221,6 +224,31 @@ Tests: `MidiRecorderInputFilterTests.cpp` (filters, the lanes, and a device-thre
 message-thread run meant for `-fsanitize=thread`), `TrackMidiInputRecordTests.cpp` (end to end
 through `MainComponent` and the device callback, sliced and not), `TimelineDocTrackMidiInputTests.cpp`
 and `TimelineRoutingPaneInputTests.cpp`.
+
+### Recording audio from each track's input
+
+Each audio track has an input ([the Input row](tracks.md#audio-tracks)): No input (the default), one device input
+or a stereo pair, or Whole mix. One Record press records every armed audio track at once
+(`MainComponentAudioTakes.cpp`), one `AudioTake` each in `MainComponent::audioTakes_`:
+
+- **A device input** records exactly that input, straight from the device (or the host), beside the graph: the
+  engine's `synth::InputTakeRecorder` (up to 16 slots at once) is fed the device-input snapshot every render pass,
+  anchored at the transport sample like the Rec Tap. What you hear while playing went through the graph, so an
+  input take is placed with the same round-trip latency (`getRecordingLatencySamples`: input + graph + output).
+- **Whole mix** records the master through the `RecordTapModule` spliced before Audio Output, as every audio take
+  used to. The tap is one take, so only the first armed Whole-mix track records it; a second says so.
+- **Nothing to record from.** No input, or an input that is not connected (picked on another device, or turned
+  off), records nothing for that track, and the status bar says why ("Vox has no input - pick one in the side
+  pane", "Vox: its input is not connected"). The other tracks still record.
+- **Take files** never collide: `chooseTakeFiles` skips numbers already given to another take of the same press.
+  If any take cannot open its file, the whole press is refused and every file of it deleted.
+- **Commit.** `commitAudioRecording` stops every take, places each one through the rate, tempo and latency frozen
+  at record-on, and adds every clip in ONE `recordTimelineChange`: one undo step for the press's audio. The live
+  recording strip is drawn per take, from its own peaks (the tap's or its recorder slot's).
+
+Wait-for-Play, the count-in and a device change mid-take behave as for a single take. Tests:
+`InputTakeRecorderTests.cpp`, `TakeCaptureWriterTests.cpp`, `MainComponentAudioTakesTests.cpp`,
+`TimelineDocTrackAudioInputTests.cpp`.
 
 ## Return to Start button
 

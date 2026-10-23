@@ -294,94 +294,97 @@ void TimelineClipLaneArea::paintWaveformColumns(juce::Graphics& g, juce::Rectang
     }
 }
 
-// One repaint over wherever the strip used to be, then a clean reset.
-void TimelineClipLaneArea::clearLiveRecording() {
-    if (!liveRecording_.active)
-        return;
-    ++liveStripRepaintCount_;
-    repaint(liveStripRect_);
-    liveRecording_ = {};
-    livePeaks_.clear();
-    liveStripRect_ = {};
-}
+// One repaint over wherever the strips used to be, then a clean reset.
+void TimelineClipLaneArea::clearLiveRecording() { updateLiveRecordings({}); }
 
-// MainComponent calls this every tick alongside the panel's other polled updates, whether or not
-// anything is actually recording — cheap when it isn't: `info.active == false` just clears any
-// previous strip (one repaint, once, on the falling edge) and returns. When it is, this copies the
-// tap's live peaks via copyLivePeaks(), a lock held only for that copy, never on the audio thread.
 void TimelineClipLaneArea::updateLiveRecording(const LiveRecordingInfo& info) {
-    if (!info.active || info.tap == nullptr || doc_ == nullptr) {
-        clearLiveRecording();
+    if (!info.active) {
+        updateLiveRecordings({});
         return;
     }
+    updateLiveRecordings({info});
+}
 
-    int trackIndex = -1;
-    const auto& tracks = doc_->getTracks();
-    for (int i = 0; i < (int)tracks.size(); ++i) {
-        if (tracks[(std::size_t)i].id == info.track) {
-            trackIndex = i;
-            break;
+// MainComponent calls this every tick alongside the panel's other polled updates, whether or not anything is
+// recording. Each take's peaks are copied (a lock held only for that copy, never on the audio thread). A take
+// whose track vanished mid-take (deleted, or an undo rebuilt the doc) simply has no strip.
+//
+// Repaint-on-arrival: a strip repaints only when new peak buckets landed for it (or it is new, or gone); the
+// transport tick alone, which moves its right edge every poll, is not data arrival. The rect is still kept
+// current, so a later arrival's dirty union covers however far the strip silently grew in between. All the dirty
+// areas of one tick go out as one repaint.
+void TimelineClipLaneArea::updateLiveRecordings(const std::vector<LiveRecordingInfo>& takes) {
+    std::vector<LiveStrip> next;
+    if (doc_ != nullptr) {
+        const auto& tracks = doc_->getTracks();
+        for (const auto& info : takes) {
+            if (!info.active || (info.tap == nullptr && !info.copyPeaks))
+                continue;
+            const auto found = std::find_if(tracks.begin(), tracks.end(),
+                                            [&info](const synth::Track& track) { return track.id == info.track; });
+            if (found == tracks.end())
+                continue;
+            LiveStrip strip;
+            strip.info = info;
+            if (info.copyPeaks)
+                info.copyPeaks(strip.peaks);
+            else
+                info.tap->copyLivePeaks(strip.peaks);
+            strip.rect = computeClipRect(viewState_, getRowLayout(), (int)(found - tracks.begin()), info.punchBeat,
+                                         std::max(0.0, info.currentBeat - info.punchBeat));
+            next.push_back(std::move(strip));
         }
     }
-    if (trackIndex < 0) {
-        // The armed track vanished mid-take (deleted, or an undo/redo rebuilt the doc): nothing
-        // sane to paint. Same handling as "nothing recording".
-        clearLiveRecording();
-        return;
+
+    juce::Rectangle<int> dirty;
+    bool anyDirty = false;
+    const auto addDirty = [&](juce::Rectangle<int> area) {
+        dirty = anyDirty ? dirty.getUnion(area) : area;
+        anyDirty = true;
+    };
+    for (std::size_t i = 0; i < next.size(); ++i) {
+        const LiveStrip* previous =
+            i < liveStrips_.size() && liveStrips_[i].info.track == next[i].info.track ? &liveStrips_[i] : nullptr;
+        if (previous != nullptr && previous->peaks.size() == next[i].peaks.size())
+            continue;
+        addDirty(previous != nullptr ? previous->rect.getUnion(next[i].rect) : next[i].rect);
+        if (previous == nullptr && i < liveStrips_.size())
+            addDirty(liveStrips_[i].rect);
     }
+    for (std::size_t i = next.size(); i < liveStrips_.size(); ++i)
+        addDirty(liveStrips_[i].rect);
 
-    std::vector<std::pair<float, float>> peaks;
-    info.tap->copyLivePeaks(peaks);
-
-    const bool wasActive = liveRecording_.active;
-    const std::size_t previousBucketCount = livePeaks_.size();
-    liveRecording_ = info;
-    livePeaks_ = std::move(peaks);
-
-    const auto newRect = computeClipRect(viewState_, getRowLayout(), trackIndex, info.punchBeat,
-                                         std::max(0.0, info.currentBeat - info.punchBeat));
-
-    // Repaint-on-arrival: only when new peak buckets actually landed (or this is the strip's very
-    // first frame) is a repaint issued — the transport tick alone (which moves the rect's right
-    // edge every poll) is not "data arrival". The rect is still kept current either way, so a
-    // LATER arrival's dirty-rect union covers however far the strip silently grew in between.
-    if (wasActive && livePeaks_.size() == previousBucketCount) {
-        liveStripRect_ = newRect;
-        return;
+    liveStrips_ = std::move(next);
+    if (anyDirty) {
+        ++liveStripRepaintCount_;
+        repaint(dirty);
     }
-
-    const auto dirty = liveStripRect_.getUnion(newRect);
-    liveStripRect_ = newRect;
-    ++liveStripRepaintCount_;
-    repaint(dirty);
 }
 
-void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g) {
-    if (liveStripRect_.isEmpty())
+void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g, const LiveStrip& strip) {
+    if (strip.rect.isEmpty())
         return;
 
     // Themed via the same accent idiom as paintDrawGhost/paintSplitPreview above: still
     // deliberately NOT the destination track's colour (kept distinct from a committed clip's
-    // fill, as the comment below always said), but no longer a flat white literal that could wash
-    // out against a light theme's background.
+    // fill), but no flat white literal that could wash out against a light theme's background.
     const juce::Colour accent = synth::theme::themeOf(*this).colors.accent;
 
-    const auto bodyBounds = liveStripRect_.toFloat().reduced(1.0f);
+    const auto bodyBounds = strip.rect.toFloat().reduced(1.0f);
     g.setColour(accent.withAlpha(0.12f)); // translucent — visibly "in progress", distinct from a
                                           // committed clip's fill
     g.fillRoundedRectangle(bodyBounds, 3.0f);
     g.setColour(accent.withAlpha(0.4f));
     g.drawRoundedRectangle(bodyBounds, 3.0f, 1.0f);
 
-    if (liveStripRect_.getWidth() <= kMinWidthForWaveform || livePeaks_.empty())
+    if (strip.rect.getWidth() <= kMinWidthForWaveform || strip.peaks.empty())
         return;
 
-    // The master tap is always stereo — see RecordTapModule::kNumChannels and every
-    // startCapture() call site in MainComponent — so this is not a guess specific to this class.
-    const int numChannels = RecordTapModule::kNumChannels;
-    const int bucketCount = (int)(livePeaks_.size() / (std::size_t)numChannels);
+    // The take's own channel count: a whole-mix take is stereo, an input take mono or stereo.
+    const int numChannels = std::max(1, strip.info.numChannels);
+    const int bucketCount = (int)(strip.peaks.size() / (std::size_t)numChannels);
     g.setColour(accent.withAlpha(0.7f));
-    paintWaveformColumns(g, liveStripRect_, livePeaks_, numChannels, 0, bucketCount);
+    paintWaveformColumns(g, strip.rect, strip.peaks, numChannels, 0, bucketCount);
 }
 
 // The lane editors paint their own rows over the extra areas; this only fills what shows through

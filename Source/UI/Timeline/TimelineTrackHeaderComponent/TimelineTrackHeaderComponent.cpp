@@ -102,6 +102,10 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     // MidiRecorder::startRecording call behind it) lives on the transport bar.
     setUpToggle(armButton_, "trackArmButton", [this] { toggleArmed(); });
     armButton_.setTooltip("Arm this track for recording");
+    // Audio tracks only (refreshFromDoc shows it); a track's kind never changes, so it never has to fade.
+    addChildComponent(monitorButton_);
+    monitorButton_.onClick = [this] { toggleMonitor(); };
+    monitorButton_.onPopupMenuRequested = [this] { showContextMenu(); };
 
     // The automation fold arrow only reports the press: the panel owns the fold state and answers
     // with setAutomationExpanded(). Visibility is set in refreshFromDoc().
@@ -194,6 +198,14 @@ void TimelineTrackHeaderComponent::toggleArmed() {
     performEdit([this, next] { doc_.setTrackArmed(trackId_, next); });
 }
 
+void TimelineTrackHeaderComponent::toggleMonitor() {
+    const auto* t = track();
+    if (t == nullptr || t->kind != synth::TrackKind::Audio)
+        return;
+    const auto next = nextMonitorMode(t->monitorMode);
+    performEdit([this, next] { doc_.setTrackMonitorMode(trackId_, next); });
+}
+
 std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buildColourPicker() {
     juce::ApplicationProperties* props = host_ != nullptr ? host_->getAppProperties() : nullptr;
     juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);
@@ -279,6 +291,8 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     muteButton_.setToggleState(showMuted, juce::dontSendNotification);
     soloButton_.setToggleState(showSoloed, juce::dontSendNotification);
     armButton_.setToggleState(t->armed, juce::dontSendNotification);
+    monitorButton_.setVisible(t->kind == synth::TrackKind::Audio);
+    monitorButton_.setState(t->monitorMode, t->armed, t->name);
 
     // 5.2: every track whose notes/audio play into a channel shows the chip -- linked or not.
     const bool showChannelChip = channelInfo_.hasChannel && t->kind != synth::TrackKind::Automation;
@@ -323,8 +337,8 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
         for (juce::Component* hidden :
              {static_cast<juce::Component*>(&colourSwatch_), static_cast<juce::Component*>(&polySwitch_),
               static_cast<juce::Component*>(&muteButton_), static_cast<juce::Component*>(&soloButton_),
-              static_cast<juce::Component*>(&armButton_), static_cast<juce::Component*>(&showModuleButton_),
-              static_cast<juce::Component*>(&drumButton_)})
+              static_cast<juce::Component*>(&armButton_), static_cast<juce::Component*>(&monitorButton_),
+              static_cast<juce::Component*>(&showModuleButton_), static_cast<juce::Component*>(&drumButton_)})
             hidden->setVisible(false);
         nameLabel_.setText("Unassigned automation", juce::dontSendNotification);
         setTitle("Unassigned automation");
@@ -511,6 +525,11 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
     }
     if (matchesAction(key, "timelineArmFocusedTrack", plainKey('r'))) {
         toggleArmed();
+        return true;
+    }
+    // I flips an audio track's monitoring like its speaker button; elsewhere the key is left to bubble.
+    if (monitorButton_.isVisible() && matchesAction(key, "timelineMonitorFocusedTrack", plainKey('i'))) {
+        toggleMonitor();
         return true;
     }
     // Cmd+D copies THIS row below itself. Claimed here, ahead of the app-wide Cmd+D (duplicate the

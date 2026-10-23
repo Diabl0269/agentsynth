@@ -50,10 +50,7 @@
 //    the panel's top-edge drag. wasTransportPlaying_ is the playing->stopped edge for the MIDI
 //    recorder's auto-commit, updated once per 10 Hz poll. transportNudge_ remembers the last
 //    cursor-move request so nudges fired faster than the audio thread applies them accumulate.
-//  - feedbackGuardLatched_ is true from a guard trip until the armed-Audio-track set goes from NONE
-//    armed to at least one armed again (wasAnyAudioTrackArmed_ is the previous poll's value); while
-//    latched the poll keeps input monitoring off, and merely staying armed must not re-enable it.
-//  - audioTake_ is the in-flight take; currentBundleDir_ is the bundle last saved to/opened from and
+//  - audioTakes_ are the in-flight takes; currentBundleDir_ is the bundle last saved to/opened from and
 //    decides where a take is written (chooseTakeFiles).
 //  - programmaticApplyScopes is a stack because an undo of a COMBINED (graph + timeline) change
 //    performs two restores, each bracketed by AppUndoManager hooks. aiApplyScope has its own slot

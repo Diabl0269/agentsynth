@@ -232,8 +232,8 @@ void MainComponent::timerCallback() {
     // The audio half of the same rule — COMMIT ON STOP, mirroring the MIDI one above: a take
     // still open when the transport stops (the user hit Space rather than the record button) commits
     // down the same path. Capture itself starts at the Record-on click, not here; the pre-roll is
-    // trimmed at commit time from the tap's own sample-accurate anchor.
-    if (wasTransportPlaying_ && !position.playing && audioTake_.capturing)
+    // trimmed at commit time from each capture's own sample-accurate anchor.
+    if (wasTransportPlaying_ && !position.playing && !audioTakes_.empty())
         commitAudioRecording();
 
     // A device/sample-rate change strands whatever take was rolling — unlike the two commit-
@@ -245,7 +245,7 @@ void MainComponent::timerCallback() {
     // the change. Both checks can fire: an audio take can run beside MIDI takes on tracks with their
     // own input (see handleRecordToggle).
     if (audioEngine.consumeFormatChangedDuringCapture()) {
-        if (audioTake_.capturing)
+        if (!audioTakes_.empty())
             commitAudioRecording();
         if (midiRecorder.isRecording())
             commitMidiRecording();
@@ -291,32 +291,21 @@ void MainComponent::timerCallback() {
     // tick while recording costs nothing once the pre-roll has already ended. An audio take's
     // pre-roll rides the same rule, ending at its own punch-in beat.
     if ((midiRecorder.isRecording() && position.ppq >= midiRecorder.getPunchInBeat()) ||
-        (audioTake_.capturing && position.ppq >= audioTake_.punchInBeat))
+        (!audioTakes_.empty() && position.ppq >= audioTakes_.front().punchInBeat))
         audioEngine.getMetronome().setForcedOn(false);
 
-    // The input-monitoring gate's poll-side half. Any Audio-kind track armed -> monitoring
-    // should be on; none armed -> off. A guard trip (audioEngine.consumeFeedbackGuardTripped(),
-    // consumed exactly once here) latches monitoring off for as long as the SAME arm state
-    // persists — disarming every Audio track and re-arming one is the explicit reset gesture, and
-    // that is exactly the false->true edge of "is any Audio track armed" below. See
-    // docs/architecture/audio-engine.md#input-monitoring--feedback-guard.
-    bool anyAudioTrackArmed = false;
-    for (const auto& track : timelineDoc.getTracks()) {
-        if (track.kind == synth::TrackKind::Audio && track.armed) {
-            anyAudioTrackArmed = true;
-            break;
-        }
-    }
-    if (anyAudioTrackArmed && !wasAnyAudioTrackArmed_)
-        feedbackGuardLatched_ = false; // the reset gesture: disarmed, then armed again
-    wasAnyAudioTrackArmed_ = anyAudioTrackArmed;
-
-    if (audioEngine.consumeFeedbackGuardTripped()) {
-        feedbackGuardLatched_ = true;
+    // Live input. Each Audio track monitors its own input in the engine (TrackInputMonitor); what this poll keeps
+    // honest is the "Record is on" flag Auto monitoring reads (handleRecordToggle raises it before the transport
+    // rolls; this lowers it once nothing records any more), and it names every guard trip once: a track whose
+    // input clipped too long, and the hand-patched Audio Input module's engine-wide guard.
+    // See docs/architecture/audio-engine.md#input-monitoring--feedback-guard.
+    audioEngine.setRecordingEngaged(recordPendingPlay_ || isRecordingActive());
+    audioEngine.consumeMonitorGuardTrips([this](std::int64_t trackId) {
+        if (const auto* track = timelineDoc.getTrack(synth::TrackId{trackId}))
+            statusBar.showMessage(track->name + " input muted - sustained clipping");
+    });
+    if (audioEngine.consumeFeedbackGuardTripped())
         statusBar.showMessage("Input muted - sustained clipping (feedback protection)");
-    }
-
-    audioEngine.setInputMonitoringEnabled(anyAudioTrackArmed && !feedbackGuardLatched_);
 
     // The timeline panel's low-rate transport poll, on the same existing timer — no new
     // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
@@ -337,21 +326,10 @@ void MainComponent::timerCallback() {
         const double outputLatencySeconds = (double)audioEngine.getOutputLatencySamples() / sampleRate;
         timelinePanel.updateFromTransport(position, outputLatencySeconds);
 
-        // The clip lane's growing recording strip, on the same poll. Cheap and a no-op when
-        // nothing is capturing — synth::ui::TimelineClipLaneArea::updateLiveRecording() internally
-        // repaints only when new peak buckets actually arrived (see its own comment), never merely
-        // because the transport tick moved.
-        synth::ui::TimelineClipLaneArea::LiveRecordingInfo liveInfo;
-        if (audioTake_.capturing) {
-            if (auto* tap = findMasterRecordTap()) {
-                liveInfo.active = true;
-                liveInfo.track = audioTake_.track;
-                liveInfo.punchBeat = audioTake_.punchInBeat;
-                liveInfo.currentBeat = position.ppq;
-                liveInfo.tap = tap;
-            }
-        }
-        timelinePanel.getClipLaneArea().updateLiveRecording(liveInfo);
+        // The clip lane's growing recording strips, one per take, on the same poll. Cheap and a
+        // no-op when nothing is capturing — synth::ui::TimelineClipLaneArea::updateLiveRecordings()
+        // repaints only when new peak buckets actually arrived, never merely because the transport moved.
+        updateLiveRecordingStrips(position.ppq);
     }
 
     // The mixer's meters, on the SAME existing 10 Hz tick -- no new timer, nothing

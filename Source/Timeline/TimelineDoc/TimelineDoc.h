@@ -270,6 +270,29 @@ struct AutomationLane {
     bool orphaned = false;
 };
 
+// Where an Audio track records from: nothing, a mono or stereo pair of input channels, or the whole mix.
+struct AudioInputChoice {
+    enum class Kind { None, Device, WholeMix };
+    static constexpr int kMaxChannel = 8; // highest 1-based input channel a choice may name
+    Kind kind = Kind::None;
+    int firstChannel = 0;    // 0-based; Device only
+    int numChannels = 1;     // 1 or 2; Device only
+    juce::String deviceName; // the input device at pick time, to name it while it is not connected
+    bool operator==(const AudioInputChoice& other) const noexcept {
+        return kind == other.kind && firstChannel == other.firstChannel && numChannels == other.numChannels &&
+               deviceName == other.deviceName;
+    }
+    bool operator!=(const AudioInputChoice& other) const noexcept { return !(*this == other); }
+    bool isValid() const noexcept {
+        return kind != Kind::Device || (firstChannel >= 0 && (numChannels == 1 || numChannels == 2) &&
+                                        firstChannel + numChannels <= kMaxChannel);
+    }
+};
+
+// Whether an Audio track plays its own input live: Auto while it is armed and the transport is stopped or recording,
+// On always, Off never (synth::monitorHearsInput in Timeline/TrackMonitoring.h is the rule).
+enum class MonitorMode { Auto, On, Off };
+
 // Clips within a track stay sorted by (startBeat, id). Overlapping clips are legal in the
 // model — whether the UI allows drawing them is a policy decision made higher up.
 struct Track {
@@ -293,6 +316,8 @@ struct Track {
     juce::String midiInputName; // the device's display name, kept to name it while it is not connected
     int midiInputChannel = 0;   // 0 = any channel, else 1..kMaxMidiInputChannel
     bool recordsEveryMidiInput() const noexcept { return midiInputId.isEmpty() && midiInputChannel == 0; }
+    AudioInputChoice audioInput;                 // Audio tracks only; None records nothing
+    MonitorMode monitorMode = MonitorMode::Auto; // Audio tracks only
     std::vector<Clip> clips;
     std::vector<AutomationLane> lanes;
 
@@ -399,6 +424,10 @@ public:
     bool resetTrackHeightScales();
     // MIDI tracks only; `channel` in [0, Track::kMaxMidiInputChannel]. An empty `deviceId` means all inputs.
     bool setTrackMidiInput(TrackId id, const juce::String& deviceId, const juce::String& deviceName, int channel);
+    // Audio tracks only; refuses an invalid choice. A non-Device choice drops the channels and device name.
+    bool setTrackAudioInput(TrackId id, const AudioInputChoice& choice);
+    // Audio tracks only.
+    bool setTrackMonitorMode(TrackId id, MonitorMode mode);
     // Binds the track to a graph node by its "uuid" property. Pass an empty string to unbind.
     bool setTrackBinding(TrackId id, const juce::String& nodeUuid);
     // Copies `source` directly below it with fresh ids; `uuidRemap` rebinds the copy (see the definition).

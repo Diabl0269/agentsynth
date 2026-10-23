@@ -221,9 +221,11 @@ bool MixerInsertList::mutateAndNotify(const std::function<bool()>& mutation, boo
     if (graph_ == nullptr || undoManager_ == nullptr || macros_ == nullptr || graphEditor_ == nullptr)
         return false;
     bool changed = false;
-    // The edit can rebuild the mixer and destroy this list before it returns: the editor is copied first and the
-    // notification only runs while the list is still alive.
+    // The edit can rebuild the mixer and destroy this list before it returns: the editor is copied and the liveness
+    // pointer taken first (taking it afterwards would read the freed list), and the notification only runs while the
+    // list is still alive.
     auto* graphEditor = graphEditor_;
+    juce::Component::SafePointer<MixerInsertList> alive(this);
     auto hold = holdPanelRebuild ? holdRebuild : std::function<void(int)>();
     if (hold)
         hold(1);
@@ -233,7 +235,6 @@ bool MixerInsertList::mutateAndNotify(const std::function<bool()>& mutation, boo
     });
     if (hold)
         hold(-1);
-    juce::Component::SafePointer<MixerInsertList> alive(this);
     if (changed && alive != nullptr && onMutated)
         onMutated();
     return changed;

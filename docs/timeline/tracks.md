@@ -32,7 +32,7 @@ column boundary its own controls do not respect.
 
 **Resizing the column.** An `EdgeResizeHandle` (`Source/UI/Layout/EdgeResizeHandle.h`, 6 px) straddles
 the seam, added last so it wins the hit test over the header rows and the clips. Dragging it sets the
-column's width, clamped to `[kMinTrackHeaderWidth, kMaxTrackHeaderWidth]` = `[140, 420]` px; a
+column's width, clamped to `[kMinTrackHeaderWidth, kMaxTrackHeaderWidth]` = `[168, 420]` px; a
 double-click goes back to the themed `Metrics::timelineTrackHeaderWidth`. The width is remembered in the
 user settings under `timelineTrackHeaderWidth` (written on release, restored in
 `setApplicationProperties()`). The handle is one Tab stop with the accent focus ring: Left/Right nudge the
@@ -59,15 +59,17 @@ rebuilds them, so a mute click does not destroy the row the user is typing a nam
 A fold arrow (visible only when `Track::lanes` is non-empty), colour swatch (click opens a full
 colour picker, built by `buildTrackColourPicker` in `TrackColourPicker.h`, which the mixer column's colour dot
 shares -- [the colour dot](../mixer/panel.md#the-colour-dot)), a track-kind badge, an "N lanes" badge while the lanes are folded, a name label
-(double-click to edit), `M` / `S` / `R` toggles, the binding chip and, for a track with a poly-capable voice chain, the
+(double-click to edit), `M` / `S` / `R` toggles, on an audio track the [Monitor](#monitoring) speaker button right of
+`R` (every row keeps its slot, so M/S/R line up down the column), the binding chip and, for a track with a poly-capable voice chain, the
 [Mono | Poly switch](#the-monopoly-switch). The Automation track is
 drawn differently, as the "Unassigned automation" section header
 ([automation](automation.md#unassigned-automation)).
 
 `R` flips `Track::armed` in the document and nothing else — **arming is not recording**. The record
 button and `MidiRecorder::startRecording` live on the transport bar
-([transport](transport.md#recording)), which looks for the first `armed` track when it starts a
-take, and records every armed MIDI track that has [an input of its own](#the-input-row) alongside it.
+([transport](transport.md#recording)), which records every armed audio track from
+[its own input](#the-input-row) and every armed MIDI track that has an input of its own, alongside the first armed
+MIDI track that records every input.
 
 ## Show a track's module
 
@@ -93,7 +95,8 @@ Tests: `Tests/UI/Timeline/TimelineTrackShowModuleTests.cpp`, `Tests/App/MainComp
 A row is a real focus target — `setWantsKeyboardFocus(true)` in the constructor, the same pattern
 `TimelineClipLaneArea` / `PianoRollComponent` use for the surfaces they own — with a `keyPressed()`
 override that resolves bare **M**/**S**/**R** (`timelineMuteFocusedTrack` /
-`timelineSoloFocusedTrack` / `timelineArmFocusedTrack`, rebindable, Timeline category, and Cmd+D `timelineDuplicateFocusedTrack`, which
+`timelineSoloFocusedTrack` / `timelineArmFocusedTrack`, rebindable, Timeline category; on an audio track bare **I**,
+`timelineMonitorFocusedTrack`, flips [Monitor](#monitoring) like its button; and Cmd+D `timelineDuplicateFocusedTrack`, which
 [duplicates the track](add-track.md#duplicate-a-track) — see
 [`shortcuts.md`](../control/shortcuts.md#timeline)) into exactly the same `toggleMuted()` / `toggleSoloed()`
 / `toggleArmed()` → `performEdit()` path the M/S/R **buttons**' own `onClick` calls, so a keystroke
@@ -586,9 +589,10 @@ and re-reads when it opens. Rows, top to bottom:
   the node kind — with the line "Its notes are kept. Pick a new Track In to hear them again." Below a
   live binding, a **Show on canvas** link selects the node with `selectNodeInGraph`, the
   chip's highlight-only path (the canvas is not scrolled).
-- **Input** (MIDI tracks only): which keyboard or controller, and which MIDI channel, records into the
-  track. Two combo-style buttons, one under the other: the device ("All MIDI inputs" by default) and
-  the channel ("Any channel" by default). See [the Input row](#the-input-row).
+- **Input**: what records into the track. On a MIDI track, two combo-style buttons, one under the other:
+  the device ("All MIDI inputs" by default) and the channel ("Any channel" by default). On an audio track,
+  one combo ("No input" by default) with a thin level meter under it, then the **Monitor** switch (Auto /
+  On / Off). See [the Input row](#the-input-row) and [Monitoring](#monitoring).
 - **MIDI destinations** (MIDI tracks only): the connected MIDI destinations' names, comma-joined, or "None".
   Clicking it opens the [MIDI destination picker](#midi-destinations) in a `CallOutBox`, built by
   `buildTrackMidiDestinationPicker` over `getMidiDestinationOptions` / `setMidiDestinationConnected`
@@ -632,6 +636,77 @@ controllers) can record into two tracks at once. The row is built in
 from the defaults ("all inputs, any channel"), so older projects load unchanged and save
 byte-identical. A channel outside 0 to 16 in a file fails the load. A duplicated track keeps its input.
 How a take uses them: [transport](transport.md#recording-from-one-input).
+
+### Audio tracks
+
+Each audio track records from its own input, so a singer and a guitar on two inputs record into two tracks in
+one take. The section is built in `TimelineRoutingPaneAudioInput.cpp`; its words and menu are pure functions in
+`AudioInputMenu.h` (`describeAudioInput`, `buildAudioInputMenu`, `resolveAudioInputMenuChoice`), so tests read them
+without a menu. The pane reaches the app through ONE accessor, `TrackHeaderHost::getAudioInputSurface()`
+(`TrackAudioInputSurface`: the inputs on offer, their peaks, turning inputs on, Audio settings), which
+`MainComponent` answers from its `AudioEngine` (`MainComponentAudioInputSurface`); null in a host that has none.
+
+- **The combo** says "No input" (muted text), "In 2 (mono)", "In 3 + 4" or "Whole mix" (the master, through the
+  Rec Tap). Its menu: "No input"; a "Mono · <device>" section with In 1 to In N; a "Stereo · <device>" section
+  with In 1 + 2, In 3 + 4 and so on; "Whole mix"; "Audio settings..." (opens Settings on its Audio tab). An
+  input that is turned off is listed but disabled, with "Turn on all its inputs" under the list. A pick stores
+  the input and the name of the device open now (`TimelineDoc::setTrackAudioInput`) through `performTrackEdit`:
+  one undo step.
+- **Inputs off** (the device has inputs, none turned on, which is how the app starts: audio input is opt-in):
+  the jack items give way to a disabled "The inputs of <device> are turned off." and "Turn on its inputs", which
+  asks for microphone access and turns every input on (`AudioEngine::enableDeviceInputs`). That lands as a device
+  change, which refreshes the pane. No device with inputs at all: a disabled "No audio input device found".
+- **Not connected.** An input picked on another device (or a project from another machine) stays the track's
+  input, like an unplugged MIDI controller: "In 1 + 2 (MOTU M4 not connected)" in the `warning` colour, a note
+  line "This track records and plays nothing until MOTU M4 is connected." and a ticked menu entry. An input of the
+  open device that is turned off says "In 3 (turned off)" with a note to turn it on. The rule
+  (`synth::isAudioInputConnected`, `Source/Timeline/TrackAudioInput.h`) is the one the record path and monitoring
+  use, so the pane, a take and what you hear never disagree.
+- **In a plugin** the inputs are the host's: the device label is "Host input", there is nothing to turn on and no
+  Audio settings item; an input the host does not pass says so.
+- **The meter** shows the chosen input's level (two bars for a pair) on the mixer meters' scale and colours,
+  fed by the pane's existing 15 Hz tick through `readInputPeak`; hidden for No input, Whole mix and an input that
+  is not connected. It is decoration: no focus, no screen-reader node.
+- **Accessibility.** The combo and the Monitor switch are pane keyboard stops in visual order (Canvas node,
+  Input, Monitor, Mixer channel links): Up/Down move between stops, Return opens the menu, Left/Right change the
+  Monitor segment. The combo's screen-reader name carries the value ("Audio input, In 1 (mono)"); its tooltip says
+  where the track records from (and, in a warning, why nothing will).
+- **Motion.** The section fades in and out with the track kind, and the rows below slide, like the MIDI rows;
+  the meter fades with its input.
+
+**Stored on the track.** `Track::audioInput` (`synth::AudioInputChoice`: kind None / Device / WholeMix, the first
+0-based input, 1 or 2 channels, the device name), saved as `"audioInput": {"kind": "device", "channel": 3,
+"channels": 2, "device": "..."}` (1-based) or `{"kind": "mix"}`, and only when it is not None. A channel past In 8
+or a kind it does not know fails the load. A duplicated track keeps it. New tracks start on No input.
+
+## Monitoring
+
+An audio track can play its own input live, through its own Track Audio node, so what you hear goes through the
+track's mixer channel and effects. `Track::monitorMode` (`synth::MonitorMode`) picks when:
+
+- **Auto** (the default): while the track is armed and the transport is stopped (you hear yourself before you
+  press Record) or recording (you hear the take as it is made); not during plain playback, where the track's clips
+  play instead.
+- **On**: always, armed or not.
+- **Off**: never.
+
+The rule is `synth::monitorHearsInput` in `Source/Timeline/TrackAudioInput.h`. No input and Whole mix monitor
+nothing, nor does an input that is not connected; a muted or solo-gated track hears nothing.
+
+**The header button.** A speaker right of `R` on audio tracks (`TrackMonitorButton`): unlit for Off and for Auto
+while not armed (nothing to hear), an accent outline for Auto while armed, solid accent for On. A click switches
+On and Auto (from Off it turns On); bare **I** on the focused row does the same. Like M/S/R it is not a Tab stop and
+right-click opens the row's menu. Its screen-reader title is "Monitor" with the mode as its value ("Auto, hearing
+the input"), and its tooltip names the mode. Each change is one undo step. The side pane's **Monitor** switch sets
+any of the three.
+
+**Feedback guard, per track.** If the monitored input stays at or above 0.97 for 0.25 s (a mic hearing its own
+speaker), that track stops monitoring and the status bar says "Vox input muted - sustained clipping". Arming the
+track again turns it back on. Other tracks keep monitoring. Mechanism:
+[audio engine](../architecture/audio-engine.md#input-monitoring--feedback-guard).
+
+**Stored on the track.** Saved as `"monitor": "on"` or `"off"`, only when not Auto; any other value fails the
+load. A duplicated track keeps it.
 
 ## The automation fold arrow
 
@@ -730,10 +805,13 @@ its own.
 The routing pane has the same seams: `setShowBindingMenuHookForTest()` receives the menu a real
 click on "Canvas node" builds (a test then feeds an item id to `applyBindingMenuChoice()`),
 `setOpenMidiDestinationsHookForTest()` replaces the picker's `CallOutBox`, and
-`createMidiDestinationPickerForTest()` builds the picker unlaunched.
+`createMidiDestinationPickerForTest()` builds the picker unlaunched. The audio Input section shares
+`setShowInputMenuHookForTest()` with the MIDI row; `applyAudioInputChoice(id)` and `applyMonitorChoice(index)` apply
+a pick.
 
 Tests: `Tests/UI/Timeline/TimelineRoutingPaneTests.cpp` (the side pane),
-`Tests/UI/Timeline/TimelineTrackHeaderTests.cpp`,
+`Tests/UI/Timeline/TimelineRoutingPaneAudioInputTests.cpp` (the audio Input section and Monitor switch),
+`Tests/UI/Timeline/TimelineTrackHeaderTests.cpp`, `Tests/UI/Timeline/TimelineTrackHeaderMonitorTests.cpp`,
 `Tests/UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp` (the real-child-dispatch right-click
 coverage), `Tests/UI/Timeline/TimelineTrackFocusTests.cpp`, and
 `Tests/UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp` for the panel-side column.

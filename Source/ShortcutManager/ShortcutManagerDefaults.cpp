@@ -346,6 +346,8 @@ void ShortcutManager::addTimelineDefaultBindings() {
     bindings["timelineMuteFocusedTrack"] = juce::KeyPress('m', juce::ModifierKeys::noModifiers, 0);
     bindings["timelineSoloFocusedTrack"] = juce::KeyPress('s', juce::ModifierKeys::noModifiers, 0);
     bindings["timelineArmFocusedTrack"] = juce::KeyPress('r', juce::ModifierKeys::noModifiers, 0);
+    // Bare I switches the focused audio track's input monitoring between On and Auto (the header's speaker button).
+    bindings["timelineMonitorFocusedTrack"] = juce::KeyPress('i', juce::ModifierKeys::noModifiers, 0);
     // Bare A folds the focused row's automation lanes, the letter the header's automation button
     // used to carry. Free in every category: every other 'a' binding carries a modifier.
     bindings["timelineToggleTrackAutomation"] = juce::KeyPress('a', juce::ModifierKeys::noModifiers, 0);

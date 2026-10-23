@@ -2,6 +2,7 @@
 
 #include "../Timeline/AudioClipStreamer.h"
 #include "../Timeline/TimelineSnapshot.h"
+#include "../Timeline/TrackInputMonitor.h"
 #include "../Transport/TransportService.h"
 #include "ModuleBase.h"
 #include <algorithm>
@@ -43,6 +44,10 @@
  * Summing and fades: overlapping clips SUM. Each clip is scaled by its own `gainLinear` and a
  * per-sample LINEAR fade from `fadeInBeats`/`fadeOutBeats` measured from the clip's own edges,
  * unclamped against clip length (a fade longer than the clip never reaches unity).
+ *
+ * Live input: it also adds the track's own device input (synth::TrackInputMonitor) whenever the
+ * track's Monitor mode says the track hears it, playing or stopped; a muted or solo-gated track
+ * hears nothing. Sustained clipping on that input mutes it until the track is armed again.
  */
 class TimelineAudioSourceModule : public ModuleBase {
 public:
@@ -78,13 +83,13 @@ public:
         // on any path out of here.
         buffer.clear();
         if (isBypassed()) {
-            pushActivity(numSamples, 0.0f);
+            silent(numSamples);
             return;
         }
 
         auto* transport = dynamic_cast<synth::TransportService*>(getPlayHead());
         if (transport == nullptr || numSamples <= 0) {
-            pushActivity(numSamples, 0.0f);
+            silent(numSamples);
             return;
         }
 
@@ -94,29 +99,26 @@ public:
         const synth::TimelineSnapshot* snapshot = transport->getCurrentTimelineSnapshot();
         synth::AudioClipStreamer* streamer = transport->getAudioClipStreamer();
 
-        if (!info.playing || snapshot == nullptr || streamer == nullptr) {
-            pushActivity(numSamples, 0.0f);
+        // The track is looked up even while stopped: a stopped transport plays no clips, but an armed track still
+        // plays its own input live (TrackInputMonitor).
+        const synth::TimelineSnapshot::TrackInfo* track = snapshot != nullptr ? findMyTrack(*snapshot) : nullptr;
+        if (track == nullptr || track->muted || (snapshot->anySoloed && !track->soloed)) {
+            silent(numSamples);
             return;
         }
 
-        const synth::TimelineSnapshot::TrackInfo* track = findMyTrack(*snapshot);
-        if (track == nullptr) {
-            pushActivity(numSamples, 0.0f);
-            return;
-        }
-
-        if (track->muted || (snapshot->anySoloed && !track->soloed)) {
-            pushActivity(numSamples, 0.0f);
-            return;
-        }
-
-        renderBlock(*snapshot, *track, info, *streamer, buffer);
+        if (info.playing && streamer != nullptr)
+            renderBlock(*snapshot, *track, info, *streamer, buffer);
+        monitor_.process(*transport, *track, info.playing, buffer);
 
         float peak = 0.0f;
         for (int channel = 0; channel < juce::jmin(kNumChannels, buffer.getNumChannels()); ++channel)
             peak = juce::jmax(peak, buffer.getMagnitude(channel, 0, numSamples));
         pushActivity(numSamples, peak);
     }
+
+    /** Any thread. Whether sustained clipping muted this track's live input (re-arming the track clears it). */
+    bool isMonitorGuardLatched() const noexcept { return monitor_.isGuardLatched(); }
 
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
@@ -312,6 +314,12 @@ private:
         return endSample;
     }
 
+    // A silenced block: no clips, no input, and the input guard's run starts again afterwards.
+    void silent(int numSamples) {
+        monitor_.resetRun();
+        pushActivity(numSamples, 0.0f);
+    }
+
     void pushActivity(int numSamples, float level) {
         if (auto* vb = getVisualBuffer())
             vb->pushConstant(level, numSamples);
@@ -319,6 +327,7 @@ private:
 
     // Per-clip mixing scratch, sized once in the constructor. processBlock never resizes it.
     juce::AudioBuffer<float> scratch_;
+    synth::TrackInputMonitor monitor_; // the track's own input, played live
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineAudioSourceModule)
 };

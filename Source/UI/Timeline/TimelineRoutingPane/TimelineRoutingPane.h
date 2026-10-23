@@ -1,11 +1,14 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/SidePane/SidePane.h"
 #include "UI/Layout/TextLinkButton.h"
 #include "UI/Timeline/ChannelChipComponent.h"
+#include "UI/Timeline/TimelineRoutingPane/AudioInputMenu.h"
+#include "UI/Timeline/TimelineRoutingPane/InputLevelMeter.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <functional>
@@ -14,8 +17,8 @@
 
 // TimelineRoutingPane.h (docs/timeline/tracks.md#routing-from-the-side-pane, docs/layout/side-pane.md): the Timeline
 // tab's side-pane content. It shows the SELECTED track's routing -- what plays it (its Track In / Track Audio node),
-// which MIDI input records into it and where its notes go (MIDI tracks), and which mixer channel its sound ends up
-// in -- like Cubase's Inspector.
+// which MIDI input records into it and where its notes go (MIDI tracks), which audio input it records and whether it
+// plays that input live (audio tracks), and which mixer channel its sound ends up in -- like Cubase's Inspector.
 //
 // A view: it reads the TimelineDoc and the TrackHeaderHost, owns no document state and edits only through host calls
 // (bindTrackTo, createAndBindTrackInNode, setMidiDestinationConnected, selectNodeInGraph, revealChannelForTrack,
@@ -39,8 +42,8 @@ public:
     synth::TrackId getTrack() const noexcept { return track_; }
     /** Re-reads the document and the host; cheap and idempotent. Message thread. */
     void refresh();
-    /** One meter tick from the panel's shared 15 Hz timer. True only when the meter repainted (gated like the
-     *  header's channel chip); false when no channel is showing. */
+    /** One meter tick from the panel's shared 15 Hz timer: the channel chip's and the audio input's meters. True only
+     *  when one repainted (gated like the header's channel chip). */
     bool tickMeter();
 
     /** Applies a "Canvas node" menu choice (ids as buildTrackBindingMenu documents). Anything else is ignored. */
@@ -54,6 +57,10 @@ public:
     /** Applies an Input-row menu choice as one undoable track edit; anything else is ignored. */
     void applyMidiInputDeviceChoice(int menuId);
     void applyMidiInputChannelChoice(int menuId);
+    /** Applies an audio Input menu choice (AudioInputMenuIds): a pick is one undoable track edit. */
+    void applyAudioInputChoice(int menuId);
+    /** The Monitor switch's segments, in order: Auto, On, Off (synth::MonitorMode's order). */
+    void applyMonitorChoice(int index);
 
     /** The side pane shows the pane inside a vertical scroller, so a short bottom panel never clips a section. */
     juce::Component& getPaneComponent() override { return scroller_; }
@@ -72,7 +79,7 @@ public:
     void setShowBindingMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
         showBindingMenuHook_ = std::move(hook);
     }
-    /** A real click on either Input button hands its built menu here instead of showing it. */
+    /** A real click on any Input button (MIDI or audio) hands its built menu here instead of showing it. */
     void setShowInputMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
         showInputMenuHook_ = std::move(hook);
     }
@@ -82,6 +89,11 @@ public:
     juce::String getMidiInputDeviceTextForTest() const { return view_.inputDeviceText; }
     juce::String getMidiInputChannelTextForTest() const { return view_.inputChannelText; }
     bool isMidiInputDeviceWarningForTest() const noexcept { return midiInputDevice_.isWarning(); }
+    juce::Button& getAudioInputButtonForTest() noexcept { return audioInput_; }
+    bool isAudioInputShownForTest() const noexcept { return audioInput_.isVisible(); }
+    AudioInputRowText getAudioInputTextForTest() const { return view_.audioInput; }
+    CardSegmentedSwitch& getMonitorSwitchForTest() noexcept { return monitorSwitch_; }
+    InputLevelMeter& getInputMeterForTest() noexcept { return inputMeter_; }
     /** Replaces launching the picker's CallOutBox when "MIDI destinations" is clicked. */
     void setOpenMidiDestinationsHookForTest(std::function<void()> hook) { openDestinationsHook_ = std::move(hook); }
     /** The picker "MIDI destinations" opens, wired exactly like the real one but never launched. */
@@ -124,6 +136,10 @@ private:
         juce::String inputDeviceName;      // the stored device's name, when there is one
         bool inputDeviceMissing = false;
         juce::String inputChannelText; // "Any channel" or "Channel N"
+        bool isAudio = false;
+        AudioInputRowText audioInput;
+        int meterFirst = 0, meterCount = 0; // the device inputs the level meter shows; no meter when 0
+        int monitorIndex = 0;               // a synth::MonitorMode
         bool hasChannel = false;
         juce::String channelText;
     };
@@ -142,6 +158,10 @@ private:
     void applyMidiInputToChildren();
     void openMidiInputDeviceMenu();
     void openMidiInputChannelMenu();
+    void computeAudioInput(const synth::Track& track);
+    void applyAudioInputToChildren();
+    void openAudioInputMenu();
+    int layoutAudioInput(int y, int contentWidth);
     void showInputMenu(juce::PopupMenu& menu, juce::Component& anchor, void (TimelineRoutingPane::*apply)(int));
 
     // Rows and dividers as laid out by layoutSections(), for paint().
@@ -150,6 +170,8 @@ private:
         juce::Rectangle<int> canvasNodeHeading;
         juce::Rectangle<int> missingNote;
         juce::Rectangle<int> midiInputHeading;
+        juce::Rectangle<int> audioInputHeading, audioInputNote, monitorHeading;
+        float audioAlpha = 1.0f; // the audio Input section's opacity while it fades
         juce::Rectangle<int> midiDestinationsHeading;
         juce::Rectangle<int> mixerChannelHeading;
         juce::Rectangle<int> noChannel;
@@ -186,6 +208,9 @@ private:
     RoutingComboButton midiInputDevice_{"MIDI input"};
     RoutingComboButton midiInputChannel_{"Input channel"};
     RoutingComboButton midiDestinations_{"MIDI destinations"};
+    RoutingComboButton audioInput_{"Audio input"};
+    InputLevelMeter inputMeter_;
+    CardSegmentedSwitch monitorSwitch_{"Monitor", {"Auto", "On", "Off"}};
     ChannelChipComponent channelChip_;
     TextLinkButton showInMixer_;
     // One fade per control (the chip and its Show in mixer link go together).
@@ -193,6 +218,8 @@ private:
     synth::ui::FadeVisibility showOnCanvasFade_{&showOnCanvas_};
     synth::ui::FadeVisibility midiInputFade_{&midiInputDevice_, &midiInputChannel_};
     synth::ui::FadeVisibility midiDestinationsFade_{&midiDestinations_};
+    synth::ui::FadeVisibility audioInputFade_{&audioInput_, &monitorSwitch_};
+    synth::ui::FadeVisibility inputMeterFade_{&inputMeter_};
     synth::ui::FadeVisibility channelFade_{&channelChip_, &showInMixer_};
     PaneKeys paneKeys_{*this};
 

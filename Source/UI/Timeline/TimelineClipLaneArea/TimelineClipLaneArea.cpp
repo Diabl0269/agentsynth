@@ -420,8 +420,8 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
 
     paintKeyboardClipRing(g);
 
-    if (liveRecording_.active)
-        paintLiveRecordingStrip(g);
+    for (const auto& strip : liveStrips_)
+        paintLiveRecordingStrip(g, strip);
 
     // Tool affordances paint LAST, over the clips they describe.
     paintDragGhosts(g);

@@ -760,6 +760,9 @@ bool MainComponent::initialiseAudioEngine() {
             // (docs/layout/module-card.md): a device/rate/channel change is exactly what it reflects,
             // and it must not wait for a repaint that has no other reason to happen.
             graphEditor.refreshOutputDeviceInfo();
+            // An audio track's Input row names the device and says which inputs are on ("Turn on its inputs"
+            // lands here too), so the routing pane re-reads it.
+            timelinePanel.refreshRoutingPane();
 
             // Null until the user has explicitly chosen a device setup — see the declaration of
             // onDeviceStateChanged. Persisting nothing then is the point: the absent key is what

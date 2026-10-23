@@ -332,9 +332,14 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
         commitAudioRecording();
         commitMidiRecording();
         recordPendingPlay_ = false;
+        audioEngine.setRecordingEngaged(false);
         timelinePanel.getTransportBar().setRecordingState(false); // a waiting record has no take to do it
         return;
     }
+
+    // Raised before anything can start the transport, so an Auto-monitored track never drops its input for the
+    // first blocks of the take; the 10 Hz poll lowers it again if nothing ends up recording.
+    audioEngine.setRecordingEngaged(true);
 
     // Record does NOT require an armed track (see docs/timeline/transport.md#recording) —
     // pressing Record always rolls the transport with the record indicator lit,
@@ -342,24 +347,24 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     // identical to Play plus a lit record indicator, plus a transient status-bar notice so the
     // silence isn't mistaken for a bug.
     //
-    // The lookup considers Audio tracks too, and FIRST-ARMED WINS among the tracks that record
-    // from every MIDI input: with one armed track of each kind the one earlier in the document
-    // decides which kind of take this is. Automation-kind tracks are not recordable and are
-    // skipped. A MIDI track with its own input (a device or a channel) is not part of that
-    // contest: it records alongside, see collectMidiTakeTargets.
-    synth::TrackId armedTrack;
-    synth::TrackKind armedKind = synth::TrackKind::Midi;
+    // FIRST-ARMED WINS only among the MIDI tracks that record from every MIDI input (they would all
+    // record the same notes). A MIDI track with its own input records alongside (collectMidiTakeTargets),
+    // and EVERY armed Audio track records from its own input (resolveAudioTakes). Automation tracks are
+    // not recordable. An armed Audio track counts as armed even when it records nothing (no input), so
+    // the status bar names why instead of saying nothing is armed.
+    synth::TrackId firstEveryInputMidi;
+    bool anyAudioArmed = false;
     for (const auto& track : timelineDoc.getTracks()) {
-        const bool everyInput = track.kind == synth::TrackKind::Midi && track.recordsEveryMidiInput();
-        if (track.armed && (everyInput || track.kind == synth::TrackKind::Audio)) {
-            armedTrack = track.id;
-            armedKind = track.kind;
-            break;
-        }
+        if (!track.armed)
+            continue;
+        if (track.kind == synth::TrackKind::Audio)
+            anyAudioArmed = true;
+        else if (!firstEveryInputMidi.isValid() && track.kind == synth::TrackKind::Midi &&
+                 track.recordsEveryMidiInput())
+            firstEveryInputMidi = track.id;
     }
-    const auto midiTargets =
-        collectMidiTakeTargets(armedKind == synth::TrackKind::Midi ? armedTrack : synth::TrackId{});
-    const bool anyArmed = armedTrack.isValid() || !midiTargets.empty();
+    const auto midiTargets = collectMidiTakeTargets(firstEveryInputMidi);
+    const bool anyArmed = anyAudioArmed || !midiTargets.empty();
 
     // "Record also starts playback" (Preferences, default on). Off, from a stop: Record only engages recording and
     // the transport is left alone. A MIDI take starts at once, since MidiRecorder::captureBlock captures nothing
@@ -370,36 +375,19 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     const auto* userSettings = appProperties.getUserSettings();
     const bool waitForPlay = !snap.playing && userSettings != nullptr &&
                              !userSettings->getBoolValue(synth::ui::kRecordStartsPlaybackKey, true);
-    if (waitForPlay && anyArmed && armedKind == synth::TrackKind::Audio) {
+    if (waitForPlay && anyAudioArmed) {
         recordPendingPlay_ = true;
         timelinePanel.getTransportBar().setRecordingState(true);
         statusBar.showMessage("Record is on - press Play to start the audio take");
         return;
     }
 
-    // An audio take's tap and its destination files are resolved BEFORE the transport
-    // moves, for the same reason as always — a request that cannot be honoured must not leave
-    // the transport rolling. Only reachable with an armed Audio track; with nothing armed (or a
-    // MIDI track armed) there is no take to resolve here.
-    const bool isAudioTake = armedTrack.isValid() && (armedKind == synth::TrackKind::Audio);
-    AudioTake take;
-    RecordTapModule* tapModule = nullptr;
-    if (isAudioTake) {
-        auto* tapNode = ensureMasterRecordTap();
-        tapModule = tapNode != nullptr ? dynamic_cast<RecordTapModule*>(tapNode->getProcessor()) : nullptr;
-        if (tapModule == nullptr) {
-            timelinePanel.getTransportBar().setRecordingState(false);
-            statusBar.showMessage("Can't record audio: no Audio Output in the patch");
-            return;
-        }
-        take.track = armedTrack;
-        take.tapNode = tapNode->nodeID;
-        if (!chooseTakeFiles(take)) {
-            timelinePanel.getTransportBar().setRecordingState(false);
-            statusBar.showMessage("Can't record audio: could not create the take file");
-            return;
-        }
-    }
+    // The audio takes' sources and destination files are resolved BEFORE the transport moves: a
+    // request that cannot be honoured must not leave the transport rolling.
+    std::vector<AudioTake> takes;
+    juce::String audioNotice;
+    if (anyAudioArmed && !resolveAudioTakes(takes, audioNotice))
+        return;
 
     // Record implies roll (DAW convention): starting a take also starts the transport if it
     // isn't already running (unless the preference above says otherwise).
@@ -442,35 +430,9 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
         punchInBeat = transport.getPositionSnapshot().ppq;
     }
 
-    if (isAudioTake) {
-        // The capture starts HERE, at record-on — not on the 10 Hz poll, which is what
-        // used to cost a take up to ~100 ms of head. The count-in's pre-roll is therefore
-        // RECORDED, and excluded from the committed clip by a trim (see commitAudioRecording);
-        // the tap itself reports the exact transport sample its frame 0 landed on, so the clip's
-        // placement is sample arithmetic rather than a poll observation.
-        //
-        // Deliberately AFTER the locate/play posted above, not before: those are transport
-        // commands that take effect at the top of a block, and a frame captured before a locate
-        // belongs to the OLD position — which would break the one thing the anchor promises,
-        // that take frame `f` sits at `captureStart + f`. Starting after them can cost at most
-        // the one block that may already be in flight (~10 ms at 512/48k), and that block is
-        // pre-roll, honestly accounted for either way.
-        const double rate = snap.sampleRate > 0.0 ? snap.sampleRate : 44100.0;
-        if (!tapModule->startCapture(take.wavFile, take.peaksFile, rate, RecordTapModule::kNumChannels)) {
-            // The tap vanished, or the file could not be opened. Nothing to salvage.
-            timelinePanel.getTransportBar().setRecordingState(false);
-            audioEngine.getMetronome().setForcedOn(false);
-            statusBar.showMessage("Can't record audio: the take file could not be opened");
-            return;
-        }
-        take.punchInBeat = punchInBeat;
-        take.capturing = true;
-        // Frozen NOW, not re-read at commit time — see the AudioTake field comments.
-        take.captureSampleRate = rate;
-        take.captureBpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
-        take.captureRecordingLatencySamples = audioEngine.getRecordingLatencySamples();
-        audioTake_ = take;
-    }
+    // The captures start HERE, at record-on, after the locate/play above -- see startAudioTakes.
+    if (!takes.empty() && !startAudioTakes(takes, punchInBeat, snap.sampleRate, snap.bpm))
+        return;
     if (!midiTargets.empty()) {
         // punchInBeat is BOTH the recorder's own bookkeeping and the audio-thread filter
         // threshold — captureBlock() drops everything before it, so the pre-roll bars the
@@ -483,6 +445,8 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
         // to stop and press Record again once something is armed.
         statusBar.showMessage("Recording started - no track is armed");
     }
+    if (audioNotice.isNotEmpty())
+        statusBar.showMessage(audioNotice);
 
     // Lit regardless of arming — a bare "record" is still record-on.
     timelinePanel.getTransportBar().setRecordingState(true);

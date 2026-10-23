@@ -483,6 +483,7 @@ plumbing the mouse wheel and vertical zoom already use, via `ensureTrackVisible(
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — flips `Track::muted` on whichever row holds focus, through the exact same `performTrackEdit` one-undo-step path the M **button** already used |
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — `Track::soloed`, same path |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — `Track::armed`, same path |
+| I | Monitor Focused Track (`timelineMonitorFocusedTrack`) — on an audio track, switches [Monitor](../timeline/tracks.md#monitoring) between On and Auto (from Off it turns On), like the speaker button, same path; a MIDI or automation row leaves the key alone |
 | Return / Space on **+ Track** | Opens the add-track menu, exactly like a click. ↓ on the Timeline region root lands on the button first, with or without tracks. Space is claimed by the panel so it does not toggle playback while the button has focus. Closing a menu opened this way (a pick or Esc) puts focus back on **+ Track** |
 | Option+= / Option+- / Option+0 | Increase / Decrease / Reset Track Height (`timelineIncreaseTrackHeight`, `timelineDecreaseTrackHeight`, `timelineResetTrackHeight`) — sizes the focused row only (a focused automation lane header sizes that lane, [lane controls](../timeline/lane-controls.md#resizing-a-lane)), ×1.25 a step, one undo step each ([tracks](../timeline/tracks.md#one-tracks-height)); no Option+=/-/0 is bound anywhere else |
 | Cmd+D | Duplicate Focused Track (`timelineDuplicateFocusedTrack`) — copies the focused row's track below it with its modules, clips and automation as one undo step ([add-track](../timeline/add-track.md#duplicate-a-track)); shares the chord with the General Duplicate (`duplicateSelection`) because conflicts are per category, and only a focused track row claims it With several tracks selected it copies all of them ([tracks](../timeline/tracks.md#what-acts-on-the-selection)) |
@@ -828,11 +829,11 @@ doesn't this key do anything":
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (64 actions) — the canvas's nine card keys (`canvasSelectCard*`, `canvasMoveCard*`,
+- **Surface-resolved** (65 actions) — the canvas's nine card keys (`canvasSelectCard*`, `canvasMoveCard*`,
   `canvasEnterCard`, resolved by `CanvasCardKeyboard::keyPressed`), the timeline panel's own keys (`timelineSnapToggle`,
   `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, `timelineFollowModeCycle`, the six
-  `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the three track-header
-  keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`), the seven
+  `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the four track-header
+  keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`/`timelineMonitorFocusedTrack`), the seven
   clip-keyboard keys (`timelineClip*`), every piano roll action, the five `mixer*` actions and the thirteen `layoutEditor*` keys. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
   `juce::ApplicationCommandManager`'s own "not a command" value) for every one of these — they are
   never dispatched through the command manager at all. Instead, the owning component's own

@@ -170,6 +170,7 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
         refreshSidechainKeys();
         refreshNormalling();
         refreshMidiWiring();
+        refreshAudioInputGate();
         return;
     }
 
@@ -220,6 +221,8 @@ void AudioEngine::shutdown() {
         midiInputs.clear();
 #endif
     }
+    // The callback is gone, so no push can race the finalise: every input take's WAV and peaks are written.
+    inputRecorder_.stopAll();
     mainProcessorGraph.clear();
 
     // Last, after the device callback is gone and the graph is empty: nothing can call
@@ -348,7 +351,9 @@ void AudioEngine::handleStreamFormatChange(double newRate, int newBlockSize) {
     //    flag it here (at the exact moment of the change) so MainComponent's 10 Hz poll finalizes it
     //    through the SAME commit choke points a manual Record-off or a transport stop already use —
     //    see consumeFormatChangedDuringCapture().
-    bool anyCapturing = false;
+    // Input takes are not graph nodes, so they never see a prepareToPlay: they are halted here instead.
+    inputRecorder_.latchHaltIfRateDiffers(newRate);
+    bool anyCapturing = inputRecorder_.isAnyCapturing();
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (node == nullptr)
             continue;
@@ -387,6 +392,9 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
         prepareDeviceScratch(numInputChannels, numOutputChannels, blockSize);
         prepareSliceScratch(std::max(numInputChannels, numOutputChannels), blockSize);
         prepareDeviceInputSnapshot(numInputChannels, blockSize);
+        mapActiveInputs(device->getActiveInputChannels());
+        inputDeviceHash_.store(deviceManager.getAudioDeviceSetup().inputDeviceName.hashCode(),
+                               std::memory_order_relaxed);
         deviceInputLatencySamples_.store(device->getInputLatencyInSamples(), std::memory_order_relaxed);
         deviceOutputLatencySamples_.store(device->getOutputLatencyInSamples(), std::memory_order_relaxed);
         mainProcessorGraph.prepareToPlay(sampleRate, blockSize);
@@ -419,6 +427,12 @@ void AudioEngine::prepareDeviceInputSnapshot(int numInputChannels, int blockSize
     deviceInputChannelsThisBlock_ = 0;
     deviceInputPointers_.fill(nullptr);
     deviceInputChannelCount_.store(std::max(0, numInputChannels), std::memory_order_relaxed);
+    // The host (and any caller without a device) delivers its inputs in order; a device overrides this with its
+    // own active-channel mask right after.
+    juce::BigInteger inOrder;
+    if (numInputChannels > 0)
+        inOrder.setRange(0, numInputChannels, true);
+    mapActiveInputs(inOrder);
 }
 
 void AudioEngine::audioDeviceStopped() {

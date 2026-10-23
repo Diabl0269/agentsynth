@@ -31,7 +31,7 @@ void nameDescendants(juce::Component& parent) {
 AudioSettingsTab::AudioSettingsTab(juce::AudioDeviceManager& deviceManager,
                                    const std::vector<juce::String>& midiRemoteDeviceNames)
     : deviceManager_(deviceManager) {
-    deviceSelector_ = std::make_unique<juce::AudioDeviceSelectorComponent>(deviceManager, 0, 2, // min/max inputs
+    deviceSelector_ = std::make_unique<juce::AudioDeviceSelectorComponent>(deviceManager, 0, 8, // min/max inputs
                                                                            0, 2,                // min/max outputs
                                                                            true, true,          // midi
                                                                            false, false         // bit depths

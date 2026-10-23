@@ -117,6 +117,14 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
         info.soloed = track.soloed;
         info.armed = track.armed;
         copyFixedString(info.bindingUuid, track.bindingUuid);
+        if (track.kind == TrackKind::Audio) {
+            info.monitorMode = static_cast<int>(track.monitorMode);
+            if (track.audioInput.kind == AudioInputChoice::Kind::Device) {
+                info.inputFirstChannel = track.audioInput.firstChannel;
+                info.inputNumChannels = track.audioInput.numChannels;
+                info.inputDeviceHash = track.audioInput.deviceName.hashCode();
+            }
+        }
 
         // Audio tracks render now (TimelineAudioSourceModule), so a soloed one is part of the
         // same document-wide predicate a soloed MIDI track is — solo would otherwise mean "solo,

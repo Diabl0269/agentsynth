@@ -15,11 +15,15 @@ public:
 
     void setWarning(bool warning);
     bool isWarning() const noexcept { return warning_; }
+    /** Muted text, for a value that means "nothing" ("No input"); the warning colour wins over it. */
+    void setMuted(bool muted);
+    bool isMuted() const noexcept { return muted_; }
 
     void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
 
 private:
     bool warning_ = false;
+    bool muted_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RoutingComboButton)
 };

@@ -1,0 +1,22 @@
+#pragma once
+
+#include <juce_audio_devices/juce_audio_devices.h>
+
+// The pure half of AudioEngine::enableDeviceInputs(): which device's inputs to turn on and the device setup that
+// does it, kept free of a live juce::AudioDeviceManager so a test can pin both.
+
+namespace synth {
+
+// Most input channels "turn on inputs" enables (the audio-input model's channel range).
+inline constexpr int kMaxEnabledDeviceInputs = 8;
+
+// `currentInput` when set; else `outputDevice` when it is in `inputDeviceNames`; else `defaultInputDevice`.
+juce::String chooseInputDeviceToEnable(const juce::String& currentInput, const juce::String& outputDevice,
+                                       const juce::StringArray& inputDeviceNames,
+                                       const juce::String& defaultInputDevice);
+
+// `current` with `inputDevice` selected and its first min(deviceInputs, kMaxEnabledDeviceInputs) inputs on.
+juce::AudioDeviceManager::AudioDeviceSetup makeInputEnabledSetup(juce::AudioDeviceManager::AudioDeviceSetup current,
+                                                                 const juce::String& inputDevice, int deviceInputs);
+
+} // namespace synth

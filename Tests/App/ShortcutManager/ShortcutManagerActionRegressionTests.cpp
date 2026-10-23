@@ -476,6 +476,20 @@ TEST_F(ShortcutManagerTest, TimelineFocusedTrackActionsDoNotCollideWithAnyExisti
     }
 }
 
+// timelineMonitorFocusedTrack -- bare i, the same surface action as m/s/r: the focused audio track row flips its
+// Monitor between On and Auto.
+TEST_F(ShortcutManagerTest, TimelineMonitorFocusedTrackIsBareIWithItsNameCategoryAndNoConflict) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineMonitorFocusedTrack"));
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineMonitorFocusedTrack"), "Monitor Focused Track");
+    EXPECT_EQ(ShortcutManager::getCategory("timelineMonitorFocusedTrack"), ShortcutCategory::Timeline);
+    const auto kp = manager.getBinding("timelineMonitorFocusedTrack");
+    EXPECT_EQ(kp.getKeyCode(), 'i');
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys());
+    EXPECT_TRUE(manager.getConflictingAction("timelineMonitorFocusedTrack", kp).isEmpty())
+        << "collides with " << manager.getConflictingAction("timelineMonitorFocusedTrack", kp);
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineMonitorFocusedTrack"), AppCommands::kNoCommand);
+}
+
 // timelineDeleteFocusedTrack -- Cmd+Backspace, Timeline category, claimed by the focused track row's keyPressed. Bare
 // Backspace/Delete on clips and the canvas are fixed keys outside the table, so nothing else carries this chord.
 TEST_F(ShortcutManagerTest, TimelineDeleteFocusedTrackIsRegisteredWithItsNameCategoryAndCmdBackspace) {
