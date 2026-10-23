@@ -12,3 +12,6 @@ list(APPEND APPUI_SOURCES
     Source/UI/ModuleViews/ShapeEditor/ShapeSavePrompts.h
     Source/UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h
 )
+# Keyboard point editing (shared with the automation lanes) keeps its own list; included here because CMakeLists.txt
+# is at the file-size cap.
+include(cmake/PointEditingSources.cmake)

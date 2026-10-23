@@ -673,7 +673,6 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 # Source list in cmake/AppUISources.cmake (APPUI_SOURCES), split out for the 1,000-line file-size cap.
 include(cmake/AppUISources.cmake)
 include(cmake/ShapeWindowSources.cmake)
-include(cmake/PointEditingSources.cmake)
 add_library(AppUI STATIC ${APPUI_SOURCES})
 include(cmake/MixerRowSources.cmake)
 include(cmake/AudioInputRecordingSources.cmake) # Core and AppUI units, so after both exist
