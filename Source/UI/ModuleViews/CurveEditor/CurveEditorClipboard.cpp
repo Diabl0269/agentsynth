@@ -100,7 +100,7 @@ bool CurveEditorComponent::duplicateSelection() {
 }
 
 // Halfway between the cursor point and the next one (or the end of the range when it is the last), at the level
-// halfway between them. The probe on a copy keeps a refused press from opening an empty undo step.
+// halfway between them. A refused press returns before beginGesture(), so it never opens an empty undo step.
 bool CurveEditorComponent::insertAfterCursor() {
     if (model_.getMode() != CurveMode::Free || selectedIndex_ < 0 || selectedIndex_ >= model_.getNumNodes() ||
         model_.getNumNodes() >= CurveModel::kMaxNodes)
