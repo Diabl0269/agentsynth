@@ -6,6 +6,7 @@
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include <algorithm>
 #include <cmath>
+#include <map>
 
 namespace synth::ui {
 
@@ -148,6 +149,42 @@ void AutomationLaneEditor::cancelKeyDrag() {
 bool AutomationLaneEditor::keyStateChanged(bool) {
     keyHold_.checkKeyUp();
     return false;
+}
+
+// The line is drawn through the gliding dots: each point moves by its dot's offset (the key the dots are drawn with,
+// see paintHandles) and the kernel evaluates the moved points, so the line meets every dot and keeps its tensions.
+std::vector<LaneBreakpoint> AutomationLaneEditor::tweenedPoints(const std::vector<LaneBreakpoint>& points) const {
+    std::map<double, double> keyBeat; // a point's beat -> the beat whose key holds its offset
+    if (dragMode_ == DragMode::MoveHandle) {
+        const auto now = dragMovedPoints();
+        for (std::size_t i = 0; i < dragPoints_.size() && i < now.size(); ++i)
+            keyBeat[now[i].beat] = dragPoints_[i].beat;
+    } else if (dragMode_ == DragMode::Stretch) {
+        const auto& result = stretch_.result();
+        for (std::size_t i = 0; i < result.moved.size(); ++i)
+            keyBeat[result.moved[i].beat] = stretch_.original()[i].beat;
+        for (std::size_t i = 0; i < result.pushed.size(); ++i)
+            keyBeat[result.pushed[i].beat] = result.pushedFrom[i];
+    }
+    std::vector<LaneBreakpoint> drawn = points;
+    for (auto& point : drawn) {
+        const auto found = keyBeat.find(point.beat);
+        const auto offset =
+            pointTween_.offsetFor(lane_key::tweenKey(found != keyBeat.end() ? found->second : point.beat));
+        if (offset.isOrigin())
+            continue;
+        const auto at = pointPosition(point) + offset;
+        point.beat = viewState_.xToBeat((double)at.x);
+        point.value = yToValue((double)at.y);
+    }
+    std::stable_sort(drawn.begin(), drawn.end(),
+                     [](const LaneBreakpoint& a, const LaneBreakpoint& b) { return a.beat < b.beat; });
+    return drawn;
+}
+
+juce::Path AutomationLaneEditor::getDrawnCurvePathForTest() const {
+    const auto* lane = doc_ != nullptr ? doc_->getLane(laneId_) : nullptr;
+    return lane != nullptr ? curvePath(tweenedPoints(lane->points), *lane) : juce::Path();
 }
 
 } // namespace synth::ui

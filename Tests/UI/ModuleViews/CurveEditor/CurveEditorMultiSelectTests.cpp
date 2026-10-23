@@ -470,6 +470,47 @@ TEST(CurveEditorKeyHold, ATapEasesTheDrawnPointAndPlainlyLandsUnderReduceMotion)
     synth::ui::setReducedMotionForTest(std::nullopt);
 }
 
+namespace {
+// The y a stroked path has at `x` (linear between its vertices); NaN when the path does not reach x.
+float pathYAt(const juce::Path& path, float x) {
+    juce::Point<float> previous;
+    bool havePrevious = false;
+    for (juce::Path::Iterator it(path); it.next();) {
+        if (it.elementType != juce::Path::Iterator::lineTo && it.elementType != juce::Path::Iterator::startNewSubPath)
+            continue;
+        const juce::Point<float> p{it.x1, it.y1};
+        if (havePrevious && it.elementType == juce::Path::Iterator::lineTo && x >= previous.x && x <= p.x)
+            return p.x == previous.x ? p.y : previous.y + (p.y - previous.y) * (x - previous.x) / (p.x - previous.x);
+        previous = p;
+        havePrevious = true;
+    }
+    return std::nanf("");
+}
+} // namespace
+
+// Regression test for FRO1063: the dots glided but the line stayed at the model place, so the dots left the line.
+TEST(CurveEditorKeyHold, TheCurveLineAndItsBendHandlesFollowTheGlidingPoints) {
+    HeldRig rig(freeModel(3));
+    auto& tween = rig.editor.getPointTweenForTest();
+    tween.forceAnimateForTest(true);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::upKey);
+    ASSERT_TRUE(tween.isAnimating());
+    for (const double ms : {0.0, 40.0, 90.0}) {
+        tween.stepForTest(ms);
+        const auto path = rig.editor.getDrawnCurvePathForTest();
+        for (int i = 0; i < rig.editor.getModel().getNumNodes(); ++i) {
+            const auto drawn = tween.drawnAt(i, rig.posOf(i));
+            const float y = pathYAt(path, drawn.x);
+            ASSERT_FALSE(std::isnan(y)) << "node " << i << " at " << ms << " ms";
+            EXPECT_NEAR(y, drawn.y, 1.0f) << "the line passes through the drawn node " << i << " at " << ms << " ms";
+        }
+    }
+    tween.stepForTest(400.0);
+    EXPECT_NEAR(pathYAt(rig.editor.getDrawnCurvePathForTest(), rig.posOf(1).x), rig.posOf(1).y, 1.0f);
+}
+
 //==============================================================================
 // Duplicate points preference: where Cmd+D puts the copies
 

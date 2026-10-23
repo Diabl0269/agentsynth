@@ -157,6 +157,7 @@ public:
      *  drawn points. */
     KeyHold& getKeyHoldForTest() noexcept { return keyHold_; }
     KeyedPointTween& getPointTweenForTest() noexcept { return pointTween_; }
+    juce::Path getDrawnCurvePathForTest() const;
     /** The beat and value the keyboard drag has the grabbed point at (the committed point's when idle). */
     double getPreviewBeatForTest() const noexcept { return previewBeat_; }
     double getPreviewValueForTest() const noexcept { return previewValue_; }
@@ -280,6 +281,8 @@ private:
     juce::Rectangle<int> meltRect() const;
     void paintToolPreview(juce::Graphics& g);
     void paintHandles(juce::Graphics& g, const synth::AutomationLane& lane);
+    juce::Path curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane) const;
+    std::vector<LaneBreakpoint> tweenedPoints(const std::vector<LaneBreakpoint>& points) const;
     void strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
                      juce::Colour colour, float thickness) const;
     std::vector<juce::Point<float>> handleScreenPositions(const synth::AutomationLane& lane) const;

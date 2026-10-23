@@ -818,6 +818,45 @@ TEST(AutomationLanesKeyboardDrag, ATapEasesTheDrawnPointAndPlainlyLandsUnderRedu
     EXPECT_FALSE(tween.isAnimating()) << "no ease under Reduce Motion";
 }
 
+namespace {
+// The y a stroked path has at `x` (linear between its vertices); NaN when the path does not reach x.
+float pathYAt(const juce::Path& path, float x) {
+    juce::Point<float> previous;
+    bool havePrevious = false;
+    for (juce::Path::Iterator it(path); it.next();) {
+        if (it.elementType != juce::Path::Iterator::lineTo && it.elementType != juce::Path::Iterator::startNewSubPath)
+            continue;
+        const juce::Point<float> p{it.x1, it.y1};
+        if (havePrevious && it.elementType == juce::Path::Iterator::lineTo && x >= previous.x && x <= p.x)
+            return p.x == previous.x ? p.y : previous.y + (p.y - previous.y) * (x - previous.x) / (p.x - previous.x);
+        previous = p;
+        havePrevious = true;
+    }
+    return std::nanf("");
+}
+} // namespace
+
+// Regression test for FRO1063: the dots glided but the line stayed at the model place, so the dots left the line.
+TEST(AutomationLanesKeyboardDrag, TheLineFollowsTheGlidingDots) {
+    HeldKeys f;
+    f.editor->forceGlideAnimateForTest(true);
+    f.editor->getPointSelection().setSelection({2.0});
+    ASSERT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAltMod), 0)));
+    auto& tween = f.editor->getPointTweenForTest();
+    ASSERT_TRUE(tween.isAnimating());
+    for (const double ms : {0.0, 40.0, 90.0}) {
+        tween.stepForTest(ms);
+        const auto path = f.editor->getDrawnCurvePathForTest();
+        for (const auto& point : f.theLane().points) {
+            const auto drawn = tween.drawnAt(synth::ui::lane_key::tweenKey(point.beat), f.at(point.beat, point.value));
+            const float y = pathYAt(path, drawn.x);
+            ASSERT_FALSE(std::isnan(y)) << "beat " << point.beat << " at " << ms << " ms";
+            EXPECT_NEAR(y, drawn.y, 1.5f)
+                << "the line passes through the dot at beat " << point.beat << " at " << ms << " ms";
+        }
+    }
+}
+
 //==============================================================================
 // The selection box through a move (docs/timeline/automation.md "Stretching a selection")
 

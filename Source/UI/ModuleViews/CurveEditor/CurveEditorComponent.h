@@ -231,6 +231,7 @@ public:
      *  drawn points. */
     KeyHold& getKeyHoldForTest() noexcept { return keyHold_; }
     KeyedPointTween& getPointTweenForTest() noexcept { return pointTween_; }
+    juce::Path getDrawnCurvePathForTest() const;
 
 private:
     CurveEditorGeometry currentGeometry() const;
@@ -263,6 +264,8 @@ private:
     void pressNudge(int keyCode, double dx, double dy, bool fine);
     bool beginKeyDrag(int keyCode, double dx, double dy, bool fine);
     std::vector<juce::Point<float>> selectionPositions() const;
+    juce::Point<float> segmentTweenOffset(int seg, float progress) const;
+    void buildCurvePaths(const CurveEditorGeometry& geometry, juce::Path& curvePath, juce::Path& fillPath) const;
     void applyKeyDrag(bool tapStep);
     void endKeyDrag();
     double keyDragSpeedFactor() const;

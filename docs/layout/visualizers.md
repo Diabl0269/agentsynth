@@ -328,7 +328,7 @@ rising to 1.2 over two seconds, Shift (fine) a fifth of that, and with snap-to-g
 line to line. The gesture opens at the first real move and closes at the key-up, so the tap and the hold are one
 `onGestureStart` / `onGestureEnd` pair and one undo step; a hold against a limit opens none. A tap and a snapped step
 ease the drawn points 160 ms `easeOutCubic` (`KeyedPointTween`; the model is final at once); nothing eases under Reduce
-Motion or Animations Off ([motion rule](animation.md#motion-rules)).
+Motion or Animations Off ([motion rule](animation.md#motion-rules)). The line, its fill and the bend handles are drawn through the gliding nodes (`segmentTweenOffset`).
 
 Five display and interaction rules:
 

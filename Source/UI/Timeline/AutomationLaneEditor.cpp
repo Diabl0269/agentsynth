@@ -345,11 +345,18 @@ void AutomationLaneEditor::paintCommittedCurve(juce::Graphics& g, const synth::A
         strokeCurve(g, pts, lane, curveColour.withMultipliedAlpha(glide_.amount()), 1.5f);
         return;
     }
-    strokeCurve(g, pts, lane, previewing ? curveColour.brighter(0.4f) : curveColour, previewing ? 2.0f : 1.5f);
+    strokeCurve(g, pointTween_.isAnimating() ? tweenedPoints(pts) : pts, lane,
+                previewing ? curveColour.brighter(0.4f) : curveColour, previewing ? 2.0f : 1.5f);
 }
 
 void AutomationLaneEditor::strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points,
                                        const synth::AutomationLane& lane, juce::Colour colour, float thickness) const {
+    g.setColour(colour);
+    g.strokePath(curvePath(points, lane), juce::PathStrokeType(thickness));
+}
+
+juce::Path AutomationLaneEditor::curvePath(const std::vector<LaneBreakpoint>& points,
+                                           const synth::AutomationLane& lane) const {
     std::vector<TimelineSnapshot::Point> pts;
     pts.reserve(points.size());
     for (const auto& bp : points)
@@ -370,8 +377,7 @@ void AutomationLaneEditor::strokeCurve(juce::Graphics& g, const std::vector<Lane
         else
             path.lineTo((float)x, y);
     }
-    g.setColour(colour);
-    g.strokePath(path, juce::PathStrokeType(thickness));
+    return path;
 }
 
 void AutomationLaneEditor::paintToolPreview(juce::Graphics& g) {

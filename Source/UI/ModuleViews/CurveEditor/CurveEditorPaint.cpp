@@ -111,15 +111,43 @@ void CurveEditorComponent::paintGrid(juce::Graphics& g, const CurveEditorGeometr
     }
 }
 
+// How far the point at `progress` along a segment is drawn from its model place: the x offset blends linearly between
+// the two nodes' offsets and the y offset by how far along the level change the point is, so the line meets both
+// gliding nodes.
+juce::Point<float> CurveEditorComponent::segmentTweenOffset(int seg, float progress) const {
+    const auto start = pointTween_.offsetFor(seg);
+    const auto end = pointTween_.offsetFor(seg + 1);
+    const float from = model_.getNode(seg).y;
+    const float to = model_.getNode(seg + 1).y;
+    const float shape = to == from ? progress : (model_.valueAt(seg, progress) - from) / (to - from);
+    return {start.x * (1.0f - progress) + end.x * progress, start.y * (1.0f - shape) + end.y * shape};
+}
+
+juce::Path CurveEditorComponent::getDrawnCurvePathForTest() const {
+    juce::Path curvePath, fillPath;
+    buildCurvePaths(currentGeometry(), curvePath, fillPath);
+    return curvePath;
+}
+
 void CurveEditorComponent::paintCurve(juce::Graphics& g, const CurveEditorGeometry& geometry,
                                       const ThemeColours& colours) const {
+    juce::Path curvePath, fillPath;
+    buildCurvePaths(geometry, curvePath, fillPath);
+    if (curvePath.isEmpty())
+        return;
+    g.setColour(colours.accent.withAlpha(0.20f));
+    g.fillPath(fillPath);
+    g.setColour(colours.accent);
+    g.strokePath(curvePath, juce::PathStrokeType(2.0f));
+}
+
+void CurveEditorComponent::buildCurvePaths(const CurveEditorGeometry& geometry, juce::Path& curvePath,
+                                           juce::Path& fillPath) const {
     const int numSegments = model_.getNumSegments();
     if (numSegments <= 0)
         return;
 
     const float baselineY = geometry.yForLevel(fillBaselineLevel_);
-    juce::Path curvePath;
-    juce::Path fillPath;
     bool first = true;
 
     for (int seg = 0; seg < numSegments; ++seg) {
@@ -129,8 +157,9 @@ void CurveEditorComponent::paintCurve(juce::Graphics& g, const CurveEditorGeomet
             if (step == 0 && seg > 0)
                 continue; // shared with the previous segment's last point
             const float progress = (float)step / (float)kCurveStepsPerSegment;
-            const float x = segStart.x + (segEnd.x - segStart.x) * progress;
-            const float y = geometry.yForLevel(model_.valueAt(seg, progress));
+            const auto drift = segmentTweenOffset(seg, progress);
+            const float x = segStart.x + (segEnd.x - segStart.x) * progress + drift.x;
+            const float y = geometry.yForLevel(model_.valueAt(seg, progress)) + drift.y;
             if (first) {
                 curvePath.startNewSubPath(x, y);
                 fillPath.startNewSubPath(x, baselineY);
@@ -142,21 +171,17 @@ void CurveEditorComponent::paintCurve(juce::Graphics& g, const CurveEditorGeomet
             }
         }
     }
-    fillPath.lineTo(geometry.nodePosition(numSegments).x, baselineY);
+    fillPath.lineTo(geometry.nodePosition(numSegments).x + pointTween_.offsetFor(numSegments).x, baselineY);
     fillPath.closeSubPath();
-
-    g.setColour(colours.accent.withAlpha(0.20f));
-    g.fillPath(fillPath);
-    g.setColour(colours.accent);
-    g.strokePath(curvePath, juce::PathStrokeType(2.0f));
 }
 
 void CurveEditorComponent::paintHandles(juce::Graphics& g, const CurveEditorGeometry& geometry,
                                         const ThemeColours& colours) const {
     for (int seg = 0; seg < model_.getNumSegments(); ++seg) {
-        const auto handle = geometry.bendHandlePosition(seg);
+        auto handle = geometry.bendHandlePosition(seg);
         if (!handle.has_value())
             continue;
+        *handle += segmentTweenOffset(seg, 0.5f);
         const bool active = hoveredKind_ == CurveHitKind::BendHandle && hoveredIndex_ == seg;
         const float radius = active ? kBendHandleRadius + 1.5f : kBendHandleRadius;
         g.setColour(colours.accent.withAlpha(active ? 0.9f : 0.55f));
