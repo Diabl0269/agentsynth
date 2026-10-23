@@ -37,11 +37,12 @@ const SwapRow kRows[] = {
 
 } // namespace
 
-TEST(BottomDockSwapKeyDefaults, TheBottomPanelKeyIsCmdJAndCmdTIsFree) {
+TEST(BottomDockSwapKeyDefaults, TheBottomPanelKeyIsCmdJAndNoPanelKeyHoldsCmdT) {
     ShortcutManager manager;
     EXPECT_EQ(manager.getBinding("toggleBottomPanel"), juce::KeyPress('j', kCmd, 0));
     for (const auto& id : manager.getActionIds())
-        EXPECT_NE(manager.getBinding(id), juce::KeyPress('t', kCmd, 0)) << id << " holds the released Cmd+T";
+        if (id != "openAddTrackMenu") // Add Track took Cmd+T on the Mac
+            EXPECT_NE(manager.getBinding(id), juce::KeyPress('t', kCmd, 0)) << id << " holds the released Cmd+T";
 }
 
 TEST(BottomDockSwapKeyDefaults, EachViewSwapActionStaysRoutedAndDescribedWithoutADigit) {

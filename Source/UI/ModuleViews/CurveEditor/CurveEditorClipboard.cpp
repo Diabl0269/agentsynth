@@ -14,6 +14,8 @@ namespace {
 // Where a pasted group starts after the point it follows, as a fraction of the curve's time range, so
 // the two never share an x.
 constexpr double kPasteGapFraction = 0.02;
+// Two points closer than this in time are the same point, so an insert between them is refused.
+constexpr double kMinInsertGap = 1e-9;
 } // namespace
 
 std::vector<CurveEditorComponent::ClipPoint>& CurveEditorComponent::clipboard() {
@@ -95,6 +97,30 @@ bool CurveEditorComponent::duplicateSelection() {
     const auto clip = selectionAsClip();
     const double gap = (model_.getMaxX() - model_.getMinX()) * kPasteGapFraction;
     return insertClip(clip, model_.getNode(selection_.back()).x + gap);
+}
+
+// Halfway between the cursor point and the next one (or the end of the range when it is the last), at the level
+// halfway between them. The probe on a copy keeps a refused press from opening an empty undo step.
+bool CurveEditorComponent::insertAfterCursor() {
+    if (model_.getMode() != CurveMode::Free || selectedIndex_ < 0 || selectedIndex_ >= model_.getNumNodes() ||
+        model_.getNumNodes() >= CurveModel::kMaxNodes)
+        return false;
+    const CurveNode& from = model_.getNode(selectedIndex_);
+    const bool last = selectedIndex_ + 1 >= model_.getNumNodes();
+    const double toX = last ? model_.getMaxX() : model_.getNode(selectedIndex_ + 1).x;
+    const float toY = last ? from.y : model_.getNode(selectedIndex_ + 1).y;
+    if (toX - from.x <= kMinInsertGap)
+        return false;
+
+    beginGesture();
+    const int index = model_.addPoint(from.x + (toX - from.x) * 0.5, from.y + (toY - from.y) * 0.5f);
+    if (index >= 0)
+        setSelection({index}, index, index);
+    if (onPointsChanged)
+        onPointsChanged();
+    endGesture();
+    repaint();
+    return index >= 0;
 }
 
 } // namespace synth::ui

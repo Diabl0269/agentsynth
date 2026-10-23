@@ -78,6 +78,7 @@ public:
         migrateBottomPanelCmdJ(*settings);
         migrateTransportCtrlChords(*settings);
         migrateDockDigitKeys(*settings);
+        migrateAddTrackCmdT(*settings);
         persistMigratedBindings(*settings, loaded);
     }
 
@@ -212,6 +213,25 @@ public:
         if (!bindings["transportToggleMetronome"].isValid() &&
             getConflictingAction("transportToggleMetronome", ctrlM).isEmpty())
             bindings["transportToggleMetronome"] = ctrlM;
+    }
+
+    /** One-shot, Mac only: Add Track moved from the physical Ctrl+T to Cmd+T (Ctrl+T now inserts a point in a
+     *  focused point editor). A saved install holds the old default (saveToProperties() persists every action),
+     *  so move it across -- but only when it still holds exactly Ctrl+T and no other action already holds Cmd+T;
+     *  any other binding is the user's choice and stays. Runs after the migrations that release Cmd+T, so an
+     *  install that old ends with Cmd+T free first. The flag stops it re-firing if they later bind Ctrl+T on
+     *  purpose. */
+    void migrateAddTrackCmdT(juce::PropertiesFile& settings) {
+        constexpr auto flag = "shortcutMigration_addTrackCmdT";
+        if (settings.getBoolValue(flag, false))
+            return;
+        settings.setValue(flag, true);
+        if (defaultsPlatform != DefaultsPlatform::Mac)
+            return;
+        const juce::KeyPress ctrlT('t', juce::ModifierKeys::ctrlModifier, 0);
+        const juce::KeyPress cmdT('t', juce::ModifierKeys::commandModifier, 0);
+        if (bindings["openAddTrackMenu"] == ctrlT && getConflictingAction("openAddTrackMenu", cmdT).isEmpty())
+            bindings["openAddTrackMenu"] = cmdT;
     }
 
     /** Where Repeat and Toggle Mod Matrix live off the Mac, once Record and Metronome own Ctrl+R and
