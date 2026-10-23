@@ -3,6 +3,7 @@
 // parent) rather than by calling one control's keyPressed. Headless windows cannot hold keyboard focus, so where a step
 // lands is read from lastFocusRequestForTest().
 #include "../App/MainComponent/MainComponentTestFixture.h"
+#include "../UI/Layout/NativeWindowTestGuard.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
@@ -362,4 +363,20 @@ TEST(SoundBrowserKeyboardReachTest, TheFooterStopsAreItsControlsNotTheVolumeText
     EXPECT_EQ(stops.back(), &footer.getVolume()) << "the volume slider itself is the last footer stop";
     for (auto* stop : stops)
         EXPECT_EQ(stop->getParentComponent(), &footer) << "a stop inside a control: " << typeid(*stop).name();
+}
+
+// Regression test for FRO991: quitting with a footer control focused crashed in the view's own focusGained.
+TEST(SoundBrowserKeyboardReachTest, DestroyingTheViewWithAFooterControlFocusedNeverHandsItTheKeyboard) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
+    Fixture f;
+    f.view->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    f.view->setVisible(true);
+    auto& stop = *synth::ui::focusableDescendants(f.view->getPreviewFooter()).front();
+    stop.grabKeyboardFocus();
+    if (!stop.hasKeyboardFocus(false))
+        GTEST_SKIP() << "this machine would not give a temporary window the keyboard";
+    const int before = SoundBrowserComponent::focusGainsWhileTearingDownForTest();
+    f.view.reset();
+    EXPECT_EQ(SoundBrowserComponent::focusGainsWhileTearingDownForTest(), before);
 }

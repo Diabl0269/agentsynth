@@ -7,6 +7,12 @@
 
 namespace synth::ui {
 
+namespace {
+int focusGainsWhileTearingDown = 0;
+}
+
+int SoundBrowserComponent::focusGainsWhileTearingDownForTest() { return focusGainsWhileTearingDown; }
+
 SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& index,
                                              synth::soundbrowser::SoundLists& lists)
     : index_(index)
@@ -43,6 +49,11 @@ SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& in
 }
 
 SoundBrowserComponent::~SoundBrowserComponent() {
+    // The members go after this body while this is still the dynamic type: a focused child (a footer or panel control)
+    // that goes then hands the keyboard to this view, and focusGained would read rows that are already gone.
+    tearingDown_ = true;
+    if (hasKeyboardFocus(true))
+        giveAwayKeyboardFocus();
     juce::Desktop::getInstance().removeFocusChangeListener(this);
     index_.removeListener(this);
     if (vblank_.has_value()) {
@@ -136,6 +147,10 @@ void SoundBrowserComponent::mouseWheelMove(const juce::MouseEvent& e, const juce
 }
 
 void SoundBrowserComponent::focusGained(FocusChangeType) {
+    if (tearingDown_) {
+        ++focusGainsWhileTearingDown;
+        return;
+    }
     repaint();
     refreshAccessibilityValue();
 }

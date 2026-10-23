@@ -114,6 +114,8 @@ public:
     bool listensForStepKeysForTest(juce::Component& control) const {
         return std::find(reachAttached_.begin(), reachAttached_.end(), &control) != reachAttached_.end();
     }
+    /** How many times any view was handed the keyboard while it was being destroyed (it must stay 0). */
+    static int focusGainsWhileTearingDownForTest();
     /** Offers `key` to the stepping as `origin`'s key listener: what the peer does before origin's own keyPressed. */
     bool offerStepKeyForTest(const juce::KeyPress& key, juce::Component& origin) {
         return listensForStepKeysForTest(origin) && keyPressed(key, &origin);
@@ -256,6 +258,7 @@ private:
     int listTop_ = kSearchHeight + kPathHeight;
     bool animateOffscreenForTest_ = false;
     juce::Component* lastFocusRequest_ = nullptr;
+    bool tearingDown_ = false;
     std::vector<juce::Component*> reachAttached_;
     PanelSlide panelSlide_;
     synth::ui::AnimationDriver panelAnim_;
