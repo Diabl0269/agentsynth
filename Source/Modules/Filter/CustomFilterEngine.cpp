@@ -2,6 +2,7 @@
 // Filter's Custom type, shared-cursor path. The per-voice path is CustomFilterEngineVoices.cpp.
 #include "CustomFilterEngine.h"
 #include "CustomFilterCutoff.h"
+#include "CustomFilterPeakMorph.h"
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -16,6 +17,8 @@ std::unique_ptr<CustomFilterEngine::ShapeTable> CustomFilterEngine::renderTable(
     auto table = std::make_unique<ShapeTable>();
     table->count = (int)shapes.shapes.size();
     table->db.resize((size_t)(table->count * kGridSize));
+    table->peakCount.assign((size_t)table->count, 0);
+    table->peaks.assign((size_t)(table->count * ShapeTable::kMaxPeaks), 0.0f);
     for (int s = 0; s < table->count; ++s) {
         const auto& shape = shapes.shapes[(size_t)s];
         for (int i = 0; i < kGridSize; ++i) {
@@ -23,6 +26,9 @@ std::unique_ptr<CustomFilterEngine::ShapeTable> CustomFilterEngine::renderTable(
             // evaluate() reads [0, 1); x == 1 falls to the last point's y, which is what we want.
             table->db[(size_t)(s * kGridSize + i)] = CustomFilterShapes::yToDb(shape.curve.evaluate(x));
         }
+        const float* db = table->db.data() + s * kGridSize;
+        table->peakCount[(size_t)s] =
+            customfilter::findPeaks(db, kGridSize, table->peaks.data() + s * ShapeTable::kMaxPeaks);
         table->x.push_back(shape.position.size() > 0 ? shape.position[0] : 0.5f);
         table->y.push_back(shape.position.size() > 1 ? shape.position[1] : 0.5f);
     }
@@ -78,15 +84,13 @@ bool CustomFilterEngine::needsDesign(const Controls& c) const noexcept {
            std::abs(c.morphY - designed_.morphY) > kMorphEpsilon || toneMoved(c, designed_);
 }
 
-/** Blends the shapes' dB curves (never their kernels: a sum of minimum-phase kernels is neither
-    minimum phase nor the blended magnitude) and designs one kernel into kernel_. */
+/** Blends the shapes' dB curves, their peaks moved together (CustomFilterPeakMorph; never their kernels: a sum of
+    minimum-phase kernels is neither minimum phase nor the blended magnitude) and designs one kernel into kernel_.
+    The per-voice path designs through here too, so both hear the same blend as blendedGridDb draws. */
 void CustomFilterEngine::designKernel(const Controls& c) noexcept {
     const ShapeTable& table = *tables_.current();
     blendWeights(table, c.morphX, c.morphY, weights_.data());
-    std::fill(blendedDb_.begin(), blendedDb_.end(), 0.0f);
-    for (int s = 0; s < table.count; ++s)
-        juce::FloatVectorOperations::addWithMultiply(blendedDb_.data(), table.db.data() + s * kGridSize,
-                                                     weights_[(size_t)s], kGridSize);
+    customfilter::blendShapes(table, weights_.data(), blendedDb_.data());
     designer_.design(blendedDb_.data(), c.shiftSemitones, c.depth, c.resonance, c.cutoffHz, kernel_.data());
 }
 

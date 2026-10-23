@@ -24,8 +24,9 @@ std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, flo
 std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, float y, float shiftSemitones, float depth,
                                   float cutoffHz, float resonance);
 
-/** Samples `gridDb` back into a curve of `numPoints` evenly spaced points (the first at x = 0, the last at
- *  x = 1; at least LfoCustomWave::kMinPoints). The result is sanitised and every y is in [0, 1]. */
+/** Samples `gridDb` into `numPoints` points (at least LfoCustomWave::kMinPoints) placed on its shape: the ends, its
+ *  prominent peaks (findPeaks) with the dips and flanks that keep their width, then evenly spaced fill. Fewer points
+ *  than the shape needs drop the least important first; x is strictly increasing and every y in [0, 1]. */
 LfoCustomWave curveFromGridDb(const std::vector<float>& gridDb, int numPoints);
 
 } // namespace synth::customfilter

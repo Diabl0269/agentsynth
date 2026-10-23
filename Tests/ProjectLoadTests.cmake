@@ -8,4 +8,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ProjectLoad/ProjectLoadPipelineTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ProjectLoad/SignalFlowOrderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroProjectLoadRevealTests.cpp
+    # Guards the unique temp folders the load tests above depend on when CI runs the suite as concurrent shards.
+    ${CMAKE_CURRENT_SOURCE_DIR}/UniqueTempDirTests.cpp
 )

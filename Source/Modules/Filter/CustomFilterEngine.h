@@ -31,8 +31,11 @@ public:
 
     /** Rendered immutable form of one shape list: kGridSize dB values per shape plus positions. */
     struct ShapeTable {
+        static constexpr int kMaxPeaks = 6;
         int count = 0;
-        std::vector<float> db; // count * kGridSize
+        std::vector<float> db;      // count * kGridSize
+        std::vector<int> peakCount; // per shape, at most kMaxPeaks
+        std::vector<float> peaks;   // count * kMaxPeaks grid positions, ascending within a shape
         std::vector<float> x, y;
         std::vector<int> orderByX; // shape indices, left to right on the map (ties by index)
     };
@@ -79,6 +82,8 @@ public:
 
     /** Kernels designed since construction (audio thread writes; any thread may read). */
     int getDesignCount() const noexcept { return designCount_.load(std::memory_order_relaxed); }
+    /** Audio thread / tests only: the blended dB grid (kGridSize) the last kernel was designed from. */
+    const std::vector<float>& getBlendedDb() const noexcept { return blendedDb_; }
 
     /** Blend weights at (x, y) for `table`, written to `out` (table.count values summing to 1). */
     static void blendWeights(const ShapeTable& table, float x, float y, float* out) noexcept;

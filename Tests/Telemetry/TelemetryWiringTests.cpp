@@ -1,5 +1,6 @@
 #include "../App/MainComponent/MainComponentTestFixture.h"
 #include "../TestSettingsHelpers.h"
+#include "../UniqueTempDir.h"
 #include "AudioEngine/AudioEngine.h"
 #include "ShortcutManager/AppCommands.h"
 #include "Telemetry/TelemetryService.h"
@@ -94,8 +95,7 @@ TEST_F(TelemetryWiringTest, AGraphLoadedFromAProjectCountsNoModules) {
     setShareSetting(true);
     MainComponent mc(std::make_unique<MockProvider>());
     auto* service = mc.getTelemetryServiceForTest();
-    const auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                         .getNonexistentChildFile("telemetry-wiring", ".agsproj", false);
+    const auto dir = synth::test::uniqueTempPath("telemetry-wiring", ".agsproj");
     ASSERT_TRUE(mc.saveProjectForTest(dir));
     EXPECT_EQ(featureCount(*service, Feature::PresetSaved), 1);
     ASSERT_TRUE(mc.openProjectForTest(dir));
@@ -111,8 +111,7 @@ TEST_F(TelemetryWiringTest, ExportingAPatchCountsASave) {
     setShareSetting(true);
     MainComponent mc(std::make_unique<MockProvider>());
     auto* service = mc.getTelemetryServiceForTest();
-    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                          .getNonexistentChildFile("telemetry-patch", ".json", false);
+    const auto file = synth::test::uniqueTempPath("telemetry-patch", ".json");
     mc.exportPatchOnlyForTest(file);
     EXPECT_EQ(featureCount(*service, Feature::PresetSaved), 1);
     file.deleteFile();

@@ -40,6 +40,7 @@ add_executable(Tests
     Modules/Filter/CustomFilterBlendTests.cpp
     Modules/Filter/CustomFilterCutoffTests.cpp
     Modules/Filter/CustomFilterVowelTests.cpp
+    Modules/Filter/CustomFilterPeakMorphTests.cpp
     Modules/Filter/FilterCustomModuleTests.cpp
     Modules/Filter/FilterPerNoteTests.cpp
     Modules/CardViewStateTests.cpp
