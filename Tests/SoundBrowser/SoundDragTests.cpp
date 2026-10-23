@@ -45,9 +45,11 @@ juce::MouseEvent mouseAt(SoundBrowserComponent& v, juce::Point<int> at, juce::Po
 } // namespace
 
 TEST(SoundDragPayloadTest, RoundTripsAPath) {
-    const auto payload = synth::ui::makeSoundPayload("/packs/core/kick-808.wav");
+    // An absolute path on every platform (a bare "/packs/..." is resolved against the drive on Windows).
+    const auto kick = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("packs/core/kick-808.wav");
+    const auto payload = synth::ui::makeSoundPayload(kick.getFullPathName());
     EXPECT_TRUE(synth::ui::isSoundPayload(payload));
-    EXPECT_EQ(synth::ui::soundFileFromPayload(payload).getFullPathName(), "/packs/core/kick-808.wav");
+    EXPECT_EQ(synth::ui::soundFileFromPayload(payload), kick);
 }
 
 TEST(SoundDragPayloadTest, RejectsEveryOtherDragKind) {
@@ -88,7 +90,7 @@ TEST(SoundDropAdapterTest, TakesASoundTheFileTargetWouldTakeAndPassesItAsAFileDr
     target.itemDragEnter(wav);
     EXPECT_EQ(target.enters, 1);
     target.itemDropped(wav);
-    EXPECT_EQ(target.dropped[0], "/a/b.wav");
+    EXPECT_EQ(target.dropped[0], juce::File("/a/b.wav").getFullPathName()) << "the path as this platform spells it";
     EXPECT_EQ(target.droppedAt, juce::Point<int>(7, 9));
 }
 
