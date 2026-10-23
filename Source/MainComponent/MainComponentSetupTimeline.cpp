@@ -4,6 +4,7 @@
 // single MainComponent.cpp -- see MainComponent::initialiseCommon in MainComponent.cpp.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
@@ -289,7 +290,7 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
     };
     // A file dropped under the last track makes a new audio track with the clip, in one undo step.
     timelinePanel.getClipLaneArea().onAudioFileDroppedBelowTracks = [this](double startBeat, juce::File file) {
-        addAudioTrackWithClip(startBeat, file);
+        MainComponentAudioImport::addAudioTrackWithClip(*this, startBeat, file);
     };
     // P on the clip lanes = loop the selection. The lane area knows the span; only this owns the
     // transport (same division as every other callback above). Whether P also ARMS looping is the

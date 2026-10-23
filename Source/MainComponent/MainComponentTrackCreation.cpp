@@ -5,6 +5,7 @@
 // TrackHeaderHost query/binding surface in MainComponentTrackHeaderHost.cpp.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentAudioImport.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 
@@ -99,22 +100,22 @@ std::function<void(juce::AudioProcessor&, const juce::String&)> MainComponent::n
 // What addAudioTrack's ONE undo step does, and what the new-track-with-a-clip drop reuses: the track, its binding and
 // colour, and the whole mixer channel. Runs inside a recordGraphTimelineAndMacroChange. Returns the new track, or an
 // invalid id when none was added (the document is at its track limit).
-synth::TrackId MainComponent::buildAudioTrackChannel(int index, juce::String& trackName) {
-    const auto tracksBefore = timelineDoc.getTracks().size();
+synth::TrackId MainComponentAudioImport::buildAudioTrackChannel(MainComponent& mc, int index, juce::String& trackName) {
+    const auto tracksBefore = mc.timelineDoc.getTracks().size();
     // Consult the per-type default BEFORE any node is created. Defaults only steer this plain "+ Track ->
     // Audio" gesture — a saved preset is always reachable regardless via the grouped list / file insert
     // (TimelinePanelTrackHeaders.cpp), independent of what's set here
     // (see docs/mixer/track-presets.md#saving-and-setting-a-default).
     const juce::String defaultPresetName =
-        appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {});
+        mc.appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {});
     if (defaultPresetName.isNotEmpty()) {
         auto preset = synth::TrackPresetManager::loadTrackPreset(
             synth::TrackPresetManager::getDefaultTrackPresetsDirectory(), defaultPresetName);
         if (preset.isObject()) {
-            trackName = insertTrackFromPresetVar(preset, synth::TrackPresetKind::Audio, "Audio");
+            trackName = mc.insertTrackFromPresetVar(preset, synth::TrackPresetKind::Audio, "Audio");
             if (trackName.isNotEmpty()) // inserted from the default preset - skip the factory chain below
-                return timelineDoc.getTracks().size() > tracksBefore ? timelineDoc.getTracks().back().id
-                                                                     : synth::TrackId{};
+                return mc.timelineDoc.getTracks().size() > tracksBefore ? mc.timelineDoc.getTracks().back().id
+                                                                        : synth::TrackId{};
         }
         // else: the name resolves to nothing (deleted file) -> fall through to the
         // unchanged factory path below, SILENTLY (docs/mixer/mixer.md gives no "tell the user
@@ -124,19 +125,19 @@ synth::TrackId MainComponent::buildAudioTrackChannel(int index, juce::String& tr
     // Doc side FIRST, for the reason addMidiTrack() spells out: a node created before the
     // kMaxTracks refusal would be left orphaned in the graph.
     trackName = "Audio " + juce::String(index + 1);
-    const auto trackId = timelineDoc.addTrack(synth::TrackKind::Audio, trackName);
+    const auto trackId = mc.timelineDoc.addTrack(synth::TrackKind::Audio, trackName);
     if (!trackId.isValid())
         return {}; // at kMaxTracks: nothing added, no node created, no macro
 
     // Unwired: buildDefaultAudioChannel below wires it into the chain instead of
     // straight to the master bus.
-    const juce::String trackAudioUuid = createTrackAudioNode(/*wireDirectlyToMasterBus=*/false);
+    const juce::String trackAudioUuid = mc.createTrackAudioNode(/*wireDirectlyToMasterBus=*/false);
     if (trackAudioUuid.isEmpty())
         return trackId;
-    timelineDoc.setTrackBinding(trackId, trackAudioUuid);
-    timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
+    mc.timelineDoc.setTrackBinding(trackId, trackAudioUuid);
+    mc.timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
 
-    auto* trackAudioNode = findNodeByUuid(trackAudioUuid);
+    auto* trackAudioNode = mc.findNodeByUuid(trackAudioUuid);
     if (trackAudioNode == nullptr)
         return trackId;
     const auto trackAudioPosition =
@@ -163,10 +164,10 @@ synth::TrackId MainComponent::buildAudioTrackChannel(int index, juce::String& tr
         /*compressor=*/{compressorX, trackAudioPosition.y},
         /*strip=*/{stripX, trackAudioPosition.y},
         /*master=*/{masterX, trackAudioPosition.y},
-        /*onNewModule=*/newModuleHook(),
+        /*onNewModule=*/mc.newModuleHook(),
     };
 
-    const auto channel = synth::buildDefaultAudioChannel(audioEngine.getGraph(), *trackAudioNode, layout);
+    const auto channel = synth::buildDefaultAudioChannel(mc.audioEngine.getGraph(), *trackAudioNode, layout);
     if (channel.stripUuid.isEmpty())
         return trackId; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
 
@@ -176,14 +177,14 @@ synth::TrackId MainComponent::buildAudioTrackChannel(int index, juce::String& tr
     // Box {Track Audio, Gate, EQ, Compressor, Strip} into ONE collapsed macro named after
     // the track. Master is deliberately NOT a member — see this method's own comment above — and the
     // strip's Master-bound edges move behind the macro's output port right after.
-    graphEditor.getMacroController().addMacroForMembers(
+    mc.graphEditor.getMacroController().addMacroForMembers(
         {trackAudioUuid, channel.gateUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid}, trackName,
         trackAudioPosition);
-    graphEditor.routeChannelOutputThroughMacroPort(channel.stripUuid);
+    mc.graphEditor.routeChannelOutputThroughMacroPort(channel.stripUuid);
 
     // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
     // must see every node above still alive to keep the macro's membership.
-    graphEditor.updateComponents();
+    mc.graphEditor.updateComponents();
     return trackId;
 }
 
@@ -205,7 +206,7 @@ void MainComponent::addAudioTrack() {
     // ports (synth::resolveSourceThroughPorts), which is what keeps a strip behind an outlet on Mix.
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
-        [this, index, &trackName] { buildAudioTrackChannel(index, trackName); });
+        [this, index, &trackName] { MainComponentAudioImport::buildAudioTrackChannel(*this, index, trackName); });
 
     reconcileTimelineAfterGraphChange();
     statusBar.showMessage(pushed ? "Added " + trackName : "Could not add a track");

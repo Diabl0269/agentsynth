@@ -5,6 +5,7 @@
 // sibling MainComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -659,7 +660,7 @@ void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFi
 
 // `file`'s duration in beats at the transport's CURRENT bpm (0.0 when it isn't readable audio).
 // Beats, not seconds, because a clip's length is beats — see synth::Clip.
-double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
+double MainComponentAudioImport::audioFileLengthInBeats(const MainComponent& mc, const juce::File& file) {
     juce::AudioFormatManager formats;
     formats.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
@@ -667,22 +668,22 @@ double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
         return 0.0;
 
     const double seconds = (double)reader->lengthInSamples / reader->sampleRate;
-    const auto snap = audioEngine.getTransport().getPositionSnapshot();
+    const auto snap = mc.audioEngine.getTransport().getPositionSnapshot();
     const double bpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
     return seconds * bpm / 60.0;
 }
 
 // The import half of importAudioFileToClip, also run first by the drop that makes a new track: copies `sourceFile`
 // into the project and returns the asset ref, or an empty ref after saying why on the status bar.
-juce::String MainComponent::importAudioAsset(const juce::File& sourceFile) {
+juce::String MainComponentAudioImport::importAudioAsset(MainComponent& mc, const juce::File& sourceFile) {
     // The SAME import policy relinkClipAsset() uses — a saved project imports into the bundle's
     // Audio/, an unsaved one into the app-data Recordings/ convention chooseTakeFiles() writes takes
     // into, which saveToFile() sweeps into the bundle via
     // synth::AssetManager::adoptRecordingsAssets before it ever writes project.json.
     juce::String error;
     juce::String newRef;
-    if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
-        newRef = synth::AssetManager::importAudioFile(sourceFile, currentBundleDir_, &error);
+    if (mc.currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(mc.currentBundleDir_)) {
+        newRef = synth::AssetManager::importAudioFile(sourceFile, mc.currentBundleDir_, &error);
     } else {
         const auto recordingsRoot = synth::userSettingsRootDirectory().getChildFile(detail::kRecordingsFolderName);
         const auto name = synth::AssetManager::importAudioFileToDirectory(sourceFile, recordingsRoot, &error);
@@ -690,7 +691,7 @@ juce::String MainComponent::importAudioAsset(const juce::File& sourceFile) {
             newRef = juce::String(detail::kRecordingsFolderName) + "/" + name;
     }
     if (newRef.isEmpty())
-        statusBar.showMessage("Import failed: " + error);
+        mc.statusBar.showMessage("Import failed: " + error);
     return newRef;
 }
 
@@ -707,13 +708,14 @@ void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat
         return;
 
     // Reported and abandoned BEFORE any mutation: a failed import leaves no clip behind.
-    const juce::String newRef = importAudioAsset(sourceFile);
+    const juce::String newRef = MainComponentAudioImport::importAudioAsset(*this, sourceFile);
     if (newRef.isEmpty())
         return;
 
     // The clip is as long as the file (never as long as some default), floored at the same minimum
     // an audio take uses so a sub-frame file still produces a grabbable clip.
-    const double lengthBeats = std::max(kMinAudioClipLengthBeats, audioFileLengthInBeats(sourceFile));
+    const double lengthBeats =
+        std::max(kMinAudioClipLengthBeats, MainComponentAudioImport::audioFileLengthInBeats(*this, sourceFile));
 
     // ONE undo step for the clip AND its asset binding, exactly like commitAudioRecording().
     undoManager.recordTimelineChange(timelineDoc, [&] {
@@ -730,28 +732,29 @@ void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat
 // A file dropped on the empty space under the last track: a new audio track holding a clip of the file at `startBeat`,
 // as ONE undo step. The file is imported first (a failed import changes nothing), then the track, its mixer channel and
 // the clip are one recorded change.
-void MainComponent::addAudioTrackWithClip(double startBeat, const juce::File& sourceFile) {
-    const juce::String newRef = importAudioAsset(sourceFile);
+void MainComponentAudioImport::addAudioTrackWithClip(MainComponent& mc, double startBeat,
+                                                     const juce::File& sourceFile) {
+    const juce::String newRef = importAudioAsset(mc, sourceFile);
     if (newRef.isEmpty())
         return;
-    const double lengthBeats = std::max(kMinAudioClipLengthBeats, audioFileLengthInBeats(sourceFile));
+    const double lengthBeats = std::max(kMinAudioClipLengthBeats, audioFileLengthInBeats(mc, sourceFile));
 
-    const TrackGrowInScope growIn(*this);
-    const int index = (int)timelineDoc.getTracks().size();
+    const MainComponent::TrackGrowInScope growIn(mc);
+    const int index = (int)mc.timelineDoc.getTracks().size();
     juce::String trackName;
-    const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
-        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [&] {
-            const auto track = buildAudioTrackChannel(index, trackName);
+    const bool pushed = mc.undoManager.recordGraphTimelineAndMacroChange(
+        mc.audioEngine.getGraph(), mc.timelineDoc, mc.graphEditor.getMacros(), [&] {
+            const auto track = buildAudioTrackChannel(mc, index, trackName);
             if (!track.isValid())
                 return;
-            const auto clip = timelineDoc.addClip(track, std::max(0.0, startBeat), lengthBeats,
-                                                  sourceFile.getFileNameWithoutExtension());
+            const auto clip = mc.timelineDoc.addClip(track, std::max(0.0, startBeat), lengthBeats,
+                                                     sourceFile.getFileNameWithoutExtension());
             if (clip.isValid())
-                timelineDoc.setClipAsset(clip, newRef, 0.0);
+                mc.timelineDoc.setClipAsset(clip, newRef, 0.0);
         });
-    reconcileTimelineAfterGraphChange();
-    statusBar.showMessage(pushed ? "Added " + trackName + " with " + sourceFile.getFileName()
-                                 : "Could not add a track");
+    mc.reconcileTimelineAfterGraphChange();
+    mc.statusBar.showMessage(pushed ? "Added " + trackName + " with " + sourceFile.getFileName()
+                                    : "Could not add a track");
 }
 
 // synth::AssetManager::cleanUnusedAssets against the current bundle + live timeline doc. 0

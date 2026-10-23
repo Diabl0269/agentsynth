@@ -353,7 +353,7 @@ accent wash, repainting only the rows involved and only when the row actually ch
 last row neither highlight nor accept a drop. `filesDropped` reports the FIRST readable audio file
 — a multi-file drop makes one clip, not N.
 
-**Under the last track.** When `onAudioFileDroppedBelowTracks` is set, the empty space under the last row (the whole area when there are no tracks) takes an audio file too: a "New audio track" strip (an outlined, rounded strip) lights up under the pointer and `MainComponent::addAudioTrackWithClip(beat, file)` makes the track, its mixer channel and the clip in ONE undo step (the file is imported first; a failed import changes nothing). A Sound dragged out of the Sounds view takes the same rows and the same strip ([sound-browser](../layout/sound-browser.md#dragging-a-sound)), through `SoundDropAdapter`. The strip needs room under the rows; a lane filled to the bottom has none.
+**Under the last track.** When `onAudioFileDroppedBelowTracks` is set, the empty space under the last row (the whole area when there are no tracks) takes an audio file too: a "New audio track" strip (an outlined, rounded strip) lights up under the pointer and `MainComponentAudioImport::addAudioTrackWithClip(mc, beat, file)` makes the track, its mixer channel and the clip in ONE undo step (the file is imported first; a failed import changes nothing). A Sound dragged out of the Sounds view takes the same rows and the same strip ([sound-browser](../layout/sound-browser.md#dragging-a-sound)), through `SoundDropAdapter`. The strip needs room under the rows; a lane filled to the bottom has none.
 
 **Who imports.** Neither gesture imports anything here: `onAudioFileDropped(TrackId, snappedBeat,
 File)` hands the decision outwards and `MainComponent::importAudioFileToClip` does the work, for
@@ -362,7 +362,7 @@ That method reuses `relinkClipAsset`'s policy verbatim: a saved project imports 
 `Audio/` (`AssetManager::importAudioFile`), and an unsaved one into the app-data `Recordings/`
 convention `chooseTakeFiles()` writes takes into, so `saveToFile`'s `adoptRecordingsAssets` sweep
 moves it into the bundle on the first save. The clip's length is the file's own duration in beats
-(`audioFileLengthInBeats`, at the transport's current bpm), `sourceStartSeconds` is 0, and the clip
+(`MainComponentAudioImport::audioFileLengthInBeats`, at the transport's current bpm), `sourceStartSeconds` is 0, and the clip
 plus its asset binding are batched into ONE `recordTimelineChange`. A failed import — unreadable or
 non-audio — reports through the status bar and mutates the document not at all. Headless seam:
 `MainComponent::importAudioFileToClipForTest`.
