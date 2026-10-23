@@ -20,6 +20,9 @@ class ShortcutManager;
 namespace synth::soundpacks {
 class SoundPackInstaller;
 }
+namespace synth::soundbrowser {
+class SoundFolderBook;
+}
 class PreferencesSettingsTab;
 
 class SettingsWindow
@@ -53,7 +56,8 @@ public:
                    ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager, GraphEditor* graphEditor,
                    synth::AccountService* accountService = nullptr, bool showAudioTab = true,
                    juce::String initialTabName = {}, std::vector<juce::String> midiRemoteDeviceNames = {},
-                   synth::soundpacks::SoundPackInstaller* soundPacks = nullptr);
+                   synth::soundpacks::SoundPackInstaller* soundPacks = nullptr,
+                   synth::soundbrowser::SoundFolderBook* soundFolders = nullptr);
     ~SettingsWindow() override;
 
     void resized() override;

@@ -1,9 +1,13 @@
 #pragma once
 
+#include "SoundBrowser/SoundFolderBook.h"
 #include "SoundBrowser/SoundIndex.h"
 #include "SoundBrowser/SoundLists.h"
 #include "SoundBrowser/SoundPreviewPlayer.h"
+#include "SoundPacks/SoundPackInstaller.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/NavigationSearchField.h"
+#include "UI/Layout/NonModalLabel.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/SoundBrowser/SoundFilterChipRow.h"
 #include "UI/Library/SoundBrowser/SoundFilterModel.h"
@@ -23,8 +27,12 @@ namespace synth::ui {
 class SoundBrowserComponent
     : public juce::Component
     , public juce::DragAndDropContainer
+    , public juce::FileDragAndDropTarget
     , public juce::SettableTooltipClient
+    , public KeyboardContextMenuProvider
     , private juce::ScrollBar::Listener
+    , private synth::soundpacks::SoundPackInstaller::Listener
+    , private synth::soundbrowser::SoundFolderBook::Listener
     , private juce::FocusChangeListener
     , private juce::KeyListener
     , private synth::soundbrowser::SoundIndex::Listener {
@@ -42,7 +50,8 @@ public:
     static constexpr const char* kFavouritesId = "@favourites";
     static constexpr const char* kRecentId = "@recent";
 
-    enum class RowKind { Hint, Place, Folder, Sound };
+    /** GetPack is a pack you have not downloaded (greyed, with its size); AddFolder is the "Add folder..." row. */
+    enum class RowKind { Hint, Place, Folder, Sound, GetPack, AddFolder };
 
     struct Row {
         RowKind kind = RowKind::Hint;
@@ -51,6 +60,15 @@ public:
         juce::String placeId, folder; ///< Where a Place or Folder row leads.
         int soundCount = 0;
         std::optional<synth::soundbrowser::SoundEntry> entry; ///< Sound rows only.
+        juce::String packId;                                  ///< GetPack rows: the hosted pack.
+        juce::int64 bytes = 0;                                ///< GetPack rows: the download size.
+        float progress = -1.0f;                               ///< GetPack rows while busy: 0 to 1, negative = unknown.
+        bool busy = false;                                    ///< GetPack rows: downloading, checking or installing.
+        bool cancellable = false;                             ///< GetPack rows: the download can still be stopped.
+        bool viaInstrument = false;                           ///< GetPack rows in search: matched an instrument name.
+        bool userFolder = false;                              ///< Place rows: one of the user's own folders.
+        bool missing = false;                                 ///< Place rows: the folder is not there now.
+        bool scanning = false;                                ///< Place rows: its sounds are still being found.
         bool navigable() const { return kind != RowKind::Hint; }
     };
 
@@ -61,6 +79,12 @@ public:
 
     SoundBrowserComponent(synth::soundbrowser::SoundIndex& index, synth::soundbrowser::SoundLists& lists);
     ~SoundBrowserComponent() override;
+
+    /** Lists the packs the installer offers but this device lacks ("Get more") and starts their downloads. Null (the
+     *  default) lists none. The installer must outlive the view. */
+    void setPackInstaller(synth::soundpacks::SoundPackInstaller* installer);
+    /** Shows "Add folder..." and the folder menu, and edits the user's folders through `book`. Null shows neither. */
+    void setFolderBook(synth::soundbrowser::SoundFolderBook* book);
 
     /** A sound row became the selection (arrow, click). */
     std::function<void(const synth::soundbrowser::SoundEntry&)> onSoundSelected;
@@ -112,6 +136,46 @@ public:
     /** Starts dragging the Sound row `index` as the drag-and-drop payload `sound:<path>`; false for any other row. */
     bool beginSoundDrag(int index);
     bool isSoundDragging() const { return soundDragging_; }
+
+    // ---- Packs you do not have (SoundBrowserPacks.cpp) ----------------------------------------------------------
+    /** Starts the shared installer's download of GetPack row `index`, or cancels it while it runs; false for any other
+     *  row or when the installer refuses. */
+    bool toggleDownload(int index);
+    /** Where GetPack row `index`'s Download (Cancel) button is painted, in this view's coordinates. */
+    juce::Rectangle<int> getPackButtonBounds(int index) const;
+
+    // ---- The user's folders (SoundBrowserFolders.cpp) -----------------------------------------------------------
+    enum class FolderAction { Rename, ShowInFinder, ScanAgain, Remove };
+    /** Opens the folder chooser; the folder picked is added. */
+    void chooseFolderToAdd();
+    /** Adds each existing folder to the book and selects the last one added; false when none was new. */
+    bool addFolders(const juce::Array<juce::File>& folders);
+    /** The right-click menu of a user folder's Place row: Rename, Show in Finder, Scan again, Remove. */
+    juce::PopupMenu buildFolderMenu(int rowIndex) const;
+    /** Opens that menu at the pointer (`anchor` empty) or at `anchor`, a screen area. */
+    void showFolderMenu(int rowIndex, std::optional<juce::Rectangle<int>> anchor);
+    /** Does what a menu item does to the user folder shown at `rowIndex`; false for any other row. */
+    bool applyFolderAction(int rowIndex, FolderAction action);
+    bool showContextMenuForKeyboardFocus() override;
+    /** The inline editor over a folder's name; visible only while renaming. */
+    NonModalLabel& getRenameLabel() { return renameLabel_; }
+    bool isFolderDropActive() const { return dropActive_; }
+    bool isInterestedInFileDrag(const juce::StringArray& files) override;
+    void filesDropped(const juce::StringArray& files, int x, int y) override;
+    void fileDragEnter(const juce::StringArray& files, int x, int y) override;
+    void fileDragExit(const juce::StringArray& files) override;
+    /** Stat-checks the folders when the app comes back to the front (and when the view shows): a drive that was
+     *  unplugged or plugged in rescans, nothing else does. */
+    void checkFoldersOnReturn();
+
+    // Test seams: the native pieces. `picker` answers the folder chooser with a folder (or none); `reveal` stands in
+    // for Finder; `foreground` for juce::Process::isForegroundProcess.
+    void setFolderPickerForTest(std::function<void(std::function<void(const juce::File&)>)> picker) {
+        folderPicker_ = std::move(picker);
+    }
+    void setRevealForTest(std::function<void(const juce::File&)> reveal) { reveal_ = std::move(reveal); }
+    void setForegroundCheckForTest(std::function<bool()> foreground) { foregroundCheck_ = std::move(foreground); }
+    void noteAppFocusForTest() { noteAppFocus(); }
 
     /** The control last asked to take focus by an Up or Down step (the list is this view); headless windows cannot
      *  hold real focus, so tests read it here. */
@@ -176,11 +240,14 @@ public:
 private:
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
     void soundIndexChanged() override;
+    void soundPacksChanged() override;
+    void soundFoldersChanged() override;
     void globalFocusChanged(juce::Component* focused) override;
 
     // Rows (SoundBrowserNavigation.cpp)
     void rebuildRows();
     void rebuildPlaceRows(const synth::soundbrowser::SoundSnapshot& snap);
+    void rebuildPlaceListing(const synth::soundbrowser::SoundSnapshot& snap, const synth::soundbrowser::SoundFilter&);
     void appendSoundRows(const std::vector<synth::soundbrowser::SoundEntry>& entries);
     juce::String selectionKey(int index) const;
     void restoreSelection(const juce::String& key);
@@ -193,6 +260,10 @@ private:
     // Painting (SoundBrowserPainting.cpp)
     void paintRows(juce::Graphics& g, int width) const;
     void paintRow(juce::Graphics& g, const Row& row, int index, juce::Rectangle<int> area) const;
+    void paintPackRow(juce::Graphics& g, const Row& row, int index, juce::Rectangle<int> area) const;
+    void paintAddFolderRow(juce::Graphics& g, juce::Rectangle<int> area) const;
+    void paintPlaceRow(juce::Graphics& g, const Row& row, juce::Rectangle<int> area) const;
+    bool activateSelectedAction();
     void paintPathBar(juce::Graphics& g, juce::Colour muted, juce::Colour primary, juce::Colour accent);
     void paintFooter(juce::Graphics& g);
     void paintCompactName(juce::Graphics& g);
@@ -235,6 +306,24 @@ private:
     void focusListStop(bool selectFirst);
     std::vector<juce::Component*> footerStops();
 
+    // Packs (SoundBrowserPacks.cpp)
+    std::vector<synth::soundpacks::SoundPackInstaller::Row>
+    offeredPacks(const synth::soundbrowser::SoundSnapshot&) const;
+    void appendOfferedPackRows(const synth::soundbrowser::SoundSnapshot& snap, bool places);
+    void refreshPackRows();
+    juce::String packSignature() const;
+    juce::String packTooltip(const Row& row) const;
+    bool packButtonHit(int index, juce::Point<int> p) const;
+
+    // Folders (SoundBrowserFolders.cpp)
+    void setupFolders();
+    bool beginRename(int rowIndex);
+    void commitRename();
+    void endRename();
+    void setDropActive(bool active);
+    void noteAppFocus();
+    void paintDropOutline(juce::Graphics& g) const;
+
     // Preview (SoundBrowserPreview.cpp)
     void setupPreview();
     void syncFooterToSelection();
@@ -253,6 +342,21 @@ private:
 
     synth::soundbrowser::SoundIndex& index_;
     synth::soundbrowser::SoundLists& lists_;
+    synth::soundpacks::SoundPackInstaller* installer_ = nullptr;
+    synth::soundbrowser::SoundFolderBook* folderBook_ = nullptr;
+    juce::String packSignature_;
+    std::function<void(std::function<void(const juce::File&)>)> folderPicker_;
+    std::function<void(const juce::File&)> reveal_;
+    std::function<bool()> foregroundCheck_;
+    std::unique_ptr<juce::FileChooser> chooser_;
+    NonModalLabel renameLabel_;
+    juce::File renaming_;
+    juce::String pendingSelection_; // a row to select once it exists (a folder just added)
+    bool appWasForeground_ = true;
+    int packButtonHot_ = -1; // the GetPack row whose button the pointer is over
+    bool dropActive_ = false;
+    float dropGlow_ = 0.0f;
+    synth::ui::AnimationDriver dropAnim_;
 
     synth::ui::NavigationSearchField search_;
     SoundFilterModel filters_;

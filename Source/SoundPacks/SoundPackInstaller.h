@@ -1,7 +1,8 @@
 #pragma once
 
 // The app's one sound pack installer: fetches the hosted pack list, downloads and installs packs on background
-// threads, removes them, and reports progress to whoever is listening (Settings > Sound packs, the Sampler picker).
+// threads, removes them, and reports progress to whoever is listening (Settings > Sound packs, the Sampler picker, the
+// Sounds view).
 
 #include "SoundPacks/SoundPackFetch.h"
 #include "SoundPacks/SoundPackIndex.h"

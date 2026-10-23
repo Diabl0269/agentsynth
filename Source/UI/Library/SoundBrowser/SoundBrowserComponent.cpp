@@ -45,6 +45,7 @@ SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& in
 
     setupFilters();
     setupPreview();
+    setupFolders();
     index_.addListener(this);
     juce::Desktop::getInstance().addFocusChangeListener(this);
     rebuildRows();
@@ -60,9 +61,14 @@ SoundBrowserComponent::~SoundBrowserComponent() {
         giveAwayKeyboardFocus();
     juce::Desktop::getInstance().removeFocusChangeListener(this);
     index_.removeListener(this);
+    if (installer_ != nullptr)
+        installer_->removeListener(this);
+    if (folderBook_ != nullptr)
+        folderBook_->removeListener(this);
     if (vblank_.has_value()) {
         listAnim_.stop(*vblank_);
         panelAnim_.stop(*vblank_);
+        dropAnim_.stop(*vblank_);
     }
     scrollBar_.removeListener(this);
 }

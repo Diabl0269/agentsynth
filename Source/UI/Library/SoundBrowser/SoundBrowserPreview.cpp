@@ -71,9 +71,20 @@ void SoundBrowserComponent::syncFooterToSelection() {
     footer_.showSound(entry);
 }
 
+// Showing the view loads the hosted pack list (for "Get more") when it is not loaded and looks again at the user's
+// folders; hiding it stops the preview.
 void SoundBrowserComponent::visibilityChanged() {
-    if (!isVisible())
+    if (!isVisible()) {
         stopPreview();
+        return;
+    }
+    if (!isShowing())
+        return;
+    checkFoldersOnReturn();
+    using Status = synth::soundpacks::SoundPackInstaller::IndexStatus;
+    if (installer_ != nullptr &&
+        (installer_->indexStatus() == Status::NotLoaded || installer_->indexStatus() == Status::Failed))
+        installer_->refreshIndex();
 }
 
 } // namespace synth::ui

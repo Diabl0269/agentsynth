@@ -61,6 +61,49 @@ void SoundIndex::setUserFolders(const std::vector<juce::File>& folders) {
     rescan();
 }
 
+namespace {
+
+// A user folder keeps its own name unless the user gave it one; the place and every entry in it carry the same name.
+void applyFolderNames(std::vector<SoundPlace>& places, std::vector<SoundEntry>& entries,
+                      const std::map<juce::String, juce::String>& names) {
+    std::map<juce::String, juce::String> byPlace;
+    for (auto& place : places) {
+        if (place.isPack)
+            continue;
+        const auto given = names.find(place.root.getFullPathName());
+        place.name = given != names.end() && given->second.isNotEmpty() ? given->second : place.root.getFileName();
+        byPlace[place.id] = place.name;
+    }
+    for (auto& e : entries)
+        if (const auto it = byPlace.find(e.placeId); it != byPlace.end())
+            e.placeName = it->second;
+}
+
+} // namespace
+
+void SoundIndex::setUserFolderNames(const std::map<juce::String, juce::String>& names) {
+    std::shared_ptr<const SoundSnapshot> current;
+    {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        if (names == folderNames_)
+            return;
+        folderNames_ = names;
+        current = snapshot_;
+    }
+    publish(current->places, current->entries, current->truncated, current->scanning);
+}
+
+bool SoundIndex::rescanIfFoldersChanged() {
+    if (worker_ == nullptr)
+        return false;
+    for (const auto& place : snapshot()->places)
+        if (!place.isPack && place.missing == place.root.isDirectory()) {
+            rescan();
+            return true;
+        }
+    return false;
+}
+
 std::vector<juce::File> SoundIndex::userFolders() const {
     const std::lock_guard<std::mutex> lock(mutex_);
     return userFolders_;
@@ -116,12 +159,18 @@ void SoundIndex::handleAsyncUpdate() {
 void SoundIndex::publish(std::vector<SoundPlace> places, std::vector<SoundEntry> entries, bool truncated,
                          bool scanning) {
     auto snap = std::make_shared<SoundSnapshot>();
-    for (size_t i = 0; i < entries.size(); ++i)
+    {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        applyFolderNames(places, entries, folderNames_);
+    }
+    std::map<juce::String, int> counts;
+    for (size_t i = 0; i < entries.size(); ++i) {
         snap->byPath[entries[i].path] = i;
+        ++counts[entries[i].placeId];
+    }
     for (auto& place : places)
-        for (const auto& e : entries)
-            if (e.placeId == place.id)
-                ++place.soundCount;
+        if (const auto it = counts.find(place.id); it != counts.end())
+            place.soundCount = it->second;
     snap->places = std::move(places);
     snap->entries = std::move(entries);
     snap->truncated = truncated;
@@ -136,12 +185,16 @@ void SoundIndex::publish(std::vector<SoundPlace> places, std::vector<SoundEntry>
 void SoundIndex::runScan(const std::function<bool()>& shouldExit) {
     std::vector<juce::File> users;
     size_t cap;
+    std::map<juce::String, juce::String> names;
     {
         const std::lock_guard<std::mutex> lock(mutex_);
         users = userFolders_;
         cap = cap_;
+        names = folderNames_;
     }
-    auto places = discoverPlaces(packRoots_(), users);
+    auto places = discoverPlaces(packRoots_(), users, names);
+    for (auto& place : places)
+        place.scanned = false;
 
     // The cached entries are both shown at once and the "before" of the incremental pass.
     std::map<juce::String, SoundEntry> previous;
@@ -163,19 +216,44 @@ void SoundIndex::runScan(const std::function<bool()>& shouldExit) {
             for (const auto& [path, e] : previous)
                 if (e.placeId == place.id)
                     shown.push_back(e);
-        if (!shown.empty())
-            publish(places, std::move(shown), cachedTruncated, true);
+        publish(places, std::move(shown), cachedTruncated, true);
     }
 
     ScanLimits limits;
     limits.cap = cap;
     limits.headersRead = &headersRead_;
     limits.shouldExit = shouldExit;
-    limits.progress = [this, &places](const std::vector<SoundEntry>& sofar) { publish(places, sofar, false, true); };
+    limits.progressIntervalMs = progressIntervalMs_;
+    limits.beforeFile = scanHold_;
+    // What a mid-scan publish shows: the entries found so far, plus the cached ones of every place the walk has not
+    // reached, so a place waiting its turn does not blink out of the lists.
+    const auto partial = [&places, &previous](const std::vector<SoundEntry>& sofar) {
+        std::set<juce::String> reached;
+        for (const auto& e : sofar)
+            reached.insert(e.placeId);
+        std::set<juce::String> waiting;
+        for (const auto& place : places)
+            if (!place.scanned && reached.count(place.id) == 0)
+                waiting.insert(place.id);
+        auto shown = sofar;
+        for (const auto& [path, e] : previous)
+            if (waiting.count(e.placeId) != 0)
+                shown.push_back(e);
+        return shown;
+    };
+    limits.progress = [this, &places, partial](const std::vector<SoundEntry>& sofar) {
+        publish(places, partial(sofar), false, true);
+    };
+    limits.placeDone = [this, &places, partial](size_t done, const std::vector<SoundEntry>& sofar) {
+        places[done].scanned = true;
+        publish(places, partial(sofar), false, true);
+    };
     auto result = scanPlaces(places, previous, limits);
 
     if (shouldExit())
         return;
+    for (auto& place : places)
+        place.scanned = true;
     if (cacheFile_ != juce::File())
         writeIndexCache(cacheFile_, result.entries, result.truncated);
     publish(std::move(places), std::move(result.entries), result.truncated, false);

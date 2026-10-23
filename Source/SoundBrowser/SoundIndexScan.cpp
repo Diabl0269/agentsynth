@@ -79,11 +79,14 @@ struct Walk {
     const ScanLimits& limits;
     juce::AudioFormatManager formats;
     ScanResult result;
-    size_t nextProgress = 500;
+    juce::uint32 lastProgressMs = juce::Time::getMillisecondCounter();
+    size_t publishedCount = 0;
 };
 
 bool visit(Walk& w, const SoundPlace& place, const juce::DirectoryEntry& item) {
     const auto file = item.getFile();
+    if (w.limits.beforeFile)
+        w.limits.beforeFile(file);
     const auto ext = file.getFileExtension().trimCharactersAtStart(".").toLowerCase();
     const bool isSfz = ext == "sfz";
     if (!isSfz && !isAudioExtension(ext))
@@ -112,9 +115,13 @@ bool visit(Walk& w, const SoundPlace& place, const juce::DirectoryEntry& item) {
             return true; // not a readable audio file: nothing to preview or load
         w.result.entries.push_back(std::move(entry));
     }
-    if (w.limits.progress && w.result.entries.size() >= w.nextProgress) {
+    // Results reach the view as they are found, but a publish copies the whole list, so one per interval at most.
+    const auto now = juce::Time::getMillisecondCounter();
+    if (w.limits.progress && w.result.entries.size() > w.publishedCount &&
+        now - w.lastProgressMs >= (juce::uint32)w.limits.progressIntervalMs) {
         w.limits.progress(w.result.entries);
-        w.nextProgress *= 2;
+        w.lastProgressMs = now;
+        w.publishedCount = w.result.entries.size();
     }
     return !(w.limits.shouldExit && w.limits.shouldExit());
 }
@@ -170,7 +177,8 @@ bool isSoundFile(const juce::File& file) {
 }
 
 std::vector<SoundPlace> discoverPlaces(const std::vector<juce::File>& packRoots,
-                                       const std::vector<juce::File>& userFolders) {
+                                       const std::vector<juce::File>& userFolders,
+                                       const std::map<juce::String, juce::String>& names) {
     std::vector<SoundPlace> places;
     juce::StringArray seen;
     for (const auto& root : packRoots) {
@@ -187,24 +195,29 @@ std::vector<SoundPlace> discoverPlaces(const std::vector<juce::File>& packRoots,
             places.push_back({id, name.isEmpty() ? id : name, dir, true, 0});
         }
     }
-    for (const auto& folder : userFolders)
-        places.push_back({"folder:" + folder.getFullPathName(), folder.getFileName(), folder, false, 0});
+    for (const auto& folder : userFolders) {
+        const auto given = names.find(folder.getFullPathName());
+        const auto name = given != names.end() && given->second.isNotEmpty() ? given->second : folder.getFileName();
+        places.push_back({"folder:" + folder.getFullPathName(), name, folder, false, 0, !folder.isDirectory(), true});
+    }
     return places;
 }
 
 ScanResult scanPlaces(const std::vector<SoundPlace>& places, const std::map<juce::String, SoundEntry>& previous,
                       const ScanLimits& limits) {
-    Walk walk{previous, limits, {}, {}, 500};
+    Walk walk{previous, limits, {}, {}};
     walk.formats.registerBasicFormats();
-    for (const auto& place : places) {
-        if (!place.root.isDirectory())
-            continue;
-        for (const auto& item : juce::RangedDirectoryIterator(place.root, true, "*", juce::File::findFiles)) {
-            if (item.isHidden())
-                continue;
-            if (!visit(walk, place, item))
-                return walk.result;
-        }
+    for (size_t i = 0; i < places.size(); ++i) {
+        const auto& place = places[i];
+        if (place.root.isDirectory())
+            for (const auto& item : juce::RangedDirectoryIterator(place.root, true, "*", juce::File::findFiles)) {
+                if (item.isHidden())
+                    continue;
+                if (!visit(walk, place, item))
+                    return walk.result;
+            }
+        if (limits.placeDone)
+            limits.placeDone(i, walk.result.entries);
     }
     return walk.result;
 }

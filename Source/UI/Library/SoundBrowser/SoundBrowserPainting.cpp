@@ -4,6 +4,7 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
+#include "UI/Library/SoundBrowser/SoundBrowserPackLayout.h"
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -11,7 +12,7 @@ namespace synth::ui {
 
 namespace {
 
-constexpr int kSideMargin = 12;
+constexpr int kSideMargin = kSoundRowSideMargin;
 constexpr int kChevronGap = 14;
 constexpr int kStatusWidth = 78;
 
@@ -49,7 +50,8 @@ void SoundBrowserComponent::paintPathBar(juce::Graphics& g, juce::Colour muted, 
     const auto snap = index_.snapshot();
     const int pathTop = getListTop() - kPathHeight;
     if (showsFlatResults()) {
-        const int count = (int)rows_.size() - ((rows_.size() == 1 && rows_[0].kind == RowKind::Hint) ? 1 : 0);
+        const int count =
+            (int)std::count_if(rows_.begin(), rows_.end(), [](const Row& r) { return r.kind == RowKind::Sound; });
         g.setColour(muted);
         g.drawText(juce::String(count) + (count == 1 ? " sound" : " sounds") + " in all places",
                    juce::Rectangle<int>(kSideMargin, pathTop, getWidth() - 2 * kSideMargin, kPathHeight),
@@ -122,21 +124,37 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
         g.setFont(detailFont);
         g.drawText(row.detail, detailLeft, area.getY(), detailRight - detailLeft, area.getHeight(),
                    juce::Justification::centredRight);
+    } else if (row.kind == RowKind::GetPack) {
+        paintPackRow(g, row, index, area);
+    } else if (row.kind == RowKind::AddFolder) {
+        paintAddFolderRow(g, area);
     } else {
-        strokeChevron(g, {(float)width - kSideMargin - 5.0f, (float)area.getCentreY() - 4.0f, 5.0f, 8.0f}, c.textMuted);
-        const int countRight = width - kSideMargin - 14;
-        g.setColour(c.textMuted);
-        g.setFont(detailFont);
-        g.drawText(row.detail, countRight - 50, area.getY(), 50, area.getHeight(), juce::Justification::centredRight);
-        g.setColour(c.textPrimary);
-        g.setFont(nameFont);
-        g.drawText(row.text, area.getX() + kSideMargin, area.getY(), juce::jmax(0, countRight - 56 - kSideMargin),
-                   area.getHeight(), juce::Justification::centredLeft, true);
+        paintPlaceRow(g, row, area);
     }
     if (index == selected_ && hasKeyboardFocus(false)) {
         g.setColour(c.accent.withAlpha(0.9f));
         g.drawRect(area, 1);
     }
+}
+
+// A Place or Folder row: name, count (or Scanning, or Not found for a folder that is gone) and a chevron. A missing
+// folder is dimmed.
+void SoundBrowserComponent::paintPlaceRow(juce::Graphics& g, const Row& row, juce::Rectangle<int> area) const {
+    const auto& c = synth::theme::themeOf(*this).colors;
+    const int width = area.getWidth();
+    const float alpha = row.missing ? 0.55f : 1.0f;
+    const int detailWidth = 76;
+    strokeChevron(g, {(float)width - kSideMargin - 5.0f, (float)area.getCentreY() - 4.0f, 5.0f, 8.0f}, c.textMuted);
+    const int countRight = width - kSideMargin - 14;
+    g.setColour(c.textMuted.withAlpha(alpha));
+    g.setFont(juce::Font(juce::FontOptions(12.0f)));
+    g.drawText(row.detail, countRight - detailWidth, area.getY(), detailWidth, area.getHeight(),
+               juce::Justification::centredRight);
+    g.setColour(c.textPrimary.withAlpha(alpha));
+    g.setFont(juce::Font(juce::FontOptions(14.0f)));
+    g.drawText(row.text, area.getX() + kSideMargin, area.getY(),
+               juce::jmax(0, countRight - detailWidth - 6 - kSideMargin), area.getHeight(),
+               juce::Justification::centredLeft, true);
 }
 
 // Paints the rows with the list's top-left at the origin; the caller clips and positions.
@@ -187,6 +205,12 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
         sub = row.entry->placeName;
         if (row.entry->folder.isNotEmpty())
             sub += " > " + row.entry->folder.replace("/", " > ");
+    } else if (row.kind == RowKind::GetPack) {
+        sub = row.busy ? row.detail : "Not downloaded - " + synth::soundpacks::formatPackSize(row.bytes);
+    } else if (row.kind == RowKind::AddFolder) {
+        sub = "Choose a folder of sounds";
+    } else if (row.missing || row.scanning) {
+        sub = row.missing ? "Not found" : "Scanning";
     } else {
         sub = juce::String(row.soundCount) + (row.soundCount == 1 ? " sound" : " sounds");
     }
@@ -241,6 +265,8 @@ void SoundBrowserComponent::paint(juce::Graphics& g) {
         }
     }
     paintFooter(g);
+    if (dropGlow_ > 0.0f)
+        paintDropOutline(g);
 }
 
 } // namespace synth::ui

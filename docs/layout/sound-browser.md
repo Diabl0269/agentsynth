@@ -1,12 +1,12 @@
 # The sound browser
 
-One place to find a recording: the **sound index** (Core, no UI) lists every sound in the installed packs and the user's own folders, and the **Sounds view** (the left sidebar's second view) browses and searches it. Dragging a sound onto a module or track and downloads arrive in later steps; this doc covers the index, the view, its filters and the preview as built.
+One place to find a recording: the **sound index** (Core, no UI) lists every sound in the installed packs and the user's own folders, and the **Sounds view** (the left sidebar's second view) browses and searches it. This doc covers the index, the view, its filters, the preview, dragging a sound out, the packs you can download from the view and your own folders.
 
 ## The sound index
 
 `synth::soundbrowser::SoundIndex` (`Source/SoundBrowser/`, part of Core) owns one long-lived scan thread. Nothing it does runs on the message thread.
 
-- **Roots**: every installed sound pack folder (`SoundPackLibrary::roots()`; a pack is a folder with a `pack.json` that has an id, and a repeated id is listed once) and each user folder passed to `setUserFolders`. The pack folders' own audio and `.sfz` files are the entries; there is no separate list for packs you have not downloaded yet.
+- **Roots**: every installed sound pack folder (`SoundPackLibrary::roots()`; a pack is a folder with a `pack.json` that has an id, and a repeated id is listed once) and each user folder passed to `setUserFolders`. The pack folders' own audio and `.sfz` files are the entries. A pack you have not downloaded has no entries; the view lists it from the installer's pack list instead ([Packs you do not have](#packs-you-do-not-have)).
 - **Entry** (`SoundEntry`): path, place (pack id and name, or `folder:<path>` and the folder's name), the folder inside the place, size, length, sample rate, kind (`OneShot`, `Loop` or `Instrument` for `.sfz`), tags, tempo (0 = unknown), key (empty = unknown) and modification time.
 - **Extensions**: `wav`, `aif`, `aiff`, `flac`, `ogg`, `mp3`, plus `.sfz` instruments. A file whose header no format reads is left out.
 - **Headers only**: listing opens each file's reader (format header and metadata chunks) and never reads a sample, so a WAV whose audio is damaged still lists, with the length its header declares. A WAV `acid` chunk gives the tempo (or beats over length), the root note and the one-shot flag; the flag beats a "loop" in the file name.
@@ -14,19 +14,39 @@ One place to find a recording: the **sound index** (Core, no UI) lists every sou
 - **Cache**: `<settings folder>/SoundBrowser/index.json`, loaded before the first scan so the list is there at once, then rescanned incrementally: a file whose size and modification time match its cached entry is not opened again. The index holds at most 50,000 entries; past that the scan stops and the snapshot says `truncated`.
 - **Reading**: `snapshot()` returns an immutable `std::shared_ptr<const SoundSnapshot>`, swapped in under a mutex, so a reader never blocks the scan. `search(query, filter)` ranks name matches first (then folder, place and tag matches, then by name) with the same word rules as `Layout/SearchMatch.h` (a Core copy, because Core cannot use the UI's; a test keeps the two equal). `childrenOf(place, folder)` returns the immediate subfolders (with a sound count) and sounds. `find(path)` looks one entry up.
 - **Listener**: `SoundIndex::Listener::soundIndexChanged()` is called on the message thread (an `AsyncUpdater`) after the cache is shown, as the scan progresses and when it ends.
+- **Results while scanning**: the scan publishes when it has walked a place and at most every 200 ms inside one (a publish copies the list), so a new folder's sounds are searchable before the scan ends. A mid-scan snapshot keeps the cached entries of the places the walk has not reached. Each `SoundPlace` says whether the running scan has walked it (`scanned`), which is what makes a folder row read "Scanning" while a pack install's rescan leaves the others alone.
+- **Folder names and missing folders**: `setUserFolderNames` renames a folder's place and its entries at once, with no scan (the id stays the path). A user folder whose path is not a folder is still listed, with `missing` set and no entries; `rescanIfFoldersChanged()` stat-checks the folders and rescans only when one appeared or vanished.
 - **Favourites and Used recently**: `SoundLists` holds two path lists (the recent one capped at 50, newest first). Core never touches the settings file, so the view's owner round-trips them through `soundBrowserFavourites` and `soundBrowserRecent`.
 
 ## The Sounds view
 
 The left column holds two views behind a **Modules / Sounds** switch at its top (`LibrarySidebarViews`, `Source/UI/Library/`). The switch is one Tab stop; Left and Right change view, and each segment's tooltip names its shortcut. The column is the "library" focus region's root.
 
-- **Screens**: Places (Favourites, Used recently, each installed pack, then "Your folders"), then folders inside a place, then the sounds. A path bar above the list shows where you are; every part but the last is a button that goes back there. A search field above it searches every place at once and shows sounds only.
+- **Screens**: Places (Favourites, Used recently, each installed pack, "Get more" with the packs you lack, then "Your folders" ending in "Add folder..."), then folders inside a place, then the sounds. A path bar above the list shows where you are; every part but the last is a button that goes back there. A search field above it searches every place at once and shows sounds only.
 - **Keys** (list focused): Up, Down, PageUp, PageDown select; Right or Return opens a folder; Left or Cmd+Up goes up; Return on a sound activates it; Space plays or stops its preview; F adds or removes it from Favourites; a printable key jumps to the search field. In the search field Down or Return moves into the list and Esc clears the text, then returns to the list.
 - **Screen reader**: the rows are painted, and ONE list element speaks the selected row ("snare, one-shot, 0.8 seconds, 2 of 23"), the same pattern as the module library. The wording lives in `SoundBrowserText` and is unit-tested.
 - **Footer**: the selected sound's name and place, then the preview strip (see [Preview](#preview)).
 - **Width**: while Sounds shows, the column is as wide as `soundBrowserWidth` (default 280, 200 to 400). Drag the right edge, double-click it to reset, or focus it and use Left and Right (16 px a step). The width eases between the Modules width and the Sounds width while the views slide.
 - **Motion**: switching views slides 190 ms (a cross-fade under reduced motion); opening a folder slides the list in, going up slides it out.
 - **Lazy start**: the index starts its first scan when Sounds is first shown, and rescans when the installed packs change.
+
+## Packs you do not have
+
+Under Places, a **Get more** heading lists every pack the hosted list offers that is not installed, greyed, each with its download size and a **Download** button painted at the row's right edge. At the end of search results the same rows appear for the packs the query finds by name or by an instrument's name (`Layout/SearchMatch.h` over the name and instrument names), after the sounds; with a filter on, none show. They need the installer's list to have loaded: showing the view fetches it when it has not (and again after a failed fetch), and until it loads there is no Get more.
+
+- **One download**: the button starts `SoundPackInstaller::install`, the job Settings > Sound packs starts, and the view listens to the same installer. The row's percentage and the bar filling along its foot are the installer's progress, so a download started in either place shows in both. The button reads Cancel while the pack downloads (`cancel`), and goes away while it is checked and unpacked. The index scan after the install turns the row into the pack's normal Place; until the index lists the folder the row stays, reading Installing, so the pack is never in neither list.
+- **Selecting** a pack row only selects it (no click downloads from the row body). The hosted pack list carries no demo or preview URL and no bundled demo, so there is nothing to play; the footer says "Not downloaded" and the size.
+- **Greyed rows are not sounds**: they refuse drags (a press and drag on one does nothing) and their tooltips read "Download <pack> (<size>)", or "Download <pack> (<size>) to use this sound" when the search matched an instrument rather than the pack's name.
+- **Keyboard**: the rows are list rows (Up and Down reach them). Return or Space starts the download; Delete or Backspace cancels a running one. The button is not a separate stop: the selected row's focus ring is its ring, and the list speaks "Core instruments, not downloaded, 33 MB, press Return to download, 4 of 7".
+
+## Your folders
+
+"Your folders" lists the folders you added, then **Add folder...** at the end of Places. Return, Space or a click on that row opens the folder chooser (an async `juce::FileChooser`), and dragging a folder from Finder onto the view adds it too: the view is a file-drop target for folders only (a file dragged over is refused, so cards and tracks keep taking audio files; sound dragging out is unaffected). An accent outline fades in around the list while a folder is over it.
+
+- **Scanning**: the new folder's row reads "Scanning" until the scan has walked it, and its sounds are searchable as they are found ([Results while scanning](#the-sound-index)).
+- **Folder menu**: right-click a folder Place, or Shift+F10 (the app's open-context-menu key) with it selected: **Rename**, **Show in Finder**, **Scan again**, **Remove**. A right-click on any row selects it and never opens it. Rename edits the name in place (`NonModalLabel` over the row: Return or leaving the field commits, Esc cancels) and changes only the label shown here, in the footer and in the Place filter; the folder and its files keep their names. Remove stops listing the folder and never touches a file on disk. Scan again rescans (a file whose size and time are unchanged is not opened again).
+- **Missing folders**: a folder whose path is not there (an unplugged drive) stays listed, dimmed, with "Not found" instead of a count, and opening it says so. Showing the view and coming back to the app from another one stat-check the folders (no timer) and rescan only when one appeared or vanished, so the folder returns by itself when the drive is plugged in.
+- **Persistence**: `SoundFolderBook` (`Source/SoundBrowser/`) holds the list and the names and keeps the index in step; `LibrarySidebarViews` saves it to `soundBrowserFolders` and `soundBrowserFolderNames`. Settings > Sound packs lists the same folders under "Your folders" (name, path, Remove).
 
 ## Short columns
 
@@ -89,6 +109,7 @@ The toolbar's library button opens or closes the column on the last-used view, a
 | `librarySidebarView` | `modules` (default) or `sounds`: the view the column shows, and the view it reopens on |
 | `soundBrowserWidth` | the column's width while Sounds shows; default 280, clamped 200 to 400 |
 | `soundBrowserFolders` | the user's own sound folders, one absolute path per line |
+| `soundBrowserFolderNames` | the names given to those folders: a JSON object from path to name; absent while none is renamed |
 | `soundBrowserFavourites`, `soundBrowserRecent` | file paths, one per line |
 | `soundBrowserAutoPlay` | play a sound when it is selected; default on |
 | `soundBrowserPreviewGainDb` | the preview volume in dB; default -6, clamped -60 to +6 |
