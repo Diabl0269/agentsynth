@@ -20,6 +20,8 @@ target_sources(Core PRIVATE
     Source/Modules/Filter/CustomFilterVoiceCursors.cpp
     Source/Modules/Filter/CustomFilterBlend.h
     Source/Modules/Filter/CustomFilterBlend.cpp
+    Source/Modules/Filter/CustomFilterPeakMorph.h
+    Source/Modules/Filter/CustomFilterPeakMorph.cpp
     Source/Modules/Shapes/LockFreeHandoff.h
     Source/Modules/Shapes/MorphShapes.h
     Source/Modules/Shapes/MorphShapes.cpp

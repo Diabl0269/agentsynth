@@ -5,6 +5,7 @@
 
 #include "../../../Mixer/ChannelFlow/ChannelFlowTestFixture.h"
 
+#include "../../../UniqueTempDir.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/SamplerModule.h"
 #include "ShortcutManager/AppCommands.h"
@@ -24,8 +25,7 @@ protected:
     void SetUp() override {
         ChannelFlowTest::SetUp();
         synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
-        dir_ = juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("LoadPipeline", "");
-        dir_.createDirectory();
+        dir_ = synth::test::makeUniqueTempDir("LoadPipeline");
         wav_ = dir_.getChildFile("loop.wav");
         juce::AudioBuffer<float> buffer(1, 9600);
         for (int i = 0; i < buffer.getNumSamples(); ++i)

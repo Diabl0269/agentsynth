@@ -57,6 +57,16 @@ TEST(SoundBrowserTextTest, LengthsDetailsAndSpokenDescriptions) {
     EXPECT_EQ(synth::ui::describePathForAccessibility({"Places", "Core"}), "Path, Places, Core");
 }
 
+TEST(SoundBrowserTextTest, TheFileBrowserHasItsPlatformName) {
+#if JUCE_MAC
+    EXPECT_EQ(synth::ui::fileManagerName(), "Finder");
+#elif JUCE_WINDOWS
+    EXPECT_EQ(synth::ui::fileManagerName(), "File Explorer");
+#else
+    EXPECT_EQ(synth::ui::fileManagerName(), "the file manager");
+#endif
+}
+
 TEST(SoundBrowserViewTest, ArrowsOpenFoldersAndGoBack) {
     ViewFixture f;
     auto& v = *f.view;

@@ -34,6 +34,10 @@ juce::String SoundBrowserComponent::selectionKey(int index) const {
         return "f:" + row.folder;
     case RowKind::Place:
         return "p:" + row.placeId;
+    case RowKind::GetPack:
+        return "g:" + row.packId;
+    case RowKind::AddFolder:
+        return "a:add";
     case RowKind::Hint:
         break;
     }
@@ -63,7 +67,19 @@ void SoundBrowserComponent::appendSoundRows(const std::vector<SoundEntry>& entri
 }
 
 void SoundBrowserComponent::rebuildPlaceRows(const synth::soundbrowser::SoundSnapshot& snap) {
-    const auto place = [this](const juce::String& id, const juce::String& name, int count) {
+    const auto place = [this](const synth::soundbrowser::SoundPlace& p, int count, bool scanning) {
+        Row row;
+        row.kind = RowKind::Place;
+        row.text = p.name;
+        row.placeId = p.id;
+        row.soundCount = count;
+        row.userFolder = !p.isPack;
+        row.missing = row.userFolder && p.missing;
+        row.scanning = row.userFolder && !row.missing && scanning;
+        row.detail = row.missing ? "Not found" : (row.scanning ? "Scanning" : juce::String(count));
+        rows_.push_back(std::move(row));
+    };
+    const auto listRow = [this](const char* id, const char* name, int count) {
         Row row;
         row.kind = RowKind::Place;
         row.text = name;
@@ -72,23 +88,58 @@ void SoundBrowserComponent::rebuildPlaceRows(const synth::soundbrowser::SoundSna
         row.detail = juce::String(count);
         rows_.push_back(std::move(row));
     };
-    place(kFavouritesId, "Favourites", lists_.favourites().size());
-    place(kRecentId, "Used recently", lists_.recent().size());
+    listRow(kFavouritesId, "Favourites", lists_.favourites().size());
+    listRow(kRecentId, "Used recently", lists_.recent().size());
     for (const auto& p : snap.places)
         if (p.isPack)
-            place(p.id, p.name, p.soundCount);
+            place(p, p.soundCount, false);
+    appendOfferedPackRows(snap, true);
     bool headed = false;
     for (const auto& p : snap.places) {
-        if (p.isPack)
+        if (p.isPack || (folderBook_ != nullptr && folderBook_->find(p.root) == nullptr))
             continue;
         if (!headed) {
             rows_.push_back({RowKind::Hint, "Your folders", {}, {}, {}, 0, std::nullopt});
             headed = true;
         }
-        place(p.id, p.name, p.soundCount);
+        place(p, p.soundCount, snap.scanning && !p.scanned);
+    }
+    if (folderBook_ != nullptr) {
+        if (!headed)
+            rows_.push_back({RowKind::Hint, "Your folders", {}, {}, {}, 0, std::nullopt});
+        Row add;
+        add.kind = RowKind::AddFolder;
+        add.text = "Add folder...";
+        rows_.push_back(std::move(add));
     }
     if (snap.scanning && snap.places.empty())
         rows_.push_back({RowKind::Hint, "Looking for sounds...", {}, {}, {}, 0, std::nullopt});
+}
+
+// The folders and sounds inside a pack or a user folder; a folder that is not there says so instead of "Nothing here".
+void SoundBrowserComponent::rebuildPlaceListing(const synth::soundbrowser::SoundSnapshot& snap,
+                                                const synth::soundbrowser::SoundFilter& filter) {
+    const auto listing = index_.childrenOf(placeId_, folder_, filter);
+    for (const auto& f : listing.folders) {
+        Row row;
+        row.kind = RowKind::Folder;
+        row.text = f.name;
+        row.placeId = placeId_;
+        row.folder = folder_.isEmpty() ? f.name : folder_ + "/" + f.name;
+        row.soundCount = f.soundCount;
+        row.detail = juce::String(f.soundCount);
+        rows_.push_back(std::move(row));
+    }
+    appendSoundRows(listing.entries);
+    if (!rows_.empty())
+        return;
+    bool missing = false;
+    for (const auto& p : snap.places)
+        missing = missing || (p.id == placeId_ && p.missing);
+    const auto text = missing ? "This folder was not found. It comes back when its drive is plugged in."
+                              : (snap.scanning ? "Looking for sounds..."
+                                               : (filter.isActive() ? "No sounds match the filters" : "Nothing here"));
+    rows_.push_back({RowKind::Hint, text, {}, {}, {}, 0, std::nullopt});
 }
 
 void SoundBrowserComponent::rebuildRows() {
@@ -98,6 +149,8 @@ void SoundBrowserComponent::rebuildRows() {
     rows_.clear();
     if (showsFlatResults()) {
         appendSoundRows(index_.search(query_, filter));
+        if (isSearchActive() && !filter.isActive())
+            appendOfferedPackRows(*snap, false);
         if (rows_.empty())
             rows_.push_back({RowKind::Hint, "No matching sounds", {}, {}, {}, 0, std::nullopt});
     } else if (placeId_.isEmpty()) {
@@ -120,29 +173,19 @@ void SoundBrowserComponent::rebuildRows() {
                              0,
                              std::nullopt});
     } else {
-        const auto listing = index_.childrenOf(placeId_, folder_, filter);
-        for (const auto& f : listing.folders) {
-            Row row;
-            row.kind = RowKind::Folder;
-            row.text = f.name;
-            row.placeId = placeId_;
-            row.folder = folder_.isEmpty() ? f.name : folder_ + "/" + f.name;
-            row.soundCount = f.soundCount;
-            row.detail = juce::String(f.soundCount);
-            rows_.push_back(std::move(row));
-        }
-        appendSoundRows(listing.entries);
-        if (rows_.empty())
-            rows_.push_back({RowKind::Hint,
-                             snap->scanning ? "Looking for sounds..."
-                                            : (filter.isActive() ? "No sounds match the filters" : "Nothing here"),
-                             {},
-                             {},
-                             {},
-                             0,
-                             std::nullopt});
+        rebuildPlaceListing(*snap, filter);
     }
     restoreSelection(key);
+    if (pendingSelection_.isNotEmpty()) {
+        const int before = selected_;
+        restoreSelection(pendingSelection_);
+        if (selected_ >= 0) {
+            pendingSelection_ = {};
+            scrollSelectionIntoView();
+        } else {
+            selected_ = before;
+        }
+    }
     layoutPathParts();
     updateScrollBar();
     refreshAccessibilityValue();

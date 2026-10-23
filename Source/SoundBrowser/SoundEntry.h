@@ -36,6 +36,8 @@ struct SoundPlace {
     juce::File root;
     bool isPack = false;
     int soundCount = 0;
+    bool missing = false; ///< A user folder whose path is not a folder now (an unplugged drive).
+    bool scanned = true;  ///< False until the running scan has walked this place.
 };
 
 /** What the index holds at one moment; immutable once published. */

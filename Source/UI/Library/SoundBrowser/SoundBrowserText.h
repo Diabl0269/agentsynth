@@ -21,8 +21,16 @@ juce::String soundDetailText(const synth::soundbrowser::SoundEntry& entry);
 juce::String describeSoundForAccessibility(const synth::soundbrowser::SoundEntry& entry, int position, int count);
 /** "Drums, folder, 24 sounds, 2 of 5". */
 juce::String describeFolderForAccessibility(const juce::String& name, int soundCount, int position, int count);
-/** "Core instruments, 214 sounds, 3 of 6". */
-juce::String describePlaceForAccessibility(const juce::String& name, int soundCount, int position, int count);
+/** "Core instruments, 214 sounds, 3 of 6"; a non-empty `status` ("Scanning", "Not found") replaces the count. */
+juce::String describePlaceForAccessibility(const juce::String& name, int soundCount, int position, int count,
+                                           const juce::String& status = {});
+/** "Animals, not downloaded, 12 MB, press Return to download, 4 of 7" (or "downloading", with no button hint). */
+juce::String describePackOfferForAccessibility(const juce::String& name, const juce::String& size, bool busy,
+                                               int position, int count);
+/** "Add folder, press Return to choose a folder, 7 of 8". */
+juce::String describeAddFolderForAccessibility(int position, int count);
+/** What this platform calls its file browser: "Finder", "File Explorer", or "the file manager" on Linux. */
+juce::String fileManagerName();
 /** "Path, Places, Core instruments, Drums". */
 juce::String describePathForAccessibility(const juce::StringArray& parts);
 

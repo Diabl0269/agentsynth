@@ -9,6 +9,7 @@
 
 #include "../Mixer/ChannelFlow/ChannelFlowTestFixture.h"
 
+#include "../UniqueTempDir.h"
 #include "AppUndoManager.h"
 #include "MacroSet.h"
 #include "Modules/ModuleBase.h"
@@ -283,8 +284,7 @@ void profileCheckpoint(MainComponent& mc, double dupMs) {
 void profileProject(const juce::File& original, int duplicates) {
     // Work on a temporary copy without its autosave sidecars: the bench's MainComponent autosaves, and an autosave of
     // the grown project left in the real bundle is what that bundle would reopen to.
-    const auto project =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("LoadTestBench", ".agsproj");
+    const auto project = synth::test::uniqueTempPath("LoadTestBench", ".agsproj");
     if (!original.copyDirectoryTo(project)) {
         std::printf("[project] could not copy %s\n", original.getFullPathName().toRawUTF8());
         return;
@@ -610,8 +610,7 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestDeleteUndoProfile) {
     const auto original = path != nullptr ? juce::File(path)
                                           : juce::File::getSpecialLocation(juce::File::userMusicDirectory)
                                                 .getChildFile("AgentSynth/Load test.agsproj");
-    const auto copy =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("LoadTestBench", ".agsproj");
+    const auto copy = synth::test::uniqueTempPath("LoadTestBench", ".agsproj");
     ASSERT_TRUE(original.copyDirectoryTo(copy)) << original.getFullPathName();
     for (const auto& f : copy.findChildFiles(juce::File::findFiles, false, "autosave*.json"))
         f.deleteFile();

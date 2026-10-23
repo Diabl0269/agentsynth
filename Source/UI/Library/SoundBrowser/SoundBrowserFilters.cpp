@@ -168,8 +168,13 @@ void SoundBrowserComponent::layoutTop() {
     repaint();
 }
 
-// A control inside a capped, scrolling panel that takes focus (Tab) scrolls into view.
-void SoundBrowserComponent::globalFocusChanged(juce::Component* focused) { scrollFocusedControlIntoView(focused); }
+// A control inside a capped, scrolling panel that takes focus (Tab) scrolls into view; a focus change is also how the
+// app learns it came back to the front.
+void SoundBrowserComponent::globalFocusChanged(juce::Component* focused) {
+    scrollFocusedControlIntoView(focused);
+    if (isShowing())
+        noteAppFocus();
+}
 
 void SoundBrowserComponent::scrollFocusedControlIntoView(juce::Component* focused) {
     if (focused == nullptr || !filterPanel_.isParentOf(focused))

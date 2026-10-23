@@ -1,6 +1,7 @@
 // SoundPacksSettingsTabTests.cpp -- the Settings "Sound packs" tab: one row per pack with its state and buttons, the
 // credits section, the Remove question, the offline line, and the screen-reader names and tooltips. The installer
 // runs inline on a fake network (SoundPackTestKit.h).
+#include "../../SoundBrowser/SoundBrowserTestKit.h"
 #include "../../SoundPacks/SoundPackTestKit.h"
 #include "../Accessibility/AccessibilitySettingsFixture.h"
 #include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
@@ -275,4 +276,35 @@ TEST(SoundPackRowDetail, TheLineNeverReachesTheButtonsAtTheNarrowestWidth) {
     row.update(packWithInstruments(9));
     EXPECT_LE(row.getDetailBounds().getRight(), row.getUpdateButton().getX());
     EXPECT_GT(row.getDetailBounds().getWidth(), 0);
+}
+
+TEST(SoundPacksSettingsTab, YourFoldersListsTheSoundsViewFoldersAndRemoveKeepsTheirFiles) {
+    Rig rig;
+    sound_browser_test::TempTree tree;
+    tree.fill();
+    auto index = sound_browser_test::makeIndex(tree);
+    synth::soundbrowser::SoundFolderBook book(*index);
+    book.add(tree.user);
+    SoundPacksSettingsTab tab(rig.installer, &book);
+    tab.setSize(500, 500);
+    tab.resized();
+    const auto pump = [] { juce::MessageManager::getInstance()->runDispatchLoopUntil(60); };
+
+    ASSERT_EQ(tab.getFolderRowCountForTest(), 1);
+    auto& row = tab.getFolderRowForTest(0);
+    EXPECT_EQ(row.getNameText(), "user");
+    EXPECT_EQ(row.getPathText(), tree.user.getFullPathName());
+    EXPECT_EQ(row.getRemoveButton().getTitle(), "Remove user from your folders");
+    EXPECT_TRUE(row.getRemoveButton().getTooltip().contains("The files stay where they are"));
+
+    book.rename(tree.user, "Field loops");
+    pump();
+    EXPECT_EQ(tab.getFolderRowForTest(0).getNameText(), "Field loops") << "a rename in the Sounds view shows here";
+
+    const auto file = tree.user.getChildFile("Field/dusty_keys_120_Am_loop.wav");
+    tab.getFolderRowForTest(0).getRemoveButton().onClick();
+    pump();
+    EXPECT_EQ(tab.getFolderRowCountForTest(), 0);
+    EXPECT_TRUE(book.folders().empty());
+    EXPECT_TRUE(file.existsAsFile());
 }

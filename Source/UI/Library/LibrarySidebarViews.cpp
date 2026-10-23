@@ -13,13 +13,6 @@ juce::File indexCacheFile() {
     return synth::userSettingsRootDirectory().getChildFile("SoundBrowser").getChildFile("index.json");
 }
 
-std::vector<juce::File> foldersFromSetting(const juce::String& text) {
-    std::vector<juce::File> folders;
-    for (const auto& line : synth::soundbrowser::SoundLists::fromSetting(text))
-        folders.emplace_back(line);
-    return folders;
-}
-
 } // namespace
 
 LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::PropertiesFile* settings)
@@ -46,6 +39,8 @@ LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::
             synth::soundbrowser::SoundLists::fromSetting(settings_->getValue(kSoundBrowserFavouritesSettingKey)));
         lists_.setRecent(
             synth::soundbrowser::SoundLists::fromSetting(settings_->getValue(kSoundBrowserRecentSettingKey)));
+        folderBook_.load(settings_->getValue(kSoundBrowserFoldersSettingKey),
+                         settings_->getValue(kSoundBrowserFolderNamesSettingKey));
     }
     if (settings_ != nullptr) {
         using Player = synth::soundbrowser::SoundPreviewPlayer;
@@ -70,10 +65,16 @@ LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::
     handle_.onKeyboardStep = [this](int direction) { setSoundsWidth(soundsWidth_ + direction * kWidthKeyStep, true); };
 
     installer_->addListener(this);
+    folderBook_.addListener(this);
+    sounds_.setPackInstaller(&*installer_);
+    sounds_.setFolderBook(&folderBook_);
     layoutViews();
 }
 
 LibrarySidebarViews::~LibrarySidebarViews() {
+    sounds_.setPackInstaller(nullptr); // the shared installer may go with this column
+    sounds_.setFolderBook(nullptr);
+    folderBook_.removeListener(this);
     installer_->removeListener(this);
     if (vblank_.has_value())
         anim_.stop(*vblank_);
@@ -90,22 +91,16 @@ void LibrarySidebarViews::ensureIndexStarted() {
     if (indexStarted_)
         return;
     indexStarted_ = true;
-    if (settings_ != nullptr)
-        index_.setUserFolders(foldersFromSetting(settings_->getValue(kSoundBrowserFoldersSettingKey)));
+    folderBook_.goLive();
     index_.rescan();
 }
 
-void LibrarySidebarViews::setUserFolders(const std::vector<juce::File>& folders) {
-    if (settings_ != nullptr) {
-        juce::StringArray paths;
-        for (const auto& f : folders)
-            paths.add(f.getFullPathName());
-        settings_->setValue(kSoundBrowserFoldersSettingKey, synth::soundbrowser::SoundLists::toSetting(paths));
-        settings_->saveIfNeeded();
-    }
-    indexStarted_ = true;
-    index_.setUserFolders(folders);
-    index_.rescan();
+void LibrarySidebarViews::soundFoldersChanged() {
+    if (settings_ == nullptr)
+        return;
+    settings_->setValue(kSoundBrowserFoldersSettingKey, folderBook_.pathsSetting());
+    settings_->setValue(kSoundBrowserFolderNamesSettingKey, folderBook_.namesSetting());
+    settings_->saveIfNeeded();
 }
 
 void LibrarySidebarViews::persistPreviewSettings() {

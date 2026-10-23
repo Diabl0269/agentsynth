@@ -12,6 +12,7 @@
 #include "../Macros/MacroContainer/MacroDragTestHelpers.h"
 #include "../Mixer/ChannelFlow/ChannelFlowTestFixture.h"
 
+#include "../UniqueTempDir.h"
 #include "AppUndoManager.h"
 #include "MacroSet.h"
 #include <algorithm>
@@ -140,8 +141,7 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestMacroDragProfile) {
     const auto original = path != nullptr ? juce::File(path)
                                           : juce::File::getSpecialLocation(juce::File::userMusicDirectory)
                                                 .getChildFile("AgentSynth/Load test.agsproj");
-    const auto project =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("LoadTestBench", ".agsproj");
+    const auto project = synth::test::uniqueTempPath("LoadTestBench", ".agsproj");
     ASSERT_TRUE(original.copyDirectoryTo(project));
     for (const auto& f : project.findChildFiles(juce::File::findFiles, false, "autosave*.json"))
         f.deleteFile();
@@ -217,8 +217,7 @@ std::unique_ptr<MainComponent> openBenchCopy(juce::File& copyOut) {
     const auto original = path != nullptr ? juce::File(path)
                                           : juce::File::getSpecialLocation(juce::File::userMusicDirectory)
                                                 .getChildFile("AgentSynth/Load test.agsproj");
-    copyOut =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("LoadTestBench", ".agsproj");
+    copyOut = synth::test::uniqueTempPath("LoadTestBench", ".agsproj");
     if (!original.copyDirectoryTo(copyOut))
         return nullptr;
     for (const auto& f : copyOut.findChildFiles(juce::File::findFiles, false, "autosave*.json"))
@@ -293,8 +292,7 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestOpenProfile) {
     const auto original = path != nullptr ? juce::File(path)
                                           : juce::File::getSpecialLocation(juce::File::userMusicDirectory)
                                                 .getChildFile("AgentSynth/Load test.agsproj");
-    const auto copy =
-        juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("LoadTestBench", ".agsproj");
+    const auto copy = synth::test::uniqueTempPath("LoadTestBench", ".agsproj");
     ASSERT_TRUE(original.copyDirectoryTo(copy));
     const struct RemoveCopy {
         juce::File dir;

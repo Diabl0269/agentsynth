@@ -1,6 +1,7 @@
 // DeferredAssetLoadsTests.cpp -- a sample or wavetable restored inside an on-screen project open decodes off the
 // message thread and lands through the module's own install path; outside one nothing changes (DeferredAssetLoads.h).
 
+#include "../UniqueTempDir.h"
 #include "Modules/ModuleFileStateKeys.h"
 #include "Modules/SamplerModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
@@ -13,7 +14,7 @@ namespace {
 struct TempWav {
     juce::File file;
     explicit TempWav(int numSamples) {
-        file = juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("deferred", ".wav");
+        file = synth::test::uniqueTempPath("deferred", ".wav");
         juce::AudioBuffer<float> buffer(1, numSamples);
         for (int i = 0; i < numSamples; ++i)
             buffer.setSample(0, i, 0.5f * std::sin((float)i * 0.1f));

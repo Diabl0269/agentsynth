@@ -36,6 +36,15 @@ juce::String SoundBrowserComponent::tooltipForRow(int index) const {
                                  "selected one.";
     if (row.kind == RowKind::Hint)
         return kDefaultTooltip;
+    if (row.kind == RowKind::GetPack)
+        return packTooltip(row);
+    if (row.kind == RowKind::AddFolder)
+        return "Add a folder of sounds. You can also drag a folder here from " + fileManagerName() + ".";
+    if (row.missing)
+        return row.text + " was not found. It comes back when its drive is plugged in.";
+    if (row.userFolder)
+        return "Open " + row.text + ". Right-click, or press Shift+F10, for Rename, Show in " + fileManagerName() +
+               ", Scan again and Remove.";
     return "Open " + row.text;
 }
 
@@ -47,22 +56,29 @@ void SoundBrowserComponent::mouseMove(const juce::MouseEvent& e) {
     int row = getRowIndexAt(e.getPosition());
     if (row >= 0 && !rows_[(size_t)row].navigable())
         row = -1;
-    if (row != hovered_ || part != hoveredPart_) {
+    const int hotButton = row >= 0 && packButtonHit(row, e.getPosition()) ? row : -1;
+    if (row != hovered_ || part != hoveredPart_ || hotButton != packButtonHot_) {
         hovered_ = row;
         hoveredPart_ = part;
+        packButtonHot_ = hotButton;
         if (part >= 0)
             setTooltip("Back to " + pathParts_[(size_t)part].label);
+        else if (hotButton >= 0 && rows_[(size_t)row].busy)
+            setTooltip(packTooltip(rows_[(size_t)row]));
         else
             setTooltip(row >= 0 ? tooltipForRow(row) : juce::String(kDefaultTooltip));
         repaint();
     }
-    const bool leadsSomewhere = part >= 0 || (row >= 0 && rows_[(size_t)row].kind != RowKind::Sound);
+    const bool leadsSomewhere =
+        part >= 0 ||
+        (row >= 0 &&
+         (rows_[(size_t)row].kind == RowKind::GetPack ? hotButton >= 0 : rows_[(size_t)row].kind != RowKind::Sound));
     setMouseCursor(leadsSomewhere ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
 }
 
 void SoundBrowserComponent::mouseExit(const juce::MouseEvent&) {
     if (hovered_ != -1 || hoveredPart_ != -1) {
-        hovered_ = hoveredPart_ = -1;
+        hovered_ = hoveredPart_ = packButtonHot_ = -1;
         setTooltip(kDefaultTooltip);
         setMouseCursor(juce::MouseCursor::NormalCursor);
         repaint();
@@ -85,10 +101,20 @@ void SoundBrowserComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     grabKeyboardFocus();
     selectRow(row);
-    if (rows_[(size_t)row].kind != RowKind::Sound)
-        openSelected();
-    else if (!e.mods.isRightButtonDown())
+    const auto kind = rows_[(size_t)row].kind;
+    if (e.mods.isPopupMenu()) { // a right-click selects; it never opens, downloads or starts a drag
+        if (rows_[(size_t)row].userFolder)
+            showFolderMenu(row, std::nullopt);
+    } else if (kind == RowKind::Sound) {
         pressedSound_ = row;
+    } else if (kind == RowKind::GetPack) {
+        if (packButtonHit(row, e.getPosition()))
+            toggleDownload(row);
+    } else if (kind == RowKind::AddFolder) {
+        chooseFolderToAdd();
+    } else {
+        openSelected();
+    }
 }
 
 void SoundBrowserComponent::mouseDoubleClick(const juce::MouseEvent& e) {
@@ -222,7 +248,7 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
                 onSoundActivated(*rows_[(size_t)selected_].entry);
             return true;
         }
-        return openSelected();
+        return activateSelectedAction() || openSelected();
     }
     if (key.isKeyCode(juce::KeyPress::escapeKey) && isSearchActive()) {
         setQuery({});
@@ -237,8 +263,11 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
         jumpToSearchWith(ch);
         return true;
     }
-    if (key.isKeyCode(juce::KeyPress::spaceKey) && selected_ >= 0 && rows_[(size_t)selected_].kind == RowKind::Sound)
-        return togglePreview();
+    if (key.isKeyCode(juce::KeyPress::spaceKey) && selected_ >= 0)
+        return rows_[(size_t)selected_].kind == RowKind::Sound ? togglePreview() : activateSelectedAction();
+    if ((key.isKeyCode(juce::KeyPress::deleteKey) || key.isKeyCode(juce::KeyPress::backspaceKey)) && selected_ >= 0 &&
+        rows_[(size_t)selected_].kind == RowKind::GetPack && rows_[(size_t)selected_].busy)
+        return toggleDownload(selected_);
     return false;
 }
 

@@ -3,6 +3,7 @@
 // parent) rather than by calling one control's keyPressed. Headless windows cannot hold keyboard focus, so where a step
 // lands is read from lastFocusRequestForTest().
 #include "../App/MainComponent/MainComponentTestFixture.h"
+#include "../SoundPacks/SoundPackTestKit.h"
 #include "../UI/Layout/NativeWindowTestGuard.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Layout/FocusStepWithin.h"
@@ -382,4 +383,46 @@ TEST(SoundBrowserKeyboardReachTest, DestroyingTheViewWithAFooterControlFocusedNe
     const int before = SoundBrowserComponent::focusGainsWhileTearingDownForTest();
     f.view.reset();
     EXPECT_EQ(SoundBrowserComponent::focusGainsWhileTearingDownForTest(), before);
+}
+
+// The Places screen's new rows: Down steps through every row, the pack Download rows and the
+// Add folder row included, and only then enters the footer; Up retraces it.
+TEST(SoundBrowserKeyboardReachTest, DownAtPlacesVisitsThePackRowsAndAddFolderBeforeTheFooter) {
+    sound_pack_test::Rig packs;
+    packs.publish("core", "1.0.0");
+    TempTree tree;
+    tree.fill();
+    synth::soundbrowser::SoundLists lists;
+    synth::soundbrowser::SoundIndex index(juce::File(),
+                                          [&] { return std::vector<juce::File>{packs.dir.path(), tree.packs}; });
+    synth::soundbrowser::SoundFolderBook book(index);
+    book.goLive();
+    book.add(tree.user);
+    scanAndWait(index);
+    SoundBrowserComponent v(index, lists);
+    v.setSize(300, 900);
+    v.setPackInstaller(&packs.installer);
+    v.setFolderBook(&book);
+    ASSERT_EQ(v.getFooterMode(), SoundBrowserComponent::FooterMode::Full);
+
+    std::vector<SoundBrowserComponent::RowKind> visited;
+    v.selectRow(0);
+    visited.push_back(v.getRows()[(size_t)v.getSelectedIndex()].kind);
+    for (int guard = 0; guard < 60 && v.lastFocusRequestForTest() == nullptr; ++guard) {
+        dispatchKey(v, v, key(juce::KeyPress::downKey));
+        if (v.lastFocusRequestForTest() == nullptr)
+            visited.push_back(v.getRows()[(size_t)v.getSelectedIndex()].kind);
+    }
+    using Kind = SoundBrowserComponent::RowKind;
+    EXPECT_NE(std::find(visited.begin(), visited.end(), Kind::GetPack), visited.end()) << "the Download rows";
+    ASSERT_EQ(visited.back(), Kind::AddFolder) << "Add folder is the last row before the footer";
+    ASSERT_NE(v.lastFocusRequestForTest(), nullptr);
+    EXPECT_TRUE(v.getPreviewFooter().isParentOf(v.lastFocusRequestForTest()))
+        << "Down past Add folder enters the footer";
+
+    dispatchKey(v, *v.lastFocusRequestForTest(), key(juce::KeyPress::upKey));
+    EXPECT_EQ(v.getRows()[(size_t)v.getSelectedIndex()].kind, Kind::AddFolder)
+        << "Up returns to the list, selection kept";
+    dispatchKey(v, v, key(juce::KeyPress::upKey));
+    EXPECT_NE(v.getRows()[(size_t)v.getSelectedIndex()].kind, Kind::AddFolder);
 }

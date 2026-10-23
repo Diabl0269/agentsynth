@@ -100,6 +100,10 @@ inline constexpr const char* kUsageStatsAskedSettingKey = "usageStatsAsked";
  *  line. Written by whoever adds a folder, read by the Sounds view's owner (docs/layout/sound-browser.md). */
 inline constexpr const char* kSoundBrowserFoldersSettingKey = "soundBrowserFolders";
 
+/** The names the user gave those folders (display only): a JSON object from absolute path to name, left out while
+ *  none is renamed. */
+inline constexpr const char* kSoundBrowserFolderNamesSettingKey = "soundBrowserFolderNames";
+
 /** The favourite sounds and the sounds used recently (the newest 50): file paths, one per line, newest first for
  *  the recent list. */
 inline constexpr const char* kSoundBrowserFavouritesSettingKey = "soundBrowserFavourites";

@@ -470,7 +470,8 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                                GraphEditor* graphEditor, synth::AccountService* accountService, bool showAudioTab,
                                juce::String initialTabName, std::vector<juce::String> midiRemoteDeviceNames,
-                               synth::soundpacks::SoundPackInstaller* soundPacks)
+                               synth::soundpacks::SoundPackInstaller* soundPacks,
+                               synth::soundbrowser::SoundFolderBook* soundFolders)
     : appProperties(appProperties)
     , shortcutManager(shortcutManager)
     , themeManager(themeManager) {
@@ -506,7 +507,8 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
 
     // Optional instrument downloads and their credits. After Feedback for the same reason Feedback is last.
     if (soundPacks != nullptr)
-        tabs.addTab("Sound packs", juce::Colours::transparentBlack, new SoundPacksSettingsTab(*soundPacks), true);
+        tabs.addTab("Sound packs", juce::Colours::transparentBlack,
+                    new SoundPacksSettingsTab(*soundPacks, soundFolders), true);
 
     addAndMakeVisible(tabs);
     // The strip is one Tab stop (SettingsTabs::getStripFocus), ahead of the open tab's controls; its

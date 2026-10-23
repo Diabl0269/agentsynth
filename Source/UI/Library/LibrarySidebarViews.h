@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SoundBrowser/SoundFolderBook.h"
 #include "SoundBrowser/SoundIndex.h"
 #include "SoundBrowser/SoundLists.h"
 #include "SoundPacks/SoundPackInstaller.h"
@@ -21,7 +22,8 @@ namespace synth::ui {
 class LibrarySidebarViews
     : public juce::Component
     , public juce::SettableTooltipClient
-    , private synth::soundpacks::SoundPackInstaller::Listener {
+    , private synth::soundpacks::SoundPackInstaller::Listener
+    , private synth::soundbrowser::SoundFolderBook::Listener {
 public:
     static constexpr int kDefaultSoundsWidth = 280;
     static constexpr int kMinSoundsWidth = 200;
@@ -57,8 +59,9 @@ public:
     EdgeResizeHandle& getResizeHandle() { return handle_; }
     synth::soundbrowser::SoundIndex& getIndex() { return index_; }
     synth::soundbrowser::SoundLists& getLists() { return lists_; }
-    /** Persists the folder list, hands it to the index and rescans. */
-    void setUserFolders(const std::vector<juce::File>& folders);
+    /** The user's own folders: edits are saved to the settings and handed to the index (which scans once Sounds has
+     *  shown). */
+    synth::soundbrowser::SoundFolderBook& getFolderBook() { return folderBook_; }
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -72,11 +75,13 @@ private:
     void persistLists();
     void persistPreviewSettings();
     void soundPacksChanged() override;
+    void soundFoldersChanged() override;
     void commitWidth();
 
     juce::PropertiesFile* settings_;
     ModuleLibraryComponent& modules_;
     synth::soundbrowser::SoundIndex index_;
+    synth::soundbrowser::SoundFolderBook folderBook_{index_};
     synth::soundbrowser::SoundLists lists_;
     SoundBrowserComponent sounds_;
     LibrarySidebarSwitch switch_;

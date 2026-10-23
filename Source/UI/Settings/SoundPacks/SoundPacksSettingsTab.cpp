@@ -31,8 +31,9 @@ void askWithAlert(const juce::String& message, std::function<void()> onYes) {
 
 } // namespace
 
-SoundPacksSettingsTab::SoundPacksSettingsTab(Installer& installer)
+SoundPacksSettingsTab::SoundPacksSettingsTab(Installer& installer, synth::soundbrowser::SoundFolderBook* folders)
     : installer_(installer)
+    , folders_(folders)
     , confirmer_(askWithAlert) {
     setTitle("Sound packs");
 
@@ -63,12 +64,28 @@ SoundPacksSettingsTab::SoundPacksSettingsTab(Installer& installer)
     creditsHeading_.setText("Credits", juce::dontSendNotification);
     creditsHeading_.setFont(juce::Font(juce::FontOptions(14.0f, juce::Font::bold)));
 
+    if (folders_ != nullptr) {
+        content_.addAndMakeVisible(foldersHeading_);
+        foldersHeading_.setText("Your folders", juce::dontSendNotification);
+        foldersHeading_.setFont(juce::Font(juce::FontOptions(14.0f, juce::Font::bold)));
+        content_.addAndMakeVisible(foldersEmpty_);
+        foldersEmpty_.setText("None yet. Add one with Add folder... under Places in the Sounds view.",
+                              juce::dontSendNotification);
+        foldersEmpty_.setMinimumHorizontalScale(1.0f);
+        folders_->addListener(this);
+    }
+
     lookAndFeelChanged();
     installer_.addListener(this);
     refresh();
+    rebuildFolderRows();
 }
 
-SoundPacksSettingsTab::~SoundPacksSettingsTab() { installer_.removeListener(this); }
+SoundPacksSettingsTab::~SoundPacksSettingsTab() {
+    if (folders_ != nullptr)
+        folders_->removeListener(this);
+    installer_.removeListener(this);
+}
 
 void SoundPacksSettingsTab::paint(juce::Graphics& g) {
     g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
@@ -76,6 +93,7 @@ void SoundPacksSettingsTab::paint(juce::Graphics& g) {
 
 void SoundPacksSettingsTab::lookAndFeelChanged() {
     status_.setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.textMuted);
+    foldersEmpty_.setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.textMuted);
 }
 
 void SoundPacksSettingsTab::visibilityChanged() {
@@ -98,6 +116,29 @@ void SoundPacksSettingsTab::resized() {
 }
 
 void SoundPacksSettingsTab::soundPacksChanged() { refresh(); }
+
+// The change may come from a row's own Remove button, so the rows are replaced once that click has returned.
+void SoundPacksSettingsTab::soundFoldersChanged() {
+    juce::Component::SafePointer<SoundPacksSettingsTab> safe(this);
+    juce::MessageManager::callAsync([safe] {
+        if (safe != nullptr)
+            safe->rebuildFolderRows();
+    });
+}
+
+// The folder rows are cheap and few, so any change to the list rebuilds all of them.
+void SoundPacksSettingsTab::rebuildFolderRows() {
+    if (folders_ == nullptr)
+        return;
+    folderRows_.clear();
+    for (const auto& folder : folders_->folders()) {
+        folderRows_.push_back(std::make_unique<synth::ui::SoundFolderRow>(
+            folder, [this](const juce::File& path) { folders_->remove(path); }));
+        content_.addAndMakeVisible(*folderRows_.back());
+    }
+    foldersEmpty_.setVisible(folderRows_.empty());
+    layoutContent();
+}
 
 void SoundPacksSettingsTab::refresh() {
     using Status = Installer::IndexStatus;
@@ -166,6 +207,19 @@ void SoundPacksSettingsTab::layoutContent() {
         y += synth::ui::SoundPackRow::kHeight + kRowGap;
     }
     y += kSectionGap;
+    if (folders_ != nullptr) {
+        foldersHeading_.setBounds(0, y, width, kHeadingH);
+        y += kHeadingH + kRowGap;
+        if (folderRows_.empty()) {
+            foldersEmpty_.setBounds(0, y, width, kHeadingH);
+            y += kHeadingH + kRowGap;
+        }
+        for (auto& row : folderRows_) {
+            row->setBounds(0, y, width, synth::ui::SoundFolderRow::kHeight);
+            y += synth::ui::SoundFolderRow::kHeight + kRowGap;
+        }
+        y += kSectionGap;
+    }
     creditsHeading_.setBounds(0, y, width, kHeadingH);
     y += kHeadingH + kRowGap;
     for (auto& credit : credits_) {
