@@ -4,6 +4,7 @@
 
 #include "AutomationLanesTestFixture.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace automation_lanes_test;
@@ -223,8 +224,9 @@ TEST(AutomationLanesPointSelectionTest, ArrowKeysNudgeTheSelectionByAGridStepAnd
     SelectLane f;
     f.editor->getPointSelection().setSelection({2.0});
     const auto rev = f.doc.getRevision();
+    const auto alt = juce::ModifierKeys::altModifier;
 
-    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, alt, 0)));
     EXPECT_EQ(f.beats(), Beats({1.0, 3.0})) << "the nudged point lands on the existing point's beat and replaces it";
     f.undo.undo();
     EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0}));
@@ -242,7 +244,7 @@ TEST(AutomationLanesPointSelectionTest, ANudgeStopsTheWholeBlockAtBeatZero) {
     SelectLane f;
     f.doc.addBreakpoint(f.lane, 0.5, 10.0);
     f.editor->getPointSelection().setSelection({0.5, 1.0});
-    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::leftKey)));
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier, 0)));
     EXPECT_EQ(f.beats(), Beats({0.0, 0.5, 2.0, 3.0})) << "both move by the 0.5 the first one had left, not 1";
 }
 
@@ -251,13 +253,12 @@ TEST(AutomationLanesPointSelectionTest, TheKeyboardCursorStepsFromPointToPointAn
     EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey)))
         << "with nothing selected the first press picks the first point";
     EXPECT_EQ(f.selected(), Beats({1.0}));
-    const auto alt = juce::ModifierKeys::altModifier;
-    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, alt, 0)));
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey)));
     EXPECT_EQ(f.selected(), Beats({2.0}));
-    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, alt, 0)));
-    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, alt, 0)));
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey)));
     EXPECT_EQ(f.selected(), Beats({3.0})) << "it stays on the last point";
-    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::leftKey, alt, 0)));
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::leftKey)));
     EXPECT_EQ(f.selected(), Beats({2.0}));
     EXPECT_EQ(f.editor->getPointSelection().getCursor(), std::optional<double>(2.0));
     EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::deleteKey)));
@@ -431,4 +432,118 @@ TEST(AutomationLanesPointSelectionTest, ChangingTheSelectionFiresTheHookOnceAndO
     EXPECT_GE(afterClick, 1);
     f.click(f.at(2.0, 60.0));
     EXPECT_EQ(fired, afterClick) << "clicking the selected point again changes nothing";
+}
+
+// Regression test for FRO1055: plain Left/Right moved the points in time and Alt+Left/Right picked them, the reverse
+// of the curve editor.
+TEST(AutomationLanesPointSelectionTest, PlainRightPicksTheNextPointAndMovesNothingInTime) {
+    SelectLane f;
+    f.editor->getPointSelection().setSelection({2.0});
+    f.editor->getPointSelection().setCursor(2.0);
+    const auto rev = f.doc.getRevision();
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey)));
+    EXPECT_EQ(f.selected(), Beats({3.0}));
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0}));
+    EXPECT_EQ(f.doc.getRevision(), rev) << "picking edits nothing";
+}
+
+TEST(AutomationLanesPointSelectionTest, AltRightMovesTheSelectionInTimeAndAltUpChangesItsValueAsOneUndoStepEach) {
+    SelectLane f;
+    f.doc.addBreakpoint(f.lane, 5.0, 10.0);
+    f.editor->getPointSelection().setSelection({2.0});
+    f.editor->getPointSelection().setCursor(2.0);
+    const auto alt = juce::ModifierKeys::altModifier;
+    const auto rev = f.doc.getRevision();
+
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, alt, 0)));
+    EXPECT_EQ(f.doc.getRevision(), rev + 1);
+    EXPECT_EQ(f.selected(), Beats({3.0})) << "the selection follows the point";
+    f.undo.undo();
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0, 5.0}));
+
+    f.editor->getPointSelection().setSelection({2.0});
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::upKey, alt, 0)));
+    EXPECT_NEAR(f.theLane().points[1].value, 61.0, 1e-6);
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0, 5.0})) << "Alt+Up changes only the value";
+    f.undo.undo();
+    EXPECT_NEAR(f.theLane().points[1].value, 60.0, 1e-6);
+
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::upKey, alt | juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_NEAR(f.theLane().points[1].value, 60.25, 1e-6) << "Alt+Shift is the fine move: a quarter of the step";
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, alt | juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_NEAR(f.beats()[1], 2.25, 1e-9);
+}
+
+// Regression test for FRO1055: a point could only be added with the mouse.
+TEST(AutomationLanesPointSelectionTest, CtrlTInsertsAPointHalfwayAfterTheCursorAsOneUndoStep) {
+    SelectLane f;
+    const auto ctrl = juce::ModifierKeys::ctrlModifier;
+    EXPECT_FALSE(f.key(juce::KeyPress('T', ctrl, 0))) << "no cursor point: nothing to insert after";
+    f.editor->getPointSelection().setSelection({2.0});
+    f.editor->getPointSelection().setCursor(2.0);
+    const auto rev = f.doc.getRevision();
+
+    EXPECT_TRUE(f.key(juce::KeyPress('T', ctrl, 0)));
+    EXPECT_EQ(f.doc.getRevision(), rev + 1);
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 2.5, 3.0}));
+    EXPECT_NEAR(f.theLane().points[2].value, 50.0, 1e-9) << "the linear midpoint of 60 and 40";
+    EXPECT_EQ(f.selected(), Beats({2.5})) << "the new point is selected";
+    EXPECT_EQ(f.editor->getPointSelection().getCursor(), std::optional<double>(2.5));
+    f.undo.undo();
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0}));
+
+    f.editor->getPointSelection().setSelection({3.0});
+    f.editor->getPointSelection().setCursor(3.0);
+    EXPECT_FALSE(f.key(juce::KeyPress('T', ctrl, 0))) << "nothing follows the last point";
+    EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0}));
+}
+
+// One key script, the same result: the curve editor and an automation lane follow one key map
+// (docs/control/point-editing.md). Cmd+D reaches a lane editor as the app's edit command, not as a key event.
+TEST(AutomationLanesPointSelectionTest, TheSameKeyScriptGivesTheSameSelectionCountsAndEditsOnACurveAndOnALane) {
+    using synth::ui::CurveEditorComponent;
+    using synth::ui::CurveMode;
+    using synth::ui::CurveModel;
+    using synth::ui::CurveNode;
+    const auto shift = juce::ModifierKeys::shiftModifier;
+    const auto alt = juce::ModifierKeys::altModifier;
+
+    // Three loose points each (the curve's ends are fixed and cannot be picked).
+    CurveEditorComponent curve;
+    curve.setBounds(0, 0, 400, 160);
+    CurveModel model(CurveMode::Free);
+    model.setNodes({CurveNode{0.0, 0.5f, false, false}, CurveNode{0.25, 0.5f, true, true},
+                    CurveNode{0.5, 0.5f, true, true}, CurveNode{0.75, 0.5f, true, true},
+                    CurveNode{1.0, 0.5f, false, false}});
+    curve.setModel(std::move(model));
+    SelectLane lane;
+
+    auto press = [&](int code, int mods = 0) {
+        const juce::KeyPress k(code, juce::ModifierKeys(mods), 0);
+        EXPECT_TRUE(curve.keyPressed(k)) << code << "/" << mods;
+        EXPECT_TRUE(lane.key(k)) << code << "/" << mods;
+    };
+    auto points = [&] { return std::make_pair(curve.getModel().getNumNodes() - 2, (int)lane.beats().size()); };
+    auto selection = [&] { return std::make_pair(curve.getSelectedIndices().size(), lane.selected().size()); };
+
+    press(juce::KeyPress::rightKey);
+    press(juce::KeyPress::rightKey);
+    press(juce::KeyPress::rightKey, shift);
+    EXPECT_EQ(selection(), std::make_pair(std::size_t(2), std::size_t(2)));
+
+    const float curveBefore = curve.getModel().getNode(2).y;
+    const double laneBefore = lane.values()[1];
+    press(juce::KeyPress::upKey, alt);
+    EXPECT_GT(curve.getModel().getNode(2).y, curveBefore);
+    EXPECT_GT(lane.values()[1], laneBefore);
+
+    ASSERT_TRUE(curve.keyPressed(juce::KeyPress('D', juce::ModifierKeys::commandModifier, 0)));
+    ASSERT_TRUE(lane.editor->duplicateSelectedPoints());
+    EXPECT_EQ(points(), std::make_pair(5, 5));
+    EXPECT_EQ(selection(), std::make_pair(std::size_t(2), std::size_t(2))) << "the copies are the selection";
+
+    press(juce::KeyPress::backspaceKey);
+    EXPECT_EQ(points(), std::make_pair(3, 3));
+    lane.undo.undo();
+    EXPECT_EQ(lane.beats().size(), 5u) << "one Cmd+Z brings the copies back";
 }

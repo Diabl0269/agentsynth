@@ -48,7 +48,9 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // lane's line); pressing the flat line of a lane with NO points and dragging vertically sets the lane's constant value,
 // committed once on mouse-up. Points select like clips and notes (LanePointSelection): click selects, Shift/Cmd-click
 // toggles, a plain drag on empty space draws a box, Escape clears; dragging a selected point moves the whole selection,
-// Delete/Backspace removes it, arrows nudge it (Alt+Left/Right steps the keyboard cursor point), each one undo step.
+// Delete/Backspace removes it, each one undo step. Keys follow docs/control/point-editing.md: Left/Right step the
+// keyboard cursor point, Alt+arrows move the selection, Up/Down change its value, Ctrl+T inserts a point halfway
+// to the next one.
 // Cmd+A/C/X/V reach it as the app's edit commands (MainComponent routes them to the focused lane editor). With two or
 // more points selected a stretch box with four edge handles (LanePointStretch) surrounds them: the side handles scale
 // the selection's beats about the opposite edge (the edge pushes the next unselected points along), the top and bottom
@@ -282,7 +284,10 @@ private:
     std::vector<LaneBreakpoint> dragMovedPoints() const;
     void commitPointMove();
     double gridStepBeats() const;
-    bool nudgePoints(double beatDirection, double valueDirection, bool coarse);
+    // Normal: a grid step / 1% of the range; Coarse (Shift+Up/Down): 10%; Fine (Alt+Shift): a quarter of Normal.
+    enum class NudgeSize { Normal, Coarse, Fine };
+    bool nudgePoints(double beatDirection, double valueDirection, NudgeSize size);
+    bool insertAfterCursor();
     bool stepCursor(int direction);
     bool extendSelection(int direction);
     bool handleSelectionKey(const juce::KeyPress& key);
