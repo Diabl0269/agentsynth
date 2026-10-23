@@ -738,3 +738,131 @@ TEST(AutomationLanesKeyboardDrag, ATapEasesTheDrawnPointAndPlainlyLandsUnderRedu
 }
 
 //==============================================================================
+// The selection box through a move (docs/timeline/automation.md "Stretching a selection")
+
+namespace {
+
+// Records the box's fade level every time the selection reports a change: a box that blinks out and back in during a
+// commit shows a 0 here.
+struct AlphaLog {
+    std::vector<float> seen;
+    explicit AlphaLog(AutomationLaneEditor& editor) {
+        editor.onSelectionChanged = [this, &editor] { seen.push_back(editor.getStretchForTest().boxAlpha()); };
+    }
+    bool neverHidden() const {
+        return std::all_of(seen.begin(), seen.end(), [](float a) { return a == 1.0f; });
+    }
+};
+
+juce::Rectangle<float> boxAround(AutomationLaneEditor& editor, const std::vector<synth::ui::LaneBreakpoint>& points,
+                                 AutomationLaneEditor& mapperOwner, synth::ui::TimelineViewState& view) {
+    const auto bounds = synth::ui::pointsBounds(points, [&](double beat, double value) {
+        return juce::Point<float>((float)view.beatToX(beat), (float)mapperOwner.valueToY(value));
+    });
+    return synth::ui::stretchBoxAround(bounds).getIntersection(editor.getLocalBounds().toFloat().reduced(0.5f));
+}
+
+} // namespace
+
+// Regression test for FRO1064: the notification an own commit fired pruned the selection, so the box faded out and
+// back in around every nudge and mouse drop.
+TEST(AutomationLanesSelectionBox, TheBoxStaysFullyShownAcrossANudgeAndAfterAMouseDrop) {
+    SelectLane f;
+    f.editor->getPointSelection().setSelection({1.0, 2.0});
+    ASSERT_FLOAT_EQ(f.editor->getStretchForTest().boxAlpha(), 1.0f);
+    AlphaLog log(*f.editor);
+
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAltMod), 0)));
+    EXPECT_FLOAT_EQ(f.editor->getStretchForTest().boxAlpha(), 1.0f);
+    EXPECT_TRUE(log.neverHidden()) << "a nudge never hides the box on the way";
+    EXPECT_EQ(f.selected(), Beats({2.0, 3.0}));
+
+    f.drag(f.at(2.0, 60.0), f.at(4.0, 60.0));
+    EXPECT_EQ(f.beats(), Beats({4.0, 5.0}));
+    EXPECT_FLOAT_EQ(f.editor->getStretchForTest().boxAlpha(), 1.0f) << "after the drop the box is still there";
+    EXPECT_TRUE(log.neverHidden()) << "and was never hidden by the commit";
+    EXPECT_FALSE(f.editor->getStretchBoxForTest().isEmpty());
+}
+
+TEST(AutomationLanesSelectionBox, DuringAMouseDragTheBoxIsTheBoundsOfThePreviewPoints) {
+    SelectLane f;
+    f.editor->getPointSelection().setSelection({1.0, 2.0});
+    const auto from = f.at(2.0, 60.0);
+    const auto to = f.at(3.0, 90.0);
+    f.editor->mouseDown(makeClickEvent(*f.editor, from, leftButton()));
+    for (int i = 1; i <= 4; ++i) {
+        f.editor->mouseDrag(makeDragEvent(*f.editor, from + (to - from) * ((float)i / 4.0f), from, leftButton()));
+        const auto preview = f.editor->getDragMovedPointsForTest();
+        EXPECT_EQ(f.editor->getStretchBoxForTest(), boxAround(*f.editor, preview, *f.editor, f.panel.getViewState()))
+            << "step " << i;
+        EXPECT_EQ(f.editor->getShownStretchBoxForTest(), f.editor->getStretchBoxForTest()) << "no lag, no ease";
+    }
+    f.editor->mouseUp(makeDragEvent(*f.editor, to, from, leftButton()));
+    ASSERT_EQ(f.selected().size(), 2u);
+    EXPECT_EQ(f.editor->getStretchBoxForTest(),
+              boxAround(*f.editor, f.theLane().points, *f.editor, f.panel.getViewState()))
+        << "and the dropped box is the committed points' box";
+}
+
+TEST(AutomationLanesSelectionBox, GrowingTheSelectionEasesTheBoxThroughIntermediateSizes) {
+    SelectLane f;
+    f.editor->getPointSelection().setSelection({1.0, 2.0});
+    auto& stretch = f.editor->getStretchForTest();
+    const auto before = f.editor->getStretchBoxForTest();
+    synth::ui::setReducedMotionForTest(false);
+    stretch.forceAnimateForTest(true);
+
+    EXPECT_TRUE(
+        f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(juce::ModifierKeys::shiftModifier), 0)));
+    ASSERT_EQ(f.selected(), Beats({1.0, 2.0, 3.0}));
+    const auto after = f.editor->getStretchBoxForTest();
+    ASSERT_GT(after.getWidth(), before.getWidth());
+    EXPECT_EQ(f.editor->getShownStretchBoxForTest().getWidth(), before.getWidth()) << "starts at the old size";
+
+    stretch.stepForTest(40.0);
+    const float mid = f.editor->getShownStretchBoxForTest().getWidth();
+    EXPECT_GT(mid, before.getWidth());
+    EXPECT_LT(mid, after.getWidth());
+    stretch.stepForTest(300.0);
+    EXPECT_EQ(f.editor->getShownStretchBoxForTest(), after);
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+TEST(AutomationLanesSelectionBox, ATapEasesTheBoxAndReduceMotionMovesItAtOnce) {
+    SelectLane f;
+    f.editor->getPointSelection().setSelection({1.0, 2.0});
+    auto& stretch = f.editor->getStretchForTest();
+    synth::ui::setReducedMotionForTest(false);
+    stretch.forceAnimateForTest(true);
+    const auto before = f.editor->getStretchBoxForTest();
+
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAltMod), 0)));
+    const auto after = f.editor->getStretchBoxForTest();
+    ASSERT_GT(after.getX(), before.getX());
+    EXPECT_EQ(f.editor->getShownStretchBoxForTest().getX(), before.getX());
+    stretch.stepForTest(40.0);
+    EXPECT_GT(f.editor->getShownStretchBoxForTest().getX(), before.getX());
+    EXPECT_LT(f.editor->getShownStretchBoxForTest().getX(), after.getX());
+    stretch.stepForTest(300.0);
+
+    synth::ui::setReducedMotionForTest(true);
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAltMod), 0)));
+    EXPECT_EQ(f.editor->getShownStretchBoxForTest(), f.editor->getStretchBoxForTest());
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+TEST(AutomationLanesSelectionBox, DuringAKeyHoldTheBoxFollowsThePreviewAndEscapeStillFadesItOut) {
+    HeldKeys f;
+    f.panel.getViewState().snapEnabled = false;
+    f.editor->getPointSelection().setSelection({1.0, 2.0});
+    f.hold(juce::KeyPress::rightKey, kAltMod);
+    f.frame(0.0);
+    f.frame(800.0);
+    const auto preview = f.editor->getDragMovedPointsForTest();
+    EXPECT_EQ(f.editor->getStretchBoxForTest(), boxAround(*f.editor, preview, *f.editor, f.panel.getViewState()));
+    EXPECT_EQ(f.editor->getShownStretchBoxForTest(), f.editor->getStretchBoxForTest());
+    f.release();
+
+    EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_FLOAT_EQ(f.editor->getStretchForTest().boxAlpha(), 0.0f);
+}

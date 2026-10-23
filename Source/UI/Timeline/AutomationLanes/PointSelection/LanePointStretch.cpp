@@ -194,9 +194,13 @@ juce::Rectangle<float> pointsBounds(const std::vector<LaneBreakpoint>& points, c
 //==============================================================================
 LanePointStretch::LanePointStretch(juce::Component& owner)
     : owner_(owner)
-    , vblank_(&owner) {}
+    , vblank_(&owner)
+    , moveVblank_(&owner) {}
 
-LanePointStretch::~LanePointStretch() { driver_.stop(vblank_); }
+LanePointStretch::~LanePointStretch() {
+    driver_.stop(vblank_);
+    moveDriver_.stop(moveVblank_);
+}
 
 bool LanePointStretch::animates() const {
     return (forceAnimateForTest_ || owner_.isShowing()) && !prefersReducedMotion();
@@ -233,10 +237,66 @@ void LanePointStretch::fadeTo(float target) {
         });
 }
 
+// The shown rectangle is the live one plus what the ease still has to cover, so a scroll or a zoom (which moves `live`)
+// moves the box with it instead of fighting the ease.
+juce::Rectangle<float> LanePointStretch::shownBox(juce::Rectangle<float> live) const {
+    if (live.isEmpty() || !moving_)
+        return live;
+    const float rest = 1.0f - easedMove_;
+    return juce::Rectangle<float>::leftTopRightBottom(live.getX() + short_.left * rest, live.getY() + short_.top * rest,
+                                                      live.getRight() + short_.right * rest,
+                                                      live.getBottom() + short_.bottom * rest);
+}
+
+void LanePointStretch::settleBox(juce::Rectangle<float> live) {
+    if (moving_) {
+        moveDriver_.stop(moveVblank_);
+        moving_ = false;
+        owner_.repaint();
+    }
+    short_ = {};
+    easedMove_ = 0.0f;
+    target_ = live;
+}
+
+// Retargeting while it is still easing starts from where the box is drawn, so a second change never makes it jump.
+void LanePointStretch::retargetBox(juce::Rectangle<float> live, bool follow) {
+    if (live.isEmpty())
+        return; // hidden: the fade-out keeps the last shape
+    if (follow || !shown_ || target_.isEmpty() || !animates()) {
+        settleBox(live);
+        return;
+    }
+    if (live.getX() == target_.getX() && live.getY() == target_.getY() && live.getRight() == target_.getRight() &&
+        live.getBottom() == target_.getBottom())
+        return;
+    const auto drawn = shownBox(target_);
+    short_ = {drawn.getX() - live.getX(), drawn.getY() - live.getY(), drawn.getRight() - live.getRight(),
+              drawn.getBottom() - live.getBottom()};
+    target_ = live;
+    easedMove_ = 0.0f;
+    moving_ = true;
+    moveDriver_.start(
+        moveVblank_, kMoveMs, easeOutCubic,
+        [this](float eased) {
+            const auto before = shownBox(target_);
+            easedMove_ = eased;
+            owner_.repaint(before.getUnion(shownBox(target_)).expanded(12.0f).getSmallestIntegerContainer());
+        },
+        [this] { settleBox(target_); });
+}
+
+void LanePointStretch::noteBox(juce::Rectangle<float> live, bool follow) {
+    if (follow)
+        retargetBox(live, true);
+    else if (!moving_ && !live.isEmpty())
+        target_ = live;
+}
+
 void LanePointStretch::paintBox(juce::Graphics& g, juce::Rectangle<float> liveBox, juce::Rectangle<float> bounds,
                                 StretchHandle hovered) const {
     if (!liveBox.isEmpty())
-        lastBox_ = liveBox;
+        lastBox_ = shownBox(liveBox);
     if (alpha_ <= 0.0f || lastBox_.isEmpty())
         return;
     juce::Colour accent = juce::Colours::yellow;

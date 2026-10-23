@@ -635,10 +635,12 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
         previewBeat_ = delta == target - dragOriginalBeat_ ? target : dragOriginalBeat_ + delta;
         previewValue_ = clampValue(yToValue(pos.y));
         showBubbleAt(previewBeat_, previewValue_);
+        refreshStretchBox();
         break;
     }
     case DragMode::Stretch:
         dragStretch(pos);
+        refreshStretchBox();
         break;
     case DragMode::LaneConstant:
         previewValue_ = clampValue(dragOriginalValue_ + yToValue(pos.y) - yToValue(mouseDownPos_.y));

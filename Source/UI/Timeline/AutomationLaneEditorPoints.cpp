@@ -45,7 +45,9 @@ LaneEditTarget AutomationLaneEditor::editTarget() const { return {doc_, undoMana
 
 // Runs on every doc notification the lane pool forwards, and lazily from paint and the input entry points so an
 // editor without a pool (or between notifications) never shows a stale selection. A selected point that is gone
-// leaves the selection; a change that only removed or only added points glides.
+// leaves the selection, except while this editor commits its own move (OwnEditScope): the old beats are gone then
+// too, but the selection is about to be set to the new ones and the stretch box must not blink out in between. A
+// change that only removed or only added points glides.
 void AutomationLaneEditor::syncToDoc() {
     if (doc_ == nullptr)
         return;
@@ -56,7 +58,8 @@ void AutomationLaneEditor::syncToDoc() {
     syncedRevision_ = revision;
 
     const auto* points = lanePoints();
-    selection_.retainOnly(points != nullptr ? beatsOf(*points) : std::vector<double>{});
+    if (ownEdits_ == 0)
+        selection_.retainOnly(points != nullptr ? beatsOf(*points) : std::vector<double>{});
     std::vector<LaneBreakpoint> now = points != nullptr ? *points : std::vector<LaneBreakpoint>{};
     if (first)
         glide_.reset(std::move(now));
@@ -64,6 +67,8 @@ void AutomationLaneEditor::syncToDoc() {
         glide_.pointsChanged(std::move(now));
     refreshDescription();
     closeValueFieldIfPointGone();
+    if (ownEdits_ == 0)
+        refreshStretchBox();
 }
 
 //==============================================================================
@@ -207,9 +212,13 @@ void AutomationLaneEditor::commitPointMove() {
     for (std::size_t i = 0; i < dragPoints_.size(); ++i)
         if (selection_.getCursor() == dragPoints_[i].beat)
             cursor = moved[i].beat;
-    commitPointEdit(editTarget(), beatsOf(dragPoints_), moved);
-    selection_.setSelection(beatsOf(moved));
-    selection_.setCursor(cursor);
+    {
+        OwnEditScope own(*this);
+        commitPointEdit(editTarget(), beatsOf(dragPoints_), moved);
+        selection_.setSelection(beatsOf(moved));
+        selection_.setCursor(cursor);
+    }
+    refreshStretchBox();
 }
 
 //==============================================================================
@@ -341,9 +350,14 @@ bool AutomationLaneEditor::nudgePoints(int keyCode, double beatDirection, double
     for (std::size_t i = 0; i < picked.size(); ++i)
         if (selection_.getCursor() == picked[i].beat)
             cursor = moved[i].beat;
-    commitPointEdit(editTarget(), beatsOf(picked), moved);
-    selection_.setSelection(beatsOf(moved));
-    selection_.setCursor(cursor);
+    {
+        OwnEditScope own(*this);
+        commitPointEdit(editTarget(), beatsOf(picked), moved);
+        selection_.setSelection(beatsOf(moved));
+        selection_.setCursor(cursor);
+    }
+    refreshStretchBox();
+    easeMovedPoints(picked, moved, beatsOf(picked), beatsOf(moved));
     return true;
 }
 

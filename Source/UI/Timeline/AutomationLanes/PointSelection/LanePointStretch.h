@@ -62,9 +62,21 @@ public:
     // ---- The box: fades in and out; Reduce Motion or a hidden owner lands at once ----
     void setBoxShown(bool shown);
     float boxAlpha() const noexcept { return alpha_; }
-    // Draws the box and handles at the current fade; `liveBox` empty keeps the last one so a fade-out has a shape.
+    // Draws the box and handles at the current fade, `liveBox` moved by what is left of its ease; `liveBox` empty keeps
+    // the last one so a fade-out has a shape.
     void paintBox(juce::Graphics& g, juce::Rectangle<float> liveBox, juce::Rectangle<float> bounds,
                   StretchHandle hovered) const;
+
+    // ---- The box's rectangle: eases to where the selection now is (Reduce Motion or a hidden owner lands at once)
+    // ----
+    static constexpr double kMoveMs = 160.0;
+    // The box now frames `live`; it is drawn moving there from where it is drawn now. `follow` lands it at once, for a
+    // box that tracks a drag.
+    void retargetBox(juce::Rectangle<float> live, bool follow);
+    // Called when painting: keeps the target in step with scrolling and zooming while nothing eases.
+    void noteBox(juce::Rectangle<float> live, bool follow);
+    juce::Rectangle<float> shownBox(juce::Rectangle<float> live) const;
+    bool isBoxMoving() const noexcept { return moving_; }
 
     // ---- The drag ----
     // `selected` and `all` as stretchBeats takes them.
@@ -85,10 +97,18 @@ public:
 
     // Tests: animate as if the owner were on screen, so no native window is needed.
     void forceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
+    void stepForTest(double ms) { moveDriver_.stepForTest(ms); }
 
 private:
     bool animates() const;
     void fadeTo(float target);
+    void settleBox(juce::Rectangle<float> live);
+
+    // The ease of the box: what it is still short of its target, edge by edge, shrinking to zero as `easedMove_` goes
+    // 0 to 1.
+    struct Edges {
+        float left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f;
+    };
 
     juce::Component& owner_;
     bool shown_ = false;
@@ -97,6 +117,12 @@ private:
     mutable juce::Rectangle<float> lastBox_;
     juce::VBlankAnimatorUpdater vblank_;
     AnimationDriver driver_;
+    juce::VBlankAnimatorUpdater moveVblank_;
+    AnimationDriver moveDriver_;
+    juce::Rectangle<float> target_;
+    Edges short_;
+    float easedMove_ = 0.0f;
+    bool moving_ = false;
 
     StretchHandle handle_ = StretchHandle::None;
     std::vector<LaneBreakpoint> selected_;

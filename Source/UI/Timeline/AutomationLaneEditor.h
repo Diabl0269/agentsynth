@@ -200,6 +200,9 @@ public:
     juce::Rectangle<float> getStretchBoxForTest() const { return stretchBox(); }
     juce::Rectangle<float> getStretchHandleRectForTest(StretchHandle handle) const;
     const LanePointStretch& getStretchForTest() const noexcept { return stretch_; }
+    LanePointStretch& getStretchForTest() noexcept { return stretch_; }
+    /** The box as drawn now, with what is left of its ease. */
+    juce::Rectangle<float> getShownStretchBoxForTest() const { return stretch_.shownBox(stretchBox()); }
 
     // ---- Headless hooks (juce::PopupMenu::showMenuAsync doesn't run headlessly) ----
 
@@ -319,6 +322,14 @@ private:
     bool extendSelection(int direction);
     bool handleSelectionKey(const juce::KeyPress& key);
     void selectionChanged();
+    struct OwnEditScope {
+        explicit OwnEditScope(AutomationLaneEditor& editor)
+            : editor_(editor) {
+            ++editor_.ownEdits_;
+        }
+        ~OwnEditScope() { --editor_.ownEdits_; }
+        AutomationLaneEditor& editor_;
+    };
     void syncToDoc();
     void selectOnly(const LaneBreakpoint& point);
     juce::String describePoints() const;
@@ -337,6 +348,8 @@ private:
     void paintStretchBox(juce::Graphics& g);
     void trackStretchHover(juce::Point<int> pos);
     void refreshStretchBox();
+    bool stretchBoxFollows() const;
+    juce::Rectangle<float> movedPointsBounds() const;
     std::optional<juce::MouseCursor> stretchCursor() const;
     double pushGapBeats() const;
 
@@ -414,6 +427,9 @@ private:
     } keyDrag_;
     LanePointClipboard* clipboard_ = nullptr;
     std::int64_t syncedRevision_ = -1;
+    // > 0 while this editor commits its own move: the notification must not prune the selection, whose new beats are
+    // set right after.
+    int ownEdits_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationLaneEditor)
 };
