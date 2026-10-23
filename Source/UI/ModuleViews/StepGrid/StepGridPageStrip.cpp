@@ -53,7 +53,8 @@ void StepGridPageStrip::setPages(int count, int viewed, int playing, int steps) 
 
 // The bar under the pointer says which steps it holds; elsewhere the strip's own tooltip.
 juce::String StepGridPageStrip::getTooltip() {
-    const int page = pageAt(getMouseXYRelative());
+    // Only a pointer really over the strip names a page (see StepGridComponent::getTooltip).
+    const int page = isMouseOver(true) ? pageAt(getMouseXYRelative()) : -1;
     return page >= 0 ? stepgrid::pageDescription(page, steps_) : juce::SettableTooltipClient::getTooltip();
 }
 

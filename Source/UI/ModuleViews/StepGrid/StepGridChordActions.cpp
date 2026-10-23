@@ -35,7 +35,9 @@ juce::Rectangle<int> StepGridComponent::chordLabelBounds(int step) const {
 bool StepGridComponent::chordLabelAt(juce::Point<int> p, int step) const { return chordLabelBounds(step).contains(p); }
 
 juce::String StepGridComponent::getTooltip() {
-    if (module_.isPoly()) {
+    // Only a pointer really over the grid picks a step: an off-screen grid (a render, a test) would
+    // otherwise read wherever the machine's mouse happens to be.
+    if (module_.isPoly() && isMouseOver(true)) {
         const auto p = getMouseXYRelative();
         const int step = stepAtX(p.x);
         if (step >= 0 && chordLabelAt(p, step))
