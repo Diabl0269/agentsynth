@@ -412,8 +412,14 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
             paintSoundDropOutline(g, bounds);
         if (track.clips.empty())
             paintEmptyRowHint(g, track, bounds);
-        for (const auto& clip : track.clips)
+        for (const auto& clip : track.clips) {
+            const float fade = clipGlide_.alphaFor(clip.id.value); // Reduce Motion: a restored clip fades in
+            if (fade < 1.0f)
+                g.beginTransparencyLayer(fade);
             paintClip(g, clip, track, trackIndex, layout);
+            if (fade < 1.0f)
+                g.endTransparencyLayer();
+        }
     }
 
     if (belowTracksHint_ || isShowingSoundOutline())

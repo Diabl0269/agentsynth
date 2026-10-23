@@ -56,11 +56,9 @@ TEST(UndoGlideSurfaces, EveryMoveSurfaceGlidesOnUndoAndRedo) {
     }
 }
 
-TEST(UndoGlideSurfaces, UnderReduceMotionEveryMoveSurfaceLandsAtOnce) {
+TEST(UndoGlideSurfaces, UnderReduceMotionARestoredThingLandsAtOnceAndFadesIn) {
     for (const auto& entry : surfaces()) {
         SCOPED_TRACE(entry.name);
-        if (!entry.honoursReduceMotion)
-            continue;
         FullMotion motion;
         auto s = entry.make();
         const double before = s->drawn();
@@ -69,7 +67,30 @@ TEST(UndoGlideSurfaces, UnderReduceMotionEveryMoveSurfaceLandsAtOnce) {
         synth::ui::setAnimationMode(synth::ui::AnimationMode::reduced);
         synth::ui::setReducedMotionForTest(true);
         ASSERT_TRUE(s->undo());
+        EXPECT_NEAR(s->drawn(), before, 1.5) << "it is at its new place on the first frame";
+        if (entry.fadesUnderReduceMotion) {
+            EXPECT_LT(s->alpha(), 0.9f) << "and starts faint";
+            EXPECT_TRUE(s->gliding()) << "the fade runs";
+            s->stepTo(1000.0);
+        }
+        EXPECT_FALSE(s->gliding()) << "settled";
+        EXPECT_FLOAT_EQ(s->alpha(), 1.0f);
+        EXPECT_NEAR(s->drawn(), before, 1.5);
+    }
+}
+
+TEST(UndoGlideSurfaces, WithAnimationsOffEveryRestoreIsInstant) {
+    for (const auto& entry : surfaces()) {
+        SCOPED_TRACE(entry.name);
+        FullMotion motion;
+        auto s = entry.make();
+        const double before = s->drawn();
+        s->move();
+        s->stepTo(1000.0);
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+        ASSERT_TRUE(s->undo());
         EXPECT_FALSE(s->gliding());
+        EXPECT_FLOAT_EQ(s->alpha(), 1.0f);
         EXPECT_NEAR(s->drawn(), before, 1.5);
     }
 }

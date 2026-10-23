@@ -36,7 +36,7 @@ void MorphMap::paint(juce::Graphics& g) {
         const auto c = toPixels(getDrawnDot(i).x, getDrawnDot(i).y);
         const auto colour = morphShapeColour(colors, i);
         const float scale = getDotScale(i);
-        const float alpha = getDotAlpha(i);
+        const float alpha = getDotAlpha(i) * moveTween_.alphaFor(i);
         const float r = kDotRadius * scale;
         if (i == selected_) {
             g.setColour(colors.textPrimary.withAlpha(0.9f * alpha));
@@ -67,9 +67,10 @@ void MorphMap::paint(juce::Graphics& g) {
 
     if (cursorVisible_) {
         const auto c = toPixels(getDrawnCursor().x, getDrawnCursor().y);
-        g.setColour(colors.bg0);
+        const float fade = moveTween_.alphaFor(kCursorKey);
+        g.setColour(colors.bg0.withMultipliedAlpha(fade));
         g.fillEllipse(c.x - kCursorRadius, c.y - kCursorRadius, kCursorRadius * 2.0f, kCursorRadius * 2.0f);
-        g.setColour(colors.textPrimary);
+        g.setColour(colors.textPrimary.withMultipliedAlpha(fade));
         g.drawEllipse(c.x - kCursorRadius, c.y - kCursorRadius, kCursorRadius * 2.0f, kCursorRadius * 2.0f, 2.0f);
     }
 

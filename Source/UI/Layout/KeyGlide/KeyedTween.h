@@ -50,8 +50,10 @@ public:
     ~KeyedTween();
 
     /** The thing `key` now rests at `to`; it is drawn at `from` (where it is drawn right now, see drawnAt) and eases
-     *  there. A key already moving restarts from `from`, so pass drawnAt(key, oldResting) to continue smoothly. */
-    void retarget(Key key, T from, T to);
+     *  there. A key already moving restarts from `from`, so pass drawnAt(key, oldResting) to continue smoothly.
+     *  With `fadeWhenReduced` (a restore), Reduce Motion lands the thing at `to` at once and fades it in there over
+     *  control_motion::kReducedMs (alphaFor); Animations Off and a hidden owner land it plain. */
+    void retarget(Key key, T from, T to, bool fadeWhenReduced = false);
     /** Forgets `key` (it lands where it rests). */
     void erase(Key key);
     void clear();
@@ -59,7 +61,10 @@ public:
     /** How far from its resting place `key` is drawn now (all zero when it is not moving). */
     T offsetFor(Key key) const;
     T drawnAt(Key key, T resting) const { return TweenMath<T>::add(resting, offsetFor(key)); }
-    bool isAnimating() const noexcept { return !entries_.empty(); }
+    /** How opaque `key` is drawn now: below 1 only while its Reduce Motion fade runs. */
+    float alphaFor(Key key) const;
+    bool isFading() const noexcept { return !fading_.empty(); }
+    bool isAnimating() const noexcept { return !entries_.empty() || !fading_.empty(); }
 
     /** Asked to repaint instead of the owner's own repaint(rect); may be null. */
     std::function<void(juce::Rectangle<int>)> onDirty;
@@ -68,8 +73,14 @@ public:
 
     /** Tests: animate as if the owner were on screen, step the clock like AnimationDriver::stepForTest, or land. */
     void forceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
-    void stepForTest(double ms) { driver_.stepForTest(ms); }
-    void completeForTest() { driver_.completeForTest(); }
+    void stepForTest(double ms) {
+        driver_.stepForTest(ms);
+        fadeDriver_.stepForTest(ms);
+    }
+    void completeForTest() {
+        driver_.completeForTest();
+        fadeDriver_.completeForTest();
+    }
 
 private:
     struct Entry {
@@ -78,6 +89,8 @@ private:
     };
 
     bool animates() const;
+    bool fadesInstead() const;
+    void startFade(Key key, T to);
     void bakeOffsets();
     void startRun();
     void onFrame(float eased);
@@ -91,6 +104,10 @@ private:
     bool forceAnimateForTest_ = false;
     juce::VBlankAnimatorUpdater vblank_;
     AnimationDriver driver_;
+    std::map<Key, T> fading_; // keys fading in at their resting place (Reduce Motion)
+    float fadeEased_ = 0.0f;
+    juce::VBlankAnimatorUpdater fadeVblank_;
+    AnimationDriver fadeDriver_;
 };
 
 using KeyedPointTween = KeyedTween<juce::Point<float>>;

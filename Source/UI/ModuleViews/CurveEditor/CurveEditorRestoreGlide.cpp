@@ -19,8 +19,8 @@ void CurveEditorComponent::glideNodesFrom(const std::vector<juce::Point<float>>&
     if (before.size() != after.size())
         return;
     for (size_t i = 0; i < after.size(); ++i)
-        pointTween_.retarget((KeyedPointTween::Key)i, pointTween_.drawnAt((KeyedPointTween::Key)i, before[i]),
-                             after[i]);
+        pointTween_.retarget((KeyedPointTween::Key)i, pointTween_.drawnAt((KeyedPointTween::Key)i, before[i]), after[i],
+                             true);
 }
 
 } // namespace synth::ui

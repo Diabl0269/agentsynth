@@ -509,6 +509,8 @@ TEST(CurveEditorKeyHold, TheCurveLineAndItsBendHandlesFollowTheGlidingPoints) {
     }
     tween.stepForTest(400.0);
     EXPECT_NEAR(pathYAt(rig.editor.getDrawnCurvePathForTest(), rig.posOf(1).x), rig.posOf(1).y, 1.0f);
+}
+
 // Regression test for FRO1065: an undo or redo swapped the model at once, so the points snapped.
 TEST(CurveEditorRestoreGlide, ARestoredModelOfTheSameShapeGlidesItsPointsAndAnotherShapeLandsAtOnce) {
     Rig rig(freeModel(3));

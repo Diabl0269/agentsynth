@@ -25,12 +25,15 @@ public:
     /** Advances the running glide to `elapsedMs` after the undo or redo (absolute, like AnimationDriver::stepForTest).
      */
     virtual void stepTo(double elapsedMs) = 0;
+    /** How opaque the moved thing is drawn right now (below 1 only during a Reduce Motion fade). */
+    virtual float alpha() const { return 1.0f; }
 };
 
 struct Entry {
     const char* name;
-    /** False for a surface whose existing glide ignores Reduce Motion (the shared reorder animator). */
-    bool honoursReduceMotion;
+    /** True when Reduce Motion lands the restored thing at its place and fades it in there; false for the rows, which
+     *  land at once. */
+    bool fadesUnderReduceMotion;
     std::function<std::unique_ptr<Surface>()> make;
 };
 
@@ -40,5 +43,6 @@ const std::vector<Entry>& surfaces();
 // Factories for the surfaces whose fixtures live in their own units.
 std::unique_ptr<Surface> makeTimelineTrackRows();
 std::unique_ptr<Surface> makeAutomationLaneReorder();
+std::unique_ptr<Surface> makeLfoCardPoint();
 
 } // namespace undo_glide_test

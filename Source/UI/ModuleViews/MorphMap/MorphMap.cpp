@@ -124,7 +124,7 @@ void MorphMap::setCursor(float x, float y, bool glide) {
     cursor_ = {juce::jlimit(kMapMin, kMapMax, x), juce::jlimit(kMapMin, kMapMax, y)};
     moveTween_.forceAnimateForTest(animatesOffScreenForTest());
     if (glide)
-        moveTween_.retarget(kCursorKey, before, cursor_);
+        moveTween_.retarget(kCursorKey, before, cursor_, true);
     else
         moveTween_.erase(kCursorKey);
     layoutStops();

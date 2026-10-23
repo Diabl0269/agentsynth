@@ -52,7 +52,7 @@ void TimelineClipLaneArea::glideRestoredClips() {
             const auto was = clipPlaces_.find(id);
             if (was == clipPlaces_.end() || was->second == place)
                 continue;
-            clipGlide_.retarget(id, clipGlide_.drawnAt(id, rectOf(was->second)), rectOf(place));
+            clipGlide_.retarget(id, clipGlide_.drawnAt(id, rectOf(was->second)), rectOf(place), true);
         }
     }
     clipPlaces_ = std::move(now);

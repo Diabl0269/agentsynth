@@ -27,7 +27,7 @@ void MorphMap::startMoveGlide(const std::vector<Dot>& before, bool glideMoved) {
         if (was.x == now.x && was.y == now.y)
             continue;
         // The old drawn place continues a glide that was already running.
-        moveTween_.retarget(i, moveTween_.drawnAt(i, {was.x, was.y}), {now.x, now.y});
+        moveTween_.retarget(i, moveTween_.drawnAt(i, {was.x, was.y}), {now.x, now.y}, true);
     }
 }
 

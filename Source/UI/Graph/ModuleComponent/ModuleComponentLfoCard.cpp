@@ -70,6 +70,7 @@ void ModuleComponent::createLfoCardControls() {
     describeEditedShape(*lfoCurveEditor, *lfo, lfoEditedShape_);
     lfoCurveEditor->setModel(
         synth::ui::curveModelFromWave(lfo->getCustomShapes().shapes[(size_t)lfoEditedShape_].curve));
+    lfoRestoreWatch_ = synth::ui::RestoreWatch(undoManager != nullptr ? undoManager->getRestoreSerial() : 0);
     lfoCurveEditor->setVisibleRangeOverride(1.0);
     lfoCurveEditor->setZeroSegmentPx(0.0f);
     lfoCurveEditor->setTimeLabelFormatter([](double) { return juce::String(); });
@@ -182,8 +183,11 @@ void ModuleComponent::syncLfoCurveFromModule() {
         return;
     lfoEditedShape_ = nearestLfoShape(*lfo);
     describeEditedShape(*lfoCurveEditor, *lfo, lfoEditedShape_);
+    // An undo or redo that moved the wave's points glides them; any other change lands at once.
+    const bool restored =
+        undoManager != nullptr && lfoRestoreWatch_.take(undoManager->isRestoring(), undoManager->getRestoreSerial());
     lfoCurveEditor->setModel(
-        synth::ui::curveModelFromWave(lfo->getCustomShapes().shapes[(size_t)lfoEditedShape_].curve));
+        synth::ui::curveModelFromWave(lfo->getCustomShapes().shapes[(size_t)lfoEditedShape_].curve), restored);
     lfoLastSeenWaveGeneration = lfo->getCustomWaveGeneration();
 }
 

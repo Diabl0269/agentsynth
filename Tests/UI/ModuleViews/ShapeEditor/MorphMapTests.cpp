@@ -948,7 +948,7 @@ TEST(MorphMap, UndoAndRedoOfADotMoveGlideItBackAndForth) {
     EXPECT_TRUE(rig.map.isMoveGliding()) << "redo glides too";
 }
 
-TEST(MorphMap, UndoOfACursorMoveGlidesItAndUnderReduceMotionLandsAtOnce) {
+TEST(MorphMap, UndoOfACursorMoveGlidesItAndUnderReduceMotionLandsAtOnceAndFadesIn) {
     ModeScope scope(AnimationMode::full);
     MapRig rig;
     drag(rig.map, rig.map.getCursorCentre(), rig.map.toPixels(0.25f, 0.75f));
@@ -963,6 +963,9 @@ TEST(MorphMap, UndoOfACursorMoveGlidesItAndUnderReduceMotionLandsAtOnce) {
     setAnimationMode(AnimationMode::reduced);
     rig.undo.redo();
     rig.controller.refresh();
-    EXPECT_FALSE(rig.map.isMoveGliding());
     EXPECT_NEAR(rig.map.getDrawnCursor().x, 0.25f, 0.02f);
+    EXPECT_LT(rig.map.getMoveAlphaForTest(true, 0), 0.9f);
+    rig.map.stepMoveGlideForTest(500.0);
+    EXPECT_FALSE(rig.map.isMoveGliding());
+    EXPECT_FLOAT_EQ(rig.map.getMoveAlphaForTest(true, 0), 1.0f);
 }

@@ -32,7 +32,7 @@ void AutomationLaneEditor::glideRestoredPoints(const std::vector<LaneBreakpoint>
     for (const auto& move : moves)
         pointTween_.erase(move.from);
     for (const auto& move : moves)
-        pointTween_.retarget(move.to, move.drawnFrom, move.target);
+        pointTween_.retarget(move.to, move.drawnFrom, move.target, true);
 }
 
 } // namespace synth::ui

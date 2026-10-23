@@ -44,6 +44,7 @@ public:
     }
     bool gliding() const override { return map_.isMoveGliding(); }
     void stepTo(double elapsedMs) override { map_.stepMoveGlideForTest(elapsedMs); }
+    float alpha() const override { return map_.getMoveAlphaForTest(cursor_, 0); }
 
 private:
     bool restore(bool forward) {
@@ -92,6 +93,9 @@ public:
         return const_cast<ShapeListEditor&>(editor_).getCurveEditor().getPointTweenForTest().isAnimating();
     }
     void stepTo(double elapsedMs) override { editor_.getCurveEditor().getPointTweenForTest().stepForTest(elapsedMs); }
+    float alpha() const override {
+        return const_cast<ShapeListEditor&>(editor_).getCurveEditor().getPointTweenForTest().alphaFor(kNode);
+    }
 
 private:
     static constexpr int kNode = 3;
@@ -137,6 +141,12 @@ public:
     }
     bool gliding() const override { return editor_->getPointTweenForTest().isAnimating(); }
     void stepTo(double elapsedMs) override { editor_->getPointTweenForTest().stepForTest(elapsedMs); }
+    float alpha() const override {
+        const auto* lane = panel_.doc.getLane(lane_);
+        if (lane == nullptr || lane->points.size() < 2)
+            return 1.0f;
+        return editor_->getPointTweenForTest().alphaFor(synth::ui::lane_key::tweenKey(lane->points[1].beat));
+    }
 
 private:
     automation_lanes_test::LanesPanel panel_;
@@ -171,6 +181,7 @@ public:
     double drawn() const override { return f_.lane.getDrawnClipRectForTest(clip_).getX(); }
     bool gliding() const override { return f_.lane.getClipGlideForTest().isAnimating(); }
     void stepTo(double elapsedMs) override { f_.lane.getClipGlideForTest().stepForTest(elapsedMs); }
+    float alpha() const override { return f_.lane.getClipGlideForTest().alphaFor(clip_.value); }
 
 private:
     bool restore(bool forward) {
@@ -192,8 +203,9 @@ const std::vector<Entry>& surfaces() {
         {"Curve editor point", true, [] { return std::make_unique<CurveSurface>(); }},
         {"Automation lane point", true, [] { return std::make_unique<LanePointSurface>(); }},
         {"Timeline clip edge", true, [] { return std::make_unique<ClipTrimSurface>(); }},
+        {"LFO card curve point", true, [] { return makeLfoCardPoint(); }},
         {"Timeline track row", false, [] { return makeTimelineTrackRows(); }},
-        {"Automation lane row", true, [] { return makeAutomationLaneReorder(); }},
+        {"Automation lane row", false, [] { return makeAutomationLaneReorder(); }},
     };
     return list;
 }

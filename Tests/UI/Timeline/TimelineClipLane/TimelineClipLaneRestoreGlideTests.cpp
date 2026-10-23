@@ -66,14 +66,18 @@ TEST(TimelineClipLaneRestoreGlide, UndoAndRedoOfALeftTrimGlideTheClipEdge) {
     EXPECT_EQ(r.drawnX(), trimmed);
 }
 
-TEST(TimelineClipLaneRestoreGlide, UnderReduceMotionAnUndoneTrimLandsAtOnce) {
+TEST(TimelineClipLaneRestoreGlide, UnderReduceMotionAnUndoneTrimLandsAtOnceAndFadesIn) {
     TrimRig r;
     const int home = r.drawnX();
     r.trimLeftEdge();
     ReducedMotionGuard reduced;
     ASSERT_TRUE(r.undo.undo());
     r.lane.refreshFromDoc();
-    EXPECT_FALSE(r.lane.getClipGlideForTest().isAnimating());
+    auto& glide = r.lane.getClipGlideForTest();
+    EXPECT_EQ(r.drawnX(), home);
+    EXPECT_TRUE(glide.isFading());
+    glide.stepForTest(500.0);
+    EXPECT_FALSE(glide.isAnimating());
     EXPECT_EQ(r.drawnX(), home);
 }
 

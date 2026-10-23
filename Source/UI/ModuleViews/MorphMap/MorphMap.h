@@ -80,6 +80,9 @@ public:
     juce::Point<float> getDrawnCursor() const;
     bool isMoveGliding() const noexcept { return moveTween_.isAnimating(); }
     void stepMoveGlideForTest(double ms) { moveTween_.stepForTest(ms); }
+    float getMoveAlphaForTest(bool cursor, int dot) const {
+        return moveTween_.alphaFor(cursor ? kCursorKey : static_cast<KeyedPointTween::Key>(dot));
+    }
     juce::Point<float> getCursor() const noexcept { return cursor_; }
     /** A map with no cursor (a shape list that is not morphed) hides the cursor and its Tab stop. */
     void setCursorVisible(bool visible);

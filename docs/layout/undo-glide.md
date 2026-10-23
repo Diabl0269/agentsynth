@@ -54,8 +54,11 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   clips that differ glide their rectangle (keyed by clip id). A moved clip carries its notes; a trimmed clip leaves them where
   they are, so the edge slides over them.
 
-Under Reduce Motion or Animations Off these land at once (the position tweens have no fade), like the keyboard glide of the
-same points; off screen they land at once unless a test forces the tween (`forceAnimateForTest`).
+Under Reduce Motion a restored point, dot, cursor or clip is already at its new place on the first frame and fades in
+there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(..., fadeWhenReduced = true)`, read with
+`alphaFor`). Animations Off and an owner that is off screen land it plain (a test forces the tween with
+`forceAnimateForTest`). The LFO card's Custom-wave editor takes the same path: its poll passes the restore flag to
+`setModel`. Track header rows and automation lane rows land at once under Reduce Motion, with no fade.
 
 ## The checklist
 
@@ -63,3 +66,4 @@ same points; off screen they land at once unless a test forces the tween (`force
 surface, makes a move through its real edit path, calls the real `AppUndoManager::undo()` and `redo()`, and
 `UndoGlideSurfaces.EveryMoveSurfaceGlidesOnUndoAndRedo` checks the moved thing is drawn between its two places on the first
 frames and settles at the restored one. **A new move surface adds an entry there; that list is the checklist.**
+The same list is walked under Reduce Motion (a fade for the point surfaces, an instant landing for the rows) and with Animations Off (instant).

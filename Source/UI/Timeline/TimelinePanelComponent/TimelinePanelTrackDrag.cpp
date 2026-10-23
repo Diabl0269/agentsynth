@@ -240,7 +240,8 @@ void TimelinePanelComponent::cancelTrackDrag() {
 // rows can glide to their new places the way the drop glided them forward. Empty for any other rebuild.
 std::vector<TimelinePanelComponent::GlideRow> TimelinePanelComponent::rowsToGlideAfterUndo() const {
     std::vector<GlideRow> rows;
-    if (doc_ == nullptr || undoManager_ == nullptr || !undoManager_->isRestoring() || !canAnimateTrackGlide())
+    if (doc_ == nullptr || undoManager_ == nullptr || !undoManager_->isRestoring() || !canAnimateTrackGlide() ||
+        synth::ui::prefersReducedMotion())
         return rows;
     const auto& tracks = doc_->getTracks();
     if (static_cast<int>(tracks.size()) != trackHeaderList_.headers.size())

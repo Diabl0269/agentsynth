@@ -464,7 +464,8 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
             continue;
         const auto eased = pointTween_.offsetFor(lane_key::tweenKey(bp.beat));
         drawDot((float)viewState_.beatToX(beat) + eased.x, (float)valueToY(value) + eased.y,
-                erased ? erase : (active || selected ? accent : normal), glide_.presence(bp.beat));
+                erased ? erase : (active || selected ? accent : normal),
+                glide_.presence(bp.beat) * pointTween_.alphaFor(lane_key::tweenKey(bp.beat)));
     }
     for (const auto& gone : glide_.leaving()) // removed points shrink and fade out where they were
         drawDot((float)viewState_.beatToX(gone.beat), (float)valueToY(gone.value), normal, glide_.presence(gone.beat));
