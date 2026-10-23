@@ -1,6 +1,5 @@
 #include "LanePointEdits.h"
 #include "AppUndoManager.h"
-#include <algorithm>
 
 namespace synth::ui {
 
@@ -20,23 +19,27 @@ bool commitPointEdit(const LaneEditTarget& target, const std::vector<double>& re
 }
 
 LanePointClipboard copyPoints(const std::vector<LaneBreakpoint>& selected) {
+    std::vector<double> beats, values;
+    std::vector<LaneClipExtra> extras;
+    for (const auto& p : selected) {
+        beats.push_back(p.beat);
+        values.push_back(p.value);
+        extras.push_back({p.tension, p.curve});
+    }
     LanePointClipboard clipboard;
-    if (selected.empty())
-        return clipboard;
-    double earliest = selected.front().beat;
-    for (const auto& p : selected)
-        earliest = std::min(earliest, p.beat);
-    for (const auto& p : selected)
-        clipboard.entries.push_back({p.beat - earliest, p.value, p.tension, p.curve});
+    clipboard.entries = makePointClip(beats, values, extras).entries;
     return clipboard;
 }
 
 std::vector<LaneBreakpoint> pastedPoints(const LanePointClipboard& clipboard, double anchorBeat, double minValue,
                                          double maxValue) {
+    const auto beats = clipPositions(clipboard, anchorBeat);
     std::vector<LaneBreakpoint> out;
     out.reserve(clipboard.entries.size());
-    for (const auto& e : clipboard.entries)
-        out.push_back({anchorBeat + e.offset, juce::jlimit(minValue, maxValue, e.value), e.tension, e.curve});
+    for (size_t i = 0; i < beats.size(); ++i) {
+        const auto& e = clipboard.entries[i];
+        out.push_back({beats[i], juce::jlimit(minValue, maxValue, e.value), e.extra.tension, e.extra.curve});
+    }
     return out;
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LanePointSelection.h"
+#include "UI/Layout/PointEditing/PointClipboard.h"
 #include <vector>
 
 class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
@@ -20,18 +21,15 @@ struct LaneEditTarget {
 bool commitPointEdit(const LaneEditTarget& target, const std::vector<double>& removeBeats,
                      const std::vector<LaneBreakpoint>& add);
 
-// Copied points, each as its distance from the earliest copied beat. Lives on the lane pool so it outlives any one
-// editor.
-struct LanePointClipboard {
-    struct Entry {
-        double offset = 0.0;
-        double value = 0.0;
-        float tension = 0.0f;
-        int curve = 0;
-    };
-    std::vector<Entry> entries;
-    bool isEmpty() const noexcept { return entries.empty(); }
+// What a copied lane point carries besides its beat and value.
+struct LaneClipExtra {
+    float tension = 0.0f;
+    int curve = 0;
 };
+
+// Copied points, each as its distance from the earliest copied beat (the shared PointClip). Lives on the lane pool so
+// it outlives any one editor.
+struct LanePointClipboard : PointClip<LaneClipExtra> {};
 
 LanePointClipboard copyPoints(const std::vector<LaneBreakpoint>& selected);
 // The clipboard laid down with its earliest point at `anchorBeat`, values clamped into [minValue, maxValue].

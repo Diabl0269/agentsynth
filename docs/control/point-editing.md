@@ -37,8 +37,45 @@ Cmd+T (Add Track). Off the Mac Cmd is Ctrl, so the same flag stands for both and
 focus (Add Track is Ctrl+Alt+T there). The focused editor sees a key before the app's shortcut table does, so a rebound
 app shortcut on Ctrl+T loses to the insert while an editor has focus and wins everywhere else.
 
-The shared test of the map runs one key script on a curve editor and on a lane and compares the results:
-`Tests/UI/Timeline/AutomationLanes/AutomationLanesPointSelectionTests.cpp`.
+The shared test of the map is one typed suite run against both editors through a small adapter per editor:
+`Tests/UI/Layout/PointEditing/PointEditorSharedKeyTests.cpp` (the pure model's own tests sit beside it in
+`PointEditingModelTests.cpp`).
+
+## The shared model
+
+Both editors run on one pure model in `Source/UI/Layout/PointEditing/` (no components, no doc), so a fix or a new key
+lands in both at once:
+
+| Part | File | What it owns |
+|---|---|---|
+| Keys | `PointEditorKeys.h` | `pointKeyAction` decodes a key press into one action of the map above (pick, extend, value, move, select all, copy, paste, duplicate, insert, remove, clear); `isInsertPointKey` holds the Ctrl+T rule |
+| Selection | `PointSelectionModel.{h,cpp}` | The selected set (ascending), the cursor and the anchor, keyed by node index in the curve editor and by beat in a lane, and what Left/Right, Shift+Left/Right and Cmd+A do to them |
+| Group move | `PointGroupMove.{h,cpp}` | How far each moving dot may go (`roomWithin`, `roomBetweenNeighbours`) and the one delta the block moves by (`clampGroupDelta`) |
+| Clipboard | `PointClipboard.h` | The copy/paste/duplicate payload: one entry per dot as its offset from the earliest, its value and the editor's extra data (a curve bend, a lane point's tension and curve) |
+| Duplicate placement | `PointEditorDuplicate.{h,cpp}` (one level up, in `Layout/`) | Where Cmd+D puts the copies (the Duplicate points preference) |
+
+The editors keep only their glue: the curve editor in `CurveEditorSelection.cpp`, `CurveEditorKeyboard.cpp` and
+`CurveEditorClipboard.cpp`; a lane in `LanePointSelection` (the model plus the box-select gesture and repaints) and
+`AutomationLaneEditorPoints.cpp`. The keyboard glide, the selection-box ease and the undo glides are unchanged on top.
+
+**Adding a key once:** add its `Kind` and decoding to `pointKeyAction`, then a `case` in each editor's switch
+(`CurveEditorComponent::keyPressed`, `AutomationLaneEditor::handleSelectionKey`), and a case to the shared suite.
+
+### Where the editors differ
+
+Each editor declares one `PointSelectionRules` constant (`CurveEditorComponent::kSelectionRules`,
+`LanePointSelection::kRules`); unifying a row is changing one field and the tests that pin it.
+
+| Rule | Curve editor | Lane |
+|---|---|---|
+| First Left/Right with no cursor | The first dot either way | The nearest end |
+| Plain arrow at the last dot | Changes nothing | Collapses the selection onto the cursor |
+| Shift+Left/Right | Selects the range from the anchor to the cursor, so reversing shrinks it | Adds the next dot past the selection's end, never shrinks |
+| Cmd+A cursor | Kept if selected, else the last dot | Kept, else the first dot |
+
+Outside the rules: a lane's block move stops only at beat 0 and clamps each value on its own (a move onto another
+point's beat replaces it), the curve's stops at unmoving neighbours and clamps the level as a group; a lane leaves
+Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifiers.
 
 ## Mouse
 
@@ -54,9 +91,11 @@ The shared test of the map runs one key script on a curve editor and on a lane a
 
 1. Order the dots along one axis; if they have none (a 2D map), say so here and keep the arrows for moving.
 2. Take the keys from the table above, nothing else for the same job: Left/Right pick, Alt+arrows move, Up/Down change
-   the value, Ctrl+T inserts (use `isInsertPointKey` in `UI/Layout/PointEditorKeys.h`, which keeps the Mac and
+   the value, Ctrl+T inserts (decode with `pointKeyAction` in `UI/Layout/PointEditing/PointEditorKeys.h`, whose
+   `isInsertPointKey` keeps the Mac and
    non-Mac Control rules in one place).
 3. One press is one undo step; open no gesture for a press that changes nothing.
 4. Make it a Tab stop with `paintFocusRing`, a `setTitle` name, a tooltip and a screen-reader description that list the
    keys ([`development/accessibility.md`](../development/accessibility.md)), and read the cursor dot aloud.
-5. Add the editor to the table above and a key-script case to the shared test.
+5. Run on the shared model (selection, group move, clipboard) with its own `PointSelectionRules`, add the editor to
+   the tables above and an adapter to the shared suite's `PointEditorTypes`.

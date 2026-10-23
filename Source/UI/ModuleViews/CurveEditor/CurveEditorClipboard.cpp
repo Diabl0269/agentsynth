@@ -1,7 +1,7 @@
 // CurveEditorClipboard.cpp -- copy, paste and duplicate of the selected points of a
 // CurveEditorComponent. The class is declared in CurveEditorComponent.h.
 //
-// The clipboard is one process-wide list (message thread only) so a group copied from one curve can be
+// The clipboard is one process-wide shared PointClip (message thread only) so a group copied from one curve can be
 // pasted into another. A group is stored as spacing from its first point, so it lands anywhere.
 
 #include "CurveEditorComponent.h"
@@ -19,57 +19,61 @@ constexpr double kPasteGapFraction = 0.02;
 constexpr double kMinInsertGap = 1e-9;
 } // namespace
 
-std::vector<CurveEditorComponent::ClipPoint>& CurveEditorComponent::clipboard() {
-    static std::vector<ClipPoint> points;
-    return points;
+CurveEditorComponent::Clip& CurveEditorComponent::clipboard() {
+    static Clip clip;
+    return clip;
 }
 
-std::vector<CurveEditorComponent::ClipPoint> CurveEditorComponent::selectionAsClip() const {
-    std::vector<ClipPoint> clip;
-    for (const int i : selection_) {
+// Only a bend between two copied neighbours travels with the group.
+CurveEditorComponent::Clip CurveEditorComponent::selectionAsClip() const {
+    const auto& selected = selection_.selected();
+    std::vector<double> xs, levels;
+    std::vector<ClipBend> bends;
+    for (const int i : selected) {
         if (i < 0 || i >= model_.getNumNodes())
             continue;
-        ClipPoint point;
-        point.dx = model_.getNode(i).x - model_.getNode(selection_.front()).x;
-        point.y = model_.getNode(i).y;
-        // Only a bend between two copied neighbours travels with the group.
-        const bool followedByCopied = std::binary_search(selection_.begin(), selection_.end(), i + 1);
+        xs.push_back(model_.getNode(i).x);
+        levels.push_back(model_.getNode(i).y);
+        ClipBend bend;
+        const bool followedByCopied = std::binary_search(selected.begin(), selected.end(), i + 1);
         if (followedByCopied && i < model_.getNumSegments()) {
-            point.bend = model_.getBend(i);
-            point.hasBend = true;
+            bend.bend = model_.getBend(i);
+            bend.hasBend = true;
         }
-        clip.push_back(point);
+        bends.push_back(bend);
     }
-    return clip;
+    return makePointClip(xs, levels, bends);
 }
 
 bool CurveEditorComponent::copySelection() {
     auto clip = selectionAsClip();
-    if (clip.empty())
+    if (clip.isEmpty())
         return false;
     clipboard() = std::move(clip);
     return true;
 }
 
-bool CurveEditorComponent::insertClip(const std::vector<ClipPoint>& points, double startX) {
+bool CurveEditorComponent::insertClip(const Clip& clip, double startX) {
+    const auto& points = clip.entries;
     const int room = CurveModel::kMaxNodes - model_.getNumNodes();
     if (model_.getMode() != CurveMode::Free || points.empty() || room <= 0)
         return false;
     const auto count = std::min((size_t)room, points.size());
     const double minX = model_.getMinX();
     const double maxX = model_.getMaxX();
-    const double span = points[count - 1].dx;
+    const double span = points[count - 1].offset;
     const double scale = span > maxX - minX && span > 0.0 ? (maxX - minX) / span : 1.0;
     const double start = juce::jlimit(minX, std::max(minX, maxX - span * scale), startX);
 
     beginGesture();
     std::vector<int> added;
     for (size_t k = 0; k < count; ++k) {
-        const int index = model_.addPoint(start + points[k].dx * scale, juce::jlimit(0.0f, 1.0f, points[k].y));
+        const int index =
+            model_.addPoint(start + points[k].offset * scale, juce::jlimit(0.0f, 1.0f, (float)points[k].value));
         if (index < 0)
             break;
-        if (points[k].hasBend && index < model_.getNumSegments())
-            model_.setBend(index, points[k].bend);
+        if (points[k].extra.hasBend && index < model_.getNumSegments())
+            model_.setBend(index, points[k].extra.bend);
         added.push_back(index);
     }
     if (!added.empty()) {
@@ -85,20 +89,20 @@ bool CurveEditorComponent::insertClip(const std::vector<ClipPoint>& points, doub
 }
 
 bool CurveEditorComponent::pasteAtCursor() {
-    if (model_.getMode() != CurveMode::Free || clipboard().empty())
+    if (model_.getMode() != CurveMode::Free || clipboard().isEmpty())
         return false;
     const double gap = (model_.getMaxX() - model_.getMinX()) * kPasteGapFraction;
-    const bool hasCursor = selectedIndex_ >= 0 && selectedIndex_ < model_.getNumNodes();
-    return insertClip(clipboard(), hasCursor ? model_.getNode(selectedIndex_).x + gap : model_.getMinX());
+    const bool hasCursor = cursorIndex() >= 0 && cursorIndex() < model_.getNumNodes();
+    return insertClip(clipboard(), hasCursor ? model_.getNode(cursorIndex()).x + gap : model_.getMinX());
 }
 
 bool CurveEditorComponent::duplicateSelection() {
-    if (model_.getMode() != CurveMode::Free || selection_.empty())
+    if (model_.getMode() != CurveMode::Free || selection_.isEmpty())
         return false;
     const auto clip = selectionAsClip();
     const double range = model_.getMaxX() - model_.getMinX();
     std::vector<double> xs;
-    for (const int i : selection_)
+    for (const int i : selection_.selected())
         if (i >= 0 && i < model_.getNumNodes())
             xs.push_back(model_.getNode(i).x);
     if (xs.empty())
@@ -114,13 +118,13 @@ bool CurveEditorComponent::duplicateSelection() {
 // Halfway between the cursor point and the next one (or the end of the range when it is the last), at the level
 // halfway between them. A refused press returns before beginGesture(), so it never opens an empty undo step.
 bool CurveEditorComponent::insertAfterCursor() {
-    if (model_.getMode() != CurveMode::Free || selectedIndex_ < 0 || selectedIndex_ >= model_.getNumNodes() ||
+    if (model_.getMode() != CurveMode::Free || cursorIndex() < 0 || cursorIndex() >= model_.getNumNodes() ||
         model_.getNumNodes() >= CurveModel::kMaxNodes)
         return false;
-    const CurveNode& from = model_.getNode(selectedIndex_);
-    const bool last = selectedIndex_ + 1 >= model_.getNumNodes();
-    const double toX = last ? model_.getMaxX() : model_.getNode(selectedIndex_ + 1).x;
-    const float toY = last ? from.y : model_.getNode(selectedIndex_ + 1).y;
+    const CurveNode& from = model_.getNode(cursorIndex());
+    const bool last = cursorIndex() + 1 >= model_.getNumNodes();
+    const double toX = last ? model_.getMaxX() : model_.getNode(cursorIndex() + 1).x;
+    const float toY = last ? from.y : model_.getNode(cursorIndex() + 1).y;
     if (toX - from.x <= kMinInsertGap)
         return false;
 

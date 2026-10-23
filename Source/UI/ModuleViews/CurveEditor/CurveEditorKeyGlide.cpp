@@ -20,7 +20,7 @@ constexpr double kMaxRangePerSecond = 1.2;
 std::vector<juce::Point<float>> CurveEditorComponent::selectionPositions() const {
     std::vector<juce::Point<float>> positions;
     const auto geometry = currentGeometry();
-    for (const int i : selection_)
+    for (const int i : selection_.selected())
         if (i >= 0 && i < model_.getNumNodes())
             positions.push_back(geometry.nodePosition(i));
     return positions;
@@ -45,9 +45,9 @@ void CurveEditorComponent::pressNudge(int keyCode, double dx, double dy, bool fi
 }
 
 bool CurveEditorComponent::beginKeyDrag(int keyCode, double dx, double dy, bool fine) {
-    if (selectedIndex_ < 0 || selectedIndex_ >= model_.getNumNodes() || dragKind_ != DragKind::None)
+    if (cursorIndex() < 0 || cursorIndex() >= model_.getNumNodes() || dragKind_ != DragKind::None)
         return false;
-    const auto& node = model_.getNode(selectedIndex_);
+    const auto& node = model_.getNode(cursorIndex());
     const bool time = dx != 0.0;
     const double step = time ? std::abs(dx) : std::abs(dy);
     const double range = time ? currentGeometry().getVisibleRange() : 1.0;
@@ -67,12 +67,12 @@ bool CurveEditorComponent::beginKeyDrag(int keyCode, double dx, double dy, bool 
 // Moves the group to where the key has carried the cursor point: relative to the point's place now, so the same
 // move path as a press does the clamping, snapping and neighbour limits.
 void CurveEditorComponent::applyKeyDrag(bool tapStep) {
-    if (selectedIndex_ < 0 || selectedIndex_ >= model_.getNumNodes())
+    if (cursorIndex() < 0 || cursorIndex() >= model_.getNumNodes())
         return;
     const double distance = keyHold_.distance();
     const double covered = keyDrag_.snapped ? std::floor(distance / keyDrag_.unit + 1e-9) * keyDrag_.unit : distance;
     const double target = keyDrag_.start + keyDrag_.sign * covered;
-    const auto& node = model_.getNode(selectedIndex_);
+    const auto& node = model_.getNode(cursorIndex());
     const double dx = keyDrag_.time ? target - node.x : 0.0;
     const double dy = keyDrag_.time ? 0.0 : target - node.y;
     const bool fine = keyHold_.host.isShiftDown && keyHold_.host.isShiftDown();

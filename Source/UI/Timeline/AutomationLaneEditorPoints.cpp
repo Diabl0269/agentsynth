@@ -3,8 +3,8 @@
 
 #include "AutomationLaneEditor.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/PointEditing/PointEditorKeys.h"
 #include "UI/Layout/PointEditorDuplicate.h"
-#include "UI/Layout/PointEditorKeys.h"
 #include "UI/PianoRoll/NoteAccessibilityText.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
@@ -227,56 +227,44 @@ void AutomationLaneEditor::commitPointMove() {
 //==============================================================================
 // ---- Keys and the edit commands ----
 
+// The key map is decoded once for both point editors (pointKeyAction); a lane consumes Escape and Delete only without
+// modifiers, takes Alt+Shift arrows as a stretch while two or more points are selected, and leaves the Cmd chords to
+// the app's commands.
 bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
-    if (key == juce::KeyPress::escapeKey) {
-        if (selection_.isEmpty())
+    using Kind = PointKeyAction::Kind;
+    const auto action = pointKeyAction(key);
+    if (action.kind == Kind::clear) {
+        if (!action.plain || selection_.isEmpty())
             return false;
         selection_.clear();
         selection_.setCursor(std::nullopt);
         return true;
     }
-    if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
-        return deleteSelectedPoints();
+    if (action.kind == Kind::remove)
+        return action.plain && deleteSelectedPoints();
     if (stretchKey(key))
         return true;
-
-    if (isInsertPointKey(key))
+    if (action.kind == Kind::insert)
         return insertAfterCursor();
 
     const auto* points = lanePoints();
     if (points == nullptr || points->empty())
         return false;
-    using K = juce::KeyPress;
-    const bool left = key.getKeyCode() == K::leftKey;
-    const bool right = key.getKeyCode() == K::rightKey;
-    const bool up = key.getKeyCode() == K::upKey;
-    const bool down = key.getKeyCode() == K::downKey;
-    if (!left && !right && !up && !down)
+    const int code = key.getKeyCode();
+    switch (action.kind) {
+    case Kind::pick:
+        return stepCursor(action.side);
+    case Kind::extend:
+        return extendSelection(action.side);
+    case Kind::value:
+        return nudgePoints(code, 0, action.side,
+                           action.size == PointKeyAction::Size::coarse ? NudgeSize::Coarse : NudgeSize::Normal);
+    case Kind::move: // with one point selected under Alt+Shift (two or more stretch, see stretchKey): the fine move
+        return nudgePoints(code, action.time ? action.side : 0, action.time ? 0 : action.side,
+                           action.size == PointKeyAction::Size::fine ? NudgeSize::Fine : NudgeSize::Normal);
+    default:
         return false;
-    const int side = right || up ? 1 : -1;
-    const auto mods =
-        key.getModifiers().getRawFlags() & (juce::ModifierKeys::shiftModifier | juce::ModifierKeys::altModifier |
-                                            juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::commandModifier);
-    constexpr int shift = juce::ModifierKeys::shiftModifier;
-    constexpr int alt = juce::ModifierKeys::altModifier;
-
-    if (mods == 0) {
-        // Left/Right pick the neighbouring point (the first press with nothing selected picks the nearest end);
-        // Up/Down move the selection's value.
-        if (left || right)
-            return stepCursor(side);
-        return nudgePoints(key.getKeyCode(), 0, side, NudgeSize::Normal);
     }
-    if (mods == shift) {
-        if (left || right)
-            return extendSelection(side);
-        return nudgePoints(key.getKeyCode(), 0, side, NudgeSize::Coarse);
-    }
-    if (mods == alt) // Alt moves the selection: Left/Right in time, Up/Down in value
-        return nudgePoints(key.getKeyCode(), left || right ? side : 0, up || down ? side : 0, NudgeSize::Normal);
-    if (mods == (alt | shift)) // with one point selected (two or more stretch, see stretchKey): the fine move
-        return nudgePoints(key.getKeyCode(), left || right ? side : 0, up || down ? side : 0, NudgeSize::Fine);
-    return false;
 }
 
 // Inserts a point halfway between the cursor point and the next one, at the level halfway between them, as one edit,
@@ -370,66 +358,36 @@ void AutomationLaneEditor::selectOnly(const LaneBreakpoint& point) {
     showBubbleAt(point.beat, point.value);
 }
 
-// Moves the keyboard cursor to the neighbouring point and selects only it; with no cursor yet the first press lands
-// on the nearest end. At the last point it stays put (still consumed).
+// The selection keys walk every point of the lane (PointSelectionModel with the lane's rules); the bubble shows the
+// point the cursor reached. Consumed whenever the lane has points, even when the walk stopped at an end.
 bool AutomationLaneEditor::stepCursor(int direction) {
     const auto* points = lanePoints();
     if (points == nullptr || points->empty())
         return false;
-    int index = direction > 0 ? 0 : (int)points->size() - 1;
-    if (const auto cursor = selection_.getCursor(); cursor.has_value()) {
-        for (int i = 0; i < (int)points->size(); ++i)
-            if ((*points)[(std::size_t)i].beat == *cursor)
-                index = juce::jlimit(0, (int)points->size() - 1, i + direction);
-    }
-    selectOnly((*points)[(std::size_t)index]);
+    showBubbleOnCursor(selection_.step(direction, beatsOf(*points)));
     return true;
 }
 
-// Adds the next point past the selection on `direction`'s side and moves the cursor onto it; with one point selected
-// the walk starts from the cursor. Nothing selected: the first press picks the nearest end like a plain arrow. Consumed
-// at the last point too.
 bool AutomationLaneEditor::extendSelection(int direction) {
     const auto* points = lanePoints();
     if (points == nullptr || points->empty())
         return false;
-    if (selection_.isEmpty())
-        return stepCursor(direction);
-
-    const auto selected = selection_.getSelected();
-    double from = direction > 0 ? selected.back() : selected.front();
-    if (selected.size() == 1 && selection_.getCursor().has_value())
-        from = *selection_.getCursor();
-    const LaneBreakpoint* next = nullptr;
-    if (direction > 0) {
-        for (const auto& p : *points)
-            if (p.beat > from) {
-                next = &p;
-                break;
-            }
-    } else {
-        for (auto it = points->rbegin(); it != points->rend(); ++it)
-            if (it->beat < from) {
-                next = &*it;
-                break;
-            }
-    }
-    if (next == nullptr)
-        return true;
-    selection_.add(next->beat);
-    selection_.setCursor(next->beat);
-    showBubbleAt(next->beat, next->value);
+    showBubbleOnCursor(selection_.extend(direction, beatsOf(*points)));
     return true;
+}
+
+void AutomationLaneEditor::showBubbleOnCursor(std::optional<double> beat) {
+    const auto* points = lanePoints();
+    if (points == nullptr || !beat.has_value())
+        return;
+    for (const auto& p : *points)
+        if (p.beat == *beat)
+            showBubbleAt(p.beat, p.value);
 }
 
 bool AutomationLaneEditor::selectAllPoints() {
     const auto* points = lanePoints();
-    if (points == nullptr || points->empty())
-        return false;
-    selection_.setSelection(beatsOf(*points));
-    if (!selection_.getCursor().has_value())
-        selection_.setCursor(points->front().beat);
-    return true;
+    return points != nullptr && selection_.selectAll(beatsOf(*points));
 }
 
 bool AutomationLaneEditor::deleteSelectedPoints() {
