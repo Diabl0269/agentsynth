@@ -9,7 +9,7 @@ namespace synth {
 namespace {
 constexpr int kSamplesPerDesign = 128;
 constexpr float kUrgentPriority = 1000.0f; // a note that just started
-constexpr float kRedrawPriority = 10.0f;   // new shapes, Shift or Depth moved
+constexpr float kRedrawPriority = 10.0f;   // new shapes, Shift, Depth, Cutoff or Resonance moved
 } // namespace
 
 /** Mode and smoothness are single values, so they cross as relaxed atomics. The key map is a fixed 128-entry table
@@ -116,8 +116,8 @@ void CustomFilterEngine::processPerVoice(float* const* channels, int numChannels
 }
 
 /** Picks at most `budget` voices to redesign this block: a note that just started first (so Smoothness 0 lands in
-    the note's first block), then voices whose shapes, Shift or Depth changed, then the ones whose cursor is
-    furthest from the cursor their kernel was designed for. A voice that has been silent long enough to be idle
+    the note's first block), then voices whose shapes, Shift, Depth, Cutoff or Resonance changed, then the ones whose
+   cursor is furthest from the cursor their kernel was designed for. A voice that has been silent long enough to be idle
     waits, and a skipped voice keeps gliding: it only takes a coarser step when its turn comes. */
 void CustomFilterEngine::designVoices(const Controls& controls, int numVoices, int numChannels, int numSamples,
                                       int budget) noexcept {
@@ -128,9 +128,7 @@ void CustomFilterEngine::designVoices(const Controls& controls, int numVoices, i
             continue;
         const Controls& d = voiceDesigned_[(size_t)v];
         const float dist = std::hypot(cursors_.getX(v) - d.morphX, cursors_.getY(v) - d.morphY);
-        const bool redraw = voiceTableDirty_[(size_t)v] || !convolver_.hasKernel(v + 1) ||
-                            std::abs(controls.shiftSemitones - d.shiftSemitones) > kShiftEpsilon ||
-                            std::abs(controls.depth - d.depth) > kDepthEpsilon;
+        const bool redraw = voiceTableDirty_[(size_t)v] || !convolver_.hasKernel(v + 1) || toneMoved(controls, d);
         if (!redraw && dist <= kMorphEpsilon)
             continue;
         // A pitch can step on a silent voice (nothing to hear yet), so only a sounding note jumps the queue, and a

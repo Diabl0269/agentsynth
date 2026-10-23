@@ -24,7 +24,9 @@ public:
         float morphX = 0.5f; // [0, 1]
         float morphY = 0.5f; // [0, 1]
         float shiftSemitones = 0.0f;
-        float depth = 1.0f; // multiplier on every shape's dB
+        float depth = 1.0f;      // multiplier on every shape's dB
+        float cutoffHz = 440.0f; // moves the response by 12 * log2(cutoffHz / 440) semitones, on top of shift
+        float resonance = 0.0f;  // [0, 1]: a bell at cutoffHz, added after depth
     };
 
     /** Rendered immutable form of one shape list: kGridSize dB values per shape plus positions. */
@@ -88,7 +90,10 @@ private:
     static constexpr float kMorphEpsilon = 1.0e-4f;
     static constexpr float kShiftEpsilon = 1.0e-3f; // semitones
     static constexpr float kDepthEpsilon = 1.0e-4f;
+    static constexpr float kResonanceEpsilon = 1.0e-4f;
 
+    /** True when shift, depth, cutoff or resonance differ by more than their epsilons (morph is separate). */
+    static bool toneMoved(const Controls& a, const Controls& b) noexcept;
     bool needsDesign(const Controls& c) const noexcept;
     void design(const Controls& c, int fadeSamples) noexcept;
     void designKernel(const Controls& c) noexcept;

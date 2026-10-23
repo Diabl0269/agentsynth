@@ -4,6 +4,7 @@
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "../../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "ModuleComponentTestFixture.h"
+#include "Modules/Filter/CustomFilterCutoff.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -62,6 +63,18 @@ juce::MouseEvent mouseOn(juce::Component& c, juce::Point<float> p, bool dragged 
                                dragged ? down : p);
 }
 
+/** Runs enough audio blocks for the module's smoothed Cutoff and Resonance to land on the knobs, so the
+    response view (which draws the modulated values) reads them. */
+void processBlocks(FilterModule& filter) {
+    filter.prepareToPlay(44100.0, 512);
+    juce::AudioBuffer<float> buf(FilterModule::kNumChannels, 512);
+    juce::MidiBuffer midi;
+    for (int i = 0; i < 4; ++i) {
+        buf.clear();
+        filter.processBlock(buf, midi);
+    }
+}
+
 } // namespace
 
 TEST_F(ModuleComponentTest, FilterCustomSectionIsAbsentInTheLadderTypesAndKeepsTheirHeight) {
@@ -83,17 +96,14 @@ TEST_F(ModuleComponentTest, FilterCustomSectionIsAbsentInTheLadderTypesAndKeepsT
     EXPECT_EQ(rig.card->getHeight(), ladderHeight) << "back to a ladder type: exactly the old card";
 }
 
-TEST_F(ModuleComponentTest, CustomTypeSwapsCutoffAndResonanceForShiftAndDepthAndKeepsDrive) {
+// Regression test for FRO964: Custom uses Cutoff and Resonance, so the card shows all four knobs.
+TEST_F(ModuleComponentTest, CustomTypeShowsCutoffResonanceShiftAndDepthAndKeepsDrive) {
     CardRig rig;
-    EXPECT_FALSE(rig.knobShown("Cutoff"));
-    EXPECT_FALSE(rig.knobShown("Resonance"));
-    EXPECT_TRUE(rig.knobShown("Shift"));
-    EXPECT_TRUE(rig.knobShown("Depth"));
-    EXPECT_TRUE(rig.knobShown("Drive"));
-    EXPECT_TRUE(rig.knobShown("Key Track"));
-    // Shift and Depth take Cutoff's and Resonance's cells.
-    EXPECT_EQ(rig.knob("Shift")->getBounds().getTopLeft(), rig.knob("Cutoff")->getBounds().getTopLeft());
-    EXPECT_EQ(rig.knob("Depth")->getBounds().getTopLeft(), rig.knob("Resonance")->getBounds().getTopLeft());
+    for (const char* name : {"Cutoff", "Resonance", "Shift", "Depth", "Drive", "Key Track"})
+        EXPECT_TRUE(rig.knobShown(name)) << name;
+    EXPECT_NE(rig.knob("Shift")->getBounds(), rig.knob("Cutoff")->getBounds());
+    EXPECT_FALSE(rig.knob("Shift")->getBounds().intersects(rig.knob("Cutoff")->getBounds()));
+    EXPECT_FALSE(rig.knob("Depth")->getBounds().intersects(rig.knob("Resonance")->getBounds()));
 }
 
 TEST_F(ModuleComponentTest, MorphMapIsShownByDefaultWithSeveralShapesAndHidesTheMorphKnobs) {
@@ -141,11 +151,10 @@ TEST_F(ModuleComponentTest, ShowMorphMapToggleHasThePillStyle) {
     EXPECT_TRUE((bool)rig.custom().getToggle().getProperties()[synth::theme::AppLookAndFeel::kTogglePillProperty]);
 }
 
-// Regression test for FRO954: Shift and Depth share a cell with the hidden Cutoff and Resonance; a drop on
-// them lands on the visible knob.
+// Regression test for FRO954: a drop on Shift or Depth lands on that visible knob.
 TEST_F(ModuleComponentTest, CableOverCustomShiftAndDepthLandsOnThem) {
     CardRig rig;
-    ASSERT_FALSE(rig.knobShown("Cutoff"));
+    ASSERT_TRUE(rig.knobShown("Shift"));
     for (const auto& [name, channel] : {std::pair<const char*, int>{"Shift", FilterModule::kShiftCVChannel},
                                         std::pair<const char*, int>{"Depth", FilterModule::kDepthCVChannel}}) {
         auto* knob = rig.knob(name);
@@ -247,22 +256,46 @@ TEST_F(ModuleComponentTest, ResponseViewDrawsTheCustomBlendAndFollowsTheCursor) 
         FilterModule::kCustomTypeIndex;
     FrequencyResponseComponent view(filter);
     view.setSize(300, 120);
+    processBlocks(filter);
     view.timerCallback();
 
     const int i = 500;
-    const auto expected = synth::customfilter::responseGridDb(filter.getCustomShapes(), 0.5f, 0.5f, 0.0f, 1.0f);
+    // The default Cutoff (440 Hz) and Resonance (0.1) are part of what is drawn.
+    const auto expected =
+        synth::customfilter::responseGridDb(filter.getCustomShapes(), 0.5f, 0.5f, 0.0f, 1.0f, 440.0f, 0.1f);
     EXPECT_NEAR(view.getMagnitudeDbForTest(i), expected[(size_t)i], 1e-3);
     EXPECT_NE(view.getMagnitudeDbForTest(i), 0.0f) << "not the flat 0 dB the view drew before";
 
     *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "morphX")) = 0.2f;
     *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "morphY")) = 0.25f;
+    processBlocks(filter);
     view.timerCallback();
-    const auto onAh = synth::customfilter::responseGridDb(filter.getCustomShapes(), 0.2f, 0.25f, 0.0f, 1.0f);
+    const auto onAh =
+        synth::customfilter::responseGridDb(filter.getCustomShapes(), 0.2f, 0.25f, 0.0f, 1.0f, 440.0f, 0.1f);
     EXPECT_NEAR(view.getMagnitudeDbForTest(i), onAh[(size_t)i], 1e-3);
 
     *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "depth")) = 0.0f;
+    *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "resonance")) = 0.0f;
+    processBlocks(filter);
     view.timerCallback();
     EXPECT_NEAR(view.getMagnitudeDbForTest(i), 0.0f, 1e-3);
+}
+
+// Regression test for FRO964: the view draws the cutoff move and the resonant bell.
+TEST_F(ModuleComponentTest, ResponseViewDrawsTheCutoffMoveAndTheResonanceBell) {
+    FilterModule filter;
+    *dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&filter, "filterType")) =
+        FilterModule::kCustomTypeIndex;
+    *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "depth")) = 0.0f;
+    *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "resonance")) = 1.0f;
+    *dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "cutoff")) = 1760.0f;
+    FrequencyResponseComponent view(filter);
+    view.setSize(300, 120);
+    processBlocks(filter);
+    view.timerCallback();
+    const int atCutoff = (int)std::lround(synth::customfilter::cutoffX(1760.0f) * 1023.0f);
+    EXPECT_NEAR(view.getMagnitudeDbForTest(atCutoff), 18.0f, 0.5f);
+    EXPECT_LT(view.getMagnitudeDbForTest(atCutoff - 300), 1.0f);
 }
 
 // ---- cables ------------------------------------------------------------------------------------------------

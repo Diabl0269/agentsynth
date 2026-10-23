@@ -18,6 +18,12 @@ std::vector<float> blendedGridDb(const CustomFilterShapes& shapes, float x, floa
 std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, float y, float shiftSemitones,
                                   float depth);
 
+/** responseGridDb with Cutoff and Resonance as the designer applies them: the curve also moves by
+ *  cutoffShiftSemitones(cutoffHz) and, after depth, the resonant bell at cutoffHz is added. At the reference
+ *  cutoff (440 Hz) and resonance 0 it equals the overload above. */
+std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, float y, float shiftSemitones, float depth,
+                                  float cutoffHz, float resonance);
+
 /** Samples `gridDb` back into a curve of `numPoints` evenly spaced points (the first at x = 0, the last at
  *  x = 1; at least LfoCustomWave::kMinPoints). The result is sanitised and every y is in [0, 1]. */
 LfoCustomWave curveFromGridDb(const std::vector<float>& gridDb, int numPoints);

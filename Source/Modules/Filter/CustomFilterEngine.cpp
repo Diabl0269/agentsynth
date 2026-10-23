@@ -1,6 +1,7 @@
 // CustomFilterEngine.cpp -- shape handoff, morph blend, redesign policy and convolution for the
 // Filter's Custom type, shared-cursor path. The per-voice path is CustomFilterEngineVoices.cpp.
 #include "CustomFilterEngine.h"
+#include "CustomFilterCutoff.h"
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -63,11 +64,18 @@ void CustomFilterEngine::blendWeights(const ShapeTable& table, float x, float y,
     morph::blendWeights(table.x.data(), table.y.data(), table.count, x, y, out);
 }
 
+/** Cutoff is compared as the shift it causes, so one epsilon in semitones covers every frequency. */
+bool CustomFilterEngine::toneMoved(const Controls& a, const Controls& b) noexcept {
+    return std::abs(a.shiftSemitones - b.shiftSemitones) > kShiftEpsilon ||
+           std::abs(a.depth - b.depth) > kDepthEpsilon ||
+           std::abs(customfilter::cutoffShiftSemitones(a.cutoffHz) - customfilter::cutoffShiftSemitones(b.cutoffHz)) >
+               kShiftEpsilon ||
+           std::abs(a.resonance - b.resonance) > kResonanceEpsilon;
+}
+
 bool CustomFilterEngine::needsDesign(const Controls& c) const noexcept {
     return tableChanged_ || std::abs(c.morphX - designed_.morphX) > kMorphEpsilon ||
-           std::abs(c.morphY - designed_.morphY) > kMorphEpsilon ||
-           std::abs(c.shiftSemitones - designed_.shiftSemitones) > kShiftEpsilon ||
-           std::abs(c.depth - designed_.depth) > kDepthEpsilon;
+           std::abs(c.morphY - designed_.morphY) > kMorphEpsilon || toneMoved(c, designed_);
 }
 
 /** Blends the shapes' dB curves (never their kernels: a sum of minimum-phase kernels is neither
@@ -79,7 +87,7 @@ void CustomFilterEngine::designKernel(const Controls& c) noexcept {
     for (int s = 0; s < table.count; ++s)
         juce::FloatVectorOperations::addWithMultiply(blendedDb_.data(), table.db.data() + s * kGridSize,
                                                      weights_[(size_t)s], kGridSize);
-    designer_.design(blendedDb_.data(), c.shiftSemitones, c.depth, kernel_.data());
+    designer_.design(blendedDb_.data(), c.shiftSemitones, c.depth, c.resonance, c.cutoffHz, kernel_.data());
 }
 
 /** The shared kernel (convolver group 0). */

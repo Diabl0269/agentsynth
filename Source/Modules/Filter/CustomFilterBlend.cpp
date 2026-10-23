@@ -1,5 +1,6 @@
 // CustomFilterBlend.cpp -- the blended Custom response as numbers, and its sampling back into a curve.
 #include "CustomFilterBlend.h"
+#include "CustomFilterCutoff.h"
 #include <cmath>
 
 namespace synth::customfilter {
@@ -34,6 +35,18 @@ std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, flo
         const float frac = pos - (float)i0;
         out[(size_t)k] = (blended[(size_t)i0] + (blended[(size_t)i0 + 1] - blended[(size_t)i0]) * frac) * depth;
     }
+    return out;
+}
+
+std::vector<float> responseGridDb(const CustomFilterShapes& shapes, float x, float y, float shiftSemitones, float depth,
+                                  float cutoffHz, float resonance) {
+    auto out = responseGridDb(shapes, x, y, shiftSemitones + cutoffShiftSemitones(cutoffHz), depth);
+    if (!(resonance > 0.0f))
+        return out;
+    const float bellX = cutoffX(cutoffHz);
+    const float octaves = axisOctaves();
+    for (int k = 0; k < kGridSize; ++k)
+        out[(size_t)k] += resonanceBellDb(resonance, ((float)k / (float)(kGridSize - 1) - bellX) * octaves);
     return out;
 }
 

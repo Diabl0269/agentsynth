@@ -23,10 +23,10 @@ type Filter size 280x553
   child 21 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 22 knob id="Morph Y" at 0,0 0x0 visible=0 title="Morph Y" tip="Morph Y" focusOrder=0 wantsFocus=1
   child 23 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 24 knob id="Shift" at 12,179 85x80 visible=0 title="Shift" tip="Shift" focusOrder=0 wantsFocus=1
-  child 25 label id="" at 12,161 85x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 26 knob id="Depth" at 12,277 85x58 visible=0 title="Depth" tip="Depth" focusOrder=0 wantsFocus=1
-  child 27 label id="" at 12,259 85x18 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 knob id="Shift" at 0,0 0x0 visible=0 title="Shift" tip="Shift" focusOrder=0 wantsFocus=1
+  child 25 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 knob id="Depth" at 0,0 0x0 visible=0 title="Depth" tip="Depth" focusOrder=0 wantsFocus=1
+  child 27 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 28 knob id="Level" at 97,371 85x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
   child 29 label id="" at 97,353 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 30 knob id="Mix" at 12,447 85x58 visible=1 title="Mix" tip="Mix" focusOrder=0 wantsFocus=1
@@ -52,7 +52,7 @@ type Filter size 280x553
   in 6 37, 408
   in 7 10, 118
   in 8 10, 118
-  in 9 29, 235
-  in 10 37, 314
+  in 9 10, 118
+  in 10 10, 118
   out 0 270, 58
   out 1 270, 78
