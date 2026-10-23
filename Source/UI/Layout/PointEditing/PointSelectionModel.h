@@ -32,7 +32,8 @@ struct PointSelectionRules {
 };
 
 /** `Key` names a dot: its index (the curve editor) or its beat (a lane), ordered like the dots. Every `pickable` list
- *  is the keys a press may land on, ascending. Every call returning bool says whether anything changed. */
+ *  is the keys a press may land on, ascending. Every call returning bool but selectAll says whether
+ *  anything changed. */
 template <typename Key>
 class PointSelectionModel {
 public:
