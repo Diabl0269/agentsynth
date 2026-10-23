@@ -133,6 +133,11 @@ int glyphsDrawn(const juce::String& message, int textWidth) {
     glyphs.addCurtailedLineOfText(juce::Font(juce::FontOptions(12.0f)), message, 0.0f, 0.0f, (float)textWidth, true);
     return glyphs.getNumGlyphs();
 }
+float measuredWidth(const juce::String& message) {
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(juce::Font(juce::FontOptions(12.0f)), message, 0.0f, 0.0f);
+    return glyphs.getBoundingBox(0, -1, true).getWidth();
+}
 int glyphsInFull(const juce::String& message) {
     juce::GlyphArrangement glyphs;
     glyphs.addLineOfText(juce::Font(juce::FontOptions(12.0f)), message, 0.0f, 0.0f);
@@ -164,9 +169,10 @@ TEST(ToastComponentTests, AMessageTooLongForTheAreaIsCappedWithAnEllipsis) {
     synth::ui::ToastComponent toast;
     parent.addChildComponent(toast);
     toast.placeIn({0, 0, 600, 400});
-    const juce::String text(
-        "This message is far too long to fit in a toast placed in a window only six hundred pixels wide, so it is "
-        "capped");
+    // Repeat words until the line measures well past the area in this machine's font, so the test holds on any font.
+    juce::String text("This message is far too long to fit in a toast placed in a narrow window");
+    while (measuredWidth(text) < 600.0f + 100.0f)
+        text += ", and it keeps going";
     toast.show(text);
     EXPECT_EQ(toast.getWidth(), 600 - 40);
     EXPECT_LT(glyphsDrawn(text, toast.getWidth() - 28), glyphsInFull(text));

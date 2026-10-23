@@ -52,7 +52,8 @@ public:
     /** `<user settings folder>/Shapes`. */
     static juce::File defaultRoot();
 
-    /** The file a saved shape of that name lives in (it may not exist); empty when the name is unusable. */
+    /** The file a saved shape of that name lives in, found ignoring letter case (it may not exist); empty when the name
+     *  is unusable. */
     juce::File fileOf(ShapeKind kind, const juce::String& name) const { return fileFor(kind, name); }
     /** Where this library keeps its files. Not created until the first save. */
     juce::File root() const;
@@ -70,7 +71,7 @@ public:
 
     /** A typed name made safe as a file name, trimmed and cut to kMaxNameLength; empty when nothing usable is left. */
     static juce::String sanitiseName(const juce::String& raw);
-    /** Whether a saved shape of that name is already there (file names compare ignoring case, as the disk does). */
+    /** Whether a saved shape of that name is already there (names compare ignoring letter case on every OS). */
     bool exists(ShapeKind kind, const juce::String& name) const;
 
     enum class SaveResult { Saved, Replaced, Exists, EmptyName, Failed };

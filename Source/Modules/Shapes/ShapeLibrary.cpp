@@ -65,9 +65,19 @@ juce::String ShapeLibrary::sanitiseName(const juce::String& raw) {
     return cleaned.substring(0, kMaxNameLength).trim();
 }
 
+// Names are case-insensitive on every OS: "Ring" and "ring" are one shape. The disk only agrees on macOS and Windows,
+// so the folder is scanned for a file whose name matches ignoring case; the composed path is the answer when none does.
 juce::File ShapeLibrary::fileFor(ShapeKind kind, const juce::String& name) const {
     const auto safe = sanitiseName(name);
-    return safe.isEmpty() ? juce::File() : folderFor(kind).getChildFile(safe + ".json");
+    if (safe.isEmpty())
+        return {};
+    const auto folder = folderFor(kind);
+    const auto wanted = safe + ".json";
+    if (folder.isDirectory())
+        for (const auto& file : folder.findChildFiles(juce::File::findFiles, false, "*.json"))
+            if (file.getFileName().equalsIgnoreCase(wanted))
+                return file;
+    return folder.getChildFile(wanted);
 }
 
 bool ShapeLibrary::exists(ShapeKind kind, const juce::String& name) const {
@@ -157,6 +167,8 @@ ShapeLibrary::SaveResult ShapeLibrary::save(ShapeKind kind, const juce::String& 
     const bool existed = file.existsAsFile();
     if (existed && !replace)
         return SaveResult::Exists;
+    // A replace keeps the spelling the shape was first saved under, so its favourites and recents ids stay valid.
+    const auto storedName = existed ? sanitiseName(file.getFileNameWithoutExtension()) : safe;
     if (!file.getParentDirectory().createDirectory().wasOk())
         return SaveResult::Failed;
 
@@ -165,7 +177,7 @@ ShapeLibrary::SaveResult ShapeLibrary::save(ShapeKind kind, const juce::String& 
     auto* obj = new juce::DynamicObject();
     obj->setProperty("version", kFileVersion);
     obj->setProperty("kind", kindWord(kind));
-    obj->setProperty("name", safe);
+    obj->setProperty("name", storedName);
     obj->setProperty("curve", sane.toVar());
     if (!file.replaceWithText(juce::JSON::toString(juce::var(obj))))
         return SaveResult::Failed;

@@ -63,11 +63,50 @@ TEST(ShapeLibraryTest, SavingOverAnExistingNameAsksFirstAndThenReplacesIt) {
     auto other = LfoCustomWave::preset(LfoCustomWave::Preset::RampUp);
     EXPECT_EQ(t.library.save(ShapeKind::Filter, "ring", other), ShapeLibrary::SaveResult::Exists);
     EXPECT_EQ(t.library.userShapes(ShapeKind::Filter)[0].curve, sampleCurve()); // not touched
-    // The disk ignores case, so a differently cased name is the same shape.
+    // Names ignore letter case on every OS, so a differently cased name is the same shape.
     EXPECT_TRUE(t.library.exists(ShapeKind::Filter, "RING"));
     EXPECT_EQ(t.library.save(ShapeKind::Filter, "ring", other, true), ShapeLibrary::SaveResult::Replaced);
     ASSERT_EQ(t.library.userShapes(ShapeKind::Filter).size(), 1u);
     EXPECT_EQ(t.library.userShapes(ShapeKind::Filter)[0].curve, other);
+}
+
+static int jsonFileCount(const juce::File& folder) {
+    return folder.findChildFiles(juce::File::findFiles, false, "*.json").size();
+}
+
+TEST(ShapeLibraryTest, SavingARecasedNameAsksToReplaceAndNeverMakesASecondFile) {
+    TempLibrary t;
+    ASSERT_EQ(t.library.save(ShapeKind::Filter, "ring", sampleCurve()), ShapeLibrary::SaveResult::Saved);
+    const auto folder = t.fileOf(ShapeKind::Filter, "ring").getParentDirectory();
+    auto other = LfoCustomWave::preset(LfoCustomWave::Preset::RampUp);
+    EXPECT_EQ(t.library.save(ShapeKind::Filter, "Ring", other), ShapeLibrary::SaveResult::Exists);
+    EXPECT_EQ(jsonFileCount(folder), 1);
+    EXPECT_EQ(t.library.save(ShapeKind::Filter, "Ring", other, true), ShapeLibrary::SaveResult::Replaced);
+    EXPECT_EQ(jsonFileCount(folder), 1);
+    // The shape keeps the spelling it was first saved under, so ids that name it stay valid.
+    const auto shapes = t.library.userShapes(ShapeKind::Filter);
+    ASSERT_EQ(shapes.size(), 1u);
+    EXPECT_EQ(shapes[0].name, "ring");
+    EXPECT_EQ(shapes[0].curve, other);
+    EXPECT_TRUE(t.library.find(ShapeKind::Filter, false, "RING").has_value());
+    EXPECT_TRUE(t.library.remove(ShapeKind::Filter, "rInG"));
+    EXPECT_EQ(jsonFileCount(folder), 0);
+}
+
+TEST(ShapeLibraryTest, ARenameThatOnlyChangesLetterCaseLeavesOneFileWithTheNewSpelling) {
+    TempLibrary t;
+    ASSERT_EQ(t.library.save(ShapeKind::Filter, "ring", sampleCurve()), ShapeLibrary::SaveResult::Saved);
+    const auto folder = t.fileOf(ShapeKind::Filter, "ring").getParentDirectory();
+    EXPECT_EQ(t.library.rename(ShapeKind::Filter, "ring", "Ring"), ShapeLibrary::RenameResult::Renamed);
+    EXPECT_EQ(jsonFileCount(folder), 1);
+    const auto shapes = t.library.userShapes(ShapeKind::Filter);
+    ASSERT_EQ(shapes.size(), 1u);
+    EXPECT_EQ(shapes[0].name, "Ring");
+    EXPECT_EQ(shapes[0].curve, sampleCurve());
+    EXPECT_EQ(t.library.fileOf(ShapeKind::Filter, "ring").getFileName(), "Ring.json");
+    // Another shape's name in a different case is still taken.
+    ASSERT_EQ(t.library.save(ShapeKind::Filter, "bell", sampleCurve()), ShapeLibrary::SaveResult::Saved);
+    EXPECT_EQ(t.library.rename(ShapeKind::Filter, "bell", "RING"), ShapeLibrary::RenameResult::Exists);
 }
 
 TEST(ShapeLibraryTest, AnEmptyOrUnusableNameIsRefusedAndWritesNothing) {
