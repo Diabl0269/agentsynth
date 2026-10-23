@@ -82,6 +82,16 @@ juce::String describeAddFolderForAccessibility(int position, int count) {
     return "Add folder, press Return to choose a folder, " + juce::String(position) + " of " + juce::String(count);
 }
 
+juce::String fileManagerName() {
+#if JUCE_MAC
+    return "Finder";
+#elif JUCE_WINDOWS
+    return "File Explorer";
+#else
+    return "the file manager";
+#endif
+}
+
 juce::String describePathForAccessibility(const juce::StringArray& parts) {
     return "Path, " + parts.joinIntoString(", ");
 }

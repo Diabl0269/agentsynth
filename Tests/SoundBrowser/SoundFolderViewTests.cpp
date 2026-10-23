@@ -3,6 +3,7 @@
 // are replaced by the view's test seams, so nothing here opens a window.
 #include "SoundBrowserTestKit.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
+#include "UI/Library/SoundBrowser/SoundBrowserText.h"
 #include <atomic>
 
 using namespace sound_browser_test;
@@ -149,7 +150,7 @@ TEST(SoundFolderView, TheFolderMenuOffersRenameFinderScanAgainAndRemove) {
     while (it.next())
         if (it.getItem().text.isNotEmpty())
             labels.add(it.getItem().text);
-    EXPECT_EQ(labels.joinIntoString("|"), "Rename|Show in Finder|Scan again|Remove");
+    EXPECT_EQ(labels.joinIntoString("|"), "Rename|Show in " + synth::ui::fileManagerName() + "|Scan again|Remove");
     EXPECT_EQ(rig.view->buildFolderMenu(rig.rowOf(Kind::Place, "Core instruments")).getNumItems(), 0);
 }
 
@@ -230,7 +231,7 @@ TEST(SoundFolderView, AFolderThatIsGoneShowsNotFoundAndComesBack) {
     auto menu = rig.view->buildFolderMenu(row);
     juce::PopupMenu::MenuItemIterator it(menu);
     while (it.next())
-        if (it.getItem().text == "Show in Finder")
+        if (it.getItem().text == "Show in " + synth::ui::fileManagerName())
             EXPECT_FALSE(it.getItem().isEnabled) << "there is nothing to show";
 
     ASSERT_TRUE(parked.moveFileTo(rig.other));

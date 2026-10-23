@@ -6,6 +6,7 @@
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserPackLayout.h"
+#include "UI/Library/SoundBrowser/SoundBrowserText.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -156,7 +157,7 @@ juce::PopupMenu SoundBrowserComponent::buildFolderMenu(int rowIndex) const {
     if (rowIndex < 0 || rowIndex >= (int)rows_.size() || !rows_[(size_t)rowIndex].userFolder)
         return menu;
     menu.addItem(1, "Rename");
-    menu.addItem(2, "Show in Finder", !rows_[(size_t)rowIndex].missing);
+    menu.addItem(2, "Show in " + fileManagerName(), !rows_[(size_t)rowIndex].missing);
     menu.addItem(3, "Scan again");
     menu.addSeparator();
     menu.addItem(4, "Remove");

@@ -150,7 +150,8 @@ public:
     void chooseFolderToAdd();
     /** Adds each existing folder to the book and selects the last one added; false when none was new. */
     bool addFolders(const juce::Array<juce::File>& folders);
-    /** The right-click menu of a user folder's Place row: Rename, Show in Finder, Scan again, Remove. */
+    /** The right-click menu of a user folder's Place row: Rename, Show in Finder (File Explorer on Windows), Scan
+     * again, Remove. */
     juce::PopupMenu buildFolderMenu(int rowIndex) const;
     /** Opens that menu at the pointer (`anchor` empty) or at `anchor`, a screen area. */
     void showFolderMenu(int rowIndex, std::optional<juce::Rectangle<int>> anchor);
