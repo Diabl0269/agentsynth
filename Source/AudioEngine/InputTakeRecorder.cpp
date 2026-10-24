@@ -5,8 +5,11 @@ namespace synth {
 // Every slot's writer exists from construction, but its ring is only allocated on the slot's first take, so an
 // engine that never records from its input costs one idle thread object and no ring memory.
 InputTakeRecorder::InputTakeRecorder(int ringCapacityFrames) {
-    for (auto& slot : slots_)
+    for (auto& slot : slots_) {
         slot.writer = std::make_unique<TakeCaptureWriter>(writerThread_, ringCapacityFrames, /*allocateRingNow*/ false);
+        slot.stripBuffer.setSize(TakeCaptureWriter::kMaxChannels, kStripBufferFrames);
+        slot.stripBuffer.clear();
+    }
 }
 
 // Writers detach from the shared thread before it stops; the slots (declared after the thread) die first anyway.
@@ -33,12 +36,37 @@ int InputTakeRecorder::startSlot(int firstChannel, int numChannels, const juce::
         if (slot.writer->isCapturing())
             continue;
         slot.firstChannel.store(firstChannel, std::memory_order_relaxed);
+        slot.stripFed.store(false, std::memory_order_relaxed);
         if (!slot.writer->start(wavFile, peaksFile, sampleRate, numChannels))
             return -1;
         capturingCount_.fetch_add(1, std::memory_order_relaxed);
         return index;
     }
     return -1;
+}
+
+// The buffer is cleared before the writer arms, so the first block never carries a previous take's tail.
+int InputTakeRecorder::startStripSlot(const juce::File& wavFile, const juce::File& peaksFile, double sampleRate) {
+    for (int index = 0; index < kMaxSlots; ++index) {
+        auto& slot = slots_[(std::size_t)index];
+        if (slot.writer->isCapturing())
+            continue;
+        slot.stripBuffer.clear();
+        slot.stripFed.store(true, std::memory_order_relaxed);
+        if (!slot.writer->start(wavFile, peaksFile, sampleRate, TakeCaptureWriter::kMaxChannels)) {
+            slot.stripFed.store(false, std::memory_order_relaxed);
+            return -1;
+        }
+        capturingCount_.fetch_add(1, std::memory_order_relaxed);
+        return index;
+    }
+    return -1;
+}
+
+juce::AudioBuffer<float>* InputTakeRecorder::getStripSlotBuffer(int slot) noexcept {
+    if (slot < 0 || slot >= kMaxSlots)
+        return nullptr;
+    return &slots_[(std::size_t)slot].stripBuffer;
 }
 
 InputTakeRecorder::TakeResult InputTakeRecorder::stopSlot(int slot) {
@@ -91,12 +119,32 @@ void InputTakeRecorder::push(const float* const* inputs, int numInputs, int numS
         return;
     const int available = inputs != nullptr ? numInputs : 0;
     for (auto& slot : slots_) {
-        if (!slot.writer->isCapturing())
+        if (!slot.writer->isCapturing() || slot.stripFed.load(std::memory_order_relaxed))
             continue;
         const int first = slot.firstChannel.load(std::memory_order_relaxed);
         const float* pair[TakeCaptureWriter::kMaxChannels] = {first < available ? inputs[first] : nullptr,
                                                               first + 1 < available ? inputs[first + 1] : nullptr};
         slot.writer->push(pair, TakeCaptureWriter::kMaxChannels, numSamples, blockStartTimelineSample, anchorValid);
+    }
+}
+
+// A pass longer than the buffer records its first kStripBufferFrames frames and silence for the rest, so frame f of the
+// take stays at its anchor + f. The anchor is the pass's block start, like a device slot's.
+void InputTakeRecorder::pushStripSlots(int numSamples, juce::int64 blockStartTimelineSample) noexcept {
+    if (!isAnyCapturing() || numSamples <= 0)
+        return;
+    const int filled = juce::jmin(numSamples, kStripBufferFrames);
+    for (auto& slot : slots_) {
+        if (!slot.writer->isCapturing() || !slot.stripFed.load(std::memory_order_relaxed))
+            continue;
+        const float* const channels[TakeCaptureWriter::kMaxChannels] = {slot.stripBuffer.getReadPointer(0),
+                                                                        slot.stripBuffer.getReadPointer(1)};
+        slot.writer->push(channels, TakeCaptureWriter::kMaxChannels, filled, blockStartTimelineSample,
+                          /*anchorValid*/ true);
+        if (numSamples > filled)
+            slot.writer->push(nullptr, 0, numSamples - filled, blockStartTimelineSample + filled,
+                              /*anchorValid*/ false);
+        slot.stripBuffer.clear(0, filled);
     }
 }
 

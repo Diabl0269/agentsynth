@@ -69,9 +69,54 @@ void addDeviceInputs(juce::PopupMenu& menu, const synth::AudioInputChoice& choic
     if (anyOff && !status.hosted)
         menu.addItem(Ids::kTurnOnInputs, "Turn on all its inputs");
 }
+
+const AudioInputTrackSource* findSource(const std::vector<AudioInputTrackSource>& sources, synth::TrackId id) {
+    for (const auto& source : sources)
+        if (source.id == id)
+            return &source;
+    return nullptr;
+}
+
+AudioInputRowText describeTrackInput(const synth::AudioInputChoice& choice,
+                                     const std::vector<AudioInputTrackSource>& sources) {
+    AudioInputRowText row;
+    const auto* source = findSource(sources, choice.sourceTrack);
+    row.warning = !synth::isTrackInputConnected(choice, {source != nullptr, source != nullptr && source->hasChannel});
+    if (source == nullptr) {
+        row.text = "(track removed)";
+        row.note = "The track this one recorded is gone. Pick another input to record again.";
+    } else if (!source->hasChannel) {
+        row.text = source->name + " (no mixer channel)";
+        row.note = source->name + " does not reach a mixer channel, so there is nothing to record from it.";
+    } else {
+        row.text = source->name;
+    }
+    return row;
+}
+
+void addTrackSources(juce::PopupMenu& menu, const synth::AudioInputChoice& choice,
+                     const std::vector<AudioInputTrackSource>& sources) {
+    juce::PopupMenu sub;
+    for (std::size_t i = 0; i < sources.size(); ++i) {
+        const auto& source = sources[i];
+        sub.addItem(Ids::kFirstTrack + (int)i, source.hasChannel ? source.name : source.name + " (no mixer channel)",
+                    source.hasChannel, choice.kind == Kind::Track && choice.sourceTrack == source.id);
+    }
+    menu.addSubMenu("Another track", sub, !sources.empty(), nullptr, choice.kind == Kind::Track);
+}
 } // namespace
 
-AudioInputRowText describeAudioInput(const synth::AudioInputChoice& choice, const synth::AudioInputStatus& status) {
+std::vector<AudioInputTrackSource> listAudioInputTrackSources(const synth::TimelineDoc& doc, synth::TrackId target,
+                                                              const std::function<bool(synth::TrackId)>& hasChannel) {
+    std::vector<AudioInputTrackSource> sources;
+    for (const auto& track : doc.getTracks())
+        if (track.id != target && track.kind != synth::TrackKind::Automation)
+            sources.push_back({track.id, track.name, hasChannel && hasChannel(track.id)});
+    return sources;
+}
+
+AudioInputRowText describeAudioInput(const synth::AudioInputChoice& choice, const synth::AudioInputStatus& status,
+                                     const std::vector<AudioInputTrackSource>& sources) {
     AudioInputRowText row;
     if (choice.kind == Kind::None) {
         row.text = "No input";
@@ -82,6 +127,8 @@ AudioInputRowText describeAudioInput(const synth::AudioInputChoice& choice, cons
         row.text = "Whole mix";
         return row;
     }
+    if (choice.kind == Kind::Track)
+        return describeTrackInput(choice, sources);
     const auto name = inputName(choice.firstChannel, choice.numChannels);
     if (pickedOnOtherDevice(choice, status)) {
         row.text = name + " (" + choice.deviceName + " not connected)";
@@ -101,7 +148,8 @@ AudioInputRowText describeAudioInput(const synth::AudioInputChoice& choice, cons
     return row;
 }
 
-juce::PopupMenu buildAudioInputMenu(const synth::AudioInputChoice& choice, const synth::AudioInputStatus& status) {
+juce::PopupMenu buildAudioInputMenu(const synth::AudioInputChoice& choice, const synth::AudioInputStatus& status,
+                                    const std::vector<AudioInputTrackSource>& sources) {
     juce::PopupMenu menu;
     menu.addItem(Ids::kNoInput, "No input", true, choice.kind == Kind::None);
     menu.addSeparator();
@@ -109,6 +157,11 @@ juce::PopupMenu buildAudioInputMenu(const synth::AudioInputChoice& choice, const
     // The track's own choice stays on the menu, ticked, while it cannot be picked from the list above.
     if (choice.kind == Kind::Device && !synth::isAudioInputConnected(choice, status))
         menu.addItem(Ids::kNotConnected, describeAudioInput(choice, status).text, true, true);
+    menu.addSeparator();
+    addTrackSources(menu, choice, sources);
+    // A source deleted since the pick stays on the menu, ticked, like a device that is not connected.
+    if (choice.kind == Kind::Track && findSource(sources, choice.sourceTrack) == nullptr)
+        menu.addItem(Ids::kTrackRemoved, describeAudioInput(choice, status, sources).text, true, true);
     menu.addSeparator();
     menu.addItem(Ids::kWholeMix, "Whole mix", true, choice.kind == Kind::WholeMix);
     if (!status.hosted) {
@@ -118,7 +171,8 @@ juce::PopupMenu buildAudioInputMenu(const synth::AudioInputChoice& choice, const
     return menu;
 }
 
-AudioInputMenuAction resolveAudioInputMenuChoice(int menuId, const synth::AudioInputStatus& status) {
+AudioInputMenuAction resolveAudioInputMenuChoice(int menuId, const synth::AudioInputStatus& status,
+                                                 const std::vector<AudioInputTrackSource>& sources) {
     AudioInputMenuAction action;
     const int inputs = listedInputs(status);
     auto pick = [&](int first, int count) {
@@ -135,6 +189,13 @@ AudioInputMenuAction resolveAudioInputMenuChoice(int menuId, const synth::AudioI
         action.kind = AudioInputMenuAction::Kind::TurnOnInputs;
     } else if (menuId == Ids::kAudioSettings && !status.hosted) {
         action.kind = AudioInputMenuAction::Kind::OpenAudioSettings;
+    } else if (menuId >= Ids::kFirstTrack && menuId < Ids::kFirstTrack + (int)sources.size()) {
+        const auto& source = sources[(std::size_t)(menuId - Ids::kFirstTrack)];
+        if (source.hasChannel) {
+            action.kind = AudioInputMenuAction::Kind::Pick;
+            action.choice.kind = Kind::Track;
+            action.choice.sourceTrack = source.id;
+        }
     } else if (menuId >= Ids::kFirstMono && menuId < Ids::kFirstMono + inputs) {
         pick(menuId - Ids::kFirstMono, 1);
     } else if (menuId >= Ids::kFirstStereo && menuId + 1 < Ids::kFirstStereo + inputs &&

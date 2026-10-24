@@ -64,17 +64,19 @@ struct InstrumentChainBuild {
  *  frames are recorded, then trimmed out of the clip window. The capture* fields are FROZEN at capture start
  *  and never re-read at commit. */
 struct AudioTake {
-    enum class Source { Input, WholeMix };
-    Source source = Source::WholeMix;          // the track's own input (an engine input slot) or the master Rec Tap
-    int inputSlot = -1;                        // Input only: the synth::InputTakeRecorder slot
-    int firstChannel = 0;                      // Input only: 0-based device input
-    int numChannels = 2;                       // channels in the WAV
-    synth::TrackId track;                      // the armed Audio track the clip lands on
-    double punchInBeat = 0.0;                  // earliest beat the committed clip may start at
-    juce::File wavFile;                        // absolute path being written
-    juce::File peaksFile;                      // its .agpk sidecar
-    juce::String assetRef;                     // what the committed clip stores (see synth::Clip::assetRef)
-    juce::AudioProcessorGraph::NodeID tapNode; // WholeMix only
+    enum class Source { Input, WholeMix, Track };
+    Source source = Source::WholeMix; // the track's own input (an engine input slot), the master Rec Tap, or another
+                                      // track's mixer channel (an engine strip slot)
+    int inputSlot = -1;               // Input and Track: the synth::InputTakeRecorder slot
+    int firstChannel = 0;             // Input only: 0-based device input
+    int numChannels = 2;              // channels in the WAV
+    synth::TrackId track;             // the armed Audio track the clip lands on
+    double punchInBeat = 0.0;         // earliest beat the committed clip may start at
+    juce::File wavFile;               // absolute path being written
+    juce::File peaksFile;             // its .agpk sidecar
+    juce::String assetRef;            // what the committed clip stores (see synth::Clip::assetRef)
+    juce::AudioProcessorGraph::NodeID tapNode;   // WholeMix only
+    juce::AudioProcessorGraph::NodeID stripNode; // Track only: the source track's channel strip when resolved
 
     double captureSampleRate = 44100.0;
     double captureBpm = 120.0;

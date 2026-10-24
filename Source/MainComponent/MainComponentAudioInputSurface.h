@@ -11,15 +11,17 @@ namespace synth::maincomponent {
 // inputs, levels and input switch-on, plus opening Settings on its Audio tab.
 class AudioInputSurface : public synth::ui::TrackAudioInputSurface {
 public:
-    AudioInputSurface(AudioEngine& engine, std::function<void()> openAudioSettings);
+    AudioInputSurface(AudioEngine& engine, const synth::TimelineDoc& doc, std::function<void()> openAudioSettings);
 
     synth::AudioInputStatus getAudioInputStatus() override;
     float readInputPeak(int channel) override;
     void enableDeviceInputs() override;
     void openAudioSettings() override;
+    bool trackHasMixerChannel(synth::TrackId id) override;
 
 private:
     AudioEngine& engine_;
+    const synth::TimelineDoc& doc_;
     std::function<void()> openAudioSettings_;
 };
 

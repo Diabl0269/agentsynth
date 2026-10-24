@@ -13,5 +13,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocTrackMonitorTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackInputMonitoringTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineRoutingPaneAudioInputTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AudioInputMenuTrackSourceTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackHeaderMonitorTests.cpp
 )

@@ -368,6 +368,9 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
 
+    // Every strip slot records what its channel strip just tapped, anchored where pushInputTakes anchored.
+    inputRecorder_.pushStripSlots(buffer.getNumSamples(), transport.getCurrentBlockInfo().blockStartSample);
+
     // The output peak the Master column reads once Master has inserts. Latched HERE -- straight after the graph,
     // before the metronome click -- so it is exactly what left the master chain and never includes the click. One
     // store per pass (a sliced pass stores once per slice; the latch keeps the loudest), no allocation, no lock.

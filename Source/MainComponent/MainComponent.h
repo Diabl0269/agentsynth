@@ -864,7 +864,8 @@ private:
     bool isAiPanelVisible{false}, isLibraryVisible{true}, isAlignmentGuidesEnabled{true};
 
     synth::ui::TrackChannelLinkController trackChannelLink_{audioEngine, timelineDoc, undoManager, graphEditor};
-    synth::maincomponent::AudioInputSurface audioInputSurface_{audioEngine, [this] { launchSettingsWindow("Audio"); }};
+    synth::maincomponent::AudioInputSurface audioInputSurface_{audioEngine, timelineDoc,
+                                                               [this] { launchSettingsWindow("Audio"); }};
     synth::ui::TimelinePanelComponent timelinePanel;
     synth::ui::MainViewHolder mainViewHolder_; // before bottomDock: outlives the host the dock may have moved into it
     synth::ui::BottomDockComponent bottomDock{timelinePanel, audioEngine,   timelineDoc, undoManager,

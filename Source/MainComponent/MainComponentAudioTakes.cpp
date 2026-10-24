@@ -5,6 +5,8 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
+#include "Mixer/TrackChannelLink.h"
+#include "Modules/ChannelStripModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/TakePlacement.h"
 #include "UserSettings.h"
@@ -19,10 +21,34 @@ using TakeResult = synth::TakeCaptureWriter::TakeResult;
 // session, and an unbounded loop on a stat() call is not something a UI click should be able to do.
 constexpr int kMaxTakeNumber = 10000;
 
+// Points the live tap of the strip `node` at a recording slot's buffer. False when the strip is gone.
+bool armStripLiveTap(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node,
+                     juce::AudioBuffer<float>* buffer) {
+    auto* found = graph.getNodeForId(node);
+    auto* strip = found != nullptr ? dynamic_cast<ChannelStripModule*>(found->getProcessor()) : nullptr;
+    if (strip == nullptr || buffer == nullptr)
+        return false;
+    strip->setLiveTapBuffer(buffer);
+    return true;
+}
+
+// Disarms by scanning every strip rather than remembering one: an undo mid-take may have rebuilt the graph, so the
+// strip that was armed can be a different object (or gone) by the time the take ends.
+void disarmStripLiveTaps(juce::AudioProcessorGraph& graph, const juce::AudioBuffer<float>* buffer) {
+    for (auto* node : graph.getNodes())
+        if (node != nullptr)
+            if (auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor()))
+                if (strip->getLiveTapBuffer() == buffer)
+                    strip->setLiveTapBuffer(nullptr);
+}
+
 // Stops one take's capture wherever it runs. A tap that vanished (an undo mid-take rebuilt the graph without it)
 // has nothing to stop, which loses that take rather than crashing.
-TakeResult stopTakeCapture(const AudioTake& take, RecordTapModule* tap, synth::InputTakeRecorder& recorder) {
-    if (take.source == AudioTake::Source::Input)
+TakeResult stopTakeCapture(const AudioTake& take, RecordTapModule* tap, synth::InputTakeRecorder& recorder,
+                           juce::AudioProcessorGraph& graph) {
+    if (take.source == AudioTake::Source::Track)
+        disarmStripLiveTaps(graph, recorder.getStripSlotBuffer(take.inputSlot));
+    if (take.source != AudioTake::Source::WholeMix)
         return recorder.stopSlot(take.inputSlot);
     return tap != nullptr ? tap->stopCapture() : TakeResult{};
 }
@@ -114,7 +140,9 @@ bool MainComponent::chooseTakeFiles(AudioTake& take, const std::vector<AudioTake
 
 // Decides, before the transport moves, which armed Audio tracks record and from where: a Device input that is
 // connected records it; Whole mix records the master tap (at most one track per press, since the tap is one
-// take); No input, or an input that is not connected, records nothing and says so in `notice`. False -- with the
+// take); Another track records that track's mixer channel (a source whose track was removed or has no channel is
+// skipped, and one channel feeds at most one take per press); No input, or an input that is not connected, records
+// nothing and says so in `notice`. False -- with the
 // record button already reset and the reason on the status bar -- refuses the whole press, exactly like a single
 // take used to: no Audio Output to tap, or a take file that cannot be created.
 bool MainComponent::resolveAudioTakes(std::vector<AudioTake>& takes, juce::String& notice) {
@@ -126,6 +154,7 @@ bool MainComponent::resolveAudioTakes(std::vector<AudioTake>& takes, juce::Strin
     const auto inputInfo = audioEngine.getAudioInputInfo();
     juce::StringArray problems;
     bool wholeMixTaken = false;
+    std::vector<juce::AudioProcessorGraph::NodeID> stripsTaken;
 
     for (const auto& track : timelineDoc.getTracks()) {
         if (!track.armed || track.kind != synth::TrackKind::Audio)
@@ -149,6 +178,25 @@ bool MainComponent::resolveAudioTakes(std::vector<AudioTake>& takes, juce::Strin
             take.tapNode = tapNode->nodeID;
             take.numChannels = RecordTapModule::kNumChannels;
             wholeMixTaken = true;
+        } else if (input.kind == synth::AudioInputChoice::Kind::Track) {
+            const auto* source = timelineDoc.getTrack(input.sourceTrack);
+            if (source == nullptr) {
+                problems.add(track.name + ": its source track was removed");
+                continue;
+            }
+            const auto link = synth::resolveTrackChannelLink(audioEngine.getGraph(), timelineDoc, input.sourceTrack);
+            if (!link.hasChannel) {
+                problems.add(track.name + ": its source track has no mixer channel");
+                continue;
+            }
+            if (std::find(stripsTaken.begin(), stripsTaken.end(), link.stripId) != stripsTaken.end()) {
+                problems.add(track.name + ": that channel is already recording on another track");
+                continue;
+            }
+            stripsTaken.push_back(link.stripId);
+            take.source = AudioTake::Source::Track;
+            take.stripNode = link.stripId;
+            take.numChannels = 2;
         } else {
             if (!synth::isAudioInputConnected(input, inputInfo)) {
                 problems.add(track.name + ": its input is not connected");
@@ -172,6 +220,7 @@ bool MainComponent::resolveAudioTakes(std::vector<AudioTake>& takes, juce::Strin
 // started are stopped and every file of this press is deleted, and the press is refused.
 bool MainComponent::startAudioTakes(std::vector<AudioTake>& takes, double punchInBeat, double sampleRate, double bpm) {
     auto& recorder = audioEngine.getInputRecorder();
+    auto& graph = audioEngine.getGraph();
     const double rate = sampleRate > 0.0 ? sampleRate : 44100.0;
     for (std::size_t i = 0; i < takes.size(); ++i) {
         auto& take = takes[i];
@@ -180,12 +229,19 @@ bool MainComponent::startAudioTakes(std::vector<AudioTake>& takes, double punchI
             take.inputSlot =
                 recorder.startSlot(take.firstChannel, take.numChannels, take.wavFile, take.peaksFile, rate);
             started = take.inputSlot >= 0;
+        } else if (take.source == AudioTake::Source::Track) {
+            take.inputSlot = recorder.startStripSlot(take.wavFile, take.peaksFile, rate);
+            started = take.inputSlot >= 0;
+            if (started && !armStripLiveTap(graph, take.stripNode, recorder.getStripSlotBuffer(take.inputSlot))) {
+                recorder.stopSlot(take.inputSlot);
+                started = false;
+            }
         } else if (auto* tap = findMasterRecordTap(take.tapNode)) {
             started = tap->startCapture(take.wavFile, take.peaksFile, rate, RecordTapModule::kNumChannels);
         }
         if (!started) {
             for (std::size_t j = 0; j < i; ++j)
-                stopTakeCapture(takes[j], findMasterRecordTap(takes[j].tapNode), recorder);
+                stopTakeCapture(takes[j], findMasterRecordTap(takes[j].tapNode), recorder, graph);
             for (const auto& each : takes)
                 deleteTakeFiles(each);
             timelinePanel.getTransportBar().setRecordingState(false);
@@ -197,7 +253,9 @@ bool MainComponent::startAudioTakes(std::vector<AudioTake>& takes, double punchI
         // Frozen NOW, not re-read at commit time -- see the AudioTake field comments.
         take.captureSampleRate = rate;
         take.captureBpm = bpm > 0.0 ? bpm : 120.0;
-        take.captureRecordingLatencySamples = audioEngine.getRecordingLatencySamples();
+        // An internal source has no round trip through the device, so nothing is shifted back for it.
+        take.captureRecordingLatencySamples =
+            take.source == AudioTake::Source::Track ? 0 : audioEngine.getRecordingLatencySamples();
     }
     audioTakes_ = takes;
     return true;
@@ -222,7 +280,8 @@ void MainComponent::commitAudioRecording() {
     std::vector<Placed> placed;
     bool overran = false;
     for (const auto& take : takes) {
-        const auto result = stopTakeCapture(take, findMasterRecordTap(take.tapNode), audioEngine.getInputRecorder());
+        const auto result = stopTakeCapture(take, findMasterRecordTap(take.tapNode), audioEngine.getInputRecorder(),
+                                            audioEngine.getGraph());
         overran = overran || result.overran;
         // Nothing captured (record disengaged during the count-in, or the capture never armed), or everything sits
         // before the punch: the file stays, no clip -- MidiRecorder's "an empty take commits nothing" rule.
@@ -255,7 +314,7 @@ void MainComponent::commitAudioRecording() {
         statusBar.showMessage("Dropped audio during recording");
 }
 
-// One growing strip per rolling take, on the poll. A whole-mix take reads the tap's peaks, an input take its
+// One growing strip per rolling take, on the poll. A whole-mix take reads the tap's peaks, an input or track take its
 // recorder slot's; neither source is held past the call.
 void MainComponent::updateLiveRecordingStrips(double currentBeat) {
     std::vector<synth::ui::TimelineClipLaneArea::LiveRecordingInfo> strips;
@@ -267,7 +326,7 @@ void MainComponent::updateLiveRecordingStrips(double currentBeat) {
         info.punchBeat = take.punchInBeat;
         info.currentBeat = currentBeat;
         info.numChannels = take.numChannels;
-        if (take.source == AudioTake::Source::Input) {
+        if (take.source != AudioTake::Source::WholeMix) {
             const int slot = take.inputSlot;
             info.copyPeaks = [&recorder, slot](std::vector<std::pair<float, float>>& out) {
                 recorder.copyLivePeaks(slot, out);

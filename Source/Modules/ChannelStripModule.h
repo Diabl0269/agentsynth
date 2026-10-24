@@ -114,6 +114,14 @@
  * before arming any tap — and a block wider than that is dropped rather than overrun, since the
  * audio thread must never touch memory it wasn't handed room for.
  *
+ * LIVE TAP (docs/timeline/tracks.md#the-input-row). A second, separate tap an Audio track recording "Another track"
+ * arms to hear this strip's sound: the stereo output after the inserts' sum, fader, pan and mute, but BEFORE the solo
+ * gate, so soloing the recording track (the usual thing while recording) never silences its source. A muted strip
+ * taps silence, a bypassed one its dry pass-through. Unlike the stem tap it may be armed and disarmed WHILE the graph
+ * renders: the buffers it points at (synth::InputTakeRecorder's strip slots) are allocated once and never freed or
+ * reallocated, so a pointer the audio thread loads is always valid memory. Copies min(numSamples, capacity) frames
+ * of the main legs; no allocation, no locks.
+ *
  * INTERNAL-ONLY, the same three exclusions as Rec Tap and the macro port types: no library row, no
  * replace-menu entry, never authorable by a model (kNonAuthorableModuleTypes, docs/mixer/mixer.md#ai-authorability).
  */
@@ -228,6 +236,7 @@ public:
             // gate still applies, per leg.
             const juce::uint32 advanced = writeSendLegs(buffer, numSamples, SendPhase::All, audible);
             skipSendSmoothers(numSamples, advanced);
+            copyToLiveTap(buffer, numSamples);
             applyMainLegGate(buffer, numSamples, audible);
             finishBlock(buffer, numSamples);
             return;
@@ -236,6 +245,7 @@ public:
         if (isMuted()) {
             buffer.clear();
             skipSendSmoothers(numSamples, 0);
+            copyToLiveTap(buffer, numSamples);
             finishBlock(buffer, numSamples);
             return;
         }
@@ -256,6 +266,7 @@ public:
 
         advanced |= writeSendLegs(buffer, numSamples, SendPhase::Post, audible);
         skipSendSmoothers(numSamples, advanced);
+        copyToLiveTap(buffer, numSamples);
         applyMainLegGate(buffer, numSamples, audible);
         finishBlock(buffer, numSamples);
     }
@@ -496,6 +507,14 @@ public:
         stemTap_.store(buffer, std::memory_order_release);
     }
 
+    // ---- Live tap (message thread arms/disarms, audio thread writes through it every block). See the class
+    // comment. Unlike the stem tap this IS safe while the graph renders, provided `buffer` is never freed or
+    // reallocated (2 channels; a longer block fills only its capacity). nullptr disarms.
+    void setLiveTapBuffer(juce::AudioBuffer<float>* buffer) noexcept {
+        liveTap_.store(buffer, std::memory_order_release);
+    }
+    juce::AudioBuffer<float>* getLiveTapBuffer() const noexcept { return liveTap_.load(std::memory_order_acquire); }
+
     // Test seam: true while a tap is armed. Lets a test prove a session disarms every tap on the
     // way out (cancel, failure, or normal completion) without needing a dangling pointer into
     // memory the session already freed.
@@ -725,6 +744,17 @@ private:
         buffer.clear(kRightBase, 0, numSamples);
     }
 
+    // Copies the main legs as they stand (post fader, pan and mute, pre solo gate) into the live tap, if armed. Called
+    // at each exit path just before the solo gate; see the class comment's LIVE TAP.
+    void copyToLiveTap(const juce::AudioBuffer<float>& buffer, int numSamples) noexcept {
+        auto* tap = liveTap_.load(std::memory_order_acquire);
+        if (tap == nullptr || tap->getNumChannels() < 2)
+            return;
+        const int frames = juce::jmin(numSamples, tap->getNumSamples());
+        tap->copyFrom(0, 0, buffer, 0, 0, frames);
+        tap->copyFrom(1, 0, buffer, kRightBase, 0, frames);
+    }
+
     // The one place every processBlock exit path converges: updates the meter and, if a stem tap is
     // armed, copies this block's FINAL output into it. `buffer` at this point is exactly what the
     // strip hands to Master, in every branch (dry-bypassed, muted, solo-gated silent, or normal) —
@@ -777,6 +807,8 @@ private:
 
     // Non-owning; null outside a stem export. See setStemTapBuffer() and the class comment.
     std::atomic<juce::AudioBuffer<float>*> stemTap_{nullptr};
+    // Non-owning; null unless a track is recording this strip. See setLiveTapBuffer() and the class comment.
+    std::atomic<juce::AudioBuffer<float>*> liveTap_{nullptr};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelStripModule)
 };

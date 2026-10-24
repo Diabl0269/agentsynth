@@ -12,6 +12,7 @@
 #include "ProjectBundle.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <vector>
@@ -62,6 +63,13 @@ synth::AudioInputChoice deviceInput(int firstChannel, int numChannels) {
 synth::AudioInputChoice wholeMix() {
     synth::AudioInputChoice choice;
     choice.kind = synth::AudioInputChoice::Kind::WholeMix;
+    return choice;
+}
+
+synth::AudioInputChoice trackInput(synth::TrackId source) {
+    synth::AudioInputChoice choice;
+    choice.kind = synth::AudioInputChoice::Kind::Track;
+    choice.sourceTrack = source;
     return choice;
 }
 
@@ -136,6 +144,23 @@ protected:
         EXPECT_TRUE(doc.setTrackAudioInput(track, input));
         EXPECT_TRUE(doc.setTrackArmed(track, true));
         return track;
+    }
+
+    // A Poly MIDI on an empty canvas, then an Oscillator instrument track whose clip holds one note on beat 1.
+    synth::TrackId addInstrumentTrackPlayingOnBeatOne() {
+        mc->getGraphEditor().newPatch();
+        mc->getGraphEditor().addModuleAtCanvasPosition("Poly MIDI", {200, 200}, {});
+        mc->simulateAddInstrumentTrackClick(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+        auto& doc = mc->getTimelineDoc();
+        EXPECT_EQ(doc.getTracks().size(), 1u);
+        const auto lead = doc.getTracks().front().id;
+        const auto clip = doc.addClip(lead, 0.0, 4.0, "Note");
+        synth::MidiNote note;
+        note.startBeat = 1.0;
+        note.lengthBeats = 2.0;
+        note.pitch = 69;
+        EXPECT_TRUE(doc.addNote(clip, note).isValid());
+        return lead;
     }
 
     void pressRecord() { mc->getTimelinePanel().getTransportBar().getRecordButton().onClick(); }
@@ -242,4 +267,76 @@ TEST_F(AudioTakesFlowTest, WholeMixStillRecordsTheMasterAndOnlyOnce) {
     ASSERT_TRUE(wav.ok);
     EXPECT_EQ(wav.numChannels, RecordTapModule::kNumChannels);
     EXPECT_GT(wav.audio.getMagnitude(0, 0, (int)wav.lengthInSamples), 0.0f) << "the tap heard the master";
+}
+
+// The committed clip's audio onset in timeline samples: where the clip starts, plus the first loud frame of its
+// window. -1 when the take is silent.
+static juce::int64 onsetTimelineSample(const synth::Clip& clip, const synth::test::TakeWav& wav) {
+    const juce::int64 skip = (juce::int64)std::llround(clip.sourceStartSeconds * kRate);
+    for (juce::int64 i = skip; i < wav.lengthInSamples; ++i)
+        if (std::abs(wav.audio.getSample(0, (int)i)) > 1.0e-3f)
+            return (juce::int64)std::llround(clip.startBeat * 0.5 * kRate) + (i - skip);
+    return -1;
+}
+
+TEST_F(AudioTakesFlowTest, AnotherTrackRecordsTheInstrumentTracksSoundOnTheBeatItPlayed) {
+    ASSERT_TRUE(mc->saveProjectForTest(bundleDir));
+    const auto lead = addInstrumentTrackPlayingOnBeatOne();
+    startDevice(2);
+    auto& doc = mc->getTimelineDoc();
+    const auto rec = armedAudioTrack("Rec", trackInput(lead));
+    mc->timerCallback();
+
+    pressRecord();
+    ASSERT_TRUE(mc->isRecordingActiveForTest()) << mc->getStatusBar().getTransientMessageForTest();
+    driveBlocks(80); // 40960 samples: past beat 1 (24000) and the note's first tens of milliseconds
+    pressRecord();
+
+    ASSERT_EQ(doc.getTrack(rec)->clips.size(), 1u);
+    const auto& clip = doc.getTrack(rec)->clips[0];
+    EXPECT_DOUBLE_EQ(clip.sourceStartSeconds, 0.0) << "an internal source has no round-trip latency to shift back";
+    const auto wav = readTakeWav(bundleDir.getChildFile(clip.assetRef));
+    ASSERT_TRUE(wav.ok);
+    ASSERT_EQ(wav.numChannels, 2);
+    const auto onset = onsetTimelineSample(clip, wav);
+    ASSERT_GE(onset, 0) << "the take is not silent";
+    EXPECT_NEAR((double)onset, 1.0 * 0.5 * kRate, 64.0) << "beat 1 at 120 bpm";
+    EXPECT_EQ(wav.audio.getMagnitude(0, 0, 20000), 0.0f) << "nothing sounds before the note";
+}
+
+TEST_F(AudioTakesFlowTest, ATrackTakeAndADeviceTakeCommitInOneUndoStepAndASourceWithoutAChannelIsSkipped) {
+    ASSERT_TRUE(mc->saveProjectForTest(bundleDir));
+    const auto lead = addInstrumentTrackPlayingOnBeatOne();
+    startDevice(2);
+    auto& doc = mc->getTimelineDoc();
+    const auto vox = armedAudioTrack("Vox", deviceInput(1, 1));
+    const auto rec = armedAudioTrack("Rec", trackInput(lead));
+    const auto orphan = doc.addTrack(synth::TrackKind::Midi, "Unbound");
+    const auto skipped = armedAudioTrack("Skipped", trackInput(orphan));
+    mc->getUndoManager().clearUndoHistory();
+
+    pressRecord();
+    EXPECT_EQ(mc->getStatusBar().getTransientMessageForTest(), "Skipped: its source track has no mixer channel");
+    driveBlocks(60);
+    pressRecord();
+
+    EXPECT_EQ(doc.getTrack(vox)->clips.size(), 1u);
+    EXPECT_EQ(doc.getTrack(rec)->clips.size(), 1u);
+    EXPECT_TRUE(doc.getTrack(skipped)->clips.empty());
+    mc->simulateUndoClick();
+    EXPECT_TRUE(doc.getTrack(vox)->clips.empty()) << "one undo takes back the whole press";
+    EXPECT_TRUE(doc.getTrack(rec)->clips.empty());
+}
+
+TEST_F(AudioTakesFlowTest, ARemovedSourceTrackRecordsNothingAndSaysSo) {
+    startDevice(2);
+    auto& doc = mc->getTimelineDoc();
+    const auto gone = doc.addTrack(synth::TrackKind::Midi, "Gone");
+    const auto rec = armedAudioTrack("Rec", trackInput(gone));
+    ASSERT_TRUE(doc.removeTrack(gone));
+    pressRecord();
+    EXPECT_EQ(mc->getStatusBar().getTransientMessageForTest(), "Rec: its source track was removed");
+    driveBlocks(4);
+    pressRecord();
+    EXPECT_TRUE(doc.getTrack(rec)->clips.empty());
 }

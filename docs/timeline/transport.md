@@ -228,7 +228,7 @@ and `TimelineRoutingPaneInputTests.cpp`.
 ### Recording audio from each track's input
 
 Each audio track has an input ([the Input row](tracks.md#audio-tracks)): No input (the default), one device input
-or a stereo pair, or Whole mix. One Record press records every armed audio track at once
+or a stereo pair, Whole mix, or another track. One Record press records every armed audio track at once
 (`MainComponentAudioTakes.cpp`), one `AudioTake` each in `MainComponent::audioTakes_`:
 
 - **A device input** records exactly that input, straight from the device (or the host), beside the graph: the
@@ -237,6 +237,15 @@ or a stereo pair, or Whole mix. One Record press records every armed audio track
   input take is placed with the same round-trip latency (`getRecordingLatencySamples`: input + graph + output).
 - **Whole mix** records the master through the `RecordTapModule` spliced before Audio Output, as every audio take
   used to. The tap is one take, so only the first armed Whole-mix track records it; a second says so.
+- **Another track** records that track's sound: its instrument and its mixer channel's inserts, fader, pan and
+  mute, as a stereo take, beside every other armed track. The source's `ChannelStripModule` is armed with a live tap
+  (`setLiveTapBuffer`) pointing at a fixed stereo buffer of a strip slot of the same `InputTakeRecorder`
+  (`startStripSlot`); `AudioEngine` pushes those buffers into their writers right after the graph renders
+  (`pushStripSlots`, same block start sample as the device slots) and clears them, so a block the strip did not run
+  records silence. The source is an internal one with no round trip through the device, so the take is placed with
+  latency 0. A source track that was removed or has no mixer channel records nothing and the status bar says so
+  ("Rec: its source track was removed", "Rec: its source track has no mixer channel"); one channel feeds at most one
+  take per press. At commit every strip is scanned and disarmed (an undo mid-take may have rebuilt the graph).
 - **Nothing to record from.** No input, or an input that is not connected (picked on another device, or turned
   off), records nothing for that track, and the status bar says why ("Vox has no input - pick one in the side
   pane", "Vox: its input is not connected"). The other tracks still record.
