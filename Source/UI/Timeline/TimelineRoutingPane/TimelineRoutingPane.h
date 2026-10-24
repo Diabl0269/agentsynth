@@ -159,6 +159,7 @@ private:
     void openMidiInputDeviceMenu();
     void openMidiInputChannelMenu();
     void computeAudioInput(const synth::Track& track);
+    std::vector<AudioInputTrackSource> audioInputTrackSources() const;
     void applyAudioInputToChildren();
     void openAudioInputMenu();
     int layoutAudioInput(int y, int contentWidth);

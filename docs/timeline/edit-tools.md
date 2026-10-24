@@ -90,6 +90,10 @@ library.
 The Draw button is the exception that paints its own glyph: lit, its icon and corner triangle take whichever theme ink
 (`iconInk`, `iconPaper`, `textPrimary`, `bg0`) contrasts most with the `toolActive` fill, so they hold 3:1 in every theme.
 
+## Range menu
+
+Right-clicking inside a Range tool selection opens its menu: **Split at range edges**, **Delete range**, **Delete range and close gap** and **Render to audio track** (Shift+Cmd+R, `timelineRenderToAudioTrack`, rebindable; greyed with "(no mixer channel)" in its text when no covered track reaches a mixer channel). The render is described in [`render-to-audio.md`](render-to-audio.md).
+
 ## Tool cursors
 
 `Source/UI/Timeline/ToolCursors.h`'s `makeToolCursor(EditTool, const juce::Drawable*)` renders the

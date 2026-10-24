@@ -8,6 +8,15 @@
 
 namespace {
 
+// Render to audio track (Shift+Cmd+R) sits after the linked-duplicate row; TimelineClipLaneArea resolves it.
+template <class Entry>
+void spliceRenderRow(std::vector<Entry>& rows) {
+    const auto at = std::find_if(rows.begin(), rows.end(), [](const Entry& row) {
+        return std::string_view(row.id) == "timelineClipDuplicateLinked";
+    });
+    rows.insert(at + 1, Entry{"timelineRenderToAudioTrack", ShortcutCategory::Timeline});
+}
+
 // The grid commands follow the other Timeline rows: the straight values, the triplet and dotted ones, then the cycle.
 template <class Entry>
 void spliceSnapRows(std::vector<Entry>& rows) {
@@ -22,6 +31,12 @@ void spliceSnapRows(std::vector<Entry>& rows) {
     const auto at = std::find_if(rows.begin(), rows.end(),
                                  [](const Entry& row) { return std::string_view(row.id) == "pianoRollNudgeLeft"; });
     rows.insert(at, snapRows.begin(), snapRows.end());
+}
+
+template <class Entry>
+void spliceTimelineRows(std::vector<Entry>& rows) {
+    spliceSnapRows(rows);
+    spliceRenderRow(rows);
 }
 
 // The positional dock keys sit right before the per-view show actions they replace as the digit owners: show the tab
@@ -242,7 +257,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"layoutEditorNudgeDownBig", ShortcutCategory::LayoutEditor},
             {"layoutEditorRemoveControl", ShortcutCategory::LayoutEditor},
         };
-        spliceSnapRows(rows);
+        spliceTimelineRows(rows);
         spliceDockKeyRows(rows);
         return rows;
     }();

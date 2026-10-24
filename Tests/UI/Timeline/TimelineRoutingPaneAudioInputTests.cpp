@@ -191,6 +191,7 @@ TEST(TimelineRoutingPaneAudioInputTest, TheMenuListsMonoAndStereoInputsOfTheOpen
                                              "Stereo" + dot() + "Scarlett 4i4",
                                              "In 1 + 2",
                                              "In 3 + 4",
+                                             "Another track",
                                              "Whole mix",
                                              "Audio settings..."};
     EXPECT_EQ(textsOf(items), expected);
@@ -221,6 +222,29 @@ TEST(TimelineRoutingPaneAudioInputTest, PickingAPairIsOneUndoStepAndShowsTheMete
     pane.applyAudioInputChoice(AudioInputMenuIds::kWholeMix);
     EXPECT_EQ(f.doc.getTrack(id)->audioInput.kind, synth::AudioInputChoice::Kind::WholeMix);
     EXPECT_EQ(pane.getAudioInputTextForTest().text, "Whole mix");
+}
+
+TEST(TimelineRoutingPaneAudioInputTest, PickingAnotherTrackIsOneUndoStepAndADeletedSourceReadsAsRemoved) {
+    AudioPanel f;
+    const auto id = f.doc.addTrack(TrackKind::Audio, "Vox");
+    const auto lead = f.doc.addTrack(TrackKind::Midi, "Lead synth");
+    f.select(0);
+    auto& pane = f.pane();
+    pane.applyAudioInputChoice(AudioInputMenuIds::kFirstTrack);
+    EXPECT_EQ(f.doc.getTrack(id)->audioInput.kind, synth::AudioInputChoice::Kind::Track);
+    EXPECT_EQ(f.doc.getTrack(id)->audioInput.sourceTrack, lead);
+    EXPECT_EQ(pane.getAudioInputTextForTest().text, "Lead synth");
+    EXPECT_FALSE(pane.getAudioInputTextForTest().warning);
+    EXPECT_FALSE(pane.getInputMeterForTest().isVisible()) << "no device input to meter";
+    ASSERT_TRUE(f.undo.undo());
+    EXPECT_FALSE(f.undo.canUndo()) << "exactly one undo step";
+    EXPECT_EQ(pane.getAudioInputTextForTest().text, "No input");
+
+    pane.applyAudioInputChoice(AudioInputMenuIds::kFirstTrack);
+    ASSERT_TRUE(f.doc.removeTrack(lead));
+    pane.refresh();
+    EXPECT_EQ(pane.getAudioInputTextForTest().text, "(track removed)");
+    EXPECT_TRUE(pane.getAudioInputTextForTest().warning);
 }
 
 TEST(TimelineRoutingPaneAudioInputTest, TurnedOffInputsAreDisabledAndCanBeTurnedOn) {
@@ -275,8 +299,13 @@ TEST(TimelineRoutingPaneAudioInputTest, HostedInputsCarryNoDeviceAndOfferNoSetti
     f.host.inputs.status.activeMask = 0b11;
     f.select(0);
     const auto texts = textsOf(openMenu(f.pane()));
-    const std::vector<juce::String> expected{"No input", "Mono" + dot() + "Host input",   "In 1",
-                                             "In 2",     "Stereo" + dot() + "Host input", "In 1 + 2",
+    const std::vector<juce::String> expected{"No input",
+                                             "Mono" + dot() + "Host input",
+                                             "In 1",
+                                             "In 2",
+                                             "Stereo" + dot() + "Host input",
+                                             "In 1 + 2",
+                                             "Another track",
                                              "Whole mix"};
     EXPECT_EQ(texts, expected);
     f.pane().applyAudioInputChoice(AudioInputMenuIds::kFirstStereo);

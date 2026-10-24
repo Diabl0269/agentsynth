@@ -471,6 +471,7 @@ juce::PopupMenu TimelineClipLaneArea::buildClipContextMenu(synth::ClipId id, juc
         menu.addSeparator();
         menu.addItem("Relink audio...", [this, id] { onRelinkAudioRequested(id); });
     }
+    addRenderToAudioItem(menu, renderSpansForClips(id));
     return menu;
 }
 

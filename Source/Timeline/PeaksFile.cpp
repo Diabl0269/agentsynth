@@ -43,6 +43,27 @@ float readLittleEndianFloat(const juce::uint8* bytes) {
 } // namespace
 
 //==============================================================================
+bool PeaksFile::writeForAudioFile(const juce::File& audioFile, const juce::File& peaksFile, int bucketSize) {
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    const std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(audioFile));
+    if (reader == nullptr || reader->numChannels == 0)
+        return false;
+
+    constexpr int kChunkFrames = 16384;
+    const int channels = (int)reader->numChannels;
+    Accumulator accumulator(bucketSize, channels);
+    juce::AudioBuffer<float> chunk(channels, kChunkFrames);
+    for (juce::int64 position = 0; position < reader->lengthInSamples; position += kChunkFrames) {
+        const int frames = (int)juce::jmin<juce::int64>(kChunkFrames, reader->lengthInSamples - position);
+        if (!reader->read(&chunk, 0, frames, position, true, true))
+            return false;
+        accumulator.addSamples(chunk, frames);
+    }
+    accumulator.flushPartial();
+    return write(peaksFile, accumulator.getData());
+}
+
 bool PeaksFile::read(const juce::File& file, Data& out) {
     if (!file.existsAsFile())
         return false;

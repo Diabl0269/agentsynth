@@ -1,7 +1,9 @@
 #pragma once
 
 #include "BounceExporter.h"
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
+#include <vector>
 
 class AudioEngine;
 
@@ -9,6 +11,18 @@ namespace synth {
 
 class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h) - see exportStems'
                    // `timelineDoc` parameter comment.
+
+// Narrows or re-routes a StemSession. The defaults reproduce stem export exactly: every strip, the tap after the
+// solo gate, nobody touched. "Render to audio track" sets all three (docs/mixer/stem-export.md#render-options).
+struct StemSessionOptions {
+    // Only these strips get a file; empty means every strip.
+    std::vector<juce::AudioProcessorGraph::NodeID> onlyStrips;
+    // Tap each strip's live tap (after fader, pan and mute, before the solo gate) instead of its final output, so a
+    // strip another strip's solo silences still renders its own sound.
+    bool tapBeforeSolo = false;
+    // These strips are un-muted for the render and put back afterwards, so a muted source renders what it plays.
+    std::vector<juce::AudioProcessorGraph::NodeID> unmuteStrips;
+};
 
 // Offline stem export (docs/mixer/stem-export.md): ONE render pass through the exact same offline
 // path BounceExporter uses, writing one audio file per mixer channel strip instead of one file for
@@ -36,6 +50,8 @@ struct StemResult {
     // One entry per ChannelStrip node found in the graph, in the same stable order the files were
     // numbered in ("NN - <name>.<ext>"). Empty (with ok == false) when the patch has no strips.
     juce::Array<juce::File> stemFiles;
+    // The strip each entry of stemFiles was rendered from, in the same order.
+    std::vector<juce::AudioProcessorGraph::NodeID> stemStrips;
 };
 
 class StemExporter {

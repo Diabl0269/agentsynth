@@ -197,7 +197,8 @@ bool readTrackMidiInput(const juce::DynamicObject& tObj, Track& track) {
 }
 
 // A track's audio input: absent = None (files written before the field existed). Like the MIDI channel it is a
-// recording setting, so an unknown kind or channels out of range fail the load. Read only for Audio tracks.
+// recording setting, so an unknown kind or channels out of range fail the load. Read only for Audio tracks. A
+// "track" source is only checked to be a valid id: it may name a track deleted since, which the pane shows as removed.
 bool readTrackAudioInput(const juce::DynamicObject& tObj, Track& track) {
     const juce::var v = tObj.getProperty("audioInput");
     if (v.isVoid() || track.kind != TrackKind::Audio)
@@ -209,6 +210,12 @@ bool readTrackAudioInput(const juce::DynamicObject& tObj, Track& track) {
     AudioInputChoice choice;
     if (kind == "mix") {
         choice.kind = AudioInputChoice::Kind::WholeMix;
+    } else if (kind == "track") {
+        std::int64_t source = 0;
+        if (!readId(obj->getProperty("track"), source))
+            return false;
+        choice.kind = AudioInputChoice::Kind::Track;
+        choice.sourceTrack = TrackId{source};
     } else if (kind == "device") {
         int channel = 0;
         int channels = 1;
@@ -237,6 +244,9 @@ void writeTrackAudioInput(juce::DynamicObject& t, const Track& track) {
     juce::DynamicObject::Ptr obj = new juce::DynamicObject();
     if (input.kind == AudioInputChoice::Kind::WholeMix) {
         obj->setProperty("kind", "mix");
+    } else if (input.kind == AudioInputChoice::Kind::Track) {
+        obj->setProperty("kind", "track");
+        obj->setProperty("track", static_cast<juce::int64>(input.sourceTrack.value));
     } else {
         obj->setProperty("kind", "device");
         obj->setProperty("channel", input.firstChannel + 1);

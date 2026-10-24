@@ -2,11 +2,14 @@
 #include "MainComponent/MainComponentAudioInputSurface.h"
 
 #include "AudioEngine/AudioEngine.h"
+#include "Mixer/TrackChannelLink.h"
 
 namespace synth::maincomponent {
 
-AudioInputSurface::AudioInputSurface(AudioEngine& engine, std::function<void()> openAudioSettings)
+AudioInputSurface::AudioInputSurface(AudioEngine& engine, const synth::TimelineDoc& doc,
+                                     std::function<void()> openAudioSettings)
     : engine_(engine)
+    , doc_(doc)
     , openAudioSettings_(std::move(openAudioSettings)) {}
 
 synth::AudioInputStatus AudioInputSurface::getAudioInputStatus() { return engine_.getAudioInputInfo(); }
@@ -19,6 +22,10 @@ void AudioInputSurface::enableDeviceInputs() { engine_.enableDeviceInputs(); }
 void AudioInputSurface::openAudioSettings() {
     if (!engine_.isHosted() && openAudioSettings_)
         openAudioSettings_();
+}
+
+bool AudioInputSurface::trackHasMixerChannel(synth::TrackId id) {
+    return synth::resolveTrackChannelLink(engine_.getGraph(), doc_, id).hasChannel;
 }
 
 } // namespace synth::maincomponent

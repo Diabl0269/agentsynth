@@ -2,6 +2,7 @@
 // trip including files written before the field existed and values that must fail the load.
 
 #include "AppUndoManager.h"
+#include "Timeline/TrackAudioInput.h"
 #include "TimelineDocTestHelpers.h"
 
 namespace {
@@ -18,6 +19,13 @@ synth::AudioInputChoice deviceInput(int firstChannel, int numChannels, const juc
 synth::AudioInputChoice wholeMix() {
     synth::AudioInputChoice choice;
     choice.kind = synth::AudioInputChoice::Kind::WholeMix;
+    return choice;
+}
+
+synth::AudioInputChoice trackInput(synth::TrackId source) {
+    synth::AudioInputChoice choice;
+    choice.kind = synth::AudioInputChoice::Kind::Track;
+    choice.sourceTrack = source;
     return choice;
 }
 
@@ -120,4 +128,60 @@ TEST_F(TimelineDocTest, FromVarRejectsAMistypedOrOutOfRangeAudioInput) {
     EXPECT_TRUE(loaded.fromVar(
         juce::JSON::parse(R"({"version":1,"tracks":[{"id":1,"kind":1,"audioInput":{"kind":"device","channel":8}}]})")))
         << "In 8 mono is the last valid input";
+}
+
+TEST_F(TimelineDocTest, SetTrackAudioInputAcceptsAnotherTrackAndRefusesSelfAutomationAndMissing) {
+    const auto vox = doc.addTrack(TrackKind::Audio, "Vox");
+    const auto lead = doc.addTrack(TrackKind::Midi, "Lead synth");
+    const auto otherAudio = doc.addTrack(TrackKind::Audio, "Guitar");
+    const auto automation = doc.addTrack(TrackKind::Automation, "Auto");
+    EXPECT_TRUE(doc.setTrackAudioInput(vox, trackInput(lead)));
+    EXPECT_EQ(doc.getTrack(vox)->audioInput, trackInput(lead));
+    EXPECT_TRUE(doc.setTrackAudioInput(vox, trackInput(otherAudio)));
+    EXPECT_FALSE(doc.setTrackAudioInput(vox, trackInput(vox))) << "a track cannot record itself";
+    EXPECT_FALSE(doc.setTrackAudioInput(vox, trackInput(automation))) << "nothing sounds on an automation track";
+    EXPECT_FALSE(doc.setTrackAudioInput(vox, trackInput(synth::TrackId{999})));
+    EXPECT_FALSE(doc.setTrackAudioInput(vox, trackInput(synth::TrackId{}))) << "no source named";
+    EXPECT_EQ(doc.getTrack(vox)->audioInput, trackInput(otherAudio)) << "a refusal changes nothing";
+
+    // Fields that mean nothing for a Track choice are dropped, so equal choices compare equal.
+    auto messy = trackInput(lead);
+    messy.firstChannel = 3;
+    messy.deviceName = "Scarlett";
+    EXPECT_TRUE(doc.setTrackAudioInput(vox, messy));
+    EXPECT_EQ(doc.getTrack(vox)->audioInput, trackInput(lead));
+}
+
+TEST_F(TimelineDocTest, TrackAudioInputSurvivesTheRoundTripAndALoadAfterTheSourceWasDeleted) {
+    const auto vox = doc.addTrack(TrackKind::Audio, "Vox");
+    const auto lead = doc.addTrack(TrackKind::Midi, "Lead synth");
+    ASSERT_TRUE(doc.setTrackAudioInput(vox, trackInput(lead)));
+
+    const auto text = juce::JSON::toString(doc.toVar());
+    EXPECT_TRUE(text.contains("\"track\"")) << text;
+    TimelineDoc loaded;
+    ASSERT_TRUE(loaded.fromVar(juce::JSON::parse(text)));
+    EXPECT_EQ(loaded.getTrack(vox)->audioInput, trackInput(lead));
+    EXPECT_EQ(dump(loaded), dump(doc));
+
+    ASSERT_TRUE(doc.removeTrack(lead));
+    TimelineDoc afterDelete;
+    ASSERT_TRUE(afterDelete.fromVar(juce::JSON::parse(juce::JSON::toString(doc.toVar()))))
+        << "a deleted source does not fail the load";
+    const auto& input = afterDelete.getTrack(vox)->audioInput;
+    EXPECT_EQ(input, trackInput(lead));
+    EXPECT_EQ(afterDelete.getTrack(input.sourceTrack), nullptr);
+    EXPECT_FALSE(synth::isTrackInputConnected(input, {afterDelete.getTrack(input.sourceTrack) != nullptr, true}));
+    EXPECT_TRUE(synth::isTrackInputConnected(trackInput(vox), {true, true}));
+    EXPECT_FALSE(synth::isTrackInputConnected(trackInput(vox), {true, false})) << "no mixer channel";
+}
+
+TEST_F(TimelineDocTest, FromVarRejectsATrackInputWithoutAValidSource) {
+    for (const juce::String input : {R"({"kind":"track"})", R"({"kind":"track","track":0})",
+                                     R"({"kind":"track","track":"2"})", R"({"kind":"track","track":-3})"}) {
+        TimelineDoc loaded;
+        EXPECT_FALSE(loaded.fromVar(
+            juce::JSON::parse(R"({"version":1,"tracks":[{"id":1,"kind":1,"audioInput":)" + input + "}]}")))
+            << input;
+    }
 }

@@ -646,12 +646,24 @@ without a menu. The pane reaches the app through ONE accessor, `TrackHeaderHost:
 (`TrackAudioInputSurface`: the inputs on offer, their peaks, turning inputs on, Audio settings), which
 `MainComponent` answers from its `AudioEngine` (`MainComponentAudioInputSurface`); null in a host that has none.
 
-- **The combo** says "No input" (muted text), "In 2 (mono)", "In 3 + 4" or "Whole mix" (the master, through the
-  Rec Tap). Its menu: "No input"; a "Mono · <device>" section with In 1 to In N; a "Stereo · <device>" section
-  with In 1 + 2, In 3 + 4 and so on; "Whole mix"; "Audio settings..." (opens Settings on its Audio tab). An
+- **The combo** says "No input" (muted text), "In 2 (mono)", "In 3 + 4", "Whole mix" (the master, through the
+  Rec Tap) or the name of another track. Its menu: "No input"; a "Mono · <device>" section with In 1 to In N; a
+  "Stereo · <device>" section with In 1 + 2, In 3 + 4 and so on; an "Another track" submenu; "Whole mix"; "Audio settings..." (opens Settings on its Audio tab). An
   input that is turned off is listed but disabled, with "Turn on all its inputs" under the list. A pick stores
   the input and the name of the device open now (`TimelineDoc::setTrackAudioInput`) through `performTrackEdit`:
   one undo step.
+- **Another track.** The submenu lists every other track except Automation ones, in timeline order, by name
+  (`listAudioInputTrackSources`); one whose sound reaches no mixer channel is listed disabled as "<name> (no mixer
+  channel)". Picking one makes this track record that track's sound (instrument plus its channel's inserts, fader and
+  pan) as an audio take, in the same undo step as the other armed tracks
+  ([transport](transport.md#recording-audio-from-each-tracks-input)). Such a track never monitors its input,
+  whatever its Monitor mode says: the source is already heard, and the input meter stays hidden, as for Whole mix.
+  Solo follows the input: soloing such a track solos its source too (`TimelineSnapshot::buildFrom`), so the source's
+  clips keep playing and the take is never silent; the tap sits before the channel's solo gate for the same reason.
+  If the source is deleted later the project still loads, the row reads "(track removed)" in the warning colour of a
+  device that is not connected, the menu keeps it ticked, and Record skips the track with a status-bar note.
+  `TimelineDoc::setTrackAudioInput` accepts a source only when it exists, is not the target itself and is not an
+  Automation track; `synth::isTrackInputConnected` (`Source/Timeline/TrackAudioInput.h`) is the rule.
 - **Inputs off** (the device has inputs, none turned on, which is how the app starts: audio input is opt-in):
   the jack items give way to a disabled "The inputs of <device> are turned off." and "Turn on its inputs", which
   asks for microphone access and turns every input on (`AudioEngine::enableDeviceInputs`). That lands as a device
@@ -674,9 +686,9 @@ without a menu. The pane reaches the app through ONE accessor, `TrackHeaderHost:
 - **Motion.** The section fades in and out with the track kind, and the rows below slide, like the MIDI rows;
   the meter fades with its input.
 
-**Stored on the track.** `Track::audioInput` (`synth::AudioInputChoice`: kind None / Device / WholeMix, the first
-0-based input, 1 or 2 channels, the device name), saved as `"audioInput": {"kind": "device", "channel": 3,
-"channels": 2, "device": "..."}` (1-based) or `{"kind": "mix"}`, and only when it is not None. A channel past In 8
+**Stored on the track.** `Track::audioInput` (`synth::AudioInputChoice`: kind None / Device / WholeMix / Track, the first
+0-based input, 1 or 2 channels, the device name, the source `TrackId`), saved as `"audioInput": {"kind": "device",
+"channel": 3, "channels": 2, "device": "..."}` (1-based), `{"kind": "mix"}` or `{"kind": "track", "track": 4}`, and only when it is not None. A channel past In 8
 or a kind it does not know fails the load. A duplicated track keeps it. New tracks start on No input.
 
 ## Monitoring
@@ -690,7 +702,7 @@ track's mixer channel and effects. `Track::monitorMode` (`synth::MonitorMode`) p
 - **On**: always, armed or not.
 - **Off**: never.
 
-The rule is `synth::monitorHearsInput` in `Source/Timeline/TrackAudioInput.h`. No input and Whole mix monitor
+The rule is `synth::monitorHearsInput` in `Source/Timeline/TrackAudioInput.h`. No input, Whole mix and Another track monitor
 nothing, nor does an input that is not connected; a muted or solo-gated track hears nothing.
 
 **The header button.** A speaker right of `R` on audio tracks (`TrackMonitorButton`): unlit for Off and for Auto

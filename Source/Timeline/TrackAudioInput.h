@@ -20,9 +20,10 @@ struct AudioInputStatus {
     }
 };
 
-// Whether `input` reaches the engine now. Only a Device choice can be cut off: by a different device being open (an
-// empty name on either side means "whatever is open", and the host's inputs carry no name) or by one of its channels
-// being turned off. No input and the whole mix always count as connected.
+// Whether `input` reaches the engine now. Only a Device choice can be cut off here: by a different device being open
+// (an empty name on either side means "whatever is open", and the host's inputs carry no name) or by one of its
+// channels being turned off. No input and the whole mix always count as connected; a Track choice depends on its source
+// (isTrackInputConnected) and counts as connected here.
 inline bool isAudioInputConnected(const AudioInputChoice& input, const AudioInputStatus& status) noexcept {
     if (input.kind != AudioInputChoice::Kind::Device)
         return true;
@@ -34,6 +35,19 @@ inline bool isAudioInputConnected(const AudioInputChoice& input, const AudioInpu
         if (!status.isChannelActive(channel))
             return false;
     return true;
+}
+
+// What a Track choice's source looks like right now: whether the track still exists and whether its sound reaches a
+// mixer channel (the strip a take is tapped from).
+struct TrackInputSource {
+    bool exists = false;
+    bool hasChannel = false;
+};
+
+// Whether `input` can record now. Only a Track choice can be cut off: by its source being deleted or having no mixer
+// channel. Every other kind is judged by isAudioInputConnected.
+inline bool isTrackInputConnected(const AudioInputChoice& input, const TrackInputSource& source) noexcept {
+    return input.kind != AudioInputChoice::Kind::Track || (source.exists && source.hasChannel);
 }
 
 // The monitor rule: On always plays the input, Off never; Auto plays it while the track is armed and the transport is

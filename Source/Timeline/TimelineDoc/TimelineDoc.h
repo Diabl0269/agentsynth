@@ -270,20 +270,24 @@ struct AutomationLane {
     bool orphaned = false;
 };
 
-// Where an Audio track records from: nothing, a mono or stereo pair of input channels, or the whole mix.
+// Where an Audio track records from: nothing, a mono or stereo pair of input channels, the whole mix, or another
+// track's sound (its instrument through its mixer channel).
 struct AudioInputChoice {
-    enum class Kind { None, Device, WholeMix };
+    enum class Kind { None, Device, WholeMix, Track };
     static constexpr int kMaxChannel = 8; // highest 1-based input channel a choice may name
     Kind kind = Kind::None;
     int firstChannel = 0;    // 0-based; Device only
     int numChannels = 1;     // 1 or 2; Device only
     juce::String deviceName; // the input device at pick time, to name it while it is not connected
+    TrackId sourceTrack;     // Track only; may name a track deleted since (the choice then reads "track removed")
     bool operator==(const AudioInputChoice& other) const noexcept {
         return kind == other.kind && firstChannel == other.firstChannel && numChannels == other.numChannels &&
-               deviceName == other.deviceName;
+               deviceName == other.deviceName && sourceTrack == other.sourceTrack;
     }
     bool operator!=(const AudioInputChoice& other) const noexcept { return !(*this == other); }
     bool isValid() const noexcept {
+        if (kind == Kind::Track)
+            return sourceTrack.isValid();
         return kind != Kind::Device || (firstChannel >= 0 && (numChannels == 1 || numChannels == 2) &&
                                         firstChannel + numChannels <= kMaxChannel);
     }

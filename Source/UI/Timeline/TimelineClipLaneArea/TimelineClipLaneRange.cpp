@@ -226,16 +226,25 @@ bool TimelineClipLaneArea::applyRangeChoice(RangeChoice choice) {
     return doc_->getRevision() != revisionBefore;
 }
 
+// The menu itself, apart from showing it, so a test can walk the real items without the display a shown menu needs.
+juce::PopupMenu TimelineClipLaneArea::buildRangeContextMenu() {
+    juce::PopupMenu menu;
+    if (!getRangeSpan())
+        return menu;
+    menu.addItem("Split at range edges", [this] { applyRangeChoice(RangeChoice::SplitAtEdges); });
+    menu.addItem("Delete range", [this] { applyRangeChoice(RangeChoice::Delete); });
+    menu.addItem("Delete range and close gap", [this] { applyRangeChoice(RangeChoice::DeleteCloseGap); });
+    addRenderToAudioItem(menu, renderSpansForRange());
+    return menu;
+}
+
 // Protected virtual for the display-less-runner reason spelled out on showClipContextMenu: a real
 // menu must never be reached from a test. Every outcome is driven through applyRangeChoice.
 void TimelineClipLaneArea::showRangeContextMenu(juce::Point<int> localPos) {
     juce::ignoreUnused(localPos);
-    if (!getRangeSpan())
+    auto menu = buildRangeContextMenu();
+    if (menu.getNumItems() == 0)
         return;
-    juce::PopupMenu menu;
-    menu.addItem("Split at range edges", [this] { applyRangeChoice(RangeChoice::SplitAtEdges); });
-    menu.addItem("Delete range", [this] { applyRangeChoice(RangeChoice::Delete); });
-    menu.addItem("Delete range and close gap", [this] { applyRangeChoice(RangeChoice::DeleteCloseGap); });
     menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
 }
 

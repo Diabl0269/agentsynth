@@ -29,7 +29,7 @@ public:
     // keeps compiling unchanged.
     StemRunner(AudioEngine& engine, const juce::File& destinationFolder, const BounceOptions& options,
                CompletionCallback onComplete, int chunkBlocks = 64, int tickMs = 10,
-               const TimelineDoc* timelineDoc = nullptr);
+               const TimelineDoc* timelineDoc = nullptr, const StemSessionOptions& sessionOptions = {});
     ~StemRunner() override;
 
     // MESSAGE THREAD. Requests cancellation; the in-flight chunk finishes, then onComplete fires

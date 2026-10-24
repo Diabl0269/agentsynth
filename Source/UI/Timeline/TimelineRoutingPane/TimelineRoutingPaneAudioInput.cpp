@@ -6,12 +6,21 @@
 namespace synth::ui {
 
 // The inputs on offer are asked for here, on a refresh, never from the meter tick (asking may probe the driver).
+// Every other non-Automation track, with whether its sound reaches a mixer channel (the "Another track" rows).
+std::vector<AudioInputTrackSource> TimelineRoutingPane::audioInputTrackSources() const {
+    auto* inputs = host_ != nullptr ? host_->getAudioInputSurface() : nullptr;
+    if (doc_ == nullptr)
+        return {};
+    return listAudioInputTrackSources(
+        *doc_, track_, [inputs](synth::TrackId id) { return inputs != nullptr && inputs->trackHasMixerChannel(id); });
+}
+
 void TimelineRoutingPane::computeAudioInput(const synth::Track& track) {
     if (!view_.isAudio)
         return;
     auto* inputs = host_ != nullptr ? host_->getAudioInputSurface() : nullptr;
     const auto status = inputs != nullptr ? inputs->getAudioInputStatus() : synth::AudioInputStatus{};
-    view_.audioInput = describeAudioInput(track.audioInput, status);
+    view_.audioInput = describeAudioInput(track.audioInput, status, audioInputTrackSources());
     view_.monitorIndex = static_cast<int>(track.monitorMode);
     const bool liveDevice = track.audioInput.kind == synth::AudioInputChoice::Kind::Device && !view_.audioInput.warning;
     view_.meterFirst = liveDevice ? track.audioInput.firstChannel : 0;
@@ -39,7 +48,7 @@ void TimelineRoutingPane::openAudioInputMenu() {
     auto* inputs = host_ != nullptr ? host_->getAudioInputSurface() : nullptr;
     if (track == nullptr || inputs == nullptr)
         return;
-    auto menu = buildAudioInputMenu(track->audioInput, inputs->getAudioInputStatus());
+    auto menu = buildAudioInputMenu(track->audioInput, inputs->getAudioInputStatus(), audioInputTrackSources());
     showInputMenu(menu, audioInput_, &TimelineRoutingPane::applyAudioInputChoice);
 }
 
@@ -50,7 +59,7 @@ void TimelineRoutingPane::applyAudioInputChoice(int menuId) {
     auto* inputs = host_ != nullptr ? host_->getAudioInputSurface() : nullptr;
     if (track == nullptr || inputs == nullptr || track->kind != synth::TrackKind::Audio)
         return;
-    const auto action = resolveAudioInputMenuChoice(menuId, inputs->getAudioInputStatus());
+    const auto action = resolveAudioInputMenuChoice(menuId, inputs->getAudioInputStatus(), audioInputTrackSources());
     switch (action.kind) {
     case AudioInputMenuAction::Kind::Nothing:
         return;

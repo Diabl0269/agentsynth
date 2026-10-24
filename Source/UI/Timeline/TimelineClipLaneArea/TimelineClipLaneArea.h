@@ -10,6 +10,7 @@
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/RangeSelectionModel.h"
+#include "UI/Timeline/RenderSpan.h"
 #include "UI/Timeline/TimelineRowLayout.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <array>
@@ -307,6 +308,14 @@ public:
     // TimelineClipLaneEditTools.cpp for why this is a callback rather than a ClipContextChoice.
     std::function<void(synth::ClipId)> onRelinkAudioRequested;
 
+    // ---- Render to audio track (see TimelineClipLaneRenderToAudio.cpp) ----
+    // Which of these tracks have a mixer channel to render from. Unset means the menu items are never offered.
+    std::function<std::vector<synth::TrackId>(const std::vector<synth::TrackId>&)> renderableTracks;
+    // Fired by either menu item and by the shortcut with the spans to render; the host refuses or renders them.
+    std::function<void(std::vector<RenderSpan>)> onRenderToAudioRequested;
+    // The shortcut's body: the live range, else the selected clips. False when there is neither.
+    bool renderSelectionToAudio();
+
     // Panel-scoped Delete/Escape/P. Grabs focus on mouseDown, so pressing Delete right after a
     // click lands here rather than on whichever panel had focus before. Returns false when there
     // is nothing to act on so the key falls through.
@@ -441,6 +450,13 @@ public:
 
     // The clip's context menu exactly as a right-click at `localPos` would show it (empty with no clip).
     juce::PopupMenu buildClipContextMenu(synth::ClipId id, juce::Point<int> localPos);
+    // The Range tool's right-click menu; empty without a range.
+    juce::PopupMenu buildRangeContextMenu();
+    std::vector<RenderSpan> renderSpansForRange() const;
+    std::vector<RenderSpan> renderSpansForClips(synth::ClipId clicked) const;
+    std::vector<synth::TrackId> renderableTracksIn(const std::vector<RenderSpan>& spans) const;
+    void addRenderToAudioItem(juce::PopupMenu& menu, const std::vector<RenderSpan>& spans);
+    bool matchesRenderToAudioKey(const juce::KeyPress& key) const;
     // Linked copies of the selected MIDI clips, tiled after the selection as one undo step; false if none.
     bool duplicateLinkedSelection();
     // Names the link mark under the pointer; empty anywhere else.

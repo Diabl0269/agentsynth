@@ -97,6 +97,15 @@ format (WAV, AIFF, FLAC or MP3; 32-bit float is WAV only; MP3 swaps the bit-dept
 prompt** — a stems folder is a re-exportable container, not a one-shot file. A cancelled or failed
 export leaves no stem files behind, never touches a pre-existing file, and disarms every tap.
 
+## Render options
+
+`StemSession` takes an optional `StemSessionOptions` (also accepted by `StemRunner`); the defaults are the export described above, unchanged.
+"Render to audio track" ([`docs/timeline/render-to-audio.md`](../timeline/render-to-audio.md)) sets all three:
+
+- **`onlyStrips`** - only these strips get a file (empty = every strip). `StemResult::stemStrips` lists the strip each file came from, in file order.
+- **`tapBeforeSolo`** - each strip's *live tap* (`ChannelStripModule::setLiveTapBuffer`: after the inserts, fader, pan and mute, before the solo gate) is armed with the stem buffer instead of the stem tap. A strip another strip's solo silences still renders its own sound. The session disarms only a live tap that still points at its own buffer.
+- **`unmuteStrips`** - these strips are un-muted before the graph is re-prepared (a freshly prepared strip adopts its parameters without a fade, so the sound starts at the first sample) and put back on every exit path, a cancel or a failure included. Mute is applied before the live tap, so this is what lets a muted source render what it plays.
+
 ## Related
 
 - [`docs/mixer/mixer.md`](mixer.md) — what a channel is, and the solo gate the tap sits after.

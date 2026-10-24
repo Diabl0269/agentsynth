@@ -528,6 +528,7 @@ header's Right, `TimelineTrackHeaderComponent::keyPressed`). See
 | Return | Open Clip in Editor (`timelineClipOpen`) — the same hook a double-click on the clip fires (the piano roll for a MIDI clip) |
 | Alt+← / Alt+→ | Move Clip Earlier / Later by One Grid Step (`timelineClipMoveEarlier` / `timelineClipMoveLater`) — one grid division (the chosen Snap division even with the snap switch off; one beat with Snap Off), one undo step, clamped at beat 0 |
 | Shift+Cmd+D | Duplicate Selected Clips as Linked Copies (`timelineClipDuplicateLinked`) — every selected MIDI clip gets a copy linked to it, the copies tiled after the selection as one block, one undo step (audio clips are skipped). Also "Duplicate linked" in the clip's menu ([linked clips](../timeline/linked-clips.md)) |
+| Shift+Cmd+R (Ctrl+Alt+Shift+R off the Mac) | Render Range or Selected Clips to Audio Track (`timelineRenderToAudioTrack`) — the live Range tool selection, else the selected clips, rendered to new audio tracks ([render to audio track](../timeline/render-to-audio.md)). Also in the range menu and the clip menu |
 | Cmd+Alt+↑ / Cmd+Alt+↓ | Move Automation Lane Up / Down (`timelineMoveLaneUp` / `timelineMoveLaneDown`) — the lane whose header controls or curve editor hold focus swaps with its neighbour within its track, one undo step ([automation](../timeline/automation.md#reordering-lanes)) |
 | Esc | Back to the clip's track header. Fixed, like Delete (not in the action table); the clip stays selected |
 
@@ -996,5 +997,4 @@ Quantise pitches, Scale, Scale filter and Velocity chips.
 
 ## Canvas mouse gestures
 
-Pan, marquee, click and drag on the canvas are mouse gestures, not rebindable shortcuts; the table
-is in [`layout/selection.md`](../layout/selection.md#canvas-mouse-gestures).
+Pan, marquee, click and drag on the canvas are mouse gestures, not rebindable shortcuts; the table is in [`layout/selection.md`](../layout/selection.md#canvas-mouse-gestures).

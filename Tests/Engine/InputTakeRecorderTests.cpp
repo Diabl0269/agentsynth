@@ -141,6 +141,86 @@ TEST(InputTakeRecorderTest, AChannelTheDeviceDoesNotDeliverRecordsSilence) {
     EXPECT_TRUE(rig.engine.isInputChannelActive(1));
 }
 
+TEST(InputTakeRecorderTest, StripSlotRecordsExactlyWhatItsBufferHeldAndABlockWithNoWriteIsSilence) {
+    synth::InputTakeRecorder recorder;
+    ScopedTakeFile wav("agentsynth_strip_slot.wav");
+    ScopedTakeFile peaks("agentsynth_strip_slot.agpk");
+    const int slot = recorder.startStripSlot(wav.file, peaks.file, kRate);
+    ASSERT_GE(slot, 0);
+    auto* buffer = recorder.getStripSlotBuffer(slot);
+    ASSERT_NE(buffer, nullptr);
+    ASSERT_GE(buffer->getNumChannels(), 2);
+    ASSERT_GE(buffer->getNumSamples(), kBlock);
+
+    // Block 0: the strip wrote. Block 1: it did not run. Block 2: it wrote again.
+    for (int i = 0; i < kBlock; ++i) {
+        buffer->setSample(0, i, inputSample(0, i));
+        buffer->setSample(1, i, inputSample(1, i));
+    }
+    recorder.pushStripSlots(kBlock, 1000);
+    EXPECT_EQ(buffer->getMagnitude(0, kBlock), 0.0f) << "the pushed frames are cleared for the next block";
+    recorder.pushStripSlots(kBlock, 1000 + kBlock);
+    for (int i = 0; i < kBlock; ++i) {
+        buffer->setSample(0, i, inputSample(2, i));
+        buffer->setSample(1, i, inputSample(3, i));
+    }
+    recorder.pushStripSlots(kBlock, 1000 + 2 * kBlock);
+    const auto result = recorder.stopSlot(slot);
+
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.lengthSamples, 3 * kBlock);
+    ASSERT_TRUE(result.captureStartValid);
+    EXPECT_EQ(result.captureStartTimelineSample, 1000);
+    const auto contents = readTakeWav(wav.file);
+    ASSERT_EQ(contents.numChannels, 2);
+    ASSERT_EQ(contents.lengthInSamples, 3 * kBlock);
+    for (int i = 0; i < kBlock; ++i) {
+        ASSERT_EQ(contents.audio.getSample(0, i), inputSample(0, i));
+        ASSERT_EQ(contents.audio.getSample(1, i), inputSample(1, i));
+        ASSERT_EQ(contents.audio.getSample(0, kBlock + i), 0.0f);
+        ASSERT_EQ(contents.audio.getSample(1, kBlock + i), 0.0f);
+        ASSERT_EQ(contents.audio.getSample(0, 2 * kBlock + i), inputSample(2, i));
+        ASSERT_EQ(contents.audio.getSample(1, 2 * kBlock + i), inputSample(3, i));
+    }
+}
+
+TEST(InputTakeRecorderTest, StripSlotsAndDeviceSlotsRecordSideBySideEachFromItsOwnSource) {
+    synth::InputTakeRecorder recorder;
+    ScopedTakeFile stripWav("agentsynth_strip_side.wav");
+    ScopedTakeFile stripPeaks("agentsynth_strip_side.agpk");
+    ScopedTakeFile deviceWav("agentsynth_device_side.wav");
+    ScopedTakeFile devicePeaks("agentsynth_device_side.agpk");
+    const int strip = recorder.startStripSlot(stripWav.file, stripPeaks.file, kRate);
+    const int device = recorder.startSlot(0, 1, deviceWav.file, devicePeaks.file, kRate);
+    ASSERT_GE(strip, 0);
+    ASSERT_GE(device, 0);
+    ASSERT_NE(strip, device);
+
+    std::vector<float> input(kBlock);
+    for (int i = 0; i < kBlock; ++i)
+        input[(std::size_t)i] = inputSample(5, i);
+    const float* channels[1] = {input.data()};
+    auto* buffer = recorder.getStripSlotBuffer(strip);
+    for (int i = 0; i < kBlock; ++i) {
+        buffer->setSample(0, i, 0.25f);
+        buffer->setSample(1, i, -0.25f);
+    }
+    recorder.push(channels, 1, kBlock, 0, true);
+    recorder.pushStripSlots(kBlock, 0);
+    ASSERT_TRUE(recorder.stopSlot(strip).ok);
+    ASSERT_TRUE(recorder.stopSlot(device).ok);
+
+    const auto stripTake = readTakeWav(stripWav.file);
+    ASSERT_EQ(stripTake.lengthInSamples, kBlock);
+    EXPECT_EQ(stripTake.audio.getSample(0, 10), 0.25f);
+    EXPECT_EQ(stripTake.audio.getSample(1, 10), -0.25f);
+    const auto deviceTake = readTakeWav(deviceWav.file);
+    ASSERT_EQ(deviceTake.numChannels, 1);
+    ASSERT_EQ(deviceTake.lengthInSamples, kBlock) << "a device push is not fed twice by the strip push";
+    for (int i = 0; i < kBlock; ++i)
+        ASSERT_EQ(deviceTake.audio.getSample(0, i), inputSample(5, i));
+}
+
 TEST(InputTakeRecorderTest, SlotsRefuseBadChannelsAndStoppingAnythingIsSafe) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     auto& recorder = engine.getInputRecorder();

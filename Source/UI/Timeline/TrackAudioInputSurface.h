@@ -20,6 +20,12 @@ struct TrackAudioInputSurface {
     virtual void enableDeviceInputs() = 0;
     /** Opens Settings on its Audio tab. Not offered in a plugin, which has no such tab. */
     virtual void openAudioSettings() = 0;
+    /** Whether track `id`'s sound reaches a mixer channel, i.e. whether another track can record it. A surface that
+     *  cannot tell says yes. */
+    virtual bool trackHasMixerChannel(synth::TrackId id) {
+        juce::ignoreUnused(id);
+        return true;
+    }
 };
 
 } // namespace synth::ui

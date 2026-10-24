@@ -259,14 +259,25 @@ bool TimelineDoc::setTrackMidiInput(TrackId id, const juce::String& deviceId, co
 }
 
 // Same rule as the MIDI input: a recording setting is refused on a track that cannot record audio. Only a Device
-// choice carries channels and a device name, so the others are stored in one canonical form and compare equal.
+// choice carries channels and a device name and only a Track choice its source, so the others are stored in one
+// canonical form and compare equal. A Track choice must name another, existing track that is not an Automation one
+// (nothing sounds there); it is checked here only, so a source deleted later stays named and reads as removed.
 bool TimelineDoc::setTrackAudioInput(TrackId id, const AudioInputChoice& choice) {
     auto* track = findTrack(id);
     if (track == nullptr || track->kind != TrackKind::Audio || !choice.isValid())
         return false;
+    if (choice.kind == AudioInputChoice::Kind::Track) {
+        const auto* source = findTrack(choice.sourceTrack);
+        if (source == nullptr || source == track || source->kind == TrackKind::Automation)
+            return false;
+    }
     AudioInputChoice stored = choice;
-    if (stored.kind != AudioInputChoice::Kind::Device)
+    if (stored.kind == AudioInputChoice::Kind::Track) {
         stored = AudioInputChoice{stored.kind};
+        stored.sourceTrack = choice.sourceTrack;
+    } else if (stored.kind != AudioInputChoice::Kind::Device) {
+        stored = AudioInputChoice{stored.kind};
+    }
     if (track->audioInput == stored)
         return true;
     return applyMutation([&] {
