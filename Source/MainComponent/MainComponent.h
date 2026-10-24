@@ -471,8 +471,7 @@ private:
 
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                       const juce::String& trackNamePrefix, bool poly);
-    friend class MainComponentTimelineOpsHost; // calls buildInstrumentTrackBody and setTempoAsUndoStep inside its
-                                               // recordBatch
+    friend class MainComponentTimelineOpsHost; // calls buildInstrumentTrackBody and setTempoAsUndoStep in recordBatch
     /** Opens NO undo transaction (the caller must); on nullopt, nothing it created is left behind. */
     std::optional<synth::InstrumentTrackBuildResult>
     buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
@@ -527,7 +526,7 @@ private:
     using AudioTake = synth::maincomponent::AudioTake;
     juce::AudioProcessorGraph::Node* ensureMasterRecordTap();
     RecordTapModule* findMasterRecordTap(juce::AudioProcessorGraph::NodeID hint) const;
-    bool chooseTakeFiles(AudioTake& take, const std::vector<AudioTake>& reserved) const;
+    bool chooseTakeFiles(AudioTake& take, const std::vector<AudioTake>& taken, const juce::String& stem = "take") const;
     bool resolveAudioTakes(std::vector<AudioTake>& takes, juce::String& notice);
     bool startAudioTakes(std::vector<AudioTake>& takes, double punchInBeat, double sampleRate, double bpm);
     void commitAudioRecording();
@@ -668,7 +667,8 @@ private:
     void promptRelinkClipAsset(synth::ClipId id);
     void relinkClipAsset(synth::ClipId id, const juce::File& chosenFile);
     void importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile);
-    friend struct MainComponentAudioImport; // audio import and the Sounds view's load
+    friend struct MainComponentAudioImport;   // audio import and the Sounds view's load
+    friend struct MainComponentRenderToAudio; // Render to audio track: the offline render and its one undo step
     int cleanUnusedAssets();
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;
     /** The node a track's "module" is: its instrument when it has one, else its bound node; null when unbound. */

@@ -393,6 +393,15 @@ void ShortcutManager::addTimelineDefaultBindings() {
     // Shift+Cmd+D: Duplicate's Cmd+D plus Shift, bound nowhere else in any category.
     bindings["timelineClipDuplicateLinked"] =
         juce::KeyPress('d', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    // Shift+Cmd+R: Repeat's Cmd+R plus Shift, free on the Mac. Off the Mac Ctrl+Shift+R is Repeat and Ctrl+Alt+R is
+    // Replace, so Render takes Ctrl+Alt+Shift+R there.
+    bindings["timelineRenderToAudioTrack"] =
+        defaultsPlatform == DefaultsPlatform::Mac
+            ? juce::KeyPress('r', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0)
+            : juce::KeyPress('r',
+                             juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier |
+                                 juce::ModifierKeys::shiftModifier,
+                             0);
     // Cmd+Backspace deletes the focused track row. Bare Backspace/Delete on clips and the canvas stay fixed keys
     // outside this table; the row claims only the Cmd chord, and only while it has focus.
     bindings["timelineDeleteFocusedTrack"] =

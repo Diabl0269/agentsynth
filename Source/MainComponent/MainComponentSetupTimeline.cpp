@@ -6,6 +6,7 @@
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
+#include "MainComponentRenderToAudio.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -281,6 +282,14 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
     // "Relink audio…" bubbles up here rather than being handled inside the lane area itself
     // — it needs a host FileChooser and synth::AssetManager import, neither of which that class has.
     timelinePanel.getClipLaneArea().onRelinkAudioRequested = [this](synth::ClipId id) { promptRelinkClipAsset(id); };
+    // "Render to audio track": the lane area works out the spans; which of those tracks have a mixer channel, and the
+    // render itself, need the graph and the engine, so both are answered here.
+    timelinePanel.getClipLaneArea().renderableTracks = [this](const std::vector<synth::TrackId>& tracks) {
+        return MainComponentRenderToAudio::renderableTracks(*this, tracks);
+    };
+    timelinePanel.getClipLaneArea().onRenderToAudioRequested = [this](std::vector<synth::ui::RenderSpan> spans) {
+        MainComponentRenderToAudio::request(*this, spans);
+    };
     // Same division of labour for the authoring gestures: the lane area decides WHICH audio track
     // and WHICH beat (double-click on an empty audio row, or an OS file drop on one), and this owns
     // the import + clip creation, because only it knows the bundle root.

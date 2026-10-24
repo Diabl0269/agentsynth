@@ -92,12 +92,14 @@ RecordTapModule* MainComponent::findMasterRecordTap(juce::AudioProcessorGraph::N
     return nullptr;
 }
 
-// Where this take's files go: `<bundle>/Audio/take-N.wav` + `<bundle>/Peaks/take-N.agpk` for a saved project,
-// `<app data>/Recordings/take-N.wav` + `.agpk` for one never saved (see the unsaved-project policy on
-// ProjectBundle). N is the first number free on disk and not already given to a take in `reserved` (the other
-// takes of the same Record press, whose files may not exist yet). Fills the file/assetRef fields of `take`;
-// false if the directories could not be created or no number is free.
-bool MainComponent::chooseTakeFiles(AudioTake& take, const std::vector<AudioTake>& reserved) const {
+// Where this take's files go: `<bundle>/Audio/<stem>-N.wav` + `<bundle>/Peaks/<stem>-N.agpk` for a saved project,
+// `<app data>/Recordings/<stem>-N.wav` + `.agpk` for one never saved (see the unsaved-project policy on
+// ProjectBundle). `stem` is "take" for a recording and "render" for a render to audio. N is the first number free on
+// disk and not already given to a take in `reserved` (the other takes of the same Record press, whose files may not
+// exist yet). Fills the file/assetRef fields of `take`; false if the directories could not be created or no number
+// is free.
+bool MainComponent::chooseTakeFiles(AudioTake& take, const std::vector<AudioTake>& reserved,
+                                    const juce::String& stem) const {
     juce::File audioDir;
     juce::File peaksDir;
     juce::String refPrefix;
@@ -123,16 +125,16 @@ bool MainComponent::chooseTakeFiles(AudioTake& take, const std::vector<AudioTake
 
     // Both files are checked so a take never half-overwrites an earlier one.
     for (int n = 1; n <= kMaxTakeNumber; ++n) {
-        const juce::String stem = "take-" + juce::String(n);
-        const auto wav = audioDir.getChildFile(stem + ".wav");
-        const auto peaks = peaksDir.getChildFile(stem + ".agpk");
+        const juce::String name = stem + "-" + juce::String(n);
+        const auto wav = audioDir.getChildFile(name + ".wav");
+        const auto peaks = peaksDir.getChildFile(name + ".agpk");
         const bool taken = std::any_of(reserved.begin(), reserved.end(),
                                        [&wav](const AudioTake& other) { return other.wavFile == wav; });
         if (taken || wav.exists() || peaks.exists())
             continue;
         take.wavFile = wav;
         take.peaksFile = peaks;
-        take.assetRef = refPrefix + stem + ".wav";
+        take.assetRef = refPrefix + name + ".wav";
         return true;
     }
     return false;

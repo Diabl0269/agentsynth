@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_core/juce_core.h>
 #include <utility>
 #include <vector>
@@ -71,6 +72,9 @@ public:
      *  file order. Creates parent directories if missing; truncates/overwrites an existing file.
      *  Returns false on any I/O failure or if `data.bucketSize`/`data.numChannels` is <= 0. */
     static bool write(const juce::File& file, const Data& data);
+
+    /** Peaks of an already-written audio file (a render), bucketed like a take's; false if unreadable or unwritable. */
+    static bool writeForAudioFile(const juce::File& audioFile, const juce::File& peaksFile, int bucketSize);
 
     /**
      * @brief Incremental bucket accumulation — the math `RecordTapModule`'s drain step used to do

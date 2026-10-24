@@ -1,5 +1,5 @@
 # Recording audio from each track's own input: the capture core shared with the Rec Tap, the engine's input
-# recorder and input switch-on, and MainComponent's take list. Split out of the root lists, both at the file-size cap.
+# recorder and input switch-on, and MainComponent's take list, and rendering a selection to an audio track. Split out of the root lists, both at the file-size cap.
 target_sources(Core PRIVATE
     Source/Timeline/TakeCaptureWriter.cpp
     Source/Timeline/TakeCaptureWriter.h
@@ -15,6 +15,12 @@ target_sources(Core PRIVATE
 )
 target_sources(AppUI PRIVATE
     Source/MainComponent/MainComponentAudioTakes.cpp
+    Source/MainComponent/MainComponentRenderToAudio.cpp
+    Source/MainComponent/MainComponentRenderToAudio.h
+    Source/UI/Chrome/RenderProgressDialog.cpp
+    Source/UI/Chrome/RenderProgressDialog.h
+    Source/UI/Timeline/RenderSpan.h
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneRenderToAudio.cpp
     Source/MainComponent/MainComponentAudioInputSurface.cpp
     Source/MainComponent/MainComponentAudioInputSurface.h
     Source/UI/Timeline/TrackAudioInputSurface.h

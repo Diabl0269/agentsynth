@@ -87,6 +87,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/timeline/playhead.md`](timeline/playhead.md) — the playhead overlay, its two timers, latency compensation, follow-playhead
 - [`docs/timeline/transport.md`](timeline/transport.md) — the transport bar, the recording gate, transport actions, metronome and count-in
 - [`docs/timeline/edit-tools.md`](timeline/edit-tools.md) — the Cubase-style tool strip shared by the clip lanes and the piano roll
+- [`docs/timeline/render-to-audio.md`](timeline/render-to-audio.md) — render a range or clips to a new audio track: which tracks, what is heard, the files, the one undo step
 - [`docs/timeline/clips.md`](timeline/clips.md) — clip lanes: selection, drag/trim, edge auto-scroll, authoring and audio import
 - [`docs/timeline/linked-clips.md`](timeline/linked-clips.md) — linked clips: Duplicate linked, Make unique, what a link shares and which edits end it
 - [`docs/timeline/remove-last-modulator.md`](timeline/remove-last-modulator.md) — Remove LFO / Keep module / Remember my choice when a removal would delete the LFO, and its reset

@@ -89,10 +89,12 @@ juce::String stemStripName(juce::AudioProcessorGraph& graph, juce::AudioProcesso
 } // namespace
 
 StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolder, const BounceOptions& options,
-                         const BounceExporter::ProgressCallback& progress, const TimelineDoc* timelineDoc)
+                         const BounceExporter::ProgressCallback& progress, const TimelineDoc* timelineDoc,
+                         const StemSessionOptions& sessionOptions)
     : engine_(engine)
     , destinationFolder_(destinationFolder)
     , options_(options)
+    , sessionOptions_(sessionOptions)
     , progress_(progress)
     , nextBlockBeat_(options.startBeat) {
     if (const auto problem = validateBounceOptions(options_); problem.isNotEmpty()) {
@@ -129,6 +131,9 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
 
     deviceWasAttached_ = engine_.suspendDeviceCallback();
     externalMidiGuard_ = std::make_unique<ExternalMidiSuspendGuard>(engine_);
+    // Before the driver re-prepares the graph: a freshly prepared strip adopts its parameters without a fade, so an
+    // un-muted source sounds from the first sample instead of fading in.
+    unmuteRequestedStrips(graph);
 
     // Constructing the driver re-prepares the whole graph at the render format - strips' pointers
     // stay valid across this (the graph itself is not cleared), so enumerating and sizing tap
@@ -137,7 +142,15 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
                                                        options_.numChannels);
 
     // ---- No strips means nothing to export - fail before touching the destination folder ----
-    const auto entries = collectStemStrips(graph);
+    auto entries = collectStemStrips(graph);
+    if (!sessionOptions_.onlyStrips.empty()) {
+        const auto& wanted = sessionOptions_.onlyStrips;
+        entries.erase(std::remove_if(entries.begin(), entries.end(),
+                                     [&wanted](const StemStripEntry& entry) {
+                                         return std::find(wanted.begin(), wanted.end(), entry.nodeId) == wanted.end();
+                                     }),
+                      entries.end());
+    }
     if (entries.empty()) {
         restoreTransportAndEngine();
         setupFailed_ = true;
@@ -165,6 +178,7 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
                                     // never move once a tap holds one - see the class comment.
     for (std::size_t i = 0; i < entries.size(); ++i) {
         StemWriter sw;
+        sw.nodeId = entries[i].nodeId;
         sw.strip = entries[i].strip;
         const auto number = juce::String((int)i + 1).paddedLeft('0', nameWidth);
         // Named after the track that feeds this strip, not the strip's own graph-node
@@ -199,8 +213,12 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
 
     // Every writer opened cleanly - only now arm the taps. A partial failure above must never leave
     // any strip's tap pointing at a buffer this session is about to destroy.
-    for (auto& stem : stems_)
-        stem.strip->setStemTapBuffer(&stem.tapBuffer);
+    for (auto& stem : stems_) {
+        if (sessionOptions_.tapBeforeSolo)
+            stem.strip->setLiveTapBuffer(&stem.tapBuffer);
+        else
+            stem.strip->setStemTapBuffer(&stem.tapBuffer);
+    }
 
     // ---- How long this is expected to be, for the progress fraction ----
     const double bpm = before.bpm > 0.0 ? before.bpm : 120.0;
@@ -227,9 +245,28 @@ StemSession::~StemSession() {
 }
 
 void StemSession::disarmAllTaps() noexcept {
-    for (auto& stem : stems_)
-        if (stem.strip != nullptr)
+    for (auto& stem : stems_) {
+        if (stem.strip == nullptr)
+            continue;
+        // Only the tap this session armed: a live tap another owner pointed elsewhere is left alone.
+        if (sessionOptions_.tapBeforeSolo) {
+            if (stem.strip->getLiveTapBuffer() == &stem.tapBuffer)
+                stem.strip->setLiveTapBuffer(nullptr);
+        } else {
             stem.strip->setStemTapBuffer(nullptr);
+        }
+    }
+}
+
+void StemSession::unmuteRequestedStrips(juce::AudioProcessorGraph& graph) {
+    for (const auto& id : sessionOptions_.unmuteStrips) {
+        auto* node = graph.getNodeForId(id);
+        auto* strip = node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
+        if (strip == nullptr || !strip->isMuted())
+            continue;
+        unmuted_.emplace_back(strip, true);
+        strip->setMuted(false);
+    }
 }
 
 void StemSession::restoreTransportAndEngine() {
@@ -245,6 +282,10 @@ void StemSession::restoreTransportAndEngine() {
         driver_->streamBlocks(1, {});
 
     externalMidiGuard_.reset();
+
+    for (auto& [strip, wasMuted] : unmuted_)
+        strip->setMuted(wasMuted);
+    unmuted_.clear();
 
     if (deviceWasAttached_)
         engine_.resumeDeviceCallback();
@@ -425,6 +466,7 @@ StemResult StemSession::finish() {
             return finishedResult_;
         }
         result.stemFiles.add(stem.finalFile);
+        result.stemStrips.push_back(stem.nodeId);
     }
 
     if (progress_)

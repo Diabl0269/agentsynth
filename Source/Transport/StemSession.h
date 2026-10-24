@@ -64,7 +64,8 @@ public:
     // several tracks do, or when this is null (a caller with no timeline at all — a test rig or any headless caller
     // that doesn't care about names). MESSAGE THREAD, read once here — never stored past the constructor.
     StemSession(AudioEngine& engine, const juce::File& destinationFolder, const BounceOptions& options,
-                const BounceExporter::ProgressCallback& progress = {}, const TimelineDoc* timelineDoc = nullptr);
+                const BounceExporter::ProgressCallback& progress = {}, const TimelineDoc* timelineDoc = nullptr,
+                const StemSessionOptions& sessionOptions = {});
 
     // Disarms every tap and restores the engine if finish() was never called.
     ~StemSession();
@@ -91,8 +92,10 @@ public:
 private:
     void restoreTransportAndEngine();
     void disarmAllTaps() noexcept;
+    void unmuteRequestedStrips(juce::AudioProcessorGraph& graph);
 
     struct StemWriter {
+        juce::AudioProcessorGraph::NodeID nodeId;
         ChannelStripModule* strip = nullptr;
         juce::File finalFile;
         // blockSize x 2, preallocated once in setup — see ChannelStripModule's stem tap contract.
@@ -104,7 +107,10 @@ private:
     AudioEngine& engine_;
     juce::File destinationFolder_;
     BounceOptions options_;
+    StemSessionOptions sessionOptions_;
     BounceExporter::ProgressCallback progress_;
+    // Strips this session un-muted, with the mute to put back.
+    std::vector<std::pair<ChannelStripModule*, bool>> unmuted_;
 
     std::unique_ptr<MetronomeForceOffGuard> metronomeGuard_;
     std::unique_ptr<ExternalMidiSuspendGuard> externalMidiGuard_;
