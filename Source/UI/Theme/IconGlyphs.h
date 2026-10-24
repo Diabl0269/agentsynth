@@ -35,7 +35,8 @@ enum class Glyph {
     LaneAutomation, // a rising and falling line with two points on it: changes drawn over time
     LaneMod,        // one wave: a modulator moves the parameter
     Swap,           // two opposite arrows: two views trade places
-    Detach          // a window with an arrow leaving its corner: a view opens in its own window
+    Detach,         // a window with an arrow leaving its corner: a view opens in its own window
+    Link            // two linked chain rings: two things joined into one (a stereo pair)
 };
 
 // Fills or strokes `glyph` in `colour`, centred in the shorter side of `area`. Nothing else is drawn.

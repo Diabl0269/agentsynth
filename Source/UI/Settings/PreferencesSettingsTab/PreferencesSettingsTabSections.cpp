@@ -1,5 +1,5 @@
 #include "PreferencesSettingsTab.h"
-#include "UI/Layout/FocusRing.h"
+#include "UI/Layout/FoldSectionHeader.h"
 #include "UI/Settings/SettingsFoldState.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -10,14 +10,10 @@
 // contribute rows (categoryShown) and, once the pass is done, slots each header above its rows.
 
 namespace {
-constexpr int kHeaderHeight = 26;
+constexpr int kHeaderHeight = synth::ui::kFoldSectionHeaderHeight;
 constexpr int kHeaderGap = 4;          // between a header and its first row
 constexpr int kSectionGap = 8;         // above every header but the first
 constexpr int kDividerLeadHeight = 21; // the 10 + 1 + 10 a group divider occupies (see layoutContent)
-constexpr int kChevronSize = 8;
-constexpr float kHeaderTextAlpha = 0.85f;
-constexpr float kHeaderHoverTextAlpha = 1.0f;
-constexpr float kHeaderRuleAlpha = 0.12f;
 
 constexpr PreferencesSettingsTab::Category kSections[] = {
     PreferencesSettingsTab::Category::Graph,  PreferencesSettingsTab::Category::Timeline,
@@ -51,19 +47,7 @@ void PreferencesSettingsTab::SectionHeader::refreshTitle() {
 }
 
 void PreferencesSettingsTab::SectionHeader::paintButton(juce::Graphics& g, bool hot, bool /*down*/) {
-    const auto textColour = findColour(juce::Label::textColourId);
-    const auto colour = textColour.withAlpha(hot || hasKeyboardFocus(false) ? kHeaderHoverTextAlpha : kHeaderTextAlpha);
-    const auto bounds = getLocalBounds();
-    synth::theme::paintDisclosureChevron(g,
-                                         juce::Rectangle<float>(6.0f, (float)(bounds.getHeight() - kChevronSize) * 0.5f,
-                                                                (float)kChevronSize, (float)kChevronSize),
-                                         turn.openness(), synth::theme::themeOf(*this), hot || hasKeyboardFocus(false));
-    g.setColour(colour);
-    g.setFont(juce::Font(juce::FontOptions(12.5f, juce::Font::bold)));
-    g.drawText(categoryName(category), bounds.withTrimmedLeft(22), juce::Justification::centredLeft);
-    g.setColour(textColour.withAlpha(kHeaderRuleAlpha));
-    g.fillRect(0, bounds.getBottom() - 1, bounds.getWidth(), 1);
-    synth::ui::paintFocusRing(g, bounds.toFloat().reduced(1.0f), *this);
+    synth::ui::paintFoldSectionHeader(g, *this, categoryName(category), turn, hot);
 }
 
 void PreferencesSettingsTab::setupSectionControls() {

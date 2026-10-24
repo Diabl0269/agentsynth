@@ -126,6 +126,48 @@ and Copy ID) is never shown while sharing is off, whatever the filter says. "Wha
 through the owner's URL seam (`PreferencesSettingsTab::setUrlOpener`, set by `MainComponent` through
 `SettingsWindow::setUrlOpener`), the one `MainComponent::urlOpener_` the Help menu pages use.
 
+## The Audio tab
+
+Settings > Audio is a stack of folding sections, built in `Source/UI/Settings/AudioSettingsTab/`. It reuses the
+Preferences look: the same header (`synth::ui::paintFoldSectionHeader`, shared with `PreferencesSettingsTabSections.cpp`),
+chevron turn, Fold all / Expand all strip, and fades (`FadeVisibility`) so a fold slides the sections below. The
+fold state is saved under `audioFolded` (the `settingsfold` helpers) with a "saved" marker, so a user who unfolds
+everything keeps everything unfolded. Defaults: Device, Inputs and Remembered interfaces open; Outputs, Recording
+and MIDI folded.
+
+| Section | Holds | Header summary |
+|---|---|---|
+| Device | interface (type), output device, input device where separate, Test, Control panel, sample rate, buffer size | "48000 Hz · 256 samples (5.3 ms) · CoreAudio" |
+| Inputs | the table below | "<device> · N jacks" |
+| Remembered interfaces | every interface the app has seen | none |
+| Outputs | output channel ticks (at least one stays on) | none |
+| Recording | "WAV 32-bit float" and "latency fixed automatically (−4.1 ms)", read-only | the same line |
+| MIDI | input ticks, MIDI output, the "Controllers: ..." caption | none |
+
+The Device section is built on `AudioDeviceManager` and `AudioDeviceSetup` directly (the stock
+`AudioDeviceSelectorComponent` cannot be split into sections). What the stock panel did that this does not: no
+Bluetooth MIDI button, no input level meter beside the input device, no "Reset device" button, and outputs are one
+tick per channel instead of a channel-pair list.
+
+**Inputs table.** Columns Jacks, Pair, Name, Kind, Level, Use; one row per mono jack or per paired stereo input, up
+to 8 jacks. The chain button spans the two rows of a pair and joins them into one stereo input (a cyan bar marks a
+paired row) or splits them again; an odd last jack is mono only. The name field shows the jack name ("In 1") as its
+placeholder, and a name is optional. Level is the live peak (15 Hz timer only while the table shows); Use turns the
+jack on or off on the device (`AudioEngine::setDeviceInputsUsed`, which asks for microphone access first). Each
+control is a Tab stop in row order (pair button, then the row's name, level and use), with the accent focus ring, a
+title ("Pair In 1 and In 2 as one stereo input", "Name for In 1", "In 1 level", "Use In 1") and a tooltip.
+
+**Remembered interfaces.** One row per entry in `AudioInputLayoutStore`: a green dot and bold name for the interface
+in use ("in use · N inputs named"), a grey dot and "not connected · names kept" (warning colour) for the others,
+each with a "Forget <name>" link except the one in use.
+
+**Where the layout lives.** `AudioInputLayoutStore` (Core, `Source/AudioEngine/`) is keyed by device type plus
+device name and holds pairs, names and last-used time. It is pure data with no JUCE audio calls; `MainComponent`
+persists it as JSON under the user setting `audioInputLayout` and republishes the timeline when it changes. An
+entry is never pruned except by Forget. The tab reads everything through the `AudioSettingsSource` seam
+(`AudioSettingsSource.h`); `MainComponentAudioSettingsSource` answers it from the engine, and tests use a fake.
+Tracks refer to a named input by name: [the Audio tracks section](../timeline/tracks.md#audio-tracks).
+
 ## The Account tab
 
 Settings > Account sits next to the AI tab when an account service is attached: plan and usage, Manage subscription

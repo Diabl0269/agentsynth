@@ -32,3 +32,4 @@ target_sources(AppUI PRIVATE
     Source/UI/Timeline/TimelineRoutingPane/InputLevelMeter.h
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneAudioInput.cpp
 )
+include(${CMAKE_CURRENT_LIST_DIR}/AudioSettingsSources.cmake) # the Audio settings tab and its input layout store

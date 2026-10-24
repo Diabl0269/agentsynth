@@ -37,7 +37,8 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
     const auto& requested = transport.getDocumentState();
     const double beatsPerBar = static_cast<double>(requested.timeSigNumerator) * 4.0 /
                                static_cast<double>(std::max(1, requested.timeSigDenominator));
-    auto snapshot = synth::TimelineSnapshot::buildFrom(doc, beatsPerBar > 0.0 ? beatsPerBar : 4.0);
+    auto snapshot = synth::TimelineSnapshot::buildFrom(doc, beatsPerBar > 0.0 ? beatsPerBar : 4.0,
+                                                       [this] { return getAudioInputInfo(); });
 
     // The snapshot's address is stable across the move into publish() (unique_ptr moves the
     // pointer, not the object), so the binding table can point at it before it is handed over.

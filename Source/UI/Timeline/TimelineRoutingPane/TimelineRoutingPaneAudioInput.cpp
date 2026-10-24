@@ -23,8 +23,9 @@ void TimelineRoutingPane::computeAudioInput(const synth::Track& track) {
     view_.audioInput = describeAudioInput(track.audioInput, status, audioInputTrackSources());
     view_.monitorIndex = static_cast<int>(track.monitorMode);
     const bool liveDevice = track.audioInput.kind == synth::AudioInputChoice::Kind::Device && !view_.audioInput.warning;
-    view_.meterFirst = liveDevice ? track.audioInput.firstChannel : 0;
-    view_.meterCount = liveDevice && inputs != nullptr ? track.audioInput.numChannels : 0;
+    const auto resolved = synth::resolveAudioInput(track.audioInput, status);
+    view_.meterFirst = liveDevice ? resolved.firstChannel : 0;
+    view_.meterCount = liveDevice && inputs != nullptr ? resolved.numChannels : 0;
 }
 
 // The screen-reader name carries the value, as on the MIDI row: a button's text is not read once it has a title.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioEngine/AudioInputLayoutStore.h"
 #include "AudioEngine/InputTakeRecorder.h"
 #include "AudioEngine/MidiInputSources.h"
 #include "AudioEngine/ModulationRoutingTypes.h"
@@ -451,6 +452,13 @@ public:
     // MESSAGE THREAD, Standalone only (a no-op Hosted). Asks for microphone access, then turns on every input
     // of the chosen device (at most 8); the change persists through onDeviceStateChanged.
     void enableDeviceInputs();
+    // MESSAGE THREAD, Standalone only. Turns `numJacks` jacks from `firstJack` on or off (microphone access is asked
+    // first when turning on); the rest of the setup stays.
+    void setDeviceInputsUsed(int firstJack, int numJacks, bool used);
+    // Pairs and names per interface (docs/layout/settings-preferences.md#the-audio-tab); the owner saves it.
+    synth::AudioInputLayoutStore& getInputLayoutStore() noexcept { return inputLayout_; }
+    // MESSAGE THREAD. Records the interface that is open now as used (a first sighting gets an empty entry).
+    void noteOpenInterface();
     // Takes recorded straight from the input; their WAVs are finalised by shutdown().
     synth::InputTakeRecorder& getInputRecorder() noexcept { return inputRecorder_; }
 
@@ -732,6 +740,7 @@ private:
     std::array<std::atomic<float>, synth::TransportService::kMaxDeviceInputChannels> inputPeaks_{};
     std::array<const float*, synth::InputTakeRecorder::kMaxInputChannels> inputTakePointers_{};
     std::map<juce::String, int> deviceInputCountCache_; // message thread only
+    synth::AudioInputLayoutStore inputLayout_;
     void mapActiveInputs(const juce::BigInteger& activeInputs) noexcept;
     std::atomic<bool> recordingEngaged_{false};
     std::atomic<int> inputDeviceHash_{0}; // hashCode() of the open input device's name, 0 when Hosted

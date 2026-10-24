@@ -31,8 +31,9 @@ std::vector<AudioInputTrackSource> listAudioInputTrackSources(const synth::Timel
 
 /** What the Input combo says, and how. */
 struct AudioInputRowText {
-    juce::String text;    // "No input", "In 1 (mono)", "In 1 + 2", "Whole mix", "In 1 (<device> not connected)", a
-                          // source track's name, "(track removed)"
+    juce::String text;    // "No input", "In 1 (mono)", "In 1 + 2", "Whole mix", "In 1 (<device> not connected)",
+                          // "Vocal mic (In 1)", "Vocal mic (not on this interface)", a source track's name,
+                          // "(track removed)"
     bool muted = false;   // No input: drawn in the muted text colour
     bool warning = false; // the choice cannot record now
     juce::String note;    // the warning's explanation under the combo; empty when there is nothing to explain

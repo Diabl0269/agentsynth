@@ -750,7 +750,30 @@ bool MainComponent::initialiseAudioEngine() {
             }
         }
 
-        audioEngine.onDeviceStateChanged = [this](std::unique_ptr<juce::XmlElement> state) {
+        // The input layout (pairs and names per interface) lives in its own key, apart from "audioDeviceState": that
+        // state is cleaned of inputs that are not in use, this one is never pruned.
+        auto& inputLayout = audioEngine.getInputLayoutStore();
+        inputLayout.loadJson(appProperties.getUserSettings()->getValue("audioInputLayout", juce::String()));
+        // A track's named input resolves against the open interface and its layout, so either changing moves what the
+        // track monitors and records from. Only a doc with a named input has anything to republish.
+        const auto republishNamedInputs = [this] {
+            for (const auto& track : timelineDoc.getTracks())
+                if (track.audioInput.kind == synth::AudioInputChoice::Kind::Device &&
+                    track.audioInput.inputName.isNotEmpty()) {
+                    audioEngine.publishTimeline(timelineDoc);
+                    break;
+                }
+            timelinePanel.refreshRoutingPane();
+        };
+        inputLayout.onChange = [this, republishNamedInputs] {
+            appProperties.getUserSettings()->setValue("audioInputLayout", audioEngine.getInputLayoutStore().toJson());
+            appProperties.saveIfNeeded();
+            republishNamedInputs();
+        };
+
+        audioEngine.onDeviceStateChanged = [this, republishNamedInputs](std::unique_ptr<juce::XmlElement> state) {
+            audioEngine.noteOpenInterface();
+            republishNamedInputs();
             // BEFORE the null check below: a device change that JUCE does not consider
             // an explicit setup still changes how many input channels exist, and the Audio Input
             // card's jacks (plus any cable on a jack that just vanished) have to follow it.

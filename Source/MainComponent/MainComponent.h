@@ -860,6 +860,7 @@ private:
     synth::AccountService accountService{synth::branding::resolveApiBaseUrl()}; // before aiChatComponent
     // The app-wide sound pack installer; the Sampler picker shares it, so a download shows in both places.
     juce::SharedResourcePointer<synth::soundpacks::SoundPackInstaller> soundPackInstaller_;
+    synth::maincomponent::EngineSettingsSource audioSettingsSource_{audioEngine}; // the Settings Audio tab's view
     synth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible{false}, isLibraryVisible{true}, isAlignmentGuidesEnabled{true};
 

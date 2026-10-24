@@ -221,7 +221,8 @@ bool readTrackAudioInput(const juce::DynamicObject& tObj, Track& track) {
         int channels = 1;
         if (!readInt(obj->getProperty("channel"), channel) ||
             !readOptionalInt(obj->getProperty("channels"), channels) ||
-            !readOptionalString(obj->getProperty("device"), choice.deviceName))
+            !readOptionalString(obj->getProperty("device"), choice.deviceName) ||
+            !readOptionalString(obj->getProperty("name"), choice.inputName))
             return false;
         if (channel < 1 || channel > AudioInputChoice::kMaxChannel)
             return false;
@@ -252,6 +253,8 @@ void writeTrackAudioInput(juce::DynamicObject& t, const Track& track) {
         obj->setProperty("channel", input.firstChannel + 1);
         obj->setProperty("channels", input.numChannels);
         obj->setProperty("device", input.deviceName);
+        if (input.inputName.isNotEmpty())
+            obj->setProperty("name", input.inputName);
     }
     t.setProperty("audioInput", juce::var(obj.get()));
 }

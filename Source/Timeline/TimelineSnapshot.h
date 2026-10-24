@@ -1,9 +1,11 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "Timeline/TrackAudioInput.h"
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <type_traits>
 #include <vector>
@@ -167,8 +169,12 @@ struct TimelineSnapshot {
 
     // Message thread only: allocates, walks juce::Strings, and reads the doc. `beatsPerBar` (the transport's time
     // signature, 4 when unknown) sizes a drum clip's steps for its swing; a time-signature change reaches the audio
-    // thread with the next publish.
-    static std::unique_ptr<TimelineSnapshot> buildFrom(const TimelineDoc& doc, double beatsPerBar = 4.0);
+    // thread with the next publish. `inputStatus` answers what the open interface offers, asked only when an audio
+    // track's input is picked by name (so a doc without one never probes the driver): that track monitors the jacks
+    // its name resolves to, or nothing when the interface has no such input.
+    using InputStatusProvider = std::function<AudioInputStatus()>;
+    static std::unique_ptr<TimelineSnapshot> buildFrom(const TimelineDoc& doc, double beatsPerBar = 4.0,
+                                                       const InputStatusProvider& inputStatus = {});
 
     // Every index range in bounds and every run correctly sorted. Cheap enough for tests and the
     // stress harness to call per block; not called on the real audio path.

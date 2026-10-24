@@ -14,6 +14,11 @@ juce::String inputName(int first, int count) {
                      : "In " + juce::String(first + 1);
 }
 
+// "Vocal mic (In 1)" for a named input, plain "In 1" otherwise.
+juce::String namedInputLabel(const juce::String& name, int first, int count) {
+    return name.isNotEmpty() ? name + " (" + inputName(first, count) + ")" : inputName(first, count);
+}
+
 // The inputs the menu lists: the device's own (capped at the model's range), or what the host passes in.
 int listedInputs(const synth::AudioInputStatus& status) {
     const int count = status.hosted ? status.activeInputs : status.deviceInputs;
@@ -27,13 +32,15 @@ juce::String deviceLabel(const synth::AudioInputStatus& status) {
 }
 
 bool pickedOnOtherDevice(const synth::AudioInputChoice& choice, const synth::AudioInputStatus& status) {
-    return !status.hosted && choice.deviceName.isNotEmpty() && status.deviceName.isNotEmpty() &&
-           choice.deviceName != status.deviceName;
+    return !status.hosted && choice.inputName.isEmpty() && choice.deviceName.isNotEmpty() &&
+           status.deviceName.isNotEmpty() && choice.deviceName != status.deviceName;
 }
 
 bool isTicked(const synth::AudioInputChoice& choice, const synth::AudioInputStatus& status, int first, int count) {
-    return choice.kind == Kind::Device && choice.firstChannel == first && choice.numChannels == count &&
-           synth::isAudioInputConnected(choice, status);
+    if (choice.kind != Kind::Device)
+        return false;
+    const auto resolved = synth::resolveAudioInput(choice, status);
+    return resolved.connected && resolved.firstChannel == first && resolved.numChannels == count;
 }
 
 bool pairActive(const synth::AudioInputStatus& status, int first) {
@@ -57,14 +64,14 @@ void addDeviceInputs(juce::PopupMenu& menu, const synth::AudioInputChoice& choic
     bool anyOff = false;
     for (int channel = 0; channel < inputs; ++channel) {
         anyOff = anyOff || !status.isChannelActive(channel);
-        menu.addItem(Ids::kFirstMono + channel, inputName(channel, 1), status.isChannelActive(channel),
-                     isTicked(choice, status, channel, 1));
+        menu.addItem(Ids::kFirstMono + channel, namedInputLabel(status.nameOfInput(channel, 1), channel, 1),
+                     status.isChannelActive(channel), isTicked(choice, status, channel, 1));
     }
     if (inputs >= 2) {
         menu.addSectionHeader("Stereo" + dot() + deviceLabel(status));
         for (int first = 0; first + 1 < inputs; first += 2)
-            menu.addItem(Ids::kFirstStereo + first, inputName(first, 2), pairActive(status, first),
-                         isTicked(choice, status, first, 2));
+            menu.addItem(Ids::kFirstStereo + first, namedInputLabel(status.nameOfInput(first, 2), first, 2),
+                         pairActive(status, first), isTicked(choice, status, first, 2));
     }
     if (anyOff && !status.hosted)
         menu.addItem(Ids::kTurnOnInputs, "Turn on all its inputs");
@@ -129,7 +136,16 @@ AudioInputRowText describeAudioInput(const synth::AudioInputChoice& choice, cons
     }
     if (choice.kind == Kind::Track)
         return describeTrackInput(choice, sources);
-    const auto name = inputName(choice.firstChannel, choice.numChannels);
+    const auto resolved = synth::resolveAudioInput(choice, status);
+    if (resolved.nameMissing) {
+        row.text = choice.inputName + " (not on this interface)";
+        row.warning = true;
+        row.note = "This track records and plays nothing until you pick one of this interface's inputs here.";
+        return row;
+    }
+    const auto name = choice.inputName.isNotEmpty()
+                          ? namedInputLabel(choice.inputName, resolved.firstChannel, resolved.numChannels)
+                          : inputName(resolved.firstChannel, resolved.numChannels);
     if (pickedOnOtherDevice(choice, status)) {
         row.text = name + " (" + choice.deviceName + " not connected)";
         row.warning = true;
@@ -144,7 +160,7 @@ AudioInputRowText describeAudioInput(const synth::AudioInputChoice& choice, cons
                                                 "settings.");
         return row;
     }
-    row.text = choice.numChannels > 1 ? name : name + " (mono)";
+    row.text = choice.inputName.isNotEmpty() || resolved.numChannels > 1 ? name : name + " (mono)";
     return row;
 }
 
@@ -181,6 +197,7 @@ AudioInputMenuAction resolveAudioInputMenuChoice(int menuId, const synth::AudioI
         action.choice.firstChannel = first;
         action.choice.numChannels = count;
         action.choice.deviceName = status.hosted ? juce::String() : status.deviceName;
+        action.choice.inputName = status.hosted ? juce::String() : status.nameOfInput(first, count);
     };
     if (menuId == Ids::kNoInput || menuId == Ids::kWholeMix) {
         action.kind = AudioInputMenuAction::Kind::Pick;

@@ -651,7 +651,9 @@ without a menu. The pane reaches the app through ONE accessor, `TrackHeaderHost:
   "Stereo · <device>" section with In 1 + 2, In 3 + 4 and so on; an "Another track" submenu; "Whole mix"; "Audio settings..." (opens Settings on its Audio tab). An
   input that is turned off is listed but disabled, with "Turn on all its inputs" under the list. A pick stores
   the input and the name of the device open now (`TimelineDoc::setTrackAudioInput`) through `performTrackEdit`:
-  one undo step.
+  one undo step. The Mono and Stereo sections both stay; a jack the user named in Settings > Audio carries the
+  name ("Vocal mic (In 1)"), on the mono entry for an unpaired jack and on the stereo entry for a paired pair.
+  Which jacks are pairs comes from the layout store, so In 3 + 4 is only offered as stereo once paired there.
 - **Another track.** The submenu lists every other track except Automation ones, in timeline order, by name
   (`listAudioInputTrackSources`); one whose sound reaches no mixer channel is listed disabled as "<name> (no mixer
   channel)". Picking one makes this track record that track's sound (instrument plus its channel's inserts, fader and
@@ -674,6 +676,11 @@ without a menu. The pane reaches the app through ONE accessor, `TrackHeaderHost:
   open device that is turned off says "In 3 (turned off)" with a note to turn it on. The rule
   (`synth::isAudioInputConnected`, `Source/Timeline/TrackAudioInput.h`) is the one the record path and monitoring
   use, so the pane, a take and what you hear never disagree.
+- **Named inputs.** A pick of a named input also stores its name (`AudioInputChoice::inputName`), and every
+  consumer (take recording, monitoring, the pane's row and meter, `isAudioInputConnected`) resolves it through
+  `synth::resolveAudioInput`: the name finds the jacks on the open interface, so a renamed layout or a different
+  interface that has the name follows it. A name the open interface does not have reads "Vocal mic (not on this
+  interface)" in the `warning` colour and records nothing; picking any input remaps it. Hosted inputs ignore the name.
 - **In a plugin** the inputs are the host's: the device label is "Host input", there is nothing to turn on and no
   Audio settings item; an input the host does not pass says so.
 - **The meter** shows the chosen input's level (two bars for a pair) on the mixer meters' scale and colours,
@@ -688,7 +695,7 @@ without a menu. The pane reaches the app through ONE accessor, `TrackHeaderHost:
 
 **Stored on the track.** `Track::audioInput` (`synth::AudioInputChoice`: kind None / Device / WholeMix / Track, the first
 0-based input, 1 or 2 channels, the device name, the source `TrackId`), saved as `"audioInput": {"kind": "device",
-"channel": 3, "channels": 2, "device": "..."}` (1-based), `{"kind": "mix"}` or `{"kind": "track", "track": 4}`, and only when it is not None. A channel past In 8
+"channel": 3, "channels": 2, "device": "..."}` (1-based; plus `"name"` only when the input is named), `{"kind": "mix"}` or `{"kind": "track", "track": 4}`, and only when it is not None. A channel past In 8
 or a kind it does not know fails the load. A duplicated track keeps it. New tracks start on No input.
 
 ## Monitoring

@@ -4,7 +4,6 @@
 // focus callback and "is focused" through its test seam.
 #include "../Accessibility/AccessibilitySettingsFixture.h"
 #include "UI/Layout/ListBoxFocusRing.h"
-#include "UI/Settings/AudioSettingsTab.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
@@ -152,20 +151,4 @@ TEST_F(ListBoxFocusRingTest, AMouseClickSelectsTheClickedRowAsBefore) {
     ASSERT_EQ(list.getSelectedRow(), 0);
     list.selectRow(4); // what ListBox's own mouse handling does for a click on row 4
     EXPECT_EQ(list.getSelectedRow(), 4);
-}
-
-TEST_F(AccessibilitySettingsTest, TheAudioTabsStockListsAllGetARing) {
-    AudioSettingsTab tab(deviceManager, {});
-    tab.setSize(500, 450);
-    int lists = 0;
-    std::function<void(juce::Component&)> count = [&](juce::Component& c) {
-        for (auto* child : c.getChildren()) {
-            if (dynamic_cast<juce::ListBox*>(child) != nullptr)
-                ++lists;
-            count(*child);
-        }
-    };
-    count(tab.getDeviceSelector());
-    EXPECT_GE(lists, 1) << "the MIDI input list is always there";
-    EXPECT_EQ(tab.getListFocusRingForTest().getNumListsForTest(), lists);
 }
