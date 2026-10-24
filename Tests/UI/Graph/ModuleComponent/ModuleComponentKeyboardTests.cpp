@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponentTestFixture.h"
 #include "Modules/FilterModule.h"
+#include "Modules/OscillatorModule.h"
 #include "PresetManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
@@ -210,6 +211,38 @@ TEST(ModuleComponentKeyboard, JacksHaveAccessibleNames) {
     for (const auto& n : names)
         EXPECT_TRUE(n.endsWith(" input") || n.endsWith(" output")) << n;
     EXPECT_TRUE(names.joinIntoString("|").contains("output"));
+}
+
+// Regression test for FRO1082: the Oscillator's last input was announced as "Gate" although a rising edge restarts the
+// wave (oscillator sync). Its name now says so, its channel and role are untouched, and it has a hover explanation.
+TEST(ModuleComponentKeyboard, TheOscillatorRestartJackIsNamedForWhatItDoes) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor{engine, &undo};
+    undo.setGraphEditor(&editor);
+    editor.setSize(1200, 900);
+    auto node = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    node->properties.set("x", 40);
+    node->properties.set("y", 40);
+    editor.updateComponents();
+    ModuleComponent* card = nullptr;
+    for (auto* c : editor.getModuleComponents())
+        if (c != nullptr && c->getNodeId() == node->nodeID)
+            card = c;
+    ASSERT_NE(card, nullptr);
+
+    juce::StringArray names;
+    for (auto* port : card->getPortAccessiblesForTest())
+        names.add(port->getTitle());
+    EXPECT_TRUE(names.contains("Restart input")) << names.joinIntoString("|");
+    EXPECT_FALSE(names.contains("Gate input")) << names.joinIntoString("|");
+
+    auto* osc = dynamic_cast<OscillatorModule*>(node->getProcessor());
+    ASSERT_NE(osc, nullptr);
+    EXPECT_EQ(osc->mapInputChannel(OscillatorModule::kGateBase).role, PortRole::Gate);
+    EXPECT_EQ(osc->mapInputChannel(OscillatorModule::kGateBase).visibleJackIndex, OscillatorModule::kJackGate);
+    EXPECT_TRUE(OscillatorModule::restartJackTooltip().containsIgnoreCase("restarts the wave on each rising edge"));
+    EXPECT_TRUE(OscillatorModule::restartJackTooltip().containsIgnoreCase("poly instruments wire it automatically"));
 }
 
 // A patch loaded from disk builds its cards through the same constructor; every knob, combo and

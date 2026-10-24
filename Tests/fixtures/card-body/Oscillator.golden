@@ -50,7 +50,7 @@ type Oscillator size 280x593
   child 48 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
   child 49 component id="" at 4,52 12x12 visible=1 title="Pitch input" tip="" focusOrder=0 wantsFocus=0
   child 50 component id="" at 4,72 12x12 visible=1 title="Waveform input" tip="" focusOrder=0 wantsFocus=0
-  child 51 component id="" at 4,92 12x12 visible=1 title="Gate input" tip="" focusOrder=0 wantsFocus=0
+  child 51 component id="" at 4,92 12x12 visible=1 title="Restart input" tip="" focusOrder=0 wantsFocus=0
   child 52 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
   child 53 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58
