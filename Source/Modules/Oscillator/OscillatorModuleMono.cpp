@@ -30,6 +30,16 @@ OscillatorModule::GlobalParamCV OscillatorModule::readGlobalParamCV(const juce::
     return result;
 }
 
+// A note-on moves the pitch at its own sample. A Legato note that overlaps nothing jumps: the glide and the
+// 5 ms smoother both land on it at once. Any other note slides (the glide time, or the smoother at Glide 0).
+void OscillatorModule::applyPitchEvent(const PitchEvent& event, float glideSeconds) {
+    const float freq = baseFrequencyHz(event.note);
+    voices[0].smoothedFreq.setTargetValue(freq);
+    if (event.jumps)
+        voices[0].smoothedFreq.setCurrentAndTargetValue(freq);
+    voices[0].glide.retarget(freq, event.jumps ? 0.0f : glideSeconds, currentSampleRate, glideTime(), glideCurve());
+}
+
 // ---------------------------------------------------------------------------
 // Mono mode processing (voice 0 only, MIDI driven)
 // ---------------------------------------------------------------------------
@@ -76,15 +86,17 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
         if (ch == 0 || ch > lastCVChannel)
             buffer.clear(ch, 0, numSamples);
 
-    const float targetFreq = baseFrequencyHz();
+    // The pitch at the block start is the note that was sounding before the block's own note-ons; each
+    // pitch event then moves it at its own sample inside the loop. A voice that has played nothing yet starts
+    // on its first note instead of gliding from the default pitch.
+    const bool firstNote = !voices[0].glide.isPrimed() && numPitchEvents > 0;
+    const float targetFreq = baseFrequencyHz(firstNote ? pitchEvents[0].note : noteAtBlockStart);
     const float minHz = minRenderHz();
     voices[0].smoothedFreq.setTargetValue(targetFreq);
     // Glide 0 leaves the pitch on the plain 5 ms frequency smoother (today's behaviour); above 0 the
     // voice slides in pitch over the set time instead and hands its pitch back to the smoother.
-    // Legato: a note that is not overlapping another jumps to its pitch instead of sliding.
-    voices[0].glide.retarget(targetFreq, noteJumps ? 0.0f : global.glideSeconds, currentSampleRate, glideTime(),
-                             glideCurve());
-    noteJumps = false;
+    voices[0].glide.retarget(targetFreq, global.glideSeconds, currentSampleRate, glideTime(), glideCurve());
+    int nextPitchEvent = 0;
     const bool gliding = global.glideSeconds > 0.0f;
     float lastBaseFreq = targetFreq;
 
@@ -115,6 +127,9 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
             restartVoice(voices[0], /*fadeFromOld*/ true);
             ++nextRestart;
         }
+
+        while (nextPitchEvent < numPitchEvents && pitchEvents[(size_t)nextPitchEvent].offset <= i)
+            applyPitchEvent(pitchEvents[(size_t)nextPitchEvent++], global.glideSeconds);
 
         float baseFreq = gliding ? voices[0].glide.nextFrequency() : voices[0].smoothedFreq.getNextValue();
         lastBaseFreq = baseFreq;

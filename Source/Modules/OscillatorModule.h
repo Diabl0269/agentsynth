@@ -221,9 +221,11 @@ public:
     }
 
     /** The held note's pitch with the Octave/Coarse/Fine knobs, whatever the Rate mode. */
-    float getTargetFrequency() const;
+    float getTargetFrequency() const { return getTargetFrequency(voices[0].lastMidiNote); }
+    float getTargetFrequency(float midiNote) const;
     /** The frequency the knobs set before any CV: the note's pitch, or in Fixed rate mode the Fixed rate. */
-    float baseFrequencyHz() const;
+    float baseFrequencyHz() const { return baseFrequencyHz(voices[0].lastMidiNote); }
+    float baseFrequencyHz(float midiNote) const;
     /** True while the Rate mode is Fixed. */
     bool isFixedRate() const { return rateModeParam->getIndex() == 1; }
     /** The lowest frequency a voice renders at in the current Rate mode. */
@@ -535,11 +537,20 @@ private:
     void fillUnisonRatios(float* ratios, int unisonCount, int renderCount, float detuneCents) const;
 
     // ---- Notes and restart (OscillatorModuleNotes.cpp) ----
+    /** A mono pitch change at a sample of this block: a note-on, or Legato going back to a held note. */
+    struct PitchEvent {
+        int offset = 0;
+        float note = 69.0f;
+        bool jumps = false; ///< true: land on the pitch at once (a Legato note-on that overlaps nothing)
+    };
     /** Reads the block's MIDI: tracks held notes and, when `audible`, the pitch and the sample offsets of
         the note-ons that restart the voice. Never allocates. */
     void scanMidi(const juce::MidiBuffer& midi, int numSamples, bool audible);
     /** The single gate for restarting phase on a note-on; `overlapping` is true while another note is held. */
     bool shouldRestartOnNoteOn(bool overlapping) const;
+    /** Records a mono pitch change at `offset`; past kMaxPitchEvents the last slot is overwritten. */
+    void addPitchEvent(int offset, float note, bool jumps);
+    void applyPitchEvent(const PitchEvent& event, float glideSeconds);
     /** Restarts every unison oscillator of `voice`; with `fadeFromOld` the previous phases run out over
      * CROSSFADE_SAMPLES. A restart during a fade starts from the output as it is at that sample. */
     void restartVoice(VoiceState& voice, bool fadeFromOld);
@@ -742,7 +753,10 @@ private:
     synth::HeldNotes heldNotes;
     std::array<int, kMaxRestartsPerBlock> restartOffsets{}; ///< sample offsets of this block's restarting note-ons
     int numRestarts = 0;
-    bool noteJumps = false;            ///< mono legato: the newest note-on was not overlapping, so its pitch jumps
+    static constexpr int kMaxPitchEvents = 64;
+    std::array<PitchEvent, kMaxPitchEvents> pitchEvents{};
+    int numPitchEvents = 0;
+    float noteAtBlockStart = 69.0f;    ///< the mono note sounding before the block's first pitch event
     bool voice0RestartPending = false; ///< poly: a MIDI note-on restarts voice 0 at the next block
     juce::Random phaseRandom{0x5EED1234};
 

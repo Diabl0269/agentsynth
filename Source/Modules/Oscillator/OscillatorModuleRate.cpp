@@ -4,17 +4,17 @@
 
 #include "Modules/OscillatorModule.h"
 
-float OscillatorModule::getTargetFrequency() const {
+float OscillatorModule::getTargetFrequency(float midiNote) const {
     float totalPitch =
-        voices[0].lastMidiNote + (octaveParam->get() * 12.0f) + (float)coarseParam->get() + (fineParam->get() / 100.0f);
+        midiNote + (octaveParam->get() * 12.0f) + (float)coarseParam->get() + (fineParam->get() / 100.0f);
     return 440.0f * std::pow(2.0f, (totalPitch - 69.0f) / 12.0f);
 }
 
 // In Fixed mode the note term is dropped and the knobs (and, per sample, their CV) still offset the rate, so
 // +1 octave doubles it. Follow notes returns exactly the note frequency.
-float OscillatorModule::baseFrequencyHz() const {
+float OscillatorModule::baseFrequencyHz(float midiNote) const {
     if (!isFixedRate())
-        return getTargetFrequency();
+        return getTargetFrequency(midiNote);
     const float semitones = (octaveParam->get() * 12.0f) + (float)coarseParam->get() + (fineParam->get() / 100.0f);
     return fixedRateParam->get() * std::pow(2.0f, semitones / 12.0f);
 }

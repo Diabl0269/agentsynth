@@ -31,6 +31,8 @@ Three Oscillator parameters, all in the card's More controls row:
 - **Glide Curve** (`glideCurve`): `Linear` (default) or `Exponential`, an RC-style approach in pitch (fast start, slow settle) that is timed to reach the target by the set time, then snaps.
 - **Legato** (`legato`, mono only, default off): glide happens only for overlapping notes (tracked by `HeldNotes`); a note that does not overlap another jumps. An overlapping note does not restart the phase, and releasing the current note while others are held glides back to the most recent held note. With Legato off the behaviour is unchanged.
 
+**Where the pitch changes.** `scanMidi` records every mono pitch change (a note-on, or the return to a held note) with its own sample offset in `pitchEvents`, and `processMonoMode` applies it at that sample, not at the start of the block the note lands in. The block starts on `noteAtBlockStart`, the note sounding before the block's first event, so a note released near a block start keeps its pitch until the next note begins and the result does not depend on where the block edges fall. A note counts as overlapping only if another note is still held once the note-offs on its own sample are applied, whichever order the host wrote them in, so two notes that touch never glide. A jump (a Legato note-on that overlaps nothing) sets the glide and the 5 ms frequency smoother to the new pitch at once, so it is clean at Glide 0 as well as with a long Glide. Without Legato at Glide 0 the 5 ms smoother still rounds each pitch step. Tests: `Tests/Modules/OscillatorLegatoJumpTests.cpp`.
+
 The ADSR has a matching Legato switch (see `modules.md`). Code: `Oscillator/PitchGlide.h`, `OscillatorModuleNotes.cpp`.
 
 ## Fixed rate

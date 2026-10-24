@@ -10,38 +10,69 @@ bool OscillatorModule::shouldRestartOnNoteOn(bool overlapping) const {
     return !(overlapping && legatoParam->get() && !polyParam->get());
 }
 
+namespace {
+// Whether a held note other than `note` is still down once the note-offs that share sample `pos` with the
+// note-on at `at` are applied. A host may write the note-off after the note-on of the same sample; two notes
+// that touch must not read as overlapping whichever way round they arrive.
+bool overlapsAfterSameSampleReleases(const synth::HeldNotes& held, int note, juce::MidiBufferIterator at,
+                                     juce::MidiBufferIterator end, int pos) {
+    int released[synth::HeldNotes::kCapacity];
+    int count = 0;
+    for (++at; at != end && (*at).samplePosition == pos && count < synth::HeldNotes::kCapacity; ++at) {
+        const auto msg = (*at).getMessage();
+        if (msg.isNoteOff())
+            released[count++] = msg.getNoteNumber();
+    }
+    return held.anyOtherThanIf(
+        note, [&](int heldNote) { return std::find(released, released + count, heldNote) == released + count; });
+}
+} // namespace
+
 // The held-note stack follows every note-on/off even while the module is muted or bypassed, so a
 // note released in that time is not left held. The pitch and the restart offsets are only taken
 // while audible, matching the old behaviour of ignoring MIDI when muted. Offsets are clamped into
-// the block, de-duplicated (a chord shares one restart) and capped at kMaxRestartsPerBlock; past the
-// cap further note-ons of the block share the last restart.
+// the block, de-duplicated (a chord shares one restart) and capped at kMaxRestartsPerBlock; past
+// the cap further note-ons of the block share the last restart. Each mono pitch change is also
+// recorded with its own sample (`pitchEvents`), so the pitch moves where the note starts, not at the
+// start of the block it lands in.
 void OscillatorModule::scanMidi(const juce::MidiBuffer& midi, int numSamples, bool audible) {
-    for (const auto metadata : midi) {
+    numPitchEvents = 0;
+    noteAtBlockStart = voices[0].lastMidiNote;
+    const bool monoLegato = legatoParam->get() && !polyParam->get();
+    for (auto it = midi.begin(); it != midi.end(); ++it) {
+        const auto metadata = *it;
         const auto msg = metadata.getMessage();
+        const int offset = juce::jlimit(0, std::max(0, numSamples - 1), metadata.samplePosition);
         if (msg.isNoteOn()) {
             const int note = msg.getNoteNumber();
-            const bool overlapping = heldNotes.anyOtherThan(note);
+            const bool overlapping =
+                overlapsAfterSameSampleReleases(heldNotes, note, it, midi.end(), metadata.samplePosition);
             heldNotes.press(note);
             if (!audible)
                 continue;
             voices[0].lastMidiNote = (float)note;
-            noteJumps = legatoParam->get() && !polyParam->get() && !overlapping;
+            addPitchEvent(offset, (float)note, monoLegato && !overlapping);
             if (!shouldRestartOnNoteOn(overlapping))
                 continue;
             voice0RestartPending = true;
-            addRestartOffset(juce::jlimit(0, std::max(0, numSamples - 1), metadata.samplePosition));
+            addRestartOffset(offset);
         } else if (msg.isNoteOff()) {
             heldNotes.release(msg.getNoteNumber());
             // Mono legato: letting go of the sounding note while others are held returns to the newest one.
-            if (audible && legatoParam->get() && !polyParam->get() && !heldNotes.empty() &&
-                msg.getNoteNumber() == (int)voices[0].lastMidiNote) {
+            if (audible && monoLegato && !heldNotes.empty() && msg.getNoteNumber() == (int)voices[0].lastMidiNote) {
                 voices[0].lastMidiNote = (float)heldNotes.newest();
-                noteJumps = false;
+                addPitchEvent(offset, voices[0].lastMidiNote, false);
             }
         } else if (msg.isAllNotesOff() || msg.isAllSoundOff()) {
             heldNotes.clear();
         }
     }
+}
+
+void OscillatorModule::addPitchEvent(int offset, float note, bool jumps) {
+    auto& slot = pitchEvents[(size_t)std::min(numPitchEvents, kMaxPitchEvents - 1)];
+    slot = {offset, note, jumps};
+    numPitchEvents = std::min(numPitchEvents + 1, kMaxPitchEvents);
 }
 
 // Both the MIDI note-ons and the mono Gate edges land here, so the per-sample restart loop sees one
@@ -110,6 +141,6 @@ void OscillatorModule::resetNoteState() {
 
 void OscillatorModule::clearPendingRestarts() {
     numRestarts = 0;
-    noteJumps = false;
+    numPitchEvents = 0;
     voice0RestartPending = false;
 }
