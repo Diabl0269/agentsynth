@@ -74,7 +74,7 @@ type Wavetable size 560x578
   child 72 component id="" at 104,112 12x12 visible=1 title="Sub input" tip="" focusOrder=0 wantsFocus=0
   child 73 component id="" at 104,132 12x12 visible=1 title="Pan input" tip="" focusOrder=0 wantsFocus=0
   child 74 component id="" at 104,152 12x12 visible=1 title="Sync input" tip="" focusOrder=0 wantsFocus=0
-  child 75 component id="" at 104,172 12x12 visible=1 title="Gate input" tip="" focusOrder=0 wantsFocus=0
+  child 75 component id="" at 104,172 12x12 visible=1 title="Restart input" tip="" focusOrder=0 wantsFocus=0
   child 76 component id="" at 544,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
   child 77 component id="" at 544,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
   in 0 10, 58

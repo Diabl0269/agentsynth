@@ -4,23 +4,22 @@
 #include "WavetableOscillatorModuleTestFixture.h"
 #include <memory>
 
+// The restarted stack starts at the asked phase on the note-on sample and the old sound fades out over the next
+// 64, so the phase is read once the fade is done. Note 69 is the pitch the voice already runs at (no glide), so
+// the sine after the fade is exactly the asked phase plus 64 samples of travel.
 TEST_F(WavetableOscillatorModuleTest, RetriggerPhaseStartsTheWaveWhereAsked) {
-    setFloat(*module, "position", 0.0f); // sine: phase is directly readable from sample 0
-
-    // Phase 0 starts at the sine's zero crossing, rising.
-    setFloat(*module, "phase", 0.0f);
-    module->prepareToPlay(kSampleRate, kBlockSize);
-    EXPECT_NEAR(renderAttack(*module, 60).getReadPointer(0)[0], 0.0f, 0.02f);
-
-    // A quarter turn starts at the positive peak instead.
-    setFloat(*module, "phase", 90.0f);
-    module->prepareToPlay(kSampleRate, kBlockSize);
-    EXPECT_GT(renderAttack(*module, 60).getReadPointer(0)[0], 0.8f);
-
-    // Three quarters starts at the negative peak.
-    setFloat(*module, "phase", 270.0f);
-    module->prepareToPlay(kSampleRate, kBlockSize);
-    EXPECT_LT(renderAttack(*module, 60).getReadPointer(0)[0], -0.8f);
+    setFloat(*module, "position", 0.0f); // sine: phase is directly readable
+    setFloat(*module, "level", 1.0f);
+    const double dt = 440.0 / kSampleRate;
+    constexpr int kFade = 64;
+    for (const float degrees : {0.0f, 90.0f, 270.0f}) {
+        setFloat(*module, "phase", degrees);
+        module->prepareToPlay(kSampleRate, kBlockSize);
+        const double expected = std::sin(2.0 * juce::MathConstants<double>::pi * (degrees / 360.0 + kFade * dt));
+        const auto block = renderAttack(*module, 69);
+        const float amplitude = peakOf(block.getReadPointer(0), kFade, kBlockSize - kFade);
+        EXPECT_NEAR(block.getReadPointer(0)[kFade], (float)expected * amplitude, 2e-3f) << degrees;
+    }
 }
 
 TEST_F(WavetableOscillatorModuleTest, RandomPhaseDecorrelatesRepeatedNotes) {

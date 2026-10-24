@@ -9,7 +9,10 @@ with every other module are in [`modules.md`](modules.md).
 
 The module outgrew one file and is split by concern:
 
-- `WavetableOscillatorModule.h`/`.cpp` — the module class: parameters, channel map, render path.
+- `WavetableOscillatorModule.h`/`.cpp` — the module class: parameters, channel map, mode processing.
+- `WavetableOscillatorModuleRender.cpp` — the per-voice render loop and one sample of a stack.
+- `WavetableOscillatorModuleNotes.cpp` — MIDI note-ons, Gate edges and the restart hand-over.
+- `WavetableOscillatorModuleVoicing.cpp` — the per-block unison ratios and gain mix.
 - `WavetableTableBuilder.h`/`.cpp` — table geometry (mip constants, `Wavetable`) and `TableBuilder`,
   the FFT-based mip-pyramid synthesiser (see [Table synthesis](#table-synthesis)), in a `wavetable`
   namespace. `WavetableOscillatorModule` aliases these names back onto itself
@@ -32,7 +35,7 @@ The module outgrew one file and is split by concern:
   Interp (choice).
 - **CV inputs (mono mode)**: ch0 = Pitch (inert — see below), then ch1…ch15 = Position, Octave,
   Coarse, Fine, Level, Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync, and ch16 =
-  Gate (see [Phase control](#phase-control)). **17 visible jacks.**
+  Gate, shown as **Restart** (see [Phase control](#phase-control)). **17 visible jacks.**
 - **Outputs**: two audio jacks, `Audio L` and `Audio R`. See [Stereo output](#stereo-output).
 - **Poly mode**: 8 voices driven by pitch CV in Hz on ch0-7, shared mod CV from ch8, and a per-voice
   Gate fan on ch23-30 (`kGateBase`).
@@ -100,14 +103,25 @@ feature** — a new mode needs one of the two defences (a `warpRateFactor` entry
 
 ## Phase control
 
-Every sub-oscillator restarts on note-on: a MIDI note-on in mono, a rising edge on the **Gate**
-input in either mode (on that exact sample), and, in poly, a voice going from silent to sounding.
-Poly MIDI holds a voice's pitch after release, so in poly only the gate shows a later note on a voice
-that already played; the Poly switch and new poly instrument tracks wire Poly MIDI's Gate fan (ch8-15)
-to it. The edge detector (`GateEdges`, a Schmitt trigger at 0.1) is shared with the Oscillator
+Every sub-oscillator restarts on note-on: a MIDI note-on in mono (and on poly voice 0), a rising edge on the
+**Restart** input (the Gate jack, label and hover text as on the Oscillator) in either mode, and, in poly, a
+voice going from silent to sounding. Each lands on **its own sample**: `scanMidi` records the note-on's offset
+and `renderVoice` restarts the phases when it reaches it. Poly MIDI holds a voice's pitch after release, so in
+poly only the gate shows a later note on a voice that already played; the Poly switch and new poly instrument
+tracks wire Poly MIDI's Gate fan (ch8-15) to it. The edge detector (`GateEdges`, a Schmitt trigger at 0.1, edges
+at least 16 samples apart, up to 256 per block) is shared with the Oscillator
 ([oscillator-voice.md](oscillator-voice.md#phase-and-rand)). The poly Gate fan (ch23-30) aliases the
 Audio R block, so it is read before anything is written; `kRightBase` stays 23 and the 31 outputs
-cover every input. An unpatched gate changes nothing. The restart point:
+cover every input. An unpatched gate changes nothing.
+
+**Hand-over.** A restart while the previous note still sounds would jump the waveform, so the stack as it stood
+(phases, sub phase and decimator history, `StackState`) keeps running as a "ghost" and fades out over 64 samples
+along the raised cosine in `Source/Modules/RestartFade.h`, while the restarted stack comes in; the sample of the
+restart itself is the old sound and the new one is at its exact phase 64 samples later. A restart inside a
+hand-over turns what it interrupts into one more ghost with the share it holds (`RestartGhosts.h`, up to five),
+so even an audio-rate gate cannot step the output. A voice that goes from silent to sounding has nothing to fade
+from and starts at once. Guarded by `SourceClickGuard` (the Wavetable is measured like the Oscillator) and
+`WavetableRestartFade`. The restart point:
 
 - **Phase** (0–360°) — where in the cycle the wave restarts.
 - **Rand Phase** (0–1) — per-note jitter added on top.
@@ -127,8 +141,10 @@ not the sustain — so their CV is read at the block's first sample rather than 
 - **Detune** is a skewed knob (centre at 25 cents) that stores cents. The stacking, Blend gain (`unisonBlendGain`), pan law (`unisonPanGains`) and restart-phase helpers live in `Source/Modules/UnisonVoicing.h`, shared with the Oscillator.
 - **Blend** (0–1) fades the voices away from the centre (the middle voice, or the middle two for an
   even count, stay at full level; in a Stack mode it is voice 0, the root pitch) and runs to outer voices louder than the
-  centre at 100 % (curve and Width pan in [oscillator-voice.md](oscillator-voice.md#blend-width-and-detune)). The
-  Wavetable's stack changes its voice count without a fade.
+  centre at 100 % (curve and Width pan in [oscillator-voice.md](oscillator-voice.md#blend-width-and-detune)). Every voice
+  gain moves no faster than 1.0 per 10 ms (`UnisonMix.h`, ramped inside the block): Blend, Width and the voice
+  count glide, a voice that leaves keeps rendering at the outermost detune and stack interval that stays while it
+  fades out, and the divisor follows, so changing Unison in a held note does not step.
 - **Sub** (0–1) adds a sub-oscillator one or two octaves down (`Sub Oct`), as a sine or square
   (`Sub Wave`). It is **read out of the built-in `Basic Shapes` table** rather than generated
   naively, so it inherits the same mip anti-aliasing as everything else — a naive square would alias

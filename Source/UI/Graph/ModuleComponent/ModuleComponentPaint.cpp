@@ -8,6 +8,7 @@
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
@@ -781,6 +782,12 @@ juce::String ModuleComponent::getTooltip() {
     if (module != nullptr && dynamic_cast<OscillatorModule*>(module) != nullptr) {
         const auto port = getPortForPoint(getMouseXYRelative());
         if (port.has_value() && port->isInput && !port->isMidi && port->index == OscillatorModule::kJackGate)
+            return OscillatorModule::restartJackTooltip();
+        return {};
+    }
+    if (module != nullptr && dynamic_cast<WavetableOscillatorModule*>(module) != nullptr) {
+        const auto port = getPortForPoint(getMouseXYRelative());
+        if (port.has_value() && port->isInput && !port->isMidi && port->index == WavetableOscillatorModule::kJackGate)
             return OscillatorModule::restartJackTooltip();
         return {};
     }
