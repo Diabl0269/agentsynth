@@ -97,9 +97,10 @@ TEST_F(VCAModuleTest, PolyMode_MultiVoice) {
     juce::MidiBuffer midi;
     vca->processBlock(polyBuffer, midi);
 
-    // Voices sum at unity: voice 0 is 1.0 * 1.0 * 1.0, voice 1 is 0.5 * 1.0 * 0.5, so the sum is 1.25.
-    // That is past the 0.9 knee, so the shared soft limiter rounds it below the plain sum.
-    const float expected = synth::softLimit(1.0f + 0.25f);
+    // Voices sum at unity: voice 0 is 1.0 * 1.0 * 1.0, voice 1 is 0.5 * 1.0 * 0.5, so the sum is 1.25. Both
+    // voices at their peak would add to 1.25, past the 0.9 knee, so the sum takes the poly headroom first and
+    // the shared soft limiter rounds what is left.
+    const float expected = synth::softLimit(1.25f * synth::polySumHeadroom(1.25f));
     EXPECT_FLOAT_EQ(polyBuffer.getSample(0, 999), expected); // Left
     EXPECT_FLOAT_EQ(polyBuffer.getSample(1, 999), expected); // Right (same as left)
     EXPECT_LT(expected, 1.0f);

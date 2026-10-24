@@ -129,21 +129,35 @@ public:
                 const bool hasRight = numChannels > kRightBase;
                 float* outRightLeg = hasRight ? buffer.getWritePointer(kRightBase) : nullptr;
 
+                // Each voice's audio peak in this block, so the headroom follows the level that is really there: a
+                // silent voice (an unpatched envelope reads 1 on every voice) and a quiet one add nothing.
+                float voicePeak[MAX_VOICES] = {};
+                for (int v = 0; v < MAX_VOICES && v < numChannels; ++v) {
+                    voicePeak[v] = buffer.getMagnitude(v, 0, numSamples);
+                    if (hasRight && kRightBase + v < numChannels)
+                        voicePeak[v] = std::max(voicePeak[v], buffer.getMagnitude(kRightBase + v, 0, numSamples));
+                }
+
                 for (int s = 0; s < numSamples; ++s) {
                     float gain = smoothedGain.getNextValue();
                     float sum = 0.0f;
                     float sumRight = 0.0f;
+                    float cvTotal = 0.0f;
                     for (int v = 0; v < MAX_VOICES && v < numChannels; ++v) {
                         float cv = (v + MAX_VOICES < numChannels) ? buffer.getSample(v + MAX_VOICES, s) : 1.0f;
+                        cvTotal += voicePeak[v] * std::abs(cv);
                         sum += buffer.getSample(v, s) * gain * cv;
                         if (hasRight && kRightBase + v < numChannels)
                             sumRight += buffer.getSample(kRightBase + v, s) * gain * cv;
                     }
-                    float mixed = synth::softLimit(sum);
+                    // A chord whose voices could add past the knee is brought back by their envelope levels, not by
+                    // clipping the sum: one note and quiet chords keep their unity sum.
+                    const float headroom = synth::polySumHeadroom(std::abs(gain) * cvTotal);
+                    float mixed = synth::softLimit(sum * headroom);
                     outL[s] = mixed;
                     outR[s] = mixed;
                     if (outRightLeg != nullptr)
-                        outRightLeg[s] = synth::softLimit(sumRight);
+                        outRightLeg[s] = synth::softLimit(sumRight * headroom);
                 }
 
                 // Zero out voice channels 2-7 so they don't leak downstream
