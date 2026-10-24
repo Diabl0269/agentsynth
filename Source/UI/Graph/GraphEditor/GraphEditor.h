@@ -641,7 +641,7 @@ public:
 
     /** Click tolerance in canvas px. Wider than the wire itself so thin cables stay grabbable. */
     static constexpr float kCableHitTolerance = 7.0f;
-    void disconnectCable(const VisibleCable& cable);
+    void disconnectCable(const VisibleCable& cable, const std::vector<VisibleCable>& sameConnection = {});
 
     /** Cable colouring config, owned/persisted by MainComponent / AppearanceSettingsTab. */
     void setCableColourMode(synth::ui::CableColourMode mode);

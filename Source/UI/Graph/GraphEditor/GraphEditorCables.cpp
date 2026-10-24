@@ -457,8 +457,9 @@ void GraphEditor::setCableColourOverrides(const synth::ui::CableColourOverrides&
     repaintCanvas();
 }
 
-// Removes every graph edge behind a user-visible cable, as one undoable action.
-void GraphEditor::disconnectCable(const VisibleCable& cable) {
+// Removes every graph edge behind a user-visible cable, as one undoable action. `sameConnection` lists further cables
+// that read as the same connection (a collapsed stereo pair keeps one per leg); they go in the same step.
+void GraphEditor::disconnectCable(const VisibleCable& cable, const std::vector<VisibleCable>& sameConnection) {
     auto& graph = audioEngine.getGraph();
 
     // Both cable kinds populate id.srcUid/dstUid with the REAL logical endpoints — for an
@@ -483,7 +484,7 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
 
     // Expand audio/poly fans via resolvePolyLink so a collapsed stereo (or poly voice) cable that
     // only drew its head edge still removes every raw channel the user-visible wire owns.
-    auto removeEdges = [this, &graph, srcId, dstId, cable] {
+    auto removeCableEdges = [this, &graph, srcId, dstId](const VisibleCable& cable) {
         auto* srcNode = graph.getNodeForId(srcId);
         auto* dstNode = graph.getNodeForId(dstId);
         auto* srcMb = srcNode ? dynamic_cast<ModuleBase*>(srcNode->getProcessor()) : nullptr;
@@ -514,6 +515,11 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
 
         juce::AudioProcessorGraph::Connection c{{srcId, cable.id.srcPort}, {dstId, cable.id.dstPort}};
         graph.removeConnection(c);
+    };
+    auto removeEdges = [removeCableEdges, cable, sameConnection] {
+        removeCableEdges(cable);
+        for (const auto& other : sameConnection)
+            removeCableEdges(other);
     };
 
     if (touchesMacroPort) {

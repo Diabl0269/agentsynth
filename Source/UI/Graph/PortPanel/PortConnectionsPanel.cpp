@@ -116,7 +116,8 @@ void PortConnectionsPanel::wireRow(PortConnectionRow& row) {
 
 // One undo step, with the cable retracting on the canvas (GraphEditor::disconnectCable).
 void PortConnectionsPanel::removeConnection(PortConnectionRow& row) {
-    editor_.disconnectCable(row.connection().cable);
+    const auto& group = row.connection().group;
+    editor_.disconnectCable(row.connection().cable, std::vector<GraphEditor::VisibleCable>(group.begin(), group.end()));
     sync();
     focusEntry();
 }
