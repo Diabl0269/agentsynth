@@ -11,7 +11,9 @@ juce::String ModuleLibraryComponent::subsectionKey(const juce::String& section, 
 juce::String ModuleLibraryComponent::descriptionFor(const juce::String& moduleName) {
     if (moduleName.equalsIgnoreCase("Oscillator"))
         return "Generates audio waveforms (sine, saw, square, triangle). Switch Poly on to run "
-               "8 voices; it switches every connected module and adds the Poly MIDI node for you.";
+               "8 voices; it switches every connected module and adds the Poly MIDI node for you. Its Restart "
+               "input restarts the wave on each rising edge, like oscillator sync; poly instruments wire it "
+               "automatically.";
     if (moduleName.equalsIgnoreCase("Wavetable"))
         return "Scans through 3D wavetables - six built-ins or load your own file.";
     if (moduleName.equalsIgnoreCase("Noise"))

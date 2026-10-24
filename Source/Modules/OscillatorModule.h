@@ -6,6 +6,7 @@
 #include "Oscillator/HeldNotes.h"
 #include "Oscillator/PitchGlide.h"
 #include "ParameterText.h"
+#include "RestartFade.h"
 #include "UnisonVoicing.h"
 #include <array>
 #include <cmath>
@@ -170,12 +171,10 @@ public:
         for (auto& v : voices) {
             v.glide.reset();
             v.active = false;
-            v.restartFadeRemaining = 0;
+            v.numGhosts = 0;
             // Every playback starts from the same phases: the first note's run-out must not depend on where the
             // previous playback (or render) happened to leave the free-running oscillators.
             for (auto& osc : v.unisonOscs)
-                osc.phase = 0.0f;
-            for (auto& osc : v.fadeOscs)
                 osc.phase = 0.0f;
         }
         resetNoteState();
@@ -244,8 +243,13 @@ public:
     }
     juce::String getInputPortLabel(int i) const override {
         const juce::String labels[] = {"Pitch",  "Waveform", "Octave",      "Coarse", "Fine",  "Level", "Pan",
-                                       "Unison", "Detune",   "Pulse Width", "Glide",  "Blend", "Width", "Gate"};
+                                       "Unison", "Detune",   "Pulse Width", "Glide",  "Blend", "Width", "Restart"};
         return (i >= 0 && i < kNumJacks) ? labels[i] : ModuleBase::getInputPortLabel(i);
+    }
+    /** What the last input does, shown when the pointer rests on its jack. The jack keeps its channel and its
+        PortRole::Gate, so saved cables and patches are untouched; only the name the card shows changed. */
+    static juce::String restartJackTooltip() {
+        return "Restarts the wave on each rising edge, like oscillator sync; poly instruments wire it automatically";
     }
     juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
     int getVisibleInputPortCount() const override { return kNumJacks; }
@@ -418,7 +422,8 @@ private:
     // -------------------------------------------------------------------------
     static constexpr int MAX_VOICES = 8;
     static constexpr int MAX_UNISON = 8;
-    static constexpr int CROSSFADE_SAMPLES = 64;
+    static constexpr int CROSSFADE_SAMPLES = synth::kRestartFadeSamples;
+    static constexpr int kMaxGhosts = 5; ///< restarts that can be fading out at once
 
     // -------------------------------------------------------------------------
     // Per-voice state
@@ -429,8 +434,16 @@ private:
 
     struct VoiceState {
         UnisonOsc unisonOscs[MAX_UNISON];
-        UnisonOsc fadeOscs[MAX_UNISON]; ///< the phases before the last restart, running out
-        int restartFadeRemaining = 0;
+        /** A stack of phases from before a restart, running out over CROSSFADE_SAMPLES while the restarted stack
+            comes in. `weight` is its share of the output when it began to fade; the current stack always holds
+            what the ghosts leave, so the shares add to one. */
+        struct Ghost {
+            UnisonOsc oscs[MAX_UNISON];
+            float weight = 0.0f;
+            int remaining = 0;
+        };
+        Ghost ghosts[kMaxGhosts];
+        int numGhosts = 0;
         bool active = false; ///< poly: was this voice sounding last block?
         juce::SmoothedValue<float> smoothedFreq;
         synth::PitchGlide glide;
@@ -508,7 +521,7 @@ private:
     /** The single gate for restarting phase on a note-on; `overlapping` is true while another note is held. */
     bool shouldRestartOnNoteOn(bool overlapping) const;
     /** Restarts every unison oscillator of `voice`; with `fadeFromOld` the previous phases run out over
-     * CROSSFADE_SAMPLES. */
+     * CROSSFADE_SAMPLES. A restart during a fade starts from the output as it is at that sample. */
     void restartVoice(VoiceState& voice, bool fadeFromOld);
     void resetNoteState();
     synth::GlideTime glideTime() const {
@@ -590,12 +603,24 @@ private:
     /** One normalised sample of `voice`'s stack, blending in the run-out phases after a restart. */
     StackSample renderStack(VoiceState& voice, const StackContext& c, int i) const {
         StackSample s = sumStack(voice.unisonOscs, c, i);
-        if (voice.restartFadeRemaining > 0) {
-            const StackSample old = sumStack(voice.fadeOscs, c, i);
-            const float alpha = (float)voice.restartFadeRemaining / (float)CROSSFADE_SAMPLES;
-            s.left = old.left * alpha + s.left * (1.0f - alpha);
-            s.right = old.right * alpha + s.right * (1.0f - alpha);
-            --voice.restartFadeRemaining;
+        if (voice.numGhosts > 0) {
+            // Each ghost leaves along its own raised cosine; the current stack takes whatever share they give up.
+            float ghostTotal = 0.0f;
+            StackSample mixed;
+            for (int g = 0; g < voice.numGhosts; ++g) {
+                auto& ghost = voice.ghosts[g];
+                const StackSample old = sumStack(ghost.oscs, c, i);
+                const float w = ghost.weight * (1.0f - synth::restartFadeIn(ghost.remaining));
+                mixed.left += old.left * w;
+                mixed.right += old.right * w;
+                ghostTotal += w;
+                --ghost.remaining;
+            }
+            s.left = mixed.left + s.left * (1.0f - ghostTotal);
+            s.right = mixed.right + s.right * (1.0f - ghostTotal);
+            for (int g = voice.numGhosts - 1; g >= 0; --g)
+                if (voice.ghosts[g].remaining <= 0)
+                    voice.ghosts[g] = voice.ghosts[--voice.numGhosts];
         }
         const float divisor = std::sqrt(unisonMix.sumStart + unisonMix.sumStep * (float)i);
         s.left /= divisor;
@@ -695,7 +720,7 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedWidth;
 
     // Note tracking. Fixed-size so the audio thread never allocates.
-    static constexpr int kMaxRestartsPerBlock = 16;
+    static constexpr int kMaxRestartsPerBlock = 256;
     synth::HeldNotes heldNotes;
     std::array<int, kMaxRestartsPerBlock> restartOffsets{}; ///< sample offsets of this block's restarting note-ons
     int numRestarts = 0;

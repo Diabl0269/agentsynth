@@ -7,6 +7,7 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
+#include "Modules/OscillatorModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
@@ -754,9 +755,9 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
     return std::nullopt;
 }
 
-// Audio Output's "L / Mono" jack (and its Right sibling) are the only jacks with a
-// hover explanation today, so this stays a small special case against isAudioOutputIONode rather
-// than a general per-jack tooltip table -- getPortForPoint() already gives the exact same hit-test
+// Audio Output's "L / Mono" jack (and its Right sibling) and the Oscillator's Restart jack are the only jacks
+// with a hover explanation today, so this stays a small special case against isAudioOutputIONode and the
+// Oscillator rather than a general per-jack tooltip table -- getPortForPoint() already gives the exact same hit-test
 // paint()'s jack dots use, so the tooltip always agrees with what is drawn. Empty for every other
 // jack/module, so a control's own setTooltip() (juce::SettableTooltipClient) is unaffected;
 // juce::TooltipWindow only calls this while the mouse is actually over this component.
@@ -776,6 +777,12 @@ juce::String ModuleComponent::getTooltip() {
         if (nameShown)
             return hint;
         return hint.isEmpty() ? ownership.port->name : ownership.port->name + " - " + hint;
+    }
+    if (module != nullptr && dynamic_cast<OscillatorModule*>(module) != nullptr) {
+        const auto port = getPortForPoint(getMouseXYRelative());
+        if (port.has_value() && port->isInput && !port->isMidi && port->index == OscillatorModule::kJackGate)
+            return OscillatorModule::restartJackTooltip();
+        return {};
     }
     if (module == nullptr || !isAudioOutputIONode(module))
         return {};

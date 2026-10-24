@@ -1,6 +1,7 @@
 // The Oscillator's Gate input: a rising edge restarts the voice's phase at Phase/Rand on its own sample,
 // in poly (one gate channel per voice) and in mono (one channel), without any MIDI note-on.
 
+#include "../Engine/AudioRendering/ClickDetector.h"
 #include "Modules/OscillatorModule.h"
 
 #include <cmath>
@@ -182,7 +183,7 @@ TEST(OscillatorGateRestart, GateChannelsAreMappedInBothModes) {
         EXPECT_EQ(p.isPolyGroupHead, v == 0) << v;
         EXPECT_EQ(p.polyVoiceSpan, v == 0 ? OscillatorModule::kNumVoices : 1) << v;
     }
-    EXPECT_EQ(osc.getInputPortLabel(OscillatorModule::kJackGate), "Gate");
+    EXPECT_EQ(osc.getInputPortLabel(OscillatorModule::kJackGate), "Restart");
     EXPECT_EQ(osc.getVisibleInputPortCount(), OscillatorModule::kNumJacks);
     for (const auto& t : osc.getModulationTargets())
         EXPECT_NE(t.name, "Gate") << "the Gate input is a trigger, not a modulation target";
@@ -202,4 +203,115 @@ TEST(OscillatorGateRestart, OutputsStayAtOrAboveEveryInputAndAudioRDoesNotMove) 
         EXPECT_FALSE(osc.mapOutputChannel(raw).isPolyGroupHead) << raw;
         EXPECT_EQ(osc.mapOutputChannel(raw).visibleJackIndex, 0) << raw;
     }
+}
+
+namespace {
+
+struct GateRun {
+    std::vector<float> out;
+    std::vector<int> edges; ///< the samples where the gate rose, after the first
+};
+
+// Mono Sine at 220 Hz (a held MIDI note), gated by a square: high for `high` of every `period` samples.
+GateRun renderGatePattern(int period, int high, int totalSamples, int block, bool alwaysHigh = false) {
+    OscillatorModule osc;
+    setActual(osc, "unison", 1.0f);
+    osc.prepareToPlay(kSampleRate, block);
+    GateRun run;
+    for (int pos = 0; pos < totalSamples; pos += block) {
+        juce::AudioBuffer<float> buf(OscillatorModule::kNumOutputs, block);
+        buf.clear();
+        float* gate = buf.getWritePointer(OscillatorModule::kGateBase);
+        for (int s = 0; s < block; ++s) {
+            const int t = pos + s;
+            gate[s] = (alwaysHigh || (t % period) < high) ? 1.0f : 0.0f;
+            if (t > 0 && t % period == 0)
+                run.edges.push_back(t);
+        }
+        juce::MidiBuffer midi;
+        if (pos == 0)
+            midi.addEvent(juce::MidiMessage::noteOn(1, 57, 0.8f), 0);
+        osc.processBlock(buf, midi);
+        run.out.insert(run.out.end(), buf.getReadPointer(0), buf.getReadPointer(0) + block);
+    }
+    return run;
+}
+
+// The largest sample-to-sample step in the 64 samples a restart hands over in, and one either side.
+float worstStepAround(const std::vector<float>& x, int edge) {
+    float worst = 0.0f;
+    for (int i = std::max(1, edge - 1); i < edge + kFade + 2 && i < (int)x.size(); ++i)
+        worst = std::max(worst, std::abs(x[(size_t)i] - x[(size_t)i - 1]));
+    return worst;
+}
+
+// The wave's own steepest step is 2 pi 220 / 44100 = 0.031; a hand-over between two such waves adds at most a
+// raised cosine across their difference (<= 2) over 64 samples, 0.05 per sample, so 0.12 leaves headroom for both
+// and still catches a step.
+constexpr float kRestartStepBound = 0.12f;
+
+} // namespace
+
+// Regression test for FRO1082: every restart from a pulse left a corner at the start and the end of its hand-over.
+TEST(OscillatorGateRestart, SubAudioGatesRestartWithoutAClickAtEveryEdge) {
+    struct Pattern {
+        const char* name;
+        int period, high;
+    };
+    for (const Pattern& p : {Pattern{"1-sample pulse", 4410, 1}, Pattern{"10-sample pulse", 4410, 10},
+                             Pattern{"5 Hz square", 8820, 4410}}) {
+        const auto run = renderGatePattern(p.period, p.high, 44100, kBlock);
+        ASSERT_GE(run.edges.size(), 4u) << p.name;
+        std::vector<float> afterFirstNote(run.out.begin() + 4096, run.out.end());
+        const auto clicks = clickdetector::findClicks(afterFirstNote);
+        EXPECT_TRUE(clicks.empty()) << p.name << ": " << clicks.size() << " clicks, first at sample "
+                                    << (clicks.empty() ? 0 : clicks[0].index + 4096);
+        for (const int edge : run.edges)
+            EXPECT_LE(worstStepAround(run.out, edge), kRestartStepBound) << p.name << " edge " << edge;
+    }
+}
+
+// Regression test for FRO1082: a restart inside the previous 64-sample hand-over copied voices that were themselves
+// mid-fade, which stepped the output by up to half the wave's height at every edge above about 700 Hz.
+TEST(OscillatorGateRestart, AudioRateGatesNeverStepTheOutputAtARestart) {
+    for (const int period : {44, 44100 / 3000, 44100 / 5000}) { // 1 kHz, 3 kHz, 5 kHz
+        const auto run = renderGatePattern(period, period / 2, 22050, kBlock);
+        float worst = 0.0f;
+        for (size_t i = 4096; i < run.out.size(); ++i)
+            worst = std::max(worst, std::abs(run.out[i] - run.out[i - 1]));
+        EXPECT_LE(worst, kRestartStepBound) << "period " << period << ": a step of " << worst;
+        float peak = 0.0f;
+        for (float v : run.out)
+            peak = std::max(peak, std::abs(v));
+        EXPECT_LE(peak, 1.0f + 1e-4f) << "period " << period;
+    }
+}
+
+// Regression test for FRO1082: edges past a per-block cap were dropped, so the restart pattern of a fast gate
+// changed with the block size. The same gate must restart on the same samples whatever the host's block.
+TEST(OscillatorGateRestart, AFastGateRestartsTheSameWhateverTheBlockSize) {
+    const auto small = renderGatePattern(44, 22, 24576, 128);
+    const auto large = renderGatePattern(44, 22, 24576, 2048);
+    ASSERT_EQ(small.out.size(), large.out.size());
+    int firstDiff = -1;
+    for (size_t i = 0; i < small.out.size() && firstDiff < 0; ++i)
+        if (small.out[i] != large.out[i])
+            firstDiff = (int)i;
+    EXPECT_EQ(firstDiff, -1) << "the outputs first differ at sample " << firstDiff;
+}
+
+TEST(OscillatorGateRestart, EdgesCloserThanTheSpacingRestartOnlyOnceAcrossBlocks) {
+    GateEdges edges;
+    std::vector<float> gate(64, 0.0f);
+    for (int s = 0; s < 64; s += 4) // a rising edge every 4 samples
+        gate[(size_t)s] = 1.0f, gate[(size_t)s + 2] = 0.0f;
+    std::vector<int> kept;
+    for (int block = 0; block < 4; ++block) {
+        edges.scan(gate.data(), 64);
+        for (int i = 0; i < edges.count; ++i)
+            kept.push_back(block * 64 + edges.offsets[(size_t)i]);
+    }
+    ASSERT_GE(kept.size(), 8u);
+    for (size_t i = 1; i < kept.size(); ++i)
+        EXPECT_GE(kept[i] - kept[i - 1], GateEdges::kMinSpacing) << "edges " << kept[i - 1] << " and " << kept[i];
 }

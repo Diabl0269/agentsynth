@@ -343,6 +343,11 @@ Two more MIDI instruments with eight voices of their own, built like the Drum Ki
   genuinely instant at 0 s: it is pinned flat (its start and target are both 1.0), so there is no
   level to step across. The floor is internal to the generator only — the parameter range, its
   displayed "0 ms", and the AI-authorable schema are all unchanged by it.
+  The same click-free rule holds at the source: an Oscillator restarting on a note hands over from its old
+  wave along a raised cosine with no corner (`Source/Modules/RestartFade.h`, see
+  [oscillator-voice](oscillator-voice.md#phase-and-rand)), a track mute fades a hosted plug-in like any other
+  module, and `SourceClickGuard` (`Tests/Engine/AudioRendering/SourceClickGuardTests.cpp`) plays every
+  registered sound source through an ADSR and VCA and fails on any second-difference spike at a note start or end.
   The knob feel at the new 1 ms attack default lives on the **slider**, not the parameter: the
   0.3 skew that used to sit on these four `NormalisableRange`s now lives purely in the UI layer
   (the card body's ADSR special case, `applyAdsrTimeSkew` in `CardBody.cpp`, runs on the four time
