@@ -851,7 +851,6 @@ private:
     synth::ui::ToolbarButton themeToggleButton{"toggleTheme"};
 
     std::unique_ptr<juce::FileChooser> fileChooser;
-
     juce::ApplicationProperties appProperties; // declared before aiChatComponent, whose ctor reads it
     juce::PropertiesFile::Options propertiesOptions;
 
