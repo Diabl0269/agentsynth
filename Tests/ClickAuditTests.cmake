@@ -7,4 +7,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/AudioRendering/ClickDetectorTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/AudioRendering/SourceClickGuardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/ModuleMixPanTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/ModulePanAudibleTests.cpp
 )

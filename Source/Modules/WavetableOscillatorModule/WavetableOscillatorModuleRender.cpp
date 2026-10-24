@@ -33,6 +33,9 @@ void WavetableOscillatorModule::renderVoice(const Wavetable& wt, VoiceState& voi
     const float lastFrame = (float)(wt.numFrames - 1);
     const bool hermite = bs.interpolation == Interpolation::Hermite;
 
+    // Collapsed to one jack only the left leg is heard, so a balance would just fade it out (silent at
+    // full right): the pan rests there and the hidden right leg alone follows it.
+    const bool panRestsOnLeft = !isDualIO();
     for (int s = 0; s < numSamples; ++s) {
         const int idx = std::min(s, cacheLen - 1);
 
@@ -59,6 +62,8 @@ void WavetableOscillatorModule::renderVoice(const Wavetable& wt, VoiceState& voi
 
         float panL, panR;
         panGains(juce::jlimit(-1.0f, 1.0f, panRamp[(size_t)idx] + cvAt(kJackPan, idx)), panL, panR);
+        if (panRestsOnLeft)
+            panL = 1.0f;
 
         // A rising Gate edge is a new note on this voice: it restarts the phases at Phase/Rand/Spread
         // on its own sample, before the sync reset and the read.
