@@ -48,6 +48,27 @@ inline juce::AudioParameterFloatAttributes percentAttributes() {
         .withValueFromStringFunction([](const juce::String& t) { return percentFromText(t); });
 }
 
+/** A stored 0..1 amount as a percent: 0.25 reads "25 %". */
+inline juce::String fractionToText(float v) { return percentToText(v * 100.0f); }
+
+/** Reads "25 %", "25%" and a bare "25" back as the 0..1 amount 0.25. */
+inline float fractionFromText(const juce::String& text) { return percentFromText(text) / 100.0f; }
+
+/** Parameter attributes for a plain 0..1 amount (Blend, Mix, Level, Depth, ...): the value is stored, automated
+    and patched as 0..1 and shown as 0-100 %. */
+inline juce::AudioParameterFloatAttributes fractionPercentAttributes() {
+    return juce::AudioParameterFloatAttributes()
+        .withLabel("%")
+        .withStringFromValueFunction([](float v, int) { return fractionToText(v); })
+        .withValueFromStringFunction([](const juce::String& t) { return fractionFromText(t); });
+}
+
+/** A new plain 0..1 amount parameter shown as a percent; the caller hands it to addParameter, which owns it. */
+inline juce::AudioParameterFloat* newFractionParameter(const char* id, const char* name, float defaultValue) {
+    return new juce::AudioParameterFloat(id, name, juce::NormalisableRange<float>(0.0f, 1.0f), defaultValue,
+                                         fractionPercentAttributes());
+}
+
 /** Parameter attributes that format and parse a time held in milliseconds. */
 inline juce::AudioParameterFloatAttributes millisecondsAttributes() {
     return juce::AudioParameterFloatAttributes()

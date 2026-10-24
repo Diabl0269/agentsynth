@@ -2,6 +2,7 @@
 
 #include "../ModuleBase.h"
 #include "ChorusCentreGlide.h"
+#include "Modules/ParameterText.h"
 #include <juce_dsp/juce_dsp.h>
 
 // Feedback (-1..1) drives juce::dsp::Chorus's internal comb-filter loop; near its extremes a
@@ -14,11 +15,14 @@ public:
     ChorusModule()
         : ModuleBase("Chorus", 7, 2) { // 2 audio + 5 CV (Rate, Depth, Centre Delay, Feedback, Mix)
         addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate (Hz)", 0.1f, 10.0f, 0.5f));
-        addParameter(depthParam = new juce::AudioParameterFloat("depth", "Depth", 0.0f, 1.0f, 0.5f));
+        addParameter(depthParam =
+                         new juce::AudioParameterFloat("depth", "Depth", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.5f, synth::fractionPercentAttributes()));
         addParameter(centreDelayParam =
                          new juce::AudioParameterFloat("centreDelay", "Centre Delay (ms)", 1.0f, 30.0f, 7.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", -1.0f, 1.0f, 0.0f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.5f));
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              0.5f, synth::fractionPercentAttributes()));
         addOutputLevelParameter();
         addMuteParameter();
         addPanParameter(); // shared output stage: this module keeps its own Mix

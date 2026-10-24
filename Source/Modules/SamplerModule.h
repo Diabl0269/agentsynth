@@ -2,6 +2,7 @@
 
 #include "ModuleBase.h"
 #include "ModuleFileStateKeys.h"
+#include "Modules/ParameterText.h"
 #include "Modules/Sampler/SamplerInstrumentHost.h"
 #include "Modules/Sampler/SamplerInstrumentSlot.h"
 #include "Modules/Sampler/SamplerSampleData.h"
@@ -130,8 +131,12 @@ public:
                          new juce::AudioParameterFloat("grainSize", "Grain Size", kMinGrainMs, kMaxGrainMs, 80.0f));
         addParameter(densityParam =
                          new juce::AudioParameterFloat("density", "Density", kMinDensity, kMaxDensity, 20.0f));
-        addParameter(sprayParam = new juce::AudioParameterFloat("spray", "Spray", 0.0f, 1.0f, 0.1f));
-        addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 0.8f));
+        addParameter(sprayParam =
+                         new juce::AudioParameterFloat("spray", "Spray", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.1f, synth::fractionPercentAttributes()));
+        addParameter(levelParam =
+                         new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.8f, synth::fractionPercentAttributes()));
         // End of the played region, as a fraction of the sample like `start`. 1 = to the end of the file.
         addParameter(endParam = new juce::AudioParameterFloat("end", "End", 0.0f, 1.0f, 1.0f));
         // Fine tune in cents on top of `pitch`; a playback-rate change, so it is not smoothed.
@@ -601,8 +606,12 @@ private:
                          "attack", "Attack", juce::NormalisableRange<float>(0.001f, 2.0f, 0.0f, 0.3f), 0.002f));
         addParameter(releaseParam = new juce::AudioParameterFloat(
                          "release", "Release", juce::NormalisableRange<float>(0.01f, 8.0f, 0.0f, 0.4f), 0.6f));
-        addParameter(toneParam = new juce::AudioParameterFloat("tone", "Tone", 0.0f, 1.0f, 1.0f));
-        addParameter(feelParam = new juce::AudioParameterFloat("feel", "Feel", 0.0f, 1.0f, 0.7f));
+        addParameter(toneParam =
+                         new juce::AudioParameterFloat("tone", "Tone", juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f,
+                                                       synth::fractionPercentAttributes()));
+        addParameter(feelParam =
+                         new juce::AudioParameterFloat("feel", "Feel", juce::NormalisableRange<float>(0.0f, 1.0f), 0.7f,
+                                                       synth::fractionPercentAttributes()));
         addParameter(voicesParam = new juce::AudioParameterInt(juce::ParameterID("voices", 1), "Voices", 1,
                                                                synth::sampler::VoicePool::kMaxVoices, 16));
         addParameter(releaseSoundParam = new juce::AudioParameterBool("releaseSound", "Release Sound", true));

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <cmath>
 
 /**
@@ -31,7 +32,9 @@ public:
         // AIStateMapper::applyParamsToProcessor treats an in-[0,1] value on a wider range as a
         // normalized value and rescales it, so a non-unit "gain" would silently misread AI
         // patches. Mapped internally to 0.25x-4.0x detector gain.
-        addParameter(sensitivityParam = new juce::AudioParameterFloat("sensitivity", "Sensitivity", 0.0f, 1.0f, 0.5f));
+        addParameter(sensitivityParam = new juce::AudioParameterFloat("sensitivity", "Sensitivity",
+                                                                      juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+                                                                      synth::fractionPercentAttributes()));
         addParameter(detectionParam = new juce::AudioParameterChoice("detection", "Detection", {"Peak", "RMS"}, 0));
         addMuteParameter();
         enableVisualBuffer(true);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include "Modules/SoftLimit.h"
 
 class VoiceMixerModule : public ModuleBase {
@@ -8,7 +9,9 @@ public:
     VoiceMixerModule()
         : ModuleBase("Voice Mixer", 8, 2) // 8 voice channels in, stereo out
     {
-        addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
+        addParameter(levelParam =
+                         new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       1.0f, synth::fractionPercentAttributes()));
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {

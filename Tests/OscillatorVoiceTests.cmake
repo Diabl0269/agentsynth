@@ -11,3 +11,4 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/SoftLimitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/UnisonConstantPowerTests.cpp
 )
+include(${CMAKE_CURRENT_SOURCE_DIR}/ParameterTextTests.cmake) # plain 0..1 amounts shown as percent

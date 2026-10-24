@@ -88,7 +88,9 @@ public:
                                                                       synth::envelopeNoteDivisions(), 2));
         // `gateThreshold`, not `threshold` / `trigThreshold`: Compressor owns `threshold` as dB,
         // Sample & Hold / Comparator own `trigThreshold` as bipolar CV. ADSR gates are unipolar.
-        addParameter(thresholdParam = new juce::AudioParameterFloat("gateThreshold", "Threshold", 0.0f, 1.0f, 0.5f));
+        addParameter(thresholdParam = new juce::AudioParameterFloat("gateThreshold", "Threshold",
+                                                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+                                                                    synth::fractionPercentAttributes()));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         // Velocity: how far the note's velocity scales the output, in percent. 0 ignores velocity.
         addParameter(velocityParam = new juce::AudioParameterFloat("velocity", "Velocity",

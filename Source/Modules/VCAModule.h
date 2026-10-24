@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include "Modules/SoftLimit.h"
 #include <cmath>
 #include <optional>
@@ -36,7 +37,9 @@ public:
         // StereoAudio::Declared: 24 outputs, so the Auto shape test cannot see the stereo pair — the
         // right leg is the kRightBase block, and it ships SPLIT.
         : ModuleBase("VCA", kNumChannels, kNumChannels, StereoAudio::Declared) {
-        addParameter(gainParam = new juce::AudioParameterFloat("gain", "Gain", 0.0f, 1.0f, 0.5f));
+        addParameter(gainParam =
+                         new juce::AudioParameterFloat("gain", "Gain", juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+                                                       synth::fractionPercentAttributes()));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
         // gates in stereo). Collapsed, its jack layout is the plain mono one — Audio, CV.

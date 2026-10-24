@@ -2,6 +2,7 @@
 // The drum sounds themselves are in DrumVoices.h; the recorded kit side is in DrumKitModuleRecorded.cpp.
 
 #include "DrumKitModule.h"
+#include "Modules/ParameterText.h"
 
 namespace {
 
@@ -49,7 +50,9 @@ DrumKitModule::Drum DrumKitModule::drumForNote(int note) noexcept {
 }
 
 juce::AudioParameterFloat* DrumKitModule::addFloat(const char* id, const char* name, float lo, float hi, float def) {
-    auto* p = new juce::AudioParameterFloat(id, name, lo, hi, def);
+    auto* p = new juce::AudioParameterFloat(id, name, juce::NormalisableRange<float>(lo, hi), def,
+                                            (lo == 0.0f && hi == 1.0f) ? synth::fractionPercentAttributes()
+                                                                       : juce::AudioParameterFloatAttributes());
     addParameter(p);
     return p;
 }

@@ -3,6 +3,7 @@
 #include "CardViewState.h"
 #include "ModuleChoiceState.h"
 #include "ModuleOutputStage.h"
+#include "Modules/ParameterText.h"
 #include "PortRole.h"
 #include "VisualBuffer.h"
 #include <algorithm>
@@ -583,8 +584,9 @@ public:
     void addOutputLevelParameter(float defaultValue = 1.0f) {
         if (outputLevelParam)
             return;
-        addParameter(outputLevelParam =
-                         new juce::AudioParameterFloat("outputLevel", "Level", 0.0f, 1.0f, defaultValue));
+        addParameter(outputLevelParam = new juce::AudioParameterFloat(
+                         "outputLevel", "Level", juce::NormalisableRange<float>(0.0f, 1.0f), defaultValue,
+                         synth::fractionPercentAttributes()));
         // Safe default if prepareToPlay (and therefore prepareOutputLevel) never runs:
         // snap-to-target, so applyOutputLevel takes its steady-state path at unity
         // instead of ramping up from a default-constructed 0 and silencing the module.

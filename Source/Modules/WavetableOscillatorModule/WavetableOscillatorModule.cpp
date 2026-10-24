@@ -266,7 +266,7 @@ WavetableOscillatorModule::WavetableOscillatorModule()
     addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -4, 4, 0));
     addParameter(coarseParam = new juce::AudioParameterInt(juce::ParameterID("coarse", 1), "Coarse", -12, 12, 0));
     addParameter(fineParam = new juce::AudioParameterFloat("fine", "Fine", -100.0f, 100.0f, 0.0f));
-    addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
+    addParameter(levelParam = synth::newFractionParameter("level", "Level", 1.0f));
     addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
     addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
     // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
@@ -280,19 +280,19 @@ WavetableOscillatorModule::WavetableOscillatorModule()
                                                             {"Off", "Sync", "Bend +", "Bend -", "PWM", "Asym", "Flip",
                                                              "Mirror", "Quantize", "Remap", "Formant"},
                                                             0));
-    addParameter(warpAmountParam = new juce::AudioParameterFloat("warpAmount", "Warp Amt", 0.0f, 1.0f, 0.0f));
+    addParameter(warpAmountParam = synth::newFractionParameter("warpAmount", "Warp Amt", 0.0f));
 
     // ---- Phase 1: phase control ----
     addParameter(phaseParam = new juce::AudioParameterFloat("phase", "Phase", 0.0f, 360.0f, 0.0f));
-    addParameter(randomPhaseParam = new juce::AudioParameterFloat("randomPhase", "Rand Phase", 0.0f, 1.0f, 0.0f));
-    addParameter(spreadParam = new juce::AudioParameterFloat("spread", "Spread", 0.0f, 1.0f, 0.0f));
+    addParameter(randomPhaseParam = synth::newFractionParameter("randomPhase", "Rand Phase", 0.0f));
+    addParameter(spreadParam = synth::newFractionParameter("spread", "Spread", 0.0f));
 
     // ---- Phase 3: richer voicing ----
-    addParameter(widthParam = new juce::AudioParameterFloat("width", "Width", 0.0f, 1.0f, 0.0f));
-    addParameter(blendParam = new juce::AudioParameterFloat("blend", "Blend", 0.0f, 1.0f, 1.0f));
+    addParameter(widthParam = synth::newFractionParameter("width", "Width", 0.0f));
+    addParameter(blendParam = synth::newFractionParameter("blend", "Blend", 1.0f));
     addParameter(stackParam = new juce::AudioParameterChoice(
                      "stack", "Stack", {"Detune", "Octave", "Power Chord", "12th", "Major", "Minor"}, 0));
-    addParameter(subLevelParam = new juce::AudioParameterFloat("subLevel", "Sub", 0.0f, 1.0f, 0.0f));
+    addParameter(subLevelParam = synth::newFractionParameter("subLevel", "Sub", 0.0f));
     addParameter(subOctaveParam = new juce::AudioParameterChoice("subOctave", "Sub Oct", {"-1", "-2"}, 0));
     addParameter(subShapeParam = new juce::AudioParameterChoice("subShape", "Sub Wave", {"Sine", "Square"}, 0));
     addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 
 class BitcrusherModule : public ModuleBase {
 public:
@@ -9,8 +10,11 @@ public:
     {
         addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate Reduction", 1.0f, 50.0f, 1.0f));
         addParameter(depthParam = new juce::AudioParameterFloat("depth", "Bit Depth", 1.0f, 24.0f, 24.0f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
-        addParameter(ditherParam = new juce::AudioParameterFloat("dither", "Dither", 0.0f, 1.0f, 0.0f));
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              1.0f, synth::fractionPercentAttributes()));
+        addParameter(ditherParam =
+                         new juce::AudioParameterFloat("dither", "Dither", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.0f, synth::fractionPercentAttributes()));
         addOutputLevelParameter();
         addMuteParameter();
         addPanParameter(); // shared output stage: this module keeps its own Mix

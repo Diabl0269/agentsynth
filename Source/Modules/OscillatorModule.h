@@ -92,7 +92,9 @@ public:
         addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -4, 4, 0));
         addParameter(coarseParam = new juce::AudioParameterInt(juce::ParameterID("coarse", 1), "Coarse", -12, 12, 0));
         addParameter(fineParam = new juce::AudioParameterFloat("fine", "Fine", -100.0f, 100.0f, 0.0f));
-        addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
+        addParameter(levelParam =
+                         new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       1.0f, synth::fractionPercentAttributes()));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
         // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
@@ -121,8 +123,12 @@ public:
         addParameter(randomPhaseParam = new juce::AudioParameterFloat("randomPhase", "Rand",
                                                                       juce::NormalisableRange<float>(0.0f, 100.0f),
                                                                       0.0f, synth::percentAttributes()));
-        addParameter(blendParam = new juce::AudioParameterFloat("blend", "Blend", 0.0f, 1.0f, 0.25f));
-        addParameter(widthParam = new juce::AudioParameterFloat("width", "Width", 0.0f, 1.0f, 0.0f));
+        addParameter(blendParam =
+                         new juce::AudioParameterFloat("blend", "Blend", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.25f, synth::fractionPercentAttributes()));
+        addParameter(widthParam =
+                         new juce::AudioParameterFloat("width", "Width", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.0f, synth::fractionPercentAttributes()));
         // Mono voice feel. Glide Mode "Scaled" makes Glide the time per octave; Glide Curve "Exponential" is
         // fast at the start and slow at the end; Legato (mono only) glides and keeps the phase only for
         // overlapping notes.

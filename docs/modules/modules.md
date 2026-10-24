@@ -2,6 +2,8 @@
 
 Detailed specifications for Agent Synth's primary synthesis modules.
 
+> **Plain 0..1 amounts read as percent.** Blend, Width, Mix, Level, Depth, Gain, Resonance and the other plain 0..1 amounts show 0-100 % on the knob, the fader and to a screen reader, and typed "25", "25%" or "25 %" all set 0.25 (`synth::fractionPercentAttributes()` / `synth::newFractionParameter()`, `Source/Modules/ParameterText.h`). The stored value, presets, patches, automation and CV stay 0..1. Values with a real unit (Hz, ms, cents, semitones, dB) keep it, as do 0..1 positions (wavetable Position, Sampler Start and End, Morph X / Y) and the envelope Sustain (dB). `PercentParameters.EveryZeroToOneAmountOfEveryModuleReadsAsPercent` fails for a new module that leaves a 0..1 amount as a bare number.
+
 > **Dual I/O is INHERITED, not registered.** A module does not opt into the stereo-jack toggle;
 > `ModuleBase`'s constructor decides from its channel shape and adds the `dualIO` parameter itself.
 > The rule (`ModuleBase::hasStereoOutputPairShape`) is **≥ 2 inputs and exactly 2 outputs** — audio

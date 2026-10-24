@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <juce_dsp/juce_dsp.h>
 
 class DistortionModule
@@ -11,7 +12,8 @@ public:
         : ModuleBase("Distortion", 4, 2) // 2 Audio + 2 CV (Drive, Mix)
     {
         addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 1.0f, 20.0f, 1.0f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.5f));
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              0.5f, synth::fractionPercentAttributes()));
         addParameter(typeParam = new juce::AudioParameterChoice("type", "Type",
                                                                 juce::StringArray{"Soft", "Hard", "Foldback"}, 0));
         addParameter(oversamplingParam = new juce::AudioParameterChoice("oversampling", "Oversampling",

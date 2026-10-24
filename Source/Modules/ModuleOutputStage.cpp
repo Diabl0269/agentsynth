@@ -12,6 +12,7 @@
 // isBypassed()/isMuted(), which answer with the lagging effective state on the render thread.
 
 #include "ModuleOutputStage.h"
+#include "Modules/ParameterText.h"
 
 #include "ModuleBase.h"
 #include <algorithm>
@@ -64,7 +65,9 @@ void ModuleOutputStage::prepare(double sampleRate, int maxBlock, int legs) {
 
 void ModuleOutputStage::addMix(juce::AudioProcessor& owner) {
     if (mix_ == nullptr)
-        owner.addParameter(mix_ = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
+        owner.addParameter(mix_ =
+                               new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                             1.0f, synth::fractionPercentAttributes()));
 }
 
 void ModuleOutputStage::addPan(juce::AudioProcessor& owner) {

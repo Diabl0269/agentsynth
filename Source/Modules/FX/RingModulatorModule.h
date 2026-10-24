@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <algorithm>
 #include <cmath>
 #include <juce_dsp/juce_dsp.h>
@@ -24,8 +25,11 @@ public:
         : ModuleBase("Ring Modulator", 5, 2) // Carrier, Modulator, Mix CV, Drive CV, Character CV
     {
         addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 0.5f, 8.0f, 1.0f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
-        addParameter(characterParam = new juce::AudioParameterFloat("character", "Character", 0.0f, 1.0f, 0.5f));
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              1.0f, synth::fractionPercentAttributes()));
+        addParameter(characterParam = new juce::AudioParameterFloat("character", "Character",
+                                                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+                                                                    synth::fractionPercentAttributes()));
         addParameter(oversamplingParam = new juce::AudioParameterChoice("oversampling", "Oversampling",
                                                                         juce::StringArray{"Off", "2x", "4x"}, 1));
         // NOTE: no Dual I/O registration here, on purpose. `ModuleBase(name, 5, 2)` matches

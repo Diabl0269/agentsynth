@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <array>
 #include <juce_core/juce_core.h>
 
@@ -31,8 +32,9 @@ public:
         addParameter(bipolarParam = new juce::AudioParameterBool("macroBipolar", "Bipolar", false));
 
         for (int i = 0; i < kMaxMacros; ++i)
-            addParameter(macroParams[(size_t)i] = new juce::AudioParameterFloat("macro" + juce::String(i + 1),
-                                                                                macroName(i), 0.0f, 1.0f, 0.0f));
+            addParameter(macroParams[(size_t)i] = new juce::AudioParameterFloat(
+                             "macro" + juce::String(i + 1), macroName(i), juce::NormalisableRange<float>(0.0f, 1.0f),
+                             0.0f, synth::fractionPercentAttributes()));
 
         addMuteParameter();
     }
