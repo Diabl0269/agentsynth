@@ -166,8 +166,39 @@ TEST_F(TransportServiceTest, LoopWrapExactlyAtBlockBoundaryIsSeamless) {
     transport.setLoop(0.0, 1.0, true);
     transport.locateBeat((24000.0 - kBlockSize) / kSamplesPerBeat);
     transport.play();
-    EXPECT_EQ(tick().loopWrapSample, -1); // wrap lands on the boundary: nothing to split
+    const auto& wrapBlock = tick();
+    EXPECT_EQ(wrapBlock.loopWrapSample, -1); // wrap lands on the boundary: nothing to split
+    EXPECT_TRUE(wrapBlock.wrapsAtBlockEnd) << "but a consumer holding per-pass state must still be told";
     EXPECT_EQ(tick().blockStartSample, 0);
+}
+
+TEST_F(TransportServiceTest, WrapIsReportedExactlyOnceForEveryBlockSizeAndAlignment) {
+    // 4 beats = 96000 samples: a whole number of 480 and 256 sample blocks, not of 512 or 441.
+    for (const int blockSize : {512, 480, 256, 441}) {
+        SCOPED_TRACE(blockSize);
+        TransportService t;
+        t.prepare(kSampleRate, blockSize);
+        t.setLoop(0.0, 4.0, true);
+        t.play();
+
+        int inBlock = 0, atEnd = 0, folds = 0;
+        std::int64_t previousStart = -1;
+        for (int block = 0; block < 6 * 96000 / blockSize - 1; ++block) {
+            const auto& info = t.tick(blockSize);
+            EXPECT_FALSE(info.loopWrapSample >= 0 && info.wrapsAtBlockEnd) << "the two reports are exclusive";
+            inBlock += info.loopWrapSample >= 0 ? 1 : 0;
+            atEnd += info.wrapsAtBlockEnd ? 1 : 0;
+            if (info.blockStartSample < previousStart)
+                ++folds;
+            previousStart = info.blockStartSample;
+        }
+        EXPECT_EQ(inBlock + atEnd, folds)
+            << "every fold the position makes is reported, inside the block or at its end";
+        if (96000 % blockSize == 0)
+            EXPECT_EQ(inBlock, 0) << "an aligned loop never wraps inside a block";
+        else
+            EXPECT_GT(inBlock, 0);
+    }
 }
 
 TEST_F(TransportServiceTest, NoWrapWhenLocatedPastLoopEnd) {

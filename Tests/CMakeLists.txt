@@ -153,7 +153,6 @@ add_executable(Tests
     Timeline/TimelineMidiSource/TimelineMidiSourceHeldNoteTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceMuteSoloTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceBindingTests.cpp
-    Timeline/TimelineMidiSource/TimelineMidiSourceLoopTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceEngineTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceAuditionTests.cpp
     Timeline/MidiClipFileTests.cpp
@@ -994,6 +993,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/CurveEditorTests.cmake) # curve editor multi
 include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerTests.cmake) # the sequencers' pattern, playback and legacy adoption
 include(${CMAKE_CURRENT_SOURCE_DIR}/HostedPluginTests.cmake) # the hosted plugin node, its card and mod slots
 include(${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowserTests.cmake) # the sound index and the Sounds view
+include(${CMAKE_CURRENT_SOURCE_DIR}/LoopWrapTests.cmake) # Track In across a loop wrap, every block size
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build
