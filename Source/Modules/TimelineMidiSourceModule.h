@@ -67,7 +67,11 @@
  *
  * Loop wrap: a block crossing the loop end is TWO beat ranges (see BlockTimeInfo); every held note
  * is released exactly at the wrap, then the wrapped range starts fresh, so a note can legitimately
- * end and restart in the same block. BlockTimeInfo reports only the FIRST wrap per block, so a
+ * end and restart in the same block. A loop end landing exactly on the end of a block is one range
+ * (the next block starts the new pass) but the release still happens, at the block's last sample:
+ * a note ending at the loop end is otherwise never reached by the note-off scan, and the next
+ * pass's note-on would stack on it. As a safety net the first block after any fold also releases a
+ * held note whose end lies at or beyond the loop end. BlockTimeInfo reports only the FIRST wrap per block, so a
  * loop shorter than the block drops whole intermediate passes (never leaks a note — the
  * release-at-wrap still runs).
  *
@@ -98,6 +102,7 @@ public:
         juce::ignoreUnused(sampleRate, samplesPerBlock);
         numActive_ = 0;
         haveLastBlock_ = false;
+        lastBlockFolded_ = false;
         wasBypassed_ = false;
         wasPlaying_ = false;
         wasSuppressed_ = false;
@@ -224,6 +229,13 @@ public:
         if ((!info.playing && wasPlaying_) || (info.playing && discontinuous))
             flushTimelineNotes(midiMessages);
 
+        // A fold that landed exactly at the end of the previous block, read before the bookkeeping
+        // below moves on: this block opens a pass and must not still hold anything the old one left.
+        // (A fold inside a block is not this: notes its wrapped range started are legitimately held.)
+        const bool afterFold = haveLastBlock_ && !discontinuous && lastBlockFolded_;
+        lastBlockFolded_ = info.playing && info.numSamples > 0 && info.loopWrapSample < 0 &&
+                           nextBlockStart != info.blockStartSample + info.numSamples;
+
         wasPlaying_ = info.playing;
         haveLastBlock_ = info.playing;
         expectedNextBlockStart_ = nextBlockStart;
@@ -265,6 +277,8 @@ public:
         }
         wasSuppressed_ = false;
 
+        if (afterFold)
+            releaseNotesPastLoopEnd(midiMessages, info.loopEndPpq);
         emitBlock(*snapshot, *track, info, midiMessages, nextBlockStart);
         pushActivity(numSamples);
     }
@@ -316,6 +330,13 @@ private:
         // (it overshoots loopEndPpq), so using it here would emit beats the transport never plays.
         emitRange(snapshot, track, midiMessages, info.startPpq, wraps ? info.loopEndPpq : info.endPpq,
                   /*baseOffset=*/0, beatsPerSample, lastSample);
+
+        if (info.wrapsAtBlockEnd) {
+            // The loop end is the end of this block: the primary range above already ran to it. Release
+            // what is still held on the last sample, the nearest one the block has.
+            flushTimelineNotes(midiMessages, lastSample);
+            return;
+        }
 
         if (!wraps)
             return;
@@ -393,6 +414,17 @@ private:
                 midiMessages.addEvent(juce::MidiMessage::noteOff(channel, pitch), offOffset);
                 removeActiveAt(numActive_ - 1);
             }
+        }
+    }
+
+    // Safety net for the first block of a pass: whatever the previous pass left held with an end at or
+    // beyond the loop end is released at sample 0 instead of stacking under the pass's own note-ons.
+    void releaseNotesPastLoopEnd(juce::MidiBuffer& midiMessages, double loopEndPpq) {
+        for (int i = numActive_ - 1; i >= 0; --i) {
+            if (isAuditionNote(active_[i]) || !(active_[i].endBeat >= loopEndPpq))
+                continue;
+            midiMessages.addEvent(juce::MidiMessage::noteOff(active_[i].channel, active_[i].pitch), 0);
+            removeActiveAt(i);
         }
     }
 
@@ -615,6 +647,7 @@ private:
 
     std::int64_t expectedNextBlockStart_ = 0;
     bool haveLastBlock_ = false;
+    bool lastBlockFolded_ = false; // the previous block ended exactly on the loop end
     bool wasBypassed_ = false;
     bool wasPlaying_ = false;
     bool wasSuppressed_ = false;

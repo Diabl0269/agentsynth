@@ -22,6 +22,7 @@
 #include "MainComponent/MainComponent.h"
 #include "TimelinePanel/TimelinePanelTestFixture.h" // timelinePanelIsOpen
 #include "Transport/TransportService.h"
+#include "UI/Timeline/PlayheadWrapCompensation.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineViewState.h"
@@ -235,6 +236,85 @@ TEST(TimelinePlayheadTest, LatencyOffsetShiftsTheLineOnlyWhilePlaying) {
     // The offset never drags the line before the start of the timeline.
     f.playhead.updateFromTransport(snapshotAt(0.0, /*playing=*/true), 0.5);
     EXPECT_EQ(f.playhead.getLineX(), 0);
+}
+
+// With looping on, the transport wraps as soon as the rendered block crosses the loop end, while the
+// heard audio is still the output latency short of it. The line must travel on to the loop end
+// before it jumps back, and must not dip below the loop start afterwards.
+TEST(TimelinePlayheadTest, LoopWrapCarriesTheLineToTheLoopEndBeforeItJumpsBack) {
+    Fixture f;
+    const auto looped = [](double ppq) {
+        auto snap = snapshotAt(ppq, /*playing=*/true);
+        snap.looping = true;
+        snap.loopStartPpq = 0.0;
+        snap.loopEndPpq = 4.0;
+        return snap;
+    };
+    constexpr double kLatency = 0.03; // 0.06 beat at 120 BPM
+
+    f.playhead.updateFromTransport(looped(3.90), kLatency);
+    f.playhead.updateFromTransport(looped(3.98), kLatency);
+    const double beforeWrap = f.playhead.getDrawnBeat();
+    EXPECT_NEAR(beforeWrap, 3.92, 1e-9);
+
+    double highest = beforeWrap;
+    for (const double ppq : {0.02, 0.04, 0.055}) {
+        f.playhead.updateFromTransport(looped(ppq), kLatency);
+        const double drawn = f.playhead.getDrawnBeat();
+        EXPECT_GE(drawn, beforeWrap) << "ppq " << ppq << ": the line keeps moving forward through the wrap";
+        EXPECT_LT(drawn, 4.0 + 1e-9);
+        highest = std::max(highest, drawn);
+    }
+    EXPECT_GE(highest, 4.0 - 1.0 / kPixelsPerBeat) << "the line gets within a pixel of the loop end";
+
+    f.playhead.updateFromTransport(looped(0.08), kLatency);
+    EXPECT_NEAR(f.playhead.getDrawnBeat(), 0.02, 1e-9) << "once heard audio is past the loop start it draws plainly";
+    f.playhead.updateFromTransport(looped(0.30), kLatency);
+    EXPECT_NEAR(f.playhead.getDrawnBeat(), 0.24, 1e-9);
+}
+
+TEST(TimelinePlayheadTest, FreshPlayFromLoopStartDrawsTheLoopStart) {
+    Fixture f;
+    auto stopped = snapshotAt(0.0, /*playing=*/false);
+    stopped.looping = true;
+    stopped.loopEndPpq = 4.0;
+    f.playhead.updateFromTransport(stopped, 0.03);
+
+    auto playing = stopped;
+    playing.playing = true;
+    playing.ppq = 0.02;
+    f.playhead.updateFromTransport(playing, 0.03);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 0.0);
+    EXPECT_EQ(f.playhead.getLineX(), 0);
+}
+
+TEST(TimelinePlayheadTest, StopOrLocateOrLoopChangeEndsTheWrappedState) {
+    const auto looped = [](double ppq, bool playing, double loopEnd) {
+        auto snap = snapshotAt(ppq, playing);
+        snap.looping = true;
+        snap.loopEndPpq = loopEnd;
+        return snap;
+    };
+    synth::ui::PlayheadWrapCompensation wrap;
+    const auto enterWrapped = [&wrap, &looped] {
+        wrap.observe(looped(3.98, true, 4.0), 0.06);
+        wrap.observe(looped(0.02, true, 4.0), 0.06);
+    };
+
+    enterWrapped();
+    ASSERT_TRUE(wrap.isWrapped());
+    wrap.observe(looped(0.02, false, 4.0), 0.06);
+    EXPECT_FALSE(wrap.isWrapped()) << "stop";
+
+    enterWrapped();
+    ASSERT_TRUE(wrap.isWrapped());
+    wrap.observe(looped(2.0, true, 4.0), 0.06);
+    EXPECT_FALSE(wrap.isWrapped()) << "locate";
+
+    enterWrapped();
+    ASSERT_TRUE(wrap.isWrapped());
+    wrap.observe(looped(0.03, true, 8.0), 0.06);
+    EXPECT_FALSE(wrap.isWrapped()) << "loop change";
 }
 
 // A zoom changes the beat->pixel mapping, so the pixels that must be repainted are where the line

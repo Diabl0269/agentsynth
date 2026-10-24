@@ -162,6 +162,7 @@ const BlockTimeInfo& TransportService::tick(int numSamples) {
     currentBlock.loopStartPpq = loopStartPpq;
     currentBlock.loopEndPpq = loopEndPpq;
     currentBlock.loopWrapSample = -1;
+    currentBlock.wrapsAtBlockEnd = false;
 
     publishSnapshot(); // block-start state is what this block sounds like
 
@@ -180,6 +181,8 @@ const BlockTimeInfo& TransportService::tick(int numSamples) {
                 const auto wrapAt = loopEndSample - samplePosition; // in [1, numSamples]
                 if (wrapAt < numSamples)
                     currentBlock.loopWrapSample = (int)wrapAt;
+                else
+                    currentBlock.wrapsAtBlockEnd = true;
                 endSample = loopStartSample + (endSample - loopEndSample) % loopLength;
             }
         }
