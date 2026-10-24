@@ -144,6 +144,9 @@ public:
         juce::ignoreUnused(samplesPerBlock);
         currentSampleRate = sampleRate;
 
+        // A prepared module starts where a new one does: the pitch of the last note played must not become the
+        // starting pitch of the next playback.
+        voices[0].lastMidiNote = 69.0f;
         const float initFreq = baseFrequencyHz();
 
         for (int v = 0; v < MAX_VOICES; ++v) {
@@ -168,6 +171,12 @@ public:
             v.glide.reset();
             v.active = false;
             v.restartFadeRemaining = 0;
+            // Every playback starts from the same phases: the first note's run-out must not depend on where the
+            // previous playback (or render) happened to leave the free-running oscillators.
+            for (auto& osc : v.unisonOscs)
+                osc.phase = 0.0f;
+            for (auto& osc : v.fadeOscs)
+                osc.phase = 0.0f;
         }
         resetNoteState();
     }

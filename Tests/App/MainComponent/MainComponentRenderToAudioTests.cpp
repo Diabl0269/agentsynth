@@ -114,6 +114,9 @@ protected:
         return track;
     }
 
+    // The null test at the rate the engine was last prepared at (a device's rate, when one was open).
+    void checkNullTest(double engineRate);
+
     // Starts a render and pumps the message loop until it and its commit are done.
     bool render(const std::vector<RenderSpan>& spans) {
         if (!MainComponentRenderToAudio::request(*mc, spans))
@@ -361,26 +364,14 @@ TEST_F(RenderToAudioTest, TheShortcutTriggersTheSameRender) {
 // The null test: the rendered track is not heard differently from the source it replaces. The same bars are bounced
 // twice through the master, once with the source playing and the rendered track muted, once the way the command leaves
 // the project (source clips muted, rendered track playing); the difference must vanish under -60 dBFS.
-TEST_F(RenderToAudioTest, NullTestTheRenderedTrackSoundsLikeTheSourceItReplaces) {
+void RenderToAudioTest::checkNullTest(double engineRate) {
+    mc->getAudioEngine().prepareForHost(engineRate, 512, 0, 2);
     ASSERT_TRUE(mc->saveProjectForTest(bundleDir));
     const auto lead = addLead();
     auto* strip = stripOf(lead);
     ASSERT_NE(strip, nullptr);
     setParam(*strip, "gain", -4.0f); // the render includes the channel's fader and pan
     setParam(*strip, "pan", 0.3f);
-
-    // The oscillator's free-running phase settles after a pass; warm it up so the render and the later bounces
-    // start every note from the same state.
-    for (int pass = 0; pass < 2; ++pass) {
-        synth::BounceOptions warm;
-        warm.startBeat = 0.0;
-        warm.endBeat = 8.0;
-        warm.sampleRate = 44100.0;
-        warm.bitDepth = 32;
-        const auto warmFile = bundleDir.getSiblingFile(bundleDir.getFileName() + "_warm.wav");
-        ASSERT_TRUE(synth::BounceExporter::bounce(mc->getAudioEngine(), warmFile, warm).ok);
-        warmFile.deleteFile();
-    }
 
     ASSERT_TRUE(render({{lead, 0.0, 8.0}}));
     auto& doc = mc->getTimelineDoc();
@@ -417,9 +408,6 @@ TEST_F(RenderToAudioTest, NullTestTheRenderedTrackSoundsLikeTheSourceItReplaces)
     ASSERT_TRUE(doc.setTrackMuted(rendered, true));
     for (const auto& clip : doc.getTrack(doc.getTracks()[0].id)->clips)
         doc.setClipMuted(clip.id, false);
-    // The first pass after the source was silenced starts its oscillator from stale state; one throwaway pass
-    // settles it so the measured pass starts every note the way the render did.
-    bounce("settle");
     const auto heardAsSource = bounce("source");
     ASSERT_TRUE(heardAsSource.ok);
     ASSERT_EQ(heardAsRendered.lengthInSamples, heardAsSource.lengthInSamples);
@@ -440,3 +428,9 @@ TEST_F(RenderToAudioTest, NullTestTheRenderedTrackSoundsLikeTheSourceItReplaces)
     ASSERT_TRUE(bothPlaying.ok);
     EXPECT_GT(peakDifference(heardAsSource, bothPlaying), -20.0);
 }
+
+// The engine's rate is the device's when one is open (44.1 and 48 kHz are the common ones), and the render and the
+// bounces run at it; no pass may start from the leftovers of an earlier one at any of them.
+TEST_F(RenderToAudioTest, NullTestTheRenderedTrackSoundsLikeTheSourceItReplaces) { checkNullTest(44100.0); }
+
+TEST_F(RenderToAudioTest, NullTestHoldsAtAnEngineRateOf48kHz) { checkNullTest(48000.0); }
