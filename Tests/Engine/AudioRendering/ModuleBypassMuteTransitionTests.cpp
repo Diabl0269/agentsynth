@@ -4,6 +4,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioRenderingTestHelpers.h"
+#include "HostedSineSource.h"
 #include <vector>
 
 namespace {
@@ -209,4 +210,37 @@ TEST(ModuleBypassMuteTransition, ALoadedBypassedModuleStartsBypassedWithoutAFade
     m.setBypassed(true);
     auto run = runDistortion(m, 2, kBlockSize, [](int) {});
     EXPECT_TRUE(blocksEqual(run.out[0], run.in[0], 2));
+}
+
+// Regression test for FRO1080: muting a track whose source is a hosted plug-in cut the sound in one step. The
+// host must fade a hosted instrument out and in like any other module, whatever the plug-in itself does.
+TEST(ModuleBypassMuteTransition, MutingAHostedPluginSourceStaysWithinTheSignalsOwnSlope) {
+    for (const bool turnOn : {true, false}) {
+        synth::test::StubBackend backend(clickrig::sineFactory());
+        auto module = clickrig::makeHostedSine(kSampleRate, kBlockSize, backend);
+        ASSERT_TRUE(module->hasInstance());
+        if (!turnOn)
+            module->setMuted(true);
+        const int channels = module->getTotalNumOutputChannels();
+        std::vector<float> left, right;
+        for (int b = 0; b < kSettle + kAfter; ++b) {
+            if (b == kSettle)
+                module->setMuted(turnOn);
+            juce::AudioBuffer<float> buf(channels, kBlockSize);
+            buf.clear();
+            juce::MidiBuffer midi;
+            module->processBlock(buf, midi);
+            left.insert(left.end(), buf.getReadPointer(0), buf.getReadPointer(0) + kBlockSize);
+            right.insert(right.end(), buf.getReadPointer(1), buf.getReadPointer(1) + kBlockSize);
+        }
+        // The sine's own largest step is 0.5 * 2 pi 220 / fs; the fade may add a small share of that.
+        const float ownSlope = 0.5f * 2.0f * juce::MathConstants<float>::pi * 220.0f / (float)kSampleRate;
+        for (const auto* leg : {&left, &right}) {
+            float worst = 0.0f;
+            for (size_t i = (size_t)kSettle * kBlockSize - 1; i + 1 < leg->size(); ++i)
+                worst = std::max(worst, std::abs((*leg)[i + 1] - (*leg)[i]));
+            EXPECT_LE(worst, 2.0f * ownSlope)
+                << "turnOn=" << turnOn << ": a step of " << worst << " against a slope of " << ownSlope;
+        }
+    }
 }
