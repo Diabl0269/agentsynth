@@ -203,7 +203,7 @@ enum class EditSurface { Graph, TimelineClips, PianoRoll, Mixer, AutomationLane 
   (`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area.
 - **PianoRoll** — same, but focus sits inside the piano roll.
 - **AutomationLane** — same, but focus sits on an automation lane's editor or header: Select All takes every point of the
-  lane, Copy/Cut/Paste move points ([timeline/automation.md](../timeline/automation.md#selecting-points)),
+  lane, Copy/Cut/Paste move points ([timeline/automation.md](../timeline/automation-points.md#selecting-points)),
   Duplicate copies the lane below itself once a parameter is picked
   ([timeline/automation.md](../timeline/automation.md#change-parameter-and-duplicate)), Repeat is inactive, and zoom is
   the timeline's.

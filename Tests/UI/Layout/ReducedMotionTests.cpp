@@ -23,6 +23,13 @@ TEST(ReducedMotionTests, DefaultModeFollowsTheSystem) {
     EXPECT_EQ(synth::ui::animationMode(), AnimationMode::followSystem);
 }
 
+// Regression test for FRO1063: two ease tests passed on a Mac without Reduce Motion and failed on a CI runner with it.
+TEST(ReducedMotionTests, TheTestRunNeverReadsTheMachinesOwnSetting) {
+    ModeGuard guard;
+    synth::ui::setReducedMotionForTest(std::nullopt);
+    EXPECT_FALSE(synth::ui::prefersReducedMotion()) << "TestMain pins the OS answer to off";
+}
+
 TEST(ReducedMotionTests, FollowSystemAsksTheOs) {
     ModeGuard guard;
     synth::ui::setAnimationMode(AnimationMode::followSystem);

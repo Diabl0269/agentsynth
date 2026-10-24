@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MorphMapGlide.h"
+#include "UI/Layout/KeyGlide/KeyGlideHost.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
@@ -135,12 +136,7 @@ public:
 
     // ---------- arrow hold ----------
     /** What the arrow hold reads from the outside world; a test replaces it to supply a clock and the keys. */
-    struct GlideHost {
-        std::function<double()> nowMs;
-        /** Whether the arrow with this juce::KeyPress code is physically down right now. */
-        std::function<bool(int)> isArrowDown;
-        std::function<bool()> isShiftDown;
-    };
+    using GlideHost = KeyGlideHost;
     void setGlideHostForTest(GlideHost host);
     /** True while an arrow is held on a stop (frames are requested only then). */
     bool isGliding() const noexcept { return glide_.isHeld(); }

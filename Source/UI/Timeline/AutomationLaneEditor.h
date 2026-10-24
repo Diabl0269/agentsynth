@@ -5,6 +5,8 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/KeyGlide/KeyHold.h"
+#include "UI/Layout/KeyGlide/KeyedPointTween.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h"
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueField.h"
@@ -85,6 +87,7 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
     void focusGained(juce::Component::FocusChangeType cause) override;
     void focusLost(juce::Component::FocusChangeType cause) override;
+    bool keyStateChanged(bool isKeyDown) override;
 
     /** Text for a lane value in the parameter's own units ("-6.0 dB"); may be null or return empty, which falls
      *  back to the plain number. */
@@ -145,8 +148,20 @@ public:
     void meltRangeNext(double startBeat, double endBeat);
     void disarmMelt() noexcept { glide_.disarmMelt(); }
     /** Tests: animate as if the editor were on screen. */
-    void forceGlideAnimateForTest(bool force) noexcept { glide_.forceAnimateForTest(force); }
+    void forceGlideAnimateForTest(bool force) noexcept {
+        glide_.forceAnimateForTest(force);
+        pointTween_.forceAnimateForTest(force);
+    }
     bool isMeltingForTest() const noexcept { return glide_.isMelting(); }
+    /** Tests: the held-arrow drag (inject host.nowMs/isArrowDown/modifiers, then tick() per frame) and the eased
+     *  drawn points. */
+    KeyHold& getKeyHoldForTest() noexcept { return keyHold_; }
+    KeyedPointTween& getPointTweenForTest() noexcept { return pointTween_; }
+    juce::Path getDrawnCurvePathForTest() const;
+    /** The beat and value the keyboard drag has the grabbed point at (the committed point's when idle). */
+    double getPreviewBeatForTest() const noexcept { return previewBeat_; }
+    double getPreviewValueForTest() const noexcept { return previewValue_; }
+    std::vector<LaneBreakpoint> getDragMovedPointsForTest() const { return dragMovedPoints(); }
     // The curve's and points' colour; unset = the theme's modWire. Drawn pushed to a readable contrast on the lane
     // background.
     void setCurveColour(juce::Colour colour);
@@ -173,7 +188,7 @@ public:
     bool selectAllPoints();
     bool copySelectedPoints();
     bool cutSelectedPoints();
-    // Copies the selected points one grid step past the last one (one undo step) and selects the copies.
+    // Copies the selected points where the Duplicate points preference puts them (one undo step) and selects them.
     bool duplicateSelectedPoints();
     bool canPastePoints() const;
     // Pastes at the transport position (snapped), or at `beat` (snapped); the pasted points become the selection.
@@ -186,6 +201,9 @@ public:
     juce::Rectangle<float> getStretchBoxForTest() const { return stretchBox(); }
     juce::Rectangle<float> getStretchHandleRectForTest(StretchHandle handle) const;
     const LanePointStretch& getStretchForTest() const noexcept { return stretch_; }
+    LanePointStretch& getStretchForTest() noexcept { return stretch_; }
+    /** The box as drawn now, with what is left of its ease. */
+    juce::Rectangle<float> getShownStretchBoxForTest() const { return stretch_.shownBox(stretchBox()); }
 
     // ---- Headless hooks (juce::PopupMenu::showMenuAsync doesn't run headlessly) ----
 
@@ -263,6 +281,8 @@ private:
     juce::Rectangle<int> meltRect() const;
     void paintToolPreview(juce::Graphics& g);
     void paintHandles(juce::Graphics& g, const synth::AutomationLane& lane);
+    juce::Path curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane) const;
+    std::vector<LaneBreakpoint> tweenedPoints(const std::vector<LaneBreakpoint>& points) const;
     void strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
                      juce::Colour colour, float thickness) const;
     std::vector<juce::Point<float>> handleScreenPositions(const synth::AutomationLane& lane) const;
@@ -284,14 +304,35 @@ private:
     std::vector<LaneBreakpoint> dragMovedPoints() const;
     void commitPointMove();
     double gridStepBeats() const;
+    // One keyboard step in time: a grid step, or four pixels at the current zoom with snap off.
+    double keyStepBeats() const;
     // Normal: a grid step / 1% of the range; Coarse (Shift+Up/Down): 10%; Fine (Alt+Shift): a quarter of Normal.
     enum class NudgeSize { Normal, Coarse, Fine };
-    bool nudgePoints(double beatDirection, double valueDirection, NudgeSize size);
+    bool nudgePoints(int keyCode, double beatDirection, double valueDirection, NudgeSize size);
+
+    // ---- Keyboard drag (AutomationLaneEditorKeyGlide.cpp) ----
+    bool beginKeyDrag(int keyCode, const std::vector<LaneBreakpoint>& picked, double beatDirection,
+                      double valueDirection, NudgeSize size);
+    void applyKeyDrag(bool tapStep);
+    void endKeyDrag();
+    void cancelKeyDrag();
+    double keyDragSpeedFactor() const;
+    void easeMovedPoints(const std::vector<LaneBreakpoint>& from, const std::vector<LaneBreakpoint>& to,
+                         const std::vector<double>& keysFrom, const std::vector<double>& keysTo);
+    juce::Point<float> pointPosition(const LaneBreakpoint& point) const;
     bool insertAfterCursor();
     bool stepCursor(int direction);
     bool extendSelection(int direction);
     bool handleSelectionKey(const juce::KeyPress& key);
     void selectionChanged();
+    struct OwnEditScope {
+        explicit OwnEditScope(AutomationLaneEditor& editor)
+            : editor_(editor) {
+            ++editor_.ownEdits_;
+        }
+        ~OwnEditScope() { --editor_.ownEdits_; }
+        AutomationLaneEditor& editor_;
+    };
     void syncToDoc();
     void selectOnly(const LaneBreakpoint& point);
     juce::String describePoints() const;
@@ -310,6 +351,8 @@ private:
     void paintStretchBox(juce::Graphics& g);
     void trackStretchHover(juce::Point<int> pos);
     void refreshStretchBox();
+    bool stretchBoxFollows() const;
+    juce::Rectangle<float> movedPointsBounds() const;
     std::optional<juce::MouseCursor> stretchCursor() const;
     double pushGapBeats() const;
 
@@ -376,8 +419,20 @@ private:
     double stretchGrabBeat_ = 0.0;
     double stretchGrabValue_ = 0.0;
     LanePointGlide glide_{*this};
+    KeyedPointTween pointTween_{*this};
+    KeyHold keyHold_{*this};
+    struct KeyDrag {
+        bool time = false;
+        int sign = 1;
+        double unit = 0.0; // beats of one step in time (the tap, and the snapped quantum)
+        bool snapped = false;
+        bool cancelled = false;
+    } keyDrag_;
     LanePointClipboard* clipboard_ = nullptr;
     std::int64_t syncedRevision_ = -1;
+    // > 0 while this editor commits its own move: the notification must not prune the selection, whose new beats are
+    // set right after.
+    int ownEdits_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationLaneEditor)
 };

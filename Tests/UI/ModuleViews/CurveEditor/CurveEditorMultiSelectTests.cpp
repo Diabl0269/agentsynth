@@ -3,7 +3,10 @@
 // selection, Alt+arrows and a mouse drag move the group rigidly as one gesture, Delete removes it, and
 // Cmd+A / C / V / D select, copy, paste and duplicate it.
 
+#include "../../Layout/KeyGlide/KeyGlideTestHost.h"
 #include "CurveEditorTestHelpers.h"
+#include "UI/Layout/PointEditorDuplicate.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
 #include <gtest/gtest.h>
 
@@ -334,4 +337,240 @@ TEST(CurveEditorMultiSelect, CtrlTDoesNothingOnAFixedCurveAndCommandTStaysWithTh
     EXPECT_FALSE(rig.press('T', kCmd)) << "Cmd+T is the app's Add Track";
     EXPECT_EQ(rig.editor.getModel().getNumNodes(), 5);
 #endif
+}
+
+//==============================================================================
+// Holding an arrow: the selection glides and the whole hold is one gesture
+
+namespace {
+// A rig whose arrows are "physically" held through the editor's key-hold host.
+struct HeldRig : Rig {
+    key_glide_test::FakeKeys keys;
+
+    explicit HeldRig(CurveModel model)
+        : Rig(std::move(model)) {
+        editor.getKeyHoldForTest().host = keys.host();
+    }
+    void hold(int code, int mods = 0) {
+        keys.down = {code};
+        keys.alt = (mods & kAlt) != 0;
+        keys.shift = (mods & kShift) != 0;
+        EXPECT_TRUE(press(code, mods));
+    }
+    void frame(double glideMs) {
+        keys.now = 1000.0 + 150.0 + glideMs;
+        editor.getKeyHoldForTest().tick();
+    }
+    void release() {
+        keys.down.clear();
+        editor.getKeyHoldForTest().checkKeyUp();
+    }
+    int count(const juce::String& event) const { return (int)std::count(events.begin(), events.end(), event); }
+};
+} // namespace
+
+TEST(CurveEditorKeyHold, HoldingUpMovesTheLevelContinuouslyAcceleratesAndIsOneGesture) {
+    HeldRig rig(freeModel(3));
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    rig.events.clear();
+    const float start = rig.node(1).y;
+
+    rig.hold(juce::KeyPress::upKey);
+    const float afterTap = rig.node(1).y;
+    EXPECT_NEAR(afterTap - start, 0.05f, 1e-5f) << "the tap is the existing one step";
+    rig.frame(0.0);
+    rig.frame(500.0);
+    const float half = rig.node(1).y;
+    rig.frame(1000.0);
+    const float full = rig.node(1).y;
+    EXPECT_GT(half, afterTap);
+    EXPECT_GT(full - half, half - afterTap) << "the second half covers more than the first";
+    EXPECT_NE(std::fmod((double)full, 0.05), 0.0) << "continuous, not in steps";
+
+    EXPECT_EQ(rig.count("start"), 1);
+    EXPECT_EQ(rig.count("end"), 0) << "the gesture stays open while the key is down";
+    rig.release();
+    EXPECT_EQ(rig.count("start"), 1);
+    EXPECT_EQ(rig.count("end"), 1) << "one undo step for the tap and the hold";
+    EXPECT_FALSE(rig.editor.getKeyHoldForTest().active());
+}
+
+TEST(CurveEditorKeyHold, ATapIsOneStepAndAHoldAgainstALimitOpensNoGesture) {
+    HeldRig rig(freeModel(3));
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    rig.events.clear();
+    EXPECT_TRUE(rig.press(juce::KeyPress::upKey)) << "no key physically down: a plain step";
+    EXPECT_EQ(rig.count("start"), 1);
+    EXPECT_EQ(rig.count("end"), 1);
+    EXPECT_FALSE(rig.editor.getKeyHoldForTest().active());
+
+    HeldRig edge(freeModel(3));
+    edge.press(juce::KeyPress::rightKey);
+    edge.press(juce::KeyPress::rightKey);
+    edge.hold(juce::KeyPress::upKey);
+    for (int i = 0; i < 4; ++i)
+        edge.frame(1000.0 * (i + 1));
+    ASSERT_NEAR(edge.node(1).y, 1.0f, 1e-6f);
+    edge.events.clear();
+    edge.release();
+    EXPECT_EQ(edge.count("end"), 1) << "it moved before the limit, so the gesture closes";
+
+    HeldRig pinned(freeModel(3));
+    pinned.press(juce::KeyPress::rightKey);
+    pinned.press(juce::KeyPress::rightKey);
+    pinned.editor.getModel().setNodeY(1, 1.0f);
+    pinned.events.clear();
+    pinned.hold(juce::KeyPress::upKey);
+    pinned.frame(500.0);
+    pinned.release();
+    EXPECT_EQ(pinned.count("start"), 0) << "a hold that never moved reaches no undo step";
+    EXPECT_EQ(pinned.count("end"), 0);
+}
+
+TEST(CurveEditorKeyHold, WithSnapOnAHoldStepsFromGridLineToGridLine) {
+    HeldRig rig(freeModel(1));
+    rig.editor.setGrid(CurveEditorComponent::CurveGrid{8, 2, 0.0, 0.0});
+    rig.editor.setSnapToGrid(true);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    rig.hold(juce::KeyPress::rightKey, kAlt);
+    EXPECT_NEAR(rig.node(1).x, 0.625, 1e-9) << "the tap is one grid cell";
+    for (const double glideMs : {200.0, 800.0, 1500.0}) {
+        rig.frame(glideMs);
+        EXPECT_NEAR(rig.node(1).x * 8.0, std::round(rig.node(1).x * 8.0), 1e-9) << "on a grid line at " << glideMs;
+    }
+    EXPECT_GT(rig.node(1).x, 0.625);
+    rig.release();
+    EXPECT_EQ(rig.count("end"), 1);
+}
+
+TEST(CurveEditorKeyHold, ATapEasesTheDrawnPointAndPlainlyLandsUnderReduceMotion) {
+    HeldRig rig(freeModel(3));
+    rig.editor.getPointTweenForTest().forceAnimateForTest(true);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+
+    auto& tween = rig.editor.getPointTweenForTest();
+    const float before = rig.posOf(1).y;
+    rig.press(juce::KeyPress::upKey);
+    ASSERT_TRUE(tween.isAnimating());
+    EXPECT_GT(tween.offsetFor(1).y, 0.0f) << "drawn below its new place, at the old one";
+    EXPECT_NEAR(tween.drawnAt(1, rig.posOf(1)).y, before, 1e-3f);
+    tween.stepForTest(40.0);
+    EXPECT_GT(tween.offsetFor(1).y, 0.0f);
+    EXPECT_LT(tween.offsetFor(1).y, before - rig.posOf(1).y);
+    tween.stepForTest(300.0);
+    EXPECT_FALSE(tween.isAnimating());
+
+    synth::ui::setReducedMotionForTest(true);
+    rig.press(juce::KeyPress::upKey);
+    EXPECT_FALSE(tween.isAnimating());
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+namespace {
+// The y a stroked path has at `x` (linear between its vertices); NaN when the path does not reach x.
+float pathYAt(const juce::Path& path, float x) {
+    juce::Point<float> previous;
+    bool havePrevious = false;
+    for (juce::Path::Iterator it(path); it.next();) {
+        if (it.elementType != juce::Path::Iterator::lineTo && it.elementType != juce::Path::Iterator::startNewSubPath)
+            continue;
+        const juce::Point<float> p{it.x1, it.y1};
+        if (havePrevious && it.elementType == juce::Path::Iterator::lineTo && x >= previous.x && x <= p.x)
+            return p.x == previous.x ? p.y : previous.y + (p.y - previous.y) * (x - previous.x) / (p.x - previous.x);
+        previous = p;
+        havePrevious = true;
+    }
+    return std::nanf("");
+}
+} // namespace
+
+// Regression test for FRO1063: the dots glided but the line stayed at the model place, so the dots left the line.
+TEST(CurveEditorKeyHold, TheCurveLineAndItsBendHandlesFollowTheGlidingPoints) {
+    HeldRig rig(freeModel(3));
+    auto& tween = rig.editor.getPointTweenForTest();
+    tween.forceAnimateForTest(true);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::upKey);
+    ASSERT_TRUE(tween.isAnimating());
+    for (const double ms : {0.0, 40.0, 90.0}) {
+        tween.stepForTest(ms);
+        const auto path = rig.editor.getDrawnCurvePathForTest();
+        for (int i = 0; i < rig.editor.getModel().getNumNodes(); ++i) {
+            const auto drawn = tween.drawnAt(i, rig.posOf(i));
+            const float y = pathYAt(path, drawn.x);
+            ASSERT_FALSE(std::isnan(y)) << "node " << i << " at " << ms << " ms";
+            EXPECT_NEAR(y, drawn.y, 1.0f) << "the line passes through the drawn node " << i << " at " << ms << " ms";
+        }
+    }
+    tween.stepForTest(400.0);
+    EXPECT_NEAR(pathYAt(rig.editor.getDrawnCurvePathForTest(), rig.posOf(1).x), rig.posOf(1).y, 1.0f);
+}
+
+//==============================================================================
+// Duplicate points preference: where Cmd+D puts the copies
+
+namespace {
+struct PlacementGuard {
+    explicit PlacementGuard(DuplicatePlacement placement) { setDuplicatePlacement(placement); }
+    ~PlacementGuard() { setDuplicatePlacement(DuplicatePlacement::afterLast); }
+};
+
+// freeModel(3) is 0.25, 0.5, 0.75; the first two are selected and duplicated. Returns the copies' x, one gesture.
+std::vector<double> duplicatedXs(DuplicatePlacement placement, bool snap) {
+    PlacementGuard guard(placement);
+    Rig rig(freeModel(3));
+    if (snap) {
+        rig.editor.setGrid(CurveEditorComponent::CurveGrid{8, 2, 0.0, 0.0});
+        rig.editor.setSnapToGrid(true);
+    }
+    rig.selectFirstTwoInterior();
+    rig.events.clear();
+    EXPECT_TRUE(rig.press('D', kCmd));
+    EXPECT_EQ(rig.events, (std::vector<juce::String>{"start", "points", "end"})) << "one gesture";
+    std::vector<double> xs;
+    for (const int i : rig.selected())
+        xs.push_back(rig.node(i).x);
+    return xs;
+}
+} // namespace
+
+TEST(CurveEditorDuplicatePlacement, RightAfterTheLastPointIsTheDefaultAndStartsOneTickPastIt) {
+    EXPECT_EQ(duplicatePlacement(), DuplicatePlacement::afterLast);
+    const auto xs = duplicatedXs(DuplicatePlacement::afterLast, false);
+    ASSERT_EQ(xs.size(), 2u);
+    EXPECT_NEAR(xs[0], 0.5 + tickBeats(), 1e-9);
+    EXPECT_NEAR(xs[1] - xs[0], 0.25, 1e-9) << "the spacing is kept";
+}
+
+TEST(CurveEditorDuplicatePlacement, OnePointSpacingAndTheNextGridLine) {
+    const auto spacing = duplicatedXs(DuplicatePlacement::onePointSpacing, false);
+    ASSERT_EQ(spacing.size(), 2u);
+    EXPECT_NEAR(spacing[0], 0.75, 1e-9) << "one gap (a quarter) past the last point";
+
+    const auto grid = duplicatedXs(DuplicatePlacement::nextGridLine, true);
+    ASSERT_EQ(grid.size(), 2u);
+    EXPECT_NEAR(grid[0], 0.625, 1e-9) << "whole eighths: 0.25 + 3 * 0.125";
+    EXPECT_NEAR(grid[1] - grid[0], 0.25, 1e-9);
+
+    const auto free = duplicatedXs(DuplicatePlacement::nextGridLine, false);
+    ASSERT_EQ(free.size(), 2u);
+    EXPECT_NEAR(free[0], 0.5 + tickBeats(), 1e-9) << "with snap off it is the default placement";
+}
+
+TEST(CurveEditorDuplicatePlacement, ASinglePointKeepsItsSmallExistingOffsetInEveryMode) {
+    for (const auto placement :
+         {DuplicatePlacement::afterLast, DuplicatePlacement::onePointSpacing, DuplicatePlacement::nextGridLine}) {
+        PlacementGuard guard(placement);
+        Rig rig(freeModel(3));
+        rig.press(juce::KeyPress::rightKey);
+        rig.press(juce::KeyPress::rightKey);
+        ASSERT_TRUE(rig.press('D', kCmd));
+        ASSERT_EQ(rig.selected().size(), 1u);
+        EXPECT_NEAR(rig.node(rig.selected()[0]).x, 0.27, 1e-9);
+    }
 }

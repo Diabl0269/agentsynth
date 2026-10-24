@@ -42,7 +42,7 @@ the Settings window is.
 | Category | Rows |
 | --- | --- |
 | Graph | smart connections, double-click to disconnect, alignment guides, draw cables on top of modules, Dual I/O default + per-module overrides, macro auto-ports, macro toggles, reconnect the chain on delete |
-| Timeline | loop-locator toggles, ask before removing an LFO's last destination, "Record also starts playback", "Follow playhead point", natural scrolling, zoom direction, piano roll key labels |
+| Timeline | Duplicate points (where Cmd+D puts copies of selected points: right after the last point, one point-spacing after, or the next grid line; user setting `duplicatePointsPlacement`; [`automation-points.md`](../timeline/automation-points.md#duplicating)), loop-locator toggles, ask before removing an LFO's last destination, "Record also starts playback", "Follow playhead point", natural scrolling, zoom direction, piano roll key labels |
 | Files & Autosave | autosave on/interval/backups, patch save location (per project / shared folder / chosen folder + Choose...) |
 | Mixer | auto-create channel on connect, default track presets, mixer placement |
 | Panels & Windows | panel detach mode, animations (Follow system / Full / Reduced / Off; [`animation.md`](animation.md#reduced-motion)), show info tooltips (off hides tooltips that explain a control; helper tips such as the mixer sources badge keep showing; [`animation.md`](animation.md#tooltips)), show button labels (on by default; off leaves only the icons on the top bar and the canvas toolbar, the tooltip still names the button and its key; [`chrome.md`](chrome.md#show-button-labels)) |

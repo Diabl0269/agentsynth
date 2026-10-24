@@ -2,6 +2,8 @@
 
 #include "CurveEditorGeometry.h"
 #include "CurveModel.h"
+#include "UI/Layout/KeyGlide/KeyHold.h"
+#include "UI/Layout/KeyGlide/KeyedPointTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -223,6 +225,13 @@ public:
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+    bool keyStateChanged(bool isKeyDown) override;
+
+    /** Tests: the held-arrow drag (inject host.nowMs/isArrowDown/modifiers, then tick() per frame) and the eased
+     *  drawn points. */
+    KeyHold& getKeyHoldForTest() noexcept { return keyHold_; }
+    KeyedPointTween& getPointTweenForTest() noexcept { return pointTween_; }
+    juce::Path getDrawnCurvePathForTest() const;
 
 private:
     CurveEditorGeometry currentGeometry() const;
@@ -247,6 +256,19 @@ private:
     /** Drags the whole selection so node `index` follows `point`. */
     void dragSelectionTo(int index, juce::Point<float> point, bool bypassSnap);
     bool handleChord(const juce::KeyPress& key);
+    /** The move behind nudgeSelectedNode without its gesture bracket: `holdGesture` opens the hold's bracket at the
+     *  first real move instead. */
+    bool moveSelectionBy(double dx, float dy, bool bypassSnap, bool holdGesture, bool ease);
+
+    // ---- Keyboard drag (CurveEditorKeyGlide.cpp) ----
+    void pressNudge(int keyCode, double dx, double dy, bool fine);
+    bool beginKeyDrag(int keyCode, double dx, double dy, bool fine);
+    std::vector<juce::Point<float>> selectionPositions() const;
+    juce::Point<float> segmentTweenOffset(int seg, float progress) const;
+    void buildCurvePaths(const CurveEditorGeometry& geometry, juce::Path& curvePath, juce::Path& fillPath) const;
+    void applyKeyDrag(bool tapStep);
+    void endKeyDrag();
+    double keyDragSpeedFactor() const;
 
     struct ClipPoint {
         double dx = 0.0;
@@ -320,6 +342,17 @@ private:
     int pendingToggleIndex_ = -1;
     int pendingCollapseIndex_ = -1;
     juce::String announcedValueText_;
+
+    KeyedPointTween pointTween_{*this};
+    KeyHold keyHold_{*this};
+    struct KeyDrag {
+        bool time = false;
+        int sign = 1;
+        double start = 0.0; // the cursor point's x or y when the hold began
+        double unit = 0.0;  // one step along the axis: the tap, and the snapped quantum
+        bool snapped = false;
+        bool gestureOpen = false;
+    } keyDrag_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CurveEditorComponent)
 };

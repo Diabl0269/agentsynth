@@ -8,6 +8,7 @@
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FoldAllButton.h"
+#include "UI/Layout/PointEditorDuplicate.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -172,6 +173,10 @@ public:
     // and applies it to the whole app at once (synth::ui::setAnimationMode).
     synth::ui::AnimationMode getAnimationMode() const;
     void setAnimationMode(synth::ui::AnimationMode mode);
+    // "Duplicate points" (Timeline): where Cmd+D puts the copies of selected automation or curve points. Setting it
+    // persists the choice and applies it to every editor at once (synth::ui::setDuplicatePlacement).
+    synth::ui::DuplicatePlacement getDuplicatePlacement() const;
+    void setDuplicatePlacement(synth::ui::DuplicatePlacement placement);
     // Where patch save/open dialogs start (Files & Autosave): with the project (default), the shared
     // Patches folder, or a chosen folder. Read at use time by MainComponent through
     // synth::PatchSaveLocation; see docs/layout/settings-preferences.md.
@@ -359,6 +364,8 @@ private:
     void persistRecordStartsPlayback(bool enabled);
     void persistFollowPointPercent(int percent);
     void initTimelineEditingToggles();
+    void setupDuplicatePointsControls();
+    void persistDuplicatePlacement(synth::ui::DuplicatePlacement placement);
     void persistNaturalScrolling(bool enabled);
     void persistZoomScrollUpZoomsIn(bool enabled);
     void persistAutosaveEnabled(bool enabled);
@@ -619,6 +626,8 @@ private:
     // On (the default) labels every row in the piano roll's keys column; off labels only the Cs —
     // PianoRollComponent::KeyLabelMode::AllNotes / OctavesOnly.
     juce::ToggleButton pianoRollKeyLabelsToggle{"Label every key"};
+    juce::Label duplicatePointsLabel;
+    juce::ComboBox duplicatePointsCombo;
     // Autosave. One single line: the toggle, then "Every: [field] min", then
     // "Keep: [field] backups" — three independent statements that read as one group, not stacked
     // rows. Both numeric fields are plain digits-only juce::TextEditors (exact-integer entry, no

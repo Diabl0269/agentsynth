@@ -2,7 +2,9 @@
 // LanePointStretch (box, handles, preview math). The class is declared in AutomationLaneEditor.h.
 
 #include "AutomationLaneEditor.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include <algorithm>
+#include <map>
 
 namespace synth::ui {
 
@@ -37,8 +39,9 @@ juce::Rectangle<float> AutomationLaneEditor::stretchBox() const {
     if (!stretchBoxVisible())
         return {};
     const auto map = pointMapper();
-    const auto around =
-        stretch_.isActive() ? pointsBounds(stretch_.result().moved, map) : selection_.boundingBox(*lanePoints(), map);
+    const auto around = stretch_.isActive()                 ? pointsBounds(stretch_.result().moved, map)
+                        : dragMode_ == DragMode::MoveHandle ? movedPointsBounds()
+                                                            : selection_.boundingBox(*lanePoints(), map);
     // Kept inside the lane: a point at the far left or the top of the lane must not push the box's edge out of view.
     return stretchBoxAround(around).getIntersection(getLocalBounds().toFloat().reduced(0.5f));
 }
@@ -52,10 +55,31 @@ juce::Rectangle<float> AutomationLaneEditor::getStretchHandleRectForTest(Stretch
     return box.isEmpty() ? juce::Rectangle<float>() : stretchHandleRect(handle, box, getLocalBounds().toFloat());
 }
 
-void AutomationLaneEditor::refreshStretchBox() { stretch_.setBoxShown(stretchBoxVisible()); }
+// While points are being moved (the mouse or a held key) the box is the bounds of where they are drawn now, so it
+// never lags behind them; a discrete jump of the selection eases (LanePointStretch::retargetBox).
+bool AutomationLaneEditor::stretchBoxFollows() const {
+    return dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::Stretch;
+}
+
+// The preview of a move, each point where it is drawn (its eased offset included).
+juce::Rectangle<float> AutomationLaneEditor::movedPointsBounds() const {
+    const auto map = pointMapper();
+    std::map<double, juce::Point<float>> offsets;
+    const auto moved = dragMovedPoints();
+    for (std::size_t i = 0; i < moved.size() && i < dragPoints_.size(); ++i)
+        offsets[moved[i].beat] = pointTween_.offsetFor(lane_key::tweenKey(dragPoints_[i].beat));
+    return pointsBounds(moved, [&](double beat, double value) { return map(beat, value) + offsets[beat]; });
+}
+
+void AutomationLaneEditor::refreshStretchBox() {
+    stretch_.setBoxShown(stretchBoxVisible());
+    stretch_.retargetBox(stretchBox(), stretchBoxFollows());
+}
 
 void AutomationLaneEditor::paintStretchBox(juce::Graphics& g) {
-    stretch_.paintBox(g, stretchBox(), getLocalBounds().toFloat(), hoverHandle_);
+    const auto box = stretchBox();
+    stretch_.noteBox(box, stretchBoxFollows());
+    stretch_.paintBox(g, box, getLocalBounds().toFloat(), hoverHandle_);
 }
 
 // A handle under the pointer wins over the point or segment beneath it; the pointer tells it by cursor and hint.
@@ -151,9 +175,13 @@ void AutomationLaneEditor::commitStretchResult(const std::vector<LaneBreakpoint>
     for (std::size_t i = 0; i < original.size(); ++i)
         if (selection_.getCursor() == original[i].beat)
             cursor = result.moved[i].beat;
-    commitPointEdit(editTarget(), stretchRemoveBeats(original, result), stretchAddPoints(result));
-    selection_.setSelection(beatsOf(result.moved));
-    selection_.setCursor(cursor);
+    {
+        OwnEditScope own(*this);
+        commitPointEdit(editTarget(), stretchRemoveBeats(original, result), stretchAddPoints(result));
+        selection_.setSelection(beatsOf(result.moved));
+        selection_.setCursor(cursor);
+    }
+    refreshStretchBox();
 }
 
 //==============================================================================

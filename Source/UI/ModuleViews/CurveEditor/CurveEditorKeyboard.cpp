@@ -33,8 +33,38 @@ juce::Point<double> CurveEditorComponent::keyboardStep() const {
 }
 
 bool CurveEditorComponent::nudgeSelectedNode(double dx, float dy, bool bypassSnap) {
+    return moveSelectionBy(dx, dy, bypassSnap, false, true);
+}
+
+// The group's move, shared by a press and a hold's frames. A press brackets it as one gesture; a hold opens the
+// bracket at its first real move and closes it when the key goes up, so a hold against a limit never reaches the undo
+// stack.
+bool CurveEditorComponent::moveSelectionBy(double dx, float dy, bool bypassSnap, bool holdGesture, bool ease) {
     if (selectedIndex_ < 0 || selectedIndex_ >= model_.getNumNodes())
         return false;
+    const auto selectedBefore = selection_;
+    const auto positionsBefore = selectionPositions();
+    const auto easeToResult = [&] {
+        const auto positionsAfter = selectionPositions();
+        if (!ease || positionsAfter.size() != positionsBefore.size())
+            return;
+        for (std::size_t k = 0; k < positionsAfter.size(); ++k) {
+            const auto from = pointTween_.drawnAt(selectedBefore[k], positionsBefore[k]);
+            if (selectedBefore[k] != selection_[k])
+                pointTween_.erase(selectedBefore[k]);
+            pointTween_.retarget(selection_[k], from, positionsAfter[k]);
+        }
+    };
+    const auto openGesture = [&] {
+        if (holdGesture && keyDrag_.gestureOpen)
+            return;
+        beginGesture();
+        keyDrag_.gestureOpen = keyDrag_.gestureOpen || holdGesture;
+    };
+    const auto closeGesture = [&] {
+        if (!holdGesture)
+            endGesture();
+    };
     const CurveNode before = model_.getNode(selectedIndex_);
     const juce::Point<double> target{before.x + dx, (double)juce::jlimit(before.minY, before.maxY, before.y + dy)};
     const auto snapped = snapModelPoint(currentGeometry(), target, bypassSnap);
@@ -45,9 +75,10 @@ bool CurveEditorComponent::nudgeSelectedNode(double dx, float dy, bool bypassSna
         CurveModel moved = modelWithSelectionMoved(snapped.x - before.x, snapped.y - before.y, changed);
         if (changed.empty())
             return false;
-        beginGesture();
+        openGesture();
         commitSelectionMove(std::move(moved), changed);
-        endGesture();
+        closeGesture();
+        easeToResult();
         return true;
     }
 
@@ -60,9 +91,10 @@ bool CurveEditorComponent::nudgeSelectedNode(double dx, float dy, bool bypassSna
 
     // Opened before the change and closed after it, so the host captures its before-state first and
     // records the whole move as one undo step.
-    beginGesture();
+    openGesture();
     applyNodeTarget(selectedIndex_, snapped);
-    endGesture();
+    closeGesture();
+    easeToResult();
     return true;
 }
 
@@ -95,7 +127,10 @@ void CurveEditorComponent::focusGained(FocusChangeType cause) {
     repaint();
 }
 
-void CurveEditorComponent::focusLost(FocusChangeType) { repaint(); }
+void CurveEditorComponent::focusLost(FocusChangeType) {
+    keyHold_.end();
+    repaint();
+}
 
 bool CurveEditorComponent::handleChord(const juce::KeyPress& key) {
     const auto mods = key.getModifiers();
@@ -140,7 +175,7 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
         const double scale = fine ? 1.0 / kFineDivisor : 1.0;
         const double dx = left ? -step.x * scale : (right ? step.x * scale : 0.0);
         const double dy = down ? -step.y * scale : (up ? step.y * scale : 0.0);
-        nudgeSelectedNode(dx, (float)dy, fine);
+        pressNudge(code, dx, dy, fine);
         return true;
     }
     if ((up || down) && !mods.isShiftDown()) {
@@ -148,7 +183,7 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
         if (selectedIndex_ < 0)
             return false;
         const double dy = down ? -keyboardStep().y : keyboardStep().y;
-        nudgeSelectedNode(0.0, (float)dy, false);
+        pressNudge(code, 0.0, dy, false);
         return true;
     }
     if ((code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) &&

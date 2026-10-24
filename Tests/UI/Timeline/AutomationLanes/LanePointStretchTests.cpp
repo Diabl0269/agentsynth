@@ -209,3 +209,75 @@ TEST(LanePointStretchTest, TheBoxFadesOnAShowingOwner) {
     }
     synth::ui::setReducedMotionForTest(std::nullopt);
 }
+
+namespace {
+struct BoxEaseRig {
+    synth::ui::LanePointStretch stretch;
+    explicit BoxEaseRig(juce::Component& owner)
+        : stretch(owner) {
+        synth::ui::setReducedMotionForTest(false);
+        stretch.forceAnimateForTest(true);
+        stretch.setBoxShown(true);
+    }
+    ~BoxEaseRig() { synth::ui::setReducedMotionForTest(std::nullopt); }
+};
+} // namespace
+
+TEST(LanePointStretchBoxEase, ARetargetedBoxPassesThroughIntermediateRectanglesAndSettlesOnTheTarget) {
+    juce::Component owner;
+    BoxEaseRig rig(owner);
+    const juce::Rectangle<float> a(10.0f, 10.0f, 40.0f, 20.0f), b(10.0f, 10.0f, 140.0f, 60.0f);
+    rig.stretch.retargetBox(a, false);
+    EXPECT_FALSE(rig.stretch.isBoxMoving()) << "the first box appears where it is";
+    rig.stretch.retargetBox(b, false);
+    ASSERT_TRUE(rig.stretch.isBoxMoving());
+    EXPECT_EQ(rig.stretch.shownBox(b), a) << "drawn at the old rectangle first";
+
+    float lastWidth = a.getWidth();
+    for (int frame = 0; frame < 4; ++frame) {
+        rig.stretch.stepForTest(20.0 * (frame + 1));
+        const auto shown = rig.stretch.shownBox(b);
+        EXPECT_GT(shown.getWidth(), lastWidth);
+        EXPECT_LT(shown.getWidth(), b.getWidth());
+        lastWidth = shown.getWidth();
+    }
+    rig.stretch.stepForTest(300.0);
+    EXPECT_EQ(rig.stretch.shownBox(b), b);
+    EXPECT_FALSE(rig.stretch.isBoxMoving()) << "it stops when settled";
+}
+
+TEST(LanePointStretchBoxEase, ARetargetMidwayStartsFromWhereTheBoxIsDrawnAndFollowLandsAtOnce) {
+    juce::Component owner;
+    BoxEaseRig rig(owner);
+    const juce::Rectangle<float> a(0.0f, 0.0f, 20.0f, 20.0f), b(0.0f, 0.0f, 100.0f, 20.0f), c(0.0f, 0.0f, 60.0f, 80.0f);
+    rig.stretch.retargetBox(a, false);
+    rig.stretch.retargetBox(b, false);
+    rig.stretch.stepForTest(50.0);
+    const auto drawn = rig.stretch.shownBox(b);
+    ASSERT_NE(drawn, b);
+
+    rig.stretch.retargetBox(c, false);
+    EXPECT_NEAR(rig.stretch.shownBox(c).getWidth(), drawn.getWidth(), 1e-3f);
+    EXPECT_NEAR(rig.stretch.shownBox(c).getHeight(), drawn.getHeight(), 1e-3f) << "no jump when it is retargeted";
+
+    rig.stretch.retargetBox(b, true);
+    EXPECT_EQ(rig.stretch.shownBox(b), b);
+    EXPECT_FALSE(rig.stretch.isBoxMoving()) << "a box that tracks a drag lands at once";
+}
+
+TEST(LanePointStretchBoxEase, ReduceMotionAndAHiddenOwnerMoveTheBoxAtOnce) {
+    juce::Component owner;
+    synth::ui::LanePointStretch stretch(owner); // never shown
+    const juce::Rectangle<float> a(0.0f, 0.0f, 20.0f, 20.0f), b(0.0f, 0.0f, 100.0f, 20.0f);
+    stretch.setBoxShown(true);
+    stretch.retargetBox(a, false);
+    stretch.retargetBox(b, false);
+    EXPECT_FALSE(stretch.isBoxMoving());
+    EXPECT_EQ(stretch.shownBox(b), b);
+
+    synth::ui::setReducedMotionForTest(true);
+    stretch.forceAnimateForTest(true);
+    stretch.retargetBox(a, false);
+    EXPECT_FALSE(stretch.isBoxMoving());
+    synth::ui::setReducedMotionForTest(std::nullopt);
+}

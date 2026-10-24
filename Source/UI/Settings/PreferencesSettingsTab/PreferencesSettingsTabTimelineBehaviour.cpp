@@ -120,6 +120,7 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
     contentHost.addAndMakeVisible(followPointUnitLabel);
     followPointUnitLabel.setText("% of the view", juce::dontSendNotification);
     followPointUnitLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+    setupDuplicatePointsControls(); // Chained here, the constructor is baselined
 }
 
 bool PreferencesSettingsTab::isRecordStartsPlaybackEnabled() const {
@@ -307,6 +308,22 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
         beginGroup(visible);
         if (visible) {
             pianoRollKeyLabelsToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 8: where Cmd+D puts the copies of selected points.
+    {
+        const std::initializer_list<juce::Component*> rows{&duplicatePointsLabel, &duplicatePointsCombo};
+        const bool visible = groupMatches(rows);
+        setGroupVisible(rows, visible);
+        beginGroup(visible);
+        if (visible) {
+            juce::Rectangle<int> row(0, y, contentWidth, 24);
+            duplicatePointsLabel.setBounds(row.removeFromLeft(150));
+            row.removeFromLeft(4);
+            duplicatePointsCombo.setBounds(row.removeFromLeft(280));
             y += 24;
         }
         pendingDivider = pendingDivider || visible;

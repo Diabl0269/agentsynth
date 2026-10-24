@@ -2,11 +2,10 @@
 // glides on (MorphMapGlide is the model; this is the glue to the frame pump and the keys).
 #include "MorphMap.h"
 #include "MorphMapInternal.h"
+#include "UI/Layout/KeyGlide/KeyGlideHost.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
-#include "UI/Timeline/CursorGlide/PhysicalKeyState.h"
 #include <algorithm>
 #include <iterator>
-#include <optional>
 
 namespace synth::ui {
 
@@ -14,38 +13,11 @@ namespace {
 // A hold is one run of the frame pump; no real hand keeps a key down this long (ten minutes).
 constexpr double kHoldRunMs = 600000.0;
 
-std::optional<ArrowKey> arrowOf(int keyCode) {
-    if (keyCode == juce::KeyPress::leftKey)
-        return ArrowKey::Left;
-    if (keyCode == juce::KeyPress::rightKey)
-        return ArrowKey::Right;
-    if (keyCode == juce::KeyPress::upKey)
-        return ArrowKey::Up;
-    if (keyCode == juce::KeyPress::downKey)
-        return ArrowKey::Down;
-    return std::nullopt;
-}
-
-/** The OS's own view where there is one (a held Cmd chord loses its key-up in JUCE's state on macOS), JUCE's otherwise.
- */
-bool arrowPhysicallyDown(int keyCode) {
-    std::optional<bool> physical;
-    if (const auto arrow = arrowOf(keyCode))
-        physical = physicalArrowKeyDown(*arrow);
-    return physical.value_or(juce::KeyPress::isKeyCurrentlyDown(keyCode));
-}
-
 const int kArrows[] = {juce::KeyPress::leftKey, juce::KeyPress::rightKey, juce::KeyPress::upKey,
                        juce::KeyPress::downKey};
 } // namespace
 
-MorphMap::GlideHost MorphMap::makeDefaultGlideHost() const {
-    GlideHost host;
-    host.nowMs = [] { return juce::Time::getMillisecondCounterHiRes(); };
-    host.isArrowDown = arrowPhysicallyDown;
-    host.isShiftDown = [] { return juce::ModifierKeys::currentModifiers.isShiftDown(); };
-    return host;
-}
+MorphMap::GlideHost MorphMap::makeDefaultGlideHost() const { return makeDefaultKeyGlideHost(); }
 
 void MorphMap::setGlideHostForTest(GlideHost host) { glideHost_ = std::move(host); }
 

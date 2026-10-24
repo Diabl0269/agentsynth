@@ -11,6 +11,13 @@ std::optional<bool>& overrideValue() {
     return value;
 }
 
+// The test run pins this so no test reads the machine's own Reduce Motion setting, which differs between CI runners
+// and developer Macs.
+std::optional<bool>& systemOverrideValue() {
+    static std::optional<bool> value;
+    return value;
+}
+
 AnimationMode& modeValue() {
     static AnimationMode mode = AnimationMode::followSystem;
     return mode;
@@ -57,6 +64,8 @@ bool prefersReducedMotion() {
     }
     if (const auto forced = overrideValue())
         return *forced;
+    if (const auto system = systemOverrideValue())
+        return *system;
     return detail::systemPrefersReducedMotion();
 }
 
@@ -69,6 +78,8 @@ double motionMs(double full, double reduced) {
 }
 
 void setReducedMotionForTest(std::optional<bool> value) { overrideValue() = value; }
+
+void setSystemReducedMotionForTest(std::optional<bool> value) { systemOverrideValue() = value; }
 
 #if !JUCE_MAC
 namespace detail {

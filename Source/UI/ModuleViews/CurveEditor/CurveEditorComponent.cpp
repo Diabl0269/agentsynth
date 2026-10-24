@@ -14,6 +14,9 @@ CurveEditorComponent::CurveEditorComponent() {
                "Delete removes them, Cmd+A selects all, Cmd+C copies, Cmd+V pastes, Cmd+D duplicates. Mouse: "
                "drag points and bend handles, Shift-click adds a point to the selection, double-click to add or "
                "remove a point");
+    keyHold_.speedFactor = [this] { return keyDragSpeedFactor(); };
+    keyHold_.onFrame = [this] { applyKeyDrag(false); };
+    keyHold_.onEnd = [this] { endKeyDrag(); };
 }
 
 CurveEditorGeometry CurveEditorComponent::currentGeometry() const {

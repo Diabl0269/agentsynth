@@ -632,10 +632,9 @@ shortcut.
 - **Reorder.** The dragged item stays under the grab point, its neighbours make room, and nothing
   teleports. One shared helper (`ReorderDragAnimator`) serves every reorderable list — never a
   second implementation per list. See [Reorder drag](#reorder-drag).
-- **Drag and drop.** Every drag-to-move shows the grab cursor (copy cursor for a copy), the moving
-  item or a ghost of it follows the pointer, and a reorderable list makes room with
-  `ReorderDragAnimator` — see [Drag-and-drop cursor](#drag-and-drop-cursor) and
-  [Reorder drag](#reorder-drag).
+- **Drag and drop.** Every drag-to-move shows the grab cursor (copy cursor for a copy), the moving item or a ghost of
+  it follows the pointer, and a reorderable list makes room with `ReorderDragAnimator`: see
+  [Drag-and-drop cursor](#drag-and-drop-cursor) and [Reorder drag](#reorder-drag).
 - **Toolbar.** A top-bar button eases its hover (110 ms in, 90 ms out), press (80 ms) and lit chip
   (160 ms in, 110 ms out); on hover its glyph lifts 1 px and does one small per-icon motion, never
   more than 2 icon units from rest. Under Reduce Motion nothing moves and only the colours change:
@@ -646,28 +645,29 @@ shortcut.
   grow in with the 8% bounce; never both at once ([details](#controls-swapping-in-place)).
 - **Tooltips.** A hover tooltip fades in over 160 ms and out over 110 ms, with no slide, and shows at once under
   Reduce Motion: [Tooltips](#tooltips).
-- **Popups.** A menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its
-  anchor and leaves the same way, 2 px back; Reduce motion makes it a plain 80 ms fade. Every close,
-  Escape and click-away included, leaves this way (`PopupMotion::dismiss`, never a direct close), and
-  lands at once when not on screen. One shared mechanism, never per call site:
-  [Popup windows](#popup-windows).
+- **Popups.** A menu, dropdown, popover, alert or dialog fades in while sliding 4 px away from its anchor and leaves
+  the same way, 2 px back; Reduce motion makes it a plain 80 ms fade. Every close (Escape and click-away included)
+  leaves this way (`PopupMotion::dismiss`, never a direct close), and lands at once when not on screen. One shared
+  mechanism, never per call site: [Popup windows](#popup-windows).
 - **Mini map.** The graph editor's mini map fades and slides 12 px out of / into its corner when
   toggled (160 ms in, 110 ms out, plain 80 ms fade under Reduce Motion): [mini map](minimap.md#show-and-hide-motion).
 - **Interruption.** A retargeted animation starts from the CURRENT value, never from its start: a
   re-toggle, a second insertion change or a drop mid-glide continues from where the thing is.
 - **Time-bounded.** Nothing repaints once it has settled: frames run for a finite duration and
   stop (see [the time-bounded animation rule](#the-time-bounded-animation-rule)).
-- **Drag-copy (Option-drag, used by the piano roll).** The original stays put at full opacity. A
-  copy ghost — raised surface, 1 px `accent` border, soft shadow, about 0.85 opacity — follows the
-  pointer at the grab offset, with the copy cursor. On drop it settles 140 ms `easeOutCubic` and
-  becomes the real item. Toggling Option mid-drag switches between copy and move without restarting
-  the drag.
+- **Drag-copy (Option-drag, used by the piano roll).** The original stays put at full opacity. A copy ghost (raised
+  surface, 1 px `accent` border, soft shadow, about 0.85 opacity) follows the pointer at the grab offset, with the copy
+  cursor, and on drop settles 140 ms `easeOutCubic` into the real item. Toggling Option mid-drag switches between
+  copy and move without restarting the drag.
 - **Insert between.** A module dragged between two cards makes room for itself: the cards after it glide aside
   (160 ms), its ghost slides to the gap, it lands with the 8% bounce, Esc or moving away glides them back:
   [Adding a module between others](#adding-a-module-between-others).
-- **Cancel (Esc, or a release over no valid target).** The dragged item or ghost returns into its
-  origin in 140 ms `easeInCubic` (a ghost also fades), its neighbours glide back in 160 ms, and
-  nothing is committed — no undo step.
+- **Cancel (Esc, or a release over no valid target).** The dragged item or ghost returns into its origin in 140 ms
+  `easeInCubic` (a ghost also fades), its neighbours glide back in 160 ms, and nothing is committed.
+- **Keyboard moves of points glide**: a hold ramps like the cursor glide and is one undo step; discrete steps (a tap, a
+  snapped step) ease the drawn point 160 ms; plain under Reduce Motion ([details](../timeline/automation-points.md#keyboard-moves)).
+- **A selection box eases to its new rectangle and follows what it frames during a drag**
+  ([details](../timeline/automation-points.md#stretching-a-selection)).
 
 ## Fading things in and out
 
@@ -845,7 +845,7 @@ duration that branches on the mode (full, reduced, or 0 under Off). Off is insta
 (`reallyClose` runs at once), and the self-clocked motions (the Card Layout Editor's fades and shrink ghost, the
 automation marker fade) land at once. A new non-essential animation asks `prefersReducedMotion()` before it starts, uses
 `AnimationDriver` or `motionMs` for its duration, and lands on its final state at once under Off.
-Tests: `setAnimationMode` sets the mode (restore `followSystem` afterwards); `setReducedMotionForTest` forces the OS's answer.
+Tests: `setAnimationMode` sets the mode (restore `followSystem` afterwards); `setReducedMotionForTest` forces the OS's answer. The test run itself pins the OS's answer to off (`setSystemReducedMotionForTest(false)` in `Tests/TestMain.cpp`), so no test reads the machine's own Reduce Motion setting, which differs between CI runners and developer Macs; a test that wants it on forces it.
 
 ## formatShortcutHint
 

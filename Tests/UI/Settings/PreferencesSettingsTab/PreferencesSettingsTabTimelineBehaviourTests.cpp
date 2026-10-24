@@ -306,3 +306,54 @@ TEST_F(PreferencesSettingsTabTest, FollowPlayheadPointFieldClampsCommitsAndPersi
     tab.setFollowPointPercent(95);
     EXPECT_EQ(appProperties.getUserSettings()->getIntValue("timelineFollowPointPercent"), 90);
 }
+
+// The "Duplicate points" combo: default "Right after the last point", a choice persists and applies app-wide at once,
+// and a fresh tab shows the saved choice.
+namespace {
+struct DuplicatePlacementGuard {
+    ~DuplicatePlacementGuard() { synth::ui::setDuplicatePlacement(synth::ui::DuplicatePlacement::afterLast); }
+};
+} // namespace
+
+TEST_F(PreferencesSettingsTabTest, DuplicatePointsDefaultsToRightAfterTheLastPoint) {
+    DuplicatePlacementGuard guard;
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_EQ(tab.getDuplicatePlacement(), synth::ui::DuplicatePlacement::afterLast);
+}
+
+TEST_F(PreferencesSettingsTabTest, ChoosingADuplicatePointsItemPersistsAndAppliesItAtOnce) {
+    using synth::ui::DuplicatePlacement;
+    DuplicatePlacementGuard guard;
+    PreferencesSettingsTab tab(appProperties);
+    juce::ComboBox* combo = nullptr;
+    for (auto* child : descendantsOf(tab))
+        if (auto* c = dynamic_cast<juce::ComboBox*>(child); c != nullptr && c->getTitle() == "Duplicate points")
+            combo = c;
+    ASSERT_NE(combo, nullptr);
+    EXPECT_FALSE(combo->getTooltip().isEmpty());
+
+    combo->setSelectedId(2, juce::sendNotificationSync);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("duplicatePointsPlacement"), "spacing");
+    EXPECT_EQ(synth::ui::duplicatePlacement(), DuplicatePlacement::onePointSpacing);
+    combo->setSelectedId(3, juce::sendNotificationSync);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("duplicatePointsPlacement"), "grid");
+    EXPECT_EQ(synth::ui::duplicatePlacement(), DuplicatePlacement::nextGridLine);
+    combo->setSelectedId(1, juce::sendNotificationSync);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("duplicatePointsPlacement"), "afterLast");
+    EXPECT_EQ(synth::ui::duplicatePlacement(), DuplicatePlacement::afterLast);
+}
+
+TEST_F(PreferencesSettingsTabTest, DuplicatePointsChoiceSurvivesAFreshTabAndUnknownValuesReadAsTheDefault) {
+    using synth::ui::DuplicatePlacement;
+    DuplicatePlacementGuard guard;
+    {
+        PreferencesSettingsTab tab(appProperties);
+        tab.setDuplicatePlacement(DuplicatePlacement::nextGridLine);
+    }
+    PreferencesSettingsTab tab2(appProperties);
+    EXPECT_EQ(tab2.getDuplicatePlacement(), DuplicatePlacement::nextGridLine);
+
+    appProperties.getUserSettings()->setValue("duplicatePointsPlacement", "notARealValue");
+    PreferencesSettingsTab tab3(appProperties);
+    EXPECT_EQ(tab3.getDuplicatePlacement(), DuplicatePlacement::afterLast);
+}
