@@ -44,6 +44,14 @@ if (!driver_.isRunning())
 - `AnimationDriver::lerpBounds(from, to, t)` is a static helper interpolating a
   `juce::Rectangle<int>` linearly between two positions.
 
+- **Never remove an animator from its own updater mid-update.** `juce::AnimatorUpdater::update()` reads its
+  map entry again after an animator finishes, so erasing that entry from a completion or frame callback (a driver
+  restarting itself, a pulse that re-arms, one animation stopping another) is a use after free. Only
+  `AnimationDriver` touches the updater: `start()`/`stop()` release the animator handle and the updater drops the
+  expired entry on its next pass. Never call `addAnimator`/`removeAnimator` from anywhere else; start or stop a
+  driver instead. Tests drive this with a plain `juce::AnimatorUpdater` (`start(juce::AnimatorUpdater&, ...)`) and
+  run in the ASAN suite.
+
 ## PanelSlide
 
 A sliding panel does **not** animate by tweening its `Rectangle`. It owns a

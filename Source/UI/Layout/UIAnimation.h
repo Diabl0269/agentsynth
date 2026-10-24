@@ -129,41 +129,37 @@ public:
      *  @param onComplete       Optional; called once when progress reaches 1.0.
      *
      *  Calling start() while an animation is already running replaces it; the
-     *  old animator is removed from the updater before the new one is added.
+     *  old one is stopped first (see stop()). It is safe to call from the onComplete
+     *  or onUpdate of any animation on the same updater, including this driver's own.
      */
     void start(juce::VBlankAnimatorUpdater& updater, double durationMs, std::function<float(float)> easingFn,
                std::function<void(float)> onUpdate, std::function<void()> onComplete = {}) {
-        // Stop / remove previous animation if any.
-        stop(updater);
-        testClockStart.reset();
+        begin([&updater](const juce::Animator& a) { updater.addAnimator(a); }, durationMs, std::move(easingFn),
+              std::move(onUpdate), std::move(onComplete));
+    }
 
-        // Animations: Off lands on the final frame at once; nothing is left running.
-        if (animationsOff()) {
-            if (onUpdate)
-                onUpdate(easingFn ? easingFn(1.0f) : 1.0f);
-            if (onComplete)
-                onComplete();
-            return;
-        }
-
-        run = std::make_shared<Run>();
-        run->updater = &updater;
-        run->durationMs = durationMs;
-        run->easing = easingFn ? std::move(easingFn) : [](float t) { return t; };
-        run->onUpdate = std::move(onUpdate);
-        run->onComplete = std::move(onComplete);
-        run->launch();
+    /** Same as above on a plain `juce::AnimatorUpdater`, whose `update()` the caller runs (headless tests). */
+    void start(juce::AnimatorUpdater& updater, double durationMs, std::function<float(float)> easingFn,
+               std::function<void(float)> onUpdate, std::function<void()> onComplete = {}) {
+        begin([&updater](const juce::Animator& a) { updater.addAnimator(a); }, durationMs, std::move(easingFn),
+              std::move(onUpdate), std::move(onComplete));
     }
 
     // -------------------------------------------------------------------------
-    /** Immediately stop a running animation and remove it from the updater.
-     *  Safe to call even if no animation is in progress.
+    /** Immediately stop a running animation. Safe to call even if none is in progress, and from inside any
+     *  animation's own callbacks on the same updater.
+     *
+     *  The updater is never asked to remove the entry: erasing it while the updater is still running that very
+     *  animator frees the entry the updater reads straight afterwards. The handle is released instead and the updater
+     *  drops the expired entry on its next pass. The updater parameter is kept so call sites need no change.
      */
-    void stop(juce::VBlankAnimatorUpdater& updater) {
+    void stop(juce::VBlankAnimatorUpdater&) { stop(); }
+    void stop(juce::AnimatorUpdater&) { stop(); }
+
+    void stop() {
         if (run != nullptr) {
             ++run->generation;
-            if (run->animator.has_value())
-                updater.removeAnimator(*run->animator);
+            Run::retire(run->animator);
             run.reset();
         }
     }
@@ -235,6 +231,30 @@ public:
     }
 
 private:
+    void begin(std::function<void(const juce::Animator&)> registerWithUpdater, double durationMs,
+               std::function<float(float)> easingFn, std::function<void(float)> onUpdate,
+               std::function<void()> onComplete) {
+        stop(); // the previous animation, if any
+        testClockStart.reset();
+
+        // Animations: Off lands on the final frame at once; nothing is left running.
+        if (animationsOff()) {
+            if (onUpdate)
+                onUpdate(easingFn ? easingFn(1.0f) : 1.0f);
+            if (onComplete)
+                onComplete();
+            return;
+        }
+
+        run = std::make_shared<Run>();
+        run->registerWithUpdater = std::move(registerWithUpdater);
+        run->durationMs = durationMs;
+        run->easing = easingFn ? std::move(easingFn) : [](float t) { return t; };
+        run->onUpdate = std::move(onUpdate);
+        run->onComplete = std::move(onComplete);
+        run->launch();
+    }
+
     // One running animation. Frames come from a VBlank clock, and a message-thread stall (a graph rebuild, a plugin
     // load) lets the next frame arrive far past the last. juce::Animator would answer with a jump to the end, so a
     // frame that arrives later than kStallMs after the previous one moves the animation by one nominal frame instead
@@ -243,7 +263,7 @@ private:
         static constexpr double kStallMs = 80.0;
         static constexpr double kFrameMs = 16.0;
 
-        juce::VBlankAnimatorUpdater* updater = nullptr;
+        std::function<void(const juce::Animator&)> registerWithUpdater;
         double durationMs = 0.0;
         std::function<float(float)> easing;
         std::function<void(float)> onUpdate;
@@ -275,9 +295,15 @@ private:
                                    self->onComplete();
                            })
                            .build();
-            updater->addAnimator(*animator);
+            registerWithUpdater(*animator);
             animator->start();
         }
+
+        // The one way an animator leaves an updater. Dropping the handle makes the updater's weak entry expire, and
+        // the updater erases it on a later pass. Calling removeAnimator instead erases the entry at once, which is a
+        // use after free when the updater is in the middle of running this animator (a completion callback that
+        // starts or stops an animation), because it reads the entry again after the animator's update returns.
+        static void retire(std::optional<juce::Animator>& handle) { handle.reset(); }
 
         void onFrame(float p, std::uint64_t gen) {
             if (gen != generation)
@@ -289,7 +315,7 @@ private:
                 progress = lastProgress + kFrameMs / durationMs;
                 baseProgress = progress;
                 ++generation;
-                updater->removeAnimator(*animator);
+                retire(animator);
                 launch();
             }
             lastProgress = progress;

@@ -352,3 +352,145 @@ TEST(AnimationDriverStall, SteadyFramesAreLeftAlone) {
     EXPECT_FLOAT_EQ(values.back(), 1.0f);
     EXPECT_NEAR(values[6], 80.0f / 200.0f, 1e-3f); // the same clock as an unguarded run
 }
+
+// ============================================================================
+// Callbacks that start or stop animations on the updater that is running them. These drive a real
+// juce::AnimatorUpdater::update(), so the updater's own bookkeeping around the finishing animator is exercised, not
+// only the driver's test seams.
+// ============================================================================
+
+namespace {
+
+constexpr double kShortMs = 5.0;
+
+// Runs updater passes with real time between them until `done` or the pass budget runs out.
+template <typename Done>
+void pumpUpdater(juce::AnimatorUpdater& updater, Done done) {
+    for (int pass = 0; pass < 40 && !done(); ++pass) {
+        updater.update();
+        juce::Thread::sleep(8);
+    }
+}
+
+} // namespace
+
+// Regression test for FRO1069: an onComplete that restarts its own driver erased the updater's entry for the animator
+// that was still being updated, and the updater then read the freed entry (heap-use-after-free under ASAN, a crash
+// in the app).
+TEST(AnimationDriverUpdater, CompletionRestartingTheSameDriverIsSafeAndTheNextRunPlays) {
+    juce::AnimatorUpdater updater;
+    synth::ui::AnimationDriver driver;
+    int completions = 0;
+    int secondFrames = 0;
+    bool secondDone = false;
+
+    driver.start(
+        updater, kShortMs, synth::ui::easeOutCubic, [](float) {},
+        [&] {
+            ++completions;
+            driver.start(
+                updater, kShortMs, synth::ui::easeOutCubic, [&](float) { ++secondFrames; }, [&] { secondDone = true; });
+        });
+
+    pumpUpdater(updater, [&] { return secondDone; });
+
+    EXPECT_EQ(completions, 1);
+    EXPECT_TRUE(secondDone) << "the animation started from the completion must run to its end";
+    EXPECT_GT(secondFrames, 0);
+}
+
+TEST(AnimationDriverUpdater, PulseStylePingPongRestartsManyTimes) {
+    juce::AnimatorUpdater updater;
+    synth::ui::AnimationDriver driver;
+    int cycles = 0;
+    std::function<void()> again = [&] {
+        if (++cycles < 6)
+            driver.start(updater, kShortMs, synth::ui::easeOutCubic, [](float) {}, again);
+    };
+    driver.start(updater, kShortMs, synth::ui::easeOutCubic, [](float) {}, again);
+
+    pumpUpdater(updater, [&] { return cycles >= 6; });
+
+    EXPECT_EQ(cycles, 6);
+}
+
+TEST(AnimationDriverUpdater, CompletionStoppingItsOwnDriverIsSafe) {
+    juce::AnimatorUpdater updater;
+    synth::ui::AnimationDriver driver;
+    bool completed = false;
+
+    driver.start(
+        updater, kShortMs, synth::ui::easeOutCubic, [](float) {},
+        [&] {
+            completed = true;
+            driver.stop(updater);
+        });
+    pumpUpdater(updater, [&] { return completed; });
+    updater.update(); // the pass that drops the expired entry
+
+    EXPECT_TRUE(completed);
+    EXPECT_FALSE(driver.isRunning());
+}
+
+TEST(AnimationDriverUpdater, CompletionStoppingAnotherDriverSilencesIt) {
+    juce::AnimatorUpdater updater;
+    synth::ui::AnimationDriver first;
+    synth::ui::AnimationDriver second;
+    int secondFrames = 0;
+    bool secondCompleted = false;
+    bool firstDone = false;
+
+    second.start(
+        updater, 10000.0, synth::ui::easeOutCubic, [&](float) { ++secondFrames; }, [&] { secondCompleted = true; });
+    first.start(
+        updater, kShortMs, synth::ui::easeOutCubic, [](float) {},
+        [&] {
+            second.stop(updater);
+            firstDone = true;
+        });
+
+    pumpUpdater(updater, [&] { return firstDone; });
+    const int framesAtStop = secondFrames;
+    updater.update();
+    updater.update();
+
+    EXPECT_TRUE(firstDone);
+    EXPECT_EQ(secondFrames, framesAtStop) << "a stopped animation gets no more frames";
+    EXPECT_FALSE(secondCompleted);
+    EXPECT_FALSE(second.isRunning());
+}
+
+TEST(AnimationDriverUpdater, StoppingFromAFrameCallbackIsSafe) {
+    juce::AnimatorUpdater updater;
+    synth::ui::AnimationDriver driver;
+    int frames = 0;
+    bool completed = false;
+
+    driver.start(
+        updater, 10000.0, synth::ui::easeOutCubic,
+        [&](float) {
+            ++frames;
+            driver.stop(updater);
+        },
+        [&] { completed = true; });
+    updater.update();
+    updater.update();
+    updater.update();
+
+    EXPECT_EQ(frames, 1);
+    EXPECT_FALSE(completed);
+}
+
+TEST(AnimationDriverUpdater, StartingAnotherDriverFromACompletionKeepsBothUpdatersEntriesValid) {
+    juce::AnimatorUpdater updater;
+    synth::ui::AnimationDriver a;
+    synth::ui::AnimationDriver b;
+    bool bDone = false;
+
+    a.start(
+        updater, kShortMs, synth::ui::easeOutCubic, [](float) {},
+        [&] { b.start(updater, kShortMs, synth::ui::easeOutCubic, [](float) {}, [&] { bDone = true; }); });
+    pumpUpdater(updater, [&] { return bDone; });
+
+    EXPECT_TRUE(bDone);
+}
