@@ -43,6 +43,16 @@ its bar spacing from it. The first poll seeds the struct instead of counting as 
 The drawn beat is `ppq - outputLatencySeconds * (bpm / 60)`, clamped `>= 0`, so the line matches
 what is being **heard** rather than the block currently being rendered.
 
+**At a loop wrap.** The transport folds back to the loop start as soon as the rendered block crosses
+the loop end, while the heard audio is still the output latency short of it. `PlayheadWrapCompensation`
+(fed every snapshot) notices the position falling from within latency (plus the poll slack) of the loop
+end to just after the loop start and enters a *wrapped* state: heard beats below the loop start are
+drawn as `heard + (loopEnd - loopStart)`, so the line reaches the loop end before it turns around and
+never dips below the loop start. The state ends once the heard beat reaches the loop start, on stop, on
+a locate (the position moving backwards or jumping ahead) and when the loop range changes. A fresh play
+from the loop start never enters it. The follow-playhead path and the piano roll's local playhead read
+`getDrawnBeat()`, so they inherit it.
+
 `outputLatencySeconds` comes from `AudioEngine::getOutputLatencySamples()` — the open output
 device's `getOutputLatencyInSamples()`, `0` in Hosted mode and `0` when no device is open, which is
 every headless test. It is report-only, exactly like `getGraphLatencySamples()`.

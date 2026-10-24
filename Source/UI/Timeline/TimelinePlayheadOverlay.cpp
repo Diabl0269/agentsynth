@@ -22,16 +22,22 @@ TimelinePlayheadOverlay::TimelinePlayheadOverlay(TimelineViewState& viewState)
 }
 
 //==============================================================================
+double TimelinePlayheadOverlay::latencyBeats() const noexcept {
+    return outputLatencySeconds_ * std::max(0.0, snapshot_.bpm) / 60.0;
+}
+
+void TimelinePlayheadOverlay::adoptSnapshot(const synth::TransportService::PositionSnapshot& snapshot) noexcept {
+    snapshot_ = snapshot;
+    wrap_.observe(snapshot_, latencyBeats());
+}
+
 double TimelinePlayheadOverlay::getDrawnBeat() const noexcept {
-    // Draw where the audio being HEARD is, not where the block being rendered is — but only while
+    // Draw where the audio being HEARD is, not where the block being rendered is, but only while
     // something IS being heard. Stopped, the raw position is the truth: a ruler click that snapped
-    // exactly onto a bar must draw exactly ON that bar line, and applying the output-latency shift
-    // here parked the line a few pixels to its left (~29 ms of device latency at a typical zoom),
-    // which reads as a snapping bug rather than as the latency compensation it is.
-    if (!snapshot_.playing)
-        return std::max(0.0, snapshot_.ppq);
-    const double beatsPerSecond = std::max(0.0, snapshot_.bpm) / 60.0;
-    return std::max(0.0, snapshot_.ppq - outputLatencySeconds_ * beatsPerSecond);
+    // exactly onto a bar must draw exactly ON that bar line. When the loop wraps, the transport is
+    // already back at the loop start while the sound is still latency short of the loop end, so the
+    // wrap helper keeps the line travelling to the loop end before it turns around.
+    return wrap_.drawnBeat(snapshot_, latencyBeats());
 }
 
 int TimelinePlayheadOverlay::getLineX() const noexcept {
@@ -58,8 +64,8 @@ void TimelinePlayheadOverlay::requestRepaintStrip(juce::Rectangle<int> strip) { 
 //==============================================================================
 void TimelinePlayheadOverlay::updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot,
                                                   double outputLatencySeconds) {
-    snapshot_ = snapshot;
     outputLatencySeconds_ = std::max(0.0, outputLatencySeconds);
+    adoptSnapshot(snapshot);
 
     // The 30 Hz timer's ENTIRE lifecycle lives in these three lines — it is started on the play
     // transition and stopped on the stop/pause one, and nothing else ever touches it.
@@ -100,7 +106,7 @@ void TimelinePlayheadOverlay::timerCallback() {
     // poll) manages the timer's lifecycle, and a tick after the transport stopped simply finds an
     // unchanged x and requests nothing.
     if (transport_ != nullptr)
-        snapshot_ = transport_->getPositionSnapshot();
+        adoptSnapshot(transport_->getPositionSnapshot());
 
     refreshLine(/*force=*/false);
 }

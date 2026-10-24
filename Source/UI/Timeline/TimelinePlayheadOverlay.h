@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PlayheadWrapCompensation.h"
 #include "TimelineViewState.h"
 #include "Transport/TransportService.h"
 #include <functional>
@@ -30,7 +31,8 @@
 //
 // The DRAWN position is deliberately not the transport position: it is offset backwards by the
 // audio device's output latency (`ppq - outputLatencySeconds * bpm/60`, clamped >= 0), so the line
-// lines up with what is being HEARD rather than with the block currently being rendered.
+// lines up with what is being HEARD rather than with the block currently being rendered. At a loop
+// wrap the line is carried on to the loop end first (PlayheadWrapCompensation).
 //
 // Headless-safe: paint() dynamic_cast<AppLookAndFeel*>s and falls back to a literal colour, and no
 // path here needs a peer, a device or a message loop.
@@ -140,6 +142,10 @@ private:
 
     synth::TransportService::PositionSnapshot snapshot_{};
     double outputLatencySeconds_ = 0.0;
+    PlayheadWrapCompensation wrap_;
+
+    double latencyBeats() const noexcept;
+    void adoptSnapshot(const synth::TransportService::PositionSnapshot& snapshot) noexcept;
 
     bool playing_ = false;
     bool previewActive_ = false;
