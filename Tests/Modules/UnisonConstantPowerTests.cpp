@@ -171,18 +171,6 @@ TEST(UnisonReferenceTable, BlendAndWidthLandOnTheReferenceNumbers) {
     }
 }
 
-// Prints the stack measurements (a table to paste, not a requirement).
-TEST(UnisonReferenceTable, PrintOurStack) {
-    const auto one = unison_measure::measureStack(1, 0.0f, 0.0f);
-    for (const int n : {1, 3, 5, 7})
-        for (const float b : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f})
-            for (const float w : {0.0f, 0.5f, 1.0f}) {
-                const auto s = unison_measure::measureStack(n, b, w);
-                std::printf("[table] %d/%d/%d rms_db %.2f side_mid %.3f centre %.3f\n", n, (int)(b * 100),
-                            (int)(w * 100), 20.0 * std::log10(s.rms / one.rms), s.sideMid, s.centreShare);
-            }
-}
-
 namespace {
 // Largest sample-to-sample step on either leg while Unison changes from `from` to `to` in a held note.
 float largestStepAcrossUnisonChange(int from, int to, float width, bool poly, int note) {
