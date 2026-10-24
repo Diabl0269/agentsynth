@@ -2,6 +2,7 @@
 // shape the unison stack. The defaults (Phase 0, Rand 0, Blend 1, Width 0) leave the stack a plain
 // average of the detuned voices.
 
+#include "../Engine/AudioRendering/ClickDetector.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/Oscillator/HeldNotes.h"
 #include "Modules/OscillatorModule.h"
@@ -501,4 +502,102 @@ TEST(OscillatorVoiceFeel, SourcePeakStaysUnderRootNAcrossBlendAndWidth) {
     for (size_t i = (size_t)kBlock; i < left.size(); ++i)
         peak = std::max(peak, std::abs(left[i]));
     EXPECT_LE(peak, std::sqrt(2.0f) * 1.05f);
+}
+
+namespace {
+
+// Sixteenth notes at 120 bpm, touching, each ending as the next starts, rendered block by block with the
+// note-ons landing mid-block. Returns Audio L and Audio R and the start sample of every note.
+struct Seams {
+    std::vector<float> left, right;
+    std::vector<int> starts;
+};
+
+Seams renderTouchingNotes(OscillatorModule& osc, const std::vector<int>& pitches) {
+    osc.prepareToPlay(kSampleRate, kBlock);
+    const int step = (int)std::lround(0.125 * kSampleRate);
+    const int total = step * (int)pitches.size();
+    Seams out;
+    for (size_t i = 0; i < pitches.size(); ++i)
+        out.starts.push_back((int)i * step);
+    for (int pos = 0; pos < total; pos += kBlock) {
+        juce::AudioBuffer<float> buf(OscillatorModule::kNumOutputs, kBlock);
+        buf.clear();
+        juce::MidiBuffer midi;
+        for (size_t i = 0; i < pitches.size(); ++i) {
+            const int on = out.starts[i];
+            const int off = on + step;
+            if (off >= pos && off < pos + kBlock && i + 1 <= pitches.size())
+                midi.addEvent(juce::MidiMessage::noteOff(1, pitches[i], 0.0f), off - pos);
+            if (on >= pos && on < pos + kBlock)
+                midi.addEvent(juce::MidiMessage::noteOn(1, pitches[i], 0.8f), on - pos);
+        }
+        osc.processBlock(buf, midi);
+        out.left.insert(out.left.end(), buf.getReadPointer(0), buf.getReadPointer(0) + kBlock);
+        out.right.insert(out.right.end(), buf.getReadPointer(OscillatorModule::kRightBase),
+                         buf.getReadPointer(OscillatorModule::kRightBase) + kBlock);
+    }
+    return out;
+}
+
+const std::vector<int> kSeamPitches = {68, 52, 58, 51, 53, 48, 66, 69, 37, 46, 65, 41, 71, 53, 69, 39};
+
+} // namespace
+
+// Regression test for FRO1071: a note restarting the wave ticked at the start and at the end of its 64-sample
+// hand-over, because the old and new waves were blended along a straight ramp that bends where it starts and
+// ends. A Sine has no corners of its own, so any second-difference spike in the source is the seam.
+TEST(OscillatorVoiceFeel, SineNoteRestartsLeaveNoClickWithAndWithoutRand) {
+    for (const int unison : {1, 5}) {
+        for (const float rand : {0.0f, 100.0f}) {
+            OscillatorModule osc;
+            setActual(osc, "unison", (float)unison);
+            setActual(osc, "randomPhase", rand);
+            if (unison > 1) {
+                setActual(osc, "width", 1.0f);
+                setActual(osc, "blend", 0.82f);
+                setActual(osc, "detune", 59.0f);
+            }
+            const auto seams = renderTouchingNotes(osc, kSeamPitches);
+            const auto left = clickdetector::findClicks(seams.left);
+            const auto right = clickdetector::findClicks(seams.right);
+            EXPECT_TRUE(left.empty()) << "unison " << unison << " rand " << rand << ": " << left.size()
+                                      << " clicks in Audio L, first at sample " << (left.empty() ? 0 : left[0].index);
+            EXPECT_TRUE(right.empty()) << "unison " << unison << " rand " << rand << ": " << right.size()
+                                       << " clicks in Audio R";
+        }
+    }
+}
+
+// A Saw jumps once a cycle by design, which hides a seam from the spike detector, so this looks only at the two
+// places a hand-over bends, its first and its last sample, where the wave is a straight ramp and the second
+// difference must be nil. Seams with a wrap of either wave within a few samples are left out.
+TEST(OscillatorVoiceFeel, SawNoteRestartsBendNoMoreThanTheirHandOverAllows) {
+    const std::vector<int> low = {36, 48, 43, 40, 47, 38, 45, 41, 36, 44, 39, 46};
+    for (const float rand : {0.0f, 100.0f}) {
+        OscillatorModule osc;
+        setActual(osc, "waveform", 2.0f);
+        setActual(osc, "randomPhase", rand);
+        const auto seams = renderTouchingNotes(osc, low);
+        const auto& x = seams.left;
+        int measured = 0;
+        float worst = 0.0f;
+        for (const int start : seams.starts) {
+            if (start == 0)
+                continue; // the first note comes from silence, with no earlier wave to hand over from
+            for (const int at : {start, start + kFade}) {
+                if (at < 8 || at + 8 >= (int)x.size())
+                    continue;
+                bool wrap = false;
+                for (int k = at - 6; k <= at + 6; ++k)
+                    wrap = wrap || std::abs(x[(size_t)k + 1] - x[(size_t)k]) > 0.25f;
+                if (wrap)
+                    continue;
+                ++measured;
+                worst = std::max(worst, std::abs(x[(size_t)at - 1] - 2.0f * x[(size_t)at] + x[(size_t)at + 1]));
+            }
+        }
+        EXPECT_GE(measured, 8) << "rand " << rand << ": too few wrap-free seams to measure";
+        EXPECT_LT(worst, 0.002f) << "rand " << rand << ": the hand-over bends by " << worst;
+    }
 }

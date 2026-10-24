@@ -63,14 +63,39 @@ void OscillatorModule::addRestartOffset(int offset) {
 
 // Every unison oscillator restarts at frac(Phase / 360 + Rand * random), the random drawn
 // independently per voice from the module's seeded generator so a render repeats exactly. The old
-// phases keep running in the fade copy and are blended out over CROSSFADE_SAMPLES, because a restart
-// while the previous note may still sound would otherwise jump the waveform.
+// phases keep running as a "ghost" and are blended out over CROSSFADE_SAMPLES, because a restart
+// while the previous note may still sound would otherwise jump the waveform. The ghost starts with
+// the share the interrupted stack holds at that sample (all of it when nothing was fading, less when
+// ghosts are still leaving), and every ghost fades along its own curve to nothing, so a restart during
+// a fade is continuous too and an audio-rate gate cannot step the output. Past kMaxGhosts (restarts
+// closer than a few samples) the quietest ghost is dropped and its share goes to the current stack.
 void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld) {
     const float startPhase = phaseParam->get() / 360.0f;
     const float randomAmount = randomPhaseParam->get() * 0.01f;
 
-    std::copy(std::begin(voice.unisonOscs), std::end(voice.unisonOscs), std::begin(voice.fadeOscs));
-    voice.restartFadeRemaining = fadeFromOld ? CROSSFADE_SAMPLES : 0;
+    if (!fadeFromOld) {
+        voice.numGhosts = 0;
+    } else {
+        float ghostTotal = 0.0f;
+        int quietest = 0;
+        float quietestWeight = 2.0f;
+        for (int g = 0; g < voice.numGhosts; ++g) {
+            const float now = voice.ghosts[g].weight * (1.0f - synth::restartFadeIn(voice.ghosts[g].remaining));
+            ghostTotal += now;
+            if (now < quietestWeight) {
+                quietestWeight = now;
+                quietest = g;
+            }
+        }
+        if (voice.numGhosts == kMaxGhosts) {
+            ghostTotal -= quietestWeight;
+            voice.ghosts[quietest] = voice.ghosts[--voice.numGhosts];
+        }
+        auto& added = voice.ghosts[voice.numGhosts++];
+        std::copy(std::begin(voice.unisonOscs), std::end(voice.unisonOscs), std::begin(added.oscs));
+        added.weight = 1.0f - ghostTotal;
+        added.remaining = CROSSFADE_SAMPLES;
+    }
     for (auto& osc : voice.unisonOscs)
         osc.phase = synth::unisonRestartPhase(startPhase, randomAmount, phaseRandom);
 }
