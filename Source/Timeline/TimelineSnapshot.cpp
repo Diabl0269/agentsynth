@@ -102,7 +102,8 @@ TimelineSnapshot::TimelineSnapshot() { liveInstanceCount().fetch_add(1, std::mem
 
 TimelineSnapshot::~TimelineSnapshot() { liveInstanceCount().fetch_sub(1, std::memory_order_relaxed); }
 
-std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc& doc, double beatsPerBar) {
+std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc& doc, double beatsPerBar,
+                                                              const InputStatusProvider& inputStatus) {
     auto snapshot = std::make_unique<TimelineSnapshot>();
     snapshot->revision = doc.getRevision();
 
@@ -123,6 +124,13 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
                 info.inputFirstChannel = track.audioInput.firstChannel;
                 info.inputNumChannels = track.audioInput.numChannels;
                 info.inputDeviceHash = track.audioInput.deviceName.hashCode();
+                if (track.audioInput.inputName.isNotEmpty() && inputStatus) {
+                    // Found by name on whatever is open, so the device it was picked on does not matter.
+                    const auto resolved = resolveAudioInput(track.audioInput, inputStatus());
+                    info.inputFirstChannel = resolved.firstChannel;
+                    info.inputNumChannels = resolved.nameMissing ? 0 : resolved.numChannels;
+                    info.inputDeviceHash = 0;
+                }
             }
         }
 

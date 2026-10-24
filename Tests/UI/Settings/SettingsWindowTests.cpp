@@ -8,7 +8,7 @@
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/Settings/AppearanceSettingsTab.h"
-#include "UI/Settings/AudioSettingsTab.h"
+#include "UI/Settings/AudioSettingsTab/AudioSettingsTab.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
@@ -244,16 +244,13 @@ TEST_F(SettingsWindowTest, DefaultTabIsAudio) {
     EXPECT_EQ(settingsWindow.getCurrentTabIndex(), 0);
 }
 
-TEST_F(SettingsWindowTest, AudioTabContainsDeviceSelector) {
+TEST_F(SettingsWindowTest, AudioTabIsMadeOfFoldingSections) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
                                   themeManager, nullptr);
-    auto* tabContent = settingsWindow.getTabs().getTabContentComponent(0);
-    ASSERT_NE(tabContent, nullptr);
-
-    auto* audioTab = dynamic_cast<AudioSettingsTab*>(tabContent);
+    auto* audioTab = dynamic_cast<AudioSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(0));
     ASSERT_NE(audioTab, nullptr);
-    EXPECT_TRUE(audioTab->isParentOf(&audioTab->getDeviceSelector()));
-    EXPECT_TRUE(audioTab->getDeviceSelector().isVisible());
+    EXPECT_TRUE(audioTab->isParentOf(&audioTab->getSectionForTest(AudioSettingsTab::Section::Device)));
+    EXPECT_TRUE(audioTab->isSectionOpen(AudioSettingsTab::Section::Device));
 }
 
 // The stock selector's MIDI checklist cannot carry a per-device "(MIDI Remote)" suffix, so

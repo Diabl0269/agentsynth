@@ -25,6 +25,9 @@ public:
     static constexpr int kDefaultRingCapacityFrames = 1 << 17;
     static constexpr int kPeakBucketSize = 256;
     static constexpr int kDrainChunkFrames = 8192;
+    /** The take files' sample format: 32 bits makes an IEEE-float WAV, a bit-exact copy of what was captured. */
+    static constexpr int kWavBitDepth = 32;
+    static juce::String describeTakeFormat() { return "WAV 32-bit float"; }
 
     /** What a finished take amounts to. `lengthSamples` is exactly the WAV's length; `overran` means samples
      *  were dropped; the capture-start fields are the transport sample of frame 0, valid only when

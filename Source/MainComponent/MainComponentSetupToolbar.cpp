@@ -309,11 +309,11 @@ void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
         if (profile.input.identifier != synth::midi::hostSourceKey())
             profiledDevices.push_back(profile.input.name);
 
-    auto* settingsComp =
-        new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent, shortcutManager,
-                           *themeManager, &graphEditor, &accountService,
-                           /*showAudioTab=*/!audioEngine.isHosted(), initialTabName, std::move(profiledDevices),
-                           &*soundPackInstaller_, librarySidebar_ ? &librarySidebar_->getFolderBook() : nullptr);
+    auto* settingsComp = new SettingsWindow(
+        audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent, shortcutManager, *themeManager,
+        &graphEditor, &accountService,
+        /*showAudioTab=*/!audioEngine.isHosted(), initialTabName, std::move(profiledDevices), &*soundPackInstaller_,
+        librarySidebar_ ? &librarySidebar_->getFolderBook() : nullptr, &audioSettingsSource_);
     settingsComp->setSize(SettingsWindow::kDefaultWidth, SettingsWindow::kDefaultHeight);
     // The Preferences "What we collect" link opens through the same seam as the Help menu's pages.
     settingsComp->setUrlOpener([safeThis = juce::Component::SafePointer<MainComponent>(this)](const juce::URL& url) {

@@ -3,7 +3,7 @@
 #include "AI/LocalHistoryStore.h"
 #include "AccountSettingsTab.h"
 #include "AppearanceSettingsTab.h"
-#include "AudioSettingsTab.h"
+#include "AudioSettingsTab/AudioSettingsTab.h"
 #include "Branding.h"
 #include "FeedbackSettingsTab.h"
 #include "ShortcutManager/ShortcutManager.h"
@@ -471,13 +471,13 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                                GraphEditor* graphEditor, synth::AccountService* accountService, bool showAudioTab,
                                juce::String initialTabName, std::vector<juce::String> midiRemoteDeviceNames,
                                synth::soundpacks::SoundPackInstaller* soundPacks,
-                               synth::soundbrowser::SoundFolderBook* soundFolders)
+                               synth::soundbrowser::SoundFolderBook* soundFolders, AudioSettingsSource* audioSource)
     : appProperties(appProperties)
     , shortcutManager(shortcutManager)
     , themeManager(themeManager) {
     if (showAudioTab) {
         tabs.addTab("Audio", juce::Colours::transparentBlack,
-                    new AudioSettingsTab(deviceManager, midiRemoteDeviceNames), true);
+                    new AudioSettingsTab(deviceManager, midiRemoteDeviceNames, audioSource, &appProperties), true);
     }
 
     auto* aiSettingsTab = new AISettingsTab(appProperties, aiService, aiChatComponent, accountService);
@@ -524,6 +524,9 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
             // A text field types Cmd+1 before the window's own keyPressed runs, so each one offers the
             // tab keys to the window first.
             tabSwitchKeys.attachToTextEditorsIn(*content);
+            // The Inputs table makes name fields as the layout changes; each is offered the same keys.
+            if (auto* audioTab = dynamic_cast<AudioSettingsTab*>(content))
+                audioTab->setEditorHook([this](juce::TextEditor& editor) { tabSwitchKeys.attachTo(editor); });
         }
         if (auto* tabButton = tabs.getTabbedButtonBar().getTabButton(i)) {
             tabButton->setTooltip(

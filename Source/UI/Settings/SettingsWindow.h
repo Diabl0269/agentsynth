@@ -24,6 +24,7 @@ namespace synth::soundbrowser {
 class SoundFolderBook;
 }
 class PreferencesSettingsTab;
+class AudioSettingsSource;
 
 class SettingsWindow
     : public juce::Component
@@ -46,6 +47,8 @@ public:
     // contract as AccountRow/PlanBadge::setAccountService(nullptr) — so every existing call site
     // (including every SettingsWindowTests.cpp test) keeps compiling and gets the signed-out-only
     // AI tab (prompt-learning toggle disabled) rather than a required dependency.
+    // audioSource is nullable: the Audio tab then reads `deviceManager` itself (no input levels, no recording latency,
+    // a layout store of its own); the app passes the engine-backed one so the tab shares the engine's input layout.
     // soundPacks is nullable: without one the Sound packs tab is left out (the last tab, so no other index moves).
     // initialTabName: when non-empty and it matches a tab's name (by exact TabbedComponent tab
     // name), that tab is selected on construction instead of the remembered tab. Empty (the default)
@@ -57,7 +60,8 @@ public:
                    synth::AccountService* accountService = nullptr, bool showAudioTab = true,
                    juce::String initialTabName = {}, std::vector<juce::String> midiRemoteDeviceNames = {},
                    synth::soundpacks::SoundPackInstaller* soundPacks = nullptr,
-                   synth::soundbrowser::SoundFolderBook* soundFolders = nullptr);
+                   synth::soundbrowser::SoundFolderBook* soundFolders = nullptr,
+                   AudioSettingsSource* audioSource = nullptr);
     ~SettingsWindow() override;
 
     void resized() override;

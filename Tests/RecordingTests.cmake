@@ -19,3 +19,4 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AudioInputMenuTrackSourceTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackHeaderMonitorTests.cpp
 )
+include(${CMAKE_CURRENT_LIST_DIR}/AudioSettingsTests.cmake) # Settings > Audio sections, the input layout store, inputs found by name

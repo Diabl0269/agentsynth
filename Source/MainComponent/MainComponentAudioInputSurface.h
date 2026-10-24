@@ -1,4 +1,5 @@
 #pragma once
+#include "MainComponent/MainComponentAudioSettingsSource.h" // the Settings Audio tab's view of the engine, owned beside this one
 
 #include "UI/Timeline/TrackAudioInputSurface.h"
 #include <functional>

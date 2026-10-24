@@ -200,13 +200,14 @@ bool MainComponent::resolveAudioTakes(std::vector<AudioTake>& takes, juce::Strin
             take.stripNode = link.stripId;
             take.numChannels = 2;
         } else {
-            if (!synth::isAudioInputConnected(input, inputInfo)) {
+            const auto resolved = synth::resolveAudioInput(input, inputInfo);
+            if (!resolved.connected) {
                 problems.add(track.name + ": its input is not connected");
                 continue;
             }
             take.source = AudioTake::Source::Input;
-            take.firstChannel = input.firstChannel;
-            take.numChannels = input.numChannels;
+            take.firstChannel = resolved.firstChannel;
+            take.numChannels = resolved.numChannels;
         }
         if (!chooseTakeFiles(take, takes))
             return refuse("Can't record audio: could not create the take file");

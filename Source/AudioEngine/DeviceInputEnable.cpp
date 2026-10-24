@@ -27,4 +27,17 @@ juce::AudioDeviceManager::AudioDeviceSetup makeInputEnabledSetup(juce::AudioDevi
     return current;
 }
 
+juce::AudioDeviceManager::AudioDeviceSetup
+makeInputJacksToggledSetup(juce::AudioDeviceManager::AudioDeviceSetup current, const juce::String& inputDevice,
+                           std::uint32_t activeMask, int firstJack, int numJacks, bool on) {
+    current.inputDeviceName = inputDevice;
+    current.useDefaultInputChannels = false;
+    current.inputChannels.clear();
+    for (int channel = 0; channel < kMaxEnabledDeviceInputs; ++channel)
+        if (channel >= firstJack && channel < firstJack + numJacks ? on
+                                                                   : (activeMask & (std::uint32_t{1} << channel)) != 0)
+            current.inputChannels.setBit(channel);
+    return current;
+}
+
 } // namespace synth

@@ -509,12 +509,11 @@ the shared settings file, documented in `Source/UserSettings.h`:
 
 The Audio tab's MIDI-input checklist keeps its meaning (which devices feed the *patch*); a
 device with a profile is opened by the remote engine regardless ([`midi-remote.md`](midi-remote.md#the-engine)).
-JUCE's stock device selector cannot decorate a single device row, so instead of a per-row
-"(Controllers)" suffix the tab (`AudioSettingsTab`) carries a one-paragraph caption under the selector
+The Audio tab's MIDI section (`AudioMidiSection`, see [the Audio tab](../layout/settings-preferences.md#the-audio-tab))
+has no per-row "(Controllers)" suffix; it carries a one-paragraph caption under the input ticks
 naming every profiled controller, which is what lets the two lists explain each other. No profiled
-controllers, no caption. The Audio tab's MIDI-output selector stays hidden and dead either way —
-controller feedback (FRO139) is picked per controller from the Controllers list's own right-click
-("Send feedback to ▸", above), not from that selector.
+controllers, no caption. Controller feedback (FRO139) is picked per controller from the Controllers list's own
+right-click ("Send feedback to ▸", above), not from the section's MIDI output.
 
 ---
 

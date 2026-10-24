@@ -807,8 +807,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModMatrixKeyboard.h
     Source/UI/Graph/ModMatrixPicker.cpp
     Source/UI/Graph/ModMatrixPicker.h
-    Source/UI/Settings/AudioSettingsTab.cpp
-    Source/UI/Settings/AudioSettingsTab.h
+    Source/UI/Settings/AudioSettingsTab/AudioSettingsTab.cpp
+    Source/UI/Settings/AudioSettingsTab/AudioSettingsTab.h
     Source/UI/Settings/SettingsTabs.cpp
     Source/UI/Settings/SettingsTabs.h
     Source/UI/Settings/SettingsWindow.cpp

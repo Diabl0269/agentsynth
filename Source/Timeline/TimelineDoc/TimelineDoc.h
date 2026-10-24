@@ -280,9 +280,10 @@ struct AudioInputChoice {
     int numChannels = 1;     // 1 or 2; Device only
     juce::String deviceName; // the input device at pick time, to name it while it is not connected
     TrackId sourceTrack;     // Track only; may name a track deleted since (the choice then reads "track removed")
+    juce::String inputName;  // the user's name for the input on that interface; non-empty = found by name
     bool operator==(const AudioInputChoice& other) const noexcept {
         return kind == other.kind && firstChannel == other.firstChannel && numChannels == other.numChannels &&
-               deviceName == other.deviceName && sourceTrack == other.sourceTrack;
+               deviceName == other.deviceName && sourceTrack == other.sourceTrack && inputName == other.inputName;
     }
     bool operator!=(const AudioInputChoice& other) const noexcept { return !(*this == other); }
     bool isValid() const noexcept {

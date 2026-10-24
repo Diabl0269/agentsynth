@@ -272,6 +272,23 @@ void paintDetach(juce::Graphics& g, juce::Rectangle<float> area) {
     arrow.lineTo(at(21, 9));
     g.strokePath(arrow, stroke);
 }
+
+// Two linked pill-shaped rings in a row, turned a quarter of a right angle, on a 24 x 24 grid drawn at 14 px like the
+// other fixed-size glyphs.
+void paintLink(juce::Graphics& g, juce::Rectangle<float> area) {
+    const float side = std::min(14.0f, std::min(area.getWidth(), area.getHeight()));
+    const auto square = juce::Rectangle<float>(side, side).withCentre(area.getCentre());
+    const float scale = side / 24.0f;
+    const auto ring = juce::Rectangle<float>(12.0f * scale, 7.0f * scale);
+    juce::Path links;
+    links.addRoundedRectangle(ring.withCentre({8.0f * scale, 12.0f * scale}), 3.5f * scale);
+    links.addRoundedRectangle(ring.withCentre({16.0f * scale, 12.0f * scale}), 3.5f * scale);
+    links.applyTransform(
+        juce::AffineTransform::rotation(-juce::MathConstants<float>::pi / 4.0f, 12.0f * scale, 12.0f * scale)
+            .translated(square.getX(), square.getY()));
+    g.strokePath(links,
+                 juce::PathStrokeType(2.2f * scale, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
 } // namespace
 
 void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juce::Colour colour) {
@@ -344,6 +361,9 @@ void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juc
         break;
     case Glyph::Detach:
         paintDetach(g, area);
+        break;
+    case Glyph::Link:
+        paintLink(g, area);
         break;
     }
 }

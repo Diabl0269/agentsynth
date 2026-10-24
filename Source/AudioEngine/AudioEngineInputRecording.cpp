@@ -105,6 +105,7 @@ AudioEngine::AudioInputInfo AudioEngine::getAudioInputInfo() {
         }
     }
     info.deviceInputs = std::max(countDeviceInputs(info.deviceName), info.activeInputs);
+    info.layout = inputLayout_.slotsFor(deviceManager.getCurrentAudioDeviceType(), info.deviceName, info.deviceInputs);
     return info;
 }
 
@@ -122,6 +123,38 @@ void AudioEngine::enableDeviceInputs() {
         return;
     }
     applyInputEnabledSetup();
+}
+
+// Same permission order as enableDeviceInputs(); turning a jack off needs no permission.
+void AudioEngine::setDeviceInputsUsed(int firstJack, int numJacks, bool used) {
+    if (isHosted() || firstJack < 0 || numJacks < 1 || firstJack + numJacks > synth::kMaxEnabledDeviceInputs)
+        return;
+    const auto apply = [weak = juce::WeakReference<AudioEngine>(this), firstJack, numJacks, used] {
+        if (weak == nullptr)
+            return;
+        const auto info = weak->getAudioInputInfo();
+        const auto setup = weak->deviceManager.getAudioDeviceSetup();
+        if (info.deviceName.isNotEmpty())
+            weak->deviceManager.setAudioDeviceSetup(
+                synth::makeInputJacksToggledSetup(setup, info.deviceName, info.activeMask, firstJack, numJacks, used),
+                true);
+    };
+    const auto permission = juce::RuntimePermissions::recordAudio;
+    if (used && juce::RuntimePermissions::isRequired(permission) && !juce::RuntimePermissions::isGranted(permission)) {
+        juce::RuntimePermissions::request(permission, [apply](bool granted) {
+            if (granted)
+                apply();
+        });
+        return;
+    }
+    apply();
+}
+
+void AudioEngine::noteOpenInterface() {
+    if (isHosted())
+        return;
+    const auto info = getAudioInputInfo();
+    inputLayout_.touch(deviceManager.getCurrentAudioDeviceType(), info.deviceName);
 }
 
 // Returns JUCE's error text, empty on success. The device restarts with the new channel mask, which re-runs

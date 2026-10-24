@@ -404,6 +404,7 @@ MainComponent::~MainComponent() {
         // `this` the same way and is reachable from the same changeListenerCallback, so it gets the
         // same treatment.
         audioEngine.onDeviceStateChanged = nullptr;
+        audioEngine.getInputLayoutStore().onChange = nullptr;
         audioEngine.onMidiDevicesChanged = nullptr;
         audioEngine.shutdown();
     }

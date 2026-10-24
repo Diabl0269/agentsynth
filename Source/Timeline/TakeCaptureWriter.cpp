@@ -110,7 +110,7 @@ bool TakeCaptureWriter::start(const juce::File& wavFile, const juce::File& peaks
     // bitDepth 32 makes this an IEEE-float WAV, so the take is a bit-exact copy of what was pushed.
     juce::WavAudioFormat wavFormat;
     std::unique_ptr<juce::AudioFormatWriter> writer(
-        wavFormat.createWriterFor(stream.get(), sampleRate, (unsigned int)numChannels, 32, {}, 0));
+        wavFormat.createWriterFor(stream.get(), sampleRate, (unsigned int)numChannels, kWavBitDepth, {}, 0));
     if (writer == nullptr)
         return false;
     stream.release(); // the writer owns the stream from here

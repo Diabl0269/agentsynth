@@ -12,7 +12,7 @@
 30 Source/AI/PatchDiff.h
 11 Source/AI/RemoteProvider.h
 87 Source/AppUndoManager.h
-82 Source/AudioEngine/AudioEngine.h
+81 Source/AudioEngine/AudioEngine.h
 45 Source/MacroSet.h
 87 Source/Mixer/ChannelFlows/ChannelFlows.h
 22 Source/Mixer/MixerModel/MixerModel.h
@@ -31,7 +31,7 @@
 32 Source/Timeline/MidiClipFile.h
 14 Source/Timeline/MidiRecorder.h
 32 Source/Timeline/PeaksFile.h
-80 Source/Timeline/TimelineDoc/TimelineDoc.h
+79 Source/Timeline/TimelineDoc/TimelineDoc.h
 15 Source/Timeline/TimelineOps.h
 49 Source/Timeline/TimelineValidator.h
 26 Source/Transport/BounceExporter.h
