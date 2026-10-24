@@ -326,6 +326,7 @@ private:
     bool insertAfterCursor();
     bool stepCursor(int direction);
     bool extendSelection(int direction);
+    void showBubbleOnCursor(std::optional<double> beat);
     bool handleSelectionKey(const juce::KeyPress& key);
     void selectionChanged();
     struct OwnEditScope {

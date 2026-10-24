@@ -35,7 +35,7 @@ void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
     const int newNumNodes = model_.getNumNodes();
     const bool topologyChanged = newNumNodes != oldNumNodes || model_.getMode() != oldMode;
     const bool indexOutOfRange =
-        dragIndex_ >= newNumNodes || hoveredIndex_ >= newNumNodes || selectedIndex_ >= newNumNodes;
+        dragIndex_ >= newNumNodes || hoveredIndex_ >= newNumNodes || cursorIndex() >= newNumNodes;
 
     if (topologyChanged || indexOutOfRange) {
         if (gestureActive_) {
@@ -48,9 +48,7 @@ void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
         dragFrozenRange_.reset();
         hoveredKind_ = CurveHitKind::None;
         hoveredIndex_ = -1;
-        selectedIndex_ = -1;
-        anchorIndex_ = -1;
-        selection_.clear();
+        selection_ = {};
         pendingToggleIndex_ = -1;
         pendingCollapseIndex_ = -1;
     }
@@ -248,12 +246,13 @@ bool CurveEditorComponent::removeNode(int index) {
     const bool removed = model_.removePoint(index);
     if (removed) {
         std::vector<int> kept;
-        for (const int j : selection_)
+        for (const int j : selection_.selected())
             if (j != index)
                 kept.push_back(j > index ? j - 1 : j);
         const auto shift = [index](int j) { return j > index ? j - 1 : j; };
-        setSelection(std::move(kept), selectedIndex_ == index ? -1 : shift(selectedIndex_),
-                     anchorIndex_ == index ? -1 : shift(anchorIndex_));
+        const int anchor = selection_.anchor().value_or(-1);
+        setSelection(std::move(kept), cursorIndex() == index ? -1 : shift(cursorIndex()),
+                     anchor == index ? -1 : shift(anchor));
         if (onPointsChanged)
             onPointsChanged();
     }
@@ -311,7 +310,7 @@ void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
             toggleSelected(hit.index);
         else if (isSelected(hit.index) && selection_.size() > 1) {
             pendingCollapseIndex_ = hit.index; // a click collapses to it; a drag moves the group
-            setSelection(selection_, hit.index, anchorIndex_);
+            setSelection(selection_.selected(), hit.index, selection_.anchor().value_or(-1));
         } else
             setSelectedIndex(hit.index);
     }

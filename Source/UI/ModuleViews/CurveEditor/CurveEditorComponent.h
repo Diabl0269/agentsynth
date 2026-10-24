@@ -4,6 +4,8 @@
 #include "CurveModel.h"
 #include "UI/Layout/KeyGlide/KeyHold.h"
 #include "UI/Layout/KeyGlide/KeyedPointTween.h"
+#include "UI/Layout/PointEditing/PointClipboard.h"
+#include "UI/Layout/PointEditing/PointSelectionModel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -201,9 +203,9 @@ public:
     bool insertAfterCursor();
 
     /** The cursor point: where Left/Right continue from and what a screen reader reads. -1 when none. */
-    int getSelectedIndex() const noexcept { return selectedIndex_; }
+    int getSelectedIndex() const noexcept { return cursorIndex(); }
     /** Every selected point, ascending. */
-    const std::vector<int>& getSelectedIndices() const noexcept { return selection_; }
+    const std::vector<int>& getSelectedIndices() const noexcept { return selection_.selected(); }
 
     /** The selected point as spoken, e.g. "Point 3 of 5, time 0.25, level 0.80"; a summary when none is. */
     juce::String getAccessibilityValueText() const;
@@ -248,7 +250,11 @@ private:
     /** Collapses the selection to `index` (-1 clears it). */
     void setSelectedIndex(int index);
     void setSelection(std::vector<int> indices, int cursor, int anchor);
+    void selectionChanged();
     bool isSelected(int index) const;
+    int cursorIndex() const noexcept;
+    /** Every node a selection key may land on, ascending. */
+    std::vector<int> movableIndices() const;
     /** Re-points the selection after node `from` was re-sorted to `to`. */
     void remapSelectionForMove(int from, int to);
     /** The model with the selection moved by (dx, dy), clamped; `changed` lists the nodes that differ. */
@@ -257,7 +263,6 @@ private:
     void commitSelectionMove(CurveModel moved, const std::vector<int>& changed);
     /** Drags the whole selection so node `index` follows `point`. */
     void dragSelectionTo(int index, juce::Point<float> point, bool bypassSnap);
-    bool handleChord(const juce::KeyPress& key);
     /** The move behind nudgeSelectedNode without its gesture bracket: `holdGesture` opens the hold's bracket at the
      *  first real move instead. */
     bool moveSelectionBy(double dx, float dy, bool bypassSnap, bool holdGesture, bool ease);
@@ -274,15 +279,15 @@ private:
     void endKeyDrag();
     double keyDragSpeedFactor() const;
 
-    struct ClipPoint {
-        double dx = 0.0;
-        float y = 0.0f;
+    /** What a copied curve point carries besides its time and level. */
+    struct ClipBend {
         float bend = 0.0f;
         bool hasBend = false;
     };
-    static std::vector<ClipPoint>& clipboard();
-    std::vector<ClipPoint> selectionAsClip() const;
-    bool insertClip(const std::vector<ClipPoint>& points, double startX);
+    using Clip = PointClip<ClipBend>;
+    static Clip& clipboard();
+    Clip selectionAsClip() const;
+    bool insertClip(const Clip& clip, double startX);
     /** Posts a value-changed event when the spoken text differs from the last one handed out. */
     void refreshAccessibilityValue();
     /** One keyboard step along each axis, in model units: a grid cell while snapping, else a fixed
@@ -339,9 +344,11 @@ private:
 
     CurveHitKind hoveredKind_ = CurveHitKind::None;
     int hoveredIndex_ = -1;
-    int selectedIndex_ = -1;
-    int anchorIndex_ = -1;
-    std::vector<int> selection_;
+    /** The curve's answers where the shared key map leaves room (docs/control/point-editing.md). */
+    static constexpr PointSelectionRules kSelectionRules{PointSelectionRules::FirstStep::firstPoint, false,
+                                                         PointSelectionRules::Extend::rangeFromAnchor,
+                                                         PointSelectionRules::SelectAllCursor::keepSelectedElseLast};
+    PointSelectionModel<int> selection_;
     /** A press on an already-selected point settles on release when no drag followed: -1 none. */
     int pendingToggleIndex_ = -1;
     int pendingCollapseIndex_ = -1;

@@ -1,15 +1,15 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/PointEditing/PointSelectionModel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
-#include <set>
 #include <vector>
 
 // LanePointSelection -- which points of one automation lane are selected, the keyboard cursor point, and the
-// box-select gesture on empty space. Points are keyed by beat (a lane has one point per beat). Runtime view
-// state: never saved, never touches the doc.
+// box-select gesture on empty space: the lane's shell around the shared PointSelectionModel, keyed by beat (a lane has
+// one point per beat). Runtime view state: never saved, never touches the doc.
 //
 // The owner must outlive it and calls paintMarquee() from its own paint(); it repaints the owner itself.
 // Message thread only.
@@ -29,16 +29,16 @@ public:
 
     // ---- The set ----
     void clear();
-    bool isEmpty() const noexcept { return beats_.empty(); }
-    int size() const noexcept { return (int)beats_.size(); }
-    bool contains(double beat) const noexcept { return beats_.count(beat) > 0; }
+    bool isEmpty() const noexcept { return model_.isEmpty(); }
+    int size() const noexcept { return model_.size(); }
+    bool contains(double beat) const { return model_.contains(beat); }
     bool add(double beat);
     bool remove(double beat);
     // Returns the beat's selected state after the toggle.
     bool toggle(double beat);
     void setSelection(const std::vector<double>& beats);
     // Ascending beat order.
-    std::vector<double> getSelected() const { return {beats_.begin(), beats_.end()}; }
+    std::vector<double> getSelected() const { return model_.selected(); }
     // Drops every selected beat (and the cursor) that is not in `alive`; returns true if anything went.
     bool retainOnly(const std::vector<double>& alive);
 
@@ -48,8 +48,16 @@ public:
     juce::Rectangle<float> boundingBox(const std::vector<LaneBreakpoint>& lane, const LanePointMapper& map) const;
 
     // ---- Keyboard cursor: the point arrow navigation stands on ----
-    std::optional<double> getCursor() const noexcept { return cursor_; }
+    std::optional<double> getCursor() const noexcept { return model_.cursor(); }
     void setCursor(std::optional<double> beat);
+
+    // ---- The selection keys, over the lane's beats (ascending); see PointSelectionModel ----
+    static constexpr PointSelectionRules kRules{PointSelectionRules::FirstStep::nearestEnd, true,
+                                                PointSelectionRules::Extend::growPastEnd,
+                                                PointSelectionRules::SelectAllCursor::keepElseFirst};
+    std::optional<double> step(int direction, const std::vector<double>& beats);
+    std::optional<double> extend(int direction, const std::vector<double>& beats);
+    bool selectAll(const std::vector<double>& beats);
 
     // ---- Box select on empty space ----
     // A plain press is only a pending click until it drags; an additive one (Shift/Cmd/Ctrl) starts the box.
@@ -68,13 +76,12 @@ private:
     void beginBox(juce::Point<int> anchor, bool additive);
 
     juce::Component& owner_;
-    std::set<double> beats_;
-    std::optional<double> cursor_;
+    PointSelectionModel<double> model_;
     bool pendingEmptyClick_ = false;
     bool boxActive_ = false;
     juce::Point<int> anchor_;
     juce::Rectangle<int> box_;
-    std::set<double> boxBase_; // what an additive box keeps
+    std::vector<double> boxBase_; // what an additive box keeps
 };
 
 // ---- Moving a selection as one rigid block ----

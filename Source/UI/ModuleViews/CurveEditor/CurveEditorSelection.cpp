@@ -2,30 +2,38 @@
 // act on all of it at once: extend, toggle, rigid move, remove. The class is declared in
 // CurveEditorComponent.h.
 //
-// The selection is a sorted set of node indices plus a cursor (the point the keyboard continues from
-// and a screen reader reads) and an anchor (where a Shift-extended range started). A fully pinned node
-// is never in it.
+// The selection is the shared PointSelectionModel keyed by node index (UI/Layout/PointEditing/), with the curve's
+// rules (kSelectionRules): a sorted set plus a cursor (the point the keyboard continues from and a screen reader reads)
+// and an anchor (where a Shift-extended range started). A fully pinned node is never in it.
 
 #include "CurveEditorComponent.h"
+#include "UI/Layout/PointEditing/PointGroupMove.h"
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 namespace synth::ui {
 
-bool CurveEditorComponent::isSelected(int index) const {
-    return std::binary_search(selection_.begin(), selection_.end(), index);
+bool CurveEditorComponent::isSelected(int index) const { return selection_.contains(index); }
+
+int CurveEditorComponent::cursorIndex() const noexcept { return selection_.cursor().value_or(-1); }
+
+std::vector<int> CurveEditorComponent::movableIndices() const {
+    std::vector<int> movable;
+    for (int i = 0; i < model_.getNumNodes(); ++i)
+        if (model_.getNode(i).isMovable())
+            movable.push_back(i);
+    return movable;
 }
 
 void CurveEditorComponent::setSelection(std::vector<int> indices, int cursor, int anchor) {
-    std::sort(indices.begin(), indices.end());
-    indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
-    if (indices == selection_ && cursor == selectedIndex_ && anchor == anchorIndex_)
+    const auto key = [](int i) { return i >= 0 ? std::optional<int>(i) : std::nullopt; };
+    if (!selection_.assign(std::move(indices), key(cursor), key(anchor)))
         return;
-    selection_ = std::move(indices);
-    selectedIndex_ = cursor;
-    anchorIndex_ = anchor;
+    selectionChanged();
+}
+
+void CurveEditorComponent::selectionChanged() {
     repaint();
     refreshAccessibilityValue();
 }
@@ -35,7 +43,7 @@ void CurveEditorComponent::setSelectedIndex(int index) {
 }
 
 void CurveEditorComponent::remapSelectionForMove(int from, int to) {
-    const auto remap = [from, to](int j) {
+    selection_.rekey([from, to](int j) {
         if (j == from)
             return to;
         if (from < to && j > from && j <= to)
@@ -43,57 +51,30 @@ void CurveEditorComponent::remapSelectionForMove(int from, int to) {
         if (to < from && j >= to && j < from)
             return j + 1;
         return j;
-    };
-    std::vector<int> moved;
-    for (const int j : selection_)
-        moved.push_back(remap(j));
-    selectedIndex_ = selectedIndex_ >= 0 ? remap(selectedIndex_) : -1;
-    anchorIndex_ = anchorIndex_ >= 0 ? remap(anchorIndex_) : -1;
-    std::sort(moved.begin(), moved.end());
-    selection_ = std::move(moved);
+    });
 }
 
+// A delta of 0 steps back once a cursor exists (and lands on the first point without one), as callers walking the
+// points from the start rely on.
 int CurveEditorComponent::selectNodeRelative(int delta) {
-    const int count = model_.getNumNodes();
-    const bool fromStart = selectedIndex_ < 0;
-    const int step = (fromStart || delta > 0) ? 1 : -1;
-    for (int candidate = fromStart ? 0 : selectedIndex_ + step; candidate >= 0 && candidate < count;
-         candidate += step) {
-        if (model_.getNode(candidate).isMovable()) {
-            setSelectedIndex(candidate);
-            repaint();
-            return candidate;
-        }
-    }
-    return selectedIndex_;
+    if (selection_.step(delta > 0 ? 1 : -1, movableIndices(), kSelectionRules).has_value())
+        selectionChanged();
+    return cursorIndex();
 }
 
 int CurveEditorComponent::extendSelectionRelative(int delta) {
-    if (selectedIndex_ < 0)
-        return selectNodeRelative(delta);
-    const int count = model_.getNumNodes();
-    const int step = delta > 0 ? 1 : -1;
-    for (int candidate = selectedIndex_ + step; candidate >= 0 && candidate < count; candidate += step) {
-        if (!model_.getNode(candidate).isMovable())
-            continue;
-        const int anchor = anchorIndex_ >= 0 ? anchorIndex_ : selectedIndex_;
-        std::vector<int> range;
-        for (int i = std::min(anchor, candidate); i <= std::max(anchor, candidate); ++i)
-            if (model_.getNode(i).isMovable())
-                range.push_back(i);
-        setSelection(std::move(range), candidate, anchor);
-        return candidate;
-    }
-    return selectedIndex_;
+    if (selection_.extend(delta > 0 ? 1 : -1, movableIndices(), kSelectionRules).has_value())
+        selectionChanged();
+    return cursorIndex();
 }
 
 bool CurveEditorComponent::toggleSelected(int index) {
     if (index < 0 || index >= model_.getNumNodes() || !model_.getNode(index).isMovable())
         return false;
-    std::vector<int> next = selection_;
+    std::vector<int> next = selection_.selected();
     if (isSelected(index)) {
         next.erase(std::remove(next.begin(), next.end(), index), next.end());
-        const int cursor = selectedIndex_ == index ? (next.empty() ? -1 : next.back()) : selectedIndex_;
+        const int cursor = cursorIndex() == index ? (next.empty() ? -1 : next.back()) : cursorIndex();
         setSelection(next, cursor, cursor);
     } else {
         next.push_back(index);
@@ -103,22 +84,23 @@ bool CurveEditorComponent::toggleSelected(int index) {
 }
 
 bool CurveEditorComponent::selectAllMovable() {
-    std::vector<int> all;
-    for (int i = 0; i < model_.getNumNodes(); ++i)
-        if (model_.getNode(i).isMovable())
-            all.push_back(i);
-    if (all.empty())
+    const auto before = selection_;
+    if (!selection_.selectAll(movableIndices(), kSelectionRules))
         return false;
-    const int cursor = isSelected(selectedIndex_) ? selectedIndex_ : all.back();
-    setSelection(all, cursor, all.front());
+    if (selection_.selected() != before.selected() || selection_.cursor() != before.cursor() ||
+        selection_.anchor() != before.anchor())
+        selectionChanged();
     return true;
 }
 
+// The time axis stops at the range ends and at the nearest point that is not moving along time (Free mode only: a
+// Fixed curve ripples instead); the level axis stops the group at the first point's own limit. Both through the
+// shared group-move math.
 CurveModel CurveEditorComponent::modelWithSelectionMoved(double dx, double dy, std::vector<int>& changed) const {
     const bool isFree = model_.getMode() == CurveMode::Free;
     std::vector<int> movingX;
     std::vector<int> movingY;
-    for (const int i : selection_) {
+    for (const int i : selection_.selected()) {
         if (i < 0 || i >= model_.getNumNodes())
             continue;
         if (model_.getNode(i).xMovable)
@@ -126,38 +108,22 @@ CurveModel CurveEditorComponent::modelWithSelectionMoved(double dx, double dy, s
         if (model_.getNode(i).yMovable)
             movingY.push_back(i);
     }
-    const auto isMovingX = [&movingX](int j) { return std::binary_search(movingX.begin(), movingX.end(), j); };
 
-    double dyLo = -std::numeric_limits<double>::infinity();
-    double dyHi = std::numeric_limits<double>::infinity();
+    std::vector<PointRoom> levelRooms;
     for (const int i : movingY) {
         const auto& node = model_.getNode(i);
-        dyLo = std::max(dyLo, (double)node.minY - node.y);
-        dyHi = std::min(dyHi, (double)node.maxY - node.y);
+        levelRooms.push_back(roomWithin(node.y, node.minY, node.maxY));
     }
-    dy = juce::jlimit(std::min(dyLo, 0.0), std::max(dyHi, 0.0), dy);
+    dy = clampGroupDelta(levelRooms, dy);
 
     if (isFree) {
-        // Rigid: stop at the range ends and at the nearest point that is not moving along time.
-        double dxLo = -std::numeric_limits<double>::infinity();
-        double dxHi = std::numeric_limits<double>::infinity();
-        for (const int i : movingX) {
-            double lower = model_.getMinX();
-            for (int j = i - 1; j >= 0; --j)
-                if (!isMovingX(j)) {
-                    lower = model_.getNode(j).x;
-                    break;
-                }
-            double upper = model_.getMaxX();
-            for (int j = i + 1; j < model_.getNumNodes(); ++j)
-                if (!isMovingX(j)) {
-                    upper = model_.getNode(j).x;
-                    break;
-                }
-            dxLo = std::max(dxLo, lower - model_.getNode(i).x);
-            dxHi = std::min(dxHi, upper - model_.getNode(i).x);
+        std::vector<double> xs;
+        std::vector<bool> moving;
+        for (int j = 0; j < model_.getNumNodes(); ++j) {
+            xs.push_back(model_.getNode(j).x);
+            moving.push_back(std::binary_search(movingX.begin(), movingX.end(), j));
         }
-        dx = juce::jlimit(std::min(dxLo, 0.0), std::max(dxHi, 0.0), dx);
+        dx = clampGroupDelta(roomBetweenNeighbours(xs, moving, model_.getMinX(), model_.getMaxX()), dx);
     }
 
     CurveModel moved = model_;
@@ -203,19 +169,20 @@ void CurveEditorComponent::dragSelectionTo(int index, juce::Point<float> point, 
 }
 
 bool CurveEditorComponent::removeSelectedNodes() {
-    if (model_.getMode() != CurveMode::Free || selection_.empty())
+    if (model_.getMode() != CurveMode::Free || selection_.isEmpty())
         return false;
     CurveModel probe = model_;
     std::vector<int> removed;
-    for (auto it = selection_.rbegin(); it != selection_.rend(); ++it)
+    const auto& selected = selection_.selected();
+    for (auto it = selected.rbegin(); it != selected.rend(); ++it)
         if (probe.removePoint(*it))
             removed.push_back(*it);
     if (removed.empty())
         return false;
 
-    int cursor = selectedIndex_;
+    int cursor = cursorIndex();
     for (const int r : removed)
-        if (r < selectedIndex_)
+        if (r < cursorIndex())
             --cursor;
     beginGesture();
     model_ = std::move(probe);

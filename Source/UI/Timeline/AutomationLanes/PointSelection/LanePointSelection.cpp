@@ -1,6 +1,9 @@
 #include "LanePointSelection.h"
+#include "UI/Layout/PointEditing/PointGroupMove.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <limits>
+#include <set>
 
 namespace synth::ui {
 
@@ -14,21 +17,19 @@ void LanePointSelection::notify() {
 }
 
 void LanePointSelection::clear() {
-    if (beats_.empty())
-        return;
-    beats_.clear();
-    notify();
+    if (model_.clear())
+        notify();
 }
 
 bool LanePointSelection::add(double beat) {
-    if (!beats_.insert(beat).second)
+    if (!model_.add(beat))
         return false;
     notify();
     return true;
 }
 
 bool LanePointSelection::remove(double beat) {
-    if (beats_.erase(beat) == 0)
+    if (!model_.remove(beat))
         return false;
     notify();
     return true;
@@ -43,38 +44,45 @@ bool LanePointSelection::toggle(double beat) {
 }
 
 void LanePointSelection::setSelection(const std::vector<double>& beats) {
-    std::set<double> next(beats.begin(), beats.end());
-    if (next == beats_)
-        return;
-    beats_ = std::move(next);
-    notify();
+    if (model_.setSelected(beats))
+        notify();
 }
 
 bool LanePointSelection::retainOnly(const std::vector<double>& alive) {
-    const std::set<double> aliveSet(alive.begin(), alive.end());
-    bool changed = false;
-    for (auto it = beats_.begin(); it != beats_.end();) {
-        if (aliveSet.count(*it) == 0) {
-            it = beats_.erase(it);
-            changed = true;
-        } else {
-            ++it;
-        }
-    }
-    if (cursor_.has_value() && aliveSet.count(*cursor_) == 0) {
-        cursor_.reset();
-        changed = true;
-    }
+    const bool changed = model_.retainOnly(alive);
     if (changed)
         notify();
     return changed;
 }
 
 void LanePointSelection::setCursor(std::optional<double> beat) {
-    if (cursor_ == beat)
-        return;
-    cursor_ = beat;
-    notify();
+    if (model_.setCursor(beat))
+        notify();
+}
+
+// Each key is one notification, however many of the set, the cursor and the anchor it changed.
+std::optional<double> LanePointSelection::step(int direction, const std::vector<double>& beats) {
+    const auto before = model_;
+    const auto landed = model_.step(direction, beats, kRules);
+    if (model_.selected() != before.selected() || model_.cursor() != before.cursor())
+        notify();
+    return landed;
+}
+
+std::optional<double> LanePointSelection::extend(int direction, const std::vector<double>& beats) {
+    const auto before = model_;
+    const auto landed = model_.extend(direction, beats, kRules);
+    if (model_.selected() != before.selected() || model_.cursor() != before.cursor())
+        notify();
+    return landed;
+}
+
+bool LanePointSelection::selectAll(const std::vector<double>& beats) {
+    const auto before = model_;
+    const bool any = model_.selectAll(beats, kRules);
+    if (model_.selected() != before.selected() || model_.cursor() != before.cursor())
+        notify();
+    return any;
 }
 
 std::vector<LaneBreakpoint> LanePointSelection::selectedPoints(const std::vector<LaneBreakpoint>& lane) const {
@@ -120,7 +128,7 @@ void LanePointSelection::beginBox(juce::Point<int> anchor, bool additive) {
     boxActive_ = true;
     anchor_ = anchor;
     box_ = {};
-    boxBase_ = additive ? beats_ : std::set<double>{};
+    boxBase_ = additive ? model_.selected() : std::vector<double>{};
 }
 
 bool LanePointSelection::dragTo(juce::Point<int> pos, const std::vector<LaneBreakpoint>& lane,
@@ -133,11 +141,10 @@ bool LanePointSelection::dragTo(juce::Point<int> pos, const std::vector<LaneBrea
     const auto previous = box_;
     box_ = juce::Rectangle<int>::leftTopRightBottom(std::min(anchor_.x, pos.x), std::min(anchor_.y, pos.y),
                                                     std::max(anchor_.x, pos.x), std::max(anchor_.y, pos.y));
-    std::set<double> next = boxBase_;
+    std::vector<double> next = boxBase_;
     for (double beat : beatsInBox(lane, map, box_.toFloat()))
-        next.insert(beat);
-    if (next != beats_)
-        setSelection({next.begin(), next.end()});
+        next.push_back(beat);
+    setSelection(next);
     owner_.repaint(previous.getUnion(box_).expanded(2));
     return true;
 }
@@ -179,13 +186,14 @@ void LanePointSelection::paintMarquee(juce::Graphics& g) const {
 }
 
 //==============================================================================
+// A lane has no end and its block may pass unselected points (a move onto a point's beat replaces it), so the only
+// limit is beat 0.
 double clampBeatDelta(const std::vector<LaneBreakpoint>& points, double delta) {
-    if (points.empty())
-        return delta;
-    double earliest = points.front().beat;
+    std::vector<PointRoom> rooms;
+    rooms.reserve(points.size());
     for (const auto& p : points)
-        earliest = std::min(earliest, p.beat);
-    return std::max(delta, -earliest);
+        rooms.push_back(roomWithin(p.beat, 0.0, std::numeric_limits<double>::infinity()));
+    return clampGroupDelta(rooms, delta);
 }
 
 std::vector<LaneBreakpoint> movePoints(const std::vector<LaneBreakpoint>& points, double beatDelta, double valueDelta,

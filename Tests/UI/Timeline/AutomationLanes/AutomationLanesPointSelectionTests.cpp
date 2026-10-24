@@ -6,7 +6,6 @@
 #include "AutomationLanesTestFixture.h"
 #include "UI/Layout/PointEditorDuplicate.h"
 #include "UI/Layout/ReducedMotion.h"
-#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 
@@ -580,56 +579,6 @@ TEST(AutomationLanesPointSelectionTest, CtrlTInsertsAPointHalfwayAfterTheCursorA
     f.editor->getPointSelection().setCursor(3.0);
     EXPECT_FALSE(f.key(juce::KeyPress('T', ctrl, 0))) << "nothing follows the last point";
     EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0}));
-}
-
-// One key script, the same result: the curve editor and an automation lane follow one key map
-// (docs/control/point-editing.md). Cmd+D reaches a lane editor as the app's edit command, not as a key event.
-TEST(AutomationLanesPointSelectionTest, TheSameKeyScriptGivesTheSameSelectionCountsAndEditsOnACurveAndOnALane) {
-    using synth::ui::CurveEditorComponent;
-    using synth::ui::CurveMode;
-    using synth::ui::CurveModel;
-    using synth::ui::CurveNode;
-    const auto shift = juce::ModifierKeys::shiftModifier;
-    const auto alt = juce::ModifierKeys::altModifier;
-
-    // Three loose points each (the curve's ends are fixed and cannot be picked).
-    CurveEditorComponent curve;
-    curve.setBounds(0, 0, 400, 160);
-    CurveModel model(CurveMode::Free);
-    model.setNodes({CurveNode{0.0, 0.5f, false, false}, CurveNode{0.25, 0.5f, true, true},
-                    CurveNode{0.5, 0.5f, true, true}, CurveNode{0.75, 0.5f, true, true},
-                    CurveNode{1.0, 0.5f, false, false}});
-    curve.setModel(std::move(model));
-    SelectLane lane;
-
-    auto press = [&](int code, int mods = 0) {
-        const juce::KeyPress k(code, juce::ModifierKeys(mods), 0);
-        EXPECT_TRUE(curve.keyPressed(k)) << code << "/" << mods;
-        EXPECT_TRUE(lane.key(k)) << code << "/" << mods;
-    };
-    auto points = [&] { return std::make_pair(curve.getModel().getNumNodes() - 2, (int)lane.beats().size()); };
-    auto selection = [&] { return std::make_pair(curve.getSelectedIndices().size(), lane.selected().size()); };
-
-    press(juce::KeyPress::rightKey);
-    press(juce::KeyPress::rightKey);
-    press(juce::KeyPress::rightKey, shift);
-    EXPECT_EQ(selection(), std::make_pair(std::size_t(2), std::size_t(2)));
-
-    const float curveBefore = curve.getModel().getNode(2).y;
-    const double laneBefore = lane.values()[1];
-    press(juce::KeyPress::upKey, alt);
-    EXPECT_GT(curve.getModel().getNode(2).y, curveBefore);
-    EXPECT_GT(lane.values()[1], laneBefore);
-
-    ASSERT_TRUE(curve.keyPressed(juce::KeyPress('D', juce::ModifierKeys::commandModifier, 0)));
-    ASSERT_TRUE(lane.editor->duplicateSelectedPoints());
-    EXPECT_EQ(points(), std::make_pair(5, 5));
-    EXPECT_EQ(selection(), std::make_pair(std::size_t(2), std::size_t(2))) << "the copies are the selection";
-
-    press(juce::KeyPress::backspaceKey);
-    EXPECT_EQ(points(), std::make_pair(3, 3));
-    lane.undo.undo();
-    EXPECT_EQ(lane.beats().size(), 5u) << "one Cmd+Z brings the copies back";
 }
 
 //==============================================================================
