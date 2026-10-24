@@ -802,16 +802,16 @@ WavetableOscillatorModule::BlockSettings WavetableOscillatorModule::gatherBlockS
         // chorus without changing the fundamental's level. Detune spreads the voices symmetrically, so
         // the root is the middle voice(s) (the shared helper); a Stack mode keeps voice 0 at the root pitch.
         const bool isRoot = bs.stack == Stack::Detune ? synth::isUnisonCentreVoice(u, bs.unisonCount) : u == 0;
-        const float voiceGain = isRoot ? 1.0f : blend;
+        const float voiceGain = isRoot ? 1.0f : synth::unisonOuterGain(blend);
         float gl, gr;
         synth::unisonPanGains(u, bs.unisonCount, width, gl, gr);
         bs.uniGainL[u] = gl * voiceGain;
         bs.uniGainR[u] = gr * voiceGain;
-        powerSum += voiceGain * voiceGain;
+        powerSum += synth::unisonLegPower(bs.uniGainL[u], bs.uniGainR[u]);
     }
 
-    // Constant power: divide by the root of the summed squared gains, so a stack of uncorrelated
-    // voices keeps the loudness of one voice. A single voice divides by exactly 1.
+    // Constant power: divide by the root of the voices' summed mean leg power, so a stack of
+    // uncorrelated voices keeps the loudness of one voice. A single voice divides by exactly 1.
     bs.uniNormalise = (powerSum > 0.0f) ? (1.0f / std::sqrt(powerSum)) : 1.0f;
     return bs;
 }

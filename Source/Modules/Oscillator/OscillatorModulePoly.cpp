@@ -131,12 +131,12 @@ void OscillatorModule::renderPolyVoiceSteady(int v, float* output, float* output
     const float freq = juce::jlimit(minRenderHz(), 20000.0f, basePitchHz);
     const float baseDt = freq / (float)currentSampleRate;
     const int wf = waveformParam->getIndex();
-    const int unisonCount = set.unisonCount;
+    const int unisonCount = unisonMix.renderCount;
     const bool hasWaveCV = polyCV.waveform;
     const bool hasLevelCV = polyCV.level;
 
     float ratios[MAX_UNISON];
-    fillUnisonRatios(ratios, unisonCount, set.detuneCents);
+    fillUnisonRatios(ratios, set.unisonCount, unisonCount, set.detuneCents);
 
     // Seed previousWaveform before the loop so the first sample doesn't spuriously trigger a
     // crossfade from the default-initialised value 0.
@@ -178,14 +178,14 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* out
                                                 const PolyVoiceSettings& set, bool gliding) {
     const int ns = std::min(numSamples, 4096);
     const int wf = waveformParam->getIndex();
-    const int unisonCount = set.unisonCount;
+    const int unisonCount = unisonMix.renderCount;
     const bool hasWaveCV = polyCV.waveform;
     const bool hasLevelCV = polyCV.level;
     const float minHz = minRenderHz();
 
     // Each unison voice's detune ratio is a block constant, so never per sample
     float ratios[MAX_UNISON];
-    fillUnisonRatios(ratios, unisonCount, set.detuneCents);
+    fillUnisonRatios(ratios, set.unisonCount, unisonCount, set.detuneCents);
 
     if (hasWaveCV)
         voices[v].previousWaveform = wf;

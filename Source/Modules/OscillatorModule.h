@@ -121,7 +121,7 @@ public:
         addParameter(randomPhaseParam = new juce::AudioParameterFloat("randomPhase", "Rand",
                                                                       juce::NormalisableRange<float>(0.0f, 100.0f),
                                                                       0.0f, synth::percentAttributes()));
-        addParameter(blendParam = new juce::AudioParameterFloat("blend", "Blend", 0.0f, 1.0f, 1.0f));
+        addParameter(blendParam = new juce::AudioParameterFloat("blend", "Blend", 0.0f, 1.0f, 0.25f));
         addParameter(widthParam = new juce::AudioParameterFloat("width", "Width", 0.0f, 1.0f, 0.0f));
         // Mono voice feel. Glide Mode "Scaled" makes Glide the time per octave; Glide Curve "Exponential" is
         // fast at the start and slow at the end; Legato (mono only) glides and keeps the phase only for
@@ -139,6 +139,19 @@ public:
         addParameter(fixedRateParam = new juce::AudioParameterFloat("fixedRate", "Fixed rate", fixedRateRange, 50.0f,
                                                                     synth::frequencyAttributes()));
         enableVisualBuffer(true);
+    }
+
+    /** A stored Oscillator node with no Blend predates the 25 % default: it keeps Blend at 100 %. */
+    void applyStoredParamDefaults(const juce::NamedValueSet& storedParams) override {
+        if (!storedParams.contains("blend"))
+            blendParam->setValueNotifyingHost(blendParam->convertTo0to1(1.0f));
+    }
+    /** The binary state of a module saved before Blend existed has no Blend key: it keeps Blend at 100 %. */
+    void setStateInformation(const void* data, int sizeInBytes) override {
+        ModuleBase::setStateInformation(data, sizeInBytes);
+        if (auto xml = getXmlFromBinary(data, sizeInBytes);
+            xml != nullptr && xml->hasTagName("ModuleState") && !xml->hasAttribute("blend"))
+            blendParam->setValueNotifyingHost(blendParam->convertTo0to1(1.0f));
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -164,10 +177,7 @@ public:
         smoothedPan.setCurrentAndTargetValue(panParam->get());
         smoothedPulseWidth.reset(sampleRate, 0.01);
         smoothedPulseWidth.setCurrentAndTargetValue(pulseWidthParam->get() * 0.01f);
-        smoothedBlend.reset(sampleRate, 0.01);
-        smoothedBlend.setCurrentAndTargetValue(blendParam->get());
-        smoothedWidth.reset(sampleRate, 0.01);
-        smoothedWidth.setCurrentAndTargetValue(widthParam->get());
+        unisonMix.primed = false; // the next block starts the voice gains at their targets
         for (auto& v : voices) {
             v.glide.reset();
             v.active = false;
@@ -499,20 +509,24 @@ private:
     GlobalParamCV readGlobalParamCV(const juce::AudioBuffer<float>& buffer, int numSamples) const;
 
     // ---- Unison mix (OscillatorModuleVoicing.cpp) ----
-    /** Per-voice weights of the unison stack for one block, ramped linearly from the block's start
-        to its end so an automated Blend or Width glides. At Blend 1 / Width 0 every left weight is
-        exactly 1 and the right side is unused. */
+    /** Per-voice leg gains of the unison stack for one block, ramped linearly from the block's start to
+        its end. Each gain moves towards its target at a bounded rate, so an automated Blend or Width
+        glides and a voice that enters or leaves with a Unison change fades instead of stepping. */
     struct UnisonMix {
         float leftStart[MAX_UNISON]{};
         float leftStep[MAX_UNISON]{};
         float rightStart[MAX_UNISON]{};
         float rightStep[MAX_UNISON]{};
-        float sumStart = 1.0f; ///< sum of the squared Blend gains: the stack is divided by its square root
+        float sumStart = 1.0f; ///< sum of the voices' mean leg power: the stack is divided by its square root
         float sumStep = 0.0f;
-        bool stereo = false; ///< Width above 0: the stack renders to both legs
+        bool stereo = false;          ///< some voice's legs differ: the stack renders to both legs
+        int renderCount = 1;          ///< voices to render: the Unison count plus any still fading out
+        float reachedL[MAX_UNISON]{}; ///< each voice's gains at the end of the last block
+        float reachedR[MAX_UNISON]{};
+        bool primed = false; ///< false until the first block after prepareToPlay sets the gains to their targets
     } unisonMix;
     void prepareUnisonMix(int unisonCount, int numSamples, float blend, float width);
-    void fillUnisonRatios(float* ratios, int unisonCount, float detuneCents) const;
+    void fillUnisonRatios(float* ratios, int unisonCount, int renderCount, float detuneCents) const;
 
     // ---- Notes and restart (OscillatorModuleNotes.cpp) ----
     /** Reads the block's MIDI: tracks held notes and, when `audible`, the pitch and the sample offsets of
@@ -716,8 +730,6 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedPan;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedPulseWidth;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedBlend;
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedWidth;
 
     // Note tracking. Fixed-size so the audio thread never allocates.
     static constexpr int kMaxRestartsPerBlock = 256;

@@ -254,8 +254,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
         if (processor == nullptr)
             continue;
 
-        if (auto* pObj = t.obj->getProperty("params").getDynamicObject())
-            applyParamsToProcessor(processor.get(), pObj, /*trusted=*/true);
+        applyParamsToNewProcessor(processor.get(), t.obj, /*trusted=*/true);
         applyExtraStateToProcessor(processor.get(), t.obj, /*trusted=*/true);
 
         std::optional<juce::AudioProcessorGraph::NodeID> preservedId;

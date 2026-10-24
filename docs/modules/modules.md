@@ -143,7 +143,7 @@ Without `Spread` or `Rand Phase`, a unison stack and a poly chord attack perfect
 ### Unison, stacking and the sub
 - **Unison** (1–8) with **Detune** (0–100 cents) spreads voices symmetrically about the root.
 - **Stack** applies an interval on top of detune: `Detune` (none), `Octave`, `Power Chord`, `12th`, `Major`, `Minor`. Voice 0 always stays at the root pitch. Unison is constant power: the stack is divided by the root of the summed squared voice gains, so its loudness stays that of one voice.
-- **Blend** (0–1) fades the voices away from the centre (shared `unisonBlendGain`: the middle voice, or the middle two for an even count, stay at full level; voice 0, the root, in a Stack mode), so thinning the chorus does not change the fundamental's level.
+- **Blend** (0–1) fades the voices away from the centre (shared `unisonBlendGain`: the middle voice, or the middle two for an even count, stay at full level; voice 0, the root, in a Stack mode; the outer voices overtake the centre near 87 %, see [oscillator-voice.md](oscillator-voice.md#blend-width-and-detune)). The Oscillator's default is 25 %.
 - **Sub** (0–1) adds a sub-oscillator one or two octaves down (`Sub Oct`), as a sine or square (`Sub Wave`). It is **read out of the built-in `Basic Shapes` table** rather than generated naively, so it inherits the same mip anti-aliasing as everything else — a naive square would alias at exactly the pitches the pyramid exists to protect.
 
 ### Stereo output

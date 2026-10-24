@@ -102,7 +102,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
 
     // Each unison voice's detune ratio is a block constant: computed once here, not per sample.
     float detuneRatios[MAX_UNISON];
-    fillUnisonRatios(detuneRatios, unisonCount, global.detuneCents);
+    fillUnisonRatios(detuneRatios, unisonCount, unisonMix.renderCount, global.detuneCents);
 
     // With Width above 0 the stack renders to Audio R as well; Pan then scales both legs in place.
     const bool rightRendered = unisonMix.stereo && numCh > kRightBase;
@@ -170,8 +170,8 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
         const float waveformAlpha = voices[0].crossfadeSamplesRemaining > 0
                                         ? static_cast<float>(voices[0].crossfadeSamplesRemaining) / CROSSFADE_SAMPLES
                                         : 0.0f;
-        const StackContext stack{detuneRatios,  unisonCount, dt, waveform, voices[0].fadingFromWaveform,
-                                 waveformAlpha, pulseWidth};
+        const StackContext stack{
+            detuneRatios, unisonMix.renderCount, dt, waveform, voices[0].fadingFromWaveform, waveformAlpha, pulseWidth};
         const StackSample stackOut = renderStack(voices[0], stack, i);
 
         if (voices[0].crossfadeSamplesRemaining > 0)

@@ -602,6 +602,15 @@ void AIStateMapper::applyUntrustedState(juce::AudioProcessor* processor, const j
     applyExtraStateToProcessor(processor, holder.get(), /*trusted=*/false);
 }
 
+void AIStateMapper::applyParamsToNewProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
+                                              bool trusted) {
+    const auto* paramsObj = nodeObj->getProperty("params").getDynamicObject();
+    if (paramsObj != nullptr)
+        applyParamsToProcessor(processor, paramsObj, trusted);
+    if (auto* module = dynamic_cast<ModuleBase*>(processor))
+        module->applyStoredParamDefaults(paramsObj != nullptr ? paramsObj->getProperties() : juce::NamedValueSet());
+}
+
 void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,
                                            bool trusted, bool skipUnchanged) {
     // Writing a parameter that already holds the target value is not a no-op: setValueNotifyingHost
@@ -832,11 +841,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     auto processor = createModule(type);
                     if (processor) {
                         // Set parameters using helper
-                        if (nObj->hasProperty("params")) {
-                            if (auto* pObj = nObj->getProperty("params").getDynamicObject()) {
-                                applyParamsToProcessor(processor.get(), pObj, trusted);
-                            }
-                        }
+                        applyParamsToNewProcessor(processor.get(), nObj, trusted);
                         applyExtraStateToProcessor(processor.get(), nObj, trusted);
 
                         // Preserve node identity when restoring OUR OWN snapshot (undo/redo, preset load).
