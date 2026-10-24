@@ -202,35 +202,9 @@ coordinates on every event, and the commit goes out once, on release.
 
 The rule: **anything that glides forward glides on undo and redo.** An undo that jumps looks like a different
 app from the edit it reverses. The two entry points are `AppUndoManager::undo()` and `redo()` (the Cmd+Z / Cmd+Shift+Z
-path); nothing else needs to know.
-
-- **Graph cards.** Both open a `CardGlideAnimator::Scope` around the restore. The scope captures every card's bounds
-  before it, and after the restore's `updateComponents()` arms the usual slide from those rects to the restored ones,
-  with the same geometry-final-at-once contract, 160 ms `easeOutCubic` and cable following as a forward move. A card
-  matches its "before" by component, or by node id when the restore tore every card down and rebuilt it (any restore
-  that frees a node does, e.g. the macro port a take-out created): so a module that moved between a macro and the root
-  glides back and forth with its cables. A card for a node the restore creates grows in, and one it removes shrinks away
-  ([delete and undo animation](#delete-and-undo-animation)); a project load never goes through `undo()` and so never glides
-  (it comes to life instead: [project load reveal](#project-load-reveal)).
-- **Edit Layout controls.** While the on-card layout editor is open, the card an undo or redo rebuilds gives the
-  editor's controls the same treatment: `CardLayoutOnCardEditor` remembers each cell's rect before the re-sync and
-  glides every control whose rect changed from there to the restored place (`startGlide`, 160 ms `easeOutCubic`, the
-  geometry final at once). A control the restore brings back grows in (`fadeInControl`) and one it takes away shrinks
-  out (`startShrinkGhostOf`, from a picture of the card taken at the previous re-sync). Nothing glides under Reduce
-  Motion or off screen.
-- **Macro borders.** `undo()`/`redo()` also snapshot the painted macro borders before the restore and hand them to
-  `GraphEditor::glideHullsFrom` after it, so the border a take-out or join moved glides (220 ms, `MacroHullGlide`) back
-  to where it was, like it glided out.
-- **Timeline track rows.** `AppUndoManager::isRestoring()` is true during the restore. When the timeline panel rebuilds
-  its header rows while it is set and the rebuild is a pure reorder (same tracks, new order),
-  `TimelinePanelComponent::glideTrackRowsFrom` starts the rows at their old slots and `release()`s the shared
-  `ReorderDragAnimator` to the new ones (140 ms settle, frames only while it runs). No row is lifted. A rebuild that
-  drops or restores a track runs the delete and undo motion instead ([delete and undo animation](#delete-and-undo-animation));
-  any other rebuild lands at once. A lane reorder within a track and a modulator row reorder glide back and forth the same way ([lane motion](../timeline/lane-motion.md#undo-and-redo-glide)).
-- **An added or duplicated track's row** grows in through the delete motion's mirror ([delete and undo animation](#delete-and-undo-animation));
-  undoing it shrinks the row away and the rows below close the gap.
-- **Off-screen.** The timeline glide runs only while the panel is showing (`ReorderDragAnimator`'s `animate` flag), so
-  headless tests land at once unless a test forces it.
+path); nothing else needs to know. Each surface, how it detects the restore and the Reduce Motion behaviour:
+[undo-glide.md](undo-glide.md). **`Tests/UI/Layout/UndoGlideSurfaces.h` is the checklist:** every undoable move surface has
+an entry there and one test walks them all, so a new move surface adds its entry in the same change.
 
 ### Controls swapping in place
 
@@ -620,6 +594,8 @@ shortcut.
   turns that motion into a short fade (80 ms); Animations: Off makes it instant. A change that stays instant
   needs a written reason in these docs (the "still instant, and why" list in [Popup windows](#popup-windows), or a
   note on the individual animation); a change with no reason written down is a bug.
+- **Undo and redo.** Anything that glides forward glides on undo and redo; a new move surface adds its entry to the
+  checklist in `Tests/UI/Layout/UndoGlideSurfaces.h` ([undo-glide.md](undo-glide.md)).
 - **Durations.** Hover state 80–120 ms. A small reveal or tooltip 160 ms in, 110 ms out. Menus,
   call-outs and dialogs: see [Popup windows](#popup-windows). Reorder
   make-room 160 ms, settle 140 ms. Panel slides are unchanged (190 ms, `easeInOutCubic`).

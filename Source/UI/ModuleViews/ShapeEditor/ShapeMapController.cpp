@@ -25,7 +25,9 @@ float positionOf(const ShapeItem& shape, int axis) {
     gesture, and every discrete action below brackets itself. */
 ShapeMapController::ShapeMapController(MorphMap& map, ShapeListAdapter& adapter)
     : map_(map)
-    , adapter_(adapter) {
+    , adapter_(adapter)
+    , shapesWatch_(adapter.restoreSerial())
+    , cursorWatch_(adapter.restoreSerial()) {
     map_.onGestureStart = [this](MorphMap::Gesture g) {
         if (g == MorphMap::Gesture::Cursor)
             adapter_.beginCursorGesture();
@@ -63,16 +65,28 @@ ShapeMapController::ShapeMapController(MorphMap& map, ShapeListAdapter& adapter)
     map_.canDeleteDot = [this] { return (int)adapter_.getShapes().size() > 1; };
 }
 
+/** True while a restore runs or one finished since `seenSerial` was taken; takes the serial. */
+bool ShapeMapController::restoreSince(RestoreWatch& watch) const {
+    return watch.take(adapter_.isRestoring(), adapter_.restoreSerial());
+}
+
 void ShapeMapController::refresh() {
     std::vector<MorphMap::Dot> dots;
     for (const auto& shape : adapter_.getShapes())
         dots.push_back({shape.name, positionOf(shape, 0), positionOf(shape, 1)});
-    map_.setDots(std::move(dots));
+    map_.setDots(std::move(dots), restoreSince(shapesWatch_));
     map_.setCursorVisible(adapter_.hasCursor());
-    if (adapter_.hasCursor()) {
-        const auto cursor = adapter_.getCursor();
-        map_.setCursor(cursor.x, cursor.y);
-    }
+    syncCursor();
+}
+
+void ShapeMapController::syncCursor() {
+    if (!adapter_.hasCursor())
+        return;
+    const auto cursor = adapter_.getCursor();
+    const bool restored = restoreSince(cursorWatch_);
+    const auto shown = map_.getCursor();
+    if (std::abs(shown.x - cursor.x) > 1.0e-4f || std::abs(shown.y - cursor.y) > 1.0e-4f)
+        map_.setCursor(cursor.x, cursor.y, restored);
 }
 
 void ShapeMapController::changed() {

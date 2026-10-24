@@ -2,6 +2,7 @@
 
 #include "MorphMapGlide.h"
 #include "UI/Layout/KeyGlide/KeyGlideHost.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
@@ -69,10 +70,19 @@ public:
     ~MorphMap() override;
 
     // ---------- content (message thread) ----------
-    /** Replaces the dots; the selection is clamped into the new list. */
-    void setDots(std::vector<Dot> dots);
+    /** Replaces the dots; the selection is clamped into the new list. With `glideMoved` (an undo or redo), a dot that
+     *  moved with the count unchanged is drawn gliding from where it was. */
+    void setDots(std::vector<Dot> dots, bool glideMoved = false);
     const std::vector<Dot>& getDots() const noexcept { return dots_; }
-    void setCursor(float x, float y);
+    void setCursor(float x, float y, bool glide = false);
+    /** Where a dot or the cursor is drawn now, in map units (trails its place while a restore glide runs). */
+    juce::Point<float> getDrawnDot(int index) const;
+    juce::Point<float> getDrawnCursor() const;
+    bool isMoveGliding() const noexcept { return moveTween_.isAnimating(); }
+    void stepMoveGlideForTest(double ms) { moveTween_.stepForTest(ms); }
+    float getMoveAlphaForTest(bool cursor, int dot) const {
+        return moveTween_.alphaFor(cursor ? kCursorKey : static_cast<KeyedPointTween::Key>(dot));
+    }
     juce::Point<float> getCursor() const noexcept { return cursor_; }
     /** A map with no cursor (a shape list that is not morphed) hides the cursor and its Tab stop. */
     void setCursorVisible(bool visible);
@@ -153,6 +163,7 @@ public:
     bool isMoving() const noexcept;
     /** Test seam: lets an off-screen map animate, and steps a running motion to `ms` after its first frame. */
     static void setAnimateOffScreenForTest(bool animate);
+    static bool animatesOffScreenForTest();
     void stepMotionForTest(double ms);
 
     // ---------- inspection ----------
@@ -198,6 +209,7 @@ private:
     bool stepStop(Stop& stop, float dx, float dy);
     bool pressArrow(Stop& stop, int keyCode, bool shift);
     void glideTick();
+    void startMoveGlide(const std::vector<Dot>& before, bool glideMoved);
     void endGlide();
     void moveGlideTarget(juce::Point<float> to);
     GlideHost makeDefaultGlideHost() const;
@@ -250,6 +262,9 @@ private:
     std::unique_ptr<Stop> stripStops_[2]; // X, Y
     std::unique_ptr<juce::TextEditor> renameEditor_;
     int renameIndex_ = -1;
+
+    KeyedPointTween moveTween_{*this}; // dots by index, the cursor by kCursorKey
+    static constexpr KeyedPointTween::Key kCursorKey = -1;
 
     std::vector<DotMotion> motions_;
     juce::VBlankAnimatorUpdater motionUpdater_{this};

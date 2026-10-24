@@ -198,9 +198,10 @@ void CurveEditorComponent::paintHandles(juce::Graphics& g, const CurveEditorGeom
             g.setColour(colours.accent.withAlpha(0.25f));
             g.fillEllipse(pos.x - radius - 4.0f, pos.y - radius - 4.0f, (radius + 4.0f) * 2.0f, (radius + 4.0f) * 2.0f);
         }
-        g.setColour(colours.background);
+        const float fade = pointTween_.alphaFor(i); // Reduce Motion: a restored node fades in
+        g.setColour(colours.background.withMultipliedAlpha(fade));
         g.fillEllipse(pos.x - radius, pos.y - radius, radius * 2.0f, radius * 2.0f);
-        g.setColour(node.xMovable || node.yMovable ? colours.accent : colours.mutedText);
+        g.setColour((node.xMovable || node.yMovable ? colours.accent : colours.mutedText).withMultipliedAlpha(fade));
         g.drawEllipse(pos.x - radius, pos.y - radius, radius * 2.0f, radius * 2.0f, 2.0f);
     }
 }

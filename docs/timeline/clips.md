@@ -71,7 +71,7 @@ Selected clips get a brighter border and a slight fill lift.
 Repaints happen only on doc changes (`refreshFromDoc()`, routed in from
 `TimelinePanelComponent::timelineChanged()`, which also calls `ClipSelectionModel::retainOnly` so a
 clip removed by any path can never stay selected), view-state changes (zoom/scroll/snap), and
-interactions — never a timer.
+interactions — never a timer. The one exception is an undo or redo: a clip whose start, length or row it changed glides its rectangle from where it was drawn (`TimelineClipLaneArea::glideRestoredClips`, a `KeyedRectTween` keyed by clip id, 160 ms `easeOutCubic`, off screen and under Reduce Motion at once). A moved clip carries its notes, a trimmed clip leaves them at their absolute beat so the edge slides over them ([undo-glide.md](../layout/undo-glide.md)).
 
 ## Select-tool gestures
 

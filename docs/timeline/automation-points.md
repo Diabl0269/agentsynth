@@ -67,7 +67,7 @@ the points jump from grid line to grid line. Alt+Shift with two or more points s
 or the preview at once; the drawn dots trail it by an offset that eases to zero over 160 ms `easeOutCubic`
 (`KeyedPointTween`, keyed by the point's beat, an `AnimationDriver` that stops when settled). A new jump retargets
 from where the dot is drawn, and the offsets carry across the commit at release. Under Reduce Motion or Animations
-Off, or off screen, nothing eases (a hold still moves). The stretch box follows the drawn dots, and so does the line (`AutomationLaneEditor::tweenedPoints` feeds the kernel the moved points, so it meets every dot).
+Off, or off screen, nothing eases (a hold still moves). The stretch box follows the drawn dots, and so does the line (`AutomationLaneEditor::tweenedPoints` feeds the kernel the moved points, so it meets every dot). Undo and redo of a move use the same tween: when a restore keeps the point count and changes beats or values, `AutomationLaneEditor::glideRestoredPoints` matches old to new by order and glides each dot back ([undo-glide.md](../layout/undo-glide.md)); a pure add or remove stays `LanePointGlide`'s.
 
 Each point is reachable from the keyboard, following the shared map in [`control/point-editing.md`](../control/point-editing.md): Tab into the editor, Left/Right walk the points
 (nothing moves in time), Shift+Left/Right add the next point past the selection on that side (the cursor moves there),

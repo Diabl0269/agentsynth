@@ -921,3 +921,51 @@ TEST(MorphMap, ClickingADotOrTheCursorOffCentreMovesNothingAndRecordsNoUndoStep)
     EXPECT_EQ(rig.map.getCursorCentre(), cursor);
     EXPECT_EQ(rig.undo.getEditSerial(), serial);
 }
+
+// Regression test for FRO1065: Cmd+Z of a dot or cursor move snapped it back, since the refresh set the map at once.
+TEST(MorphMap, UndoAndRedoOfADotMoveGlideItBackAndForth) {
+    ModeScope scope(AnimationMode::full);
+    MapRig rig;
+    const float home = rig.map.getDots()[0].x;
+    drag(rig.map, rig.map.getDotCentre(0), rig.map.toPixels(0.4f, 0.55f));
+    EXPECT_FALSE(rig.map.isMoveGliding()) << "an ordinary move lands at once";
+    const float moved = rig.map.getDrawnDot(0).x;
+
+    rig.undo.undo();
+    rig.controller.refresh();
+    EXPECT_TRUE(rig.map.isMoveGliding());
+    EXPECT_NEAR(rig.map.getDots()[0].x, home, 1e-5) << "the stored position is final at once";
+    EXPECT_NEAR(rig.map.getDrawnDot(0).x, moved, 1e-4) << "it is drawn where it stood";
+    rig.map.stepMoveGlideForTest(40.0);
+    EXPECT_GT(rig.map.getDrawnDot(0).x, home + 0.01f);
+    EXPECT_LT(rig.map.getDrawnDot(0).x, moved - 0.01f);
+    rig.map.stepMoveGlideForTest(1000.0);
+    EXPECT_FALSE(rig.map.isMoveGliding());
+    EXPECT_NEAR(rig.map.getDrawnDot(0).x, home, 1e-5);
+
+    rig.undo.redo();
+    rig.controller.refresh();
+    EXPECT_TRUE(rig.map.isMoveGliding()) << "redo glides too";
+}
+
+TEST(MorphMap, UndoOfACursorMoveGlidesItAndUnderReduceMotionLandsAtOnceAndFadesIn) {
+    ModeScope scope(AnimationMode::full);
+    MapRig rig;
+    drag(rig.map, rig.map.getCursorCentre(), rig.map.toPixels(0.25f, 0.75f));
+    rig.undo.undo();
+    rig.controller.refresh();
+    ASSERT_TRUE(rig.map.isMoveGliding());
+    EXPECT_NEAR(rig.map.getDrawnCursor().x, 0.25f, 0.02f);
+    rig.map.stepMoveGlideForTest(40.0);
+    EXPECT_GT(rig.map.getDrawnCursor().x, 0.26f);
+    EXPECT_LT(rig.map.getDrawnCursor().x, 0.49f);
+
+    setAnimationMode(AnimationMode::reduced);
+    rig.undo.redo();
+    rig.controller.refresh();
+    EXPECT_NEAR(rig.map.getDrawnCursor().x, 0.25f, 0.02f);
+    EXPECT_LT(rig.map.getMoveAlphaForTest(true, 0), 0.9f);
+    rig.map.stepMoveGlideForTest(500.0);
+    EXPECT_FALSE(rig.map.isMoveGliding());
+    EXPECT_FLOAT_EQ(rig.map.getMoveAlphaForTest(true, 0), 1.0f);
+}

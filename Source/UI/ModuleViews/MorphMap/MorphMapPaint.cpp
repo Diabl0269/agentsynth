@@ -33,10 +33,10 @@ void MorphMap::paint(juce::Graphics& g) {
 
     g.setFont(juce::Font(10.0f));
     for (int i = 0; i < (int)dots_.size(); ++i) {
-        const auto c = getDotCentre(i);
+        const auto c = toPixels(getDrawnDot(i).x, getDrawnDot(i).y);
         const auto colour = morphShapeColour(colors, i);
         const float scale = getDotScale(i);
-        const float alpha = getDotAlpha(i);
+        const float alpha = getDotAlpha(i) * moveTween_.alphaFor(i);
         const float r = kDotRadius * scale;
         if (i == selected_) {
             g.setColour(colors.textPrimary.withAlpha(0.9f * alpha));
@@ -66,10 +66,11 @@ void MorphMap::paint(juce::Graphics& g) {
     }
 
     if (cursorVisible_) {
-        const auto c = getCursorCentre();
-        g.setColour(colors.bg0);
+        const auto c = toPixels(getDrawnCursor().x, getDrawnCursor().y);
+        const float fade = moveTween_.alphaFor(kCursorKey);
+        g.setColour(colors.bg0.withMultipliedAlpha(fade));
         g.fillEllipse(c.x - kCursorRadius, c.y - kCursorRadius, kCursorRadius * 2.0f, kCursorRadius * 2.0f);
-        g.setColour(colors.textPrimary);
+        g.setColour(colors.textPrimary.withMultipliedAlpha(fade));
         g.drawEllipse(c.x - kCursorRadius, c.y - kCursorRadius, kCursorRadius * 2.0f, kCursorRadius * 2.0f, 2.0f);
     }
 
@@ -96,7 +97,7 @@ void MorphMap::paintStrips(juce::Graphics& g) const {
     const auto& colors = synth::theme::themeOf(*this).colors;
     for (const Axis axis : {Axis::X, Axis::Y}) {
         const auto strip = getStripBounds(axis);
-        const float value = axis == Axis::X ? cursor_.x : cursor_.y;
+        const float value = axis == Axis::X ? getDrawnCursor().x : getDrawnCursor().y;
         g.setColour(colors.border.withAlpha(0.8f));
         g.fillRoundedRectangle(strip, 3.0f);
         g.setColour(colors.accent);

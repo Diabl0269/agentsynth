@@ -26,7 +26,8 @@ CurveEditorGeometry CurveEditorComponent::currentGeometry() const {
     return CurveEditorGeometry(model_, getLocalBounds().toFloat(), config);
 }
 
-void CurveEditorComponent::setModel(CurveModel model) {
+void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
+    const auto placesBefore = glideMoved ? nodePositions() : std::vector<juce::Point<float>>();
     const int oldNumNodes = model_.getNumNodes();
     const CurveMode oldMode = model_.getMode();
     model_ = std::move(model);
@@ -53,6 +54,10 @@ void CurveEditorComponent::setModel(CurveModel model) {
         pendingToggleIndex_ = -1;
         pendingCollapseIndex_ = -1;
     }
+    if (topologyChanged)
+        pointTween_.clear();
+    else if (glideMoved)
+        glideNodesFrom(placesBefore);
     repaint();
     refreshAccessibilityValue();
 }

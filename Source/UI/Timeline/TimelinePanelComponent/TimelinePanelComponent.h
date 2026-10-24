@@ -490,13 +490,13 @@ public:
      *  runs in a test process. Anything else is ignored. */
     void applyAddTrackMenuChoice(int menuId);
     juce::Viewport& getTrackHeaderViewport() noexcept { return trackHeaderViewport_; }
-    // The Viewport's content component — a pixel-level test seam for what a track-reorder drag
-    // paints. See createComponentSnapshot() at the call site.
+    // The Viewport's content component: a pixel-level test seam for what a track-reorder drag paints.
     juce::Component& getTrackHeaderListForTest() noexcept { return trackHeaderList_; }
     /** Lets the undo/redo row glide run on an off-screen panel (no peer, so isShowing() is false). */
     void forceTrackGlideForTest(bool on) noexcept { trackGlideForcedForTest_ = on; }
-    /** One frame of the row glide, as the VBlank pump would run it. */
+    /** One frame of the row glide, as the VBlank pump would run it; the setter below swaps its clock (empty: real). */
     void advanceTrackGlideForTest() { onTrackReorderFrame(); }
+    void setTrackGlideClockForTest(std::function<double()> nowMs) { trackReorder_.setClock(std::move(nowMs)); }
     /** True from the first drag step of a track reorder until its drop has finished settling. */
     bool isTrackReorderActiveForTest() const noexcept { return trackReorder_.isReordering(); }
     /** The Esc key press a real track drag would receive from the window. */

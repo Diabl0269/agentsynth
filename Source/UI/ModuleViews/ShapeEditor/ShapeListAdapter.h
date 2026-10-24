@@ -75,6 +75,11 @@ public:
     /** A new shape for map position (x, y), e.g. a copy of the blend there. */
     virtual ShapeItem makeShapeAt(float x, float y) const = 0;
 
+    /** True while an undo or redo is applying; restoreSerial() advances once per finished step. Both are 0/false
+     *  for an adapter with no undo. */
+    virtual bool isRestoring() const { return false; }
+    virtual int restoreSerial() const { return 0; }
+
     virtual bool hasCursor() const { return false; }
     virtual juce::Point<float> getCursor() const { return {0.5f, 0.5f}; }
     virtual void setCursor(juce::Point<float>) {}

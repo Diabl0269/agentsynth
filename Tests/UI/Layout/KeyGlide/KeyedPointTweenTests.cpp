@@ -99,3 +99,31 @@ TEST(KeyedPointTween, AnOwnerThatIsNotShowingDoesNotAnimate) {
     tween.retarget(1, {0.0f, 0.0f}, {100.0f, 0.0f});
     EXPECT_FALSE(tween.isAnimating());
 }
+
+TEST(KeyedPointTween, UnderReduceMotionARestoreLandsAtOnceAndFadesInThere) {
+    juce::Component owner;
+    KeyedPointTween tween(owner);
+    tween.forceAnimateForTest(true);
+    ReducedMotionGuard reduced(true);
+    tween.retarget(1, {0.0f, 0.0f}, {100.0f, 0.0f}, true);
+    EXPECT_EQ(tween.offsetFor(1), juce::Point<float>()) << "already at the new place";
+    EXPECT_LT(tween.alphaFor(1), 0.5f);
+    EXPECT_TRUE(tween.isFading());
+    tween.stepForTest(40.0);
+    EXPECT_GT(tween.alphaFor(1), 0.5f);
+    EXPECT_LT(tween.alphaFor(1), 1.0f);
+    tween.stepForTest(500.0);
+    EXPECT_FLOAT_EQ(tween.alphaFor(1), 1.0f);
+    EXPECT_FALSE(tween.isAnimating());
+}
+
+TEST(KeyedPointTween, AnimationsOffLandsARestoreWithoutAFade) {
+    juce::Component owner;
+    KeyedPointTween tween(owner);
+    tween.forceAnimateForTest(true);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+    tween.retarget(1, {0.0f, 0.0f}, {100.0f, 0.0f}, true);
+    synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+    EXPECT_FALSE(tween.isAnimating());
+    EXPECT_FLOAT_EQ(tween.alphaFor(1), 1.0f);
+}

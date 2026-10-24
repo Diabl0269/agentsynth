@@ -28,6 +28,7 @@ MorphMap::MorphMap() {
     setDescription("Shapes placed on a map; the cursor blends the shapes around it");
     setWantsKeyboardFocus(true);
     glideHost_ = makeDefaultGlideHost();
+    moveTween_.onDirty = [this](juce::Rectangle<int>) { repaint(); };
     cursorStop_ = std::make_unique<Stop>(*this, -1);
     addAndMakeVisible(*cursorStop_);
     cursorStop_->setExplicitFocusOrder(1000);
@@ -106,9 +107,10 @@ bool MorphMap::cursorAt(juce::Point<float> point) const {
 // Content
 // ---------------------------------------------------------------------------------------------------------------
 
-void MorphMap::setDots(std::vector<Dot> dots) {
+void MorphMap::setDots(std::vector<Dot> dots, bool glideMoved) {
     auto before = std::move(dots_);
     dots_ = std::move(dots);
+    startMoveGlide(before, glideMoved);
     startDotMotion(before);
     selected_ = dots_.empty() ? -1 : juce::jmin(selected_, (int)dots_.size() - 1);
     if (renameEditor_ != nullptr)
@@ -117,8 +119,14 @@ void MorphMap::setDots(std::vector<Dot> dots) {
     repaint();
 }
 
-void MorphMap::setCursor(float x, float y) {
+void MorphMap::setCursor(float x, float y, bool glide) {
+    const auto before = getDrawnCursor();
     cursor_ = {juce::jlimit(kMapMin, kMapMax, x), juce::jlimit(kMapMin, kMapMax, y)};
+    moveTween_.forceAnimateForTest(animatesOffScreenForTest());
+    if (glide)
+        moveTween_.retarget(kCursorKey, before, cursor_, true);
+    else
+        moveTween_.erase(kCursorKey);
     layoutStops();
     refreshStopNames();
     repaint();
@@ -428,6 +436,7 @@ void MorphMap::setHoveredAxis(Axis axis) {
 void MorphMap::moveDot(int index, juce::Point<float> to) {
     if (index < 0 || index >= (int)dots_.size())
         return;
+    moveTween_.erase(index);
     dots_[(size_t)index].x = to.x;
     dots_[(size_t)index].y = to.y;
     layoutStops();
@@ -444,6 +453,7 @@ void MorphMap::moveToStrip(Axis axis, juce::Point<float> pixels) {
 }
 
 void MorphMap::moveCursor(juce::Point<float> to) {
+    moveTween_.erase(kCursorKey);
     cursor_ = to;
     layoutStops();
     refreshStopNames();
@@ -470,6 +480,8 @@ bool& animateOffScreen() {
 } // namespace
 
 void MorphMap::setAnimateOffScreenForTest(bool animate) { animateOffScreen() = animate; }
+
+bool MorphMap::animatesOffScreenForTest() { return animateOffScreen(); }
 
 const MorphMap::DotMotion* MorphMap::growingMotion(int index) const {
     if (index < 0 || index >= (int)dots_.size())

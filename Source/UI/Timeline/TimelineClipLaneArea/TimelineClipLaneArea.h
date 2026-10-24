@@ -2,6 +2,8 @@
 
 #include "Timeline/PeaksFile.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/Timeline/ClipSelectionModel.h"
@@ -523,6 +525,9 @@ public:
     // The (startBeat, lengthBeats) a clip PAINTS at this instant — its doc geometry except while
     // its own move/trim drag is previewing. nullopt when the id does not resolve.
     std::optional<std::pair<double, double>> getEffectiveGeometryForTest(synth::ClipId id) const;
+    // Where a clip is drawn right now (trails its place while an undo or redo glide runs), and the glide itself.
+    juce::Rectangle<int> getDrawnClipRectForTest(synth::ClipId id) const;
+    KeyedRectTween& getClipGlideForTest() noexcept { return clipGlide_; }
     // The track-row offset the in-flight move/copy drag would apply to the whole selection — 0
     // whenever the drop would be illegal for any clip in it (see mouseDrag's kind check).
     int getPreviewRowDeltaForTest() const noexcept { return previewRowDelta_; }
@@ -586,6 +591,8 @@ private:
 
     std::optional<ClipHit> hitTestClip(juce::Point<int> pos) const;
     std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> collectClipRects() const;
+    void glideRestoredClips();
+    juce::Rectangle<int> drawnClipRect(synth::ClipId id, juce::Rectangle<int> resting) const;
     Geometry effectiveGeometryFor(const synth::Clip& clip) const;
     // The row a clip PAINTS in right now: its own, except while a plain (non-copy) move drag
     // previews a cross-track drop (see TimelineClipLaneArea.cpp for the copy-drag exception).
@@ -734,6 +741,17 @@ private:
     void clearLiveRecording();
 
     TimelineViewState& viewState_;
+    // Where each clip rested at the last sync, so a restore can glide the clips it moved (RestoreGlide.cpp).
+    struct ClipPlace {
+        double start = 0.0;
+        double length = 0.0;
+        int row = 0;
+        bool operator==(const ClipPlace&) const = default;
+    };
+    std::map<std::int64_t, ClipPlace> clipPlaces_;
+    KeyedRectTween clipGlide_{*this};
+    RestoreWatch restoreWatch_;
+    const AppUndoManager* watchedUndo_ = nullptr;
     // Screen area the real clip menu opens at while showContextMenuForKeyboardFocus() runs; empty = at the mouse.
     std::optional<juce::Rectangle<int>> keyboardMenuAnchor_;
     ClipSelectionModel& selection_;

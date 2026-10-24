@@ -7,6 +7,7 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/KeyGlide/KeyHold.h"
 #include "UI/Layout/KeyGlide/KeyedPointTween.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h"
 #include "UI/Timeline/AutomationLanes/PointReadout/PointValueField.h"
@@ -317,6 +318,8 @@ private:
     void endKeyDrag();
     void cancelKeyDrag();
     double keyDragSpeedFactor() const;
+    bool restoreSinceLastSync();
+    void glideRestoredPoints(const std::vector<LaneBreakpoint>& before, const std::vector<LaneBreakpoint>& now);
     void easeMovedPoints(const std::vector<LaneBreakpoint>& from, const std::vector<LaneBreakpoint>& to,
                          const std::vector<double>& keysFrom, const std::vector<double>& keysTo);
     juce::Point<float> pointPosition(const LaneBreakpoint& point) const;
@@ -430,6 +433,7 @@ private:
     } keyDrag_;
     LanePointClipboard* clipboard_ = nullptr;
     std::int64_t syncedRevision_ = -1;
+    RestoreWatch restoreWatch_;
     // > 0 while this editor commits its own move: the notification must not prune the selection, whose new beats are
     // set right after.
     int ownEdits_ = 0;

@@ -10,6 +10,7 @@
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
 #include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/Layout/AutomatedMarker.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/SplitButton.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -621,7 +622,8 @@ private:
     bool lfoCurveGestureActive = false; // mirrors envelopeCurveGestureActive, for the wave graph
     juce::var lfoWaveBefore;            // getExtraState() at onGestureStart, for the undo bracket
     int lfoLastSeenWaveGeneration = 0;  // last generation this card wrote or resynced from
-    int lfoEditedShape_ = 0;            // the shape the curve editor shows: the one nearest the morph cursor
+    synth::ui::RestoreWatch lfoRestoreWatch_;
+    int lfoEditedShape_ = 0; // the shape the curve editor shows: the one nearest the morph cursor
 
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
     std::unique_ptr<juce::TextButton> loadWavetableButton;

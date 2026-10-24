@@ -49,7 +49,9 @@ public:
     CurveEditorComponent();
     ~CurveEditorComponent() override = default;
 
-    void setModel(CurveModel model);
+    /** With `glideMoved` (an undo or redo), nodes of a same-shaped curve (same count and mode) are drawn gliding from
+     *  where they were; a different shape lands at once. */
+    void setModel(CurveModel model, bool glideMoved = false);
     CurveModel& getModel() noexcept { return model_; }
     const CurveModel& getModel() const noexcept { return model_; }
 
@@ -266,6 +268,8 @@ private:
     std::vector<juce::Point<float>> selectionPositions() const;
     juce::Point<float> segmentTweenOffset(int seg, float progress) const;
     void buildCurvePaths(const CurveEditorGeometry& geometry, juce::Path& curvePath, juce::Path& fillPath) const;
+    std::vector<juce::Point<float>> nodePositions() const;
+    void glideNodesFrom(const std::vector<juce::Point<float>>& before);
     void applyKeyDrag(bool tapStep);
     void endKeyDrag();
     double keyDragSpeedFactor() const;

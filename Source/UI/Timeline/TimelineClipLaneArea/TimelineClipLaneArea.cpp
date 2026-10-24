@@ -103,6 +103,7 @@ void TimelineClipLaneArea::refreshFromDoc() {
     peaksCache_.clear();
     // Same policy, same reasoning, for the asset-existence cache.
     assetExistsCache_.clear();
+    glideRestoredClips();
     repaint();
 }
 
@@ -411,8 +412,14 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
             paintSoundDropOutline(g, bounds);
         if (track.clips.empty())
             paintEmptyRowHint(g, track, bounds);
-        for (const auto& clip : track.clips)
+        for (const auto& clip : track.clips) {
+            const float fade = clipGlide_.alphaFor(clip.id.value); // Reduce Motion: a restored clip fades in
+            if (fade < 1.0f)
+                g.beginTransparencyLayer(fade);
             paintClip(g, clip, track, trackIndex, layout);
+            if (fade < 1.0f)
+                g.endTransparencyLayer();
+        }
     }
 
     if (belowTracksHint_ || isShowingSoundOutline())
@@ -436,8 +443,12 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
 void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip, const synth::Track& track,
                                      int trackIndex, const TimelineRowLayout& layout) {
     const auto geometry = effectiveGeometryFor(clip);
-    const auto rect =
+    auto rect =
         computeClipRect(viewState_, layout, effectiveRowFor(clip.id, trackIndex), geometry.start, geometry.length);
+    const auto glide = clipGlide_.offsetFor(clip.id.value);
+    // A moved clip carries its notes along; a trimmed one (its width changes) leaves them where they are.
+    const double noteShift = glide.getWidth() == 0.0f ? (double)glide.getX() : 0.0;
+    rect = drawnClipRect(clip.id, rect);
     const int rowHeight = rect.getHeight(); // the row it is drawn in (a dragged clip's target row)
     // Cull against the area being painted, in both directions: rows scrolled above or below the panel are laid out at
     // negative or far y, and drawing every note of every track made a scroll frame cost in proportion to the project.
@@ -478,8 +489,8 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
         g.setColour(juce::Colours::white.withAlpha(0.55f));
         for (const auto& note : clip.notes) {
             const double noteStartBeat = geometry.start + note.startBeat; // notes are clip-relative
-            const double x0 = viewState_.beatToX(noteStartBeat);
-            const double x1 = viewState_.beatToX(noteStartBeat + note.lengthBeats);
+            const double x0 = viewState_.beatToX(noteStartBeat) + noteShift;
+            const double x1 = viewState_.beatToX(noteStartBeat + note.lengthBeats) + noteShift;
             const auto nx0 = (float)juce::jlimit((double)rect.getX(), (double)rect.getRight(), x0);
             const auto nx1 = (float)juce::jlimit((double)rect.getX(), (double)rect.getRight(), x1);
             if (nx1 <= nx0)
