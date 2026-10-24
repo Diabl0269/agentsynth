@@ -13,6 +13,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotPopoverTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotSourceRemovalMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotRowPolishTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotFaderGestureTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotDoubleClickTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotDoubleClickZoomTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotInlineAddTests.cpp
@@ -23,6 +24,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelClickTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelRowsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorDropRebuildTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/ModuleComponentModDotEveryControlTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelStereoPairRowsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelAddConnectionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelMacroCardTests.cpp

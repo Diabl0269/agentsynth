@@ -198,6 +198,21 @@ TEST(CardFader, PaintsTheDesignSystemFaderAtCardSizes) {
     }
 }
 
+// The mod dot is pressed through the fader, so the point it is painted at must lie inside the fader's own bounds, with
+// the dot's reach (its radius and the press tolerance) not leaving them on the near side either.
+TEST(CardFader, TheLandingDotLiesInsideTheFaderForBothOrientations) {
+    synth::theme::AppLookAndFeel lnf;
+    for (auto orientation : {CardFader::Orientation::Vertical, CardFader::Orientation::Horizontal}) {
+        LoneFader f(orientation);
+        f.fader.setLookAndFeel(&lnf);
+        const auto dot = f.fader.landingPoint(ModuleComponent::kKnobLandingDotDiameter);
+        EXPECT_TRUE(f.fader.getLocalBounds().toFloat().contains(dot))
+            << (f.fader.isVerticalFader() ? "vertical" : "horizontal") << " dot at " << dot.toString();
+        EXPECT_FALSE(f.fader.hitsModBar(dot)) << "the dot never sits in the amount bar's zone";
+        f.fader.setLookAndFeel(nullptr);
+    }
+}
+
 TEST(CardFader, OnACardItIsAModulationTargetLearnableAndInTheSliderList) {
     CardCanvas canvas;
     auto filter = std::make_unique<FilterModule>();
