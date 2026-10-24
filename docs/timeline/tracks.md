@@ -658,6 +658,8 @@ without a menu. The pane reaches the app through ONE accessor, `TrackHeaderHost:
   pan) as an audio take, in the same undo step as the other armed tracks
   ([transport](transport.md#recording-audio-from-each-tracks-input)). Such a track never monitors its input,
   whatever its Monitor mode says: the source is already heard, and the input meter stays hidden, as for Whole mix.
+  Solo follows the input: soloing such a track solos its source too (`TimelineSnapshot::buildFrom`), so the source's
+  clips keep playing and the take is never silent; the tap sits before the channel's solo gate for the same reason.
   If the source is deleted later the project still loads, the row reads "(track removed)" in the warning colour of a
   device that is not connected, the menu keeps it ticked, and Record skips the track with a status-bar note.
   `TimelineDoc::setTrackAudioInput` accepts a source only when it exists, is not the target itself and is not an

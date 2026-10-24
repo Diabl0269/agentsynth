@@ -229,6 +229,16 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
         snapshot->tracks.push_back(info);
     }
 
+    // Solo follows the input: a soloed Audio track recording "Another track" solos its source too, or the source's
+    // clips would be suppressed and the take recorded silence (docs/timeline/tracks.md#the-input-row).
+    for (const auto& track : docTracks) {
+        if (track.kind != TrackKind::Audio || !track.soloed || track.audioInput.kind != AudioInputChoice::Kind::Track)
+            continue;
+        for (auto& info : snapshot->tracks)
+            if (info.trackId == track.audioInput.sourceTrack.value)
+                info.soloed = true;
+    }
+
     return snapshot;
 }
 
