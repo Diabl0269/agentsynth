@@ -329,6 +329,26 @@ TEST_F(AudioSettingsTabTest, RememberedInterfacesListsAnUnpluggedDeviceAndForget
     EXPECT_EQ(list.getNumRowsForTest(), 1);
 }
 
+// The hidden "no interface" note once kept its slot, so a single remembered interface was laid out below the
+// section's bottom edge and the section looked empty.
+TEST_F(AudioSettingsTabTest, EveryRememberedInterfaceRowSitsInsideTheList) {
+    for (const int extra : {0, 1}) {
+        if (extra == 1)
+            source.store.setName(kType, "Scarlett 4i4", 0, "Guitar");
+        source.store.setName(kType, source.info.deviceName, 0, "Vocal mic");
+        auto tab = makeTab();
+        auto& list = tab->getInterfacesForTest();
+        list.setSize(400, list.preferredHeight(400));
+        ASSERT_EQ(list.getNumRowsForTest(), 1 + extra);
+        for (int i = 0; i < list.getNumRowsForTest(); ++i) {
+            const auto& row = list.getRowForTest(i);
+            EXPECT_TRUE(list.getLocalBounds().contains(row.getBounds()))
+                << "row " << i << " of " << list.getNumRowsForTest() << " at " << row.getBounds().toString();
+            EXPECT_TRUE(row.getTitle().startsWith(row.deviceName)) << "a row has a screen-reader name";
+        }
+    }
+}
+
 TEST_F(AudioSettingsTabTest, TheInUseStatusCountsNamedInputsSingularAndPlural) {
     source.store.setName(kType, source.info.deviceName, 0, "Vocal mic");
     auto tab = makeTab();

@@ -106,6 +106,7 @@ void AudioInterfacesList::refresh() {
                 row->addAndMakeVisible(*row->forget);
             }
         }
+        row->setTitle(entry.deviceName + ", " + row->status);
         row->resized();
         row->repaint();
         ordered.push_back(std::move(row));
@@ -117,7 +118,10 @@ void AudioInterfacesList::refresh() {
 
 void AudioInterfacesList::resized() {
     auto area = getLocalBounds().reduced(kPad);
-    empty_.setBounds(area.removeFromTop(kRowHeight));
+    // The empty note takes a slot only while shown; preferredHeight() counts rows alone, so a hidden note's slot
+    // would push the last row past the bottom edge.
+    if (rows_.empty())
+        empty_.setBounds(area.removeFromTop(kRowHeight));
     for (auto& row : rows_)
         row->setBounds(area.removeFromTop(kRowHeight));
 }
