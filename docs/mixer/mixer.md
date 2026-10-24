@@ -311,6 +311,8 @@ pan pot, and the project setting never touches it. Every other `ModuleBase::panG
 module-card's own pan knob, e.g. Oscillator/Wavetable/Filter) is likewise unaffected; this ticket
 only ever changes a MONO `ChannelStripModule`'s own pan and its sends' pan.
 
+A module card's pan is never silent at an extreme: on a Left-only patch the output stage first lends the left leg to the empty right leg in proportion to |Pan| ([`fx-modules.md`](../modules/fx-modules.md#mix-and-pan-shared-stage)), and a split-block module collapsed to one jack leaves its pan at rest.
+
 **Persistence and the engine-side switch.** The setting is a top-level `"mixerPanLaw"` string in the
 project file (`"balance"`/`"compensated"`, [`docs/architecture/project-bundle.md`](../architecture/project-bundle.md#projectbundle-agsproj)) —
 absent means Balance, so an existing project's mix is never changed underfoot. The founder's

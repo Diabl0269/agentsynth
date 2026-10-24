@@ -75,6 +75,7 @@ public:
     bool mutedNow() const noexcept { return effMute_; }
     void applyMixPan(juce::AudioBuffer<float>& buffer, const OutputLegs& legs, bool panApplies) noexcept;
     void skipMixPan(int numSamples) noexcept;
+    void fillRightForPan(juce::AudioBuffer<float>& buffer, int rightBase, int span) noexcept;
     void applyFade(juce::AudioBuffer<float>& buffer, const OutputLegs& legs) noexcept;
     void finishBlock(int numSamples) noexcept;
 
@@ -97,6 +98,7 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mixSm_{1.0f};
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> panSm_{0.0f};
     juce::AudioBuffer<float> dry_;
+    float panFill_ = 0.0f;
 
     bool synced_ = false;
     bool effBypass_ = false;

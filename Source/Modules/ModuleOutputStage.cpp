@@ -178,6 +178,33 @@ void ModuleOutputStage::skipMixPan(int numSamples) noexcept {
     panSm_.skip(numSamples);
 }
 
+// A Left-only patch leaves the right input leg empty, so a hard-right balance (left leg to zero) would
+// leave nothing to hear. While the right input is silent and the left is not, the left leg is lent to
+// the right in proportion to |pan|: nothing changes at centre, the far leg grows from zero as the knob
+// moves (no step when it leaves centre), and full pan lands the whole signal on one side. `span` is
+// the voice count of a poly split-block module; voice v's right leg borrows voice v's left.
+void ModuleOutputStage::fillRightForPan(juce::AudioBuffer<float>& buffer, int rightBase, int span) noexcept {
+    const float target = pan_ != nullptr ? std::min(1.0f, std::abs(pan_->get())) : 0.0f;
+    const float from = panFill_;
+    panFill_ = 0.0f;
+    if (target == 0.0f && from == 0.0f)
+        return;
+    const int n = buffer.getNumSamples();
+    for (int v = 0; v < span; ++v) {
+        const int l = v;
+        const int r = rightBase + v;
+        if (r >= buffer.getNumChannels() || l >= buffer.getNumChannels())
+            break;
+        if (buffer.getMagnitude(r, 0, n) != 0.0f || buffer.getMagnitude(l, 0, n) == 0.0f)
+            continue;
+        const float* src = buffer.getReadPointer(l);
+        float* dst = buffer.getWritePointer(r);
+        for (int s = 0; s < n; ++s)
+            dst[s] = src[s] * (from + (target - from) * (float)(s + 1) / (float)n);
+        panFill_ = target;
+    }
+}
+
 void ModuleOutputStage::applyMixPan(juce::AudioBuffer<float>& buffer, const OutputLegs& legs,
                                     bool panApplies) noexcept {
     syncTargets();
@@ -314,13 +341,18 @@ void ModuleBase::renderThroughOutputStage(juce::AudioBuffer<float>& buffer, juce
     if (canCapture && stage.needsDry(legs))
         stage.captureDry(buffer, legs);
 
+    // Pan balances a pair of legs. A split-block module collapsed to one jack has no right jack, so
+    // the balance would only fade its one audible leg out: there the pan rests.
+    const int right = rightAudioLegChannel();
+    const bool panApplies = right > 0 && (isDualIO() || !hasSplitBlockStereo());
+    if (panApplies && !stage.bypassedNow() && !stage.mutedNow() && !isNormalLeftToRight() &&
+        mapInputChannel(right).role == PortRole::Audio)
+        stage.fillRightForPan(buffer, right, right > 1 ? std::max(1, mapInputChannel(0).polyVoiceSpan) : 1);
+
     stage.beginRender();
     processModuleBlock(buffer, midi);
     stage.endRender(paramBypass, paramMute);
 
-    // Pan balances a pair of legs. A split-block module collapsed to one jack has no right jack, so
-    // there is nothing to balance against and the pan rests.
-    const bool panApplies = rightAudioLegChannel() > 0 && (isDualIO() || !hasSplitBlockStereo());
     if (stage.bypassedNow() || stage.mutedNow())
         stage.skipMixPan(n);
     else
