@@ -49,7 +49,7 @@ TEST(DrumIdeasPanelTest, TheButtonOpensThePanelAndIsNamedAndTipped) {
     ASSERT_NE(f.panel, nullptr);
     auto& button = f.grid.getIdeasButton();
     EXPECT_EQ(button.getTitle(), "Ideas");
-    EXPECT_EQ(button.getTooltip(), "Starters, variations and randomize");
+    EXPECT_EQ(button.getTooltip(), "Starters, fills, variations and randomize");
     EXPECT_TRUE(button.getWantsKeyboardFocus());
     EXPECT_EQ(f.panel->getTitle(), "Ideas");
 }
@@ -67,8 +67,9 @@ TEST(DrumIdeasPanelTest, EveryControlIsATabStopWithATitleAndATooltipInsideThePan
         EXPECT_TRUE(client->getTooltip().isNotEmpty()) << child->getTitle();
         EXPECT_TRUE(f.panel->getLocalBounds().contains(child->getBounds())) << child->getTitle();
     }
-    EXPECT_EQ(controls, 12 + 1 + 1 + 3 + 3 + 1 + 1 + 1 + 1)
-        << "starters, amount, make, takes, picks, replace, density, keep, randomize";
+    EXPECT_EQ(controls, 12 + 2 + 1 + 1 + 1 + 3 + 3 + 1 + 1 + 1 + 1)
+        << "starters, snare roll, tom fill, every 4th bar, amount, make, takes, picks, replace, density, keep, "
+           "randomize";
 }
 
 TEST(DrumIdeasPanelTest, AStarterFillsTheClipAsOneUndoStepAndAnnouncesIt) {
@@ -243,4 +244,121 @@ TEST(DrumTakeAuditionTest, StartingAgainStopsTheRunningPassFirst) {
     EXPECT_EQ(finished, 1);
     audition.stop();
     EXPECT_EQ(finished, 2);
+}
+
+//==============================================================================
+// Fills
+
+TEST(DrumIdeasPanelTest, TheFillsControlsAreTitledTippedAndInsideThePanelInTabOrder) {
+    IdeasFixture f;
+    auto& roll = f.panel->getSnareRollButton();
+    auto& tom = f.panel->getTomFillButton();
+    auto& every = f.panel->getEveryFourthToggle();
+    EXPECT_EQ(roll.getTitle(), "Snare roll");
+    EXPECT_EQ(tom.getTitle(), "Tom fill");
+    EXPECT_EQ(every.getTitle(), "Every 4th bar");
+    for (auto* b :
+         {static_cast<juce::Button*>(&roll), static_cast<juce::Button*>(&tom), static_cast<juce::Button*>(&every)}) {
+        EXPECT_TRUE(b->getWantsKeyboardFocus());
+        EXPECT_TRUE(b->getTooltip().isNotEmpty());
+        EXPECT_TRUE(f.panel->getLocalBounds().contains(b->getBounds())) << b->getTitle();
+        EXPECT_FALSE(b->getBounds().isEmpty());
+    }
+    EXPECT_TRUE(roll.getTooltip().contains("undo step"));
+    EXPECT_TRUE(every.getTooltip().contains("bars 4, 8, 12"));
+    // Every control still fits above the panel's bottom edge.
+    int bottom = 0;
+    for (auto* child : f.panel->getChildren())
+        bottom = std::max(bottom, child->getBottom());
+    EXPECT_LE(bottom, f.panel->getHeight());
+    juce::KeyboardFocusTraverser traverser;
+    std::vector<juce::Component*> order;
+    for (auto* c = traverser.getDefaultComponent(f.panel.get()); c != nullptr && order.size() < 60;
+         c = traverser.getNextComponent(c))
+        order.push_back(c);
+    const auto at = [&](juce::Component* c) { return std::find(order.begin(), order.end(), c) - order.begin(); };
+    EXPECT_LT(at(&f.panel->getStarterButton(Style::LoFi)), at(&roll));
+    EXPECT_LT(at(&roll), at(&tom));
+    EXPECT_LT(at(&tom), at(&every));
+    EXPECT_LT(at(&every), at(&f.panel->getAmountSlider()));
+}
+
+TEST(DrumIdeasPanelTest, ASnareRollReplacesTheLastBeatAsOneUndoStepWithTheOutlineAndAnAnnouncement) {
+    IdeasFixture f;
+    f.doc.addNote(f.clip, makeNote(7.0, 42, 0.25));
+    f.doc.addNote(f.clip, makeNote(7.5, 36, 0.25));
+    f.doc.addNote(f.clip, makeNote(6.0, 42, 0.25));
+    f.grid.refreshFromDoc();
+    f.undo.clearUndoHistory();
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    f.panel->getSnareRollButton().onClick();
+    EXPECT_EQ(f.pitchCount(38), 4u);
+    EXPECT_EQ(f.pitchCount(42), 1u) << "the hat in the last beat went, the one before stayed";
+    EXPECT_EQ(f.pitchCount(36), 1u) << "kicks stay";
+    EXPECT_EQ(f.grid.getLastAnnouncement(), "Added a snare roll");
+    EXPECT_TRUE(f.grid.isChangedOutlineActive(f.grid.rowOfPitch(38), 28));
+    EXPECT_TRUE(f.grid.isChangedOutlineActive(f.grid.rowOfPitch(42), 28)) << "the removed hat's cell is outlined too";
+    EXPECT_FALSE(f.grid.isChangedOutlineActive(f.grid.rowOfPitch(42), 24));
+    f.grid.finishMotionsForTest();
+    f.undo.undo();
+    EXPECT_EQ(f.pitchCount(38), 0u);
+    EXPECT_EQ(f.pitchCount(42), 2u);
+    EXPECT_FALSE(f.undo.canUndo()) << "one undo step";
+}
+
+TEST(DrumIdeasPanelTest, ATomFillAndTheEveryFourthBarToggleReachTheClip) {
+    IdeasFixture f;
+    ASSERT_TRUE(f.doc.resizeClip(f.clip, 32.0));
+    f.grid.refreshFromDoc();
+    f.undo.clearUndoHistory();
+    f.panel->getEveryFourthToggle().setToggleState(true, juce::dontSendNotification);
+    f.panel->getTomFillButton().onClick();
+    EXPECT_EQ(f.pitchCount(50), 4u) << "two fills of 2 steps each";
+    EXPECT_EQ(f.pitchCount(45), 4u);
+    EXPECT_EQ(f.grid.getLastAnnouncement(), "Added a tom fill every 4th bar");
+    bool atFifteen = false, atThirtyOne = false;
+    for (const auto& n : f.c().notes) {
+        atFifteen = atFifteen || n.startBeat == 14.0;
+        atThirtyOne = atThirtyOne || n.startBeat == 30.0;
+    }
+    EXPECT_TRUE(atFifteen && atThirtyOne) << "bars 4 and 8";
+    f.undo.undo();
+    EXPECT_TRUE(f.c().notes.empty());
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(DrumIdeasPanelTest, AFillLiftsAnEightStepGridToSixteenInTheSameUndoStep) {
+    IdeasFixture f;
+    ASSERT_TRUE(f.doc.setClipStepsPerBar(f.clip, 8));
+    f.grid.refreshFromDoc();
+    f.undo.clearUndoHistory();
+    f.panel->getSnareRollButton().onClick();
+    EXPECT_EQ(f.c().stepsPerBar, 16);
+    f.undo.undo();
+    EXPECT_EQ(f.c().stepsPerBar, 8);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(DrumIdeasPanelTest, PickingATakeAsANewClipCopiesTheDrumsOwnLengthAndSwing) {
+    IdeasFixture f;
+    f.panel->getStarterButton(Style::Rock).onClick();
+    ASSERT_TRUE(f.doc.setClipRowLength(f.clip, 42, 12));
+    ASSERT_TRUE(f.doc.setClipRowSwing(f.clip, 42, 0.6));
+    ASSERT_TRUE(f.doc.setClipRowSwing(f.clip, 38, 0.7));
+    f.undo.clearUndoHistory();
+    synth::ClipId created;
+    f.grid.onClipCreated = [&](synth::ClipId id) { created = id; };
+    f.panel->getMakeTakesButton().onClick();
+    f.panel->getPickButton(0).onClick();
+    const auto* added = f.doc.getClip(created);
+    ASSERT_NE(added, nullptr);
+    ASSERT_EQ(added->drumRows.size(), 2u);
+    EXPECT_EQ(added->drumRows[0].pitch, 38);
+    EXPECT_DOUBLE_EQ(added->drumRows[0].swing, 0.7);
+    EXPECT_EQ(added->drumRows[0].lengthSteps, 0);
+    EXPECT_EQ(added->drumRows[1].pitch, 42);
+    EXPECT_EQ(added->drumRows[1].lengthSteps, 12);
+    EXPECT_DOUBLE_EQ(added->drumRows[1].swing, 0.6);
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrackForClip(f.clip)->clips.size(), 1u) << "still one undo step";
 }

@@ -25,6 +25,7 @@ public:
         bool soloed = false;
         bool dimmed = false;   ///< silenced by another row's solo, or by its own mute
         bool selected = false; ///< the row the lanes under the grid show
+        juce::String detail;   ///< ", length, 12 steps, swing 40%": what a screen reader adds to the name
     };
 
     /** Fired for a user toggle of a row's M or S. */
@@ -32,6 +33,8 @@ public:
     std::function<void(int pitch, bool on)> onSoloToggled;
     /** Fired when a row's name is pressed (click, Space or an accessibility press). */
     std::function<void(int pitch)> onRowClicked;
+    /** Fired for a right-click on a row's name, with the pointer's screen position. */
+    std::function<void(int pitch, juce::Point<int> screenPoint)> onRowContextMenu;
 
     void setRows(std::vector<Row> rows);
     /** The row's toggle, or null when `pitch` has no row. */

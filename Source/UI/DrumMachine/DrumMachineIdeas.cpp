@@ -26,7 +26,7 @@ void DrumMachineComponent::setupIdeas() {
     addAndMakeVisible(ideasButton_);
     ideasButton_.setComponentID("drumIdeas");
     ideasButton_.setTitle("Ideas");
-    ideasButton_.setTooltip("Starters, variations and randomize");
+    ideasButton_.setTooltip("Starters, fills, variations and randomize");
     ideasButton_.onClick = [this] { openIdeasPanel(); };
 }
 
@@ -54,6 +54,10 @@ void DrumMachineComponent::openIdeasPanel() {
     panel->onStarter = [safe](drumideas::Style style) {
         if (safe != nullptr)
             safe->fillWithStarter(style);
+    };
+    panel->onFill = [safe](drumideas::Fill fill, bool everyFourth) {
+        if (safe != nullptr)
+            safe->addFill(fill, everyFourth);
     };
     panel->onRandomize = [safe](double density, bool keep, int seed) {
         if (safe != nullptr)
@@ -134,6 +138,19 @@ void DrumMachineComponent::randomizePattern(double density, bool keepKickAndSnar
                    keepKickAndSnare ? "Randomized the other drums" : "Randomized the pattern");
 }
 
+// A fill is a pattern edit like the others: ONE undo step, the changed-cell outline, an announcement. It needs 16
+// steps per bar so its sixteenths land on cells; the grid is lifted to that when it is coarser.
+void DrumMachineComponent::addFill(drumideas::Fill fill, bool everyFourthBar) {
+    const auto* c = clip();
+    if (c == nullptr)
+        return;
+    const int steps = std::max(c->stepsPerBar, drumideas::kFillStepsPerBar);
+    auto result = drumideas::addFill(c->notes, ideaGrid(), fill, everyFourthBar);
+    applyIdeaNotes(std::move(result), drumideas::kFillStepsPerBar,
+                   "Added a " + drumideas::fillName(fill).toLowerCase() + (everyFourthBar ? " every 4th bar" : "") +
+                       (steps != c->stepsPerBar ? ", grid set to 16 steps per bar" : ""));
+}
+
 // Replace puts the take into this clip; otherwise it becomes a new clip right after this one, with the same grid,
 // swing and humanise, and the grid opens it. Either way one undo step.
 synth::ClipId DrumMachineComponent::pickTake(const std::vector<synth::MidiNote>& notes, bool replace) {
@@ -153,6 +170,7 @@ synth::ClipId DrumMachineComponent::pickTake(const std::vector<synth::MidiNote>&
     const int steps = c->stepsPerBar;
     const double swing = c->swing;
     const double humanise = c->humanise;
+    const auto rows = c->drumRows; // copied before addClip, which can move the clip
     const auto sourceName = c->name;
     const auto name = sourceName + " take";
     synth::ClipId created;
@@ -163,6 +181,10 @@ synth::ClipId DrumMachineComponent::pickTake(const std::vector<synth::MidiNote>&
         doc_->setClipStepsPerBar(created, steps);
         doc_->setClipSwing(created, swing);
         doc_->setClipHumanise(created, humanise);
+        for (const auto& row : rows) {
+            doc_->setClipRowLength(created, row.pitch, row.lengthSteps);
+            doc_->setClipRowSwing(created, row.pitch, row.swing);
+        }
         for (const auto& note : notes)
             doc_->addNote(created, note);
     });

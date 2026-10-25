@@ -63,8 +63,8 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
     return {};
 }
 
-// The Mixer category, split out of getActionDescription to keep that function under the function-size
-// cap. Empty when `actionId` is not a Mixer action.
+// The Drum Machine category, split out of getActionDescription to keep that function under the function-size
+// cap. Empty when `actionId` is not a Drum Machine action.
 juce::String drumMachineActionName(const juce::String& actionId) {
     if (actionId == "drumMachineToggleHit")
         return "Toggle Hit at Focused Step";
@@ -76,6 +76,14 @@ juce::String drumMachineActionName(const juce::String& actionId) {
         return "Make Focused Hit Softer";
     if (actionId == "drumMachinePlayClip")
         return "Play or Stop the Clip";
+    if (actionId == "drumMachineRowShorter")
+        return "Shorten Focused Drum by a Step";
+    if (actionId == "drumMachineRowLonger")
+        return "Lengthen Focused Drum by a Step";
+    if (actionId == "drumMachineRowShorterBar")
+        return "Shorten Focused Drum by a Bar";
+    if (actionId == "drumMachineRowLongerBar")
+        return "Lengthen Focused Drum by a Bar";
     return {};
 }
 

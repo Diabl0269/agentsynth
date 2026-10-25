@@ -256,6 +256,72 @@ std::vector<ChangedCell> changedCells(const std::vector<synth::MidiNote>& before
 }
 
 //==============================================================================
+// Fills
+namespace {
+constexpr double kSixteenthBeats = 0.25;
+constexpr int kRollFirstVelocity = 60, kRollLastVelocity = 120, kTomVelocity = 100;
+constexpr int kTomPitches[] = {50, 48, 47, 45}; // high to low, two sixteenths each
+
+// The hits a fill writes into a bar that starts at `barStart`, ending at `barEnd`.
+std::vector<synth::MidiNote> fillHits(Fill fill, double barStart, double barEnd) {
+    std::vector<synth::MidiNote> hits;
+    const int beats = fill == Fill::SnareRoll ? 1 : 2;
+    const double spanStart = std::max(barStart, barEnd - beats);
+    const int count = static_cast<int>(std::lround((barEnd - spanStart) / kSixteenthBeats));
+    for (int i = 0; i < count; ++i) {
+        const double start = spanStart + i * kSixteenthBeats;
+        if (fill == Fill::SnareRoll) {
+            const int velocity =
+                kRollFirstVelocity + (count > 1 ? (kRollLastVelocity - kRollFirstVelocity) * i / (count - 1) : 0);
+            auto note = makeHit(start, kSixteenthBeats, kSnare, velocity);
+            note.repeat = i >= count - 2 ? 2 : 1;
+            hits.push_back(note);
+        } else {
+            hits.push_back(makeHit(start, kSixteenthBeats, kTomPitches[std::min(3, i / 2)], kTomVelocity));
+        }
+    }
+    return hits;
+}
+} // namespace
+
+juce::String fillName(Fill fill) { return fill == Fill::SnareRoll ? "Snare roll" : "Tom fill"; }
+
+std::vector<int> fillBars(const Grid& grid, bool everyFourthBar) {
+    const double bar = std::max(kEpsilon, grid.beatsPerBar);
+    const int bars = std::max(1, static_cast<int>(std::ceil(grid.lengthBeats / bar - kEpsilon)));
+    std::vector<int> result;
+    if (!everyFourthBar || bars < 4)
+        return {bars - 1};
+    for (int b = 3; b < bars; b += 4)
+        result.push_back(b);
+    return result;
+}
+
+std::vector<synth::MidiNote> addFill(const std::vector<synth::MidiNote>& notes, const Grid& grid, Fill fill,
+                                     bool everyFourthBar) {
+    const int beats = fill == Fill::SnareRoll ? 1 : 2;
+    std::vector<synth::MidiNote> result = notes;
+    std::vector<synth::MidiNote> added;
+    for (const int bar : fillBars(grid, everyFourthBar)) {
+        const double barStart = bar * grid.beatsPerBar;
+        const double barEnd = barStart + grid.beatsPerBar;
+        const double spanStart = std::max(barStart, barEnd - beats);
+        result.erase(std::remove_if(result.begin(), result.end(),
+                                    [&](const auto& n) {
+                                        return !isKick(n.pitch) && n.startBeat >= spanStart - kEpsilon &&
+                                               n.startBeat < barEnd - kEpsilon;
+                                    }),
+                     result.end());
+        for (const auto& hit : fillHits(fill, barStart, barEnd))
+            if (hit.startBeat < grid.lengthBeats - kEpsilon)
+                added.push_back(hit);
+    }
+    result.insert(result.end(), added.begin(), added.end());
+    sortNotes(result);
+    return result;
+}
+
+//==============================================================================
 namespace {
 
 struct VaryState {

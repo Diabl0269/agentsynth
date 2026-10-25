@@ -121,6 +121,7 @@ void DrumMachineComponent::paint(juce::Graphics& g) {
         juce::Graphics::ScopedSaveState state(g);
         g.reduceClipRegion(gridRegion());
         paintCells(g);
+        paintRowEdges(g);
         paintPlayhead(g);
     }
 }
@@ -150,6 +151,9 @@ void DrumMachineComponent::paintCells(juce::Graphics& g) {
 // What the pieces of one cell's painting share.
 struct DrumMachineComponent::CellPaint {
     drumgrid::CellKey key = 0;
+    drumgrid::CellKey hitKey = 0; ///< the cell whose hit is drawn: this one, or for a ghost the cell it repeats
+    int step = 0;
+    bool ghost = false;
     int pitch = 0;
     juce::Rectangle<float> area;
     float radius = 0.0f;
@@ -165,6 +169,10 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
     const int pitch = slot.lane.pitch;
     CellPaint cell;
     cell.key = drumgrid::cellKey(pitch, step);
+    const int source = ghostSourceStep(row, step);
+    cell.ghost = source >= 0;
+    cell.hitKey = cell.ghost ? drumgrid::cellKey(pitch, source) : cell.key;
+    cell.step = step;
     cell.pitch = pitch;
     cell.area = rect.toFloat();
     cell.radius = dense ? 0.0f : theme.metrics.cornerRadiusSmall;
@@ -175,8 +183,12 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
     // A leaving hit is drawn from the velocity its motion remembers, since the cell no longer holds it.
     int velocity = getCellVelocity(row, step);
     const auto motion = hitMotions_.find(cell.key);
-    if (velocity == 0 && motion != hitMotions_.end() && !motion->second.growing)
+    if (cell.ghost) {
+        const auto repeated = cells_.find(cell.hitKey);
+        velocity = repeated == cells_.end() ? 0 : repeated->second.velocity;
+    } else if (velocity == 0 && motion != hitMotions_.end() && !motion->second.growing) {
         velocity = motion->second.velocity;
+    }
     if (velocity > 0) {
         paintCellHit(g, slot, cell, velocity);
     } else {
@@ -215,12 +227,15 @@ void DrumMachineComponent::paintCellBase(juce::Graphics& g, const CellPaint& cel
 void DrumMachineComponent::paintCellHit(juce::Graphics& g, const LaneSlot& slot, const CellPaint& cell, int velocity) {
     const auto& area = cell.area;
     float motionAlpha = 1.0f;
-    const float scale = hitScaleAt(cell.key, motionAlpha);
-    const auto found = cells_.find(cell.key);
+    float scale = 1.0f;
+    if (cell.ghost)
+        motionAlpha = kGhostAlpha * ghostFadeAt(cell.key); // a repeat past the drum's end: faint, fading in
+    else
+        scale = hitScaleAt(cell.key, motionAlpha);
+    const auto found = cells_.find(cell.hitKey);
     const bool present = found != cells_.end();
     const bool noteMuted = present && found->second.muted;
-    const auto marks =
-        present ? describeCellMarks(found->second, swing_, static_cast<int>(cell.key % 1000000)) : DrumCellMarks{};
+    const auto marks = present ? describeCellMarks(found->second, getRowSwing(cell.pitch), cell.step) : DrumCellMarks{};
     const float alpha = cell.rowAlpha * motionAlpha * (noteMuted ? kMutedHitAlpha : 1.0f);
     const float fillHeight = std::max(1.0f, area.getHeight() * static_cast<float>(velocity) / 127.0f);
     const auto fill = area.withTop(area.getBottom() - fillHeight);

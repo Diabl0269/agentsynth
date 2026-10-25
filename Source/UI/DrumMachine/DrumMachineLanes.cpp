@@ -48,8 +48,11 @@ void DrumMachineComponent::setSelectedPitch(int pitch) {
 // Hands every lane the hits of the picked row (the value each lane shows is the first note's of its cell).
 void DrumMachineComponent::refreshLane() {
     std::vector<std::pair<int, const drumgrid::CellHits*>> cells;
+    const int length =
+        getRowLength(selectedPitch_); // hits stored past the drum's end do not play, so the lanes skip them
     for (const auto& [key, cell] : cells_)
-        if (static_cast<int>(key / 1000000) == selectedPitch_ && !cell.empty())
+        if (static_cast<int>(key / 1000000) == selectedPitch_ && !cell.empty() &&
+            (length <= 0 || static_cast<int>(key % 1000000) < length))
             cells.emplace_back(static_cast<int>(key % 1000000), &cell);
     std::sort(cells.begin(), cells.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     const auto row = drumLaneForPitch(selectedPitch_);

@@ -102,9 +102,11 @@ void DrumMachineComponent::refreshGroove() {
 // the column.
 void DrumMachineComponent::flashStepHits(int step) {
     for (const auto& slot : slots_) {
-        const auto key = drumgrid::cellKey(slot.lane.pitch, step);
-        if (cells_.count(key) > 0 && !rowSilenced(slot.lane.pitch))
-            beginFlash(key);
+        // A drum with its own length plays cell (step mod length) past its end, and that is the cell that flashes.
+        const int length = getRowLength(slot.lane.pitch);
+        const int source = length > 0 && step >= length ? step % length : step;
+        if (cells_.count(drumgrid::cellKey(slot.lane.pitch, source)) > 0 && !rowSilenced(slot.lane.pitch))
+            beginFlash(drumgrid::cellKey(slot.lane.pitch, step));
     }
 }
 

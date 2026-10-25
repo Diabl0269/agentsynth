@@ -48,6 +48,9 @@ bool DrumMachineComponent::keyPressed(const juce::KeyPress& key) {
     const auto shift = juce::ModifierKeys(juce::ModifierKeys::shiftModifier);
     const int pitch = getLanePitch(focus_.row);
 
+    // The length actions carry Alt, so they go before the "any modifier" bail below.
+    if (handleRowLengthKey(key))
+        return true;
     // The most specific chords first, so Shift+Return is not taken for Return.
     if (matchesAction(key, "drumMachineToggleAccent", juce::KeyPress(juce::KeyPress::returnKey, shift, 0))) {
         if (pitch >= 0)

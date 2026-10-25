@@ -20,8 +20,9 @@ constexpr float kConditionTextWidth = 26.0f;
 
 DrumCellMarks DrumMachineComponent::getCellMarks(int row, int step) const {
     const int pitch = getLanePitch(row);
-    const auto it = pitch < 0 ? cells_.end() : cells_.find(drumgrid::cellKey(pitch, step));
-    return it == cells_.end() ? DrumCellMarks{} : describeCellMarks(it->second, swing_, step);
+    const int source = ghostSourceStep(row, step);
+    const auto it = pitch < 0 ? cells_.end() : cells_.find(drumgrid::cellKey(pitch, source >= 0 ? source : step));
+    return it == cells_.end() ? DrumCellMarks{} : describeCellMarks(it->second, getRowSwing(pitch), step);
 }
 
 // Draws `marks` inside `area` (the cell, already in the hit's scaled space). Nothing on a dense grid: the cells are too

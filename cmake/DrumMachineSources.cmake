@@ -34,4 +34,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/DrumMachine/DrumMachineKeys.cpp
     Source/UI/DrumMachine/DrumMachinePreview.cpp
     Source/UI/DrumMachine/DrumMachineAccessibility.cpp
+    Source/UI/DrumMachine/DrumMachineRowLength.cpp
+    Source/UI/DrumMachine/DrumMachineEdges.cpp
+    Source/UI/DrumMachine/DrumMachineRowMenu.cpp
 )
