@@ -74,6 +74,7 @@ public:
     bool isVisibleKeyTicked(int index) const;
     juce::String getStatusText() const;
     bool isRelativeEnabled() const;
+    bool isDetectShown() const;
     juce::String getRelativeText() const;
     void pickHighlighted();
     void clickRelative();

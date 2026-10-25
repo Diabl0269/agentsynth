@@ -110,6 +110,10 @@ TEST_F(SongKeyFieldTest, DetectIsOfferedOnlyWhenTheSongCanBeRead) {
     auto* picker = dynamic_cast<KeyPicker*>(launched.get());
     ASSERT_NE(picker, nullptr);
     ASSERT_TRUE((bool)picker->detect);
+    // The field wires detect after the picker is built; attaching it the way a CallOutBox does must show the button.
+    juce::Component box;
+    box.addAndMakeVisible(*picker);
+    EXPECT_TRUE(picker->isDetectShown());
     const auto detected = picker->detect();
     ASSERT_TRUE(detected.has_value());
     EXPECT_EQ(keyDisplayName(*detected), "A Natural Minor");

@@ -312,9 +312,11 @@ void KeyPicker::applyColours() {
 void KeyPicker::lookAndFeelChanged() { applyColours(); }
 
 // A CallOutBox attaches its content after construction, so the LookAndFeel and the focus target only become real
-// once this component has a parent.
+// once this component has a parent. Callers wire `detect` after the constructor's first layout, so lay out again
+// here or the Detect button stays hidden.
 void KeyPicker::parentHierarchyChanged() {
     applyColours();
+    resized();
     reveal_.startIfInCallout();
     if (isShowing())
         search_->grabKeyboardFocus();
@@ -512,6 +514,8 @@ void KeyPicker::clickRelative() {
     if (const auto target = relativeTarget())
         pick(target);
 }
+
+bool KeyPicker::isDetectShown() const { return detectButton_->isVisible(); }
 
 void KeyPicker::clickDetect() {
     if (!detect)
