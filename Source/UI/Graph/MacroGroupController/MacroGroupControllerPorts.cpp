@@ -46,7 +46,7 @@ int reachablePeerRightAudioLeg(juce::AudioProcessor* proc, bool asInput) {
     for (int jack = 0; jack < visible; ++jack)
         for (const auto& t : peerMb->getJackTargets(jack, asInput))
             for (int v = 0; v < t.voiceSpan; ++v)
-                if (t.rawHeadChannel + v == leg)
+                if (t.rawHeadChannel + v * t.rawStride == leg)
                     return leg;
     return -1; // reported but hidden behind a collapsed jack — not reachable
 }

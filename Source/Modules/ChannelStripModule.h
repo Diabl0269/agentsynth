@@ -72,8 +72,7 @@
  * branch stays `buffer.clear()` per the root CLAUDE.md two-branch contract, a deliberate departure
  * from DAWs that keep a pre-fader cue alive under mute.
  *
- * The (5, 16) channel shape does not match hasStereoOutputPairShape, so no Dual I/O toggle is
- * inherited and none is wanted — the strip owns its own fixed jack map below.
+ * DUAL I/O (input side only, StereoAudio::Declared, ships SPLIT; docs/mixer/mixer.md#mono-and-stereo).
  *
  * SOLO (docs/mixer/mixer.md#solo-is-a-render-time-gate). `soloed_` is NOT an AudioParameter: not host-visible, not
  * automatable, persisted only in the trusted extra state. Whether ANY strip is soloed is an
@@ -159,7 +158,7 @@ public:
     static constexpr double kSmoothingSeconds = 0.02;
 
     ChannelStripModule()
-        : ModuleBase("Channel Strip", kNumInputs, kNumOutputs) {
+        : ModuleBase("Channel Strip", kNumInputs, kNumOutputs, StereoAudio::Declared) {
         addParameter(gainParam_ = new juce::AudioParameterFloat(
                          "gain", "Gain", juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f));
         addParameter(
@@ -277,12 +276,14 @@ public:
     ModuleType getModuleType() const override { return ModuleType::ChannelStrip; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Other; }
 
-    int getVisibleInputPortCount() const override { return getShape() == Shape::Stereo ? 2 : 1; }
+    int getVisibleInputPortCount() const override { return getShape() == Shape::Stereo && isDualIO() ? 2 : 1; }
     int getVisibleOutputPortCount() const override { return 2 + 2 * getActiveSendCount(); }
 
     juce::String getInputPortLabel(int visibleJack) const override {
         if (getShape() == Shape::Mono)
             return "In";
+        if (!isDualIO())
+            return "Audio";
         return visibleJack == 1 ? "Right" : "Left";
     }
     juce::String getOutputPortLabel(int visibleJack) const override {
@@ -297,10 +298,20 @@ public:
     }
 
     LogicalPort mapInputChannel(int rawChannel) const override {
-        if (rawChannel == 0)
-            return audioJack(0);
-        if (rawChannel == kRightBase && getShape() == Shape::Stereo)
-            return audioJack(1);
+        const bool stereo = getShape() == Shape::Stereo;
+        if (rawChannel == 0) {
+            auto port = audioJack(0);
+            if (stereo && !isDualIO()) {
+                port.polyVoiceSpan = 2; // the one jack owns both legs, kRightBase apart
+                port.voiceStride = kRightBase;
+            }
+            return port;
+        }
+        if (rawChannel == kRightBase && stereo) {
+            auto port = audioJack(isDualIO() ? 1 : 0);
+            port.isPolyGroupHead = isDualIO();
+            return port;
+        }
         return {}; // reserved / hidden: role Other, not a group head
     }
     LogicalPort mapOutputChannel(int rawChannel) const override {

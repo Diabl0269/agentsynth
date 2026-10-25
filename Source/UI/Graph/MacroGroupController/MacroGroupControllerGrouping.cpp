@@ -141,7 +141,11 @@ juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts)
 
     auto& graph = host_.graph();
     juce::String newId;
-    auto doGroup = [this, macro, units, portPlan, &newId] {
+    // The pictures and places of every card as they stand now: the new macro has no entry of its own, so its fold is
+    // built from these once it exists (foldChangedMacros) and the members fly into the closed card like a collapse.
+    const auto foldBefore = snapshotFoldState();
+    auto doGroup = [this, macro, units, portPlan, &newId, &foldBefore] {
+        CardGlideAnimator::Scope glide(host_.cardGlide()); // the neighbours makeRoomFor pushes glide
         newId = host_.getMacros().add(macro);
         nestUnitsUnder(host_.getMacros(), newId, units);
         // Splice BEFORE updateComponents(): the spliced port nodes must exist, and be macro
@@ -151,6 +155,7 @@ juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts)
             spliceMacroPorts(newId, portPlan);
         host_.updateComponents();
         makeRoomFor("m:" + newId);
+        foldChangedMacros(foldBefore); // every card is final; this only animates how the members got into the card
     };
 
     if (host_.undo())
@@ -419,6 +424,7 @@ void MacroGroupController::ungroupSelection() {
     }
 
     auto& graph = host_.graph();
+    const auto foldBefore = snapshotFoldState(); // a closed macro's modules unfold out of its card
     auto doUngroup = [this, macroIdsToRemove] {
         std::vector<juce::AudioProcessorGraph::NodeID> newSelection;
         for (const auto& macroId : macroIdsToRemove) {
@@ -471,6 +477,7 @@ void MacroGroupController::ungroupSelection() {
     else
         doUngroup();
 
+    foldChangedMacros(foldBefore);
     host_.requestRepaint();
 }
 

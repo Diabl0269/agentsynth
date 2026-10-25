@@ -271,7 +271,7 @@ rather than raw channel numbers.
 
 1. `resolvePolyLink(source, sourceVisibleJack, dest, destVisibleJack)` calls `getJackTargets` on both
    ends and pairs one `JackTarget` from each into a
-   `PolyLink { sourceRawChannel, destRawChannel, voiceCount, sourceStride }`. Pairings are scored:
+   `PolyLink { sourceRawChannel, destRawChannel, voiceCount, sourceStride, destStride }`. Pairings are scored:
    matching `PortRole` is the strongest signal (this is what lets Poly MIDI's single "Poly Out" jack
    send Pitch to an Oscillator and Gate to an Amp Env from the same jack); a `ModCV`/`Other` end is a
    wildcard, since mod inputs accept anything; equal fan widths break remaining ties.
@@ -296,11 +296,16 @@ rather than raw channel numbers.
      (`isPolyGroupHead` at `kRightBase`, `polyVoiceSpan == 8` in poly), so there is no span-2 group to
      broadcast into — a mono cable reaches `Audio L` only, and a stereo path means two cables. See
      [`modules.md`](modules.md#oscillator-module).
+   - **A collapsed stereo source onto a split Left jack** (span-2 `Audio` source, destination jack that is
+     the Left of a labelled Left/Right pair) wires the whole pair: `voiceCount = 2`, `sourceStride = 1`,
+     and `destStride` is the gap to the destination's real Right leg (1 for the FX and Master, the
+     distance to `kRightBase` for the voice modules and the Channel Strip). A hand-built cable that
+     reaches only `Audio L` is therefore a mono source or a mono jack, not a stereo one.
    - A poly source into a mono jack never broadcasts either; summing N envelopes onto one CV channel
      is not what the user asked for.
 4. `GraphEditor::endConnectionDrag` resolves the visible jacks the user dropped a cable between
    through `resolvePolyLink` and adds `voiceCount` connections,
-   `{sourceRawChannel + v * sourceStride} -> {destRawChannel + v}` for each voice. A fan is always
+   `{sourceRawChannel + v * sourceStride} -> {destRawChannel + v * destStride}` for each voice. A fan is always
    wired direct — an `AttenuverterModule` is only inserted for a single mono mod wire
    (`voiceCount == 1`), because the engine collapses the N raw edges of a fan into one `PolyBus` for
    display.

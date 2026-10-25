@@ -5,15 +5,18 @@
 //   • bypass / mute  -- the root CLAUDE.md two-branch contract: bypass is dry (no gain/pan, a mono
 //                        strip still feeds both legs), mute clears
 //   • shape          -- fixed once written or once live; a later width change is refused
-//   • ports          -- kRightBase split-block jack map, no inherited Dual I/O toggle
+//   • ports          -- kRightBase split-block jack map, input-side Dual I/O (ships split)
 //   • Master         -- Direct summed into Mix BEFORE the fader; bypass is a unity sum that keeps
 //                        Direct; mute clears
 //
 // Solo gating (the render-time gate both modules read off the playhead) lives in
 // MixerSoloTests.cpp.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Mixer/PeakMeterLatch.h"
 #include "Modules/ChannelStripModule.h"
+#include "Modules/FX/CompressorModule.h"
 #include "Modules/MasterModule.h"
 #include "Transport/TransportService.h"
 #include <gtest/gtest.h>
@@ -313,7 +316,8 @@ TEST(ChannelStripTest, ExtraStateWithNoNamePropertyLeavesTheNameUnset) {
 
 TEST(ChannelStripTest, JackMapFollowsTheShapeWithTheRightLegOnKRightBase) {
     ChannelStripModule stereo;
-    EXPECT_FALSE(stereo.hasDualIOParameter()) << "the (5,5) shape inherits no Dual I/O toggle";
+    EXPECT_TRUE(stereo.hasDualIOParameter()) << "declared, input side only";
+    EXPECT_TRUE(stereo.isDualIO()) << "ships split, so a project saved before the toggle opens unchanged";
     EXPECT_EQ(stereo.rightAudioLegChannel(), kRight);
     EXPECT_EQ(stereo.getVisibleInputPortCount(), 2);
     EXPECT_EQ(stereo.getVisibleOutputPortCount(), 2);
@@ -329,6 +333,99 @@ TEST(ChannelStripTest, JackMapFollowsTheShapeWithTheRightLegOnKRightBase) {
     EXPECT_EQ(mono.getVisibleOutputPortCount(), 2) << "strip output is always stereo";
     EXPECT_FALSE(mono.mapInputChannel(kRight).isPolyGroupHead) << "a mono strip has no right input jack";
     EXPECT_EQ(mono.getJackTargets(1, /*isInput=*/false).front().rawHeadChannel, kRight);
+}
+
+TEST(ChannelStripTest, CollapsedStereoStripShowsOneAudioJackOwningBothLegs) {
+    ChannelStripModule strip;
+    setParam(strip, "dualIO", 0.0f);
+    ASSERT_FALSE(strip.isDualIO());
+    EXPECT_EQ(strip.getVisibleInputPortCount(), 1);
+    EXPECT_EQ(strip.getInputPortLabel(0), "Audio");
+
+    const auto targets = strip.getJackTargets(0, /*isInput=*/true);
+    ASSERT_EQ(targets.size(), 1u);
+    EXPECT_EQ(targets[0].rawHeadChannel, 0);
+    EXPECT_EQ(targets[0].voiceSpan, 2);
+    EXPECT_EQ(targets[0].rawStride, kRight) << "the second leg sits on kRightBase, not on ch1";
+    EXPECT_EQ(strip.mapInputChannel(kRight).visibleJackIndex, 0);
+    EXPECT_FALSE(strip.mapInputChannel(kRight).isPolyGroupHead) << "kRightBase is a follower of the one jack";
+    EXPECT_FALSE(strip.mapInputChannel(1).isPolyGroupHead) << "ch1 stays reserved";
+
+    // Back to split: the original two jacks.
+    setParam(strip, "dualIO", 1.0f);
+    EXPECT_EQ(strip.getVisibleInputPortCount(), 2);
+    EXPECT_EQ(strip.getInputPortLabel(0), "Left");
+    EXPECT_EQ(strip.getInputPortLabel(1), "Right");
+}
+
+TEST(ChannelStripTest, DualIONeverTouchesTheOutputsOrTheSendJacks) {
+    ChannelStripModule strip;
+    strip.setSendActive(0, true);
+    strip.setSendActive(2, true);
+    std::vector<juce::String> split;
+    for (int j = 0; j < strip.getVisibleOutputPortCount(); ++j)
+        split.push_back(strip.getOutputPortLabel(j));
+    ASSERT_EQ(split.size(), 6u);
+
+    setParam(strip, "dualIO", 0.0f);
+    ASSERT_EQ(strip.getVisibleOutputPortCount(), 6);
+    for (int j = 0; j < 6; ++j)
+        EXPECT_EQ(strip.getOutputPortLabel(j), split[(size_t)j]) << "jack " << j;
+    EXPECT_EQ(strip.mapOutputChannel(kRight).visibleJackIndex, 1);
+    EXPECT_TRUE(strip.mapOutputChannel(kRight).isPolyGroupHead);
+    EXPECT_EQ(strip.mapOutputChannel(ChannelStripModule::sendLeftChannel(2)).visibleJackIndex, 4);
+}
+
+TEST(ChannelStripTest, AMonoStripHasOneInputJackWhateverTheToggleSays) {
+    for (const float dual : {0.0f, 1.0f}) {
+        ChannelStripModule mono;
+        ASSERT_TRUE(mono.setShape(ChannelStripModule::Shape::Mono));
+        setParam(mono, "dualIO", dual);
+        EXPECT_EQ(mono.getVisibleInputPortCount(), 1) << "dual=" << dual;
+        EXPECT_EQ(mono.getInputPortLabel(0), "In") << "dual=" << dual;
+        const auto targets = mono.getJackTargets(0, /*isInput=*/true);
+        ASSERT_EQ(targets.size(), 1u);
+        EXPECT_EQ(targets[0].voiceSpan, 1) << "dual=" << dual;
+        EXPECT_FALSE(mono.mapInputChannel(kRight).isPolyGroupHead) << "dual=" << dual;
+    }
+}
+
+TEST(ChannelStripTest, ASavedStripWithoutTheDualIOParamLoadsSplitWithItsCablesIntact) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    auto compressor = graph.addNode(synth::AIStateMapper::createModule("Compressor"));
+    auto strip = graph.addNode(synth::AIStateMapper::createModule("Channel Strip"));
+    ASSERT_TRUE(compressor != nullptr && strip != nullptr);
+    ASSERT_TRUE(graph.addConnection({{compressor->nodeID, 0}, {strip->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{compressor->nodeID, 1}, {strip->nodeID, kRight}}));
+
+    auto json = synth::AIStateMapper::graphToJSON(graph);
+    int stripped = 0;
+    if (auto* nodes = json.getProperty("nodes", {}).getArray())
+        for (auto& node : *nodes)
+            if (node.getProperty("type", {}).toString() == "Channel Strip")
+                if (auto* params = node.getProperty("params", {}).getDynamicObject()) {
+                    params->removeProperty("dualIO"); // a project saved before the toggle existed
+                    ++stripped;
+                }
+    ASSERT_EQ(stripped, 1);
+
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true));
+    ChannelStripModule* loaded = nullptr;
+    juce::AudioProcessorGraph::NodeID loadedId, compressorId;
+    for (auto* node : graph.getNodes()) {
+        if (auto* s = dynamic_cast<ChannelStripModule*>(node->getProcessor())) {
+            loaded = s;
+            loadedId = node->nodeID;
+        } else if (dynamic_cast<CompressorModule*>(node->getProcessor()) != nullptr) {
+            compressorId = node->nodeID;
+        }
+    }
+    ASSERT_NE(loaded, nullptr);
+    EXPECT_TRUE(loaded->isDualIO()) << "a strip saved without the param keeps its two input jacks";
+    EXPECT_EQ(loaded->getVisibleInputPortCount(), 2);
+    EXPECT_TRUE(graph.isConnected({{compressorId, 0}, {loadedId, 0}}));
+    EXPECT_TRUE(graph.isConnected({{compressorId, 1}, {loadedId, kRight}}));
 }
 
 // ============================================================================

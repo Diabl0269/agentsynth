@@ -321,6 +321,26 @@ inline std::vector<std::pair<int, int>> expandAudioJackPairs(const std::vector<i
     return pairs;
 }
 
+/** True when `left` and `right` are the labels of a stereo pair's two jacks ("Left"/"Right",
+ *  "Audio L"/"Audio R", "Mix L"/"Mix R", "Direct L"/"Direct R"). */
+inline bool isLeftOfLabelledPair(const juce::String& left, const juce::String& right) {
+    const auto l = left.trim().toLowerCase();
+    const auto r = right.trim().toLowerCase();
+    if (l == "left" || l == "audio l")
+        return r == (l == "left" ? "right" : "audio r");
+    return l.length() > 2 && l.endsWith(" l") && r == l.dropLastCharacters(1) + "r";
+}
+
+/** True when visible jack `jack` of `mb` is the Left of a Left/Right pair of separate jacks, i.e. the
+ *  module shows its pair split and `jack + 1` is the Right. */
+inline bool jackIsLeftOfSplitPair(const ModuleBase& mb, int jack, bool isInput) {
+    const int visible = isInput ? mb.getVisibleInputPortCount() : mb.getVisibleOutputPortCount();
+    if (jack < 0 || jack + 1 >= visible)
+        return false;
+    return isInput ? isLeftOfLabelledPair(mb.getInputPortLabel(jack), mb.getInputPortLabel(jack + 1))
+                   : isLeftOfLabelledPair(mb.getOutputPortLabel(jack), mb.getOutputPortLabel(jack + 1));
+}
+
 } // namespace detail
 
 // Delete heal (GraphEditorDeleteHeal.cpp): one healable audio splice, captured BEFORE
@@ -329,10 +349,10 @@ inline std::vector<std::pair<int, int>> expandAudioJackPairs(const std::vector<i
 // in/-out nodes. Applying it wires upstreamId's `upstreamJack` to downstreamId's `downstreamJack`
 // the same way a user-drawn cable would (resolvePolyLink's L->L/R->R mapping), re-validated with
 // graph.isAnInputTo()/canConnect() once the deletion has actually happened.
-// `upstreamDualPair`/`downstreamDualPair`: true when that side is one half of a genuine Dual-I/O
-// L/R pair on BOTH the splice's own endpoint and its peer (mergeDualIoStereoPairLegs' own comment
-// in GraphEditorDeleteHeal.cpp) -- healDeletedChain then also heals jack+1 explicitly on that side,
-// since resolvePolyLink has no notion of "two separate jacks" within one PolyLink.
+// `upstreamDualPair`/`downstreamDualPair`: true when that survivor shows the cable as a Left/Right pair
+// of separate jacks (mergeStereoPairLegs' own comment in GraphEditorDeleteHeal.cpp) -- healDeletedChain
+// then also heals jack+1 explicitly, since resolvePolyLink has no notion of "two separate jacks"
+// within one PolyLink.
 struct GraphEditor::HealSplice {
     juce::AudioProcessorGraph::NodeID upstreamId, downstreamId;
     int upstreamJack = 0, downstreamJack = 0;

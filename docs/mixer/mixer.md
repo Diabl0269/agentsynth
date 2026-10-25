@@ -288,6 +288,17 @@ control (industry convention: pan pot on mono, balance on stereo). The right leg
 `kRightBase` convention (`Source/Modules/CLAUDE.md`) — **never ch1**, which stays reserved for CV on
 the split-block voice modules.
 
+**A stereo strip's inputs follow Dual I/O** (input side only; the outputs and send jacks never collapse). Split
+(the default, and what a project saved before the toggle loads as) it shows `Left` and `Right`; collapsed it
+shows one `Audio` jack whose cable feeds BOTH raw legs, `0` and `kRightBase` (a jack that owns two raw
+channels `kRightBase` apart: `JackTarget::rawStride`, and `PolyLink::destStride` when a cable is made). A
+mono-shaped strip has one `In` jack whichever way the toggle is set, and its card hides the toggle. A strip
+made by a track, "Make channel", a bus or "Add bus" follows the **Split Left/Right jacks** preference and its
+per-module override (`Channel Strip` in the list), like every other new module; a strip loaded from a project
+or preset keeps what it was saved with. Like Master it is internal-only for the AI (see
+[AI authorability](#ai-authorability)) yet appears in the Preferences list, which is discovered from
+`hasDualIOParameter()`.
+
 **Changing a strip's shape means replacing the strip**, one undo step, not widening a live node — the
 same invariant that governs every fixed-channel-count module in this codebase. When a flow wraps a
 chain that ends poly, it inserts a `VoiceMixerModule` ahead of the strip so the strip itself only ever

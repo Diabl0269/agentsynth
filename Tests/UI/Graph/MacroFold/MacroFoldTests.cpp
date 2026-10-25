@@ -418,3 +418,205 @@ TEST(MacroFold, AnUnfoldingMacroKeepsItsPortWidgetsOnTheGrowingBorder) {
     c.fold().stepFrameForTest(1.0f); // the last frame lands the fold
     EXPECT_FALSE(c.fold().isLive());
 }
+
+// Grouping a selection into a macro folds its modules into the new closed card like a collapse of the same group
+// does, through the real groupSelectionIntoMacro (what Cmd+G, the menu and the canvas menu call). Bug kind:
+// motion-over-time.
+namespace {
+
+struct GroupCanvas {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor{engine, &undo};
+    std::vector<NodeID> members;
+    NodeID neighbour;
+
+    struct SystemMotionPin {
+        SystemMotionPin() { synth::ui::setReducedMotionForTest(false); }
+        ~SystemMotionPin() { synth::ui::setReducedMotionForTest(std::nullopt); }
+    } systemMotionPin;
+
+    explicit GroupCanvas(bool animate) {
+        undo.setGraphEditor(&editor);
+        editor.setSize(6000, 4000);
+        for (int i = 0; i < 4; ++i) {
+            std::unique_ptr<juce::AudioProcessor> processor =
+                i % 2 == 0 ? std::unique_ptr<juce::AudioProcessor>(new OscillatorModule())
+                           : std::unique_ptr<juce::AudioProcessor>(new FilterModule());
+            members.push_back(
+                addModuleAt(editor, engine, std::move(processor), 100 + (i % 2) * 500, 100 + (i / 2) * 600));
+        }
+        neighbour = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 1300, 100);
+        editor.getCardGlideForTest().setForceAnimateForTest(animate);
+    }
+
+    CardGlideAnimator& glide() { return editor.getCardGlideForTest(); }
+    MacroFoldAnimator& fold() { return glide().fold(); }
+    ModuleComponent* comp(NodeID id) { return findComponent(editor, id); }
+
+    juce::String group() {
+        editor.setSelectedNodes(members);
+        return editor.getMacroController().groupSelectionIntoMacro(false);
+    }
+    // Every card and the macro's, as laid out right now.
+    std::vector<juce::Rectangle<int>> layout(const juce::String& macroId) {
+        std::vector<juce::Rectangle<int>> out;
+        for (auto id : members)
+            out.push_back(comp(id)->getBounds());
+        out.push_back(comp(neighbour)->getBounds());
+        if (auto* card = editor.getMacroController().getMacroCardForTest(macroId))
+            out.push_back(card->getBounds());
+        return out;
+    }
+};
+
+} // namespace
+
+TEST(MacroFoldGroup, GroupingFoldsTheMembersIntoTheNewCardInsteadOfJumping) {
+    GroupCanvas c(/*animate=*/true);
+    std::vector<juce::Rectangle<int>> start;
+    for (auto id : c.members)
+        start.push_back(c.comp(id)->getBounds());
+
+    const auto macroId = c.group();
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(c.editor.getMacros().find(macroId)->collapsed);
+
+    ASSERT_TRUE(c.fold().isLive()) << "grouping starts the fold";
+    EXPECT_EQ(c.fold().ghostCount(), 4);
+    auto* card = c.editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    EXPECT_EQ(card->isVisible(), false) << "the closed card is held back while the modules fly into it";
+    for (auto id : c.members)
+        EXPECT_FALSE(c.comp(id)->isVisible()) << "no member card is left standing on the canvas";
+
+    // Frame 0: every module is still where it stood.
+    c.fold().applyAtMs(0.0);
+    auto rects = c.fold().moduleRects(macroId);
+    ASSERT_EQ(rects.size(), 4u);
+    for (size_t i = 0; i < rects.size(); ++i)
+        EXPECT_EQ(rects[i].getSmallestIntegerContainer(), start[i]) << "module " << i;
+
+    // Mid-flight the first module (the first to leave) is neither where it stood nor on its box yet.
+    const auto previews = c.editor.getMacroController().macroMemberPreviews(macroId);
+    ASSERT_EQ(previews.size(), 4u);
+    c.fold().applyAtMs(150.0);
+    rects = c.fold().moduleRects(macroId);
+    EXPECT_NE(rects[0].getPosition(), start[0].getPosition().toFloat());
+    EXPECT_GT(rects[0].getWidth(), 0.0f);
+    EXPECT_LT(rects[0].getWidth(), start[0].getWidth() * 1.0f) << "it has shrunk toward its preview box";
+
+    // The last frame lands the fold: nothing is left running, the card shows, no ghost remains.
+    c.fold().applyAtMs(c.fold().totalMs());
+    c.fold().stepFrameForTest(1.0f);
+    c.editor.finishCardGlideForTest();
+    EXPECT_FALSE(c.fold().isLive());
+    EXPECT_EQ(c.fold().ghostCount(), 0);
+    EXPECT_TRUE(card->isVisible());
+    EXPECT_EQ(card->getAlpha(), 1.0f);
+}
+
+TEST(MacroFoldGroup, TheFinalLayoutIsTheSameWithAndWithoutTheMotion) {
+    GroupCanvas still(/*animate=*/false);
+    const auto stillId = still.group();
+    EXPECT_FALSE(still.fold().isLive()) << "off screen, it lands at once";
+    const auto stillLayout = still.layout(stillId);
+
+    GroupCanvas moving(/*animate=*/true);
+    const auto movingId = moving.group();
+    moving.editor.finishCardGlideForTest();
+    EXPECT_EQ(moving.layout(movingId), stillLayout);
+}
+
+TEST(MacroFoldGroup, RedoOfTheGroupingFoldsTheMembersToo) {
+    GroupCanvas c(/*animate=*/true);
+    const auto macroId = c.group();
+    c.editor.finishCardGlideForTest();
+    ASSERT_TRUE(c.undo.undo());
+    c.editor.finishCardGlideForTest();
+    ASSERT_EQ(c.editor.getMacros().find(macroId), nullptr);
+
+    ASSERT_TRUE(c.undo.redo());
+    ASSERT_NE(c.editor.getMacros().find(macroId), nullptr);
+    EXPECT_TRUE(c.fold().isLive()) << "redoing the grouping folds the modules in again";
+    EXPECT_EQ(c.fold().ghostCount(), 4);
+    c.editor.finishCardGlideForTest();
+    EXPECT_FALSE(c.fold().isLive());
+}
+
+TEST(MacroFoldGroup, UndoOfTheGroupingUnfoldsTheMembers) {
+    GroupCanvas c(/*animate=*/true);
+    std::vector<juce::Rectangle<int>> start;
+    for (auto id : c.members)
+        start.push_back(c.comp(id)->getBounds());
+    const auto macroId = c.group();
+    c.editor.finishCardGlideForTest();
+
+    ASSERT_TRUE(c.undo.undo());
+    ASSERT_EQ(c.editor.getMacros().find(macroId), nullptr);
+    ASSERT_TRUE(c.fold().isLive()) << "undoing a grouping unfolds the modules out of the card";
+    EXPECT_EQ(c.fold().ghostCount(), 4);
+    for (auto id : c.members)
+        EXPECT_FALSE(c.comp(id)->isVisible()) << "a member's card is held until its ghost lands";
+
+    c.fold().applyAtMs(0.0);
+    auto rects = c.fold().moduleRects(macroId);
+    ASSERT_EQ(rects.size(), 4u);
+    for (const auto& r : rects)
+        EXPECT_LT(r.getWidth(), 100.0f) << "frame 0 sits on the small box on the closed card";
+    c.fold().applyAtMs(c.fold().totalMs() * 0.5);
+    const auto mid = c.fold().moduleRects(macroId);
+    EXPECT_NE(mid[0], rects[0]) << "it moves between the box and its card";
+    EXPECT_LT(mid[0].getWidth(), static_cast<float>(start[0].getWidth()));
+
+    c.editor.finishCardGlideForTest();
+    EXPECT_FALSE(c.fold().isLive());
+    for (size_t i = 0; i < c.members.size(); ++i) {
+        EXPECT_TRUE(c.comp(c.members[i])->isVisible());
+        EXPECT_EQ(c.comp(c.members[i])->getBounds(), start[i]) << "final layout is the ungrouped one";
+    }
+}
+
+TEST(MacroFoldGroup, UndoOfTheGroupingStartsTheNeighbourGlideWithTheUnfold) {
+    GroupCanvas c(/*animate=*/true);
+    c.group();
+    c.editor.finishCardGlideForTest();
+
+    ASSERT_TRUE(c.undo.undo());
+    ASSERT_TRUE(c.fold().isLive());
+    // The closed card the members unfold out of is drawn by the fold; no shrinking ghost of it may hold the
+    // neighbours' glide back behind an exit phase.
+    EXPECT_EQ(c.glide().exitGhostCount(), 0) << "the removed macro card does not also shrink away";
+    EXPECT_EQ(c.glide().timeline().exitMs(), 0.0) << "the glide has no exit phase to wait behind";
+}
+
+TEST(MacroFoldGroup, UndoLandsOnTheSameLayoutWithAndWithoutTheMotion) {
+    auto layoutAfterUndo = [](bool animate) {
+        GroupCanvas c(animate);
+        c.group();
+        c.editor.finishCardGlideForTest();
+        c.undo.undo();
+        c.editor.finishCardGlideForTest();
+        std::vector<juce::Rectangle<int>> out;
+        for (auto id : c.members)
+            out.push_back(c.comp(id)->getBounds());
+        out.push_back(c.comp(c.neighbour)->getBounds());
+        return out;
+    };
+    EXPECT_EQ(layoutAfterUndo(true), layoutAfterUndo(false));
+}
+
+TEST(MacroFoldGroup, UngroupingAClosedMacroUnfoldsItsMembers) {
+    GroupCanvas c(/*animate=*/true);
+    const auto macroId = c.group();
+    c.editor.finishCardGlideForTest();
+    c.editor.setSelectedNodes(c.members);
+    c.editor.getMacroController().ungroupSelection();
+    ASSERT_EQ(c.editor.getMacros().find(macroId), nullptr);
+    ASSERT_TRUE(c.fold().isLive());
+    EXPECT_EQ(c.fold().ghostCount(), 4);
+    c.editor.finishCardGlideForTest();
+    EXPECT_FALSE(c.fold().isLive());
+    for (auto id : c.members)
+        EXPECT_TRUE(c.comp(id)->isVisible());
+}
