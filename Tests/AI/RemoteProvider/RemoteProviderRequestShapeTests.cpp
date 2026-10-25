@@ -39,7 +39,8 @@ TEST_F(RemoteProviderTest, RequestShapePlainTextConversation) {
     EXPECT_EQ(obj->getProperty("productName").toString(), juce::String(synth::branding::kProductName));
     EXPECT_EQ(obj->getProperty("userPrompt").toString(), juce::String("Make a bass patch"));
     EXPECT_FALSE(obj->hasProperty("currentPatch"));
-    EXPECT_EQ((int)obj->getProperty("promptVersion"), 2) << "the server prompt that writes sequencer pattern state";
+    EXPECT_EQ((int)obj->getProperty("promptVersion"), 3)
+        << "the server prompt that keeps Sequencers on Follow Song Key";
 }
 
 // The design hinges on this: AIIntegrationService::buildPatchAugmentedContent() wraps the current

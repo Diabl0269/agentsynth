@@ -335,6 +335,9 @@ public:
     bool isCurrentProviderHosted() const { return provider != nullptr && provider->isHosted(); }
 
 private:
+    /** The project's song key as the requests carry it ("D Dorian (D E F G A B C)"); empty when it has none. */
+    juce::String songKeyContext() const;
+
     std::unique_ptr<AIProvider> provider;
     std::vector<AIProvider::Message> chatHistory;
     juce::AudioProcessorGraph& audioGraph;

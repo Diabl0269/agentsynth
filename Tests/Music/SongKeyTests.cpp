@@ -135,3 +135,27 @@ TEST(SongKeyTest, RangeFollowingARootClampsInsideTheKeyboardKeepingItsWidth) {
     EXPECT_EQ(lowLo, 0);
     EXPECT_EQ(lowHi - lowLo, 12);
 }
+
+TEST(SongKeyTest, ParseKeyTextReadsPlanKeysAndRejectsGarbage) {
+    struct Row {
+        const char* text;
+        int root;
+        const char* scale; // nullptr = unreadable
+    };
+    const Row rows[] = {
+        {"E minor", 4, "Natural Minor"}, {"A dorian", 9, "Dorian"}, {"F# minor", 6, "Natural Minor"},
+        {"Bb major", 10, "Major"},       {"A", 9, "Major"},         {"e Natural Minor", 4, "Natural Minor"},
+        {"C min", 0, "Natural Minor"},   {"G maj", 7, "Major"},     {"D Phrygian Dominant", 2, "Phrygian Dominant"},
+        {"  d   BLUES ", 2, "Blues"},    {"", 0, nullptr},          {"banana", 0, nullptr},
+        {"H minor", 0, nullptr},         {"E wibble", 0, nullptr},  {"E Chromatic", 0, nullptr}};
+    for (const auto& row : rows) {
+        SCOPED_TRACE(row.text);
+        const auto key = parseKeyText(row.text);
+        if (row.scale == nullptr) {
+            EXPECT_FALSE(key.has_value());
+            continue;
+        }
+        ASSERT_TRUE(key.has_value());
+        EXPECT_TRUE(sameKey(*key, keyOf(row.root, row.scale)));
+    }
+}

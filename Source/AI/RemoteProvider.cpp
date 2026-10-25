@@ -35,7 +35,7 @@ constexpr int kDefaultRequestTimeoutMs = 240000;
 constexpr int kStreamTimeoutMs = 660000;
 
 // The patch.generate prompt this build understands; the eval harness never overrides it, unlike project.generate's.
-constexpr int kPatchGeneratePromptVersion = 2;
+constexpr int kPatchGeneratePromptVersion = 3;
 
 const char* const kShuttingDownMessage = "Error: Request cancelled - the Remote provider is shutting down.";
 const char* const kCancelledMessage = "Request cancelled.";

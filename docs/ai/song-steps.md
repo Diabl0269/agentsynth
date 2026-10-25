@@ -8,7 +8,7 @@ side (routes, token, prices) is the hosted service's own song steps doc; this pa
 
 1. `AIIntegrationService::planSong` posts `/v1/song/plan` (`RemoteProvider::sendRouteRequest`): the prompt, the chosen
    Length (`short`/`medium`/`long`) and Detail (`light`/`full`/`rich`), and, when re-planning, `previousPlan` (the plan
-   object kept verbatim from the earlier reply). Both requests (plan and build) also carry `instruments`, the names in
+   object kept verbatim from the earlier reply), plus `songKey` (the same `"D Dorian (D E F G A B C)"` text `project.generate` gets) when the project has a song key. Both requests (plan and build) also carry `instruments`, the names in
    `TimelineOps::kAuthorableInstrumentTypes` (so Noise, Pluck and Mallet are offered only to apps that can build them;
    an older app sends nothing and the service keeps its old list). The reply is a plan, its price in uses and a signed token. Nothing is spent.
 2. The chat shows a **song plan card** (`SongPlanCard`): title, `3:20 · 174 BPM · 7 sections`, a section strip (a
@@ -22,7 +22,7 @@ side (routes, token, prices) is the hosted service's own song steps doc; this pa
    message thread in order. A malformed or unknown line is skipped, never fatal.
 4. `songsteps::BuildModel` turns the events into what the card shows; the **build card** (`BuildStepsCard`) is a view of it.
 5. On `done` the service runs `previewProjectEdit` and `applyProjectEdit` on the envelope: one undo step, exactly like an
-   edit plan. A refused envelope is reported in the chat and the plan card stays out of it. The chat history gets the
+   edit plan. Before applying, the plan's `key` ("E minor", "Bb major", "A dorian") is read by `parseKeyText` (`Music/SongKey.h`) and, when readable and the envelope has no `setSongKey` of its own, appended to the envelope as a `setSongKey` op, so the Key field changes inside the build's one undo step (an unreadable key leaves the project's key alone; a key equal to the current one adds nothing to the undo step). A refused envelope is reported in the chat and the plan card stays out of it. The chat history gets the
    user's words and a one-line answer, so later edits have the context.
 
 ## When the chat uses it
