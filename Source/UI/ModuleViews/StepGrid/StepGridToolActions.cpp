@@ -124,19 +124,24 @@ void StepGridComponent::roll(const ops::RandomizeSettings& settings) {
                       std::nullopt);
 }
 
-// The popover starts at C2 to C4 (the grid's numbering), widened to take in any note the pattern already plays.
+// The popover starts two octaves up from the key's root in octave 2 (C2 to C4 with no key, D2 to D4 in D; the grid's
+// numbering), widened to take in any note the pattern already plays. A key change before the range was touched
+// moves it to the new root; a range the user set stays.
 void StepGridComponent::seedRandomizeRange() {
-    if (randomizeSeeded_)
+    const int root = scale_.isChromatic() ? 0 : ((scale_.rootPitchClass % 12) + 12) % 12;
+    if (randomizeSeeded_ && (root == seededRoot_ || randomizeRangeTouched()))
         return;
     randomizeSeeded_ = true;
-    int lo = 48;
-    int hi = 72;
+    seededRoot_ = root;
+    int lo = 48 + root;
+    int hi = 72 + root;
     for (int i = 0; i < std::min(stepCount(), kMaxSequencerSteps); ++i) {
         lo = std::min(lo, playedPitchOf(i));
         hi = std::max(hi, playedPitchOf(i));
     }
     randomize_.minPitch = lo;
     randomize_.maxPitch = hi;
+    seededRange_ = {lo, hi};
 }
 
 void StepGridComponent::openRandomizePanel() {

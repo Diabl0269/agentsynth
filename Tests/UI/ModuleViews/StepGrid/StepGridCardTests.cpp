@@ -96,6 +96,7 @@ TEST(StepGridCard, AStrokeAcrossThePadsPaintsTheSameStateAndIsOneUndoStep) {
 TEST(StepGridCard, APitchDragLandsOnlyOnScaleNotes) {
     SeqCard c;
     c.setChoice("scaleRoot", "C");
+    c.useOwnKey();
     c.setChoice("scale", "Major");
     c.grid->poll();
     const auto major = synth::sequencerScale(0, synth::sequencerScaleChoices().indexOf("Major"), 0xFFF);

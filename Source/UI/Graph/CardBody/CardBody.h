@@ -150,6 +150,7 @@ public:
 
 private:
     void createChoice(CardBodyItem& item, juce::AudioParameterChoice& param);
+    void createKeyField(CardBodyItem& item, juce::AudioParameterChoice& param);
     void createKnob(CardBodyItem& item, juce::RangedAudioParameter& param);
     void createToggle(CardBodyItem& item, juce::AudioParameterBool& param);
     void installPolyPill(juce::ToggleButton& toggle, juce::AudioParameterBool& param);

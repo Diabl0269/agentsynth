@@ -10,6 +10,7 @@
 #include "Modules/MacroControlModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "Modules/ModuleBase.h"
+#include "Modules/Sequencer/SequencerModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include <set>
 
@@ -25,10 +26,13 @@ ModuleType typeOf(juce::AudioProcessor& module) {
 
 bool isAdsr(juce::AudioProcessor& module) { return typeOf(module) == ModuleType::ADSR; }
 
+bool isSequencer(juce::AudioProcessor& module) { return dynamic_cast<SequencerModuleBase*>(&module) != nullptr; }
+
 // Parameters with no widget of their own. bypassed/muted/dualIO are the header buttons. The ADSR's
 // three curve amounts are edited on the envelope graph's bend handles, and the Wavetable's Table choice
-// by the card's chrome beside the display it selects. A parameter a registered view edits (the
-// Threshold slider inside the Threshold view) gets no knob either. The ADSR's tempoSync and
+// by the card's chrome beside the display it selects. A sequencer's Scale and Follow Song Key are set by its Key
+// field, which stands in Key's cell, so a layout naming Key (a saved one too) still gets the whole key. A parameter a
+// registered view edits (the Threshold slider inside the Threshold view) gets no knob either. The ADSR's tempoSync and
 // four note divisions are ordinary items: a layout swaps each division in for its time with a condition
 // on tempoSync (one mechanism, the layout's), and the automatic layout shows them as plain controls.
 bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioParameter& param) {
@@ -41,6 +45,8 @@ bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioPara
             return true;
     }
     if (typeOf(module) == ModuleType::Wavetable && id == "table")
+        return true;
+    if (isSequencer(module) && (id == sequencer_ids::kScale || id == sequencer_ids::kFollowSongKey))
         return true;
     if (const auto* threshold = findCardViewFactory(CardView::Threshold);
         threshold != nullptr && cardViewAvailableFor(CardView::Threshold, module))
@@ -97,6 +103,7 @@ void addParameterItems(juce::AudioProcessor& module, CardBodyPlan& plan) {
             CardBodyItem item;
             item.kind = *kind;
             item.param = param;
+            item.keyField = isSequencer(module) && param->paramID == sequencer_ids::kScaleRoot;
             plan.items.push_back(item);
         }
     }

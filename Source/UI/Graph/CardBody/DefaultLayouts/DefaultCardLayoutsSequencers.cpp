@@ -10,7 +10,7 @@ namespace {
 
 using namespace cardlayout;
 
-constexpr int kRevision = 1;
+constexpr int kRevision = 2;
 
 CardLayout sequencerLayout() {
     CardLayout layout;
@@ -20,7 +20,7 @@ CardLayout sequencerLayout() {
                     labelled(param("syncToTransport", CardWidget::Toggle), "Sync"),
                     showWhen(param("bpm", CardWidget::FaderH), "syncToTransport", {"false"})}),
         rowSection("time", "Time", {param("rate"), param("steps", CardWidget::Stepper)}),
-        rowSection("notes", "Notes", {param("scaleRoot"), param("scale")}),
+        rowSection("notes", "Notes", {param("scaleRoot")}),
         rowSection("pattern", "Pattern",
                    {param("transpose", CardWidget::Knob), param("gate", CardWidget::Knob),
                     param("velocity", CardWidget::Knob), param("chance", CardWidget::Knob)}),

@@ -25,7 +25,7 @@ SequencerModuleBase::SequencerModuleBase(const char* name, bool poly)
     addParameter(scaleRootParam_ = new juce::AudioParameterChoice(
                      ids::kScaleRoot, "Key", {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}, 0));
     addParameter(scaleParam_ = new juce::AudioParameterChoice(ids::kScale, "Scale", sequencerScaleChoices(), 0));
-    // A "follows the song key" switch will be appended after these, never inserted among them.
+    addParameter(followParam_ = new juce::AudioParameterBool(ids::kFollowSongKey, "Follow Song Key", true));
 
     auto pattern = SequencerPattern::makeDefault(poly_);
     pattern.seed = (std::uint32_t)juce::Random::getSystemRandom().nextInt();
@@ -55,6 +55,49 @@ void SequencerModuleBase::adoptLegacyParams(const juce::NamedValueSet& params) {
     auto adopted = pattern_;
     if (adoptLegacyStepParams(adopted, params, poly_))
         setPattern(adopted);
+}
+
+// A node saved before the follow switch existed keeps what it played: a scale it had becomes its own key, and one
+// with No scale follows the song key, which an old song does not have, so it still plays every note.
+void SequencerModuleBase::applyStoredParamDefaults(const juce::NamedValueSet& storedParams) {
+    if (storedParams.contains(sequencer_ids::kFollowSongKey))
+        return;
+    *followParam_ = scaleParam_->getIndex() == 0;
+}
+
+std::optional<MusicalScale> SequencerModuleBase::getOwnKey() const {
+    const int index = scaleParam_->getIndex();
+    if (index == 0)
+        return std::nullopt;
+    auto key = sequencerScale(scaleRootParam_->getIndex(), index, pattern_.customMask);
+    key.name = sequencerScaleChoices()[index];
+    return key;
+}
+
+MusicalScale SequencerModuleBase::resolvedScale(const std::optional<MusicalScale>& songKey) const {
+    if (!followsSongKey())
+        return sequencerScale(scaleRootParam_->getIndex(), scaleParam_->getIndex(), pattern_.customMask);
+    if (songKey.has_value())
+        return *songKey;
+    return sequencerScale(0, 0, 0);
+}
+
+// A preset's own index when the mask is one; anything else (a user scale, a hand-made mask) is stored as Custom.
+SequencerModuleBase::OwnKeyValues SequencerModuleBase::ownKeyValuesFor(const std::optional<MusicalScale>& key) {
+    OwnKeyValues values;
+    if (!key.has_value())
+        return values;
+    values.root = ((key->rootPitchClass % 12) + 12) % 12;
+    const auto mask = (std::uint16_t)(key->mask & 0xFFF);
+    const auto& presets = builtInScalePresets();
+    for (size_t i = 0; i < presets.size(); ++i)
+        if (presets[i].mask == mask) {
+            values.scaleIndex = (int)i + 1;
+            return values;
+        }
+    values.scaleIndex = sequencerCustomScaleIndex();
+    values.customMask = mask;
+    return values;
 }
 
 bool SequencerModuleBase::isLegacyParamId(const juce::String& id) const { return isLegacyStepParamId(id, poly_); }
@@ -103,6 +146,22 @@ void SequencerModuleBase::processModuleBlock(juce::AudioBuffer<float>& buffer, j
         preview_.render(midiMessages, buffer.getNumSamples(), player_);
 }
 
+// A follower reads the song key from our own TransportService whatever Sync says; a foreign host's playhead (or none)
+// has no song key, which plays every note. The key goes in as a Custom mask, so any scale the picker offers snaps.
+void SequencerModuleBase::updateSnap(const SequencerPattern& pattern) {
+    if (!followParam_->get()) {
+        snap_.update(scaleRootParam_->getIndex(), scaleParam_->getIndex(), pattern.customMask);
+        return;
+    }
+    const auto* transport = dynamic_cast<TransportService*>(getPlayHead());
+    const std::uint32_t packed = transport != nullptr ? transport->getSongKeyPacked() : 0u;
+    if ((packed & (1u << 16)) == 0) {
+        snap_.update(0, 0, 0);
+        return;
+    }
+    snap_.update((int)((packed >> 12) & 0xF), sequencerCustomScaleIndex(), (std::uint16_t)(packed & 0xFFF));
+}
+
 // The audition is rendered after the pattern, so the held-note list it consults already holds this block's notes.
 void SequencerModuleBase::renderPattern(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     const auto* pattern = handoff_.current();
@@ -112,7 +171,7 @@ void SequencerModuleBase::renderPattern(juce::AudioBuffer<float>& buffer, juce::
     }
 
     const auto settings = readSettings();
-    snap_.update(scaleRootParam_->getIndex(), scaleParam_->getIndex(), pattern->customMask);
+    updateSnap(*pattern);
 
     // Locked to the transport only when the playhead is our own TransportService; a foreign host's playhead
     // falls back to the free-running clock rather than going silent.

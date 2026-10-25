@@ -354,6 +354,15 @@ int rowCellWidth(Kind kind) {
     return 0;
 }
 
+// A sequencer's Key field reads "Song key · E Natural Minor", which a 96 px choice cell would cut short.
+constexpr int kKeyFieldRowWidth = 184;
+
+int rowCellWidth(const CardBodyPlan& plan, const Cell& cell) {
+    if (cell.item >= 0 && plan.items[(size_t)cell.item].keyField)
+        return kKeyFieldRowWidth;
+    return rowCellWidth(cell.runKind);
+}
+
 struct RowBlock {
     int section = -1;
     std::vector<Cell> cells;
@@ -369,7 +378,7 @@ RowBlock rowBlockOf(const CardBodyPlan& plan, int sectionIndex, const cardbody::
         if (cell.runKind == Kind::View)
             continue;
         block.cells.push_back(cell);
-        block.width += (block.cells.size() > 1 ? kRowCellGap : 0) + rowCellWidth(cell.runKind);
+        block.width += (block.cells.size() > 1 ? kRowCellGap : 0) + rowCellWidth(plan, cell);
         block.cellHeight = std::max(block.cellHeight, cardBodyCellSize(cell.runKind, 1, g).y);
     }
     return block;
@@ -399,7 +408,7 @@ void placeRowBlock(const CardBodyPlan& plan, juce::AudioProcessor& module, const
     section.cellBottom = y + headerH + cellBand;
     int cellX = x;
     for (const auto& cell : block.cells) {
-        const int w = rowCellWidth(cell.runKind);
+        const int w = rowCellWidth(plan, cell);
         const int h = cardBodyCellSize(cell.runKind, 1, g).y;
         // A cell shorter than the line (a pill beside knobs) sits at the line's vertical middle.
         const int cellY = y + headerH + (cellBand - h) / 2;

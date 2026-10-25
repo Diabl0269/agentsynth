@@ -79,8 +79,26 @@ void TransportService::setSongKey(const std::optional<MusicalScale>& key) {
     if (sameKey(documentState_.songKey, key))
         return;
     documentState_.songKey = key;
+    songKeyPacked_.store(packSongKey(key), std::memory_order_release);
     if (onSongKeyChanged)
         onSongKeyChanged();
+}
+
+// Packed so the audio thread can read the key without a lock: the mask is 12 bits, the root 4.
+std::uint32_t TransportService::packSongKey(const std::optional<MusicalScale>& key) noexcept {
+    if (!key.has_value() || (key->mask & 0xFFF) == 0)
+        return 0;
+    const auto root = (std::uint32_t)(((key->rootPitchClass % 12) + 12) % 12);
+    return (1u << 16) | (root << 12) | (std::uint32_t)(key->mask & 0xFFF);
+}
+
+std::optional<MusicalScale> TransportService::unpackSongKey(std::uint32_t packed) {
+    if ((packed & (1u << 16)) == 0)
+        return std::nullopt;
+    MusicalScale key;
+    key.rootPitchClass = (int)((packed >> 12) & 0xF);
+    key.mask = (std::uint16_t)(packed & 0xFFF);
+    return key;
 }
 
 // The mirror is updated only once the command is queued, and holds exactly what was queued (the clamped

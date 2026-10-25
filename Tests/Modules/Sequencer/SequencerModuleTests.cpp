@@ -177,6 +177,7 @@ TEST_F(SequencerModuleTest, ScaleSnapsAtPlayTimeAndLeavesTheWrittenPitchAlone) {
     EXPECT_EQ(onsOnly(render(*seq, 512))[0].note, 64); // No scale: E
 
     seq->prepareToPlay(kRate, 512);
+    setNumber(*seq, "followSongKey", 0.0f);    // its own key, not the song key
     setChoice(*seq, "scale", "Natural Minor"); // C natural minor has Eb, not E
     EXPECT_EQ(onsOnly(render(*seq, 512))[0].note, 63);
     EXPECT_EQ(seq->getPattern().steps[0].pitch, 64);
@@ -191,6 +192,7 @@ TEST_F(SequencerModuleTest, CustomScaleUsesTheMaskInThePattern) {
     pattern.customMask = 0b000000000101; // root and the major second
     seq->setPattern(pattern);
     setNumber(*seq, "steps", 1);
+    setNumber(*seq, "followSongKey", 0.0f); // its own key, not the song key
     setChoice(*seq, "scale", "Custom");
     run(*seq, true);
     EXPECT_EQ(onsOnly(render(*seq, 512))[0].note, 60); // C# snaps down to C (D is equally near; lower wins)
@@ -206,7 +208,8 @@ TEST_F(SequencerModuleTest, TransposeAndKeyMoveTheScale) {
 
     seq->prepareToPlay(kRate, 512);
     setChoice(*seq, "scaleRoot", "D");
-    setChoice(*seq, "scale", "Major"); // D major: F is out, F# (66) and E (64) are in; tie goes down
+    setNumber(*seq, "followSongKey", 0.0f); // its own key, not the song key
+    setChoice(*seq, "scale", "Major");      // D major: F is out, F# (66) and E (64) are in; tie goes down
     EXPECT_EQ(onsOnly(render(*seq, 512))[0].note, 64);
 }
 

@@ -8,6 +8,7 @@
 #include "SequencerPreview.h"
 #include "SequencerScaleSnap.h"
 #include <atomic>
+#include <optional>
 
 namespace synth {
 
@@ -24,6 +25,7 @@ inline constexpr const char* kVelocity = "velocity";
 inline constexpr const char* kChance = "chance";
 inline constexpr const char* kScaleRoot = "scaleRoot";
 inline constexpr const char* kScale = "scale";
+inline constexpr const char* kFollowSongKey = "followSongKey";
 } // namespace sequencer_ids
 
 /** What Sequencer and Poly Sequencer share: the whole-pattern parameters, the pattern as module state, and the
@@ -50,6 +52,21 @@ public:
     /** Message thread: ends the preview now. */
     void stopPreview() noexcept { preview_.request(nullptr, 0, 0.0f); }
 
+    /** Plays in the song key (true) or in its own Key and Scale. */
+    bool followsSongKey() const noexcept { return followParam_->get(); }
+    /** Its own key from Key, Scale and the custom mask; nullopt for "No scale". Named after the preset, or "Custom". */
+    std::optional<MusicalScale> getOwnKey() const;
+    /** The scale the steps play through, given the song key now (nullopt = No key, which plays every note). */
+    MusicalScale resolvedScale(const std::optional<MusicalScale>& songKey) const;
+
+    /** The Key and Scale values (and custom mask, for a scale that is not a preset) that store `key` as own key. */
+    struct OwnKeyValues {
+        int root = 0;
+        int scaleIndex = 0;
+        std::optional<std::uint16_t> customMask;
+    };
+    static OwnKeyValues ownKeyValuesFor(const std::optional<MusicalScale>& key);
+
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
 
@@ -61,6 +78,7 @@ public:
     void setExtraState(const juce::var& state) override;
     void setUntrustedExtraState(const juce::var& state) override;
     void adoptLegacyParams(const juce::NamedValueSet& params) override;
+    void applyStoredParamDefaults(const juce::NamedValueSet& storedParams) override;
     bool isLegacyParamId(const juce::String& id) const override;
 
 protected:
@@ -70,6 +88,7 @@ private:
     SequencerSettings readSettings() const;
     void renderPattern(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi);
     void stopOutput(juce::MidiBuffer& midi);
+    void updateSnap(const SequencerPattern& pattern);
 
     const bool poly_;
     SequencerPattern pattern_;
@@ -93,6 +112,7 @@ private:
     juce::AudioParameterFloat* chanceParam_ = nullptr;
     juce::AudioParameterChoice* scaleRootParam_ = nullptr;
     juce::AudioParameterChoice* scaleParam_ = nullptr;
+    juce::AudioParameterBool* followParam_ = nullptr;
 };
 
 } // namespace synth

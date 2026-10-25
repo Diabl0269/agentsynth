@@ -18,3 +18,4 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/SongKeyField.cpp
     Source/UI/Timeline/SongKeyField.h
 )
+include(cmake/SequencerKeySources.cmake)

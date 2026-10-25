@@ -55,6 +55,8 @@ public:
 
     /** The 15 Hz tick from the card: playhead, pattern generation and the parameters the grid draws. */
     void poll();
+    /** The song key a following module plays in (nullopt = No key); read on the next poll. */
+    void setSongKey(const std::optional<MusicalScale>& key) { songKey_ = key; }
 
     // ---- Lanes ---------------------------------------------------------------------------------------
     std::uint16_t getLanes() const noexcept { return lanes_; }
@@ -195,6 +197,9 @@ private:
     void commitPatternTool(const SequencerPattern& next, std::optional<int> newSteps);
     void openRandomizePanel();
     void seedRandomizeRange();
+    bool randomizeRangeTouched() const noexcept {
+        return randomize_.minPitch != seededRange_.first || randomize_.maxPitch != seededRange_.second;
+    }
     void updateToolAvailability();
     SequencerPattern inPlayedDomain(const SequencerPattern& pattern,
                                     const std::function<SequencerPattern(const SequencerPattern&)>& op) const;
@@ -230,8 +235,10 @@ private:
     int seenSteps_ = -1;
     int seenTranspose_ = 0;
     int seenRoot_ = -1;
-    int seenScale_ = -1;
     std::uint16_t seenMask_ = 0;
+    std::optional<MusicalScale> songKey_;
+    int seededRoot_ = 0;
+    std::pair<int, int> seededRange_{48, 72};
     bool seenRunning_ = false;
     MusicalScale scale_;
     int transpose_ = 0;

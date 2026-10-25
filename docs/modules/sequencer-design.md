@@ -50,8 +50,24 @@ SequencerStep    { pitch 0-127, on, gate 0.05-1, velocity 1-127, chance 0-100, r
 | `gate`, `velocity`, `chance` | float 0-2, 0-2, 0-1 | 1 | Multiply each step's own value |
 | `scaleRoot` | choice C..B ("Key") | C | |
 | `scale` | `No scale`, the built-in presets, `Custom` | `No scale` | `Custom` uses the pattern's `customMask` |
+| `followSongKey` | bool | on | Plays in the song key; off = `scaleRoot` and `scale` above ([Key](#key)) |
 
-A "follows the song key" switch is planned as a new bool appended after these (never inserted).
+### Key
+
+Built. A sequencer follows the song key ([song-key.md](../timeline/song-key.md#following-the-song-key)) or plays its
+own key. `followSongKey` on (every new card): the steps snap to the song key, and No key plays every note. Off: they
+snap to `scaleRoot` and `scale`, whatever the song key is. Changing the song key never rewrites a written pitch; it
+only changes what plays.
+
+- **Audio thread.** `renderPattern` resolves the scale every block before `SequencerScaleSnap::update`, whatever Sync
+  says: a follower reads the song key from `TransportService::getSongKeyPacked()` (a lock-free mirror written by
+  `setSongKey`) through its playhead and feeds it in as the Custom index with the key's mask. A playhead that is not
+  our `TransportService` (a foreign host, a bare test) has no song key and plays every note.
+- **Message thread.** `SequencerModuleBase::resolvedScale(songKey)` is the same rule for the card; `getOwnKey()` is
+  the own key (nullopt for No scale); `ownKeyValuesFor(key)` maps a picked key to Key, Scale and, for a mask that is
+  no preset (a user scale), Custom plus `customMask`. A user scale's name is not stored, so it reloads as "D Custom".
+- **Old projects.** `applyStoredParamDefaults`: a stored node without `followSongKey` follows only if its `scale` is
+  No scale, so a saved scale loads as its own key and nothing an old song played changes.
 
 ### Legacy adoption
 
@@ -213,10 +229,21 @@ Built. A step stores a chord *type* (`SequencerChord`); its notes are built on t
 Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `ModuleComponent`.
 
 - **Layout.** The type's code default (`DefaultCardLayoutsSequencers.cpp`) is four `row` sections (Play: Run and Sync
-  as pills and BPM as a fader that swaps out while Sync is on; Time: Rate and Steps; Notes: Key and Scale; Pattern:
+  as pills and BPM as a fader that swaps out while Sync is on; Time: Rate and Steps; Notes: Key; Pattern:
   Transpose, Gate, Velocity, Chance) and then the `stepGrid` view. Consecutive `row` sections sit side by side and wrap
   only when the 560 px card is too narrow ([module-card-layout.md](../layout/module-card-layout.md#rendering)).
   Steps is a stepper that can also be typed: double-click the value, or press a digit key with a button focused.
+- **Key** (`Source/UI/ModuleViews/SequencerKey/SequencerKeyField`, on the shared `Layout/FollowKeyField`): the Key
+  cell (any layout that names `scaleRoot`, a saved one too) holds a field that reads "Song key · D Dorian" in the
+  muted colour while following and "A Phrygian · own" otherwise. It opens the key picker with a Follow song key row on
+  top. A pick writes Key, Scale, `followSongKey` (and `customMask`) as one undo step; Follow song key turns following
+  on and keeps the own key for later. `scale` and `followSongKey` get no widget of their own. The card's 15 Hz tick
+  reads the song key from the app's transport (never the node's playhead, which a card built on load or with no audio
+  device does not have yet) and hands it to the field and the grid. When the followed key changes the field glows
+  once (300 ms; none under reduced motion). The field is bound to no single parameter, so it has no MIDI Learn.
+- **Randomize range** starts two octaves up from the resolved key's root in octave 2 (C2 to C4 with no key, D2 to
+  D4 in D; the grid's numbering), widened to take in the notes the pattern plays. A key change moves it until the
+  range is touched.
 - **The grid** (`Source/UI/ModuleViews/StepGrid/`): the pattern tools row ([Pattern tools](#pattern-tools)), a page strip, 16 columns of the viewed page, the Pitch lane as a
   mini piano roll, a row of step pads, the lane chips ([lane-chips.md](../layout/lane-chips.md)) and the other lanes
   stacked under them. Steps past `steps` are dimmed, never removed.
