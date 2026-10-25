@@ -531,7 +531,6 @@ add_executable(Tests
     UI/Theme/ThemeMeterZoneTests.cpp
     UI/Theme/FaderRenderTests.cpp
     UI/Theme/UiTextWidthTests.cpp
-    UI/Theme/KnobStyleTests.cpp
     UI/Theme/MenuCornerTests.cpp
     UI/Theme/IconLibraryTests.cpp
     UI/Chrome/StatusBarTests.cpp
@@ -994,6 +993,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerTests.cmake) # the sequencers' patt
 include(${CMAKE_CURRENT_SOURCE_DIR}/HostedPluginTests.cmake) # the hosted plugin node, its card and mod slots
 include(${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowserTests.cmake) # the sound index and the Sounds view
 include(${CMAKE_CURRENT_SOURCE_DIR}/LoopWrapTests.cmake) # Track In across a loop wrap, every block size
+include(${CMAKE_CURRENT_SOURCE_DIR}/ControlStyleTests.cmake) # knob and fader styles, per module and per type
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

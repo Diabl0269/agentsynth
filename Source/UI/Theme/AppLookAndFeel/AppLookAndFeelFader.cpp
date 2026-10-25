@@ -287,7 +287,7 @@ void AppLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width
     state.dragging = slider.isMouseButtonDown();
     state.hover = slider.isMouseOverOrDragging() && !state.dragging;
     state.focused = slider.hasKeyboardFocus(true);
-    state.style = knobAppearance.faderStyle;
+    state.style = faderStyleFor(slider);
     state.valueColour = knobValueColour(slider);
     fader::paint(g, theme, {x, y, width, height}, {slider.getWidth(), slider.getHeight()}, sliderPos, vertical, state);
 }

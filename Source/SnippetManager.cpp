@@ -398,6 +398,8 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
             // clipboard and duplicate, dropped from a snippet file on disk.
             if (includeExtraState && nObj->getProperty(kCardLayoutNodeProperty).isObject())
                 n->setProperty(kCardLayoutNodeProperty, nObj->getProperty(kCardLayoutNodeProperty));
+            if (includeExtraState && nObj->getProperty(kControlStyleNodeProperty).isObject())
+                n->setProperty(kControlStyleNodeProperty, nObj->getProperty(kControlStyleNodeProperty));
             auto pos = readPosition(nObj);
             n->setProperty("position", makePosition({pos.x - origin.x, pos.y - origin.y}));
             nodes.add(juce::var(n.get()));
@@ -504,6 +506,8 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
             // clipboard and duplicate, dropped from a snippet file on disk.
             if (includeExtraState && nObj->getProperty(kCardLayoutNodeProperty).isObject())
                 n->setProperty(kCardLayoutNodeProperty, nObj->getProperty(kCardLayoutNodeProperty));
+            if (includeExtraState && nObj->getProperty(kControlStyleNodeProperty).isObject())
+                n->setProperty(kControlStyleNodeProperty, nObj->getProperty(kControlStyleNodeProperty));
             auto pos = readPosition(nObj);
             n->setProperty("position", makePosition({pos.x + dropPos.x, pos.y + dropPos.y}));
             nodes.add(juce::var(n.get()));

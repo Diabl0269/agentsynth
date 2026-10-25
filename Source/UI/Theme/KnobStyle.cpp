@@ -40,14 +40,18 @@ const char* knobStyleId(KnobStyle style) noexcept { return infoFor(style).id; }
 
 const char* knobStyleLabel(KnobStyle style) noexcept { return infoFor(style).label; }
 
-KnobStyle knobStyleFromId(const juce::String& id) noexcept {
+std::optional<KnobStyle> knobStyleFromKnownId(const juce::String& id) noexcept {
     for (const auto& info : kStyles)
         if (id == info.id)
             return info.style;
     for (const auto& retired : kRetired)
         if (id == retired.id)
             return retired.successor;
-    return KnobStyle::Classic;
+    return std::nullopt;
+}
+
+KnobStyle knobStyleFromId(const juce::String& id) noexcept {
+    return knobStyleFromKnownId(id).value_or(KnobStyle::Classic);
 }
 
 KnobAppearance loadKnobAppearance(juce::PropertiesFile& props) {

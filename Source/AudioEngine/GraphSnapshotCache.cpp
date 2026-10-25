@@ -114,6 +114,7 @@ GraphSnapshotCache::Entry GraphSnapshotCache::readNode(juce::AudioProcessorGraph
     e.type = AIStateMapper::getFactoryTypeName(processor);
     e.displayName = node.properties["displayName"].toString();
     e.cardLayout = node.properties[kCardLayoutNodeProperty];
+    e.controlStyle = node.properties[kControlStyleNodeProperty];
     e.x = node.properties["x"];
     e.y = node.properties["y"];
     const auto& params = processor->getParameters();
@@ -130,7 +131,8 @@ GraphSnapshotCache::Entry GraphSnapshotCache::readNode(juce::AudioProcessorGraph
 bool GraphSnapshotCache::Entry::sameAs(const Entry& o) const {
     return processor == o.processor && id == o.id && type == o.type && displayName == o.displayName &&
            params == o.params && sameJson(x, o.x) && sameJson(y, o.y) && sameJson(cardLayout, o.cardLayout) &&
-           sameJson(extraState, o.extraState) && sameJson(cardView, o.cardView);
+           sameJson(controlStyle, o.controlStyle) && sameJson(extraState, o.extraState) &&
+           sameJson(cardView, o.cardView);
 }
 
 // A node's object is reused only when every field nodeToJSON would write for it reads the same as when that object
@@ -162,6 +164,7 @@ juce::var GraphSnapshotCache::capture(juce::AudioProcessorGraph& graph) {
         } else {
             entry.json = AIStateMapper::nodeToJSON(*node);
             entry.cardLayout = entry.cardLayout.clone(); // compared against later, so never the live object
+            entry.controlStyle = entry.controlStyle.clone();
             entry.size = estimateJsonSize(entry.json);
             ++lastRebuilt_;
             attenuvertersChanged = attenuvertersChanged || isAttenuverter;

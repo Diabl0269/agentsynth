@@ -3,6 +3,8 @@
 target_sources(Core PRIVATE
     Source/UI/Theme/KnobStyle.h
     Source/UI/Theme/KnobStyle.cpp
+    Source/UI/Theme/ControlStyleOverride.h
+    Source/UI/Theme/ControlStyleOverride.cpp
     Source/UI/Theme/AppLookAndFeel/KnobPainter.h
     Source/UI/Theme/AppLookAndFeel/KnobPainterInternal.h
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelKnobStyles.cpp

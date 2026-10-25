@@ -17,6 +17,7 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
+#include "UI/Graph/ControlStyle/ControlStyleMenu.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/PortPanel/PortPanelController.h"
 #include "UI/Layout/ContextMenuPlacement.h"
@@ -431,28 +432,9 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         m.addSeparator();
     }
 
-    // "Edit Layout..." edits a built-in card on the card itself (showCardLayoutEditor); for a hosted plugin
-    // it is the card's button's editor over the plugin's parameters
-    // (docs/layout/module-card-layout.md#editing-a-layout).
+    // "Edit Layout...", "Control Style..." and a hosted plugin's "Add control from plugin window...".
     juce::Component::SafePointer<ModuleComponent> safeThis(this);
-    if (cardBody_ != nullptr && cardBody_->drawsFromLayout()) {
-        synth::appendEditLayoutMenuItem(m, [safeThis] {
-            if (safeThis != nullptr)
-                safeThis->showCardLayoutEditor();
-        });
-        m.addSeparator();
-    } else if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module)) {
-        synth::appendEditLayoutMenuItem(m, [safeThis] {
-            if (safeThis != nullptr && safeThis->onChooseKnobsRequested)
-                safeThis->onChooseKnobsRequested();
-        });
-        // Starts "add by moving a control in the plugin" (no popover).
-        m.addItem("Add control from plugin window...", hosted->hasInstance(), false, [safeThis] {
-            if (safeThis != nullptr)
-                safeThis->setPluginTouchToAdd(true);
-        });
-        m.addSeparator();
-    }
+    synth::appendLayoutAndStyleMenuItems(m, *this);
 
     // "Rename" and "Replace with..." (a searchable picker of every module type and scanned hosted plugin) show their
     // live keyboard bindings; each appears only where its command is allowed (canRename / canReplace).

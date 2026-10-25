@@ -123,6 +123,10 @@ public:
     static constexpr const char* kKnobFamilyProperty = synth::theme::kKnobFamilyProperty;
     // The value-arc colour for `knob`: its card's family hue when colour-by-family is on, else accent.
     juce::Colour knobValueColour(const juce::Component& knob) const;
+    // The knob or fader style `control` paints: its card's own (kKnobStyleProperty / kFaderStyleProperty found
+    // up the parent chain), else the app-wide choice.
+    synth::theme::KnobStyle knobStyleFor(const juce::Component& control) const;
+    synth::theme::KnobStyle faderStyleFor(const juce::Component& control) const;
 
     // ---------- icon registry ----------
     // Re-tint every Icon from the active theme tokens. Called at the end of applyTheme()

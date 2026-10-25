@@ -454,6 +454,20 @@ cannot map `MidiKeyboardComponent` ColourIds. The on-screen keyboard is themed i
 The assistant panel's chat bubbles and debug console still pick their colours from hardcoded
 literals rather than tokens, so they do not re-skin with the rest of the app.
 
+### Per-module control style
+
+A module card, or every card of a module type, can
+take its own knob style and fader style (card menu > **Control Style...**, `ControlStylePanel`). A
+control resolves per kind, knob and fader independently: the node's own `controlStyle` property
+(`ControlStyleNodeOverride`, undoable, saved with the project), else the type's entry in the
+`controlStyleByType` user setting (`{"<factory type name>": {"knob": id, "fader": id}}`), else the app-wide choice
+above; **Follow** in the panel clears a level. `ModuleComponent` publishes the first two as the component
+properties `knobStyleOverride` and `faderStyleOverride` (an int `KnobStyle`, absent when neither sets one)
+and `AppLookAndFeel::knobStyleFor` / `faderStyleFor` walk the parent chain for them, as `knobValueColour`
+does for the family. `refreshControlStyle` (`ControlStyleCards.h`) runs when a card is built, in every
+`updateComponents` pass (so undo and redo restore it) and when `MainComponent` sees the setting text change.
+Controls with no card above them (the mixer strips, the controller surfaces) keep the app-wide style.
+
 ## Implementation notes
 
 **`Theme.h`** (`Source/UI/Theme/Theme.h`) has **no JUCE GUI dependencies** beyond `juce::Colour` and

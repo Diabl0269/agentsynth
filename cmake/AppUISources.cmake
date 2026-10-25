@@ -822,6 +822,14 @@ set(APPUI_SOURCES
     Source/Plugin/Hosting/CardLayoutStore.h
     Source/UI/Graph/CardBody/CardLayoutOverride.cpp
     Source/UI/Graph/CardBody/CardLayoutOverride.h
+    Source/UI/Graph/CardBody/ControlStyleNodeOverride.cpp
+    Source/UI/Graph/CardBody/ControlStyleNodeOverride.h
+    Source/UI/Graph/ControlStyle/ControlStyleCards.cpp
+    Source/UI/Graph/ControlStyle/ControlStyleCards.h
+    Source/UI/Graph/ControlStyle/ControlStyleMenu.cpp
+    Source/UI/Graph/ControlStyle/ControlStyleMenu.h
+    Source/UI/Graph/ControlStyle/ControlStylePanel.cpp
+    Source/UI/Graph/ControlStyle/ControlStylePanel.h
     Source/UI/Graph/CardBody/DefaultCardLayouts.cpp
     Source/UI/Graph/CardBody/DefaultCardLayouts.h
     Source/UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.cpp

@@ -299,7 +299,10 @@ Every control on a card drawn from layout data adds to its right-click menu, aft
 MIDI Learn block: **Hide from card** (or **Show on card** for a control in the More row), **Show as
 fader** / **Show as knob** for a float or int on the card and **Edit Layout...**, which turns the card itself
 into the layout editor ([module-card-layout.md](module-card-layout.md#editing-a-layout)); the module menu carries
-**Edit Layout...** too. The bespoke cards offer none of these. Each click is one write of the node's `cardLayout` override, one undo step,
+**Edit Layout...** too. The bespoke cards offer none of these. Every card with a knob or a fader, bespoke and hosted
+included, also has **Control Style...** in its module menu, right after **Edit Layout...**: a call-out with the
+knob and fader style for this module or for every module of its type
+([theming](theming.md#per-module-control-style)). Each click is one write of the node's `cardLayout` override, one undo step,
 starting from the layout the card draws now (the automatic layout written out as explicit items,
 which builds the same card): Hide adds the parameter to `hidden` and leaves its item where it is, so
 Show on card puts it back exactly there; a parameter the layout never placed goes to the end of the

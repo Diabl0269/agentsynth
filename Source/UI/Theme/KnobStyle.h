@@ -2,6 +2,7 @@
 
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_graphics/juce_graphics.h>
+#include <optional>
 
 namespace synth::theme {
 
@@ -18,6 +19,8 @@ inline constexpr int kKnobStyleCount = 5;
 const char* knobStyleId(KnobStyle style) noexcept;
 const char* knobStyleLabel(KnobStyle style) noexcept;
 KnobStyle knobStyleFromId(const juce::String& id) noexcept;
+// Like knobStyleFromId, but nullopt for an id that is neither current nor retired.
+std::optional<KnobStyle> knobStyleFromKnownId(const juce::String& id) noexcept;
 
 struct KnobAppearance {
     KnobStyle style = KnobStyle::Classic;      // every rotary knob

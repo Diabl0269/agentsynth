@@ -101,6 +101,7 @@ juce::var AIIntegrationService::buildStrippedPatchJson() const {
                     nodeObj->removeProperty("state");
                 nodeObj->removeProperty("cardView");   // which card panels are open: nothing a model can act on
                 nodeObj->removeProperty("cardLayout"); // trusted-only presentation, never advertised to a model
+                nodeObj->removeProperty("controlStyle");
             }
         }
     }

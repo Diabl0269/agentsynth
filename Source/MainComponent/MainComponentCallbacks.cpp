@@ -10,13 +10,17 @@
 #include "PatchSaveLocation.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
+#include "UI/Graph/ControlStyle/ControlStyleCards.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Theme/ControlStyleOverride.h"
 #include <cmath>
 
 namespace {
+constexpr const char* kControlStyleSeenProperty =
+    "controlStyleByTypeSeen"; // GraphEditor property: the setting text its cards last saw
 
 // The file filter both patch dialogs use. A `.agsproj` project bundle only exists in a build that
 // has the timeline compiled in — offering it otherwise would let a user save a "project" whose
@@ -171,6 +175,12 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
                 top->sendLookAndFeelChange();
             bottomDock.getMixerPanel().sendLookAndFeelChange();
             bottomDock.getMidiRemotePanel().sendLookAndFeelChange();
+        }
+        // Per-module-type control styles: cards repaint only when the stored text really changed.
+        const auto byType = appProperties.getUserSettings()->getValue(synth::theme::controlStyleByTypeKey());
+        if (graphEditor.getProperties()[kControlStyleSeenProperty].toString() != byType) {
+            graphEditor.getProperties().set(kControlStyleSeenProperty, byType);
+            synth::refreshAllControlStyles(graphEditor);
         }
         return;
     }
