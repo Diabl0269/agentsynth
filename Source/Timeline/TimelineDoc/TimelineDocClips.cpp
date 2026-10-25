@@ -189,6 +189,22 @@ bool TimelineDoc::setClipSwing(ClipId id, double swing) {
     });
 }
 
+bool TimelineDoc::setClipScale(ClipId id, std::optional<synth::MusicalScale> scale, bool visible) {
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    scale = normaliseClipScale(scale);
+    if (clip->scale == scale && clip->scaleVisible == visible)
+        return true;
+
+    // Not synced across a link group: the scale is how one piano roll views the clip, not its content.
+    return applyMutation([&] {
+        clip->scale = scale;
+        clip->scaleVisible = visible;
+        return true;
+    });
+}
+
 namespace {
 // Adds or removes `pitch` in a sorted, unique list. Returns false when nothing changed.
 bool setPitchMembership(std::vector<int>& list, int pitch, bool member) {
@@ -298,6 +314,8 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
         right.swing = clip->swing;
         right.mutedPitches = clip->mutedPitches;
         right.soloPitches = clip->soloPitches;
+        right.scale = clip->scale;
+        right.scaleVisible = clip->scaleVisible;
         clip->fadeOutBeats = 0.0;
 
         // `clip` (and therefore `id`, the original/left id) stays valid; only insert may
@@ -397,6 +415,8 @@ ClipId TimelineDoc::duplicateClipImpl(ClipId id, bool linked) {
         dup.swing = clip->swing;
         dup.mutedPitches = clip->mutedPitches;
         dup.soloPitches = clip->soloPitches;
+        dup.scale = clip->scale;
+        dup.scaleVisible = clip->scaleVisible;
         dup.notes.reserve(clip->notes.size());
         for (const auto& note : clip->notes) {
             MidiNote copy = note;

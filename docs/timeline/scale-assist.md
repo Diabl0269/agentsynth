@@ -98,17 +98,24 @@ lookup), `makeScaleFromMask`, `pickPitches`, and in-scale chords (`chordInScale`
 
 Tests: `Tests/Music/MusicalScaleTests.cpp` and `Tests/Music/MusicalScaleChordTests.cpp`.
 
-## Per-clip scale memory
+## The scale is saved on the clip
 
-`PianoRollComponent` keeps `clipScaleMemory_`, a `std::map<ClipId, {scale, pitchVisibilityOn}>`,
-populated only as clips get their scale touched.
+A clip owns its scale: `Clip::scale` (a root note plus the scale's notes and name; empty means "no
+choice made") and `Clip::scaleVisible` (the "Show only scale notes" flag). They are saved in the
+project, so a clip opens on the scale it was left on after a restart. In the project file they are
+two optional clip keys, `"scale": {"root", "mask", "name"}` and `"scaleVisible": true`, left out when
+unset (the file version stays 1). A missing or unreadable scale loads as "No scale" and never stops the
+project loading; a root outside C to B is pulled into range and an empty mask means no scale. A scale
+belongs to one clip: duplicating, splitting and copy/paste carry it, linked clips do not share it.
 
-**It is deliberately NOT persisted to disk.** A scale choice is a per-editing-session aid, not
-document state that would need its own undo/redo or bundle-format entry.
-
-`openClip()` calls `restoreScaleMemoryForOpenClip()`, which pushes whatever this clip remembers —
-or "No scale" for a clip never opened before — back into the panel and the roll's own scale
-context, rebuilding `visiblePitches_` against it.
+The piano roll keeps no copy. Every change goes through `PianoRollComponent::commitClipScale()`, which
+calls `TimelineDoc::setClipScale()` as one undo step. It has to be an undo step: timeline undo restores
+the whole document, so a scale change made outside the undo stack would be silently reverted by undoing an
+earlier note edit. The same step marks the project changed, so autosave and the unsaved-changes prompt
+see it. `openClip()` calls `restoreScaleForOpenClip()`, which shows the clip's saved scale in the panel
+and the roll's own scale context, rebuilding `visiblePitches_` against it; `refreshFromDoc()` does the
+same after an undo, but only when the panel disagrees with the clip (re-showing it also closes the
+custom-scale editor).
 
 ## Pitch-visibility row collapse
 
@@ -131,11 +138,11 @@ instead of the next drawn one. `firstVisiblePitch_` is re-clamped to the nearest
 
 The roll's header chip, `Option+S` and the panel's checkbox are three views of one flag, and all
 three route through `PianoRollComponent::toggleScaleFilter()`. It writes the open clip's
-`ClipScaleMemory`, pushes the scale context, and reflects the new value back into the panel via
+scale through `commitClipScale()`, pushes the scale context, and reflects the new value back into the panel via
 `setSelection()`, which fires no callback by contract — it is a reflection, not an edit — so it
 cannot loop back in.
 
-The flag is remembered per clip alongside the scale, and is deliberately NOT gated on a scale being
+The flag is saved per clip alongside the scale, and is deliberately NOT gated on a scale being
 chosen: arming it first and picking the scale second is a real order of operations.
 `isRowFilterActive()` (the flag AND a real scale) is the separate question anything behavioural
 asks.

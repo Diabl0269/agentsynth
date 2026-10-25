@@ -739,21 +739,19 @@ private:
     std::function<void(std::unique_ptr<ModMatrixPicker>)> addAutomationPickerHook_;
 
     // ---- Clip clipboard ----
-    // One captured clip, relative to the earliest selected clip's start at copy time (see copySelectedClips()).
-    // Notes are already clip-relative in the doc; addNote() reassigns their ids on paste.
+    // One captured clip, relative to the earliest selected clip's start (see copySelectedClips()).
     struct ClipboardClip {
         synth::TrackId originalTrack;
-        // The track kind this clip needs on paste, derived at COPY time from the payload
-        // (non-empty assetRef -> Audio, else Midi) rather than from the track it sat on: the
-        // payload is what decides where it can be played, and it is also what
-        // TimelineDoc::moveClipToTrack checks.
+        // The track kind this clip needs on paste, derived at COPY time from the payload (non-empty
+        // assetRef -> Audio, else Midi), not from its old track: the payload decides where it can play.
         synth::TrackKind requiredKind = synth::TrackKind::Midi;
         double relativeStartBeat = 0.0;
         double lengthBeats = 4.0;
         juce::String name;
         std::vector<synth::MidiNote> notes; // each note's own muted flag travels with it
         bool muted = false;
-        // Audio fields and the drum machine's settings: captured and restored so a paste yields the same clip.
+        // Audio fields, drum machine settings and the piano roll scale: captured and restored so a paste yields the
+        // same clip.
         juce::String assetRef;
         double gainDb = 0.0;
         double fadeInBeats = 0.0;
@@ -762,6 +760,8 @@ private:
         int stepsPerBar = synth::Clip::kDefaultStepsPerBar;
         double swing = synth::Clip::kStraightSwing;
         std::vector<int> mutedPitches, soloPitches;
+        std::optional<synth::MusicalScale> scale; // the piano roll's scale choice
+        bool scaleVisible = false;
     };
     std::vector<ClipboardClip> clipClipboard_;
     // The beatsPerBar TimelineViewState::snapBeat needs for pasteClipsAtPlayhead()'s Snap::Bar

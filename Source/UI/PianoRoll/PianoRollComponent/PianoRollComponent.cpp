@@ -97,24 +97,18 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
 
     addChildComponent(scalePanel_); // starts INVISIBLE; the header button / persisted flag show it
     scalePanel_.onScaleChanged = [this](std::optional<synth::MusicalScale> scale) {
-        if (clipId_.isValid())
-            clipScaleMemory_[clipId_].scale = scale;
-        pushScaleContextFromMemory();
+        commitClipScale(std::move(scale), isScaleFilterOn());
     };
-    scalePanel_.onPitchVisibilityChanged = [this](bool on) {
-        if (clipId_.isValid())
-            clipScaleMemory_[clipId_].pitchVisibilityOn = on;
-        pushScaleContextFromMemory();
-    };
+    scalePanel_.onPitchVisibilityChanged = [this](bool on) { commitClipScale(activeScaleForOpenClip(), on); };
     // Pitch-quantize has NO panel button any more — the header chip and "pianoRollQuantisePitches"
     // are its only entry points (see the ScaleAssistPanel class comment).
     scalePanel_.onGenerate = [this](int minPitch, int maxPitch, bool addToExisting) {
         if (!clipId_.isValid())
             return;
-        // Copied out rather than kept as a pointer into the map: generateRandomNotesIntoClip
+        // Copied out rather than kept as a pointer into the clip: generateRandomNotesIntoClip
         // mutates the doc (and can therefore repaint/rebuild things this lambda has no business
-        // reasoning about the lifetime of), so the scale it reads must not depend on the map
-        // entry surviving the call.
+        // reasoning about the lifetime of), so the scale it reads must not depend on the clip
+        // surviving the call.
         const auto scale = activeScaleForOpenClip();
         juce::Random rng; // default-seeded — the panel's Generate button always wants a fresh draw
         generateRandomNotesIntoClip(scale.has_value() ? &*scale : nullptr, minPitch, maxPitch, rng, addToExisting);
@@ -200,10 +194,10 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     // row set has to be rebuilt against THIS clip before anything below reads visiblePitches_.
     rebuildVisiblePitches();
 
-    // Restores THIS clip's remembered scale/pitch-visibility (or "No scale" for a clip never
-    // opened before) into the panel and the roll's own scale context — rebuilds visiblePitches_
-    // again, correctly this time (the call above ran against whichever clip was open previously).
-    restoreScaleMemoryForOpenClip();
+    // Shows THIS clip's saved scale/pitch-visibility (or "No scale" for a clip that has none) in the
+    // panel and the roll's own scale context — rebuilds visiblePitches_ again, correctly this time
+    // (the call above ran against whichever clip was open previously).
+    restoreScaleForOpenClip();
 
     // Frame the clip: its start at the keys column's right edge, zoomed so the whole clip fits the
     // grid width (subject to the shared zoom clamps).
@@ -278,9 +272,14 @@ void PianoRollComponent::refreshFromDoc() {
         hasSplitPreview_ = false;
         splitPreviewNote_ = {};
     }
-    // A note add/remove can change which out-of-scale pitches pitch-visibility mode is keeping
-    // visible on the note's account alone.
-    rebuildVisiblePitches();
+    // An undo/redo can change the clip's scale: re-show it, but only when the panel disagrees, since
+    // setSelection also closes the panel's custom-scale editor, which a note edit must not do.
+    // Otherwise a note add/remove can still change which out-of-scale pitches pitch-visibility mode
+    // is keeping visible on the note's account alone.
+    if (scalePanel_.getSelectedScale() != clip->scale || scalePanel_.isPitchVisibilityOn() != clip->scaleVisible)
+        restoreScaleForOpenClip();
+    else
+        rebuildVisiblePitches();
     refreshAccessibilityValue(); // a nudge or velocity edit changes what the focused note reads as
     repaint();
 }
@@ -450,18 +449,17 @@ void PianoRollComponent::rebuildVisiblePitches() {
 bool PianoRollComponent::isScaleFilterOn() const noexcept {
     if (!clipId_.isValid())
         return false;
-    const auto it = clipScaleMemory_.find(clipId_);
-    return it != clipScaleMemory_.end() && it->second.pitchVisibilityOn;
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    return clip != nullptr && clip->scaleVisible;
 }
 
 void PianoRollComponent::toggleScaleFilter() {
     if (!clipId_.isValid())
         return;
     const bool next = !isScaleFilterOn();
-    // The clip's memory is the single source of truth (see clipScaleMemory_); the panel's checkbox and
-    // this chip are both VIEWS of it, which is what stops the two from drifting apart.
-    clipScaleMemory_[clipId_].pitchVisibilityOn = next;
-    pushScaleContextFromMemory();
+    // The clip in the doc is the single source of truth; the panel's checkbox and this chip are both
+    // VIEWS of it, which is what stops the two from drifting apart.
+    commitClipScale(activeScaleForOpenClip(), next);
     // Reflect it back into the panel. setSelection fires NO callback by contract — it is a reflection
     // of state the owner already applied, not a user edit — so this cannot loop back through
     // onPitchVisibilityChanged into here again.

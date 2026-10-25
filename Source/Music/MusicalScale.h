@@ -26,6 +26,10 @@ struct MusicalScale {
 
     bool isChromatic() const noexcept { return (mask & 0xFFF) == 0xFFF; }
 
+    bool operator==(const MusicalScale& other) const noexcept {
+        return rootPitchClass == other.rootPitchClass && mask == other.mask && name == other.name;
+    }
+
     // Degenerate mask (0) contains nothing — every pitch is "out of scale", which callers must
     // treat as "no candidate pitch" rather than crashing or looping.
     bool contains(int midiPitch) const noexcept {
