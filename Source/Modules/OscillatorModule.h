@@ -7,6 +7,8 @@
 #include "Oscillator/PitchGlide.h"
 #include "ParameterText.h"
 #include "RestartFade.h"
+#include "RestartGhosts.h"
+#include "UnisonMix.h"
 #include "UnisonVoicing.h"
 #include <array>
 #include <cmath>
@@ -187,7 +189,7 @@ public:
         for (auto& v : voices) {
             v.glide.reset();
             v.active = false;
-            v.numGhosts = 0;
+            v.ghosts.count = 0;
             // Every playback starts from the same phases: the first note's run-out must not depend on where the
             // previous playback (or render) happened to leave the free-running oscillators.
             for (auto& osc : v.unisonOscs)
@@ -450,18 +452,16 @@ private:
         float phase = 0.0f;
     };
 
+    /** The phases of every unison voice of one stack: the state a ghost keeps running. */
+    struct UnisonStack {
+        UnisonOsc oscs[MAX_UNISON];
+    };
+
     struct VoiceState {
         UnisonOsc unisonOscs[MAX_UNISON];
-        /** A stack of phases from before a restart, running out over CROSSFADE_SAMPLES while the restarted stack
-            comes in. `weight` is its share of the output when it began to fade; the current stack always holds
-            what the ghosts leave, so the shares add to one. */
-        struct Ghost {
-            UnisonOsc oscs[MAX_UNISON];
-            float weight = 0.0f;
-            int remaining = 0;
-        };
-        Ghost ghosts[kMaxGhosts];
-        int numGhosts = 0;
+        /** The stacks of phases from before a restart, running out over CROSSFADE_SAMPLES while the restarted stack
+            comes in. */
+        synth::RestartGhosts<UnisonStack, kMaxGhosts> ghosts;
         bool active = false; ///< poly: was this voice sounding last block?
         juce::SmoothedValue<float> smoothedFreq;
         synth::PitchGlide glide;
@@ -520,19 +520,7 @@ private:
     /** Per-voice leg gains of the unison stack for one block, ramped linearly from the block's start to
         its end. Each gain moves towards its target at a bounded rate, so an automated Blend or Width
         glides and a voice that enters or leaves with a Unison change fades instead of stepping. */
-    struct UnisonMix {
-        float leftStart[MAX_UNISON]{};
-        float leftStep[MAX_UNISON]{};
-        float rightStart[MAX_UNISON]{};
-        float rightStep[MAX_UNISON]{};
-        float sumStart = 1.0f; ///< sum of the voices' mean leg power: the stack is divided by its square root
-        float sumStep = 0.0f;
-        bool stereo = false;          ///< some voice's legs differ: the stack renders to both legs
-        int renderCount = 1;          ///< voices to render: the Unison count plus any still fading out
-        float reachedL[MAX_UNISON]{}; ///< each voice's gains at the end of the last block
-        float reachedR[MAX_UNISON]{};
-        bool primed = false; ///< false until the first block after prepareToPlay sets the gains to their targets
-    } unisonMix;
+    synth::UnisonMix unisonMix;
     void prepareUnisonMix(int unisonCount, int numSamples, float blend, float width);
     void fillUnisonRatios(float* ratios, int unisonCount, int renderCount, float detuneCents) const;
 
@@ -635,14 +623,14 @@ private:
     /** One normalised sample of `voice`'s stack, blending in the run-out phases after a restart. */
     StackSample renderStack(VoiceState& voice, const StackContext& c, int i) const {
         StackSample s = sumStack(voice.unisonOscs, c, i);
-        if (voice.numGhosts > 0) {
+        if (voice.ghosts.count > 0) {
             // Each ghost leaves along its own raised cosine; the current stack takes whatever share they give up.
             float ghostTotal = 0.0f;
             StackSample mixed;
-            for (int g = 0; g < voice.numGhosts; ++g) {
-                auto& ghost = voice.ghosts[g];
-                const StackSample old = sumStack(ghost.oscs, c, i);
-                const float w = ghost.weight * (1.0f - synth::restartFadeIn(ghost.remaining));
+            for (int g = 0; g < voice.ghosts.count; ++g) {
+                auto& ghost = voice.ghosts.items[g];
+                const StackSample old = sumStack(ghost.state.oscs, c, i);
+                const float w = synth::RestartGhosts<UnisonStack, kMaxGhosts>::share(ghost);
                 mixed.left += old.left * w;
                 mixed.right += old.right * w;
                 ghostTotal += w;
@@ -650,9 +638,7 @@ private:
             }
             s.left = mixed.left + s.left * (1.0f - ghostTotal);
             s.right = mixed.right + s.right * (1.0f - ghostTotal);
-            for (int g = voice.numGhosts - 1; g >= 0; --g)
-                if (voice.ghosts[g].remaining <= 0)
-                    voice.ghosts[g] = voice.ghosts[--voice.numGhosts];
+            voice.ghosts.retireFinished();
         }
         const float divisor = std::sqrt(unisonMix.sumStart + unisonMix.sumStep * (float)i);
         s.left /= divisor;

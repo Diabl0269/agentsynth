@@ -4,11 +4,6 @@
 
 #include "Modules/OscillatorModule.h"
 
-namespace {
-/** Seconds a voice gain takes to move by 1.0. */
-constexpr double kUnisonFadeSeconds = 0.01;
-} // namespace
-
 // A voice that is leaving (u >= targetCount) keeps the detune of the outermost voice that stays, so it
 // fades out in tune rather than at a pitch the shorter stack no longer has.
 void OscillatorModule::fillUnisonRatios(float* ratios, int targetCount, int renderCount, float detuneCents) const {
@@ -25,47 +20,14 @@ void OscillatorModule::fillUnisonRatios(float* ratios, int targetCount, int rend
 // normalisation follows the fades and uncorrelated voices keep the loudness of one voice. One centred
 // voice divides by exactly 1. `blend` and `width` are the knob values after their CV.
 void OscillatorModule::prepareUnisonMix(int unisonCount, int numSamples, float blend, float width) {
-    const float maxMove = (float)((double)numSamples / (kUnisonFadeSeconds * currentSampleRate));
-    const float perSample = 1.0f / (float)std::max(1, numSamples);
-
-    float sumStart = 0.0f;
-    float sumEnd = 0.0f;
-    int renderCount = unisonCount;
-    bool stereo = false;
-    for (int u = 0; u < MAX_UNISON; ++u) {
-        float targetL = 0.0f;
-        float targetR = 0.0f;
-        if (u < unisonCount) {
-            float panL, panR;
-            synth::unisonPanGains(u, unisonCount, width, panL, panR);
-            const float level = synth::unisonBlendGain(u, unisonCount, blend);
-            targetL = level * panL;
-            targetR = level * panR;
-        }
-        if (!unisonMix.primed) {
-            unisonMix.reachedL[u] = targetL;
-            unisonMix.reachedR[u] = targetR;
-        }
-        const float leftStart = unisonMix.reachedL[u];
-        const float rightStart = unisonMix.reachedR[u];
-        const float leftEnd = leftStart + std::clamp(targetL - leftStart, -maxMove, maxMove);
-        const float rightEnd = rightStart + std::clamp(targetR - rightStart, -maxMove, maxMove);
-        unisonMix.reachedL[u] = leftEnd;
-        unisonMix.reachedR[u] = rightEnd;
-
-        unisonMix.leftStart[u] = leftStart;
-        unisonMix.leftStep[u] = (leftEnd - leftStart) * perSample;
-        unisonMix.rightStart[u] = rightStart;
-        unisonMix.rightStep[u] = (rightEnd - rightStart) * perSample;
-        sumStart += synth::unisonLegPower(leftStart, rightStart);
-        sumEnd += synth::unisonLegPower(leftEnd, rightEnd);
-        stereo = stereo || leftStart != rightStart || leftEnd != rightEnd;
-        if (leftStart != 0.0f || rightStart != 0.0f || leftEnd != 0.0f || rightEnd != 0.0f)
-            renderCount = std::max(renderCount, u + 1);
+    float targetL[MAX_UNISON]{};
+    float targetR[MAX_UNISON]{};
+    for (int u = 0; u < unisonCount && u < MAX_UNISON; ++u) {
+        float panL, panR;
+        synth::unisonPanGains(u, unisonCount, width, panL, panR);
+        const float level = synth::unisonBlendGain(u, unisonCount, blend);
+        targetL[u] = level * panL;
+        targetR[u] = level * panR;
     }
-    unisonMix.primed = true;
-    unisonMix.stereo = stereo;
-    unisonMix.renderCount = renderCount;
-    unisonMix.sumStart = std::max(sumStart, 1e-12f);
-    unisonMix.sumStep = (std::max(sumEnd, 1e-12f) - unisonMix.sumStart) * perSample;
+    unisonMix.advance(targetL, targetR, unisonCount, numSamples, currentSampleRate);
 }
