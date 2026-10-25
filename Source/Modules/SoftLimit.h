@@ -21,8 +21,9 @@ inline float softLimit(float x) noexcept {
 
 /** Gain each voice is summed at in a poly sum (the VCA's poly mode). Fixed: no voice-count or dynamic
     normalisation, so every note adds the same level and a chord is louder than one note, as on other
-    polyphonic synths. It is chosen so a three-note chord at the default level stays under the knee and
-    `softLimit` stays a safety net for bigger chords. */
-constexpr float kPolyVoiceGain = 0.5f;
+    polyphonic synths. About -11 dB, so a three-note chord stays under the knee even at full VCA Gain and
+    eight notes at the default Gain stay clean; one poly note is therefore about 11 dB quieter than the
+    same note through the mono path. `softLimit` stays the safety net for bigger chords. */
+constexpr float kPolyVoiceGain = 0.28f;
 
 } // namespace synth

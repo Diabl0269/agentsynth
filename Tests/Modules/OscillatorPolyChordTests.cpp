@@ -24,6 +24,7 @@ struct Voice {
     int unison = 1;
     int waveform = 0;
     float blend = 0.75f;
+    float vcaGain = 0.5f; ///< the VCA Gain knob; 0.5 is the default
 };
 
 struct Chain {
@@ -45,7 +46,7 @@ struct Chain {
         setParamValue(&adsr, "sustain", 1.0f);
         setParamValue(&adsr, "release", 0.015f);
         setParamValue(&vca, "poly", 1.0f);
-        setParamValue(&vca, "gain", 0.5f);
+        setParamValue(&vca, "gain", voice.vcaGain);
         for (juce::AudioProcessor* p :
              {static_cast<juce::AudioProcessor*>(&midi), static_cast<juce::AudioProcessor*>(&osc),
               static_cast<juce::AudioProcessor*>(&adsr), static_cast<juce::AudioProcessor*>(&vca)})
@@ -211,6 +212,24 @@ TEST(OscillatorPolyChord, ChordsGrowLouderWithEveryNoteAndNeverPassTheCeiling) {
         EXPECT_GT(level[1], level[0] * std::pow(10.0, 3.0 / 20.0)) << "three notes are at least 3 dB above one";
         EXPECT_GT(level[2], level[1]) << "and eight are louder than three";
     }
+}
+
+// Eight notes at the default VCA Gain stay the sum of their sines: the fixed voice gain leaves room for a big chord.
+TEST(OscillatorPolyChord, EightNoteChordAtTheDefaultGainStaysClean) {
+    const std::vector<int> chord = {48, 52, 55, 60, 64, 67, 72, 76};
+    const auto p = renderChord(chord, 1, 512, 0, Voice{})[0];
+    const auto fit = fitNotes(p.out, p.onAt + 4800, p.offAt - 480, chord);
+    EXPECT_LT(fit.residual / fit.rms, 0.015);
+}
+
+// ...and three notes with the VCA Gain turned all the way up do too.
+TEST(OscillatorPolyChord, ThreeNoteChordAtFullVcaGainStaysClean) {
+    Voice voice;
+    voice.vcaGain = 1.0f;
+    const std::vector<int> chord = {62, 66, 70};
+    const auto p = renderChord(chord, 1, 512, 0, voice)[0];
+    const auto fit = fitNotes(p.out, p.onAt + 4800, p.offAt - 480, chord);
+    EXPECT_LT(fit.residual / fit.rms, 0.015);
 }
 
 // Each voice's fixed gain scales one note by kPolyVoiceGain against the same note through the mono path.
