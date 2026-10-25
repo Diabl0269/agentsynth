@@ -306,8 +306,8 @@ TEST(AccessibilityCoverageTest, PianoRoll) {
     roll.openClip(clip);
     roll.setVelocityLaneVisible(true, false);
     roll.toggleScalePanel();
-    // The "Edit custom scales..." row (id 9000, ScaleAssistPanel::kCustomRowId, private) shows the editor.
-    roll.getScaleAssistPanel().getScaleCombo().setSelectedId(9000, juce::sendNotificationSync);
+    // The Custom scales button shows the editor.
+    roll.getScaleAssistPanel().getCustomScalesButton().onClick();
     roll.resized();
     EXPECT_TRUE(matchesBaseline("PianoRoll", auditAccessibility(roll)));
 }

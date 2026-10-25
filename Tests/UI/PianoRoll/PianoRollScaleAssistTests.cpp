@@ -222,23 +222,23 @@ TEST(PianoRollScaleAssistTest, GenerateWithNullScaleAllowsAnyPitchInRange) {
 
 // ---- Per-clip scale memory ----
 
-TEST(PianoRollScaleAssistTest, PerClipScaleMemoryRestoresOnReopenAndDefaultsToNoScale) {
+TEST(PianoRollScaleAssistTest, PerClipScaleMemoryRestoresOnReopenAndANewClipFollowsTheSongKey) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipA = f.doc.addClip(trackId, 0.0, 8.0, "A");
     const auto clipB = f.doc.addClip(trackId, 8.0, 8.0, "B");
 
     f.open(clipA);
-    EXPECT_FALSE(f.roll.getScaleAssistPanel().getSelectedScale().has_value()) << "never opened before -> No scale";
+    EXPECT_FALSE(f.roll.getScaleAssistPanel().getSelectedScale().has_value()) << "never opened before -> no own key";
+    EXPECT_TRUE(f.roll.getScaleAssistPanel().isFollowingSongKey());
 
-    // id 2 is the first built-in preset ("Major") — see ScaleAssistPanel::rebuildScaleCombo.
-    f.roll.getScaleAssistPanel().getScaleCombo().setSelectedId(2, juce::sendNotificationSync);
+    ASSERT_NO_FATAL_FAILURE(pickPanelKey(f.roll.getScaleAssistPanel(), "c major"));
     ASSERT_TRUE(f.roll.getScaleAssistPanel().getSelectedScale().has_value());
     EXPECT_EQ(juce::String(f.roll.getScaleAssistPanel().getSelectedScale()->name), "Major");
 
     f.open(clipB);
     EXPECT_FALSE(f.roll.getScaleAssistPanel().getSelectedScale().has_value())
-        << "a clip never opened before starts at No scale, regardless of what another clip has";
+        << "a clip never opened before follows the song key, regardless of what another clip has";
 
     f.open(clipA);
     ASSERT_TRUE(f.roll.getScaleAssistPanel().getSelectedScale().has_value());
@@ -247,17 +247,10 @@ TEST(PianoRollScaleAssistTest, PerClipScaleMemoryRestoresOnReopenAndDefaultsToNo
 }
 
 namespace {
-// Picks D Dorian through the panel's own combos, exactly as a click would.
+// Picks D Dorian through the panel's key picker, exactly as a typed search would.
 void pickDDorianThroughThePanel(PianoRollFixture& f) {
     auto& panel = f.roll.getScaleAssistPanel();
-    auto& scaleCombo = panel.getScaleCombo();
-    int dorianId = 0;
-    for (int i = 0; i < scaleCombo.getNumItems(); ++i)
-        if (scaleCombo.getItemText(i) == "Dorian")
-            dorianId = scaleCombo.getItemId(i);
-    ASSERT_NE(dorianId, 0);
-    scaleCombo.setSelectedId(dorianId, juce::sendNotificationSync);
-    panel.getRootCombo().setSelectedId(2 + 1, juce::sendNotificationSync); // D
+    ASSERT_NO_FATAL_FAILURE(pickPanelKey(panel, "d dor"));
     panel.getPitchVisibilityToggle().setToggleState(true, juce::sendNotificationSync);
 }
 } // namespace
@@ -657,49 +650,6 @@ TEST(PianoRollScaleFilterTest, DegreeStepFallsThroughWithNothingSelected) {
 // ScaleAssistPanel — the component in isolation, via its own accessors.
 // ============================================================================
 
-TEST(ScaleAssistPanelTest, ScaleComboIsPopulatedNoScaleFirstThenEveryBuiltInPreset) {
-    ScaleAssistPanel panel;
-    auto& combo = panel.getScaleCombo();
-    EXPECT_EQ(combo.getItemText(0), "No scale");
-
-    const auto& presets = synth::builtInScalePresets();
-    for (std::size_t i = 0; i < presets.size(); ++i)
-        EXPECT_EQ(combo.getItemText((int)(1 + i)), juce::String(presets[i].name));
-
-    EXPECT_EQ(combo.getItemText(combo.getNumItems() - 1), "Edit custom scales...")
-        << "the custom-editor affordance is always last";
-}
-
-TEST(ScaleAssistPanelTest, RootAndScaleSelectionFireOnScaleChangedWithTheRightScale) {
-    ScaleAssistPanel panel;
-    std::vector<std::optional<synth::MusicalScale>> fired;
-    panel.onScaleChanged = [&](std::optional<synth::MusicalScale> s) { fired.push_back(s); };
-
-    panel.getScaleCombo().setSelectedId(2, juce::sendNotificationSync); // "Major"
-    ASSERT_EQ(fired.size(), 1u);
-    ASSERT_TRUE(fired.back().has_value());
-    EXPECT_EQ(juce::String(fired.back()->name), "Major");
-    EXPECT_EQ(fired.back()->rootPitchClass, 0);
-
-    panel.getRootCombo().setSelectedId(3, juce::sendNotificationSync); // D
-    ASSERT_EQ(fired.size(), 2u);
-    ASSERT_TRUE(fired.back().has_value());
-    EXPECT_EQ(fired.back()->rootPitchClass, 2);
-    EXPECT_EQ(juce::String(fired.back()->name), "Major") << "changing the root keeps the same scale shape";
-
-    panel.getScaleCombo().setSelectedId(1, juce::sendNotificationSync); // "No scale"
-    ASSERT_EQ(fired.size(), 3u);
-    EXPECT_FALSE(fired.back().has_value());
-}
-
-TEST(ScaleAssistPanelTest, RootChangeWithNoScaleSelectedFiresNoCallback) {
-    ScaleAssistPanel panel;
-    int fireCount = 0;
-    panel.onScaleChanged = [&](std::optional<synth::MusicalScale>) { ++fireCount; };
-    panel.getRootCombo().setSelectedId(5, juce::sendNotificationSync);
-    EXPECT_EQ(fireCount, 0) << "No scale has no root to recompute";
-}
-
 TEST(ScaleAssistPanelTest, PitchVisibilityToggleFiresCallbackWithItsState) {
     ScaleAssistPanel panel;
     std::vector<bool> fired;
@@ -758,15 +708,14 @@ TEST(ScaleAssistPanelTest, NoteRangePickerDefaultsToC2AndC5) {
     EXPECT_EQ(panel.getMaxPitchSelection(), 72) << "C5";
 }
 
-TEST(ScaleAssistPanelTest, CustomScaleSaveRoundTripsThroughAPropertiesFileAndRefreshesTheCombo) {
+TEST(ScaleAssistPanelTest, CustomScaleSaveRoundTripsThroughAPropertiesFileAndRefreshesThePicker) {
     auto props = makeScaleAssistTestProps("ScaleAssistPanelTest");
     ScaleAssistPanel panel;
     panel.setPropertiesFile(props.get());
     ASSERT_TRUE(panel.getUserScalesForTest().empty());
 
-    // Reveal the editor the same way selecting the last combo row does, fill it in, and save.
-    panel.getScaleCombo().setSelectedId(panel.getScaleCombo().getItemId(panel.getScaleCombo().getNumItems() - 1),
-                                        juce::sendNotificationSync);
+    // Reveal the editor with the Custom scales button, fill it in, and save.
+    panel.getCustomScalesButton().onClick();
     EXPECT_TRUE(panel.isCustomEditorVisibleForTest());
 
     panel.getCustomPitchToggle(0).setToggleState(true, juce::dontSendNotification);
@@ -791,15 +740,15 @@ TEST(ScaleAssistPanelTest, CustomScaleSaveRoundTripsThroughAPropertiesFileAndRef
     ASSERT_EQ(onDisk.size(), 1u);
     EXPECT_EQ(juce::String(onDisk[0].name), "Sparse");
 
-    // The combo now offers the saved scale between the built-ins and the custom-editor row.
-    const auto& presets = synth::builtInScalePresets();
-    EXPECT_EQ(panel.getScaleCombo().getItemText((int)(1 + presets.size())), "Sparse");
+    // The key picker now lists the saved scale under Your scales.
+    EXPECT_TRUE(hasTitle(pickerGroupTitles(panel), "Your scales"));
 
     props->getFile().deleteFile();
 }
 
 TEST(ScaleAssistPanelTest, SavingWithNoPropertiesFileIsSessionOnly) {
     ScaleAssistPanel panel; // never wired to a PropertiesFile
+    panel.getCustomPitchToggle(0).setToggleState(true, juce::dontSendNotification);
     panel.getCustomScaleNameEditor().setText("Ephemeral", false);
     panel.getSaveCustomScaleButton().onClick();
 
@@ -828,8 +777,8 @@ TEST(ScaleAssistPanelTest, SetSelectionReflectsStateWithoutFiringCallbacks) {
     EXPECT_EQ(juce::String(panel.getSelectedScale()->name), "Natural Minor");
     EXPECT_EQ(panel.getSelectedScale()->rootPitchClass, 2);
     EXPECT_TRUE(panel.isPitchVisibilityOn());
-    EXPECT_EQ(panel.getRootCombo().getSelectedId(), 3);  // D
-    EXPECT_EQ(panel.getScaleCombo().getSelectedId(), 3); // "Natural Minor" is presets[1] -> id 3
+    EXPECT_EQ(panel.getKeyField().getText(), juce::String::fromUTF8("D Natural Minor \xc2\xb7 own"));
+    EXPECT_FALSE(panel.isFollowingSongKey()) << "an own key unless the owner says it follows";
 }
 
 // ---- Custom-scale editor: the mini-piano toggle row (labels + layout sanity) ----
@@ -838,9 +787,7 @@ TEST(ScaleAssistPanelTest, CustomEditorTogglesAreLabelledWithTheirNoteNames) {
     static const char* const kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     ScaleAssistPanel panel;
     panel.setSize(220, 400);
-    // Same "Edit custom scales..." row selection every other custom-editor test uses to reveal it.
-    panel.getScaleCombo().setSelectedId(panel.getScaleCombo().getItemId(panel.getScaleCombo().getNumItems() - 1),
-                                        juce::sendNotificationSync);
+    panel.getCustomScalesButton().onClick();
     ASSERT_TRUE(panel.isCustomEditorVisibleForTest());
 
     for (int pc = 0; pc < 12; ++pc)
@@ -853,8 +800,7 @@ TEST(ScaleAssistPanelTest, CustomEditorTogglesAreLabelledWithTheirNoteNames) {
 TEST(ScaleAssistPanelTest, CustomEditorTwelveToggleBoundsAreVisibleAndNonOverlapping) {
     ScaleAssistPanel panel;
     panel.setSize(220, 400); // comfortably wider than kScalePanelWidth (170) so no cell degenerates
-    panel.getScaleCombo().setSelectedId(panel.getScaleCombo().getItemId(panel.getScaleCombo().getNumItems() - 1),
-                                        juce::sendNotificationSync);
+    panel.getCustomScalesButton().onClick();
     ASSERT_TRUE(panel.isCustomEditorVisibleForTest());
 
     for (int pc = 0; pc < 12; ++pc) {
@@ -911,10 +857,8 @@ TEST(ScaleAssistPanelTest, RevealingCustomEditorGrowsContentAndForcesScroll) {
     EXPECT_FALSE(panel.getScrollViewportForTest().canScrollVertically())
         << "a panel sized to the editor-less content fits it with room to spare";
 
-    // Select the "Edit custom scales..." row (always last) — the same gesture every other custom-
-    // editor test uses — growing the content past the same panel height.
-    panel.getScaleCombo().setSelectedId(panel.getScaleCombo().getItemId(panel.getScaleCombo().getNumItems() - 1),
-                                        juce::sendNotificationSync);
+    // The Custom scales button grows the content past the same panel height.
+    panel.getCustomScalesButton().onClick();
     ASSERT_TRUE(panel.isCustomEditorVisibleForTest());
     EXPECT_GT(panel.getContentNaturalHeightForTest(), naturalWithout)
         << "the custom-scale editor adds a block of controls, so the content grows";
@@ -932,8 +876,7 @@ TEST(ScaleAssistPanelTest, ContentNaturalHeightMatchesLaidOutContent) {
     EXPECT_EQ(panel.getAddToExistingToggle().getBottom() + kInset, panel.getContentNaturalHeightForTest())
         << "custom editor hidden";
 
-    panel.getScaleCombo().setSelectedId(panel.getScaleCombo().getItemId(panel.getScaleCombo().getNumItems() - 1),
-                                        juce::sendNotificationSync);
+    panel.getCustomScalesButton().onClick();
     ASSERT_TRUE(panel.isCustomEditorVisibleForTest());
     EXPECT_EQ(panel.getAddToExistingToggle().getBottom() + kInset, panel.getContentNaturalHeightForTest())
         << "custom editor shown";
@@ -944,14 +887,13 @@ TEST(ScaleAssistPanelTest, ContentNaturalHeightMatchesLaidOutContent) {
 TEST(ScaleAssistPanelTest, TheCustomEditorFadesInAndOutWhileTheRowsBelowSlide) {
     ScaleAssistPanel panel;
     panel.setSize(PianoRollComponent::kScalePanelWidth, 800);
-    auto& combo = panel.getScaleCombo();
     const int without = panel.getContentNaturalHeightForTest();
     const int belowBefore = panel.getPitchVisibilityToggle().getY();
     auto& block = panel.getCustomBlockForTest();
     ASSERT_FALSE(block.isVisible());
 
     FadeAnimateGuard guard;
-    combo.setSelectedId(combo.getItemId(combo.getNumItems() - 1), juce::sendNotificationSync);
+    panel.getCustomScalesButton().onClick();
     ASSERT_TRUE(panel.isCustomEditorVisibleForTest()) << "the logical state is immediate";
     EXPECT_TRUE(block.isVisible());
     EXPECT_FLOAT_EQ(block.getAlpha(), 0.0f);
@@ -971,8 +913,8 @@ TEST(ScaleAssistPanelTest, TheCustomEditorFadesInAndOutWhileTheRowsBelowSlide) {
     EXPECT_FLOAT_EQ(block.getAlpha(), 1.0f);
     EXPECT_EQ(panel.getAddToExistingToggle().getBottom() + 6, withEditor);
 
-    // Back to a preset scale: the block fades out and the rows slide back up.
-    combo.setSelectedId(combo.getItemId(1), juce::sendNotificationSync); // a preset scale
+    // The button again: the block fades out and the rows slide back up.
+    panel.getCustomScalesButton().onClick();
     EXPECT_FALSE(panel.isCustomEditorVisibleForTest());
     EXPECT_TRUE(block.isVisible());
     EXPECT_FALSE(interceptsClicks(block));

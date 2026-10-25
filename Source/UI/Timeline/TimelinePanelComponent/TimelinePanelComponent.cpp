@@ -423,6 +423,7 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
     lastOutputLatencySeconds_ = outputLatencySeconds;
     playhead_.updateFromTransport(snapshot, outputLatencySeconds);
     transportBar_.updateFromTransport(snapshot);
+    pianoRoll_.refreshSongKey(); // a following clip's key moves with the song key (one comparison when steady)
     // The lane headers' value readouts ride this same poll (nothing runs while the beat stands still).
     const int visibleTop = (int)std::llround(viewState_.trackScrollY);
     automationLanes_.tickReadouts(snapshot.ppq, visibleTop,
