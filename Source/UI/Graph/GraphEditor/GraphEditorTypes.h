@@ -29,7 +29,7 @@ enum class LocateMasterResult {
 
 /** Raw-channel wiring for a single cable: the channel each end starts at, and how many
  *  consecutive per-voice channels the cable covers (1 = an ordinary mono wire).
- *  Voice v connects sourceRawChannel + v * sourceStride -> destRawChannel + v. */
+ *  Voice v connects sourceChannel(v) -> destChannel(v). */
 struct PolyLink {
     int sourceRawChannel = 0;
     int destRawChannel = 0;
@@ -37,6 +37,12 @@ struct PolyLink {
     // 1 for a voice-to-voice fan; 0 when a single mono source is broadcast to every voice of
     // the destination fan, so all N wires leave the same source channel.
     int sourceStride = 1;
+    // Gap between the destination's consecutive raw channels: 1 for every fan except a collapsed
+    // jack whose second leg sits on a split block (the Channel Strip's kRightBase).
+    int destStride = 1;
+
+    int sourceChannel(int voice) const noexcept { return sourceRawChannel + voice * sourceStride; }
+    int destChannel(int voice) const noexcept { return destRawChannel + voice * destStride; }
 };
 
 // ---- Cables ---------------------------------------------------------------------------------

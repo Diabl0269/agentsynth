@@ -506,8 +506,7 @@ void GraphEditor::disconnectCable(const VisibleCable& cable, const std::vector<V
                 dstMb != nullptr ? dstMb->mapInputChannel(cable.id.dstPort).visibleJackIndex : cable.id.dstPort;
             const auto link = resolvePolyLink(srcMb, srcJack, dstMb, dstJack);
             for (int v = 0; v < link.voiceCount; ++v) {
-                juce::AudioProcessorGraph::Connection c{{srcId, link.sourceRawChannel + v * link.sourceStride},
-                                                        {dstId, link.destRawChannel + v}};
+                juce::AudioProcessorGraph::Connection c{{srcId, link.sourceChannel(v)}, {dstId, link.destChannel(v)}};
                 graph.removeConnection(c);
             }
             return;

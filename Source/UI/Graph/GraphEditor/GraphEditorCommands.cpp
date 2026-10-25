@@ -753,8 +753,7 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
             }
         } else {
             for (int v = 0; v < link.voiceCount; ++v)
-                graph.addConnection(
-                    {{sourceId, link.sourceRawChannel + v * link.sourceStride}, {destId, link.destRawChannel + v}});
+                graph.addConnection({{sourceId, link.sourceChannel(v)}, {destId, link.destChannel(v)}});
         }
     }
 

@@ -200,8 +200,8 @@ bool SmartConnectionEngine::areJacksAlreadyConnected(juce::AudioProcessorGraph::
     const auto link = GraphEditor::resolvePolyLink(srcMb, srcJack, dstMb, dstJack);
 
     for (int v = 0; v < link.voiceCount; ++v) {
-        const int sCh = link.sourceRawChannel + v * link.sourceStride;
-        const int dCh = link.destRawChannel + v;
+        const int sCh = link.sourceChannel(v);
+        const int dCh = link.destChannel(v);
         for (const auto& c : graph.getConnections()) {
             if (c.source.nodeID == srcId && c.destination.nodeID == dstId && c.source.channelIndex == sCh &&
                 c.destination.channelIndex == dCh)
@@ -285,6 +285,5 @@ void SmartConnectionEngine::disconnectAudioLink(juce::AudioProcessorGraph::NodeI
     const auto link = GraphEditor::resolvePolyLink(dynamic_cast<ModuleBase*>(srcNode->getProcessor()), srcJack,
                                                    dynamic_cast<ModuleBase*>(dstNode->getProcessor()), dstJack);
     for (int v = 0; v < link.voiceCount; ++v)
-        graph.removeConnection(
-            {{srcId, link.sourceRawChannel + v * link.sourceStride}, {dstId, link.destRawChannel + v}});
+        graph.removeConnection({{srcId, link.sourceChannel(v)}, {dstId, link.destChannel(v)}});
 }

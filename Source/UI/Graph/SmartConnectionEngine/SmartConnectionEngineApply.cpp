@@ -117,8 +117,8 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
             auto* dMb = dynamic_cast<ModuleBase*>(dProc);
             const auto link = GraphEditor::resolvePolyLink(sMb, sJack, dMb, dJack);
             for (int v = 0; v < link.voiceCount; ++v) {
-                const int rawSrc = link.sourceRawChannel + v * link.sourceStride;
-                const int rawDst = link.destRawChannel + v;
+                const int rawSrc = link.sourceChannel(v);
+                const int rawDst = link.destChannel(v);
                 SmartSuggestion::InsertLink leg;
                 leg.fromJack = sMb != nullptr ? sMb->mapOutputChannel(rawSrc).visibleJackIndex : rawSrc;
                 leg.toJack = dMb != nullptr ? dMb->mapInputChannel(rawDst).visibleJackIndex : rawDst;
@@ -302,9 +302,9 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
                                                                       ghostInJack);
                         bool addsGhostIn = false, addsUpstreamOut = false;
                         for (int v = 0; v < fan.voiceCount; ++v) {
-                            if (claimedRawGhostIns.insert(fan.destRawChannel + v).second)
+                            if (claimedRawGhostIns.insert(fan.destChannel(v)).second)
                                 addsGhostIn = true;
-                            if (claimedRawUpstreamOuts.insert(fan.sourceRawChannel + v * fan.sourceStride).second)
+                            if (claimedRawUpstreamOuts.insert(fan.sourceChannel(v)).second)
                                 addsUpstreamOut = true;
                         }
                         if (!addsGhostIn && !addsUpstreamOut)
@@ -356,9 +356,9 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
                     const auto fan = GraphEditor::resolvePolyLink(srcMb, pr.first, dstMb, pr.second);
                     bool addsDst = false, addsSrc = false;
                     for (int v = 0; v < fan.voiceCount; ++v) {
-                        if (claimedRawDsts.insert(fan.destRawChannel + v).second)
+                        if (claimedRawDsts.insert(fan.destChannel(v)).second)
                             addsDst = true;
-                        if (claimedRawSrcs.insert(fan.sourceRawChannel + v * fan.sourceStride).second)
+                        if (claimedRawSrcs.insert(fan.sourceChannel(v)).second)
                             addsSrc = true;
                     }
                     if (addsDst || addsSrc)

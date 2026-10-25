@@ -23,6 +23,34 @@
 
 using namespace detail;
 
+namespace {
+
+// The raw channel carrying the Right leg of the stereo pair whose Left leg is `destVisibleJack` (raw
+// `leftRaw`) on `dest`, or -1 when that jack is not the Left of a pair. A null `dest` is the graph's
+// Audio Output, whose jack 0 is Left over a contiguous Right. A module's pair is its jack 0 (the FX
+// and voice modules), or any jack labelled Left/Right as a pair (Master's Mix L / Mix R and
+// Direct L / Direct R). The Right leg is asked of the module -- adjacent for the FX, a dedicated
+// kRightBase block for the split-block modules -- never assumed to be leftRaw + 1.
+int stereoPairRightLeg(const ModuleBase* dest, int leftRaw, int destVisibleJack) {
+    if (dest == nullptr)
+        return destVisibleJack == 0 ? leftRaw + 1 : -1;
+
+    const auto adjacent = dest->mapInputChannel(leftRaw + 1);
+    if (adjacent.role == PortRole::Audio && destVisibleJack == 0)
+        return leftRaw + 1;
+
+    const bool labelledPair = jackIsLeftOfSplitPair(*dest, destVisibleJack, /*isInput=*/true);
+    const int rightLeg = dest->rightAudioLegChannel();
+    if (destVisibleJack == 0 && rightLeg > leftRaw && labelledPair &&
+        dest->mapInputChannel(rightLeg).role == PortRole::Audio)
+        return rightLeg;
+    if (labelledPair && adjacent.role == PortRole::Audio && adjacent.visibleJackIndex == destVisibleJack + 1)
+        return leftRaw + 1;
+    return -1;
+}
+
+} // namespace
+
 // Works out which raw-channel fan a cable dropped between two *visible* jacks should wire.
 // Port hit-testing yields visible jack indices, which are not raw channel numbers once a
 // module goes poly (a poly VCA's CV jack is jack 1 but raw channel 8). Pure — no graph access,
@@ -61,6 +89,7 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
 
             int voiceCount = std::min(s.voiceSpan, d.voiceSpan);
             int sourceStride = 1;
+            int destStride = 1;
 
             // One mono modulator patched onto a per-voice mod-CV fan drives every voice, the way a
             // single LFO shakes all the voices of a hardware poly synth. Deliberately limited to
@@ -103,19 +132,16 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
             // Collapsed stereo source (span 2) dropped on dest jack 0: fan L→L / R→R when the
             // dest actually has a second audio channel (Audio Output, Dual I/O). A mono Filter
             // jack 0 must not steal its Cutoff CV on ch1.
-            if (s.voiceSpan == 2 && s.role == PortRole::Audio && d.voiceSpan == 1 && destVisibleJack == 0) {
-                bool destHasStereoPair = dest == nullptr;
-                if (dest != nullptr) {
-                    const auto other = dest->mapInputChannel(d.rawHeadChannel + 1);
-                    destHasStereoPair = other.role == PortRole::Audio;
-                }
-                if (destHasStereoPair) {
+            if (s.voiceSpan == 2 && s.role == PortRole::Audio && d.voiceSpan == 1) {
+                const int rightLeg = stereoPairRightLeg(dest, d.rawHeadChannel, destVisibleJack);
+                if (rightLeg >= 0) {
                     voiceCount = 2;
                     sourceStride = 1;
+                    destStride = rightLeg - d.rawHeadChannel;
                 }
             }
 
-            link = {s.rawHeadChannel, d.rawHeadChannel, voiceCount, sourceStride};
+            link = {s.rawHeadChannel, d.rawHeadChannel, voiceCount, sourceStride, destStride};
         }
     }
 
@@ -287,8 +313,7 @@ void GraphEditor::connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJ
             audioEngine.addModRouting(srcId, link.sourceRawChannel, dstId, link.destRawChannel);
         } else {
             for (int v = 0; v < link.voiceCount; ++v)
-                graph.addConnection(
-                    {{srcId, link.sourceRawChannel + v * link.sourceStride}, {dstId, link.destRawChannel + v}});
+                graph.addConnection({{srcId, link.sourceChannel(v)}, {dstId, link.destChannel(v)}});
         }
     };
 
