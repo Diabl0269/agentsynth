@@ -303,7 +303,20 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         return;
 
     bool connectedToAModule = false; // gates the macro-card fallback below — unchanged loop otherwise
-    for (auto* comp : content.getModules()) {
+
+    // A connection can rebuild the cards (a macro port minted by the drop, a Dual I/O change, a Track In's auto
+    // channel all reach updateComponents), which frees and reallocates the very array a walk over
+    // content.getModules() reads. So the candidates are copied out first as weak pointers, top-most card first
+    // (the one the person sees under the cursor), and the walk stops at the first connection: a drop lands on one
+    // jack, and nothing touches a card or the array after the call that may have rebuilt them.
+    std::vector<juce::Component::SafePointer<ModuleComponent>> candidates;
+    for (int i = content.getNumChildComponents(); --i >= 0;)
+        if (auto* card = dynamic_cast<ModuleComponent*>(content.getChildComponent(i)))
+            candidates.emplace_back(card);
+    const juce::Component::SafePointer<ModuleComponent> sourceCard(dragSourceModule);
+
+    for (const auto& candidate : candidates) {
+        auto* comp = candidate.getComponent();
         // A hidden member of a collapsed macro is not "on the canvas" as a drop target (same
         // reasoning as collectModuleBoxes' marquee/group-drag exclusion) — it is kept alive only
         // so its position tracks the card, and its ORIGINAL bounds (group-bounds top-left, see
@@ -363,9 +376,12 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                                                        dragSourceIsMidi, /*recordUndo=*/true,
                                                        content.getLocalPoint(nullptr, screenPos).toFloat());
                 connectedToAModule = true;
+                break;
             }
         }
     }
+    if (sourceCard == nullptr)
+        dragSourceModule = nullptr; // the connection rebuilt the card the drag started on
 
     // A modulation cable released on a plugin card's body, not on a knob: pick any of the plugin's parameters.
     if (!connectedToAModule && dragSourceModule != nullptr && !dragSourceIsInput && !dragSourceIsMidi)

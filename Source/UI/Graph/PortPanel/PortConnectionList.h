@@ -23,13 +23,17 @@ struct PortRef {
 
 struct PortConnection {
     GraphEditor::VisibleCable cable;
+    /** Every drawn cable behind this row, `cable` first: a collapsed stereo pair keeps two raw edges that read as one
+     *  connection, and removing the row removes them all. */
+    std::vector<GraphEditor::VisibleCable> group;
     PortRef far;           // the jack at the other end (VISIBLE index; a MIDI jack answers the MIDI channel index)
     int farRawChannel = 0; // the RAW channel there: a knob's CV channel, what a Knob target is matched by
     juce::String label;    // "<other module title> . <other port name>" (a macro port: its own name)
     juce::Colour colour;
 };
 
-/** The cables landing on `port` as of now, in the canvas' own order (a copy: the editor's list is a memo). */
+/** The connections landing on `port` as of now, in the canvas' own order (a copy: the editor's list is a memo). Cables
+ *  with the same far module, far jack, signal and target are one entry. */
 std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortRef& port);
 /** "<module title> . <port name>" for the jack itself (a macro port: its own name); empty when the node is gone. */
 juce::String portTitle(GraphEditor& editor, const PortRef& port);

@@ -8,6 +8,8 @@
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModDot/KnobModSources.h"
 
+#include <algorithm>
+
 namespace synth::ui {
 
 namespace {
@@ -90,6 +92,15 @@ PortRef farEnd(GraphEditor& editor, const GraphEditor::VisibleCable& cable, cons
             farIsDestination, midi};
 }
 
+// True when two cables landing on one jack are one connection to the person: the same far module and far jack
+// (visible), signal and kind, and the same knob when they land on one. A collapsed stereo pair keeps a raw edge per
+// leg when one end is split (or a mono source feeds both legs); all of them end on the same visible jacks.
+bool sameConnection(const PortConnection& a, const PortConnection& b) {
+    return a.far == b.far && a.cable.signal == b.cable.signal && a.cable.kind == b.cable.kind &&
+           a.cable.id.attenUid == b.cable.id.attenUid && a.cable.landsOnKnob == b.cable.landsOnKnob &&
+           (!a.cable.landsOnKnob || a.farRawChannel == b.farRawChannel);
+}
+
 } // namespace
 
 std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortRef& port) {
@@ -104,6 +115,13 @@ std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortR
         entry.farRawChannel = port.isInput ? cable.id.srcPort : cable.destChannel;
         entry.label = endName(editor, cable, /*farIsDestination=*/!port.isInput);
         entry.colour = editor.colourForCable(cable);
+        const auto same = std::find_if(out.begin(), out.end(),
+                                       [&entry](const PortConnection& o) { return sameConnection(o, entry); });
+        if (same != out.end()) {
+            same->group.push_back(cable);
+            continue;
+        }
+        entry.group = {cable};
         out.push_back(std::move(entry));
     }
     return out;

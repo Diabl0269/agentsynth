@@ -81,7 +81,7 @@ struct Fixture {
     // The panel a click on the dot opened: a real window needs a display, so the launcher keeps it instead.
     std::unique_ptr<juce::Component> held;
 
-    explicit Fixture(bool modulated = true, bool gainAsKnob = true) {
+    explicit Fixture(bool modulated = true, bool gainAsKnob = true, bool designedLayout = false) {
         engine.initialise();
         engine.getGraph().clear();
         editor = std::make_unique<GraphEditor>(engine, &undo);
@@ -91,7 +91,9 @@ struct Fixture {
         auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
         lfoId = lfoNode->nodeID;
         vcaId = vcaNode->nodeID;
-        if (gainAsKnob)
+        if (designedLayout)
+            ; // the card's own default: Gain is a horizontal fader
+        else if (gainAsKnob)
             showGainAsKnob(graph, vcaId);
         else
             hideCardKnobs(graph, vcaId);

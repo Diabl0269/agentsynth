@@ -218,6 +218,11 @@ It is built from the [mod dot menu](../modules/modulation.md#the-mod-dot-menu)'s
 through the shared `launchInFrame`, which grows out of the jack and shrinks back, closes on a click outside or Esc), width
 (`ModDotPage::kWidth`), palette, row look and remove button.
 
+- **One row per connection.** A collapsed stereo pair keeps a raw edge per leg (or a mono source feeds both legs), which
+  the canvas draws as separate cables landing on one jack. `listPortConnections` merges cables with the same far module,
+  far jack, signal and kind into one row (`PortConnection::group` keeps every cable), so the list shows the Filter once;
+  removing the row removes all of them as one undo step (`GraphEditor::disconnectCable`'s second argument). The canvas
+  still draws every cable. Test: `PortPanelStereoPairRowsTests.cpp`.
 - **Click.** A left press and release under 3 px apart that is the first click of its run. A drag from the jack still
   makes a cable and opens nothing; the right-click menu is unchanged. A second click on the same jack closes the panel.
 - **Double-click.** With *Double-click port to disconnect* on, a jack with exactly one cable waits one double-click
