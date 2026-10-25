@@ -2,6 +2,7 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_core/juce_core.h>
+#include <optional>
 #include <vector>
 
 namespace synth::ui {
@@ -20,7 +21,8 @@ struct TimelineClipboardClip {
     juce::String name;
     std::vector<synth::MidiNote> notes; // each note's own muted flag travels with it
     bool muted = false;
-    // Audio fields and the drum machine's settings: captured and restored so a paste yields the same clip.
+    // Audio fields, drum machine settings and the piano roll scale: captured and restored so a paste yields the
+    // same clip.
     juce::String assetRef;
     double gainDb = 0.0;
     double fadeInBeats = 0.0;
@@ -31,5 +33,7 @@ struct TimelineClipboardClip {
     double humanise = 0.0;
     std::vector<synth::Clip::DrumRow> drumRows;
     std::vector<int> mutedPitches, soloPitches;
+    std::optional<synth::MusicalScale> scale; // the piano roll's scale choice
+    bool scaleVisible = false;
 };
 } // namespace synth::ui

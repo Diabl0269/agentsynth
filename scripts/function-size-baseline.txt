@@ -9,7 +9,7 @@
 209 Source/AI/AIStateMapper/AIStateMapperValidation.cpp::AIStateMapper::validatePatch
 213 Source/AudioEngine/AudioEngineModRouting.cpp::AudioEngine::getModulationRoutings
 379 Source/PresetManager.cpp::PresetManager::getPresetJSON
-318 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
+317 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
 216 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::rebuildVisibleCables
 208 Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp::GraphEditor::completeStereoPairConnections
 549 Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp::SmartConnectionEngine::refreshSmartSuggestions

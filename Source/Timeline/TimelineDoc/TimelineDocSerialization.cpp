@@ -223,6 +223,12 @@ void writeNoteDrumFields(juce::DynamicObject& obj, const MidiNote& note) {
         obj.setProperty("condition", juce::String(note.condHit) + "/" + juce::String(note.condOf));
 }
 
+bool clipAudioFieldsValid(const Clip& clip) {
+    return isValidAssetRefString(clip.assetRef) && std::isfinite(clip.gainDb) &&
+           isFiniteAtOrAfterZero(clip.fadeInBeats) && isFiniteAtOrAfterZero(clip.fadeOutBeats) &&
+           isFiniteAtOrAfterZero(clip.sourceStartSeconds);
+}
+
 bool readClipDrumFields(const juce::DynamicObject& obj, Clip& clip) {
     if (!readOptionalInt(obj.getProperty("stepsPerBar"), clip.stepsPerBar) ||
         !Clip::isValidStepsPerBar(clip.stepsPerBar))
@@ -454,6 +460,7 @@ juce::var TimelineDoc::toVar() const {
             c->setProperty("fadeOutBeats", clip.fadeOutBeats);
             c->setProperty("sourceStartSeconds", clip.sourceStartSeconds);
             writeClipDrumFields(*c, clip);
+            writeClipScaleFields(*c, clip);
 
             juce::Array<juce::var> noteVars;
             for (const auto& note : clip.notes) {
@@ -635,9 +642,8 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                         !readOptionalDouble(cObj->getProperty("fadeOutBeats"), clip.fadeOutBeats) ||
                         !readOptionalDouble(cObj->getProperty("sourceStartSeconds"), clip.sourceStartSeconds))
                         return false;
-                    if (!isValidAssetRefString(clip.assetRef) || !std::isfinite(clip.gainDb) ||
-                        !isFiniteAtOrAfterZero(clip.fadeInBeats) || !isFiniteAtOrAfterZero(clip.fadeOutBeats) ||
-                        !isFiniteAtOrAfterZero(clip.sourceStartSeconds) || !readClipDrumFields(*cObj, clip))
+                    if (!clipAudioFieldsValid(clip) || !readClipDrumFields(*cObj, clip) ||
+                        !readClipScaleFields(*cObj, clip))
                         return false;
 
                     const juce::Array<juce::var>* noteList = nullptr;

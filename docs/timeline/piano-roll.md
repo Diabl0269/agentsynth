@@ -31,7 +31,7 @@ to absolute beats via `clip->startBeat` and back.
 | `PianoRollZoom.cpp` | Anchored zoom and `keyPressed` dispatch |
 | `PianoRollVelocity.cpp` | The velocity strip's wiring (its `Host`, layout band, remembered visibility), the header's value box and Humanize |
 | `PianoRollInternal.h` | Private shared constants and helpers; not a CMake source file |
-| `PianoRollTypes.h` | `NoteHit`, `NoteOrigin`, `ClipboardNote`, `NoteGeometry`, `LineRange`, `ClipScaleMemory`; not a CMake source file |
+| `PianoRollTypes.h` | `NoteHit`, `NoteOrigin`, `ClipboardNote`, `NoteGeometry`, `LineRange`; not a CMake source file |
 
 **The header declares; the units document.** `PianoRollComponent.h` carries only what a caller can
 get wrong from outside — nullability, thread affinity, call ordering, units, ownership — and each

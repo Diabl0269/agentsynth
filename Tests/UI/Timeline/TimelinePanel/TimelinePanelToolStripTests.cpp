@@ -419,6 +419,24 @@ TEST(TimelineClipClipboardTest, CopyPasteRoundTripsEveryAudioFieldAndTheMuteFlag
     EXPECT_EQ(f.doc.getTrackForClip(copy->id)->kind, synth::TrackKind::Audio);
 }
 
+TEST(TimelineClipClipboardTest, CopyPasteCarriesThePianoRollScale) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Keys");
+    const auto clip = f.doc.addClip(track, 8.0, 4.0, "Chords");
+    const auto scale = synth::makeScaleFromMask(2, 0x06AD, "Dorian");
+    ASSERT_TRUE(f.doc.setClipScale(clip, scale, true));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    EXPECT_NE(pasted[0], clip);
+    EXPECT_EQ(f.doc.getClip(pasted[0])->scale, scale);
+    EXPECT_TRUE(f.doc.getClip(pasted[0])->scaleVisible);
+}
+
 TEST(TimelineClipClipboardTest, PasteFallsBackToTheFirstTrackOfTheRequiredKind) {
     ToolPanelFixture f;
     const auto midi = f.doc.addTrack(synth::TrackKind::Midi, "Midi 1");

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Music/MusicalScale.h"
+
 #include <cstdint>
 #include <functional>
 #include <juce_core/juce_core.h>
@@ -231,6 +233,10 @@ struct Clip {
     std::vector<DrumRow> drumRows;
     std::vector<int> mutedPitches; // sorted, unique, 0..127
     std::vector<int> soloPitches;  // sorted, unique, 0..127
+
+    // Piano roll scale choice (nullopt = none made) and "show only scale notes". Per clip; additive.
+    std::optional<synth::MusicalScale> scale;
+    bool scaleVisible = false;
 };
 
 // One automated parameter. Identity is the (nodeUuid, paramId) pair, doc-wide: there is at
@@ -530,6 +536,7 @@ public:
     // Clip::isValidSwing). pitch 0..127.
     bool setClipRowLength(ClipId id, int pitch, int lengthSteps);
     bool setClipRowSwing(ClipId id, int pitch, double swing);
+    bool setClipScale(ClipId id, std::optional<synth::MusicalScale> scale, bool visible);
     bool setClipPitchMuted(ClipId id, int pitch, bool muted);
     bool setClipPitchSoloed(ClipId id, int pitch, bool soloed);
 

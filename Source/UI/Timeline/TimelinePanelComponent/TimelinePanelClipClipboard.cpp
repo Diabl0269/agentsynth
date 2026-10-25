@@ -91,6 +91,8 @@ bool TimelinePanelComponent::copySelectedClips() {
         entry.drumRows = clip->drumRows;
         entry.mutedPitches = clip->mutedPitches;
         entry.soloPitches = clip->soloPitches;
+        entry.scale = clip->scale;
+        entry.scaleVisible = clip->scaleVisible;
         captured.push_back(std::move(entry));
     }
     if (captured.empty())
@@ -166,6 +168,8 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
                 doc_->setClipPitchMuted(newId, pitch, true);
             for (const int pitch : entry.soloPitches)
                 doc_->setClipPitchSoloed(newId, pitch, true);
+            if (entry.scale.has_value() || entry.scaleVisible)
+                doc_->setClipScale(newId, entry.scale, entry.scaleVisible);
             newIds.push_back(newId);
         }
     };
@@ -344,6 +348,8 @@ bool TimelinePanelComponent::copyRange() {
             entry.drumRows = fragment->drumRows;
             entry.mutedPitches = fragment->mutedPitches;
             entry.soloPitches = fragment->soloPitches;
+            entry.scale = fragment->scale;
+            entry.scaleVisible = fragment->scaleVisible;
             captured.push_back(std::move(entry));
         }
     }

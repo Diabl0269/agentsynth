@@ -246,6 +246,69 @@ TEST(PianoRollScaleAssistTest, PerClipScaleMemoryRestoresOnReopenAndDefaultsToNo
         << "clip A's scale choice survived opening a different clip in between";
 }
 
+namespace {
+// Picks D Dorian through the panel's own combos, exactly as a click would.
+void pickDDorianThroughThePanel(PianoRollFixture& f) {
+    auto& panel = f.roll.getScaleAssistPanel();
+    auto& scaleCombo = panel.getScaleCombo();
+    int dorianId = 0;
+    for (int i = 0; i < scaleCombo.getNumItems(); ++i)
+        if (scaleCombo.getItemText(i) == "Dorian")
+            dorianId = scaleCombo.getItemId(i);
+    ASSERT_NE(dorianId, 0);
+    scaleCombo.setSelectedId(dorianId, juce::sendNotificationSync);
+    panel.getRootCombo().setSelectedId(2 + 1, juce::sendNotificationSync); // D
+    panel.getPitchVisibilityToggle().setToggleState(true, juce::sendNotificationSync);
+}
+} // namespace
+
+TEST(PianoRollScaleAssistTest, ScaleChoiceIsWrittenToTheClipAndShownAgainOnAFreshlyLoadedDoc) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    ASSERT_NO_FATAL_FAILURE(pickDDorianThroughThePanel(f));
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_TRUE(clip->scale.has_value()) << "the panel writes the choice to the doc";
+    EXPECT_EQ(clip->scale->rootPitchClass, 2);
+    EXPECT_EQ(clip->scale->name, "Dorian");
+    EXPECT_TRUE(clip->scaleVisible);
+    EXPECT_GT(f.undo.getEditSerial(), 0) << "an edit the unsaved-changes guard and autosave can see";
+
+    // A restart: a brand-new doc and a brand-new roll, built only from the saved JSON text.
+    const auto saved = juce::JSON::toString(f.doc.toVar());
+    TimelineDoc reloaded;
+    ASSERT_TRUE(reloaded.fromVar(juce::JSON::parse(saved)));
+    TimelineViewState state;
+    CountingRoll freshRoll{state};
+    freshRoll.setTimelineDoc(&reloaded);
+    freshRoll.setSize(900, 160);
+    freshRoll.openClip(clipId);
+
+    const auto shown = freshRoll.getScaleAssistPanel().getSelectedScale();
+    ASSERT_TRUE(shown.has_value()) << "the reopened roll shows the saved scale";
+    EXPECT_EQ(shown->rootPitchClass, 2);
+    EXPECT_EQ(shown->name, "Dorian");
+    EXPECT_TRUE(freshRoll.getScaleAssistPanel().isPitchVisibilityOn());
+    EXPECT_TRUE(freshRoll.isScaleFilterOn());
+    EXPECT_TRUE(freshRoll.isRowFilterActive());
+}
+
+TEST(PianoRollScaleAssistTest, UndoRevertsAScaleChoiceAndThePanelFollows) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    chooseMajorScaleForOpenClip(f);
+    ASSERT_TRUE(f.doc.getClip(clipId)->scale.has_value());
+
+    f.undo.undo();
+    f.roll.refreshFromDoc(); // what the timeline panel's doc listener does after an undo
+    EXPECT_FALSE(f.doc.getClip(clipId)->scale.has_value());
+    EXPECT_FALSE(f.roll.getScaleAssistPanel().getSelectedScale().has_value());
+}
+
 // ---- PropertiesFile persistence: panel visibility + user scales ----
 
 TEST(PianoRollScaleAssistTest, PanelVisibilityAndUserScalesPersistThroughAPropertiesFile) {
@@ -560,6 +623,7 @@ TEST(PianoRollScaleFilterTest, DegreeStepMovesAChordTogetherAndClampsAsAGroup) {
     const auto hi = f.doc.addNote(clipId, makeNote(1.0, 67, 1.0));  // G
     f.roll.getSelectionForTest().setSelection({lo, mid, hi});
     f.roll.toggleScaleFilter();
+    f.undo.clearUndoHistory(); // the scale choices are undo steps of their own; this test is about the chord move
 
     EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
     // Each note moves ONE DEGREE: C->D, E->F, G->A. The semitone intervals change (that is what a
