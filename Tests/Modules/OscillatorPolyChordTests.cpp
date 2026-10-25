@@ -6,10 +6,10 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/PolyMidiModule.h"
+#include "Modules/SoftLimit.h"
 #include "Modules/VCAModule.h"
 
 #include <cmath>
-#include <cstdio>
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -183,32 +183,41 @@ Fit fitNotes(const std::vector<float>& x, int from, int to, const std::vector<in
 } // namespace
 
 // Regression test for FRO1076: a chord of three sines at the default level summed to 1.5 and the VCA's soft
-// limiter clipped it, which sounds like a broken telephone: 12 % of the level was not in the notes at all. Now the
-// output is the sum of the notes' sines, and a chord is no quieter than one note.
-TEST(OscillatorPolyChord, ChordsStayTheSumOfTheirSinesAndNeverGetQuieterThanOneNote) {
-    const std::vector<std::vector<int>> chords = {{60}, {62, 66, 70}, {48, 52, 55, 60, 64, 67, 72, 76}};
-    const double limit[] = {0.002, 0.015, 0.07};
-    double level[3] = {};
-    for (size_t c = 0; c < chords.size(); ++c)
-        for (const int block : {128, 480, 512})
-            for (const int lead : {0, 100, 333}) {
-                const auto passes = renderChord(chords[c], 4, block, lead, Voice{});
-                for (const auto& p : passes) {
-                    const auto fit = fitNotes(p.out, p.onAt + 4800, p.offAt - 480, chords[c]);
-                    EXPECT_LT(fit.residual / fit.rms, limit[c])
-                        << chords[c].size() << " notes, block " << block << ", lead " << lead;
-                    level[c] = fit.rms;
-                }
+// limiter clipped it, which sounds like a broken telephone: 12 % of the level was not in the notes at all. Each voice
+// is now summed at a fixed lower gain, so a steady three-note chord is the sum of its sines (under 1.5 % distortion)
+// at every block size and loop offset.
+TEST(OscillatorPolyChord, ThreeNoteChordStaysTheSumOfItsSines) {
+    for (const int block : {64, 128, 256, 441, 480, 512})
+        for (const int lead : {0, 100, 333}) {
+            const auto passes = renderChord({62, 66, 70}, 4, block, lead, Voice{});
+            for (const auto& p : passes) {
+                const auto fit = fitNotes(p.out, p.onAt + 4800, p.offAt - 480, {62, 66, 70});
+                EXPECT_LT(fit.residual / fit.rms, 0.015) << "block " << block << ", lead " << lead;
             }
-    EXPECT_GT(level[1], level[0] * 1.05) << "three notes are louder than one";
-    EXPECT_GT(level[2], level[0] * 0.95) << "and eight are no quieter";
+        }
 }
 
-// A chord that stays under the knee keeps the plain unity sum, so one note is as loud as the same note alone.
-TEST(OscillatorPolyChord, OneNoteAndQuietChordsKeepTheirUnityLevel) {
+// Voices add at a fixed gain, so every note makes the chord louder, and the soft limiter still caps the sum.
+TEST(OscillatorPolyChord, ChordsGrowLouderWithEveryNoteAndNeverPassTheCeiling) {
+    const std::vector<std::vector<int>> chords = {{60}, {62, 66, 70}, {48, 52, 55, 60, 64, 67, 72, 76}};
+    for (const int block : {64, 512}) {
+        double level[3] = {};
+        for (size_t c = 0; c < chords.size(); ++c) {
+            const auto p = renderChord(chords[c], 1, block, 0, Voice{})[0];
+            const auto fit = fitNotes(p.out, p.onAt + 4800, p.offAt - 480, chords[c]);
+            level[c] = fit.rms;
+            EXPECT_LE(fit.peak, 0.98) << chords[c].size() << " notes, block " << block;
+        }
+        EXPECT_GT(level[1], level[0] * std::pow(10.0, 3.0 / 20.0)) << "three notes are at least 3 dB above one";
+        EXPECT_GT(level[2], level[1]) << "and eight are louder than three";
+    }
+}
+
+// Each voice's fixed gain scales one note by kPolyVoiceGain against the same note through the mono path.
+TEST(OscillatorPolyChord, OneNoteIsTheVoiceGainTimesTheVcaGain) {
     const auto passes = renderChord({60}, 1, 512, 0, Voice{});
     const auto fit = fitNotes(passes[0].out, passes[0].onAt + 4800, passes[0].offAt - 480, {60});
-    EXPECT_NEAR(fit.peak, 0.5, 0.005);
+    EXPECT_NEAR(fit.peak, 0.5 * synth::kPolyVoiceGain, 0.005);
 }
 
 namespace {
@@ -283,9 +292,9 @@ TEST(OscillatorPolyChord, PhaseAndRandAreAudibleOnEveryRepeatOfAChord) {
     EXPECT_GT(apart.repeatDifference, 0.5) << "the chord starts differently each time";
 }
 
-// A chord that starts mid-block must not step the output where a block ends: the headroom follows the voices
-// sample by sample, so the largest step is a sine's own slope and the loudest peak does not depend on the block size.
-TEST(OscillatorPolyChord, HeadroomNeverStepsAndDoesNotDependOnTheBlockSize) {
+// A chord that starts mid-block must not step the output where a block ends: the largest step is a sine's own
+// slope and the loudest peak does not depend on the block size.
+TEST(OscillatorPolyChord, ChordNeverStepsAndDoesNotDependOnTheBlockSize) {
     const std::vector<std::vector<int>> chords = {{62, 66, 70}, {48, 52, 55, 60, 64, 67, 72, 76}};
     for (const auto& chord : chords) {
         double reference = 0.0;

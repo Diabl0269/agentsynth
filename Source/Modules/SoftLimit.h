@@ -19,16 +19,10 @@ inline float softLimit(float x) noexcept {
     return std::copysign(kSoftLimitKnee + 0.08f * std::tanh((mag - kSoftLimitKnee) * 12.5f), x);
 }
 
-/** Nominal peak of a poly sum (master gain times the sum of each voice's audio peak times its envelope level)
-    up to which the voices add at unity; past it `polySumHeadroom` takes the sum back. */
-constexpr float kPolySumKnee = kSoftLimitKnee;
-
-/** The gain a poly sum takes when its nominal peak `nominalPeak` (every voice at its audio peak and
-    envelope level at once) is above `kPolySumKnee`: (knee / peak) to the power 0.7, so the sum's peaks stay out of
-   `softLimit` (clipping would turn a steady chord into a distorted one) while a bigger chord is still no quieter than
-   one note. 1 at or below the knee, so one note and quiet chords are untouched. */
-inline float polySumHeadroom(float nominalPeak) noexcept {
-    return nominalPeak > kPolySumKnee ? std::pow(kPolySumKnee / nominalPeak, 0.7f) : 1.0f;
-}
+/** Gain each voice is summed at in a poly sum (the VCA's poly mode). Fixed: no voice-count or dynamic
+    normalisation, so every note adds the same level and a chord is louder than one note, as on other
+    polyphonic synths. It is chosen so a three-note chord at the default level stays under the knee and
+    `softLimit` stays a safety net for bigger chords. */
+constexpr float kPolyVoiceGain = 0.5f;
 
 } // namespace synth

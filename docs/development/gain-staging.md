@@ -12,29 +12,31 @@ device's hard clip then erases everything quieter in the mix. Only gain controls
 | SourceModulePeakTest | Oscillator, Wavetable and Noise sources stay within unity peak at default and maximum level |
 | OscillatorVoiceFeel (source peak) | The Oscillator's Blend (0, 0.5, 1) and Width (0, 1) at 8 detuned unison saws: peak at most sqrt(N), RMS within 1.5 dB of one voice; no allow-list entry, since neither adds gain |
 
-**Rules.** Polyphonic voices sum at unity, never divided by the voice count: one poly note is as loud
-as the same note in mono. The VCA poly sum and the Voice Mixer end in the shared soft limiter
-(`Source/Modules/SoftLimit.h`), which is the identity at or below 0.9 and rounds larger sums towards
-0.98. A unison stack is constant power: the Oscillator and the Wavetable divide it by the root of the
-summed squared voice gains, so its loudness does not change with Unison. Voices that start in phase can
-peak at sqrt(N); headroom for that is handled downstream (soft limiter, channel faders).
+**Rules.** Mono signals and the Voice Mixer pass a note at unity. Polyphonic voices are summed in the VCA's
+poly mode at a fixed per-voice gain, `synth::kPolyVoiceGain` (0.5, `Source/Modules/SoftLimit.h`), never
+normalised by the voice count or by a dynamic headroom gain: every note adds the same level, so a chord is louder
+than one note, as on other polyphonic synths. The VCA poly sum and the Voice Mixer end in the shared soft limiter
+(`SoftLimit.h`), which is the identity at or below 0.9 and rounds larger sums towards 0.98; it is the safety net for
+chords bigger than the fixed gain leaves room for, not part of the sound of a normal chord. A unison stack is
+constant power: the Oscillator and the Wavetable divide it by the root of the summed squared voice gains, so its
+loudness does not change with Unison. Voices that start in phase can peak at sqrt(N); headroom for that is handled
+downstream (soft limiter, channel faders).
 
-The default instrument chain's VCA (mono and poly alike) sits at gain 0.5, so each voice leaves 6 dB of
-headroom: two notes sum at unity and a two-note chord peaks at 1.0.
+The default instrument chain's VCA (mono and poly alike) sits at gain 0.5, so each mono note leaves 6 dB of headroom;
+in poly mode the per-voice gain takes another 6 dB off each voice, so a poly note is half as loud as the same note
+through the mono path.
 
-**Poly chords above the knee.** Three full-level sines at gain 0.5 peak at 1.5, and the soft limiter above 0.9
-turns that into clipping: a steady three-note chord measured 12 % distortion (eight notes 32 %), the broken
-telephone sound. A reference synth measured as a black box stays linear for the same chords because each of its
-voices is about 11 dB down (a saw peaking at 0.28), where ours is 6 dB down. Lowering every voice would make a poly
-note quieter than the same note in mono, so the poly VCA sum instead looks at its nominal peak: the master gain times
-the sum, over the voices, of each voice's audio peak in the block times its envelope level (`synth::polySumHeadroom`, `SoftLimit.h`). Up to 0.9 nothing changes, so one note, two
-notes and any quiet or low-sustain chord keep their unity sum. Above it the sum is multiplied by (0.9 / peak)^0.7, which holds the
-worst-case peak near the knee: three notes read under 1 % distortion and eight about 4 %, the level of three notes is 1.7 dB
-above one note and eight are level with it. A sharper curve (exponent 1) makes the distortion zero but the level fall
-as notes are added; a flatter one (0.5) keeps the chord louder but distorts again. The gain follows each voice's peak sample by sample (up at once, down over 20 ms) and moves down in about 1.5 ms and back up in about 50 ms, so it never steps at a block edge and the render does not depend on the block size; below the knee it stays exactly 1. The audio peak (not a count of voices) is used so a silent voice, which reads an unpatched
-envelope as 1, and a quiet one add nothing. Pinned by `OscillatorPolyChord.*`
-(`Tests/Modules/OscillatorPolyChordTests.cpp`), which renders Poly MIDI, Oscillator, ADSR and VCA over several block sizes and loop offsets
-and fits the sines of the played notes to the output.
+**Why a fixed gain, and why 0.5.** Three full-level sines at VCA gain 0.5 summed to 1.5 when voices added at unity,
+and the soft limiter above 0.9 turned that into clipping (12 % distortion for three notes, 32 % for eight, the broken
+telephone sound). A dynamic headroom gain that followed the voices' peaks fixed the distortion but made eight notes
+about as loud as one, which is not how a chord sounds on other polyphonic synths: they sum each voice at a fixed gain
+and let the sum grow. The value is the largest of 0.5, 0.4, 0.35 and 0.28 for which a three-note chord stays under 1.5 %
+distortion at every block size `OscillatorPolyChord.ThreeNoteChordStaysTheSumOfItsSines` renders: at 0.5 three notes read
+0.02 % distortion at a peak of 0.75, 4.8 dB above one note, and eight notes are 8.5 dB above one (and reach the soft
+limiter: about 13 % distortion at the default level). Smaller values only trade level for a cleaner eight-note chord
+(0.28 reads 0.8 % at eight notes). Pinned by `OscillatorPolyChord.*` (`Tests/Modules/OscillatorPolyChordTests.cpp`), which
+renders Poly MIDI, Oscillator, ADSR and VCA over several block sizes and loop offsets, fits the sines of the played notes
+to the output, and checks that level grows with every note and stays under the soft-limit ceiling.
 
 A new allow-list entry needs a real justification, not a raised ceiling. A new module goes into
 `ModuleGainAudit`'s spec list.
