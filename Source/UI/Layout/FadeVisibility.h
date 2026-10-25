@@ -95,6 +95,7 @@ public:
     /** Test seams: animate even though the parent is not on screen, and step every running fade by hand
      *  (t in 0..1; 1 finishes them) since no VBlank reaches an off-screen component. */
     static void setAnimateOffScreenForTest(bool animate) { forceAnimate() = animate; }
+    static bool animatesOffScreenForTest() { return forceAnimate(); }
     static void stepAllForTest(float t) {
         const auto all = registry();
         for (auto* fade : all) {

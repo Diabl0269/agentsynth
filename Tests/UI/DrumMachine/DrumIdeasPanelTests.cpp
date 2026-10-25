@@ -304,6 +304,7 @@ TEST(DrumIdeasPanelTest, ASnareRollReplacesTheLastBeatAsOneUndoStepWithTheOutlin
     EXPECT_EQ(f.pitchCount(38), 0u);
     EXPECT_EQ(f.pitchCount(42), 2u);
     EXPECT_FALSE(f.undo.canUndo()) << "one undo step";
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }
 
 TEST(DrumIdeasPanelTest, ATomFillAndTheEveryFourthBarToggleReachTheClip) {

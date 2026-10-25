@@ -2,12 +2,16 @@
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "SoundPacks/SoundPackFetch.h"
+#include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
 #include <cstdlib>
 #include <gtest/gtest.h>
 #include <iostream>
 #include <juce_events/juce_events.h>
+#include <string>
+#include <vector>
 
 // Drain pending async messages after each test to prevent
 // cross-test pollution from callAsync/timer callbacks
@@ -15,6 +19,30 @@ class MessageQueueDrainer : public ::testing::EmptyTestEventListener {
     void OnTestEnd(const ::testing::TestInfo&) override {
         if (auto* mm = juce::MessageManager::getInstanceWithoutCreating())
             mm->runDispatchLoopUntil(10);
+    }
+};
+
+// The motion test seams are process-wide: a test that turns one on and never back off makes every later test in the
+// same process (and so which shard it lands in) animate where it expects an instant change. After each test this names
+// a test that left one changed, puts the default back so the rest of the run is unaffected, and fails the run.
+class MotionSeamLeakCheck : public ::testing::EmptyTestEventListener {
+public:
+    static std::vector<std::string>& leakers() {
+        static std::vector<std::string> names;
+        return names;
+    }
+
+private:
+    void OnTestEnd(const ::testing::TestInfo& info) override {
+        const bool leaked = synth::ui::FadeVisibility::animatesOffScreenForTest() ||
+                            synth::ui::PopupMotion::animatesOffScreenForTest() ||
+                            synth::ui::animationMode() != synth::ui::AnimationMode::followSystem;
+        if (!leaked)
+            return;
+        leakers().push_back(std::string(info.test_suite_name()) + "." + info.name());
+        synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+        synth::ui::PopupMotion::setAnimateOffScreenForTest(false);
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
     }
 };
 
@@ -40,6 +68,7 @@ int main(int argc, char** argv) {
     juce::ScopedJuceInitialiser_GUI juceInit;
     ::testing::InitGoogleTest(&argc, argv);
     ::testing::UnitTest::GetInstance()->listeners().Append(new MessageQueueDrainer());
+    ::testing::UnitTest::GetInstance()->listeners().Append(new MotionSeamLeakCheck());
 
     // The ONE call site that reads AGENTSYNTH_SETTINGS_DIR, so a shipped binary can never
     // be redirected via it (see test-patterns.md's "on-disk path" section for the full seam).
@@ -79,7 +108,14 @@ int main(int argc, char** argv) {
     // prompt on every run).
     synth::KeychainTokenStore::useInMemoryStoreForProcess(true);
 
-    const int result = RUN_ALL_TESTS();
+    int result = RUN_ALL_TESTS();
+    for (const auto& name : MotionSeamLeakCheck::leakers()) {
+        std::cerr << "[  LEAKED  ] " << name
+                  << " left a motion test seam changed (FadeVisibility/PopupMotion off-screen animation or the "
+                     "Animations mode); restore it before the test returns"
+                  << std::endl;
+        result = 1;
+    }
     if (ownedSettingsDir != juce::File())
         ownedSettingsDir.deleteRecursively();
     return result;
