@@ -212,6 +212,57 @@ float largestStepAcrossUnisonChange(int from, int to, float width, bool poly, in
 }
 } // namespace
 
+namespace {
+// The same for the Wavetable (a sine, Unison from `from` to `to` after six blocks of a held note).
+float largestWavetableStepAcrossUnisonChange(int from, int to, float width, bool poly, int note) {
+    WavetableOscillatorModule m;
+    setActual(m, "level", 1.0f);
+    setActual(m, "position", 0.0f);
+    setActual(m, "unison", (float)from);
+    setActual(m, "detune", 30.0f);
+    setActual(m, "width", width);
+    setActual(m, "blend", 1.0f);
+    setActual(m, "randomPhase", 1.0f);
+    if (poly)
+        setActual(m, "poly", 1.0f);
+    m.prepareToPlay(kRate, kBlock);
+    float worst = 0.0f;
+    float lastL = 0.0f, lastR = 0.0f;
+    for (int b = 0; b < 12; ++b) {
+        if (b == 6)
+            setActual(m, "unison", (float)to);
+        juce::AudioBuffer<float> buf(WavetableOscillatorModule::kNumOutputs, kBlock);
+        buf.clear();
+        juce::MidiBuffer midi;
+        if (poly)
+            juce::FloatVectorOperations::fill(buf.getWritePointer(0),
+                                              440.0f * std::pow(2.0f, (float)(note - 69) / 12.0f), kBlock);
+        else if (b == 0)
+            midi.addEvent(juce::MidiMessage::noteOn(1, note, (juce::uint8)100), 0);
+        m.processBlock(buf, midi);
+        for (int i = 0; i < kBlock; ++i) {
+            const float l = buf.getReadPointer(0)[i];
+            const float r = buf.getReadPointer(WavetableOscillatorModule::kRightBase)[i];
+            if (b >= 2)
+                worst = std::max({worst, std::abs(l - lastL), std::abs(r - lastR)});
+            lastL = l;
+            lastR = r;
+        }
+    }
+    return worst;
+}
+} // namespace
+
+// Regression test for FRO1129: the Wavetable changed its voice count instantly, so a held stack stepped.
+TEST(UnisonReferenceTable, ChangingUnisonInAHeldWavetableNoteHasNoStep) {
+    for (const bool poly : {false, true})
+        for (const float width : {0.0f, 1.0f})
+            for (const auto& [from, to] : {std::pair{1, 7}, std::pair{7, 1}, std::pair{3, 4}, std::pair{5, 8}})
+                for (int note = 45; note < 58; note += 2)
+                    EXPECT_LT(largestWavetableStepAcrossUnisonChange(from, to, width, poly, note), 0.1f)
+                        << from << " -> " << to << " width " << width << (poly ? " poly" : " mono") << " note " << note;
+}
+
 // Regression test for FRO1077: the voice count changed instantly, so a held stack stepped by up to the whole
 // signal level at the block where Unison changed.
 TEST(UnisonReferenceTable, ChangingUnisonInAHeldNoteHasNoStep) {

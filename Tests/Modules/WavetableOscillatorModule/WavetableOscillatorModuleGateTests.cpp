@@ -54,6 +54,7 @@ float maxDiff(const std::vector<float>& a, int aFrom, const std::vector<float>& 
 class WavetableGateTest : public WavetableOscillatorModuleTest {
 protected:
     void configure(bool poly) {
+        setFloat(*module, "level", 1.0f);
         setFloat(*module, "position", 0.0f); // sine
         setFloat(*module, "phase", 90.0f);
         setFloat(*module, "randomPhase", 0.0f);
@@ -70,10 +71,13 @@ TEST_F(WavetableGateTest, PolyEdgeRetriggersTheVoiceOnItsOwnSample) {
     const auto a = rig.renderBlock({100, 200});
     const auto b = rig.renderBlock({300, -1});
 
-    // No crossfade: the edge sample itself is the sine at 90 degrees, and both notes then run alike.
-    EXPECT_GT(a[100], 0.8f) << "a sine started at 90 degrees is near its peak";
-    EXPECT_GT(b[300], 0.8f);
-    EXPECT_EQ(maxDiff(a, 100, b, 300, kBlockSize - 300), 0.0f);
+    // The restarted stack starts at 90 degrees on the edge sample while the old sound fades out over 64 samples;
+    // past the fade both notes run alike, and the sine is where a quarter-turn start puts it.
+    const double dt = (double)kPitchHz / kSampleRate;
+    const float expected = (float)std::sin(6.283185307179586 * (0.25 + 64.0 * dt)) * peakOf(b.data(), 300 + 64, 100);
+    EXPECT_NEAR(a[100 + 64], expected, 2e-3f);
+    EXPECT_NEAR(b[300 + 64], expected, 2e-3f);
+    EXPECT_EQ(maxDiff(a, 100 + 64, b, 300 + 64, kBlockSize - 300 - 64), 0.0f);
 }
 
 TEST_F(WavetableGateTest, PolyWithoutAGateTheTwoNotesAreNotAligned) {
@@ -90,8 +94,11 @@ TEST_F(WavetableGateTest, MonoEdgeRetriggersWithoutAnyMidi) {
     rig.renderBlock({-1, -1}); // lets the pitch smoother settle
     const auto a = rig.renderBlock({100, 200});
     const auto b = rig.renderBlock({300, -1});
-    EXPECT_GT(a[100], 0.8f) << "a sine started at 90 degrees is near its peak";
-    EXPECT_EQ(maxDiff(a, 100, b, 300, kBlockSize - 300), 0.0f);
+    const double dt = 440.0 / kSampleRate; // no MIDI note yet: the voice rests on A4
+    EXPECT_NEAR(a[100 + 64], (float)std::sin(6.283185307179586 * (0.25 + 64.0 * dt)) * peakOf(b.data(), 300 + 64, 100),
+                2e-3f)
+        << "a sine started at 90 degrees, once the old sound has faded out";
+    EXPECT_EQ(maxDiff(a, 100 + 64, b, 300 + 64, kBlockSize - 300 - 64), 0.0f);
 
     WT other;
     other.prepareToPlay(kSampleRate, kBlockSize);
@@ -136,7 +143,7 @@ TEST_F(WavetableGateTest, GateChannelsAreMappedInBothModesAndAudioRStaysPut) {
     EXPECT_EQ(mono.visibleJackIndex, WT::kJackGate);
     EXPECT_EQ(mono.role, PortRole::Gate);
     EXPECT_EQ(mono.polyVoiceSpan, 1);
-    EXPECT_EQ(module->getInputPortLabel(WT::kJackGate), "Gate");
+    EXPECT_EQ(module->getInputPortLabel(WT::kJackGate), "Restart");
     EXPECT_EQ(module->getVisibleInputPortCount(), WT::kNumJacks);
     EXPECT_EQ(WT::kNumModCV, 15);
     EXPECT_EQ(WT::kNumInputs, 31);

@@ -1,4 +1,5 @@
-# The Oscillator's voice rendering, note tracking and the unison maths it shares with the Wavetable. Part of Core;
+# The Oscillator's voice rendering, note tracking and the unison and restart pieces it shares with the Wavetable
+# (plus the Wavetable's own note and voicing units). Part of Core;
 # its own list so the root file stays under the line cap.
 target_sources(Core PRIVATE
     Source/Modules/Oscillator/OscillatorModuleMono.cpp
@@ -9,4 +10,8 @@ target_sources(Core PRIVATE
     Source/Modules/Oscillator/HeldNotes.h
     Source/Modules/Oscillator/PitchGlide.h
     Source/Modules/UnisonVoicing.h
+    Source/Modules/UnisonMix.h
+    Source/Modules/RestartGhosts.h
+    Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleNotes.cpp
+    Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleVoicing.cpp
 )

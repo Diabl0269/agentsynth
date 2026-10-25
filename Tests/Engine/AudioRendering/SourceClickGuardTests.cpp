@@ -31,9 +31,7 @@ struct NoteSource {
 const std::vector<NoteSource>& noteSources() {
     static const std::vector<NoteSource> sources = {
         {"Oscillator"},
-        {"Wavetable", nullptr,
-         "its note start is a hard phase reset at the start of the block, with no fade: the output steps by up to "
-         "the wave's full height when a note lands on a sounding one"},
+        {"Wavetable"},
         {"Pluck"},
         {"Hosted Plugin"},
         {"Noise", "noise has no slope bound, so a step cannot be told from signal; its CV gating is covered by "

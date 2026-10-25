@@ -2,6 +2,8 @@
 
 #include "../GateEdges.h"
 #include "../ModuleBase.h"
+#include "../RestartGhosts.h"
+#include "../UnisonMix.h"
 #include "../UnisonVoicing.h"
 #include "WavetableTableBuilder.h"
 #include <algorithm>
@@ -338,18 +340,15 @@ private:
         }
     };
 
-    struct VoiceState {
+    /** What a restart replaces and a ghost keeps running: the phases, the sub phase and the decimator history. */
+    struct StackState {
         float phase[MAX_UNISON]{};       // slave phase, what actually reads the table
         float masterPhase[MAX_UNISON]{}; // drives Sync's reset and Formant's window
         float subPhase = 0.0f;
-        juce::SmoothedValue<float> smoothedFreq;
-        float lastMidiNote = 69.0f;
-        GateEdges gateEdges;    // this block's rising Gate edges, each a note that retriggers the phases
-        bool active = false;    // poly: was this voice sounding last block?
-        Decimator decimator[2]; // one per stereo leg — panning happens before decimation
+        Decimator decimator[2]; // one per stereo leg -- panning happens before decimation
 
         /** Restarts every sub-oscillator at the configured retrigger phase. `spread`
-            decorrelates the unison stack, `randomAmount` adds per-note jitter — without
+            decorrelates the unison stack, `randomAmount` adds per-note jitter -- without
             either, a unison stack or a poly chord attacks perfectly phase-correlated and
             comb-filters itself. */
         void resetPhases(float startPhase, float spread, float randomAmount, int unisonCount, juce::Random& rng) {
@@ -366,6 +365,28 @@ private:
             decimator[0].reset();
             decimator[1].reset();
         }
+
+        void resetSyncPhases() {
+            for (int u = 0; u < MAX_UNISON; ++u)
+                phase[u] = masterPhase[u] = 0.0f;
+        }
+    };
+
+    static constexpr int kMaxMidiRestarts = 64;
+
+    struct VoiceState {
+        StackState stack;
+        synth::RestartGhosts<StackState> ghosts; // the stacks from before a restart, running out
+        juce::SmoothedValue<float> smoothedFreq;
+        float lastMidiNote = 69.0f;
+        GateEdges gateEdges; // this block's rising Gate edges, each a note that restarts the phases
+        bool active = false; // poly: was this voice sounding last block?
+        std::array<int, kMaxMidiRestarts> midiRestarts{};
+        int numMidiRestarts = 0;
+        int nextMidiRestart = 0;
+
+        void addMidiRestart(int offset);
+        bool restartFiresAt(int s);
     };
 
     // -------------------------------------------------------------------------
@@ -742,11 +763,34 @@ private:
         float subOctaveRatio = 0.5f; // -1 octave
         float subPosition = 0.0f;    // scan position of the sub's shape in Basic Shapes
         // Per-block voicing gains (width/blend move slowly; their CV lands at block rate).
-        float uniGainL[MAX_UNISON]{};
-        float uniGainR[MAX_UNISON]{};
+        int renderCount = 1;  // voices that still sound, leaving ones included
+        synth::UnisonMix mix; // the voice gains and their ramps over the block
         float uniRatio[MAX_UNISON]{};
-        float uniNormalise = 1.0f;
     };
+
+    /** What one sample of a stack reads besides its own phases. */
+    struct SampleParams {
+        const Wavetable* wt = nullptr;
+        const Wavetable* subTable = nullptr;
+        const int* uniMip = nullptr;
+        float dt = 0.0f;
+        float mipRateScale = 1.0f;
+        float posFrames = 0.0f;
+        float warpAmount = 0.0f;
+        float subLevel = 0.0f;
+        float subPosFrames = 0.0f;
+        bool hermite = false;
+        float norm = 1.0f;
+        float gainL[MAX_UNISON]{};
+        float gainR[MAX_UNISON]{};
+    };
+
+    struct StackOut {
+        float left = 0.0f;
+        float right = 0.0f;
+    };
+    StackOut renderStackSample(StackState& st, const BlockSettings& bs, const SampleParams& p) const;
+    StackOut renderWithGhosts(VoiceState& voice, StackOut live, const BlockSettings& bs, const SampleParams& p) const;
 
     /** Renders one voice into `outL` / `outR`. freqRamp holds the (already smoothed)
         per-sample base frequency in Hz; positionRamp / levelRamp hold the smoothed parameter
@@ -760,18 +804,21 @@ private:
     void fillParameterRamps(int numSamples);
 
     /** Gathers the voice-independent settings for this block, including the unison gain
-        table. Width and Blend land at block rate: they are voicing settings whose CV does
+        mix. Width and Blend land at block rate: they are voicing settings whose CV does
         not need sample accuracy, and keeping them out of the inner loop keeps the
-        oversampled path affordable. */
-    BlockSettings gatherBlockSettings();
+        oversampled path affordable. Call once per block: it advances the gain fades. */
+    BlockSettings gatherBlockSettings(int numSamples);
 
     /** Marks the samples where the Sync input crosses zero going up. Computed once per block
         because every voice needs the same crossings, and the voices render one after another. */
     void buildSyncResets(int cacheLen, SyncMode mode);
 
-    /** Restarts a voice's oscillators at the configured retrigger phase. Phase / Rand /
-        Spread are sampled at the note-on instant — they shape the attack, not the sustain. */
-    void retriggerVoice(VoiceState& voice, int unisonCount);
+    /** Restarts a voice's oscillators at the configured retrigger phase; with `fadeFromOld` the old sound
+        runs out over kRestartFadeSamples. Phase / Rand / Spread are sampled at the note-on instant. */
+    void restartVoice(VoiceState& voice, int unisonCount, bool fadeFromOld);
+
+    /** Tracks the block's MIDI note-ons: the pitch now, the restart at each note-on's own sample. */
+    void scanMidi(const juce::MidiBuffer& midi, int numSamples);
 
     /** Fills freqRamp with a voice's smoothed per-sample frequency in Hz. */
     void fillFrequencyRamp(VoiceState& voice, float targetHz, int numSamples);
@@ -843,7 +890,7 @@ private:
 
     float blockPeakWarpAmount = 0.0f;
     float lastSyncSample = 0.0f;
-    bool pendingRetrigger = false;
+    synth::UnisonMix unisonMix;
     juce::Random phaseRandom{0x5EED1234};
 
     juce::AudioParameterChoice* tableParam = nullptr;

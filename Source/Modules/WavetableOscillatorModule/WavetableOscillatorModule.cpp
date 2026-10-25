@@ -338,11 +338,14 @@ void WavetableOscillatorModule::prepareToPlay(double sampleRate, int samplesPerB
     smoothedPan.setCurrentAndTargetValue(panParam->get());
 
     for (int v = 0; v < MAX_VOICES; ++v) {
-        voices[v].decimator[0].reset();
-        voices[v].decimator[1].reset();
+        voices[v].stack.decimator[0].reset();
+        voices[v].stack.decimator[1].reset();
+        voices[v].ghosts.count = 0;
+        voices[v].numMidiRestarts = voices[v].nextMidiRestart = 0;
         voices[v].active = false;
         voices[v].gateEdges.reset();
     }
+    unisonMix.primed = false; // the next block starts the voice gains at their targets
     lastSyncSample = 0.0f;
     blockPeakWarpAmount = 0.0f;
 }
@@ -360,13 +363,7 @@ void WavetableOscillatorModule::processModuleBlock(juce::AudioBuffer<float>& buf
 
     adoptPendingTable();
 
-    for (const auto metadata : midiMessages) {
-        const auto msg = metadata.getMessage();
-        if (msg.isNoteOn()) {
-            voices[0].lastMidiNote = (float)msg.getNoteNumber();
-            pendingRetrigger = true; // consumed once the block's unison count is known
-        }
-    }
+    scanMidi(midiMessages, buffer.getNumSamples());
 
     if (polyParam->get())
         processPolyMode(buffer);
@@ -776,46 +773,6 @@ void WavetableOscillatorModule::fillParameterRamps(int numSamples) {
     blockPeakWarpAmount = peakWarp;
 }
 
-WavetableOscillatorModule::BlockSettings WavetableOscillatorModule::gatherBlockSettings() {
-    BlockSettings bs;
-    bs.unisonCount = juce::jlimit(1, MAX_UNISON, unisonParam->get());
-    bs.warp = (Warp)juce::jlimit(0, (int)Warp::Count - 1, warpParam->getIndex());
-    bs.stack = (Stack)juce::jlimit(0, (int)Stack::Count - 1, stackParam->getIndex());
-    bs.syncMode = (SyncMode)juce::jlimit(0, (int)SyncMode::Count - 1, syncModeParam->getIndex());
-    bs.interpolation = (Interpolation)juce::jlimit(0, (int)Interpolation::Count - 1, interpolationParam->getIndex());
-    bs.pitchModulated = hasCV(kJackOctave) || hasCV(kJackCoarse) || hasCV(kJackFine);
-    bs.oversample = warpNeedsOversampling(bs.warp, blockPeakWarpAmount);
-    bs.subOctaveRatio = (subOctaveParam->getIndex() == 1) ? 0.25f : 0.5f;
-    bs.subPosition = (subShapeParam->getIndex() == 1) ? 1.0f : 0.0f; // Basic Shapes: sine .. square
-
-    bs.detuneCents = juce::jlimit(0.0f, 100.0f, detuneParam->get() + cvAt(kJackDetune, 0) * 100.0f);
-    const float width = juce::jlimit(0.0f, 1.0f, widthParam->get() + cvAt(kJackWidth, 0));
-    const float blend = juce::jlimit(0.0f, 1.0f, blendParam->get() + cvAt(kJackBlend, 0));
-
-    float powerSum = 0.0f;
-    for (int u = 0; u < bs.unisonCount; ++u) {
-        const float cents = bs.detuneCents * synth::unisonOffsetFraction(u, bs.unisonCount);
-        const float semis = stackSemitones(bs.stack, u, bs.unisonCount);
-        bs.uniRatio[u] = std::pow(2.0f, semis / 12.0f + cents / 1200.0f);
-
-        // Blend fades the other voices against an always-present root, so turning it down thins the
-        // chorus without changing the fundamental's level. Detune spreads the voices symmetrically, so
-        // the root is the middle voice(s) (the shared helper); a Stack mode keeps voice 0 at the root pitch.
-        const bool isRoot = bs.stack == Stack::Detune ? synth::isUnisonCentreVoice(u, bs.unisonCount) : u == 0;
-        const float voiceGain = isRoot ? 1.0f : synth::unisonOuterGain(blend);
-        float gl, gr;
-        synth::unisonPanGains(u, bs.unisonCount, width, gl, gr);
-        bs.uniGainL[u] = gl * voiceGain;
-        bs.uniGainR[u] = gr * voiceGain;
-        powerSum += synth::unisonLegPower(bs.uniGainL[u], bs.uniGainR[u]);
-    }
-
-    // Constant power: divide by the root of the voices' summed mean leg power, so a stack of
-    // uncorrelated voices keeps the loudness of one voice. A single voice divides by exactly 1.
-    bs.uniNormalise = (powerSum > 0.0f) ? (1.0f / std::sqrt(powerSum)) : 1.0f;
-    return bs;
-}
-
 void WavetableOscillatorModule::buildSyncResets(int cacheLen, SyncMode mode) {
     if (mode != SyncMode::HardSync || !hasCV(kJackSync)) {
         std::fill_n(syncResetCache.data(), cacheLen, false);
@@ -826,13 +783,6 @@ void WavetableOscillatorModule::buildSyncResets(int cacheLen, SyncMode mode) {
         syncResetCache[(size_t)s] = (lastSyncSample <= 0.0f && v > 0.0f);
         lastSyncSample = v;
     }
-}
-
-void WavetableOscillatorModule::retriggerVoice(VoiceState& voice, int unisonCount) {
-    const float startPhase = juce::jlimit(0.0f, 1.0f, phaseParam->get() / 360.0f + cvAt(kJackPhase, 0));
-    const float spread = juce::jlimit(0.0f, 1.0f, spreadParam->get() + cvAt(kJackSpread, 0));
-    const float randomAmount = juce::jlimit(0.0f, 1.0f, randomPhaseParam->get() + cvAt(kJackRand, 0));
-    voice.resetPhases(startPhase, spread, randomAmount, unisonCount, phaseRandom);
 }
 
 void WavetableOscillatorModule::fillFrequencyRamp(VoiceState& voice, float targetHz, int numSamples) {
@@ -864,13 +814,8 @@ void WavetableOscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer
         return;
 
     fillParameterRamps(cacheLen);
-    const BlockSettings bs = gatherBlockSettings();
+    const BlockSettings bs = gatherBlockSettings(numSamples);
     buildSyncResets(cacheLen, bs.syncMode);
-
-    if (pendingRetrigger) {
-        retriggerVoice(voices[0], bs.unisonCount);
-        pendingRetrigger = false;
-    }
 
     fillFrequencyRamp(voices[0], tunedFrequency(frequencyForMidiNote(voices[0].lastMidiNote)), cacheLen);
 
@@ -905,7 +850,7 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
         return;
 
     fillParameterRamps(cacheLen);
-    const BlockSettings bs = gatherBlockSettings();
+    const BlockSettings bs = gatherBlockSettings(numSamples);
     buildSyncResets(cacheLen, bs.syncMode);
 
     for (int v = 0; v < MAX_VOICES && v < numCh; ++v) {
@@ -920,9 +865,11 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
         }
 
         // A voice going from silent to sounding is a note-on: that is where the retrigger
-        // phase, the random-phase jitter and the unison spread get applied.
-        if (!voices[v].active || (v == 0 && pendingRetrigger)) {
-            retriggerVoice(voices[v], bs.unisonCount);
+        // phase, the random-phase jitter and the unison spread get applied. Nothing was sounding, so
+        // nothing fades out; a later note on the sounding voice restarts on its own sample in renderVoice.
+        if (!voices[v].active) {
+            restartVoice(voices[v], bs.unisonCount, /*fadeFromOld*/ false);
+            voices[v].numMidiRestarts = 0;
             voices[v].active = true;
         }
 
@@ -933,7 +880,6 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
         float* outR = (rightCh < numCh) ? buffer.getWritePointer(rightCh) : scratchRight.data();
         renderVoice(*wt, voices[v], outL, outR, numSamples, cacheLen, bs);
     }
-    pendingRetrigger = false;
 
     // Shared CV channels must not leak downstream as audio. The Audio R block sits above
     // them, so clear only the span between the two audio blocks.
@@ -956,15 +902,6 @@ void WavetableOscillatorModule::cacheModCV(const juce::AudioBuffer<float>& buffe
     }
 }
 
-void WavetableOscillatorModule::scanGateEdges(const juce::AudioBuffer<float>& buffer, bool poly, int numSamples) {
-    const int numCh = buffer.getNumChannels();
-    for (int v = 0; v < MAX_VOICES; ++v) {
-        const int ch = poly ? kGateBase + v : kJackGate;
-        const bool read = (poly || v == 0) && ch < numCh;
-        voices[v].gateEdges.scan(read ? buffer.getReadPointer(ch) : nullptr, numSamples);
-    }
-}
-
 void WavetableOscillatorModule::pushToVisualBuffer(const juce::AudioBuffer<float>& buffer, int numSamples) {
     if (auto* vb = getVisualBuffer())
         vb->pushBlock(buffer.getReadPointer(0), numSamples);
@@ -973,7 +910,7 @@ void WavetableOscillatorModule::pushToVisualBuffer(const juce::AudioBuffer<float
 const juce::String* WavetableOscillatorModule::jackLabels() {
     static const juce::String labels[kNumJacks] = {"Pitch", "Position", "Octave", "Coarse", "Fine",   "Level",
                                                    "Warp",  "Phase",    "Rand",   "Detune", "Spread", "Width",
-                                                   "Blend", "Sub",      "Pan",    "Sync",   "Gate"};
+                                                   "Blend", "Sub",      "Pan",    "Sync",   "Restart"};
     return labels;
 }
 
