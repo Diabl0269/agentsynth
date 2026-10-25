@@ -292,23 +292,15 @@ bool carriesHostOp(const juce::var& envelope) {
             for (const auto& opVar : *ops)
                 if (auto* opObj = opVar.getDynamicObject()) {
                     const juce::String name = opObj->getProperty("op").toString();
-                    if (name == "addInstrumentTrack" || name == "setTempo")
+                    if (name == "addInstrumentTrack" || name == "setTempo" || name == "setSongKey")
                         return true;
                 }
     return false;
 }
 
-TimelineOpsResult runSetTempo(const juce::String& where, juce::DynamicObject& op, const TimelineOpsHost* host,
-                              TimelineOpsHost* applyHost, juce::StringArray& parts) {
-    double bpm = 0.0;
-    if (const auto error = readSetTempoOp(op, bpm); error.isNotEmpty())
-        return fail(where + error);
-    if (host == nullptr || !host->canSetTempo())
-        return fail(where + "This build cannot change the tempo from here.");
-    if (applyHost != nullptr && !applyHost->setTempo(bpm))
-        return fail(where + "could not set the tempo.");
-    parts.add(describeSetTempo(bpm));
-    return {};
+// Turns a host op's error text ("" = ok) into a result carrying the op's position prefix.
+TimelineOpsResult hostOp(const juce::String& where, const juce::String& error) {
+    return error.isEmpty() ? TimelineOpsResult{} : fail(where + error);
 }
 
 TimelineOpsResult runAddMarker(const juce::String& where, juce::DynamicObject& op, TimelineDoc& doc,
@@ -865,13 +857,15 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
         else if (opName == "placeMidiClip")
             result = runPlaceMidiClip(where, *opObj, doc, parts, totalNotes);
         else if (opName == "setTempo")
-            result = runSetTempo(where, *opObj, host, applyHost, parts);
+            result = hostOp(where, applySetTempoOp(*opObj, host, applyHost, parts));
+        else if (opName == "setSongKey")
+            result = hostOp(where, applySetSongKeyOp(*opObj, host, applyHost, parts));
         else if (opName == "addMarker")
             result = runAddMarker(where, *opObj, doc, markers);
         else
             result = fail(index + " asks for unknown operation \"" + opName +
                           "\". The operations are \"addTrack\", \"addInstrumentTrack\", \"placeClips\", \"writeLane\", "
-                          "\"placeMidiClip\", \"setTempo\" and \"addMarker\".");
+                          "\"placeMidiClip\", \"setTempo\", \"setSongKey\" and \"addMarker\".");
 
         if (!result.ok)
             return result;
@@ -925,8 +919,8 @@ TimelineOpsResult TimelineOps::validate(const juce::var& envelope, const Timelin
 //    the written span in one editBreakpoints call.
 //  - placeMidiClip (runPlaceMidiClip) imports through the same strict path a user's own
 //    "Import MIDI…" menu item uses.
-//  - setTempo (runSetTempo) sets the transport tempo through the host, which records it in the
-//    batch's undo step; addMarker (runAddMarker) adds a named marker to the document.
+//  - setTempo / setSongKey (applySetTempoOp / applySetSongKeyOp) set the transport tempo or key through the host,
+//    which records it in the batch's undo step; addMarker (runAddMarker) adds a named marker to the document.
 TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc,
                                      const juce::AudioProcessorGraph& graph, AppUndoManager& undo,
                                      TimelineOpsHost* host) {
@@ -954,7 +948,7 @@ TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc
         if (!applied.ok)
             doc.fromVar(before);
     };
-    // validate() rejects an addInstrumentTrack or setTempo op with no host, so `host` is non-null here.
+    // validate() rejects an addInstrumentTrack, setTempo or setSongKey op with no host, so `host` is non-null here.
     const bool pushed = buildsGraph ? host->recordBatch(mutation) : undo.recordTimelineChange(doc, mutation);
 
     if (!applied.ok)

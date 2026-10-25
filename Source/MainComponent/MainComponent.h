@@ -471,7 +471,7 @@ private:
 
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                       const juce::String& trackNamePrefix, bool poly);
-    friend class MainComponentTimelineOpsHost; // calls buildInstrumentTrackBody and setTempoAsUndoStep in recordBatch
+    friend class MainComponentTimelineOpsHost; // calls buildInstrumentTrackBody, set{Tempo,SongKey}AsUndoStep
     /** Opens NO undo transaction (the caller must); on nullopt, nothing it created is left behind. */
     std::optional<synth::InstrumentTrackBuildResult>
     buildInstrumentTrackBody(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
@@ -781,8 +781,7 @@ private:
 
     void setCurrentPatchName(const juce::String& name);
     void markDocumentClean();
-    // New/Open begin a document with an empty undo stack, so Cmd+Z can never half-restore the previous
-    // one. Call after the last recorded mutation and before markDocumentClean(); never mid-undo.
+    // New/Open start with an empty undo stack (no half-restore by Cmd+Z): after the last mutation, never mid-undo.
     void startFreshUndoHistory();
     bool isRecordingActive() const;
     void maybeAutosave();
@@ -790,6 +789,7 @@ private:
     void pollTransportEdits(juce::uint32 nowMs);
     void recordTransportStep(const synth::TransportDoc& cur);
     bool setTempoAsUndoStep(double bpm, bool& changed);
+    bool setSongKeyAsUndoStep(const synth::MusicalScale& key, bool& changed);
     void applyLoadedTransport(const synth::TransportDoc& loaded);
     void notifyDocumentTitleChanged();
 

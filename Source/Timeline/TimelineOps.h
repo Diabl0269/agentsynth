@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Music/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <array>
 #include <functional>
@@ -80,12 +81,20 @@ struct TimelineOpsHost {
         juce::ignoreUnused(bpm);
         return false;
     }
+    /** True if this host can change the song key; a `setSongKey` op is rejected without one. */
+    virtual bool canSetSongKey() const { return false; }
+    /** Sets the song key (already checked: a root and one of the key scales) inside recordBatch, so the same undo step
+     * reverts it. Called only while applying, never while validating. False = the key was not changed. */
+    virtual bool setSongKey(const MusicalScale& key) {
+        juce::ignoreUnused(key);
+        return false;
+    }
 };
 
 /**
  * @brief The app-side timeline tools: discrete, validated, previewable operations a model
- *        may ask for (addTrack, addInstrumentTrack, placeClips, writeLane, placeMidiClip, setTempo, addMarker), applied
- *        as ONE undo step.
+ *        may ask for (addTrack, addInstrumentTrack, placeClips, writeLane, placeMidiClip, setTempo, setSongKey,
+ * addMarker), applied as ONE undo step.
  *
  * A **sibling** of a patch suggestion, never nested inside one — `"timelineOps"` is a distinct
  * envelope key from `"timeline"`, so a response may legitimately carry both side by side. Trust
@@ -142,8 +151,8 @@ struct TimelineOps {
      * @param graph the LIVE graph — a `writeLane` op's `(nodeUuid, paramId)` must resolve against
      *              it, and the resolved parameter's real range is what bounds the values.
      */
-    /** @param host null fails any `addInstrumentTrack` or `setTempo` op; only its presence (and canSetTempo) is read
-     * here. */
+    /** @param host null fails any `addInstrumentTrack`, `setTempo` or `setSongKey` op; only its presence (and
+     * canSetTempo/canSetSongKey) is read here. */
     static TimelineOpsResult validate(const juce::var& envelope, const TimelineDoc& doc,
                                       const juce::AudioProcessorGraph& graph, const TimelineOpsHost* host = nullptr);
 

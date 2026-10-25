@@ -64,6 +64,17 @@ bool MainComponent::setTempoAsUndoStep(double bpm, bool& changed) {
     return true;
 }
 
+// The AI's song key, recorded exactly like setTempoAsUndoStep (see there).
+bool MainComponent::setSongKeyAsUndoStep(const synth::MusicalScale& key, bool& changed) {
+    auto& transport = audioEngine.getTransport();
+    transport.setSongKey(key);
+    const synth::TransportDoc cur = transport.getDocumentState();
+    changed = cur != committedTransport_;
+    recordTransportStep(cur);
+    pendingTransport_ = cur;
+    return true;
+}
+
 // Opening a project applies its transport and rebases the baseline in the same step, so the load itself
 // is never seen as an edit (it must leave the document clean).
 void MainComponent::applyLoadedTransport(const synth::TransportDoc& loaded) {
