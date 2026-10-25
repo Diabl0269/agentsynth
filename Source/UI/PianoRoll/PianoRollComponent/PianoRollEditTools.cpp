@@ -329,6 +329,12 @@ void PianoRollComponent::performSplit(synth::NoteId id, juce::Point<int> pos) {
         right.velocity = original.velocity;
         right.channel = original.channel;
         right.muted = original.muted;
+        right.chance = original.chance;
+        right.repeat = original.repeat;
+        right.flam = original.flam;
+        right.nudge = original.nudge;
+        right.condHit = original.condHit;
+        right.condOf = original.condOf;
         doc_->addNote(clipId_, right);
     };
     if (undoManager_)

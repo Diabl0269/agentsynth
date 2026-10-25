@@ -120,15 +120,15 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
     : context_(std::move(context)) {
     setTitle("Ideas");
     setComponentID("drumIdeasPanel");
-    for (auto* label : {&title_, &startersLabel_, &varyLabel_, &subtleLabel_, &wildLabel_, &randomizeLabel_,
-                        &sparseLabel_, &busyLabel_}) {
+    for (auto* label : {&title_, &startersLabel_, &fillsLabel_, &varyLabel_, &subtleLabel_, &wildLabel_,
+                        &randomizeLabel_, &sparseLabel_, &busyLabel_}) {
         label->setInterceptsMouseClicks(false, false);
         label->setWantsKeyboardFocus(false);
         label->setFont(theme::AppLookAndFeel::uiFont(kLabelFont));
         addAndMakeVisible(*label);
     }
     title_.setFont(theme::AppLookAndFeel::uiSemiBoldFont(13.0f));
-    for (auto* label : {&startersLabel_, &varyLabel_, &randomizeLabel_})
+    for (auto* label : {&startersLabel_, &fillsLabel_, &varyLabel_, &randomizeLabel_})
         label->setFont(theme::AppLookAndFeel::uiSemiBoldFont(11.5f));
     wildLabel_.setJustificationType(juce::Justification::centredRight);
     busyLabel_.setJustificationType(juce::Justification::centredRight);
@@ -146,6 +146,26 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
         };
         addAndMakeVisible(*button);
     }
+
+    for (const auto fill : {drumideas::Fill::SnareRoll, drumideas::Fill::TomFill}) {
+        auto& button = fill == drumideas::Fill::SnareRoll ? snareRoll_ : tomFill_;
+        const bool roll = fill == drumideas::Fill::SnareRoll;
+        button.setTitle(drumideas::fillName(fill));
+        button.setTooltip(juce::String("Replace the last ") + (roll ? "beat" : "two beats") +
+                          " of the last bar (kicks stay) with " +
+                          (roll ? "a rising snare roll" : "a tom fill, high to low") +
+                          ". One undo step. Turn on Every 4th bar to fill bars 4, 8, 12 and so on");
+        button.onClick = [this, fill] {
+            if (onFill)
+                onFill(fill, everyFourth_.getToggleState());
+        };
+        addAndMakeVisible(button);
+    }
+    everyFourth_.setTitle("Every 4th bar");
+    everyFourth_.setTooltip("Fill bars 4, 8, 12 and so on instead of only the last bar (the last bar when the clip is "
+                            "shorter than 4 bars)");
+    setTogglePillStyle(everyFourth_, true);
+    addAndMakeVisible(everyFourth_);
 
     amount_.setRange(0.0, 100.0, 1.0);
     amount_.setValue(40.0, juce::dontSendNotification);
@@ -253,7 +273,7 @@ void DrumIdeasPanel::playTake(int index) {
 void DrumIdeasPanel::applyColours() {
     const auto& c = theme::themeOf(*this).colors;
     title_.setColour(juce::Label::textColourId, c.textPrimary);
-    for (auto* label : {&startersLabel_, &varyLabel_, &randomizeLabel_})
+    for (auto* label : {&startersLabel_, &fillsLabel_, &varyLabel_, &randomizeLabel_})
         label->setColour(juce::Label::textColourId, c.textPrimary);
     for (auto* label : {&subtleLabel_, &wildLabel_, &sparseLabel_, &busyLabel_})
         label->setColour(juce::Label::textColourId, c.textMuted);
@@ -269,7 +289,7 @@ void DrumIdeasPanel::paint(juce::Graphics& g) {
     const auto& c = theme::themeOf(*this).colors;
     g.fillAll(c.surfaceHi);
     g.setColour(c.border);
-    for (const int y : {dividerY_[0], dividerY_[1]})
+    for (const int y : {dividerY_[0], dividerY_[1], dividerY_[2]})
         if (y > 0)
             g.drawHorizontalLine(y, static_cast<float>(kPad), static_cast<float>(getWidth() - kPad));
 }
@@ -291,6 +311,18 @@ void DrumIdeasPanel::resized() {
     }
     area.removeFromTop(kGap);
     dividerY_[0] = area.getY() - kGap;
+
+    fillsLabel_.setBounds(area.removeFromTop(kLabelHeight));
+    auto fillsRow = area.removeFromTop(kRowHeight);
+    snareRoll_.setBounds(fillsRow.removeFromLeft(buttonWidth));
+    fillsRow.removeFromLeft(kGap);
+    tomFill_.setBounds(fillsRow.removeFromLeft(buttonWidth));
+    fillsRow.removeFromLeft(kGap);
+    everyFourth_.setBounds(
+        fillsRow.removeFromLeft(theme::AppLookAndFeel::togglePillWidth(everyFourth_.getButtonText())));
+    area.removeFromTop(kGap);
+    area.removeFromTop(kGap);
+    dividerY_[2] = area.getY() - kGap;
 
     varyLabel_.setBounds(area.removeFromTop(kLabelHeight));
     auto amountRow = area.removeFromTop(kRowHeight);

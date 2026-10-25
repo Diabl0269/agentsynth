@@ -7,6 +7,8 @@ target_sources(Core PRIVATE
     Source/Timeline/TimelineOps.h
     Source/Timeline/TimelineOpsLaneRepair.cpp
     Source/Timeline/TimelineOpsLaneRepair.h
+    Source/Timeline/TimelineOpsNotes.cpp
+    Source/Timeline/TimelineOpsNotes.h
     Source/Timeline/TimelineOpsTempoMarkers.cpp
     Source/Timeline/TimelineOpsTempoMarkers.h
 )

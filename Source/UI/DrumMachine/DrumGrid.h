@@ -36,12 +36,28 @@ struct CellHits {
     std::vector<synth::NoteId> ids;
     int velocity = 0;   ///< the loudest of them; 0 when the cell is empty
     bool muted = false; ///< every one of them carries the note-level mute from the piano roll
+    /** The per-hit settings of the cell's FIRST note (the lanes and marks show that one and write them to every note).
+     */
+    int chance = 100;
+    int repeat = 1;
+    bool flam = false;
+    double nudge = 0.0;
+    int condHit = 1;
+    int condOf = 1;
 
     bool empty() const noexcept { return ids.empty(); }
     bool accent() const noexcept { return isAccent(velocity); }
 };
 
 inline void addNoteToHits(CellHits& hits, const synth::MidiNote& note) {
+    if (hits.ids.empty()) {
+        hits.chance = note.chance;
+        hits.repeat = note.repeat;
+        hits.flam = note.flam;
+        hits.nudge = note.nudge;
+        hits.condHit = note.condHit;
+        hits.condOf = note.condOf;
+    }
     hits.muted = hits.ids.empty() ? note.muted : hits.muted && note.muted;
     hits.ids.push_back(note.id);
     hits.velocity = std::max(hits.velocity, note.velocity);

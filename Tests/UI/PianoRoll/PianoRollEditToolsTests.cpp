@@ -78,6 +78,32 @@ TEST(PianoRollToolTest, SplitCutsANoteInTwoAndTheRightHalfInheritsEveryField) {
     EXPECT_FALSE(f.undo.canUndo()) << "resize + add were ONE undo step";
 }
 
+TEST(PianoRollToolTest, SplitRightHalfInheritsThePerHitDrumSettings) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 2.0));
+    ASSERT_TRUE(f.doc.setNoteChance(id, 40));
+    ASSERT_TRUE(f.doc.setNoteRepeat(id, 3, true));
+    ASSERT_TRUE(f.doc.setNoteNudge(id, -0.25));
+    ASSERT_TRUE(f.doc.setNoteCondition(id, 2, 4));
+
+    f.roll.setActiveTool(EditTool::Split);
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 2.0, 60)));
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 2u);
+    const auto& right = clip->notes[1];
+    EXPECT_EQ(right.chance, 40);
+    EXPECT_EQ(right.repeat, 3);
+    EXPECT_TRUE(right.flam);
+    EXPECT_DOUBLE_EQ(right.nudge, -0.25);
+    EXPECT_EQ(right.condHit, 2);
+    EXPECT_EQ(right.condOf, 4);
+}
+
 TEST(PianoRollToolTest, SplitTooCloseToAnEdgeIsANoOpWithNoUndoStep) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");

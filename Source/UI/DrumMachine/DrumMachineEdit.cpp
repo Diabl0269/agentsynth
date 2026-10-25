@@ -47,6 +47,13 @@ void DrumMachineComponent::rebuildCells(bool animate) {
             beginHitMotion(key, false, hits.velocity);
 }
 
+// A cell past its drum's end (a ghost repeat) takes no edits; notes stored there stay hidden until the drum is
+// lengthened.
+bool DrumMachineComponent::isPastRowEnd(int pitch, int step) const {
+    const int length = getRowLength(pitch);
+    return length > 0 && step >= length;
+}
+
 void DrumMachineComponent::audition(int pitch, int velocity) {
     if (!onAuditionNote)
         return;
@@ -57,7 +64,7 @@ void DrumMachineComponent::audition(int pitch, int velocity) {
 
 // A click on an empty cell: one note at the cell's start, one step long.
 void DrumMachineComponent::addHit(int pitch, int step, int velocity) {
-    if (clip() == nullptr || step < 0)
+    if (clip() == nullptr || step < 0 || isPastRowEnd(pitch, step))
         return;
     synth::MidiNote note;
     note.startBeat = static_cast<double>(step) * getStepBeats();
@@ -71,6 +78,8 @@ void DrumMachineComponent::addHit(int pitch, int step, int velocity) {
 }
 
 void DrumMachineComponent::removeHits(int pitch, int step) {
+    if (isPastRowEnd(pitch, step))
+        return;
     const auto it = cells_.find(drumgrid::cellKey(pitch, step));
     if (it == cells_.end())
         return;
@@ -83,6 +92,8 @@ void DrumMachineComponent::removeHits(int pitch, int step) {
 }
 
 void DrumMachineComponent::setCellVelocity(int pitch, int step, int velocity) {
+    if (isPastRowEnd(pitch, step))
+        return;
     const auto it = cells_.find(drumgrid::cellKey(pitch, step));
     if (it == cells_.end())
         return;

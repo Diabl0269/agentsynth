@@ -56,12 +56,35 @@ Nothing here trusts that schema: an envelope is re-validated locally whatever pr
         refused there); `envelope` (optional object `{
     id ?, params ?}`, Oscillator/Wavetable only - see [the track's own envelope](#the-tracks-own-envelope)). Needs a host — see [below](#addinstrumenttrack). | No `bindingUuid`, no plugin identity, no default-track-preset lookup (the preview must describe what gets built). Never binds anything but the `Track In` it creates. |
 | `placeClips` | Places clips, and their clip-relative notes, on a MIDI track targeted by exact name or `{
-    "index" : N}`. | A name matching no track, or more than one, rejects the whole batch rather than guessing. |
+    "index" : N}`. | A name matching no track, or more than one, rejects the whole batch rather than guessing. A note is a closed object: `startBeat`, `lengthBeats`, `pitch`, `velocity`, `channel` and the per-hit drum settings below; any other key rejects. |
 | `writeLane` | Find-or-creates the lane for `(nodeUuid, paramId)` on the document's Automation track, creating that track if there is none (it has no graph, so it cannot pick the owning track itself; after the batch the host's `assignLanesToOwners` moves each lane to the track that plays its module, inside the same undo step, so a lane only stays in Unassigned when no single track plays its module), then REPLACES every point in the written span (min to max beat of the payload, inclusive) in one `editBreakpoints` call. | Never sets a record mode; never widens a range. |
 | `placeMidiClip` | Decodes `midBase64` and parses it with `MidiClipFile::importFromStream`, placing one clip per non-empty imported SMF track on the target MIDI track at `startBeat`. Clip length is `ceil` of its last note's end, floored at 1 beat, reusing `MidiClipFile::importIntoTrack`. | No paths, no plugin ids, no code — a `.mid` blob can only ever decode to notes, which is why this is the one op that accepts an opaque binary payload at all. |
 | `setTempo` | Sets the project tempo to `bpm` (a number from 40 to 220, narrower than the transport's own clamp). The tempo lives on the transport, not in `TimelineDoc`, so it goes through the host (`TimelineOpsHost::setTempo`, with `canSetTempo()` to say a host can): a batch with this op runs inside `host->recordBatch`, and `MainComponentTimelineOpsHost` records the change as a transport undo step (`MainComponent::setTempoAsUndoStep`) inside the same undo group, so one Cmd+Z restores the tempo with the rest. The last `setTempo` in a batch wins. | Rejected with no host, or a host that cannot set it ("This build cannot change the tempo from here."). Never changes the time signature or loop. Validation never sets the tempo, only apply does. |
 | `setSongKey` | Sets the project's song key from `root` (a note name: C, C#, Db, D, D#, Eb, E, F, F#, Gb, G, G#, Ab, A, A#, Bb, B) and `scale` (one of the names in `keyScaleGroups()`: Major, Natural Minor, the five modes, Major/Minor Pentatonic, Blues, Harmonic/Melodic Minor, Phrygian Dominant, Whole Tone; Chromatic is not a key). Built as `makeScale(root, scalePresetIndex(scale))`. Like the tempo it lives on the transport, so it goes through the host (`TimelineOpsHost::setSongKey`, with `canSetSongKey()`) and `MainComponentTimelineOpsHost` records it as a transport undo step (`MainComponent::setSongKeyAsUndoStep`) inside the batch's undo group: one Cmd+Z restores the previous key with the rest. The last `setSongKey` in a batch wins. | Closed object (only `op`, `root`, `scale`). Rejected with no host, or a host that cannot set it ("This build cannot change the song key from here."). Validation never sets the key, only apply does. |
 | `addMarker` | Adds a marker `name` (1 to 40 characters) at `beat` (0 to `kMaxPpqUntrusted`) through `TimelineDoc::addMarker`; the preview folds all of a batch's markers into one phrase (`adds 3 markers ("Intro" at beat 0, ...)`, first four named). | No colour field (the doc's default applies). Rejects past `TimelineDoc::kMaxMarkers`. |
+
+## Note keys
+
+A `placeClips` note accepts these keys, all optional (`TimelineOpsNotes.cpp`, `readNoteOp`). The drum-hit fields
+use the Poly Sequencer's names and ranges and play as described in
+[drum machine](../timeline/drum-machine.md#per-hit-settings-and-per-drum-length-in-playback).
+
+| Key | Value | Default |
+| --- | --- | --- |
+| `startBeat` | number, clip-relative | 0 |
+| `lengthBeats` | number above 0 | 1 |
+| `pitch` | int 0 to 127 | 60 |
+| `velocity` | int 1 to 127 | 100 |
+| `channel` | int 1 to 16 | 1 |
+| `chance` | int 0 to 100, the percent chance the hit plays on a pass | 100 |
+| `repeat` | int 1 to 8, hits spread over one grid step | 1 |
+| `flam` | true or false, a softer grace hit just before the hit | false |
+| `nudge` | number -0.5 to 0.5, a fraction of the clip's grid step (negative = early) | 0 |
+| `condition` | text `"h/o"`, 1 <= h <= o <= 8, plays on pass h of every o passes | `"1/1"` |
+
+An out-of-range or mistyped value rejects the whole batch (never clamped), and the unknown-key error lists every key
+above. The `timeline.generate` request pins `"promptVersion": 2`, the server prompt that teaches these fields; a
+request without a version keeps getting version 1.
 
 ## The local path
 

@@ -28,6 +28,19 @@ public:
     }
 
     float alpha = 1.0f;
+    std::function<void(juce::Point<int>)> onContextMenu;
+
+    // A right-click opens the row's menu instead of pressing the button (which would select the row).
+    void mouseDown(const juce::MouseEvent& e) override {
+        if (!e.mods.isPopupMenu())
+            juce::Button::mouseDown(e);
+        else if (onContextMenu)
+            onContextMenu(e.getScreenPosition());
+    }
+    void mouseUp(const juce::MouseEvent& e) override {
+        if (!e.mods.isPopupMenu())
+            juce::Button::mouseUp(e);
+    }
 
     void paintButton(juce::Graphics& g, bool, bool) override {
         const auto& theme = synth::theme::themeOf(*this);
@@ -52,7 +65,10 @@ DrumRowLabels::Controls& DrumRowLabels::controlsFor(const DrumLane& lane) {
     const int pitch = lane.pitch;
     controls.name->setComponentID("drumRowName" + juce::String(pitch));
     controls.name->setTitle(lane.name + " row");
-    controls.name->setTooltip("Select " + lane.name + ": the lanes under the grid edit this drum's hits");
+    static_cast<NameButton&>(*controls.name).onContextMenu = [this, pitch](juce::Point<int> p) {
+        if (onRowContextMenu)
+            onRowContextMenu(pitch, p);
+    };
     controls.name->onClick = [this, pitch] {
         if (onRowClicked)
             onRowClicked(pitch);
@@ -87,6 +103,10 @@ void DrumRowLabels::setRows(std::vector<Row> rows) {
         controls.mute->setToggleState(row.muted, juce::dontSendNotification);
         controls.solo->setToggleState(row.soloed, juce::dontSendNotification);
         controls.name->setToggleState(row.selected, juce::dontSendNotification);
+        controls.name->setTitle(row.lane.name + " row" + row.detail);
+        controls.name->setTooltip("Select " + row.lane.name +
+                                  ": the lanes under the grid edit this drum's hits. Right-click or Shift+F10 for "
+                                  "its length and swing");
         static_cast<NameButton&>(*controls.name).alpha = (row.dimmed ? kDimmedAlpha : 1.0f) * row.alpha;
     }
     // A row that is gone takes its buttons with it, so the Tab order never holds a hidden drum.

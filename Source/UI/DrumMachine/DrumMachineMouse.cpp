@@ -11,8 +11,8 @@ namespace synth::ui {
 
 int DrumMachineComponent::getCellVelocity(int row, int step) const {
     const int pitch = getLanePitch(row);
-    if (pitch < 0)
-        return 0;
+    if (pitch < 0 || ghostSourceStep(row, step) >= 0)
+        return 0; // a cell past the drum's end holds no hit of its own, whatever notes are stored there
     if (gesture_.kind == Gesture::Kind::Velocity && gesture_.cell == Cell{row, step})
         return gesture_.previewVelocity;
     const auto it = cells_.find(drumgrid::cellKey(pitch, step));
@@ -23,12 +23,18 @@ void DrumMachineComponent::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
     if (e.mods.isPopupMenu() || !clipId_.isValid())
         return;
+    if (const int edgeRow = edgeHandleRowAt(e.getPosition()); edgeRow >= 0) {
+        beginEdgeDrag(edgeRow);
+        repaint();
+        return;
+    }
     const auto cell = cellAt(e.getPosition());
     if (!cell)
         return;
     focus_ = *cell;
     const int pitch = getLanePitch(cell->row);
-    if (pitch < 0)
+    // A click past the drum's end is ignored: the cell repeats the pattern and has no hit of its own to add or remove.
+    if (pitch < 0 || ghostSourceStep(cell->row, cell->step) >= 0)
         return;
     const bool occupied = cells_.count(drumgrid::cellKey(pitch, cell->step)) > 0;
     if (!occupied) {
@@ -49,6 +55,10 @@ void DrumMachineComponent::mouseDown(const juce::MouseEvent& e) {
 void DrumMachineComponent::mouseDrag(const juce::MouseEvent& e) {
     if (gesture_.kind == Gesture::Kind::None)
         return;
+    if (gesture_.kind == Gesture::Kind::EdgeDrag) {
+        dragEdgeTo(e.position.x);
+        return;
+    }
     const int dy = gesture_.startY - e.getPosition().y; // up is louder
     if (gesture_.kind == Gesture::Kind::PendingHit) {
         if (std::abs(dy) < kVelocityDragThresholdPx)
@@ -71,6 +81,15 @@ void DrumMachineComponent::endGesture(bool commit) {
     gesture_ = {};
     if (gesture.kind == Gesture::Kind::None)
         return;
+    if (gesture.kind == Gesture::Kind::EdgeDrag) {
+        // One undo step with exactly the length the drag showed; the preview goes after the commit so nothing flickers.
+        if (commit && gesture.previewLength != gesture.startLength)
+            setRowLength(gesture.pitch, gesture.previewLength);
+        setRowPreview(gesture.pitch, std::nullopt);
+        updateEdgeHover(getMouseXYRelative());
+        repaint();
+        return;
+    }
     if (!commit) {
         repaint();
         return;

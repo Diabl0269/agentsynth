@@ -49,6 +49,12 @@ std::vector<PianoRollComponent::ClipboardNote> PianoRollComponent::captureSelect
         entry.velocity = note.velocity;
         entry.channel = note.channel;
         entry.muted = note.muted;
+        entry.chance = note.chance;
+        entry.repeat = note.repeat;
+        entry.flam = note.flam;
+        entry.nudge = note.nudge;
+        entry.condHit = note.condHit;
+        entry.condOf = note.condOf;
         entries.push_back(entry);
     }
 
@@ -93,6 +99,12 @@ bool PianoRollComponent::buildPastedNotes(const std::vector<ClipboardNote>& entr
         note.velocity = entry.velocity;
         note.channel = entry.channel;
         note.muted = entry.muted;
+        note.chance = entry.chance;
+        note.repeat = entry.repeat;
+        note.flam = entry.flam;
+        note.nudge = entry.nudge;
+        note.condHit = entry.condHit;
+        note.condOf = entry.condOf;
         out.push_back(note);
         placedAny = true;
     }

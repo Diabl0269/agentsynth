@@ -66,14 +66,14 @@ private:
 
 /**
  * The Ideas popover of the drum machine: starters by style, a Vary amount with three takes to hear and pick, and a
- * Randomize with a density and "Keep kick and snare". It lives in a juce::CallOutBox grown out of the Ideas button and
- * stays open between results. It holds no clip: the owner applies each result as one undo step. Esc closes it.
- * docs/timeline/drum-machine.md#ideas.
+ * Randomize with a density and "Keep kick and snare", and Fills (a snare roll or tom fill at the end of the last bar,
+ * or of every 4th bar). It lives in a juce::CallOutBox grown out of the Ideas button and stays open between results. It
+ * holds no clip: the owner applies each result as one undo step. Esc closes it. docs/timeline/drum-machine.md#ideas.
  */
 class DrumIdeasPanel : public juce::Component {
 public:
     static constexpr int kWidth = 452;
-    static constexpr int kHeight = 382;
+    static constexpr int kHeight = 446;
     static constexpr int kTakes = 3;
 
     explicit DrumIdeasPanel(std::function<DrumIdeasContext()> context);
@@ -81,6 +81,8 @@ public:
 
     /** A style was chosen: fill the clip with its starter. */
     std::function<void(drumideas::Style)> onStarter;
+    /** A fill button was pressed; the bool is the "Every 4th bar" toggle. */
+    std::function<void(drumideas::Fill, bool everyFourthBar)> onFill;
     /** Randomize was pressed. */
     std::function<void(double density, bool keepKickAndSnare, int seed)> onRandomize;
     /** A take was picked: `replace` swaps the clip's notes, otherwise the owner adds a clip after it. */
@@ -97,6 +99,9 @@ public:
     }
 
     juce::TextButton& getStarterButton(drumideas::Style style) { return *starters_[(size_t)style]; }
+    juce::TextButton& getSnareRollButton() noexcept { return snareRoll_; }
+    juce::TextButton& getTomFillButton() noexcept { return tomFill_; }
+    juce::ToggleButton& getEveryFourthToggle() noexcept { return everyFourth_; }
     juce::Slider& getAmountSlider() noexcept { return amount_; }
     juce::TextButton& getMakeTakesButton() noexcept { return makeTakes_; }
     DrumMiniGrid& getTakeGrid(int index) noexcept { return *takeGrids_[(size_t)index]; }
@@ -126,6 +131,7 @@ private:
     std::array<std::unique_ptr<juce::TextButton>, kTakes> picks_;
     juce::Label title_{"title", "Ideas"};
     juce::Label startersLabel_{"startersLabel", "Starters by style"};
+    juce::Label fillsLabel_{"fillsLabel", "Fills"};
     juce::Label varyLabel_{"varyLabel", "Vary"};
     juce::Label subtleLabel_{"subtle", "Subtle"};
     juce::Label wildLabel_{"wild", "Wild"};
@@ -133,6 +139,9 @@ private:
     juce::Label sparseLabel_{"sparse", "Sparse"};
     juce::Label busyLabel_{"busy", "Busy"};
     juce::Slider amount_{juce::Slider::LinearHorizontal, juce::Slider::NoTextBox};
+    juce::TextButton snareRoll_{"Snare roll"};
+    juce::TextButton tomFill_{"Tom fill"};
+    juce::ToggleButton everyFourth_{"Every 4th bar"};
     juce::TextButton makeTakes_{"Make 3 takes"};
     juce::ToggleButton replace_{"Replace this clip"};
     juce::Slider density_{juce::Slider::LinearHorizontal, juce::Slider::NoTextBox};
@@ -145,7 +154,7 @@ private:
     bool seeded_ = false;
     bool closedNotified_ = false;
     int playingTake_ = -1;
-    std::array<int, 2> dividerY_{0, 0};
+    std::array<int, 3> dividerY_{0, 0, 0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrumIdeasPanel)
 };

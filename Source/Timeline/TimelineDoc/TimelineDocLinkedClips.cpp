@@ -63,6 +63,8 @@ void TimelineDoc::syncLinkedClips(const Clip& source) {
             clip.lengthBeats = source.lengthBeats;
             clip.stepsPerBar = source.stepsPerBar;
             clip.swing = source.swing;
+            clip.humanise = source.humanise;
+            clip.drumRows = source.drumRows;
             clip.mutedPitches = source.mutedPitches;
             clip.soloPitches = source.soloPitches;
             clip.notes.clear();
