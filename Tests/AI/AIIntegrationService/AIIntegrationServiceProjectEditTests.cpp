@@ -8,6 +8,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/ModuleBase.h"
+#include "Music/SongKey.h"
 #include "PlanFakeHost.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 
@@ -489,12 +490,12 @@ TEST_F(AIIntegrationServiceProjectEditTest, HostedRequestIsProjectGenerateWithTh
         EXPECT_EQ(juce::JSON::toString(body[key]), juce::JSON::toString(arrange[key])) << key;
     EXPECT_EQ(juce::JSON::toString(service->buildProjectRequestBody("a wobbly bass")), juce::JSON::toString(body));
     EXPECT_EQ((int)arrange["promptVersion"], 2) << "the timeline.generate prompt that teaches the drum-hit note fields";
-    EXPECT_EQ((int)body["promptVersion"], 7) << "the server prompt that writes a sequencer's pattern as its state";
+    EXPECT_EQ((int)body["promptVersion"], 8) << "the server prompt that knows the song key";
 
     service->setProjectPromptVersion(3); // the eval harness measuring a newer server prompt
     EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 3);
     service->setProjectPromptVersion(0);
-    EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 7) << "0 restores the default";
+    EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 8) << "0 restores the default";
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, LocalRequestComposesTheSameSectionsAndOffersTheWidenedSchema) {
@@ -541,6 +542,29 @@ TEST_F(AIIntegrationServiceProjectEditTest, LocalRequestComposesTheSameSectionsA
         "string");
     EXPECT_FALSE(modulationItem.getProperty("required", {}).getArray()->contains("destPort"));
     EXPECT_FALSE(modulationItem.getProperty("properties", {}).getProperty("destParam", {}).hasProperty("anyOf"));
+}
+
+TEST_F(AIIntegrationServiceProjectEditTest, SongKeyIsInTheBodyAndTheLocalMessageOnlyWhenSet) {
+    doc.addTrack(TrackKind::Midi, "Melody");
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    auto providerPtr = std::make_unique<PlanCapturingProvider>();
+    providerPtr->hosted = false;
+    auto* provider = providerPtr.get();
+    service->setProvider(std::move(providerPtr));
+
+    EXPECT_FALSE(service->buildProjectRequestBody("x").hasProperty("songKey"));
+    service->sendProjectMessage("x", {});
+    EXPECT_FALSE(provider->lastConversation.back().content.contains("Song key:"));
+
+    transport.setSongKey(makeScale(2, scalePresetIndex("Dorian")));
+    EXPECT_EQ(service->buildProjectRequestBody("x")["songKey"].toString(), "D Dorian (D E F G A B C)");
+    service->sendProjectMessage("y", {});
+    const juce::String content = provider->lastConversation.back().content;
+    const int arrangement = content.indexOf("Arrangement context:");
+    const int key = content.indexOf("Song key: D Dorian (D E F G A B C)\n\nProject tracks:");
+    EXPECT_GE(arrangement, 0) << content;
+    EXPECT_GT(key, arrangement) << content;
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, ProjectRequestBodyCarriesTracksTargetsAndContextAsStructuredFields) {

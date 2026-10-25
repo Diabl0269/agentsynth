@@ -29,11 +29,11 @@ MainComponentTimelineOpsHost::addInstrumentTrack(const juce::String& name, const
 }
 
 // ONE undo step over graph, timeline and macros -- the transaction addInstrumentTrack's own menu
-// flow opens -- then the reconcile every graph-changing track flow runs afterwards. The tempo is not part
-// of those snapshots (it lives on the transport), so a setTempo op records its own transport step; the
-// group folds that step and the batch's into one Cmd+Z.
+// flow opens -- then the reconcile every graph-changing track flow runs afterwards. The tempo and song key are
+// not part of those snapshots (they live on the transport), so a setTempo or setSongKey op records its own
+// transport step; the group folds that step and the batch's into one Cmd+Z.
 bool MainComponentTimelineOpsHost::recordBatch(const std::function<void()>& mutation) {
-    tempoRecorded_ = false;
+    transportRecorded_ = false;
     bool pushed = false;
     {
         const AppUndoManager::ScopedUndoGroup group(owner_.undoManager);
@@ -41,7 +41,7 @@ bool MainComponentTimelineOpsHost::recordBatch(const std::function<void()>& muta
                                                                       owner_.graphEditor.getMacros(), mutation);
     }
     owner_.reconcileTimelineAfterGraphChange();
-    return pushed || tempoRecorded_;
+    return pushed || transportRecorded_;
 }
 
 // Inside recordBatch: applies the tempo and records it as a transport undo step (joined to the batch's by the
@@ -50,7 +50,16 @@ bool MainComponentTimelineOpsHost::setTempo(double bpm) {
     bool changed = false;
     if (!owner_.setTempoAsUndoStep(bpm, changed))
         return false;
-    tempoRecorded_ = tempoRecorded_ || changed;
+    transportRecorded_ = transportRecorded_ || changed;
+    return true;
+}
+
+// Same for the song key.
+bool MainComponentTimelineOpsHost::setSongKey(const synth::MusicalScale& key) {
+    bool changed = false;
+    if (!owner_.setSongKeyAsUndoStep(key, changed))
+        return false;
+    transportRecorded_ = transportRecorded_ || changed;
     return true;
 }
 

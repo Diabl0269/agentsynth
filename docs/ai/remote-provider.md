@@ -102,7 +102,7 @@ optional) and absorbs the transport difference so it is never a behaviour differ
 
 - **Hosted provider** — `sendCapabilityRequest("project.generate", buildProjectRequestBody(text))`:
   the `timeline.generate` fields below plus `currentPatch`, the same stripped graph JSON the patch
-  path sends, as an object and omitted when the graph is empty. The hosted service has no free-text
+  path sends, as an object and omitted when the graph is empty, and `songKey` (e.g. `"D Dorian (D E F G A B C)"`) when the project has a song key. The hosted service has no free-text
   chat, so on a hosted provider every message is an edit request.
 - **Local provider** — `sendPrompt()` with the SAME fields composed into the outgoing message
   (`buildProjectAugmentedContent()`, in `project.generate`'s own section order: the patch or

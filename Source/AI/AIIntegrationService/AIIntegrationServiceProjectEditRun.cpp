@@ -360,6 +360,8 @@ public:
     }
     bool canSetTempo() const override { return inner_.canSetTempo(); }
     bool setTempo(double bpm) override { return inner_.setTempo(bpm); }
+    bool canSetSongKey() const override { return inner_.canSetSongKey(); }
+    bool setSongKey(const MusicalScale& key) override { return inner_.setSongKey(key); }
 
     std::vector<InstrumentTrackBuildResult> results;
 
@@ -720,6 +722,12 @@ StandInHost::addInstrumentTrackWithSound(const juce::String& name, const juce::S
 // A preview validates a setTempo op but never applies it, so there is nothing to set.
 bool StandInHost::setTempo(double bpm) {
     juce::ignoreUnused(bpm);
+    return true;
+}
+
+// Likewise for a setSongKey op.
+bool StandInHost::setSongKey(const MusicalScale& key) {
+    juce::ignoreUnused(key);
     return true;
 }
 

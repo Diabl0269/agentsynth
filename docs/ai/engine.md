@@ -58,9 +58,9 @@ One more way to ask, one intent over two transports: `sendProjectMessage` (hoste
 `project.generate`, answered with an [edit plan](timeline-ops.md#one-edit-plan): a patch plus a
 sibling `timelineOps` list). Its body (`buildProjectRequestBody`) is the structured fields
 (`buildArrangeRequestBody`: prompt, arrangement, targets, tracks) plus `currentPatch`, the same stripped graph JSON the patch path sends, as an object and
-omitted when the graph is empty. On a local provider the same fields are composed into the message
+omitted when the graph is empty, plus `songKey` when the project has a song key. On a local provider the same fields are composed into the message
 in `project.generate`'s own section order (the patch or "Current patch is empty.", the arrangement,
-the tracks, the targets, the prompt), with `getPatchSchemaWithTimelineOps()` as the response
+the song key when set, the tracks, the targets, the prompt), with `getPatchSchemaWithTimelineOps()` as the response
 contract. A plan is checked and applied through `previewProjectEdit` / `applyProjectEdit`; the chat
 sends every edit request through `sendProjectMessage` once a timeline is wired in. With no host installed
 (a plugin build or a test), `applyProjectEdit` still applies a plan that carries no timeline ops:

@@ -28,8 +28,10 @@ public:
     void assignLanesToOwners() override;
     bool canSetTempo() const override { return true; }
     bool setTempo(double bpm) override;
+    bool canSetSongKey() const override { return true; }
+    bool setSongKey(const synth::MusicalScale& key) override;
 
 private:
     MainComponent& owner_;
-    bool tempoRecorded_ = false; // a setTempo in the running batch pushed an undo step
+    bool transportRecorded_ = false; // a setTempo or setSongKey in the running batch pushed an undo step
 };

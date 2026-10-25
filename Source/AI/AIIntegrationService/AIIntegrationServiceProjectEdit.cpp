@@ -8,6 +8,7 @@
 #include "AI/PatchEval.h"
 #include "AIIntegrationService.h"
 #include "AIIntegrationServiceInternal.h"
+#include "Music/SongKey.h"
 
 #include <algorithm>
 
@@ -217,18 +218,23 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // app build asks for it: an app may only pin a version once the deployed service serves it.
 // Prompt versions: 2 envelope and instrumentParams, 3 whole-track rules, 4 song layout, 5 tempo and
 // section markers, 6 drums on one Drum Kit track instead of one Oscillator track per drum, 7 a sequencer's
-// pattern as the node's "state" (steps, velocity, chance) instead of eight step parameters.
-static constexpr int kProjectGeneratePromptVersion = 7;
+// pattern as the node's "state" (steps, velocity, chance) instead of eight step parameters, 8 the song key (a
+// songKey context line and the setSongKey op).
+static constexpr int kProjectGeneratePromptVersion = 8;
 
 juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text) const {
     juce::var body = buildArrangeRequestBody(text);
     const juce::var patch = buildStrippedPatchJson();
     if (auto* nodes = patch.getProperty("nodes", {}).getArray(); nodes != nullptr && !nodes->isEmpty())
         body.getDynamicObject()->setProperty("currentPatch", patch);
+    // The project's song key, when it has one: "D Dorian (D E F G A B C)". Absent without a key.
+    if (transportService != nullptr)
+        if (const auto key = transportService->getDocumentState().songKey; key.has_value())
+            body.getDynamicObject()->setProperty("songKey", keyDisplayName(*key) + " (" + keyNoteNames(*key) + ")");
     // Pins the server prompt this build understands: version 2 teaches addInstrumentTrack's "envelope" and
     // "instrumentParams", 3 adds the whole-track rules, 4 the song layout the server expands into ordinary
-    // clips, 5 the tempo and markers (setTempo and addMarker ops), 6 the Drum Kit track and 7 a sequencer's
-    // pattern state. A build that does not understand those
+    // clips, 5 the tempo and markers (setTempo and addMarker ops), 6 the Drum Kit track, 7 a sequencer's
+    // pattern state and 8 the song key ("songKey" below, and the setSongKey op). A build that does not understand those
     // fields sends no version and keeps getting version 1, so a server deploy can never hand an older app a
     // field it would reject.
     body.getDynamicObject()->setProperty("promptVersion", projectPromptVersionOverride > 0
@@ -240,7 +246,7 @@ juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text
 // The local transport's message, composed from the SAME body the hosted request sends and in the
 // SAME section order project.generate's buildProjectUserMessage uses (synth-platform
 // project-generate/capability.ts): the patch (or "Current patch is empty."), the arrangement when
-// non-empty, the tracks, the targets, the prompt. The trailing line stands in for the dedicated
+// non-empty, the song key when set, the tracks, the targets, the prompt. The trailing line stands in for the dedicated
 // system prompt the server swaps in; the response schema enforces the shape regardless.
 juce::String AIIntegrationService::buildProjectAugmentedContent(const juce::String& text) const {
     const juce::var body = buildProjectRequestBody(text);
@@ -252,6 +258,8 @@ juce::String AIIntegrationService::buildProjectAugmentedContent(const juce::Stri
     const juce::String arrangement = body["arrangementContext"].toString();
     if (arrangement.trim().isNotEmpty())
         content << "Arrangement context:\n" << arrangement << "\n\n";
+    if (body.hasProperty("songKey"))
+        content << "Song key: " << body["songKey"].toString() << "\n\n";
     content << "Project tracks:\n```json\n" << juce::JSON::toString(body["availableTracks"]) << "\n```\n\n";
     content << "Automation targets:\n```json\n" << juce::JSON::toString(body["paramTargets"]) << "\n```\n\n";
     content << text << "\n\n";

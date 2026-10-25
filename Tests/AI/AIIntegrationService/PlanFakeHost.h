@@ -53,7 +53,14 @@ public:
         return true;
     }
 
-    std::vector<double> tempos; // every setTempo the plan applied, in order
+    bool canSetSongKey() const override { return true; }
+    bool setSongKey(const MusicalScale& key) override {
+        songKeys.push_back(key);
+        return true;
+    }
+
+    std::vector<MusicalScale> songKeys; // every setSongKey the plan applied, in order
+    std::vector<double> tempos;         // every setTempo the plan applied, in order
     TimelineDoc& doc;
     juce::AudioProcessorGraph& graph;
     AppUndoManager undo;

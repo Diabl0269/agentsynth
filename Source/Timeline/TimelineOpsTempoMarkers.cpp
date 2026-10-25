@@ -1,6 +1,8 @@
-// Concern: reading and describing the timelineOps `setTempo` and `addMarker` ops.
+// Concern: reading, describing and applying the timelineOps `setTempo`, `setSongKey` and `addMarker` ops.
 #include "TimelineOpsTempoMarkers.h"
 
+#include "Music/SongKey.h"
+#include "TimelineOps.h"
 #include "TimelineValidator.h"
 
 #include <cmath>
@@ -51,6 +53,52 @@ juce::String readSetTempoOp(juce::DynamicObject& op, double& bpm) {
     return {};
 }
 
+juce::String readSetSongKeyOp(juce::DynamicObject& op, MusicalScale& key) {
+    if (const auto bad = firstUnknownKey(op, {"op", "root", "scale"}); bad.isNotEmpty())
+        return "has an unknown field \"" + bad + "\". A setSongKey op accepts only \"root\" and \"scale\".";
+    const juce::var rootVar = op.getProperty("root");
+    const int root = rootVar.isString() ? parseKeyRoot(rootVar.toString()) : -1;
+    if (root < 0)
+        return "needs a \"root\" note name such as \"C\", \"F#\" or \"Bb\".";
+    const juce::var scaleVar = op.getProperty("scale");
+    int preset = -1;
+    if (scaleVar.isString())
+        for (const auto& group : keyScaleGroups())
+            for (const char* name : group.scales)
+                if (scaleVar.toString() == name)
+                    preset = scalePresetIndex(scaleVar.toString());
+    if (preset < 0)
+        return "needs a \"scale\" that is a key scale such as \"Major\" or \"Dorian\".";
+    key = makeScale(root, preset);
+    return {};
+}
+
+juce::String applySetTempoOp(juce::DynamicObject& op, const TimelineOpsHost* host, TimelineOpsHost* applyHost,
+                             juce::StringArray& parts) {
+    double bpm = 0.0;
+    if (const auto error = readSetTempoOp(op, bpm); error.isNotEmpty())
+        return error;
+    if (host == nullptr || !host->canSetTempo())
+        return "This build cannot change the tempo from here.";
+    if (applyHost != nullptr && !applyHost->setTempo(bpm))
+        return "could not set the tempo.";
+    parts.add(describeSetTempo(bpm));
+    return {};
+}
+
+juce::String applySetSongKeyOp(juce::DynamicObject& op, const TimelineOpsHost* host, TimelineOpsHost* applyHost,
+                               juce::StringArray& parts) {
+    MusicalScale key;
+    if (const auto error = readSetSongKeyOp(op, key); error.isNotEmpty())
+        return error;
+    if (host == nullptr || !host->canSetSongKey())
+        return "This build cannot change the song key from here.";
+    if (applyHost != nullptr && !applyHost->setSongKey(key))
+        return "could not set the song key.";
+    parts.add(describeSetSongKey(key));
+    return {};
+}
+
 juce::String readAddMarkerOp(juce::DynamicObject& op, MarkerOpFields& out) {
     if (const auto bad = firstUnknownKey(op, {"op", "beat", "name"}); bad.isNotEmpty())
         return "has an unknown field \"" + bad + "\". An addMarker op accepts only \"beat\" and \"name\".";
@@ -72,6 +120,8 @@ juce::String readAddMarkerOp(juce::DynamicObject& op, MarkerOpFields& out) {
 }
 
 juce::String describeSetTempo(double bpm) { return "sets the tempo to " + numberText(bpm) + " BPM"; }
+
+juce::String describeSetSongKey(const MusicalScale& key) { return "sets the song key to " + keyDisplayName(key); }
 
 juce::String describeMarkers(const std::vector<MarkerOpFields>& markers) {
     if (markers.empty())

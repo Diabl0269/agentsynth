@@ -99,6 +99,8 @@ public:
     TimelineDoc* editableTimelineDoc() override { return &doc_; }
     bool canSetTempo() const override { return true; }
     bool setTempo(double bpm) override;
+    bool canSetSongKey() const override { return true; }
+    bool setSongKey(const MusicalScale& key) override;
 
 private:
     std::optional<InstrumentTrackBuildResult>

@@ -14,6 +14,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/ModuleBase.h"
+#include "Music/SongKey.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <gtest/gtest.h>
@@ -249,6 +250,61 @@ TEST_F(ChannelFlowTest, ProjectEditTempoAloneIsOneUndoStep) {
 
     ASSERT_TRUE(mc.getUndoManager().undo());
     EXPECT_EQ(transport.getDocumentState().bpm, bpmBefore);
+}
+
+// The AI's song key through the real host: the key reaches the transport, ONE undo restores the previous key (No
+// key) and the track together, and the transport poll records no extra step.
+TEST_F(ChannelFlowTest, ProjectEditSongKeyIsOneUndoStepWithTheRest) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& transport = mc.getAudioEngine().getTransport();
+    auto& aiService = mc.getAiServiceForTest();
+    const auto before = snapshotCFT(mc);
+    ASSERT_FALSE(transport.getDocumentState().songKey.has_value());
+
+    const juce::var plan = juce::JSON::parse(R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": [
+        {"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator"},
+        {"op": "setSongKey", "root": "D", "scale": "Dorian"},
+        {"op": "placeClips", "track": "Bass", "clips": [{"startBeat": 0, "lengthBeats": 4, "notes": [
+            {"startBeat": 0, "lengthBeats": 1, "pitch": 38, "velocity": 100}]}]}]})");
+    const auto preview = aiService.previewProjectEdit(plan);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_FALSE(transport.getDocumentState().songKey.has_value()) << "a preview never sets the key";
+
+    const auto applied = aiService.applyProjectEdit(plan);
+    ASSERT_TRUE(applied.ok) << applied.message;
+    ASSERT_TRUE(transport.getDocumentState().songKey.has_value());
+    EXPECT_EQ(synth::keyDisplayName(*transport.getDocumentState().songKey), "D Dorian");
+
+    mc.pollTransportEditsForTest(1000);
+    mc.pollTransportEditsForTest(5000);
+
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    EXPECT_FALSE(transport.getDocumentState().songKey.has_value()) << "undo restores No key";
+    expectSameSnapshotCFT(snapshotCFT(mc), before);
+    EXPECT_FALSE(mc.getUndoManager().canUndo()) << "the poll recorded no extra step";
+
+    ASSERT_TRUE(mc.getUndoManager().redo());
+    ASSERT_TRUE(transport.getDocumentState().songKey.has_value());
+    EXPECT_EQ(synth::keyDisplayName(*transport.getDocumentState().songKey), "D Dorian") << "redo sets it again";
+}
+
+// A key-only plan still lands as one undo step.
+TEST_F(ChannelFlowTest, ProjectEditSongKeyAloneIsOneUndoStep) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& transport = mc.getAudioEngine().getTransport();
+
+    const auto applied = mc.getAiServiceForTest().applyProjectEdit(juce::JSON::parse(
+        R"({"mode": "merge", "nodes": [], "connections": [], "timelineOps": [{"op": "setSongKey", "root": "Bb", "scale": "Major"}]})"));
+    ASSERT_TRUE(applied.ok) << applied.message;
+    ASSERT_TRUE(transport.getDocumentState().songKey.has_value());
+    EXPECT_EQ(synth::keyDisplayName(*transport.getDocumentState().songKey), "A# Major");
+
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    EXPECT_FALSE(transport.getDocumentState().songKey.has_value());
 }
 
 // Regression test: a real full-song answer (Tests/fixtures/ai-plans/dark-forest-plan.json, its ids offset by 7000
