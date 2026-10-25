@@ -306,8 +306,7 @@ TEST(OscillatorPolyChord, ChordNeverStepsAndDoesNotDependOnTheBlockSize) {
             for (int i = from + 1; i < to; ++i)
                 step = std::max(step, (double)std::abs(pass.out[(size_t)i] - pass.out[(size_t)i - 1]));
             EXPECT_LT(step, 0.08) << chord.size() << " notes, block " << block;
-            // The pitch glides up over 5 ms in steps of one block, so the chord's phases (and its beating) differ a
-            // little between block sizes; the loudest peak of the held chord must not.
+            // The pitch glides up over 5 ms sample by sample, so the held chord is the same at every block size.
             double peak = 0.0;
             for (int k = pass.onAt + 480; k < pass.offAt; ++k)
                 peak = std::max(peak, (double)std::abs(pass.out[(size_t)k]));
@@ -315,8 +314,27 @@ TEST(OscillatorPolyChord, ChordNeverStepsAndDoesNotDependOnTheBlockSize) {
                 reference = peak;
                 continue;
             }
-            EXPECT_NEAR(peak, reference, 0.1 * reference)
+            EXPECT_NEAR(peak, reference, 0.01 * reference)
                 << chord.size() << " notes, block " << block << " against block 64";
         }
+    }
+}
+
+// Regression test for FRO1132: Poly MIDI glides each new note's pitch over 5 ms, per sample, but the poly Oscillator
+// read it once per block, so the pitch moved in block-size steps and a chord beat differently at every buffer size.
+// The same chord started off the block grid must sound the same at any block size, glide included.
+TEST(OscillatorPolyChord, PitchGlideIsFollowedPerSampleSoTheChordDoesNotDependOnTheBlockSize) {
+    const std::vector<int> chord = {62, 66, 70};
+    const auto reference = renderChord(chord, 1, 64, 100, Voice{})[0];
+    for (const int block : {256, 441, 512}) {
+        const auto pass = renderChord(chord, 1, block, 100, Voice{})[0];
+        ASSERT_EQ(pass.onAt, reference.onAt);
+        double worst = 0.0, peak = 1e-9;
+        // From the note-on through the 5 ms glide and the start of the sustain.
+        for (int i = pass.onAt; i < pass.onAt + 1440; ++i) {
+            worst = std::max(worst, (double)std::abs(pass.out[(size_t)i] - reference.out[(size_t)i]));
+            peak = std::max(peak, (double)std::abs(reference.out[(size_t)i]));
+        }
+        EXPECT_LT(worst / peak, 1e-4) << "block " << block << " against block 64";
     }
 }

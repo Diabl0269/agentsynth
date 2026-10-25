@@ -49,6 +49,22 @@ int firstSoundingSample(const float* pitchHz, int count) {
             return i;
     return -1;
 }
+
+/** True when the pitch CV moves within the block: every sample from `from` on sounds (is at least 20 Hz) and one of
+    them differs from the one at `from` by more than a tiny epsilon. Poly MIDI glides a new note's pitch over 5 ms, so
+    a block that holds the glide has to follow it sample by sample to sound the same at any block size. */
+bool pitchMovesWithinBlock(const float* pitchHz, int count, int from) {
+    if (from < 0)
+        return false;
+    constexpr float kEpsilonHz = 1e-3f;
+    bool moves = false;
+    for (int i = from; i < count; ++i) {
+        if (pitchHz[i] < 20.0f)
+            return false;
+        moves = moves || std::abs(pitchHz[i] - pitchHz[from]) > kEpsilonHz;
+    }
+    return moves;
+}
 } // namespace
 
 void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int numSamples) {
@@ -99,6 +115,9 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
         // Fixed rate replaces the pitch only after the voice is known to be live, so voices stay note-gated.
         if (fixedMode)
             basePitchHz = baseFrequencyHz();
+        else if (settings.glideSeconds <= 0.0f &&
+                 pitchMovesWithinBlock(pitchCVCache[v].data(), ns, start < 0 ? 0 : start))
+            settings.pitchHz = pitchCVCache[v].data();
 
         // A voice going from silent to sounding is a new note and restarts its phases; voice 0 also
         // restarts on a MIDI note-on, and only that one has an earlier note to fade out of. A rising
@@ -137,7 +156,7 @@ void OscillatorModule::renderPolyVoice(int voice, float* output, float* outputR,
                                        const PolyVoiceSettings& set) {
     const bool gliding = set.glideSeconds > 0.0f;
     const bool pitchMod = polyCV.octave || polyCV.coarse || polyCV.fine;
-    if (!pitchMod && !gliding)
+    if (!pitchMod && !gliding && set.pitchHz == nullptr)
         renderPolyVoiceSteady(voice, output, outputR, numSamples, basePitchHz, set);
     else
         renderPolyVoiceModulated(voice, output, outputR, numSamples, basePitchHz, set, gliding);
@@ -222,7 +241,8 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* out
         if (polyCV.fine)
             extraPitchShift += fineCVCache[idx]; // cvFine * 100 / 100 == cvFine
 
-        const float baseHz = gliding ? voices[v].glide.nextFrequency() : basePitchHz;
+        const float cvHz = set.pitchHz != nullptr ? set.pitchHz[idx] : basePitchHz;
+        const float baseHz = gliding ? voices[v].glide.nextFrequency() : cvHz;
         float freqS = (extraPitchShift != 0.0f) ? baseHz * std::pow(2.0f, extraPitchShift / 12.0f) : baseHz;
         freqS = juce::jlimit(minHz, 20000.0f, freqS);
         const float dtS = freqS / (float)currentSampleRate;
