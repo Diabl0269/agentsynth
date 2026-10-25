@@ -67,7 +67,7 @@ assert_args() {
 
 assert_message() {
     local desc="$1" expect_grep="$2"
-    if printf '%s' "$DEPS_REUSE_MESSAGE" | grep -qF -- "$expect_grep"; then
+    if grep -qF -- "$expect_grep" <<<"$DEPS_REUSE_MESSAGE"; then
         echo "PASS: $desc"
         pass=$((pass + 1))
     else

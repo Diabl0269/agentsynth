@@ -93,7 +93,7 @@ run() {
         fail=$((fail + 1))
         return 1
     fi
-    if [ "$want_text" != "-" ] && ! printf '%s' "$out" | grep -qF "$want_text"; then
+    if [ "$want_text" != "-" ] && ! grep -qF "$want_text" <<<"$out"; then
         printf 'FAIL  %s\n      expected output to contain: %s\n%s\n' "$name" "$want_text" "$out"
         fail=$((fail + 1))
         return 1

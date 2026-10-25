@@ -99,7 +99,7 @@ run() {
         fail=$((fail + 1))
         return
     fi
-    if [ "$want_text" != "-" ] && ! printf '%s' "$out" | grep -qF "$want_text"; then
+    if [ "$want_text" != "-" ] && ! grep -qF "$want_text" <<<"$out"; then
         printf 'FAIL  %s\n      expected output to contain: %s\n%s\n' \
             "$name" "$want_text" "$(defang "$out")"
         fail=$((fail + 1))
@@ -241,7 +241,7 @@ roomy_out="$(env -u CACHE_MATCHED_KEY -u DEPS_MATCHED_KEY -u CACHE_WARM_EXPECTED
     CACHE_WARM_EXPECTED=true DEPS_KEY_CHANGED=false \
     CCACHE_STATS_FILE="$WORK/stats-roomy.txt" \
     GITHUB_STEP_SUMMARY="$WORK/summary.md" bash "$CHECK" 2>&1)"
-if printf '%s' "$roomy_out" | grep -qF "full against its configured max_size"; then
+if grep -qF "full against its configured max_size" <<<"$roomy_out"; then
     printf 'FAIL  roomy cache does not warn about saturation\n%s\n' "$(defang "$roomy_out")"
     fail=$((fail + 1))
 else
@@ -289,7 +289,7 @@ contradiction_out="$(env -u CACHE_MATCHED_KEY -u DEPS_MATCHED_KEY -u CACHE_WARM_
     GITHUB_STEP_SUMMARY="$WORK/summary.md" bash "$CHECK" 2>&1)"
 # Must match the live notice text in ci-cache-check.sh — if this string drifts out of sync the
 # assertion silently passes for the wrong reason, which is exactly the failure mode being guarded.
-if printf '%s' "$contradiction_out" | grep -qF "not expected to have a warm cache"; then
+if grep -qF "not expected to have a warm cache" <<<"$contradiction_out"; then
     printf 'FAIL  fail-safe: does not misreport the contradiction as a seeding run\n%s\n' \
         "$(defang "$contradiction_out")"
     fail=$((fail + 1))

@@ -90,6 +90,17 @@ library.
 The Draw button is the exception that paints its own glyph: lit, its icon and corner triangle take whichever theme ink
 (`iconInk`, `iconPaper`, `textPrimary`, `bg0`) contrasts most with the `toolActive` fill, so they hold 3:1 in every theme.
 
+## The Sizing field
+
+`ClipSizingButton` (`Source/UI/Timeline/ClipSizingButton.h`), right of the tool buttons: a `juce::TextButton` reading
+"Sizing: Trim" / "Carry" / "Stretch", lit (its toggle state) while the mode is not Trim so a stretch mode is never
+forgotten. A click opens a menu of the three modes, each with what it does to the notes (Stretch notes that audio
+needs the time-stretch engine), and a closing tip about Option. The Select key pressed again while Select is the tool
+steps Trim -> Carry contents -> Stretch to fit -> Trim, as in Cubase; it follows a rebind of `timelineToolSelect`.
+The choice is the user setting `timelineClipSizingMode` and is pushed into the clip lanes
+([clips](clips.md#edge-sizing)). Like the snap toggle it is a Tab stop that a click never focuses; its screen-reader
+name is "Clip sizing, <mode>".
+
 ## Range menu
 
 Right-clicking inside a Range tool selection opens its menu: **Split at range edges**, **Delete range**, **Delete range and close gap** and **Render to audio track** (Shift+Cmd+R, `timelineRenderToAudioTrack`, rebindable; greyed with "(no mixer channel)" in its text when no covered track reaches a mixer channel). The render is described in [`render-to-audio.md`](render-to-audio.md).

@@ -111,7 +111,7 @@ assert_fail() {
         echo "FAIL: $desc (expected non-zero exit, got success)"
         echo "$output"
         fail=$((fail + 1))
-    elif echo "$output" | grep -qF -- "$expect_grep"; then
+    elif grep -qF -- "$expect_grep" <<<"$output"; then
         echo "PASS: $desc"
         pass=$((pass + 1))
     else
@@ -236,7 +236,7 @@ commit_all
 raise_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 raise_status=$?
 baseline_after_raise="$(cat "$BASELINE")"
-if [ "$raise_status" -ne 0 ] && echo "$raise_output" | grep -qF -- "Foo.h would raise the baseline from +15 to +23" \
+if [ "$raise_status" -ne 0 ] && grep -qF -- "Foo.h would raise the baseline from +15 to +23" <<<"$raise_output" \
     && [ "$baseline_before_raise" = "$baseline_after_raise" ]; then
     echo "PASS: --update refuses to raise a baseline entry without --allow-growth (exit 1, baseline unchanged)"
     pass=$((pass + 1))
@@ -250,8 +250,8 @@ fi
 allow_output="$(bash "$CHECK" --root "$REPO" --update --allow-growth 2>&1)"
 allow_status=$?
 baseline_after_allow="$(cat "$BASELINE")"
-if [ "$allow_status" -eq 0 ] && echo "$allow_output" | grep -qF -- "::warning::Source/UI/Foo/Foo.h raised from +15 to +23" \
-    && echo "$baseline_after_allow" | grep -qF -- "23 Source/UI/Foo/Foo.h"; then
+if [ "$allow_status" -eq 0 ] && grep -qF -- "::warning::Source/UI/Foo/Foo.h raised from +15 to +23" <<<"$allow_output" \
+    && grep -qF -- "23 Source/UI/Foo/Foo.h" <<<"$baseline_after_allow"; then
     echo "PASS: --update --allow-growth lets a raised entry through with a warning"
     pass=$((pass + 1))
 else
@@ -271,8 +271,8 @@ commit_all
 shrink_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 shrink_status=$?
 shrink_baseline="$(cat "$BASELINE")"
-if [ "$shrink_status" -eq 0 ] && echo "$shrink_baseline" | grep -qF -- "27 Source/UI/Bar/Bar.h" \
-    && ! echo "$shrink_output" | grep -q "::error::" && ! echo "$shrink_output" | grep -q "::warning::"; then
+if [ "$shrink_status" -eq 0 ] && grep -qF -- "27 Source/UI/Bar/Bar.h" <<<"$shrink_baseline" \
+    && ! grep -q "::error::" <<<"$shrink_output" && ! grep -q "::warning::" <<<"$shrink_output"; then
     echo "PASS: --update tightens a shrunk entry silently (no growth error or warning)"
     pass=$((pass + 1))
 else
@@ -289,8 +289,8 @@ commit_all
 drop_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 drop_status=$?
 drop_baseline="$(cat "$BASELINE")"
-if [ "$drop_status" -eq 0 ] && ! echo "$drop_baseline" | grep -q "Bar.h" \
-    && ! echo "$drop_output" | grep -q "::error::"; then
+if [ "$drop_status" -eq 0 ] && ! grep -q "Bar.h" <<<"$drop_baseline" \
+    && ! grep -q "::error::" <<<"$drop_output"; then
     echo "PASS: --update removes an entry that is no longer over the placement threshold"
     pass=$((pass + 1))
 else
@@ -340,7 +340,7 @@ git clone -q --no-checkout "$REPO" "$clone_dir"
 (cd "$clone_dir" && git read-tree HEAD)
 failsafe_output="$(bash "$CHECK" --root "$clone_dir" 2>&1)"
 failsafe_status=$?
-if [ "$failsafe_status" -ne 0 ] && echo "$failsafe_output" | grep -qF -- "::error::check-header-comments read every one of 2 scanned headers as 0 comment / 0 code lines"; then
+if [ "$failsafe_status" -ne 0 ] && grep -qF -- "::error::check-header-comments read every one of 2 scanned headers as 0 comment / 0 code lines" <<<"$failsafe_output"; then
     echo "PASS: the vacuous-pass fail-safe catches every scanned header reading as 0/0 and fails loudly"
     pass=$((pass + 1))
 else

@@ -380,7 +380,7 @@ current_naming_violations() {
         esac
         base="${path##*/}"
         [ "$base" = "README.md" ] && continue
-        if ! printf '%s' "$base" | grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*\.md$'; then
+        if ! grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*\.md$' <<<"$base"; then
             printf '%s\n' "$path"
         fi
     done <"$scanned" | sort

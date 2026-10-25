@@ -108,6 +108,7 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
     if (hit->zone == ClipHit::Zone::RightEdge) {
         if (const auto* clip = doc_->getClip(hit->id)) {
             dragMode_ = DragMode::ResizeRight;
+            stretchOnce_ = e.mods.isAltDown();
             resizeOriginalStart_ = clip->startBeat;
             resizeOriginalLength_ = clip->lengthBeats;
             previewLength_ = resizeOriginalLength_;
@@ -115,6 +116,7 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
     } else if (hit->zone == ClipHit::Zone::LeftEdge) {
         if (const auto* clip = doc_->getClip(hit->id)) {
             dragMode_ = DragMode::ResizeLeft;
+            stretchOnce_ = e.mods.isAltDown();
             resizeOriginalStart_ = clip->startBeat;
             resizeOriginalLength_ = clip->lengthBeats;
             previewStart_ = resizeOriginalStart_;
@@ -184,6 +186,8 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
 
     if (dragMode_ == DragMode::Move)
         copyDrag_ = e.mods.isAltDown();
+    else
+        stretchOnce_ = e.mods.isAltDown(); // an edge drag: Option stretches this one drag
     lastDragPointer_ = e.getPosition();
     updateDragPreviewFromLastPointer();
     updateMoveCursor();
@@ -191,10 +195,16 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
     repaint();
 }
 
+// Option flips a live drag on its own, without the pointer moving: a body drag between move and copy, an edge drag
+// between the Sizing field's mode and a one-off stretch.
 void TimelineClipLaneArea::modifierKeysChanged(const juce::ModifierKeys& mods) {
     if (dragMode_ == DragMode::Move && copyDrag_ != mods.isAltDown()) {
         copyDrag_ = mods.isAltDown();
         updateMoveCursor();
+        repaint();
+    } else if ((dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight) &&
+               stretchOnce_ != mods.isAltDown()) {
+        stretchOnce_ = mods.isAltDown();
         repaint();
     }
     juce::Component::modifierKeysChanged(mods); // keep the default bubbling to the parent
@@ -415,9 +425,15 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
             if (copying && !newIds.empty())
                 selection_.setSelection(newIds);
         } else if (dragMode_ == DragMode::ResizeRight && std::abs(previewLength_ - resizeOriginalLength_) > 1e-9) {
+            // ONE undo step, through the sizing rule the preview painted with. An audio clip only changes length.
             const auto id = activeClip_;
             const double newLength = previewLength_;
-            auto mutate = [this, id, newLength] { doc_->resizeClip(id, newLength); };
+            const double newEnd = resizeOriginalStart_ + previewLength_;
+            const auto mode = dragSizingMode();
+            auto mutate = [this, id, newLength, newEnd, mode] {
+                if (!doc_->resizeClipEdge(id, synth::ClipEdge::Right, mode, newEnd))
+                    doc_->resizeClip(id, newLength);
+            };
             if (undoManager_)
                 undoManager_->recordTimelineChange(*doc_, mutate);
             else
@@ -426,11 +442,11 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
             const auto id = activeClip_;
             const double newStart = previewStart_;
             const double newLength = previewLength_;
-            // ONE undo step. A MIDI clip's left edge keeps its notes at the same absolute beat
-            // (resizeClipLeft drops/cuts the ones the shrink uncovers); an audio clip moves its
-            // start and resizes so the end stays fixed.
-            auto mutate = [this, id, newStart, newLength] {
-                if (!doc_->resizeClipLeft(id, newStart)) {
+            // ONE undo step, through the sizing rule the preview painted with (TimelineDoc::resizeClipEdge); an
+            // audio clip moves its start and resizes so the end stays fixed.
+            const auto mode = dragSizingMode();
+            auto mutate = [this, id, newStart, newLength, mode] {
+                if (!doc_->resizeClipEdge(id, synth::ClipEdge::Left, mode, newStart)) {
                     doc_->moveClip(id, newStart);
                     doc_->resizeClip(id, newLength);
                 }
@@ -449,6 +465,7 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     previewDeltaBeats_ = 0.0;
     previewRowDelta_ = 0;
     copyDrag_ = false;
+    stretchOnce_ = false;
     repaint();
 }
 
