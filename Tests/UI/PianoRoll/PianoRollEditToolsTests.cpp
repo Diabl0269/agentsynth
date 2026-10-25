@@ -528,8 +528,8 @@ TEST(PianoRollPitchQuantiseTest, ChipTooltipCarriesTheDynamicShortcutHint) {
     PianoRollFixture f;
     const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantisePitchButtonBounds().getCentre());
     // No ShortcutManager installed, so the hint falls back to the hardcoded Option+Shift+Q.
-    EXPECT_TRUE(tooltip.startsWith("Quantize note pitches into the scale (Alt + Shift + Q)")) << tooltip;
-    EXPECT_TRUE(tooltip.contains("Scale Assist")) << tooltip;
+    EXPECT_TRUE(tooltip.startsWith("Fit notes to key (Alt + Shift + Q)")) << tooltip;
+    EXPECT_TRUE(tooltip.contains("Needs a key")) << tooltip;
 }
 
 // Both quantise keys dispatch through keyPressed with the Option-based defaults. Stored as a KEY

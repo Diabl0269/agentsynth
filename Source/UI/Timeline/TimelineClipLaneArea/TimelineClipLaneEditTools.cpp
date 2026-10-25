@@ -10,6 +10,9 @@
 
 #include "AppUndoManager.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "Timeline/ClipKey.h"
+#include "Timeline/FitToKey.h"
+#include "Transport/TransportService.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ToolCursors.h"
@@ -408,6 +411,11 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
     menu.showMenuAsync(options);
 }
 
+std::optional<synth::MusicalScale> TimelineClipLaneArea::resolvedKeyFor(const synth::Clip& clip) const {
+    const auto songKey = transport_ != nullptr ? transport_->getDocumentState().songKey : std::nullopt;
+    return synth::resolveClipKey(clip, songKey).key;
+}
+
 // The menu itself, apart from showing it, so a test can walk the real items (and run their actions)
 // without the display a shown menu needs.
 juce::PopupMenu TimelineClipLaneArea::buildClipContextMenu(synth::ClipId id, juce::Point<int> localPos) {
@@ -451,6 +459,11 @@ juce::PopupMenu TimelineClipLaneArea::buildClipContextMenu(synth::ClipId id, juc
     menu.addItem(linkedDup);
     if (doc_->countLinkedClips(id) > 0)
         menu.addItem("Make unique", [this, id] { applyClipContextChoice(id, ClipContextChoice::MakeUnique, 0.0); });
+    // Greyed, not hidden, unless the clip is a MIDI clip with notes and a key (its own or the song's) to fit to.
+    juce::PopupMenu::Item fitToKey("Fit to key");
+    fitToKey.setEnabled(clip->assetRef.isEmpty() && !clip->notes.empty() && resolvedKeyFor(*clip).has_value());
+    fitToKey.action = [this, id] { applyClipContextChoice(id, ClipContextChoice::FitToKey, 0.0); };
+    menu.addItem(fitToKey);
     // One toggling item rather than two, labelled for what the click will DO.
     menu.addItem(clip->muted ? "Unmute" : "Mute",
                  [this, id] { applyClipContextChoice(id, ClipContextChoice::ToggleMute, 0.0); });
@@ -580,6 +593,24 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
         // `target` was absorbed into `id` — the survivor keeps its own id, so only the swallowed
         // one has to leave the selection.
         selection_.remove(target);
+        break;
+    }
+    case ClipContextChoice::FitToKey: {
+        const auto* clip = doc_->getClip(id);
+        if (clip == nullptr || clip->assetRef.isNotEmpty())
+            return;
+        const auto key = resolvedKeyFor(*clip);
+        if (!key.has_value())
+            return;
+        // The key is copied and the ids taken before the mutation: both would otherwise point into the clip being
+        // edited.
+        const auto ids = synth::fitToKeyTargets(*clip, {});
+        auto mutate = [this, ids, scale = *key] { synth::fitNotesToKey(*doc_, ids, scale); };
+        // recordTimelineChange pushes no undo step when nothing moved.
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
         break;
     }
     case ClipContextChoice::Rename:

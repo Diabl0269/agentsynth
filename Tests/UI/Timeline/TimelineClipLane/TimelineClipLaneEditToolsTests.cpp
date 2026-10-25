@@ -1,6 +1,8 @@
 // TimelineClipLaneEditToolsTests.cpp — split/duplicate/delete via the clip context-menu hook.
 #include "TimelineClipLaneTestFixture.h"
 
+#include "Music/SongKey.h"
+
 TEST(TimelineClipLaneInteractionTest, SplitAtPointerViaMenuHook) {
     ClipLaneFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
@@ -64,4 +66,92 @@ TEST(TimelineClipLaneInteractionTest, DeleteViaMenuHook) {
     f.lane.applyClipContextChoice(clipId, TimelineClipLaneArea::ClipContextChoice::Delete, 0.0);
     EXPECT_EQ(f.doc.getTrack(trackId)->clips.size(), 0u);
     ASSERT_TRUE(f.undo.canUndo());
+}
+
+namespace {
+
+// A clip lane wired to a real transport, with one MIDI clip holding C, C# and D.
+struct FitToKeyMenuFixture : ClipLaneFixture {
+    synth::TransportService transport;
+    ClipId clip;
+
+    FitToKeyMenuFixture() {
+        lane.setTransport(&transport);
+        const auto track = doc.addTrack(TrackKind::Midi, "Track 1");
+        clip = doc.addClip(track, 0.0, 8.0, "Clip");
+        doc.addNote(clip, makeNote(0.0, 60));
+        doc.addNote(clip, makeNote(1.0, 61));
+        doc.addNote(clip, makeNote(2.0, 62));
+    }
+
+    void setSongKey(const char* scale, int root = 0) {
+        transport.setSongKey(synth::makeScale(root, synth::scalePresetIndex(scale)));
+    }
+
+    // Whether the menu has a "Fit to key" item, and whether it is enabled.
+    std::pair<bool, bool> fitItem() {
+        auto menu = lane.buildClipContextMenu(clip, {0, 0});
+        juce::PopupMenu::MenuItemIterator it(menu);
+        while (it.next())
+            if (it.getItem().text == "Fit to key")
+                return {true, it.getItem().isEnabled};
+        return {false, false};
+    }
+
+    int pitchAt(double startBeat) const {
+        for (const auto& note : doc.getClip(clip)->notes)
+            if (std::abs(note.startBeat - startBeat) < 1.0e-6)
+                return note.pitch;
+        return -1;
+    }
+};
+
+} // namespace
+
+TEST(TimelineClipLaneInteractionTest, FitToKeyIsOfferedForAMidiClipWithNotesAndAKey) {
+    FitToKeyMenuFixture f;
+    f.setSongKey("Major");
+    const auto [present, enabled] = f.fitItem();
+    EXPECT_TRUE(present);
+    EXPECT_TRUE(enabled);
+}
+
+TEST(TimelineClipLaneInteractionTest, FitToKeyIsGreyedWithNoKeyAndForAnEmptyClip) {
+    FitToKeyMenuFixture f;
+    auto [present, enabled] = f.fitItem();
+    EXPECT_TRUE(present) << "greyed, not hidden";
+    EXPECT_FALSE(enabled) << "no song key and no own key";
+
+    f.setSongKey("Major");
+    const auto track = f.doc.addTrack(TrackKind::Midi, "Track 2");
+    f.clip = f.doc.addClip(track, 0.0, 4.0, "Empty");
+    std::tie(present, enabled) = f.fitItem();
+    EXPECT_TRUE(present);
+    EXPECT_FALSE(enabled) << "nothing to fit";
+}
+
+TEST(TimelineClipLaneInteractionTest, FitToKeyMovesNotesAsOneUndoStepAndKeyChangesMoveNothing) {
+    FitToKeyMenuFixture f;
+    f.setSongKey("Major");
+    f.lane.applyClipContextChoice(f.clip, TimelineClipLaneArea::ClipContextChoice::FitToKey, 0.0);
+    EXPECT_EQ(f.pitchAt(0.0), 60);
+    EXPECT_EQ(f.pitchAt(1.0), 60) << "C# goes down to C";
+    EXPECT_EQ(f.pitchAt(2.0), 62);
+
+    f.setSongKey("Major", 5);
+    EXPECT_EQ(f.pitchAt(1.0), 60) << "setting a key never moves notes";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.pitchAt(1.0), 61) << "one undo restores the whole fit";
+    EXPECT_EQ(f.pitchAt(0.0), 60);
+}
+
+TEST(TimelineClipLaneInteractionTest, FitToKeyPushesNoUndoStepWhenEverythingIsInKey) {
+    FitToKeyMenuFixture f;
+    f.setSongKey("Major");
+    ASSERT_TRUE(f.doc.removeNote(f.doc.getClip(f.clip)->notes[1].id)); // the C#: C and D are already in key
+    f.lane.applyClipContextChoice(f.clip, TimelineClipLaneArea::ClipContextChoice::FitToKey, 0.0);
+    EXPECT_EQ(f.pitchAt(2.0), 62);
+    EXPECT_FALSE(f.undo.canUndo());
 }

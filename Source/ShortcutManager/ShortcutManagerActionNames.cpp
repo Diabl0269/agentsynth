@@ -485,7 +485,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
     if (actionId == "pianoRollQuantiseLength")
         return "Quantise Selected Note Lengths";
     if (actionId == "pianoRollQuantisePitches")
-        return "Quantise Note Pitches to Scale";
+        return "Fit Notes to Key";
     if (actionId == "pianoRollToggleScaleFilter")
         return "Show Only Scale Notes";
     if (actionId == "pianoRollToggleScalePanel")
