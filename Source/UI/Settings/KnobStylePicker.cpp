@@ -1,6 +1,7 @@
 #include "KnobStylePicker.h"
 
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/SpaceClaimingButton.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeelFader.h"
 #include "UI/Theme/AppLookAndFeel/KnobPainter.h"
@@ -113,6 +114,8 @@ public:
     }
 
     bool keyPressed(const juce::KeyPress& key) override {
+        if (synth::ui::pressButtonOnSpace(*this, key))
+            return true;
         if (key.getModifiers().isAnyModifierKeyDown())
             return false;
         if (key == juce::KeyPress::returnKey) {

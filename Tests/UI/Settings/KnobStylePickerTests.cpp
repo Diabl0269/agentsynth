@@ -92,6 +92,16 @@ TEST(KnobStylePickerTest, ReturnPicksTheFocusedPreview) {
     EXPECT_EQ(rig.props->getValue(knobStyleKey()), "analog");
 }
 
+// Regression test for FRO635: Space on a focused style preview did nothing (only Return picked it) and fell
+// through to the window, where Space toggles playback.
+TEST(KnobStylePickerTest, SpacePicksTheFocusedPreview) {
+    PickerRig rig;
+    juce::Component& button = rig.picker.getFaderStyleButtonForTest((int)KnobStyle::Ring);
+    EXPECT_TRUE(button.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // triggerClick() posts the click
+    EXPECT_EQ(rig.props->getValue(faderStyleKey()), "ring");
+}
+
 TEST(KnobStylePickerTest, OffersTheFiveStylesInOrder) {
     PickerRig rig;
     ASSERT_EQ(kKnobStyleCount, 5);

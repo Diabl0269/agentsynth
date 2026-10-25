@@ -31,6 +31,8 @@ ControlStylePanel::ControlStylePanel(GraphEditor& editor, juce::AudioProcessorGr
     typeButton_.setButtonText("Every " + typeName);
     for (auto* button : {&moduleButton_, &typeButton_}) {
         button->setRadioGroupId(kRadioGroup);
+        button->setConnectedEdges(button == &moduleButton_ ? juce::Button::ConnectedOnRight
+                                                           : juce::Button::ConnectedOnLeft);
         button->setClickingTogglesState(true);
         button->setWantsKeyboardFocus(true);
         button->setMouseClickGrabsKeyboardFocus(false);
@@ -106,6 +108,17 @@ void ControlStylePanel::write(std::optional<synth::theme::KnobStyle> knob,
         apply();
 }
 
+// The panel paints its own surface and hairline border (the shared Popover look), so it reads the same in every
+// theme whichever window hosts it.
+void ControlStylePanel::paint(juce::Graphics& g) {
+    const auto& theme = synth::theme::themeOf(*this);
+    const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+    g.setColour(theme.colors.surface);
+    g.fillRoundedRectangle(bounds, theme.metrics.cornerRadius);
+    g.setColour(theme.colors.border);
+    g.drawRoundedRectangle(bounds, theme.metrics.cornerRadius, 1.0f);
+}
+
 void ControlStylePanel::resized() {
     auto area = getLocalBounds().reduced(kPad);
     title_.setBounds(area.removeFromTop(kTitleHeight));
@@ -143,8 +156,6 @@ void ControlStylePanel::lookAndFeelChanged() { refreshTheme(); }
 void ControlStylePanel::refreshTheme() {
     const auto& theme = synth::theme::themeOf(*this);
     title_.setColour(juce::Label::textColourId, theme.colors.textPrimary);
-    for (auto* button : {&moduleButton_, &typeButton_})
-        button->setColour(juce::ToggleButton::textColourId, theme.colors.textPrimary);
     picker_.setTheme(theme);
 }
 

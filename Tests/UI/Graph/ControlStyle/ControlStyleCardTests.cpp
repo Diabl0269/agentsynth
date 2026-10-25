@@ -11,6 +11,7 @@
 #include "UI/Graph/ControlStyle/ControlStyleMenu.h"
 #include "UI/Graph/ControlStyle/ControlStylePanel.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/ControlStyleOverride.h"
 #include <gtest/gtest.h>
@@ -303,4 +304,53 @@ TEST(ControlStylePanel, EveryControlIsNamedHasATooltipAndTabsInVisualOrder) {
     ASSERT_EQ(got.size(), expected.size());
     for (size_t i = 0; i < got.size(); ++i)
         EXPECT_EQ(got[i], expected[i]) << "Tab stop " << i;
+}
+
+// Regression test for FRO635: Space on a focused scope button or style preview did nothing and fell through to
+// the window, where Space toggles playback; every button presses on Space and consumes it.
+TEST(ControlStylePanel, EveryButtonPressesOnSpaceAndConsumesIt) {
+    PanelRig rig;
+    // A focused button gets Space through juce::Component::keyPressed, public there.
+    auto pressSpace = [](juce::Component& button) {
+        return button.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey));
+    };
+    EXPECT_TRUE(pressSpace(rig.panel->getScopeButtonForTest(Scope::Type)));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // triggerClick() posts the click
+    EXPECT_EQ(rig.panel->getScope(), Scope::Type);
+    EXPECT_TRUE(pressSpace(rig.panel->getScopeButtonForTest(Scope::Module)));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_EQ(rig.panel->getScope(), Scope::Module);
+
+    EXPECT_TRUE(pressSpace(rig.picker().getStyleButtonForTest((int)KnobStyle::Analog)));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_EQ(rig.own(), (ControlStyleOverride{KnobStyle::Analog, std::nullopt}));
+    EXPECT_TRUE(pressSpace(rig.picker().getFollowButtonForTest(false)));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_TRUE(rig.own().isEmpty());
+}
+
+// Regression test for FRO635: the call-out showed the panel's dark-on-dark text in the light theme because the
+// panel left its ground to the call-out; it paints the theme's surface itself, in every built-in theme.
+TEST(ControlStylePanel, PaintsTheThemeSurfaceInEveryBuiltInTheme) {
+    PanelRig rig;
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lnf;
+        lnf.applyTheme(theme);
+        rig.panel->setLookAndFeel(&lnf);
+        juce::Image image(juce::Image::ARGB, rig.panel->getWidth(), rig.panel->getHeight(), true,
+                          juce::SoftwareImageType());
+        {
+            juce::Graphics g(image);
+            rig.panel->paintEntireComponent(g, false);
+        }
+        // Left of the row labels, below the title: plain panel ground.
+        const auto pixel = image.getPixelAt(6, rig.panel->getHeight() / 2);
+        // Within 1 per channel: a translucent surface (Neon) round-trips through premultiplied alpha.
+        const auto want = theme.colors.surface;
+        EXPECT_NEAR(pixel.getAlpha(), want.getAlpha(), 1) << theme.id;
+        EXPECT_NEAR(pixel.getRed(), want.getRed(), 1) << theme.id;
+        EXPECT_NEAR(pixel.getGreen(), want.getGreen(), 1) << theme.id;
+        EXPECT_NEAR(pixel.getBlue(), want.getBlue(), 1) << theme.id;
+        rig.panel->setLookAndFeel(nullptr);
+    }
 }

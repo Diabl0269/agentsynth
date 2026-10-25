@@ -4,6 +4,7 @@
 // for every module of its type, each row with a leading Follow that clears that level. Changes apply live.
 // docs/layout/theming.md#per-module-control-style.
 
+#include "UI/Layout/SpaceClaimingButton.h"
 #include "UI/Settings/KnobStylePicker.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -28,6 +29,7 @@ public:
 
     void focusFirstControl() { moduleButton_.grabKeyboardFocus(); }
 
+    void paint(juce::Graphics& g) override;
     void resized() override;
     bool keyPressed(const juce::KeyPress& key) override;
     void parentHierarchyChanged() override;
@@ -46,8 +48,8 @@ private:
     juce::String typeName_;
     Scope scope_ = Scope::Module;
     juce::Label title_{{}, "Control style"};
-    juce::ToggleButton moduleButton_{"This module"};
-    juce::ToggleButton typeButton_;
+    SpaceClaimingButton<juce::TextButton> moduleButton_{"This module"};
+    SpaceClaimingButton<juce::TextButton> typeButton_;
     KnobStylePicker picker_{KnobStylePicker::Mode::Override};
 };
 
