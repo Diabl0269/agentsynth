@@ -228,6 +228,9 @@ public:
         const bool discontinuous = haveLastBlock_ && info.blockStartSample != expectedNextBlockStart_;
         if ((!info.playing && wasPlaying_) || (info.playing && discontinuous))
             flushTimelineNotes(midiMessages);
+        // The pass counter (chance and conditions) counts loop wraps since play started or was located.
+        if (!info.playing || !wasPlaying_ || discontinuous)
+            transportPass_ = 0;
 
         // A fold that landed exactly at the end of the previous block, read before the bookkeeping
         // below moves on: this block opens a pass and must not still hold anything the old one left.
@@ -329,12 +332,13 @@ private:
         // loopWrapSample on belongs to the next pass, and info.endPpq is the UNWRAPPED virtual end
         // (it overshoots loopEndPpq), so using it here would emit beats the transport never plays.
         emitRange(snapshot, track, midiMessages, info.startPpq, wraps ? info.loopEndPpq : info.endPpq,
-                  /*baseOffset=*/0, beatsPerSample, lastSample);
+                  /*baseOffset=*/0, beatsPerSample, lastSample, transportPass_);
 
         if (info.wrapsAtBlockEnd) {
             // The loop end is the end of this block: the primary range above already ran to it. Release
             // what is still held on the last sample, the nearest one the block has.
             flushTimelineNotes(midiMessages, lastSample);
+            ++transportPass_;
             return;
         }
 
@@ -355,8 +359,9 @@ private:
         // no beat emitted twice and none skipped. For a loop shorter than the block that end is the
         // final partial pass and the whole passes in between are simply not emitted (the multi-wrap
         // bound in the class comment); note hygiene is unaffected, the release above saw to that.
+        ++transportPass_;
         emitRange(snapshot, track, midiMessages, info.loopStartPpq, beatFromSample(nextBlockStartSample, info),
-                  wrapOffset, beatsPerSample, lastSample);
+                  wrapOffset, beatsPerSample, lastSample, transportPass_);
     }
 
     // Emits every note edge inside one beat range, at offsets measured from `baseOffset`. Notes are
@@ -365,7 +370,7 @@ private:
     // it.
     void emitRange(const synth::TimelineSnapshot& snapshot, const synth::TimelineSnapshot::TrackInfo& track,
                    juce::MidiBuffer& midiMessages, double rangeStart, double rangeEnd, int baseOffset,
-                   double beatsPerSample, int lastSample) {
+                   double beatsPerSample, int lastSample, std::int64_t pass) {
         if (!(rangeEnd > rangeStart))
             return;
 
@@ -394,6 +399,10 @@ private:
 
             // A zero- or negative-length note would emit an on with no matching off in range.
             if (!(note.endBeat > note.startBeat))
+                continue;
+
+            // Chance and condition: a skipped hit pushes no active note, so it owes no note-off.
+            if (!synth::TimelineSnapshot::notePlays(note, pass))
                 continue;
 
             const int offset = beatToOffset(note.startBeat, rangeStart, beatsPerSample, baseOffset, lastSample);
@@ -644,6 +653,8 @@ private:
     double previewLo_ = 0.0;
     double previewHi_ = 0.0;
     double previewPos_ = 0.0;
+    std::int64_t previewPass_ = 0;   // completed clip wraps since the preview started
+    std::int64_t transportPass_ = 0; // loop wraps since play started or was located
 
     std::int64_t expectedNextBlockStart_ = 0;
     bool haveLastBlock_ = false;
@@ -708,6 +719,7 @@ inline bool TimelineMidiSourceModule::syncPreviewRequest(juce::MidiBuffer& midiM
             previewLo_ = lo;
             previewHi_ = hi;
             previewPos_ = lo;
+            previewPass_ = 0;
             if (!previewRunning_)
                 previewBeat_.store(std::numeric_limits<double>::quiet_NaN(), std::memory_order_relaxed);
         }
@@ -752,11 +764,12 @@ inline void TimelineMidiSourceModule::emitPreviewBlock(const synth::TimelineSnap
     if (!(previewPos_ >= previewLo_ && previewPos_ < previewHi_)) {
         flushTimelineNotes(midiMessages); // the previous block ended exactly on the clip end
         previewPos_ = previewLo_;
+        ++previewPass_;
     }
     const double end = previewPos_ + static_cast<double>(numSamples) * beatsPerSample;
     const auto emit = [&](double from, double to, int baseOffset) {
         if (!previewSuppressed_)
-            emitRange(snapshot, track, midiMessages, from, to, baseOffset, beatsPerSample, lastSample);
+            emitRange(snapshot, track, midiMessages, from, to, baseOffset, beatsPerSample, lastSample, previewPass_);
     };
     if (end <= previewHi_) {
         emit(previewPos_, end, 0);
@@ -767,6 +780,7 @@ inline void TimelineMidiSourceModule::emitPreviewBlock(const synth::TimelineSnap
             juce::jlimit(0, lastSample, static_cast<int>(std::llround((previewHi_ - previewPos_) / beatsPerSample)));
         flushTimelineNotes(midiMessages, wrapOffset);
         const double into = std::fmod(end - previewHi_, length); // a clip shorter than the block folds, as a loop does
+        previewPass_ += 1 + static_cast<std::int64_t>(std::floor((end - previewHi_) / length));
         emit(previewLo_, previewLo_ + into, wrapOffset);
         previewPos_ = previewLo_ + into;
     }

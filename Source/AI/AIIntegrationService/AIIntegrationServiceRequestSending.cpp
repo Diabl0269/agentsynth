@@ -233,11 +233,17 @@ juce::String AIIntegrationService::buildAutomationTargetsSection() const {
 //    buildAutomationTargetsSection() renders as text, as structured objects {nodeUuid, nodeName,
 //    paramId, min, max, default}, capped at kMaxRemoteParamTargets.
 //  - `availableTracks`: one {name, kind, index} per live TimelineDoc track, in doc order.
+// The timeline.generate prompt this build understands. Version 2 teaches the drum-hit note fields (chance, repeat,
+// flam, nudge, condition); a request that sends no version keeps getting version 1, so a server deploy never hands an
+// older app a note field it would reject.
+static constexpr int kTimelineGeneratePromptVersion = 2;
+
 juce::var AIIntegrationService::buildArrangeRequestBody(const juce::String& text) const {
     juce::DynamicObject::Ptr body = new juce::DynamicObject();
 
     // The RAW user text (see the comment above).
     body->setProperty("userPrompt", text);
+    body->setProperty("promptVersion", kTimelineGeneratePromptVersion);
 
     // Required key, allowed empty (the schema's own words: "a caller with nothing to say should
     // say so explicitly rather than have the field quietly go missing").

@@ -131,6 +131,98 @@ bool readPitchList(const juce::var& v, std::vector<int>& out) {
     return true;
 }
 
+// A clip's per-drum overrides: absent -> none; present, an array of {pitch, length?, swing?} with distinct pitches.
+bool readDrumRows(const juce::var& v, std::vector<Clip::DrumRow>& out) {
+    const juce::Array<juce::var>* list = nullptr;
+    if (!readOptionalArray(v, list))
+        return false;
+    out.clear();
+    if (list == nullptr)
+        return true;
+    for (const auto& item : *list) {
+        const auto* rowObj = item.getDynamicObject();
+        if (rowObj == nullptr)
+            return false;
+        Clip::DrumRow row;
+        if (!readInt(rowObj->getProperty("pitch"), row.pitch) || row.pitch < 0 || row.pitch > 127 ||
+            !readOptionalInt(rowObj->getProperty("length"), row.lengthSteps) ||
+            !Clip::isValidRowLength(row.lengthSteps) || !readOptionalDouble(rowObj->getProperty("swing"), row.swing) ||
+            (rowObj->hasProperty("swing") && !Clip::isValidSwing(row.swing)))
+            return false;
+        if (row.lengthSteps == 0 && row.swing < 0.0)
+            return false; // a row with nothing to say is never written
+        out.push_back(row);
+    }
+    std::sort(out.begin(), out.end(), [](const Clip::DrumRow& a, const Clip::DrumRow& b) { return a.pitch < b.pitch; });
+    return std::adjacent_find(out.begin(), out.end(), [](const Clip::DrumRow& a, const Clip::DrumRow& b) {
+               return a.pitch == b.pitch;
+           }) == out.end();
+}
+
+void writeDrumRows(juce::DynamicObject& obj, const std::vector<Clip::DrumRow>& rows) {
+    if (rows.empty())
+        return;
+    juce::Array<juce::var> items;
+    for (const auto& row : rows) {
+        juce::DynamicObject::Ptr r = new juce::DynamicObject();
+        r->setProperty("pitch", row.pitch);
+        if (row.lengthSteps != 0)
+            r->setProperty("length", row.lengthSteps);
+        if (row.swing >= 0.0)
+            r->setProperty("swing", row.swing);
+        items.add(juce::var(r.get()));
+    }
+    obj.setProperty("drumRows", items);
+}
+
+// "hit/of", both whole numbers, hit <= of <= 8.
+bool readCondition(const juce::var& v, int& hit, int& of) {
+    juce::String text;
+    if (!readString(v, text))
+        return false;
+    const int slash = text.indexOfChar('/');
+    if (slash <= 0)
+        return false;
+    const auto hitText = text.substring(0, slash).trim();
+    const auto ofText = text.substring(slash + 1).trim();
+    if (hitText.isEmpty() || ofText.isEmpty() || !hitText.containsOnly("0123456789") ||
+        !ofText.containsOnly("0123456789") || hitText.length() > 2 || ofText.length() > 2)
+        return false;
+    hit = hitText.getIntValue();
+    of = ofText.getIntValue();
+    return MidiNote::isValidCondition(hit, of);
+}
+
+// A note's per-hit drum settings. "condition" is the Poly Sequencer's "hit/of" string.
+bool readNoteDrumFields(const juce::DynamicObject& obj, MidiNote& note) {
+    if (!readOptionalInt(obj.getProperty("chance"), note.chance) || !MidiNote::isValidChance(note.chance) ||
+        !readOptionalInt(obj.getProperty("repeat"), note.repeat) || !MidiNote::isValidRepeat(note.repeat) ||
+        !readOptionalBool(obj.getProperty("flam"), note.flam) ||
+        !readOptionalDouble(obj.getProperty("nudge"), note.nudge) || !std::isfinite(note.nudge) ||
+        !MidiNote::isValidNudge(note.nudge))
+        return false;
+    const auto cond = obj.getProperty("condition");
+    return cond.isVoid() || readCondition(cond, note.condHit, note.condOf);
+}
+
+// The note's mute flag and drum settings, all optional (absent = default).
+bool readNoteFlags(const juce::DynamicObject& obj, MidiNote& note) {
+    return readOptionalBool(obj.getProperty("muted"), note.muted) && readNoteDrumFields(obj, note);
+}
+
+void writeNoteDrumFields(juce::DynamicObject& obj, const MidiNote& note) {
+    if (note.chance != 100)
+        obj.setProperty("chance", note.chance);
+    if (note.repeat != 1)
+        obj.setProperty("repeat", note.repeat);
+    if (note.flam)
+        obj.setProperty("flam", true);
+    if (note.nudge != 0.0)
+        obj.setProperty("nudge", note.nudge);
+    if (note.condHit != 1 || note.condOf != 1)
+        obj.setProperty("condition", juce::String(note.condHit) + "/" + juce::String(note.condOf));
+}
+
 bool clipAudioFieldsValid(const Clip& clip) {
     return isValidAssetRefString(clip.assetRef) && std::isfinite(clip.gainDb) &&
            isFiniteAtOrAfterZero(clip.fadeInBeats) && isFiniteAtOrAfterZero(clip.fadeOutBeats) &&
@@ -142,6 +234,9 @@ bool readClipDrumFields(const juce::DynamicObject& obj, Clip& clip) {
         !Clip::isValidStepsPerBar(clip.stepsPerBar))
         return false;
     if (!readOptionalDouble(obj.getProperty("swing"), clip.swing) || !Clip::isValidSwing(clip.swing))
+        return false;
+    if (!readOptionalDouble(obj.getProperty("humanise"), clip.humanise) || !std::isfinite(clip.humanise) ||
+        !Clip::isValidHumanise(clip.humanise) || !readDrumRows(obj.getProperty("drumRows"), clip.drumRows))
         return false;
     return readPitchList(obj.getProperty("mutedPitches"), clip.mutedPitches) &&
            readPitchList(obj.getProperty("soloPitches"), clip.soloPitches);
@@ -162,6 +257,9 @@ void writeClipDrumFields(juce::DynamicObject& obj, const Clip& clip) {
         obj.setProperty("stepsPerBar", clip.stepsPerBar);
     if (clip.swing != Clip::kStraightSwing)
         obj.setProperty("swing", clip.swing);
+    if (clip.humanise > 0.0)
+        obj.setProperty("humanise", clip.humanise);
+    writeDrumRows(obj, clip.drumRows);
     writePitchList(obj, "mutedPitches", clip.mutedPitches);
     writePitchList(obj, "soloPitches", clip.soloPitches);
 }
@@ -374,6 +472,7 @@ juce::var TimelineDoc::toVar() const {
                 n->setProperty("velocity", note.velocity);
                 n->setProperty("channel", note.channel);
                 n->setProperty("muted", note.muted); // additive; absent loads as false
+                writeNoteDrumFields(*n, note);
                 noteVars.add(juce::var(n.get()));
             }
             c->setProperty("notes", noteVars);
@@ -572,7 +671,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                                 !readOptionalInt(nObj->getProperty("pitch"), note.pitch) ||
                                 !readOptionalInt(nObj->getProperty("velocity"), note.velocity) ||
                                 !readOptionalInt(nObj->getProperty("channel"), note.channel) ||
-                                !readOptionalBool(nObj->getProperty("muted"), note.muted))
+                                !readNoteFlags(*nObj, note))
                                 return false;
                             if (!isValidNote(note))
                                 return false;

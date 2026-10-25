@@ -488,6 +488,7 @@ TEST_F(AIIntegrationServiceProjectEditTest, HostedRequestIsProjectGenerateWithTh
     for (const char* key : {"userPrompt", "arrangementContext", "paramTargets", "availableTracks"})
         EXPECT_EQ(juce::JSON::toString(body[key]), juce::JSON::toString(arrange[key])) << key;
     EXPECT_EQ(juce::JSON::toString(service->buildProjectRequestBody("a wobbly bass")), juce::JSON::toString(body));
+    EXPECT_EQ((int)arrange["promptVersion"], 2) << "the timeline.generate prompt that teaches the drum-hit note fields";
     EXPECT_EQ((int)body["promptVersion"], 7) << "the server prompt that writes a sequencer's pattern as its state";
 
     service->setProjectPromptVersion(3); // the eval harness measuring a newer server prompt

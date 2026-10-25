@@ -189,6 +189,86 @@ bool TimelineDoc::setClipSwing(ClipId id, double swing) {
     });
 }
 
+bool TimelineDoc::setClipHumanise(ClipId id, double amount) {
+    if (!std::isfinite(amount) || !Clip::isValidHumanise(amount))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->humanise == amount)
+        return true;
+
+    return applyMutation([&] {
+        clip->humanise = amount;
+        syncLinkedClips(*clip);
+        return true;
+    });
+}
+
+namespace {
+// The drum row for `pitch`, inserted in pitch order when missing (a fresh row follows the clip).
+Clip::DrumRow& drumRowFor(Clip& clip, int pitch) {
+    auto it = std::lower_bound(clip.drumRows.begin(), clip.drumRows.end(), pitch,
+                               [](const Clip::DrumRow& row, int p) { return row.pitch < p; });
+    if (it == clip.drumRows.end() || it->pitch != pitch) {
+        Clip::DrumRow row;
+        row.pitch = pitch;
+        it = clip.drumRows.insert(it, row);
+    }
+    return *it;
+}
+
+// Drops the entry for `pitch` once both of its settings are back to following the clip.
+void pruneDrumRow(Clip& clip, int pitch) {
+    const auto it = std::find_if(clip.drumRows.begin(), clip.drumRows.end(),
+                                 [pitch](const Clip::DrumRow& row) { return row.pitch == pitch; });
+    if (it != clip.drumRows.end() && it->lengthSteps == 0 && it->swing < 0.0)
+        clip.drumRows.erase(it);
+}
+} // namespace
+
+bool TimelineDoc::setClipRowLength(ClipId id, int pitch, int lengthSteps) {
+    if (pitch < 0 || pitch > 127 || !Clip::isValidRowLength(lengthSteps))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    const auto it = std::find_if(clip->drumRows.begin(), clip->drumRows.end(),
+                                 [pitch](const Clip::DrumRow& row) { return row.pitch == pitch; });
+    if ((it == clip->drumRows.end() ? 0 : it->lengthSteps) == lengthSteps)
+        return true;
+
+    return applyMutation([&] {
+        drumRowFor(*clip, pitch).lengthSteps = lengthSteps;
+        pruneDrumRow(*clip, pitch);
+        syncLinkedClips(*clip);
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipRowSwing(ClipId id, int pitch, double swing) {
+    if (pitch < 0 || pitch > 127 || !std::isfinite(swing))
+        return false;
+    if (swing >= 0.0 && !Clip::isValidSwing(swing))
+        return false;
+    if (swing < 0.0)
+        swing = -1.0;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    const auto it = std::find_if(clip->drumRows.begin(), clip->drumRows.end(),
+                                 [pitch](const Clip::DrumRow& row) { return row.pitch == pitch; });
+    if ((it == clip->drumRows.end() ? -1.0 : it->swing) == swing)
+        return true;
+
+    return applyMutation([&] {
+        drumRowFor(*clip, pitch).swing = swing;
+        pruneDrumRow(*clip, pitch);
+        syncLinkedClips(*clip);
+        return true;
+    });
+}
+
 bool TimelineDoc::setClipScale(ClipId id, std::optional<synth::MusicalScale> scale, bool visible) {
     auto* clip = findClip(id);
     if (clip == nullptr)
@@ -312,6 +392,8 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
         right.muted = clip->muted;
         right.stepsPerBar = clip->stepsPerBar;
         right.swing = clip->swing;
+        right.humanise = clip->humanise;
+        right.drumRows = clip->drumRows;
         right.mutedPitches = clip->mutedPitches;
         right.soloPitches = clip->soloPitches;
         right.scale = clip->scale;
@@ -413,6 +495,8 @@ ClipId TimelineDoc::duplicateClipImpl(ClipId id, bool linked) {
         dup.muted = clip->muted;
         dup.stepsPerBar = clip->stepsPerBar;
         dup.swing = clip->swing;
+        dup.humanise = clip->humanise;
+        dup.drumRows = clip->drumRows;
         dup.mutedPitches = clip->mutedPitches;
         dup.soloPitches = clip->soloPitches;
         dup.scale = clip->scale;

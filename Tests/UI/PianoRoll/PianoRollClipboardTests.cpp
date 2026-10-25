@@ -8,6 +8,34 @@
 // 5. Note clipboard
 // ============================================================================
 
+TEST(PianoRollClipboardTest, PasteKeepsThePerHitDrumSettings) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 42, 0.5));
+    ASSERT_TRUE(f.doc.setNoteChance(id, 40));
+    ASSERT_TRUE(f.doc.setNoteRepeat(id, 3, true));
+    ASSERT_TRUE(f.doc.setNoteNudge(id, -0.25));
+    ASSERT_TRUE(f.doc.setNoteCondition(id, 2, 4));
+
+    f.roll.getSelectionForTest().setSelection({id});
+    ASSERT_TRUE(f.roll.copySelectedNotes());
+    f.roll.setPlayheadBeat(4.0);
+    ASSERT_TRUE(f.roll.pasteNotesAtPlayhead());
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 2u);
+    const auto& pasted = clip->notes[1];
+    EXPECT_EQ(pasted.chance, 40);
+    EXPECT_EQ(pasted.repeat, 3);
+    EXPECT_TRUE(pasted.flam);
+    EXPECT_DOUBLE_EQ(pasted.nudge, -0.25);
+    EXPECT_EQ(pasted.condHit, 2);
+    EXPECT_EQ(pasted.condOf, 4);
+}
+
 TEST(PianoRollClipboardTest, CopyThenPasteAtThePlayheadInsideTheClip) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");

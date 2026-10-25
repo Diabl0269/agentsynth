@@ -48,6 +48,9 @@ DrumMachineComponent::DrumMachineComponent()
     labels_.setComponentID("drumRowLabels");
     labels_.onMuteToggled = [this](int pitch, bool on) { setMuted(pitch, on); };
     labels_.onSoloToggled = [this](int pitch, bool on) { setSoloed(pitch, on); };
+    labels_.onRowContextMenu = [this](int pitch, juce::Point<int> p) {
+        showRowMenu(pitch, juce::Rectangle<int>(p.x, p.y, 1, 1));
+    };
 
     addAndMakeVisible(viewSwitch_);
     viewSwitch_.setComponentID("drumViewSwitch");
@@ -92,6 +95,7 @@ DrumMachineComponent::~DrumMachineComponent() {
     motionAnim_.stop(vblank_);
     rowAnim_.stop(vblank_);
     laneAnim_.stop(vblank_);
+    edgeAnim_.stop(vblank_);
     changeAnim_.stop(vblank_);
 }
 
@@ -125,6 +129,7 @@ void DrumMachineComponent::openClip(synth::ClipId id) {
     motionAnim_.stop(vblank_);
     rowAnim_.stop(vblank_);
     changeAnim_.stop(vblank_);
+    clearRowLengthState();
     hasPlayheadX_ = false;
     playStep_ = -1;
     pendingSwung_.clear();
@@ -144,6 +149,7 @@ void DrumMachineComponent::openClip(synth::ClipId id) {
     slots_.clear();
     syncLanes(false);
     rebuildCells(false); // the first build is the baseline: nothing grows in on open
+    syncRowLengths(false);
     focus_ = {0, 0};
     viewSwitch_.setSelectedIndex(0, juce::dontSendNotification);
     stepsCombo_.setSelectedId(
@@ -168,6 +174,7 @@ void DrumMachineComponent::closeGrid() {
     flashes_.clear();
     changed_.clear();
     changeAnim_.stop(vblank_);
+    clearRowLengthState();
     clipId_ = {};
     hasPlayheadX_ = false;
     playStep_ = -1;
@@ -205,7 +212,9 @@ void DrumMachineComponent::refreshFromDoc() {
         startClipPreview(); // the clip moved or was resized: loop its new range
     }
     syncLanes(true);
+    const bool sameGrid = std::abs(cellsStepBeats_ - getStepBeats()) < 1.0e-12;
     rebuildCells();
+    syncRowLengths(sameGrid);
     const int combo = 1 + static_cast<int>(std::find(std::begin(kStepChoices), std::end(kStepChoices), c->stepsPerBar) -
                                            std::begin(kStepChoices));
     stepsCombo_.setSelectedId(combo, juce::dontSendNotification);
@@ -292,6 +301,7 @@ void DrumMachineComponent::pushRowsToLabels() {
         row.height = rowHeightOf(slot);
         row.alpha = slot.reveal;
         row.selected = slot.lane.pitch == selectedPitch_;
+        row.detail = describeRowSettings(slot.lane.pitch);
         if (c != nullptr) {
             row.muted = std::binary_search(c->mutedPitches.begin(), c->mutedPitches.end(), slot.lane.pitch);
             row.soloed = std::binary_search(c->soloPitches.begin(), c->soloPitches.end(), slot.lane.pitch);

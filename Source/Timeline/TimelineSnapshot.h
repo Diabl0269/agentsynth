@@ -85,6 +85,14 @@ struct TimelineSnapshot {
         int pitch = 0;
         int velocity = 0;
         int channel = 1;
+        // Per-hit drum settings, resolved by notePlays() against a pass counter. Every event of one hit shares the
+        // seed, so a repeat or its grace hit plays or skips together.
+        std::uint32_t rollSeed = 0;
+        std::uint8_t chance = 100;
+        std::uint8_t condHit = 1;
+        std::uint8_t condOf = 1;
+        int cycle = 0;         // which repetition of the pattern this event belongs to
+        int cyclesPerPass = 1; // how many cycles one pass over the clip spans
     };
 
     struct LaneInfo {
@@ -156,6 +164,25 @@ struct TimelineSnapshot {
     std::vector<Point> points;    // per-lane runs, sorted by beat
     // Per-track runs, sorted by startBeat. Only Audio-kind tracks contribute.
     std::vector<AudioClipInfo> audioClips;
+
+    // splitmix64 over (value, salt): allocation-free, the roll behind chance.
+    static constexpr std::uint64_t mixHash(std::uint64_t value, std::uint64_t salt) noexcept {
+        std::uint64_t z = value + 0x9E3779B97F4A7C15ull * (salt + 1);
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        return z ^ (z >> 31);
+    }
+
+    // Whether the event sounds on pass `pass` (0 = the first pass of a preview or of the transport loop). Audio-thread
+    // safe.
+    static bool notePlays(const NoteEvent& event, std::int64_t pass) noexcept {
+        const std::int64_t cycle = event.cycle + pass * event.cyclesPerPass;
+        if (event.condOf > 1 && cycle % event.condOf != event.condHit - 1)
+            return false;
+        if (event.chance < 100)
+            return mixHash(event.rollSeed, static_cast<std::uint64_t>(pass)) % 100 < event.chance;
+        return true;
+    }
 
     // True when at least one MIDI track has soloed set. Solo is a document-wide predicate ("is
     // anything soloed?" decides whether a non-soloed track is silent), so it is computed ONCE in

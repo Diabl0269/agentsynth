@@ -33,10 +33,23 @@ void spliceSnapRows(std::vector<Entry>& rows) {
     rows.insert(at, snapRows.begin(), snapRows.end());
 }
 
+// A drum's own length: shorter and longer by a step, then by a bar, right after Play clip in the Drum Machine section.
+template <class Entry>
+void spliceDrumRowLengthRows(std::vector<Entry>& rows) {
+    std::vector<Entry> lengthRows;
+    for (const char* id :
+         {"drumMachineRowShorter", "drumMachineRowLonger", "drumMachineRowShorterBar", "drumMachineRowLongerBar"})
+        lengthRows.push_back({id, ShortcutCategory::DrumMachine});
+    const auto at = std::find_if(rows.begin(), rows.end(),
+                                 [](const Entry& row) { return std::string_view(row.id) == "drumMachinePlayClip"; });
+    rows.insert(at + 1, lengthRows.begin(), lengthRows.end());
+}
+
 template <class Entry>
 void spliceTimelineRows(std::vector<Entry>& rows) {
     spliceSnapRows(rows);
     spliceRenderRow(rows);
+    spliceDrumRowLengthRows(rows);
 }
 
 // The positional dock keys sit right before the per-view show actions they replace as the digit owners: show the tab

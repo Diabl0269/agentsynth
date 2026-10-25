@@ -56,6 +56,7 @@ void DrumMachineComponent::startMotionClock() {
         [this] {
             hitMotions_.clear();
             flashes_.clear();
+            ghostFades_.clear();
             staggerTailMs_ = 0.0;
             repaint();
         });
@@ -68,10 +69,14 @@ void DrumMachineComponent::tickMotion() {
         repaint(rectForKey(key));
     for (const auto& [key, start] : flashes_)
         repaint(rectForKey(key));
+    for (const auto& [key, start] : ghostFades_)
+        repaint(rectForKey(key));
     for (auto it = hitMotions_.begin(); it != hitMotions_.end();)
         it = now - it->second.startMs >= hitMs ? hitMotions_.erase(it) : std::next(it);
     for (auto it = flashes_.begin(); it != flashes_.end();)
         it = now - it->second >= kFlashMs ? flashes_.erase(it) : std::next(it);
+    for (auto it = ghostFades_.begin(); it != ghostFades_.end();)
+        it = now - it->second >= hitMs ? ghostFades_.erase(it) : std::next(it);
 }
 
 // The scale a growing or shrinking hit is drawn at (1 when it has no motion), and under Reduce Motion the fade it takes
@@ -109,10 +114,14 @@ void DrumMachineComponent::finishMotionsForTest() {
     motionAnim_.stop(vblank_);
     hitMotions_.clear();
     flashes_.clear();
+    ghostFades_.clear();
     changed_.clear();
     changeAnim_.stop(vblank_);
     laneAnim_.completeForTest();
     rowAnim_.completeForTest();
+    if (edgeAnim_.isRunning()) {
+        edgeAnim_.completeForTest();
+    }
     repaint();
 }
 

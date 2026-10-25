@@ -473,6 +473,7 @@ bool PopupMotion::isPlatformAnimationOffForTest([[maybe_unused]] juce::Component
 }
 
 void PopupMotion::setAnimateOffScreenForTest(bool animate) { offscreenForTestFlag() = animate; }
+bool PopupMotion::animatesOffScreenForTest() { return offscreenForTestFlag(); }
 
 void PopupMotion::stepMotionForTest(juce::Component& window, double ms) {
     if (const auto it = registry().find(&window); it != registry().end())

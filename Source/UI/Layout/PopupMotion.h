@@ -195,6 +195,7 @@ public:
     /** Test seam: lets dismiss() animate a window that has no native peer (the tween then ends on
      *  its watchdog timer, since no VBlank ever arrives). Default off. */
     static void setAnimateOffScreenForTest(bool animate);
+    static bool animatesOffScreenForTest();
 
     /** Test seam: moves the tween `window` is running (in or out) to `ms` after its start, in place of the VBlank
      *  frames an off-screen window never gets, so a test can read the in-between frames. */

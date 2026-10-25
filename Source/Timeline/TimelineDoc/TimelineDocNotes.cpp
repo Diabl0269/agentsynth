@@ -114,6 +114,76 @@ bool TimelineDoc::setNoteVelocity(NoteId id, int velocity) {
     });
 }
 
+bool TimelineDoc::setNoteChance(NoteId id, int chance) {
+    if (!MidiNote::isValidChance(chance))
+        return false;
+    Clip* owner = nullptr;
+    auto* note = findNote(id, &owner);
+    if (note == nullptr)
+        return false;
+    if (note->chance == chance)
+        return true;
+
+    return applyMutation([&] {
+        note->chance = chance;
+        syncLinkedClips(*owner);
+        return true;
+    });
+}
+
+bool TimelineDoc::setNoteRepeat(NoteId id, int repeat, bool flam) {
+    if (!MidiNote::isValidRepeat(repeat))
+        return false;
+    Clip* owner = nullptr;
+    auto* note = findNote(id, &owner);
+    if (note == nullptr)
+        return false;
+    if (note->repeat == repeat && note->flam == flam)
+        return true;
+
+    return applyMutation([&] {
+        note->repeat = repeat;
+        note->flam = flam;
+        syncLinkedClips(*owner);
+        return true;
+    });
+}
+
+bool TimelineDoc::setNoteNudge(NoteId id, double nudge) {
+    if (!std::isfinite(nudge) || !MidiNote::isValidNudge(nudge))
+        return false;
+    Clip* owner = nullptr;
+    auto* note = findNote(id, &owner);
+    if (note == nullptr)
+        return false;
+    if (note->nudge == nudge)
+        return true;
+
+    return applyMutation([&] {
+        note->nudge = nudge;
+        syncLinkedClips(*owner);
+        return true;
+    });
+}
+
+bool TimelineDoc::setNoteCondition(NoteId id, int hit, int of) {
+    if (!MidiNote::isValidCondition(hit, of))
+        return false;
+    Clip* owner = nullptr;
+    auto* note = findNote(id, &owner);
+    if (note == nullptr)
+        return false;
+    if (note->condHit == hit && note->condOf == of)
+        return true;
+
+    return applyMutation([&] {
+        note->condHit = hit;
+        note->condOf = of;
+        syncLinkedClips(*owner);
+        return true;
+    });
+}
+
 bool TimelineDoc::setNoteMuted(NoteId id, bool muted) {
     Clip* owner = nullptr;
     auto* note = findNote(id, &owner);
