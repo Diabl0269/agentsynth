@@ -639,8 +639,9 @@ private:
     void applyScalePanelOpenProgress(float progress);
     void finishScalePanelAnimation();
     std::optional<synth::MusicalScale> activeScaleForOpenClip() const;
-    void pushScaleContextFromMemory();
-    void restoreScaleMemoryForOpenClip();
+    void pushScaleContextFromClip();
+    void restoreScaleForOpenClip();
+    void commitClipScale(std::optional<synth::MusicalScale> scale, bool pitchVisibilityOn);
 
     // ---- Velocity strip plumbing ---- see PianoRollVelocity.cpp.
     void initVelocityControls();
@@ -917,11 +918,6 @@ private:
     // Within the house 160-220 ms spec (docs/layout/animation.md), matching MainComponent's own
     // kPanelSlideMs (~190 ms) feel for the app's other show/hide sidebars.
     static constexpr double kScalePanelAnimMs = 200.0;
-
-    // ClipScaleMemory is defined in PianoRollTypes.h; re-exposed as a nested-type alias so
-    // PianoRollComponent::ClipScaleMemory keeps resolving exactly as when it was nested.
-    using ClipScaleMemory = pianoroll::ClipScaleMemory;
-    std::map<synth::ClipId, ClipScaleMemory> clipScaleMemory_;
 
     // ---- Edge auto-scroll timer ----
     //

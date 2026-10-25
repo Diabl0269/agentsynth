@@ -152,5 +152,15 @@ inline AutomationLane::Breakpoint makeBreakpoint(const AutomationLane::RangeSnap
     return point;
 }
 
+// -- clip scale fields (TimelineDocScaleSerialization.cpp) ----------------------
+// Writes "scale"/"scaleVisible" only when set. The reader is tolerant: a missing or malformed scale
+// loads as none and never fails the load, so it always returns true (a bool only so it chains into the
+// clip validation expression in fromVar(), which is at its function-size ratchet).
+void writeClipScaleFields(juce::DynamicObject& obj, const Clip& clip);
+bool readClipScaleFields(const juce::DynamicObject& obj, Clip& clip);
+
+// The one normal form a scale takes inside a clip (root 0..11, 12-bit mask), or none for an empty mask.
+std::optional<synth::MusicalScale> normaliseClipScale(const std::optional<synth::MusicalScale>& scale);
+
 } // namespace detail
 } // namespace synth

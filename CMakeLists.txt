@@ -368,6 +368,7 @@ add_library(Core STATIC
     Source/Timeline/TimelineDoc/TimelineDocLinkedClips.cpp
     Source/Timeline/TimelineDoc/TimelineDocNotes.cpp
     Source/Timeline/TimelineDoc/TimelineDocRanges.cpp
+    Source/Timeline/TimelineDoc/TimelineDocScaleSerialization.cpp
     Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp
     Source/Timeline/TimelineDoc/TimelineDocTracks.cpp
     Source/Timeline/TimelineReconciler.cpp
@@ -680,9 +681,8 @@ include(cmake/AudioInputRecordingSources.cmake) # Core and AppUI units, so after
 # FRO337: the mac-only NSEvent monitor half of "Esc/Cmd+W closes a focused hosted-plugin window"
 # (Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.{h,mm}) — Objective-C++, so it can't sit
 # in APPUI_SOURCES' plain file(GLOB)-free list like every other AppUI source; registered directly
-# on the target instead, same shape as Source/Update/SparkleUpdateManager.mm below. AppUI (not a
-# specific app/plugin target) because every consumer needs it: the app, both plugin formats, and
-# Tests all link AppUI and share the one HostedPluginEditorWindow it patches.
+# on the target instead, same shape as Source/Update/SparkleUpdateManager.mm below. AppUI because
+# every consumer needs it: the app, both plugin formats and Tests share the window it patches.
 if(APPLE)
     target_sources(AppUI PRIVATE Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.mm)
     # ARC explicitly, matching SparkleUpdateManager.mm below — this file's NSEvent monitor block
