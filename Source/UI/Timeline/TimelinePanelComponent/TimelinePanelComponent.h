@@ -20,6 +20,7 @@
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/ClipSelectionModel.h"
+#include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/CursorGlide/TimelineCursorGlide.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/FollowPlayheadButton.h"
@@ -393,6 +394,7 @@ public:
     void refreshTransportTooltips() { refreshShortcutTooltips(); } // after a preference the tooltips quote changes
     /** Test seam: a test drives the click via `getFollowPlayheadButtonForTest().onClick()`. */
     FollowPlayheadButton& getFollowPlayheadButtonForTest() noexcept { return followPlayheadButton_; }
+    ClipSizingButton& getClipSizingButton() noexcept { return clipSizingButton_; } // the edit-tool strip's Sizing field
 
     /** How many times updateFromTransport() has run; proves the 10 Hz poll never reaches a hidden panel. */
     int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
@@ -803,10 +805,8 @@ private:
     // relationship it has with viewState_ below).
     synth::ui::ClipSelectionModel clipSelection_;
     TimelineRulerComponent ruler_{viewState_};
-    // Positioned over gridLanesBounds_ in resized() — the SAME rect the grid below it is painted
-    // into by this component's own paint(). Added as a child AFTER the grid is painted (parent
-    // paint() always precedes children) and BEFORE playhead_ (added last, below), so z-order reads
-    // grid -> clips -> playhead with no second place ever painting the grid.
+    // Over gridLanesBounds_, the rect this panel's paint() fills with the grid; a child added before playhead_, so
+    // z-order reads grid -> clips -> playhead with no second place ever painting the grid.
     synth::ui::TimelineClipLaneArea clipLaneArea_{viewState_, clipSelection_};
     // Occupies the same rect as clipLaneArea_, added right after it and invisible until opened, so z-order reads grid
     // -> clips/editor -> playhead. It owns its own beat<->x mapping, so it is a LocalPlayheadClient of playhead_.
@@ -824,8 +824,8 @@ private:
     // setSnapEnabled() and the button never owns it. Labelled "Snap", not with its key, which goes stale on a rebind:
     // the live key is in the tooltip, through synth::shortcutHintFor.
     juce::TextButton snapToggleButton_{"Snap"};
-    // The one writer for the snap switch from panel chrome/keys: flips the flag, persists, syncs
-    // the button's lit state, and repaints every grid painter.
+    ClipSizingButton clipSizingButton_;
+    // The one writer for the snap switch: flips the flag, persists, lights the button, repaints every grid painter.
     void setSnapEnabled(bool enabled);
     // Left-aligned in the transport-bar strip, the snap combo stays right of it.
     TimelineTransportBar transportBar_;

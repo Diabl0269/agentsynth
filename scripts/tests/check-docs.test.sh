@@ -105,7 +105,7 @@ assert_fail() {
         echo "FAIL: $desc (expected non-zero exit, got success)"
         echo "$output"
         fail=$((fail + 1))
-    elif echo "$output" | grep -qF -- "$expect_grep"; then
+    elif grep -qF -- "$expect_grep" <<<"$output"; then
         echo "PASS: $desc"
         pass=$((pass + 1))
     else
@@ -332,8 +332,8 @@ write_file "Source/Some.h" <<EOF
 EOF
 f_doubled_output="$(run_check 2>&1)"
 f_doubled_status=$?
-if [ "$f_doubled_status" -ne 0 ] && echo "$f_doubled_output" | grep -qF -- "${D}${S}does-not-exist.md' does not exist" \
-    && ! echo "$f_doubled_output" | grep -qF -- "has no heading matching anchor"; then
+if [ "$f_doubled_status" -ne 0 ] && grep -qF -- "${D}${S}does-not-exist.md' does not exist" <<<"$f_doubled_output" \
+    && ! grep -qF -- "has no heading matching anchor" <<<"$f_doubled_output"; then
     echo "PASS: an anchor mention on a doc that doesn't exist is check C's failure only -- check F never double-reports it"
     pass=$((pass + 1))
 else
@@ -586,7 +586,7 @@ write_file "$D$S""Old_Name.md" <<'EOF'
 EOF
 link_from_readme "Old_Name.md"
 update_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
-if echo "$update_output" | grep -qF -- "baseline rewritten (1 naming entries)" \
+if grep -qF -- "baseline rewritten (1 naming entries)" <<<"$update_output" \
     && grep -qxF -- "naming ${D}${S}Old_Name.md" "$BASELINE"; then
     echo "PASS: --update (first run, no prior baseline) seeds the naming entry without needing --allow-growth"
     pass=$((pass + 1))
@@ -608,7 +608,7 @@ write_file "$D$S""New_Violation.md" <<'EOF'
 EOF
 refuse_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 refuse_status=$?
-if [ "$refuse_status" -ne 0 ] && echo "$refuse_output" | grep -qF -- "${D}${S}New_Violation.md is a new naming violation" \
+if [ "$refuse_status" -ne 0 ] && grep -qF -- "${D}${S}New_Violation.md is a new naming violation" <<<"$refuse_output" \
     && ! grep -q "New_Violation" "$BASELINE"; then
     echo "PASS: --update refuses to add a new naming entry once a baseline already exists"
     pass=$((pass + 1))
@@ -621,7 +621,7 @@ fi
 
 allow_output="$(bash "$CHECK" --root "$REPO" --update --allow-growth 2>&1)"
 allow_status=$?
-if [ "$allow_status" -eq 0 ] && echo "$allow_output" | grep -qF -- "::warning::${D}${S}New_Violation.md is a new naming violation" \
+if [ "$allow_status" -eq 0 ] && grep -qF -- "::warning::${D}${S}New_Violation.md is a new naming violation" <<<"$allow_output" \
     && grep -qxF -- "naming ${D}${S}New_Violation.md" "$BASELINE"; then
     echo "PASS: --update --allow-growth lets a new naming entry through with a warning"
     pass=$((pass + 1))
@@ -659,8 +659,8 @@ write_file "$D$S""Bad_Name.md" <<'EOF'
 EOF
 list_output="$(bash "$CHECK" --root "$REPO" --list 2>&1)"
 list_status=$?
-if [ "$list_status" -eq 0 ] && echo "$list_output" | grep -qF -- "${D}${S}Bad_Name.md" \
-    && echo "$list_output" | grep -qF -- "=== naming violations (check A) ==="; then
+if [ "$list_status" -eq 0 ] && grep -qF -- "${D}${S}Bad_Name.md" <<<"$list_output" \
+    && grep -qF -- "=== naming violations (check A) ===" <<<"$list_output"; then
     echo "PASS: --list exits 0 and summarizes current violations"
     pass=$((pass + 1))
 else
@@ -676,7 +676,7 @@ mkdir -p "$empty_dir/Source"
 printf '// nothing here\n' >"$empty_dir/Source/Placeholder.cpp"
 vacuous_output="$(bash "$CHECK" --root "$empty_dir" 2>&1)"
 vacuous_status=$?
-if [ "$vacuous_status" -ne 0 ] && echo "$vacuous_output" | grep -qF -- "0 .md files scanned"; then
+if [ "$vacuous_status" -ne 0 ] && grep -qF -- "0 .md files scanned" <<<"$vacuous_output"; then
     echo "PASS: zero .md files scanned fails loudly instead of reporting a vacuous pass"
     pass=$((pass + 1))
 else

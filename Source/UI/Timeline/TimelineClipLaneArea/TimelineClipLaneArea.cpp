@@ -370,6 +370,8 @@ TimelineClipLaneArea::Geometry TimelineClipLaneArea::effectiveGeometryFor(const 
         return {resizeOriginalStart_, previewLength_};
     } else if (dragMode_ == DragMode::ResizeLeft && activeClip_ == clip.id) {
         return {previewStart_, previewLength_};
+    } else if (const auto preview = resizePreviewFor(clip)) {
+        return {preview->startBeat, preview->lengthBeats}; // a copy linked to the clip being resized
     }
     return {clip.startBeat, clip.lengthBeats};
 }
@@ -487,7 +489,9 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
         // arbitrary per-track/per-user hue, not a theme colour — the contrast they need to read
         // against is unrelated to which app theme is active, only to that one clip's colour.
         g.setColour(juce::Colours::white.withAlpha(0.55f));
-        for (const auto& note : clip.notes) {
+        // During an edge drag the notes are the ones the drop will leave (the sizing rule), never the stored ones.
+        const auto preview = resizePreviewFor(clip);
+        for (const auto& note : preview ? preview->notes : clip.notes) {
             const double noteStartBeat = geometry.start + note.startBeat; // notes are clip-relative
             const double x0 = viewState_.beatToX(noteStartBeat) + noteShift;
             const double x1 = viewState_.beatToX(noteStartBeat + note.lengthBeats) + noteShift;
@@ -518,6 +522,8 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     }
     if (!markBounds.isEmpty())
         paintLinkMark(g, rect, track.muted || clip.muted);
+    if (clip.id == activeClip_)
+        paintSizingReadout(g, rect);
 }
 
 juce::String TimelineClipLaneArea::emptyRowHintFor(synth::TrackKind kind) {

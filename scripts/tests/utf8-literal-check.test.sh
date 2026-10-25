@@ -55,7 +55,7 @@ assert_fail() {
     if output="$(UTF8_CHECK_ROOT="$WORK" bash "$CHECK" 2>&1)"; then
         echo "FAIL: $desc (expected non-zero exit, got success)"
         fail=$((fail + 1))
-    elif echo "$output" | grep -qF "$expect_grep"; then
+    elif grep -qF "$expect_grep" <<<"$output"; then
         echo "PASS: $desc"
         pass=$((pass + 1))
     else

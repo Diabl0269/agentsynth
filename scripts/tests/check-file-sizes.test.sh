@@ -89,7 +89,7 @@ assert_fail() {
         echo "FAIL: $desc (expected non-zero exit, got success)"
         echo "$output"
         fail=$((fail + 1))
-    elif echo "$output" | grep -qF -- "$expect_grep"; then
+    elif grep -qF -- "$expect_grep" <<<"$output"; then
         echo "PASS: $desc"
         pass=$((pass + 1))
     else
@@ -230,7 +230,7 @@ cp "$CHECK" "$REPO/scripts/check-file-sizes.sh"   # deliberately NOT `git add`ed
 set_baseline "30 Big.cpp"
 hook_output="$(cd "$REPO" && FILE_SIZE_CAP="$FILE_SIZE_CAP" FILE_SIZE_BASELINE="$BASELINE" GIT_DIR=.git bash scripts/check-file-sizes.sh 2>&1)"
 hook_status=$?
-if [ "$hook_status" -eq 0 ] && echo "$hook_output" | grep -qF -- "1 files scanned, 1 over the ${FILE_SIZE_CAP}-line cap, largest: Big.cpp (30 lines)"; then
+if [ "$hook_status" -eq 0 ] && grep -qF -- "1 files scanned, 1 over the ${FILE_SIZE_CAP}-line cap, largest: Big.cpp (30 lines)" <<<"$hook_output"; then
     echo "PASS: an inherited relative GIT_DIR from the fixture repo root resolves ROOT correctly and reports real numbers"
     pass=$((pass + 1))
 else
@@ -248,7 +248,7 @@ mkdir -p "$nogit_dir"
 cp "$CHECK" "$nogit_dir/check-file-sizes.sh"
 nogit_output="$(cd "$nogit_dir" && GIT_DIR=/nonexistent bash ./check-file-sizes.sh 2>&1)"
 nogit_status=$?
-if [ "$nogit_status" -ne 0 ] && echo "$nogit_output" | grep -qF -- "::error::check-file-sizes: 'git rev-parse --show-toplevel' failed"; then
+if [ "$nogit_status" -ne 0 ] && grep -qF -- "::error::check-file-sizes: 'git rev-parse --show-toplevel' failed" <<<"$nogit_output"; then
     echo "PASS: ROOT resolution failing outside a git repo fails loudly instead of passing vacuously"
     pass=$((pass + 1))
 else
@@ -276,7 +276,7 @@ git clone -q --no-checkout "$REPO" "$clone_dir"
 (cd "$clone_dir" && git read-tree HEAD)
 failsafe_output="$(bash "$CHECK" --root "$clone_dir" 2>&1)"
 failsafe_status=$?
-if [ "$failsafe_status" -ne 0 ] && echo "$failsafe_output" | grep -qF -- "::error::check-file-sizes read every one of 2 scanned files as 0 lines"; then
+if [ "$failsafe_status" -ne 0 ] && grep -qF -- "::error::check-file-sizes read every one of 2 scanned files as 0 lines" <<<"$failsafe_output"; then
     echo "PASS: the awk fail-safe catches every scanned file reading as 0 lines and fails loudly"
     pass=$((pass + 1))
 else
@@ -328,7 +328,7 @@ commit_all
 raise_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 raise_status=$?
 baseline_after_raise="$(cat "$BASELINE")"
-if [ "$raise_status" -ne 0 ] && echo "$raise_output" | grep -qF -- "Legacy.cpp would raise the baseline from 30 to 35" \
+if [ "$raise_status" -ne 0 ] && grep -qF -- "Legacy.cpp would raise the baseline from 30 to 35" <<<"$raise_output" \
     && [ "$baseline_before_raise" = "$baseline_after_raise" ]; then
     echo "PASS: --update refuses to raise a baseline entry (exit 1, baseline unchanged)"
     pass=$((pass + 1))
@@ -344,8 +344,8 @@ fi
 allow_output="$(bash "$CHECK" --root "$REPO" --update --allow-growth 2>&1)"
 allow_status=$?
 baseline_after_allow="$(cat "$BASELINE")"
-if [ "$allow_status" -eq 0 ] && echo "$allow_output" | grep -qF -- "::warning::Legacy.cpp raised from 30 to 35" \
-    && echo "$baseline_after_allow" | grep -qF -- "35 Legacy.cpp"; then
+if [ "$allow_status" -eq 0 ] && grep -qF -- "::warning::Legacy.cpp raised from 30 to 35" <<<"$allow_output" \
+    && grep -qF -- "35 Legacy.cpp" <<<"$baseline_after_allow"; then
     echo "PASS: --update --allow-growth lets a raised entry through with a warning"
     pass=$((pass + 1))
 else
@@ -365,8 +365,8 @@ commit_all
 shrink_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 shrink_status=$?
 shrink_baseline="$(cat "$BASELINE")"
-if [ "$shrink_status" -eq 0 ] && echo "$shrink_baseline" | grep -qF -- "32 Shrinking.cpp" \
-    && ! echo "$shrink_output" | grep -q "::error::" && ! echo "$shrink_output" | grep -q "::warning::"; then
+if [ "$shrink_status" -eq 0 ] && grep -qF -- "32 Shrinking.cpp" <<<"$shrink_baseline" \
+    && ! grep -q "::error::" <<<"$shrink_output" && ! grep -q "::warning::" <<<"$shrink_output"; then
     echo "PASS: --update tightens a shrunk entry silently (no growth error or warning)"
     pass=$((pass + 1))
 else
@@ -386,8 +386,8 @@ bash "$CHECK" --root "$REPO" --update >/dev/null 2>&1
 mv_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 mv_status=$?
 mv_baseline="$(cat "$BASELINE")"
-if [ "$mv_status" -eq 0 ] && echo "$mv_baseline" | grep -qF -- "33 New.cpp" \
-    && ! echo "$mv_baseline" | grep -q "Old.cpp" && ! echo "$mv_output" | grep -q "::error::"; then
+if [ "$mv_status" -eq 0 ] && grep -qF -- "33 New.cpp" <<<"$mv_baseline" \
+    && ! grep -q "Old.cpp" <<<"$mv_baseline" && ! grep -q "::error::" <<<"$mv_output"; then
     echo "PASS: a pure git-mv of an over-cap file (same count, new path) is accepted without --allow-growth"
     pass=$((pass + 1))
 else
@@ -407,8 +407,8 @@ commit_all
 new_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 new_status=$?
 new_baseline="$(cat "$BASELINE")"
-if [ "$new_status" -ne 0 ] && echo "$new_output" | grep -qF -- "BrandNew.cpp is a new over-cap file (45 lines" \
-    && ! echo "$new_baseline" | grep -q "BrandNew.cpp"; then
+if [ "$new_status" -ne 0 ] && grep -qF -- "BrandNew.cpp is a new over-cap file (45 lines" <<<"$new_output" \
+    && ! grep -q "BrandNew.cpp" <<<"$new_baseline"; then
     echo "PASS: a genuinely new over-cap file is refused by --update without --allow-growth"
     pass=$((pass + 1))
 else

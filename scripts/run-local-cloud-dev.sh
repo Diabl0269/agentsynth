@@ -56,7 +56,7 @@ if [ -z "${INFERENCE_MODEL_ID:-}" ]; then
     # Prefer the documented default, then a small-and-fast pulled model, before falling back to
     # whatever's first -- an auto-picked 120B model makes every test round-trip painfully slow.
     for CANDIDATE in llama3.1 gpt-oss:20b; do
-        if echo "$OLLAMA_TAGS" | grep -q "\"$CANDIDATE\""; then
+        if grep -q "\"$CANDIDATE\"" <<<"$OLLAMA_TAGS"; then
             INFERENCE_MODEL_ID="$CANDIDATE"
             break
         fi

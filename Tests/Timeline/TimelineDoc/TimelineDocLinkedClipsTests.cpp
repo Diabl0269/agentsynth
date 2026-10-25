@@ -1,4 +1,5 @@
 #include "AppUndoManager.h"
+#include "Timeline/TimelineDoc/ClipEdgeSizing.h"
 #include "TimelineDocTestHelpers.h"
 
 #include <functional>
@@ -97,6 +98,10 @@ TEST(TimelineDocLinkedClipsTest, EveryNoteMutationSyncsTheGroupInOneNotification
         {"quantiseNotes", [](TimelineDoc& d, ClipId c) { d.quantiseNotes(c, 4.0, 1.0); }},
         {"quantiseNoteLengths", [](TimelineDoc& d, ClipId c) { d.quantiseNoteLengths(c, 2.0); }},
         {"resizeClip", [](TimelineDoc& d, ClipId c) { d.resizeClip(c, 8.0); }},
+        {"resizeClipEdge stretch",
+         [](TimelineDoc& d, ClipId c) {
+             d.resizeClipEdge(c, synth::ClipEdge::Right, synth::ClipSizingMode::Stretch, d.getClip(c)->startBeat + 8.0);
+         }},
     };
     for (const auto& [name, edit] : edits) {
         for (const bool editSecond : {false, true}) {

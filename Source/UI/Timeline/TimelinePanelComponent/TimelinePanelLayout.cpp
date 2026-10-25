@@ -57,6 +57,7 @@ constexpr int kSnapToggleButtonWidth = 46;
 // locate the marker against the arrangement without competing with the clips for attention.
 constexpr float kMarkerLaneStemAlpha = 0.40f;
 constexpr int kFollowPlayheadButtonWidth = 30;
+constexpr int kClipSizingButtonWidth = 96; // "Sizing: Stretch", the longest label
 } // namespace
 
 // Restores/persists the snap-selector choice under the "timelineSnap" key, same pattern as
@@ -72,6 +73,7 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     // only" / "read the default" rather than needing one, and the early return below would
     // otherwise leave them holding a stale pointer.
     clipLaneArea_.setApplicationProperties(props);
+    clipSizingButton_.setApplicationProperties(props); // the clip edge sizing mode, kept across projects
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr) {
         ruler_.setPropertiesFile(nullptr);
         return;
@@ -551,9 +553,10 @@ void TimelinePanelComponent::layoutTransportRow() {
     snapToggleButton_.setBounds(transportBar.removeFromRight(kSnapToggleButtonWidth).reduced(2));
     // Follow-playhead sits immediately left of the snap toggle — see its member comment.
     followPlayheadButton_.setBounds(transportBar.removeFromRight(kFollowPlayheadButtonWidth).reduced(2));
-    // The tool strip sits immediately left of the snap controls: both are "how the next edit
-    // behaves" chrome, so they read as one group, and neither pushes the transport controls off
-    // their left-aligned home. Laid out left-to-right in EditTool order (1, 3, 4, 5, 7, 8).
+    // The Sizing field, then the tool strip, sit immediately left of the snap controls: all are "how the next edit
+    // behaves" chrome, so they read as one group, and none pushes the transport controls off their left-aligned
+    // home. The tools are laid out left-to-right in EditTool order (1, 2, 3, 4, 5, 7, 8).
+    clipSizingButton_.setBounds(transportBar.removeFromRight(kClipSizingButtonWidth).reduced(2));
     auto toolStrip = transportBar.removeFromRight(kEditToolButtonWidth * (int)kAllEditTools.size());
     for (auto tool : kAllEditTools)
         if (auto* button = getToolButton(tool))

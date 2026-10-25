@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Timeline/PeaksFile.h"
+#include "Timeline/TimelineDoc/ClipEdgeSizing.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
@@ -209,6 +210,16 @@ public:
     // TimelineClipLaneEditTools.cpp for which tools are click-only vs. drag-capable and why.
     void setActiveTool(EditTool tool);
     EditTool getActiveTool() const noexcept { return activeTool_; }
+
+    // What a clip edge drag does to the notes (the panel's Sizing field pushes it in). Option held during an
+    // edge drag stretches that one drag instead.
+    void setClipSizingMode(synth::ClipSizingMode mode) noexcept { clipSizingMode_ = mode; }
+    synth::ClipSizingMode getClipSizingMode() const noexcept { return clipSizingMode_; }
+    // The live edge drag's outcome for `clip` (the notes the lane paints), or nullopt when no edge drag of it is
+    // in flight. The drop commits exactly this.
+    std::optional<synth::ClipEdgeResult> resizePreviewFor(const synth::Clip& clip) const;
+    // The text drawn on a clip during an edge drag ("75%" while stretching), empty when none (test hook).
+    juce::String getSizingReadoutForTest() const { return sizingReadout(); }
 
     // The clip the Glue tool (and the "Glue with next" menu item) would join `id` into. Returns an
     // invalid ClipId when there is no doc, no such clip, or nothing after it.
@@ -581,6 +592,10 @@ public:
 private:
     enum class DragMode { None, Move, ResizeLeft, ResizeRight, Marquee, Draw, Range };
 
+    synth::ClipSizingMode dragSizingMode() const noexcept;
+    juce::String sizingReadout() const;
+    void paintSizingReadout(juce::Graphics& g, juce::Rectangle<int> clipRect) const;
+
     struct ClipHit {
         synth::ClipId id;
         juce::Rectangle<int> rect;
@@ -851,6 +866,8 @@ private:
     double resizeOriginalLength_ = 0.0;
     double previewStart_ = 0.0;  // left-edge trim only (end stays fixed)
     double previewLength_ = 0.0; // both edges
+    synth::ClipSizingMode clipSizingMode_ = synth::ClipSizingMode::Trim;
+    bool stretchOnce_ = false; // Option held during this edge drag
 
     // ---- Marquee ----
     juce::Point<int> marqueeAnchor_;

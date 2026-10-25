@@ -671,12 +671,12 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 # a second time.
 # Main.cpp stays out — it is the standalone entry point (JUCEApplication + the generated
 # JuceHeader.h) and has no meaning inside a plugin.
-# Source list in cmake/AppUISources.cmake (APPUI_SOURCES), split out for the 1,000-line file-size cap.
-include(cmake/AppUISources.cmake)
+include(cmake/AppUISources.cmake) # APPUI_SOURCES, split out for the 1,000-line file-size cap
 include(cmake/ShapeWindowSources.cmake)
 add_library(AppUI STATIC ${APPUI_SOURCES})
 include(cmake/MixerRowSources.cmake)
 include(cmake/AudioInputRecordingSources.cmake) # Core and AppUI units, so after both exist
+include(cmake/ClipEdgeSizingSources.cmake)       # Core and AppUI units, so after both exist
 
 # FRO337: the mac-only NSEvent monitor half of "Esc/Cmd+W closes a focused hosted-plugin window"
 # (Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.{h,mm}) — Objective-C++, so it can't sit
