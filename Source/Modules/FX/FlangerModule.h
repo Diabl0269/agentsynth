@@ -2,6 +2,7 @@
 
 #include "../ModuleBase.h"
 #include "ChorusCentreGlide.h"
+#include "Modules/ParameterText.h"
 #include <juce_dsp/juce_dsp.h>
 
 class FlangerModule : public ModuleBase {
@@ -9,11 +10,14 @@ public:
     FlangerModule()
         : ModuleBase("Flanger", 7, 2) { // 2 audio + 5 CV (Rate, Depth, Centre Delay, Feedback, Mix)
         addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate (Hz)", 0.05f, 5.0f, 0.3f));
-        addParameter(depthParam = new juce::AudioParameterFloat("depth", "Depth", 0.0f, 1.0f, 0.7f));
+        addParameter(depthParam =
+                         new juce::AudioParameterFloat("depth", "Depth", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.7f, synth::fractionPercentAttributes()));
         addParameter(centreDelayParam =
                          new juce::AudioParameterFloat("centreDelay", "Centre Delay (ms)", 1.0f, 5.0f, 2.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", -1.0f, 1.0f, 0.5f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.5f));
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              0.5f, synth::fractionPercentAttributes()));
         addOutputLevelParameter();
         addMuteParameter();
         addPanParameter(); // shared output stage: this module keeps its own Mix

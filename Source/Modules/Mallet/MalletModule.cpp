@@ -2,6 +2,7 @@
 // The bar itself is in MalletVoices.h.
 
 #include "MalletModule.h"
+#include "Modules/ParameterText.h"
 
 namespace {
 
@@ -13,7 +14,9 @@ constexpr float kBarPeak = 0.9f;
 
 juce::AudioParameterFloat* MalletModule::addFloat(const char* id, const char* name, float lo, float hi, float def,
                                                   float skew) {
-    auto* p = new juce::AudioParameterFloat(id, name, juce::NormalisableRange<float>(lo, hi, 0.0f, skew), def);
+    auto* p = new juce::AudioParameterFloat(id, name, juce::NormalisableRange<float>(lo, hi, 0.0f, skew), def,
+                                            (lo == 0.0f && hi == 1.0f) ? synth::fractionPercentAttributes()
+                                                                       : juce::AudioParameterFloatAttributes());
     addParameter(p);
     return p;
 }

@@ -109,6 +109,16 @@ TEST(SourcesDefaultLayout, OscillatorHasItsDesignedSectionsAndWidgets) {
     EXPECT_TRUE(isPill(widget(osc, "poly"))) << "Poly joins the footer on its own";
 }
 
+TEST(SourcesDefaultLayout, OscillatorBlendKnobReadsAsPercentAtItsNewDefault) {
+    CardCanvas canvas;
+    const auto osc = build(canvas, "Oscillator");
+    auto* blend = dynamic_cast<juce::Slider*>(widget(osc, "blend"));
+    ASSERT_NE(blend, nullptr);
+    EXPECT_EQ(blend->getTextFromValue(blend->getValue()), "25 %");
+    EXPECT_NEAR(blend->getValueFromText("60"), 0.6, 1e-6);
+    EXPECT_NEAR(blend->getValueFromText("60%"), 0.6, 1e-6);
+}
+
 TEST(SourcesDefaultLayout, OscillatorDetuneDimsAtOneVoiceAndPulseWidthUnlessSquare) {
     CardCanvas canvas;
     const auto osc = build(canvas, "Oscillator");

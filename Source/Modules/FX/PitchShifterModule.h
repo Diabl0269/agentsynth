@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <cmath>
 
 /**
@@ -43,7 +44,8 @@ public:
         addParameter(windowParam =
                          new juce::AudioParameterFloat("window", "Window (ms)", kMinWindowMs, kMaxWindowMs, 50.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, kMaxFeedback, 0.0f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              1.0f, synth::fractionPercentAttributes()));
         addOutputLevelParameter();
         addMuteParameter();
         addPanParameter(); // shared output stage: this module keeps its own Mix

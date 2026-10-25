@@ -3,6 +3,7 @@
 #include "CardViewState.h"
 #include "ModuleChoiceState.h"
 #include "ModuleOutputStage.h"
+#include "Modules/ParameterText.h"
 #include "PortRole.h"
 #include "VisualBuffer.h"
 #include <algorithm>
@@ -583,8 +584,9 @@ public:
     void addOutputLevelParameter(float defaultValue = 1.0f) {
         if (outputLevelParam)
             return;
-        addParameter(outputLevelParam =
-                         new juce::AudioParameterFloat("outputLevel", "Level", 0.0f, 1.0f, defaultValue));
+        addParameter(outputLevelParam = new juce::AudioParameterFloat(
+                         "outputLevel", "Level", juce::NormalisableRange<float>(0.0f, 1.0f), defaultValue,
+                         synth::fractionPercentAttributes()));
         // Safe default if prepareToPlay (and therefore prepareOutputLevel) never runs:
         // snap-to-target, so applyOutputLevel takes its steady-state path at unity
         // instead of ramping up from a default-constructed 0 and silencing the module.
@@ -896,6 +898,11 @@ public:
     // reads the old keys here so old saves, presets and AI patches still load. Values come straight from the
     // file or the model: clamp every one. A params object without the old keys must change nothing.
     virtual void adoptLegacyParams(const juce::NamedValueSet& params) { juce::ignoreUnused(params); }
+    // Called on a module created from a stored node (a project, preset, snapshot or generated patch), after its
+    // params are applied; `storedParams` is empty when the node has none. A module whose default moved reads the
+    // keys here and puts the old default back for a node that never recorded it, so a saved sound does not
+    // change. Not called for a module that already exists (a patch tweaking it) or for a freshly dropped one.
+    virtual void applyStoredParamDefaults(const juce::NamedValueSet& storedParams) { juce::ignoreUnused(storedParams); }
     // Whether `id` is a parameter this module no longer has but adoptLegacyParams still reads, so the patch
     // validator lets it through instead of rejecting it as an unknown key.
     virtual bool isLegacyParamId(const juce::String& id) const {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 
 // Wet/Dry can exceed unity gain: juce::Reverb::updateParameters() (JUCE's code, not this
@@ -14,11 +15,19 @@ class ReverbModule : public ModuleBase {
 public:
     ReverbModule()
         : ModuleBase("Reverb", 8, 2) { // 2 audio + 6 CV (Size, Damping, Wet, Dry, Width, Pre-Delay)
-        addParameter(roomSizeParam = new juce::AudioParameterFloat("roomSize", "Room Size", 0.0f, 1.0f, 0.5f));
-        addParameter(dampingParam = new juce::AudioParameterFloat("damping", "Damping", 0.0f, 1.0f, 0.5f));
-        addParameter(wetParam = new juce::AudioParameterFloat("wet", "Wet", 0.0f, 1.0f, 0.33f));
-        addParameter(dryParam = new juce::AudioParameterFloat("dry", "Dry", 0.0f, 1.0f, 0.4f));
-        addParameter(widthParam = new juce::AudioParameterFloat("width", "Width", 0.0f, 1.0f, 1.0f));
+        addParameter(roomSizeParam = new juce::AudioParameterFloat("roomSize", "Room Size",
+                                                                   juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
+                                                                   synth::fractionPercentAttributes()));
+        addParameter(dampingParam =
+                         new juce::AudioParameterFloat("damping", "Damping", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.5f, synth::fractionPercentAttributes()));
+        addParameter(wetParam = new juce::AudioParameterFloat("wet", "Wet", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              0.33f, synth::fractionPercentAttributes()));
+        addParameter(dryParam = new juce::AudioParameterFloat("dry", "Dry", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              0.4f, synth::fractionPercentAttributes()));
+        addParameter(widthParam =
+                         new juce::AudioParameterFloat("width", "Width", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       1.0f, synth::fractionPercentAttributes()));
         // Pre-Delay: a delay in front of the reverb's wet path only (the dry signal is not delayed).
         // 0 ms is the plain reverb, sample for sample.
         addParameter(preDelayParam = new juce::AudioParameterFloat("preDelay", "Pre-Delay (ms)", 0.0f, 250.0f, 0.0f));

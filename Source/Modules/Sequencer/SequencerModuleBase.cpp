@@ -1,5 +1,6 @@
 #include "SequencerModuleBase.h"
 #include "Modules/Envelope/EnvelopeTempoSync.h"
+#include "Modules/ParameterText.h"
 #include "SequencerPatternLegacy.h"
 #include "Transport/TransportService.h"
 
@@ -18,7 +19,9 @@ SequencerModuleBase::SequencerModuleBase(const char* name, bool poly)
     addParameter(transposeParam_ = new juce::AudioParameterInt(ids::kTranspose, "Transpose", -24, 24, 0));
     addParameter(gateParam_ = new juce::AudioParameterFloat(ids::kGate, "Gate", 0.0f, 2.0f, 1.0f));
     addParameter(velocityParam_ = new juce::AudioParameterFloat(ids::kVelocity, "Velocity", 0.0f, 2.0f, 1.0f));
-    addParameter(chanceParam_ = new juce::AudioParameterFloat(ids::kChance, "Chance", 0.0f, 1.0f, 1.0f));
+    addParameter(chanceParam_ =
+                     new juce::AudioParameterFloat(ids::kChance, "Chance", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                   1.0f, synth::fractionPercentAttributes()));
     addParameter(scaleRootParam_ = new juce::AudioParameterChoice(
                      ids::kScaleRoot, "Key", {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}, 0));
     addParameter(scaleParam_ = new juce::AudioParameterChoice(ids::kScale, "Scale", sequencerScaleChoices(), 0));

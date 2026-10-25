@@ -66,7 +66,9 @@ public:
         addParameter(cutoffParam = new juce::AudioParameterFloat("cutoff", "Cutoff",
                                                                  juce::NormalisableRange<float>(20.0f, 20000.0f, 0.01f),
                                                                  440.0f, synth::frequencyAttributes()));
-        addParameter(resonanceParam = new juce::AudioParameterFloat("resonance", "Resonance", 0.0f, 1.0f, 0.1f));
+        addParameter(resonanceParam = new juce::AudioParameterFloat("resonance", "Resonance",
+                                                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f,
+                                                                    synth::fractionPercentAttributes()));
         addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 1.0f, 10.0f, 1.0f));
         addParameter(filterTypeParam = new juce::AudioParameterChoice(
                          "filterType", "Filter Type",

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <juce_dsp/juce_dsp.h>
 
 // Feedback (-1..1) drives juce::dsp::Phaser's internal allpass loop; either polarity can
@@ -14,11 +15,14 @@ public:
     PhaserModule()
         : ModuleBase("Phaser", 7, 2) { // 2 audio + 5 CV (Rate, Depth, Centre Freq, Feedback, Mix)
         addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate (Hz)", 0.1f, 20.0f, 1.0f));
-        addParameter(depthParam = new juce::AudioParameterFloat("depth", "Depth", 0.0f, 1.0f, 0.5f));
+        addParameter(depthParam =
+                         new juce::AudioParameterFloat("depth", "Depth", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.5f, synth::fractionPercentAttributes()));
         addParameter(centreFreqParam =
                          new juce::AudioParameterFloat("centreFreq", "Centre Freq (Hz)", 200.0f, 10000.0f, 1300.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", -1.0f, 1.0f, 0.0f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.5f));
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              0.5f, synth::fractionPercentAttributes()));
         addOutputLevelParameter();
         addMuteParameter();
         addPanParameter(); // shared output stage: this module keeps its own Mix

@@ -67,10 +67,14 @@ public:
         addParameter(retrigParam = new juce::AudioParameterBool("retrig", "Retrig", false));
 
         // Output Level
-        addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
+        addParameter(levelParam =
+                         new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       1.0f, synth::fractionPercentAttributes()));
 
         // Glide (S&H only)
-        addParameter(glideParam = new juce::AudioParameterFloat("glide", "Glide", 0.0f, 1.0f, 0.0f));
+        addParameter(glideParam =
+                         new juce::AudioParameterFloat("glide", "Glide", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       0.0f, synth::fractionPercentAttributes()));
 
         // Phase: where in its cycle the wave sits, in degrees. 0 is the unshifted wave.
         addParameter(phaseParam =

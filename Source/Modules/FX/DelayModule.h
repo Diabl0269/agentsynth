@@ -2,6 +2,7 @@
 
 #include "../Envelope/EnvelopeTempoSync.h"
 #include "../ModuleBase.h"
+#include "Modules/ParameterText.h"
 
 class DelayModule : public ModuleBase {
 public:
@@ -9,7 +10,8 @@ public:
         : ModuleBase("Delay", 5, 2) { // 2 audio + 3 CV (Time, Feedback, Mix)
         addParameter(timeParam = new juce::AudioParameterFloat("time", "Time (ms)", 1.0f, 1000.0f, 250.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, 0.95f, 0.5f));
-        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.3f));
+        addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                              0.3f, synth::fractionPercentAttributes()));
         // Tempo sync: with `tempoSync` on, the delay time is a note division of the transport tempo
         // (the same division list as the LFO and ADSR) instead of the Time knob. Off (default) is the
         // plain ms delay; Time and its CV are ignored while synced. `pingPong` off (default) is the

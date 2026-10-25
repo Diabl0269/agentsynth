@@ -337,6 +337,11 @@ private:
     static void applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,
                                        bool trusted = false, bool skipUnchanged = false);
 
+    // A node's "params" onto the module just created for it (none: the module keeps its defaults), then
+    // ModuleBase::applyStoredParamDefaults so a stored node keeps the default its module had when it was saved.
+    static void applyParamsToNewProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
+                                          bool trusted);
+
     // Feeds a node's "state" property back into ModuleBase::setExtraState — trusted callers only.
     static void applyExtraStateToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
                                            bool trusted);

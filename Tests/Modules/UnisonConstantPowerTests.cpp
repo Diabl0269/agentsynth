@@ -5,6 +5,7 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
+#include "UnisonStackMeasure.h"
 
 #include <cmath>
 #include <gtest/gtest.h>
@@ -128,4 +129,98 @@ TEST(UnisonConstantPower, OscillatorAndWavetableLevelsAtUnisonOne) {
     EXPECT_LE(b.peakDb, 0.5);
     EXPECT_LE(c.peakDb, 0.5);
     EXPECT_LE(d.peakDb, 0.5);
+}
+
+// The reference stack's numbers: a Saw at 220 Hz held with Rand 100 %, a 34 cent detune, measured as the share of
+// the mid power on the centre voice, the side/mid level ratio and the loudness against one voice. They come from
+// a reference synth measured as a black box (Blend and Width as 0..1 here, 0..100 % there).
+namespace {
+struct Reference {
+    int unison;
+    float blend;
+    float width;
+    double centreShare; ///< 0 where the row is not about Blend
+    double sideMid;     ///< 0 where the row is not about Width
+};
+
+const Reference kReference[] = {
+    {7, 0.0f, 0.0f, 0.988, 0.0},  {7, 0.25f, 0.0f, 0.9125, 0.0}, {7, 0.5f, 0.0f, 0.547, 0.0},
+    {7, 0.75f, 0.0f, 0.216, 0.0}, {7, 1.0f, 0.0f, 0.086, 0.0},   {3, 0.5f, 0.0f, 0.784, 0.0},
+    {3, 1.0f, 0.0f, 0.220, 0.0},  {5, 1.0f, 0.0f, 0.1239, 0.0},  {7, 1.0f, 0.5f, 0.0, 0.565},
+    {7, 1.0f, 1.0f, 0.0, 0.966},  {7, 0.5f, 0.5f, 0.0, 0.409},   {7, 0.5f, 1.0f, 0.0, 0.748},
+    {7, 0.25f, 1.0f, 0.0, 0.362}, {5, 1.0f, 1.0f, 0.0, 0.953},   {3, 1.0f, 1.0f, 0.0, 0.923},
+    {3, 0.5f, 1.0f, 0.0, 0.554},  {5, 0.5f, 0.5f, 0.0, 0.366},
+};
+} // namespace
+
+// Regression test for FRO1077: Blend scaled only the outer voices between 1 and `blend` and Width used a
+// balance law, so both moved the sound far less than the reference (Blend 100 % left 14 % on the centre voice
+// of 7 instead of 9 %, Width 100 % reached a side/mid ratio of 0.45 instead of 0.97).
+TEST(UnisonReferenceTable, BlendAndWidthLandOnTheReferenceNumbers) {
+    const auto one = unison_measure::measureStack(1, 0.0f, 0.0f);
+    for (const auto& r : kReference) {
+        const auto s = unison_measure::measureStack(r.unison, r.blend, r.width);
+        if (r.centreShare > 0.0)
+            EXPECT_NEAR(s.centreShare, r.centreShare, 0.04)
+                << r.unison << " voices Blend " << r.blend << " centre share";
+        if (r.sideMid > 0.0)
+            EXPECT_NEAR(s.sideMid, r.sideMid, 0.2 * r.sideMid)
+                << r.unison << " voices Blend " << r.blend << " Width " << r.width << " side/mid";
+        EXPECT_NEAR(20.0 * std::log10(s.rms / one.rms), 0.0, 1.5)
+            << r.unison << " voices Blend " << r.blend << " Width " << r.width << " loudness";
+    }
+}
+
+namespace {
+// Largest sample-to-sample step on either leg while Unison changes from `from` to `to` in a held note.
+float largestStepAcrossUnisonChange(int from, int to, float width, bool poly, int note) {
+    OscillatorModule m;
+    setActual(m, "level", 1.0f);
+    setActual(m, "waveform", 0.0f);
+    setActual(m, "unison", (float)from);
+    setActual(m, "detune", 30.0f);
+    setActual(m, "width", width);
+    setActual(m, "blend", 1.0f);
+    setActual(m, "randomPhase", 100.0f);
+    if (poly)
+        setActual(m, "poly", 1.0f);
+    m.prepareToPlay(kRate, kBlock);
+    float worst = 0.0f;
+    float lastL = 0.0f, lastR = 0.0f;
+    for (int b = 0; b < 12; ++b) {
+        if (b == 6)
+            setActual(m, "unison", (float)to);
+        juce::AudioBuffer<float> buf(OscillatorModule::kNumOutputs, kBlock);
+        buf.clear();
+        juce::MidiBuffer midi;
+        if (poly)
+            juce::FloatVectorOperations::fill(buf.getWritePointer(0),
+                                              440.0f * std::pow(2.0f, (float)(note - 69) / 12.0f), kBlock);
+        else if (b == 0)
+            midi.addEvent(juce::MidiMessage::noteOn(1, note, (juce::uint8)100), 0);
+        m.processBlock(buf, midi);
+        for (int i = 0; i < kBlock; ++i) {
+            const float l = buf.getReadPointer(0)[i];
+            const float r = buf.getReadPointer(OscillatorModule::kRightBase)[i];
+            if (b >= 2) // past the note start
+                worst = std::max({worst, std::abs(l - lastL), std::abs(r - lastR)});
+            lastL = l;
+            lastR = r;
+        }
+    }
+    return worst;
+}
+} // namespace
+
+// Regression test for FRO1077: the voice count changed instantly, so a held stack stepped by up to the whole
+// signal level at the block where Unison changed.
+TEST(UnisonReferenceTable, ChangingUnisonInAHeldNoteHasNoStep) {
+    // A sine up to 220 Hz moves at most 0.032 per sample; a stack of a few voices roughly doubles that and the
+    // fades add a little, while an instant change steps by up to the signal level.
+    for (const bool poly : {false, true})
+        for (const float width : {0.0f, 1.0f})
+            for (const auto& [from, to] : {std::pair{1, 7}, std::pair{7, 1}, std::pair{3, 4}, std::pair{5, 8}})
+                for (int note = 45; note < 58; note += 2) // the phase at the change differs with the pitch
+                    EXPECT_LT(largestStepAcrossUnisonChange(from, to, width, poly, note), 0.1f)
+                        << from << " -> " << to << " width " << width << (poly ? " poly" : " mono") << " note " << note;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "Modules/ParameterText.h"
 #include <array>
 #include <cmath>
 #include <juce_core/juce_core.h>
@@ -12,7 +13,9 @@ public:
     {
         addParameter(typeParam = new juce::AudioParameterChoice("noiseType", "Type", {"White", "Pink", "Brown"}, 0));
         addParameter(colorParam = new juce::AudioParameterFloat("color", "Color", -1.0f, 1.0f, 0.0f));
-        addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 1.0f));
+        addParameter(levelParam =
+                         new juce::AudioParameterFloat("level", "Level", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       1.0f, synth::fractionPercentAttributes()));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         addMuteParameter();
         enableVisualBuffer(true);
