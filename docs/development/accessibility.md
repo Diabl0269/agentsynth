@@ -71,7 +71,7 @@ The canvas is one focus region; inside it the arrows move between cards, Return 
 Tab/Shift+Tab walk that card's controls, and Escape (or Tab past the last control, Shift+Tab before the first) goes back out with the card still selected, so the next Tab moves to the next region
 ([shortcuts](../control/shortcuts.md#canvas-card-keys)). The selected card's accent border is its ring;
 each control inside draws its own (`AppLookAndFeel`). A card is a `group` named after its title
-(`ModuleComponentAccessibility.cpp`, through `TooltipHelpHandler`). Every knob, combo and toggle on it is named
+(`ModuleComponentAccessibility.cpp`, through `TooltipHelpHandler`). The card is also the tree container of its controls (a focus container for the tree only, so Tab and the arrows are unchanged) with a traverser that keeps a rule-disabled control: JUCE's own walk drops every disabled component, so a greyed Pan would vanish from the screen reader instead of staying named "Pan", reporting disabled and carrying its hint. Every knob, combo and toggle on it is named
 after its parameter and gets a tooltip naming it, by one pass that runs after the card has built its controls
 (`applyControlAccessibility`; it also tells the MIDI Learn registry, which composes a mapped control's
 tooltip from the base one). A knob's spoken value is the parameter's own text through the slider's text

@@ -424,6 +424,10 @@ public:
 
     // ---- Accessibility (ModuleComponentAccessibility.cpp) ----
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+    /** The card's controls for the accessibility tree, a rule-disabled one included. */
+    std::unique_ptr<juce::ComponentTraverser> createFocusTraverser() override;
+    /** Makes the card the tree container of its controls; the constructor calls it. */
+    void makeAccessibilityContainer();
     /** The accessible stand-ins for the card's jacks, in jack order. */
     const juce::OwnedArray<juce::Component>& getPortAccessiblesForTest() const noexcept { return portAccessibles_; }
 
