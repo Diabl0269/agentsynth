@@ -635,3 +635,125 @@ TEST(OscillatorVoiceFeel, SawNoteRestartsBendNoMoreThanTheirHandOverAllows) {
         EXPECT_LT(worst, 0.002f) << "rand " << rand << ": the hand-over bends by " << worst;
     }
 }
+
+// ---- Phase and Rand are audible at a note's start -------------------------------------------------------
+
+namespace {
+
+constexpr int kRepeatStep = 17640; // 0.4 s at 44.1 kHz
+constexpr int kRepeatNotes = 8;
+constexpr int kAttackSamples = 44; // a 1 ms attack, applied to the raw render like the default ADSR
+
+struct Repeats {
+    std::vector<std::vector<float>> notes; ///< the first 100 ms of each repeat, through a 1 ms attack
+    double rms(size_t note, size_t from, size_t to) const {
+        double e = 0.0;
+        for (size_t i = from; i < to; ++i)
+            e += (double)notes[note][i] * notes[note][i];
+        return std::sqrt(e / (double)(to - from));
+    }
+    double meanRms(size_t from, size_t to) const {
+        double sum = 0.0;
+        for (size_t n = 0; n < notes.size(); ++n)
+            sum += rms(n, from, to);
+        return sum / (double)notes.size();
+    }
+    // Relative standard deviation of the 100 ms level over the repeats.
+    double levelSpread() const {
+        std::vector<double> levels;
+        for (size_t n = 0; n < notes.size(); ++n)
+            levels.push_back(rms(n, 0, notes[n].size()));
+        double mean = 0.0, var = 0.0;
+        for (const double l : levels)
+            mean += l / (double)levels.size();
+        for (const double l : levels)
+            var += (l - mean) * (l - mean) / (double)levels.size();
+        return std::sqrt(var) / mean;
+    }
+    // Largest difference between the first two repeats' first 30 ms, against the first one's peak.
+    double repeatDifference() const {
+        double diff = 0.0, peak = 1e-9;
+        for (size_t i = 0; i < 1323; ++i) {
+            diff = std::max(diff, (double)std::abs(notes[0][i] - notes[1][i]));
+            peak = std::max(peak, (double)std::abs(notes[0][i]));
+        }
+        return diff / peak;
+    }
+};
+
+Repeats renderRepeats(int unison, float phase, float rand, int waveform) {
+    Rig rig;
+    setActual(rig.osc, "waveform", (float)waveform);
+    setActual(rig.osc, "unison", (float)unison);
+    setActual(rig.osc, "detune", 25.0f);
+    setActual(rig.osc, "blend", 0.75f);
+    setActual(rig.osc, "phase", phase);
+    setActual(rig.osc, "randomPhase", rand);
+    rig.settle();
+    std::vector<NoteEvent> events;
+    for (int n = 0; n < kRepeatNotes; ++n) {
+        const int on = 2048 + n * kRepeatStep;
+        events.push_back({on / kBlock, on % kBlock, 57, true});
+        events.push_back({(on + 6600) / kBlock, (on + 6600) % kBlock, 57, false});
+    }
+    rig.render((2048 + kRepeatNotes * kRepeatStep) / kBlock + 2, events);
+    Repeats r;
+    for (int n = 0; n < kRepeatNotes; ++n) {
+        const size_t on = (size_t)(2048 + n * kRepeatStep);
+        std::vector<float> note(rig.left.begin() + (long)on, rig.left.begin() + (long)on + 4410);
+        for (int i = 0; i < kAttackSamples; ++i)
+            note[(size_t)i] *= (float)i / kAttackSamples;
+        r.notes.push_back(std::move(note));
+    }
+    return r;
+}
+
+// Root-mean-square difference of two renders' notes between samples [from, to), against the first one's level.
+double relativeDifference(const Repeats& a, const Repeats& b, size_t from, size_t to) {
+    double diff = 0.0, level = 0.0;
+    for (size_t i = from; i < to; ++i) {
+        const double d = (double)a.notes[0][i] - b.notes[0][i];
+        diff += d * d;
+        level += (double)a.notes[0][i] * a.notes[0][i];
+    }
+    return std::sqrt(diff / level);
+}
+
+} // namespace
+
+// The reference synth, measured as a black box (a saw at 220 Hz, 1 ms attack, five voices, Blend 75 %, Width 0): the
+// shape of the first 30 ms differs from Phase 0 by 1.5 to 1.8 times its own level at Phase 90, 180 and 270, so
+// Phase is plainly heard in the attack of one voice and of a stack.
+TEST(OscillatorPhaseRand, PhaseChangesTheAttackWaveformOfOneVoiceAndOfAStack) {
+    for (const int unison : {1, 5}) {
+        const auto zero = renderRepeats(unison, 0.0f, 0.0f, 2);
+        for (const float phase : {90.0f, 180.0f, 270.0f}) {
+            const auto moved = renderRepeats(unison, phase, 0.0f, 2);
+            EXPECT_GT(relativeDifference(zero, moved, kFade, 240), 1.0) << "unison " << unison << " phase " << phase;
+            EXPECT_GT(relativeDifference(zero, moved, 240, 1323), 1.0) << "unison " << unison << " phase " << phase;
+        }
+    }
+}
+
+// Rand 0 starts every voice, on every note, at Phase: the stack is in phase, so the first 30 ms are louder than
+// the settled sound (2.0 times in the reference synth) and every repeat of the note is the same. Rand 100 starts the
+// voices apart: no bump in level (1.0 in the reference synth) and each note differs from the last, by about 15 %
+// in level over 100 ms.
+TEST(OscillatorPhaseRand, RandSpreadsTheStackPerVoiceAndPerNote) {
+    const auto together = renderRepeats(5, 0.0f, 0.0f, 2);
+    EXPECT_GT(together.meanRms(kFade, 1323) / together.meanRms(1323, 4410), 1.3) << "an in-phase stack starts loud";
+    EXPECT_LT(together.levelSpread(), 0.02) << "and every repeat is the same";
+
+    const auto apart = renderRepeats(5, 0.0f, 100.0f, 2);
+    EXPECT_LT(apart.meanRms(kFade, 1323) / apart.meanRms(1323, 4410), 1.15) << "a stack started apart has no bump";
+    EXPECT_GT(apart.levelSpread(), 0.05) << "the stack's thickness differs from note to note";
+    EXPECT_LT(apart.levelSpread(), 0.4);
+    EXPECT_GT(apart.repeatDifference(), 0.5) << "consecutive notes start differently";
+
+    const auto half = renderRepeats(5, 0.0f, 50.0f, 2);
+    EXPECT_GT(half.meanRms(kFade, 1323) / half.meanRms(1323, 4410),
+              apart.meanRms(kFade, 1323) / apart.meanRms(1323, 4410))
+        << "Rand 50 sits between";
+    EXPECT_LT(half.meanRms(kFade, 1323) / half.meanRms(1323, 4410),
+              together.meanRms(kFade, 1323) / together.meanRms(1323, 4410));
+}

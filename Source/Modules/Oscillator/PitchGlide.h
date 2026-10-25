@@ -61,6 +61,9 @@ public:
 
     bool isGliding() const noexcept { return offsetSemitones_ != 0.0f; }
 
+    /** True once the voice has had a target: before that the first one lands at once. */
+    bool isPrimed() const noexcept { return primed_; }
+
     /** The frequency for the next sample. */
     float nextFrequency() noexcept {
         if (offsetSemitones_ == 0.0f)

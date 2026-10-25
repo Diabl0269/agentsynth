@@ -24,6 +24,15 @@ public:
         return false;
     }
 
+    /** True when a held note other than `note` satisfies `counts(heldNote)`. */
+    template <class Predicate>
+    bool anyOtherThanIf(int note, Predicate counts) const {
+        for (int i = 0; i < count_; ++i)
+            if (notes_[(size_t)i] != note && counts(notes_[(size_t)i]))
+                return true;
+        return false;
+    }
+
     /** The most recently pressed note still held, or -1. */
     int newest() const noexcept { return count_ > 0 ? notes_[(size_t)count_ - 1] : -1; }
 

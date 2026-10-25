@@ -41,6 +41,16 @@ void OscillatorModule::cachePolyModCV(const juce::AudioBuffer<float>& buffer, in
     cache(modCVChannelFor(kJackPan, /*poly*/ true), panCVCache); // ch13
 }
 
+namespace {
+/** The first sample of `pitchHz[0..count)` at or above 20 Hz, or -1 when there is none. */
+int firstSoundingSample(const float* pitchHz, int count) {
+    for (int i = 0; i < count; ++i)
+        if (pitchHz[i] >= 20.0f)
+            return i;
+    return -1;
+}
+} // namespace
+
 void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int numSamples) {
     const int numChannels = buffer.getNumChannels();
     const int ns = std::min(numSamples, 4096);
@@ -66,11 +76,20 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
     prepareUnisonMix(global.unisonCount, numSamples, global.blend, global.width);
     const bool rightWanted = unisonMix.stereo;
 
-    const PolyVoiceSettings settings{global.unisonCount, global.detuneCents, global.glideSeconds};
+    const PolyVoiceSettings blockSettings{global.unisonCount, global.detuneCents, global.glideSeconds};
     const bool fixedMode = isFixedRate();
     for (int v = 0; v < MAX_VOICES && v < numChannels; ++v) {
         // Voice 0 falls back to the MIDI pitch when no pitch CV is patched; a voice below 20 Hz is off.
+        PolyVoiceSettings settings = blockSettings;
         float basePitchHz = pitchCVCache[v][0];
+        // A voice whose pitch CV starts sounding inside the block (Poly MIDI's first note on a voice) begins at that
+        // sample, not at the next block: its envelope is already rising there. The CV is still gliding up, so the
+        // pitch is the block's last value.
+        const int start = firstSoundingSample(pitchCVCache[v].data(), ns);
+        if (basePitchHz < 20.0f && start > 0) {
+            settings.firstSample = start;
+            basePitchHz = pitchCVCache[v][(size_t)ns - 1];
+        }
         if (basePitchHz < 20.0f && v == 0)
             basePitchHz = getTargetFrequency();
         if (basePitchHz < 20.0f) {
@@ -143,7 +162,7 @@ void OscillatorModule::renderPolyVoiceSteady(int v, float* output, float* output
     if (hasWaveCV)
         voices[v].previousWaveform = wf;
 
-    for (int s = 0; s < numSamples; ++s) {
+    for (int s = set.firstSample; s < numSamples; ++s) {
         if (voices[v].gateEdges.firesAt(s))
             restartVoice(voices[v], /*fadeFromOld*/ true);
         const int idx = std::min(s, ns - 1);
@@ -190,7 +209,7 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* out
     if (hasWaveCV)
         voices[v].previousWaveform = wf;
 
-    for (int s = 0; s < numSamples; ++s) {
+    for (int s = set.firstSample; s < numSamples; ++s) {
         if (voices[v].gateEdges.firesAt(s))
             restartVoice(voices[v], /*fadeFromOld*/ true);
         const int idx = std::min(s, ns - 1);

@@ -4,6 +4,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorPulseWidthGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorVoiceFeelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorMonoFeelTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorLegatoJumpTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorPolyChordTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorGateRestartTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorFixedRateTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/WavetableOscillatorModule/WavetableOscillatorModuleGateTests.cpp

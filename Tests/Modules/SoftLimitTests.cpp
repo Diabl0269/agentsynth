@@ -28,3 +28,18 @@ TEST(SoftLimit, RoundsAboveTheKneeWithoutAStep) {
     EXPECT_GT(synth::softLimit(1.0f), 0.9f);
     EXPECT_NEAR(synth::softLimit(0.9001f), 0.9001f, 1e-3f);
 }
+
+TEST(PolySumHeadroom, LeavesEverythingUpToTheKneeAndNeverMakesALouderChordQuieter) {
+    EXPECT_EQ(synth::polySumHeadroom(0.0f), 1.0f);
+    EXPECT_EQ(synth::polySumHeadroom(synth::kPolySumKnee), 1.0f);
+    float previousGain = 1.0f;
+    float previousLevel = 0.0f;
+    for (float peak = 0.05f; peak <= 8.0f; peak += 0.05f) {
+        const float gain = synth::polySumHeadroom(peak);
+        EXPECT_LE(gain, previousGain) << peak;
+        EXPECT_GE(peak * gain, previousLevel) << "a bigger nominal sum is never quieter: " << peak;
+        previousGain = gain;
+        previousLevel = peak * gain;
+    }
+    EXPECT_NEAR(synth::polySumHeadroom(synth::kPolySumKnee * 1.0001f), 1.0f, 1e-3f) << "no step at the knee";
+}

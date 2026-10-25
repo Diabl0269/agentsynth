@@ -19,6 +19,7 @@ struct UnisonMix {
     float sumStart = 1.0f; ///< summed mean leg power at the first sample: the stack divides by its root
     float sumStep = 0.0f;
     int renderCount = 1; ///< voices that still sound, leaving ones included
+    bool stereo = false; ///< some voice's legs differ: the stack renders to both legs
     bool primed = false; ///< false until the first block after prepareToPlay sets the gains to their targets
     float reachedL[kMaxUnisonVoices]{};
     float reachedR[kMaxUnisonVoices]{};
@@ -31,6 +32,7 @@ struct UnisonMix {
         float powerStart = 0.0f;
         float powerEnd = 0.0f;
         renderCount = unisonCount;
+        stereo = false;
         for (int u = 0; u < kMaxUnisonVoices; ++u) {
             if (!primed) {
                 reachedL[u] = targetL[u];
@@ -48,6 +50,7 @@ struct UnisonMix {
             rightStep[u] = (r1 - r0) * perSample;
             powerStart += unisonLegPower(l0, r0);
             powerEnd += unisonLegPower(l1, r1);
+            stereo = stereo || l0 != r0 || l1 != r1;
             if (l0 != 0.0f || r0 != 0.0f || l1 != 0.0f || r1 != 0.0f)
                 renderCount = std::max(renderCount, u + 1);
         }
