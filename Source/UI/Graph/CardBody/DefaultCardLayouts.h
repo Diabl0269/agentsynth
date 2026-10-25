@@ -16,6 +16,8 @@ struct CardDimRule {
     juce::StringArray watched; ///< The parameter ids whose change re-evaluates `dims`.
     std::function<bool(juce::AudioProcessor& module)> dims;
     bool hides = false; ///< The control leaves the card (its cell stays) while `dims` returns true, instead of greying.
+    juce::String
+        disabledHint; ///< Not empty: while `dims` returns true the control is also disabled, and this is its tooltip.
 };
 
 /**

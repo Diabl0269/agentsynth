@@ -2,6 +2,7 @@
 // both range edges, deleting a range (with and without closing the gap) and the detached clipped
 // copy a range copy captures.
 
+#include "Timeline/TimelineDoc/ClipEdgeSizing.h"
 #include "TimelineDocTestHelpers.h"
 
 namespace {
@@ -322,4 +323,72 @@ TEST_F(TimelineDocTest, ResizeClipLeftRejectsAudioAndBadEdges) {
     const auto audio = doc.addClip(audioTrack, 2.0, 4.0, "take");
     ASSERT_TRUE(doc.setClipAsset(audio, "Audio/take.wav", 0.0));
     EXPECT_FALSE(doc.resizeClipLeft(audio, 3.0));
+}
+
+// ---- resizeClipEdge: the three sizing modes (ClipEdgeSizing.h) ----
+
+namespace {
+std::vector<double> noteStarts(const synth::Clip& clip) {
+    std::vector<double> starts;
+    for (const auto& note : clip.notes)
+        starts.push_back(note.startBeat);
+    return starts;
+}
+} // namespace
+
+TEST_F(TimelineDocTest, ResizeClipEdgeAppliesEachModeToEachEdge) {
+    using synth::ClipEdge;
+    using synth::ClipSizingMode;
+    struct Case {
+        ClipEdge edge;
+        ClipSizingMode mode;
+        double edgeBeat, start, length;
+        std::vector<double> starts;
+    };
+    const Case cases[] = {
+        {ClipEdge::Left, ClipSizingMode::Trim, 3.0, 3.0, 3.0, {0.0, 2.0}}, // notes stay on beat 4 and 5
+        {ClipEdge::Left, ClipSizingMode::CarryContents, 3.0, 3.0, 3.0, {0.0, 1.0, 3.0}},
+        {ClipEdge::Left, ClipSizingMode::Stretch, 4.0, 4.0, 2.0, {0.0, 0.5, 1.5}},
+        {ClipEdge::Right, ClipSizingMode::Trim, 4.0, 2.0, 2.0, {0.0, 1.0, 3.0}}, // past the end: kept, unheard
+        {ClipEdge::Right, ClipSizingMode::CarryContents, 4.0, 2.0, 2.0, {0.0, 1.0, 3.0}},
+        {ClipEdge::Right, ClipSizingMode::Stretch, 10.0, 2.0, 8.0, {0.0, 2.0, 6.0}},
+    };
+    for (const auto& c : cases) {
+        TimelineDoc d;
+        const auto track = d.addTrack(TrackKind::Midi, "T");
+        const auto clip = d.addClip(track, 2.0, 4.0, "c"); // [2, 6), notes at 0, 1 and 3
+        for (const double start : {0.0, 1.0, 3.0})
+            d.addNote(clip, makeNote(start, 60));
+        ASSERT_TRUE(d.resizeClipEdge(clip, c.edge, c.mode, c.edgeBeat)) << synth::clipSizingModeName(c.mode);
+        const auto* got = d.getClip(clip);
+        EXPECT_DOUBLE_EQ(got->startBeat, c.start) << synth::clipSizingModeName(c.mode);
+        EXPECT_DOUBLE_EQ(got->lengthBeats, c.length) << synth::clipSizingModeName(c.mode);
+        EXPECT_EQ(noteStarts(*got), c.starts) << synth::clipSizingModeName(c.mode);
+    }
+}
+
+TEST_F(TimelineDocTest, ResizeClipEdgeRejectsAudioAndAnEdgePastTheOtherOne) {
+    using synth::ClipEdge;
+    using synth::ClipSizingMode;
+    const auto midiTrack = doc.addTrack(TrackKind::Midi, "T");
+    const auto midi = doc.addClip(midiTrack, 2.0, 4.0, "m");
+    EXPECT_FALSE(doc.resizeClipEdge(midi, ClipEdge::Right, ClipSizingMode::Stretch, 2.0));
+    EXPECT_FALSE(doc.resizeClipEdge(midi, ClipEdge::Left, ClipSizingMode::CarryContents, 6.0));
+    EXPECT_FALSE(doc.resizeClipEdge(midi, ClipEdge::Left, ClipSizingMode::Stretch, -1.0));
+    EXPECT_DOUBLE_EQ(doc.getClip(midi)->lengthBeats, 4.0);
+
+    const auto audioTrack = doc.addTrack(TrackKind::Audio, "A");
+    const auto audio = doc.addClip(audioTrack, 2.0, 4.0, "take");
+    ASSERT_TRUE(doc.setClipAsset(audio, "Audio/take.wav", 0.0));
+    EXPECT_FALSE(doc.resizeClipEdge(audio, ClipEdge::Right, ClipSizingMode::Stretch, 8.0));
+}
+
+TEST(ClipEdgeSizingTest, ModesCycleAndRoundTripThroughTheSettingsKey) {
+    using synth::ClipSizingMode;
+    EXPECT_EQ(synth::nextClipSizingMode(ClipSizingMode::Trim), ClipSizingMode::CarryContents);
+    EXPECT_EQ(synth::nextClipSizingMode(ClipSizingMode::CarryContents), ClipSizingMode::Stretch);
+    EXPECT_EQ(synth::nextClipSizingMode(ClipSizingMode::Stretch), ClipSizingMode::Trim);
+    for (const auto mode : {ClipSizingMode::Trim, ClipSizingMode::CarryContents, ClipSizingMode::Stretch})
+        EXPECT_EQ(synth::clipSizingModeFromKey(synth::clipSizingModeKey(mode)), mode);
+    EXPECT_FALSE(synth::clipSizingModeFromKey("sideways").has_value());
 }

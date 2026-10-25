@@ -15,3 +15,6 @@ list(APPEND APPUI_SOURCES
 # Keyboard point editing (shared with the automation lanes) keeps its own list; included here because CMakeLists.txt
 # is at the file-size cap.
 include(cmake/PointEditingSources.cmake)
+# The song key and the command table's row files keep their own lists for the same reason.
+include(cmake/SongKeySources.cmake)
+include(cmake/CommandRowSources.cmake)

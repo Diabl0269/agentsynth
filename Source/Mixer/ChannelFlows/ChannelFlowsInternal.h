@@ -121,6 +121,8 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
     }
     if (auto* stripModule = dynamic_cast<ChannelStripModule*>(stripProcessor.get()))
         stripModule->setShape(ChannelStripModule::Shape::Stereo);
+    if (layout.onNewModule)
+        layout.onNewModule(*stripProcessor, "Channel Strip"); // the Split Left/Right jacks preference, before addNode
     auto stripNode = graph.addNode(std::move(stripProcessor));
     if (stripNode == nullptr) {
         result.gateUuid = gateUuid;

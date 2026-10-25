@@ -51,13 +51,6 @@ public:
         prepareOutputStage(sampleRate, samplesPerBlock);
         smoothedGain.reset(sampleRate, 0.01);
         smoothedGain.setCurrentAndTargetValue(*gainParam);
-        const auto coefficient = [sampleRate](double seconds) {
-            return (float)(1.0 - std::exp(-1.0 / (seconds * sampleRate)));
-        };
-        peakRelease = 1.0f - coefficient(0.02);
-        headroomDown = coefficient(0.0015);
-        headroomUp = coefficient(0.05);
-        resetHeadroom();
     }
 
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -123,9 +116,9 @@ public:
         } else {
             // --- Poly mode: 8 voices summed to stereo (ch0/ch1) ---
             // Each voice is multiplied by its envelope CV and the master gain,
-            // then all voices are accumulated into a single stereo sum at unity: one voice
-            // is exactly as loud as the same note through the mono path, and the sum is never
-            // divided by the voice count. synth::softLimit rounds only what passes 0.9.
+            // then all voices are accumulated into a single stereo sum, each at the fixed
+            // synth::kPolyVoiceGain: a chord is louder than one note and nothing is normalised by
+            // the voice count. synth::softLimit rounds only what passes 0.9.
 
             if (numChannels >= 2) {
                 auto* outL = buffer.getWritePointer(0);
@@ -137,32 +130,21 @@ public:
                 float* outRightLeg = hasRight ? buffer.getWritePointer(kRightBase) : nullptr;
 
                 for (int s = 0; s < numSamples; ++s) {
-                    float gain = smoothedGain.getNextValue();
+                    const float voiceGain = smoothedGain.getNextValue() * synth::kPolyVoiceGain;
                     float sum = 0.0f;
                     float sumRight = 0.0f;
-                    float cvTotal = 0.0f;
                     for (int v = 0; v < MAX_VOICES && v < numChannels; ++v) {
                         float cv = (v + MAX_VOICES < numChannels) ? buffer.getSample(v + MAX_VOICES, s) : 1.0f;
-                        float audio = std::abs(buffer.getSample(v, s));
-                        sum += buffer.getSample(v, s) * gain * cv;
+                        sum += buffer.getSample(v, s) * voiceGain * cv;
                         if (hasRight && kRightBase + v < numChannels) {
-                            audio = std::max(audio, std::abs(buffer.getSample(kRightBase + v, s)));
-                            sumRight += buffer.getSample(kRightBase + v, s) * gain * cv;
+                            sumRight += buffer.getSample(kRightBase + v, s) * voiceGain * cv;
                         }
-                        // The voice's recent peak: up at once, down over 20 ms, so it follows the level that is
-                        // really there (a silent voice, and an unpatched envelope reading 1, add nothing) whatever
-                        // the block size.
-                        voicePeak[v] = std::max(audio, voicePeak[v] * peakRelease);
-                        cvTotal += voicePeak[v] * std::abs(cv);
                     }
-                    // A chord whose voices could add past the knee is brought back by their envelope levels, not by
-                    // clipping the sum: one note and quiet chords keep their unity sum.
-                    const float headroom = nextHeadroom(synth::polySumHeadroom(std::abs(gain) * cvTotal));
-                    float mixed = synth::softLimit(sum * headroom);
+                    float mixed = synth::softLimit(sum);
                     outL[s] = mixed;
                     outR[s] = mixed;
                     if (outRightLeg != nullptr)
-                        outRightLeg[s] = synth::softLimit(sumRight * headroom);
+                        outRightLeg[s] = synth::softLimit(sumRight);
                 }
 
                 // Zero out voice channels 2-7 so they don't leak downstream
@@ -302,28 +284,6 @@ public:
 private:
     static constexpr int MAX_VOICES = 8;
 
-    void resetHeadroom() {
-        headroomGain = 1.0f;
-        for (auto& peak : voicePeak)
-            peak = 0.0f;
-    }
-
-    /** The headroom gain moved towards `target`: down in about 1.5 ms, back up in about 50 ms, so it never steps.
-        Exactly 1 for as long as the target has been 1. */
-    float nextHeadroom(float target) {
-        if (target == 1.0f && headroomGain == 1.0f)
-            return 1.0f;
-        headroomGain += (target - headroomGain) * (target < headroomGain ? headroomDown : headroomUp);
-        if (target == 1.0f && headroomGain > 0.99999f)
-            headroomGain = 1.0f;
-        return headroomGain;
-    }
-
-    float voicePeak[MAX_VOICES] = {};
-    float peakRelease = 0.0f;
-    float headroomGain = 1.0f;
-    float headroomDown = 1.0f;
-    float headroomUp = 1.0f;
     juce::AudioParameterFloat* gainParam = nullptr;
     juce::AudioParameterBool* polyParam = nullptr;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGain;

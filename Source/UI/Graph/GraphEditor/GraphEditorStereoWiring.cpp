@@ -399,7 +399,7 @@ bool GraphEditor::audioChannelReachableFromJack(const ModuleBase& mb, int rawCha
     for (int jack = 0; jack < visible; ++jack)
         for (const auto& t : mb.getJackTargets(jack, isInput))
             for (int v = 0; v < t.voiceSpan; ++v)
-                if (t.rawHeadChannel + v == rawChannel)
+                if (t.rawHeadChannel + v * t.rawStride == rawChannel)
                     return true;
     return false;
 }
@@ -453,10 +453,15 @@ void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeI
     for (const auto& c : graph.getConnections()) {
         if (c.source.isMIDI() || c.destination.isMIDI())
             continue;
-        const bool fromHiddenOutput =
-            c.source.nodeID == nodeId && c.source.channelIndex >= hiddenBase && c.source.channelIndex < outputCount;
+        // A channel at or above the right block that a visible jack still owns is not hidden: the
+        // Channel Strip's collapsed input jack covers both its raw legs, kRightBase included, and its
+        // main Right and send legs sit above kRightBase as visible jacks of their own.
+        const bool fromHiddenOutput = c.source.nodeID == nodeId && c.source.channelIndex >= hiddenBase &&
+                                      c.source.channelIndex < outputCount &&
+                                      !audioChannelReachableFromJack(*mb, c.source.channelIndex, /*isInput=*/false);
         const bool intoHiddenInput = c.destination.nodeID == nodeId && c.destination.channelIndex >= hiddenBase &&
-                                     c.destination.channelIndex < inputCount;
+                                     c.destination.channelIndex < inputCount &&
+                                     !audioChannelReachableFromJack(*mb, c.destination.channelIndex, /*isInput=*/true);
         if (!fromHiddenOutput && !intoHiddenInput)
             continue;
 
@@ -547,7 +552,7 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
             for (int j = 0; j < visible; ++j) {
                 for (const auto& t : mb->getJackTargets(j, isInput))
                     for (int v = 0; v < t.voiceSpan; ++v)
-                        if (t.rawHeadChannel + v == rawChannel)
+                        if (t.rawHeadChannel + v * t.rawStride == rawChannel)
                             return true;
             }
             return false;

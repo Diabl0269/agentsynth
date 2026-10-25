@@ -290,8 +290,7 @@ both as unbound (and, off the Mac, holds Ctrl+R / Ctrl+M on Repeat and the matri
 them, gives Record / Metronome the new chords unless another action already uses one, and leaves any key the
 user chose alone. Every migration writes the keys it changes back to the settings file (not only its done-flag), so
 the chords survive the next launch; the transport one runs under the flag `shortcutMigration_transportCtrlChords2`,
-which repairs installs where the first version kept them in memory only. `ShortcutManager::setDefaultsPlatform` builds the other platform's table, which is how the
-Windows/Linux defaults are tested from a Mac host:
+which repairs installs where the first version kept them in memory only. `ShortcutManager::setDefaultsPlatform` builds the other platform's table, which is how the Windows/Linux defaults are tested from a Mac host:
 
 | Action id | Display name | Behaviour |
 |---|---|---|
@@ -302,6 +301,7 @@ Windows/Linux defaults are tested from a Mac host:
 | `transportRecord` | Record | Triggers the transport bar's own Record button, so it reaches `MainComponent::handleRecordToggle`'s armed-track gate exactly as a mouse click would — never bypassed |
 | `transportToggleMetronome` | Toggle Metronome | Triggers the transport bar's own metronome button, so its persisted `timelineMetronomeEnabled` state stays authoritative |
 | `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop. The transport bar's Return to Start button runs this same command ([`transport.md`](../timeline/transport.md#return-to-start-button)) |
+| `setSongKey` | Set Song Key | Shift+Cmd+K. Shows the Timeline and opens the transport bar's song key picker ([`song-key.md`](../timeline/song-key.md)) |
 | `transportNudgeBackBeat` / `transportNudgeForwardBeat` | Move Cursor Back (Beat) / Move Cursor Forward (Beat) | Relocates one beat (a quarter note) back or forward from the current position, clamped at beat 0. Works playing or stopped; never starts or stops the transport |
 | `transportNudgeBackBar` / `transportNudgeForwardBar` | Move Cursor Back (Bar) / Move Cursor Forward (Bar) | As above, by one bar of the current time signature (`numerator × 4 / denominator` beats — 4 in 4/4, 3 in 3/4, 3 in 6/8) |
 | `transportJumpToLoopStart` / `transportJumpToLoopEnd` | Jump to Loop Start / Jump to Loop End | Relocates to the left / right loop locator. A no-op when the locators span no range (end at or before start) |
@@ -459,7 +459,7 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | L | Toggle Looping, keeping the existing bounds — the transport bar's loop button |
 | F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/L/P, so it works whichever timeline surface (lanes or roll) has focus. **Ctrl+F** (macOS) / **Ctrl+Alt+F** (Windows, Linux) cycles the mode, `timelineFollowModeCycle`: Page (jump a screenful when the playhead leaves the view, the default) or Smooth (the view scrolls so the playhead stays pinned at one point of the width). Off the Mac Cmd is Ctrl, so Ctrl+F would be Cmd+F (Focus Library Search) and the chord takes Alt too ([playhead](../timeline/playhead.md#follow-modes)) |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the selected notes', else the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
-| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline/edit-tools.md`](../timeline/edit-tools.md#numbering)) |
+| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline/edit-tools.md`](../timeline/edit-tools.md#numbering)). 1 again while Select is the tool steps the clip edge Sizing mode ([edit tools](../timeline/edit-tools.md#the-sizing-field)) |
 | Shift+1 .. Shift+6 | Pick the Draw tool and a shape: 1 Free, 2 Line, 3 Sine, 4 Triangle, 5 Saw, 6 Square (`timelineShapeFree` .. `timelineShapeSquare`, titled "Free Draw Shape", "Line Shape", ...). With a lane range selected the shape is also stamped over it. Pressing the Draw key again while Draw is the tool steps to the next shape, wrapping ([automation](../timeline/automation.md#draw-shapes-and-the-lane-range)). Stored as Shift plus the digit; `keyPressMatches` maps the `!`..`^` macOS delivers back to the digit. Shift+digit was never bound before, so no saved setting shadows these |
 | Shift+8 | Open the Draw button's shape flyout (`timelineShapeMenu`, "Open shape menu"): a list of the six shapes under the pen, picked with the mouse or Up/Down and Enter. It only opens the menu; it does not pick Draw or a shape ([automation](../timeline/automation.md#draw-shapes-and-the-lane-range)). No other action uses Shift+8 (the grid division 1/128 is Ctrl+Shift+8) |
 | Delete / Backspace, Esc (with a lane range) | Remove the points inside the automation lane range (one undo step); Esc clears the lane range |

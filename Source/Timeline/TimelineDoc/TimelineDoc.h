@@ -333,6 +333,10 @@ struct AudioInputChoice {
 // On always, Off never (synth::monitorHearsInput in Timeline/TrackMonitoring.h is the rule).
 enum class MonitorMode { Auto, On, Off };
 
+// Declared in ClipEdgeSizing.h, which needs Clip complete.
+enum class ClipSizingMode;
+enum class ClipEdge;
+
 // Clips within a track stay sorted by (startBeat, id). Overlapping clips are legal in the
 // model — whether the UI allows drawing them is a policy decision made higher up.
 struct Track {
@@ -586,6 +590,8 @@ public:
     bool trimClipStart(ClipId id, double newStartBeat, double secondsPerBeat);
     // MIDI clips only: left edge to `newStartBeat`, end fixed, notes keep their absolute beat.
     bool resizeClipLeft(ClipId id, double newStartBeat);
+    // MIDI clips only: the dragged edge to absolute `edgeBeat` (the other edge fixed), notes per `mode`.
+    bool resizeClipEdge(ClipId id, ClipEdge edge, ClipSizingMode mode, double edgeBeat);
     // Right edge to absolute `newEndBeat`, strictly inside the clip; notes past it are cut.
     bool trimClipEnd(ClipId id, double newEndBeat);
     // Splits `tracks`' clips at both edges; returns the clips then wholly inside [start, end).

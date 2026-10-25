@@ -351,7 +351,7 @@ juce::String PresetManager::getPresetJSON(int index) {
 })";
 
     case 6: // Poly Pad - 8-voice polyphonic pad
-        // VCA sums all 8 voices to stereo at unity (no VoiceMixer); gain 0.5 leaves chord headroom.
+        // VCA sums all 8 voices to stereo at a fixed per-voice gain (no VoiceMixer); gain 0.5 leaves chord headroom.
         return R"({
   "nodes": [
     {"id": 1, "type": "Audio Input", "position": {"x": 10, "y": 340}},

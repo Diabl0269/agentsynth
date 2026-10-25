@@ -105,7 +105,7 @@ assert_fail() {
         echo "FAIL: $desc (expected non-zero exit, got success)"
         echo "$output"
         fail=$((fail + 1))
-    elif echo "$output" | grep -qF -- "$expect_grep"; then
+    elif grep -qF -- "$expect_grep" <<<"$output"; then
         echo "PASS: $desc"
         pass=$((pass + 1))
     else
@@ -296,7 +296,7 @@ commit_all
 raise_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 raise_status=$?
 baseline_after_raise="$(cat "$BASELINE")"
-if [ "$raise_status" -ne 0 ] && echo "$raise_output" | grep -qF -- "Source/Legacy.cpp::legacyFunc would raise the baseline from 6 to 9" \
+if [ "$raise_status" -ne 0 ] && grep -qF -- "Source/Legacy.cpp::legacyFunc would raise the baseline from 6 to 9" <<<"$raise_output" \
     && [ "$baseline_before_raise" = "$baseline_after_raise" ]; then
     echo "PASS: --update refuses to raise a baseline entry (exit 1, baseline unchanged)"
     pass=$((pass + 1))
@@ -310,8 +310,8 @@ fi
 allow_output="$(bash "$CHECK" --root "$REPO" --update --allow-growth 2>&1)"
 allow_status=$?
 baseline_after_allow="$(cat "$BASELINE")"
-if [ "$allow_status" -eq 0 ] && echo "$allow_output" | grep -qF -- "::warning::Source/Legacy.cpp::legacyFunc raised from 6 to 9" \
-    && echo "$baseline_after_allow" | grep -qF -- "9 Source/Legacy.cpp::legacyFunc"; then
+if [ "$allow_status" -eq 0 ] && grep -qF -- "::warning::Source/Legacy.cpp::legacyFunc raised from 6 to 9" <<<"$allow_output" \
+    && grep -qF -- "9 Source/Legacy.cpp::legacyFunc" <<<"$baseline_after_allow"; then
     echo "PASS: --update --allow-growth lets a raised entry through with a warning"
     pass=$((pass + 1))
 else
@@ -330,8 +330,8 @@ commit_all
 shrink_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 shrink_status=$?
 shrink_baseline="$(cat "$BASELINE")"
-if [ "$shrink_status" -eq 0 ] && echo "$shrink_baseline" | grep -qF -- "7 Source/Shrinking.cpp::shrinkFunc" \
-    && ! echo "$shrink_output" | grep -q "::error::" && ! echo "$shrink_output" | grep -q "::warning::"; then
+if [ "$shrink_status" -eq 0 ] && grep -qF -- "7 Source/Shrinking.cpp::shrinkFunc" <<<"$shrink_baseline" \
+    && ! grep -q "::error::" <<<"$shrink_output" && ! grep -q "::warning::" <<<"$shrink_output"; then
     echo "PASS: --update tightens a shrunk entry silently (no growth error or warning)"
     pass=$((pass + 1))
 else
@@ -349,8 +349,8 @@ bash "$CHECK" --root "$REPO" --update >/dev/null 2>&1
 mv_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 mv_status=$?
 mv_baseline="$(cat "$BASELINE")"
-if [ "$mv_status" -eq 0 ] && echo "$mv_baseline" | grep -qF -- "8 Source/New.cpp::movedFunc" \
-    && ! echo "$mv_baseline" | grep -q "Old.cpp" && ! echo "$mv_output" | grep -q "::error::"; then
+if [ "$mv_status" -eq 0 ] && grep -qF -- "8 Source/New.cpp::movedFunc" <<<"$mv_baseline" \
+    && ! grep -q "Old.cpp" <<<"$mv_baseline" && ! grep -q "::error::" <<<"$mv_output"; then
     echo "PASS: a pure git-mv of a file (same function, same size, new path) is accepted without --allow-growth"
     pass=$((pass + 1))
 else
@@ -403,10 +403,10 @@ commit_all
 split_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 split_status=$?
 split_baseline="$(cat "$BASELINE")"
-if [ "$split_status" -eq 0 ] && echo "$split_baseline" | grep -qF -- "6 Source/Extracted.cpp::movedFunc" \
-    && echo "$split_baseline" | grep -qF -- "6 Source/Combined.cpp::stayingFunc" \
-    && ! echo "$split_baseline" | grep -q "Combined.cpp::movedFunc" \
-    && ! echo "$split_output" | grep -q "::error::"; then
+if [ "$split_status" -eq 0 ] && grep -qF -- "6 Source/Extracted.cpp::movedFunc" <<<"$split_baseline" \
+    && grep -qF -- "6 Source/Combined.cpp::stayingFunc" <<<"$split_baseline" \
+    && ! grep -q "Combined.cpp::movedFunc" <<<"$split_baseline" \
+    && ! grep -q "::error::" <<<"$split_output"; then
     echo "PASS: a function split into a brand-new file (old file survives, git confirms no rename) is accepted without --allow-growth"
     pass=$((pass + 1))
 else
@@ -459,7 +459,7 @@ splitgrow_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 splitgrow_status=$?
 baseline_after_split_grow="$(cat "$BASELINE")"
 if [ "$splitgrow_status" -ne 0 ] \
-    && echo "$splitgrow_output" | grep -qF -- "Source/Extracted2.cpp::movedGrowFunc would raise the baseline from 6 to 9 lines while moving from Source/Combined2.cpp::movedGrowFunc" \
+    && grep -qF -- "Source/Extracted2.cpp::movedGrowFunc would raise the baseline from 6 to 9 lines while moving from Source/Combined2.cpp::movedGrowFunc" <<<"$splitgrow_output" \
     && [ "$baseline_before_split_grow" = "$baseline_after_split_grow" ]; then
     echo "PASS: a function that moved AND grew still needs --allow-growth (baseline left untouched)"
     pass=$((pass + 1))
@@ -479,8 +479,8 @@ commit_all
 new_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
 new_status=$?
 new_baseline="$(cat "$BASELINE")"
-if [ "$new_status" -ne 0 ] && echo "$new_output" | grep -qF -- "Source/BrandNew.cpp::brandNewFunc is a new over-cap function (9 lines" \
-    && ! echo "$new_baseline" | grep -q "BrandNew.cpp"; then
+if [ "$new_status" -ne 0 ] && grep -qF -- "Source/BrandNew.cpp::brandNewFunc is a new over-cap function (9 lines" <<<"$new_output" \
+    && ! grep -q "BrandNew.cpp" <<<"$new_baseline"; then
     echo "PASS: a genuinely new over-cap function is refused by --update without --allow-growth"
     pass=$((pass + 1))
 else
@@ -524,7 +524,7 @@ cp "$SCRIPT_DIR/scripts/function-size-scan.awk" "$REPO/scripts/function-size-sca
 set_baseline "8 Source/Big.cpp::bigFunc"
 hook_output="$(cd "$REPO" && FUNCTION_SIZE_CAP="$FUNCTION_SIZE_CAP" FUNCTION_SIZE_BASELINE="$BASELINE" GIT_DIR=.git bash scripts/check-function-sizes.sh 2>&1)"
 hook_status=$?
-if [ "$hook_status" -eq 0 ] && echo "$hook_output" | grep -qF -- "1 functions scanned, 1 over the ${FUNCTION_SIZE_CAP}-line cap, largest: Source/Big.cpp::bigFunc (8 lines)"; then
+if [ "$hook_status" -eq 0 ] && grep -qF -- "1 functions scanned, 1 over the ${FUNCTION_SIZE_CAP}-line cap, largest: Source/Big.cpp::bigFunc (8 lines)" <<<"$hook_output"; then
     echo "PASS: an inherited relative GIT_DIR from the fixture repo root resolves ROOT correctly and reports real numbers"
     pass=$((pass + 1))
 else
@@ -541,7 +541,7 @@ cp "$CHECK" "$nogit_dir/check-function-sizes.sh"
 cp "$SCRIPT_DIR/scripts/function-size-scan.awk" "$nogit_dir/function-size-scan.awk"
 nogit_output="$(cd "$nogit_dir" && GIT_DIR=/nonexistent bash ./check-function-sizes.sh 2>&1)"
 nogit_status=$?
-if [ "$nogit_status" -ne 0 ] && echo "$nogit_output" | grep -qF -- "::error::check-function-sizes: 'git rev-parse --show-toplevel' failed"; then
+if [ "$nogit_status" -ne 0 ] && grep -qF -- "::error::check-function-sizes: 'git rev-parse --show-toplevel' failed" <<<"$nogit_output"; then
     echo "PASS: ROOT resolution failing outside a git repo fails loudly instead of passing vacuously"
     pass=$((pass + 1))
 else
@@ -565,7 +565,7 @@ git clone -q --no-checkout "$REPO" "$clone_dir"
 (cd "$clone_dir" && git read-tree HEAD)
 failsafe_output="$(bash "$CHECK" --root "$clone_dir" 2>&1)"
 failsafe_status=$?
-if [ "$failsafe_status" -ne 0 ] && echo "$failsafe_output" | grep -qF -- "check-function-sizes scanned 2 files and found zero functions in any of them"; then
+if [ "$failsafe_status" -ne 0 ] && grep -qF -- "check-function-sizes scanned 2 files and found zero functions in any of them" <<<"$failsafe_output"; then
     echo "PASS: the vacuous-pass fail-safe catches every scanned file missing on disk and fails loudly"
     pass=$((pass + 1))
 else

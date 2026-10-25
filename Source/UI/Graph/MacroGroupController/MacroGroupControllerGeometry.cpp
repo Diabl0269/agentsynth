@@ -232,6 +232,11 @@ juce::Rectangle<int> MacroGroupController::macroHullBounds(const juce::String& m
     return macro_geometry::openHullBounds(host_, macro_geometry::cardsByNodeUid(host_), macroId);
 }
 
+juce::Rectangle<int> MacroGroupController::macroOpenHullBounds(const juce::String& macroId) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    return macro == nullptr ? juce::Rectangle<int>() : computeMacroHullBounds(host_, *macro, {});
+}
+
 juce::Rectangle<int> MacroGroupController::macroFootprint(const juce::String& macroId) const {
     const auto* macro = host_.getMacros().find(macroId);
     return macro == nullptr ? juce::Rectangle<int>()

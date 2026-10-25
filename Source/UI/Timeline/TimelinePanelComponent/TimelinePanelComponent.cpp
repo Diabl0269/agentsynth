@@ -10,6 +10,7 @@
 
 #include "TimelinePanelComponent.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "Timeline/SongKeyNotes.h"
 #include "Transport/TransportService.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
 #include <algorithm>
@@ -110,6 +111,10 @@ TimelinePanelComponent::TimelinePanelComponent() {
     applyToolStripTheme();
     initDrawShapes();
 
+    // The Sizing field sits right of the tools: it says what the Select tool's edge drags do to the notes.
+    addAndMakeVisible(clipSizingButton_);
+    clipSizingButton_.onModeChanged = [this](synth::ClipSizingMode mode) { clipLaneArea_.setClipSizingMode(mode); };
+
     // The snap toggle lives in the transport bar so grid magnetism is discoverable without opening
     // a clip — the same switch the piano roll's header "Q" and the panel-wide Q key flip.
     addAndMakeVisible(snapToggleButton_);
@@ -193,6 +198,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
         auditionClipNote(pianoRoll_.isOpen() ? pianoRoll_.getClipId() : synth::ClipId{}, pitch, velocity01, on);
     };
 
+    initSongKeyField();
+
     // The automation lane editors, over the clip lanes and under the playhead.
     initAutomationLanes();
 
@@ -205,7 +212,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // purpose still takes focus; only the incidental mouse-click grab is disabled.
     for (juce::Component* chrome :
          {static_cast<juce::Component*>(&addTrackButton_), static_cast<juce::Component*>(&snapToggleButton_),
-          static_cast<juce::Component*>(&followPlayheadButton_), static_cast<juce::Component*>(&snapCombo_)})
+          static_cast<juce::Component*>(&followPlayheadButton_), static_cast<juce::Component*>(&snapCombo_),
+          static_cast<juce::Component*>(&clipSizingButton_)})
         chrome->setMouseClickGrabsKeyboardFocus(false);
 
     // Added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
@@ -339,6 +347,13 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
 
     addTrackButton_.setTooltip(synth::ui::formatShortcutHint("Add a track or marker; type to search",
                                                              shortcutHintFor(shortcuts_, "openAddTrackMenu", {})));
+
+    const auto selectKey =
+        shortcutHintFor(shortcuts_, "timelineToolSelect", juce::KeyPress('1', juce::ModifierKeys::noModifiers, 0));
+    clipSizingButton_.setTooltip(
+        "What dragging a clip edge does to its notes. Hold Option while dragging to stretch "
+        "once." +
+        (selectKey.isEmpty() ? juce::String() : " With Select active, " + selectKey + " switches it."));
 
     snapToggleButton_.setTooltip(synth::ui::formatShortcutHint(
         "Snap on/off",
@@ -489,6 +504,38 @@ void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     automationLanes_.setUndoManager(undoManager);
     // Marker drag/rename/recolour/delete are real edits and belong on the same one undo stack.
     ruler_.setUndoManager(undoManager);
+}
+
+// The song key field: Detect from notes reads every MIDI track but drum kits, and a hovered key auditions on the
+// first selected MIDI track that plays somewhere, else the first such track.
+void TimelinePanelComponent::initSongKeyField() {
+    auto& songKeyField = transportBar_.getSongKeyField();
+    songKeyField.pitchClassWeights = [this] {
+        if (doc_ == nullptr)
+            return std::array<double, 12>{};
+        return synth::songPitchClassWeights(*doc_, [this](const synth::Track& track) {
+            return trackHeaderHost_ != nullptr && trackHeaderHost_->isDrumKitTrack(track.id);
+        });
+    };
+    songKeyField.resolveAuditionTrack = [this]() -> std::optional<synth::TrackId> {
+        if (doc_ == nullptr || trackHeaderHost_ == nullptr)
+            return std::nullopt;
+        const auto playable = [this](const synth::Track* track) {
+            return track != nullptr && track->kind == synth::TrackKind::Midi && track->bindingUuid.isNotEmpty() &&
+                   !trackHeaderHost_->isDrumKitTrack(track->id);
+        };
+        for (const auto id : selectedTracks())
+            if (playable(doc_->getTrack(id)))
+                return id;
+        for (const auto& track : doc_->getTracks())
+            if (playable(&track))
+                return track.id;
+        return std::nullopt;
+    };
+    songKeyField.auditionNote = [this](synth::TrackId track, int pitch, int velocity, bool on) {
+        if (trackHeaderHost_ != nullptr)
+            trackHeaderHost_->auditionTrackNote(track, pitch, velocity, on);
+    };
 }
 
 } // namespace synth::ui

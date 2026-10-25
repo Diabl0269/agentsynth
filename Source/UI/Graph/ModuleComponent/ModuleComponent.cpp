@@ -7,6 +7,7 @@
 #include "CardKnobSlider.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
+#include "Modules/ChannelStripModule.h"
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
@@ -52,6 +53,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         }
     }
 
+    makeAccessibilityContainer();
     showContextMenuHook_ = [this](juce::PopupMenu& menu) { showRealContextMenu(menu); };
     // Knobs inside this card take its module family's colour (AppLookAndFeel::knobValueColour).
     getProperties().set(synth::theme::kKnobFamilyProperty, (int)synth::ui::categoryFor(getType(module)));
@@ -164,6 +166,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
             // A hosted plugin shows it only while the published instance is a stereo pair (the live edge shows it).
             if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module))
                 dualIOButton->setVisible(hosted->hasStereoPairInstance());
+            // A Mono strip has one input jack whichever way the toggle is set: nothing to split.
+            if (auto* strip = dynamic_cast<ChannelStripModule*>(module))
+                dualIOButton->setVisible(strip->getShape() == ChannelStripModule::Shape::Stereo);
         }
     }
 

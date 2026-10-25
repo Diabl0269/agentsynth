@@ -38,6 +38,10 @@ Fast checks first, so a lint failure does not wait on a full build.
    editing this script. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree
    itself, so this also covers the Lint job's
    [ASCII-literal gate](ascii-literal-guard.md) on live code, not just the checker's fixtures.
+   `no-pipe-into-grep-q.test.sh` scans `scripts/` for `echo`/`printf` piped into `grep -q` in a script
+   that sets `pipefail`: grep exits at its first match, the writer dies of SIGPIPE, and pipefail turns the
+   match into a failure only on a busy machine, so script tests pass text to grep as a here-string
+   (`grep -qF "text" <<<"$output"`).
    `check-ui-caps.test.sh` likewise scans `Source/UI/` for all-caps UI text
    ([rule](accessibility.md#no-all-caps-ui-text)) and for the default theme's accent and text colours
    written as literals outside `Source/UI/Theme/` ([rule](../layout/theming.md#themed-widgets)).

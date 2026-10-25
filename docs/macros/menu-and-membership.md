@@ -378,7 +378,7 @@ Selection to Macro" all read the selection the same way, through `macro_units::r
 
 Each unit has a **container**: the macro that directly contains it (for a whole macro, its parent).
 `MacroGroupController::groupSelectionIntoMacro` groups when there are **at least two units that share
-one container**, and the new macro's `parentId` is that container. So one rule covers every case:
+one container**, and the new macro's `parentId` is that container. The new card is closed and the modules fold into it with motion, like a collapse ([Macro fold](../layout/animation.md#macro-fold)). So one rule covers every case:
 
 - two loose modules at top level: a top-level macro, as always;
 - two whole macros, or a whole macro and a loose module beside it: a parent macro around them (the

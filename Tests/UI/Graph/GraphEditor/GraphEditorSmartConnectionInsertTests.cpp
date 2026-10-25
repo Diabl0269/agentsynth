@@ -7,11 +7,17 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
+#include "Modules/ChannelStripModule.h"
 #include "Modules/FX/ChorusModule.h"
+#include "Modules/FX/CompressorModule.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/FX/ReverbModule.h"
 #include "Modules/FilterModule.h"
+#include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
+
+#include <array>
+#include <tuple>
 
 // --- Occupied audio destinations: parallel add vs. Ctrl insert-in-series ------
 // Default (no modifier): the terminal audio sink accepts an ADDITIVE parallel cable, because it is
@@ -274,7 +280,9 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertIsBothOrNeitherAcrossStereoInpu
                                                    libraryCursorForGhostTopLeft("Chorus", {440, 100}));
 
     // Phase 1: only the first leg wired → half-occupied group, no insert.
-    editor.connectPorts(reverbNode->nodeID, 0, filterNode->nodeID, audioLegs[0], false, false);
+    // Raw edges, not connectPorts: a collapsed Reverb dragged onto the Filter's Left jack now wires
+    // BOTH legs (Left to Left, Right to Audio R), which is the fully occupied case below.
+    ASSERT_TRUE(graph.addConnection({{reverbNode->nodeID, 0}, {filterNode->nodeID, 0}}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
@@ -282,8 +290,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertIsBothOrNeitherAcrossStereoInpu
     editor.getDragDropController().endDragPreview();
 
     // Phase 2: wire the rest → fully occupied group, and now the same drag inserts.
-    for (size_t i = 1; i < audioLegs.size(); ++i)
-        editor.connectPorts(reverbNode->nodeID, 0, filterNode->nodeID, audioLegs[i], false, false);
+    ASSERT_TRUE(graph.addConnection({{reverbNode->nodeID, 1}, {filterNode->nodeID, FilterModule::kRightBase}}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
@@ -422,3 +429,208 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertDoesNotDuplicateOneUpstreamLegO
     EXPECT_TRUE(graph.isConnected({{chorusId, 0}, {outId, 0}}));
     EXPECT_TRUE(graph.isConnected({{chorusId, 1}, {outId, 1}}));
 }
+
+// ---- Insert and delete between a collapsed output and a split input -----------------------------
+// The cable between a one-jack stereo output and a split-block stereo input (Channel Strip: Left on
+// raw 0, Right on kRightBase), through the real insert (SmartConnectionEngine) and the real delete heal.
+
+using NodeID = juce::AudioProcessorGraph::NodeID;
+
+namespace {
+
+struct StripChain {
+    NodeID compressorId, stripId;
+};
+
+StripChain makeCompressorIntoStrip(AudioEngine& engine, GraphEditor& editor) {
+    auto& graph = engine.getGraph();
+    auto strip = std::make_unique<ChannelStripModule>();
+    strip->setShape(ChannelStripModule::Shape::Stereo);
+    auto stripNode = graph.addNode(std::move(strip));
+    stripNode->properties.set("x", 760);
+    stripNode->properties.set("y", 100);
+    auto compNode = graph.addNode(std::make_unique<CompressorModule>());
+    compNode->properties.set("x", 40);
+    compNode->properties.set("y", 600);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    return {compNode->nodeID, stripNode->nodeID};
+}
+
+bool wired(juce::AudioProcessorGraph& graph, NodeID a, int ca, NodeID b, int cb) {
+    return graph.isConnected({{a, ca}, {b, cb}});
+}
+
+int audioEdgesInto(juce::AudioProcessorGraph& graph, NodeID dest) {
+    int n = 0;
+    for (const auto& c : graph.getConnections())
+        if (c.destination.nodeID == dest && !c.destination.isMIDI())
+            ++n;
+    return n;
+}
+
+// ---- The same two paths across every collapsed / split pairing --------------------------------
+
+enum class Kind { FxCollapsed, FxSplit, Filter, Strip, Master, MasterCollapsed, MasterDirect };
+
+const char* kindName(Kind k) {
+    switch (k) {
+    case Kind::FxCollapsed:
+        return "FxCollapsed";
+    case Kind::FxSplit:
+        return "FxSplit";
+    case Kind::Filter:
+        return "Filter";
+    case Kind::Strip:
+        return "Strip";
+    case Kind::Master:
+        return "Master";
+    case Kind::MasterCollapsed:
+        return "MasterCollapsed";
+    case Kind::MasterDirect:
+        return "MasterDirect";
+    }
+    return "";
+}
+
+std::unique_ptr<juce::AudioProcessor> makeKind(Kind k) {
+    switch (k) {
+    case Kind::FxCollapsed:
+        return std::make_unique<CompressorModule>();
+    case Kind::FxSplit: {
+        auto m = std::make_unique<CompressorModule>();
+        setDualIOParam(*m, true);
+        return m;
+    }
+    case Kind::Filter:
+        return std::make_unique<FilterModule>();
+    case Kind::Strip: {
+        auto m = std::make_unique<ChannelStripModule>();
+        m->setShape(ChannelStripModule::Shape::Stereo);
+        return m;
+    }
+    case Kind::Master:
+    case Kind::MasterDirect:
+        return std::make_unique<MasterModule>();
+    case Kind::MasterCollapsed: {
+        auto m = std::make_unique<MasterModule>();
+        setDualIOParam(*m, false);
+        return m;
+    }
+    }
+    return nullptr;
+}
+
+// The raw channels carrying Left and Right when the module is the source / destination of a stereo cable.
+std::array<int, 2> outLegs(Kind k) {
+    if (k == Kind::Filter)
+        return {0, FilterModule::kRightBase};
+    if (k == Kind::Strip)
+        return {0, ChannelStripModule::kRightBase};
+    return {0, 1};
+}
+std::array<int, 2> inLegs(Kind k) { return k == Kind::MasterDirect ? std::array<int, 2>{2, 3} : outLegs(k); }
+
+void expectPair(juce::AudioProcessorGraph& graph, NodeID a, std::array<int, 2> aLegs, NodeID b,
+                std::array<int, 2> bLegs, const char* what) {
+    for (int i = 0; i < 2; ++i)
+        EXPECT_TRUE(wired(graph, a, aLegs[(size_t)i], b, bLegs[(size_t)i])) << what << " leg " << i;
+    int n = 0;
+    for (const auto& c : graph.getConnections())
+        if (c.source.nodeID == a && c.destination.nodeID == b && !c.source.isMIDI())
+            ++n;
+    EXPECT_EQ(n, 2) << what << ": exactly the two legs, nothing summed in";
+}
+
+void wirePair(juce::AudioProcessorGraph& graph, NodeID a, std::array<int, 2> aLegs, NodeID b,
+              std::array<int, 2> bLegs) {
+    for (int i = 0; i < 2; ++i)
+        ASSERT_TRUE(graph.addConnection({{a, aLegs[(size_t)i]}, {b, bLegs[(size_t)i]}}));
+}
+
+NodeID addKind(AudioEngine& engine, Kind k, int x, int y) {
+    auto node = engine.getGraph().addNode(makeKind(k));
+    node->properties.set("x", x);
+    node->properties.set("y", y);
+    return node->nodeID;
+}
+
+using HealParam = std::tuple<Kind, Kind, Kind>;
+class StripWiringHealMatrix : public ::testing::TestWithParam<HealParam> {};
+
+} // namespace
+
+// Regression test for FRO900: a module inserted between a one-jack Compressor and a split-input
+// Channel Strip rewired only the strip's Left leg, and deleting it left the Left input empty.
+TEST_F(GraphEditorTest, InsertAndDeleteBetweenCollapsedOutputAndSplitStripKeepsBothLegs) {
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(1200, 700);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
+
+    auto& graph = engine.getGraph();
+    const auto f = makeCompressorIntoStrip(engine, editor);
+    constexpr int kR = ChannelStripModule::kRightBase;
+    ASSERT_TRUE(graph.addConnection({{f.compressorId, 0}, {f.stripId, 0}}));
+    ASSERT_TRUE(graph.addConnection({{f.compressorId, 1}, {f.stripId, kR}}));
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
+    editor.itemDropped(details);
+
+    const auto chorusId = findNodeIdByName(graph, "Chorus");
+    ASSERT_NE(chorusId.uid, 0u);
+    EXPECT_FALSE(wired(graph, f.compressorId, 0, f.stripId, 0)) << "the direct Left cable is rerouted";
+    EXPECT_FALSE(wired(graph, f.compressorId, 1, f.stripId, kR)) << "the direct Right cable is rerouted";
+    EXPECT_TRUE(wired(graph, f.compressorId, 0, chorusId, 0));
+    EXPECT_TRUE(wired(graph, f.compressorId, 1, chorusId, 1));
+    EXPECT_TRUE(wired(graph, chorusId, 0, f.stripId, 0)) << "new module -> strip Left";
+    EXPECT_TRUE(wired(graph, chorusId, 1, f.stripId, kR)) << "new module -> strip Right";
+    EXPECT_EQ(audioEdgesInto(graph, f.stripId), 2) << "nothing else may land on the strip";
+
+    editor.requestDeleteModule(chorusId);
+    EXPECT_EQ(findNodeIdByName(graph, "Chorus").uid, 0u);
+    EXPECT_TRUE(wired(graph, f.compressorId, 0, f.stripId, 0)) << "healed Left";
+    EXPECT_TRUE(wired(graph, f.compressorId, 1, f.stripId, kR)) << "healed Right";
+    EXPECT_EQ(audioEdgesInto(graph, f.stripId), 2);
+}
+
+// Regression test for FRO900: the delete heal restored one leg (or none) whenever the deleted module
+// and a survivor presented the stereo cable differently (one jack vs. two, an adjacent right leg vs.
+// a dedicated block).
+TEST_P(StripWiringHealMatrix, DeletingTheMiddleModuleRestoresBothLegs) {
+    const auto [upKind, midKind, downKind] = GetParam();
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 900);
+    auto& graph = engine.getGraph();
+
+    const auto up = addKind(engine, upKind, 0, 0);
+    const auto mid = addKind(engine, midKind, 400, 0);
+    const auto down = addKind(engine, downKind, 800, 0);
+    editor.updateComponents();
+    wirePair(graph, up, outLegs(upKind), mid, inLegs(midKind));
+    wirePair(graph, mid, outLegs(midKind), down, inLegs(downKind));
+
+    editor.requestDeleteModule(mid);
+
+    EXPECT_EQ(graph.getNodeForId(mid), nullptr);
+    expectPair(graph, up, outLegs(upKind), down, inLegs(downKind), "healed cable");
+}
+
+INSTANTIATE_TEST_SUITE_P(CollapsedAndSplit, StripWiringHealMatrix,
+                         ::testing::Combine(::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter),
+                                            ::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter),
+                                            ::testing::Values(Kind::FxCollapsed, Kind::FxSplit, Kind::Filter,
+                                                              Kind::Strip, Kind::Master, Kind::MasterCollapsed,
+                                                              Kind::MasterDirect)),
+                         [](const ::testing::TestParamInfo<HealParam>& info) {
+                             return std::string(kindName(std::get<0>(info.param))) + "_" +
+                                    kindName(std::get<1>(info.param)) + "_" + kindName(std::get<2>(info.param));
+                         });

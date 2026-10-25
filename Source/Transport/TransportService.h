@@ -50,9 +50,14 @@ public:
     // every path (the transport bar, a project load, undo), so an owner can republish what depends on the bar length.
     std::function<void()> onTimeSignatureChanged;
 
-    // Message thread only. The tempo, time signature and loop last requested, valid immediately.
+    // Message thread only. Sets or clears (nullopt = No key) the song key; never touches the audio thread or any note.
+    void setSongKey(const std::optional<MusicalScale>& key);
+    // Message thread only. Fires after the song key changed, from every path (the picker, a project load, undo).
+    std::function<void()> onSongKeyChanged;
+
+    // Message thread only. The tempo, time signature, loop and song key last requested, valid immediately.
     const TransportDoc& getDocumentState() const noexcept { return documentState_; }
-    // Message thread only. Posts time signature, bpm and loop; true if all three were queued.
+    // Message thread only. Sets the song key and posts time signature, bpm and loop; true if all three were queued.
     bool applyDocumentState(const TransportDoc& doc);
 
     // -- Audio-thread API ----------------------------------------------------

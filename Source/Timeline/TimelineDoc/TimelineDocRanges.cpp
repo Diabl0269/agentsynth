@@ -7,6 +7,7 @@
 // where it starts reading its asset — otherwise the audio slides under the clip instead of the
 // clip being cut out of it. That is the one thing splitClip deliberately does not do, and the
 // reason these edits are not simply compositions of it.
+#include "ClipEdgeSizing.h"
 #include "TimelineDoc.h"
 #include "TimelineDocInternal.h"
 
@@ -74,47 +75,46 @@ bool TimelineDoc::trimClipStart(ClipId id, double newStartBeat, double secondsPe
     });
 }
 
-// Drags the left edge of a MIDI clip to absolute `newStartBeat` with the end fixed, anchoring every
-// surviving note to its ABSOLUTE beat (the notes are stored clip-relative, so they are re-based by
-// the edge's travel). A move rightwards cuts the notes at the new edge by the shared rule: notes
-// wholly before it are dropped and a straddler keeps only its right half; a move leftwards just
-// uncovers empty space. Fades are left alone (unlike trimClipStart, the edge is a resize, not a cut).
-// An audio clip is refused: its left edge also moves the source offset, which is trimClipStart's job.
+// The Trim case of resizeClipEdge: notes keep their absolute beat, see clipEdgeResult.
 bool TimelineDoc::resizeClipLeft(ClipId id, double newStartBeat) {
-    if (!isFiniteAtOrAfterZero(newStartBeat))
+    return resizeClipEdge(id, ClipEdge::Left, ClipSizingMode::Trim, newStartBeat);
+}
+
+// One edge drag of a MIDI clip, committed by the same clipEdgeResult the clip lane previews with. A left Trim
+// re-bases this clip's notes, so it leaves its link group (as every cut edge does); every other mode keeps the
+// notes shared or changes them all alike, so the group follows in the same mutation. Fades are left alone: the
+// edge is a resize, not a cut. An audio clip is refused: its left edge also moves the source offset, which is
+// trimClipStart's job.
+bool TimelineDoc::resizeClipEdge(ClipId id, ClipEdge edge, ClipSizingMode mode, double edgeBeat) {
+    if (!isFiniteAtOrAfterZero(edgeBeat))
         return false;
     Track* owner = nullptr;
     auto* clip = findClip(id, &owner);
     if (clip == nullptr || clip->assetRef.isNotEmpty())
         return false;
     const double end = clip->startBeat + clip->lengthBeats;
-    if (!(newStartBeat < end))
+    const double newStart = edge == ClipEdge::Left ? edgeBeat : clip->startBeat;
+    const double newLength = edge == ClipEdge::Left ? end - edgeBeat : edgeBeat - clip->startBeat;
+    if (!(newLength > 0.0))
         return false;
-    if (newStartBeat == clip->startBeat)
+    if (newStart == clip->startBeat && newLength == clip->lengthBeats)
         return true;
 
     return applyMutation([&] {
-        const double delta = newStartBeat - clip->startBeat;
-        std::vector<MidiNote> kept;
-        if (delta > 0.0) {
-            std::vector<MidiNote> dropped;
-            partitionNotesAt(clip->notes, delta, keepOriginalId, dropped, kept);
-        } else {
-            kept = clip->notes;
-            for (auto& note : kept)
-                note.startBeat -= delta;
-        }
-
+        auto result = clipEdgeResult(*clip, edge, mode, newStart, newLength);
         // Lift and re-insert, as moveClip does: the start participates in the clip ordering.
         const auto index = clip - owner->clips.data();
         Clip moved = std::move(*clip);
-        moved.notes = std::move(kept);
-        moved.startBeat = newStartBeat;
-        moved.lengthBeats = end - newStartBeat;
-        moved.linkGroup = 0; // the left edge re-bases every note: the clip leaves its link group
+        moved.notes = std::move(result.notes);
+        moved.startBeat = result.startBeat;
+        moved.lengthBeats = result.lengthBeats;
+        if (edge == ClipEdge::Left && mode == ClipSizingMode::Trim)
+            moved.linkGroup = 0;
         owner->clips.erase(owner->clips.begin() + index);
         const auto pos = std::lower_bound(owner->clips.begin(), owner->clips.end(), moved, clipLess);
-        owner->clips.insert(pos, std::move(moved));
+        const auto inserted = owner->clips.insert(pos, std::move(moved));
+        if (inserted->linkGroup != 0)
+            syncLinkedClips(*inserted);
         return true;
     });
 }

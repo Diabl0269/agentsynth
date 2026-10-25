@@ -86,6 +86,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/timeline/add-track.md`](timeline/add-track.md) — the `"+ Track"` menu and every flow it starts (MIDI, Audio, Instrument, plugins, presets, markers), and Duplicate Track
 - [`docs/timeline/playhead.md`](timeline/playhead.md) — the playhead overlay, its two timers, latency compensation, follow-playhead
 - [`docs/timeline/transport.md`](timeline/transport.md) — the transport bar, the recording gate, transport actions, metronome and count-in
+- [`docs/timeline/song-key.md`](timeline/song-key.md) — the song key: the transport bar Key field, the key picker, Detect from notes, saving and undo
 - [`docs/timeline/edit-tools.md`](timeline/edit-tools.md) — the Cubase-style tool strip shared by the clip lanes and the piano roll
 - [`docs/timeline/render-to-audio.md`](timeline/render-to-audio.md) — render a range or clips to a new audio track: which tracks, what is heard, the files, the one undo step
 - [`docs/timeline/clips.md`](timeline/clips.md) — clip lanes: selection, drag/trim, edge auto-scroll, authoring and audio import

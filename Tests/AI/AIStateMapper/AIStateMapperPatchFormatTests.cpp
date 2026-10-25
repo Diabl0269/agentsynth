@@ -130,8 +130,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         // The mixer's strip. Solo is deliberately NOT here: it is a render-time gate kept
         // in trusted extra state, never a parameter (docs/mixer/mixer.md#solo-is-a-render-time-gate).
         {"Channel Strip",
-         "bypassed, gain, muted, pan, send1Level, send1Pan, send2Level, send2Pan, send3Level, send3Pan, send4Level, "
-         "send4Pan"},
+         "bypassed, dualIO, gain, muted, pan, send1Level, send1Pan, send2Level, send2Pan, send3Level, send3Pan, "
+         "send4Level, send4Pan"},
         {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, pan, rate"},
         {"Comparator", "bypassed, muted, trigThreshold"},
         {"Compressor", "attack, bypassed, dualIO, knee, makeupGain, mix, muted, pan, ratio, release, threshold"},

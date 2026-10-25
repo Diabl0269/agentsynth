@@ -138,6 +138,9 @@ Fold::Before captureBefore(Controller& controller, const synth::MacroSet& macros
 struct MacroGroupController::FoldSnapshot {
     std::map<juce::String, Fold::Before> byMacro;
     std::vector<Fold::VisibleCable> cables; // as drawn before the change
+    // Every module card as drawn before the change (rect and picture): a macro created by the change has no entry in
+    // byMacro, and its fold starts from these.
+    std::map<uint32_t, Fold::Module> nodes;
 };
 
 namespace {
@@ -344,8 +347,14 @@ private:
 
 // Starts the folds, and lets the folded macros' modules keep their own cards out of the delete and undo ghosts: an
 // undo of a collapse would otherwise also shrink (or grow) every one of them.
-void startFolds(CardGlideAnimator& glide, std::vector<Fold::Plan> plans) {
+// `goneMacros` are macros the change removed: the fold draws their closed card itself, so their card must not also
+// shrink away as an exit ghost (that phase would hold the neighbours' glide back until it ended).
+void startFolds(CardGlideAnimator& glide, std::vector<Fold::Plan> plans, const std::vector<juce::String>& goneMacros) {
     std::vector<uint32_t> uids;
+    for (const auto& id : goneMacros) {
+        uids.push_back(CardGlideAnimator::macroKey(id));
+        uids.push_back(CardGlideAnimator::borderKey(CardGlideAnimator::macroKey(id)));
+    }
     for (const auto& plan : plans)
         for (const auto& m : plan.modules)
             if (m.nodeUid != 0)
@@ -365,8 +374,51 @@ std::shared_ptr<const MacroGroupController::FoldSnapshot> MacroGroupController::
     for (const auto& macro : host_.getMacros().getAll())
         if (host_.getMacros().isVisible(macro.id))
             out->byMacro[macro.id] = captureBefore(*this, host_.getMacros(), macro.id);
+    for (auto* comp : host_.modules()) {
+        if (comp == nullptr || !comp->isVisible())
+            continue;
+        Fold::Module m;
+        m.nodeUid = comp->getNodeId().uid;
+        m.rect = comp->getBounds();
+        m.picture = Fold::cachedPicture(*comp);
+        out->nodes[m.nodeUid] = std::move(m);
+    }
     return out;
 }
+
+// The expand plan of a closed macro that no longer exists: each module that stands visible again flies from its box on
+// the card (captured before the change) to its card. Nested macros and modules that are gone are left out.
+namespace {
+Fold::Plan unfoldRemovedMacro(GraphCanvasHost& host, const juce::String& macroId, const Fold::Before& before) {
+    Fold::Plan plan;
+    plan.macroId = macroId;
+    plan.collapsing = false;
+    plan.card = before.card;
+    plan.timeScale = 1.0;
+    juce::Rectangle<int> hull;
+    for (const auto& unit : before.modules) {
+        if (unit.nodeUid == 0)
+            continue;
+        auto* comp = host.moduleComponentFor(juce::AudioProcessorGraph::NodeID(unit.nodeUid));
+        if (comp == nullptr || !comp->isVisible())
+            continue;
+        Fold::Module out;
+        out.nodeUid = unit.nodeUid;
+        out.category = unit.category;
+        out.box = unit.box;
+        out.rect = comp->getBounds();
+        out.comp = comp;
+        out.picture = Fold::cachedPicture(*comp);
+        if (out.picture.isNull() && before.modules.size() <= kMaxRenderedPictures &&
+            out.rect.intersects(card_glide_detail::visibleCanvasArea(*comp)))
+            out.picture = comp->createComponentSnapshot(comp->getLocalBounds(), true, 1.0f);
+        hull = hull.isEmpty() ? out.rect : hull.getUnion(out.rect);
+        plan.modules.push_back(std::move(out));
+    }
+    plan.hull = hull;
+    return plan;
+}
+} // namespace
 
 // Only the outermost macro whose state changed starts a fold: the macros nested in it fold inside its plans.
 void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSnapshot>& before) {
@@ -379,8 +431,40 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
         return macro != nullptr && it != before->byMacro.end() && macro->collapsed != it->second.wasCollapsed;
     };
     std::vector<Fold::Plan> plans;
+    std::vector<juce::String> goneMacros;
     std::vector<Fold::VisibleCable> cablesAfter;
     bool haveCablesAfter = false;
+    // A macro the change created (grouping, or the redo of it) folds like a collapse of the same group: it was open, as
+    // its members stood on the canvas, and is now closed.
+    std::map<juce::String, Fold::Before> created;
+    for (const auto& macro : macros.getAll()) {
+        if (before->byMacro.count(macro.id) != 0 || !macro.collapsed || !macros.isVisible(macro.id))
+            continue;
+        auto& entry = created[macro.id];
+        entry.hull = macroOpenHullBounds(macro.id);
+        for (const auto& p : macroMemberPreviews(macro.id)) {
+            if (p.isMacro()) {
+                const auto it = before->byMacro.find(p.macroId);
+                if (it == before->byMacro.end())
+                    continue;
+                auto m = macroUnit(p);
+                if (!it->second.wasCollapsed)
+                    m.rect = nestedCardRect(*this, p.macroId);
+                else if (auto* card = getMacroCard(p.macroId))
+                    m.picture = Fold::cachedPicture(*card);
+                entry.modules.push_back(std::move(m));
+                continue;
+            }
+            const auto it = before->nodes.find(p.nodeUid);
+            if (it == before->nodes.end())
+                continue;
+            auto m = it->second;
+            m.category = p.category;
+            entry.modules.push_back(std::move(m));
+        }
+    }
+    const auto isCreated = [&](const juce::String& id) { return created.count(id) != 0; };
+
     for (const auto& [id, snapshot] : before->byMacro) {
         if (!changed(id) || snapshot.modules.empty())
             continue;
@@ -400,6 +484,27 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
         for (auto& plan : tree)
             plans.push_back(std::move(plan));
     }
+    for (const auto& [id, snapshot] : created) {
+        if (snapshot.modules.empty())
+            continue;
+        const auto ancestors = macros.ancestorChain(id);
+        if (std::any_of(ancestors.begin(), ancestors.end(),
+                        [&](const juce::String& a) { return changed(a) || isCreated(a); }))
+            continue;
+        FoldTreeBuilder builder(*this, host_, *before);
+        for (auto& plan : builder.collapse(id, snapshot))
+            plans.push_back(std::move(plan));
+    }
+    // A collapsed macro the change removed (undo of a grouping, or Ungroup) whose modules stand on the canvas again:
+    // they unfold out of the box they had on the card it leaves.
+    for (const auto& [id, snapshot] : before->byMacro) {
+        if (macros.find(id) != nullptr || !snapshot.wasCollapsed || snapshot.modules.empty())
+            continue;
+        if (auto plan = unfoldRemovedMacro(host_, id, snapshot); !plan.modules.empty()) {
+            plans.push_back(std::move(plan));
+            goneMacros.push_back(id);
+        }
+    }
     if (!plans.empty())
-        startFolds(host_.cardGlide(), std::move(plans));
+        startFolds(host_.cardGlide(), std::move(plans), goneMacros);
 }

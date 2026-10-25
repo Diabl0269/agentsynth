@@ -11,6 +11,8 @@ How each unison voice of the [Oscillator](modules.md#oscillator-module) starts a
 
 **Where a poly voice's first note starts.** A poly voice that has never played starts at the first sample its pitch input is sounding (20 Hz or more), not at the next block, so its first note rises with its envelope at every block size (Poly MIDI glides the pitch up from 0 over 5 ms). Test: `SourceClickGuard.PolyOscillatorFirstChordStartsOnItsOwnSample`.
 
+**Poly pitch follows the glide per sample.** Poly MIDI writes a new note's pitch as a 5 ms per-sample glide. When a voice's pitch CV moves within a block (and the Oscillator's own Glide and Fixed rate are off), the voice takes the per-sample render path and reads the pitch CV at every sample (`pitchMovesWithinBlock`, `OscillatorModulePoly.cpp`); a constant pitch keeps the per-block fast path. Without it the pitch moved in block-size steps and a chord beat differently at every buffer size. Test: `OscillatorPolyChord.PitchGlideIsFollowedPerSampleSoTheChordDoesNotDependOnTheBlockSize`.
+
 ## Restart UX options
 
 Open for a later pick, none built: (1) keep the Restart jack on every Oscillator, clearly named (today); (2) show the jack only while Poly is on, since mono users rarely meet it and poly wiring is automatic; (3) a separate **Sync** input for patched oscillators and keep Restart for the gate fan only.

@@ -459,7 +459,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
     } else if (auto* modBase = dynamic_cast<ModuleBase*>(module->getModule())) {
         for (const auto& t : modBase->getJackTargets(portIndex, isInput))
             for (int v = 0; v < t.voiceSpan; ++v)
-                targetChannels.push_back(t.rawHeadChannel + v);
+                targetChannels.push_back(t.rawHeadChannel + v * t.rawStride);
     } else {
         targetChannels.push_back(portIndex);
     }
@@ -753,8 +753,7 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
             }
         } else {
             for (int v = 0; v < link.voiceCount; ++v)
-                graph.addConnection(
-                    {{sourceId, link.sourceRawChannel + v * link.sourceStride}, {destId, link.destRawChannel + v}});
+                graph.addConnection({{sourceId, link.sourceChannel(v)}, {destId, link.destChannel(v)}});
         }
     }
 

@@ -33,6 +33,18 @@ juce::String toolActionIdFor(synth::ui::EditTool tool) { return "timelineTool" +
 // Item: P (loop the selection) also ARMS looping by default; Preferences can turn the arming off
 // so P only places the locators (Cubase's behaviour). Read at key time — no cached copy to drift.
 constexpr const char* kTimelineLoopSelectionArmsPropertyKey = "timelineLoopSelectionArms";
+
+// The Select tool's own key, by the same two paths keyPressed's tool digits use: the rebindable action with a
+// manager (matchesAction's rule), the typed character without one (Shift or Cmd make it some other key).
+bool isSelectToolKey(const ShortcutManager* shortcuts, const juce::KeyPress& key) {
+    const auto selectKey = plainKey('0' + editToolKeyDigit(EditTool::Select));
+    if (shortcuts != nullptr)
+        return ShortcutManager::keyPressMatches(shortcuts->getBinding(toolActionIdFor(EditTool::Select)), key);
+    if (key.getModifiers().isCommandDown() || key.getModifiers().isShiftDown())
+        return false;
+    const int typed = (int)key.getTextCharacter();
+    return (typed != 0 ? typed : key.getKeyCode()) == selectKey.getKeyCode();
+}
 } // namespace
 
 std::vector<std::pair<juce::Component*, juce::String>> TimelinePanelComponent::getShortcutHintTargets() {
@@ -43,6 +55,7 @@ std::vector<std::pair<juce::Component*, juce::String>> TimelinePanelComponent::g
     targets.emplace_back(&snapToggleButton_, "timelineSnapToggle");
     targets.emplace_back(&followPlayheadButton_, "timelineFollowPlayheadToggle");
     targets.emplace_back(&addTrackButton_, "openAddTrackMenu");
+    targets.emplace_back(&transportBar_.getSongKeyField(), "setSongKey");
     return targets;
 }
 
@@ -82,6 +95,12 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // Shift+digit shapes, Draw-again and the lane range's keys, before the bare tool digits below.
     if (handleDrawShapeKey(key))
         return true;
+
+    // The Select key while Select is already the tool steps the clip edge Sizing mode, as in Cubase.
+    if (activeTool_ == EditTool::Select && isSelectToolKey(shortcuts_, key)) {
+        clipSizingButton_.choose(synth::nextClipSizingMode(clipSizingButton_.getMode()));
+        return true;
+    }
 
     // Number keys pick a tool, BEFORE the letter keys below.
     //

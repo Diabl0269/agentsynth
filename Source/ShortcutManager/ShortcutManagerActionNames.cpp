@@ -28,6 +28,8 @@ juce::String transportAndSelectionActionName(const juce::String& actionId) {
         return "Toggle Metronome";
     if (actionId == "transportReturnToStart")
         return "Return to Start";
+    if (actionId == "setSongKey")
+        return "Set Song Key";
     // Cursor moves and loop-locator jumps.
     if (actionId == "transportNudgeBackBeat")
         return "Move Cursor Back (Beat)";

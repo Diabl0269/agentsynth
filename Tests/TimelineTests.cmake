@@ -22,6 +22,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelZoomSnapScrollTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTrackSizingTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelClipSizingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTrackReorderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelBulkTrackActionsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTrackReorderUndoGlideTests.cpp
@@ -56,6 +57,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneLinkedClipsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneMouseTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLanePaintingTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneSizingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneRangeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneRenderToAudioTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneSelectionTests.cpp

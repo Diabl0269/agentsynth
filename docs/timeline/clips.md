@@ -86,8 +86,9 @@ marquees or double-click-authors. Switching away from Select disables all of it;
 | Drag from empty lane space | Marquee — intersection hit-test (`clipHitTestMarquee`), additive with Shift. There is no drag-to-pan here (scrolling is wheel-only, see [view](view.md#wheel-and-trackpad-bindings)), so a plain drag also starts a non-additive marquee |
 | Drag a clip's body | Moves it, and every other selected clip, by one Snap-quantised beat delta shared across the whole selection, computed from the clip that was grabbed and clamped so no clip's start goes below 0, **plus** one shared track-row delta (see **Cross-track drag**) |
 | **Alt** + drag a clip's body | Copy-drag: the originals stay exactly where they are, doc and screen both; release commits a `duplicateClip` + `moveClipToTrack` per dragged clip at the destination, and the **copies** end up selected. Alt is re-read on every drag event, so it can be pressed or released mid-drag to switch between copy and move without restarting the drag. There is no Alt-**click** action — copying a clip onto itself is not something anyone asks for by clicking |
-| Drag within 6 px of the right edge | Resizes (trims) the clip's length, Snap-quantised, floored at 1/16 beat |
-| Drag within 6 px of the left edge | Moves the start and shrinks or grows the length so the **end** stays fixed. A MIDI clip's notes keep their absolute beat (`TimelineDoc::resizeClipLeft`): a shrink drops the notes before the new edge and cuts a straddling one, a grow leaves the new space empty; one undo step restores geometry and notes |
+| Drag within 6 px of the right edge | Resizes the clip's length, Snap-quantised, floored at 1/16 beat; what happens to a MIDI clip's notes is the **Sizing** mode (see **Edge sizing**) |
+| Drag within 6 px of the left edge | Moves the start and shrinks or grows the length so the **end** stays fixed; the notes follow the **Sizing** mode (see **Edge sizing**). One undo step restores geometry and notes |
+| **Option** + drag an edge | Stretches that one drag whatever the Sizing mode says (Logic, Reaper and Bitwig's key). Option is re-read on every drag event and on a bare modifier change, so pressing or releasing it mid-drag switches the drag in place |
 | Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Glue with next** (enabled only when a legal join target exists — greyed out, not hidden, so the menu's items never move around), **Duplicate**, **Duplicate linked** (greyed for an audio clip) and, on a linked clip only, **Make unique** ([linked clips](linked-clips.md)), **Mute**/**Unmute** (one toggling item, labelled for what the click will do), **Rename…**, **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…**, then, below another separator, **Render to audio track** ([render to audio track](render-to-audio.md); greyed with "(no mixer channel)" when the clip's track reaches no channel). It preserves the existing selection, the same rule `GraphEditor`'s cable and canvas menus follow |
 | Double-click a clip | Opens the piano roll on it (`onClipDoubleClicked` → `TimelinePanelComponent::openPianoRoll`) |
 | Double-click empty lane space | Authors content on the row under the pointer — see **Adding content** |
@@ -95,6 +96,28 @@ marquees or double-click-authors. Switching away from Select disables all of it;
 | Delete / Backspace | Deletes every selected clip as ONE undo step; returns `false` (key falls through) when the selection is empty |
 | Escape | Clears the selection; returns `false` when it is already empty |
 | P | **Loop the selection** — see **Loop the selection** below |
+
+## Edge sizing
+
+What an edge drag does to a MIDI clip's notes is the user setting `timelineClipSizingMode` (`trim`, `carry`,
+`stretch`; Trim when unset), the same in every project and chosen with the **Sizing** field on the edit-tool strip
+([edit tools](edit-tools.md#the-sizing-field)):
+
+| Mode | Left edge | Right edge |
+|---|---|---|
+| **Trim** | Notes keep their absolute beat: a shrink drops the notes before the new edge and cuts a straddling one (it keeps its id), a grow leaves the new space empty. The clip leaves its link group | Notes stay put; a note past the new end is kept, unheard, so growing the edge back brings it back |
+| **Carry contents** | Notes keep their place inside the clip, so they travel with the edge (the behaviour before the left-edge trim existed); the end crops them | Same as Trim (notes are anchored to the clip's start) |
+| **Stretch to fit** | Note starts and lengths scale by new length / old length (a note never shrinks under 1/1024 beat) | Same |
+
+One rule, `synth::clipEdgeResult` (`Source/Timeline/TimelineDoc/ClipEdgeSizing.h`), decides all six: the lanes paint
+the drag's preview from it (`TimelineClipLaneArea::resizePreviewFor`) and the drop commits it through
+`TimelineDoc::resizeClipEdge`, so the last drag frame is the frame after release. A linked copy shares notes and
+length, so it previews and takes every mode's change too, except a left Trim, which unlinks the dragged clip
+([linked clips](linked-clips.md)).
+
+While stretching, a small pill on the clip's top right shows the new length as a percentage of the old one ("75%").
+An **audio** clip has no stretch engine yet: Stretch (the mode or Option) trims it instead and the pill says
+"Audio trims: no stretch yet"; its left edge moves the start and keeps the end, as it always has.
 
 ## Cross-track drag
 
@@ -417,7 +440,9 @@ The default destination is `Exports/<patch name>.mid` in an open project bundle,
 (`TimelineClipLaneSelectionTests.cpp`), pure-geometry tests for `computeClipRect`
 (`TimelineClipLaneAreaTests.cpp`), mouse interaction driven by hand-built `juce::MouseEvent`s
 against a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed
-(`TimelineClipLaneMouseTests.cpp`), painting (`TimelineClipLanePaintingTests.cpp`), the tool
+(`TimelineClipLaneMouseTests.cpp`), edge sizing in every mode on both edges, Option, the readout, linked copies
+and the painted last-drag-frame-equals-release check (`TimelineClipLaneSizingTests.cpp`, through the fixture's
+`dragEdgeExpectingPreviewEqualsCommit` guard), painting (`TimelineClipLanePaintingTests.cpp`), the tool
 layer (`TimelineClipLaneEditToolsTests.cpp`) and the Range tool — the model, the drag and its
 Shift-extension, the repaint gate and every verb (`TimelineClipLaneRangeTests.cpp`). The doc-level
 range edits are `Tests/Timeline/TimelineDoc/TimelineDocRangesTests.cpp`, and the range clipboard is
