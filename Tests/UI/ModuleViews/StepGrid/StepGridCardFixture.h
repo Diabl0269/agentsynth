@@ -42,6 +42,13 @@ struct SeqCard {
         *param = index;
     }
 
+    /** The module plays its own Key and Scale instead of following the song key. */
+    void useOwnKey() {
+        auto* follow = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(module, "followSongKey"));
+        ASSERT_NE(follow, nullptr);
+        *follow = false;
+    }
+
     juce::Point<float> pointIn(SequencerLane lane, int step, float yFraction = 0.5f) const {
         const auto cell = grid->cellBounds(lane, step);
         return {(float)cell.getCentreX(), (float)cell.getY() + yFraction * (float)cell.getHeight()};

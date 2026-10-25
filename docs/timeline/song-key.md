@@ -36,6 +36,17 @@ the same picker from anywhere.
 The key is part of the transport's document state (`TransportDoc::songKey`, `{root, mask, name}`), saved in the
 project's `"transport"` object as an optional `"songKey"`. Older projects have none and load as No key; a malformed
 one is dropped to No key rather than rejecting the tempo and loop beside it. `TransportService::setSongKey` changes
-only that message-thread state and fires `onSongKeyChanged`; it posts nothing to the audio thread and moves no note.
+only that message-thread state, a lock-free mirror the audio thread reads (`getSongKeyPacked()`: valid bit, root,
+mask), and fires `onSongKeyChanged`; it queues no transport command and moves no note.
 The transport poll in `MainComponent` records the change as one undo step, like a tempo edit, and undo restores it
 through `applyDocumentState`. New Patch resets it to No key.
+
+## Following the song key
+
+Things that use a key follow the song key by default and can be given their own. Each one's Key field is a
+`Layout/FollowKeyField`: "Song key · D Dorian" in the muted colour while following, "A Phrygian · own" otherwise
+(screen reader: title "Key, following song key" or "Key, own key", value the text shown). It opens the key picker with the
+Follow song key row on top (ticked while following, the song key at its right). When the key a follower plays changes
+under it (a new song key, an undo), the field glows once for 300 ms; picking or following is the user's own change
+and does not glow, and reduced motion only changes the text. Built for the Sequencer and Poly Sequencer
+([sequencer-design.md](../modules/sequencer-design.md#key)).

@@ -99,6 +99,12 @@ TEST(CardBodyBinding, EveryWidgetIsLearnableUnderItsParameterAndFoundByParamId) 
             if (item.param == nullptr)
                 continue;
             EXPECT_EQ(body->findWidget(item.param->paramID), item.widget);
+            if (item.keyField) {
+                // The sequencer Key field writes Key, Scale and the follow switch together, so no one parameter
+                // could stand for it under MIDI Learn.
+                EXPECT_EQ(card.findMidiLearnableParamForTest(item.widget), nullptr);
+                continue;
+            }
             EXPECT_EQ(card.findMidiLearnableParamForTest(item.widget), item.param) << item.param->paramID;
             if (item.kind != CardBodyItem::Kind::Knob)
                 continue;

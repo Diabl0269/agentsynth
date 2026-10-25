@@ -133,13 +133,9 @@ juce::Rectangle<int> StepGridComponent::padBounds(int step) const {
     return {left, row.getY(), juce::roundToInt(columnLeft(step + 1)) - left, row.getHeight()};
 }
 
-void StepGridComponent::rebuildScale() {
-    const auto& pattern = module_.getPattern();
-    auto* root = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&module_, sequencer_ids::kScaleRoot));
-    auto* scale = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&module_, sequencer_ids::kScale));
-    scale_ = sequencerScale(root != nullptr ? root->getIndex() : 0, scale != nullptr ? scale->getIndex() : 0,
-                            pattern.customMask);
-}
+// The scale the module plays through: the song key while it follows, else its own Key and Scale. Everything the grid
+// draws, snaps, picks chords from or fits to reads this one scale.
+void StepGridComponent::rebuildScale() { scale_ = module_.resolvedScale(songKey_); }
 
 int StepGridComponent::playedPitchOf(int step) const {
     const int written = module_.getPattern().steps[(size_t)juce::jlimit(0, kMaxSequencerSteps - 1, step)].pitch;
@@ -164,17 +160,16 @@ int StepGridComponent::runningStep() const {
     return runParam_ != nullptr && runParam_->get() ? module_.currentActiveStep.load() : -1;
 }
 
-// The parameters the grid draws against: Steps (dimming, pages), Transpose, Key and Scale (the played pitch).
+// The parameters the grid draws against: Steps (dimming, pages), Transpose, and the scale it plays through (its own Key
+// and Scale, or the song key while it follows), which sets the played pitch.
 void StepGridComponent::syncSettings() {
     auto* transpose = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(&module_, sequencer_ids::kTranspose));
-    auto* root = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&module_, sequencer_ids::kScaleRoot));
-    auto* scale = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&module_, sequencer_ids::kScale));
     const int steps = stepCount();
     const int t = transpose != nullptr ? transpose->get() : 0;
-    const int r = root != nullptr ? root->getIndex() : 0;
-    const int s = scale != nullptr ? scale->getIndex() : 0;
-    const auto mask = module_.getPattern().customMask;
-    const bool scaleChanged = r != seenRoot_ || s != seenScale_ || mask != seenMask_;
+    const auto resolved = module_.resolvedScale(songKey_);
+    const int r = resolved.rootPitchClass;
+    const auto mask = resolved.mask;
+    const bool scaleChanged = r != seenRoot_ || mask != seenMask_;
     if (steps == seenSteps_ && t == seenTranspose_ && !scaleChanged)
         return;
     if (steps != seenSteps_ && seenSteps_ >= 0)
@@ -182,7 +177,6 @@ void StepGridComponent::syncSettings() {
     seenSteps_ = steps;
     seenTranspose_ = t;
     seenRoot_ = r;
-    seenScale_ = s;
     seenMask_ = mask;
     transpose_ = t;
     if (scaleChanged)

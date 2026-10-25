@@ -194,16 +194,18 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         // (and there is deliberately no mute — muting a tap would silence the patch, which is
         // not what a recorder is for).
         {"Rec Tap", "bypassed"},
-        {"Poly Sequencer", "bpm, bypassed, chance, gate, rate, run, scale, scaleRoot, steps, syncToTransport, "
-                           "transpose, velocity"},
+        {"Poly Sequencer",
+         "bpm, bypassed, chance, followSongKey, gate, rate, run, scale, scaleRoot, steps, syncToTransport, "
+         "transpose, velocity"},
         {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, pan, preDelay, roomSize, wet, width"},
         {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling, pan"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler",
          "attack, bypassed, density, dualIO, end, feel, fine, glide, grainSize, level, loop, mono, muted, pitch, "
          "playMode, release, releaseSound, reverse, rootNote, spray, start, tone, voices"},
-        {"Sequencer", "bpm, bypassed, chance, gate, rate, run, scale, scaleRoot, steps, syncToTransport, "
-                      "transpose, velocity"},
+        {"Sequencer",
+         "bpm, bypassed, chance, followSongKey, gate, rate, run, scale, scaleRoot, steps, syncToTransport, "
+         "transpose, velocity"},
         // Every playback value it needs (gain, fades, trim) lives on the CLIP, not on the node,
         // so the inherited bypass is the whole parameter set — and there is deliberately no mute,
         // since a muted track is a document state the module already honours.

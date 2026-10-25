@@ -22,6 +22,7 @@
 #include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
+#include "UI/ModuleViews/SequencerKey/SequencerKeyField.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -264,6 +265,10 @@ static void nameRenamedCaption(juce::Label& label, const CardBodyItem& item, juc
 // A note-length choice (a stage's division, the Delay time, the LFO sync rate) is a NoteLengthBox: it is a ComboBox, so
 // the attachment, MIDI Learn and the card's bookkeeping below treat it as one, but it opens the S/T/D chip popup.
 void CardBody::createChoice(CardBodyItem& item, juce::AudioParameterChoice& param) {
+    if (item.keyField) {
+        createKeyField(item, param);
+        return;
+    }
     juce::ComboBox* combo = nullptr;
     if (isNoteLengthParameter(param.paramID))
         combo = new synth::ui::NoteLengthBox();
@@ -292,6 +297,25 @@ void CardBody::createChoice(CardBodyItem& item, juce::AudioParameterChoice& para
     card_.comboLabels.add(label);
     card_.addAndMakeVisible(label);
     item.widget = combo;
+    item.label = label;
+}
+
+// The sequencers' Key cell holds the follow-or-own key field instead of the Key combo. It is bound to no single
+// parameter (a pick writes Key, Scale and Follow Song Key together), so it gets no attachment and no MIDI Learn; the
+// card wires its transport and undo record on its 15 Hz tick (ModuleComponentSequencerCard.cpp).
+void CardBody::createKeyField(CardBodyItem& item, juce::AudioParameterChoice& param) {
+    auto* sequencer = dynamic_cast<SequencerModuleBase*>(&module_);
+    jassert(sequencer != nullptr);
+    auto* field = new synth::ui::SequencerKeyField(*sequencer);
+    widgets_.add(field);
+    card_.addAndMakeVisible(field);
+
+    auto* label = new juce::Label(param.getName(100), item.captionText());
+    nameRenamedCaption(*label, item, param);
+    widgets_.add(label);
+    card_.comboLabels.add(label);
+    card_.addAndMakeVisible(label);
+    item.widget = field;
     item.label = label;
 }
 

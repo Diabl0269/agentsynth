@@ -11,24 +11,22 @@ type Poly Sequencer size 560x482
   child 9 label id="" at 378,58 104x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 10 combo id="" at 278,76 96x24 visible=1 title="Rate" tip="Rate" focusOrder=0 wantsFocus=1
   child 11 label id="" at 278,58 96x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 12 knob id="Transpose" at 222,144 56x58 visible=1 title="Transpose" tip="Transpose" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 222,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Gate" at 282,144 56x58 visible=1 title="Gate" tip="Gate" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 282,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 knob id="Velocity" at 342,144 56x58 visible=1 title="Velocity" tip="Velocity" focusOrder=0 wantsFocus=1
-  child 17 label id="" at 342,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 18 knob id="Chance" at 402,144 56x58 visible=1 title="Chance" tip="Chance" focusOrder=0 wantsFocus=1
-  child 19 label id="" at 402,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 20 combo id="" at 12,161 96x24 visible=1 title="Key" tip="Key" focusOrder=0 wantsFocus=1
-  child 21 label id="" at 12,143 96x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 22 combo id="" at 112,161 96x24 visible=1 title="Scale" tip="Scale" focusOrder=0 wantsFocus=1
-  child 23 label id="" at 112,143 96x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 24 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 25 label id="cardSectionHeader" at 12,38 252x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 26 component id="" at 271,56 1x46 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 27 label id="cardSectionHeader" at 278,38 204x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 28 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 29 label id="cardSectionHeader" at 12,108 196x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 30 component id="" at 215,126 1x76 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 31 label id="cardSectionHeader" at 222,108 236x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 32 component id="" at 544,32 12x12 visible=1 title="Midi output" tip="" focusOrder=0 wantsFocus=0
+  child 12 knob id="Transpose" at 210,144 56x58 visible=1 title="Transpose" tip="Transpose" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 210,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Gate" at 270,144 56x58 visible=1 title="Gate" tip="Gate" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 270,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 knob id="Velocity" at 330,144 56x58 visible=1 title="Velocity" tip="Velocity" focusOrder=0 wantsFocus=1
+  child 17 label id="" at 330,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 18 knob id="Chance" at 390,144 56x58 visible=1 title="Chance" tip="Chance" focusOrder=0 wantsFocus=1
+  child 19 label id="" at 390,126 56x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 20 combo id="sequencerKey" at 12,161 184x24 visible=1 title="Key, following song key" tip="Following the song key. Click to give this its own key." focusOrder=0 wantsFocus=1
+  child 21 label id="" at 12,143 184x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 22 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 23 label id="cardSectionHeader" at 12,38 252x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 24 component id="" at 271,56 1x46 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 25 label id="cardSectionHeader" at 278,38 204x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 26 component id="" at 0,0 0x0 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 27 label id="cardSectionHeader" at 12,108 184x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 28 component id="" at 203,126 1x76 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 29 label id="cardSectionHeader" at 210,108 236x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 30 component id="" at 544,32 12x12 visible=1 title="Midi output" tip="" focusOrder=0 wantsFocus=0

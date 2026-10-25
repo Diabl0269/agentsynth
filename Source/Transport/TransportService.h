@@ -55,6 +55,12 @@ public:
     // Message thread only. Fires after the song key changed, from every path (the picker, a project load, undo).
     std::function<void()> onSongKeyChanged;
 
+    // Any thread. The song key last set, packed: 0 = No key, else bit 16 set, root in bits 12-15, mask in bits 0-11.
+    // The name is not carried; a message-thread reader takes getDocumentState().songKey instead.
+    std::uint32_t getSongKeyPacked() const noexcept { return songKeyPacked_.load(std::memory_order_acquire); }
+    static std::uint32_t packSongKey(const std::optional<MusicalScale>& key) noexcept;
+    static std::optional<MusicalScale> unpackSongKey(std::uint32_t packed);
+
     // Message thread only. The tempo, time signature, loop and song key last requested, valid immediately.
     const TransportDoc& getDocumentState() const noexcept { return documentState_; }
     // Message thread only. Sets the song key and posts time signature, bpm and loop; true if all three were queued.
@@ -244,6 +250,7 @@ private:
 
     // Message thread only; see getDocumentState.
     TransportDoc documentState_;
+    std::atomic<std::uint32_t> songKeyPacked_{0};
 
     // -- Audio-thread state ---------------------------------------------------
     ConstantTempoMap tempoMap;

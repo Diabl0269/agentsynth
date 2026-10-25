@@ -126,6 +126,7 @@ TEST(StepGridTools, FitToScaleIsOffWithoutAScaleAndWhenNothingWouldChange) {
     auto& fit = c.grid->getTools().getButton(Tool::FitToScale);
     EXPECT_FALSE(fit.isEnabled()) << "No scale";
     c.setChoice("scaleRoot", "C");
+    c.useOwnKey();
     c.setChoice("scale", "Major");
     c.grid->poll();
     EXPECT_TRUE(fit.isEnabled()) << "the default notes include out-of-scale ones";
@@ -143,6 +144,7 @@ TEST(StepGridTools, FitToScaleIsOffWithoutAScaleAndWhenNothingWouldChange) {
 TEST(StepGridTools, UpAndDownMoveEveryNoteOneScaleNote) {
     SeqCard c;
     c.setChoice("scaleRoot", "C");
+    c.useOwnKey();
     c.setChoice("scale", "Major");
     c.grid->poll();
     click(c, Tool::Up);
@@ -158,6 +160,7 @@ TEST(StepGridTools, UpAndDownMoveEveryNoteOneScaleNote) {
 TEST(StepGridTools, RandomizeOpensAPopoverWhoseRollsAreEachOneUndoStep) {
     SeqCard c;
     c.setChoice("scaleRoot", "C");
+    c.useOwnKey();
     c.setChoice("scale", "Major");
     c.grid->poll();
     std::unique_ptr<synth::ui::StepGridRandomizePanel> panel;

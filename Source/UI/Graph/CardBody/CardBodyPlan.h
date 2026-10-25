@@ -33,10 +33,11 @@ struct CardBodyItem {
         std::optional<juce::Point<int>> at;
     };
     std::vector<Placement> alsoIn;
-    bool shown = true;   ///< A `show` condition's current result.
-    bool dimmed = false; ///< A `dim` condition or a code dim rule greys it out now.
-    bool pill = false;   ///< A footer toggle, drawn as the small pill.
-    bool open = true;    ///< A view only: shown now (the layout's `open`, then the card's toggle).
+    bool shown = true;     ///< A `show` condition's current result.
+    bool dimmed = false;   ///< A `dim` condition or a code dim rule greys it out now.
+    bool pill = false;     ///< A footer toggle, drawn as the small pill.
+    bool keyField = false; ///< The sequencers' Key: a follow-or-own key field in a wider cell (a Choice otherwise).
+    bool open = true;      ///< A view only: shown now (the layout's `open`, then the card's toggle).
     /** A view only: how much of its height it takes now while it fades in or out (0 to 1), written by the live card
      *  body each time it lays out; negative = follow `open`, as in a plan that is only measured. */
     mutable float reveal = -1.0f;

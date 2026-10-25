@@ -86,6 +86,7 @@ TEST_F(PolySequencerModuleTest, FixedQualitiesStackOnTheRoot) {
 }
 
 TEST_F(PolySequencerModuleTest, ScaleChordsStackScaleNotes) {
+    setNumber(*seq, "followSongKey", 0.0f); // its own key, not the song key
     setChoice(*seq, "scale", "Major");
     EXPECT_EQ(chordNotes(SequencerChord::ScaleSeventh, 60), (std::vector<int>{60, 64, 67, 71}));
     EXPECT_EQ(chordNotes(SequencerChord::ScaleTriad, 62), (std::vector<int>{62, 65, 69})); // D minor in C major
@@ -99,6 +100,7 @@ TEST_F(PolySequencerModuleTest, ScaleChordsWithoutAScaleFallBackToMajor) {
 }
 
 TEST_F(PolySequencerModuleTest, FixedChordsAreBuiltOnTheSnappedRootButNotSnapped) {
+    setNumber(*seq, "followSongKey", 0.0f); // its own key, not the song key
     setChoice(*seq, "scale", "Major");
     // Root C# snaps to C; the Dim intervals (0, 3, 6) are not pulled into the key.
     EXPECT_EQ(chordNotes(SequencerChord::Dim, 61), (std::vector<int>{60, 63, 66}));

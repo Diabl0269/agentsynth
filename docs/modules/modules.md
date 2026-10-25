@@ -629,6 +629,7 @@ reference: [`lfo.md`](lfo.md).
     - `transpose` (int -24–24, default 0) — added to every step's pitch before the scale snap.
     - `gate` (0–2, default 1), `velocity` (0–2, default 1), `chance` (0–1, default 1) — multiply every step's own gate, velocity and chance.
     - `scaleRoot` (C … B, shown as "Key") and `scale` (`No scale`, the built-in scale presets, `Custom`; default `No scale`) — the pitch of every note is snapped to the nearest scale note when it plays; the stored pitch is never rewritten.
+    - `followSongKey` (bool, default on) — plays in the song key instead of `scaleRoot`/`scale`; a stored node without it follows only if it has No scale ([sequencer-design.md](sequencer-design.md#key)).
 - **State** (the pattern, `getExtraState`): per step pitch, on, gate, velocity, chance, repeat, slide, nudge, condition, filter amount; the custom scale mask; the seed for chance. Format: [patch-format.md](../ai/patch-format.md#per-node-state). Default: F3 F4 Gb3 Db4 F3 A3 Gb3 C4, gate 0.5, filter 0.5 (CC 74 = 64), steps 9–128 repeat steps 1–8.
 - **Old files**: the former parameters `Pitch 1–8`, `Gate 1–8` and `F.Env 1–8` are read once on load into the pattern ([sequencer-design.md](sequencer-design.md#legacy-adoption)).
 - **Timing**: sample-accurate. `currentActiveStep` (`std::atomic<int>`) is the step whose first hit came last, for the card's playhead.
@@ -639,7 +640,7 @@ reference: [`lfo.md`](lfo.md).
 ## Poly Sequencer Module
 - **Source file**: `Source/Modules/PolySequencerModule.h` (same base as the Sequencer).
 - **Purpose**: polyphonic chord sequencer, 1 to 128 steps. Generates MIDI chord events — it does **not** output per-voice pitch CV channels, and sends no CC 74.
-- **Parameters**: exactly the Sequencer's (`run`, `bpm`, `syncToTransport`, `steps`, `rate`, `transpose`, `gate`, `velocity`, `chance`, `scaleRoot`, `scale`).
+- **Parameters**: exactly the Sequencer's (`run`, `bpm`, `syncToTransport`, `steps`, `rate`, `transpose`, `gate`, `velocity`, `chance`, `scaleRoot`, `scale`, `followSongKey`).
 - **State**: the same pattern; the per-step `chord` replaces `slide` and `filter`. The 25 chords are the old eight (Unison, Major, Minor, Maj7, Min7, 5ths, Octs, Random), six built from the scale at the snapped root (`Scale Triad`, `Scale Seventh`, `Scale Sus2`, `Scale Sus4`, `Scale Add9`, `Scale Sixth`; with no scale they use the Major scale at the root) and eleven fixed qualities (`Dom7`, `Dim`, `Aug`, `Sus2`, `Sus4`, `Sixth`, `Min6`, `Add9`, `Dim7`, `HalfDim7`, `MinMaj7`). The old and fixed chords stack their intervals on the snapped root unsnapped; Random picks its notes from the seed. Notes outside 0–127 are dropped. Default roots: C3 E3 G3 C4 C3 G3 E3 C4.
 - **Old files**: `Step N Root`, `Step N Chord` and `Gate N` are read once on load into the pattern.
 - **Timing and sync**: as the Sequencer; the whole chord starts together and ends together after the gate.

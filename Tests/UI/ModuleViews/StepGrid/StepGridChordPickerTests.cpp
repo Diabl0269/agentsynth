@@ -89,6 +89,7 @@ TEST(StepGridChords, WithNoScaleTheLabelHasOnlyTheName) {
 TEST(StepGridChordPicker, PickingAChordIsOneUndoStepAndChangesTheStep) {
     SeqCard c("Poly Sequencer");
     c.setChoice("scaleRoot", "C");
+    c.useOwnKey();
     c.setChoice("scale", "Major");
     c.grid->poll();
     Open open(c, 2);
@@ -234,6 +235,7 @@ std::vector<int> chordAt(SeqCard& c, SequencerChord chord, int step) {
 TEST(StepGridChordPicker, HoveringAChipPlaysItsChordAfterTheDebounceAndLeavingOrClosingStopsIt) {
     SeqCard c("Poly Sequencer");
     c.setChoice("scaleRoot", "C");
+    c.useOwnKey();
     c.setChoice("scale", "Major");
     c.grid->poll();
     c.module->prepareToPlay(44100.0, 256);
@@ -261,6 +263,7 @@ TEST(StepGridChordPicker, HoveringAChipPlaysItsChordAfterTheDebounceAndLeavingOr
 TEST(StepGridChordPicker, OnlyTheChipThePointerRestsOnPlaysAndTheKeysAuditionToo) {
     SeqCard c("Poly Sequencer");
     c.setChoice("scaleRoot", "C");
+    c.useOwnKey();
     c.setChoice("scale", "Major");
     c.grid->poll();
     c.module->prepareToPlay(44100.0, 256);
