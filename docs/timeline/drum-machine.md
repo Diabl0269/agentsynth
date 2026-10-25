@@ -70,14 +70,49 @@ Swing is applied in `TimelineSnapshot::buildFrom` and never written into the not
 counted from 0; a note whose clip-relative start is on an ODD step (within 1e-6 of a step) starts later by
 `(swing - 0.5) * 2 * step`, so at 0.75 the off-beat of a pair sits at 75% of the pair (a triplet feel). Notes off the
 grid are untouched, the note keeps its length (its end follows, clamped to the clip end as before), and a shift that
-would push the start past the clip end is dropped. The clip's run is sorted again when swing is on, since a swung note
-can pass an off-grid one. A step is `beatsPerBar / stepsPerBar` with the bar length of the transport's requested time signature (a change republishes through `TransportService::onTimeSignatureChanged`),
+would push the start past the clip end is dropped. The clip's run is always stable-sorted again, since a swung or nudged
+note can pass an off-grid one. A step is `beatsPerBar / stepsPerBar` with the bar length of the transport's requested time signature (a change republishes through `TransportService::onTimeSignatureChanged`),
 which the engine passes to `buildFrom` on every publish (a time-signature change reaches playback at the next
 publish, not at once).
 
 The grid keeps its cells on the grid. A hit on a swung step shows a small tick inside its cell, at how far into the
 step it plays. The playhead column is real time, and a swung hit flashes when it plays, not when the playhead enters
 its column.
+
+## Per-hit settings and per-drum length in playback
+
+A hit's chance, repeat, flam, nudge and condition, the clip's humanise and a drum's own length and swing are applied in
+`TimelineSnapshot::buildFrom` (`appendClipNotes`) and by Track In. They are never written into the notes, so the
+piano roll shows the notes as the user left them. All of it is deterministic: the same document gives the same events.
+
+For every note that survives mute and solo, with `step = beatsPerBar / stepsPerBar`:
+
+- **Per-drum length** (`Clip::drumRows`, `lengthSteps` L). When `L * step` is shorter than the clip, only notes whose
+  cell (`floor(start / step)`) is below L play, and they repeat every `L * step` across the clip (repetition
+  r = 0, 1, ...; an occurrence at or past the clip end is dropped). A note of that pitch stored at a cell of L or more
+  stays in the clip but does not play. A length of 0, or one at least as long as the clip, changes nothing. Example:
+  Closed hat (42) at length 12 in a one-bar 16-step clip plays steps 1..4 again at 13..16, and a note stored at step 14
+  stays silent (step 14 plays the copy of step 2).
+- **Swing**: the drum's own swing when set, else the clip's, by the usual odd-step rule on the occurrence's start.
+- **Start** (clip-relative) = occurrence start + swing delay + `nudge * step` + humanise timing. A start below 0 plays
+  at 0; a start at or past the clip end is dropped.
+- **Humanise** h (0..1): a hash of the note id and repetition gives timing within +-0.08 * h * step and loudness within
+  +-round(24 * h), loudness clamped 1..127.
+- **Repeat** n: n hits at `start + j * step / n`, each as long as the note or `step / n`, whichever is shorter.
+- **Flam**: one grace hit 0.15 steps before the first hit, at 60% of its loudness (at least 1) and at most 0.15 steps
+  long; skipped when it would start before the clip.
+- Each event's end is clamped to the clip end, and the clip's run is stable-sorted by start.
+- **Chance and condition** travel on the event (`rollSeed`, `chance`, `condHit`, `condOf`, `cycle`, `cyclesPerPass`)
+  and are decided per pass by `TimelineSnapshot::notePlays(event, pass)`: with `c = cycle + pass * cyclesPerPass`, a
+  condition (`condOf > 1`) plays only when `c % condOf == condHit - 1`; a chance below 100 then plays when
+  `hash(rollSeed, pass) % 100 < chance`. `cycle` is the repetition r for a drum with its own length, else the bar the
+  note sits in; `cyclesPerPass` is how many such cycles one pass over the clip spans. Linked clips continue each other's
+  cycle: the k-th clip of a link group on the track (by position) adds `k * cyclesPerPass`. A repeat and its flam share
+  one seed, so they play or skip together.
+
+Track In counts the pass: in the clip preview, the clip wraps completed since the preview started (reset on start and
+restart); during playback, the transport loop wraps since play started or the playhead was located. A hit that
+`notePlays` rejects emits no note-on and owes no note-off.
 
 ## Lanes under the grid
 

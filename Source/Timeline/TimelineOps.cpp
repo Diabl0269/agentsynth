@@ -4,6 +4,7 @@
 #include "AutomationBinding.h"
 #include "InstrumentTrackOpReader.h"
 #include "MidiClipFile.h"
+#include "TimelineOpsNotes.h"
 #include "TimelineOpsTempoMarkers.h"
 #include "TimelineValidator.h"
 
@@ -32,7 +33,7 @@ namespace synth {
 //
 // The per-op checks throughout this file are validateTimeline's, reused rather than restated:
 // same caps, same bounds, and the same rule that untrusted input is REJECTED where a trusted path
-// would clamp or repair (see the checks inline below for the specific instances — e.g. readNote's
+// would clamp or repair (see the checks inline below for the specific instances — e.g. readNoteOp's
 // pitch/velocity/channel bounds, runWriteLane's value-range check against the live parameter).
 
 namespace {
@@ -374,45 +375,6 @@ TimelineOpsResult resolveTrack(const juce::String& where, const juce::var& selec
     return fail(where + "needs a \"track\", either the track's exact name or { \"index\": N }.");
 }
 
-TimelineOpsResult readNote(const juce::String& where, const juce::var& noteVar, MidiNote& out) {
-    auto* noteObj = noteVar.getDynamicObject();
-    if (noteObj == nullptr)
-        return fail(where + "has a note that is not an object.");
-    if (const auto bad = unknownKey(*noteObj, {"startBeat", "lengthBeats", "pitch", "velocity", "channel"});
-        bad.isNotEmpty())
-        return fail(where + "has a note with an unknown field \"" + bad +
-                    "\". A note accepts only \"startBeat\", \"lengthBeats\", \"pitch\", \"velocity\" and "
-                    "\"channel\".");
-
-    if (!readOptionalDouble(noteObj->getProperty("startBeat"), out.startBeat) ||
-        !readOptionalDouble(noteObj->getProperty("lengthBeats"), out.lengthBeats))
-        return fail(where + "has a note with a non-numeric \"startBeat\" or \"lengthBeats\".");
-    if (!isBeatInBounds(out.startBeat))
-        return fail(where + "has a note starting at beat " + juce::String(out.startBeat) +
-                    ", which is not a finite beat between " + beatRangeText() +
-                    ". Note beats are relative to the clip's own start.");
-    if (!isLengthInBounds(out.lengthBeats))
-        return fail(where + "has a note " + juce::String(out.lengthBeats) +
-                    " beats long. A note length must be finite, greater than 0 and at most " +
-                    juce::String(kMaxPpqUntrusted) + ".");
-
-    // Ranges are REJECTED, never clamped — validateTimeline's rule, for its reason: a hand on a
-    // control means "as far as this goes", but a sender naming pitch 200 means something the
-    // parameter cannot express, and quietly rewriting it to 127 ships music nobody asked for.
-    if (!readOptionalInt(noteObj->getProperty("pitch"), out.pitch) ||
-        !readOptionalInt(noteObj->getProperty("velocity"), out.velocity) ||
-        !readOptionalInt(noteObj->getProperty("channel"), out.channel))
-        return fail(where + "has a note with a non-integer \"pitch\", \"velocity\" or \"channel\".");
-    if (out.pitch < 0 || out.pitch > 127)
-        return fail(where + "has a note with pitch " + juce::String(out.pitch) + ", outside the MIDI range 0 to 127.");
-    if (out.velocity < 1 || out.velocity > 127)
-        return fail(where + "has a note with velocity " + juce::String(out.velocity) +
-                    ", outside the range 1 to 127 (0 is not a note-on).");
-    if (out.channel < 1 || out.channel > 16)
-        return fail(where + "has a note on channel " + juce::String(out.channel) + ", outside the MIDI range 1 to 16.");
-    return {};
-}
-
 TimelineOpsResult runPlaceClips(const juce::String& where, juce::DynamicObject& op, TimelineDoc& doc,
                                 juce::StringArray& parts, std::int64_t& totalNotes) {
     if (const auto bad = unknownKey(op, {"op", "track", "clips"}); bad.isNotEmpty())
@@ -497,8 +459,8 @@ TimelineOpsResult runPlaceClips(const juce::String& where, juce::DynamicObject& 
             clip.notes.reserve(static_cast<size_t>(noteList.size()));
             for (const auto& noteVar : noteList) {
                 MidiNote note;
-                if (const auto result = readNote(where, noteVar, note); !result.ok)
-                    return result;
+                if (const auto error = readNoteOp(noteVar, note); error.isNotEmpty())
+                    return fail(where + error);
                 clip.notes.push_back(note);
             }
         }

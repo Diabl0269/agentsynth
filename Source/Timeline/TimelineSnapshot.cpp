@@ -36,31 +36,128 @@ float gainFromDecibels(double gainDb) noexcept {
     return (float)std::pow(10.0, gainDb * 0.05);
 }
 
-// The delay swing gives a note starting at the clip-relative `startBeat`: every ODD step of the clip's grid (steps
-// counted from 0, a step being beatsPerBar / stepsPerBar beats) is pushed later by (swing - 0.5) * 2 steps, so 0.75
-// puts the off-beat of a pair at 75% of it. A note off the grid is untouched, and a shift that would leave the clip is
-// dropped, so a swung note always starts inside its clip.
-double swingDelayBeats(const Clip& clip, double startBeat, double beatsPerBar) noexcept {
-    if (clip.swing <= Clip::kStraightSwing)
+// The delay swing gives a hit starting at the clip-relative `startBeat`: every ODD step of the clip's grid (steps
+// counted from 0) is pushed later by (swing - 0.5) * 2 steps, so 0.75 puts the off-beat of a pair at 75% of it. A hit
+// off the grid is untouched, and a shift that would leave the clip is dropped, so a swung hit always starts inside its
+// clip.
+double swingDelayBeats(double swing, double startBeat, double step, double clipLength) noexcept {
+    if (swing <= Clip::kStraightSwing)
         return 0.0;
-    const double bar = beatsPerBar > 0.0 ? beatsPerBar : 4.0;
-    const double step = bar / static_cast<double>(std::max(1, clip.stepsPerBar));
     const double index = startBeat / step;
     const double nearest = std::round(index);
     if (std::abs(index - nearest) > 1.0e-6 || (static_cast<long long>(nearest) & 1LL) == 0)
         return 0.0;
-    const double delay = (clip.swing - Clip::kStraightSwing) * 2.0 * step;
-    return startBeat + delay < clip.lengthBeats ? delay : 0.0;
+    const double delay = (swing - Clip::kStraightSwing) * 2.0 * step;
+    return startBeat + delay < clipLength ? delay : 0.0;
 }
 
-// Flattens one clip's notes onto the end of `out`, applying the clip's mute, solo and swing. The result is sorted by
-// start: the notes already are, and a swung note moves later (never past the clip end), so a re-sort is needed only
-// when swing is on.
-void appendClipNotes(std::vector<TimelineSnapshot::NoteEvent>& out, const Clip& clip, double beatsPerBar) {
+constexpr double kEps = 1.0e-6;
+constexpr double kFlamLeadSteps = 0.15; // the grace hit sits this far (in steps) before the hit
+constexpr double kHumaniseTimingSteps = 0.08;
+constexpr double kHumaniseVelocity = 24.0;
+
+// Everything the expansion of one clip's notes shares.
+struct ClipGrid {
+    const Clip& clip;
+    double bar;
+    double step;
+    int linkIndex; // this clip's place among the track's clips of its link group
+};
+
+const Clip::DrumRow* findDrumRow(const Clip& clip, int pitch) noexcept {
+    for (const auto& row : clip.drumRows)
+        if (row.pitch == pitch)
+            return &row;
+    return nullptr;
+}
+
+// A uniform value in [-1, 1) from 24 bits of `hash`.
+double unitFromHash(std::uint64_t hash, int shift) noexcept {
+    return static_cast<double>((hash >> shift) & 0xFFFFFFu) / 8388608.0 - 1.0;
+}
+
+// The events of one occurrence of a note: its hit (or `repeat` hits spread over a step) and an optional grace hit.
+// `occurrenceStart` is clip-relative and before swing, nudge and humanise.
+void appendOccurrence(std::vector<TimelineSnapshot::NoteEvent>& out, const ClipGrid& grid, const MidiNote& note,
+                      double occurrenceStart, int repetition, double swing, int cycle, int cyclesPerPass) {
+    const Clip& clip = grid.clip;
+    const std::uint64_t hash =
+        TimelineSnapshot::mixHash(static_cast<std::uint64_t>(note.id.value), static_cast<std::uint64_t>(repetition));
+    double start =
+        occurrenceStart + swingDelayBeats(swing, occurrenceStart, grid.step, clip.lengthBeats) + note.nudge * grid.step;
+    int velocity = note.velocity;
+    if (clip.humanise > 0.0) {
+        start += unitFromHash(hash, 0) * kHumaniseTimingSteps * clip.humanise * grid.step;
+        velocity = std::clamp(
+            velocity + static_cast<int>(std::lround(unitFromHash(hash, 24) * kHumaniseVelocity * clip.humanise)), 1,
+            127);
+    }
+    start = std::max(0.0, start);
+    if (start >= clip.lengthBeats)
+        return;
+
     const double clipEnd = clip.startBeat + clip.lengthBeats;
+    TimelineSnapshot::NoteEvent event;
+    event.pitch = note.pitch;
+    event.velocity = velocity;
+    event.channel = note.channel;
+    event.rollSeed = static_cast<std::uint32_t>(hash);
+    event.chance = static_cast<std::uint8_t>(note.chance);
+    event.condHit = static_cast<std::uint8_t>(note.condHit);
+    event.condOf = static_cast<std::uint8_t>(note.condOf);
+    event.cycle = cycle + grid.linkIndex * cyclesPerPass;
+    event.cyclesPerPass = cyclesPerPass;
+
+    const int repeats = std::max(1, note.repeat);
+    const double slot = grid.step / static_cast<double>(repeats);
+    const double hitLength = repeats > 1 ? std::min(note.lengthBeats, slot) : note.lengthBeats;
+    if (note.flam) {
+        const double lead = kFlamLeadSteps * grid.step;
+        if (start - lead >= 0.0) {
+            auto grace = event;
+            grace.velocity = std::max(1, static_cast<int>(std::lround(0.6 * velocity)));
+            grace.startBeat = clip.startBeat + start - lead;
+            grace.endBeat = std::min(grace.startBeat + std::min(note.lengthBeats, lead), clipEnd);
+            out.push_back(grace);
+        }
+    }
+    for (int j = 0; j < repeats; ++j) {
+        const double hitStart = start + static_cast<double>(j) * slot;
+        if (hitStart >= clip.lengthBeats)
+            break;
+        event.startBeat = clip.startBeat + hitStart;
+        event.endBeat = std::min(event.startBeat + hitLength, clipEnd);
+        out.push_back(event);
+    }
+}
+
+// One note of a clip with a per-drum length shorter than the clip: only the cells inside the length play, and the
+// pattern repeats every length across the clip.
+void appendRowRepeats(std::vector<TimelineSnapshot::NoteEvent>& out, const ClipGrid& grid, const MidiNote& note,
+                      const Clip::DrumRow& row, double swing) {
+    const double rowLength = static_cast<double>(row.lengthSteps) * grid.step;
+    if (std::floor(note.startBeat / grid.step + kEps) >= static_cast<double>(row.lengthSteps))
+        return; // stored past the drum's length: kept in the clip, never played
+    const int cyclesPerPass = std::max(1, static_cast<int>(std::ceil(grid.clip.lengthBeats / rowLength - kEps)));
+    for (int r = 0;; ++r) {
+        const double occurrence = note.startBeat + static_cast<double>(r) * rowLength;
+        if (occurrence >= grid.clip.lengthBeats)
+            break;
+        appendOccurrence(out, grid, note, occurrence, r, swing, r, cyclesPerPass);
+    }
+}
+
+// Flattens one clip's notes onto the end of `out`, applying the clip's mute, solo, swing and per-hit drum settings
+// (see TimelineSnapshot::notePlays). The run is stable-sorted by start afterwards: swing, nudge, repeats, flams and
+// repeated drum patterns all move events out of the stored order.
+void appendClipNotes(std::vector<TimelineSnapshot::NoteEvent>& out, const Clip& clip, double beatsPerBar,
+                     int linkIndex) {
     const auto runStart = out.size();
     const auto& mutedPitches = clip.mutedPitches;
     const auto& soloPitches = clip.soloPitches;
+    const double bar = beatsPerBar > 0.0 ? beatsPerBar : 4.0;
+    const ClipGrid grid{clip, bar, bar / static_cast<double>(std::max(1, clip.stepsPerBar)), linkIndex};
+    const int barCycles = std::max(1, static_cast<int>(std::ceil(clip.lengthBeats / bar - kEps)));
 
     for (const auto& note : clip.notes) {
         // Notes are sorted by (startBeat, pitch), so the first one at or past the clip
@@ -80,16 +177,29 @@ void appendClipNotes(std::vector<TimelineSnapshot::NoteEvent>& out, const Clip& 
         if (!soloPitches.empty() && !std::binary_search(soloPitches.begin(), soloPitches.end(), note.pitch))
             continue;
 
-        TimelineSnapshot::NoteEvent event;
-        event.startBeat = clip.startBeat + note.startBeat + swingDelayBeats(clip, note.startBeat, beatsPerBar);
-        event.endBeat = std::min(event.startBeat + note.lengthBeats, clipEnd);
-        event.pitch = note.pitch;
-        event.velocity = note.velocity;
-        event.channel = note.channel;
-        out.push_back(event);
+        const auto* row = findDrumRow(clip, note.pitch);
+        const double swing = (row != nullptr && row->swing >= 0.0) ? row->swing : clip.swing;
+        const double rowLength = row != nullptr ? static_cast<double>(row->lengthSteps) * grid.step : 0.0;
+        if (row != nullptr && row->lengthSteps > 0 && rowLength < clip.lengthBeats - kEps)
+            appendRowRepeats(out, grid, note, *row, swing);
+        else
+            appendOccurrence(out, grid, note, note.startBeat, 0, swing,
+                             static_cast<int>(std::floor(note.startBeat / bar + kEps)), barCycles);
     }
-    if (clip.swing > Clip::kStraightSwing)
-        std::stable_sort(out.begin() + static_cast<std::ptrdiff_t>(runStart), out.end(), noteEventLess);
+    std::stable_sort(out.begin() + static_cast<std::ptrdiff_t>(runStart), out.end(), noteEventLess);
+}
+
+// The clip's place among the track's clips of the same non-zero link group (in clip order, muted ones counted), so
+// linked copies of one pattern continue each other's condition cycle.
+int linkIndexOf(const Track& track, std::size_t clipIndex) noexcept {
+    const auto group = track.clips[clipIndex].linkGroup;
+    if (group == 0)
+        return 0;
+    int index = 0;
+    for (std::size_t i = 0; i < clipIndex; ++i)
+        if (track.clips[i].linkGroup == group)
+            ++index;
+    return index;
 }
 } // namespace
 
@@ -148,14 +258,15 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
         info.firstNote = static_cast<int>(snapshot->notes.size());
 
         if (track.kind == TrackKind::Midi) {
-            for (const auto& clip : track.clips) {
+            for (std::size_t clipIndex = 0; clipIndex < track.clips.size(); ++clipIndex) {
+                const auto& clip = track.clips[clipIndex];
                 // A muted clip is excluded whole, before anything else is looked at — see the
                 // flatten policy on TimelineSnapshot.
                 if (clip.muted)
                     continue;
 
                 const auto runStart = snapshot->notes.size();
-                appendClipNotes(snapshot->notes, clip, beatsPerBar);
+                appendClipNotes(snapshot->notes, clip, beatsPerBar, linkIndexOf(track, clipIndex));
 
                 // Each clip contributes an already-sorted run (its notes are sorted and shifted by
                 // one constant), so folding it into the track's run is a stable merge, never a sort.
