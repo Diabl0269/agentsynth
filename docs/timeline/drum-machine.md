@@ -119,7 +119,9 @@ For every note that survives mute and solo, with `step = beatsPerBar / stepsPerB
   `hash(rollSeed, pass) % 100 < chance`. `cycle` is the repetition r for a drum with its own length, else the bar the
   note sits in; `cyclesPerPass` is how many such cycles one pass over the clip spans. Linked clips continue each other's
   cycle: the k-th clip of a link group on the track (by position) adds `k * cyclesPerPass`. A repeat and its flam share
-  one seed, so they play or skip together.
+  one seed, so they play or skip together. The roll is deterministic: the same hit, linked copy and pass always roll the same way,
+  so a song played from the start (and a bounce) sounds the same every time, and the hits vary from bar to bar, copy to
+  copy and loop pass to loop pass.
 
 Track In counts the pass: in the clip preview, the clip wraps completed since the preview started (reset on start and
 restart); during playback, the transport loop wraps since play started or the playhead was located. A hit that
