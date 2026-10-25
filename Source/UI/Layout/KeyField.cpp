@@ -1,5 +1,6 @@
 #include "UI/Layout/KeyField.h"
 #include "Music/SongKey.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
 
@@ -23,10 +24,39 @@ void KeyField::setNoKeyText(const juce::String& text) {
     refreshText();
 }
 
+// A follower shows where its key comes from ("Song key" and a middle dot before "D Dorian") in the muted text colour,
+// so following and an own key read differently at a glance; an own key uses the box's normal text colour.
+void KeyField::setFollowing(bool following, const juce::String& what) {
+    following_ = following;
+    setTitle(what + (following ? ", following song key" : ", own key"));
+    setTooltip(following ? "Following the song key. Click to give this its own key."
+                         : "Own key. Choose Follow song key to follow again.");
+    refreshText();
+    refreshFollowColour();
+}
+
 void KeyField::refreshText() {
-    const auto text = key_.has_value() ? keyDisplayName(*key_) : noKeyText_;
+    auto text = key_.has_value() ? keyDisplayName(*key_) : noKeyText_;
+    if (isFollowing())
+        text = juce::String::fromUTF8("Song key \xc2\xb7 ") + text;
+    else if (following_.has_value() && key_.has_value())
+        text += juce::String::fromUTF8(" \xc2\xb7 own");
     if (getText() != text)
         setText(text, juce::dontSendNotification);
+}
+
+void KeyField::refreshFollowColour() {
+    if (isFollowing())
+        setColour(juce::ComboBox::textColourId, synth::theme::themeOf(*this).colors.textMuted);
+    else
+        removeColour(juce::ComboBox::textColourId);
+}
+
+// The muted colour is a theme token: a theme switch re-reads it.
+void KeyField::lookAndFeelChanged() {
+    juce::ComboBox::lookAndFeelChanged();
+    if (following_.has_value())
+        refreshFollowColour();
 }
 
 // The mouse path reaches here through ComboBox's own asynchronous open; there are no items, so the stock menu never

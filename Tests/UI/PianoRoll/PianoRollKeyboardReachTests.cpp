@@ -143,7 +143,7 @@ TEST(PianoRollKeyboardReachTest, TabWalksTheHeaderChipsThenTheVelocityControls) 
     EXPECT_GE(indexOf(f.roll.getHeaderChipButtonForTest(HeaderButtonId::Humanize)), 0);
     EXPECT_GE(indexOf(&f.roll.getVelocityValueBox()), 0) << "the Set box";
     EXPECT_GE(indexOf(&f.roll.getVelocityLane()), 0) << "the velocity strip";
-    EXPECT_GE(indexOf(&f.roll.getScaleAssistPanel().getScaleCombo()), 0) << "the scale panel's controls";
+    EXPECT_GE(indexOf(&f.roll.getScaleAssistPanel().getKeyField()), 0) << "the scale panel's controls";
 }
 
 // The scale pane is its own Tab region, in the cycle only while it is on screen.
@@ -162,10 +162,10 @@ TEST(PianoRollKeyboardReachTest, TheScalePaneIsAFocusRegionOnlyWhileItShows) {
     EXPECT_EQ(pane.getTitle(), "Scale assist");
     const auto stops = synth::ui::focusableDescendants(pane);
     ASSERT_FALSE(stops.empty());
-    EXPECT_EQ(stops.front(), &pane.getRootCombo()) << "the root picker is the first control";
+    EXPECT_EQ(stops.front(), &pane.getKeyField()) << "the key field is the first control";
     EXPECT_EQ(synth::ui::neighbourStop(pane, nullptr, +1), stops.front());
     EXPECT_EQ(synth::ui::neighbourStop(pane, stops.front(), -1), nullptr);
-    EXPECT_EQ(synth::ui::neighbourStop(pane, &pane.getRootCombo(), +1), &pane.getScaleCombo());
+    EXPECT_EQ(synth::ui::neighbourStop(pane, &pane.getKeyField(), +1), &pane.getCustomScalesButton());
     EXPECT_TRUE(std::find(stops.begin(), stops.end(), &pane.getGenerateButton()) != stops.end());
     EXPECT_TRUE(std::none_of(stops.begin(), stops.end(), [&](auto* c) {
         return dynamic_cast<juce::Viewport*>(c) != nullptr || dynamic_cast<juce::ScrollBar*>(c) != nullptr;
@@ -174,8 +174,10 @@ TEST(PianoRollKeyboardReachTest, TheScalePaneIsAFocusRegionOnlyWhileItShows) {
     EXPECT_TRUE(pane.keyPressed(plain(juce::KeyPress::downKey)));
     EXPECT_TRUE(pane.keyPressed(plain(juce::KeyPress::upKey)));
     auto& keys = pane.getPaneKeysForTest();
-    EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::escapeKey), &pane.getRootCombo())) << "Escape leaves a combo";
-    EXPECT_FALSE(keys.keyPressed(plain(juce::KeyPress::downKey), &pane.getRootCombo())) << "a combo keeps its arrows";
+    EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::escapeKey), &pane.getKeyField()))
+        << "Escape leaves the key field";
+    EXPECT_FALSE(keys.keyPressed(plain(juce::KeyPress::downKey), &pane.getKeyField()))
+        << "a combo keeps its arrows (the field opens its picker itself)";
     EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::downKey), &pane.getGenerateButton())) << "a button steps on";
 }
 

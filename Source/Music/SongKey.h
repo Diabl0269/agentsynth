@@ -5,9 +5,11 @@
 // Header-only and juce_core only, like MusicalScale.h; the song key itself lives in TransportDoc.
 
 #include "Music/MusicalScale.h"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace synth {
@@ -152,6 +154,17 @@ inline std::optional<MusicalScale> relativeKey(const MusicalScale& key) {
             return makeScale(key.rootPitchClass + 3, scalePresetIndex(pair.a));
     }
     return std::nullopt;
+}
+
+/** A note range moved to follow a root change: both edges shift by the nearest step from `fromRoot` to `toRoot`
+ *  (-5..+6 semitones), keeping its width, then are clamped to 0..127. C2-C3 becomes D2-D3. */
+inline std::pair<int, int> rangeFollowingRoot(int lo, int hi, int fromRoot, int toRoot) {
+    int delta = (((toRoot - fromRoot) % 12) + 12) % 12;
+    if (delta > 6)
+        delta -= 12;
+    const int width = hi - lo;
+    lo = std::clamp(lo + delta, 0, 127 - std::max(0, width));
+    return {lo, std::min(127, lo + width)};
 }
 
 /** The major or natural minor key that best fits `weights` (how much each pitch class C..B sounds, e.g. summed note

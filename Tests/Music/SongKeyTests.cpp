@@ -119,3 +119,19 @@ TEST(SongKeyTest, DetectsTheKeyOfAHistogram) {
     ASSERT_TRUE(key.has_value());
     EXPECT_EQ(keyDisplayName(*key), "A Natural Minor");
 }
+
+TEST(SongKeyTest, RangeFollowsTheNearestStepOfTheRoot) {
+    EXPECT_EQ(rangeFollowingRoot(36, 48, 0, 2), (std::pair<int, int>{38, 50}));
+    EXPECT_EQ(rangeFollowingRoot(36, 48, 0, 11), (std::pair<int, int>{35, 47})) << "B is one step down from C";
+    EXPECT_EQ(rangeFollowingRoot(36, 48, 2, 2), (std::pair<int, int>{36, 48})) << "same root, same range";
+}
+
+TEST(SongKeyTest, RangeFollowingARootClampsInsideTheKeyboardKeepingItsWidth) {
+    const auto [lo, hi] = rangeFollowingRoot(120, 127, 0, 6);
+    EXPECT_GE(lo, 0);
+    EXPECT_LE(hi, 127);
+    EXPECT_EQ(hi - lo, 7);
+    const auto [lowLo, lowHi] = rangeFollowingRoot(0, 12, 2, 0);
+    EXPECT_EQ(lowLo, 0);
+    EXPECT_EQ(lowHi - lowLo, 12);
+}

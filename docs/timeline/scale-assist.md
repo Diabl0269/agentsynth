@@ -10,22 +10,25 @@ collapse it drives, and random note generation. The roll itself is [piano-roll](
 "Scale" chip and hidden by default.
 
 **It holds no reference to the roll, the doc, or any undo manager.** Every user action travels OUT
-through a `std::function` callback (`onScaleChanged`, `onPitchVisibilityChanged`,
-`onQuantizePitches`, `onGenerate`) and every piece of state the roll needs to push back IN —
+through a `std::function` callback (`onScaleChanged` for an own key, `onFollowSongKey`,
+`onPitchVisibilityChanged`, `onGenerate`) and every piece of state the roll needs to push back IN —
 switching clips, restoring a remembered scale — travels IN through `setSelection()`. That is the
 same "panel owns presentation, owner owns the doc" split `PianoRollComponent` itself follows for
 `TimelineViewState`.
 
 Contents, top to bottom:
 
-- a **Root** combo (C…B) and a **Scale** combo — "No scale" first, then every entry from
-  `synth::builtInScalePresets()` in order (Major, Natural/Harmonic/Melodic Minor, Dorian,
-  Phrygian, Lydian, Mixolydian, Locrian, Major/Minor Pentatonic, Blues, Whole Tone, Chromatic),
-  then the user's saved scales, then "Edit custom scales..." which reveals a 12-toggle pitch-class
-  plus name plus Save editor rather than being itself a scale choice;
+- a **Key** field (`KeyField`) that reads **Song key · D Dorian** in the muted text colour while the clip follows
+  the song key, or the clip's own key ("A Phrygian") otherwise. It opens the shared key picker
+  ([song-key](song-key.md#the-key-picker)) with a **Follow song key** row on top and no "No key" button: a clip's own
+  key is always a key, and a clip with no key is one following a song that has none. The user's saved scales are in
+  its **Your scales** group;
+- a **Custom scales...** button that shows or hides the 12-toggle pitch-class plus name plus Save editor; saving makes
+  the new scale the clip's own key at the current root;
 - a **"Show only scale notes"** toggle — the same flag the roll's funnel chip drives, see **Show
   Only Scale Notes has one writer**;
-- a **Note range** picker (`Source/UI/Layout/NoteRangePicker/`, [note-range-picker.md](../layout/note-range-picker.md): a four-octave keyboard strip, drag an edge to add or remove notes, drag the middle to move the range; it follows the panel's scale; C2 to C5 by default) plus a **Generate** button with an **"Add to existing"** toggle
+- a **Note range** picker (`Source/UI/Layout/NoteRangePicker/`, [note-range-picker.md](../layout/note-range-picker.md): a four-octave keyboard strip, drag an edge to add or remove notes, drag the middle to move the range; it follows the panel's scale, and its root: a change of root moves both ends by the nearest step,
+`synth::rangeFollowingRoot`, so C2 to C5, the default, reads D2 to D5 in D) plus a **Generate** button with an **"Add to existing"** toggle
   under it. The toggle sits under the button rather than beside it because at `kScalePanelWidth` a
   button-plus-checkbox row truncates the label the button's meaning depends on.
 
@@ -98,13 +101,30 @@ lookup), `makeScaleFromMask`, `pickPitches`, and in-scale chords (`chordInScale`
 
 Tests: `Tests/Music/MusicalScaleTests.cpp` and `Tests/Music/MusicalScaleChordTests.cpp`.
 
+## Following the song key or its own
+
+A clip with no scale of its own follows the song key ([song-key](song-key.md)); new MIDI clips and clips in older
+projects with no scale follow, and a clip that already had a scale keeps it as its own key. `synth::resolveClipKey`
+(`Source/Timeline/ClipKey.h`) answers "which key does this clip use" for every caller: the roll's
+`activeScaleForOpenClip()` is that resolved key, and highlighting, snapping new notes, Generate, quantise and the range
+picker all read it. Writes never do: picking a key, the filter toggle and undo write `Clip::scale`, the own key, so
+toggling "Show only scale notes" on a follower leaves it following. Choosing **Follow song key** clears the own key.
+
+The song key reaches the roll through the timeline's 10 Hz transport poll (`PianoRollComponent::refreshSongKey()`): a
+following clip whose shown key differs from the song key is re-shown, so its highlighting moves when the song key
+changes. Nothing plays differently and no written note moves; only new notes snap.
+
+**Snapping new notes.** A note drawn or double-clicked into a clip with a key lands on the nearest note of that key
+(ties go down, `MusicalScale::snapPitch`). Holding Cmd places it where the pointer is. Moves, pastes, Generate's own
+picks and the notes already in the clip never snap.
+
 ## The scale is saved on the clip
 
-A clip owns its scale: `Clip::scale` (a root note plus the scale's notes and name; empty means "no
-choice made") and `Clip::scaleVisible` (the "Show only scale notes" flag). They are saved in the
+A clip owns its scale: `Clip::scale` (a root note plus the scale's notes and name; empty means it follows the song
+key) and `Clip::scaleVisible` (the "Show only scale notes" flag). They are saved in the
 project, so a clip opens on the scale it was left on after a restart. In the project file they are
 two optional clip keys, `"scale": {"root", "mask", "name"}` and `"scaleVisible": true`, left out when
-unset (the file version stays 1). A missing or unreadable scale loads as "No scale" and never stops the
+unset (the file version stays 1). A missing or unreadable scale loads as following the song key and never stops the
 project loading; a root outside C to B is pulled into range and an empty mask means no scale. A scale
 belongs to one clip: duplicating, splitting and copy/paste carry it, linked clips do not share it.
 

@@ -84,6 +84,11 @@ bool PianoRollComponent::computeNewNoteAnchor(juce::Point<int> pos, bool floorTo
     startOut = start;
     lengthOut = clampedLength;
     pitchOut = juce::jlimit(0, 127, pitchForY(pos.y));
+    // A new note lands on the clip's key (own or followed); ties go down. Only new notes: moves, pastes and the notes
+    // already written never snap. Holding Cmd places it off the key, as Cmd frees a drag from the grid.
+    if (const auto key = activeScaleForOpenClip();
+        key.has_value() && !juce::ModifierKeys::currentModifiers.isCommandDown())
+        pitchOut = juce::jlimit(0, 127, key->snapPitch(pitchOut));
     return true;
 }
 

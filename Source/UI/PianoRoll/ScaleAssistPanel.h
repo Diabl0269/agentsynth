@@ -1,12 +1,11 @@
 #pragma once
 
-// Scale-assist panel for the piano roll: root/scale pickers, a custom-scale editor, the
-// show-only-scale-notes toggle and a random-generation block. Pitch-quantize is deliberately NOT
-// here: it has exactly one entry point now, the roll's header chip (plus its Option+Shift+Q key). A
-// button that duplicated it inside a panel the user has to open first was a second door to the same
-// room, and the two could only ever disagree about their enabled state. Deliberately dumb — it
-// holds no reference to the roll, no TimelineDoc and no undo manager. Every action the roll needs
-// to react to travels OUT through a std::function callback, and every piece of state the roll
+// Scale-assist panel for the piano roll: the clip's Key field (follow the song key or its own), a custom-scale editor,
+// the show-only-scale-notes toggle and a random-generation block. Pitch-quantize is deliberately NOT here: it has
+// exactly one entry point now, the roll's header chip (plus its Option+Shift+Q key). A button that duplicated it inside
+// a panel the user has to open first was a second door to the same room, and the two could only ever disagree about
+// their enabled state. Deliberately dumb — it holds no reference to the roll, no TimelineDoc and no undo manager. Every
+// action the roll needs to react to travels OUT through a std::function callback, and every piece of state the roll
 // needs to push BACK in (switching clips, restoring a persisted scale) travels IN through
 // setSelection() — the same "panel owns presentation, owner owns the doc" split
 // PianoRollComponent itself follows for TimelineViewState.
@@ -22,6 +21,8 @@
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Layout/KeyField.h"
+#include "UI/Layout/KeyPicker/KeyPicker.h"
 #include "UI/Layout/NoteRangePicker/NoteRangePicker.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <array>
@@ -29,6 +30,7 @@
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -43,7 +45,7 @@ public:
         setWantsKeyboardFocus(true);
         setMouseClickGrabsKeyboardFocus(false);
         setTitle("Scale assist");
-        buildRootAndScaleControls();
+        buildKeyControls();
         buildCustomScaleEditor();
         buildPitchVisibilityControl();
         buildRandomGenerationControls();
@@ -58,11 +60,15 @@ public:
         scrollViewport_.setTitle("Scale assist options");
         scrollViewport_.setViewedComponent(&scaleContent_, /*deleteComponentWhenNoLongerNeeded=*/false);
         scrollViewport_.setScrollBarsShown(/*vertical=*/true, /*horizontal=*/false);
-        rebuildScaleCombo();
         showCustomEditor(false);
         paneKeys_.attachToDescendants();
     }
-    ~ScaleAssistPanel() override = default;
+    ~ScaleAssistPanel() override {
+        if (auto* picker = getOpenKeyPicker()) {
+            picker->onPick = nullptr;
+            picker->onFollow = nullptr;
+        }
+    }
 
     bool keyPressed(const juce::KeyPress& key) override {
         const bool plain = !key.getModifiers().isAnyModifierKeyDown();
@@ -104,8 +110,8 @@ public:
     int contentNaturalHeight() const {
         constexpr int kInset = 6; // matches the inset layoutContentInto takes off the content area
         int y = kInset;
-        y += 22 + 4;                // root row + gap
-        y += 22 + 6;                // scale combo + gap
+        y += 22 + 4;                // key field + gap
+        y += 22 + 6;                // custom scales button + gap
         y += customBlockHeight();   // the custom editor: its full height once shown, tweened with its fade
         y += 22 + 10;               // pitch-visibility toggle + gap
         y += kRangeLabelHeight + 2; // "Note range" label + gap
@@ -121,12 +127,10 @@ public:
     void layoutContentInto(juce::Rectangle<int> area) {
         auto bounds = area.reduced(6);
 
-        auto rootRow = bounds.removeFromTop(22);
-        rootLabel_.setBounds(rootRow.removeFromLeft(34));
-        rootCombo_.setBounds(rootRow);
+        keyField_.setBounds(bounds.removeFromTop(22));
         bounds.removeFromTop(4);
 
-        scaleCombo_.setBounds(bounds.removeFromTop(22));
+        customScalesButton_.setBounds(bounds.removeFromTop(22));
         bounds.removeFromTop(6);
 
         // The custom editor lives in `customBlock_`, which clips it: while it fades the block is only as tall as the
@@ -176,26 +180,25 @@ public:
         propertiesFile_ = props;
         if (propertiesFile_ != nullptr)
             userScales_ = synth::parseUserScales(propertiesFile_->getValue(kUserScalesPropertyKey, {}));
-        rebuildScaleCombo();
     }
 
     // ---- State the owner pushes IN (never fires a callback — this is a REFLECTION, not an
     // edit the user made) ----
-    void setSelection(std::optional<synth::MusicalScale> scale, bool pitchVisibilityOn) {
+    // `scale` is the key in force (the song key when `following`).
+    void setSelection(std::optional<synth::MusicalScale> scale, bool pitchVisibilityOn, bool following = false) {
         selectedScale_ = scale;
-        rangePicker_.setScale(selectedScale_.has_value() ? &*selectedScale_ : nullptr);
+        following_ = following;
         pitchVisibilityOn_ = pitchVisibilityOn;
-        if (selectedScale_.has_value()) {
-            rootPitchClass_ = selectedScale_->rootPitchClass;
-            rootCombo_.setSelectedId(rootPitchClass_ + 1, juce::dontSendNotification);
-        }
-        selectScaleComboForCurrentSelection();
+        showSelectedKey();
         pitchVisibilityToggle_.setToggleState(pitchVisibilityOn_, juce::dontSendNotification);
         showCustomEditor(false);
         repaint();
     }
+    /** The song key the picker's Follow row names; a reflection, like setSelection. */
+    void setSongKey(std::optional<synth::MusicalScale> songKey) { songKey_ = std::move(songKey); }
 
     std::optional<synth::MusicalScale> getSelectedScale() const noexcept { return selectedScale_; }
+    bool isFollowingSongKey() const noexcept { return following_; }
     bool isPitchVisibilityOn() const noexcept { return pitchVisibilityOn_; }
 
     int getMinPitchSelection() const noexcept { return rangePicker_.getLow(); }
@@ -208,7 +211,39 @@ public:
     bool isAddToExistingSelected() const noexcept { return addToExistingToggle_.getToggleState(); }
 
     // ---- Callbacks the owner wires (see the class comment) ----
-    std::function<void(std::optional<synth::MusicalScale>)> onScaleChanged;
+    std::function<void(std::optional<synth::MusicalScale>)> onScaleChanged; // an own key was picked
+    std::function<void()> onFollowSongKey;                                  // the Follow song key row
+    /** Launches the key picker; unset = a CallOutBox from the field. Tests replace it to keep the picker. */
+    std::function<void(std::unique_ptr<juce::Component> picker, juce::Rectangle<int> screenArea)> pickerLauncher;
+
+    void openKeyPicker() {
+        if (openPicker_ != nullptr)
+            return;
+        KeyPicker::Options options;
+        options.current = following_ ? std::nullopt : selectedScale_;
+        options.showFollowRow = true;
+        options.following = following_;
+        options.followDetail = songKey_.has_value() ? synth::keyDisplayName(*songKey_) : juce::String("No key");
+        options.showNoKey = false; // an own key is always a key; "no key" is following a song with none
+        options.userScales = userScales_;
+        options.what = "Key";
+        juce::Component::SafePointer<ScaleAssistPanel> self(this);
+        auto picker = std::make_unique<KeyPicker>(std::move(options), [self](std::optional<synth::MusicalScale> key) {
+            if (self != nullptr && key.has_value())
+                self->pickOwnKey(*key);
+        });
+        picker->onFollow = [self] {
+            if (self != nullptr && self->onFollowSongKey)
+                self->onFollowSongKey();
+        };
+        openPicker_ = picker.get();
+        const auto area = keyField_.getScreenBounds();
+        if (pickerLauncher)
+            pickerLauncher(std::move(picker), area);
+        else
+            juce::CallOutBox::launchAsynchronously(std::move(picker), area, nullptr);
+    }
+    KeyPicker* getOpenKeyPicker() const noexcept { return dynamic_cast<KeyPicker*>(openPicker_.getComponent()); }
     std::function<void(bool)> onPitchVisibilityChanged;
     // `addToExisting` is the toggle's state at the moment Generate was pressed, passed BY VALUE
     // rather than left for the owner to read back off the panel: the owner's handler mutates the doc
@@ -218,8 +253,8 @@ public:
 
     // ---- Test accessors (every interactive child also carries its own componentID) ----
     PaneKeys& getPaneKeysForTest() noexcept { return paneKeys_; }
-    juce::ComboBox& getRootCombo() noexcept { return rootCombo_; }
-    juce::ComboBox& getScaleCombo() noexcept { return scaleCombo_; }
+    KeyField& getKeyField() noexcept { return keyField_; }
+    juce::TextButton& getCustomScalesButton() noexcept { return customScalesButton_; }
     juce::ToggleButton& getPitchVisibilityToggle() noexcept { return pitchVisibilityToggle_; }
     juce::TextButton& getGenerateButton() noexcept { return generateButton_; }
     juce::ToggleButton& getAddToExistingToggle() noexcept { return addToExistingToggle_; }
@@ -240,10 +275,6 @@ public:
     juce::Component& getCustomBlockForTest() noexcept { return customBlock_; }
 
 private:
-    static constexpr int kNoScaleId = 1;
-    // Far past any realistic preset+user-scale id range (14 presets + however many a session
-    // accumulates), so it can never collide with a real scale's combo id.
-    static constexpr int kCustomRowId = 9000;
     static constexpr int kDefaultMinPitch = 36; // C2
     static constexpr int kDefaultMaxPitch = 72; // C5
     static constexpr int kRangeLabelHeight = 14;
@@ -317,32 +348,16 @@ private:
         }
     }
 
-    void buildRootAndScaleControls() {
-        scaleContent_.addAndMakeVisible(rootLabel_);
-        rootLabel_.setText("Root", juce::dontSendNotification);
-        rootLabel_.setFont(juce::Font(juce::FontOptions(11.5f)));
+    void buildKeyControls() {
+        scaleContent_.addAndMakeVisible(keyField_);
+        keyField_.setComponentID("scaleAssistKeyField");
+        keyField_.onOpen = [this] { openKeyPicker(); };
+        keyField_.setFollowing(true);
 
-        scaleContent_.addAndMakeVisible(rootCombo_);
-        rootCombo_.setComponentID("scaleAssistRootCombo");
-        rootCombo_.setTitle("Scale root note");
-        rootCombo_.setTooltip("Root note of the scale");
-        for (int pc = 0; pc < 12; ++pc)
-            rootCombo_.addItem(pitchClassName(pc), pc + 1);
-        rootCombo_.setSelectedId(1, juce::dontSendNotification);
-        rootCombo_.onChange = [this] {
-            rootPitchClass_ = rootCombo_.getSelectedId() - 1;
-            // Only a REAL scale has a root worth re-firing over; "No scale" ignores it.
-            if (selectedScale_.has_value()) {
-                selectedScale_->rootPitchClass = rootPitchClass_;
-                notifyScaleChanged();
-            }
-        };
-
-        scaleContent_.addAndMakeVisible(scaleCombo_);
-        scaleCombo_.setComponentID("scaleAssistScaleCombo");
-        scaleCombo_.setTitle("Scale");
-        scaleCombo_.setTooltip("The scale the roll checks notes against, or No scale");
-        scaleCombo_.onChange = [this] { handleScaleComboChanged(); };
+        scaleContent_.addAndMakeVisible(customScalesButton_);
+        customScalesButton_.setComponentID("scaleAssistCustomScalesButton");
+        customScalesButton_.setTooltip("Make your own scale from any notes; it joins Your scales in the key picker");
+        customScalesButton_.onClick = [this] { showCustomEditor(!customEditorVisible_); };
     }
 
     void buildCustomScaleEditor() {
@@ -409,69 +424,28 @@ private:
                                         "added on top of what is already there.");
     }
 
-    // "No scale" first, then every built-in preset (synth::builtInScalePresets order), then the
-    // user's saved scales, then the "Edit custom scales..." affordance — see the class comment.
-    void rebuildScaleCombo() {
-        scaleCombo_.clear(juce::dontSendNotification);
-        scaleCombo_.addItem("No scale", kNoScaleId);
-        const auto& presets = synth::builtInScalePresets();
-        for (size_t i = 0; i < presets.size(); ++i)
-            scaleCombo_.addItem(presets[i].name, (int)(2 + i));
-        for (size_t i = 0; i < userScales_.size(); ++i)
-            scaleCombo_.addItem(userScales_[i].name, (int)(2 + presets.size() + i));
-        scaleCombo_.addSeparator();
-        scaleCombo_.addItem("Edit custom scales...", kCustomRowId);
-        selectScaleComboForCurrentSelection();
-    }
-
-    void selectScaleComboForCurrentSelection() {
-        scaleCombo_.setSelectedId(findComboIdForScale(selectedScale_), juce::dontSendNotification);
-    }
-
-    int findComboIdForScale(const std::optional<synth::MusicalScale>& scale) const {
-        if (!scale.has_value())
-            return kNoScaleId;
-        const auto& presets = synth::builtInScalePresets();
-        for (size_t i = 0; i < presets.size(); ++i)
-            if (scale->name == presets[i].name)
-                return (int)(2 + i);
-        for (size_t i = 0; i < userScales_.size(); ++i)
-            if (scale->name == userScales_[i].name)
-                return (int)(2 + presets.size() + i);
-        return kNoScaleId; // a scale this panel no longer knows (e.g. a deleted user scale)
-    }
-
-    std::optional<synth::MusicalScale> scaleFromComboId(int id) const {
-        if (id <= 0 || id == kNoScaleId)
-            return std::nullopt;
-        const auto& presets = synth::builtInScalePresets();
-        if (id >= 2 && id < (int)(2 + presets.size()))
-            return synth::makeScale(rootPitchClass_, id - 2);
-        const int userIndex = id - 2 - (int)presets.size();
-        if (userIndex >= 0 && userIndex < (int)userScales_.size()) {
-            synth::MusicalScale s;
-            s.rootPitchClass = rootPitchClass_;
-            s.mask = userScales_[(size_t)userIndex].mask;
-            s.name = userScales_[(size_t)userIndex].name;
-            return s;
+    // The field and the range picker show the key in force; the range follows a change of root (C2-C5 in C reads
+    // D2-D5 in D), and keeps its place while there is no key.
+    void showSelectedKey() {
+        keyField_.setKey(selectedScale_);
+        keyField_.setFollowing(following_);
+        rangePicker_.setScale(selectedScale_.has_value() ? &*selectedScale_ : nullptr);
+        if (selectedScale_.has_value() && selectedScale_->rootPitchClass != rangeRoot_) {
+            const auto [lo, hi] = synth::rangeFollowingRoot(rangePicker_.getLow(), rangePicker_.getHigh(), rangeRoot_,
+                                                            selectedScale_->rootPitchClass);
+            rangePicker_.setRange(lo, hi);
+            rangeRoot_ = selectedScale_->rootPitchClass;
         }
-        return std::nullopt; // the custom row (or an unknown id) never reaches here — see caller
     }
 
-    void handleScaleComboChanged() {
-        const int id = scaleCombo_.getSelectedId();
-        if (id == kCustomRowId) {
-            // Not itself a scale choice: reveal the editor and put the combo BACK to whatever was
-            // actually selected, so the dropdown never shows "Edit custom scales..." as if it were
-            // a scale.
-            showCustomEditor(true);
-            selectScaleComboForCurrentSelection();
-            return;
-        }
+    void pickOwnKey(const synth::MusicalScale& key) {
+        selectedScale_ = key;
+        following_ = false;
         showCustomEditor(false);
-        selectedScale_ = scaleFromComboId(id);
         notifyScaleChanged();
     }
+
+    int currentRoot() const noexcept { return selectedScale_.has_value() ? selectedScale_->rootPitchClass : 0; }
 
     void handleSaveCustomScale() {
         const auto name = customScaleNameEditor_.getText().trim();
@@ -482,6 +456,8 @@ private:
         for (int pc = 0; pc < 12; ++pc)
             if (customPitchToggles_[(size_t)pc].getToggleState())
                 mask = (std::uint16_t)(mask | (1u << pc));
+        if (mask == 0)
+            return; // a scale with no notes is no key: the picker would not list it
 
         bool replaced = false;
         for (auto& existing : userScales_) {
@@ -500,14 +476,10 @@ private:
         }
 
         synth::MusicalScale saved;
-        saved.rootPitchClass = rootPitchClass_;
+        saved.rootPitchClass = currentRoot();
         saved.mask = mask;
         saved.name = name;
-        selectedScale_ = saved;
-
-        rebuildScaleCombo(); // includes selectScaleComboForCurrentSelection()
-        showCustomEditor(false);
-        notifyScaleChanged();
+        pickOwnKey(saved); // a saved scale becomes the clip's own key at the current root
     }
 
     void showCustomEditor(bool show) {
@@ -517,7 +489,7 @@ private:
     }
 
     void notifyScaleChanged() {
-        rangePicker_.setScale(selectedScale_.has_value() ? &*selectedScale_ : nullptr);
+        showSelectedKey();
         if (onScaleChanged)
             onScaleChanged(selectedScale_);
         repaint();
@@ -531,9 +503,12 @@ private:
     juce::PropertiesFile* propertiesFile_ = nullptr;
     std::vector<synth::UserScale> userScales_;
     std::optional<synth::MusicalScale> selectedScale_;
+    std::optional<synth::MusicalScale> songKey_;
+    bool following_ = true;
     bool pitchVisibilityOn_ = false;
-    int rootPitchClass_ = 0;
+    int rangeRoot_ = 0; // the root the range picker last followed
     bool customEditorVisible_ = false;
+    juce::Component::SafePointer<juce::Component> openPicker_;
 
     // The scrolled content that holds every control, plus the viewport that shows a vertical
     // scrollbar only when that content is taller than the panel — see resized()/contentNaturalHeight().
@@ -541,9 +516,8 @@ private:
     juce::Viewport scrollViewport_;
     PaneKeys paneKeys_{*this};
 
-    juce::Label rootLabel_;
-    juce::ComboBox rootCombo_;
-    juce::ComboBox scaleCombo_;
+    KeyField keyField_;
+    juce::TextButton customScalesButton_{"Custom scales..."};
 
     // The custom scale editor (the twelve keys, the name field and Save), held in one block so it can fade and be
     // clipped to the height the fade has reached. `customEditorVisible_` is its logical state.

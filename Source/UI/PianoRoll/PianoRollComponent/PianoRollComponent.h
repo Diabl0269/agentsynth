@@ -2,6 +2,7 @@
 
 #include "Music/MusicalScale.h"
 #include "PianoRollTypes.h"
+#include "Timeline/ClipKey.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
@@ -162,8 +163,10 @@ public:
     synth::TimelineDoc* getTimelineDoc() const noexcept;
     void setUndoManager(AppUndoManager* undoManager) noexcept;
     AppUndoManager* getUndoManager() const noexcept;
-    // Only consulted for Snap::Bar's beatsPerBar, as in TimelineClipLaneArea::setTransport.
+    // Snap::Bar's beatsPerBar (as in TimelineClipLaneArea::setTransport) and the song key a following clip uses.
     void setTransport(synth::TransportService* transport) noexcept;
+    // Message thread, cheap: re-shows a following clip's key when the song key changed (the transport poll).
+    void refreshSongKey();
 
     // The user's bindings for this surface's own keys (resolution contract: PianoRollZoom.cpp).
     void setShortcutManager(const ShortcutManager* manager) noexcept;
@@ -638,6 +641,7 @@ private:
     void setScalePanelVisible(bool visible, bool animate = true);
     void applyScalePanelOpenProgress(float progress);
     void finishScalePanelAnimation();
+    synth::ResolvedClipKey resolvedKeyForOpenClip() const;
     std::optional<synth::MusicalScale> activeScaleForOpenClip() const;
     void pushScaleContextFromClip();
     void restoreScaleForOpenClip();

@@ -42,3 +42,18 @@ TEST(KeyFieldTest, ADisabledFieldDoesNotOpen) {
     field.showPopup();
     EXPECT_EQ(opened, 0);
 }
+
+TEST(KeyFieldTest, FollowingReadsSongKeyBeforeTheKeyAndSaysSoToTheUser) {
+    KeyField field;
+    field.setKey(synth::makeScale(2, synth::scalePresetIndex("Dorian")));
+    field.setFollowing(true);
+    EXPECT_TRUE(field.isFollowing());
+    EXPECT_EQ(field.getText(), juce::String::fromUTF8("Song key \xc2\xb7 D Dorian"));
+    EXPECT_EQ(field.getTitle(), "Key, following song key");
+    EXPECT_EQ(field.getTooltip(), "Following the song key. Click to give this its own key.");
+
+    field.setFollowing(false);
+    EXPECT_FALSE(field.isFollowing());
+    EXPECT_EQ(field.getText(), juce::String::fromUTF8("D Dorian \xc2\xb7 own"));
+    EXPECT_EQ(field.getTitle(), "Key, own key");
+}

@@ -2,6 +2,7 @@
 # and the key picker popover, appended to APPUI_SOURCES (CMakeLists.txt and cmake/AppUISources.cmake are at the
 # file-size cap).
 target_sources(Core PRIVATE
+    Source/Timeline/ClipKey.h
     Source/Timeline/SongKeyNotes.cpp
     Source/Timeline/SongKeyNotes.h
 )

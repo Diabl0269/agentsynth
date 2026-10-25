@@ -50,3 +50,14 @@ Follow song key row on top (ticked while following, the song key at its right). 
 under it (a new song key, an undo), the field glows once for 300 ms; picking or following is the user's own change
 and does not glow, and reduced motion only changes the text. Built for the Sequencer and Poly Sequencer
 ([sequencer-design.md](../modules/sequencer-design.md#key)).
+
+## Piano roll clips
+
+Each MIDI clip follows the song key unless it has its own (`Clip::scale`); the piano roll's scale panel shows which
+(**Song key · D Dorian**, or the own key) and its key picker has the **Follow song key** row. The key in force drives
+highlighting, snapping new notes, Generate and the note range; nothing plays differently. `synth::resolveClipKey`
+(`Source/Timeline/ClipKey.h`) is the one query. Details: [scale-assist](scale-assist.md#following-the-song-key-or-its-own).
+
+`KeyField::setFollowing` gives any key field that can follow the follow display: the muted **Song key ·** prefix, the
+tooltip ("Following the song key. Click to give this its own key." / "Own key. Choose Follow song key to follow
+again.") and the accessible title ("Key, following song key").

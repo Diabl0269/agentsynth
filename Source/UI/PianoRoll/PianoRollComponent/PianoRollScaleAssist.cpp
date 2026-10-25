@@ -7,6 +7,7 @@
 #include "PianoRollComponent.h"
 
 #include "AppUndoManager.h"
+#include "Music/SongKey.h"
 #include "PianoRollInternal.h"
 #include "Timeline/ScaleNoteGenerator.h"
 #include "Transport/TransportService.h"
@@ -102,11 +103,30 @@ void PianoRollComponent::finishScalePanelAnimation() {
 
 void PianoRollComponent::toggleScalePanel() { setScalePanelVisible(!scalePanelVisible_); }
 
+// The clip's own key, or the song key it follows (a clip with no scale of its own follows). The transport is read
+// at every call rather than cached, so a transport wired after the clip opened is still seen.
+synth::ResolvedClipKey PianoRollComponent::resolvedKeyForOpenClip() const {
+    const auto songKey = transport_ != nullptr ? transport_->getDocumentState().songKey : std::nullopt;
+    const auto* clip = clipId_.isValid() && doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    return clip != nullptr ? synth::resolveClipKey(*clip, songKey) : synth::ResolvedClipKey{};
+}
+
+// The key in force: what highlighting, snapping, Generate, quantise and the range picker use. Never a write
+// source: writes take the clip's OWN scale, or a following clip would silently freeze the song key as its own.
 std::optional<synth::MusicalScale> PianoRollComponent::activeScaleForOpenClip() const {
-    if (!clipId_.isValid() || doc_ == nullptr)
-        return std::nullopt;
-    const auto* clip = doc_->getClip(clipId_);
-    return clip != nullptr ? clip->scale : std::nullopt; // a clip with no choice made reads as "No scale"
+    return resolvedKeyForOpenClip().key;
+}
+
+// The transport poll's hook: only a following clip whose shown key is stale is re-shown, so a steady song key costs
+// one comparison and never closes the custom-scale editor.
+void PianoRollComponent::refreshSongKey() {
+    const auto resolved = resolvedKeyForOpenClip();
+    if (!clipId_.isValid() || !resolved.following)
+        return;
+    if (synth::sameKey(scalePanel_.getSelectedScale(), resolved.key) && scalePanel_.isFollowingSongKey())
+        return;
+    restoreScaleForOpenClip();
+    repaint();
 }
 
 void PianoRollComponent::pushScaleContextFromClip() {
@@ -121,7 +141,9 @@ void PianoRollComponent::pushScaleContextFromClip() {
 
 void PianoRollComponent::restoreScaleForOpenClip() {
     // setSelection fires no callback: this reflects what the doc holds, it is not a user edit.
-    scalePanel_.setSelection(activeScaleForOpenClip(), isScaleFilterOn());
+    const auto resolved = resolvedKeyForOpenClip();
+    scalePanel_.setSongKey(transport_ != nullptr ? transport_->getDocumentState().songKey : std::nullopt);
+    scalePanel_.setSelection(resolved.key, isScaleFilterOn(), resolved.following);
     pushScaleContextFromClip();
 }
 

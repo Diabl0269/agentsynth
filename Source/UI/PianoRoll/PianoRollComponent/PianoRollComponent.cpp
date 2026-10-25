@@ -99,7 +99,15 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
     scalePanel_.onScaleChanged = [this](std::optional<synth::MusicalScale> scale) {
         commitClipScale(std::move(scale), isScaleFilterOn());
     };
-    scalePanel_.onPitchVisibilityChanged = [this](bool on) { commitClipScale(activeScaleForOpenClip(), on); };
+    scalePanel_.onFollowSongKey = [this] {
+        commitClipScale(std::nullopt, isScaleFilterOn()); // no own scale = follow
+        restoreScaleForOpenClip();
+    };
+    // The OWN scale, never the resolved one: toggling the filter must not turn a follower into an own key.
+    scalePanel_.onPitchVisibilityChanged = [this](bool on) {
+        const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+        commitClipScale(clip != nullptr ? clip->scale : std::nullopt, on);
+    };
     // Pitch-quantize has NO panel button any more — the header chip and "pianoRollQuantisePitches"
     // are its only entry points (see the ScaleAssistPanel class comment).
     scalePanel_.onGenerate = [this](int minPitch, int maxPitch, bool addToExisting) {
@@ -276,7 +284,10 @@ void PianoRollComponent::refreshFromDoc() {
     // setSelection also closes the panel's custom-scale editor, which a note edit must not do.
     // Otherwise a note add/remove can still change which out-of-scale pitches pitch-visibility mode
     // is keeping visible on the note's account alone.
-    if (scalePanel_.getSelectedScale() != clip->scale || scalePanel_.isPitchVisibilityOn() != clip->scaleVisible)
+    const auto resolved = resolvedKeyForOpenClip();
+    if (!synth::sameKey(scalePanel_.getSelectedScale(), resolved.key) ||
+        scalePanel_.isFollowingSongKey() != resolved.following ||
+        scalePanel_.isPitchVisibilityOn() != clip->scaleVisible)
         restoreScaleForOpenClip();
     else
         rebuildVisiblePitches();
@@ -459,11 +470,13 @@ void PianoRollComponent::toggleScaleFilter() {
     const bool next = !isScaleFilterOn();
     // The clip in the doc is the single source of truth; the panel's checkbox and this chip are both
     // VIEWS of it, which is what stops the two from drifting apart.
-    commitClipScale(activeScaleForOpenClip(), next);
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    commitClipScale(clip != nullptr ? clip->scale : std::nullopt, next); // the own scale: a follower stays one
     // Reflect it back into the panel. setSelection fires NO callback by contract — it is a reflection
     // of state the owner already applied, not a user edit — so this cannot loop back through
     // onPitchVisibilityChanged into here again.
-    scalePanel_.setSelection(activeScaleForOpenClip(), next);
+    const auto resolved = resolvedKeyForOpenClip();
+    scalePanel_.setSelection(resolved.key, next, resolved.following);
     repaint(); // the chip's lit state, plus whatever rows just appeared or collapsed
 }
 
@@ -481,7 +494,11 @@ void PianoRollComponent::setTimelineDoc(synth::TimelineDoc* doc) noexcept { doc_
 synth::TimelineDoc* PianoRollComponent::getTimelineDoc() const noexcept { return doc_; }
 void PianoRollComponent::setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
 AppUndoManager* PianoRollComponent::getUndoManager() const noexcept { return undoManager_; }
-void PianoRollComponent::setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
+// A transport wired after a clip opened brings the song key a following clip uses: re-read it now.
+void PianoRollComponent::setTransport(synth::TransportService* transport) noexcept {
+    transport_ = transport;
+    refreshSongKey();
+}
 
 bool PianoRollComponent::isOpen() const noexcept { return clipId_.isValid(); }
 synth::ClipId PianoRollComponent::getClipId() const noexcept { return clipId_; }

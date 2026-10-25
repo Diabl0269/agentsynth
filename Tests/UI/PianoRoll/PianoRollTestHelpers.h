@@ -10,6 +10,7 @@
 #include "UI/PianoRoll/ScaleAssistPanel.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineViewState.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -181,11 +182,56 @@ inline ::testing::AssertionResult onlySelected(PianoRollFixture& f, NoteId expec
 
 inline juce::KeyPress altArrow(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::altModifier, 0); }
 
-// Picks the first built-in preset ("Major", combo id 2 — see ScaleAssistPanel::rebuildScaleCombo)
-// for whichever clip is open, which is how the panel, the chip and the key all learn the scale.
-inline void chooseMajorScaleForOpenClip(PianoRollFixture& f) {
-    f.roll.getScaleAssistPanel().getScaleCombo().setSelectedId(2, juce::sendNotificationSync);
+// Picks a key through the panel's Key field and its key picker, as a click and a typed search would: `query` is the
+// picker's search ("d dor"), and its first match is picked as the open clip's own key.
+inline void pickPanelKey(synth::ui::ScaleAssistPanel& panel, const juce::String& query) {
+    std::unique_ptr<juce::Component> held;
+    panel.pickerLauncher = [&held](std::unique_ptr<juce::Component> picker, juce::Rectangle<int>) {
+        held = std::move(picker);
+    };
+    panel.openKeyPicker();
+    auto* picker = panel.getOpenKeyPicker();
+    ASSERT_NE(picker, nullptr);
+    picker->setQuery(query);
+    picker->pickHighlighted();
+    held.reset();
+    panel.pickerLauncher = nullptr;
 }
+
+// The group titles of the key picker the panel opens (and closes again).
+inline std::vector<juce::String> pickerGroupTitles(ScaleAssistPanel& panel) {
+    std::unique_ptr<juce::Component> held;
+    panel.pickerLauncher = [&held](std::unique_ptr<juce::Component> picker, juce::Rectangle<int>) {
+        held = std::move(picker);
+    };
+    panel.openKeyPicker();
+    std::vector<juce::String> titles;
+    if (auto* picker = panel.getOpenKeyPicker())
+        titles = picker->visibleGroupTitles();
+    held.reset();
+    panel.pickerLauncher = nullptr;
+    return titles;
+}
+
+inline bool hasTitle(const std::vector<juce::String>& titles, const juce::String& title) {
+    return std::find(titles.begin(), titles.end(), title) != titles.end();
+}
+
+// Chooses the picker's Follow song key row for the open clip.
+inline void chooseFollowSongKey(synth::ui::ScaleAssistPanel& panel) {
+    std::unique_ptr<juce::Component> held;
+    panel.pickerLauncher = [&held](std::unique_ptr<juce::Component> picker, juce::Rectangle<int>) {
+        held = std::move(picker);
+    };
+    panel.openKeyPicker();
+    ASSERT_NE(panel.getOpenKeyPicker(), nullptr);
+    panel.getOpenKeyPicker()->clickFollow();
+    held.reset();
+    panel.pickerLauncher = nullptr;
+}
+
+// Picks C Major as the open clip's own key, which is how the panel, the chip and the key all learn the scale.
+inline void chooseMajorScaleForOpenClip(PianoRollFixture& f) { pickPanelKey(f.roll.getScaleAssistPanel(), "c major"); }
 
 inline juce::MouseWheelDetails wheelOnY(float deltaY) {
     juce::MouseWheelDetails wheel{}; // value-initialised: the struct has no default member initialisers
