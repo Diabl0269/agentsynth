@@ -89,7 +89,7 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
 
             int voiceCount = std::min(s.voiceSpan, d.voiceSpan);
             int sourceStride = 1;
-            int destStride = 1;
+            int destStride = d.rawStride;
 
             // One mono modulator patched onto a per-voice mod-CV fan drives every voice, the way a
             // single LFO shakes all the voices of a hardware poly synth. Deliberately limited to

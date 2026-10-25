@@ -39,8 +39,8 @@ struct DefaultChannelLayout {
     juce::Point<int> compressor;
     juce::Point<int> strip;
     juce::Point<int> master;
-    /** Applied to each insert FX (Gate/EQ/Compressor, and Master when the flow splices one; never Strip) before it
-     * enters the graph, so the app can apply preferences Core cannot see (left/right jacks). Empty = no-op. */
+    /** Applied to each insert FX (Gate/EQ/Compressor), the Channel Strip, and Master when the flow splices one, before
+     * it enters the graph, so the app can apply preferences Core cannot see (left/right jacks). Empty = no-op. */
     NewModuleHook onNewModule;
 };
 

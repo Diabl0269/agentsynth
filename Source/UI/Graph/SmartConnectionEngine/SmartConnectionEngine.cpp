@@ -110,7 +110,7 @@ bool SmartConnectionEngine::isInputJackFree(juce::AudioProcessorGraph::NodeID no
     if (mb != nullptr) {
         for (const auto& t : mb->getJackTargets(jack, true)) {
             for (int v = 0; v < t.voiceSpan; ++v)
-                rawChannels.push_back(t.rawHeadChannel + v);
+                rawChannels.push_back(t.rawHeadChannel + v * t.rawStride);
         }
     } else {
         rawChannels.push_back(jack); // Audio I/O identity mapping
@@ -152,7 +152,7 @@ bool SmartConnectionEngine::isOutputJackFree(juce::AudioProcessorGraph::NodeID n
     if (mb != nullptr) {
         for (const auto& t : mb->getJackTargets(jack, false)) {
             for (int v = 0; v < t.voiceSpan; ++v)
-                rawChannels.push_back(t.rawHeadChannel + v);
+                rawChannels.push_back(t.rawHeadChannel + v * t.rawStride);
         }
         if (rawChannels.empty())
             rawChannels.push_back(jack);
@@ -229,7 +229,7 @@ SmartConnectionEngine::findSingleUpstreamAudioLink(juce::AudioProcessorGraph::No
     if (dstMb != nullptr) {
         for (const auto& t : dstMb->getJackTargets(dstJack, true))
             for (int v = 0; v < t.voiceSpan; ++v)
-                rawChannels.push_back(t.rawHeadChannel + v);
+                rawChannels.push_back(t.rawHeadChannel + v * t.rawStride);
     } else {
         rawChannels.push_back(dstJack); // Audio I/O identity mapping
     }

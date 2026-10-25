@@ -233,7 +233,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         for (int j = 0; j < visible; ++j)
             for (const auto& t : mb->getJackTargets(j, isInput))
                 for (int v = 0; v < t.voiceSpan; ++v)
-                    if (t.rawHeadChannel + v == rawChannel)
+                    if (t.rawHeadChannel + v * t.rawStride == rawChannel)
                         return true;
         return false;
     };

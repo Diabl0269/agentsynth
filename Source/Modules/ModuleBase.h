@@ -37,6 +37,7 @@ struct LogicalPort {
     PortRole role = PortRole::Other;
     bool isPolyGroupHead = false; // true only for the lowest raw channel of a poly fan
     int polyVoiceSpan = 1;        // 1 = mono; N = head of an N-voice fan
+    int voiceStride = 1;          // raw-channel gap between a fan's voices; > 1 only for a collapsed split-block pair
 };
 
 enum class ModuleType {
@@ -847,6 +848,7 @@ public:
         int rawHeadChannel = 0;
         PortRole role = PortRole::Other;
         int voiceSpan = 1;
+        int rawStride = 1; // voice v of the fan sits on rawHeadChannel + v * rawStride
     };
 
     /** Inverse of mapInput/OutputChannel: every poly-group head that anchors to visibleJackIndex.
@@ -861,7 +863,7 @@ public:
         for (int raw = 0; raw < numRaw; ++raw) {
             const LogicalPort p = isInput ? mapInputChannel(raw) : mapOutputChannel(raw);
             if (p.isPolyGroupHead && p.visibleJackIndex == visibleJackIndex)
-                targets.push_back({raw, p.role, std::max(1, p.polyVoiceSpan)});
+                targets.push_back({raw, p.role, std::max(1, p.polyVoiceSpan), std::max(1, p.voiceStride)});
         }
 
         if (targets.empty())

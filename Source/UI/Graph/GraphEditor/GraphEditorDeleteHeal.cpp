@@ -286,7 +286,8 @@ bool healSplitPairIntoCollapsedJack(juce::AudioProcessorGraph& graph, juce::Audi
         return true;
 
     const juce::AudioProcessorGraph::Connection left{{upId, srcLeft}, {downId, pair->rawHeadChannel}};
-    const juce::AudioProcessorGraph::Connection right{{upId, srcRight}, {downId, pair->rawHeadChannel + 1}};
+    const juce::AudioProcessorGraph::Connection right{{upId, srcRight},
+                                                      {downId, pair->rawHeadChannel + pair->rawStride}};
     if (!graph.canConnect(left) || !graph.canConnect(right))
         return true;
     graph.addConnection(left);
