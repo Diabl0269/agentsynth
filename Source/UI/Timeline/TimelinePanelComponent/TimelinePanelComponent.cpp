@@ -10,6 +10,7 @@
 
 #include "TimelinePanelComponent.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "Timeline/SongKeyNotes.h"
 #include "Transport/TransportService.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
 #include <algorithm>
@@ -196,6 +197,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
     pianoRoll_.onAuditionNote = [this](int pitch, float velocity01, bool on) {
         auditionClipNote(pianoRoll_.isOpen() ? pianoRoll_.getClipId() : synth::ClipId{}, pitch, velocity01, on);
     };
+
+    initSongKeyField();
 
     // The automation lane editors, over the clip lanes and under the playhead.
     initAutomationLanes();
@@ -501,6 +504,38 @@ void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     automationLanes_.setUndoManager(undoManager);
     // Marker drag/rename/recolour/delete are real edits and belong on the same one undo stack.
     ruler_.setUndoManager(undoManager);
+}
+
+// The song key field: Detect from notes reads every MIDI track but drum kits, and a hovered key auditions on the
+// first selected MIDI track that plays somewhere, else the first such track.
+void TimelinePanelComponent::initSongKeyField() {
+    auto& songKeyField = transportBar_.getSongKeyField();
+    songKeyField.pitchClassWeights = [this] {
+        if (doc_ == nullptr)
+            return std::array<double, 12>{};
+        return synth::songPitchClassWeights(*doc_, [this](const synth::Track& track) {
+            return trackHeaderHost_ != nullptr && trackHeaderHost_->isDrumKitTrack(track.id);
+        });
+    };
+    songKeyField.resolveAuditionTrack = [this]() -> std::optional<synth::TrackId> {
+        if (doc_ == nullptr || trackHeaderHost_ == nullptr)
+            return std::nullopt;
+        const auto playable = [this](const synth::Track* track) {
+            return track != nullptr && track->kind == synth::TrackKind::Midi && track->bindingUuid.isNotEmpty() &&
+                   !trackHeaderHost_->isDrumKitTrack(track->id);
+        };
+        for (const auto id : selectedTracks())
+            if (playable(doc_->getTrack(id)))
+                return id;
+        for (const auto& track : doc_->getTracks())
+            if (playable(&track))
+                return track.id;
+        return std::nullopt;
+    };
+    songKeyField.auditionNote = [this](synth::TrackId track, int pitch, int velocity, bool on) {
+        if (trackHeaderHost_ != nullptr)
+            trackHeaderHost_->auditionTrackNote(track, pitch, velocity, on);
+    };
 }
 
 } // namespace synth::ui

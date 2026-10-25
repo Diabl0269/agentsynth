@@ -1,4 +1,5 @@
 #include "Transport/TransportDoc.h"
+#include "Music/SongKey.h"
 #include "Transport/TransportService.h"
 #include <cmath>
 
@@ -11,6 +12,7 @@ constexpr const char* kTimeSigDen = "timeSigDen";
 constexpr const char* kLoopStart = "loopStartBeat";
 constexpr const char* kLoopEnd = "loopEndBeat";
 constexpr const char* kLoopEnabled = "loopEnabled";
+constexpr const char* kSongKey = "songKey";
 
 bool readNumber(const juce::DynamicObject& obj, const char* key, double& out) {
     const auto v = obj.getProperty(key);
@@ -39,6 +41,8 @@ juce::var TransportDoc::toVar() const {
     obj->setProperty(kLoopStart, loopStartBeat);
     obj->setProperty(kLoopEnd, loopEndBeat);
     obj->setProperty(kLoopEnabled, loopEnabled);
+    if (songKey.has_value())
+        obj->setProperty(kSongKey, keyToVar(*songKey));
     return juce::var(obj);
 }
 
@@ -69,13 +73,18 @@ bool TransportDoc::fromVar(const juce::var& v) {
     if (local.loopEnabled && local.loopEndBeat - local.loopStartBeat < TransportService::kMinLoopLengthBeats)
         return false;
 
+    // The song key is optional and added later: absent (every older project) is No key, and a malformed one is
+    // dropped to No key rather than rejecting the tempo and loop it was saved with.
+    local.songKey = keyFromVar(obj->getProperty(kSongKey));
+
     *this = local;
     return true;
 }
 
 bool TransportDoc::operator==(const TransportDoc& o) const noexcept {
     return bpm == o.bpm && timeSigNumerator == o.timeSigNumerator && timeSigDenominator == o.timeSigDenominator &&
-           loopStartBeat == o.loopStartBeat && loopEndBeat == o.loopEndBeat && loopEnabled == o.loopEnabled;
+           loopStartBeat == o.loopStartBeat && loopEndBeat == o.loopEndBeat && loopEnabled == o.loopEnabled &&
+           sameKey(songKey, o.songKey);
 }
 
 } // namespace synth

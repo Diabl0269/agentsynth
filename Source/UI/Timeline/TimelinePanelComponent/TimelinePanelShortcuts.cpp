@@ -55,6 +55,7 @@ std::vector<std::pair<juce::Component*, juce::String>> TimelinePanelComponent::g
     targets.emplace_back(&snapToggleButton_, "timelineSnapToggle");
     targets.emplace_back(&followPlayheadButton_, "timelineFollowPlayheadToggle");
     targets.emplace_back(&addTrackButton_, "openAddTrackMenu");
+    targets.emplace_back(&transportBar_.getSongKeyField(), "setSongKey");
     return targets;
 }
 

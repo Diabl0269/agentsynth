@@ -1,11 +1,13 @@
 #pragma once
 
+#include "Music/MusicalScale.h"
 #include <juce_core/juce_core.h>
+#include <optional>
 
 namespace synth {
 
-/** The transport state a project persists: tempo, time signature and loop. Play state and position are
- *  deliberately not part of it. */
+/** The transport state a project persists: tempo, time signature, loop and the song key. Play state and position
+ *  are deliberately not part of it. */
 struct TransportDoc {
     double bpm = 120.0;
     int timeSigNumerator = 4;
@@ -13,6 +15,8 @@ struct TransportDoc {
     double loopStartBeat = 0.0;
     double loopEndBeat = 4.0;
     bool loopEnabled = false;
+    /** No value = the song has no key. */
+    std::optional<MusicalScale> songKey;
 
     juce::var toVar() const;
 

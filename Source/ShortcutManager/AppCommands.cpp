@@ -291,6 +291,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return transportToggleMetronome;
     if (actionId == "transportReturnToStart")
         return transportReturnToStart;
+    if (actionId == "setSongKey")
+        return setSongKey;
     if (actionId == "transportNudgeBackBeat")
         return transportNudgeBackBeat;
     if (actionId == "transportNudgeForwardBeat")

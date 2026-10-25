@@ -11,3 +11,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CableChainMotionTests.cpp
 )
+# The song key's tests ride along here for the same reason.
+include(${CMAKE_CURRENT_SOURCE_DIR}/SongKeyTests.cmake)

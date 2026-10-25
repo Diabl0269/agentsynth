@@ -53,6 +53,21 @@ void spliceDockKeyRows(std::vector<Entry>& rows) {
     rows.insert(at, dockRows.begin(), dockRows.end());
 }
 
+// Set Song Key follows Return to Start, the last of the transport verbs.
+template <class Entry>
+void spliceSongKeyRow(std::vector<Entry>& rows) {
+    const auto at = std::find_if(rows.begin(), rows.end(),
+                                 [](const Entry& row) { return std::string_view(row.id) == "transportReturnToStart"; });
+    rows.insert(at + 1, Entry{"setSongKey", ShortcutCategory::General});
+}
+
+template <class Entry>
+void spliceRows(std::vector<Entry>& rows) {
+    spliceTimelineRows(rows);
+    spliceDockKeyRows(rows);
+    spliceSongKeyRow(rows);
+}
+
 } // namespace
 
 /** One row per rebindable action: the persisted id, and the category that decides both its
@@ -257,8 +272,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"layoutEditorNudgeDownBig", ShortcutCategory::LayoutEditor},
             {"layoutEditorRemoveControl", ShortcutCategory::LayoutEditor},
         };
-        spliceTimelineRows(rows);
-        spliceDockKeyRows(rows);
+        spliceRows(rows);
         return rows;
     }();
     return table;

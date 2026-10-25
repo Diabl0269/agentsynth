@@ -6,6 +6,7 @@
 #include "UI/Layout/IconButton.h"
 #include "UI/Layout/NonModalLabel.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
+#include "UI/Timeline/SongKeyField.h"
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -57,7 +58,10 @@ public:
 
     // Non-owning; may be null (tests, or before the panel finishes wiring) — every command below
     // is then a no-op, matching TimelineRulerComponent/TimelinePlayheadOverlay's own null contract.
-    void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
+    void setTransport(synth::TransportService* transport) noexcept {
+        transport_ = transport;
+        songKeyField_.setTransport(transport);
+    }
     synth::TransportService* getTransport() const noexcept { return transport_; }
 
     // THE drive seam, called from TimelinePanelComponent::updateFromTransport (which is itself
@@ -128,6 +132,7 @@ public:
     juce::Button& getLoopButton() noexcept { return loopButton_; }
     juce::Label& getBpmLabel() noexcept { return bpmLabel_; }
     juce::Label& getTimeSigLabel() noexcept { return timeSigLabel_; }
+    SongKeyField& getSongKeyField() noexcept { return songKeyField_; }
     juce::String getReadoutTextForTest() const noexcept { return lastReadoutText_; }
     /** How many times the readout's cached string actually changed (and so requested a repaint) —
      *  the test hook that proves the string-diff gate, the same counting idiom
@@ -254,6 +259,7 @@ private:
     juce::ComboBox countInCombo_;
     BpmDragLabel bpmLabel_{*this};
     synth::ui::NonModalLabel timeSigLabel_;
+    SongKeyField songKeyField_;
 
     juce::String lastReadoutText_;
     int readoutRepaintCount_ = 0;

@@ -1,4 +1,5 @@
 #include "TransportService.h"
+#include "Music/SongKey.h"
 
 #include <algorithm>
 
@@ -73,11 +74,21 @@ bool TransportService::setTimeSignature(int numerator, int denominator) {
     return true;
 }
 
+// The song key is message-thread state only: it posts no command, so it can never be dropped by a full FIFO.
+void TransportService::setSongKey(const std::optional<MusicalScale>& key) {
+    if (sameKey(documentState_.songKey, key))
+        return;
+    documentState_.songKey = key;
+    if (onSongKeyChanged)
+        onSongKeyChanged();
+}
+
 // The mirror is updated only once the command is queued, and holds exactly what was queued (the clamped
 // bpm, the computed loop flag). It exists because the audio-side snapshot lags until the next tick() and
 // never updates at all without an audio device, so saving and dirty tracking must read the requested
 // state, never getPositionSnapshot().
 bool TransportService::applyDocumentState(const TransportDoc& doc) {
+    setSongKey(doc.songKey);
     const bool sigOk = setTimeSignature(doc.timeSigNumerator, doc.timeSigDenominator);
     const bool bpmOk = setBpm(doc.bpm);
     const bool loopOk = setLoop(doc.loopStartBeat, doc.loopEndBeat, doc.loopEnabled);

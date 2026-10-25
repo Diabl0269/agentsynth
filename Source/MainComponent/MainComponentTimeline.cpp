@@ -290,6 +290,11 @@ void MainComponent::newPatch() {
     // graph/timeline resets around it already have (this call runs after both, so nothing above it
     // can leave the law stale on an undo back into THIS document).
     audioEngine.setMixerPanLaw(synth::MixerPanLaw::Compensated);
+    // A new song has no key, so nothing snaps until one is chosen; the baseline moves with it, so the transport poll
+    // does not record the reset as an edit.
+    audioEngine.getTransport().setSongKey(std::nullopt);
+    committedTransport_.songKey.reset();
+    pendingTransport_.songKey.reset();
     // ...and starts with Master pinned right and nothing hidden; the reconcile below rebuilds the mixer.
     bottomDock.getMixerPanel().getViewDoc() = synth::MixerViewDoc::forNewProject();
     reconcileTimelineAfterGraphChange();
