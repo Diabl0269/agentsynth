@@ -134,8 +134,8 @@ void DrumMachineComponent::randomizePattern(double density, bool keepKickAndSnar
                    keepKickAndSnare ? "Randomized the other drums" : "Randomized the pattern");
 }
 
-// Replace puts the take into this clip; otherwise it becomes a new clip right after this one, with the same grid and
-// swing, and the grid opens it. Either way one undo step.
+// Replace puts the take into this clip; otherwise it becomes a new clip right after this one, with the same grid,
+// swing and humanise, and the grid opens it. Either way one undo step.
 synth::ClipId DrumMachineComponent::pickTake(const std::vector<synth::MidiNote>& notes, bool replace) {
     const auto* c = clip();
     if (c == nullptr)
@@ -152,6 +152,7 @@ synth::ClipId DrumMachineComponent::pickTake(const std::vector<synth::MidiNote>&
     const double length = c->lengthBeats;
     const int steps = c->stepsPerBar;
     const double swing = c->swing;
+    const double humanise = c->humanise;
     const auto sourceName = c->name;
     const auto name = sourceName + " take";
     synth::ClipId created;
@@ -161,6 +162,7 @@ synth::ClipId DrumMachineComponent::pickTake(const std::vector<synth::MidiNote>&
             return;
         doc_->setClipStepsPerBar(created, steps);
         doc_->setClipSwing(created, swing);
+        doc_->setClipHumanise(created, humanise);
         for (const auto& note : notes)
             doc_->addNote(created, note);
     });

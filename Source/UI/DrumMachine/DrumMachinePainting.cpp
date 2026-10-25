@@ -20,6 +20,7 @@ constexpr int kStepsCaptionWidth = 78;
 constexpr int kSwingCaptionWidth = 44;
 constexpr int kSwingKnobSize = 18;
 constexpr int kSwingValueWidth = 34;
+constexpr int kHumaniseCaptionWidth = 62;
 constexpr int kIdeasWidth = 56;
 constexpr juce::uint32 kChangedOutlineArgb = 0xffFFB454;
 constexpr int kToolbarPad = 4;
@@ -30,7 +31,7 @@ constexpr float kBeatGroupShadeAlpha = 0.03f;
 constexpr float kPlayColumnAlpha = 0.16f;
 constexpr float kFlashAlpha = 0.55f;
 constexpr float kAccentTickHeight = 2.0f;
-constexpr float kSwingTickAlpha = 0.45f;
+constexpr float kChanceFillAlpha = 0.5f;
 constexpr int kDenseStepPx = 3;
 constexpr float kPlayheadLineWidth = TimelinePlayheadOverlay::kLineWidth;
 constexpr int kPlayheadStripHalfWidth = TimelinePlayheadOverlay::kStripHalfWidth;
@@ -42,9 +43,10 @@ static_assert(DrumMachineComponent::kToolbarHeight == 20, "the toolbar matches t
 //==============================================================================
 void DrumMachineComponent::layoutToolbar() {
     auto header = getLocalBounds().removeFromTop(kToolbarHeight).reduced(kToolbarPad, 1);
-    const int nameWidth = std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - kShowAllWidth -
-                                          kStepsComboWidth - kStepsCaptionWidth - kSwingCaptionWidth - kSwingKnobSize -
-                                          kSwingValueWidth - kIdeasWidth - 8 * kToolbarPad);
+    const int nameWidth =
+        std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - kShowAllWidth - kStepsComboWidth -
+                        kStepsCaptionWidth - kSwingCaptionWidth - kSwingKnobSize - kSwingValueWidth -
+                        kHumaniseCaptionWidth - kSwingKnobSize - kSwingValueWidth - kIdeasWidth - 10 * kToolbarPad);
     nameBounds_ = header.removeFromLeft(std::min(nameWidth, 220));
     header.removeFromLeft(kToolbarPad);
     viewSwitch_.setBounds(header.removeFromLeft(kSwitchWidth));
@@ -60,6 +62,12 @@ void DrumMachineComponent::layoutToolbar() {
     swingKnob_.setBounds(header.removeFromLeft(kSwingKnobSize).withSizeKeepingCentre(kSwingKnobSize, kSwingKnobSize));
     header.removeFromLeft(kToolbarPad);
     swingValueBounds_ = header.removeFromLeft(kSwingValueWidth);
+    header.removeFromLeft(kToolbarPad);
+    humaniseCaptionBounds_ = header.removeFromLeft(kHumaniseCaptionWidth);
+    humaniseKnob_.setBounds(
+        header.removeFromLeft(kSwingKnobSize).withSizeKeepingCentre(kSwingKnobSize, kSwingKnobSize));
+    header.removeFromLeft(kToolbarPad);
+    humaniseValueBounds_ = header.removeFromLeft(kSwingValueWidth);
     header.removeFromLeft(kToolbarPad);
     ideasButton_.setBounds(header.removeFromLeft(kIdeasWidth));
 }
@@ -85,8 +93,11 @@ void DrumMachineComponent::paintToolbar(juce::Graphics& g) {
     g.setColour(theme.colors.textMuted);
     g.drawText("Steps per bar", stepsCaptionBounds_, juce::Justification::centredRight, true);
     g.drawText("Swing", swingCaptionBounds_, juce::Justification::centredRight, true);
+    g.drawText("Humanise", humaniseCaptionBounds_, juce::Justification::centredRight, true);
     g.setColour(theme.colors.textPrimary);
     g.drawText(juce::String(juce::roundToInt(swingKnob_.getValue())) + "%", swingValueBounds_,
+               juce::Justification::centredLeft, true);
+    g.drawText(juce::String(juce::roundToInt(humaniseKnob_.getValue())) + "%", humaniseValueBounds_,
                juce::Justification::centredLeft, true);
 }
 
@@ -136,87 +147,115 @@ void DrumMachineComponent::paintCells(juce::Graphics& g) {
     }
 }
 
+// What the pieces of one cell's painting share.
+struct DrumMachineComponent::CellPaint {
+    drumgrid::CellKey key = 0;
+    int pitch = 0;
+    juce::Rectangle<float> area;
+    float radius = 0.0f;
+    float rowAlpha = 1.0f;
+    bool dense = false;
+};
+
 void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, int row, int step,
                                      juce::Rectangle<int> rect, bool dense) {
     if (rect.isEmpty())
         return;
     const auto& theme = synth::theme::themeOf(*this);
-    const auto& colors = theme.colors;
     const int pitch = slot.lane.pitch;
-    const auto key = drumgrid::cellKey(pitch, step);
-    const float rowAlpha = slot.reveal * (rowSilenced(pitch) ? kSilencedAlpha : 1.0f);
-    const float radius = dense ? 0.0f : theme.metrics.cornerRadiusSmall;
-    const auto area = rect.toFloat();
+    CellPaint cell;
+    cell.key = drumgrid::cellKey(pitch, step);
+    cell.pitch = pitch;
+    cell.area = rect.toFloat();
+    cell.radius = dense ? 0.0f : theme.metrics.cornerRadiusSmall;
+    cell.rowAlpha = slot.reveal * (rowSilenced(pitch) ? kSilencedAlpha : 1.0f);
+    cell.dense = dense;
+    paintCellBase(g, cell, step);
 
+    // A leaving hit is drawn from the velocity its motion remembers, since the cell no longer holds it.
+    int velocity = getCellVelocity(row, step);
+    const auto motion = hitMotions_.find(cell.key);
+    if (velocity == 0 && motion != hitMotions_.end() && !motion->second.growing)
+        velocity = motion->second.velocity;
+    if (velocity > 0) {
+        paintCellHit(g, slot, cell, velocity);
+    } else {
+        g.setColour(theme.colors.border.withMultipliedAlpha(cell.rowAlpha * kRestingAlpha));
+        if (!dense)
+            g.drawRoundedRectangle(cell.area.reduced(0.5f), cell.radius, 1.0f);
+    }
+    // A cell an idea just changed keeps an orange outline that fades out.
+    if (const float amount = changedAmount(cell.key); amount > 0.0f) {
+        g.setColour(juce::Colour(kChangedOutlineArgb).withAlpha(amount));
+        g.drawRoundedRectangle(cell.area.reduced(0.75f), cell.radius, 1.5f);
+    }
+}
+
+// The empty cell: its surface, the shaded beat group and the playing column's tint.
+void DrumMachineComponent::paintCellBase(juce::Graphics& g, const CellPaint& cell, int step) {
+    const auto& colors = synth::theme::themeOf(*this).colors;
     // Every other beat group is shaded like the step sequencer's every other group of four, so the pulse stays
     // readable; steps per beat is a whole number for every choice.
     const double stepsPerBeat = static_cast<double>(stepsPerBar()) / std::max(1.0, beatsPerBar());
     const int group = static_cast<int>(std::floor(static_cast<double>(step) / std::max(1.0, stepsPerBeat)));
-    g.setColour(colors.surface.withMultipliedAlpha(rowAlpha));
-    g.fillRoundedRectangle(area, radius);
+    g.setColour(colors.surface.withMultipliedAlpha(cell.rowAlpha));
+    g.fillRoundedRectangle(cell.area, cell.radius);
     if (group % 2 == 1) {
-        g.setColour(colors.textPrimary.withAlpha(kBeatGroupShadeAlpha * rowAlpha));
-        g.fillRoundedRectangle(area, radius);
+        g.setColour(colors.textPrimary.withAlpha(kBeatGroupShadeAlpha * cell.rowAlpha));
+        g.fillRoundedRectangle(cell.area, cell.radius);
     }
-
     if (showsPlayhead() && step == playStep_) {
-        g.setColour(colors.accent.withAlpha(kPlayColumnAlpha * rowAlpha));
-        g.fillRoundedRectangle(area, radius);
+        g.setColour(colors.accent.withAlpha(kPlayColumnAlpha * cell.rowAlpha));
+        g.fillRoundedRectangle(cell.area, cell.radius);
     }
+}
 
-    // A leaving hit is drawn from the velocity its motion remembers, since the cell no longer holds it.
-    int velocity = getCellVelocity(row, step);
-    const auto motion = hitMotions_.find(key);
-    if (velocity == 0 && motion != hitMotions_.end() && !motion->second.growing)
-        velocity = motion->second.velocity;
-    if (velocity > 0) {
-        float motionAlpha = 1.0f;
-        const float scale = hitScaleAt(key, motionAlpha);
-        const auto cell = cells_.find(key);
-        const bool noteMuted = cell != cells_.end() && cell->second.muted;
-        const float alpha = rowAlpha * motionAlpha * (noteMuted ? kMutedHitAlpha : 1.0f);
-        const float fillHeight = std::max(1.0f, area.getHeight() * static_cast<float>(velocity) / 127.0f);
-        auto fill = area.withTop(area.getBottom() - fillHeight);
-        const auto centre = area.getCentre();
-        const auto scaled = juce::AffineTransform::scale(scale, scale, centre.x, centre.y);
-        juce::Path body;
-        body.addRoundedRectangle(area.getX(), area.getY(), area.getWidth(), area.getHeight(), radius);
-        body.applyTransform(scaled);
+// A hit: the fill to its velocity (dimmer when it only plays some of the time), the accent tick, its marks and the
+// flash, all in the hit's grow-in or shrink-out motion.
+void DrumMachineComponent::paintCellHit(juce::Graphics& g, const LaneSlot& slot, const CellPaint& cell, int velocity) {
+    const auto& area = cell.area;
+    float motionAlpha = 1.0f;
+    const float scale = hitScaleAt(cell.key, motionAlpha);
+    const auto found = cells_.find(cell.key);
+    const bool present = found != cells_.end();
+    const bool noteMuted = present && found->second.muted;
+    const auto marks =
+        present ? describeCellMarks(found->second, swing_, static_cast<int>(cell.key % 1000000)) : DrumCellMarks{};
+    const float alpha = cell.rowAlpha * motionAlpha * (noteMuted ? kMutedHitAlpha : 1.0f);
+    const float fillHeight = std::max(1.0f, area.getHeight() * static_cast<float>(velocity) / 127.0f);
+    const auto fill = area.withTop(area.getBottom() - fillHeight);
+    const auto centre = area.getCentre();
+    const auto scaled = juce::AffineTransform::scale(scale, scale, centre.x, centre.y);
+    juce::Path body;
+    body.addRoundedRectangle(area.getX(), area.getY(), area.getWidth(), area.getHeight(), cell.radius);
+    body.applyTransform(scaled);
+    juce::Path fillPath;
+    fillPath.addRoundedRectangle(fill.getX(), fill.getY(), fill.getWidth(), fill.getHeight(), cell.radius);
+    fillPath.applyTransform(scaled);
+    {
         juce::Graphics::ScopedSaveState state(g);
         g.reduceClipRegion(body.getBounds().getSmallestIntegerContainer());
-        g.setColour(slot.lane.colour.withMultipliedAlpha(alpha));
-        juce::Path fillPath;
-        fillPath.addRoundedRectangle(fill.getX(), fill.getY(), fill.getWidth(), fill.getHeight(), radius);
-        fillPath.applyTransform(scaled);
+        g.setColour(slot.lane.colour.withMultipliedAlpha(alpha * (marks.dimmed ? kChanceFillAlpha : 1.0f)));
         g.fillPath(fillPath);
-        if (drumgrid::isAccent(velocity) && !dense) {
+        if (drumgrid::isAccent(velocity) && !cell.dense) {
             const auto tick = juce::Rectangle<float>(area.getX() + 2.0f, area.getY() + 1.0f, area.getWidth() - 4.0f,
                                                      kAccentTickHeight);
             g.setColour(juce::Colours::white.withMultipliedAlpha(alpha));
             g.fillRect(tick.transformedBy(scaled).getIntersection(area));
         }
-        if (swing_ > synth::Clip::kStraightSwing && (step & 1) != 0 && !dense) {
-            // The hit sits on the grid but plays late: a small tick marks how far into its cell.
-            const float offset = static_cast<float>((swing_ - synth::Clip::kStraightSwing) * 2.0);
-            g.setColour(juce::Colours::white.withMultipliedAlpha(kSwingTickAlpha * alpha));
-            g.fillRect(juce::Rectangle<float>(area.getX() + offset * area.getWidth() - 1.0f, area.getY() + 3.0f, 2.0f,
-                                              std::max(1.0f, area.getHeight() - 6.0f))
-                           .getIntersection(area));
-        }
-        const float flash = flashAmount(key);
-        if (flash > 0.0f) {
-            g.setColour(juce::Colours::white.withAlpha(kFlashAlpha * flash * alpha));
-            g.fillPath(fillPath);
-        }
-    } else {
-        g.setColour(colors.border.withMultipliedAlpha(rowAlpha * kRestingAlpha));
-        if (!dense)
-            g.drawRoundedRectangle(area.reduced(0.5f), radius, 1.0f);
     }
-    // A cell an idea just changed keeps an orange outline that fades out.
-    if (const float amount = changedAmount(key); amount > 0.0f) {
-        g.setColour(juce::Colour(kChangedOutlineArgb).withAlpha(amount));
-        g.drawRoundedRectangle(area.reduced(0.75f), radius, 1.5f);
+    {
+        // The marks move with the hit and may sit just outside its body (an early tick), so they are not clipped to it.
+        juce::Graphics::ScopedSaveState state(g);
+        g.addTransform(scaled);
+        paintCellMarks(g, area, marks, alpha, cell.dense);
+    }
+    const float flash = flashAmount(cell.key);
+    if (flash > 0.0f) {
+        juce::Graphics::ScopedSaveState state(g);
+        g.reduceClipRegion(body.getBounds().getSmallestIntegerContainer());
+        g.setColour(juce::Colours::white.withAlpha(kFlashAlpha * flash * alpha));
+        g.fillPath(fillPath);
     }
 }
 

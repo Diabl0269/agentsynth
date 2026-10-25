@@ -36,7 +36,8 @@ double DrumMachineComponent::xToBeat(double x) const noexcept {
 
 void DrumMachineComponent::notifyViewChanged() {
     repaint();
-    lane_.repaint();
+    for (auto& band : bands_)
+        band.lane->repaint();
     if (onHorizontalViewChanged)
         onHorizontalViewChanged();
 }

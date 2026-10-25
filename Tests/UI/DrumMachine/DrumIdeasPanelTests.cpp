@@ -140,6 +140,7 @@ TEST(DrumIdeasPanelTest, MakeThreeTakesShowsThreePicturesAndNothingIsWrittenYet)
 TEST(DrumIdeasPanelTest, PickAddsANewClipRightAfterTheCurrentOneAndOpensIt) {
     IdeasFixture f;
     f.panel->getStarterButton(Style::Rock).onClick();
+    ASSERT_TRUE(f.doc.setClipHumanise(f.clip, 0.4));
     f.undo.clearUndoHistory();
     synth::ClipId created;
     f.grid.onClipCreated = [&](synth::ClipId id) { created = id; };
@@ -156,6 +157,7 @@ TEST(DrumIdeasPanelTest, PickAddsANewClipRightAfterTheCurrentOneAndOpensIt) {
     EXPECT_DOUBLE_EQ(added->startBeat, 8.0) << "right after the current clip";
     EXPECT_DOUBLE_EQ(added->lengthBeats, 8.0);
     EXPECT_EQ(added->notes.size(), take.size());
+    EXPECT_DOUBLE_EQ(added->humanise, 0.4) << "the new clip keeps the groove";
     EXPECT_EQ(f.grid.getClipId(), created) << "the grid opens the new clip";
     f.undo.undo();
     EXPECT_EQ(f.doc.getTrackForClip(f.clip)->clips.size(), 1u);

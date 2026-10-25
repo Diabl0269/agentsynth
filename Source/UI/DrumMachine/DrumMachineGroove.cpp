@@ -1,6 +1,6 @@
-// DrumMachineComponent: the groove controls. The Swing knob in the header, the row the lanes edit (picked by a row's
-// name), the lane chips under the grid and the Loudness lane they fold in, and the timing of a swung hit's flash.
-// Swing itself lives on the clip and is applied when the snapshot is built (docs/timeline/drum-machine.md#swing).
+// DrumMachineComponent: the groove controls. The Swing and Humanise knobs in the header and the timing of a swung hit's
+// flash. Both live on the clip and are applied when the snapshot is built (docs/timeline/drum-machine.md#swing). The
+// lanes under the grid are in DrumMachineLanes.cpp.
 
 #include "DrumMachineComponent.h"
 
@@ -12,54 +12,50 @@
 namespace synth::ui {
 
 namespace {
-constexpr double kSwingPercentMin = 50.0;
-constexpr double kSwingPercentMax = 75.0;
+constexpr double kPercentMin = 0.0;
+constexpr double kPercentMax = 100.0;
 } // namespace
 
-void DrumMachineComponent::setupGroove() {
-    addAndMakeVisible(swingKnob_);
-    swingKnob_.setComponentID("drumSwing");
-    swingKnob_.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    swingKnob_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
-    swingKnob_.setRange(kSwingPercentMin, kSwingPercentMax, 1.0);
-    swingKnob_.setDoubleClickReturnValue(true, kSwingPercentMin);
-    swingKnob_.setValue(kSwingPercentMin, juce::dontSendNotification);
-    swingKnob_.setTitle("Swing");
-    swingKnob_.setTooltip("Swing: push every second step later (50% is straight)");
-    swingKnob_.textFromValueFunction = [](double value) { return juce::String(juce::roundToInt(value)) + "%"; };
-    swingKnob_.onDragStart = [this] { swingDragging_ = true; };
+// A header knob that reads 0 to 100%: a drag commits on release, a key press or a double-click reset at once.
+void DrumMachineComponent::setupPercentKnob(CardKnobSlider& knob, const juce::String& id, const juce::String& title,
+                                            const juce::String& tooltip, const juce::Rectangle<int>& valueBounds,
+                                            bool& dragging, bool& updating, std::function<void()> commit) {
+    addAndMakeVisible(knob);
+    knob.setComponentID(id);
+    knob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    knob.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+    knob.setRange(kPercentMin, kPercentMax, 1.0);
+    knob.setDoubleClickReturnValue(true, kPercentMin);
+    knob.setValue(kPercentMin, juce::dontSendNotification);
+    knob.setTitle(title);
+    knob.setTooltip(tooltip);
+    knob.textFromValueFunction = [](double value) { return juce::String(juce::roundToInt(value)) + "%"; };
+    knob.onDragStart = [&dragging] { dragging = true; };
     // A value that changes outside a drag (Home and End, a double-click reset) commits at once; a drag commits on
     // release, so the whole turn is one undo step.
-    swingKnob_.onValueChange = [this] {
-        repaint(swingValueBounds_);
-        if (!swingDragging_ && !updatingKnob_)
-            commitSwingKnob();
+    knob.onValueChange = [this, &valueBounds, &dragging, &updating, commit] {
+        repaint(valueBounds);
+        if (!dragging && !updating)
+            commit();
     };
-    swingKnob_.onDragEnd = [this] {
-        swingDragging_ = false;
-        commitSwingKnob();
+    knob.onDragEnd = [&dragging, commit] {
+        dragging = false;
+        commit();
     };
+}
 
-    addAndMakeVisible(chips_);
-    chips_.setComponentID("drumLaneChips");
-    chips_.setLanes({"Loudness"});
-    chips_.onToggle = [this](int index, bool shown) {
-        if (index == 0)
-            setLoudnessShown(shown);
-    };
-
-    addChildComponent(lane_);
-    DrumLoudnessLane::Mapping mapping;
-    mapping.gutterWidth = kLabelColumnWidth;
-    mapping.stepRange = [this](int step) { return stepXRange(step); };
-    mapping.stepAt = [this](int x) { return stepAtX(x); };
-    lane_.setMapping(std::move(mapping));
-    lane_.onCommit = [this](const std::vector<DrumLoudnessLane::Hit>& changed) { commitLoudness(changed); };
-    labels_.onRowClicked = [this](int pitch) { setSelectedPitch(pitch); };
+void DrumMachineComponent::setupGroove() {
+    setupPercentKnob(swingKnob_, "drumSwing", "Swing", "Swing: push every second step later (0% is straight)",
+                     swingValueBounds_, swingDragging_, updatingKnob_, [this] { commitSwingKnob(); });
+    setupPercentKnob(humaniseKnob_, "drumHumanise", "Humanise",
+                     "Humanise: small random changes to each hit's loudness and timing (0% is exact)",
+                     humaniseValueBounds_, humaniseDragging_, updatingHumanise_, [this] { commitHumaniseKnob(); });
+    setupLanes();
 }
 
 //==============================================================================
-void DrumMachineComponent::commitSwingKnob() { setSwing(swingKnob_.getValue() / 100.0); }
+// The Swing knob reads 0% (straight, stored 0.5) to 100% (stored 0.75).
+void DrumMachineComponent::commitSwingKnob() { setSwing(percentToSwing(swingKnob_.getValue())); }
 
 void DrumMachineComponent::setSwing(double swing) {
     const auto* c = clip();
@@ -70,119 +66,35 @@ void DrumMachineComponent::setSwing(double swing) {
     refreshFromDoc();
 }
 
-// Follows the clip: the knob, and the swing the cells' tick and the flash timing use.
-void DrumMachineComponent::refreshGroove() {
+void DrumMachineComponent::commitHumaniseKnob() { setHumanise(humaniseKnob_.getValue() / 100.0); }
+
+void DrumMachineComponent::setHumanise(double amount) {
     const auto* c = clip();
-    swing_ = c != nullptr ? c->swing : synth::Clip::kStraightSwing;
-    if (!swingDragging_) {
-        updatingKnob_ = true;
-        swingKnob_.setValue(swing_ * 100.0, juce::dontSendNotification);
-        updatingKnob_ = false;
-    }
-    repaint(swingValueBounds_);
-    refreshLane();
-}
-
-//==============================================================================
-void DrumMachineComponent::setSelectedPitch(int pitch) {
-    if (pitch < 0 || pitch > 127 || pitch == selectedPitch_)
+    if (c == nullptr || !synth::Clip::isValidHumanise(amount) || amount == c->humanise)
         return;
-    selectedPitch_ = pitch;
-    pushRowsToLabels();
-    refreshLane();
-    repaint();
-}
-
-void DrumMachineComponent::refreshLane() {
-    std::vector<DrumLoudnessLane::Hit> hits;
-    for (const auto& [key, cell] : cells_)
-        if (static_cast<int>(key / 1000000) == selectedPitch_ && !cell.empty())
-            hits.push_back({static_cast<int>(key % 1000000), cell.velocity});
-    std::sort(hits.begin(), hits.end(), [](const auto& a, const auto& b) { return a.step < b.step; });
-    const auto lane = drumLaneForPitch(selectedPitch_);
-    lane_.setHits(std::move(hits), lane.name, lane.colour);
-    repaint(forBounds_);
-}
-
-// The lane's one gesture (a whole drag, or one key press) as ONE undo step.
-void DrumMachineComponent::commitLoudness(const std::vector<DrumLoudnessLane::Hit>& changed) {
-    std::vector<std::pair<std::vector<synth::NoteId>, int>> edits;
-    for (const auto& hit : changed) {
-        const auto it = cells_.find(drumgrid::cellKey(selectedPitch_, hit.step));
-        if (it != cells_.end())
-            edits.emplace_back(it->second.ids, juce::jlimit(1, 127, hit.velocity));
-    }
-    if (edits.empty() || clip() == nullptr)
-        return;
-    record([this, edits] {
-        for (const auto& [ids, velocity] : edits)
-            for (const auto id : ids)
-                doc_->setNoteVelocity(id, velocity);
-    });
+    const auto id = clipId_;
+    record([this, id, amount] { doc_->setClipHumanise(id, amount); });
     refreshFromDoc();
 }
 
-juce::Range<int> DrumMachineComponent::stepXRange(int step) const {
+// Follows the clip: the knobs, and the swing the cells' tick and the flash timing use.
+void DrumMachineComponent::refreshGroove() {
     const auto* c = clip();
-    if (c == nullptr || step < 0)
-        return {};
-    const double stepLen = getStepBeats();
-    const int x0 = static_cast<int>(std::lround(beatToX(c->startBeat + step * stepLen)));
-    const int x1 = static_cast<int>(std::lround(beatToX(c->startBeat + (step + 1) * stepLen)));
-    return {x0, std::max(x0 + 1, x1)};
-}
-
-//==============================================================================
-// The band under the rows: the lane (as tall as its reveal) and, below it, the chips row.
-int DrumMachineComponent::bottomBandHeight() const noexcept {
-    return LaneChipRow::kHeight + 2 * kBottomPad + static_cast<int>(std::lround(kLaneHeight * laneReveal_));
-}
-
-int DrumMachineComponent::gridHeight() const noexcept {
-    return std::max(0, getHeight() - canvasTop() - bottomBandHeight());
-}
-
-void DrumMachineComponent::layoutBottom() {
-    const int laneHeight = static_cast<int>(std::lround(kLaneHeight * laneReveal_));
-    const int chipsTop = getHeight() - LaneChipRow::kHeight - kBottomPad;
-    chips_.setBounds(kBottomPad, chipsTop, std::max(0, getWidth() - 2 * kBottomPad), LaneChipRow::kHeight);
-    lane_.setBounds(0, chipsTop - kBottomPad - laneHeight, getWidth(), laneHeight);
-    lane_.setVisible(laneHeight > 0);
-    const int chipsRight =
-        chips_.getNumChips() > 0 ? chips_.getX() + chips_.getChip(chips_.getNumChips() - 1)->getRight() : 0;
-    forBounds_ = {chipsRight + 8, chipsTop, std::max(0, getWidth() - chipsRight - 16), LaneChipRow::kHeight};
-}
-
-void DrumMachineComponent::setLoudnessShown(bool shown) {
-    chips_.setShown(0, shown);
-    startLaneMotion(shown ? 1.0f : 0.0f);
-}
-
-// The lane grows under the grid (and folds back) over 160 ms; the rows' viewport follows each frame. It lands at once
-// when the grid is off screen or Animations is Off.
-void DrumMachineComponent::startLaneMotion(float target) {
-    laneTo_ = target;
-    laneAnim_.stop(vblank_);
-    const auto settle = [this] {
-        laneReveal_ = laneTo_;
-        layoutBottom();
-        layoutRows();
-        repaint();
-    };
-    if (!motionAllowed()) {
-        settle();
-        return;
+    swing_ = c != nullptr ? c->swing : synth::Clip::kStraightSwing;
+    humanise_ = c != nullptr ? c->humanise : 0.0;
+    if (!swingDragging_) {
+        updatingKnob_ = true;
+        swingKnob_.setValue(swingToPercent(swing_), juce::dontSendNotification);
+        updatingKnob_ = false;
     }
-    laneFrom_ = laneReveal_;
-    laneAnim_.start(
-        vblank_, motionMs(kLaneMotionMs, kReducedMotionMs), easeOutCubic,
-        [this](float t) {
-            laneReveal_ = laneFrom_ + (laneTo_ - laneFrom_) * t;
-            layoutBottom();
-            layoutRows();
-            repaint();
-        },
-        settle);
+    if (!humaniseDragging_) {
+        updatingHumanise_ = true;
+        humaniseKnob_.setValue(humanise_ * 100.0, juce::dontSendNotification);
+        updatingHumanise_ = false;
+    }
+    repaint(swingValueBounds_);
+    repaint(humaniseValueBounds_);
+    refreshLane();
 }
 
 //==============================================================================

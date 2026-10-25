@@ -1,9 +1,10 @@
 #pragma once
 
+#include "DrumCellMarks.h"
 #include "DrumGrid.h"
+#include "DrumHitLane.h"
 #include "DrumIdeasPanel.h"
 #include "DrumLanes.h"
-#include "DrumLoudnessLane.h"
 #include "DrumRowLabels.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -13,6 +14,7 @@
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineViewState.h"
+#include <array>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -51,6 +53,8 @@ public:
     static constexpr double kReducedMotionMs = 80.0;
     static constexpr int kVelocityKeyStep = 10;
     static constexpr int kLaneHeight = 72;
+    static constexpr int kMinLaneHeight = 36; ///< a lane squeezes to this when the panel is short
+    static constexpr int kMinGridHeight = 48; ///< the rows keep at least two rows of room above the lanes
     static constexpr int kBottomPad = 4;
     static constexpr double kLaneMotionMs = 160.0;
     static constexpr int kDefaultSelectedPitch = 36;
@@ -149,21 +153,34 @@ public:
     void setShowAllDrums(bool showAll);
     juce::String getAccessibilityValueText() const;
 
-    // ---- Groove: swing and the lanes under the grid (DrumMachineGroove.cpp) ----
-    /** The clip's swing, 0.5 (straight) to 0.75; set through the clip, one undo step. */
+    // ---- Groove: swing and humanise (DrumMachineGroove.cpp) ----
+    /** The clip's swing, 0.5 (straight) to 0.75; set through the clip, one undo step. The knob reads it as 0 to 100%.
+     */
     double getSwing() const noexcept { return swing_; }
     void setSwing(double swing);
+    /** The clip's humanise, 0 to 1; set through the clip, one undo step. The knob reads it as 0 to 100%. */
+    double getHumanise() const noexcept { return humanise_; }
+    void setHumanise(double amount);
+    CardKnobSlider& getSwingKnob() noexcept { return swingKnob_; }
+    CardKnobSlider& getHumaniseKnob() noexcept { return humaniseKnob_; }
+    /** The knob positions (percent) of a clip's swing and back: 0.5 is 0%, 0.75 is 100%. */
+    static double swingToPercent(double swing) noexcept { return (swing - synth::Clip::kStraightSwing) * 400.0; }
+    static double percentToSwing(double percent) noexcept { return synth::Clip::kStraightSwing + percent / 400.0; }
+
+    // ---- Lanes under the grid: Loudness, Chance, Repeat, Nudge, Condition (DrumMachineLanes.cpp) ----
     /** The row the lanes under the grid edit, by pitch; Kick until a row name is chosen. */
     int getSelectedPitch() const noexcept { return selectedPitch_; }
     void setSelectedPitch(int pitch);
-    bool isLoudnessShown() const noexcept { return laneTo_ > 0.5f; }
-    void setLoudnessShown(bool shown);
-    CardKnobSlider& getSwingKnob() noexcept { return swingKnob_; }
+    bool isLaneShown(DrumLaneKind kind) const noexcept { return bands_[(size_t)kind].to > 0.5f; }
+    /** Shows or folds a lane (the same as its chip); lanes stack under the grid in chip order. */
+    void setLaneShown(DrumLaneKind kind, bool shown);
+    DrumHitLane& getLane(DrumLaneKind kind) noexcept { return *bands_[(size_t)kind].lane; }
     LaneChipRow& getLaneChips() noexcept { return chips_; }
-    DrumLoudnessLane& getLoudnessLane() noexcept { return lane_; }
-    /** The height the lane band takes right now (it grows and folds with the lane). */
+    /** The height the lane band takes right now (it grows and folds with the lanes). */
     int bottomBandHeight() const noexcept;
     bool isLaneMotionRunning() const noexcept { return laneAnim_.isRunning(); }
+    /** What the cell at (row, step) shows beyond its fill; nothing for an empty cell. */
+    DrumCellMarks getCellMarks(int row, int step) const;
 
     // ---- Ideas: starters, variations, randomize (DrumMachineIdeas.cpp) ----
     juce::Button& getIdeasButton() noexcept { return ideasButton_; }
@@ -227,6 +244,13 @@ private:
         int previewVelocity = 0;
         bool shift = false;
     };
+    /** One lane under the grid with its reveal (0 folded, 1 grown); `from` and `to` are the motion's ends. */
+    struct LaneBand {
+        std::unique_ptr<DrumHitLane> lane;
+        float reveal = 0.0f;
+        float from = 0.0f;
+        float to = 0.0f;
+    };
     struct HitMotion {
         double startMs = 0.0;
         bool growing = true;
@@ -286,20 +310,35 @@ private:
     void paintToolbar(juce::Graphics& g);
     void paintCells(juce::Graphics& g);
     void paintCell(juce::Graphics& g, const LaneSlot& slot, int row, int step, juce::Rectangle<int> rect, bool dense);
+    struct CellPaint;
+    void paintCellBase(juce::Graphics& g, const CellPaint& cell, int step);
+    void paintCellHit(juce::Graphics& g, const LaneSlot& slot, const CellPaint& cell, int velocity);
+    /** DrumMachineMarks.cpp: the marks of one hit, drawn in `area` (the cell, in the hit's scaled space). */
+    void paintCellMarks(juce::Graphics& g, juce::Rectangle<float> area, const DrumCellMarks& marks, float alpha,
+                        bool dense);
     void paintPlayhead(juce::Graphics& g);
     void paintLaneCaption(juce::Graphics& g);
     void layoutToolbar();
 
     // DrumMachineGroove.cpp
     void setupGroove();
+    void setupPercentKnob(CardKnobSlider& knob, const juce::String& id, const juce::String& title,
+                          const juce::String& tooltip, const juce::Rectangle<int>& valueBounds, bool& dragging,
+                          bool& updating, std::function<void()> commit);
     void refreshGroove();
-    void refreshLane();
-    void commitLoudness(const std::vector<DrumLoudnessLane::Hit>& changed);
     void commitSwingKnob();
-    void layoutBottom();
-    void startLaneMotion(float target);
+    void commitHumaniseKnob();
     void flushSwungFlashes(double relativeBeat);
     void flashStepHits(int step);
+
+    // DrumMachineLanes.cpp
+    void setupLanes();
+    void refreshLane();
+    void commitLane(DrumLaneKind kind, const std::vector<DrumHitLane::Hit>& changed);
+    void layoutBottom();
+    void startLaneMotion();
+    int laneUnitHeight() const noexcept;
+    int laneHeightOf(DrumLaneKind kind) const noexcept;
     int gridHeight() const noexcept;
     juce::Range<int> stepXRange(int step) const;
 
@@ -314,6 +353,9 @@ private:
 
     // DrumMachineMouse.cpp
     void endGesture(bool commit);
+
+    // DrumMachineAccessibility.cpp
+    juce::String describeHitSettings(int pitch) const;
 
     // DrumMachineKeys.cpp
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
@@ -350,8 +392,9 @@ private:
 
     double swing_ = synth::Clip::kStraightSwing;
     int selectedPitch_ = kDefaultSelectedPitch;
-    float laneReveal_ = 0.0f, laneFrom_ = 0.0f, laneTo_ = 0.0f;
+    double humanise_ = 0.0;
     bool swingDragging_ = false, updatingKnob_ = false;
+    bool humaniseDragging_ = false, updatingHumanise_ = false;
     std::vector<int> pendingSwung_; ///< swung steps the playhead entered whose hits have not reached their time yet
 
     double playheadBeat_ = 0.0;
@@ -383,10 +426,12 @@ private:
     juce::TextButton playClipButton_{"Play clip"};
     juce::TextButton ideasButton_{"Ideas"};
     CardKnobSlider swingKnob_;
+    CardKnobSlider humaniseKnob_;
     LaneChipRow chips_;
-    DrumLoudnessLane lane_;
+    std::array<LaneBand, kDrumLaneKindCount> bands_;
     DrumRowLabels labels_;
     juce::Rectangle<int> nameBounds_, stepsCaptionBounds_, swingCaptionBounds_, swingValueBounds_, forBounds_;
+    juce::Rectangle<int> humaniseCaptionBounds_, humaniseValueBounds_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrumMachineComponent)
 };

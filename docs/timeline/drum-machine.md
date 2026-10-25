@@ -7,13 +7,13 @@ opens the roll. It edits the same notes the roll shows, so a clip can be viewed 
 ## What it shows
 
 - A header strip: the clip name, a "Drum machine | Piano roll" switch, "Play clip", "Show all drums", the
-  Steps per bar dropdown (8, 16, 32, 64), the Swing knob and the Ideas button.
+  Steps per bar dropdown (8, 16, 32, 64), the Swing and Humanise knobs and the Ideas button.
 - One row per drum: a coloured dot, the name (a button: click it to pick the row the lanes under the grid edit, drawn
   in the accent colour while picked, Kick at first), and Mute (M) and Solo (S) toggles. The default rows are Kick, Snare,
   Clap, Closed hat, Open hat, Tom, Cymbal, Cowbell; "Show all drums" adds the rest of the General MIDI drum map.
   A pitch that holds a note always has a row, and a pitch outside the table is named "Note N".
 - Cells are rounded squares with every other beat group (the cells of beats 2 and 4 in 4/4) shaded with text-primary at 3%, as the step sequencer shades its groups. A hit fills the cell to its velocity; an accent adds
-  a white tick on top. While the transport plays the playing column is tinted and a hit flashes as it plays.
+  a white tick on top. While the transport plays the playing column is tinted and a hit flashes as it plays. A hit that carries per-hit settings shows [marks](#grid-marks).
 
 ## Opening it
 
@@ -62,9 +62,11 @@ pitch is not. They never write `MidiNote::muted`, which stays the piano roll's p
 
 ## Swing
 
-The Swing knob in the header (50% straight to 75% shuffle, 56% reads "56%") sets `Clip::swing` (0.5 to 0.75), one
-undo step per turn: a drag or key press commits on release, a double-click resets to 50%. A linked group shares it
-(`syncLinkedClips`); split, duplicate and copy/paste carry it. It is saved only when it is not 0.5.
+The Swing knob in the header reads 0% (straight, stored `Clip::swing` 0.5) to 100% (the full shuffle, stored 0.75), so
+the stored value is `0.5 + percent / 400` and the knob shows `(swing - 0.5) * 400` (a clip stored at 0.66 reads 64%). It
+sets the clip's swing, one undo step per turn: a drag or key press commits on release, a double-click resets to 0%. A
+linked group shares it (`syncLinkedClips`); split, duplicate and copy/paste carry it. It is saved only when it is not 0.5.
+The knob's text, tooltip ("Swing: push every second step later (0% is straight)") and spoken value all use the percent.
 
 Swing is applied in `TimelineSnapshot::buildFrom` and never written into the notes. The steps of the clip's grid are
 counted from 0; a note whose clip-relative start is on an ODD step (within 1e-6 of a step) starts later by
@@ -75,22 +77,71 @@ can pass an off-grid one. A step is `beatsPerBar / stepsPerBar` with the bar len
 which the engine passes to `buildFrom` on every publish (a time-signature change reaches playback at the next
 publish, not at once).
 
-The grid keeps its cells on the grid. A hit on a swung step shows a small tick inside its cell, at how far into the
-step it plays. The playhead column is real time, and a swung hit flashes when it plays, not when the playhead enters
-its column.
+The grid keeps its cells on the grid. A hit that plays off its cell start shows a small tick inside its cell, at how far
+into the step it plays ([marks](#grid-marks)). The playhead column is real time, and a swung hit flashes when it plays,
+not when the playhead enters its column.
+
+## Humanise
+
+The Humanise knob beside Swing reads 0% to 100% and sets `Clip::humanise` (0 to 1, `p / 100`) through
+`TimelineDoc::setClipHumanise`: small, deterministic random changes to each hit's loudness and timing, applied only in
+`TimelineSnapshot::buildFrom`, never written into the notes. A drag or key press commits on release as ONE undo step, a
+double-click resets to 0% (and does nothing, with no undo step, when it is already 0%). It is a Tab stop named
+"Humanise" with the tooltip "Humanise: small random changes to each hit's loudness and timing (0% is exact)". A take the
+Ideas panel adds as a new clip keeps the clip's humanise as it keeps its swing.
 
 ## Lanes under the grid
 
 A row of lane chips (`LaneChipRow`, [lane-chips](../layout/lane-chips.md)) sits under the grid with a "for <row>" note
-beside it. The only lane so far is Loudness; the lane host (the chips row, the lane band above it) takes more.
+beside it. There are five lanes, in chip order: Loudness, Chance, Repeat, Nudge and Condition. Any set can be on at
+once; each is its own lane, 72 px tall, stacked under the grid in chip order (whatever order they were turned on) and
+above the chips row.
 
-Turning Loudness on grows a lane under the grid over 160 ms (`easeOutCubic`, 80 ms under Reduce Motion, at once with
-Animations Off or off screen); the grid area above it scrolls when the panel is short. The lane draws one bar per hit
-of the picked row, as tall as the hit is loud, with the value on hover. Press and drag across it to set each hit
-under the pointer to the pointer's height; a drag is a straight ramp between its pointer samples, previewed in the
-lane and written once on release as ONE undo step. The lane is one Tab stop: Left and Right move between the row's
-hits, Up and Down change loudness by 5 (Shift 25), each press one undo step, read out as "Kick, step 5, loudness
-100".
+Turning a chip on grows its lane under the grid over 160 ms (`easeOutCubic`, 80 ms under Reduce Motion, at once with
+Animations Off or off screen) and turning it off folds it back; lanes moving together share one motion, and a chip
+pressed mid-motion carries on from where each lane is. The grid area above the lanes scrolls when the panel is short:
+the lanes squeeze (down to 36 px each) before the rows lose their last two rows of room. The lanes edit the row picked
+by its name (Kick at first); the "for <row>" note says which.
+
+All five are one class, `DrumHitLane` (`Source/UI/DrumMachine/DrumHitLane.h`), driven by a `DrumLaneSpec`
+(`DrumLaneSpec.h`: name, value range, key steps, bipolar or not, the options of a discrete lane, and how a value reads).
+A lane draws one bar per hit of the picked row, as tall as the hit's value, with the value on hover; a bar is at least a
+pixel tall so a value of 0 still has something to see and focus. A lane's value for a cell is the cell's first note's; an
+edit writes every note of the cell.
+
+| Lane | Range | Keys (Up / Down, Shift) | Reads as |
+|---|---|---|---|
+| Loudness | 1 to 127 | 5, Shift 25 | "Kick, step 5, loudness 100" |
+| Chance | 0 to 100% | 5, Shift 25 | "Kick, step 5, chance 50%" |
+| Repeat | Off, Flam, 2 to 8 | one option | "Kick, step 5, repeat 3" |
+| Nudge | -50% to +50% of a step, drawn up or down from a centre line | 5, Shift 25 | "Kick, step 5, nudge -10%" |
+| Condition | Always, 1/2, 2/2, 1/3 to 3/3, 1/4 to 4/4, 1/8 to 8/8 | one option, Shift four | "Kick, step 5, condition 2/4" |
+
+Repeat: Off is repeat 1 without a flam, Flam is repeat 1 with one, and 2 to 8 set that repeat without a flam. A stored
+value that is not an option still shows its own text ("3 + flam", "3/5"), keeps it until it is edited, and the next key
+press moves to the option above or below it.
+
+Press and drag across a lane to set each hit under the pointer to the pointer's height (a discrete lane steps through its
+options); a drag is a straight ramp between its pointer samples, previewed in the lane and written once on release as ONE
+undo step, with exactly the values it previewed. Each lane is one Tab stop titled "<Lane> lane" with a tooltip: Left and
+Right move between the row's hits, Up and Down change the value, each press one undo step. The grid's cell text also
+reads a hit's non-default settings ("Kick, step 5, hit, loudness 100, chance 50%, condition 2/4").
+
+The per-hit values are applied by the snapshot and Track In, never written into the notes' timing.
+
+## Grid marks
+
+A hit's cell shows what its settings do, small and in theme colours (`DrumCellMarks`, painted by
+`DrumMachineComponent::paintCellMarks`), drawn with the hit so they grow in and shrink out with it; a dense grid
+(cells under 3 px) draws none.
+
+| Setting | Mark |
+|---|---|
+| Chance below 100% | the fill is drawn dimmer and a small "%" sits at the cell's lower left |
+| Repeat above 1 | that many thin ticks across the top of the cell, below the accent tick |
+| Flam | a short grace tick at the cell's left |
+| Condition other than always | the text ("2/4") at the lower right when the cell is wide enough, else a dot |
+| Nudge, or swing on an odd step | one tick where the hit plays (swing and nudge add up); an early hit's tick sits at the cell's left edge |
 
 ## Ideas
 
@@ -121,7 +172,7 @@ The grid is one Tab stop titled "Drum machine grid". Arrow keys, Home and End mo
 focus ring); Return toggles a hit, Space plays or stops the clip, Shift+Return toggles accent, Shift+Up and Shift+Down change loudness
 by 10, Delete removes the hit, Escape closes. Return, Space (Play clip), Shift+Return and Shift+Up/Down are rebindable (Drum Machine
 category in Settings). The focused cell is read out as, for example, "Kick, step 5, hit, loudness 100, accent" or
-"Kick, step 5, empty". Header controls (the Swing knob, Ideas) and each row's name, M and S are Tab-reachable with names and tooltips.
+"Kick, step 5, empty". Header controls (the Swing and Humanise knobs, Ideas) and each row's name, M and S are Tab-reachable with names and tooltips.
 
 ## Motion
 
