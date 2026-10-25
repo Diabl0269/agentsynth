@@ -227,7 +227,7 @@ TimelineOpsResult runAddTrack(const juce::String& where, juce::DynamicObject& op
 }
 
 // -- addInstrumentTrack -----------------------------------------------------------------------
-// The one op that builds graph-side: the host runs the app's own "+ Track -> Instrument" build
+// The one op that builds graph-side: the host runs the app's own "Add Track -> Instrument" build
 // (docs/ai/timeline-ops.md#addinstrumenttrack). The model may bind only the Track In this op
 // creates -- there is no bindingUuid and no plugin identity in the grammar, and "Track In" stays
 // non-authorable in patches. validate() cannot dry-run the graph side; on the scratch doc it adds

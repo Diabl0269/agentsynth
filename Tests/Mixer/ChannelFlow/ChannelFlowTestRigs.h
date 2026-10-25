@@ -119,7 +119,7 @@ inline bool setPolyParamCFT(juce::AudioProcessor* processor, bool poly) {
 }
 
 // ============================================================================
-// "+ Track -> Instrument -> Plugin" — the fake plugin-format seam, same shape
+// "Add Track -> Instrument -> Plugin" — the fake plugin-format seam, same shape
 // PluginScanTests.cpp's ScanningStubBackend/ScanListStubBackend use, extended with a name-keyed
 // factory table so a single backend can make one scanned identity succeed (an instrument) and
 // another fail (an effect never offered, or an instrument whose load is refused/broken) without

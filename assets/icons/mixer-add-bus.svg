@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Toolbar icon, edit group (channels merging into a bus, with a plus). Colour roles are placeholders the icon library replaces: #FF00FF = group colour (stroke-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. -->
+  <path d="M2.5 3.5C8 3.5 8 8.6 13 8.6M2.5 13.7C8 13.7 8 8.6 13 8.6M2.5 8.6H13" stroke-width="1.9" fill="none" stroke="#FF00FF" stroke-opacity=".45" stroke-linecap="round" />
+  <rect x="13" y="4.6" width="8" height="8" rx="2.2" fill="#FF00FF" />
+  <circle cx="16.7" cy="17.7" r="5" fill="#FF00FF" />
+  <path d="M16.7 15.2v5M14.2 17.7h5" stroke-width="1.8" fill="none" stroke="#00FFFF" stroke-linecap="round" />
+</svg>

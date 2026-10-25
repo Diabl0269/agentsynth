@@ -1,6 +1,6 @@
 // TimelineAddTrackPickerTests.cpp
 //
-// "+ Track" opens a searchable picker built from the add-track menu: the menu stays the one source of the
+// "Add Track" opens a searchable picker built from the add-track menu: the menu stays the one source of the
 // entries, flattened into rows whose ids are the menu ids, so a pick lands exactly where a menu click did.
 
 #include "AppUndoManager.h"
@@ -190,7 +190,7 @@ TEST(TimelineAddTrackPicker, ClosingAKeyboardOpenedPickerHandsFocusBackOnce) {
     synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
     ASSERT_NE(picker, nullptr);
 
-    // Closing without a pick (Escape / click away destroys the picker) keeps focus on "+ Track".
+    // Closing without a pick (Escape / click away destroys the picker) keeps focus on "Add Track".
     picker.reset();
     EXPECT_TRUE(f.panel.isAddTrackButtonFocused());
     EXPECT_EQ(f.host.midiTracks + f.host.audioTracks, 0) << "closing without a pick adds nothing";

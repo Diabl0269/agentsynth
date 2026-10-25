@@ -6,11 +6,11 @@
 // (both ways, the first track in timeline order owning a shared macro).
 //
 // Most cases run on a rig of real collaborators (AudioEngine + GraphEditor + TimelineDoc +
-// AppUndoManager + TrackChannelLinkController + real TimelineTrackHeaderComponents over a stub
+// AppUndoManager Add TrackChannelLinkController + real TimelineTrackHeaderComponents over a stub
 // TrackHeaderHost) rather than a whole MainComponent: that rig is renderable, so the mixed
 // linked-solo/shared-solo case can assert what the mix actually does rather than only what a flag
 // says. The last test closes the loop on a REAL MainComponent, proving the wiring is reachable from
-// the shipped "+ Track -> Audio" flow and not just from this file.
+// the shipped "Add Track -> Audio" flow and not just from this file.
 //
 // The link rule itself is proved at the Core layer in ChannelFlowTrackChannelLinkCoreTests.cpp.
 // =================================================================================================

@@ -7,7 +7,7 @@
 
 namespace synth::ui {
 
-// The searchable picker behind the timeline's "+ Track" button. The entries still come from one place, the panel's
+// The searchable picker behind the timeline's "Add Track" button. The entries still come from one place, the panel's
 // add-track menu; this unit flattens that menu (submenus and all) into rows of the shared ModMatrixPicker, so a
 // row's id is the menu item's id and a pick resolves exactly as a menu click did.
 

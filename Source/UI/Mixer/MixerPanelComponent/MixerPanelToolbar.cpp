@@ -7,24 +7,23 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kToggleWidths[MixerSectionLayout::kSectionCount] = {60, 54, 40};
 constexpr int kToggleGap = 2;
 constexpr int kSideInset = 4;
-constexpr int kResetMetersWidth = 84;
-constexpr int kAddBusWidth = 54;
 
 MixerSection sectionAt(size_t index) { return (MixerSection)(int)index; }
+constexpr synth::theme::Icon kSectionIcons[MixerSectionLayout::kSectionCount] = {
+    synth::theme::Icon::MixerInserts, synth::theme::Icon::MixerSends, synth::theme::Icon::MixerEq};
 } // namespace
 
-// The toggles are label-only DrawableButtons so the look-and-feel paints them with the same accent
-// wash as the main toolbar's toggles. Every button is its own Tab stop that acts on Return and Space; the focused
-// column's keys stay with the panel because a key a button does not use bubbles up to it.
+// Every button is a ToolbarButton in its compact inline layout (a 24 x 20 chip with the name to its right, so the
+// bar keeps its height); the section toggles light like the top bar's toggles. Every button is its own Tab stop that
+// acts on Return and Space; the focused column's keys stay with the panel because a key a button does not use bubbles
+// up to it.
 MixerPanelToolbar::MixerPanelToolbar() {
     setWantsKeyboardFocus(false);
     for (size_t i = 0; i < toggles_.size(); ++i) {
         auto& toggle = toggles_[i];
-        toggle.setButtonText(MixerSectionLayout::nameOf(sectionAt(i)));
-        toggle.setTitle(MixerSectionLayout::nameOf(sectionAt(i)));
+        toggle.setIcon(kSectionIcons[i], ToolbarGroup::View);
         toggle.setClickingTogglesState(false); // the layout is the source of truth, see refresh()
         toggle.setWantsKeyboardFocus(true);
         toggle.onClick = [this, i] {
@@ -39,10 +38,11 @@ MixerPanelToolbar::MixerPanelToolbar() {
         button->setWantsKeyboardFocus(true);
         addAndMakeVisible(*button);
     }
-    resetMetersButton_.setTitle("Reset meters");
-    resetMetersButton_.setTooltip("Reset every channel's peak readout to -inf");
-    addBusButton_.setTitle("Add bus");
-    addBusButton_.setTooltip("Add a bus channel (a group or send target)");
+    resetMetersButton_.setIcon(synth::theme::Icon::MixerResetMeters, ToolbarGroup::Housekeeping);
+    resetMetersButton_.setTooltip("Reset Meters: clear every channel's peak readout to -inf");
+    addBusButton_.setIcon(synth::theme::Icon::MixerAddBus, ToolbarGroup::Edit);
+    addBusButton_.setTooltip("Add Bus: a bus channel (a group or send target)");
+    setLabelsShown(true);
     resetMetersButton_.onClick = [this] {
         if (onResetMeters)
             onResetMeters();
@@ -51,6 +51,19 @@ MixerPanelToolbar::MixerPanelToolbar() {
         if (onAddBus)
             onAddBus();
     };
+}
+
+void MixerPanelToolbar::setLabelsShown(bool shown) {
+    labelsShown_ = shown;
+    for (size_t i = 0; i < toggles_.size(); ++i) {
+        toggles_[i].setLayout(ToolbarButtonLayout::InlineCompact);
+        toggles_[i].setLabel(MixerSectionLayout::nameOf(sectionAt(i)), shown);
+    }
+    for (auto* button : {&resetMetersButton_, &addBusButton_}) {
+        button->setLayout(ToolbarButtonLayout::InlineCompact);
+        button->setLabel(button->getName(), shown);
+    }
+    resized();
 }
 
 void MixerPanelToolbar::setLayout(MixerSectionLayout& layout) {
@@ -80,16 +93,16 @@ void MixerPanelToolbar::resized() {
         area.removeFromLeft(kToggleGap * 2);
     }
     for (size_t i = 0; i < toggles_.size(); ++i) {
-        toggles_[i].setBounds(area.removeFromLeft(kToggleWidths[i]));
+        toggles_[i].setBounds(area.removeFromLeft(toggles_[i].getPreferredWidth()));
         area.removeFromLeft(kToggleGap);
     }
     if (dockBack_ != nullptr) {
         dockBack_->setBounds(area.removeFromRight(DockBackSlot::kButtonWidth).reduced(0, 1));
         area.removeFromRight(kToggleGap * 2);
     }
-    addBusButton_.setBounds(area.removeFromRight(kAddBusWidth).reduced(0, 1));
+    addBusButton_.setBounds(area.removeFromRight(addBusButton_.getPreferredWidth()).reduced(0, 1));
     area.removeFromRight(kToggleGap);
-    resetMetersButton_.setBounds(area.removeFromRight(kResetMetersWidth).reduced(0, 1));
+    resetMetersButton_.setBounds(area.removeFromRight(resetMetersButton_.getPreferredWidth()).reduced(0, 1));
 }
 
 void MixerPanelToolbar::paint(juce::Graphics& g) {

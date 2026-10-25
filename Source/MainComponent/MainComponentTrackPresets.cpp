@@ -1,5 +1,5 @@
 // MainComponentTrackPresets.cpp (docs/mixer/track-presets.md): "Save track as preset.../Set
-// as default" (track header menu + channel macro menu), the "+ Track" grouped preset list, "Insert
+// as default" (track header menu + channel macro menu), the "Add Track" grouped preset list, "Insert
 // Track Preset from File...", and the per-type default consulted by addAudioTrack/
 // buildInstrumentTrackAndChain (see MainComponentTrackCreation.cpp's own edits for that half).
 // MainComponent is declared in MainComponent.h; the rest of its implementation lives in the
@@ -224,7 +224,7 @@ void MainComponent::saveBusAsPreset(const juce::String& macroId) {
         false);
 }
 
-// The shared insert path (default-consulting branch, "+ Track" preset list, "Insert from File...").
+// The shared insert path (default-consulting branch, "Add Track" preset list, "Insert from File...").
 // NO UNDO TRANSACTION OF ITS OWN — the default-consulting branch is already inside
 // addAudioTrack's own; callers that aren't already inside one wrap this in
 // recordGraphTimelineAndMacroChange themselves. Returns the created track's name, or an empty

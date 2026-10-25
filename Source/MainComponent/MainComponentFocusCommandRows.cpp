@@ -63,8 +63,8 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          [](MainComponent& m) {
              return synth::ui::openContextMenuForFocusedComponent(m.getFocusedComponentForMenu());
          }},
-        // Opens the Timeline if needed (focusRegionById runs the region's open hook), then its "+ Track" picker.
-        {AppCommands::openAddTrackMenu, "Add Track...", "Show the Timeline, focus + Track and open its search",
+        // Opens the Timeline if needed (focusRegionById runs the region's open hook), then its "Add Track" picker.
+        {AppCommands::openAddTrackMenu, "Add Track...", "Show the Timeline, focus Add Track and open its search",
          "General", "openAddTrackMenu", [](const MainComponent& m) { return m.isWelcomeScreenHidden(); },
          [](MainComponent& m) {
              m.focusRegions_.focusRegionById("timeline");

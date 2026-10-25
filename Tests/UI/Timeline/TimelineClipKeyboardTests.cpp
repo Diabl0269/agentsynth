@@ -348,7 +348,7 @@ TEST(TimelineClipKeyboardTest, RightOnThePanelRootEntersTheFirstTrackWithClips) 
 TEST(TimelineClipKeyboardTest, RightOnThePanelRootEntersTheFocusedTracksClips) {
     ClipKeyboardFixture f;
     f.panel.setRecordFocusForTest(true);                // no native peer: focus moves are recorded, not grabbed
-    EXPECT_TRUE(f.panel.handleRootFocusKey(downKey())); // "+ Track", the first stop
+    EXPECT_TRUE(f.panel.handleRootFocusKey(downKey())); // "Add Track", the first stop
     EXPECT_TRUE(f.panel.keyPressed(downKey()));         // row 0
     EXPECT_TRUE(f.panel.getTrackHeaderAt(0)->keyPressed(downKey())); // row 1 (Empty)
     EXPECT_TRUE(f.panel.getTrackHeaderAt(1)->keyPressed(downKey())); // row 2 (Lead)

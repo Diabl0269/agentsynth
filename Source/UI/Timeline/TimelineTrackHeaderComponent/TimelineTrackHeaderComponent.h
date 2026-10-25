@@ -137,16 +137,16 @@ struct TrackHeaderHost {
      *  header never has to know an AppUndoManager exists. */
     virtual void performTrackEdit(const std::function<void()>& mutation) = 0;
 
-    /** The "+ Track" button's MIDI entry. Lives on this interface rather than on a separate callback
+    /** The "Add Track" button's MIDI entry. Lives on this interface rather than on a separate callback
      *  so the whole header column talks to the app through one seam. */
     virtual void addMidiTrack() = 0;
 
-    /** The "+ Track" button's Audio entry: a "Track Audio" node wired into the master bus,
+    /** The "Add Track" button's Audio entry: a "Track Audio" node wired into the master bus,
      *  plus an Audio-kind track bound to it, as ONE compound undo step — the exact mirror of
      *  addMidiTrack(). */
     virtual void addAudioTrack() = 0;
 
-    /** The "+ Track" button's Instrument submenu: `instrumentModuleType` ("Oscillator",
+    /** The "Add Track" button's Instrument submenu: `instrumentModuleType` ("Oscillator",
      *  "Wavetable", "Sampler" or "Drum Kit") wired as Track In -> instrument -> default chain (EQ/Compressor
      *  bypassed -> Channel Strip Stereo) -> Master, plus a Midi-kind track bound to the Track In, as
      *  ONE compound undo step — the exact mirror of addAudioTrack(). `poly` (Oscillator/
@@ -156,12 +156,12 @@ struct TrackHeaderHost {
     virtual void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) = 0;
 
     /** docs/mixer/mixer.md#creating-channels-in-an-existing-project: true when at least one track's
-     * chain still reaches the output without passing through a ChannelStripModule — the "+ Track" menu's "Create
+     * chain still reaches the output without passing through a ChannelStripModule — the "Add Track" menu's "Create
      * Channels" entry is enabled exactly when this is true. Non-pure with an inert `false` default so every existing
      * TrackHeaderHost implementer (test stubs included) keeps compiling. */
     virtual bool hasTracksNeedingChannels() const { return false; }
 
-    /** docs/mixer/mixer.md#creating-channels-in-an-existing-project: the "+ Track" menu's "Create
+    /** docs/mixer/mixer.md#creating-channels-in-an-existing-project: the "Add Track" menu's "Create
      * Channels" entry — wraps every channel-less track's chain into a mixer channel (docs/mixer/mixer.md's factory
      * default: EQ -> Compressor, both bypassed -> Channel Strip -> Master), as ONE undo step covering every track it
      * touches. A track that already has a channel is left untouched; a no-op (nothing pushed to the undo stack) when
@@ -184,7 +184,7 @@ struct TrackHeaderHost {
      * canMakeChannelForTrack() is false. Non-pure with an inert no-op default. */
     virtual void makeChannelForTrack(synth::TrackId track) { juce::ignoreUnused(track); }
 
-    /** Instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
+    /** Instrument-capable hosted plugins for the "Add Track -> Instrument -> Plugin"
      *  submenu — every scanned plugin whose juce::PluginDescription::isInstrument is true, sorted by
      *  name like the library sidebar's own list (effects are never offered here, and neither is this
      *  app's own VST3/AU build — see MainComponent::getInstrumentPluginOptions). A pure read of
@@ -203,13 +203,13 @@ struct TrackHeaderHost {
 
     /** Kicks off (or no-ops past the first call this session — see PluginScanService::
      *  ensureScanned) the scan that populates getInstrumentPluginOptions() above. Called once when
-     *  the "+ Track" menu opens, never on every keystroke or click. MainComponent delegates to its
+     *  the "Add Track" menu opens, never on every keystroke or click. MainComponent delegates to its
      *  own maybeStartEagerPluginScan(), so opening this menu inside a hosted DAW build never
      *  re-launches the host binary — the same guard the eager startup scan and the library
      *  sidebar's manual "Scan for plugins..." row both already honour. Non-pure no-op default. */
     virtual void ensureInstrumentPluginsScanned() {}
 
-    /** "+ Track -> Instrument -> Plugin -> <name>" — builds the same
+    /** "Add Track -> Instrument -> Plugin -> <name>" — builds the same
      *  Track In -> instrument -> default chain (EQ bypassed -> Compressor bypassed -> Channel
      *  Strip) -> Master flow addInstrumentTrack() builds for a factory instrument, boxed into one
      *  collapsed macro, as ONE undo step — except the instrument is a hosted plugin instance loaded
@@ -461,18 +461,18 @@ struct TrackHeaderHost {
      *  canSaveTrackPresetForTrack() is false. Non-pure no-op default. */
     virtual void setTrackPresetAsDefault(synth::TrackId track) { juce::ignoreUnused(track); }
 
-    /** The "+ Track" menu's grouped preset-list click: inserts the named saved preset as a new
+    /** The "Add Track" menu's grouped preset-list click: inserts the named saved preset as a new
      *  track, independent of the per-type default. Non-pure no-op default. */
     virtual void addTrackFromPreset(const juce::String& presetName, synth::TrackPresetKind kind) {
         juce::ignoreUnused(presetName, kind);
     }
 
-    /** The "+ Track" menu's "Insert Track Preset from File..." entry: a native chooser filtered to
+    /** The "Add Track" menu's "Insert Track Preset from File..." entry: a native chooser filtered to
      *  `*.agtrackpreset`, then the same insert path as addTrackFromPreset(). Non-pure no-op
      *  default. */
     virtual void addTrackFromPresetFile() {}
 
-    /** "+ Track" -> Bus submenu click. Non-pure no-op default. */
+    /** "Add Track" -> Bus submenu click. Non-pure no-op default. */
     virtual void addBusFromPreset(const juce::String& presetName) { juce::ignoreUnused(presetName); }
 
     /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: everything the header needs about the

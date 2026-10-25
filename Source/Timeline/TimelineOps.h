@@ -45,7 +45,7 @@ struct InstrumentTrackBuildResult {
 /** What the app supplies so a batch can build graph-side tracks. */
 struct TimelineOpsHost {
     virtual ~TimelineOpsHost() = default;
-    /** Builds a bound instrument track like the "+ Track -> Instrument" menu, inside the batch's transaction;
+    /** Builds a bound instrument track like the "Add Track -> Instrument" menu, inside the batch's transaction;
      * nullopt = nothing left behind. `envelopeParams` (an object or void) is applied to the built ADSR,
      * `instrumentParams` to the instrument. */
     virtual std::optional<InstrumentTrackBuildResult>
@@ -116,7 +116,7 @@ struct TimelineOps {
     /** Most effect inserts one `addInstrumentTrack` op may ask for. */
     static constexpr int kMaxInstrumentInserts = 8;
 
-    /** The instrument types `addInstrumentTrack` accepts -- the "+ Track -> Instrument" menu's own. */
+    /** The instrument types `addInstrumentTrack` accepts -- the "Add Track -> Instrument" menu's own. */
     static const std::array<const char*, 7> kAuthorableInstrumentTypes;
 
     /** True for Sampler, Drum Kit, Pluck and Mallet: no ADSR/VCA is built for it, and no poly mode. */

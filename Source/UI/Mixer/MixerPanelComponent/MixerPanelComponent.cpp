@@ -26,7 +26,7 @@ namespace {
 constexpr int kBusCardGap = 220;
 
 const char* const kEmptyHintText =
-    "No channels yet. Add a track from the Timeline's + Track button, or a bus with + Bus above.";
+    "No channels yet. Add a track from the Timeline's Add Track button, or a bus with Add Bus above.";
 } // namespace
 
 MixerPanelComponent::MixerPanelComponent() {
@@ -49,7 +49,7 @@ MixerPanelComponent::MixerPanelComponent() {
         zone->viewport.onScrolled = [this, zone] { syncVerticalScroll(zone->viewport); };
         zone->divider.setInterceptsMouseClicks(false, false);
     }
-    // Always shown, even with no columns: "+ Bus" is how an empty mixer gets its first bus.
+    // Always shown, even with no columns: "Add Bus" is how an empty mixer gets its first bus.
     addAndMakeVisible(toolbar_);
     addChildComponent(sidePane_);
     toolbar_.bindSidePane(sidePane_);

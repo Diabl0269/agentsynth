@@ -2,7 +2,7 @@
 // a bus's channel macro (no bound timeline track) saved and re-inserted with its effects/params
 // intact, still classifying as a bus (synth::isBusStrip) on the far side even though the scrubbed
 // saved JSON carries no "isBus"/"sends" (TrackPresetManager.cpp's own scrub, unchanged by this
-// ticket -- docs/mixer/track-presets.md#scrubbed-keys), listTrackPresets grouping, and the "+ Track"
+// ticket -- docs/mixer/track-presets.md#scrubbed-keys), listTrackPresets grouping, and the "Add Track"
 // menu's own Bus submenu (TimelinePanelTrackHeaders.cpp), driven through the same real
 // menu-result handler (TimelinePanelComponent::applyAddTrackMenuChoice) the Audio/Instrument menu
 // tests use, not TrackPresetManager internals directly.
@@ -192,7 +192,7 @@ TEST_F(TrackPresetBusTest, ListTrackPresetsReturnsBusPresetsUnderTheBusKind) {
         EXPECT_NE(info.name, kBusPresetName) << "a Bus preset must never also show up in the Audio group";
 }
 
-// ---- "+ Track" menu's Bus submenu ----
+// ---- "Add Track" menu's Bus submenu ----
 
 TEST_F(TrackPresetBusTest, PlusTrackMenuBuildsBusSubmenuFromSnapshot) {
     HostedPatchCFT patch;

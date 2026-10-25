@@ -56,6 +56,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
 
     addAndMakeVisible(addTrackButton_);
     addTrackButton_.setComponentID("timelineAddTrackButton");
+    addTrackButton_.setIcon(synth::theme::Icon::ToolbarAddTrack, ToolbarGroup::Edit);
     // Tooltip text (it names the shortcut) is set by refreshShortcutTooltips() below.
     addTrackButton_.onClick = [this] { openAddTrackMenu(); };
 
@@ -119,6 +120,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // a clip — the same switch the piano roll's header "Q" and the panel-wide Q key flip.
     addAndMakeVisible(snapToggleButton_);
     snapToggleButton_.setComponentID("timelineSnapToggle");
+    snapToggleButton_.setIcon(synth::theme::Icon::ToolbarSnap, ToolbarGroup::Edit);
+    setToolbarLabelsShown(true);
     // Tooltip text is set by refreshShortcutTooltips() below.
     snapToggleButton_.setClickingTogglesState(false); // the shared view state is the truth
     snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
@@ -345,7 +348,7 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
         }
     }
 
-    addTrackButton_.setTooltip(synth::ui::formatShortcutHint("Add a track or marker; type to search",
+    addTrackButton_.setTooltip(synth::ui::formatShortcutHint("Add Track: a track or marker; type to search",
                                                              shortcutHintFor(shortcuts_, "openAddTrackMenu", {})));
 
     const auto selectKey =

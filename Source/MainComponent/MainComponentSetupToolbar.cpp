@@ -292,6 +292,10 @@ void MainComponent::applyToolbarLabels(bool iconOnly) {
         button->setButtonText(iconOnly ? juce::String() : label);
     }
     canvasToolbar_.setIconOnly(iconOnly);
+    // The Timeline and Mixer panels follow the preference alone: narrow mode is about the top bar's width. The mixer
+    // is the same panel in the dock, its own panel or a detached window.
+    timelinePanel.setToolbarLabelsShown(toolbarLabelsShown_);
+    bottomDock.getMixerPanel().setToolbarLabelsShown(toolbarLabelsShown_);
 }
 
 // Called on every settings write: only a flip of "Show button labels" does any work.

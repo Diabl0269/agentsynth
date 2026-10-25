@@ -73,7 +73,7 @@ float MainComponent::getPanelSlideStartForTest(SlidingPanel p) const noexcept { 
 // True only while the shared slide driver is actually running.
 bool MainComponent::isPanelSlideAnimatingForTest() const noexcept { return panelSlideAnim_.isRunning(); }
 
-// juce::PopupMenu never runs in a test process: these drive the "+ Track" menu's own headless seam
+// juce::PopupMenu never runs in a test process: these drive the "Add Track" menu's own headless seam
 // (TimelinePanelComponent::applyAddTrackMenuChoice) directly.
 void MainComponent::simulateAddMidiTrackClick() {
     timelinePanel.applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddMidiTrackMenuId);
@@ -156,7 +156,7 @@ int MainComponent::cleanUnusedAssetsForTest() { return cleanUnusedAssets(); }
 void MainComponent::loadPresetGuardedForTest(int index) { loadPresetGuarded(index); }
 
 // hasTracksNeedingChannels() is a private TrackHeaderHost override, so a test cannot call it
-// directly; this wrapper lets a test assert the "+ Track" menu's own enabled/disabled state.
+// directly; this wrapper lets a test assert the "Add Track" menu's own enabled/disabled state.
 bool MainComponent::hasTracksNeedingChannelsForTest() const { return hasTracksNeedingChannels(); }
 
 // "Insert Track Preset from File..." has no real FileChooser in a headless test process: this

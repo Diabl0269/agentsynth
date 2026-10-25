@@ -53,7 +53,7 @@ below for the Mixer region's own keyboard behaviour.
   specifically. A bare **Down** on the panel root DOES seed keyboard focus into the track-header
   column (the track-header focus work, below) — the one direct keyboard path out of the region root
   this adds; reaching the clip lanes themselves by keyboard alone stays out of scope (the locked
-  "track headers only" decision). The **+ Track** button is the last stop of that column: Down on the last
+  "track headers only" decision). The **Add Track** button is the last stop of that column: Down on the last
   row moves focus to it (with no tracks, Down on the region root lands on it directly), Up returns to the
   last row, and Return/Space press it (`TimelinePanelComponent::handleAddTrackButtonKey`). It shows the
   standard button focus ring.
@@ -95,7 +95,7 @@ below for the Mixer region's own keyboard behaviour.
   no `ShortcutManager` actions): in the **Toolbar**, Left/Right move the ring across the visible, enabled
   buttons (no wrap), Home/End jump to the ends, Space/Return press the ringed button; in the **Dock tabs**
   region, Left/Right select the previous/next tab (which switches the panel), Home/End the first/last, and
-  Return moves focus into the selected panel, and Down does too and then takes the panel's first Down step (on the Timeline that lands on `"+ Track"`) (the key rule is shared with the Settings tabs, `tabStripKeyTarget`).
+  Return moves focus into the selected panel, and Down does too and then takes the panel's first Down step (on the Timeline that lands on `"Add Track"`) (the key rule is shared with the Settings tabs, `tabStripKeyTarget`).
   Cmd+J, when it opens the pane, and Cmd+1/2/3, for a docked tab, focus this region; Cmd+J closing the pane
   around the focus focuses the region of the view in the main area instead (the Canvas region while the canvas
   is the main view; focus is also handed over when the pane closes around the canvas shown as a tab). Modified keys fall through, so Cmd+1/2/3 and Tab behave as

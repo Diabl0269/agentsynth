@@ -79,7 +79,9 @@ restricts; asking for a repaint is.
 A toggle button sits immediately next to the snap toggle in the panel's snap/tool strip
 (`followPlayheadButton_`, tinted via `Icon::FollowPlayhead` — see
 [`layout/icons.md`](../layout/icons.md)). `kFollowPlayheadButtonWidth` is 30 px; the snap
-toggle's `kSnapToggleButtonWidth` is **46 px**, wide enough for the word `"Snap"`.
+toggle is an inline `ToolbarButton` ([inline buttons](../layout/chrome.md#inline-buttons)): a 30 x 24 amber chip with the
+word `"Snap"` beside it (the chip alone when "Show button labels" is off), as wide as `getPreferredWidth()` plus a 4 px
+margin, lit while snapping is on.
 The glyph is the playhead with two chevrons chasing it. Off, it is muted ink; on, it is the
 theme's dark `iconInk`, because a toggled-on `DrawableButton` is filled solid accent and `iconInk`
 is the glyph colour for a light fill (the same rule the toolbar buttons' lit state follows). The

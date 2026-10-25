@@ -1,6 +1,6 @@
 // ChannelFlowInstrumentTests.cpp
 //
-// "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" — the MIDI-track
+// "Add Track -> Instrument -> {Oscillator/Wavetable/Sampler}" — the MIDI-track
 // mirror of the Audio Track flow in ChannelFlowTests.cpp. Shared ChannelFlowTest fixture and
 // helpers live in ChannelFlowTestFixture.h.
 
@@ -35,7 +35,7 @@
 #include <thread>
 
 // ---------------------------------------------------------------------------------------------
-// "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds
+// "Add Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds
 //
 //     Track In -> instrument -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed)
 //              -> Channel Strip (Stereo) -> Master (Mix)

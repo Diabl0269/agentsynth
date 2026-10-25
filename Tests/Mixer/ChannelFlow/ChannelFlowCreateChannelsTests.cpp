@@ -39,7 +39,7 @@
 //
 // docs/mixer/mixer.md#creating-channels-in-an-existing-project: an old project opens UNCHANGED -- no automatic
 // migration on load. The
-// "+ Track" menu's "Create Channels" entry (TimelinePanelComponent::kCreateChannelsMenuId, driven
+// "Add Track" menu's "Create Channels" entry (TimelinePanelComponent::kCreateChannelsMenuId, driven
 // here through the same applyAddTrackMenuChoice() headless seam addAudioTrack()/addInstrumentTrack()
 // use above) wraps every channel-less track's chain into a strip, as ONE undo step covering all of
 // them. These tests build the "old project" starting state directly -- a "Track Audio" or
@@ -251,7 +251,7 @@ TEST_F(ChannelFlowTest, CreateChannelsGivesTwoTracksSharingOneInstrumentJustOneC
         << "the one undo step removes the whole (single) channel";
 }
 
-// The spec's other required no-op clause: the "+ Track" menu's "Create Channels" entry itself must
+// The spec's other required no-op clause: the "Add Track" menu's "Create Channels" entry itself must
 // be DISABLED (not just a silent no-op) whenever nothing needs a channel, and enabled the moment
 // something does. openAddTrackMenu() reads this straight off
 // TrackHeaderHost::hasTracksNeedingChannels() (TimelinePanelComponent.cpp), so exercising that same

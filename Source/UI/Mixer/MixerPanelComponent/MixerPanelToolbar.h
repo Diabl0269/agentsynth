@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/SidePane/SidePaneToggleButton.h"
 #include "UI/Layout/SpaceClaimingButton.h"
@@ -10,7 +11,8 @@
 
 // MixerPanelToolbar.h (docs/mixer/panel.md#the-toolbar): the slim row along the top of the mixer
 // panel -- the side-pane button at the very left, then the Inserts / Sends / EQ show-hide toggles, "Reset Meters" and
-// "+ Bus" on the right. It belongs to the panel, so it travels with it into a detached window and the Own-panel strip.
+// "Add Bus" on the right, each an icon chip with its name beside it. It belongs to the panel, so it travels with it
+// into a detached window and the Own-panel strip.
 namespace synth::ui {
 
 class MixerPanelToolbar : public juce::Component {
@@ -24,7 +26,7 @@ public:
     /** Re-reads the hidden flags into the toggles' on-state and names. */
     void refresh();
 
-    /** Fired by the "+ Bus" button and the "Reset Meters" button. */
+    /** Fired by the "Add Bus" button and the "Reset Meters" button. */
     std::function<void()> onAddBus;
     std::function<void()> onResetMeters;
     /** The display text of a section toggle's shortcut ("Ctrl+S"), appended to its tooltip; empty for none. */
@@ -42,8 +44,12 @@ public:
 
     juce::Button& getSectionToggle(MixerSection section) noexcept { return toggles_[(size_t)section]; }
     juce::Button& getSectionToggleForTest(MixerSection section) noexcept { return getSectionToggle(section); }
-    juce::TextButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
-    juce::TextButton& getResetMetersButtonForTest() noexcept { return resetMetersButton_; }
+    ToolbarButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
+    ToolbarButton& getResetMetersButtonForTest() noexcept { return resetMetersButton_; }
+
+    /** Shows each button's name beside its icon (true) or only the icon, the name in its tooltip (false). */
+    void setLabelsShown(bool shown);
+    bool areLabelsShown() const noexcept { return labelsShown_; }
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -52,12 +58,12 @@ private:
     MixerSectionLayout* layout_ = nullptr;
     SidePaneToggleButton paneButton_;
     juce::Button* dockBack_ = nullptr; // borrowed; a child while set
-    std::array<SpaceClaimingButton<juce::DrawableButton>, MixerSectionLayout::kSectionCount> toggles_{
-        SpaceClaimingButton<juce::DrawableButton>("Inserts", juce::DrawableButton::ImageAboveTextLabel),
-        SpaceClaimingButton<juce::DrawableButton>("Sends", juce::DrawableButton::ImageAboveTextLabel),
-        SpaceClaimingButton<juce::DrawableButton>("EQ", juce::DrawableButton::ImageAboveTextLabel)};
-    SpaceClaimingButton<juce::TextButton> resetMetersButton_{"Reset Meters"};
-    SpaceClaimingButton<juce::TextButton> addBusButton_{"+ Bus"};
+    bool labelsShown_ = true;
+    std::array<SpaceClaimingButton<ToolbarButton>, MixerSectionLayout::kSectionCount> toggles_{
+        SpaceClaimingButton<ToolbarButton>("Inserts"), SpaceClaimingButton<ToolbarButton>("Sends"),
+        SpaceClaimingButton<ToolbarButton>("EQ")};
+    SpaceClaimingButton<ToolbarButton> resetMetersButton_{"Reset Meters"};
+    SpaceClaimingButton<ToolbarButton> addBusButton_{"Add Bus"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerPanelToolbar)
 };

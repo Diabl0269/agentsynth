@@ -111,7 +111,7 @@ rather than in the track list.
 **Why not a marker track.** It would have to be excluded from every place that iterates tracks to
 make sound.
 
-**Where they come from.** The `"+ Track"` menu's **Add Marker** entry (`kAddMarkerMenuId` — see
+**Where they come from.** The `"Add Track"` menu's **Add Marker** entry (`kAddMarkerMenuId` — see
 [add-track](add-track.md#add-marker)) calls `TimelinePanelComponent::addMarkerAtPlayhead()`: a
 marker at the transport's CURRENT position — **unsnapped**, because a cue marks something the user
 just heard, so it belongs exactly where the playhead is; a later drag *does* snap — named `"Marker
@@ -264,7 +264,7 @@ drive the outcomes through `applyMarkerContextChoice`. Production behaviour is u
 seam idiom appears in `PianoRollComponent::promptExtendClipToFitNotes`, `requestRepaintStrip`, and
 `ModuleLibraryComponent::showHelpPopover` / `launchHelpCallOutBox`.
 
-`TimelinePanelComponent::openAddTrackMenu` is the same seam for the `"+ Track"` menu. No test
+`TimelinePanelComponent::openAddTrackMenu` is the same seam for the `"Add Track"` menu. No test
 reaches it today — they all drive `applyAddTrackMenuChoice`, the documented headless entry point —
 but a test that clicked the button would crash identically, so the override point exists before
 someone writes that test. Those two are the only real-window creations under the panel and the

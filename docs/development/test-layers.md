@@ -157,7 +157,7 @@ it are in [`../mixer/meters.md#test-coverage`](../mixer/meters.md#test-coverage)
 ## Channel creation flows
 
 `Tests/Mixer/ChannelFlow/` — `Source/Mixer/ChannelFlows/ChannelFlows.h`/`.cpp`'s builders and the
-three "+ Track"/drag flows that call them ([`../mixer/mixer.md#channels-follow-audio-not-tracks`](../mixer/mixer.md#channels-follow-audio-not-tracks)). Headless except the
+three "Add Track"/drag flows that call them ([`../mixer/mixer.md#channels-follow-audio-not-tracks`](../mixer/mixer.md#channels-follow-audio-not-tracks)). Headless except the
 `ChannelFlowTest` fixture, which drives a real `MainComponent` off-screen.
 `ChannelFlowAutoChannelCore` cases build a bare `AudioEngine`/graph directly
 (`graph.setPlayConfigDetails(0, 2, 44100.0, 512)` before adding an "Audio Output" node, mirroring
@@ -185,8 +185,8 @@ The suite is split by topic, all sharing the `ChannelFlowTest` fixture, `MockPro
 
 | File | Covers |
 |------|--------|
-| `ChannelFlowTests.cpp` | "+ Track -> Audio Track" builds a whole mixer channel in one undo step |
-| `ChannelFlowInstrumentTests.cpp` | "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}", the MIDI-track mirror of the audio-track flow |
+| `ChannelFlowTests.cpp` | "Add Track -> Audio Track" builds a whole mixer channel in one undo step |
+| `ChannelFlowInstrumentTests.cpp` | "Add Track -> Instrument -> {Oscillator/Wavetable/Sampler}", the MIDI-track mirror of the audio-track flow |
 | `ChannelFlowPluginInstrumentTests.cpp` | A hosted plugin as the instrument, plus menu snapshot resolution, format-label disambiguation and self-exclusion |
 | `ChannelFlowAutoChannelTests.cpp` | Auto-create channel on MIDI connect — core-level `findUnchanneledOutputFeeds`/`buildChannelForFeeds`, then real-mouse-gesture coverage through `GraphEditor::endConnectionDrag` |
 | `ChannelFlowCreateChannelsTests.cpp` | "Create Channels" for existing projects, wrapping every channel-less track's chain as one undo step |
@@ -262,7 +262,7 @@ per-block callback. There is no sleep and no "eventually the ring fills" wait an
 | `MissingAssetIsSilentNoCrash` | a well-formed but non-existent ref: no stream, exact silence, no crash |
 | `MutedTrackSilent` / `SoloElsewhereSilencesThisTrack` / `BypassClears` / `StoppedSilent` / `UnboundNodePlaysNothing` | the five ways a Track Audio node legitimately renders nothing |
 | `RegisteredButInternalOnly` / `AbsentFromTheLibraryWithAPinnedSizeEstimate` | the internal-only checklist: factory key, module type, 0-in/2-out, `getFactoryTypeName`, non-authorable, **Sources** cable colour; absent from the library, with `estimateModuleSize("Track Audio")` measured against the real card |
-| `AddAudioTrackFlowTest.AddAudioTrackFlow` | the "+ Track" menu's Audio entry: **one** undo step creating a uuid'd `Track Audio` node wired `0→0`/`1→1` into Audio Output plus an Audio-kind track bound to it; undo removes both |
+| `AddAudioTrackFlowTest.AddAudioTrackFlow` | the "Add Track" menu's Audio entry: **one** undo step creating a uuid'd `Track Audio` node wired `0→0`/`1→1` into Audio Output plus an Audio-kind track bound to it; undo removes both |
 | `AddAudioTrackFlowTest.AddMidiTrackFromTheSameMenuIsUnchanged` | the MIDI entry still does exactly what it did before the menu existed |
 
 ## Hosted plugins

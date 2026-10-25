@@ -552,7 +552,7 @@ TEST_F(FocusRegionMainComponentTest, DetachingAPanelDropsItFromMainComponentsReg
     EXPECT_NE(mc.getFocusRegionsForTest().findById("timeline"), nullptr) << "redocking must re-register it";
 }
 
-// The Add Track shortcut shows the Timeline and opens the "+ Track" picker (headless: through the launcher's hook).
+// The Add Track shortcut shows the Timeline and opens the "Add Track" picker (headless: through the launcher's hook).
 TEST_F(FocusRegionMainComponentTest, AddTrackCommandShowsTheTimelineAndOpensThePicker) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
     hideWelcomeScreen(mc);

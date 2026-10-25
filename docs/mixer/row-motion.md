@@ -22,7 +22,7 @@ docked panel, one in the main area or a window, and the "both places" mirror. No
 rebuild (`noteColumnSetComing`, while the old columns still stand) the panel compares the shown channels with the new
 snapshot; when exactly one kind of change is coming (columns only added, or only removed) it prepares the motion (a
 removal takes its picture of the old columns now) and `rebuildFrom` ends it after layout. That covers Add Track, Make
-channel, Create Channels, + Bus, a plugin track, Duplicate Track and the undo or redo of each, including the undo of a
+channel, Create Channels, Add Bus, a plugin track, Duplicate Track and the undo or redo of each, including the undo of a
 step that drops no track (which never reached the track hooks). `TrackGrowInScope` and the undo hooks still group
 several rebuilds into one motion through `noteColumnsLeaving` / `finishColumnChange`. A second rebuild after the start
 (the add's own follow-up) leaves the motion playing: `resized()` ends it only when the viewport moved or resized.

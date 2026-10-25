@@ -85,6 +85,14 @@ enum class Icon : int {
     // The "dock back" button on a detached panel's toolbar: an arrow pointing into a window (the inverse of
     // ActionDetachWindow's arrow out of it) -- appended, as above.
     ActionDockBack,
+    // The Timeline and Mixer toolbar buttons' multi-role glyphs (see IconRoleColours) -- appended, as above.
+    ToolbarAddTrack,
+    ToolbarSnap,
+    MixerInserts,
+    MixerSends,
+    MixerEq,
+    MixerResetMeters,
+    MixerAddBus,
     kCount
 };
 

@@ -26,7 +26,7 @@ constexpr int kTrackHeaderWidthHandleWidth = 6; // straddles the column seam
 // by reloadPianoRollAppearancePrefs().
 constexpr const char* kPianoRollKeyLabelsPropertyKey = "pianoRollKeyLabels";
 
-// the "+ Track" strip at the top of the track-header column. Fixed height — the headers
+// the "Add Track" strip at the top of the track-header column. Fixed height — the headers
 // below it scroll, the button never does.
 constexpr int kAddTrackButtonHeight = 22;
 
@@ -47,11 +47,6 @@ constexpr double kZoomWheelSensitivity = 2.0;
 constexpr double kScrollPixelsPerWheelUnit = 200.0;
 
 constexpr int kSnapComboWidth = 90;
-// 30 (was 26): part of the timeline-panel button-size sweep — both buttons are .reduced(2) at
-// their setBounds() call site, so the effective on-screen size grows from 22 to 26 px.
-// Wide enough for the word "Snap" (it used to read "Q" and be 30 px) — see the member's comment in
-// TimelinePanelComponent.h for why the label is the verb and not the key.
-constexpr int kSnapToggleButtonWidth = 46;
 
 // A marker's stem where it crosses the CLIPS, well under the ruler flag's own alpha: it has to
 // locate the marker against the arrangement without competing with the clips for attention.
@@ -480,14 +475,15 @@ void TimelinePanelComponent::resized() {
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
 
-    // The "+ Track" strip is pinned at the top of the header column, the scrolling header list below it. Both live
+    // The "Add Track" strip is pinned at the top of the header column, the scrolling header list below it. Both live
     // INSIDE trackHeaderBounds_, so the panel's three regions still tile. The strip is exactly as tall as what sits
     // above the clip rows (the ruler, plus the roll's toolbar while it is open), so every header row starts at the
     // same y as its clip row and its lane rows: a taller ruler than strip left the headers a few px above the lanes.
     auto headerColumn = trackHeaderBounds_;
     const auto strip = headerColumn.removeFromTop(
         std::max(kAddTrackButtonHeight, gridLanesBounds_.getY() - trackHeaderBounds_.getY()));
-    addTrackButton_.setBounds(strip.withSizeKeepingCentre(strip.getWidth() - 4, kAddTrackButtonHeight - 2));
+    // The button is as tall as its 24 px chip needs; the strip itself does not grow.
+    addTrackButton_.setBounds(strip.reduced(2));
     trackHeaderViewport_.setBounds(headerColumn);
     layoutTrackHeaders();
 
@@ -541,6 +537,17 @@ void TimelinePanelComponent::resized() {
     layoutTransportRow();
 }
 
+// The Add Track and Snap buttons share the "Show button labels" preference with the top bar. The names stay their
+// screen-reader titles either way; icon-only, the tooltips carry them.
+void TimelinePanelComponent::setToolbarLabelsShown(bool shown) {
+    for (auto* button : {&addTrackButton_, &snapToggleButton_}) {
+        button->setLayout(ToolbarButtonLayout::Inline);
+        button->setContentCentred(button == &addTrackButton_);
+        button->setLabel(button->getName(), shown);
+    }
+    layoutTransportRow();
+}
+
 // Its own step so the transport row can be re-laid out without laying out the whole panel.
 void TimelinePanelComponent::layoutTransportRow() {
     // Snap selector: right-hand side of the transport bar. The transport controls (play/stop/
@@ -550,7 +557,7 @@ void TimelinePanelComponent::layoutTransportRow() {
     if (dockBack_ != nullptr)
         dockBack_->setBounds(transportBar.removeFromRight(DockBackSlot::kButtonWidth).reduced(2));
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));
-    snapToggleButton_.setBounds(transportBar.removeFromRight(kSnapToggleButtonWidth).reduced(2));
+    snapToggleButton_.setBounds(transportBar.removeFromRight(snapToggleButton_.getPreferredWidth() + 4).reduced(2));
     // Follow-playhead sits immediately left of the snap toggle — see its member comment.
     followPlayheadButton_.setBounds(transportBar.removeFromRight(kFollowPlayheadButtonWidth).reduced(2));
     // The Sizing field, then the tool strip, sit immediately left of the snap controls: all are "how the next edit

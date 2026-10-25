@@ -73,7 +73,7 @@ has neither, and no strip either, so the panel would otherwise render nothing at
 `MixerPanelComponent` shows a muted, centred hint instead whenever `columnEntries_` ends up empty
 after a rebuild — a direct child of the panel itself (never `content_`/`viewport_`, so it neither
 scrolls nor takes keyboard focus or mouse clicks), naming the controls that are actually reachable
-from every mixer placement: the Timeline's own "+ Track" button, and the mixer toolbar's "+ Bus".
+from every mixer placement: the Timeline's own "Add Track" button, and the mixer toolbar's "Add Bus".
 
 **Every column lays out against the panel's shared sections, and the fader is protected first
 (FRO298, FRO351).** The Inserts, Sends and EQ rows have one height across every column (see
@@ -319,7 +319,7 @@ detach state.
 **The dock resizes from every tab** (FRO231). One `synth::ui::PanelResizeHandle` lives on the
 dock's own top edge, so every tab resizes the dock like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays 24 px; tab buttons are laid out below it, so a grab never lands on one) and
 reports the total dock height through `BottomDockComponent::onResizeHeight` /
-`onResizeHeightCommitted`. The dock carves nothing for the Mixer: `+ Bus`/Reset Meters live in the
+`onResizeHeightCommitted`. The dock carves nothing for the Mixer: `Add Bus`/Reset Meters live in the
 mixer panel's own [toolbar](#the-toolbar), so the tab strip's width split never depends on the
 active tab and every tab gets the full content height. The rules (clamp, persistence, live relayout) are in
 [`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height); Own-panel placement is a
@@ -602,24 +602,26 @@ convention for the pattern.
 along its top edge, so the row belongs to the panel and follows it into every placement: the docked
 tab, the Own panel and a detached window (the columns get `panel height - 24`, see
 `requiredPanelHeight()`). It sits outside the horizontally scrolling viewport, so it stays put while
-columns scroll, and it is shown even with no columns -- `+ Bus` is how an empty mixer gets its first
+columns scroll, and it is shown even with no columns -- `Add Bus` is how an empty mixer gets its first
 bus.
 
 - **Far left: the side-pane button.** Shows and hides the panel's [side pane](#side-pane-zones-and-visibility)
   (a sidebar glyph, accent wash while the pane is open); Cmd+Shift+B does the same.
-- **Left, after it: Inserts / Sends / EQ toggles.** Label-only `juce::DrawableButton`s, so the look-and-feel
-  paints them like the main toolbar's toggles (accent wash and accent label while on). On means the
-  section is shown. A click calls `MixerSectionLayout::toggleHidden` -- the same commit and persist
-  path a hidden section's strip uses. The layout stays the source of truth: the toggles are re-read
+- **Left, after it: Inserts / Sends / EQ toggles.** Compact inline `ToolbarButton`s ([inline
+  buttons](../layout/chrome.md#inline-buttons)): an accent icon chip with the name beside it, solid with a faint pill
+  while on. On means the section is shown. A click calls `MixerSectionLayout::toggleHidden` -- the same commit and
+  persist path a hidden section's strip uses. The layout stays the source of truth: the toggles are re-read
   from it after every layout change (`MixerPanelToolbar::refresh()`), so clicking a column's
   collapsed strip flips the toggle back on. Their accessible names are "Inserts", "Sends" and "EQ"
   with the toggle state; the tooltip says "Hide Sends" / "Show Sends" plus the current binding. With the
   mixer focused, **Ctrl+I / Ctrl+S / Ctrl+E** (Ctrl+Alt+letter on Windows/Linux) do the same, rebindable
   in the Mixer shortcut category ([shortcuts](../control/shortcuts.md#mixer)).
-- **Right: Reset Meters and + Bus.** "Reset Meters" calls `resetAllMeterReadouts()`; "+ Bus" calls
-  `createBus()` then `rebuild()`, so the new bus's column is there at once.
-- **Tab stops.** The three toggles, Reset Meters and + Bus are each their own Tab stop, with a name and a
-  tooltip; see [Header controls and names](#header-controls-and-names).
+- **Right: Reset Meters and Add Bus.** Inline `ToolbarButton`s too (violet and amber chips). "Reset Meters" calls
+  `resetAllMeterReadouts()`; "Add Bus" calls `createBus()` then `rebuild()`, so the new bus's column is there at once.
+- **Labels.** "Show button labels" applies here: off, each button is its icon chip alone (name in the tooltip, bar
+  still 24 px, accessible names unchanged), live in a detached window too (`setToolbarLabelsShown`).
+- **Tab stops.** The three toggles, Reset Meters and Add Bus are each their own Tab stop, with a name and a tooltip;
+  see [Header controls and names](#header-controls-and-names).
 
 While a section divider is dragged, the panel paints a mono "5 rows" bubble beside the dragged
 divider at the left edge of the first column (`paintDragBubble`).
@@ -886,7 +888,7 @@ labelled by the Cmd-hold [shortcut hints](../control/shortcuts.md#shortcut-hints
 
 ### Header controls and names
 
-The toolbar's Inserts, Sends and EQ toggles, Reset Meters and + Bus, the side pane's Filter channels field and
+The toolbar's Inserts, Sends and EQ toggles, Reset Meters and Add Bus, the side pane's Filter channels field and
 its All / Tracks / Buses chips are each their own Tab stop, with a `setTitle` name and a tooltip. A key that
 one of them does not use bubbles to the panel, so the column keys still work after a click on one. Return
 triggers a button (`juce::Button::keyPressed`); Space presses it and is consumed (`SpaceClaimingButton`, see

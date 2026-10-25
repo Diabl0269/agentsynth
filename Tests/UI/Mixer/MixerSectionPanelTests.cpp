@@ -5,8 +5,10 @@
 // minimum, a long list scrolls inside its section, and the sections persist app-wide. Real off-screen
 // MainComponent, synthesized mouse events into the real handlers.
 
+#include "../../TestSettingsHelpers.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h"
+#include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -451,7 +453,7 @@ TEST_F(MixerSectionPanelTest, ToolbarSitsAtTheTopOfThePanelAndTheColumnsStartBel
               toolbar.getResetMetersButtonForTest().getX())
         << "toggles on the left, actions on the right";
     EXPECT_LT(toolbar.getResetMetersButtonForTest().getRight(), toolbar.getAddBusButtonForTest().getX());
-    EXPECT_EQ(toolbar.getAddBusButtonForTest().getButtonText(), "+ Bus");
+    EXPECT_EQ(toolbar.getAddBusButtonForTest().getButtonText(), "Add Bus");
     EXPECT_EQ(toolbar.getResetMetersButtonForTest().getButtonText(), "Reset Meters");
 
     for (auto* column : strips())
@@ -553,4 +555,111 @@ TEST_F(MixerSectionPanelTest, DISABLED_RenderMixerSectionsToPng) {
     ASSERT_TRUE(out.openedOk());
     juce::PNGImageFormat png;
     ASSERT_TRUE(png.writeImageToStream(image, out));
+}
+
+// ---- Toolbar buttons: icon chips, names beside them, "Show button labels" ----------------------------------------
+
+namespace {
+using synth::ui::MixerSection;
+
+std::vector<synth::ui::ToolbarButton*> toolbarButtons(synth::ui::MixerPanelToolbar& toolbar) {
+    std::vector<synth::ui::ToolbarButton*> out;
+    for (auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
+        out.push_back(dynamic_cast<synth::ui::ToolbarButton*>(&toolbar.getSectionToggleForTest(section)));
+    out.push_back(&toolbar.getResetMetersButtonForTest());
+    out.push_back(&toolbar.getAddBusButtonForTest());
+    return out;
+}
+
+const char* const kButtonNames[] = {"Inserts", "Sends", "EQ", "Reset Meters", "Add Bus"};
+
+void setShowLabelsPreference(MainComponent& mc, bool shown) {
+    auto* settings = mc.getAppPropertiesForTest().getUserSettings();
+    settings->setValue(synth::ui::kShowToolbarLabelsKey, shown);
+    settings->sendSynchronousChangeMessage(); // what the app's settings broadcast does, without the message loop
+}
+} // namespace
+
+TEST_F(MixerSectionPanelTest, ToolbarButtonsShowTheirNameBesideTheIconAndFitTheBar) {
+    openMixer(2);
+    setDockHeight(600);
+    auto& toolbar = panel().getToolbarForTest();
+    const auto buttons = toolbarButtons(toolbar);
+    ASSERT_EQ(buttons.size(), 5u);
+    EXPECT_EQ(toolbar.getHeight(), 24);
+    for (size_t i = 0; i < buttons.size(); ++i) {
+        auto& b = *buttons[i];
+        EXPECT_EQ(b.getButtonText(), kButtonNames[i]) << "the caption is the full name";
+        EXPECT_EQ(b.getTitle(), kButtonNames[i]);
+        EXPECT_EQ(b.getLayout(), synth::ui::ToolbarButtonLayout::InlineCompact);
+        EXPECT_LE(b.getHeight(), 24) << kButtonNames[i] << " does not make the bar taller";
+        EXPECT_GE(b.getWidth(), b.getPreferredWidth()) << kButtonNames[i] << " has room for its caption";
+        EXPECT_TRUE(toolbar.getLocalBounds().contains(b.getBounds())) << kButtonNames[i];
+        const auto chip = synth::theme::toolbarChipBounds(b);
+        EXPECT_LE(chip.getBottom(), (float)b.getHeight()) << "the chip is not shifted down by a caption row";
+        EXPECT_LT(chip.getRight(), (float)b.getWidth()) << "the caption sits to the right of the chip";
+    }
+}
+
+TEST_F(MixerSectionPanelTest, WithLabelsOffTheToolbarIsIconsOnlyAndKeepsItsHeightAndNames) {
+    openMixer(2);
+    setDockHeight(600);
+    auto& toolbar = panel().getToolbarForTest();
+    const int labelledWidth = toolbar.getResetMetersButtonForTest().getWidth();
+    panel().setToolbarLabelsShown(false);
+
+    EXPECT_EQ(toolbar.getHeight(), 24);
+    const auto buttons = toolbarButtons(toolbar);
+    for (size_t i = 0; i < buttons.size(); ++i) {
+        auto& b = *buttons[i];
+        EXPECT_TRUE(b.getButtonText().isEmpty()) << kButtonNames[i];
+        EXPECT_EQ(b.getTitle(), kButtonNames[i]) << "the screen-reader name stays the full name";
+        EXPECT_TRUE(b.getTooltip().containsIgnoreCase(kButtonNames[i]))
+            << "the name is in the tooltip: " << b.getTooltip();
+        EXPECT_LE(b.getHeight(), 24);
+        EXPECT_TRUE(toolbar.getLocalBounds().contains(b.getBounds())) << kButtonNames[i];
+    }
+    EXPECT_LT(toolbar.getResetMetersButtonForTest().getWidth(), labelledWidth);
+    EXPECT_NE(toolbar.getSectionToggleForTest(MixerSection::Sends).getTooltip().indexOf("Sends"), -1);
+
+    panel().setToolbarLabelsShown(true);
+    EXPECT_EQ(toolbar.getResetMetersButtonForTest().getWidth(), labelledWidth);
+    EXPECT_EQ(toolbar.getResetMetersButtonForTest().getButtonText(), "Reset Meters");
+}
+
+TEST_F(MixerSectionPanelTest, TheSectionTogglesAreLitWhileTheirSectionIsShown) {
+    openMixer(2);
+    setDockHeight(600);
+    auto& toolbar = panel().getToolbarForTest();
+    for (auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq}) {
+        auto& toggle = static_cast<synth::ui::ToolbarButton&>(toolbar.getSectionToggleForTest(section));
+        EXPECT_EQ(toggle.getLitAmount(), 1.0f);
+        click(toggle);
+        EXPECT_EQ(toggle.getLitAmount(), 0.0f) << "hiding the section turns the switch off";
+        EXPECT_EQ(toggle.getTitle(), Layout::nameOf(section));
+        click(toggle);
+        EXPECT_EQ(toggle.getLitAmount(), 1.0f);
+    }
+}
+
+TEST_F(MixerSectionPanelTest, ShowButtonLabelsReachesTheTimelineAndTheMixerLiveEvenWhenTheMixerIsDetached) {
+    synth::test::PersistedKeysGuard keys(juce::StringArray{synth::ui::kShowToolbarLabelsKey});
+    openMixer(2);
+    auto& toolbar = panel().getToolbarForTest();
+    auto& timeline = mc->getTimelinePanel();
+    EXPECT_EQ(timeline.getAddTrackButton().getButtonText(), "Add Track");
+
+    setShowLabelsPreference(*mc, false);
+    EXPECT_TRUE(timeline.getAddTrackButton().getButtonText().isEmpty());
+    EXPECT_TRUE(timeline.getSnapToggleButton().getButtonText().isEmpty());
+    EXPECT_TRUE(toolbar.getAddBusButtonForTest().getButtonText().isEmpty());
+
+    mc->getBottomDock().getMixerHost().setDetached(true);
+    ASSERT_TRUE(mc->getBottomDock().getMixerHost().isDetached());
+    EXPECT_TRUE(toolbar.getResetMetersButtonForTest().getButtonText().isEmpty()) << "detaching keeps the choice";
+    setShowLabelsPreference(*mc, true);
+    EXPECT_EQ(toolbar.getResetMetersButtonForTest().getButtonText(), "Reset Meters") << "a detached mixer follows it";
+    EXPECT_EQ(toolbar.getHeight(), 24);
+    EXPECT_EQ(timeline.getSnapToggleButton().getButtonText(), "Snap");
+    mc->getBottomDock().getMixerHost().setDetached(false);
 }

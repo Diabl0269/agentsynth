@@ -1,4 +1,4 @@
-// AddTrackPicker.cpp -- flattens the "+ Track" menu into picker rows and launches the picker.
+// AddTrackPicker.cpp -- flattens the "Add Track" menu into picker rows and launches the picker.
 #include "AddTrackPicker.h"
 
 namespace synth::ui {

@@ -21,7 +21,7 @@ void TimelinePanelComponent::wireClipLaneCallbacks() {
     clipLaneArea_.onReturnToTrackHeaderRequested = [this](synth::TrackId id) { returnToTrackHeader(id); };
 }
 
-// Keys for the panel root holding focus. Down enters the track-header column at its top, "+ Track"
+// Keys for the panel root holding focus. Down enters the track-header column at its top, "Add Track"
 // (the first stop, with or without tracks), and Down again reaches the first track; the Next Clip key enters the clips
 // of the focused track, else of the first track that has any.
 bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {

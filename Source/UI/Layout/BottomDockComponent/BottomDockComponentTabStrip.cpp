@@ -429,7 +429,7 @@ juce::Component* BottomDockComponent::getActivePanelRoot() noexcept {
 
 // Plain Left/Right/Home/End walk the tabs that are offered, in the user's tab order, and stop at the
 // ends (tabStripKeyTarget); Return hands focus to the selected tab's panel root, and Down does the same
-// then takes the panel's own first Down step (on the Timeline: "+ Track"), since the panel sits below
+// then takes the panel's own first Down step (on the Timeline: "Add Track"), since the panel sits below
 // the strip. Everything else (the Cmd+digit tab keys included) is left for the app-wide shortcuts.
 bool BottomDockComponent::handleTabStripKey(const juce::KeyPress& key) {
     if (key == juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0))

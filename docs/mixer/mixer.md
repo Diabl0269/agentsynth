@@ -112,7 +112,7 @@ tracks do.
 **An instrument track is a `TrackKind::Midi` track, not a new track kind.** A `TrackKind::Instrument`
 enum value would mean format, serialisation and kind-badge changes, and an instrument track is exactly
 what the "MIDI track into an existing instrument" row above already describes once the user draws the
-cable by hand: a Track In feeding exactly one instrument. "+ Track -> Instrument" just draws that
+cable by hand: a Track In feeding exactly one instrument. "Add Track -> Instrument" just draws that
 cable and builds the channel automatically instead of making the user do both steps. A future
 `TrackKind::Instrument` would have to migrate every track this flow has already created.
 
@@ -570,7 +570,7 @@ gate belongs upstream of tone-shaping and dynamics, so it sees the source signal
 
 `synth::buildDefaultAudioChannel` (`Source/Mixer/ChannelFlows/ChannelFlows.h`) splices Master
 (`synth::spliceMasterNode`, reusing the existing singleton after the first channel) and wires the
-strip into it. "+ Track -> Audio Track" builds the whole channel — Track Audio, Gate, EQ, Compressor,
+strip into it. "Add Track -> Audio Track" builds the whole channel — Track Audio, Gate, EQ, Compressor,
 Strip, Master — in ONE undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`), and
 `{Track Audio, Gate, EQ, Compressor, Strip}` are boxed into ONE collapsed macro named after the track
 (`GraphEditor::addMacroForMembers`).
@@ -598,7 +598,7 @@ is never ch1 (`Source/Modules/CLAUDE.md`).
 
 ### An instrument track
 
-"+ Track -> Instrument" opens a submenu of audio-producing MIDI instruments — Oscillator, Wavetable,
+"Add Track -> Instrument" opens a submenu of audio-producing MIDI instruments — Oscillator, Wavetable,
 Sampler, **deliberately not every `isMidiInstrumentType()` member**, since Poly MIDI, Sequencer and
 Poly Sequencer generate CV or MIDI rather than audio — and builds Track In, the chosen instrument, and
 the same default chain, in ONE undo step (`MainComponent::addInstrumentTrack`).
@@ -670,7 +670,7 @@ poly parameter and therefore no poly entry.
 
 ### A hosted plugin as the instrument
 
-"+ Track -> Instrument -> Plugin" lists the scanned INSTRUMENT plugins
+"Add Track -> Instrument -> Plugin" lists the scanned INSTRUMENT plugins
 (`juce::PluginDescription::isInstrument`; effects are filtered out and never offered here). Choosing
 one builds the exact same Track In, instrument, default chain, Master flow, boxed into one collapsed
 macro, as ONE undo step — except the instrument is a hosted `HostedPluginModule` rather than a factory
@@ -722,10 +722,10 @@ Cancel or a failed Save — `addInstrumentPluginTrack` captures it when the load
 ### Creating channels in an existing project
 
 **Existing projects open unchanged — no automatic migration on load.** "Create Channels" on the
-"+ Track" menu (`TimelinePanelComponent::kCreateChannelsMenuId`) wraps every channel-less track's
+"Add Track" menu (`TimelinePanelComponent::kCreateChannelsMenuId`) wraps every channel-less track's
 chain into a strip, as one undo step covering all of them at once.
 
-**Why it lives on the "+ Track" menu.** It acts on every track in the project at once, so it belongs
+**Why it lives on the "Add Track" menu.** It acts on every track in the project at once, so it belongs
 beside the project-wide channel-creating actions (Audio Track, Instrument Track) rather than off a
 single track header or a per-column control.
 
@@ -832,7 +832,7 @@ macro".
   in, and the proxy-port and internal-only-node precedents this design follows.
 - [`docs/timeline/tracks.md`](../timeline/tracks.md) — track headers, M and S controls, the timeline
   side of the track and channel relationship.
-- [`docs/timeline/add-track.md`](../timeline/add-track.md) — the "+ Track" menu and every flow it
+- [`docs/timeline/add-track.md`](../timeline/add-track.md) — the "Add Track" menu and every flow it
   starts.
 - [`docs/architecture/audio-engine.md#audioengine`](../architecture/audio-engine.md#audioengine) —
   `ensureMasterRecordTap()`, `EpochExchange`.

@@ -304,7 +304,7 @@ std::vector<NamedAction> addRoutes() {
         {"Instrument Track (Oscillator)", nullptr,
          [](Rig& r) { r.mc.simulateAddInstrumentTrackClick(Panel::kAddInstrumentOscillatorMenuId); }},
         {"Duplicate Track", nullptr, [](Rig& r) { r.duplicateFirstTrack(); }},
-        {"+ Bus", nullptr, [](Rig& r) { r.mixer().createBus(); }},
+        {"Add Bus", nullptr, [](Rig& r) { r.mixer().createBus(); }},
     };
 }
 

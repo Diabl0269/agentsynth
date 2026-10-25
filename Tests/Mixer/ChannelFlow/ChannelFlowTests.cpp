@@ -1,6 +1,6 @@
 // ChannelFlowTests.cpp
 //
-// "+ Track -> Audio Track" now builds a WHOLE mixer channel in one undo step —
+// "Add Track -> Audio Track" now builds a WHOLE mixer channel in one undo step —
 //
 //     Track Audio -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed)
 //                 -> Channel Strip (Stereo) -> Master (Mix)

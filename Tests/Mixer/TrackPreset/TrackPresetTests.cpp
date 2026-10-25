@@ -6,7 +6,7 @@
 //
 // The "outside modulator captured" and "walk stops at another channel's strip" assertions live in
 // the sibling TrackPresetCaptureTests.cpp (they need TrackPresetRigCFT's LFO/otherChannelStrip);
-// the "per-type default used by + Track" assertion lives in TrackPresetDefaultsTests.cpp (it needs
+// the "per-type default used by Add Track" assertion lives in TrackPresetDefaultsTests.cpp (it needs
 // a real MainComponent and the shared on-disk settings file).
 
 #include "TrackPresetTestFixture.h"
