@@ -456,6 +456,14 @@ void ShortcutManager::addDrumMachineDefaultBindings() {
     bindings["drumMachineLouder"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0);
     bindings["drumMachineSofter"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0);
     bindings["drumMachinePlayClip"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, 0);
+    // A drum's own length: Alt+Left / Alt+Right by a step, Alt+Shift by a bar. Conflicts are per category, and the
+    // grid claims these before the timeline's clip-move chords (also Alt+arrows) can see them.
+    const auto alt = juce::ModifierKeys::altModifier;
+    const auto altShift = juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier;
+    bindings["drumMachineRowShorter"] = juce::KeyPress(juce::KeyPress::leftKey, alt, 0);
+    bindings["drumMachineRowLonger"] = juce::KeyPress(juce::KeyPress::rightKey, alt, 0);
+    bindings["drumMachineRowShorterBar"] = juce::KeyPress(juce::KeyPress::leftKey, altShift, 0);
+    bindings["drumMachineRowLongerBar"] = juce::KeyPress(juce::KeyPress::rightKey, altShift, 0);
 }
 
 void ShortcutManager::addPianoRollDefaultBindings() {
