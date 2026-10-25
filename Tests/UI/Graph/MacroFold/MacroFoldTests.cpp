@@ -577,6 +577,19 @@ TEST(MacroFoldGroup, UndoOfTheGroupingUnfoldsTheMembers) {
     }
 }
 
+TEST(MacroFoldGroup, UndoOfTheGroupingStartsTheNeighbourGlideWithTheUnfold) {
+    GroupCanvas c(/*animate=*/true);
+    c.group();
+    c.editor.finishCardGlideForTest();
+
+    ASSERT_TRUE(c.undo.undo());
+    ASSERT_TRUE(c.fold().isLive());
+    // The closed card the members unfold out of is drawn by the fold; no shrinking ghost of it may hold the
+    // neighbours' glide back behind an exit phase.
+    EXPECT_EQ(c.glide().exitGhostCount(), 0) << "the removed macro card does not also shrink away";
+    EXPECT_EQ(c.glide().timeline().exitMs(), 0.0) << "the glide has no exit phase to wait behind";
+}
+
 TEST(MacroFoldGroup, UndoLandsOnTheSameLayoutWithAndWithoutTheMotion) {
     auto layoutAfterUndo = [](bool animate) {
         GroupCanvas c(animate);

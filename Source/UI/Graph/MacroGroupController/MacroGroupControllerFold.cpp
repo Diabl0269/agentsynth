@@ -347,8 +347,14 @@ private:
 
 // Starts the folds, and lets the folded macros' modules keep their own cards out of the delete and undo ghosts: an
 // undo of a collapse would otherwise also shrink (or grow) every one of them.
-void startFolds(CardGlideAnimator& glide, std::vector<Fold::Plan> plans) {
+// `goneMacros` are macros the change removed: the fold draws their closed card itself, so their card must not also
+// shrink away as an exit ghost (that phase would hold the neighbours' glide back until it ended).
+void startFolds(CardGlideAnimator& glide, std::vector<Fold::Plan> plans, const std::vector<juce::String>& goneMacros) {
     std::vector<uint32_t> uids;
+    for (const auto& id : goneMacros) {
+        uids.push_back(CardGlideAnimator::macroKey(id));
+        uids.push_back(CardGlideAnimator::borderKey(CardGlideAnimator::macroKey(id)));
+    }
     for (const auto& plan : plans)
         for (const auto& m : plan.modules)
             if (m.nodeUid != 0)
@@ -425,6 +431,7 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
         return macro != nullptr && it != before->byMacro.end() && macro->collapsed != it->second.wasCollapsed;
     };
     std::vector<Fold::Plan> plans;
+    std::vector<juce::String> goneMacros;
     std::vector<Fold::VisibleCable> cablesAfter;
     bool haveCablesAfter = false;
     // A macro the change created (grouping, or the redo of it) folds like a collapse of the same group: it was open, as
@@ -493,9 +500,11 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
     for (const auto& [id, snapshot] : before->byMacro) {
         if (macros.find(id) != nullptr || !snapshot.wasCollapsed || snapshot.modules.empty())
             continue;
-        if (auto plan = unfoldRemovedMacro(host_, id, snapshot); !plan.modules.empty())
+        if (auto plan = unfoldRemovedMacro(host_, id, snapshot); !plan.modules.empty()) {
             plans.push_back(std::move(plan));
+            goneMacros.push_back(id);
+        }
     }
     if (!plans.empty())
-        startFolds(host_.cardGlide(), std::move(plans));
+        startFolds(host_.cardGlide(), std::move(plans), goneMacros);
 }
