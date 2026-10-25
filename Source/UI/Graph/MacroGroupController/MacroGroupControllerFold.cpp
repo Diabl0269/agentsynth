@@ -138,6 +138,9 @@ Fold::Before captureBefore(Controller& controller, const synth::MacroSet& macros
 struct MacroGroupController::FoldSnapshot {
     std::map<juce::String, Fold::Before> byMacro;
     std::vector<Fold::VisibleCable> cables; // as drawn before the change
+    // Every module card as drawn before the change (rect and picture): a macro created by the change has no entry in
+    // byMacro, and its fold starts from these.
+    std::map<uint32_t, Fold::Module> nodes;
 };
 
 namespace {
@@ -365,6 +368,15 @@ std::shared_ptr<const MacroGroupController::FoldSnapshot> MacroGroupController::
     for (const auto& macro : host_.getMacros().getAll())
         if (host_.getMacros().isVisible(macro.id))
             out->byMacro[macro.id] = captureBefore(*this, host_.getMacros(), macro.id);
+    for (auto* comp : host_.modules()) {
+        if (comp == nullptr || !comp->isVisible())
+            continue;
+        Fold::Module m;
+        m.nodeUid = comp->getNodeId().uid;
+        m.rect = comp->getBounds();
+        m.picture = Fold::cachedPicture(*comp);
+        out->nodes[m.nodeUid] = std::move(m);
+    }
     return out;
 }
 
@@ -381,6 +393,37 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
     std::vector<Fold::Plan> plans;
     std::vector<Fold::VisibleCable> cablesAfter;
     bool haveCablesAfter = false;
+    // A macro the change created (grouping, or the redo of it) folds like a collapse of the same group: it was open, as
+    // its members stood on the canvas, and is now closed.
+    std::map<juce::String, Fold::Before> created;
+    for (const auto& macro : macros.getAll()) {
+        if (before->byMacro.count(macro.id) != 0 || !macro.collapsed || !macros.isVisible(macro.id))
+            continue;
+        auto& entry = created[macro.id];
+        entry.hull = macroOpenHullBounds(macro.id);
+        for (const auto& p : macroMemberPreviews(macro.id)) {
+            if (p.isMacro()) {
+                const auto it = before->byMacro.find(p.macroId);
+                if (it == before->byMacro.end())
+                    continue;
+                auto m = macroUnit(p);
+                if (!it->second.wasCollapsed)
+                    m.rect = nestedCardRect(*this, p.macroId);
+                else if (auto* card = getMacroCard(p.macroId))
+                    m.picture = Fold::cachedPicture(*card);
+                entry.modules.push_back(std::move(m));
+                continue;
+            }
+            const auto it = before->nodes.find(p.nodeUid);
+            if (it == before->nodes.end())
+                continue;
+            auto m = it->second;
+            m.category = p.category;
+            entry.modules.push_back(std::move(m));
+        }
+    }
+    const auto isCreated = [&](const juce::String& id) { return created.count(id) != 0; };
+
     for (const auto& [id, snapshot] : before->byMacro) {
         if (!changed(id) || snapshot.modules.empty())
             continue;
@@ -398,6 +441,17 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
             tree = builder.expand(id, snapshot, cablesAfter);
         }
         for (auto& plan : tree)
+            plans.push_back(std::move(plan));
+    }
+    for (const auto& [id, snapshot] : created) {
+        if (snapshot.modules.empty())
+            continue;
+        const auto ancestors = macros.ancestorChain(id);
+        if (std::any_of(ancestors.begin(), ancestors.end(),
+                        [&](const juce::String& a) { return changed(a) || isCreated(a); }))
+            continue;
+        FoldTreeBuilder builder(*this, host_, *before);
+        for (auto& plan : builder.collapse(id, snapshot))
             plans.push_back(std::move(plan));
     }
     if (!plans.empty())

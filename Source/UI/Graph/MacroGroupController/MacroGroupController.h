@@ -191,6 +191,9 @@ public:
     std::shared_ptr<const FoldSnapshot> snapshotFoldState();
     /** After the change: folds every macro in `before` whose collapsed state changed, all in one animation. */
     void foldChangedMacros(const std::shared_ptr<const FoldSnapshot>& before);
+    /** The border `macroId` would have if it were open, whatever its flag says (a fold of a macro that was just
+     *  created, or is being redone, starts from it). */
+    juce::Rectangle<int> macroOpenHullBounds(const juce::String& macroId) const;
     /** Where `macroId`'s card stands when it folds now: at the top-left of what its border wraps, card-sized. */
     juce::Rectangle<int> foldedCardBounds(const juce::String& macroId);
 
