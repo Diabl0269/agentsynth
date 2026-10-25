@@ -111,6 +111,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::transportToggleLoop,
     AppCommands::transportRecord,
     AppCommands::transportToggleMetronome,
+    AppCommands::setSongKey,
     AppCommands::transportReturnToStart,
     // Cursor moves and loop-locator jumps, appended after the rows above.
     AppCommands::transportNudgeBackBeat,

@@ -104,8 +104,7 @@ public:
     // Non-owning; may be null (tests, or before MainComponent finishes wiring).
     void setTransport(synth::TransportService* transport);
 
-    // Non-owning; may be null.
-    void setMetronome(synth::Metronome* metronome);
+    void setMetronome(synth::Metronome* metronome); // Non-owning; may be null.
 
     // Called from MainComponent's existing 10 Hz timer (only while this panel is visible); adds no
     // timer of its own. See its definition in TimelinePanelComponent.cpp for what it does with the
@@ -725,6 +724,7 @@ private:
     void toggleAutomationForSelection(synth::TrackId trackId); // bare A: the selection follows the focused row
     // Wires automationLanes_ into the panel (part of the constructor, kept out of its size ratchet).
     void initAutomationLanes();
+    void initSongKeyField(); // the transport bar Key field's hooks, part of the constructor
     // Re-syncs the lane pools, pushes their row geometry into the clip lanes and relayouts.
     void syncAutomationLanes();
     // Pushes the lanes' extra heights and the section-row override into the clip lanes' layout.

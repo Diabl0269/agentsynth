@@ -177,8 +177,8 @@ TEST(TimelineTransportBarTest, EveryInteractiveChildHasATooltip) {
             ++tooltipClientsChecked;
         }
     }
-    // The 5 glyph buttons, the count-in combo, and the BPM/time-sig labels.
-    EXPECT_EQ(tooltipClientsChecked, 8);
+    // The 5 glyph buttons, the count-in combo, the BPM/time-sig labels and the song key field.
+    EXPECT_EQ(tooltipClientsChecked, 9);
 }
 
 // ---- 7. RecordReadsRedWhenEngaged ----

@@ -168,6 +168,9 @@ void ShortcutManager::addGeneralDefaultBindings() {
     bindings["transportRecord"] = juce::KeyPress('r', juce::ModifierKeys::ctrlModifier, 0);
     bindings["transportToggleMetronome"] = juce::KeyPress('m', juce::ModifierKeys::ctrlModifier, 0);
     bindings["transportReturnToStart"] = juce::KeyPress();
+    // Shift+Cmd+K: Cmd+K is the minimap and nothing else binds K.
+    bindings["setSongKey"] =
+        juce::KeyPress('k', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     // Cursor moves and loop jumps -- same unbound-by-default reasoning as above.
     bindings["transportNudgeBackBeat"] = juce::KeyPress();
     bindings["transportNudgeForwardBeat"] = juce::KeyPress();

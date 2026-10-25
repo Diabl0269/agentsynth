@@ -156,7 +156,9 @@ enum CommandIDs {
     snapSetSixteenthDotted,
     snapSetThirtySecondDotted,
     snapSetSixtyFourthDotted,
-    snapSetHundredTwentyEighthDotted
+    snapSetHundredTwentyEighthDotted,
+    // Opens the transport bar's song key picker.
+    setSongKey
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

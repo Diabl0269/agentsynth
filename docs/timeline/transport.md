@@ -106,6 +106,12 @@ That covers every editable label at once — these two and the track-name label.
 `TimelineTransportBarTest.InlineFieldEditorsTakeTheirColoursFromTheTheme`, which asserts the TOKENS
 in a light and a dark theme so the fix cannot regress into a second hardcoded colour.
 
+## Song key field
+
+After the tempo and time signature sits the Key field, which shows and sets the song key and opens the key picker:
+[`song-key.md`](song-key.md). It reads the key from `TransportService::getDocumentState()` on the same 10 Hz poll
+as the labels.
+
 ## Bar-beat readout
 
 `TimelineTransportBar::formatBarBeat(ppq, tsNumerator, tsDenominator)` is a **static, pure** helper

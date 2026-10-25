@@ -18,6 +18,7 @@
 // null-degrades-gracefully contract every other timeline sub-component's setter follows.
 
 #include "Music/MusicalScale.h"
+#include "Music/SongKey.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusStepWithin.h"
@@ -246,7 +247,7 @@ private:
     static constexpr int kDefaultMinPitch = 36; // C2
     static constexpr int kDefaultMaxPitch = 72; // C5
     static constexpr int kRangeLabelHeight = 14;
-    static constexpr const char* kUserScalesPropertyKey = "pianoRollUserScales";
+    static constexpr const char* kUserScalesPropertyKey = synth::kUserScalesSettingsKey;
 
     // A custom-scale toggle painted as a small piano KEY rather than a checkbox+label: it overrides
     // paintButton() and draws through AppLookAndFeel::drawKeyToggle (the stock drawToggleButton always

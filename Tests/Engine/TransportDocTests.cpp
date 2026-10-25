@@ -197,3 +197,59 @@ TEST(TransportServiceMirrorTest, ApplyDocumentStateAppliesAllThreeAndReachesTheA
     EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0);
     EXPECT_DOUBLE_EQ(snap.loopEndPpq, 10.5);
 }
+
+// ---- Song key ---------------------------------------------------------------------------------
+
+TEST(TransportDocTest, SongKeyIsAbsentByDefaultAndNotWritten) {
+    const TransportDoc d;
+    EXPECT_FALSE(d.songKey.has_value());
+    EXPECT_FALSE(d.toVar().getDynamicObject()->hasProperty("songKey"));
+}
+
+TEST(TransportDocTest, SongKeyRoundTripsAndTakesPartInEquality) {
+    auto doc = customDoc();
+    doc.songKey = synth::makeScale(2, 4); // D Dorian
+    TransportDoc out;
+    ASSERT_TRUE(out.fromVar(juce::JSON::parse(juce::JSON::toString(doc.toVar()))));
+    ASSERT_TRUE(out.songKey.has_value());
+    EXPECT_EQ(out.songKey->rootPitchClass, 2);
+    EXPECT_EQ(out.songKey->name, "Dorian");
+    EXPECT_EQ(out, doc);
+    EXPECT_NE(out, customDoc());
+}
+
+TEST(TransportDocTest, AMalformedSongKeyLoadsAsNoKeyAndKeepsTheRest) {
+    auto v = customDoc().toVar();
+    v.getDynamicObject()->setProperty("songKey", "D minor");
+    TransportDoc out;
+    ASSERT_TRUE(out.fromVar(v));
+    EXPECT_FALSE(out.songKey.has_value());
+    EXPECT_EQ(out, customDoc());
+}
+
+TEST(TransportServiceMirrorTest, SetSongKeyChangesOnlyTheKeyAndNotifiesOnChange) {
+    TransportService transport;
+    int notified = 0;
+    transport.onSongKeyChanged = [&] { ++notified; };
+    const auto before = transport.getDocumentState();
+    transport.setSongKey(synth::makeScale(9, 1));
+    ASSERT_TRUE(transport.getDocumentState().songKey.has_value());
+    EXPECT_EQ(transport.getDocumentState().songKey->rootPitchClass, 9);
+    EXPECT_DOUBLE_EQ(transport.getDocumentState().bpm, before.bpm);
+    EXPECT_EQ(notified, 1);
+    transport.setSongKey(synth::makeScale(9, 1));
+    EXPECT_EQ(notified, 1) << "the same key again is not a change";
+    transport.setSongKey(std::nullopt);
+    EXPECT_FALSE(transport.getDocumentState().songKey.has_value());
+    EXPECT_EQ(notified, 2);
+}
+
+TEST(TransportServiceMirrorTest, ApplyDocumentStateSetsTheSongKey) {
+    TransportService transport;
+    auto doc = customDoc();
+    doc.songKey = synth::makeScale(4, 0);
+    transport.applyDocumentState(doc);
+    EXPECT_EQ(transport.getDocumentState(), doc);
+    transport.applyDocumentState(customDoc());
+    EXPECT_FALSE(transport.getDocumentState().songKey.has_value());
+}

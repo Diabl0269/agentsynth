@@ -290,8 +290,7 @@ both as unbound (and, off the Mac, holds Ctrl+R / Ctrl+M on Repeat and the matri
 them, gives Record / Metronome the new chords unless another action already uses one, and leaves any key the
 user chose alone. Every migration writes the keys it changes back to the settings file (not only its done-flag), so
 the chords survive the next launch; the transport one runs under the flag `shortcutMigration_transportCtrlChords2`,
-which repairs installs where the first version kept them in memory only. `ShortcutManager::setDefaultsPlatform` builds the other platform's table, which is how the
-Windows/Linux defaults are tested from a Mac host:
+which repairs installs where the first version kept them in memory only. `ShortcutManager::setDefaultsPlatform` builds the other platform's table, which is how the Windows/Linux defaults are tested from a Mac host:
 
 | Action id | Display name | Behaviour |
 |---|---|---|
@@ -302,6 +301,7 @@ Windows/Linux defaults are tested from a Mac host:
 | `transportRecord` | Record | Triggers the transport bar's own Record button, so it reaches `MainComponent::handleRecordToggle`'s armed-track gate exactly as a mouse click would — never bypassed |
 | `transportToggleMetronome` | Toggle Metronome | Triggers the transport bar's own metronome button, so its persisted `timelineMetronomeEnabled` state stays authoritative |
 | `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop. The transport bar's Return to Start button runs this same command ([`transport.md`](../timeline/transport.md#return-to-start-button)) |
+| `setSongKey` | Set Song Key | Shift+Cmd+K. Shows the Timeline and opens the transport bar's song key picker ([`song-key.md`](../timeline/song-key.md)) |
 | `transportNudgeBackBeat` / `transportNudgeForwardBeat` | Move Cursor Back (Beat) / Move Cursor Forward (Beat) | Relocates one beat (a quarter note) back or forward from the current position, clamped at beat 0. Works playing or stopped; never starts or stops the transport |
 | `transportNudgeBackBar` / `transportNudgeForwardBar` | Move Cursor Back (Bar) / Move Cursor Forward (Bar) | As above, by one bar of the current time signature (`numerator × 4 / denominator` beats — 4 in 4/4, 3 in 3/4, 3 in 6/8) |
 | `transportJumpToLoopStart` / `transportJumpToLoopEnd` | Jump to Loop Start / Jump to Loop End | Relocates to the left / right loop locator. A no-op when the locators span no range (end at or before start) |

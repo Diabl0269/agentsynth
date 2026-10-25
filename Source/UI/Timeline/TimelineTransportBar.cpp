@@ -20,6 +20,7 @@ constexpr int kEdgePaddingX = 4;
 constexpr int kEdgePaddingY = 2;
 constexpr int kBpmLabelWidth = 52;
 constexpr int kTimeSigLabelWidth = 40;
+constexpr int kSongKeyFieldWidth = 132;
 constexpr int kReadoutWidth = 92;
 constexpr int kCountInComboWidth = 64;
 
@@ -207,6 +208,8 @@ TimelineTransportBar::TimelineTransportBar() {
             timeSigLabel_.setText(formatTimeSig(numerator, denominator), juce::dontSendNotification);
         }
     };
+
+    addAndMakeVisible(songKeyField_);
 }
 
 //==============================================================================
@@ -238,6 +241,7 @@ void TimelineTransportBar::setMetronome(synth::Metronome* metronome) noexcept {
 
 void TimelineTransportBar::setApplicationProperties(juce::ApplicationProperties* props) {
     appProperties_ = props;
+    songKeyField_.setApplicationProperties(props);
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
 
@@ -266,6 +270,7 @@ void TimelineTransportBar::updateFromTransport(const synth::TransportService::Po
         timeSigLabel_.setText(formatTimeSig(snapshot.timeSigNumerator, snapshot.timeSigDenominator),
                               juce::dontSendNotification);
 
+    songKeyField_.refreshFromTransport();
     refreshReadout(snapshot);
     // No timer of its own -- rides the SAME 10 Hz poll as everything else this method
     // resyncs (the class comment's "never any faster" rule).
@@ -352,6 +357,9 @@ void TimelineTransportBar::resized() {
     bpmLabel_.setBounds(bounds.removeFromLeft(kBpmLabelWidth));
     bounds.removeFromLeft(kGap);
     timeSigLabel_.setBounds(bounds.removeFromLeft(kTimeSigLabelWidth));
+    bounds.removeFromLeft(kGap);
+    songKeyField_.setBounds(bounds.removeFromLeft(kSongKeyFieldWidth)
+                                .withSizeKeepingCentre(kSongKeyFieldWidth, std::min(24, bounds.getHeight())));
     bounds.removeFromLeft(kGap * 2);
 
     readoutBounds_ = bounds.removeFromLeft(kReadoutWidth);
