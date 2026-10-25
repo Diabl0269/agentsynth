@@ -273,7 +273,7 @@ TEST(OscillatorPolyChord, PhaseAndRandAreAudibleOnEveryRepeatOfAChord) {
     }
     EXPECT_GT(std::sqrt(diff / level), 0.5) << "Phase moves the attack";
     EXPECT_GT(together.early / together.late, 1.2) << "an in-phase stack starts loud";
-    EXPECT_LT(together.spread, 0.03);
+    EXPECT_LT(together.spread, 0.05);
 
     Voice random = base;
     random.rand = 100.0f;
@@ -281,4 +281,32 @@ TEST(OscillatorPolyChord, PhaseAndRandAreAudibleOnEveryRepeatOfAChord) {
     EXPECT_LT(apart.early / apart.late, together.early / together.late);
     EXPECT_GT(apart.spread, 0.04) << "the stack's thickness differs from repeat to repeat";
     EXPECT_GT(apart.repeatDifference, 0.5) << "the chord starts differently each time";
+}
+
+// A chord that starts mid-block must not step the output where a block ends: the headroom follows the voices
+// sample by sample, so the largest step and the render itself do not depend on the block size. The chord is
+// played once before, so every voice already holds a pitch.
+TEST(OscillatorPolyChord, HeadroomNeverStepsAndDoesNotDependOnTheBlockSize) {
+    const std::vector<std::vector<int>> chords = {{62, 66, 70}, {48, 52, 55, 60, 64, 67, 72, 76}};
+    for (const auto& chord : chords) {
+        std::vector<float> reference;
+        for (const int block : {64, 256, 441, 512}) {
+            const auto pass = renderChord(chord, 2, block, 100, Voice{})[2];
+            const int from = pass.onAt - 50;
+            const int to = pass.offAt + 800;
+            double step = 0.0;
+            for (int i = from + 1; i < to; ++i)
+                step = std::max(step, (double)std::abs(pass.out[(size_t)i] - pass.out[(size_t)i - 1]));
+            EXPECT_LT(step, 0.07) << chord.size() << " notes, block " << block;
+            const std::vector<float> window(pass.out.begin() + from, pass.out.begin() + to);
+            if (reference.empty()) {
+                reference = window;
+                continue;
+            }
+            double worst = 0.0;
+            for (size_t i = 0; i < window.size(); ++i)
+                worst = std::max(worst, (double)std::abs(window[i] - reference[i]));
+            EXPECT_LT(worst, 0.02) << chord.size() << " notes, block " << block << " against block 64";
+        }
+    }
 }

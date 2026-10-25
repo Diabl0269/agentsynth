@@ -31,7 +31,7 @@ the sum, over the voices, of each voice's audio peak in the block times its enve
 notes and any quiet or low-sustain chord keep their unity sum. Above it the sum is multiplied by (0.9 / peak)^0.7, which holds the
 worst-case peak near the knee: three notes read under 1 % distortion and eight about 4 %, the level of three notes is 1.7 dB
 above one note and eight are level with it. A sharper curve (exponent 1) makes the distortion zero but the level fall
-as notes are added; a flatter one (0.5) keeps the chord louder but distorts again. The audio peak (not a count of voices) is used so a silent voice, which reads an unpatched
+as notes are added; a flatter one (0.5) keeps the chord louder but distorts again. The gain follows each voice's peak sample by sample (up at once, down over 20 ms) and moves down in about 1.5 ms and back up in about 50 ms, so it never steps at a block edge and the render does not depend on the block size; below the knee it stays exactly 1. The audio peak (not a count of voices) is used so a silent voice, which reads an unpatched
 envelope as 1, and a quiet one add nothing. Pinned by `OscillatorPolyChord.*`
 (`Tests/Modules/OscillatorPolyChordTests.cpp`), which renders Poly MIDI, Oscillator, ADSR and VCA over several block sizes and loop offsets
 and fits the sines of the played notes to the output.

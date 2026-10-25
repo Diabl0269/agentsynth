@@ -101,8 +101,9 @@ TEST_F(VCAModuleTest, PolyMode_MultiVoice) {
     // voices at their peak would add to 1.25, past the 0.9 knee, so the sum takes the poly headroom first and
     // the shared soft limiter rounds what is left.
     const float expected = synth::softLimit(1.25f * synth::polySumHeadroom(1.25f));
-    EXPECT_FLOAT_EQ(polyBuffer.getSample(0, 999), expected); // Left
-    EXPECT_FLOAT_EQ(polyBuffer.getSample(1, 999), expected); // Right (same as left)
+    // The headroom gain settles over a few milliseconds, so it is within a hair of its target rather than equal.
+    EXPECT_NEAR(polyBuffer.getSample(0, 999), expected, 1e-4f);            // Left
+    EXPECT_EQ(polyBuffer.getSample(1, 999), polyBuffer.getSample(0, 999)); // Right (same as left)
     EXPECT_LT(expected, 1.0f);
 }
 
