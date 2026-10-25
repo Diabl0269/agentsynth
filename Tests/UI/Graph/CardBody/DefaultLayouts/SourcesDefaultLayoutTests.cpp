@@ -391,3 +391,105 @@ TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
                 }
     }
 }
+
+// ---- Joined Left/Right jacks -------------------------------------------------------------------------
+// Pan, and the unison Width, are disabled (dimmed, with a tooltip saying how to get them back) while a split-block
+// module's jacks are joined, because the one jack carries a single mono leg. Splitting them, or a saved split module,
+// has them enabled; effect modules keep their raw legs and are never affected.
+
+namespace {
+
+constexpr const char* kPanHint = "Split the Left/Right jacks to pan";
+constexpr const char* kWidthHint = "Split the Left/Right jacks to spread the voices";
+
+struct JoinedCard {
+    NodeID id;
+    ModuleComponent* card = nullptr;
+    juce::AudioProcessor* module = nullptr;
+};
+
+JoinedCard buildJoined(CardCanvas& canvas, const juce::String& type, bool joined) {
+    JoinedCard result;
+    result.id = canvas.add(synth::AIStateMapper::createModule(type), 0, 0);
+    result.module = canvas.processor(result.id);
+    if (joined)
+        findParameterByID(result.module, "dualIO")->setValueNotifyingHost(0.0f);
+    canvas.editor.updateComponents();
+    result.card = canvas.card(result.id);
+    return result;
+}
+
+void setJoined(const JoinedCard& card, bool joined) {
+    findParameterByID(card.module, "dualIO")->setValueNotifyingHost(joined ? 0.0f : 1.0f);
+    card.card->getCardBody()->flushPendingConditionUpdate();
+}
+
+juce::Component* joinedWidget(const JoinedCard& card, const char* paramId) {
+    return card.card->getCardBody()->findWidget(paramId);
+}
+
+void expectDisabled(const JoinedCard& card, const char* paramId, const char* hint) {
+    SCOPED_TRACE(paramId);
+    auto* w = joinedWidget(card, paramId);
+    ASSERT_NE(w, nullptr);
+    EXPECT_FALSE(w->isEnabled());
+    EXPECT_TRUE(AppLookAndFeel::paintsDimmed(*w));
+    auto* tip = dynamic_cast<juce::SettableTooltipClient*>(w);
+    ASSERT_NE(tip, nullptr);
+    EXPECT_EQ(tip->getTooltip(), juce::String(hint));
+    EXPECT_FALSE(w->getTitle().isEmpty()) << "keeps its accessibility name";
+}
+
+void expectEnabled(const JoinedCard& card, const char* paramId, const char* hint) {
+    SCOPED_TRACE(paramId);
+    auto* w = joinedWidget(card, paramId);
+    ASSERT_NE(w, nullptr);
+    EXPECT_TRUE(w->isEnabled());
+    auto* tip = dynamic_cast<juce::SettableTooltipClient*>(w);
+    ASSERT_NE(tip, nullptr);
+    EXPECT_NE(tip->getTooltip(), juce::String(hint));
+    EXPECT_FALSE(w->getTitle().isEmpty());
+}
+
+} // namespace
+
+TEST(JoinedJackDisable, OscillatorPanAndWidthFollowTheJackSplit) {
+    CardCanvas canvas;
+    const auto osc = buildJoined(canvas, "Oscillator", false);
+    expectEnabled(osc, "pan", kPanHint);
+    expectEnabled(osc, "width", kWidthHint);
+    setJoined(osc, true);
+    expectDisabled(osc, "pan", kPanHint);
+    expectDisabled(osc, "width", kWidthHint);
+    setJoined(osc, false);
+    expectEnabled(osc, "pan", kPanHint);
+    expectEnabled(osc, "width", kWidthHint);
+}
+
+TEST(JoinedJackDisable, WavetableAndFilterPanFollowTheJackSplit) {
+    for (const char* type : {"Wavetable", "Filter"}) {
+        SCOPED_TRACE(type);
+        CardCanvas canvas;
+        const auto card = buildJoined(canvas, type, false);
+        setJoined(card, true);
+        expectDisabled(card, "pan", kPanHint);
+        setJoined(card, false);
+        expectEnabled(card, "pan", kPanHint);
+    }
+}
+
+TEST(JoinedJackDisable, ASavedJoinedModuleLoadsWithPanAndWidthDisabled) {
+    CardCanvas canvas;
+    const auto osc = buildJoined(canvas, "Oscillator", true);
+    expectDisabled(osc, "pan", kPanHint);
+    expectDisabled(osc, "width", kWidthHint);
+}
+
+TEST(JoinedJackDisable, AnEffectModuleKeepsItsPanWhenJoined) {
+    CardCanvas canvas;
+    const auto delay = buildJoined(canvas, "Delay", true);
+    auto* pan = joinedWidget(delay, "pan");
+    ASSERT_NE(pan, nullptr);
+    EXPECT_TRUE(pan->isEnabled());
+    EXPECT_FALSE(AppLookAndFeel::paintsDimmed(*pan));
+}

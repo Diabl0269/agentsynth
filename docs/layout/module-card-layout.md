@@ -257,6 +257,13 @@ envelope, LFO curve and threshold components plug in unchanged.
   describes the module, not the layout, so it applies to every layout the card resolves (instance
   override, stored type default or code default; `ResolvedModuleCardLayout::dimRules`) whenever its
   parameter is on the card: a card the user has edited keeps them.
+- **Joined jacks disable Pan and Width (built).** A `CardDimRule` with a `disabledHint` also disables its control
+  (not draggable, no focus, still named, dimmed) and shows the hint as tooltip and description; the tooltip it had comes
+  back with the control. `CardBodyPlan::forModule` adds two such rules to every split-block module (Oscillator,
+  Wavetable, Filter, ...) while its Dual I/O is off, because the one collapsed jack carries a single mono leg: Pan
+  ("Split the Left/Right jacks to pan") and the unison Width ("Split the Left/Right jacks to spread the voices").
+  Effect modules keep their raw legs and are untouched. The state follows the `dualIO` parameter and a loaded
+  project. Tests: `JoinedJackDisable.*` in `Tests/UI/Graph/CardBody/DefaultLayouts/SourcesDefaultLayoutTests.cpp`.
 - **Footer row (built).** A section with the reserved id `footer` is laid out last, under the card's
   chrome panels and above More, as one compact row (wrapping when full): toggles as the small pill,
   anything continuous as `faderH`, the rest as their own widget with an inline caption. On such a card
