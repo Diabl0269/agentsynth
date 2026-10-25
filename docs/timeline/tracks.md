@@ -2,7 +2,7 @@
 
 `Source/UI/Timeline/TimelineTrackHeaderComponent/` (`TimelineTrackHeaderComponent.h`, `.cpp`, and `TimelineTrackHeaderComponentPaint.cpp` for layout and painting)
 (`synth::ui::TimelineTrackHeaderComponent`) — one row per `synth::Track`, living in the timeline
-panel's track-header column. The `"+ Track"` menu and the flows it starts are
+panel's track-header column. The `"Add Track"` menu and the flows it starts are
 [add-track](add-track.md); the clip rows the headers line up with are [clips](clips.md).
 
 The row talks to the app exclusively through `synth::ui::TrackHeaderHost` (implemented by
@@ -11,7 +11,7 @@ The row talks to the app exclusively through `synth::ui::TrackHeaderHost` (imple
 ## The track-header column
 
 Rows are `Metrics::timelineTrackRowHeight` (56 px) tall by default — shared with the clip-lane area, so header
-rows and clip rows always line up — and each track can be resized on its own ([below](#one-tracks-height)). The column is a fixed `"+ Track"` strip (22 px) at the top plus
+rows and clip rows always line up — and each track can be resized on its own ([below](#one-tracks-height)). The column is a fixed `"Add Track"` strip (22 px) at the top plus
 a `juce::Viewport` below it, so a project with more tracks than fit **scrolls**; rows are never
 compressed. Both live inside `getTrackHeaderBounds()`, so the panel's three regions still tile
 exactly.

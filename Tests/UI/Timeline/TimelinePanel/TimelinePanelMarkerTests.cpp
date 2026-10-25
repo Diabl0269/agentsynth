@@ -692,7 +692,7 @@ TEST(TimelineRulerMarkerTest, PanelPaintsMarkersWithNoTimerAndTheAddMarkerMenuEn
     EXPECT_EQ(doc.getMarkers().front().text, "Marker 1");
     EXPECT_FALSE(panel.getRuler().buildMarkerFlags().empty());
 
-    // One undo step, and the whole "+ Track" menu route lands on the same method.
+    // One undo step, and the whole "Add Track" menu route lands on the same method.
     ASSERT_TRUE(undo.canUndo());
     undo.undo();
     EXPECT_TRUE(doc.getMarkers().empty());

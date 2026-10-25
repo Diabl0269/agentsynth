@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Toolbar icon, housekeeping group (level bars with a reset arrow). Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. -->
+  <rect x="3" y="9" width="3.2" height="12" rx="1.1" fill="#FF00FF" />
+  <rect x="7.8" y="3.5" width="3.2" height="17.5" rx="1.1" fill="#FF00FF" fill-opacity=".45" />
+  <rect x="12.6" y="13" width="3.2" height="8" rx="1.1" fill="#FF00FF" />
+  <circle cx="17.6" cy="16.6" r="5.5" fill="#FF00FF" />
+  <path d="M19.9 15.2A2.8 2.8 0 1 0 20.2 17.9" stroke-width="1.7" fill="none" stroke="#00FFFF" stroke-linecap="round" />
+  <path d="M17.3 14.5l3.3 0.5-1.2 3z" fill="#00FFFF" />
+</svg>

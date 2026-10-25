@@ -8,7 +8,7 @@
 //   * level knob     -- attached to the strip's own sendNLevel parameter, so moving it moves the
 //                        parameter (and therefore host automation) with no lane plumbing
 //   * PRE/POST       -- one undo step, restored by undo
-//   * bus column     -- "+ Bus" on the dock adds a Kind::Bus column
+//   * bus column     -- "Add Bus" on the dock adds a Kind::Bus column
 //   * unbind         -- a document replacement tears the row attachments down FIRST, the same
 //                        crash MixerPanelUndoUnbindTests.cpp pins for the fader and pan, plus a
 //                        full undo drain as the crash pin

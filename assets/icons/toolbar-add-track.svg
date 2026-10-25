@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Toolbar icon, edit group. Colour roles are placeholders the icon library replaces: #FF00FF = group colour (fill-opacity .45 = soft), #00FFFF = ink, #FFFF00 = paper. -->
+  <rect x="3" y="3.5" width="13.5" height="4.4" rx="1.7" fill="#FF00FF" />
+  <rect x="3" y="9.8" width="13.5" height="4.4" rx="1.7" fill="#FF00FF" fill-opacity=".45" />
+  <rect x="3" y="16.1" width="8" height="4.4" rx="1.7" fill="#FF00FF" fill-opacity=".45" />
+  <circle cx="17" cy="16.7" r="5.3" fill="#FF00FF" />
+  <path d="M17 14v5.4M14.3 16.7h5.4" stroke-width="1.9" fill="none" stroke="#00FFFF" stroke-linecap="round" />
+</svg>

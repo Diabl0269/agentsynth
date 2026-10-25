@@ -47,7 +47,7 @@ waveform draws at once.
 ONE undo step (`recordGraphTimelineAndMacroChange`, queued with `callAsync` when the render completes because it rebuilds the clip
 lanes):
 
-- for each source track, a new Audio track directly below it, built like **+ Track > Audio Track** (a macro-boxed channel), named
+- for each source track, a new Audio track directly below it, built like **Add Track > Audio Track** (a macro-boxed channel), named
   "<source> audio" in the source's colour with input No input, holding one clip at exactly the span, named after the source;
 - the source's clips are split at the span's edges (`TimelineDoc::splitClipsAtRangeEdges`, the same as **Split at range edges**) and
   every clip now inside the span is muted.

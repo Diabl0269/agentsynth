@@ -3,6 +3,7 @@
 #include "Mixer/TrackPresetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportNudge.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/EdgeResizeHandle.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
@@ -378,7 +379,7 @@ public:
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
     TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
     NoteLengthBox& getSnapCombo() noexcept { return snapCombo_; }
-    juce::TextButton& getSnapToggleButton() noexcept { return snapToggleButton_; }
+    ToolbarButton& getSnapToggleButton() noexcept { return snapToggleButton_; }
     // play/stop/record/loop + BPM/time-sig editors + the bar:beat readout.
     TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
 
@@ -421,12 +422,12 @@ public:
     void selectAllTracks(); // Cmd+A on a track row: every track, focus stays on the focused one
 
     // ---- Track headers ----
-    // Menu ids for the "+ Track" button's menu. Numbered from 1 because juce::PopupMenu reserves 0
+    // Menu ids for the "Add Track" button's menu. Numbered from 1 because juce::PopupMenu reserves 0
     // for "dismissed".
     static constexpr int kAddMidiTrackMenuId = 1;
     static constexpr int kAddAudioTrackMenuId = 2;
     // Below a separator, because a marker is NOT a track: it adds no header row and no graph node.
-    // It shares this menu because "+ Track" is where a user reaches for "add something to the
+    // It shares this menu because "Add Track" is where a user reaches for "add something to the
     // arrangement", and a second button for one item would not earn its pixels.
     static constexpr int kAddMarkerMenuId = 3;
     // The Instrument submenu's audio-producing MIDI instrument choices — see
@@ -445,7 +446,7 @@ public:
     static constexpr int kAddInstrumentWavetablePolyMenuId = 8;
     // docs/mixer/mixer.md#creating-channels-in-an-existing-project: "Create channels" for existing
     // projects. Lives on this same menu rather than a per-track context menu or a mixer panel — there is no mixer panel
-    // yet, and "+ Track" is already where every other channel-creating action in this doc lives (Audio Track,
+    // yet, and "Add Track" is already where every other channel-creating action in this doc lives (Audio Track,
     // Instrument Track); a project-wide sweep belongs beside them, not off a single track header, since it acts on
     // every track at once.
     static constexpr int kCreateChannelsMenuId = 9;
@@ -464,7 +465,7 @@ public:
     // against a plugin the menu never actually showed at that row. Resolving against a snapshot
     // taken when the menu was built (what the user is actually looking at) closes that: see
     // applyAddTrackMenuChoice. Deliberately 10, not 9 — kCreateChannelsMenuId already
-    // claims 9 on this same flat "+ Track" menu, and every flat id here must stay <
+    // claims 9 on this same flat "Add Track" menu, and every flat id here must stay <
     // kAddInstrumentPluginMenuIdBase (100) with no collisions between them.
     static constexpr int kAddInstrumentPluginNoneMenuId = 10;
     static constexpr int kAddInstrumentPluginMenuIdBase = 100;
@@ -482,13 +483,15 @@ public:
     /** Adds a marker at the transport's current position, named "Marker N", coloured from the
      *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is
      *  installed. Returns the new id, or an invalid one when there is no doc or the doc refused
-     *  (kMaxMarkers). Public because it IS the "+ Track" menu's Add Marker action and the seam a
+     *  (kMaxMarkers). Public because it IS the "Add Track" menu's Add Marker action and the seam a
      *  test drives instead of the async menu. */
     synth::MarkerId addMarkerAtPlayhead();
 
-    juce::TextButton& getAddTrackButton() noexcept { return addTrackButton_; }
+    ToolbarButton& getAddTrackButton() noexcept { return addTrackButton_; }
+    /** The "Show button labels" preference for Add Track and Snap: names beside the icons, or icons only. */
+    void setToolbarLabelsShown(bool shown);
 
-    /** Applies an "+ Track" menu choice. Exposed as the headless test seam for a menu that never
+    /** Applies an "Add Track" menu choice. Exposed as the headless test seam for a menu that never
      *  runs in a test process. Anything else is ignored. */
     void applyAddTrackMenuChoice(int menuId);
     juce::Viewport& getTrackHeaderViewport() noexcept { return trackHeaderViewport_; }
@@ -519,7 +522,7 @@ public:
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
     /** Track header rows constructed since this panel was made (a row kept across a sync is not counted). */
     int getTrackHeadersBuiltForTest() const noexcept { return trackHeadersBuilt_; }
-    /** The lane header or modulator row keyboard focus last moved to, or null when it is on a track row or "+ Track".
+    /** The lane header or modulator row keyboard focus last moved to, or null when it is on a track row or "Add Track".
      */
     juce::Component* getKeyboardLaneStopForTest() const noexcept { return keyboardStop_.getComponent(); }
     bool selectAdjacentTrack(int direction);
@@ -536,22 +539,22 @@ public:
     void focusTrackRow(synth::TrackId id);
     bool handleRootFocusKey(const juce::KeyPress& key);
 
-    // ---- "+ Track" keyboard stop (TimelinePanelTrackHeaders.cpp) ----
+    // ---- "Add Track" keyboard stop (TimelinePanelTrackHeaders.cpp) ----
     // The last stop of the track-header column; rationale beside the definitions.
-    /** Message thread only. Moves keyboard focus to "+ Track". */
+    /** Message thread only. Moves keyboard focus to "Add Track". */
     void focusAddTrackButton();
-    /** True while "+ Track" holds keyboard focus (or, in test mode, was last focused through this panel). */
+    /** True while "Add Track" holds keyboard focus (or, in test mode, was last focused through this panel). */
     bool isAddTrackButtonFocused() const;
-    /** Keys for "+ Track" while it holds focus; false for any other focus owner or an unclaimed key. */
+    /** Keys for "Add Track" while it holds focus; false for any other focus owner or an unclaimed key. */
     bool handleAddTrackButtonKey(const juce::KeyPress& key);
-    /** The "+ Track" picker's close callback (rationale beside the definition). */
+    /** The "Add Track" picker's close callback (rationale beside the definition). */
     void finishAddTrackMenu(int result, bool openedFromKeyboard);
-    /** Focuses "+ Track" and opens its searchable picker, as the Add Track shortcut does. Message thread only. */
+    /** Focuses "Add Track" and opens its searchable picker, as the Add Track shortcut does. Message thread only. */
     void openAddTrackMenuFromShortcut();
     /** Headless stand-in for real focus (no native window): focus moves are recorded, not grabbed. */
     void setRecordFocusForTest(bool record) noexcept { recordFocusForTest_ = record; }
 
-    /** Builds the "+ Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
+    /** Builds the "Add Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
      *  result async. The headless test seam for inspecting menu CONTENTS (item text, enabled state,
      *  submenus). Triggers ensureInstrumentPluginsScanned() on the host first (openAddTrackMenu()'s
      *  own contract), so the Plugin submenu this builds reflects a scan that has at least started. */
@@ -564,7 +567,7 @@ public:
     std::vector<synth::PluginIdentity> collectInstrumentPluginMenuOptions() const;
 
 protected:
-    /** Opens the "+ Track" button's searchable picker (MIDI Track / Audio Track / Instrument Tracks / plugins /
+    /** Opens the "Add Track" button's searchable picker (MIDI Track / Audio Track / Instrument Tracks / plugins /
      *  presets / Add Marker). The default implementation launches a call-out. Protected virtual so a
      *  headless test can override it rather than crash on the display-less window -- see its
      *  definition in TimelinePanelTrackHeaders.cpp. */
@@ -638,7 +641,7 @@ private:
     // ---- Lanes in the arrow order (TimelinePanelLaneKeyboard.cpp) ----
     // Under a track whose lanes are open, Up/Down visit each lane header and its modulator rows before the next track;
     // folded lanes are skipped. `keyboardStop_` is the lane header or modulator row last moved to (null while a track
-    // row or "+ Track" is the stop), kept like focusedTrackIndex_ so the model is readable without a native window.
+    // row or "Add Track" is the stop), kept like focusedTrackIndex_ so the model is readable without a native window.
     std::vector<juce::Component*> keyboardStops() const;
     void stepFocusFromLaneStop(juce::Component& from, int direction);
     void focusKeyboardStop(juce::Component& stop);
@@ -647,7 +650,7 @@ private:
     juce::Component::SafePointer<juce::Component> keyboardStop_;
     bool recordFocusForTest_ = false;
     bool addTrackFocusRecorded_ = false;
-    bool addTrackFromTop_ = false; // "+ Track" was entered from above (root Down, Up off row 0), not from the last row
+    bool addTrackFromTop_ = false; // "Add Track" entered from above (root Down, Up off row 0), not from the last row
 
     // ---- Clip keyboard mode (TimelinePanelClipKeyboard.cpp) ----
     bool enterTrackClips(synth::TrackId trackId);
@@ -798,10 +801,9 @@ private:
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
     NoteLengthBox snapCombo_;
-    // Toggles TimelineViewState::snapEnabled from the panel chrome; its state mirrors the shared flag via
-    // setSnapEnabled() and the button never owns it. Labelled "Snap", not with its key, which goes stale on a rebind:
-    // the live key is in the tooltip, through synth::shortcutHintFor.
-    juce::TextButton snapToggleButton_{"Snap"};
+    // Toggles TimelineViewState::snapEnabled; its state mirrors the shared flag via setSnapEnabled(), never owns it.
+    // Named "Snap", not by its key (stale on a rebind): the live key is in the tooltip (synth::shortcutHintFor).
+    ToolbarButton snapToggleButton_{"Snap"};
     ClipSizingButton clipSizingButton_;
     // The one writer for the snap switch: flips the flag, persists, lights the button, repaints every grid painter.
     void setSnapEnabled(bool enabled);
@@ -860,13 +862,11 @@ private:
     std::function<double()> glideClockForTest_; // declared before cursorGlide_, whose host reads it
     synth::ui::TimelineCursorGlide cursorGlide_{*this, makeCursorGlideHost()};
 
-    // NOTE AUDITION — the track the currently-sounding preview note was sent TO. Invalid means
-    // nothing is sounding. See the onAuditionNote wiring in the constructor (TimelinePanelComponent.cpp)
-    // for the latch rationale.
+    // NOTE AUDITION: the track the sounding preview note was sent TO (invalid = silent); see the onAuditionNote wiring.
     synth::TrackId auditionTrackLatch_;
 
     // The button opens a MIDI/Audio menu rather than adding a MIDI track outright.
-    juce::TextButton addTrackButton_{"+ Track"};
+    ToolbarButton addTrackButton_{"Add Track"};
     EdgeResizeHandle trackHeaderWidthHandle_{EdgeResizeHandle::Axis::Horizontal};
     int trackHeaderWidth_ = 0; // 0 = the themed default
     int trackHeaderWidthAtPress_ = 0;

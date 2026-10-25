@@ -98,7 +98,7 @@ protected:
     juce::AudioProcessorGraph& graph() { return mc->getAudioEngine().getGraph(); }
     synth::TimelineDoc& doc() { return mc->getTimelineDoc(); }
 
-    // "+ Track -> Instrument -> Oscillator": Track In -> Oscillator -> ... -> Channel Strip -> Master, boxed in a
+    // "Add Track -> Instrument -> Oscillator": Track In -> Oscillator -> ... -> Channel Strip -> Master, boxed in a
     // macro.
     synth::TrackId addInstrumentTrack() {
         mc->getTimelinePanel().applyAddTrackMenuChoice(

@@ -100,7 +100,7 @@ TEST(AutomationLanesKeyboardTest, FoldedLanesAreSkippedAndStepsFromTheEndsGoToAd
     EXPECT_EQ(f.stop(), nullptr) << "folded lanes are not stops";
     EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), 1) << "Down goes straight to the next track";
 
-    // The last track's row with no lanes: Down reaches "+ Track".
+    // The last track's row with no lanes: Down reaches "Add Track".
     EXPECT_TRUE(f.pressOnTrack(2, downKey()));
     EXPECT_TRUE(f.panel.isAddTrackButtonFocused());
 }

@@ -56,6 +56,23 @@ struct ToolbarIconArt {
 // Splits `icon` (null allowed: an empty art) at its "mv" / "mv2" groups.
 ToolbarIconArt splitToolbarIconArt(std::unique_ptr<juce::Drawable> icon);
 
+// Where a button puts its caption: Stacked is the top bar's (caption under the chip). The Inline layouts put it to
+// the chip's right and keep the button no taller than the chip; InlineCompact has the smaller chip of the mixer bar.
+enum class ToolbarButtonLayout { Stacked, Inline, InlineCompact };
+
+// The chip, its glyph and the inline caption's metrics for `layout`, in px.
+struct ToolbarChipSpec {
+    float chipWidth;
+    float chipHeight;
+    float chipRadius;
+    float glyphSize;
+    float captionSize;
+    float inlineLeftInset; // before the chip, captioned
+    float inlineGap;       // chip to caption
+    float inlineRightPad;  // after the caption
+};
+ToolbarChipSpec toolbarChipSpec(ToolbarButtonLayout layout);
+
 class ToolbarButton : public juce::DrawableButton {
 public:
     explicit ToolbarButton(const juce::String& name);
@@ -65,6 +82,19 @@ public:
     void setIcon(synth::theme::Icon icon, ToolbarGroup group);
     // Rebuilds the art from the current look-and-feel's theme. Message thread only.
     void refreshArt();
+
+    // Chooses where the caption sits (Stacked by default) and repaints.
+    void setLayout(ToolbarButtonLayout layout);
+    ToolbarButtonLayout getLayout() const noexcept { return layout_; }
+    bool isInline() const noexcept { return layout_ != ToolbarButtonLayout::Stacked; }
+    // Names the button: the screen-reader title is always `name`; the caption is `name` only when `captionShown`.
+    void setLabel(const juce::String& name, bool captionShown);
+    // True: a wider-than-needed Inline button centres its chip and caption instead of keeping them at the left.
+    void setContentCentred(bool centred);
+    // How far an Inline button's chip and caption are shifted right of the left edge.
+    float getInlineContentOffset() const;
+    // The width an Inline layout needs for its current caption (just the chip when it has none).
+    int getPreferredWidth() const;
 
     synth::theme::Icon getIcon() const noexcept { return icon_; }
     ToolbarGroup getGroup() const noexcept { return group_; }
@@ -120,6 +150,8 @@ private:
 
     synth::theme::Icon icon_ = synth::theme::Icon::kCount;
     ToolbarGroup group_ = ToolbarGroup::View;
+    ToolbarButtonLayout layout_ = ToolbarButtonLayout::Stacked;
+    bool contentCentred_ = false;
     ToolbarIconArt restArt_;
     ToolbarIconArt litArt_;
     std::array<ToolbarPartMotion, 2> motion_{};

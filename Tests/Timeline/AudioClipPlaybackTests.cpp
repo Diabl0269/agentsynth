@@ -882,7 +882,7 @@ TEST_F(AddAudioTrackFlowTest, AddAudioTrackFlow) {
     ASSERT_NE(created, nullptr);
     EXPECT_EQ(created->getProcessor()->getName(), "Track Audio");
 
-    // "+ Track -> Audio Track" now builds a whole default channel, so the Track Audio node
+    // "Add Track -> Audio Track" now builds a whole default channel, so the Track Audio node
     // feeds the chain's first insert, not the master bus directly. that is the Gate — see
     // ChannelFlowTests.cpp for the rest of the chain (EQ, Compressor, Channel Strip, Master).
     auto* gate = findNodeNamedACP(graph, "Gate");

@@ -2,7 +2,7 @@
 //
 // A timelineOps `addInstrumentTrack` op applied through the REAL app host
 // (MainComponentTimelineOpsHost, installed on aiService by MainComponentSetup.cpp): the same
-// instrument-track build "+ Track -> Instrument" runs, with the op's exact name and its effect
+// instrument-track build "Add Track -> Instrument" runs, with the op's exact name and its effect
 // inserts between the envelope stage and the Gate, as ONE undo step together with the rest of the
 // batch. The op's contract with the host is covered call by call in
 // Tests/Timeline/TimelineOpsInstrumentTrackTests.cpp.

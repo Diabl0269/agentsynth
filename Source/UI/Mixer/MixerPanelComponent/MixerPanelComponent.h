@@ -102,6 +102,8 @@ public:
     /** The toolbar's Inserts / Sends / EQ toggle and the shortcut action it mirrors (shortcut hints). */
     juce::Button& getSectionToggle(MixerSection section) noexcept { return toolbar_.getSectionToggle(section); }
     static juce::String sectionToggleActionId(MixerSection section);
+    /** The "Show button labels" preference for the toolbar's buttons: names beside the icons, or icons only. */
+    void setToolbarLabelsShown(bool shown) { toolbar_.setLabelsShown(shown); }
     /** Shows or hides the side pane; `forceOpen` only ever opens it. Always true (the mixer has a pane). */
     bool toggleSidePane(bool forceOpen = false);
 
@@ -156,7 +158,7 @@ public:
 
     /** Creates a group/send bus channel -- bypassed EQ -> bypassed Compressor -> Stereo Strip ->
      *  Master(Mix), boxed in a macro named "Bus N" -- as ONE recordGraphAndMacroChange step, and
-     *  returns its strip's node id (invalid on failure). Wired to the toolbar's "+ Bus" button and
+     *  returns its strip's node id (invalid on failure). Wired to the toolbar's "Add Bus" button and
      *  to every send row's "New bus..." item (see docs/mixer/sends-and-buses.md). */
     juce::AudioProcessorGraph::NodeID createBus();
 

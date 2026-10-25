@@ -1,6 +1,6 @@
 // ChannelFlowVcaSignalPathTests.cpp
 //
-// What a user hears from "+ Track -> Instrument -> Oscillator" (Track In -> Oscillator -> ADSR/VCA ->
+// What a user hears from "Add Track -> Instrument -> Oscillator" (Track In -> Oscillator -> ADSR/VCA ->
 // Gate ...) while they unplug cables. Every case drives the REAL engine through the fake device with
 // a note held (Track In's audition path) and reads the Audio Output level.
 //

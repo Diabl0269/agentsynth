@@ -266,7 +266,7 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
     }
     // docs/mixer/track-presets.md#a-third-kind-bus: a Bus preset creates no timeline track
     // at all, just the bus chain — still listed here, grouped like the other two kinds, since
-    // "+ Track" is where every saved chain (track-bearing or not) is inserted from.
+    // "Add Track" is where every saved chain (track-bearing or not) is inserted from.
     const auto busPresets = synth::TrackPresetManager::listTrackPresets(dir, synth::TrackPresetKind::Bus);
     busTrackPresetMenuSnapshot_.assign(busPresets.begin(), busPresets.end());
     if (!busTrackPresetMenuSnapshot_.empty()) {
@@ -289,7 +289,7 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
 // on. Tests reach the picker through addTrackPickerHookForTest() instead.
 void TimelinePanelComponent::openAddTrackMenu() { showAddTrackPickerFor(isAddTrackButtonFocused()); }
 
-// The shortcut lands focus on "+ Track" first, then opens the picker as a keyboard open. Focus is passed on
+// The shortcut lands focus on "Add Track" first, then opens the picker as a keyboard open. Focus is passed on
 // explicitly because a real grab may not have taken effect by the time the picker is built.
 void TimelinePanelComponent::openAddTrackMenuFromShortcut() {
     focusAddTrackButton();
@@ -328,7 +328,7 @@ void TimelinePanelComponent::showAddTrackPickerFor(bool fromKeyboard) {
     synth::ui::showAddTrackPicker(addTrackButton_, std::move(picker));
 }
 
-// Picked or dismissed, a menu opened from the keyboard hands focus back to "+ Track"; otherwise focus
+// Picked or dismissed, a menu opened from the keyboard hands focus back to "Add Track"; otherwise focus
 // would be left nowhere and the next Tab would restart at the toolbar.
 void TimelinePanelComponent::finishAddTrackMenu(int result, bool openedFromKeyboard) {
     applyAddTrackMenuChoice(result);
@@ -653,7 +653,7 @@ void TimelinePanelComponent::focusTrackRowAt(int index) {
     refreshRoutingPane();
 }
 
-// "+ Track" sits above the rows but is also the stop below the last one, so it is entered from both
+// "Add Track" sits above the rows but is also the stop below the last one, so it is entered from both
 // ends: Up off the first row lands on it from the top, Down off the last row from the bottom. Anything
 // else is the clamped row step. selectAdjacentTrack deliberately does not come through here: it
 // selects a track and must keep clamping.

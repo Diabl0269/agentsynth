@@ -7,8 +7,8 @@ CoreText runtime font-family swap corruption described in
 
 ## The icon enum
 
-`synth::theme::Icon` in `Source/UI/Theme/IconLibrary.h` defines 46 icons, `TransportPlay = 0`
-through `TogglePanel`, followed by `kCount`:
+`synth::theme::Icon` in `Source/UI/Theme/IconLibrary.h` defines 55 icons, `TransportPlay = 0`
+through `MixerAddBus`, followed by `kCount`:
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -23,7 +23,9 @@ ToolSelect       ToolSplit        ToolGlue         ToolErase
 ToolMute         ToolDraw
 TrackMidi        TrackAudio       TrackAutomation  FollowPlayhead
 CatIO            ActionDetachWindow ToolRange        MixerSources
-TogglePanel      ActionDockBack
+TogglePanel      MixerSplit       ActionDockBack
+ToolbarAddTrack  ToolbarSnap      MixerInserts     MixerSends
+MixerEq          MixerResetMeters MixerAddBus
 ```
 
 **Ordinals are append-only.** New entries go immediately before `kCount`, never grouped in beside a
@@ -103,7 +105,7 @@ Notes on individual entries:
 | `ModuleMute` | `warning` |
 | `ModuleDelete` | `error` |
 | `TransportPlay` | `textMuted` |
-| The toolbar set | not tinted here: recoloured per group by `ToolbarButton` ([multi-role icons](#multi-role-icons)) |
+| The toolbar set, and the Timeline and Mixer toolbar glyphs (`ToolbarAddTrack`, `ToolbarSnap`, `MixerInserts`, `MixerSends`, `MixerEq`, `MixerResetMeters`, `MixerAddBus`) | not tinted here: recoloured per group by `ToolbarButton` ([multi-role icons](#multi-role-icons)) |
 | `TransportStop` | `textPrimary` |
 | Category icons (`CatSources` … `CatUtility`, `CatIO`) | `textMuted` |
 | `WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle` | `textPrimary` — the same as the combo text colour, so they stay legible across all themes |

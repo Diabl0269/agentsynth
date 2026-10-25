@@ -408,7 +408,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_AlreadyChanneledInstrumentGetsNoNew
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
 
-    // "+ Track -> Instrument" builds Track In -> Oscillator -> EQ -> Compressor -> Strip ->
+    // "Add Track -> Instrument" builds Track In -> Oscillator -> EQ -> Compressor -> Strip ->
     // Master in one step; the instrument this test's SECOND Track In targets already has a channel.
     addInstrumentTrack(mc, "Oscillator");
     auto& graph = mc.getAudioEngine().getGraph();

@@ -1,6 +1,6 @@
 // ChannelFlowPluginInstrumentTests.cpp
 //
-// "+ Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the
+// "Add Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the
 // instrument, plus regressions for menu snapshot resolution, format-label
 // disambiguation, self-exclusion and poly Voice Mixer wiring. Uses InstrumentPluginStubBackendCFT
 // and friends from ChannelFlowTestFixture.h.
@@ -37,7 +37,7 @@
 #include <thread>
 
 // ============================================================================
-// "+ Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the instrument.
+// "Add Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the instrument.
 // Loading is asynchronous (StubBackend's own contract), so every test here pumps the message loop
 // after driving the SAME applyAddTrackMenuChoice/menu-id path the tests above use.
 // ============================================================================
@@ -583,7 +583,7 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackOverMaxChannelsIsRefusedGraphAndUnd
 // synth::addVoiceMixerForPolyInstrument / the poly branch of MainComponent::addInstrumentTrack's
 // chain-source selection, exercised directly at the ChannelFlows level: a factory-default
 // Oscillator is poly OFF (see InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1 above), so
-// the golden "+ Track -> Instrument" path never takes this branch today — this proves it wires
+// the golden "Add Track -> Instrument" path never takes this branch today — this proves it wires
 // correctly for whenever an instrument IS poly (docs/mixer/mixer.md#an-instrument-track).
 TEST_F(ChannelFlowTest, PolyInstrumentGetsVoiceMixerAheadOfStripAndFeedsTheChannel) {
     AudioEngine engine;
@@ -634,7 +634,7 @@ TEST_F(ChannelFlowTest, NonPolyInstrumentGetsNoVoiceMixer) {
 }
 
 // synth::addEnvelopeAndVCAForRawInstrument, exercised directly at the ChannelFlows level for the
-// poly case (a factory-default Oscillator is poly OFF, so the golden "+ Track -> Instrument" path
+// poly case (a factory-default Oscillator is poly OFF, so the golden "Add Track -> Instrument" path
 // never exercises composition with a Voice Mixer today — see PolyInstrumentGetsVoiceMixerAheadOf-
 // StripAndFeedsTheChannel above for the same reasoning). Proves the VCA is inserted AFTER the Voice
 // Mixer's poly-voice sum, both forced non-poly, exactly as MainComponent::addInstrumentTrack does.
@@ -683,7 +683,7 @@ TEST_F(ChannelFlowTest, EnvelopeAndVCAComposeAfterVoiceMixerForPolyInstrument) {
     ASSERT_FALSE(channel.stripUuid.isEmpty()) << "the VCA's output must satisfy buildDefaultAudioChannel too";
 }
 
-// The ADSR a '+ Track' chain builds is the same card as one dragged from the library: every
+// The ADSR a 'Add Track' chain builds is the same card as one dragged from the library: every
 // parameter but the forced-mono `poly` is the stock default, and the new-module hook (Dual I/O default)
 // runs on it like it does on a library drop.
 TEST_F(ChannelFlowTest, TrackChainAdsrMatchesTheLibraryAdsrAndRunsTheNewModuleHook) {
@@ -723,7 +723,7 @@ TEST_F(ChannelFlowTest, TrackChainAdsrMatchesTheLibraryAdsrAndRunsTheNewModuleHo
 }
 
 // synth::addPolyEnvelopeAndVCAForInstrument, exercised directly at the ChannelFlows
-// level (a factory-default Oscillator is poly OFF, so the golden "+ Track -> Instrument" path never
+// level (a factory-default Oscillator is poly OFF, so the golden "Add Track -> Instrument" path never
 // takes this branch today, same reasoning as the poly tests above) — proves a poly instrument gets
 // a TRUE per-voice envelope: Poly MIDI's Pitch/Gate fans feed the instrument and a poly ADSR
 // directly, no Voice Mixer, both ADSR and VCA stay poly (never forced non-poly).
@@ -793,10 +793,10 @@ TEST_F(ChannelFlowTest, PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVo
         << "the VCA's summed ch0/ch1 output must satisfy buildDefaultAudioChannel";
 }
 
-// The "+ Track -> Instrument -> Oscillator (Poly)" menu entry is the first real UI
+// The "Add Track -> Instrument -> Oscillator (Poly)" menu entry is the first real UI
 // entry point for the poly-envelope auto-wire above — it must set the freshly created Oscillator's
 // "poly" parameter BEFORE MainComponent::addInstrumentTrack's own isProcessorPoly check runs, so
-// the golden "+ Track" path (never poly today — see InstrumentTrackOscillatorWiresSplitBlockRight-
+// the golden "Add Track" path (never poly today — see InstrumentTrackOscillatorWiresSplitBlockRight-
 // LegNeverCh1 above) can actually reach PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNo-
 // VoiceMixer's wiring. Drives the real menu seam (applyAddTrackMenuChoice), not
 // MainComponent::addInstrumentTrack or synth::addPolyEnvelopeAndVCAForInstrument directly.

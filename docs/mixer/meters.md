@@ -156,7 +156,7 @@ ticks.
 
 A plain click resets that column; Option or Alt-click resets every column
 (`onResetAllRequested`, fanned out by `MixerPanelComponent::resetAllMeterReadouts()`); the mixer panel
-toolbar's "Reset Meters" button, next to "+ Bus", calls the same fan-out. `reset()` clears both the max
+toolbar's "Reset Meters" button, next to "Add Bus", calls the same fan-out. `reset()` clears both the max
 and the clip colour.
 
 ## The Master meter and Master inserts

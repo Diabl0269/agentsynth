@@ -169,6 +169,14 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::mixersplit_svg, BinaryData::mixersplit_svgSize},
         // The detached panel's dock-back button (appended after Icon::MixerSplit).
         {BinaryData::actiondockback_svg, BinaryData::actiondockback_svgSize},
+        // The Timeline and Mixer toolbar buttons' glyphs (appended after Icon::ActionDockBack).
+        {BinaryData::toolbaraddtrack_svg, BinaryData::toolbaraddtrack_svgSize},
+        {BinaryData::toolbarsnap_svg, BinaryData::toolbarsnap_svgSize},
+        {BinaryData::mixerinserts_svg, BinaryData::mixerinserts_svgSize},
+        {BinaryData::mixersends_svg, BinaryData::mixersends_svgSize},
+        {BinaryData::mixereq_svg, BinaryData::mixereq_svgSize},
+        {BinaryData::mixerresetmeters_svg, BinaryData::mixerresetmeters_svgSize},
+        {BinaryData::mixeraddbus_svg, BinaryData::mixeraddbus_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount - update binaryDataForIcon lookup table");

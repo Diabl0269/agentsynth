@@ -53,7 +53,7 @@ void setProcessorPoly(juce::AudioProcessor* processor, bool poly) {
 }
 
 // Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain) that
-// "+ Track -> Audio Track" wires after a freshly-created Track Audio node's stereo output:
+// "Add Track -> Audio Track" wires after a freshly-created Track Audio node's stereo output:
 //
 //     source 0/1 -> Gate 0/1 -> Parametric EQ 0/1 -> Compressor 0/1 -> Channel Strip (Stereo) -> Master (Mix)
 //
@@ -104,7 +104,7 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
 // buildDefaultAudioChannel() instead of `instrument` directly.
 //
 // A factory-created instrument defaults to poly OFF (Oscillator/Wavetable's own `poly` parameter
-// default), so this returns nullptr on the golden "+ Track -> Instrument" path today; it exists so
+// default), so this returns nullptr on the golden "Add Track -> Instrument" path today; it exists so
 // poly instruments are handled correctly wherever they arise (a caller that explicitly turns poly on
 // before building the chain, or a future direct-poly picker), without the strip ever seeing more
 // than one stereo pair.
@@ -149,7 +149,7 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
 // (necessarily-mono) VCA gates it.
 //
 // The ADSR is left exactly as the module library creates it (stock defaults, and the new-module
-// hook's Dual I/O default), so a '+ Track' ADSR and a dragged-in one are the same card; the release
+// hook's Dual I/O default), so a 'Add Track' ADSR and a dragged-in one are the same card; the release
 // stage is what fixes the drone-after-note-off bug. VCA's gain is set to 0.5 (-6 dB) in the mono and the poly chain
 // alike: a single note peaks about -6 dB below full scale, leaving headroom so a chord, which sums at unity, stays
 // mostly under the soft limiter's knee.

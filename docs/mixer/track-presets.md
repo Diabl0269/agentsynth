@@ -33,7 +33,7 @@ BUS column exactly like a freshly built one. Two consequences follow:
 - **A bus has no per-type Preferences -> Mixer default.** "Set as Default Track Preset" is omitted
   entirely from a bus macro's own menu (`synth::isBusMacro`, same "omit, don't disable" precedent
   the header's own gates use) — a bus preset can still be saved and inserted at any time, it just
-  never becomes what a plain "+ Bus" builds.
+  never becomes what a plain "Add Bus" builds.
 
 **Inserting one re-flags `"isBus"` the same way "Add bus" does, AFTER the scrub-respecting insert
 runs.** The scrub itself is unchanged (see below): a Bus preset's saved JSON carries no `"isBus"` any
@@ -50,7 +50,7 @@ project already carries, falls back to the numbered `synth::busFallbackName` def
 same name "Add bus" would give a fresh one, so inserting a preset saved from "Bus 1" next to "Bus 1"
 never shows two columns with the same name.
 
-`"+ Track"`'s own **Bus** submenu ([`docs/timeline/add-track.md`](../timeline/add-track.md#track-presets))
+`"Add Track"`'s own **Bus** submenu ([`docs/timeline/add-track.md`](../timeline/add-track.md#track-presets))
 lists every saved Bus preset the same way the Audio/Instrument ones are listed, and **"Insert Track
 Preset from File..."** dispatches to the same no-timeline-track insert path when the file's own
 `"trackPresetKind"` reads `"bus"`.
@@ -72,14 +72,14 @@ Preferences -> Mixer lists each type's current default in a dropdown.
 **Saving a preset never changes a default** unless the user also picks "Set as default".
 
 The two per-type defaults are read from Preferences -> Mixer's `mixerDefaultTrackPresetAudio` and
-`mixerDefaultTrackPresetInstrument` settings keys and are **consulted by "+ Track -> Audio Track" and
-"+ Track -> Instrument Track" before the factory chain is built**
+`mixerDefaultTrackPresetInstrument` settings keys and are **consulted by "Add Track -> Audio Track" and
+"Add Track -> Instrument Track" before the factory chain is built**
 ([`docs/mixer/mixer.md`](mixer.md#the-factory-default-chain)).
 
 ## Creating a track from a preset
 
-Defaults only decide what a plain `+ Track -> Audio` or `+ Track -> Instrument` creates. **Any saved
-preset can be inserted at any time regardless of the defaults:** `+ Track` lists every saved preset
+Defaults only decide what a plain `Add Track -> Audio` or `Add Track -> Instrument` creates. **Any saved
+preset can be inserted at any time regardless of the defaults:** `Add Track` lists every saved preset
 grouped by type as its own submenu entries, and **"Insert Track Preset from File..."** loads one saved
 anywhere on disk (`TimelinePanelTrackHeaders.cpp`).
 
@@ -143,5 +143,5 @@ extra state before the preset is ever written to disk.** Each one is a real haza
 - [`docs/mixer/sends-and-buses.md`](sends-and-buses.md) — why `"sends"` and `"isBus"` are scrubbed.
 - [`docs/layout/snippets-clipboard.md`](../layout/snippets-clipboard.md) — `SnippetManager`, and the
   trusted-versus-untrusted apply rule.
-- [`docs/timeline/add-track.md`](../timeline/add-track.md) — the "+ Track" menu that lists presets.
+- [`docs/timeline/add-track.md`](../timeline/add-track.md) — the "Add Track" menu that lists presets.
 - [`docs/ai/patch-safety.md`](../ai/patch-safety.md) — `validatePatch` and the untrusted path.

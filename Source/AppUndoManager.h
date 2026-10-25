@@ -232,7 +232,7 @@ public:
 
     /**
      * @brief Records a mutation that may touch the graph, the TimelineDoc, AND a synth::MacroSet all
-     *        in ONE undo step (the canonical case: "+ Track -> Audio Track", which creates a
+     *        in ONE undo step (the canonical case: "Add Track -> Audio Track", which creates a
      *        Track Audio node plus its default insert chain (graph), the new track (timeline), and
      *        the collapsed macro boxing the chain under the track's name (macros), all as a single
      *        gesture a single Cmd+Z has to remove entirely).

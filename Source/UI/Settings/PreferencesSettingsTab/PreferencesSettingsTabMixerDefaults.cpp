@@ -7,7 +7,7 @@
 
 // Populates `combo` with the "Factory Default" sentinel (kMixerDefaultPresetFactoryComboId) plus
 // every saved `kind` preset (kMixerDefaultPresetComboIdBase + index) — same snapshot-at-populate-
-// time posture the "+ Track" menu's own preset submenus take, since this combo is populated once
+// time posture the "Add Track" menu's own preset submenus take, since this combo is populated once
 // at construction rather than re-collected live. Declared extern in
 // PreferencesSettingsTabInternal.h (the constructor, in PreferencesSettingsTabLifecycle.cpp, is
 // where it's actually called) — same "one definition, several callers" pattern as comboIdFromMode.
@@ -77,7 +77,7 @@ void PreferencesSettingsTab::setMixerDefaultTrackPresetInstrument(const juce::St
 // Constructs/wires the two combos — pulled out of PreferencesSettingsTab's constructor
 // (PreferencesSettingsTabLifecycle.cpp) into its own named step so that constructor stays under
 // the function-size ratchet; populateMixerDefaultPresetCombo() lists "Factory Default" plus every
-// saved preset of that type, snapshotted once here (same posture the "+ Track" menu's own
+// saved preset of that type, snapshotted once here (same posture the "Add Track" menu's own
 // submenus take).
 void PreferencesSettingsTab::setupMixerDefaultTrackPresetControls() {
     contentHost.addAndMakeVisible(mixerDefaultTrackPresetAudioLabel);

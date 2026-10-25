@@ -151,12 +151,40 @@ Tooltips name each button's shortcut where it has one.
 
 The Preferences switch **Show button labels** (Panels & Windows; `showToolbarLabels` in the user settings, on by
 default; `Source/UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h`) takes the caption off every top-bar button and
-every [canvas toolbar](#canvas-toolbar) button, leaving the icon chip. `applyToolbarLabels(iconOnly)` ORs it with the
+every [canvas toolbar](#canvas-toolbar) button, leaving the icon chip. It also covers the Timeline panel's Add Track
+and Snap buttons and the Mixer panel's Inserts, Sends, EQ, Reset Meters and Add Bus buttons
+([inline buttons](#inline-buttons)). `applyToolbarLabels(iconOnly)` ORs it with the
 narrow-width answer, so a narrow window is icon-only whatever the switch says, and a settings write
 (`MainComponent::changeListenerCallback`) re-applies the labels at once through `applyToolbarLabelPreference()`,
 which does work only when the value flipped. Titles and tooltips (with the key) are unchanged in both modes, so a
 screen reader and a hover still name each button. Tests: `Tests/UI/Chrome/CanvasToolbarTests.cpp`,
 `PreferencesSettingsTabToolbarLabelsTests.cpp`.
+
+### Inline buttons
+
+The Timeline and Mixer toolbars have no room for a caption under the chip, so their buttons are `ToolbarButton`s in an
+inline layout (`ToolbarButtonLayout`, `toolbarChipSpec()`): the chip, then the caption to its right, in one row, so
+no bar grows. The chip is the top bar's 30 x 24 with a 19 px glyph (`Inline`: the Timeline's 34 px bar and its Add Track
+strip) or a 24 x 20 chip with a 15 px glyph (`InlineCompact`: the Mixer's 24 px bar). The look-and-feel paints them
+with the same chip, glyph roles, hover, press and lit tweens as the top bar; a lit toggle with a caption also sits on a
+faint pill of its group colour. `ToolbarButton::setLabel(name, captionShown)` sets the screen-reader title (always the
+full name) and the caption (the name, or empty when labels are off); `getPreferredWidth()` is the width the caption
+needs, and `setContentCentred(true)` (Add Track) centres chip and caption in a wider button.
+
+| Button | Glyph (`Icon`) | Group colour | Lit |
+|---|---|---|---|
+| Timeline "Add Track" | `ToolbarAddTrack` | amber | no |
+| Timeline "Snap" | `ToolbarSnap` | amber | while snapping is on |
+| Mixer "Inserts" / "Sends" / "EQ" | `MixerInserts` / `MixerSends` / `MixerEq` | accent | while the section is shown |
+| Mixer "Reset Meters" | `MixerResetMeters` | violet | no |
+| Mixer "Add Bus" | `MixerAddBus` | amber | no |
+
+The glyphs are multi-role SVGs ([icons](icons.md#multi-role-icons)). `MainComponent::applyToolbarLabels` pushes the
+preference to `TimelinePanelComponent::setToolbarLabelsShown` and `MixerPanelComponent::setToolbarLabelsShown`; the
+mixer is one panel in the dock, the Own panel and a detached window, so all three follow. Narrow mode does not touch
+them. With labels off the tooltip still names the button ("Add Track: ...", "Snap on/off (J)"). Tests:
+`Tests/UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp`, `TimelinePanelResizeTests.cpp`,
+`MixerSectionPanelTests.cpp`.
 
 ## Canvas toolbar
 

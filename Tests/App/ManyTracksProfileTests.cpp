@@ -1,6 +1,6 @@
 // ManyTracksProfileTests.cpp
 //
-// A disabled profiling bench, not a test: builds N instrument tracks through the real "+ Track -> Instrument" path in
+// A disabled profiling bench, not a test: builds N instrument tracks through the real "Add Track -> Instrument" path in
 // a real MainComponent and prints the per-frame cost of the canvas tick, the card glide (auto-arrange, undo, redo),
 // the timeline and the mixer. Run by hand (docs/layout/rendering.md#per-frame-work-does-not-grow-with-the-patch):
 //   ./Tests --gtest_also_run_disabled_tests --gtest_filter='*ManyTracksProfile*'

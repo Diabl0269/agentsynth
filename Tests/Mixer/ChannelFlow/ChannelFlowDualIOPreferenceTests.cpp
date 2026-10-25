@@ -1,7 +1,7 @@
 // ChannelFlowDualIOPreferenceTests.cpp
 //
 // The "Split Left/Right jacks on new modules" preference (and its per-module overrides) must
-// apply to the modules "+ Track" builds, not only to modules dropped from the library. The input SHAPE
+// apply to the modules "Add Track" builds, not only to modules dropped from the library. The input SHAPE
 // the chain forces on the Channel Strip (Stereo) is not affected; its Left/Right jacks follow the preference.
 // Shared ChannelFlowTest fixture and helpers live in ChannelFlowTestFixture.h.
 

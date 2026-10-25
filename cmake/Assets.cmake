@@ -91,6 +91,15 @@ juce_add_binary_data(Assets SOURCES
     ${CMAKE_SOURCE_DIR}/assets/icons/mixer-split.svg
     # The detached panel's dock-back button (an arrow into a window). BinaryData symbol: actiondockback_svg.
     ${CMAKE_SOURCE_DIR}/assets/icons/action-dock-back.svg
+    # The Timeline and Mixer toolbar buttons' multi-role glyphs. BinaryData symbols: toolbaraddtrack_svg,
+    # toolbarsnap_svg, mixerinserts_svg, mixersends_svg, mixereq_svg, mixerresetmeters_svg, mixeraddbus_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-add-track.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-snap.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-inserts.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-sends.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-eq.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-reset-meters.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/mixer-add-bus.svg
     # FRO134/FRO143 (docs/control/midi-remote-ui.md#templates-and-importexport): controller
     # templates (generic + vendor), enumerated via BinaryData::namedResourceList by id, not name.
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-8-knobs.json

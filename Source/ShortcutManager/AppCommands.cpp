@@ -104,7 +104,7 @@ namespace AppCommands {
  *    a raw juce::CommandID); filed under Graph in the action table, alongside autoArrange, since it
  *    means nothing off the canvas.
  *  - openAddTrackMenu / renameSelectedModule / replaceSelectedModule: appended per the snapSet rule. The
- *    first shows the Timeline, focuses "+ Track" and opens its searchable menu (General); the other two act
+ *    first shows the Timeline, focuses "Add Track" and opens its searchable menu (General); the other two act
  *    on the single selected module card (Graph) -- the inline title editor and the "Replace with..." search.
  *  - transportPlay / transportStop: transport verbs promoted to command-dispatched actions -- the
  *    prerequisite docs/control/midi-remote.md#action-targets asks for, since a MIDI Remote action

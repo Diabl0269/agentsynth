@@ -4,6 +4,7 @@
 
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cmath>
 
 namespace synth::ui {
 
@@ -25,6 +26,18 @@ constexpr float kPressSquashY = 0.14f;
 constexpr float kLitSoftAlpha = 0.4f;
 } // namespace
 
+ToolbarChipSpec toolbarChipSpec(ToolbarButtonLayout layout) {
+    switch (layout) {
+    case ToolbarButtonLayout::Inline:
+        return {30.0f, 24.0f, 7.0f, 19.0f, 11.5f, 1.0f, 6.0f, 4.0f};
+    case ToolbarButtonLayout::InlineCompact:
+        return {24.0f, 20.0f, 6.0f, 15.0f, 11.5f, 1.0f, 6.0f, 4.0f};
+    case ToolbarButtonLayout::Stacked:
+        break;
+    }
+    return {30.0f, 24.0f, 7.0f, 19.0f, 10.5f, 0.0f, 0.0f, 0.0f};
+}
+
 ToolbarButton::ToolbarButton(const juce::String& name)
     : juce::DrawableButton(name, juce::DrawableButton::ImageAboveTextLabel) {}
 
@@ -34,6 +47,40 @@ ToolbarButton::~ToolbarButton() {
     lit_.driver.stop(updater_);
     loop_.driver.stop(updater_);
     cycle_.stop(updater_);
+}
+
+void ToolbarButton::setLayout(ToolbarButtonLayout layout) {
+    if (layout == layout_)
+        return;
+    layout_ = layout;
+    repaint();
+}
+
+void ToolbarButton::setContentCentred(bool centred) {
+    contentCentred_ = centred;
+    repaint();
+}
+
+float ToolbarButton::getInlineContentOffset() const {
+    if (!contentCentred_ || !isInline() || getButtonText().isEmpty())
+        return 0.0f;
+    return juce::jmax(0.0f, (float)(getWidth() - getPreferredWidth()) * 0.5f);
+}
+
+void ToolbarButton::setLabel(const juce::String& name, bool captionShown) {
+    setTitle(name);
+    setButtonText(captionShown ? name : juce::String());
+    repaint();
+}
+
+int ToolbarButton::getPreferredWidth() const {
+    const auto spec = toolbarChipSpec(layout_);
+    const auto text = getButtonText();
+    if (text.isEmpty() || !isInline())
+        return (int)std::ceil(spec.chipWidth) + 4;
+    const auto font = synth::theme::AppLookAndFeel::uiSemiBoldFont(spec.captionSize);
+    const int textWidth = juce::GlyphArrangement::getStringWidthInt(font, text);
+    return (int)std::ceil(spec.inlineLeftInset + spec.chipWidth + spec.inlineGap + spec.inlineRightPad) + textWidth + 1;
 }
 
 void ToolbarButton::setIcon(synth::theme::Icon icon, ToolbarGroup group) {

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Toolbar icon, edit group (a magnet). Colour roles are placeholders the icon library replaces: #FF00FF = group colour, #00FFFF = ink, #FFFF00 = paper. -->
+  <path d="M6 8v4a6 6 0 0 0 12 0V8" stroke-width="3.6" fill="none" stroke="#FF00FF" />
+  <rect x="4.2" y="3" width="3.6" height="5.2" rx=".6" fill="#FFFF00" />
+  <rect x="16.2" y="3" width="3.6" height="5.2" rx=".6" fill="#FFFF00" />
+</svg>

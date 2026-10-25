@@ -26,7 +26,7 @@ in-flight gesture and keyboard focus survive the notification); only a lane that
 loses them. The editors live in one click-through container over the lanes region (above the clip
 lanes and the piano roll, below the playhead), placed at their row's y minus the vertical scroll and
 clipped by it; the container hides while the piano roll is open.
-The header column's "+ Track" strip is exactly as tall as what sits above the clip rows (the ruler, plus the roll's
+The header column's "Add Track" strip is exactly as tall as what sits above the clip rows (the ruler, plus the roll's
 toolbar while it is open), so a track header, its lane headers and their rows all start at the same y and have the same
 height as the rows they label.
 
@@ -198,7 +198,7 @@ panel is not on screen. A lane never leaves its own track: the block is clamped 
 
 Up/Down walk the track list as one column: a track's row, then each of its open lanes (a lane header, followed by its
 modulator rows), then the next track's row, and back. Folded lanes are not stops, and the last stop's Down reaches
-"+ Track". Stepping onto a lane or modulator row also makes its track the focused one, so the routing pane follows.
+"Add Track". Stepping onto a lane or modulator row also makes its track the focused one, so the routing pane follows.
 Where the arrows navigate: only when focus is on the row itself (a lane header or a modulator row). Return on a row opens its menu. Up/Down on a control chip bubble to the row like any other key, and Cmd+Alt+Up/Down still move the lane; any other modified
 arrow is left alone. On a modulator row Left folds it to its title line and Right opens it (as a tree view does), and
 Cmd+Alt+Up/Down (the same rebindable `timelineMoveLaneUp` / `timelineMoveLaneDown`) move that modulator one slot among its

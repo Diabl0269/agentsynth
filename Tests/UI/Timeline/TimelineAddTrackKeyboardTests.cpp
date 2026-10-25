@@ -1,6 +1,6 @@
 // TimelineAddTrackKeyboardTests.cpp
 //
-// "+ Track" as the last keyboard stop of the track-header column: Down from the last row (or from
+// "Add Track" as the last keyboard stop of the track-header column: Down from the last row (or from
 // the panel root of an empty timeline) lands on it, Up goes back, Return/Space press it. Real focus
 // needs a native peer, so the panel's record-focus test mode stands in for it while the keys go
 // through the real handlers (a header's keyPressed, the panel's keyPressed).
@@ -63,7 +63,7 @@ struct AddTrackFixture {
         panel.getAddTrackButton().onClick = [this] { ++clicks; };
     }
 
-    // Down on the panel root lands on "+ Track", Down again seeds row 0; each further Down from a header
+    // Down on the panel root lands on "Add Track", Down again seeds row 0; each further Down from a header
     // steps one row.
     void focusRow(int index) {
         ASSERT_TRUE(panel.handleRootFocusKey(downKey()));
@@ -124,7 +124,7 @@ TEST(TimelineAddTrackKeyboard, FromTheTopUpReturnsToTheRootAndFromTheFirstRowUpR
     f.focusRow(0);
     ASSERT_EQ(f.panel.getFocusedTrackIndexForTest(), 0);
     ASSERT_TRUE(f.panel.getTrackHeaderAt(0)->keyPressed(upKey()));
-    EXPECT_TRUE(f.panel.isAddTrackButtonFocused()) << "Up off the first row lands on + Track";
+    EXPECT_TRUE(f.panel.isAddTrackButtonFocused()) << "Up off the first row lands on Add Track";
     EXPECT_TRUE(f.panel.keyPressed(downKey()));
     EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), 0) << "and Down from it is the first row again";
 }
@@ -182,7 +182,7 @@ TEST(TimelineAddTrackKeyboard, ModifiedKeysFallThroughToTheAppShortcuts) {
 }
 
 // The menu's own close callback (showMenuAsync's result can't be driven headlessly): opened from the
-// keyboard, focus comes back to "+ Track" whether the menu was dismissed or a pick was made, so the
+// keyboard, focus comes back to "Add Track" whether the menu was dismissed or a pick was made, so the
 // next Tab does not restart at the toolbar. Opened by mouse, focus is left where it was.
 TEST(TimelineAddTrackKeyboard, ClosingTheMenuOpenedFromTheKeyboardRefocusesAddTrack) {
     AddTrackFixture f(2);
@@ -194,7 +194,7 @@ TEST(TimelineAddTrackKeyboard, ClosingTheMenuOpenedFromTheKeyboardRefocusesAddTr
     EXPECT_FALSE(f.panel.isAddTrackButtonFocused()) << "a mouse-opened menu leaves focus alone";
 
     f.panel.finishAddTrackMenu(0, true);
-    EXPECT_TRUE(f.panel.isAddTrackButtonFocused()) << "dismissed with Esc: back on + Track";
+    EXPECT_TRUE(f.panel.isAddTrackButtonFocused()) << "dismissed with Esc: back on Add Track";
 }
 
 // Up/Down land on the rows themselves, so each row carries its track's name for a screen reader (it

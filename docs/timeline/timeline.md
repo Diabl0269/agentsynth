@@ -11,7 +11,7 @@ This doc is the shell — the regions, the dock, the height and the slide. The r
 | [view](view.md) | `TimelineViewState`: beat↔pixel mapping, snap, the lanes grid, wheel/zoom/scroll |
 | [ruler](ruler.md) | The ruler strip, its two gesture zones, the loop brace, markers |
 | [tracks](tracks.md) | Track header rows: binding chips, M/S/R, focus, reordering |
-| [add-track](add-track.md) | The `"+ Track"` menu and every flow it starts |
+| [add-track](add-track.md) | The `"Add Track"` menu and every flow it starts |
 | [playhead](playhead.md) | The playhead overlay, latency compensation, follow-playhead |
 | [transport](transport.md) | The transport bar, recording, metronome and count-in |
 | [edit-tools](edit-tools.md) | The Cubase-style tool strip shared by the lanes and the roll |
@@ -45,7 +45,7 @@ layout-plus-paint with no timer or animation of its own:
 | Transport bar strip  (play/stop/record/loop, BPM, time-sig, ruler   |  transport
 | readout, metronome/count-in .......................... snap combo) |   (+ view's snap selector)
 +---------------------+----------------------------------------------+
-| "+ Track"            | Ruler  (bar/beat ticks, loop brace)          |  add-track (+ ruler)
+| "Add Track"            | Ruler  (bar/beat ticks, loop brace)          |  add-track (+ ruler)
 | Track header column  +----------------------------------------------+
 | (fold arrow/name/    | Clip lanes  <-or->  Piano roll               |  tracks / clips <-> roll
 |  colour/M/S/R/chip), | (one of the two, same rect, playhead overlay |
@@ -150,7 +150,7 @@ minimum**:
   be resized from Timeline, Mixer and Controllers alike (and while the Timeline is detached into
   its own window). It *overlaps* the top 5 px of the 22 px tab strip: the strip keeps its full
   height so the content below never moves, but the tab/detach buttons are laid out beneath it, so a
-  resize grab never lands on a button. `+ Bus`/Reset Meters are not on the tab strip at all — they are the mixer panel's own
+  resize grab never lands on a button. `Add Bus`/Reset Meters are not on the tab strip at all — they are the mixer panel's own
   toolbar (see [`docs/mixer/panel.md`](../mixer/panel.md#the-toolbar)), so switching tabs never changes the tab strip's own
   width split. The Timeline panel itself has no handle
   and no resize callbacks; its transport bar uses its whole `Metrics::timelineTransportBarHeight`

@@ -10,7 +10,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/NewModulePlacement/NewModulePlacement.h"
 
-// The same build "+ Track -> Instrument" runs (MainComponent::buildInstrumentTrackBody), with the
+// The same build "Add Track -> Instrument" runs (MainComponent::buildInstrumentTrackBody), with the
 // exact name the op asked for and WITHOUT the user's default-preset lookup: the preview the user
 // agreed to describes this chain, so a preset must not silently replace it. The model can bind
 // nothing but the Track In this creates -- "Track In" itself stays non-authorable in patches.

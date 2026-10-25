@@ -1,12 +1,14 @@
 # Adding Tracks
 
-The `"+ Track"` button at the top of the timeline panel's header column, and every flow it starts.
+The `"Add Track"` button at the top of the timeline panel's header column, and every flow it starts. The button is an
+amber icon chip with its name beside it (the chip alone when Show button labels is off; [inline
+buttons](../layout/chrome.md#inline-buttons)); its screen-reader name is "Add Track" either way.
 The header rows it creates are [tracks](tracks.md); the channel chains it builds are
 [`docs/mixer/mixer.md`](../mixer/mixer.md#building-a-channel).
 
 ## The picker
 
-`"+ Track"` is the first keyboard stop of the header column: Down from the bottom-panel tab strip (Timeline selected) or from the Timeline region root lands on it
+`"Add Track"` is the first keyboard stop of the header column: Down from the bottom-panel tab strip (Timeline selected) or from the Timeline region root lands on it
 and Down again on the first track; it is also the stop below the last track (the arrow-key table is in
 [shortcuts](../control/shortcuts.md#timeline)). Its tooltip names the live **Add Track...** shortcut (Cmd+T on
 macOS, Ctrl+Alt+T elsewhere, rebindable). Pressing it, or the shortcut, opens a **searchable picker** in a call-out
@@ -33,7 +35,7 @@ Menu ids are `TimelinePanelComponent::kAddMidiTrackMenuId` / `kAddAudioTrackMenu
 with its module type string.
 
 **Focus.** Opened from the keyboard (the button was focused, or the shortcut ran), the picker hands focus back to
-`"+ Track"` when it closes: `finishAddTrackMenu` does it after a pick, and the picker's `onClosed` (run from its
+`"Add Track"` when it closes: `finishAddTrackMenu` does it after a pick, and the picker's `onClosed` (run from its
 destructor) does it after Escape or a click away, once only. The shortcut itself is
 `TimelinePanelComponent::openAddTrackMenuFromShortcut()`: it focuses the button, then opens the picker as a keyboard open;
 `MainComponent` runs it after showing the Timeline.
@@ -89,7 +91,7 @@ Track presets are different: they keep the jacks they were saved with.
 
 ## Track presets
 
-Below the Instrument submenu, `"+ Track"` lists every saved preset for each track kind — own
+Below the Instrument submenu, `"Add Track"` lists every saved preset for each track kind — own
 **Audio**, **Instrument** and **Bus** submenus, one item per preset via
 `synth::TrackPresetManager::listTrackPresets`, ids `kAddTrackPresetAudioMenuIdBase` /
 `kAddTrackPresetInstrumentMenuIdBase` / `kAddTrackPresetBusMenuIdBase` — then a final **"Insert
@@ -138,7 +140,7 @@ handled.
 
 **Add Marker** sits below a separator because it is **not a track**: it adds no header row and no
 graph node, it drops a flag on the ruler ([ruler](ruler.md#markers)). It shares this menu because
-`"+ Track"` is where a user reaches for "add something to the arrangement", and a second button for
+`"Add Track"` is where a user reaches for "add something to the arrangement", and a second button for
 one item would not earn its pixels. It is handled *before* `applyAddTrackMenuChoice`'s
 `TrackHeaderHost` null-check — a marker is document data with nothing behind it to wire — and calls
 `addMarkerAtPlayhead()`.
@@ -289,7 +291,7 @@ the reconcile pass:
 
 Focus follows the copy (`TimelinePanelComponent::focusTrackRow`), so Cmd+D again duplicates the copy. The new row and the
 copy's mixer strip grow in (the rows below and the columns after make room first), the mirror of the delete motion, armed
-by `MainComponent::TrackGrowInScope`; adding a track from "+ Track" does the same. Under Reduce Motion it is a plain
+by `MainComponent::TrackGrowInScope`; adding a track from "Add Track" does the same. Under Reduce Motion it is a plain
 fade, and off-screen it lands at once. A mixer strip's right-click menu also offers "Duplicate Track" (the same action, for
 a strip fed by exactly one track). At `kMaxTracks` nothing happens and the status bar says so.
 

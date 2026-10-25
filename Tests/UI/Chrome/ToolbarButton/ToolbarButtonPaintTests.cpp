@@ -1,12 +1,19 @@
 // ToolbarButtonPaintTests.cpp -- the top bar's buttons paint their group colour on the chip and in the
 // glyph (dark and Daylight themes), a lit toggle's chip is solid, a disabled button has no chip, captions
 // are never coloured, a theme switch re-colours from the originals, and splitting an icon into body and
-// moving parts draws exactly what the whole icon draws (docs/layout/chrome.md#toolbar).
+// moving parts draws exactly what the whole icon draws (docs/layout/chrome.md#toolbar). The inline layouts of the
+// Timeline and Mixer bars (docs/layout/chrome.md#inline-buttons) are at the end: chip and caption in one row, an
+// icon-only chip, width from the caption, and the lit pill.
 #include "ToolbarButtonTestHelpers.h"
 #include "UI/Chrome/ToolbarComponent.h"
 #include <array>
 
 using namespace toolbartest;
+using synth::ui::ToolbarButtonLayout;
+
+namespace {
+constexpr float kPillAlpha = 0.12f; // a lit inline button's pill, as a share of its group colour
+}
 
 namespace {
 
@@ -231,4 +238,102 @@ TEST(ToolbarLayoutTest, FeedbackSlotIsWideEnoughForItsCaption) {
     // The chip and caption fit inside the button the bar actually lays out.
     const auto& b = *owned[ToolbarComponent::Save];
     EXPECT_EQ(b.getHeight(), 44);
+}
+
+TEST_F(ToolbarButtonTest, InlineChipSitsLeftOfItsCaptionInOneRow) {
+    auto& b = make(Icon::ToolbarSnap, ToolbarGroup::Edit, "Snap");
+    b.setLayout(ToolbarButtonLayout::Inline);
+    b.setSize(b.getPreferredWidth(), 30);
+
+    const auto chip = synth::theme::toolbarChipBounds(b);
+    EXPECT_EQ(chip.getWidth(), 30.0f);
+    EXPECT_EQ(chip.getHeight(), 24.0f);
+    EXPECT_LE(chip.getBottom(), (float)b.getHeight()) << "the chip fits the bar";
+    EXPECT_EQ(chip.getCentreY(), b.getHeight() * 0.5f) << "centred vertically, not above a caption";
+    EXPECT_LT(chip.getRight(), (float)b.getWidth()) << "room is left for the caption beside it";
+}
+
+TEST_F(ToolbarButtonTest, CompactInlineChipFitsAMixerBar) {
+    auto& b = make(Icon::MixerEq, ToolbarGroup::View, "EQ");
+    b.setLayout(ToolbarButtonLayout::InlineCompact);
+    b.setSize(b.getPreferredWidth(), 23);
+
+    const auto chip = synth::theme::toolbarChipBounds(b);
+    EXPECT_EQ(chip.getWidth(), 24.0f);
+    EXPECT_EQ(chip.getHeight(), 20.0f);
+    EXPECT_GE(chip.getY(), 0.0f);
+    EXPECT_LE(chip.getBottom(), 23.0f);
+    const auto glyph = juce::Rectangle<float>(0, 0, 24, 24).transformed(synth::theme::toolbarIconTransform(b));
+    EXPECT_FLOAT_EQ(glyph.getWidth(), 15.0f);
+}
+
+TEST_F(ToolbarButtonTest, InlineWithoutACaptionIsJustACentredChip) {
+    auto& b = make(Icon::MixerAddBus, ToolbarGroup::Edit, "Add Bus");
+    b.setLayout(ToolbarButtonLayout::InlineCompact);
+    b.setLabel("Add Bus", false);
+    b.setSize(b.getPreferredWidth(), 23);
+
+    EXPECT_TRUE(b.getButtonText().isEmpty());
+    EXPECT_EQ(b.getTitle(), "Add Bus") << "the screen-reader name stays the full name";
+    EXPECT_EQ(synth::theme::toolbarChipBounds(b).getCentreX(), b.getWidth() * 0.5f);
+    EXPECT_LE(b.getPreferredWidth(), 30) << "icon-only is narrow";
+}
+
+TEST_F(ToolbarButtonTest, InlineWidthFollowsTheCaption) {
+    auto& shortName = make(Icon::MixerEq, ToolbarGroup::View, "EQ");
+    auto& longName = make(Icon::MixerResetMeters, ToolbarGroup::Housekeeping, "Reset Meters");
+    for (auto* b : {&shortName, &longName})
+        b->setLayout(ToolbarButtonLayout::InlineCompact);
+    EXPECT_GT(longName.getPreferredWidth(), shortName.getPreferredWidth());
+
+    longName.setLabel("Reset Meters", false);
+    EXPECT_LT(longName.getPreferredWidth(), shortName.getPreferredWidth()) << "no caption, no text width";
+}
+
+TEST_F(ToolbarButtonTest, ACentredInlineButtonKeepsChipAndCaptionTogether) {
+    auto& b = make(Icon::ToolbarAddTrack, ToolbarGroup::Edit, "Add Track");
+    b.setLayout(ToolbarButtonLayout::Inline);
+    b.setContentCentred(true);
+    b.setSize(b.getPreferredWidth() + 100, 26);
+    EXPECT_NEAR(b.getInlineContentOffset(), 50.0f, 1.0f);
+    EXPECT_NEAR(synth::theme::toolbarChipBounds(b).getX(), 51.0f, 1.0f);
+
+    b.setContentCentred(false);
+    EXPECT_EQ(b.getInlineContentOffset(), 0.0f);
+}
+
+TEST_F(ToolbarButtonTest, ALitCaptionedInlineButtonSitsOnAFaintPill) {
+    auto& b = make(Icon::ToolbarSnap, ToolbarGroup::Edit, "Snap");
+    b.setLayout(ToolbarButtonLayout::Inline);
+    b.setSize(b.getPreferredWidth(), 30);
+    const juce::Point<int> pillOnly{b.getWidth() - 2, b.getHeight() / 2}; // right of the caption
+    const auto bg = theme().colors.bg0;
+    const auto hue = synth::ui::toolbarGroupHue(theme(), ToolbarGroup::Edit);
+
+    EXPECT_TRUE(pixelNear(render(b), pillOnly, bg)) << "an unlit button has no pill";
+    b.setToggleState(true, juce::dontSendNotification);
+    EXPECT_TRUE(pixelNear(render(b), pillOnly, bg.overlaidWith(hue.withAlpha(kPillAlpha)))) << "a lit one does";
+
+    b.setLabel("Snap", false);
+    b.setSize(b.getPreferredWidth(), 30);
+    EXPECT_TRUE(pixelNear(render(b), {1, 1}, bg)) << "icon-only has no pill, just the solid chip";
+}
+
+TEST_F(ToolbarButtonTest, TheInlineCaptionIsPaintedBesideTheChip) {
+    auto& b = make(Icon::ToolbarAddTrack, ToolbarGroup::Edit, "Add Track");
+    b.setLayout(ToolbarButtonLayout::Inline);
+    b.setSize(b.getPreferredWidth(), 30);
+    const auto img = render(b);
+    const auto chip = synth::theme::toolbarChipBounds(b);
+
+    int inked = 0;
+    for (int y = 0; y < b.getHeight(); ++y)
+        for (int x = (int)chip.getRight() + 2; x < b.getWidth(); ++x)
+            inked += near(img.getPixelAt(x, y), theme().colors.bg0, 2) ? 0 : 1;
+    EXPECT_GT(inked, 20) << "caption pixels to the right of the chip";
+
+    int below = 0;
+    for (int x = 0; x < b.getWidth(); ++x)
+        below += near(img.getPixelAt(x, b.getHeight() - 1), theme().colors.bg0, 2) ? 0 : 1;
+    EXPECT_EQ(below, 0) << "nothing is drawn under the chip: the caption is not stacked";
 }

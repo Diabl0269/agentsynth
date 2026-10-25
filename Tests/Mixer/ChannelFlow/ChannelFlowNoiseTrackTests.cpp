@@ -1,6 +1,6 @@
 // ChannelFlowNoiseTrackTests.cpp
 //
-// A Noise instrument track ("+ Track -> Instrument -> Noise" and a model's addInstrumentTrack op): the
+// A Noise instrument track ("Add Track -> Instrument -> Noise" and a model's addInstrumentTrack op): the
 // Noise module takes no MIDI, so the build draws no Track In -> Noise MIDI cable, yet the ADSR is still
 // gated by Track In and the noise is audible only while a note plays.
 

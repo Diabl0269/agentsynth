@@ -1,5 +1,6 @@
 // Concern: (docs/mixer/track-presets.md#saving-and-setting-a-default) -- the per-type default track preset
-// consulted by "+ Track -> Audio Track" (MainComponentTrackCreation.cpp's addAudioTrack) BEFORE the factory Track Audio
+// consulted by "Add Track -> Audio Track" (MainComponentTrackCreation.cpp's addAudioTrack) BEFORE the factory Track
+// Audio
 // -> EQ -> Compressor -> Strip -> Master chain is built. Unlike TrackPresetTests.cpp / TrackPresetCaptureTests.cpp
 // (pure TrackPresetManager, no MainComponent needed), this exercises the real settings key
 // (mixerDefaultTrackPresetAudio) AND the real on-disk preset directory
@@ -54,7 +55,7 @@ protected:
 };
 
 TEST_F(TrackPresetDefaultsTest, PerTypeDefaultUsedByPlusTrackAudio) {
-    // Build and save a distinctive preset (it carries a bare Oscillator -- the factory "+ Track ->
+    // Build and save a distinctive preset (it carries a bare Oscillator -- the factory "Add Track ->
     // Audio Track" chain, Track Audio -> EQ -> Compressor -> Strip, never contains one) to the REAL
     // default track-presets directory, entirely independent of any MainComponent.
     {
@@ -82,12 +83,12 @@ TEST_F(TrackPresetDefaultsTest, PerTypeDefaultUsedByPlusTrackAudio) {
     // falsifiable against the factory Track Audio -> EQ -> Compressor chain (which adds none).
     const auto oscillatorsBefore = countNodesOfTypeCFT(mc->getAudioEngine().getGraph(), ModuleType::Oscillator);
 
-    // Same headless "+ Track -> Audio Track" seam ChannelFlowTest::addAudioTrack uses internally
+    // Same headless "Add Track -> Audio Track" seam ChannelFlowTest::addAudioTrack uses internally
     // (that helper is protected on ChannelFlowTest, not reachable from this unrelated fixture).
     mc->getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddAudioTrackMenuId);
 
     EXPECT_EQ(mc->getTimelineDoc().getTracks().size(), tracksBefore + 1);
     EXPECT_EQ(countNodesOfTypeCFT(mc->getAudioEngine().getGraph(), ModuleType::Oscillator), oscillatorsBefore + 1)
-        << "the default preset's Oscillator must be what + Track -> Audio Track actually inserted, "
+        << "the default preset's Oscillator must be what Add Track -> Audio Track actually inserted, "
            "not the factory Track Audio -> EQ -> Compressor chain (which never has one)";
 }

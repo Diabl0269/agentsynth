@@ -102,7 +102,7 @@ std::function<void(juce::AudioProcessor&, const juce::String&)> MainComponent::n
 // invalid id when none was added (the document is at its track limit).
 synth::TrackId MainComponentAudioImport::buildAudioTrackChannel(MainComponent& mc, int index, juce::String& trackName) {
     const auto tracksBefore = mc.timelineDoc.getTracks().size();
-    // Consult the per-type default BEFORE any node is created. Defaults only steer this plain "+ Track ->
+    // Consult the per-type default BEFORE any node is created. Defaults only steer this plain "Add Track ->
     // Audio" gesture — a saved preset is always reachable regardless via the grouped list / file insert
     // (TimelinePanelTrackHeaders.cpp), independent of what's set here
     // (see docs/mixer/track-presets.md#saving-and-setting-a-default).
@@ -193,7 +193,7 @@ void MainComponent::addAudioTrack() {
     const int index = (int)timelineDoc.getTracks().size();
     juce::String trackName; // set inside the mutation; read afterwards for the status message
 
-    // "+ Track -> Audio Track" creates a WHOLE mixer channel in ONE undo step —
+    // "Add Track -> Audio Track" creates a WHOLE mixer channel in ONE undo step —
     // Track Audio -> Gate (bypassed) -> Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel
     // Strip (Stereo) -> Master (Mix), with {Track Audio, Gate, EQ, Compressor, Strip} boxed into one
     // collapsed macro named after the track, plus the track/binding/colour exactly like
@@ -213,7 +213,7 @@ void MainComponent::addAudioTrack() {
 }
 
 void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) {
-    // "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds Track In
+    // "Add Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds Track In
     // -> instrument -> default chain (Gate bypassed -> Parametric EQ bypassed -> Compressor bypassed
     // -> Channel Strip Stereo -> Master Mix) in ONE undo step, the MIDI-track mirror of
     // addAudioTrack()'s step. {Track In, instrument, Gate, EQ, Compressor, Strip} are boxed
@@ -295,7 +295,7 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
     statusBar.showMessage(pushed ? "Added " + trackName : "Could not add a track");
 }
 
-// The transaction body of an instrument-track build, shared by the "+ Track -> Instrument" menu
+// The transaction body of an instrument-track build, shared by the "Add Track -> Instrument" menu
 // (buildInstrumentTrackAndChain, inside its own transaction, after its default-preset lookup) and
 // the timelineOps host (inside TimelineOpsHost::recordBatch, never consulting a preset): Track In
 // -> instrument -> envelope stage -> `inserts` -> channel -> Master, boxed into one macro named
@@ -668,7 +668,7 @@ bool MainComponent::hasTracksNeedingChannels() const {
     return false;
 }
 
-// The "+ Track" menu's "Create Channels" action for existing projects —
+// The "Add Track" menu's "Create Channels" action for existing projects —
 // docs/mixer/mixer.md#creating-channels-in-an-existing-project says the project itself opens unchanged (no automatic
 // migration on load; this method is never called from anywhere but the explicit menu choice below). Gathers every
 // track's own bound node first (outside the undo transaction — this is a pure read), then wraps
@@ -687,7 +687,7 @@ void MainComponent::createChannelsForExistingTracks() {
             sourceNodeIds.push_back(node->nodeID);
     }
 
-    // No-op, no undo step, when nothing needs a channel (also the "+ Track" menu's own disabled
+    // No-op, no undo step, when nothing needs a channel (also the "Add Track" menu's own disabled
     // condition — see hasTracksNeedingChannels() above) — checked again here rather than trusting
     // the menu's enabled state, since this is also the seam tests drive directly.
     if (!hasTracksNeedingChannels()) {
@@ -791,7 +791,7 @@ void MainComponent::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeI
     statusBar.showMessage(built ? "Duplicated into the channel" : "Could not duplicate into the channel");
 }
 
-// Instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
+// Instrument-capable hosted plugins for the "Add Track -> Instrument -> Plugin"
 // submenu — see TrackHeaderHost::getInstrumentPluginOptions's own comment. getKnownPlugins() (full
 // juce::PluginDescription, which carries isInstrument) is read here rather than
 // getKnownPluginIdentities() (PluginIdentity alone, no isInstrument) precisely because the filter

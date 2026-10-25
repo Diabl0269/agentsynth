@@ -39,7 +39,7 @@ void TimelinePanelComponent::wireLaneKeyboard() {
 }
 
 // Up/Down on a lane header or modulator row: the neighbouring stop. Stepping onto a track row selects that track
-// exactly as its own arrows do (focused index, scroll, routing pane); stepping off the bottom lands on "+ Track" like
+// exactly as its own arrows do (focused index, scroll, routing pane); stepping off the bottom lands on "Add Track" like
 // the last track row does. The top is always a track row, so Up never falls off.
 void TimelinePanelComponent::stepFocusFromLaneStop(juce::Component& from, int direction) {
     const auto stops = keyboardStops();
