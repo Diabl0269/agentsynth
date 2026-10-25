@@ -269,7 +269,7 @@ out as its own run, by the same measure-and-apply walk:
 - **Faders.** `CardFader` is a linear `juce::Slider` painted by `AppLookAndFeel`'s fader painter
   (`AppLookAndFeelFader.cpp`, the design system's Fader): a vertical one at 40 px wide gets the small
   fader (4 px slot, 18x7 cap), a horizontal one the medium fader (4 px slot, 10x18 cap); the painter
-  also draws its focus ring round the cap. It takes the control style (as knobs do), and its fill takes the card's family colour like a knob (`AppLookAndFeel::knobValueColour`). A vertical fader's value box is 40 px, so it shows the parameter's text without spaces ("1.00s") at the theme's label size (`CardFader::useCompactValueText`) rather than truncating. It carries every knob gesture through
+  also draws its focus ring round the cap. It takes the fader style from Settings > Appearance > Controls, and its fill takes the card's family colour like a knob (`AppLookAndFeel::knobValueColour`). A vertical fader's value box is 40 px, so it shows the parameter's text without spaces ("1.00s") at the theme's label size (`CardFader::useCompactValueText`) rather than truncating. It carries every knob gesture through
   `CardControlGestures` (the modulation-amount drag, the cable pickup on its landing dot, the hover
   that highlights the landing cable, the keyboard steps) and is in the card's slider list, so
   Automate, MIDI Learn, value reflection and the modulation-target lookup treat it as a knob. Its own
@@ -299,7 +299,10 @@ Every control on a card drawn from layout data adds to its right-click menu, aft
 MIDI Learn block: **Hide from card** (or **Show on card** for a control in the More row), **Show as
 fader** / **Show as knob** for a float or int on the card and **Edit Layout...**, which turns the card itself
 into the layout editor ([module-card-layout.md](module-card-layout.md#editing-a-layout)); the module menu carries
-**Edit Layout...** too. The bespoke cards offer none of these. Each click is one write of the node's `cardLayout` override, one undo step,
+**Edit Layout...** too. The bespoke cards offer none of these. Every card with a knob or a fader, bespoke and hosted
+included, also has **Control Style...** in its module menu, right after **Edit Layout...**: a call-out with the
+knob and fader style for this module or for every module of its type
+([theming](theming.md#per-module-control-style)). Each click is one write of the node's `cardLayout` override, one undo step,
 starting from the layout the card draws now (the automatic layout written out as explicit items,
 which builds the same card): Hide adds the parameter to `hidden` and leaves its item where it is, so
 Show on card puts it back exactly there; a parameter the layout never placed goes to the end of the

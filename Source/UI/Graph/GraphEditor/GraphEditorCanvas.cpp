@@ -17,6 +17,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "Project/ViewDoc.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/ControlStyle/ControlStyleCards.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
@@ -209,6 +210,7 @@ void GraphEditor::updateComponents() {
             });
         }
 
+        synth::refreshControlStyle(*this, *existingComp);
         // Always sync position from properties OR deterministic fallback
         auto x = node->properties.getWithDefault("x", -1);
         auto y = node->properties.getWithDefault("y", -1);

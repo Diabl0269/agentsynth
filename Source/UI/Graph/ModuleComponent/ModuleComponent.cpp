@@ -18,6 +18,7 @@
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
+#include "UI/Graph/ControlStyle/ControlStyleCards.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/LayoutUtil.h"
@@ -57,6 +58,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     showContextMenuHook_ = [this](juce::PopupMenu& menu) { showRealContextMenu(menu); };
     // Knobs inside this card take its module family's colour (AppLookAndFeel::knobValueColour).
     getProperties().set(synth::theme::kKnobFamilyProperty, (int)synth::ui::categoryFor(getType(module)));
+    synth::refreshControlStyle(owner, *this);
 
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {

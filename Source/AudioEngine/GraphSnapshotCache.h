@@ -36,7 +36,7 @@ private:
         const juce::AudioProcessor* processor = nullptr;
         juce::uint32 id = 0;
         juce::String type, displayName;
-        juce::var cardLayout, extraState, cardView, x, y;
+        juce::var cardLayout, controlStyle, extraState, cardView, x, y;
         std::vector<std::pair<const juce::AudioProcessorParameter*, float>> params;
         juce::var json;
         int size = 0;

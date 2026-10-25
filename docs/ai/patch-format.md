@@ -245,6 +245,14 @@ not exist yet.
 
 Pinned by `Tests/AI/CardLayoutTrustTests.cpp`.
 
+## Per-node `controlStyle`
+
+A node may carry a `"controlStyle"` object, `{"knob":"neon","fader":"ring"}` with only the set keys: the
+module's own knob and fader style (ids as in Settings > Appearance > Controls). It follows the `cardLayout`
+rules exactly: emitted only when set, applied on the trusted path only (the restore form also removes it),
+stripped from the model-bound patch context, dropped from a `.agsnip` file and kept by the in-app
+clipboard. An id this build does not know reads as unset. Pinned by `Tests/UI/Theme/ControlStyleNodeTests.cpp`.
+
 ## Reserved keys and forward compatibility
 
 Parameter values are a flat scalar map, permanently. Time-varying data lives under the reserved

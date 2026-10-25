@@ -18,6 +18,25 @@ juce::Colour AppLookAndFeel::knobValueColour(const juce::Component& knob) const 
     return theme.colors.accent;
 }
 
+namespace {
+std::optional<synth::theme::KnobStyle> ancestorStyle(const juce::Component& control, const char* property) {
+    for (const auto* c = &control; c != nullptr; c = c->getParentComponent()) {
+        const auto& value = c->getProperties()[property];
+        if (!value.isVoid())
+            return (synth::theme::KnobStyle)(int)value;
+    }
+    return std::nullopt;
+}
+} // namespace
+
+synth::theme::KnobStyle AppLookAndFeel::knobStyleFor(const juce::Component& control) const {
+    return ancestorStyle(control, synth::theme::kKnobStyleProperty).value_or(knobAppearance.style);
+}
+
+synth::theme::KnobStyle AppLookAndFeel::faderStyleFor(const juce::Component& control) const {
+    return ancestorStyle(control, synth::theme::kFaderStyleProperty).value_or(knobAppearance.faderStyle);
+}
+
 // A range counts as symmetric when its ends are within 1% of the span of mirroring each other, so a
 // float range like -1..1 and an int range like -4..4 both qualify; 0..100 and -12..24 do not.
 float knobOriginFor(const juce::Slider& slider) {
@@ -41,7 +60,7 @@ void AppLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width
     if (disabled)
         g.beginTransparencyLayer(kDisabledControlAlpha);
 
-    paintKnob(g, theme, knobAppearance.style, bounds, sliderPosProportional, knobValueColour(slider),
+    paintKnob(g, theme, knobStyleFor(slider), bounds, sliderPosProportional, knobValueColour(slider),
               knobOriginFor(slider));
 
     if (disabled)

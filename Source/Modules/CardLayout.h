@@ -170,6 +170,9 @@ juce::String cardSectionDisplayName(const CardSection& section);
 /** Node property that carries a built-in module's per-instance layout JSON. */
 constexpr const char* kCardLayoutNodeProperty = "cardLayout";
 
+/** Node property that carries a module's own knob and fader style (a ControlStyleOverride object). */
+constexpr const char* kControlStyleNodeProperty = "controlStyle";
+
 /** isBoolean -> Toggle; isDiscrete with value strings -> Choice; otherwise Knob. Never Auto. */
 CardSlotKind deriveSlotKind(const juce::AudioProcessorParameter& param);
 

@@ -27,7 +27,7 @@ struct State {
     bool focused = false;  // keyboard focus
     bool enabled = true;
     bool dimmed = false; // greyed out but operable (a layout's dim)
-    // The look: the user's knob style (faders always match the knobs) and the fill colour (a card's
+    // The look: the user's fader style (chosen apart from the knob style) and the fill colour (a card's
     // module-family hue, else accent). A transparent colour means accent.
     KnobStyle style = KnobStyle::Classic;
     juce::Colour valueColour{};

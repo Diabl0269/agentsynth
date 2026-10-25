@@ -483,7 +483,7 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     themeManager.addChangeListener(this);
 }
 
-// The Controls section: the style previews (one style sets knobs and faders together) and the
+// The Controls section: the knob and fader style previews (picked apart) and the
 // colour-by-family switch. A change is written back here; MainComponent's settings listener re-reads the
 // keys and re-skins every knob and fader.
 void AppearanceSettingsTab::buildKnobsSection(const juce::Font& sectionHeaderFont) {

@@ -364,12 +364,12 @@ juce::var AIStateMapper::nodeToJSON(juce::AudioProcessorGraph::Node& node) {
     if (displayName.isNotEmpty())
         n->setProperty("displayName", displayName);
 
-    // The user's per-instance card layout (a built-in module's own layout, not the hosted
-    // plugin's extra-state key of the same name). Emitted only when set, so every other node's
-    // JSON is byte-identical to before; trusted-apply only (see applyCardLayoutToNode).
-    const auto& cardLayout = node.properties[kCardLayoutNodeProperty];
-    if (cardLayout.isObject())
-        n->setProperty(kCardLayoutNodeProperty, cardLayout.clone());
+    // Per-instance display: the card layout (a built-in module's own, not the hosted plugin's extra-state key of
+    // the same name) and the control style. Emitted only when set, so every other node's JSON is byte-identical
+    // to before; trusted-apply only (see applyNodePresentation).
+    for (const char* key : {kCardLayoutNodeProperty, kControlStyleNodeProperty})
+        if (const auto& value = node.properties[key]; value.isObject())
+            n->setProperty(key, value.clone());
 
     // Params — store denormalized values to match applyJSONToGraph expectations
     juce::DynamicObject::Ptr params = new juce::DynamicObject();

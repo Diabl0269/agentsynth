@@ -398,11 +398,11 @@ implemented in `AppLookAndFeel`:
   "Colour controls by module family" is on and the knob sits in a module card, `familyHue(colors, category)`:
   `ModuleComponent` sets the `knobFamily` component property (its `ModuleCategory` as an int) on itself and
   `AppLookAndFeel::knobValueColour` walks the parent chain for it. The choice is `KnobAppearance`
-  (`KnobStyle.h`), stored under the settings keys `knobStyle` and `knobColourByFamily`, picked in
-  Settings > Appearance > Controls (`KnobStylePicker`, whose previews call the same `paintKnob`), and pushed
+  (`KnobStyle.h`), stored under the settings keys `knobStyle`, `faderStyle` and `knobColourByFamily`, picked in
+  Settings > Appearance > Controls (`KnobStylePicker`: a Knobs row whose previews call the same `paintKnob` and a Faders row painted by `fader::paint`), and pushed
   into the shared `AppLookAndFeel` by `MainComponent` at startup and on every settings write (a change
-  re-skins the whole tree, as a card's knobs are painted into its cached image). Faders follow the same
-  choice (one control style sets knobs and faders together; there is no separate fader setting): `drawLinearSlider` passes `KnobAppearance::style` and
+  re-skins the whole tree, as a card's knobs are painted into its cached image). Faders take their own
+  style (`KnobAppearance::faderStyle`, picked apart from the knob style; a saved setting with no `faderStyle` loads it as the saved knob style): `drawLinearSlider` passes `KnobAppearance::faderStyle` and
   `knobValueColour(slider)` into `fader::paint`, so a card fader takes its module's family hue and the
   mixer and controller surfaces keep `accent` (see the Linear sliders entry below).
 - **Linear sliders (the fader)** — `drawLinearSlider` (`AppLookAndFeelFader.cpp`, geometry in
@@ -417,7 +417,7 @@ implemented in `AppLookAndFeel`:
   56 px controller-surface cell), **medium** (slot 4, cap 10x18) for a horizontal one, the cap
   shrinking when the bounds are shorter. `getSliderThumbRadius` insets the travel by half the cap plus
   2 px so the cap is never clipped, and `MixerFaderSlider`'s drag maths reads the same inset through
-  `getSliderLayout`. The five control styles each have a draw path (`fader::State::style`, the fill
+  `getSliderLayout`. The five styles each have a fader draw path (`fader::State::style`, the fill
   colour in `fader::State::valueColour`; Classic is the look described here): Analog adds a soft
   inner shadow, eleven tick dots beside the slot lit up to the value, and a fill brightening from 60%
   to full at the cap; Chunky a `knobSkirt` slot and a cap with a `knobCapHighlight` sheen and two
@@ -453,6 +453,20 @@ cannot map `MidiKeyboardComponent` ColourIds. The on-screen keyboard is themed i
 
 The assistant panel's chat bubbles and debug console still pick their colours from hardcoded
 literals rather than tokens, so they do not re-skin with the rest of the app.
+
+### Per-module control style
+
+A module card, or every card of a module type, can
+take its own knob style and fader style (card menu > **Control Style...**, `ControlStylePanel`). A
+control resolves per kind, knob and fader independently: the node's own `controlStyle` property
+(`ControlStyleNodeOverride`, undoable, saved with the project), else the type's entry in the
+`controlStyleByType` user setting (`{"<factory type name>": {"knob": id, "fader": id}}`), else the app-wide choice
+above; **Follow** in the panel clears a level. `ModuleComponent` publishes the first two as the component
+properties `knobStyleOverride` and `faderStyleOverride` (an int `KnobStyle`, absent when neither sets one)
+and `AppLookAndFeel::knobStyleFor` / `faderStyleFor` walk the parent chain for them, as `knobValueColour`
+does for the family. `refreshControlStyle` (`ControlStyleCards.h`) runs when a card is built, in every
+`updateComponents` pass (so undo and redo restore it) and when `MainComponent` sees the setting text change.
+Controls with no card above them (the mixer strips, the controller surfaces) keep the app-wide style.
 
 ## Implementation notes
 

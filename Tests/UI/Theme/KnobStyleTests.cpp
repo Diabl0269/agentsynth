@@ -256,3 +256,32 @@ TEST(KnobStyleTest, ThemeLoaderParsesAndRoundTripsTheNewTokens) {
     EXPECT_EQ(theme->colors.hueRose.getARGB(), 0xff112233u);
     EXPECT_EQ(theme->colors.hueAmber, makeObsidian().colors.hueAmber);
 }
+
+TEST(KnobStyleTest, MissingFaderStyleLoadsAsTheSavedKnobStyle) {
+    auto props = makeProps("KnobStyleFaderMigrate");
+    props->setValue(knobStyleKey(), "neon");
+    const auto appearance = loadKnobAppearance(*props);
+    EXPECT_EQ(appearance.style, KnobStyle::Neon);
+    EXPECT_EQ(appearance.faderStyle, KnobStyle::Neon);
+    EXPECT_EQ(loadKnobAppearance(*makeProps("KnobStyleFaderNone")).faderStyle, KnobStyle::Classic);
+}
+
+TEST(KnobStyleTest, FaderStyleIsSavedApartFromTheKnobStyle) {
+    auto props = makeProps("KnobStyleFaderApart");
+    writeKnobAppearance(*props, {KnobStyle::Analog, true, KnobStyle::Ring});
+    EXPECT_EQ(props->getValue(faderStyleKey()), "ring");
+    const auto appearance = loadKnobAppearance(*props);
+    EXPECT_EQ(appearance.style, KnobStyle::Analog);
+    EXPECT_EQ(appearance.faderStyle, KnobStyle::Ring);
+}
+
+TEST(KnobStyleTest, UnknownAndRetiredFaderIdsMapLikeKnobIds) {
+    auto props = makeProps("KnobStyleFaderIds");
+    props->setValue(knobStyleKey(), "ring");
+    props->setValue(faderStyleKey(), "nonsense");
+    EXPECT_EQ(loadKnobAppearance(*props).faderStyle, KnobStyle::Classic) << "an unknown id is Classic, not the knob's";
+    props->setValue(faderStyleKey(), "polished");
+    EXPECT_EQ(loadKnobAppearance(*props).faderStyle, KnobStyle::Analog);
+    props->setValue(faderStyleKey(), "soft");
+    EXPECT_EQ(loadKnobAppearance(*props).faderStyle, KnobStyle::Hardware);
+}

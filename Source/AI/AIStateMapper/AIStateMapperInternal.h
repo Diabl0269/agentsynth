@@ -305,12 +305,35 @@ inline void restoreCardLayoutOnNode(juce::AudioProcessorGraph::Node* node, const
         node->properties.remove(kCardLayoutNodeProperty);
 }
 
-// Display-only node presentation from a patch node: the title on every path, the card layout on the
-// trusted path only. One call so the apply sites stay short.
+// The module's own knob and fader style ("controlStyle", kControlStyleNodeProperty), copied like the card
+// layout: trusted path only, absent means "leave as is".
+inline void applyControlStyleToNode(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj,
+                                    bool trusted) {
+    if (!trusted || node == nullptr || nObj == nullptr)
+        return;
+    const auto& style = nObj->getProperty(kControlStyleNodeProperty);
+    if (style.isObject())
+        node->properties.set(kControlStyleNodeProperty, style.clone());
+}
+
+// The snapshot-restore form: a snapshot without a style clears the one the node has.
+inline void restoreControlStyleOnNode(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj) {
+    if (node == nullptr || nObj == nullptr)
+        return;
+    const auto& style = nObj->getProperty(kControlStyleNodeProperty);
+    if (style.isObject())
+        node->properties.set(kControlStyleNodeProperty, style.clone());
+    else
+        node->properties.remove(kControlStyleNodeProperty);
+}
+
+// Display-only node presentation from a patch node: the title on every path, the card layout and control
+// style on the trusted path only. One call so the apply sites stay short.
 inline void applyNodePresentation(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj,
                                   bool trusted) {
     applyDisplayNameToNode(node, nObj);
     applyCardLayoutToNode(node, nObj, trusted);
+    applyControlStyleToNode(node, nObj, trusted);
 }
 
 // Snapshot-restore form of the above (snapshots are always trusted; see restoreCardLayoutOnNode). A snapshot
@@ -320,6 +343,7 @@ inline void restoreNodePresentation(juce::AudioProcessorGraph::Node* node, const
         node->properties.remove("displayName");
     applyDisplayNameToNode(node, nObj);
     restoreCardLayoutOnNode(node, nObj);
+    restoreControlStyleOnNode(node, nObj);
 }
 
 // -- Plan-scoped ids and modulation destinations (AIStateMapperModulations.cpp) ----------------

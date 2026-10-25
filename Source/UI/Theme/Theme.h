@@ -135,6 +135,11 @@ inline juce::Colour familyHue(const Colors& c, int categoryIndex) {
 // inside it can find its family by walking the parent chain.
 inline constexpr const char* kKnobFamilyProperty = "knobFamily";
 
+// Component properties a ModuleComponent sets on itself (value: int KnobStyle) when its module, or its
+// module type, has its own knob or fader style; absent means the app-wide Settings choice.
+inline constexpr const char* kKnobStyleProperty = "knobStyleOverride";
+inline constexpr const char* kFaderStyleProperty = "faderStyleOverride";
+
 // Geometry / spacing. Pixel units at zoom 1.0.
 struct Metrics {
     float cornerRadius{10.0f};   // card / panel corner radius
