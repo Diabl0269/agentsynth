@@ -11,6 +11,10 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "ClickRenderRig.h"
 #include "HostedSineSource.h"
+#include "Modules/ADSRModule.h"
+#include "Modules/OscillatorModule.h"
+#include "Modules/PolyMidiModule.h"
+#include "Modules/VCAModule.h"
 #include <algorithm>
 #include <iostream>
 #include <set>
@@ -213,3 +217,75 @@ INSTANTIATE_TEST_SUITE_P(EveryNoteSource, SourceClickGuard, ::testing::ValuesIn(
                          [](const ::testing::TestParamInfo<NoteSource>& info) {
                              return sanitiseName(info.param.name);
                          });
+
+// A poly voice that has never played starts at its note's own sample. Its pitch CV only starts to sound inside the
+// block (Poly MIDI glides it up from 0), and the envelope is already rising there, so a voice that waited for the
+// next block started at full level: a step of up to the wave's height, bigger the bigger the block. The first
+// chord of a fresh Poly MIDI -> Oscillator -> ADSR -> VCA chain, off the block grid, steps no more than the sines'
+// own slope (0.052 for this chord) at every block size.
+TEST(SourceClickGuard, PolyOscillatorFirstChordStartsOnItsOwnSample) {
+    const std::vector<int> chord = {62, 66, 70};
+    const int on = 24100;
+    const int off = 48100;
+    for (const int block : {64, 256, 441, 512}) {
+        PolyMidiModule midi;
+        OscillatorModule osc;
+        ADSRModule adsr;
+        VCAModule vca;
+        setParamValue(&osc, "poly", 1.0f);
+        setParamValue(&osc, "phase", 273.7f);
+        setParamValue(&adsr, "poly", 1.0f);
+        setParamValue(&adsr, "attack", 0.001f);
+        setParamValue(&adsr, "sustain", 1.0f);
+        setParamValue(&adsr, "release", 0.015f);
+        setParamValue(&vca, "poly", 1.0f);
+        setParamValue(&vca, "gain", 0.5f);
+        for (juce::AudioProcessor* p :
+             {static_cast<juce::AudioProcessor*>(&midi), static_cast<juce::AudioProcessor*>(&osc),
+              static_cast<juce::AudioProcessor*>(&adsr), static_cast<juce::AudioProcessor*>(&vca)})
+            p->prepareToPlay(kRate, block);
+
+        std::vector<float> out;
+        for (int pos = 0; pos < 52000; pos += block) {
+            juce::MidiBuffer in;
+            for (const int note : chord) {
+                if (off >= pos && off < pos + block)
+                    in.addEvent(juce::MidiMessage::noteOff(1, note), off - pos);
+                if (on >= pos && on < pos + block)
+                    in.addEvent(juce::MidiMessage::noteOn(1, note, (juce::uint8)100), on - pos);
+            }
+            juce::AudioBuffer<float> fan(16, block);
+            fan.clear();
+            juce::MidiBuffer forMidi(in);
+            midi.processBlock(fan, forMidi);
+            juce::AudioBuffer<float> o(OscillatorModule::kNumOutputs, block);
+            o.clear();
+            for (int v = 0; v < 8; ++v) {
+                o.copyFrom(v, 0, fan, v, 0, block);
+                o.copyFrom(OscillatorModule::kGateBase + v, 0, fan, 8 + v, 0, block);
+            }
+            juce::MidiBuffer forOsc(in), none;
+            osc.processBlock(o, forOsc);
+            juce::AudioBuffer<float> env(16, block);
+            env.clear();
+            for (int v = 0; v < 8; ++v)
+                env.copyFrom(v, 0, fan, 8 + v, 0, block);
+            adsr.processBlock(env, none);
+            juce::AudioBuffer<float> mix(16, block);
+            mix.clear();
+            for (int v = 0; v < 8; ++v) {
+                mix.copyFrom(v, 0, o, v, 0, block);
+                mix.copyFrom(8 + v, 0, env, v, 0, block);
+            }
+            vca.processBlock(mix, none);
+            out.insert(out.end(), mix.getReadPointer(0), mix.getReadPointer(0) + block);
+        }
+        double step = 0.0, peak = 0.0;
+        for (int i = on - 100; i < on + 3000; ++i) {
+            step = std::max(step, (double)std::abs(out[(size_t)i] - out[(size_t)i - 1]));
+            peak = std::max(peak, (double)std::abs(out[(size_t)i]));
+        }
+        EXPECT_GT(peak, 0.2) << "block " << block << " played nothing";
+        EXPECT_LT(step, 0.07) << "block " << block;
+    }
+}

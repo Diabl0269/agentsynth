@@ -581,6 +581,7 @@ private:
         int unisonCount;
         float detuneCents;
         float glideSeconds;
+        int firstSample = 0; ///< the voice renders from this sample on; the samples before it stay silent
     };
     /** `outputR` is the voice's Audio R channel, or null when the stack renders to the left leg only. */
     void renderPolyVoice(int voice, float* output, float* outputR, int numSamples, float basePitchHz,
