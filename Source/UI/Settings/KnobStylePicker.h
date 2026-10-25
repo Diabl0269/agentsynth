@@ -9,10 +9,10 @@
 
 namespace synth::ui {
 
-// Settings > Appearance > Controls: five clickable control-style previews (a style sets knobs and faders
-// together) in one radio group plus the "Colour controls by module family" switch. Previews are painted by
-// synth::theme::paintKnob, the same painter the app's knobs use. Left/Right move between the previews, Space/Return
-// picks.
+// Settings > Appearance > Controls: two rows of five clickable style previews, "Knobs" and "Faders", each row
+// its own radio group, plus the "Colour controls by module family" switch. Knob previews are painted by
+// synth::theme::paintKnob and fader previews by synth::theme::fader::paint, the painters the app's own
+// controls use. Left/Right move between the previews of a row, Space/Return picks.
 class KnobStylePicker : public juce::Component {
 public:
     KnobStylePicker();
@@ -27,21 +27,27 @@ public:
     // The theme the previews paint with (the owner passes the active theme).
     void setTheme(const synth::theme::Theme& theme);
 
-    static constexpr int kPreferredHeight = 108;
+    static constexpr int kPreferredHeight = 168;
 
     void resized() override;
 
-    juce::Button& getStyleButtonForTest(int index);
+    juce::Button& getStyleButtonForTest(int index);      // knob row
+    juce::Button& getFaderStyleButtonForTest(int index); // fader row
     juce::ToggleButton& getFamilyToggleForTest() { return familyToggle_; }
 
 private:
     class StyleButton;
-    void styleChosen(int index);
+    enum class Kind { Knob, Fader };
+    void styleChosen(Kind kind, int index);
     void refreshPreviewColour();
 
     synth::theme::KnobAppearance appearance_;
     synth::theme::Theme theme_;
-    std::array<std::unique_ptr<StyleButton>, synth::theme::kKnobStyleCount> buttons_;
+    using Row = std::array<std::unique_ptr<StyleButton>, synth::theme::kKnobStyleCount>;
+    Row buttons_;      // knob previews
+    Row faderButtons_; // fader previews
+    juce::Label knobRowLabel_{{}, "Knobs"};
+    juce::Label faderRowLabel_{{}, "Faders"};
     juce::ToggleButton familyToggle_{"Colour controls by module family"};
 };
 

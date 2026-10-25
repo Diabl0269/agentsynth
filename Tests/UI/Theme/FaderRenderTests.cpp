@@ -27,7 +27,8 @@ struct FaderRig {
     explicit FaderRig(const Theme& t, juce::Slider::SliderStyle style, int w, int h, double value)
         : theme(t) {
         laf.applyTheme(theme);
-        laf.setKnobAppearance({synth::theme::KnobStyle::Classic, true}); // the pixel checks below are Classic
+        laf.setKnobAppearance({synth::theme::KnobStyle::Classic, true,
+                               synth::theme::KnobStyle::Classic}); // the pixel checks below are Classic
         slider.setSliderStyle(style);
         slider.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
         slider.setRange(0.0, 1.0, 0.0);
@@ -208,7 +209,7 @@ TEST(FaderStyleTest, EveryStylePaintsADifferentFader) {
         std::vector<juce::Image> images;
         for (int i = 0; i < synth::theme::kKnobStyleCount; ++i) {
             FaderRig rig(synth::theme::makeObsidian(), orientation, vertical ? 100 : 120, vertical ? 150 : 22, 0.6);
-            rig.laf.setKnobAppearance({styleAt(i), true});
+            rig.laf.setKnobAppearance({styleAt(i), true, styleAt(i)});
             images.push_back(rig.paint());
         }
         for (size_t a = 0; a < images.size(); ++a)
@@ -223,7 +224,7 @@ TEST(FaderStyleTest, ThumbRadiusAndTravelDoNotMoveWithTheStyle) {
         const bool vertical = orientation == juce::Slider::LinearVertical;
         for (int i = 0; i < synth::theme::kKnobStyleCount; ++i) {
             FaderRig rig(synth::theme::makeObsidian(), orientation, vertical ? 100 : 120, vertical ? 150 : 22, 0.5);
-            rig.laf.setKnobAppearance({styleAt(i), true});
+            rig.laf.setKnobAppearance({styleAt(i), true, styleAt(i)});
             EXPECT_EQ(rig.laf.getSliderThumbRadius(rig.slider), vertical ? 9 : 7) << i;
             const auto travel = rig.laf.getSliderLayout(rig.slider).sliderBounds;
             EXPECT_EQ(travel.getHeight(), vertical ? 150 - 18 : 22) << i;
@@ -269,11 +270,11 @@ TEST(FaderStyleTest, FillTakesTheFamilyColourLikeAKnob) {
     ASSERT_GT(channelDistance(colors.hueAmber, colors.accent), 120) << "the test needs distinct colours";
     for (int i = 0; i < synth::theme::kKnobStyleCount; ++i) {
         const auto style = styleAt(i);
-        FamilyFaderRig sources({style, true}, 0); // ModuleCategory 0 = sources
+        FamilyFaderRig sources({style, true, style}, 0); // ModuleCategory 0 = sources
         EXPECT_LE(channelDistance(sources.fillPixel(), colors.hueAmber), 40) << i << " family on";
-        FamilyFaderRig off({style, false}, 0);
+        FamilyFaderRig off({style, false, style}, 0);
         EXPECT_LE(channelDistance(off.fillPixel(), colors.accent), 40) << i << " family off";
-        FamilyFaderRig mixer({style, true}, -1); // no family property: the mixer, a controller surface
+        FamilyFaderRig mixer({style, true, style}, -1); // no family property: the mixer, a controller surface
         EXPECT_LE(channelDistance(mixer.fillPixel(), colors.accent), 40) << i << " no family";
     }
 }
@@ -281,7 +282,7 @@ TEST(FaderStyleTest, FillTakesTheFamilyColourLikeAKnob) {
 // A pixel just beside the fill (inside the bloom's two inner layers, outside the slot).
 juce::Colour besideFill(synth::theme::KnobStyle style, double value) {
     FaderRig rig(synth::theme::makeObsidian(), juce::Slider::LinearVertical, 100, 150, value);
-    rig.laf.setKnobAppearance({style, false});
+    rig.laf.setKnobAppearance({style, false, style});
     return rig.paint().getPixelAt(rig.cx() + 4, 130);
 }
 
@@ -292,6 +293,31 @@ TEST(FaderStyleTest, NeonFaderGlowsInObsidianAndGrowsWithTheValue) {
     const auto high = besideFill(synth::theme::KnobStyle::Neon, 0.9);
     EXPECT_GT(low.getAlpha(), 0);
     EXPECT_GT(high.getAlpha(), low.getAlpha());
+}
+
+TEST(FaderStyleTest, TheFaderStyleDrivesFadersAndNotKnobs) {
+    auto paintLinear = [](KnobStyle faderStyle) {
+        FaderRig rig(synth::theme::makeObsidian(), juce::Slider::LinearHorizontal, 120, 22, 0.6);
+        rig.laf.setKnobAppearance({KnobStyle::Classic, true, faderStyle});
+        return rig.paint();
+    };
+    auto paintRotary = [](KnobStyle faderStyle) {
+        AppLookAndFeel laf;
+        laf.applyTheme(synth::theme::makeObsidian());
+        laf.setKnobAppearance({KnobStyle::Classic, true, faderStyle});
+        juce::Slider slider(juce::Slider::RotaryVerticalDrag, juce::Slider::NoTextBox);
+        slider.setLookAndFeel(&laf);
+        slider.setRange(0.0, 1.0, 0.0);
+        slider.setValue(0.6, juce::dontSendNotification);
+        slider.setBounds(0, 0, 60, 60);
+        auto img = makeImage(60, 60);
+        juce::Graphics g(img);
+        slider.paintEntireComponent(g, false);
+        slider.setLookAndFeel(nullptr);
+        return img;
+    };
+    EXPECT_GT(differingPixels(paintLinear(KnobStyle::Classic), paintLinear(KnobStyle::Neon)), 0);
+    EXPECT_EQ(differingPixels(paintRotary(KnobStyle::Classic), paintRotary(KnobStyle::Neon)), 0);
 }
 
 } // namespace

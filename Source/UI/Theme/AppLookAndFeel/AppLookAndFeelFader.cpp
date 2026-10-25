@@ -4,8 +4,8 @@
 
 namespace synth::theme {
 
-// Concern: the fader (linear slider) look -- slot + fill, cap, state overlays; one draw path per knob style
-// (a fader follows the knob style) sharing the slot / cap helpers.
+// Concern: the fader (linear slider) look -- slot + fill, cap, state overlays; one draw path per style
+// (the user's fader style) sharing the slot / cap helpers.
 
 namespace fader {
 
@@ -287,7 +287,7 @@ void AppLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width
     state.dragging = slider.isMouseButtonDown();
     state.hover = slider.isMouseOverOrDragging() && !state.dragging;
     state.focused = slider.hasKeyboardFocus(true);
-    state.style = knobAppearance.style;
+    state.style = knobAppearance.faderStyle;
     state.valueColour = knobValueColour(slider);
     fader::paint(g, theme, {x, y, width, height}, {slider.getWidth(), slider.getHeight()}, sliderPos, vertical, state);
 }

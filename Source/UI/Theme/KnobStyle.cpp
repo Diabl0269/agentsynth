@@ -54,12 +54,15 @@ KnobAppearance loadKnobAppearance(juce::PropertiesFile& props) {
     KnobAppearance appearance;
     if (props.containsKey(knobStyleKey()))
         appearance.style = knobStyleFromId(props.getValue(knobStyleKey()));
+    appearance.faderStyle =
+        props.containsKey(faderStyleKey()) ? knobStyleFromId(props.getValue(faderStyleKey())) : appearance.style;
     appearance.colourByFamily = props.getBoolValue(knobColourByFamilyKey(), true);
     return appearance;
 }
 
 void writeKnobAppearance(juce::PropertiesFile& props, const KnobAppearance& appearance) {
     props.setValue(knobStyleKey(), juce::String(knobStyleId(appearance.style)));
+    props.setValue(faderStyleKey(), juce::String(knobStyleId(appearance.faderStyle)));
     props.setValue(knobColourByFamilyKey(), appearance.colourByFamily);
 }
 
