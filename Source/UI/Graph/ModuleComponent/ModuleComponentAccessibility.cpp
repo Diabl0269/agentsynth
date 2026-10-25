@@ -12,7 +12,9 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Layout/TooltipHelpHandler.h"
 #include <algorithm>
+#include <limits>
 #include <map>
+#include <tuple>
 
 using namespace detail;
 
@@ -45,6 +47,48 @@ public:
     }
 };
 
+// The accessibility tree lists a container's children through its focus traverser, whose stock walk skips a
+// disabled component. A control a rule greys out must stay in the tree (named, reporting disabled), so this
+// walk is the stock one without the enabled filter: visible children, in explicit order, then
+// always-on-top, then top-to-bottom and left-to-right.
+class CardTreeTraverser final : public juce::FocusTraverser {
+public:
+    juce::Component* getDefaultComponent(juce::Component* parent) override {
+        const auto all = getAllComponents(parent);
+        return all.empty() ? nullptr : all.front();
+    }
+
+    std::vector<juce::Component*> getAllComponents(juce::Component* parent) override {
+        std::vector<juce::Component*> out;
+        collect(parent, out);
+        return out;
+    }
+
+private:
+    static int order(const juce::Component* c) {
+        const int explicitOrder = c->getExplicitFocusOrder();
+        return explicitOrder > 0 ? explicitOrder : std::numeric_limits<int>::max();
+    }
+
+    static void collect(const juce::Component* parent, std::vector<juce::Component*>& out) {
+        if (parent == nullptr)
+            return;
+        std::vector<juce::Component*> kids;
+        for (auto* child : parent->getChildren())
+            if (child->isVisible())
+                kids.push_back(child);
+        std::stable_sort(kids.begin(), kids.end(), [](const juce::Component* a, const juce::Component* b) {
+            return std::make_tuple(order(a), a->isAlwaysOnTop() ? 0 : 1, a->getY(), a->getX()) <
+                   std::make_tuple(order(b), b->isAlwaysOnTop() ? 0 : 1, b->getY(), b->getX());
+        });
+        for (auto* kid : kids) {
+            out.push_back(kid);
+            if (!kid->isFocusContainer())
+                collect(kid, out);
+        }
+    }
+};
+
 bool isNamedControl(const juce::Component& c) {
     return dynamic_cast<const juce::Slider*>(&c) != nullptr || dynamic_cast<const juce::ComboBox*>(&c) != nullptr ||
            dynamic_cast<const juce::Button*>(&c) != nullptr || c.getWantsKeyboardFocus();
@@ -72,6 +116,15 @@ juce::String fallbackName(const juce::Component& c) {
 }
 
 } // namespace
+
+std::unique_ptr<juce::ComponentTraverser> ModuleComponent::createFocusTraverser() {
+    return std::make_unique<CardTreeTraverser>();
+}
+
+void ModuleComponent::makeAccessibilityContainer() {
+    // Only the tree's container flag: Tab and the arrow keys walk the keyboard container, which this leaves alone.
+    setFocusContainerType(FocusContainerType::focusContainer);
+}
 
 std::unique_ptr<juce::AccessibilityHandler> ModuleComponent::createAccessibilityHandler() {
     return std::make_unique<CardAccessibilityHandler>(*this);

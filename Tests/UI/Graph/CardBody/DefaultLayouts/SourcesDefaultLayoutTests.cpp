@@ -6,6 +6,7 @@
 // section appears on a mode switch), the footer, and the size estimate against the real card.
 // Source/UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsSources.cpp.
 
+#include "../../../Layout/NativeWindowTestGuard.h"
 #include "../../GraphEditor/GraphEditorTestHelpers.h"
 #include "../CardBodyTestHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -483,6 +484,36 @@ TEST(JoinedJackDisable, ASavedJoinedModuleLoadsWithPanAndWidthDisabled) {
     const auto osc = buildJoined(canvas, "Oscillator", true);
     expectDisabled(osc, "pan", kPanHint);
     expectDisabled(osc, "width", kWidthHint);
+}
+
+// Regression test for FRO1130: a greyed Pan dropped out of the accessibility tree, because JUCE lists a container's
+// children through a traverser that skips disabled components.
+TEST(JoinedJackDisable, AGreyedPanStaysInTheAccessibilityTreeAsDisabled) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
+    CardCanvas canvas;
+    const auto osc = buildJoined(canvas, "Oscillator", true);
+    canvas.editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    canvas.editor.setVisible(true);
+    auto* pan = joinedWidget(osc, "pan");
+    ASSERT_NE(pan, nullptr);
+    ASSERT_FALSE(pan->isEnabled());
+    auto* handler = pan->getAccessibilityHandler();
+    auto* cardHandler = osc.card->getAccessibilityHandler();
+    if (handler == nullptr || cardHandler == nullptr) {
+        canvas.editor.removeFromDesktop();
+        GTEST_SKIP() << "this machine gave no accessibility handlers to a temporary window";
+    }
+    EXPECT_FALSE(handler->isIgnored());
+    EXPECT_EQ(handler->getTitle(), juce::String("Pan"));
+    EXPECT_FALSE(handler->getComponent().isEnabled()) << "the platform reports a disabled control from this";
+    EXPECT_EQ(handler->getDescription(), juce::String(kPanHint));
+    const auto kids = cardHandler->getChildren();
+    EXPECT_NE(std::find(kids.begin(), kids.end(), handler), kids.end()) << "Pan is a child of its card in the tree";
+    setJoined(osc, false);
+    const auto after = cardHandler->getChildren();
+    EXPECT_NE(std::find(after.begin(), after.end(), handler), after.end());
+    canvas.editor.removeFromDesktop();
 }
 
 TEST(JoinedJackDisable, AnEffectModuleKeepsItsPanWhenJoined) {

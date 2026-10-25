@@ -52,6 +52,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         }
     }
 
+    makeAccessibilityContainer();
     showContextMenuHook_ = [this](juce::PopupMenu& menu) { showRealContextMenu(menu); };
     // Knobs inside this card take its module family's colour (AppLookAndFeel::knobValueColour).
     getProperties().set(synth::theme::kKnobFamilyProperty, (int)synth::ui::categoryFor(getType(module)));
