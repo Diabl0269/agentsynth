@@ -224,6 +224,8 @@ public:
     // The clip the Glue tool (and the "Glue with next" menu item) would join `id` into. Returns an
     // invalid ClipId when there is no doc, no such clip, or nothing after it.
     synth::ClipId findGlueTarget(synth::ClipId id) const;
+    // The key the clip uses (its own, else the transport's song key); nullopt when there is none.
+    std::optional<synth::MusicalScale> resolvedKeyFor(const synth::Clip& clip) const;
 
     // The commit half of the inline rename editor, and the headless seam for it. One
     // recordTimelineChange; TimelineDoc::setClipName REJECTS a blank name, so a cleared field
@@ -456,7 +458,8 @@ public:
         GlueWithNext,
         Rename,
         DuplicateLinked,
-        MakeUnique
+        MakeUnique,
+        FitToKey
     };
 
     // The clip's context menu exactly as a right-click at `localPos` would show it (empty with no clip).

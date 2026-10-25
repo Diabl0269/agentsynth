@@ -57,6 +57,7 @@ Each MIDI clip follows the song key unless it has its own (`Clip::scale`); the p
 (**Song key · D Dorian**, or the own key) and its key picker has the **Follow song key** row. The key in force drives
 highlighting, snapping new notes, Generate and the note range; nothing plays differently. `synth::resolveClipKey`
 (`Source/Timeline/ClipKey.h`) is the one query. Details: [scale-assist](scale-assist.md#following-the-song-key-or-its-own).
+Fit to key (the piano roll chip, Option+Shift+Q, or the clip's right-click menu) moves notes to the key; setting a key never moves notes.
 
 `KeyField::setFollowing` gives any key field that can follow the follow display: the muted **Song key ·** prefix, the
 tooltip ("Following the song key. Click to give this its own key." / "Own key. Choose Follow song key to follow

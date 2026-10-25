@@ -3,6 +3,7 @@
 # file-size cap).
 target_sources(Core PRIVATE
     Source/Timeline/ClipKey.h
+    Source/Timeline/FitToKey.h
     Source/Timeline/SongKeyNotes.cpp
     Source/Timeline/SongKeyNotes.h
 )

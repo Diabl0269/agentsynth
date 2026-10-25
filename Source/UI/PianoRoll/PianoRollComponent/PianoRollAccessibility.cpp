@@ -48,7 +48,7 @@ constexpr ChipSpec kChipSpecs[] = {
     {HeaderButtonId::DrumMachine, "Show as drum machine", "pianoRollDrumMachineChip", false},
     {HeaderButtonId::Quantise, "Quantize note starts", "pianoRollQuantiseChip", false},
     {HeaderButtonId::QuantiseLength, "Quantize note lengths", "pianoRollQuantiseLengthChip", false},
-    {HeaderButtonId::QuantisePitches, "Quantize note pitches to the scale", "pianoRollQuantisePitchChip", false},
+    {HeaderButtonId::QuantisePitches, "Fit notes to key", "pianoRollQuantisePitchChip", false},
     {HeaderButtonId::Scale, "Scale assist", "pianoRollScaleChip", true},
     {HeaderButtonId::ScaleFilter, "Show only scale notes", "pianoRollScaleFilterChip", true},
     {HeaderButtonId::Velocity, "Show velocity strip", "pianoRollVelocityChip", true},

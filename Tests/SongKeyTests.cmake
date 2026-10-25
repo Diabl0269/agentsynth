@@ -8,5 +8,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/SongKeyFieldTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/PianoRoll/PianoRollSongKeyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/ClipKeyTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/FitToKeyTests.cpp
 )
 include(${CMAKE_CURRENT_SOURCE_DIR}/SequencerKeyTests.cmake)

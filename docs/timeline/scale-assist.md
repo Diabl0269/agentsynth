@@ -182,10 +182,12 @@ behaviour is preserved **by construction** rather than by a parallel code path t
 The octave actions stay on `transposeSelectedNotes(±12)`: an octave is twelve semitones by
 definition, not twelve degrees.
 
-## Quantise pitches to the scale
+## Fit to key
 
-Reached from the roll's **Quantise Pitches** chip or `Option+Shift+Q`, and from nowhere else — one
-door, so nothing can disagree about its own enabled state.
+Reached from the roll's **Fit notes to key** chip or `Option+Shift+Q`, and from the clip's right-click menu in the
+timeline (**Fit to key**, every note of the clip, greyed with no key or no notes). Both share the helpers in
+`Source/Timeline/FitToKey.h`. The roll's chip is the only door in the roll, so nothing can disagree about its own
+enabled state.
 
 Both entry points go through `quantisePitchesToActiveScale()`, which resolves the clip's scale via
 `activeScaleForOpenClip()` and defers to `quantisePitchesToScale(scale)`. That snaps every note's

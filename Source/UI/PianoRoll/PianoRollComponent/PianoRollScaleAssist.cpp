@@ -9,6 +9,7 @@
 #include "AppUndoManager.h"
 #include "Music/SongKey.h"
 #include "PianoRollInternal.h"
+#include "Timeline/FitToKey.h"
 #include "Timeline/ScaleNoteGenerator.h"
 #include "Transport/TransportService.h"
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
@@ -174,25 +175,11 @@ void PianoRollComponent::quantisePitchesToScale(const synth::MusicalScale& scale
 
     // Selected notes if any; every note in the clip otherwise — the same "or all notes when
     // nothing is selected" contract the Q button's Shift+click quantise follows.
-    std::vector<synth::NoteId> ids = selection_.getSelected();
-    if (ids.empty()) {
-        ids.reserve(clip->notes.size());
-        for (const auto& note : clip->notes)
-            ids.push_back(note.id);
-    }
+    const auto ids = synth::fitToKeyTargets(*clip, selection_.getSelected());
     if (ids.empty())
         return;
 
-    auto mutate = [this, ids, scale] {
-        for (auto id : ids) {
-            const auto* note = doc_->getNote(id);
-            if (note == nullptr)
-                continue;
-            const int snapped = scale.snapPitch(note->pitch);
-            if (snapped != note->pitch)
-                doc_->moveNote(id, note->startBeat, snapped);
-        }
-    };
+    auto mutate = [this, ids, scale] { synth::fitNotesToKey(*doc_, ids, scale); };
     // recordTimelineChange itself pushes no undo step when the mutation changed nothing (every
     // note already in scale) — the "no-op pushes nothing" half of the contract needs no extra
     // code here.
