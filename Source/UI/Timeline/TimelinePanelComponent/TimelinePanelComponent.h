@@ -24,6 +24,7 @@
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/FollowPlayheadButton.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelineClipboardClip.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
 #include "UI/Timeline/TimelineRowLayout.h"
@@ -739,30 +740,7 @@ private:
     std::function<void(std::unique_ptr<ModMatrixPicker>)> addAutomationPickerHook_;
 
     // ---- Clip clipboard ----
-    // One captured clip, relative to the earliest selected clip's start at copy time (see copySelectedClips()).
-    // Notes are already clip-relative in the doc; addNote() reassigns their ids on paste.
-    struct ClipboardClip {
-        synth::TrackId originalTrack;
-        // The track kind this clip needs on paste, derived at COPY time from the payload
-        // (non-empty assetRef -> Audio, else Midi) rather than from the track it sat on: the
-        // payload is what decides where it can be played, and it is also what
-        // TimelineDoc::moveClipToTrack checks.
-        synth::TrackKind requiredKind = synth::TrackKind::Midi;
-        double relativeStartBeat = 0.0;
-        double lengthBeats = 4.0;
-        juce::String name;
-        std::vector<synth::MidiNote> notes; // each note's own muted flag travels with it
-        bool muted = false;
-        // Audio fields and the drum machine's settings: captured and restored so a paste yields the same clip.
-        juce::String assetRef;
-        double gainDb = 0.0;
-        double fadeInBeats = 0.0;
-        double fadeOutBeats = 0.0;
-        double sourceStartSeconds = 0.0;
-        int stepsPerBar = synth::Clip::kDefaultStepsPerBar;
-        double swing = synth::Clip::kStraightSwing;
-        std::vector<int> mutedPitches, soloPitches;
-    };
+    using ClipboardClip = synth::ui::TimelineClipboardClip;
     std::vector<ClipboardClip> clipClipboard_;
     // The beatsPerBar TimelineViewState::snapBeat needs for pasteClipsAtPlayhead()'s Snap::Bar
     // case — same formula (and same "4.0 with no transport" fallback) as every other timeline

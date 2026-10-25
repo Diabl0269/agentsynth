@@ -54,6 +54,13 @@ struct ClipboardNote {
     int velocity = 100;
     int channel = 1;
     bool muted = false;
+    // Per-hit drum settings (see MidiNote): a pasted hit keeps its chance, roll, nudge and condition.
+    int chance = 100;
+    int repeat = 1;
+    bool flam = false;
+    double nudge = 0.0;
+    int condHit = 1;
+    int condOf = 1;
 };
 
 // Effective (possibly mid-drag) clip-relative geometry / velocity for one note — read by

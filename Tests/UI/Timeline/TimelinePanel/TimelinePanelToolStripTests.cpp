@@ -356,6 +356,34 @@ TEST(TimelineToolStripTest, ToolButtonsNeverGrabKeyboardFocusFromTheEditSurfaces
 
 // ---- Clipboard: the audio-field regression ----
 
+TEST(TimelineClipClipboardTest, CopyPasteCarriesTheDrumLaneSettings) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Drums");
+    const auto clip = f.doc.addClip(track, 8.0, 4.0, "Beat");
+    const auto note = f.doc.addNote(clip, synth::MidiNote{});
+    ASSERT_TRUE(f.doc.setNoteChance(note, 40));
+    ASSERT_TRUE(f.doc.setNoteCondition(note, 2, 4));
+    ASSERT_TRUE(f.doc.setClipHumanise(clip, 0.3));
+    ASSERT_TRUE(f.doc.setClipRowLength(clip, 42, 12));
+    ASSERT_TRUE(f.doc.setClipRowSwing(clip, 42, 0.7));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    const auto* copy = f.doc.getClip(pasted[0]);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_DOUBLE_EQ(copy->humanise, 0.3);
+    ASSERT_EQ(copy->drumRows.size(), 1u);
+    EXPECT_EQ(copy->drumRows[0].lengthSteps, 12);
+    EXPECT_DOUBLE_EQ(copy->drumRows[0].swing, 0.7);
+    ASSERT_EQ(copy->notes.size(), 1u);
+    EXPECT_EQ(copy->notes[0].chance, 40);
+    EXPECT_EQ(copy->notes[0].condOf, 4);
+}
+
 TEST(TimelineClipClipboardTest, CopyPasteRoundTripsEveryAudioFieldAndTheMuteFlag) {
     ToolPanelFixture f;
     const auto track = f.doc.addTrack(synth::TrackKind::Audio, "Audio 1");

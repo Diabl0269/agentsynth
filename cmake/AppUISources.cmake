@@ -72,21 +72,6 @@ set(APPUI_SOURCES
     Source/MidiRemote/MidiLearnControllerRetarget.cpp
     Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
     Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShapes.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShortcuts.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelCursorGlide.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelFollowMode.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipKeyboard.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLaneKeyboard.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackDrag.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackListMotion.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeight.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
     Source/UI/Timeline/TimelineRulerComponent.h
     Source/UI/Timeline/TimelineRulerComponent.cpp
     Source/UI/Timeline/TimelinePlayheadOverlay.h
@@ -106,7 +91,6 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPanePaint.cpp
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.h
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelSidePane.cpp
     Source/UI/Timeline/TrackChannelLinkSurface.h
     Source/UI/Timeline/TrackColourPicker.h
     Source/UI/Timeline/TrackColourPicker.cpp
@@ -121,9 +105,6 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineTransportBarMidiLearn.cpp
     Source/UI/Timeline/TimelineRowLayout.h
     Source/UI/Timeline/TimelineRowLayout.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAutomation.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAddAutomation.cpp
-    Source/UI/Timeline/TimelinePanelComponent/AddTrackPicker.cpp
     Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.h
     Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationRow.cpp
     Source/UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h
@@ -997,4 +978,5 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGroupFades.cpp
 )
 include(cmake/DrumMachineSources.cmake) # appends the drum machine editor to APPUI_SOURCES
+include(cmake/TimelinePanelSources.cmake) # appends the timeline panel to APPUI_SOURCES
 list(APPEND APPUI_SOURCES ${SOUND_BROWSER_UI_SOURCES}) # the Sounds view, from SoundBrowserSources.cmake

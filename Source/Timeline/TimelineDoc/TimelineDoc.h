@@ -131,6 +131,22 @@ struct MidiNote {
     // merges it — because it is part of the note, not of the clip that happens to hold it.
     // Additive field: absent in a file loads as false, and kFormatVersion stays 1.
     bool muted = false;
+
+    // Per-hit drum settings, named and ranged like the Poly Sequencer's step settings. Applied only when the
+    // snapshot is built (and by Track In), never written into the notes' timing. Additive; each is saved only
+    // when not its default.
+    static constexpr bool isValidChance(int chance) noexcept { return chance >= 0 && chance <= 100; }
+    static constexpr bool isValidRepeat(int repeat) noexcept { return repeat >= 1 && repeat <= 8; }
+    static constexpr bool isValidNudge(double nudge) noexcept { return nudge >= -0.5 && nudge <= 0.5; }
+    static constexpr bool isValidCondition(int hit, int of) noexcept {
+        return of >= 1 && of <= 8 && hit >= 1 && hit <= of;
+    }
+    int chance = 100;   // percent chance the hit plays, rolled per pass
+    int repeat = 1;     // hits spread evenly over one grid step (a roll / ratchet)
+    bool flam = false;  // a softer grace hit just before the hit
+    double nudge = 0.0; // of the clip's grid step; negative = early
+    int condHit = 1;    // plays on pass condHit of every condOf passes; 1/1 = always
+    int condOf = 1;
 };
 
 // Notes within a clip stay sorted by (startBeat, pitch, id) — that invariant is what makes the
@@ -200,6 +216,19 @@ struct Clip {
     static constexpr double kMaxSwing = 0.75;
     static constexpr bool isValidSwing(double swing) noexcept { return swing >= kStraightSwing && swing <= kMaxSwing; }
     double swing = kStraightSwing;
+    // Humanise: small deterministic random loudness and timing per hit, applied in the snapshot only.
+    double humanise = 0.0; // 0..1
+    // A drum's own pattern length and swing; absent = follows the clip. Sorted by pitch, unique; an entry with
+    // both defaults is removed.
+    static constexpr int kMaxRowLengthSteps = 256;
+    struct DrumRow {
+        int pitch = 0;
+        int lengthSteps = 0; // 0 = the clip's length
+        double swing = -1.0; // < 0 = the clip's swing
+    };
+    static constexpr bool isValidHumanise(double amount) noexcept { return amount >= 0.0 && amount <= 1.0; }
+    static constexpr bool isValidRowLength(int steps) noexcept { return steps >= 0 && steps <= kMaxRowLengthSteps; }
+    std::vector<DrumRow> drumRows;
     std::vector<int> mutedPitches; // sorted, unique, 0..127
     std::vector<int> soloPitches;  // sorted, unique, 0..127
 };
@@ -495,6 +524,12 @@ public:
     bool setClipStepsPerBar(ClipId id, int stepsPerBar);
     // Swing must be 0.5 to 0.75, else false.
     bool setClipSwing(ClipId id, double swing);
+    // Humanise 0..1.
+    bool setClipHumanise(ClipId id, double amount);
+    // A drum's own length in steps (0 clears, else 1..kMaxRowLengthSteps) and swing (< 0 clears, else
+    // Clip::isValidSwing). pitch 0..127.
+    bool setClipRowLength(ClipId id, int pitch, int lengthSteps);
+    bool setClipRowSwing(ClipId id, int pitch, double swing);
     bool setClipPitchMuted(ClipId id, int pitch, bool muted);
     bool setClipPitchSoloed(ClipId id, int pitch, bool soloed);
 
@@ -592,6 +627,11 @@ public:
     bool moveNote(NoteId id, double newStartBeat, int newPitch);
     bool resizeNote(NoteId id, double newLengthBeats); // rejects non-positive/non-finite
     bool setNoteVelocity(NoteId id, int velocity);     // rejects outside 1..127
+    // Per-hit drum settings (see MidiNote); each rejects an out-of-range value, a no-op returns true.
+    bool setNoteChance(NoteId id, int chance);
+    bool setNoteRepeat(NoteId id, int repeat, bool flam);
+    bool setNoteNudge(NoteId id, double nudge);
+    bool setNoteCondition(NoteId id, int hit, int of);
     // Mutes / un-mutes a single note inside its clip: the note is skipped when the clip is
     // flattened into TimelineSnapshot, and is otherwise untouched (see MidiNote::muted). Setting
     // the flag it already has is a no-op — no revision bump, no notification. Note that a muted

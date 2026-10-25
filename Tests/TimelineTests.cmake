@@ -6,6 +6,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumIdeasTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumIdeasPanelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/ClipSwingTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/DrumLaneModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineMidiSource/TimelineMidiSourcePreviewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTransportBarReturnToStartTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationMarkerMainTests.cpp
