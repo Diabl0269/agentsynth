@@ -424,6 +424,7 @@ void MacroGroupController::ungroupSelection() {
     }
 
     auto& graph = host_.graph();
+    const auto foldBefore = snapshotFoldState(); // a closed macro's modules unfold out of its card
     auto doUngroup = [this, macroIdsToRemove] {
         std::vector<juce::AudioProcessorGraph::NodeID> newSelection;
         for (const auto& macroId : macroIdsToRemove) {
@@ -476,6 +477,7 @@ void MacroGroupController::ungroupSelection() {
     else
         doUngroup();
 
+    foldChangedMacros(foldBefore);
     host_.requestRepaint();
 }
 

@@ -357,8 +357,10 @@ overlay, and timed by the pure `MacroFoldTimeline.h` (like `ExitEnterTimeline.h`
   a neighbour pushed aside to make room glides (one `CardGlideAnimator::Scope`). The new macro has no entry in the
   `snapshotFoldState()` taken before, so `foldChangedMacros()` treats a collapsed macro that is not in the snapshot as
   "was open, now closed", built from the snapshot's per-module rects and pictures (`FoldSnapshot::nodes`). Redo of a
-  grouping goes through the same path; undo of one (the macro disappears) does not fold. Track creation
-  (`addMacroForMembers`) stays instant: its modules are new.
+  grouping goes through the same path. Undo of a grouping, and the Ungroup command on a closed macro, unfold:
+  a closed macro in the snapshot that no longer exists, whose modules stand on the canvas again, gets an expand plan
+  from the boxes it had on its card to the modules' cards (`unfoldRemovedMacro`); no border is drawn for the macro that
+  is gone. Track creation (`addMacroForMembers`) stays instant: its modules are new.
 - **Several macros at once** (a multi-macro toggle, an undo step that flips more than one) fold together: the toggle
   takes one `snapshotFoldState()` and starts every plan in one `foldChangedMacros()`.
 - **Pictures come from the cards' rasters** (`ZoomFrozenCachedImage::lastRaster`); a card that was never painted (a

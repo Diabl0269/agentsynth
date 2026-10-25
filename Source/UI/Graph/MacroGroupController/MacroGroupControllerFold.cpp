@@ -380,6 +380,40 @@ std::shared_ptr<const MacroGroupController::FoldSnapshot> MacroGroupController::
     return out;
 }
 
+// The expand plan of a closed macro that no longer exists: each module that stands visible again flies from its box on
+// the card (captured before the change) to its card. Nested macros and modules that are gone are left out.
+namespace {
+Fold::Plan unfoldRemovedMacro(GraphCanvasHost& host, const juce::String& macroId, const Fold::Before& before) {
+    Fold::Plan plan;
+    plan.macroId = macroId;
+    plan.collapsing = false;
+    plan.card = before.card;
+    plan.timeScale = 1.0;
+    juce::Rectangle<int> hull;
+    for (const auto& unit : before.modules) {
+        if (unit.nodeUid == 0)
+            continue;
+        auto* comp = host.moduleComponentFor(juce::AudioProcessorGraph::NodeID(unit.nodeUid));
+        if (comp == nullptr || !comp->isVisible())
+            continue;
+        Fold::Module out;
+        out.nodeUid = unit.nodeUid;
+        out.category = unit.category;
+        out.box = unit.box;
+        out.rect = comp->getBounds();
+        out.comp = comp;
+        out.picture = Fold::cachedPicture(*comp);
+        if (out.picture.isNull() && before.modules.size() <= kMaxRenderedPictures &&
+            out.rect.intersects(card_glide_detail::visibleCanvasArea(*comp)))
+            out.picture = comp->createComponentSnapshot(comp->getLocalBounds(), true, 1.0f);
+        hull = hull.isEmpty() ? out.rect : hull.getUnion(out.rect);
+        plan.modules.push_back(std::move(out));
+    }
+    plan.hull = hull;
+    return plan;
+}
+} // namespace
+
 // Only the outermost macro whose state changed starts a fold: the macros nested in it fold inside its plans.
 void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSnapshot>& before) {
     if (before == nullptr)
@@ -452,6 +486,14 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
             continue;
         FoldTreeBuilder builder(*this, host_, *before);
         for (auto& plan : builder.collapse(id, snapshot))
+            plans.push_back(std::move(plan));
+    }
+    // A collapsed macro the change removed (undo of a grouping, or Ungroup) whose modules stand on the canvas again:
+    // they unfold out of the box they had on the card it leaves.
+    for (const auto& [id, snapshot] : before->byMacro) {
+        if (macros.find(id) != nullptr || !snapshot.wasCollapsed || snapshot.modules.empty())
+            continue;
+        if (auto plan = unfoldRemovedMacro(host_, id, snapshot); !plan.modules.empty())
             plans.push_back(std::move(plan));
     }
     if (!plans.empty())
