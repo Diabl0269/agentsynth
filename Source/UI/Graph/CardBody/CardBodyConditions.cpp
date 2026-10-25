@@ -60,6 +60,31 @@ void describeDimmed(juce::Component& widget, bool dimmed) {
         tip->setTooltip(tooltip.dropLastCharacters((int)juce::String(kDimmedTooltipSuffix).length()));
 }
 
+// A disabled control's tooltip and description are the hint; the tooltip it had comes back with the control.
+constexpr const char* kPreBlockTooltip = "preBlockTooltip";
+constexpr const char* kPreBlockDescription = "preBlockDescription";
+
+void describeDisabled(juce::Component& widget, const juce::String& hint) {
+    auto& props = widget.getProperties();
+    auto* tip = dynamic_cast<juce::SettableTooltipClient*>(&widget);
+    const bool blocked = props.contains(kPreBlockTooltip);
+    if (hint.isNotEmpty() && !blocked) {
+        props.set(kPreBlockTooltip, tip != nullptr ? tip->getTooltip() : juce::String());
+        props.set(kPreBlockDescription, widget.getDescription());
+    }
+    if (hint.isNotEmpty()) {
+        widget.setDescription(hint);
+        if (tip != nullptr)
+            tip->setTooltip(hint);
+    } else if (blocked) {
+        widget.setDescription(props[kPreBlockDescription].toString());
+        if (tip != nullptr)
+            tip->setTooltip(props[kPreBlockTooltip].toString());
+        props.remove(kPreBlockTooltip);
+        props.remove(kPreBlockDescription);
+    }
+}
+
 bool ruleApplies(const std::vector<CardBodyPlan::DimRule>& rules, int item, bool hides, juce::AudioProcessor& module) {
     for (const auto& rule : rules)
         if (rule.item == item && rule.hides == hides && rule.dims(module))
@@ -68,6 +93,13 @@ bool ruleApplies(const std::vector<CardBodyPlan::DimRule>& rules, int item, bool
 }
 
 } // namespace
+
+juce::String CardBodyPlan::disabledHint(int item, juce::AudioProcessor& module) const {
+    for (const auto& rule : dimRules)
+        if (rule.item == item && rule.disabledHint.isNotEmpty() && rule.dims(module))
+            return rule.disabledHint;
+    return {};
+}
 
 CardBodyPlan::ConditionChange CardBodyPlan::evaluateConditions(juce::AudioProcessor& module) {
     ConditionChange change;
@@ -185,6 +217,10 @@ void CardBody::applyVisibility() {
         if (item.kind == CardBodyItem::Kind::View)
             visible = visible && item.open; // a view the card's toggle closed stays closed
         const bool dims = item.when.has_value() || dimmable.count(i) > 0;
+        const auto disabledHint = plan_.disabledHint(i, module_);
+        const bool disablable = std::any_of(plan_.dimRules.begin(), plan_.dimRules.end(), [i](const auto& rule) {
+            return rule.item == i && rule.disabledHint.isNotEmpty();
+        });
         // A fade owns its controls while it runs (More row, a conditional section).
         const bool faded = (folded && fadeOwnsMore()) || fadeOwnsSection(item.section);
         for (auto* component : {item.widget, item.label}) {
@@ -195,8 +231,17 @@ void CardBody::applyVisibility() {
             if (dims)
                 markDimmed(*component, item.dimmed);
         }
-        if (dims && item.widget != nullptr && dimHintsReady_)
-            describeDimmed(*item.widget, item.dimmed);
+        if (disablable && item.widget != nullptr)
+            item.widget->setEnabled(disabledHint.isEmpty());
+        if (dims && item.widget != nullptr && dimHintsReady_) {
+            if (disabledHint.isNotEmpty()) {
+                describeDimmed(*item.widget, false);
+                describeDisabled(*item.widget, disabledHint);
+            } else {
+                describeDisabled(*item.widget, {});
+                describeDimmed(*item.widget, item.dimmed);
+            }
+        }
     }
     for (int s = 0; s < (int)plan_.sections.size(); ++s)
         if (const auto& section = plan_.sections[(size_t)s]; section.header != nullptr && !fadeOwnsSection(s))

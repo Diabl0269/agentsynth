@@ -97,12 +97,10 @@ TEST_F(VCAModuleTest, PolyMode_MultiVoice) {
     juce::MidiBuffer midi;
     vca->processBlock(polyBuffer, midi);
 
-    // Voices sum at unity: voice 0 is 1.0 * 1.0 * 1.0, voice 1 is 0.5 * 1.0 * 0.5, so the sum is 1.25. Both
-    // voices at their peak would add to 1.25, past the 0.9 knee, so the sum takes the poly headroom first and
-    // the shared soft limiter rounds what is left.
-    const float expected = synth::softLimit(1.25f * synth::polySumHeadroom(1.25f));
-    // The headroom gain settles over a few milliseconds, so it is within a hair of its target rather than equal.
-    EXPECT_NEAR(polyBuffer.getSample(0, 999), expected, 1e-4f);            // Left
+    // Each voice is summed at the fixed per-voice gain: voice 0 is 1.0 * 1.0 * 1.0, voice 1 is 0.5 * 1.0 * 0.5, so
+    // the sum is 1.25 * kPolyVoiceGain, which the shared soft limiter then passes (or rounds above its knee).
+    const float expected = synth::softLimit(1.25f * synth::kPolyVoiceGain);
+    EXPECT_NEAR(polyBuffer.getSample(0, 999), expected, 1e-5f);            // Left
     EXPECT_EQ(polyBuffer.getSample(1, 999), polyBuffer.getSample(0, 999)); // Right (same as left)
     EXPECT_LT(expected, 1.0f);
 }
@@ -194,8 +192,8 @@ float polyVcaOutput(const std::vector<float>& voiceLevels) {
 } // namespace
 
 // Regression test for FRO848: a single poly voice used to be divided by 8 and run through tanh, about 18 dB
-// below the same note through the mono path.
-TEST(VCAModulePolyLevel, SingleVoiceEqualsTheMonoPathUnderTheKnee) {
+// below the same note through the mono path. It is now the mono note times the fixed per-voice gain.
+TEST(VCAModulePolyLevel, SingleVoiceIsTheMonoPathTimesTheVoiceGainUnderTheKnee) {
     for (float level : {0.05f, 0.3f, 0.6f, 0.89f}) {
         VCAModule mono;
         mono.prepareToPlay(44100.0, 64);
@@ -210,18 +208,20 @@ TEST(VCAModulePolyLevel, SingleVoiceEqualsTheMonoPathUnderTheKnee) {
         juce::MidiBuffer midi;
         mono.processBlock(buffer, midi);
 
-        EXPECT_EQ(buffer.getSample(0, 63), polyVcaOutput({level})) << "level " << level;
+        EXPECT_FLOAT_EQ(buffer.getSample(0, 63) * synth::kPolyVoiceGain, polyVcaOutput({level})) << "level " << level;
     }
 }
 
-TEST(VCAModulePolyLevel, FourVoicesOfPointTwoSumToPointEight) {
-    EXPECT_FLOAT_EQ(polyVcaOutput({0.2f, 0.2f, 0.2f, 0.2f}), 0.8f);
+TEST(VCAModulePolyLevel, FourVoicesOfPointTwoSumToPointEightTimesTheVoiceGain) {
+    EXPECT_FLOAT_EQ(polyVcaOutput({0.2f, 0.2f, 0.2f, 0.2f}), 0.8f * synth::kPolyVoiceGain);
 }
 
 TEST(VCAModulePolyLevel, SumAboveTheKneeIsSoftLimitedAndContinuous) {
-    float previous = polyVcaOutput({0.89f});
+    // `sum` is the voices' total after the per-voice gain, so the voices carry sum / gain between them.
+    float previous = polyVcaOutput({0.89f / synth::kPolyVoiceGain});
     for (float sum = 0.9f; sum <= 4.0f; sum += 0.1f) {
-        const float out = polyVcaOutput({sum * 0.5f, sum * 0.5f});
+        const float level = sum / synth::kPolyVoiceGain * 0.5f;
+        const float out = polyVcaOutput({level, level});
         EXPECT_LT(out, 1.0f) << "sum " << sum;
         EXPECT_GE(out, previous) << "sum " << sum;
         EXPECT_LT(out - previous, 0.15f) << "sum " << sum;

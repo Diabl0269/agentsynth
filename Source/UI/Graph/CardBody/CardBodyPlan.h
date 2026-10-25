@@ -108,7 +108,8 @@ struct CardBodyPlan {
         int item = -1;
         std::vector<juce::RangedAudioParameter*> watched;
         std::function<bool(juce::AudioProcessor&)> dims;
-        bool hides = false; ///< Hides the item (CardBodyItem::shown) instead of dimming it.
+        bool hides = false;        ///< Hides the item (CardBodyItem::shown) instead of dimming it.
+        juce::String disabledHint; ///< Not empty: the item is disabled too while the rule applies, with this tooltip.
     };
 
     /** What a re-evaluation changed: any result at all, and whether a section appeared or went. */
@@ -134,6 +135,9 @@ struct CardBodyPlan {
     ConditionChange evaluateConditions(juce::AudioProcessor& module);
     /** Every parameter a condition or dim rule reads, once each. */
     std::vector<juce::RangedAudioParameter*> watchedParameters(juce::AudioProcessor& module) const;
+
+    /** The tooltip of the rule that disables `item` right now, or empty when no rule does. */
+    juce::String disabledHint(int item, juce::AudioProcessor& module) const;
 
     /** The parameter item for `paramId`, or -1. */
     int findParam(const juce::String& paramId) const;

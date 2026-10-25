@@ -386,11 +386,29 @@ void bindDimRules(juce::AudioProcessor& module, const std::vector<CardDimRule>& 
         bound.item = index;
         bound.dims = rule.dims;
         bound.hides = rule.hides;
+        bound.disabledHint = rule.disabledHint;
         for (const auto& id : rule.watched)
             if (auto* param = findParameterByID(&module, id))
                 bound.watched.push_back(param);
         plan.dimRules.push_back(std::move(bound));
     }
+}
+
+// Pan, and the Oscillator and Wavetable unison Width, do nothing while a split-block module's Left/Right jacks are
+// joined: the one jack carries a single mono leg. The rules describe the module, so they apply to every layout.
+std::vector<CardDimRule> joinedJackRules(juce::AudioProcessor& module) {
+    auto* base = dynamic_cast<ModuleBase*>(&module);
+    if (base == nullptr || !base->hasSplitBlockStereo())
+        return {};
+    const auto joined = [](juce::AudioProcessor& m) {
+        auto* mb = dynamic_cast<ModuleBase*>(&m);
+        return mb != nullptr && mb->hasSplitBlockStereo() && !mb->isDualIO();
+    };
+    CardDimRule pan{"pan", {"dualIO"}, joined};
+    pan.disabledHint = "Split the Left/Right jacks to pan";
+    CardDimRule width{"width", {"dualIO"}, joined};
+    width.disabledHint = "Split the Left/Right jacks to spread the voices";
+    return {pan, width};
 }
 
 } // namespace
@@ -402,6 +420,7 @@ CardBodyPlan CardBodyPlan::forModule(juce::AudioProcessor& module, const std::op
     if (layout.has_value() && !layout->sections.empty() && cardBodyLayoutIsDataDriven(module)) {
         placeFromLayout(module, *layout, plan);
         bindDimRules(module, dimRules, plan);
+        bindDimRules(module, joinedJackRules(module), plan);
         plan.evaluateConditions(module);
     } else {
         placeAutomatically(module, plan);

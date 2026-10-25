@@ -227,8 +227,10 @@ TEST(CardBodyConditions, ACodeDimRuleGreysWhileItsPredicateHolds) {
     const int detune = plan.findParam("detune");
     EXPECT_TRUE(plan.items[(size_t)detune].dimmed) << "one voice: Detune does nothing";
     const auto watched = plan.watchedParameters(osc);
-    ASSERT_EQ(watched.size(), 1u);
+    // The Oscillator's joined-jack rules for Pan and Width watch Dual I/O too.
+    ASSERT_EQ(watched.size(), 2u);
     EXPECT_EQ(watched.front()->paramID, "unison");
+    EXPECT_EQ(watched.back()->paramID, "dualIO");
 
     setParam(osc, "unison", 3.0f);
     const auto change = plan.evaluateConditions(osc);
