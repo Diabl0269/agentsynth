@@ -111,7 +111,9 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   cards included, so their offsets to the card never change.
 - **Direction.** Only units the grower overlaps (with the usual 12 px clearance) move. Each goes the
   way that needs the least travel (left, right, up or down; a tie goes down, then right), rounded up
-  to the 8 px grid. The grower itself never moves.
+  to the 8 px grid. The grower itself never moves. A macro that expands passes its folded card's rect
+  (`LayoutUnit::before`): a neighbour wholly on one side of that card is pushed away from that side only, so the
+  macro stacked right below a card glides down instead of up past the grown border.
 - **Cascade.** A pushed unit pushes what it now overlaps in the same direction, so a row of
   neighbours shifts together. A unit reached twice ends up as far as the further push needs.
   Nothing ever moves back, so the cascade always settles.

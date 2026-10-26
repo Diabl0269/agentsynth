@@ -65,6 +65,25 @@ TEST(LayoutUtilDisplacement, PushedDownWhenThatIsTheLeastPenetration) {
     expectClear(units, moves, "g");
 }
 
+// Regression test for FRO1085: a neighbour just under a card that opened was sent up past the grown border because
+// that needed less travel; with the card's old rect known it goes down, away from where the card was.
+TEST(LayoutUtilDisplacement, ANeighbourBelowThePreviousRectIsPushedDownEvenWhenUpIsShorter) {
+    LayoutUnit grower = unit("g", 100, 400);
+    grower.rect.setSize(280, 500);
+    grower.before = {100, 400, 280, 90};
+    const std::vector<LayoutUnit> units{grower, unit("a", 100, 506, 280, 90)};
+    const auto moves = resolveDisplacement("g", units);
+    ASSERT_EQ(moves.size(), 1u);
+    EXPECT_EQ(moves[0].delta.x, 0);
+    EXPECT_GT(moves[0].delta.y, 0);
+
+    LayoutUnit plain = grower;
+    plain.before = {};
+    const auto unaided = resolveDisplacement("g", {plain, unit("a", 100, 506, 280, 90)});
+    ASSERT_EQ(unaided.size(), 1u);
+    EXPECT_LT(unaided[0].delta.y, 0) << "without the previous rect the shorter way is up";
+}
+
 TEST(LayoutUtilDisplacement, TieGoesDownThenRight) {
     // a sits diagonally so right and down penetrate equally.
     const std::vector<LayoutUnit> units{unit("g", 100, 100), unit("a", 180, 180)};

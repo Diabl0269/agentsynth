@@ -17,6 +17,7 @@
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 using namespace detail;
 
@@ -627,7 +628,12 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
             live->expandNudge = nudge;
             live->preExpandCardOrigin = preExpandOrigin;
         }
-        makeRoomFor("m:" + macroId);
+        // The folded card is where it sat before the border grew around it: the macros beside it are pushed away
+        // from it, so one below the card goes down rather than up past the grown border.
+        const auto* grown = host_.getMacros().find(macroId);
+        const auto* card = getMacroCard(macroId);
+        makeRoomFor("m:" + macroId,
+                    card != nullptr ? card->getBounds() : (grown != nullptr ? grown->bounds : juce::Rectangle<int>()));
     } else {
         restoreCardAfterCollapse(macroId);
         returnDisplacedNeighbours(macroId); // neighbours pushed aside when it opened come back if they still can

@@ -235,6 +235,7 @@ void GraphEditor::deleteSelection() {
     auto doDelete = [this, ids] { removeNodesNow(ids, /*healChain=*/true, /*narrowDetach=*/false); };
 
     const auto cablesBefore = snapshotCablesForRetract();
+    const auto macroCountBefore = macros.getAll().size();
     CardGlideAnimator::Scope glideScope(cardGlide_); // each card shrinks away, see noteCardExits
     noteCardExits(ids);
 
@@ -243,7 +244,12 @@ void GraphEditor::deleteSelection() {
     else
         doDelete();
 
-    morphCablesSince(cablesBefore); // the neighbours the delete healed run together into one cable
+    // A delete that removed a macro takes its cables with it: they pull back into their sources while the card shrinks
+    // away, rather than blinking out. Otherwise only the neighbours a delete healed run together into one cable.
+    if (macros.getAll().size() < macroCountBefore)
+        retractCablesGoneSince(cablesBefore);
+    else
+        morphCablesSince(cablesBefore);
     repaint();
 }
 

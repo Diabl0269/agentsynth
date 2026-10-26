@@ -85,7 +85,8 @@ growAdded)` with the cables drawn before a change (`snapshotCablesForRetract()`)
 - **Retract.** A cable no longer drawn pulls back into its source jack (`easeInOutCubic`), staying fully opaque
   until 60% of the tween and then fading to 0 linearly. Callers: `disconnectCable`, `disconnectPort`,
   `removeModulator` (and so the mod dot panel's remove button), `MacroGroupController::deleteMacroPortManually`
-  (through the `GraphCanvasHost` seam) and `AppUndoManager::undo()`/`redo()`, so Cmd+Z taking a cable away
+  (through the `GraphCanvasHost` seam), a delete that removes a macro (its cables retract while the
+  card shrinks away) and `AppUndoManager::undo()`/`redo()`, so Cmd+Z taking a cable away
   animates too. The ghosts paint in `GraphContentComponent::paint` after the live cables.
 - **Grow.** Only undo and redo pass `growAdded`: a cable in the graph now that was not drawn before grows from its
   source jack out to its destination (`easeOutCubic`) while its opacity rises over the first 40%. The cable is real

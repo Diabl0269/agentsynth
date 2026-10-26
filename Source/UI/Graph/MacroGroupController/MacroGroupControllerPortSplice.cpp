@@ -655,6 +655,34 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
     return node->nodeID;
 }
 
+// A source gets one output per macro: the drag-created leg source -> outlet is plain and direct, so an outlet that
+// already has a connection from this source's jack is the one a second cable from it should leave through.
+juce::AudioProcessorGraph::NodeID MacroGroupController::existingOutletFedBy(const juce::String& macroId,
+                                                                            juce::AudioProcessorGraph::NodeID sourceId,
+                                                                            int visibleJack, bool isMidi) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    auto& graph = host_.graph();
+    auto* sourceNode = graph.getNodeForId(sourceId);
+    if (macro == nullptr || sourceNode == nullptr)
+        return {};
+    auto* sourceMb = dynamic_cast<ModuleBase*>(sourceNode->getProcessor());
+    for (const auto& port : macro->ports) {
+        if (port.isInput || (port.kind == synth::MacroPortKind::Midi) != isMidi)
+            continue;
+        const auto portId = resolveMemberNodeId(port.nodeUuid);
+        if (portId.uid == 0)
+            continue;
+        for (const auto& c : graph.getConnections()) {
+            if (c.source.nodeID != sourceId || c.destination.nodeID != portId)
+                continue;
+            if (isMidi || sourceMb == nullptr ||
+                sourceMb->mapOutputChannel(c.source.channelIndex).visibleJackIndex == visibleJack)
+                return portId;
+        }
+    }
+    return {};
+}
+
 bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                                             juce::AudioProcessorGraph::NodeID dstId, int dstJack,
                                                             bool isMidi, bool recordUndo) {
@@ -687,10 +715,15 @@ bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessor
 
         // Source side, innermost boundary first: member -> outlet -> the next boundary's outlet -> ...
         for (const auto& macroId : srcCrossings) {
-            const auto portId = mintMacroPortForAutoCreate(macroId, /*isInput=*/false, isMidi, srcId, srcJack);
+            // A source already leaving this macro through an outlet reuses it: one output, many destinations.
+            const auto reused = existingOutletFedBy(macroId, effectiveSrc, effectiveSrcJack, isMidi);
+            const auto portId = reused.uid != 0
+                                    ? reused
+                                    : mintMacroPortForAutoCreate(macroId, /*isInput=*/false, isMidi, srcId, srcJack);
             if (portId.uid == 0)
                 continue;
-            host_.connectPorts(effectiveSrc, effectiveSrcJack, portId, 0, isMidi, /*recordUndo=*/false);
+            if (reused.uid == 0)
+                host_.connectPorts(effectiveSrc, effectiveSrcJack, portId, 0, isMidi, /*recordUndo=*/false);
             effectiveSrc = portId;
             effectiveSrcJack = 0;
         }

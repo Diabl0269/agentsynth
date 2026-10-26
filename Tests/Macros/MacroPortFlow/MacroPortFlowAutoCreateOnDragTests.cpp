@@ -490,3 +490,80 @@ TEST(MacroPortFlow, AutoCreateOnDragDisabledPreferenceLeavesTheOriginalBehaviour
     EXPECT_TRUE(macro->ports.empty());
     EXPECT_TRUE(hasConnection(engine, oscMember, 0, extFilter, 0)) << "plain direct connection instead";
 }
+
+// Regression test for FRO796: a second cable dragged from the same member jack out of an expanded macro minted a
+// second outlet; the source must keep one output with two destinations.
+TEST(MacroPortFlow, ASecondCableFromTheSameMemberJackReusesTheMacrosExistingOutlet) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
+    editor.setSelectedNodes({oscMember, filterMember});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+
+    auto extA = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+    auto extB = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 500);
+
+    for (const auto target : {extA, extB}) {
+        auto* memberComp = compFor(editor, oscMember);
+        auto* extComp = compFor(editor, target);
+        ASSERT_NE(memberComp, nullptr);
+        ASSERT_NE(extComp, nullptr);
+        editor.beginConnectionDrag(memberComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+        editor.endConnectionDrag(extComp->getBounds().getPosition() + extComp->getPortCenter(0, /*isInput=*/true));
+    }
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u) << "one output for the one source";
+    const auto portId = nodeIdForUuid(engine, macro->ports[0].nodeUuid);
+    ASSERT_TRUE(portId.uid != 0);
+    EXPECT_TRUE(hasConnection(engine, oscMember, 0, portId, 0));
+    EXPECT_TRUE(hasConnection(engine, portId, 0, extA, 0)) << "first destination";
+    EXPECT_TRUE(hasConnection(engine, portId, 0, extB, 0)) << "second destination";
+}
+
+TEST(MacroPortFlow, TwoModulationCablesFromOneMemberLfoShareOneMacroOutlet) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto lfoMember = addModuleAt(editor, engine, std::make_unique<LFOModule>(), 100, 100);
+    auto fillerMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
+    editor.setSelectedNodes({lfoMember, fillerMember});
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+
+    auto extA = addModuleAt(editor, engine, std::make_unique<WavetableOscillatorModule>(), 900, 100);
+    auto extB = addModuleAt(editor, engine, std::make_unique<WavetableOscillatorModule>(), 900, 600);
+
+    for (const auto target : {extA, extB}) {
+        auto* lfoComp = compFor(editor, lfoMember);
+        auto* extComp = compFor(editor, target);
+        ASSERT_NE(lfoComp, nullptr);
+        ASSERT_NE(extComp, nullptr);
+        juce::Slider* position = nullptr;
+        for (auto* child : extComp->getChildren())
+            if (auto* s = dynamic_cast<juce::Slider*>(child))
+                if (s->getComponentID() == "Position")
+                    position = s;
+        ASSERT_NE(position, nullptr);
+        editor.beginConnectionDrag(lfoComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+        editor.endConnectionDrag(extComp->getBounds().getPosition() + position->getBounds().getCentre());
+    }
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u) << "one output for the one LFO";
+    const auto portId = nodeIdForUuid(engine, macro->ports[0].nodeUuid);
+    ASSERT_TRUE(portId.uid != 0);
+    const auto active = engine.getActiveModRoutings();
+    ASSERT_EQ(active.size(), 2u);
+    for (const auto& routing : active)
+        EXPECT_EQ(routing.sourceNodeID, portId) << "both routings leave through the same outlet";
+}

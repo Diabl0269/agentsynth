@@ -265,8 +265,10 @@ public:
     /** Translates one unit rigidly, geometry final on return. Does not refresh the canvas. */
     void moveUnitBy(const juce::String& key, juce::Point<int> delta);
     /** Pushes every neighbour clear of `growerKey`, then repeats one level up. Call it INSIDE the undo record of
-     *  whatever grew the unit; it opens none of its own. */
-    void makeRoomFor(const juce::String& growerKey);
+     *  whatever grew the unit; it opens none of its own. `previousFootprint`, when given, is the rect the grower
+     *  occupied before it grew (an expanding macro's folded card): neighbours on one side of it are pushed away from
+     *  that side. */
+    void makeRoomFor(const juce::String& growerKey, juce::Rectangle<int> previousFootprint = {});
     /** While deferred, makeRoomFor only remembers its grower; takeDeferredMakeRoom() hands the list back. */
     void setMakeRoomDeferred(bool deferred) noexcept { makeRoomDeferred_ = deferred; }
     std::vector<juce::String> takeDeferredMakeRoom() { return std::exchange(deferredMakeRoom_, {}); }
@@ -569,6 +571,11 @@ private:
     juce::AudioProcessorGraph::NodeID mintMacroPortForAutoCreate(const juce::String& macroId, bool isInput, bool isMidi,
                                                                  juce::AudioProcessorGraph::NodeID internalNodeId,
                                                                  int internalVisibleJack);
+    /** The macro's existing outlet already fed by jack `visibleJack` of `sourceId` (same kind), or an invalid NodeID.
+     *  A second cable from the same source reuses it instead of minting another output. */
+    juce::AudioProcessorGraph::NodeID existingOutletFedBy(const juce::String& macroId,
+                                                          juce::AudioProcessorGraph::NodeID sourceId, int visibleJack,
+                                                          bool isMidi) const;
     /** Infers a macro port's shape (Mono/StereoCollapsed/Poly) from ONE dragged cable's
      *  own jack fan, instead of always Mono. Returns {shape, voiceCount}. See the .cpp. */
     static std::pair<MacroPortShape, int> inferPortShapeFromCableFan(ModuleBase* otherMb, int otherVisibleJack,

@@ -149,7 +149,7 @@ static juce::String containerOfKey(const MacroGroupController& controller, const
 // back (returnDisplacedNeighbours, reflowForResizedModule).
 // Deferred while a drag applies a macro crossing live: the macro must not slide or push its neighbours under the
 // pointer, so the drop makes the room once the module has landed.
-void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
+void MacroGroupController::makeRoomFor(const juce::String& growerKey, juce::Rectangle<int> previousFootprint) {
     if (makeRoomDeferred_) {
         if (std::find(deferredMakeRoom_.begin(), deferredMakeRoom_.end(), growerKey) == deferredMakeRoom_.end())
             deferredMakeRoom_.push_back(growerKey);
@@ -171,7 +171,11 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey) {
     juce::String key = growerKey;
     for (int depth = 0; depth < 64; ++depth) {
         const auto container = containerOfKey(*this, macros, key);
-        const auto units = buildLayoutUnits(container);
+        auto units = buildLayoutUnits(container);
+        if (depth == 0 && !previousFootprint.isEmpty())
+            for (auto& unit : units)
+                if (unit.key == key)
+                    unit.before = previousFootprint;
         for (const auto& move : synth::LayoutUtil::resolveDisplacement(key, units)) {
             const auto unit =
                 std::find_if(units.begin(), units.end(), [&move](const LayoutUnit& u) { return u.key == move.key; });
