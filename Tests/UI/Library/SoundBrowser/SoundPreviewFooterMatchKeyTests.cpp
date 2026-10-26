@@ -58,6 +58,24 @@ TEST(SoundPreviewFooterMatchKeyTest, SitsBesideAutoPlayAndTellsTheOwnerWhenFlipp
     EXPECT_EQ(calls, 1) << "setting it from outside is silent";
 }
 
+// Regression test for FRO996: at the narrowest sidebar (200 px) both labels were cut to "Match..." and "Auto-...".
+TEST(SoundPreviewFooterMatchKeyTest, AtTheNarrowestSidebarBothSwitchesKeepRoomForTheirLabels) {
+    for (const int width : {200, 236, 280}) {
+        synth::ui::SoundPreviewFooter footer;
+        footer.setSize(width, synth::ui::SoundPreviewFooter::kHeight);
+        auto& match = footer.getMatchKey();
+        auto& autoPlay = footer.getAutoPlay();
+        EXPECT_GE(match.getWidth(), 80) << width;
+        EXPECT_GE(autoPlay.getWidth(), 80) << width;
+        EXPECT_FALSE(match.getBounds().intersects(autoPlay.getBounds())) << width;
+        EXPECT_FALSE(match.getBounds().intersects(footer.getStopButton().getBounds())) << width;
+        EXPECT_FALSE(autoPlay.getBounds().intersects(footer.getStopButton().getBounds())) << width;
+        EXPECT_FALSE(autoPlay.getBounds().intersects(footer.getVolume().getBounds())) << width;
+        EXPECT_FALSE(match.getBounds().intersects(footer.getVolume().getBounds())) << width;
+        EXPECT_TRUE(footer.getLocalBounds().contains(autoPlay.getBounds())) << width;
+    }
+}
+
 TEST(SoundPreviewFooterMatchKeyTest, PersistsAcrossViews) {
     juce::PropertiesFile::Options opts;
     opts.applicationName = "sound-matchkey-settings-test-" + juce::Uuid().toDashedString();

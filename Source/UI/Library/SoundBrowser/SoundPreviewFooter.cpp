@@ -126,6 +126,16 @@ void SoundPreviewFooter::resized() {
     wave_.setBounds(area.removeFromTop(40));
     area.removeFromTop(6);
     auto row = area.removeFromTop(24);
+    if (area.getWidth() < kSwitchesBesideStopWidth) {
+        // Too narrow for two labelled switches beside Stop: they take the row, Stop shares the next one with the level.
+        matchKey_.setBounds(row.removeFromLeft(row.getWidth() / 2));
+        autoPlay_.setBounds(row);
+        area.removeFromTop(4);
+        auto levelRow = area.removeFromTop(22);
+        stop_.setBounds(levelRow.removeFromLeft(56));
+        volume_.setBounds(levelRow);
+        return;
+    }
     stop_.setBounds(row.removeFromLeft(56));
     const int switchWidth = juce::jmax(0, juce::jmin(110, (row.getWidth() - 8) / 2));
     autoPlay_.setBounds(row.removeFromRight(switchWidth));

@@ -18,6 +18,7 @@ class SoundPreviewFooter : public juce::Component {
 public:
     static constexpr int kHeight = 108;
     static constexpr int kCompactHeight = 36;
+    static constexpr int kSwitchesBesideStopWidth = 240; ///< Below this inner width the switches get their own row.
 
     SoundPreviewFooter();
     ~SoundPreviewFooter() override;
