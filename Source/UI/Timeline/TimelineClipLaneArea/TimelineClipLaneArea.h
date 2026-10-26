@@ -298,6 +298,7 @@ public:
     // The FIRST readable audio file only, reported through onAudioFileDropped. Multi-file drops
     // deliberately import one clip rather than fanning out.
     void filesDropped(const juce::StringArray& files, int x, int y) override;
+    bool takesStretchedLoops() const override { return true; }
 
     // The track row currently highlighted for a file drop, or -1. Test hook (the drop highlight is
     // otherwise only observable as pixels).

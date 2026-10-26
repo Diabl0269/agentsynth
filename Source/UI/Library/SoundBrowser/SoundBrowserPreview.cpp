@@ -12,6 +12,10 @@ void SoundBrowserComponent::setupPreview() {
         if (onPreviewSettingsChanged)
             onPreviewSettingsChanged();
     };
+    footer_.onMatchKeyChanged = [this](bool) {
+        if (onPreviewSettingsChanged)
+            onPreviewSettingsChanged();
+    };
     footer_.onGainChanged = [this](float db) {
         if (previewPlayer_ != nullptr)
             previewPlayer_->setGainDb(db);
@@ -28,14 +32,16 @@ void SoundBrowserComponent::setPreviewPlayer(synth::soundbrowser::SoundPreviewPl
         player->setGainDb(footer_.getGainDb());
 }
 
-void SoundBrowserComponent::setPreviewSettings(bool autoPlay, float gainDb) {
+void SoundBrowserComponent::setPreviewSettings(bool autoPlay, float gainDb, bool matchKey) {
     footer_.setAutoPlay(autoPlay);
+    footer_.setMatchKey(matchKey);
     footer_.setGainDb(gainDb);
     if (previewPlayer_ != nullptr)
         previewPlayer_->setGainDb(footer_.getGainDb());
 }
 
-// A loop starts on the next bar when the song plays; instruments are not audio files and stay silent.
+// A loop starts on the next bar when the song plays and is fitted to the song's tempo (and key, with Match key on);
+// instruments are not audio files and stay silent.
 bool SoundBrowserComponent::playSelected() {
     if (previewPlayer_ == nullptr || selected_ < 0 || selected_ >= (int)rows_.size() ||
         rows_[(size_t)selected_].kind != RowKind::Sound)
@@ -44,9 +50,18 @@ bool SoundBrowserComponent::playSelected() {
     const juce::File file(entry.path);
     if (entry.kind == SoundKind::Instrument || !file.existsAsFile())
         return false;
-    lastRequestId_ = previewPlayer_->play(file, entry.kind == SoundKind::Loop);
+    const bool loop = entry.kind == SoundKind::Loop;
+    lastRequestId_ = loop ? previewPlayer_->play(file, true, loopTargetFor(entry)) : previewPlayer_->play(file, false);
     footer_.followRequest(lastRequestId_);
     return true;
+}
+
+// A loop of unknown tempo gets fileBpm 0, which the player leaves as recorded.
+synth::soundbrowser::LoopTarget
+SoundBrowserComponent::loopTargetFor(const synth::soundbrowser::SoundEntry& entry) const {
+    const double songBpm = songTempoProvider ? songTempoProvider() : 0.0;
+    return synth::soundbrowser::makeLoopTarget(entry.tempo, entry.key, songBpm, filters_.songKey(),
+                                               footer_.isMatchKey());
 }
 
 void SoundBrowserComponent::stopPreview() {

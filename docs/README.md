@@ -158,6 +158,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/development/docs-guard.md`](development/docs-guard.md) — `scripts/check-docs.sh`'s nine checks (naming, links, `docs/...` mentions, `§`-section refs, README map completeness, bare `#anchor` mentions, bare basenames, reversed `§N of docs/...` refs, bare `§N` markers), the naming ratchet, and where it runs
 - [`docs/development/pr-title-convention.md`](development/pr-title-convention.md) — PR title format (`type(scope)!: subject`) and why it is checked on the title, not a commit message
 - [`docs/development/distribution.md`](development/distribution.md) — version identity, the build-time "What's New" data, and the signing state of a shipped build
+- [`docs/development/third-party-licences.md`](development/third-party-licences.md) — the licence text of the shipped third-party code (Signalsmith Stretch and Linear)
 - [`docs/development/auto-update.md`](development/auto-update.md) — Sparkle (macOS) and WinSparkle (Windows), EdDSA key generation, and the manual verification recipes
 - [`docs/development/releases.md`](development/releases.md) — the post-merge artifact build, appcast publishing, release asset upload reliability, and promoting a build to stable
 

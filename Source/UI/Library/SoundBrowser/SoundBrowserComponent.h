@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Modules/Shapes/ShapeLibrary.h"
+#include "SoundBrowser/LoopStretch.h"
 #include "SoundBrowser/SoundFolderBook.h"
 #include "SoundBrowser/SoundIndex.h"
 #include "SoundBrowser/SoundLists.h"
@@ -121,11 +122,15 @@ public:
     // ---- Preview (SoundBrowserPreview.cpp) ------------------------------------------------------------------
     /** The audio engine's preview player (may be null: the view then plays nothing). Applies the preview volume. */
     void setPreviewPlayer(synth::soundbrowser::SoundPreviewPlayer* player);
-    /** Auto-play and the preview volume as persisted; does not call onPreviewSettingsChanged. */
-    void setPreviewSettings(bool autoPlay, float gainDb);
+    /** Auto-play, the preview volume and Match key as persisted; does not call onPreviewSettingsChanged. */
+    void setPreviewSettings(bool autoPlay, float gainDb, bool matchKey = false);
     bool isAutoPlay() const { return footer_.isAutoPlay(); }
+    bool isMatchKey() const { return footer_.isMatchKey(); }
+    /** How a loop is fitted to the song now: its tempo to the transport's, and its key to the song's with Match key on.
+     */
+    synth::soundbrowser::LoopTarget loopTargetFor(const synth::soundbrowser::SoundEntry& entry) const;
     float getPreviewGainDb() const { return footer_.getGainDb(); }
-    /** Auto-play or the preview volume was changed by the user. */
+    /** Auto-play, Match key or the preview volume was changed by the user. */
     std::function<void()> onPreviewSettingsChanged;
     /** Plays the selected sound (a loop on the next bar when the song plays); false when none can play. */
     bool playSelected();

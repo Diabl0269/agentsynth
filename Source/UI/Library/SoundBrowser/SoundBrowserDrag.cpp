@@ -49,7 +49,9 @@ bool SoundBrowserComponent::beginSoundDrag(int index) {
         container->startDragging(makeSoundPayload(file.getFullPathName()), this, makeSoundDragImage(row.text));
     soundDragging_ = true;
     showDragCursor(*this);
-    SoundDragState::begin(file);
+    SoundDragState::begin(file, row.entry->kind == synth::soundbrowser::SoundKind::Loop
+                                    ? loopTargetFor(*row.entry)
+                                    : synth::soundbrowser::LoopTarget{});
     return true;
 }
 

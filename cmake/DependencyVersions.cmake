@@ -48,3 +48,19 @@ set(SYNTH_WINSPARKLE_URL "https://github.com/vslavik/winsparkle/releases/downloa
 
 set(SYNTH_WINSPARKLE_SHA256 "6037df37fc263bd1650a1c4949681a9d40ffe991d01f35892a406cb5d103c976"
     CACHE STRING "SHA-256 of SYNTH_WINSPARKLE_URL — verified against the GitHub release asset at pin time")
+
+# Signalsmith Stretch (loop time-stretch and pitch-shift, MIT) and Signalsmith Linear (the FFT/STFT it includes, MIT).
+# Both are header-only; only the include directories are used (CMakeLists.txt), never their own CMake projects.
+# 1.4.0 pins Linear 0.6.4. Tag commits: stretch a670068d9aeb64913331d5cc29337b19a457a7df, linear
+# de55e6a50ffcf6f8f43f649692d94691c7025151 (checked at pin time with `gh api`).
+set(SYNTH_SIGNALSMITH_STRETCH_GIT_REPOSITORY "https://github.com/Signalsmith-Audio/signalsmith-stretch.git"
+    CACHE STRING "Signalsmith Stretch upstream fetched via FetchContent (headers only)")
+
+set(SYNTH_SIGNALSMITH_STRETCH_GIT_TAG "a670068d9aeb64913331d5cc29337b19a457a7df"
+    CACHE STRING "Signalsmith Stretch commit of release tag 1.4.0")
+
+set(SYNTH_SIGNALSMITH_LINEAR_GIT_REPOSITORY "https://github.com/Signalsmith-Audio/linear.git"
+    CACHE STRING "Signalsmith Linear upstream fetched via FetchContent (headers only)")
+
+set(SYNTH_SIGNALSMITH_LINEAR_GIT_TAG "de55e6a50ffcf6f8f43f649692d94691c7025151"
+    CACHE STRING "Signalsmith Linear commit of release tag 0.6.4")

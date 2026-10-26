@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
 #include "MainComponentShortcutHints.h"
+#include "SoundBrowser/LoopStretch.h"
 #include "Telemetry/UsageStatsChoice.h"
 #include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"
 #include "UI/Layout/PopupMotion.h"
@@ -36,6 +37,13 @@ void MainComponent::addCanvasAndPanels() {
     librarySidebar_->getSounds().songTempoProvider = [this] {
         return audioEngine.getTransport().getDocumentState().bpm;
     };
+    // The song's key for Match key and the Song key chip; the transport tells the view whenever it changes.
+    auto sendSongKey = [this] {
+        librarySidebar_->getSounds().setSongKey(
+            synth::soundbrowser::soundKeyForScale(audioEngine.getTransport().getDocumentState().songKey));
+    };
+    audioEngine.getTransport().onSongKeyChanged = sendSongKey;
+    sendSongKey();
     addAndMakeVisible(*librarySidebar_);
 
     // Grey out the singleton I/O rows once the patch already has one, and repaint the library

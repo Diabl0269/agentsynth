@@ -5,6 +5,7 @@
 // locks or touches a file. The engine sums the preview into its output AFTER the master, so the song's volume, mute
 // and master effects never reach it, and a bounce never contains it.
 
+#include "SoundBrowser/LoopStretch.h"
 #include "Transport/BlockTimeInfo.h"
 #include <array>
 #include <atomic>
@@ -31,6 +32,9 @@ public:
      *  With `alignToBar`, and the song playing, it starts on the next bar. Returns the request's id; a request
      *  that the next one replaces before it finished decoding never plays. A file no reader opens never plays. */
     std::uint64_t play(const juce::File& file, bool alignToBar);
+    /** As above, and the decoded sound is first fitted to `target` (time-stretched to the song's tempo, shifted to its
+     *  key) when target.needsStretch(); an unknown file tempo (fileBpm 0) plays as recorded. */
+    std::uint64_t play(const juce::File& file, bool alignToBar, const LoopTarget& target);
     /** Cuts the sound that plays with a 5 ms fade and drops one still decoding. */
     void stop();
     /** The preview's own level in dB; clamped to -60..+6, and -60 is silence. Any thread. */

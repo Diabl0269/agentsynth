@@ -1,4 +1,6 @@
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
+#include "Music/SongKey.h"
+#include "SoundBrowser/SoundSearch.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -9,6 +11,14 @@ using synth::soundbrowser::SoundKind;
 namespace {
 
 juce::String middleDot() { return juce::String::fromUTF8("\xc2\xb7"); }
+
+// "Am", "C", "F#m": the root, and an m for a minor key; a key that does not read gives "".
+juce::String shortKeyName(const juce::String& key) {
+    const auto id = synth::soundbrowser::parseSoundKey(key);
+    if (id.pitchClass < 0)
+        return {};
+    return synth::keyRootName(id.pitchClass) + (id.mode == 2 ? "m" : "");
+}
 
 juce::String plural(int n, const char* one, const char* many) { return juce::String(n) + " " + (n == 1 ? one : many); }
 
@@ -40,6 +50,18 @@ juce::String soundDetailText(const SoundEntry& entry) {
         return juce::String((int)std::lround(entry.tempo)) + " " + middleDot() + " " + plural(bars, "bar", "bars");
     }
     return formatSoundLength(entry.lengthSeconds);
+}
+
+juce::String soundKeyMetaText(const SoundEntry& entry, const juce::String& songKey) {
+    if (entry.kind != SoundKind::Loop)
+        return {};
+    const auto own = shortKeyName(entry.key);
+    if (own.isEmpty())
+        return {};
+    auto text = "Key " + own;
+    if (const auto song = shortKeyName(songKey); song.isNotEmpty())
+        text += " " + middleDot() + " song " + song;
+    return text;
 }
 
 juce::String describeSoundForAccessibility(const SoundEntry& entry, int position, int count) {

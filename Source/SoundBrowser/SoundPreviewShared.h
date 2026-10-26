@@ -41,7 +41,7 @@ public:
     explicit Decoder(SoundPreviewPlayer& owner);
     ~Decoder() override;
 
-    void request(const juce::File& file, bool alignToBar, std::uint64_t requestId);
+    void request(const juce::File& file, bool alignToBar, std::uint64_t requestId, const LoopTarget& target);
     void cancel();
     bool waitIdle(int timeoutMs) const;
 
@@ -50,11 +50,13 @@ private:
         juce::File file;
         bool alignToBar = false;
         std::uint64_t id = 0;
+        LoopTarget target;
     };
 
     void run() override;
     bool superseded(std::uint64_t generation) const { return generation_.load() != generation; }
     std::shared_ptr<Clip> decode(const Request& request, std::uint64_t generation);
+    static void fitToTarget(Clip& clip, const LoopTarget& target);
 
     SoundPreviewPlayer& owner_;
     juce::AudioFormatManager formats_;

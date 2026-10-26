@@ -27,6 +27,14 @@ SoundPreviewFooter::SoundPreviewFooter() {
     };
     addAndMakeVisible(autoPlay_);
 
+    matchKey_.setTitle("Match key");
+    matchKey_.setTooltip("Play loops in the song's key");
+    matchKey_.onClick = [this] {
+        if (onMatchKeyChanged)
+            onMatchKeyChanged(matchKey_.getToggleState());
+    };
+    addAndMakeVisible(matchKey_);
+
     using Player = synth::soundbrowser::SoundPreviewPlayer;
     volume_.setTitle("Preview volume");
     volume_.setWantsKeyboardFocus(true); // juce::Slider turns it off; the volume is a keyboard stop
@@ -94,7 +102,8 @@ void SoundPreviewFooter::applyShapeMix() {
         c->setVisible(transport);
         c->setAlpha(transportAlpha);
     }
-    for (juce::Component* c : {static_cast<juce::Component*>(&autoPlay_), static_cast<juce::Component*>(&wave_)}) {
+    for (juce::Component* c : {static_cast<juce::Component*>(&autoPlay_), static_cast<juce::Component*>(&matchKey_),
+                               static_cast<juce::Component*>(&wave_)}) {
         c->setVisible(transport && !compact_);
         c->setAlpha(transportAlpha);
     }
@@ -118,7 +127,9 @@ void SoundPreviewFooter::resized() {
     area.removeFromTop(6);
     auto row = area.removeFromTop(24);
     stop_.setBounds(row.removeFromLeft(56));
-    autoPlay_.setBounds(row.removeFromRight(juce::jmin(110, row.getWidth() - 8)));
+    const int switchWidth = juce::jmax(0, juce::jmin(110, (row.getWidth() - 8) / 2));
+    autoPlay_.setBounds(row.removeFromRight(switchWidth));
+    matchKey_.setBounds(row.removeFromRight(switchWidth));
     area.removeFromTop(4);
     volume_.setBounds(area.removeFromTop(22));
 }
