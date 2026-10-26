@@ -11,7 +11,8 @@ namespace synth::ui {
  *  file drop's own. Takes nothing but a sound (a module or snippet drag falls through to the canvas). While a sound
  *  drag is live, isShowingSoundOutline() is true when the file target would take it; the owner paints the faint
  *  outline from it. A component that also takes a dragged Shape returns a ShapeDropTarget from shapeDropTarget(); a
- *  shape is then offered to it the same way, and a component without one refuses every shape. */
+ *  shape is then offered to it the same way, and a component without one refuses every shape. A target that overrides
+ *  takesStretchedLoops() is offered a loop as a stretched copy at the song's tempo (and key), written on the drop. */
 class SoundDropAdapter
     : public juce::DragAndDropTarget
     , private SoundDragState::Listener {
@@ -29,6 +30,9 @@ public:
     bool isShowingSoundOutline() const noexcept { return outline_; }
     /** The part of this component that takes a dragged Shape; null (the default) refuses shapes. */
     virtual ShapeDropTarget* shapeDropTarget() { return nullptr; }
+    /** True (an audio track) to be offered a loop fitted to the song; false (the default) always gets the original
+     * file. */
+    virtual bool takesStretchedLoops() const { return false; }
 
 private:
     void soundDragChanged() override;

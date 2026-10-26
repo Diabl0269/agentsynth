@@ -207,6 +207,8 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
         sub = row.entry->placeName;
         if (row.entry->folder.isNotEmpty())
             sub += " > " + row.entry->folder.replace("/", " > ");
+        if (const auto keyMeta = soundKeyMetaText(*row.entry, filters_.songKey()); keyMeta.isNotEmpty())
+            sub = keyMeta + "  -  " + sub;
     } else if (row.kind == RowKind::Shape) {
         sub = shapeKindAndSource(*row.shape);
     } else if (row.kind == RowKind::GetPack) {

@@ -10,6 +10,8 @@ struct State {
     synth::shapes::ShapeKind shapeKind = synth::shapes::ShapeKind::Filter;
     juce::String shapeName;
     juce::File file;
+    juce::File loopFile; // the latest drag's file and target; kept after the drag ends
+    synth::soundbrowser::LoopTarget loopTarget;
     juce::ListenerList<SoundDragState::Listener> listeners;
 };
 
@@ -20,7 +22,9 @@ State& state() {
 }
 } // namespace
 
-void SoundDragState::begin(const juce::File& file) {
+void SoundDragState::begin(const juce::File& file, const synth::soundbrowser::LoopTarget& loop) {
+    state().loopFile = file;
+    state().loopTarget = loop;
     state().active = true;
     state().shapeActive = false;
     state().file = file;
@@ -55,6 +59,10 @@ synth::shapes::ShapeKind SoundDragState::shapeKind() { return state().shapeKind;
 juce::String SoundDragState::shapeName() { return state().shapeName; }
 
 juce::File SoundDragState::file() { return state().file; }
+
+synth::soundbrowser::LoopTarget SoundDragState::loopTargetFor(const juce::File& file) {
+    return file == state().loopFile ? state().loopTarget : synth::soundbrowser::LoopTarget{};
+}
 
 void SoundDragState::addListener(Listener* listener) { state().listeners.add(listener); }
 

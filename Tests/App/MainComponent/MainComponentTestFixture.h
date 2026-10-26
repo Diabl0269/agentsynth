@@ -86,6 +86,7 @@ protected:
             s->removeValue("librarySidebarView");
             s->removeValue("soundBrowserWidth");
             s->removeValue("soundBrowserAutoPlay");
+            s->removeValue("soundBrowserMatchKey");
             s->removeValue("soundBrowserPreviewGainDb");
             // default: dock closed. Any earlier test that opens the bottom dock persists "1", which
             // would steal canvas height from every layout-sensitive test that follows.

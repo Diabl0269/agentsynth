@@ -11,6 +11,11 @@ constexpr int kReadChunk = 65536;
 constexpr int kMaxHeldClips = 8;
 } // namespace
 
+void SoundPreviewPlayer::Decoder::fitToTarget(Clip& clip, const LoopTarget& target) {
+    if (target.needsStretch())
+        clip.data = stretchLoop(clip.data, clip.sampleRate, target.tempoRatio(), (double)target.semitones);
+}
+
 SoundPreviewPlayer::Decoder::Decoder(SoundPreviewPlayer& owner)
     : juce::Thread("Sound preview decoder")
     , owner_(owner) {
@@ -25,10 +30,11 @@ SoundPreviewPlayer::Decoder::~Decoder() {
     stopThread(5000);
 }
 
-void SoundPreviewPlayer::Decoder::request(const juce::File& file, bool alignToBar, std::uint64_t requestId) {
+void SoundPreviewPlayer::Decoder::request(const juce::File& file, bool alignToBar, std::uint64_t requestId,
+                                          const LoopTarget& target) {
     {
         const std::lock_guard<std::mutex> lock(mutex_);
-        pending_ = Request{file, alignToBar, requestId};
+        pending_ = Request{file, alignToBar, requestId, target};
         generation_.fetch_add(1);
     }
     wake_.signal();
@@ -86,7 +92,8 @@ void SoundPreviewPlayer::Decoder::run() {
 }
 
 // Reads at most kMaxSeconds, mono or the first two channels, and converts to the output rate with Lagrange
-// interpolation; gives up as soon as a newer request arrives.
+// interpolation; gives up as soon as a newer request arrives. A loop target is applied last, to the finished buffer, so
+// the stretch runs at the output rate and the audio thread still only reads a finished clip.
 std::shared_ptr<SoundPreviewPlayer::Clip> SoundPreviewPlayer::Decoder::decode(const Request& request,
                                                                               std::uint64_t generation) {
     const double outRate = owner_.sampleRate_.load(std::memory_order_relaxed);
@@ -116,6 +123,7 @@ std::shared_ptr<SoundPreviewPlayer::Clip> SoundPreviewPlayer::Decoder::decode(co
         clip->data.setSize(channels, length);
         for (int ch = 0; ch < channels; ++ch)
             clip->data.copyFrom(ch, 0, source, ch, 0, length);
+        fitToTarget(*clip, request.target);
         return clip;
     }
     const double ratio = reader->sampleRate / outRate;
@@ -125,6 +133,7 @@ std::shared_ptr<SoundPreviewPlayer::Clip> SoundPreviewPlayer::Decoder::decode(co
         juce::LagrangeInterpolator interpolator;
         interpolator.process(ratio, source.getReadPointer(ch), clip->data.getWritePointer(ch), outLength);
     }
+    fitToTarget(*clip, request.target);
     return clip;
 }
 

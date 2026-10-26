@@ -24,9 +24,13 @@ void SoundPreviewPlayer::setSuspended(bool suspended) noexcept {
 }
 
 std::uint64_t SoundPreviewPlayer::play(const juce::File& file, bool alignToBar) {
+    return play(file, alignToBar, LoopTarget{});
+}
+
+std::uint64_t SoundPreviewPlayer::play(const juce::File& file, bool alignToBar, const LoopTarget& target) {
     const auto id = ++requestCounter_;
     post({Command::Kind::Stop, nullptr, id, false, 0});
-    decoder_->request(file, alignToBar, id);
+    decoder_->request(file, alignToBar, id, target);
     return id;
 }
 

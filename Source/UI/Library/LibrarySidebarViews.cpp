@@ -47,7 +47,8 @@ LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::
         sounds_.setPreviewSettings(settings_->getBoolValue(kSoundBrowserAutoPlaySettingKey, true),
                                    juce::jlimit(Player::kMinGainDb, Player::kMaxGainDb,
                                                 (float)settings_->getDoubleValue(kSoundBrowserPreviewGainDbSettingKey,
-                                                                                 Player::kDefaultGainDb)));
+                                                                                 Player::kDefaultGainDb)),
+                                   settings_->getBoolValue(kSoundBrowserMatchKeySettingKey, false));
     }
     sounds_.onPreviewSettingsChanged = [this] { persistPreviewSettings(); };
     lists_.onChanged = [this] { persistLists(); };
@@ -109,6 +110,7 @@ void LibrarySidebarViews::persistPreviewSettings() {
     if (settings_ == nullptr)
         return;
     settings_->setValue(kSoundBrowserAutoPlaySettingKey, sounds_.isAutoPlay());
+    settings_->setValue(kSoundBrowserMatchKeySettingKey, sounds_.isMatchKey());
     settings_->setValue(kSoundBrowserPreviewGainDbSettingKey, (double)sounds_.getPreviewGainDb());
     settings_->saveIfNeeded();
 }

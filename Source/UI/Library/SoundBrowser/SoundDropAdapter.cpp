@@ -1,5 +1,6 @@
 // SoundDropAdapter.cpp -- a dragged Sound handed to the component's own file-drop methods.
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
+#include "SoundBrowser/LoopStretchFile.h"
 #include "UI/Library/SoundBrowser/ShapeDragPayload.h"
 #include "UI/Library/SoundBrowser/SoundDragPayload.h"
 
@@ -66,9 +67,14 @@ void SoundDropAdapter::itemDropped(const SourceDetails& details) {
         }
         return;
     }
-    if (auto* target = fileTarget())
-        target->filesDropped({soundFileFromPayload(details.description).getFullPathName()}, details.localPosition.x,
-                             details.localPosition.y);
+    auto* target = fileTarget();
+    if (target == nullptr)
+        return;
+    auto file = soundFileFromPayload(details.description);
+    // Rendered here, on the message thread: a loop is a few seconds, which stretches well under a second.
+    if (takesStretchedLoops())
+        file = synth::soundbrowser::stretchedLoopFile(file, SoundDragState::loopTargetFor(file));
+    target->filesDropped({file.getFullPathName()}, details.localPosition.x, details.localPosition.y);
 }
 
 // The outline asks the file target the question a drop would, so a card that would refuse the file shows nothing.

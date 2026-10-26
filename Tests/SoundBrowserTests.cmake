@@ -1,6 +1,8 @@
 # The sound index (FRO989), the Sounds view in the left sidebar (FRO990), its filters (FRO991) and the preview player
 # (FRO992) and dragging a sound (FRO993), kept in their own list so Tests/CMakeLists.txt stays under the file-size cap.
 target_sources(Tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/LoopStretchTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/LoopStretchFileTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/ShapeLibraryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/ShapesPlaceTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeLibraryWindowTests.cpp
@@ -17,6 +19,9 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFolderViewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFolderBookTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundPreviewPlayerTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundPreviewPlayerLoopTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Library/SoundBrowser/SoundDropAdapterStretchTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Library/SoundBrowser/SoundPreviewFooterMatchKeyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundPreviewViewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/MainComponentSoundDropTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphDragDropController/GraphDragDropControllerSoundTests.cpp

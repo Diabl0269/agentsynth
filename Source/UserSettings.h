@@ -120,4 +120,8 @@ inline constexpr const char* kSoundBrowserWidthSettingKey = "soundBrowserWidth";
 inline constexpr const char* kSoundBrowserAutoPlaySettingKey = "soundBrowserAutoPlay";
 inline constexpr const char* kSoundBrowserPreviewGainDbSettingKey = "soundBrowserPreviewGainDb";
 
+/** Whether the Sounds view plays and drops loops in the song's key ("1") or leaves their pitch alone ("0", the
+ *  default); the tempo always follows the song. */
+inline constexpr const char* kSoundBrowserMatchKeySettingKey = "soundBrowserMatchKey";
+
 } // namespace synth

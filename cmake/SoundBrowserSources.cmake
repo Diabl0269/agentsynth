@@ -1,9 +1,14 @@
 # The sound index: a background scan of the sound packs and the user's folders, name guessing and the search.
 # Part of Core (no UI), with the library of named shape curves the Sounds view lists; their own list so the root file stays under the line cap.
+include(${CMAKE_CURRENT_LIST_DIR}/SignalsmithStretch.cmake)
 target_sources(Core PRIVATE
     Source/Modules/Shapes/FactoryShapes.cpp
     Source/Modules/Shapes/ShapeLibrary.cpp
     Source/Modules/Shapes/ShapeLibrary.h
+    Source/SoundBrowser/LoopStretch.cpp
+    Source/SoundBrowser/LoopStretch.h
+    Source/SoundBrowser/LoopStretchFile.cpp
+    Source/SoundBrowser/LoopStretchFile.h
     Source/SoundBrowser/SoundEntry.h
     Source/SoundBrowser/SoundFolderBook.cpp
     Source/SoundBrowser/SoundFolderBook.h

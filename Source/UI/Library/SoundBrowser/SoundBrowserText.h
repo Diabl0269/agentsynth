@@ -18,6 +18,10 @@ int soundBarCount(double tempo, double seconds);
  * dot is U+00B7), "instrument" for an .sfz. */
 juce::String soundDetailText(const synth::soundbrowser::SoundEntry& entry);
 
+/** What the footer says about a loop's key: "Key Am . song Dm" (the dot is U+00B7), "Key Am" while the song has no
+ *  key; empty for a sound that is not a loop or whose key is unknown. */
+juce::String soundKeyMetaText(const synth::soundbrowser::SoundEntry& entry, const juce::String& songKey);
+
 /** "acoustic-snare-center, one-shot, 0.8 seconds, 2 of 23". */
 juce::String describeSoundForAccessibility(const synth::soundbrowser::SoundEntry& entry, int position, int count);
 /** "Drums, folder, 24 sounds, 2 of 5". */
