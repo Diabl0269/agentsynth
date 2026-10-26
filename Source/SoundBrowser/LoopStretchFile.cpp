@@ -36,6 +36,25 @@ bool readWhole(const juce::File& source, juce::AudioBuffer<float>& data, double&
     return reader->read(&data, 0, data.getNumSamples(), 0, true, channels > 1);
 }
 
+// The window [startSeconds, startSeconds + lengthSeconds) at the file's own rate, at most two channels; the reader
+// fills whatever lies past the file's end with silence.
+bool readWindow(const juce::File& source, double startSeconds, double lengthSeconds, juce::AudioBuffer<float>& data,
+                double& rate) {
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(source));
+    if (reader == nullptr || reader->sampleRate <= 0.0 || reader->lengthInSamples <= 0)
+        return false;
+    const auto first = (juce::int64)std::llround(startSeconds * reader->sampleRate);
+    const auto count = (int)std::llround(lengthSeconds * reader->sampleRate);
+    if (count <= 0)
+        return false;
+    const int channels = (int)juce::jmin<unsigned int>(2, reader->numChannels);
+    data.setSize(channels, count);
+    rate = reader->sampleRate;
+    return reader->read(&data, 0, count, first, true, channels > 1);
+}
+
 bool writeWav(const juce::File& file, const juce::AudioBuffer<float>& data, double rate) {
     juce::WavAudioFormat wav;
     std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
@@ -78,6 +97,29 @@ juce::File stretchedLoopFile(const juce::File& source, const LoopTarget& target,
         return source;
     }
     return copy;
+}
+
+// The clip-stretch path: unlike stretchedLoopFile it reads only a window (a clip may already be trimmed) and writes
+// where the caller says, which then imports the copy into the project. Same write-then-rename as above.
+bool renderStretchedWindow(const juce::File& source, double startSeconds, double lengthSeconds, double tempoRatio,
+                           const juce::File& dest) {
+    if (!(tempoRatio > 0.0) || !std::isfinite(tempoRatio) || !(lengthSeconds > 0.0) ||
+        lengthSeconds > kMaxStretchWindowSeconds || !(startSeconds >= 0.0) || !source.existsAsFile())
+        return false;
+    juce::AudioBuffer<float> data;
+    double rate = 0.0;
+    if (!readWindow(source, startSeconds, lengthSeconds, data, rate))
+        return false;
+    const auto stretched = stretchLoop(data, rate, tempoRatio, 0.0);
+    if (!dest.getParentDirectory().createDirectory().wasOk())
+        return false;
+    const auto partial = dest.withFileExtension("partial");
+    const bool written = writeWav(partial, stretched, rate);
+    if (!written || !partial.moveFileTo(dest)) {
+        partial.deleteFile();
+        return false;
+    }
+    return true;
 }
 
 } // namespace synth::soundbrowser

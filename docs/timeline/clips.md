@@ -116,8 +116,17 @@ length, so it previews and takes every mode's change too, except a left Trim, wh
 ([linked clips](linked-clips.md)).
 
 While stretching, a small pill on the clip's top right shows the new length as a percentage of the old one ("75%").
-An **audio** clip has no stretch engine yet: Stretch (the mode or Option) trims it instead and the pill says
-"Audio trims: no stretch yet"; its left edge moves the start and keeps the end, as it always has.
+An **audio** clip under Trim or Carry contents keeps its audio and only changes span; its left edge moves the start and
+keeps the end, as it always has. Under **Stretch** (the mode or Option) its audio is time-stretched to the new length at
+the same pitch, with the Signalsmith engine the Sounds view uses for loops: on the drop the lanes hand the new span to
+`onAudioClipStretchRequested`, and `MainComponentAudioImport::stretchAudioClip` renders the audio the clip plays now
+(`synth::audioStretchWindow`: from its source offset for its length at the current tempo) with
+`soundbrowser::renderStretchedWindow`, imports the copy like a dropped file (`<name>-stretch<percent>.wav` in the
+bundle's `Audio/`, or `Recordings/` before the first save) and points the clip at it from 0 s, fades scaled, as one undo
+step (`synth::applyAudioClipStretch`). Undo plays the original file again; both files stay in the project. The render
+blocks for about a second per minute of audio, so a clip over a minute (`kMaxStretchWindowSeconds`), or one whose file
+is missing, resizes instead and the status bar says why. The drag previews the stretch already: an audio clip's
+waveform is always drawn from its stored span into the dragged rectangle.
 
 ## Cross-track drag
 

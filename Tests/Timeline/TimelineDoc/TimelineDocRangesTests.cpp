@@ -392,3 +392,40 @@ TEST(ClipEdgeSizingTest, ModesCycleAndRoundTripThroughTheSettingsKey) {
         EXPECT_EQ(synth::clipSizingModeFromKey(synth::clipSizingModeKey(mode)), mode);
     EXPECT_FALSE(synth::clipSizingModeFromKey("sideways").has_value());
 }
+
+TEST_F(TimelineDocTest, AnAudioStretchWindowIsTheAudioTheClipPlaysNow) {
+    const auto track = doc.addTrack(TrackKind::Audio, "A");
+    const auto audio = doc.addClip(track, 2.0, 4.0, "take");
+    ASSERT_TRUE(doc.setClipAsset(audio, "Audio/take.wav", 1.5));
+
+    const auto window = synth::audioStretchWindow(*doc.getClip(audio), 8.0, kSecondsPerBeat);
+    ASSERT_TRUE(window.has_value());
+    EXPECT_DOUBLE_EQ(window->startSeconds, 1.5);
+    EXPECT_DOUBLE_EQ(window->lengthSeconds, 2.0); // 4 beats at 0.5 s
+    EXPECT_DOUBLE_EQ(window->tempoRatio, 0.5) << "twice as long plays half as fast";
+
+    EXPECT_FALSE(synth::audioStretchWindow(*doc.getClip(audio), 0.0, kSecondsPerBeat).has_value());
+    EXPECT_FALSE(synth::audioStretchWindow(*doc.getClip(audio), 8.0, 0.0).has_value());
+    const auto midi = doc.addClip(doc.addTrack(TrackKind::Midi, "M"), 0.0, 4.0, "m");
+    EXPECT_FALSE(synth::audioStretchWindow(*doc.getClip(midi), 8.0, kSecondsPerBeat).has_value());
+}
+
+TEST_F(TimelineDocTest, ApplyingAnAudioStretchPointsTheClipAtItsCopyAndScalesItsFades) {
+    const auto track = doc.addTrack(TrackKind::Audio, "A");
+    const auto audio = doc.addClip(track, 4.0, 4.0, "take");
+    ASSERT_TRUE(doc.setClipAsset(audio, "Audio/take.wav", 1.5));
+    ASSERT_TRUE(doc.setClipFades(audio, 0.5, 1.0));
+
+    ASSERT_TRUE(synth::applyAudioClipStretch(doc, audio, 2.0, 6.0, "Audio/take-stretch150.wav"));
+    const auto* c = doc.getClip(audio);
+    EXPECT_EQ(c->assetRef, "Audio/take-stretch150.wav");
+    EXPECT_DOUBLE_EQ(c->sourceStartSeconds, 0.0) << "the copy holds only the clip's window";
+    EXPECT_DOUBLE_EQ(c->startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(c->lengthBeats, 6.0);
+    EXPECT_DOUBLE_EQ(c->fadeInBeats, 0.75);
+    EXPECT_DOUBLE_EQ(c->fadeOutBeats, 1.5);
+
+    const auto midi = doc.addClip(doc.addTrack(TrackKind::Midi, "M"), 0.0, 4.0, "m");
+    EXPECT_FALSE(synth::applyAudioClipStretch(doc, midi, 0.0, 8.0, "Audio/x.wav"));
+    EXPECT_FALSE(synth::applyAudioClipStretch(doc, audio, 2.0, 6.0, "/abs/path.wav")) << "refs stay bundle-relative";
+}

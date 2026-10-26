@@ -5,6 +5,7 @@
 #include "TimelineDocInternal.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace synth {
 
@@ -49,7 +50,7 @@ ClipEdgeResult clipEdgeResult(const Clip& clip, ClipEdge edge, ClipSizingMode mo
     if (!clip.assetRef.isEmpty())
         return result; // an audio clip has no notes to place
 
-    switch (effectiveSizingMode(clip, mode)) {
+    switch (mode) {
     case ClipSizingMode::Trim:
         result.notes = edge == ClipEdge::Left ? trimmedFromLeft(clip.notes, newStartBeat - clip.startBeat) : clip.notes;
         break;
@@ -63,10 +64,30 @@ ClipEdgeResult clipEdgeResult(const Clip& clip, ClipEdge edge, ClipSizingMode mo
     return result;
 }
 
-ClipSizingMode effectiveSizingMode(const Clip& clip, ClipSizingMode mode) noexcept {
-    if (mode == ClipSizingMode::Stretch && !clip.assetRef.isEmpty())
-        return ClipSizingMode::Trim;
-    return mode;
+// The window is the audio the clip plays now: from its source offset for its length in seconds at today's tempo. A
+// ratio above 1 is a shorter clip, as in soundbrowser::LoopTarget.
+std::optional<AudioStretchWindow> audioStretchWindow(const Clip& clip, double newLengthBeats, double secondsPerBeat) {
+    if (clip.assetRef.isEmpty() || !std::isfinite(newLengthBeats) || !(newLengthBeats > 0.0) ||
+        !std::isfinite(secondsPerBeat) || !(secondsPerBeat > 0.0) || !(clip.lengthBeats > 0.0))
+        return std::nullopt;
+    return AudioStretchWindow{clip.sourceStartSeconds, clip.lengthBeats * secondsPerBeat,
+                              clip.lengthBeats / newLengthBeats};
+}
+
+// Built from the public mutators rather than one new TimelineDoc member: the caller's recorded change makes them one
+// undo step, as importAudioFileToClip does with addClip and setClipAsset. The fades scale with the audio they cover.
+bool applyAudioClipStretch(TimelineDoc& doc, ClipId id, double newStartBeat, double newLengthBeats,
+                           const juce::String& stretchedRef) {
+    const auto* clip = doc.getClip(id);
+    if (clip == nullptr || clip->assetRef.isEmpty() || stretchedRef.isEmpty() || !(clip->lengthBeats > 0.0))
+        return false;
+    const double factor = newLengthBeats / clip->lengthBeats;
+    const double fadeIn = clip->fadeInBeats * factor;
+    const double fadeOut = clip->fadeOutBeats * factor;
+    bool ok = doc.setClipAsset(id, stretchedRef, 0.0);
+    ok = ok && doc.moveClip(id, newStartBeat);
+    ok = ok && doc.resizeClip(id, newLengthBeats);
+    return ok && doc.setClipFades(id, fadeIn, fadeOut);
 }
 
 const char* clipSizingModeName(ClipSizingMode mode) noexcept {
@@ -88,7 +109,7 @@ const char* clipSizingModeDescription(ClipSizingMode mode) noexcept {
     case ClipSizingMode::CarryContents:
         return "notes move with the edge";
     case ClipSizingMode::Stretch:
-        return "notes scale to the new length";
+        return "notes and audio scale to the new length";
     }
     return "";
 }

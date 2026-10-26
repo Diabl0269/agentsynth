@@ -317,6 +317,9 @@ public:
     // when that row has clips (or does not exist).
     juce::String getEmptyRowHintForTest(int trackIndex) const;
 
+    // A Stretch edge drop on an AUDIO clip, with its new span; the owner records it. Unset: the clip resizes instead.
+    std::function<void(synth::ClipId, double newStartBeat, double newLengthBeats)> onAudioClipStretchRequested;
+
     // Fired when the user picks "Relink audio…" from an audio clip's context menu. Non-owning; may
     // be unset, in which case the menu item is simply never offered (see showClipContextMenu). See
     // TimelineClipLaneEditTools.cpp for why this is a callback rather than a ClipContextChoice.
@@ -598,6 +601,7 @@ private:
 
     synth::ClipSizingMode dragSizingMode() const noexcept;
     juce::String sizingReadout() const;
+    std::optional<std::pair<double, double>> audioStretchDrop() const;
     void paintSizingReadout(juce::Graphics& g, juce::Rectangle<int> clipRect) const;
 
     struct ClipHit {
