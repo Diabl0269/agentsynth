@@ -490,12 +490,12 @@ TEST_F(AIIntegrationServiceProjectEditTest, HostedRequestIsProjectGenerateWithTh
         EXPECT_EQ(juce::JSON::toString(body[key]), juce::JSON::toString(arrange[key])) << key;
     EXPECT_EQ(juce::JSON::toString(service->buildProjectRequestBody("a wobbly bass")), juce::JSON::toString(body));
     EXPECT_EQ((int)arrange["promptVersion"], 2) << "the timeline.generate prompt that teaches the drum-hit note fields";
-    EXPECT_EQ((int)body["promptVersion"], 8) << "the server prompt that knows the song key";
+    EXPECT_EQ((int)body["promptVersion"], 9) << "the server prompt that keeps Sequencers on Follow Song Key";
 
     service->setProjectPromptVersion(3); // the eval harness measuring a newer server prompt
     EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 3);
     service->setProjectPromptVersion(0);
-    EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 8) << "0 restores the default";
+    EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 9) << "0 restores the default";
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, LocalRequestComposesTheSameSectionsAndOffersTheWidenedSchema) {

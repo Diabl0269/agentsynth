@@ -22,6 +22,56 @@
 
 namespace {
 
+// Streams one scripted final line for /v1/song/build; every other call is inert.
+class SongBuildProvider : public synth::AIProvider {
+public:
+    explicit SongBuildProvider(juce::String line)
+        : doneLine(std::move(line)) {}
+    RequestId sendPrompt(const std::vector<Message>&, CompletionCallback, const juce::var&,
+                         std::function<void(const juce::String&)> = {}) override {
+        return {};
+    }
+    RequestId streamRouteRequest(const juce::String&, const juce::var&, StreamLineCallback onLine,
+                                 CompletionCallback onFinished) override {
+        onLine(doneLine);
+        AIResponse response;
+        response.success = true;
+        onFinished(response);
+        return {2};
+    }
+    void cancel(RequestId) override {}
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> cb) override { cb({}, true); }
+    void setModel(const juce::String&) override {}
+    juce::String getCurrentModel() const override { return {}; }
+    void setRequestTimeoutMs(int) override {}
+    int getRequestTimeoutMs() const override { return 1000; }
+    juce::String getProviderName() const override { return "SongBuildProvider"; }
+    bool isHosted() const override { return true; }
+
+private:
+    juce::String doneLine;
+};
+
+// Builds a song whose plan names `planKey`, answering with a final envelope that adds one track.
+synth::AIIntegrationService::SongBuildOutcome buildSongWithKey(MainComponent& mc, const juce::String& planKey) {
+    mc.getAiServiceForTest().setProvider(std::make_unique<SongBuildProvider>(
+        R"({"type":"done","notes":[],"envelope":{"mode":"merge","nodes":[],"connections":[],"timelineOps":[
+            {"op":"addInstrumentTrack","name":"Bass","instrument":"Oscillator"}]}})"));
+    synth::songsteps::PlanReply reply;
+    juce::String error;
+    const juce::String planJson = R"({"plan":{"title":"T","bpm":120,"key":")" + planKey +
+                                  R"(","special":"",
+        "sections":[{"name":"Intro","bars":16,"energy":1,"chords":"Am","description":"pad"}],
+        "tracks":[{"name":"Kit","role":"drums","instrument":"Drum Kit","sound":"punchy","sections":["Intro"]}],
+        "lanes":[]},"price":{"units":1,"estimatedUsd":0.01},"steps":[],"token":"t"})";
+    EXPECT_TRUE(synth::songsteps::parsePlanReply(planJson, reply, error)) << error;
+    synth::AIIntegrationService::SongBuildOutcome outcome;
+    synth::AIIntegrationService::SongBuildCallbacks callbacks;
+    callbacks.onFinished = [&](const auto& o) { outcome = o; };
+    mc.getAiServiceForTest().buildSong("a song", reply, callbacks);
+    return outcome;
+}
+
 // Insert Filter 7002 feeds patch Distortion 7004 (a connection FROM a built node); patch LFO 7003
 // modulates the Filter's cutoff by name; the lane on the Filter is addressed by nodeId and listed
 // before the op that builds it.
@@ -288,6 +338,44 @@ TEST_F(ChannelFlowTest, ProjectEditSongKeyIsOneUndoStepWithTheRest) {
     ASSERT_TRUE(mc.getUndoManager().redo());
     ASSERT_TRUE(transport.getDocumentState().songKey.has_value());
     EXPECT_EQ(synth::keyDisplayName(*transport.getDocumentState().songKey), "D Dorian") << "redo sets it again";
+}
+
+// A song build sets the Key field from the plan: ONE undo restores the previous key and the new track together.
+TEST_F(ChannelFlowTest, SongBuildSetsThePlanKeyAsPartOfItsOneUndoStep) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& transport = mc.getAudioEngine().getTransport();
+    transport.setSongKey(synth::makeScale(0, synth::scalePresetIndex("Major")));
+    mc.pollTransportEditsForTest(1000);
+    mc.pollTransportEditsForTest(5000);
+    const auto keyBefore = transport.getDocumentState().songKey;
+    const auto undoneToBefore = snapshotCFT(mc);
+
+    const auto outcome = buildSongWithKey(mc, "F# minor");
+    ASSERT_EQ(outcome.kind, synth::AIIntegrationService::SongBuildOutcome::Kind::applied) << outcome.message;
+    ASSERT_TRUE(transport.getDocumentState().songKey.has_value());
+    EXPECT_EQ(synth::keyDisplayName(*transport.getDocumentState().songKey), "F# Natural Minor");
+    mc.pollTransportEditsForTest(1000);
+    mc.pollTransportEditsForTest(5000);
+
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    EXPECT_TRUE(synth::sameKey(transport.getDocumentState().songKey, keyBefore)) << "undo restores the previous key";
+    expectSameSnapshotCFT(snapshotCFT(mc), undoneToBefore);
+}
+
+// A key the plan does not state readably leaves the project's key untouched.
+TEST_F(ChannelFlowTest, SongBuildWithAnUnreadablePlanKeyLeavesTheKeyAlone) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& transport = mc.getAudioEngine().getTransport();
+    transport.setSongKey(synth::makeScale(2, synth::scalePresetIndex("Dorian")));
+    const auto keyBefore = transport.getDocumentState().songKey;
+
+    const auto outcome = buildSongWithKey(mc, "no idea");
+    ASSERT_EQ(outcome.kind, synth::AIIntegrationService::SongBuildOutcome::Kind::applied) << outcome.message;
+    EXPECT_TRUE(synth::sameKey(transport.getDocumentState().songKey, keyBefore));
 }
 
 // A key-only plan still lands as one undo step.

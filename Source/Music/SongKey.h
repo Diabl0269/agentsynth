@@ -140,6 +140,35 @@ inline const std::vector<KeyScaleGroup>& keyScaleGroups() {
     return groups;
 }
 
+/** The key a short text names: a note, then optionally a scale ("E minor", "A dorian", "F# minor", "Bb major",
+ *  "e Natural Minor"). A bare note is major; "min"/"minor" and "maj"/"major" are accepted as aliases, and any key
+ *  scale name (keyScaleGroups) matches case-insensitively. nullopt when the text is not readable as a key. */
+inline std::optional<MusicalScale> parseKeyText(const juce::String& text) {
+    auto words = juce::StringArray::fromTokens(text.trim(), " ", "");
+    words.removeEmptyStrings();
+    if (words.isEmpty())
+        return std::nullopt;
+    const int root = parseKeyRoot(words[0]);
+    if (root < 0)
+        return std::nullopt;
+    words.remove(0);
+    const auto scaleWords = words.joinIntoString(" ").trim().toLowerCase();
+    juce::String scaleName = "Major";
+    if (scaleWords == "minor" || scaleWords == "min")
+        scaleName = "Natural Minor";
+    else if (scaleWords.isNotEmpty() && scaleWords != "major" && scaleWords != "maj") {
+        scaleName = {};
+        for (const auto& group : keyScaleGroups())
+            for (const char* name : group.scales)
+                if (scaleWords == juce::String(name).toLowerCase())
+                    scaleName = name;
+    }
+    const int preset = scaleName.isEmpty() ? -1 : scalePresetIndex(scaleName);
+    if (preset < 0)
+        return std::nullopt;
+    return makeScale(root, preset);
+}
+
 /** Major <-> Natural Minor and Major Pentatonic <-> Minor Pentatonic (same notes, other root); nullopt otherwise. */
 inline std::optional<MusicalScale> relativeKey(const MusicalScale& key) {
     struct Pair {

@@ -219,8 +219,15 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // Prompt versions: 2 envelope and instrumentParams, 3 whole-track rules, 4 song layout, 5 tempo and
 // section markers, 6 drums on one Drum Kit track instead of one Oscillator track per drum, 7 a sequencer's
 // pattern as the node's "state" (steps, velocity, chance) instead of eight step parameters, 8 the song key (a
-// songKey context line and the setSongKey op).
-static constexpr int kProjectGeneratePromptVersion = 8;
+// songKey context line and the setSongKey op), 9 new and edited Sequencers stay on Follow Song Key.
+static constexpr int kProjectGeneratePromptVersion = 9;
+
+juce::String AIIntegrationService::songKeyContext() const {
+    if (transportService == nullptr)
+        return {};
+    const auto key = transportService->getDocumentState().songKey;
+    return key.has_value() ? keyDisplayName(*key) + " (" + keyNoteNames(*key) + ")" : juce::String();
+}
 
 juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text) const {
     juce::var body = buildArrangeRequestBody(text);
@@ -228,15 +235,14 @@ juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text
     if (auto* nodes = patch.getProperty("nodes", {}).getArray(); nodes != nullptr && !nodes->isEmpty())
         body.getDynamicObject()->setProperty("currentPatch", patch);
     // The project's song key, when it has one: "D Dorian (D E F G A B C)". Absent without a key.
-    if (transportService != nullptr)
-        if (const auto key = transportService->getDocumentState().songKey; key.has_value())
-            body.getDynamicObject()->setProperty("songKey", keyDisplayName(*key) + " (" + keyNoteNames(*key) + ")");
+    if (const auto key = songKeyContext(); key.isNotEmpty())
+        body.getDynamicObject()->setProperty("songKey", key);
     // Pins the server prompt this build understands: version 2 teaches addInstrumentTrack's "envelope" and
     // "instrumentParams", 3 adds the whole-track rules, 4 the song layout the server expands into ordinary
     // clips, 5 the tempo and markers (setTempo and addMarker ops), 6 the Drum Kit track, 7 a sequencer's
-    // pattern state and 8 the song key ("songKey" below, and the setSongKey op). A build that does not understand those
-    // fields sends no version and keeps getting version 1, so a server deploy can never hand an older app a
-    // field it would reject.
+    // pattern state, 8 the song key ("songKey" below, and the setSongKey op) and 9 Sequencers staying on Follow Song
+    // Key. A build that does not understand those fields sends no version and keeps getting version 1, so a server
+    // deploy can never hand an older app a field it would reject.
     body.getDynamicObject()->setProperty("promptVersion", projectPromptVersionOverride > 0
                                                               ? projectPromptVersionOverride
                                                               : kProjectGeneratePromptVersion);

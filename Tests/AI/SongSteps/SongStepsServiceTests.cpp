@@ -1,7 +1,9 @@
 // The song steps through AIIntegrationService with a scripted provider: plan, then build with the final envelope
 // applied as the existing edit plan, plus the silent fallback when the service has no song routes.
+#include "../AIIntegrationService/PlanFakeHost.h"
 #include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/PatchEval.h"
+#include "Music/SongKey.h"
 #include <gtest/gtest.h>
 
 namespace synth {
@@ -150,6 +152,57 @@ TEST_F(SongStepsServiceTest, ARePlanSendsThePreviousPlanAsAChangeRequest) {
     service->planSong("fewer tracks", "", "light", plan().plan.raw, [](const auto&) {});
     EXPECT_TRUE(provider->lastPlanBody["previousPlan"].isObject());
     EXPECT_FALSE(provider->lastPlanBody.hasProperty("length"));
+}
+
+TEST_F(SongStepsServiceTest, ThePlanRequestCarriesTheSongKeyOnlyWhenTheProjectHasOne) {
+    TimelineDoc doc;
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    service->planSong("a song", "", "", {}, [](const auto&) {});
+    EXPECT_FALSE(provider->lastPlanBody.hasProperty("songKey"));
+
+    transport.setSongKey(makeScale(4, scalePresetIndex("Natural Minor")));
+    service->planSong("a song", "", "", {}, [](const auto&) {});
+    EXPECT_EQ(provider->lastPlanBody["songKey"].toString(), juce::String("E Natural Minor (E F# G A B C D)"));
+}
+
+TEST_F(SongStepsServiceTest, TheBuildSetsTheKeyFromThePlanThroughASingleSetSongKeyOp) {
+    TimelineDoc doc;
+    PlanFakeHost host(doc, *graph);
+    service->setTimelineContext(&doc, nullptr);
+    service->setTimelineOpsHost(&host);
+    provider->lines = {doneLine()};
+    EXPECT_EQ(build().kind, AIIntegrationService::SongBuildOutcome::Kind::applied);
+    ASSERT_EQ(host.songKeys.size(), 1u);
+    EXPECT_TRUE(sameKey(host.songKeys[0], makeScale(9, scalePresetIndex("Natural Minor")))) << "the plan says A minor";
+}
+
+TEST_F(SongStepsServiceTest, ABuildWhoseEnvelopeAlreadySetsAKeyKeepsThatKey) {
+    TimelineDoc doc;
+    PlanFakeHost host(doc, *graph);
+    service->setTimelineContext(&doc, nullptr);
+    service->setTimelineOpsHost(&host);
+    provider->lines = {
+        R"({"type":"done","envelope":{"mode":"merge","nodes":[],"timelineOps":[{"op":"setSongKey","root":"D","scale":"Dorian"}]},"notes":[]})"};
+    EXPECT_EQ(build().kind, AIIntegrationService::SongBuildOutcome::Kind::applied);
+    ASSERT_EQ(host.songKeys.size(), 1u);
+    EXPECT_TRUE(sameKey(host.songKeys[0], makeScale(2, scalePresetIndex("Dorian"))));
+}
+
+TEST_F(SongStepsServiceTest, AnUnreadablePlanKeyLeavesTheKeyAlone) {
+    TimelineDoc doc;
+    PlanFakeHost host(doc, *graph);
+    service->setTimelineContext(&doc, nullptr);
+    service->setTimelineOpsHost(&host);
+    auto reply = plan();
+    reply.plan.key = "something odd";
+    provider->lines = {doneLine()};
+    AIIntegrationService::SongBuildCallbacks callbacks;
+    AIIntegrationService::SongBuildOutcome outcome;
+    callbacks.onFinished = [&](const auto& o) { outcome = o; };
+    service->buildSong("x", reply, callbacks);
+    EXPECT_EQ(outcome.kind, AIIntegrationService::SongBuildOutcome::Kind::applied) << outcome.message;
+    EXPECT_TRUE(host.songKeys.empty());
 }
 
 TEST_F(SongStepsServiceTest, A404OnPlanMeansUnsupportedAndStopsOfferingSongs) {

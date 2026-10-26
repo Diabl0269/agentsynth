@@ -2,6 +2,7 @@
 // events and the build state are in AI/SongSteps; this is only the orchestration, and where the final envelope meets
 // the existing preview and apply path (AIIntegrationServiceProjectEdit.cpp).
 #include "AIIntegrationService.h"
+#include "Music/SongKey.h"
 
 namespace synth {
 
@@ -22,6 +23,32 @@ juce::var buildableInstruments() {
 juce::String describeBuildFailure(const AIProvider::AIError& error) {
     const auto& text = error.message;
     return text.startsWith("Error: ") ? text.substring(7) : text;
+}
+
+// The envelope with a setSongKey op for the plan's key appended, so the key lands in the build's one undo step.
+// Unchanged when the key is unreadable, the envelope already sets one, or this app cannot set it.
+juce::var withPlanKey(const juce::var& envelope, const juce::String& planKey, const TimelineOpsHost* host) {
+    const auto key = parseKeyText(planKey);
+    auto* object = envelope.getDynamicObject();
+    if (!key.has_value() || object == nullptr || host == nullptr || !host->canSetSongKey())
+        return envelope;
+    juce::Array<juce::var> ops;
+    if (const auto* existing = object->getProperty("timelineOps").getArray())
+        for (const auto& op : *existing) {
+            if (op.getProperty("op", {}).toString() == "setSongKey")
+                return envelope;
+            ops.add(op);
+        }
+    juce::DynamicObject::Ptr keyOp = new juce::DynamicObject();
+    keyOp->setProperty("op", "setSongKey");
+    keyOp->setProperty("root", keyRootName(key->rootPitchClass));
+    keyOp->setProperty("scale", key->name);
+    ops.add(juce::var(keyOp.get()));
+    juce::DynamicObject::Ptr copy = new juce::DynamicObject();
+    for (const auto& property : object->getProperties())
+        copy->setProperty(property.name, property.value);
+    copy->setProperty("timelineOps", ops);
+    return juce::var(copy.get());
 }
 
 } // namespace
@@ -51,6 +78,8 @@ AIProvider::RequestId AIIntegrationService::planSong(const juce::String& text, c
         body->setProperty("detail", detail);
     if (previousPlan.isObject())
         body->setProperty("previousPlan", previousPlan);
+    if (const auto key = songKeyContext(); key.isNotEmpty())
+        body->setProperty("songKey", key);
 
     juce::WeakReference<AIIntegrationService> weakThis(this);
     return provider->sendRouteRequest("/v1/song/plan", juce::var(body.get()),
@@ -107,6 +136,7 @@ AIProvider::RequestId AIIntegrationService::buildSong(const juce::String& reques
     auto run = std::make_shared<Run>();
     juce::WeakReference<AIIntegrationService> weakThis(this);
     const juce::String title = reply.plan.title;
+    const juce::String planKey = reply.plan.key;
 
     auto report = [run, callbacks](const SongBuildOutcome& outcome) {
         if (run->reported)
@@ -116,7 +146,7 @@ AIProvider::RequestId AIIntegrationService::buildSong(const juce::String& reques
             callbacks.onFinished(outcome);
     };
 
-    auto onLine = [weakThis, run, callbacks, report, requestText, title](const juce::String& line) {
+    auto onLine = [weakThis, run, callbacks, report, requestText, title, planKey](const juce::String& line) {
         auto* self = weakThis.get();
         const auto event = songsteps::parseStreamLine(line);
         if (self == nullptr || !event || run->reported)
@@ -130,7 +160,7 @@ AIProvider::RequestId AIIntegrationService::buildSong(const juce::String& reques
         } else if (event->type == EventType::done) {
             SongBuildOutcome outcome;
             outcome.done = *event;
-            outcome.edit = self->applyProjectEdit(event->envelope);
+            outcome.edit = self->applyProjectEdit(withPlanKey(event->envelope, planKey, self->timelineOpsHost));
             outcome.kind = outcome.edit.ok ? SongBuildOutcome::Kind::applied : SongBuildOutcome::Kind::rejected;
             outcome.message = outcome.edit.message;
             if (outcome.edit.ok) {
