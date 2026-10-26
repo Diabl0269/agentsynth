@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Branding.h"
+#include "Music/SongKey.h"
 #include "PluginEditor.h"
 #include "UserSettings.h"
 
@@ -14,6 +15,8 @@ constexpr const char* kStateVersionKey = "stateVersion";
 constexpr const char* kPatchKey = "patch";
 constexpr const char* kEditorWidthKey = "editorWidth";
 constexpr const char* kEditorHeightKey = "editorHeight";
+// The song key lives on the transport, which the patch does not carry. Absent (every older state) = No key.
+constexpr const char* kSongKeyKey = "songKey";
 constexpr int kStateVersion = 1;
 } // namespace
 
@@ -127,6 +130,8 @@ void AgentSynthAudioProcessor::getStateInformation(juce::MemoryBlock& destData) 
     state->setProperty(kPatchKey, AIStateMapper::graphToJSON(engine.getGraph()));
     state->setProperty(kEditorWidthKey, savedEditorSize.x);
     state->setProperty(kEditorHeightKey, savedEditorSize.y);
+    if (const auto& key = engine.getTransport().getDocumentState().songKey; key.has_value())
+        state->setProperty(kSongKeyKey, keyToVar(*key));
 
     const auto json = juce::JSON::toString(juce::var(state));
     destData.replaceAll(json.toRawUTF8(), json.getNumBytesAsUTF8());
@@ -143,6 +148,7 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
     // Accept both the wrapper written by getStateInformation and a bare patch object, so a raw
     // preset JSON dropped into the host's state slot still loads.
     juce::var patch = parsed;
+    std::optional<MusicalScale> songKey; // a bare patch or an older state has none: No key
     if (auto* obj = parsed.getDynamicObject()) {
         if (obj->hasProperty(kPatchKey))
             patch = obj->getProperty(kPatchKey);
@@ -151,6 +157,8 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
         const int h = obj->getProperty(kEditorHeightKey);
         if (w > 0 && h > 0)
             savedEditorSize = {w, h};
+
+        songKey = keyFromVar(obj->getProperty(kSongKeyKey));
     }
 
     if (!patch.isObject())
@@ -185,6 +193,7 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
         return;
     }
     AIStateMapper::applyJSONToGraph(patch, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/true);
+    engine.getTransport().setSongKey(songKey);
     engine.updateModuleNames(); // a restored second Diva reads "Diva 2" right away
     // This path replaces the graph without going through publishTimeline, so it recounts the
     // mixer's soloed strips itself — a restored session's solo flags live in the strips' extra
