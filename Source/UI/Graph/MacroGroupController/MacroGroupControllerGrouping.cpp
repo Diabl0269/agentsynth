@@ -19,6 +19,8 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
+#include <algorithm>
+
 using namespace detail;
 
 namespace {
@@ -579,15 +581,46 @@ void MacroGroupController::selectMacro(const juce::String& macroId, bool additiv
     if (host_.getMacros().find(macroId) == nullptr)
         return;
 
+    const auto memberIds = macroSelectionIds(macroId);
+    host_.applySelectionChange(additive ? synth::ui::unionSelection(host_.getSelection().getSelected(), memberIds)
+                                        : memberIds);
+}
+
+std::vector<juce::AudioProcessorGraph::NodeID>
+MacroGroupController::macroSelectionIds(const juce::String& macroId) const {
     std::vector<juce::AudioProcessorGraph::NodeID> memberIds;
+    if (host_.getMacros().find(macroId) == nullptr)
+        return memberIds;
     for (const auto& uuid : macro_nesting::orderedDescendantMembers(host_.getMacros(), macroId)) {
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid != 0)
             memberIds.push_back(nodeId);
     }
+    return memberIds;
+}
 
-    host_.applySelectionChange(additive ? synth::ui::unionSelection(host_.getSelection().getSelected(), memberIds)
-                                        : memberIds);
+// A macro is "in" the selection when all its members are, so several macros can be selected together (the exact-match
+// test below would call each of two selected macros unselected). The selection's other nodes do not matter.
+bool MacroGroupController::isMacroInSelection(const juce::String& macroId) const {
+    const auto ids = macroSelectionIds(macroId);
+    return !ids.empty() &&
+           std::all_of(ids.begin(), ids.end(), [this](auto id) { return host_.getSelection().contains(id); });
+}
+
+// Adds the macro's members, or takes exactly them out, leaving every other selected node as it was.
+void MacroGroupController::toggleMacroInSelection(const juce::String& macroId) {
+    const auto ids = macroSelectionIds(macroId);
+    if (ids.empty())
+        return;
+    auto next = host_.getSelection().getSelected();
+    if (isMacroInSelection(macroId)) {
+        next.erase(std::remove_if(next.begin(), next.end(),
+                                  [&ids](auto id) { return std::find(ids.begin(), ids.end(), id) != ids.end(); }),
+                   next.end());
+    } else {
+        next = synth::ui::unionSelection(next, ids);
+    }
+    host_.applySelectionChange(next);
 }
 
 // True when the selection is exactly the set selectMacro(macroId) would make.

@@ -76,6 +76,26 @@ is the theme `bg0`; inside is `bg1` with the dot grid, a 10 px rounded corner an
 - **Content.** The `content` component is the frame TARGET (not the animated size) plus 2000 px of slack, so a fast
   drag never clips a card.
 
+## Edge scroll while dragging
+
+Dragging a card to the edge of the canvas view pans the canvas (`CanvasEdgeScrollDriver`, `CanvasEdgeScroller`,
+`Source/UI/Graph/CanvasEdgeScroll/`). It covers a module or folded macro card moved on the canvas and a card dragged in
+from the module library or the sound browser; a marquee and a cable drag do not scroll.
+
+- **Speed.** `canvasEdgePanDelta` (`CanvasEdgeScroll.h`, pure) gives zero in the middle of the view and a speed that
+  grows linearly over the outer 48 px (a third of a small view at most) up to 22 screen px per tick at the edge or past
+  it, one axis at a time, on the timeline's `edgeScrollVelocity` curve. The tick is a gated 30 Hz timer that runs only
+  for the length of a drag; moving the pointer back inward stops the pan on the next tick, and a release, drop, exit or
+  `cancelLiveDragGestures` stops the timer.
+- **The card keeps tracking.** The pointer does not move while the canvas does, so no mouse event arrives. Each tick
+  that panned sends the card a synthetic `mouseDrag` at the pointer (its own press point and `ComponentDragger` keep the
+  grab offset), so it takes the real drag path: group drag, canvas frame growth, landing ghost, macro join highlight. A
+  library drag gets a synthetic `itemDragMove` at the pointer.
+- **Limits.** The pan never goes past the origin (nothing exists left of or above it) and never further right or down
+  than the content extends; a card drag grows the content ahead of itself, so it can keep going.
+- **Keyboard.** There is no pointer to park, so the keyboard move (arrow keys on a focused card) already pans the card
+  into view instead.
+
 ## Anti-overlap search
 
 When a module is placed (library drop or drag-release) the engine:

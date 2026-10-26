@@ -427,7 +427,7 @@ Cmd+Alt+G still always toggles.
 
 "Fold and Pack Macros" (`MacroGroupController::foldAndPackSelectionMacros`, default Cmd+Ctrl+G on macOS and
 Ctrl+Alt+Shift+G elsewhere, where Cmd and Ctrl are the same key; Edit menu, next to Collapse / Expand Macro; rebindable
-in the Keyboard Shortcuts list) acts on every macro the selection touches (Cmd+A selects them all):
+in the Keyboard Shortcuts list) acts on every macro the selection touches (Cmd+A selects them all; Shift-click a folded card or an open macro's name chip adds or removes one macro, and a Shift marquee across folded cards selects them, see [selection](../layout/selection.md)):
 
 - **Any of them open:** every open one folds with the usual [fold motion](../layout/animation.md#macro-fold). With the
   preference **Collapsing also packs macros together** on (Preferences > Graph, on by default, key

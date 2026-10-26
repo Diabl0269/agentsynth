@@ -1,5 +1,6 @@
 #include "MacroCardComponent.h"
 #include "MacroPreviewLayout.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/ContextMenuPlacement.h"
@@ -25,7 +26,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         return;
 
     auto bounds = getLocalBounds().toFloat();
-    const bool selected = owner.getMacroController().isMacroSelected(macroId);
+    const bool selected = owner.getMacroController().isMacroInSelection(macroId);
 
     const auto& themeColors = synth::theme::themeOf(*this).colors;
 
@@ -212,7 +213,7 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
     }
 
     if (e.mods.isShiftDown() || e.mods.isCommandDown()) {
-        owner.getMacroController().selectMacro(macroId, true);
+        owner.getMacroController().toggleMacroInSelection(macroId);
         return;
     }
 
@@ -222,6 +223,7 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
     dragStartPosition = getPosition();
     bodyDragActive = true;
     dragger.startDraggingComponent(this, e);
+    owner.getEdgeScroll().beginCardDrag(*this, e.getEventRelativeTo(this).getPosition());
     owner.beginMacroCardDrag(macroId);
 }
 
@@ -244,6 +246,7 @@ void MacroCardComponent::mouseUp(const juce::MouseEvent& e) {
     if (!bodyDragActive)
         return;
     bodyDragActive = false;
+    owner.getEdgeScroll().end();
     synth::ui::endDragCursor(*this);
 
     if (getPosition() != dragStartPosition)
@@ -266,6 +269,7 @@ void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
         // (GraphEditor::mouseDoubleClick's macroChipDragId handling).
         if (bodyDragActive) {
             owner.cancelMacroCardDrag(macroId);
+            owner.getEdgeScroll().end();
             bodyDragActive = false;
             synth::ui::endDragCursor(*this);
         }

@@ -11,6 +11,7 @@
 #include "GraphEditorPaintMemo.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/ModDot/ModDotController.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
@@ -59,6 +60,7 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
 
     modDot_ = std::make_unique<synth::ui::ModDotController>(*this, content);
     portPanel_ = std::make_unique<synth::ui::PortPanelController>(*this);
+    edgeScroll_ = std::make_unique<synth::ui::CanvasEdgeScrollDriver>(*this);
     polyChain_ = std::make_unique<synth::ui::PolyChainController>(*this);
     configureCardGlide();
     configureCanvasFrame();
@@ -84,6 +86,7 @@ GraphEditor::~GraphEditor() {
     stopTimer();
     dragDropController_.getGhostSlide().reset(vblankUpdater); // its driver outlives the updater otherwise
     loadReveal_.reset();                                      // before the cards it may still be scaling
+    edgeScroll_.reset();                                      // stops its timer
     polyChain_.reset();
     portPanel_.reset();
     modDot_.reset(); // before `content`, which its tooltip animator is attached to

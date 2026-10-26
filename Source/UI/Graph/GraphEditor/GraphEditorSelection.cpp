@@ -10,6 +10,7 @@
 #include "GraphEditorInternal.h" // GraphEditor::HealSplice's full definition (captureHealSplices)
 
 #include "CanvasAccessibilityClip.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleStepOrder.h"
@@ -73,6 +74,10 @@ void GraphEditor::applySelectionChange(const std::vector<juce::AudioProcessorGra
         if ((before.count(id) > 0) != (after.count(id) > 0))
             comp->repaint();
     }
+    // A folded macro's card shows whether its members are selected; there are few of them and they are not buffered.
+    for (auto* card : content.getMacroCards())
+        if (card != nullptr)
+            card->repaint();
 }
 
 // Selects a single module. When additive, toggles it instead and leaves the rest alone.
@@ -256,6 +261,12 @@ void GraphEditor::deleteSelection() {
 // ---- Marquee ----
 
 void GraphEditor::beginMarquee(juce::Point<int> canvasAnchor, bool additive) {
+    // Shift on an expanded macro's name chip adds the macro to the selection (or takes it out), as it does on a
+    // folded card; a drag from there carries on as an additive marquee.
+    if (const auto chipId = macroController_.macroChipAt(canvasAnchor); chipId.isNotEmpty()) {
+        macroController_.toggleMacroInSelection(chipId);
+        additive = true;
+    }
     marqueeActive = true;
     marqueeAdditive = additive;
     marqueeAnchor = canvasAnchor;
@@ -273,6 +284,12 @@ void GraphEditor::updateMarquee(juce::Point<int> canvasCurrent) {
 
     marqueeRect = synth::ui::marqueeRectFrom(marqueeAnchor, canvasCurrent);
     auto hits = synth::ui::hitTestMarquee(marqueeRect, collectModuleBoxes(false, false));
+    // A folded macro's members are hidden, so its card stands in for them: sweeping the card selects the macro.
+    for (auto* card : content.getMacroCards())
+        if (card != nullptr && card->isVisible() && marqueeRect.intersects(card->getBounds())) {
+            const auto ids = macroController_.macroSelectionIds(card->getMacroId());
+            hits.insert(hits.end(), ids.begin(), ids.end());
+        }
     applySelectionChange(marqueeAdditive ? synth::ui::unionSelection(marqueeBaseSelection, hits) : hits);
 
     repaintCanvas();
@@ -463,6 +480,7 @@ void GraphEditor::cancelSelectionDrag() {
 // mouseUp is still coming, and finalizeSelectionDrag's lookup simply skips a stale id it can't find.
 // See docs/layout/selection.md.
 void GraphEditor::cancelLiveDragGestures() {
+    edgeScroll_->end();
     if (selectionDragActive)
         cancelSelectionDrag();
     if (dragDropController_.isDragPreviewActive())

@@ -487,6 +487,11 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroFoldAnimator/MacroFoldAnimator.cpp
     Source/UI/Graph/NewModulePlacement/NewModulePlacement.h
     Source/UI/Graph/NewModulePlacement/NewModulePlacement.cpp
+    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroll.h
+    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h
+    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.cpp
+    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h
+    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.cpp
     Source/UI/Graph/CanvasFrame/CanvasFrame.h
     Source/UI/Graph/CanvasFrame/CanvasFrame.cpp
     Source/UI/Graph/CanvasFrame/CanvasEdgeDrag.h

@@ -181,6 +181,13 @@ public:
     void groupOrToggleSelectionMacros();
     void selectMacro(const juce::String& macroId, bool additive);
     bool isMacroSelected(const juce::String& macroId) const;
+    /** True when every member of the macro is selected, whatever else is too (several macros can be selected at once).
+     */
+    bool isMacroInSelection(const juce::String& macroId) const;
+    /** Shift-click: adds the macro's members to the selection, or removes them when it is already all selected. */
+    void toggleMacroInSelection(const juce::String& macroId);
+    /** The node ids selecting the macro selects: its members, nested macros' too. Empty for an unknown macro. */
+    std::vector<juce::AudioProcessorGraph::NodeID> macroSelectionIds(const juce::String& macroId) const;
     const synth::Macro* macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const;
     void setMacroCollapsed(const juce::String& macroId, bool collapsed);
 
