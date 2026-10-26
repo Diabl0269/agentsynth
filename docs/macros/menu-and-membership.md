@@ -440,7 +440,10 @@ in the Keyboard Shortcuts list) acts on every macro the selection touches (Cmd+A
   pack, in the same undo step and glide; turn it off and loose modules and everything else stay put, leaving the space
   empty. A nested macro is folded but not moved: its parent holds it. A card that was
   already folded joins the grid.
-- **Preference off:** only the folds, in place.
+- **Preference off:** only the folds, in place. Macros keep their places: opening a stack of folded macros slides
+  each one aside only where an open border grows into it, and folding them again brings every one home, whatever
+  order they opened and fold in (a fold or an open is not a move by the user, see
+  [Shrinking](../layout/layout.md#making-room-when-something-grows)).
 - **All of them already folded:** they all expand where their cards sit, making room for neighbours as an expand
   always does. Nothing is unpacked, and expanding one packed card later opens it where its card sits.
 
@@ -595,6 +598,37 @@ ambiguity. With nested macros the innermost open macro under the pointer wins; a
   its uuid, any smart connections and the membership (with its port splicing) are a single Cmd+Z.
 - **Live highlight.** While a library drag hovers such a hull, `GraphEditor::setMacroDropCandidate`
   puts that macro in the same join-id emphasis a canvas drag uses; it clears on drag exit and drop.
+
+## Dropping a macro into another
+
+Drag a whole macro onto an open macro and release: it nests there, the way a module dropped into a hull joins it. Both
+ways of dragging a macro do it: a folded card dragged by its body, and an open macro dragged by its name chip (or by
+its empty space, with the "move macro on hull drag" preference).
+
+- **Target.** The innermost open border under the card's centre (folded card) or under the pointer (name chip), from
+  `MacroGroupController::macroNestTargetAt`. A folded macro is never a target (its inside is hidden). Left out: the
+  dragged macro itself and every macro inside it, so a macro can never be dropped into itself or its own descendant
+  (`MacroSet::setParent` would refuse the cycle anyway); its own parent, which is no change; and any macro outside its
+  parent, which would mean taking it out of its parent first (dragging a nested macro out is not a drop gesture; use
+  Ungroup on the parent).
+- **Live outline.** While the drag hovers a target, `updateMacroNestCandidate` hands it to
+  `GraphEditor::setMacroDropCandidate`, so it gets the same heavier outline a module drag's join target gets. It
+  clears on drop, on a press that never moved, and in `cancelLiveDragGestures`.
+- **Where it lands.** The target's border (and its ancestors') is left out of the placement blockers
+  (`placementBlockers(..., macroNestCandidate())`, in `finalizeMacroCardDrag` and `finalizeSelectionDrag`), so the
+  card or the open macro lands where it was released, inside the border, clear of the members there.
+- **One undo step.** The drop's own record (`finalizeMacroCardDrag`, or the chip `mouseUp`, both consuming the
+  mousedown graph capture) runs `nestDraggedMacroIntoCandidate` after the positions are final. It calls
+  `addSelectionToMacro(..., recordUndo=false)` with the dragged macro's whole subtree, which nests a whole macro that
+  sits beside the target and splices that level's ports. A target deeper down is reached one level at a time from the
+  dragged macro's container, each step planning its own ports, then `makeRoomFor` pushes what the macro covers. One
+  Cmd+Z puts back the position, the parent and every port. The borders that changed glide
+  ([Macro borders glide](#macro-borders-glide)).
+- **Folding.** The nested macro is an ordinary child: folding the new parent flies it in as one box and opening it
+  brings it back open or folded as it was ([Macro fold](../layout/animation.md#macro-fold)).
+- A channel macro nests like any other, as it does with Cmd+G.
+
+Tests: `Tests/Macros/MacroContainer/MacroDropIntoMacroTests.cpp`, through the real card and canvas mouse events.
 
 ## The expanded hull's collapse button
 

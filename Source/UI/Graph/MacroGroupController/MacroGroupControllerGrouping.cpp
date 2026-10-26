@@ -510,6 +510,7 @@ void MacroGroupController::toggleSelectionMacrosCollapsed() {
                 applyMacroCollapsed(macroId, targetCollapsed);
         }
         batchingFolds_ = false;
+        returnDeferredNeighbours();
     };
 
     if (host_.undo())
@@ -647,6 +648,12 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
     // The modules' pictures and the border as they stand now, for the fold that flies them into (or out of) the card.
     // A multi-macro toggle takes one snapshot for all of them and folds them together.
     const auto foldBefore = batchingFolds_ ? nullptr : snapshotFoldState();
+    const auto unitKey = "m:" + macroId;
+    const auto unitBefore = layoutUnitTopLeft(unitKey);
+    auto retargetRecords = [this, &unitKey, &unitBefore] {
+        if (const auto unitAfter = layoutUnitTopLeft(unitKey); unitBefore && unitAfter)
+            retargetPushRecords(unitKey, *unitBefore, *unitAfter);
+    };
 
     if (collapsed)
         m->bounds = foldedCardBounds(macroId); // seeded at what the border wraps, card-sized
@@ -661,6 +668,7 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
             live->expandNudge = nudge;
             live->preExpandCardOrigin = preExpandOrigin;
         }
+        retargetRecords(); // before makeRoomFor, whose own pushes are recorded against the open border
         // The folded card is where it sat before the border grew around it: the macros beside it are pushed away
         // from it, so one below the card goes down rather than up past the grown border.
         const auto* grown = host_.getMacros().find(macroId);
@@ -669,7 +677,13 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
                     card != nullptr ? card->getBounds() : (grown != nullptr ? grown->bounds : juce::Rectangle<int>()));
     } else {
         restoreCardAfterCollapse(macroId);
-        returnDisplacedNeighbours(macroId); // neighbours pushed aside when it opened come back if they still can
+        retargetRecords();
+        if (auto* folded = host_.getMacros().find(macroId); folded != nullptr && batchingFolds_) {
+            deferredReturns_.insert(deferredReturns_.end(), folded->displaced.begin(), folded->displaced.end());
+            folded->displaced.clear(); // returned with the whole batch (returnDeferredNeighbours)
+        } else {
+            returnDisplacedNeighbours(macroId); // neighbours pushed aside when it opened come back if they still can
+        }
     }
     foldChangedMacros(foldBefore); // every card is final; this only animates how they got there
 }

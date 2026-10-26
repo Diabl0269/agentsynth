@@ -19,6 +19,8 @@
 #include "UI/Layout/HierarchicalArrange.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
+#include <algorithm>
+
 using namespace detail;
 
 namespace {
@@ -401,6 +403,33 @@ juce::String MacroGroupController::macroHullAtExcluding(juce::Point<int> canvasP
             return juce::Rectangle<int>();
         return paintedHullBounds(macro.id);
     });
+}
+
+// The innermost open border under the point wins, as for a module drop. The dragged macro and everything inside it
+// are left out, so a macro can never be dropped into itself (MacroSet::setParent would refuse the cycle anyway). Its
+// own parent is no change. A target must sit inside the dragged macro's container (or anywhere, from the top level):
+// nesting walks down one level at a time and never has to take the macro out of its parent first.
+juce::String MacroGroupController::macroNestTargetAt(const juce::String& draggedMacroId,
+                                                     juce::Point<int> canvasPoint) const {
+    const auto& macros = host_.getMacros();
+    const auto* dragged = macros.find(draggedMacroId);
+    if (dragged == nullptr)
+        return {};
+    const auto isInsideDragged = [&](const juce::String& id) {
+        const auto chain = macros.ancestorChain(id);
+        return id == draggedMacroId || std::find(chain.begin(), chain.end(), draggedMacroId) != chain.end();
+    };
+    const auto target = deepestMacroAt(macros, canvasPoint, [&](const synth::Macro& macro) {
+        return isInsideDragged(macro.id) ? juce::Rectangle<int>() : paintedHullBounds(macro.id);
+    });
+    if (target.isEmpty() || target == dragged->parentId)
+        return {};
+    if (dragged->parentId.isNotEmpty()) {
+        const auto chain = macros.ancestorChain(target);
+        if (std::find(chain.begin(), chain.end(), dragged->parentId) == chain.end())
+            return {};
+    }
+    return target;
 }
 
 juce::Rectangle<int> MacroGroupController::macroChipBounds(const juce::String& macroId) const {

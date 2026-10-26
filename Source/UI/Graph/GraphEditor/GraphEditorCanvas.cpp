@@ -851,10 +851,8 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // before the attenuverter/empty-canvas-click logic below so the chip wins over whatever
         // would otherwise be under it (in practice, empty canvas above the hull).
         //
-        // Shift is excluded deliberately: it is the explicit marquee modifier, and a marquee that
-        // happens to start on a chip should still be a marquee. The chip is a small target, so
-        // letting it swallow Shift+drag would make marquees fail unpredictably near a hull's top
-        // edge. Unmodified drag is the chip's gesture; Shift keeps belonging to the marquee.
+        // Shift is excluded deliberately: it is the marquee modifier, and the chip is a small target, so letting it
+        // swallow Shift+drag would make marquees fail unpredictably near a hull's top edge.
         // The chip's rigid-body drag start, shared with the hull-drag preference below so both
         // gestures run the ONE beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag path.
         const auto beginMacroBodyDrag = [this, &localPos](const juce::String& macroId) {
@@ -915,13 +913,12 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
     }
 
     if (macroChipDragId.isNotEmpty()) {
-        // The delta MUST be computed in CANVAS space (via content.getLocalPoint), not in
-        // GraphEditor-local space the way the pan code below does: `content` carries the zoom
-        // transform, so a raw e.getPosition() delta would make the macro drift at any zoom other
-        // than 1.0 (a delta of N screen pixels is N/zoom canvas pixels).
+        // The delta MUST be in CANVAS space (content.getLocalPoint), not GraphEditor-local like the pan below:
+        // `content` carries the zoom, so a raw e.getPosition() delta would drift at any zoom other than 1.0.
         auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
         dragSelectionBy(clampDragDeltaToCanvas(canvasPos - macroChipDragStartCanvasPos), nullptr);
-        refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // the frame steps out ahead of the hull
+        macroController_.updateMacroNestCandidate(macroChipDragId, canvasPos); // the open macro under the pointer
+        refreshCanvasFrame(CanvasFrame::Mode::GrowOnly);                       // the frame steps out ahead of the hull
         repaintCanvas();
         return;
     }
@@ -950,24 +947,27 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
 
     if (macroChipDragId.isNotEmpty()) {
         const auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
-        // isSelectionDragActive() guards a single-member macro (reachable - see
-        // MacroDelete.DeletingDownToOneMemberDoesNotDissolveButDeletingTheLastDoes): beginSelectionDrag
-        // requires >1 recorded member to arm, so a lone member never actually moves even if the
-        // mouse travelled, and finalizing would push a no-delta undo entry that visibly does nothing.
+        // isSelectionDragActive() guards a single-member macro: beginSelectionDrag needs >1 member to arm, so a lone
+        // member never moves, and finalizing would push a no-delta undo entry that visibly does nothing.
         const bool moved = isSelectionDragActive() && canvasPos != macroChipDragStartCanvasPos;
         if (moved) {
-            // Graph AND macros in one step: the drop can shift a carried nested collapsed macro's
-            // `bounds` (finalizeSelectionDrag). The graph "before" is the mouseDown capture, since
-            // every drag tick already wrote live positions into the graph.
-            auto doFinalize = [this] { finalizeSelectionDrag(); }; // snaps + de-overlaps as one rigid body
+            // Graph AND macros in one step (the drop can shift a carried nested card's `bounds`, and nests the macro
+            // into an open one under the pointer); the graph "before" is the mouseDown capture.
+            const auto hullsBefore = snapshotPaintedHulls();
+            auto doFinalize = [this, id = macroChipDragId] {
+                finalizeSelectionDrag(); // snaps + de-overlaps as one rigid body
+                macroController_.nestDraggedMacroIntoCandidate(id);
+            };
             if (undoManager)
                 undoManager->recordGraphAndMacroChange(audioEngine.getGraph(), macros, doFinalize,
                                                        undoManager->takeCapturedGraphBeforeState());
             else
                 doFinalize();
+            glideHullsFrom(hullsBefore);
         } else {
             cancelSelectionDrag();
         }
+        macroController_.clearMacroNestCandidate();
         macroChipDragId.clear();
         repaintCanvas();
         return;

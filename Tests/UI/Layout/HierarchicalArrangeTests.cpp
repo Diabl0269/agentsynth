@@ -116,7 +116,7 @@ TEST(HierarchicalArrange, GoldenThreeTracksWithASharedModulatorOnTop) {
     EXPECT_LT(out.positions.at("gate1").x, out.positions.at("eq1").x);
     EXPECT_LT(out.positions.at("eq1").x, out.positions.at("comp1").x);
 
-    // The modulator is not part of any track's columns: it sits over the first column, cross-row edges never shift it.
+    // The modulator sits one column before the leftmost stage it modulates (the gates), so over the first column.
     EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("in1").x);
 
     for (const auto& [id, pos] : out.positions) {
@@ -181,6 +181,41 @@ TEST(HierarchicalArrange, AModulatorForOneRowJoinsThatRowInsteadOfTheSharedRow) 
     EXPECT_LT(out.positions.at("lfo").y, out.positions.at("in2").y);
     EXPECT_LT(out.positions.at("in2").y, out.positions.at("in3").y);
     EXPECT_EQ(out.positions.at("lfo").x, out.positions.at("in2").x);
+}
+
+// Regression test for FRO801: a modulator routed into two macros that each start their own row sat over the first
+// column of the shared row, right above the first macro, instead of in a column before both.
+TEST(HierarchicalArrange, ASharedModulatorSitsInAColumnBeforeEveryMacroItModulates) {
+    ArrangeInput in;
+    in.blocks = {card("m:a", 200, 90, 1), module("fx1", 280, 300, 2), card("m:b", 200, 90, 3),
+                 module("fx2", 280, 300, 4), module("lfo", 280, 300, 5, 3)};
+    in.edges = {flow("m:a", "fx1"), flow("m:b", "fx2"), mod("lfo", "m:a"), mod("lfo", "m:b")};
+    in.trackStarts = {"m:a", "m:b"};
+
+    const auto out = computeHierarchicalArrange(in);
+
+    const auto lfo = rectOf(in, out, "lfo");
+    for (const char* macro : {"m:a", "m:b"})
+        EXPECT_LE(lfo.getRight() + kLayerGapX, out.positions.at(macro).x) << "the LFO is a column before " << macro;
+    // The rows keep their stages lined up: both macros, and both effects, share one x.
+    EXPECT_EQ(out.positions.at("m:a").x, out.positions.at("m:b").x);
+    EXPECT_EQ(out.positions.at("fx1").x, out.positions.at("fx2").x);
+    EXPECT_LT(lfo.getY(), out.positions.at("m:a").y) << "still in the shared row on top";
+    expectTopLevelClear(in, out);
+    EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
+}
+
+TEST(HierarchicalArrange, ASharedModulatorFollowsTheLeftmostOfItsConsumersAcrossRows) {
+    auto in = threeTracks();
+    in.blocks.push_back(module("lfo", 280, 300, 100, 3));
+    in.edges.push_back(mod("lfo", "comp1"));
+    in.edges.push_back(mod("lfo", "eq2"));
+
+    const auto out = computeHierarchicalArrange(in);
+
+    // eq (column 2) is the leftmost consumer: the LFO hugs the right edge of column 1, the gates' column.
+    EXPECT_EQ(rectOf(in, out, "lfo").getRight(), rectOf(in, out, "gate1").getRight());
+    EXPECT_EQ(out.positions.at("in1").x, kArrangeOriginX) << "no extra column when no consumer starts its row";
 }
 
 TEST(HierarchicalArrange, SharedModulatorsAreOrderedByConsumerCountThenOrder) {

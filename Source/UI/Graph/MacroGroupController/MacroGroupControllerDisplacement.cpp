@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <set>
+#include <utility>
 
 namespace {
 using synth::LayoutUtil::LayoutUnit;
@@ -77,6 +78,18 @@ void collectMacroSubtree(const synth::MacroSet& macros, const juce::String& macr
     out.push_back(macroId);
     for (const auto& child : macros.childrenOf(macroId))
         collectMacroSubtree(macros, child, out);
+}
+
+// A push or a return moves an open macro without the user touching it, so the spot its card came from moves with it:
+// folding it again still puts the card back by its open-border nudge instead of reading the push as a user move.
+void shiftExpandRecords(synth::MacroSet& macros, const juce::String& unitKey, juce::Point<int> delta) {
+    if (!unitKey.startsWith("m:"))
+        return;
+    std::vector<juce::String> subtree;
+    collectMacroSubtree(macros, unitKey.fromFirstOccurrenceOf("m:", false, false), subtree);
+    for (const auto& id : subtree)
+        if (auto* m = macros.find(id); m != nullptr && m->hasExpandRecord)
+            m->preExpandCardOrigin += delta;
 }
 } // namespace
 
@@ -180,10 +193,13 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey, juce::Rect
             const auto unit =
                 std::find_if(units.begin(), units.end(), [&move](const LayoutUnit& u) { return u.key == move.key; });
             moveUnitBy(move.key, move.delta);
+            shiftExpandRecords(macros, move.key, move.delta);
             movedAny = true;
             if (unit == units.end())
                 continue;
             const synth::Macro::DisplacedNeighbour record{move.key, move.delta, unit->rect.getPosition() + move.delta};
+            // An earlier grower's record of this unit follows it here, so either grower can still send it back.
+            retargetPushRecords(move.key, unit->rect.getPosition(), record.landedAt);
             if (growerMacroId.isEmpty())
                 moduleDisplaced_[growerKey].push_back(record);
             else if (auto* grower = macros.find(growerMacroId))
@@ -249,7 +265,8 @@ MacroGroupController::DisplacedRecords MacroGroupController::returnRecordedNeigh
     for (size_t pass = 0; pass <= records.size() && !kept.empty(); ++pass) {
         DisplacedRecords stillBlocked;
         bool movedThisPass = false;
-        for (const auto& rec : kept) {
+        for (size_t i = 0; i < kept.size(); ++i) {
+            const auto rec = kept[i];
             const auto units = buildLayoutUnits(containerOfKey(*this, host_.getMacros(), rec.unitKey));
             const auto self =
                 std::find_if(units.begin(), units.end(), [&rec](const LayoutUnit& u) { return u.key == rec.unitKey; });
@@ -269,6 +286,14 @@ MacroGroupController::DisplacedRecords MacroGroupController::returnRecordedNeigh
                 continue;
             }
             moveUnitBy(rec.unitKey, {-rec.delta.x, -rec.delta.y});
+            shiftExpandRecords(host_.getMacros(), rec.unitKey, {-rec.delta.x, -rec.delta.y});
+            // The unit's other records, stored and in this walk, follow it (two growers that pushed the same unit
+            // unwind in either order).
+            retargetPushRecords(rec.unitKey, rec.landedAt, home.getPosition());
+            for (auto* list : {&kept, &stillBlocked})
+                for (auto& other : *list)
+                    if (other.unitKey == rec.unitKey && other.landedAt == rec.landedAt)
+                        other.landedAt = home.getPosition();
             movedThisPass = movedAny = true;
             refreshAfterMove(); // the next record's units must see this geometry
         }
@@ -277,6 +302,50 @@ MacroGroupController::DisplacedRecords MacroGroupController::returnRecordedNeigh
             break;
     }
     return DisplacedRecords(kept.rbegin(), kept.rend());
+}
+
+std::optional<juce::Point<int>> MacroGroupController::layoutUnitTopLeft(const juce::String& key) const {
+    for (const auto& unit : buildLayoutUnits(containerOfKey(*this, host_.getMacros(), key)))
+        if (unit.key == key)
+            return unit.rect.getPosition();
+    return std::nullopt;
+}
+
+// A push record holds the top-left its unit had right after the push. Three things move or reshape a unit without
+// the user touching it: a second grower pushing it further, another grower's record sending it back, and folding or
+// opening it (its footprint switches between card and border). Each retargets every other record of that unit, so
+// whichever pusher shrinks first, the others still recognise it and the pushes unwind in any order. Without this,
+// Fold and Pack (packing off) opening a stack of folded macros, each pushing the next, and folding them again
+// stranded the ones pushed twice, depending on which macro happened to fold first.
+void MacroGroupController::retargetPushRecords(const juce::String& unitKey, juce::Point<int> from,
+                                               juce::Point<int> to) {
+    if (from == to)
+        return;
+    auto retarget = [&](DisplacedRecords& records) {
+        for (auto& rec : records)
+            if (rec.unitKey == unitKey && rec.landedAt == from)
+                rec.landedAt = to;
+    };
+    for (const auto& macro : host_.getMacros().getAll())
+        if (auto* live = host_.getMacros().find(macro.id))
+            retarget(live->displaced);
+    for (auto& [grower, records] : moduleDisplaced_)
+        retarget(records);
+    retarget(deferredReturns_);
+}
+
+// Folding the macros of a stack one by one, each one's neighbours would still be blocked by the open borders of the
+// ones not yet folded, and a fold drops what it could not return, so the stack would come home only for a lucky
+// fold order. Held until the last has folded, every record gets its way back at once.
+void MacroGroupController::returnDeferredNeighbours() {
+    if (deferredReturns_.empty())
+        return;
+    CardGlideAnimator::Scope glide(host_.cardGlide());
+    const auto records = std::exchange(deferredReturns_, {});
+    bool movedAny = false;
+    returnRecordedNeighbours(records, movedAny);
+    if (movedAny)
+        host_.requestRepaint();
 }
 
 // `keepBlocked` (the macro stays open, e.g. a port was deleted) keeps the records that only lacked room, so a later

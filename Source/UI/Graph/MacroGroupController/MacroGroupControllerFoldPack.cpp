@@ -81,6 +81,7 @@ void MacroGroupController::foldAndPackSelectionMacros() {
         for (const auto& macroId : targets)
             applyMacroCollapsed(macroId, anyExpanded);
         batchingFolds_ = false;
+        returnDeferredNeighbours();
         if (pack) {
             packCollapsedCards(targets);
             if (tidyCanvasOnPack_ && arrangeCanvasHook)
