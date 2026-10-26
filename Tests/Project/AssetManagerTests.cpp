@@ -19,11 +19,13 @@
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "MainComponent/MainComponentAudioImport.h"
 #include "PatchDocument.h"
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UserSettings.h"
+#include <cmath>
 #include <functional>
 #include <gtest/gtest.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -576,4 +578,77 @@ TEST_F(AssetManagerAdoptionTest, MissingSourceFileIsLeftUntouched) {
     const auto bundleDir = root.getChildFile("AdoptMissing.agsproj");
     EXPECT_EQ(AssetManager::adoptRecordingsAssets(doc, recordingsRoot, bundleDir), 0);
     EXPECT_EQ(doc.getClip(clipId)->assetRef, juce::String("Recordings/never-existed.wav"));
+}
+
+// ---- A Stretch edge drag on an audio clip (the lane half is in TimelineClipLaneSizingTests.cpp) ----
+
+TEST_F(AssetManagerRelinkTest, StretchingAnAudioClipImportsAStretchedCopyAsOneUndoStep) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto bundleDir = root.getChildFile("Stretch.agsproj");
+    ASSERT_TRUE(mc.saveProjectForTest(bundleDir));
+
+    // Two seconds of A440, so the stretched copy's length and pitch can be measured.
+    constexpr double kSampleRate = 44100.0;
+    const auto source = root.getChildFile("loop.wav");
+    ASSERT_TRUE(writeWav(source, 88200, 1, kSampleRate, [](juce::int64 i, int) {
+        return 0.5f * (float)std::sin(2.0 * juce::MathConstants<double>::pi * 440.0 * (double)i / kSampleRate);
+    }));
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+    ASSERT_EQ(doc.getTrack(trackId)->clips.size(), 1u);
+    const auto clip = doc.getTrack(trackId)->clips[0].id;
+    const double length = doc.getClip(clip)->lengthBeats;
+    mc.getUndoManager().clearUndoHistory();
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, length * 2.0);
+
+    const auto* c = doc.getClip(clip);
+    EXPECT_EQ(c->assetRef, juce::String("Audio/loop-stretch200.wav"));
+    EXPECT_DOUBLE_EQ(c->lengthBeats, length * 2.0);
+    EXPECT_DOUBLE_EQ(c->sourceStartSeconds, 0.0);
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "Stretched loop to 200%");
+    const auto copy = bundleDir.getChildFile("Audio/loop-stretch200.wav");
+    EXPECT_TRUE(bundleDir.getChildFile("Peaks/loop-stretch200.agpk").existsAsFile()) << "it keeps a waveform";
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(copy));
+    ASSERT_NE(reader, nullptr);
+    EXPECT_NEAR((double)reader->lengthInSamples, 4.0 * kSampleRate, 2.0) << "twice as long";
+    juce::AudioBuffer<float> data(1, (int)reader->lengthInSamples);
+    reader->read(&data, 0, data.getNumSamples(), 0, true, false);
+    int crossings = 0;
+    for (int i = 44100; i < 132300; ++i) // the middle two seconds
+        crossings += data.getSample(0, i) < 0.0f && data.getSample(0, i + 1) >= 0.0f ? 1 : 0;
+    EXPECT_NEAR(crossings / 2.0, 440.0, 4.0) << "the same pitch";
+
+    // ONE undo step back to the original file, which stays in the project; redo plays the copy again.
+    ASSERT_TRUE(mc.getUndoManager().canUndo());
+    mc.getUndoManager().undo();
+    EXPECT_EQ(doc.getClip(clip)->assetRef, juce::String("Audio/loop.wav"));
+    EXPECT_DOUBLE_EQ(doc.getClip(clip)->lengthBeats, length);
+    EXPECT_FALSE(mc.getUndoManager().canUndo());
+    EXPECT_TRUE(bundleDir.getChildFile("Audio/loop.wav").existsAsFile());
+    mc.getUndoManager().redo();
+    EXPECT_EQ(doc.getClip(clip)->assetRef, juce::String("Audio/loop-stretch200.wav"));
+}
+
+TEST_F(AssetManagerRelinkTest, AnAudioClipThatCannotStretchIsResizedAndSaysWhy) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& doc = mc.getTimelineDoc();
+    const auto clip = doc.addClip(doc.addTrack(TrackKind::Audio, "Audio 1"), 4.0, 4.0, "gone");
+    ASSERT_TRUE(doc.setClipAsset(clip, "Audio/gone.wav", 0.0));
+    mc.getUndoManager().clearUndoHistory();
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 5.0, 3.0);
+
+    EXPECT_EQ(doc.getClip(clip)->assetRef, juce::String("Audio/gone.wav"));
+    EXPECT_DOUBLE_EQ(doc.getClip(clip)->startBeat, 5.0);
+    EXPECT_DOUBLE_EQ(doc.getClip(clip)->lengthBeats, 3.0);
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "The clip's audio file is missing; resized instead");
+    EXPECT_TRUE(mc.getUndoManager().canUndo());
 }

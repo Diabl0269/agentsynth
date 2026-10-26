@@ -29,8 +29,19 @@ struct ClipEdgeResult {
 ClipEdgeResult clipEdgeResult(const Clip& clip, ClipEdge edge, ClipSizingMode mode, double newStartBeat,
                               double newLengthBeats);
 
-// Stretch needs a time-stretch engine for audio, which the app does not have: an audio clip trims instead.
-ClipSizingMode effectiveSizingMode(const Clip& clip, ClipSizingMode mode) noexcept;
+// What a Stretch edge drag of an audio clip to `newLengthBeats` reads from its asset: the clip's own window, and how
+// many times faster to play it. nullopt for a MIDI clip, or a length or tempo that is not finite and positive.
+struct AudioStretchWindow {
+    double startSeconds = 0.0;
+    double lengthSeconds = 0.0;
+    double tempoRatio = 1.0;
+};
+std::optional<AudioStretchWindow> audioStretchWindow(const Clip& clip, double newLengthBeats, double secondsPerBeat);
+
+// Points audio clip `id` at its stretched copy `stretchedRef` (read from 0 s) over [newStartBeat, + newLengthBeats),
+// fades scaled alike. Call inside one recorded change; false (possibly part-applied) when a mutator refuses.
+bool applyAudioClipStretch(TimelineDoc& doc, ClipId id, double newStartBeat, double newLengthBeats,
+                           const juce::String& stretchedRef);
 
 const char* clipSizingModeName(ClipSizingMode mode) noexcept;
 const char* clipSizingModeDescription(ClipSizingMode mode) noexcept;

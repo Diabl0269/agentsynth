@@ -424,6 +424,8 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
             // just made, and the next drag should move it rather than the original.
             if (copying && !newIds.empty())
                 selection_.setSelection(newIds);
+        } else if (const auto stretch = audioStretchDrop()) {
+            onAudioClipStretchRequested(activeClip_, stretch->first, stretch->second);
         } else if (dragMode_ == DragMode::ResizeRight && std::abs(previewLength_ - resizeOriginalLength_) > 1e-9) {
             // ONE undo step, through the sizing rule the preview painted with. An audio clip only changes length.
             const auto id = activeClip_;

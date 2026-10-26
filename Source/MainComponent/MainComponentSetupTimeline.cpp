@@ -297,6 +297,11 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
                                                                 juce::File file) {
         importAudioFileToClip(track, startBeat, file);
     };
+    // A Stretch edge drag of an audio clip: only this can render and import the stretched copy.
+    timelinePanel.getClipLaneArea().onAudioClipStretchRequested = [this](synth::ClipId clip, double startBeat,
+                                                                         double lengthBeats) {
+        MainComponentAudioImport::stretchAudioClip(*this, clip, startBeat, lengthBeats);
+    };
     // A file dropped under the last track makes a new audio track with the clip, in one undo step.
     timelinePanel.getClipLaneArea().onAudioFileDroppedBelowTracks = [this](double startBeat, juce::File file) {
         MainComponentAudioImport::addAudioTrackWithClip(*this, startBeat, file);

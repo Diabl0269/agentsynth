@@ -59,7 +59,7 @@ TEST(TimelineClipSizingFieldTest, TheMenuListsTheThreeModesAndPickingOneReachesT
     EXPECT_TRUE(items[0].startsWith("Trim"));
     EXPECT_TRUE(items[1].startsWith("Carry contents"));
     EXPECT_TRUE(items[2].startsWith("Stretch to fit"));
-    EXPECT_TRUE(items[2].contains("time-stretch engine")) << "audio stretch is not there yet";
+    EXPECT_TRUE(items[2].contains("notes and audio")) << "audio clips stretch too";
     EXPECT_TRUE(items[3].contains("Option"));
 
     f.field().choose(ClipSizingMode::Stretch);

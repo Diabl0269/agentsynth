@@ -37,15 +37,28 @@ std::optional<synth::ClipEdgeResult> TimelineClipLaneArea::resizePreviewFor(cons
     if (clip.id == active->id)
         return result;
 
-    const bool leavesGroup =
-        left && synth::effectiveSizingMode(*active, dragSizingMode()) == synth::ClipSizingMode::Trim;
+    const bool leavesGroup = left && dragSizingMode() == synth::ClipSizingMode::Trim;
     if (clip.linkGroup == 0 || clip.linkGroup != active->linkGroup || leavesGroup)
         return std::nullopt;
     result.startBeat = clip.startBeat; // a copy keeps its own place; only the shared content follows
     return result;
 }
 
-// Only Stretch says anything: the new length as a share of the old one, or, for an audio clip, why it trims instead.
+// An audio clip's stretch is a rendered copy of its audio, which only the owner can import into the project; without a
+// listener the drop falls through to the plain trim below it in mouseUp.
+std::optional<std::pair<double, double>> TimelineClipLaneArea::audioStretchDrop() const {
+    const bool resizing = dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
+    if (!resizing || dragSizingMode() != synth::ClipSizingMode::Stretch || !onAudioClipStretchRequested ||
+        doc_ == nullptr)
+        return std::nullopt;
+    const auto* clip = doc_->getClip(activeClip_);
+    if (clip == nullptr || clip->assetRef.isEmpty() || std::abs(previewLength_ - resizeOriginalLength_) <= 1e-9)
+        return std::nullopt;
+    const double start = dragMode_ == DragMode::ResizeLeft ? previewStart_ : resizeOriginalStart_;
+    return std::make_pair(start, previewLength_);
+}
+
+// Only Stretch says anything: the new length as a share of the old one.
 juce::String TimelineClipLaneArea::sizingReadout() const {
     if (!isDragInProgress() || dragMode_ == DragMode::Move || dragSizingMode() != synth::ClipSizingMode::Stretch ||
         doc_ == nullptr)
@@ -53,8 +66,6 @@ juce::String TimelineClipLaneArea::sizingReadout() const {
     const auto* clip = doc_->getClip(activeClip_);
     if (clip == nullptr || resizeOriginalLength_ <= 0.0)
         return {};
-    if (clip->assetRef.isNotEmpty())
-        return "Audio trims: no stretch yet";
     return juce::String(juce::roundToInt(previewLength_ / resizeOriginalLength_ * 100.0)) + "%";
 }
 

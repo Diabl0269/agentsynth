@@ -19,6 +19,9 @@ struct MainComponentAudioImport {
     static void addAudioTrackWithClip(MainComponent& mc, double startBeat, const juce::File& sourceFile);
     /** The body of addAudioTrack's undo step (call inside a recorded change); an invalid id when no track was added. */
     static synth::TrackId buildAudioTrackChannel(MainComponent& mc, int index, juce::String& trackName);
+    /** A Stretch edge drag's drop on audio clip `id`: renders its audio at the new span and points the clip at the
+     * copy, one undo step; a plain resize, with a status-bar message, when the audio cannot be stretched. */
+    static void stretchAudioClip(MainComponent& mc, synth::ClipId id, double newStartBeat, double newLengthBeats);
     /** Loads `sound` into the selected Sampler, else the selected audio track at the playhead, else a new Sampler. */
     static void loadSoundFromBrowser(MainComponent& mc, const juce::File& sound);
     /** Return on a shape in the Sounds view: stamps it onto the selected Filter or LFO card (one undo step); false,

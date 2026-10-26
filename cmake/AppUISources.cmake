@@ -38,6 +38,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentDockFocus.cpp
     Source/MainComponent/MainComponentFocusRegions.cpp
     Source/MainComponent/MainComponentTimeline.cpp
+    Source/MainComponent/MainComponentClipStretch.cpp
     Source/MainComponent/MainComponentAutomationOwner.cpp
     Source/MainComponent/MainComponentAutomationLanes.cpp
     Source/MainComponent/MainComponentCustomLfo.cpp

@@ -150,20 +150,81 @@ TEST(TimelineClipLaneSizingTest, StretchIsOneUndoStep) {
     EXPECT_DOUBLE_EQ(c->notes[0].lengthBeats, 1.0);
 }
 
-TEST(TimelineClipLaneSizingTest, AnAudioClipTrimsUnderStretchAndSaysWhy) {
-    ClipLaneFixture f;
+namespace {
+
+// A [4, 8) audio clip on its own audio track.
+ClipId addAudioClip(ClipLaneFixture& f) {
     const auto track = f.doc.addTrack(TrackKind::Audio, "Audio 1");
     const auto clip = f.doc.addClip(track, 4.0, 4.0, "take");
-    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/take.wav", 0.0));
+    EXPECT_TRUE(f.doc.setClipAsset(clip, "Audio/take.wav", 0.0));
+    return clip;
+}
+
+struct StretchRequest {
+    ClipId id;
+    double startBeat;
+    double lengthBeats;
+};
+
+// Drags the clip's left or right edge 40 px (one beat) inwards with `extraFlags` held, checking the readout mid-drag.
+void dragAudioEdgeInwards(ClipLaneFixture& f, ClipId clip, bool left, const juce::String& readout, int extraFlags = 0) {
+    const auto rect = f.lane.getClipRect(clip);
+    const juce::Point<float> edge(left ? (float)rect.getX() + 3.0f : (float)rect.getRight() - 3.0f,
+                                  (float)rect.getCentreY());
+    const juce::Point<float> dragged(edge.x + (left ? 40.0f : -40.0f), edge.y);
+    f.lane.mouseDown(leftClick(f.lane, edge, extraFlags));
+    f.lane.mouseDrag(leftDrag(f.lane, dragged, edge, extraFlags));
+    EXPECT_EQ(f.lane.getSizingReadoutForTest(), readout);
+    f.lane.mouseUp(leftDrag(f.lane, dragged, edge, extraFlags));
+}
+
+} // namespace
+
+// The stretch itself is a rendered copy of the audio that only the owner can import (MainComponentClipStretch.cpp), so
+// the lane hands it the drop's span and leaves the clip alone.
+TEST(TimelineClipLaneSizingTest, AnAudioClipStretchDropAsksTheOwnerWithItsNewSpan) {
+    for (const bool left : {true, false}) {
+        SCOPED_TRACE(left ? "left" : "right");
+        ClipLaneFixture f;
+        const auto clip = addAudioClip(f);
+        f.lane.setClipSizingMode(ClipSizingMode::Stretch);
+        std::vector<StretchRequest> requests;
+        f.lane.onAudioClipStretchRequested = [&](ClipId id, double start, double length) {
+            requests.push_back({id, start, length});
+        };
+
+        dragAudioEdgeInwards(f, clip, left, "75%");
+
+        ASSERT_EQ(requests.size(), 1u);
+        EXPECT_EQ(requests[0].id, clip);
+        EXPECT_DOUBLE_EQ(requests[0].startBeat, left ? 5.0 : 4.0);
+        EXPECT_DOUBLE_EQ(requests[0].lengthBeats, 3.0);
+        EXPECT_DOUBLE_EQ(f.doc.getClip(clip)->lengthBeats, 4.0) << "the owner applies it";
+        EXPECT_FALSE(f.undo.canUndo()) << "and records the undo step";
+    }
+}
+
+TEST(TimelineClipLaneSizingTest, OptionStretchesAnAudioClipOnceUnderTrim) {
+    ClipLaneFixture f;
+    const auto clip = addAudioClip(f);
+    int requests = 0;
+    f.lane.onAudioClipStretchRequested = [&](ClipId, double, double) { ++requests; };
+
+    dragAudioEdgeInwards(f, clip, false, "75%", juce::ModifierKeys::altModifier);
+    EXPECT_EQ(requests, 1);
+
+    dragAudioEdgeInwards(f, clip, false, {});
+    EXPECT_EQ(requests, 1) << "a plain drag trims";
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clip)->lengthBeats, 3.0);
+}
+
+// With no owner to render (a lane on its own), a Stretch drop on audio still resizes, as before audio could stretch.
+TEST(TimelineClipLaneSizingTest, AnAudioClipWithNoStretchOwnerResizesInstead) {
+    ClipLaneFixture f;
+    const auto clip = addAudioClip(f);
     f.lane.setClipSizingMode(ClipSizingMode::Stretch);
 
-    const auto rect = f.lane.getClipRect(clip);
-    const juce::Point<float> edge((float)rect.getRight() - 3.0f, (float)rect.getCentreY());
-    const juce::Point<float> dragged(edge.x - 40.0f, edge.y);
-    f.lane.mouseDown(leftClick(f.lane, edge));
-    f.lane.mouseDrag(leftDrag(f.lane, dragged, edge));
-    EXPECT_EQ(f.lane.getSizingReadoutForTest(), "Audio trims: no stretch yet");
-    f.lane.mouseUp(leftDrag(f.lane, dragged, edge));
+    dragAudioEdgeInwards(f, clip, false, "75%");
 
     const auto* c = f.doc.getClip(clip);
     EXPECT_DOUBLE_EQ(c->lengthBeats, 3.0);

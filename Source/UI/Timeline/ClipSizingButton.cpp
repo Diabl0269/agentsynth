@@ -61,15 +61,13 @@ void ClipSizingButton::setApplicationProperties(juce::ApplicationProperties* pro
         onModeChanged(mode_);
 }
 
-// Each mode with what it does to the notes; Stretch says it is MIDI only for now. The Option tip closes the menu.
+// Each mode with what it does to a clip's contents. The Option tip closes the menu.
 juce::PopupMenu ClipSizingButton::buildMenu() const {
     juce::PopupMenu menu;
     for (int i = 0; i < (int)std::size(kModes); ++i) {
         const auto mode = kModes[i];
         juce::String text =
             juce::String(synth::clipSizingModeName(mode)) + ": " + synth::clipSizingModeDescription(mode);
-        if (mode == synth::ClipSizingMode::Stretch)
-            text += " (MIDI clips; audio needs the time-stretch engine)";
         menu.addItem(kFirstModeItemId + i, text, true, mode == mode_);
     }
     menu.addSeparator();
