@@ -635,6 +635,39 @@ TEST_F(AssetManagerRelinkTest, StretchingAnAudioClipImportsAStretchedCopyAsOneUn
     EXPECT_EQ(doc.getClip(clip)->assetRef, juce::String("Audio/loop-stretch200.wav"));
 }
 
+TEST_F(AssetManagerRelinkTest, AStretchRendersTheAudioTheClipPlaysAtTheProjectTempo) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& transport = mc.getAudioEngine().getTransport();
+    ASSERT_TRUE(transport.setBpm(90.0));
+    transport.tick(512);
+    ASSERT_DOUBLE_EQ(transport.getPositionSnapshot().bpm, 90.0);
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(mc.saveProjectForTest(root.getChildFile("Tempo.agsproj")));
+
+    // Two seconds is three beats at 90 BPM; at the 120 BPM fallback the window would be 1.5 s.
+    constexpr double kSampleRate = 44100.0;
+    const auto source = root.getChildFile("tempo.wav");
+    ASSERT_TRUE(writeWav(source, 88200, 1, kSampleRate, [](juce::int64 i, int) {
+        return 0.5f * (float)std::sin(2.0 * juce::MathConstants<double>::pi * 440.0 * (double)i / kSampleRate);
+    }));
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+    ASSERT_EQ(doc.getTrack(trackId)->clips.size(), 1u);
+    const auto clip = doc.getTrack(trackId)->clips[0].id;
+    ASSERT_NEAR(doc.getClip(clip)->lengthBeats, 3.0, 1e-6);
+
+    MainComponentAudioImport::stretchAudioClip(mc, clip, 0.0, 6.0);
+
+    const auto copy = mc.getAudioEngine().getAudioClipStreamer().resolveAssetRef(doc.getClip(clip)->assetRef);
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(copy));
+    ASSERT_NE(reader, nullptr);
+    EXPECT_NEAR((double)reader->lengthInSamples, 6.0 * 60.0 / 90.0 * kSampleRate, 2.0) << "six beats at 90 BPM";
+}
+
 TEST_F(AssetManagerRelinkTest, AnAudioClipThatCannotStretchIsResizedAndSaysWhy) {
     MainComponent mc(std::make_unique<MockProviderAM>());
     mc.setSize(1600, 900);
