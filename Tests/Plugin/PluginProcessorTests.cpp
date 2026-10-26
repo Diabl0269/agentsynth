@@ -16,9 +16,11 @@
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
+#include "Music/SongKey.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/PluginEditor.h"
 #include "Plugin/PluginProcessor.h"
+#include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UserSettings.h"
@@ -478,6 +480,57 @@ TEST(AgentSynthAudioProcessorStateTest, EditorSizeSurvivesStateRoundTrip) {
 
     EXPECT_EQ(second.getSavedEditorSize().x, 1234);
     EXPECT_EQ(second.getSavedEditorSize().y, 777);
+}
+
+TEST(AgentSynthAudioProcessorStateTest, SongKeySurvivesStateRoundTrip) {
+    synth::AgentSynthAudioProcessor first;
+    synth::MusicalScale dMinor;
+    dMinor.rootPitchClass = 2;
+    dMinor.mask = 0b101101011010; // natural minor
+    dMinor.name = "Natural Minor";
+    first.getAudioEngine().getTransport().setSongKey(dMinor);
+
+    juce::MemoryBlock state;
+    first.getStateInformation(state);
+
+    synth::AgentSynthAudioProcessor second;
+    second.setStateInformation(state.getData(), (int)state.getSize());
+
+    const auto& key = second.getAudioEngine().getTransport().getDocumentState().songKey;
+    ASSERT_TRUE(key.has_value());
+    EXPECT_TRUE(synth::sameKey(*key, dMinor));
+    EXPECT_EQ(second.getAudioEngine().getTransport().getSongKeyPacked(), synth::TransportService::packSongKey(dMinor));
+}
+
+TEST(AgentSynthAudioProcessorStateTest, StateWithoutSongKeyLoadsAsNoKey) {
+    synth::AgentSynthAudioProcessor first; // never set a key: nothing is written
+    juce::MemoryBlock state;
+    first.getStateInformation(state);
+    EXPECT_FALSE(juce::JSON::parse(state.toString()).getDynamicObject()->hasProperty("songKey"));
+
+    // A processor that already holds a key drops it when an older, key-less state loads over it.
+    synth::AgentSynthAudioProcessor second;
+    synth::MusicalScale key;
+    key.rootPitchClass = 7;
+    key.mask = 0b101010110101; // major
+    key.name = "Major";
+    second.getAudioEngine().getTransport().setSongKey(key);
+    second.setStateInformation(state.getData(), (int)state.getSize());
+    EXPECT_FALSE(second.getAudioEngine().getTransport().getDocumentState().songKey.has_value());
+    EXPECT_EQ(second.getAudioEngine().getTransport().getSongKeyPacked(), 0u);
+}
+
+TEST(AgentSynthAudioProcessorStateTest, MalformedSongKeyLoadsAsNoKey) {
+    synth::AgentSynthAudioProcessor first;
+    juce::MemoryBlock state;
+    first.getStateInformation(state);
+    auto parsed = juce::JSON::parse(state.toString());
+    parsed.getDynamicObject()->setProperty("songKey", "garbage");
+    const auto json = juce::JSON::toString(parsed);
+
+    synth::AgentSynthAudioProcessor second;
+    second.setStateInformation(json.toRawUTF8(), (int)json.getNumBytesAsUTF8());
+    EXPECT_FALSE(second.getAudioEngine().getTransport().getDocumentState().songKey.has_value());
 }
 
 class AgentSynthAudioProcessorJunkStateTest : public ::testing::Test {
