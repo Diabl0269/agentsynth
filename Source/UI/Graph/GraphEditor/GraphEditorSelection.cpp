@@ -10,6 +10,7 @@
 #include "GraphEditorInternal.h" // GraphEditor::HealSplice's full definition (captureHealSplices)
 
 #include "CanvasAccessibilityClip.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleStepOrder.h"
@@ -73,6 +74,10 @@ void GraphEditor::applySelectionChange(const std::vector<juce::AudioProcessorGra
         if ((before.count(id) > 0) != (after.count(id) > 0))
             comp->repaint();
     }
+    // A folded macro's card shows whether its members are selected; there are few of them and they are not buffered.
+    for (auto* card : content.getMacroCards())
+        if (card != nullptr)
+            card->repaint();
 }
 
 // Selects a single module. When additive, toggles it instead and leaves the rest alone.
@@ -235,6 +240,7 @@ void GraphEditor::deleteSelection() {
     auto doDelete = [this, ids] { removeNodesNow(ids, /*healChain=*/true, /*narrowDetach=*/false); };
 
     const auto cablesBefore = snapshotCablesForRetract();
+    const auto macroCountBefore = macros.getAll().size();
     CardGlideAnimator::Scope glideScope(cardGlide_); // each card shrinks away, see noteCardExits
     noteCardExits(ids);
 
@@ -243,13 +249,24 @@ void GraphEditor::deleteSelection() {
     else
         doDelete();
 
-    morphCablesSince(cablesBefore); // the neighbours the delete healed run together into one cable
+    // A delete that removed a macro takes its cables with it: they pull back into their sources while the card shrinks
+    // away, rather than blinking out. Otherwise only the neighbours a delete healed run together into one cable.
+    if (macros.getAll().size() < macroCountBefore)
+        retractCablesGoneSince(cablesBefore);
+    else
+        morphCablesSince(cablesBefore);
     repaint();
 }
 
 // ---- Marquee ----
 
 void GraphEditor::beginMarquee(juce::Point<int> canvasAnchor, bool additive) {
+    // Shift on an expanded macro's name chip adds the macro to the selection (or takes it out), as it does on a
+    // folded card; a drag from there carries on as an additive marquee.
+    if (const auto chipId = macroController_.macroChipAt(canvasAnchor); chipId.isNotEmpty()) {
+        macroController_.toggleMacroInSelection(chipId);
+        additive = true;
+    }
     marqueeActive = true;
     marqueeAdditive = additive;
     marqueeAnchor = canvasAnchor;
@@ -267,6 +284,12 @@ void GraphEditor::updateMarquee(juce::Point<int> canvasCurrent) {
 
     marqueeRect = synth::ui::marqueeRectFrom(marqueeAnchor, canvasCurrent);
     auto hits = synth::ui::hitTestMarquee(marqueeRect, collectModuleBoxes(false, false));
+    // A folded macro's members are hidden, so its card stands in for them: sweeping the card selects the macro.
+    for (auto* card : content.getMacroCards())
+        if (card != nullptr && card->isVisible() && marqueeRect.intersects(card->getBounds())) {
+            const auto ids = macroController_.macroSelectionIds(card->getMacroId());
+            hits.insert(hits.end(), ids.begin(), ids.end());
+        }
     applySelectionChange(marqueeAdditive ? synth::ui::unionSelection(marqueeBaseSelection, hits) : hits);
 
     repaintCanvas();
@@ -389,7 +412,8 @@ void GraphEditor::finalizeSelectionDrag() {
             juce::ignoreUnused(startPos);
             movingIds.push_back(nodeId);
         }
-        auto obstacles = macroController_.placementBlockers(movingIds);
+        // A macro dragged by its chip onto an open macro lands inside it (it nests there on drop).
+        auto obstacles = macroController_.placementBlockers(movingIds, macroController_.macroNestCandidate());
         auto clear = synth::LayoutUtil::findFreeSlot(snapped, groupBounds.getWidth(), groupBounds.getHeight(),
                                                      obstacles, juce::AudioProcessorGraph::NodeID{});
         auto offset = clear - groupBounds.getTopLeft();
@@ -457,6 +481,7 @@ void GraphEditor::cancelSelectionDrag() {
 // mouseUp is still coming, and finalizeSelectionDrag's lookup simply skips a stale id it can't find.
 // See docs/layout/selection.md.
 void GraphEditor::cancelLiveDragGestures() {
+    edgeScroll_->end();
     if (selectionDragActive)
         cancelSelectionDrag();
     if (dragDropController_.isDragPreviewActive())
@@ -464,6 +489,7 @@ void GraphEditor::cancelLiveDragGestures() {
     // A component destroyed mid-Cmd/Ctrl-drag would otherwise leave the candidate hull
     // highlighted forever — no-op when nothing was armed, same as the two clears above.
     clearMacroDragCandidate();
+    macroController_.clearMacroNestCandidate(); // a macro body drag's nest target, likewise
 }
 
 // ---- Macro card drag (MacroCardComponent's own ComponentDragger calls these) -------------------
@@ -482,8 +508,12 @@ void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {
     beginSelectionDrag();
 }
 
-void GraphEditor::dragMacroCardBy(const juce::String&, juce::Point<int> delta) {
+void GraphEditor::dragMacroCardBy(const juce::String& macroId, juce::Point<int> delta) {
     dragSelectionBy(delta, nullptr);
+    // The card's centre decides the open macro it would nest into, like a dragged module's (outlined live).
+    for (auto* card : content.getMacroCards())
+        if (card != nullptr && card->getMacroId() == macroId)
+            macroController_.updateMacroNestCandidate(macroId, card->getBounds().getCentre());
     refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // the frame steps out ahead of the card
     // Matches ModuleComponent::mouseDrag's own per-frame repaint call exactly (one repaint per
     // drag tick), but goes through repaintCanvas() rather than a bare Component::repaint(): once
@@ -502,10 +532,13 @@ void GraphEditor::dragMacroCardBy(const juce::String&, juce::Point<int> delta) {
 // then take exactly the card's resolved delta from their recorded start positions, so card and members never drift
 // apart. They are NOT resolved as a group of their own the way finalizeSelectionDrag does: they are hidden under the
 // card, so a collision test on their own bounds would shove them away from a card that landed in free space.
+// Dropped over an open macro (the live nest candidate), the card lands where it was released, inside that border, and
+// nests there in the same undo step; the borders that change glide.
 void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft) {
     // Every exit path: a drop can both grow and shrink the canvas frame.
     const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};
     auto& graph = audioEngine.getGraph();
+    const auto hullsBefore = snapshotPaintedHulls();
     auto doFinalize = [this, macroId, newCardTopLeft] {
         slidePatchForEdgeDrop(); // a card held at the canvas origin: the rest of the patch makes room
         auto* m = macros.find(macroId);
@@ -513,6 +546,7 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
             finalizeSelectionDrag();
             if (m != nullptr)
                 m->bounds.setPosition(synth::LayoutUtil::snap(newCardTopLeft));
+            macroController_.nestDraggedMacroIntoCandidate(macroId);
             reflowOutputDock();
             return;
         }
@@ -525,7 +559,8 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
         const auto cardSize = macroController_.macroCableAnchorBounds(*m);
         const auto resolved = synth::LayoutUtil::findFreeSlot(
             synth::LayoutUtil::snap(newCardTopLeft), cardSize.getWidth(), cardSize.getHeight(),
-            macroController_.placementBlockers(movingIds), juce::AudioProcessorGraph::NodeID{});
+            macroController_.placementBlockers(movingIds, macroController_.macroNestCandidate()),
+            juce::AudioProcessorGraph::NodeID{});
         const auto delta = resolved - m->bounds.getPosition();
 
         for (const auto& [nodeId, startPos] : selectionDragStartPositions)
@@ -546,6 +581,7 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
         detail::applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
         selectionDragActive = false;
         selectionDragStartPositions.clear();
+        macroController_.nestDraggedMacroIntoCandidate(macroId);
         reflowOutputDock(); // a collapsed card dropped right of the dock pushes the dock along
     };
 
@@ -554,11 +590,13 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
     else
         doFinalize();
 
+    glideHullsFrom(hullsBefore);
     repaintCanvas();
 }
 
 // A press that never moved — mirrors cancelSelectionDrag, no re-resolve.
 void GraphEditor::cancelMacroCardDrag(const juce::String&) {
+    macroController_.clearMacroNestCandidate();
     if (undoManager)
         undoManager->takeCapturedGraphBeforeState(); // discard the unused "before" capture
     cancelSelectionDrag();

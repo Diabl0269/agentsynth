@@ -320,6 +320,7 @@ void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
         if (macroChipDragId.isNotEmpty()) {
             cancelSelectionDrag();
             macroChipDragId.clear();
+            macroController_.clearMacroNestCandidate();
         }
         promptRenameMacro(macroId);
         return;

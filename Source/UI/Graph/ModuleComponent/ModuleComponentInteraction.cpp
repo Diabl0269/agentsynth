@@ -15,6 +15,7 @@
 #include "ReplaceWithPicker.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/ControlStyle/ControlStyleMenu.h"
@@ -687,6 +688,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             if (undoManager)
                 undoManager->captureBeforeState(owner.getAudioEngine().getGraph());
             dragger.startDraggingComponent(this, e);
+            owner.getEdgeScroll().beginCardDrag(*this, e.getEventRelativeTo(this).getPosition());
             // Record every selected module's origin so they can all follow this one.
             owner.beginSelectionDrag(nodeId);
             // Show grid + ghost for this module-body drag.
@@ -882,6 +884,7 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     if (!bodyDragActive)
         return;
     bodyDragActive = false;
+    owner.getEdgeScroll().end();
     synth::ui::endDragCursor(*this); // first: the release below may rebuild and destroy this card
 
     const bool moved = getPosition() != dragStartPosition;

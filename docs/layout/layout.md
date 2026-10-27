@@ -76,6 +76,26 @@ is the theme `bg0`; inside is `bg1` with the dot grid, a 10 px rounded corner an
 - **Content.** The `content` component is the frame TARGET (not the animated size) plus 2000 px of slack, so a fast
   drag never clips a card.
 
+## Edge scroll while dragging
+
+Dragging a card to the edge of the canvas view pans the canvas (`CanvasEdgeScrollDriver`, `CanvasEdgeScroller`,
+`Source/UI/Graph/CanvasEdgeScroll/`). It covers a module or folded macro card moved on the canvas and a card dragged in
+from the module library or the sound browser; a marquee and a cable drag do not scroll.
+
+- **Speed.** `canvasEdgePanDelta` (`CanvasEdgeScroll.h`, pure) gives zero in the middle of the view and a speed that
+  grows linearly over the outer 48 px (a third of a small view at most) up to 22 screen px per tick at the edge or past
+  it, one axis at a time, on the timeline's `edgeScrollVelocity` curve. The tick is a gated 30 Hz timer that runs only
+  for the length of a drag; moving the pointer back inward stops the pan on the next tick, and a release, drop, exit or
+  `cancelLiveDragGestures` stops the timer.
+- **The card keeps tracking.** The pointer does not move while the canvas does, so no mouse event arrives. Each tick
+  that panned sends the card a synthetic `mouseDrag` at the pointer (its own press point and `ComponentDragger` keep the
+  grab offset), so it takes the real drag path: group drag, canvas frame growth, landing ghost, macro join highlight. A
+  library drag gets a synthetic `itemDragMove` at the pointer.
+- **Limits.** The pan never goes past the origin (nothing exists left of or above it) and never further right or down
+  than the content extends; a card drag grows the content ahead of itself, so it can keep going.
+- **Keyboard.** There is no pointer to park, so the keyboard move (arrow keys on a focused card) already pans the card
+  into view instead.
+
 ## Anti-overlap search
 
 When a module is placed (library drop or drag-release) the engine:
@@ -111,7 +131,9 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   cards included, so their offsets to the card never change.
 - **Direction.** Only units the grower overlaps (with the usual 12 px clearance) move. Each goes the
   way that needs the least travel (left, right, up or down; a tie goes down, then right), rounded up
-  to the 8 px grid. The grower itself never moves.
+  to the 8 px grid. The grower itself never moves. A macro that expands passes its folded card's rect
+  (`LayoutUnit::before`): a neighbour wholly on one side of that card is pushed away from that side only, so the
+  macro stacked right below a card glides down instead of up past the grown border.
 - **Cascade.** A pushed unit pushes what it now overlaps in the same direction, so a row of
   neighbours shifts together. A unit reached twice ends up as far as the further push needs.
   Nothing ever moves back, so the cascade always settles.
@@ -132,7 +154,7 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   hull, so that macro is treated as the grower one level up, all the way to the top level.
 - **When.** Only on discrete events, never while dragging (a drag between two cards opens its own gap, see
   [Making room for a module dropped between others](#making-room-for-a-module-dropped-between-others)): grouping (including nesting), adding
-  modules to a macro (menu, Cmd-drag, library drop into a hull), expanding a macro, adding a port
+  modules to a macro (menu, Cmd-drag, library drop into a hull), dropping a macro into an open one, expanding a macro, adding a port
   (which lengthens the hull), and a module card changing size in place (loose or macro member: the Macros knob count, the Scope / Response / envelope graph folds, an LFO's Draw section, a poly or Dual I/O toggle; the list is in [module-card.md](module-card.md)).
 - **Undo.** It runs inside the undo step of whatever caused the growth, so one undo puts the
   neighbours back with the macro. Positions are written at once, so hulls, port strips and cables
@@ -148,7 +170,15 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   macro, deleting one of its members or ports, or a member leaving it (drag or menu), offers each pushed unit its way back, newest push first
   (`returnDisplacedNeighbours`), repeating over the still-blocked ones until a pass returns nothing so a cascade unwinds fully: a unit returns only if the user has not moved it since (it is still exactly where the
   push left it) and its old spot is clear, with the usual 12 px clearance, of every other unit at that level, the
-  collapsed card included. A unit that cannot return stays put. Collapse clears the record; a delete on a macro that
+  collapsed card included. A unit that cannot return stays put. Three things move a unit without the user touching
+  it: a second grower pushing it further, another grower's record sending it back, and folding or opening it (its
+  footprint switches between card and border in place). Each moves every other push record that names the unit to
+  its new top-left (`retargetPushRecords`), so pushes from several growers unwind in any order; a push or return of
+  an open macro also moves the spot its card came from, so folding it again still undoes its open-border nudge. A
+  multi-macro fold (Fold and Pack, Cmd+G on several macros) holds every folded macro's records until the last one has
+  folded and returns them together (`returnDeferredNeighbours`): one by one, each return would still be blocked by
+  the borders not yet folded. Without these, Fold and Pack with packing off left a stack of macros pushed apart after
+  opening and folding them all, depending on the order the macros happened to fold in. Collapse clears the record; a delete on a macro that
   stays open keeps the pushes that only lacked room. It runs inside the same undo step as the collapse or delete. Before neighbours return, a collapse first undoes the
   expand's canvas nudge (`restoreCardAfterCollapse`) when the members have not moved since and the card's old spot is
   clear, so the card sits where it was and the neighbours' old spots are clear of it again.
@@ -285,7 +315,11 @@ component types); `GraphEditorAutoArrange.cpp` flattens the live canvas into tha
 
 1. **The shared-modulator row.** A modulator (a block with no signal cable at all and nothing feeding it, such as an
    LFO or an envelope) whose consumers sit in two or more rows goes in one row on top, ordered by consumer count
-   (most first), then node id. A modulator whose consumers are all in one row joins that row instead. A block with modulation consumers and no signal cable leaving it (an LFO
+   (most first), then node id, in the column before the leftmost block it modulates (right-aligned in it, like a
+   pulled-up source below). When that block is in the first column (a macro that starts its row), every other block
+   moves one column right to make room, so the modulator is behind every macro it drives and the rows stay lined up.
+   A shared modulator fed inside its own row (a MIDI retrigger cable) keeps the column that cable gives it. A
+   modulator whose consumers are all in one row joins that row instead. A block with modulation consumers and no signal cable leaving it (an LFO
    that only takes a MIDI retrigger cable in) counts as a modulator too, so that incoming cable never pulls it into the
    feeding track's row.
 2. **One row per track, in track order.** Track order is the timeline's: `GraphEditor::trackSourceOrder` (set by
@@ -298,7 +332,7 @@ component types); `GraphEditorAutoArrange.cpp` flattens the live canvas into tha
 3. **One row per remaining connected component**, ordered by the id of the component's leftmost source (its first
    block with nothing feeding it). A loose module with no cables is a component of one.
 
-Cables between rows are still drawn but never influence placement. Row gap is `kIntraLayerGapY`; a row is as tall as
+Cables between rows are still drawn but never influence placement, except a shared modulator's, which pick its column. Row gap is `kIntraLayerGapY`; a row is as tall as
 its tallest column stack.
 
 **Columns.** A block's column is its longest-path depth from the row's sources, over the edges inside the row (signal

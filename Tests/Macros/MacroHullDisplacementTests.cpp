@@ -437,3 +437,77 @@ TEST(MacroHullDisplacement, UndoAndRedoNeverRunTheReturnAndLeaveNoRecord) {
     EXPECT_EQ(c.rect(neighbour), home);
     EXPECT_TRUE(c.editor.getMacros().find(macroId)->displaced.empty());
 }
+
+namespace {
+// Two macros stacked the way two track chains sit: the second right below the first. Returns both ids, first on top.
+struct StackedMacros {
+    juce::String top, below;
+};
+
+StackedMacros stackTwoMacros(Canvas& c) {
+    StackedMacros s;
+    const auto a1 = c.osc(400, 300);
+    const auto a2 = c.osc(700, 300);
+    s.top = c.group({a1, a2});
+    const int belowY = c.footprint(s.top).getBottom() + 16;
+    const auto b1 = c.osc(400, belowY);
+    const auto b2 = c.osc(700, belowY);
+    s.below = c.group({b1, b2});
+    return s;
+}
+} // namespace
+
+// Regression test for FRO1085: expanding the top of two stacked macros left the one below where it was, so the
+// grown hull opened behind it.
+TEST(MacroHullDisplacement, ExpandingTheTopOfTwoStackedMacrosGlidesTheOneBelowClear) {
+    Canvas c;
+    const auto s = stackTwoMacros(c);
+    ASSERT_TRUE(s.top.isNotEmpty() && s.below.isNotEmpty());
+    const auto belowStart = c.footprint(s.below);
+    ASSERT_FALSE(belowStart.intersects(c.footprint(s.top))) << "clear while both are folded";
+
+    c.ctl().setMacroCollapsed(s.top, false);
+
+    const auto hull = c.ctl().macroHullBounds(s.top);
+    const auto belowNow = c.footprint(s.below);
+    EXPECT_FALSE(belowNow.intersects(hull)) << "hull " << hull.toString() << " below " << belowNow.toString();
+    EXPECT_GT(belowNow.getY(), belowStart.getY()) << "the macro below made room";
+    EXPECT_EQ(belowNow.getX(), belowStart.getX());
+}
+
+TEST(MacroHullDisplacement, ExpandingTheTopMacroPushesAnAlreadyExpandedMacroBelowIt) {
+    Canvas c;
+    const auto s = stackTwoMacros(c);
+    c.ctl().setMacroCollapsed(s.below, false);
+    const auto belowStart = c.footprint(s.below);
+    ASSERT_FALSE(belowStart.intersects(c.footprint(s.top)));
+
+    c.ctl().setMacroCollapsed(s.top, false);
+
+    const auto hull = c.ctl().macroHullBounds(s.top);
+    const auto belowNow = c.footprint(s.below);
+    EXPECT_FALSE(belowNow.intersects(hull)) << "hull " << hull.toString() << " below " << belowNow.toString();
+    EXPECT_GT(belowNow.getY(), belowStart.getY());
+}
+
+TEST(MacroHullDisplacement, TheStackedMacroBelowMakesRoomAgainOnEveryExpandAndUndoRedo) {
+    Canvas c;
+    const auto s = stackTwoMacros(c);
+    const auto home = c.footprint(s.below);
+    c.undo.clearUndoHistory();
+
+    c.ctl().setMacroCollapsed(s.top, false);
+    const auto pushed = c.footprint(s.below);
+    ASSERT_FALSE(pushed.intersects(c.ctl().macroHullBounds(s.top)));
+    ASSERT_NE(pushed, home);
+
+    ASSERT_TRUE(c.undo.undo());
+    EXPECT_EQ(c.footprint(s.below), home);
+    ASSERT_TRUE(c.undo.redo());
+    EXPECT_EQ(c.footprint(s.below), pushed);
+    EXPECT_FALSE(c.footprint(s.below).intersects(c.ctl().macroHullBounds(s.top)));
+
+    c.ctl().setMacroCollapsed(s.top, true);
+    c.ctl().setMacroCollapsed(s.top, false);
+    EXPECT_FALSE(c.footprint(s.below).intersects(c.ctl().macroHullBounds(s.top))) << "and it makes room again";
+}

@@ -14,6 +14,7 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
+#include <optional>
 
 namespace {
 
@@ -209,4 +210,42 @@ TEST(CardGlideMacroDelete, ReducedMotionFadesInPlaceInsteadOfShrinking) {
         synth::ui::setReducedMotionForTest(std::nullopt);
         c.editor.finishCardGlideForTest();
     }
+}
+
+namespace {
+std::optional<GraphEditor::VisibleCable> cableBetween(GraphEditor& editor, NodeID src, NodeID dst) {
+    for (const auto& cable : editor.buildVisibleCables())
+        if (cable.id.srcUid == src.uid && cable.id.dstUid == dst.uid)
+            return cable;
+    return std::nullopt;
+}
+} // namespace
+
+// Regression test for FRO808: deleting a folded macro made its cables blink out, and the undo had to bring them back
+// anchored on the returning card at once.
+TEST(CardGlideMacroDelete, DeletingAFoldedMacroRetractsItsCablesAndUndoGrowsThemBackOnTheCard) {
+    MacroCanvas c(false);
+    c.editor.connectPorts(c.a, 0, c.loose, 0, /*isMidi=*/false);
+    c.editor.getMacroController().setMacroCollapsed(c.macroId, true);
+    c.editor.finishCardGlideForTest();
+    const auto drawn = cableBetween(c.editor, c.a, c.loose);
+    ASSERT_TRUE(drawn.has_value()) << "sanity: the folded card has a cable out to the loose module";
+    c.glide().setForceAnimateForTest(true);
+
+    c.deleteMacro();
+
+    EXPECT_FALSE(cableBetween(c.editor, c.a, c.loose).has_value());
+    const auto& retract = c.editor.getCableRetractForTest();
+    ASSERT_TRUE(retract.isLive()) << "the cable retracts instead of vanishing";
+    ASSERT_EQ(retract.ghosts().size(), 1u);
+    EXPECT_EQ(retract.ghosts()[0].p1, drawn->p1) << "from where it was drawn on the card";
+    c.editor.finishCardGlideForTest();
+    c.editor.finishCableRetractForTest();
+
+    ASSERT_TRUE(c.undo.undo());
+    const auto back = cableBetween(c.editor, c.a, c.loose);
+    ASSERT_TRUE(back.has_value());
+    EXPECT_EQ(back->p1, drawn->p1) << "anchored on the returned card at once, with no canvas move";
+    EXPECT_EQ(back->p2, drawn->p2);
+    EXPECT_EQ(c.editor.getCableRetractForTest().numGrowing(), 1u);
 }

@@ -344,3 +344,40 @@ TEST(AutoArrangeMacros, AModulatorThatAlsoTakesInputFromItsMacroStaysBeforeIt) {
     c.editor.autoArrange();
     EXPECT_TRUE(first == c.snap());
 }
+
+// One LFO modulating two macros on a bare canvas: it sits a column before both, folded or open, and the arrange is one
+// undo step. (Across track rows the same rule is covered in AutoArrangeTests.cpp.)
+TEST(AutoArrangeMacros, AModulatorFeedingTwoMacrosSitsInAColumnBeforeBothAsOneUndoStep) {
+    for (const bool open : {false, true}) {
+        Canvas c;
+        const auto a1 = c.osc(700, 300);
+        const auto a2 = c.filter(1100, 300);
+        const auto b1 = c.osc(300, 1200);
+        const auto b2 = c.filter(700, 1200);
+        const auto lfo = c.lfo(2200, 600);
+        c.connect(a1, a2);
+        c.connect(b1, b2);
+        const auto first = c.group({a1, a2});
+        const auto second = c.group({b1, b2});
+        ASSERT_FALSE(first.isEmpty());
+        ASSERT_FALSE(second.isEmpty());
+        if (open) {
+            c.ctl().setMacroCollapsed(first, false);
+            c.ctl().setMacroCollapsed(second, false);
+        }
+        c.modulate(lfo, a2);
+        c.modulate(lfo, b2);
+        c.undo.clearUndoHistory();
+        const auto before = c.snap();
+
+        c.editor.autoArrange();
+
+        const auto label = open ? "open macros" : "folded macros";
+        for (const auto& macroId : {first, second})
+            EXPECT_LE(c.rect(lfo).getRight() + synth::LayoutUtil::kLayerGapX, c.footprint(macroId).getX()) << label;
+        autoarrange_test::expectNoOverlaps(c.editor);
+        ASSERT_TRUE(c.undo.undo());
+        EXPECT_TRUE(before == c.snap()) << label;
+        EXPECT_FALSE(c.undo.canUndo()) << label << ": the arrange is one step";
+    }
+}

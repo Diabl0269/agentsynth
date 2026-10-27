@@ -129,6 +129,9 @@ TEST_F(AutoArrangeTrackTest, ThreeTracksAndASharedLfoArrangeIntoAModulatorRowThe
     EXPECT_LT(t2.getBottom(), t3.getY());
     EXPECT_EQ(t1.getX(), t2.getX());
     EXPECT_EQ(t2.getX(), t3.getX());
+    // Regression test for FRO801: the LFO used to sit straight above the first channel; it belongs a column before
+    // both channels it modulates.
+    EXPECT_LE(lfo.getRight() + synth::LayoutUtil::kLayerGapX, t1.getX());
     autoarrange_test::expectNoOverlaps(editor);
 
     // The dock (Master, Audio Output) sits right of everything, on the first row's y.

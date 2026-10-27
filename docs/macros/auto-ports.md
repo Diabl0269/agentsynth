@@ -298,6 +298,10 @@ wired port-to-port for the boundary leg. When only one endpoint needs a port, th
 final connection lands directly on the plain module (or on the existing port, if that is what it
 resolved to), never a second port.
 
+**One output per source.** A source leaving a macro through an outlet that is already fed by the same jack
+(`existingOutletFedBy`) reuses that outlet: a second cable from the same LFO or oscillator output gives one macro
+output with two destinations, not a second output. The same holds at every nesting level.
+
 **A mod or CV-routed drag goes through the SAME mint-and-wire path as a plain audio drag** — no
 separate scope cut and no mirrored CV-detection helper. `connectPorts()`'s own CV and mod-routing
 detection (`resolvePolyLink`, single-voice, the destination's `getModulationTargets()`) naturally

@@ -181,6 +181,13 @@ public:
     void groupOrToggleSelectionMacros();
     void selectMacro(const juce::String& macroId, bool additive);
     bool isMacroSelected(const juce::String& macroId) const;
+    /** True when every member of the macro is selected, whatever else is too (several macros can be selected at once).
+     */
+    bool isMacroInSelection(const juce::String& macroId) const;
+    /** Shift-click: adds the macro's members to the selection, or removes them when it is already all selected. */
+    void toggleMacroInSelection(const juce::String& macroId);
+    /** The node ids selecting the macro selects: its members, nested macros' too. Empty for an unknown macro. */
+    std::vector<juce::AudioProcessorGraph::NodeID> macroSelectionIds(const juce::String& macroId) const;
     const synth::Macro* macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const;
     void setMacroCollapsed(const juce::String& macroId, bool collapsed);
 
@@ -265,8 +272,10 @@ public:
     /** Translates one unit rigidly, geometry final on return. Does not refresh the canvas. */
     void moveUnitBy(const juce::String& key, juce::Point<int> delta);
     /** Pushes every neighbour clear of `growerKey`, then repeats one level up. Call it INSIDE the undo record of
-     *  whatever grew the unit; it opens none of its own. */
-    void makeRoomFor(const juce::String& growerKey);
+     *  whatever grew the unit; it opens none of its own. `previousFootprint`, when given, is the rect the grower
+     *  occupied before it grew (an expanding macro's folded card): neighbours on one side of it are pushed away from
+     *  that side. */
+    void makeRoomFor(const juce::String& growerKey, juce::Rectangle<int> previousFootprint = {});
     /** While deferred, makeRoomFor only remembers its grower; takeDeferredMakeRoom() hands the list back. */
     void setMakeRoomDeferred(bool deferred) noexcept { makeRoomDeferred_ = deferred; }
     std::vector<juce::String> takeDeferredMakeRoom() { return std::exchange(deferredMakeRoom_, {}); }
@@ -325,6 +334,20 @@ public:
     juce::Rectangle<int> macroHullBoundsExcluding(const juce::String& macroId,
                                                   const juce::String& excludedMemberUuid) const;
     juce::String macroHullAt(juce::Point<int> canvasPos) const;
+
+    // ---- Dropping a whole macro into an open one (docs/macros/menu-and-membership.md#dropping-a-macro-into-another)
+    /** The open macro `draggedMacroId` nests into if dropped at `canvasPoint`, empty for none: never itself or a macro
+     *  inside it, never its own parent, and never one it would have to leave its parent to reach. */
+    juce::String macroNestTargetAt(const juce::String& draggedMacroId, juce::Point<int> canvasPoint) const;
+    /** Each tick of a macro body drag (card or name chip): recomputes the target and shows it with the join outline. */
+    void updateMacroNestCandidate(const juce::String& draggedMacroId, juce::Point<int> canvasPoint);
+    /** The target the macro drag in progress would nest into, empty between gestures. */
+    const juce::String& macroNestCandidate() const noexcept { return macroNestCandidate_; }
+    /** Call inside the drop's undo record, after the drag's positions are final. Nests the macro into the candidate
+     *  (one level at a time, ports spliced at each) and clears it; a no-op without a candidate. */
+    void nestDraggedMacroIntoCandidate(const juce::String& draggedMacroId);
+    void clearMacroNestCandidate();
+
     /** The macro membership change a live module drag would make if released now: `leave` is the
      *  macro the dragged node is a member of and would exit, `join` the expanded macro it would
      *  enter, each empty for "none". Both set is a one-gesture transfer. */
@@ -530,12 +553,20 @@ private:
     juce::AudioProcessorGraph::NodeID frozenDragNode_;
     bool makeRoomDeferred_ = false;
     std::vector<juce::String> deferredMakeRoom_;
+    juce::String macroNestCandidate_;
 
     // The shared return walk behind returnDisplacedNeighbours and reflowForResizedModule: offers each record (newest
     // first, repeated until a pass returns nothing) its way back and answers the ones that could not go, in push
     // order. `movedAny` is set when at least one neighbour moved.
     using DisplacedRecords = std::vector<synth::Macro::DisplacedNeighbour>;
     DisplacedRecords returnRecordedNeighbours(const DisplacedRecords& records, bool& movedAny);
+    // The top-left of layout unit `key` as buildLayoutUnits draws it (hull open, card folded); nullopt when absent.
+    std::optional<juce::Point<int>> layoutUnitTopLeft(const juce::String& key) const;
+    // `unitKey` went from `from` to `to` without the user moving it: every other push record that left it at `from`
+    // now names `to`, so it still counts as untouched when that record's pusher shrinks.
+    void retargetPushRecords(const juce::String& unitKey, juce::Point<int> from, juce::Point<int> to);
+    // Returns, together, what every macro of a multi-macro fold pushed aside (see deferredReturns_).
+    void returnDeferredNeighbours();
     void closeGapAt(const juce::String& macroId, juce::Rectangle<int> slot);
     // Transient (never saved, not part of any snapshot): what a module card's growth pushed aside, keyed by the
     // grower's "n:<nodeUid>". The macro counterpart lives on synth::Macro::displaced.
@@ -546,6 +577,8 @@ private:
     void applyMacroCollapsed(const juce::String& macroId, bool collapsed);
     // True while a multi-macro toggle runs: its folds start together, after the last macro has changed.
     bool batchingFolds_ = false;
+    // What the macros of a multi-macro fold pushed aside, held until the last of them has folded.
+    DisplacedRecords deferredReturns_;
     bool packMacrosOnCollapse_ = true;
     bool tidyCanvasOnPack_ = true;
     // The macros a selection folds or expands, and whether any of them is open (MacroGroupControllerFoldPack.cpp).
@@ -569,6 +602,11 @@ private:
     juce::AudioProcessorGraph::NodeID mintMacroPortForAutoCreate(const juce::String& macroId, bool isInput, bool isMidi,
                                                                  juce::AudioProcessorGraph::NodeID internalNodeId,
                                                                  int internalVisibleJack);
+    /** The macro's existing outlet already fed by jack `visibleJack` of `sourceId` (same kind), or an invalid NodeID.
+     *  A second cable from the same source reuses it instead of minting another output. */
+    juce::AudioProcessorGraph::NodeID existingOutletFedBy(const juce::String& macroId,
+                                                          juce::AudioProcessorGraph::NodeID sourceId, int visibleJack,
+                                                          bool isMidi) const;
     /** Infers a macro port's shape (Mono/StereoCollapsed/Poly) from ONE dragged cable's
      *  own jack fan, instead of always Mono. Returns {shape, voiceCount}. See the .cpp. */
     static std::pair<MacroPortShape, int> inferPortShapeFromCableFan(ModuleBase* otherMb, int otherVisibleJack,

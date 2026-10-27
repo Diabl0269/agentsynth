@@ -16,6 +16,7 @@
 #include "SnippetManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -257,9 +258,9 @@ TEST(MultiSelectMarquee, UpdateWithoutBeginIsANoOp) {
 }
 
 // A collapsed macro's hidden members are not on the canvas as far as marquee hit-testing is
-// concerned — collectModuleBoxes() skips !isVisible() components. Clicking the visible
-// card is the only way to select a collapsed macro; a marquee over the original footprint must
-// pick up nothing.
+// concerned — collectModuleBoxes() skips !isVisible() components. The visible card stands in for
+// them: a marquee over the original footprint that misses the card must pick up nothing, and one
+// that touches the card selects the macro as a whole.
 TEST(MultiSelectMarquee, CollapsedMacroMembersAreNotMarqueeSelectable) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -281,11 +282,20 @@ TEST(MultiSelectMarquee, CollapsedMacroMembersAreNotMarqueeSelectable) {
     ASSERT_FALSE(macroId.isEmpty());
     editor.getMacroController().setMacroCollapsed(macroId, true);
 
+    const auto cardBounds = editor.getMacroController().getMacroCardForTest(macroId)->getBounds();
+    const auto missingTheCard =
+        band.withTrimmedLeft(cardBounds.getRight() + 8).withTrimmedTop(cardBounds.getBottom() + 8);
+    ASSERT_FALSE(missingTheCard.isEmpty());
+    editor.beginMarquee(missingTheCard.getTopLeft(), /*additive=*/false);
+    editor.updateMarquee(missingTheCard.getBottomRight());
+    editor.endMarquee();
+    EXPECT_EQ(editor.getSelectionCount(), 0);
+
     editor.beginMarquee(band.getTopLeft(), /*additive=*/false);
     editor.updateMarquee(band.getBottomRight());
     editor.endMarquee();
-
-    EXPECT_EQ(editor.getSelectionCount(), 0);
+    EXPECT_EQ(editor.getSelectionCount(), 2) << "touching the card selects the macro's members as one unit";
+    EXPECT_TRUE(editor.getMacroController().isMacroInSelection(macroId));
 }
 
 // ============================================================================

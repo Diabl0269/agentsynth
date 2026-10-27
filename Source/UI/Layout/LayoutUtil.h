@@ -91,6 +91,9 @@ struct LayoutUnit {
     juce::String key;
     juce::Rectangle<int> rect;
     bool pinned = false; // never moves, and pushed units are redirected around it
+    // Grower only, optional: the rect it occupied before it grew. A neighbour wholly on one side of it is pushed away
+    // from that side (one below a card that opened goes down), not the way that happens to need the least travel.
+    juce::Rectangle<int> before;
 };
 
 struct UnitMove {

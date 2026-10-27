@@ -180,6 +180,23 @@ int penetration(Dir d, const juce::Rectangle<int>& p, const juce::Rectangle<int>
     return 0;
 }
 
+// Whether `u` lies wholly on the `d` side of the rect the grower occupied before it grew.
+bool sideOfPreviousRect(Dir d, const juce::Rectangle<int>& was, const juce::Rectangle<int>& u) {
+    switch (d) {
+    case Dir::Down:
+        return u.getY() >= was.getBottom();
+    case Dir::Right:
+        return u.getX() >= was.getRight();
+    case Dir::Up:
+        return u.getBottom() <= was.getY();
+    case Dir::Left:
+        return u.getRight() <= was.getX();
+    case Dir::None:
+        break;
+    }
+    return false;
+}
+
 // The wall (canvas top-left) and pinned units both block a destination.
 bool blocked(const juce::Rectangle<int>& dest, const std::vector<LayoutUnit>& units, const std::vector<bool>& isMoved,
              const std::vector<juce::Rectangle<int>>& cur, size_t self) {
@@ -262,7 +279,14 @@ std::vector<UnitMove> resolveDisplacement(const juce::String& growerKey, const s
                     } else {
                         Dir best = Dir::None;
                         int bestPen = std::numeric_limits<int>::max();
+                        const auto& was = units[*grower].before;
+                        bool sided = false;
+                        if (pusher.idx == *grower && !was.isEmpty())
+                            for (auto d : {Dir::Down, Dir::Right, Dir::Up, Dir::Left})
+                                sided = sided || sideOfPreviousRect(d, was, cur[u]);
                         for (auto d : {Dir::Down, Dir::Right, Dir::Up, Dir::Left}) {
+                            if (sided && !sideOfPreviousRect(d, was, cur[u]))
+                                continue;
                             const int pen = penetration(d, cur[pusher.idx], cur[u], gap);
                             if (pen < bestPen) {
                                 bestPen = pen;

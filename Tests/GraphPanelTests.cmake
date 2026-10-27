@@ -23,6 +23,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/NoiseLevelModTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelClickTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelRowsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroGroupController/MacroMultiSelectTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorDropRebuildTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/ModuleComponentModDotEveryControlTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelStereoPairRowsTests.cpp
@@ -30,4 +32,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelMacroCardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelDimTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardBody/CardBodyOverlapTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/MacroFold/MacroPackOffKeepsPlacesTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroContainer/MacroDropIntoMacroTests.cpp
 )

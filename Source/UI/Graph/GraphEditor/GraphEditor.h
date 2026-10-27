@@ -36,6 +36,7 @@ class PortPanelController; // UI/Graph/PortPanel/PortPanelController.h
 class PortConnector;       // UI/Graph/PortPanel/PortConnector.h (a friend: the drop rules, shared with the port panel)
 class PolyChainController; // UI/Graph/PolyChain/PolyChainController.h
 class ColourPickerPopup;   // a unique_ptr return type only; 89 files include this header
+class CanvasEdgeScrollDriver; // UI/Graph/CanvasEdgeScroll/ (a friend: it pans the view)
 } // namespace synth::ui
 class AudioEngine;
 class CanvasCardKeyboard;
@@ -271,16 +272,12 @@ public:
 
     // ---- Macro auto-port preference (docs/macros/auto-ports.md) ----
     using MacroAutoPortPreference = graph_editor_types::MacroAutoPortPreference;
-
     void setMacroAutoPortPreference(MacroAutoPortPreference pref) noexcept { macroAutoPortPreference_ = pref; }
     MacroAutoPortPreference getMacroAutoPortPreference() const noexcept { return macroAutoPortPreference_; }
-
     /** Cmd+G / right-click "Create Macro" entry point; may show the auto-port modal. */
     void requestGroupSelectionIntoMacro() override;
-
     /** Test seam: replaces the real modal when set. Null in production. */
     std::function<void(std::function<void(bool createPorts, bool remember)> respond)> macroAutoPortModalForTest;
-
     // The collaborators, for the app to install its hooks on; the const overloads serve const call sites.
     /** The mod dot's controller: drag, tooltip and last-chosen source (UI/Graph/ModDot). */
     synth::ui::ModDotController& getModDot() noexcept { return *modDot_; }
@@ -295,6 +292,7 @@ public:
     const SmartConnectionEngine& getSmartConnections() const noexcept { return smartConnections_; }
     GraphDragDropController& getDragDropController() noexcept { return dragDropController_; }
     const GraphDragDropController& getDragDropController() const noexcept { return dragDropController_; }
+    synth::ui::CanvasEdgeScrollDriver& getEdgeScroll() noexcept { return *edgeScroll_; } // drag-to-the-edge scroll
     /** The canvas's card keys (arrows, Alt+arrows, Return); install the ShortcutManager here. */
     CanvasCardKeyboard& getCardKeyboard() noexcept { return *cardKeyboard_; }
 
@@ -796,6 +794,8 @@ private:
     std::unique_ptr<synth::ui::ModDotController> modDot_;       // the mod dot's drag, tooltip and last-chosen source
     std::unique_ptr<synth::ui::PortPanelController> portPanel_; // the jack panel and its cable highlight
     std::unique_ptr<synth::ui::PolyChainController> polyChain_; // the Poly pill's whole-voice-graph switch
+    std::unique_ptr<synth::ui::CanvasEdgeScrollDriver> edgeScroll_;
+    friend class synth::ui::CanvasEdgeScrollDriver;
     // The open picker's armed preview: node + WEAK handles, never raw -- see previewMacroPortColour.
     juce::String previewSessionNode_;
     juce::Component::SafePointer<MacroCardComponent> previewSessionCard_;

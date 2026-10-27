@@ -27,6 +27,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroControlModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
@@ -105,6 +106,7 @@ bool GraphEditor::isInterestedInDragSource(const SourceDetails& dragSourceDetail
 
 void GraphEditor::itemDragEnter(const SourceDetails& dragSourceDetails) {
     dragDropController_.itemDragEnter(dragSourceDetails);
+    edgeScroll_->beginLibraryDrag(dragSourceDetails);
 }
 
 void GraphEditor::itemDragMove(const SourceDetails& dragSourceDetails) {
@@ -112,10 +114,12 @@ void GraphEditor::itemDragMove(const SourceDetails& dragSourceDetails) {
 }
 
 void GraphEditor::itemDragExit(const SourceDetails& dragSourceDetails) {
+    edgeScroll_->end();
     dragDropController_.itemDragExit(dragSourceDetails);
 }
 
 void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
+    edgeScroll_->end();
     dragDropController_.itemDropped(dragSourceDetails);
 }
 

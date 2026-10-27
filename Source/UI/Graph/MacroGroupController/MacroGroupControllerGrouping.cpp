@@ -17,6 +17,9 @@
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
+
+#include <algorithm>
 
 using namespace detail;
 
@@ -507,6 +510,7 @@ void MacroGroupController::toggleSelectionMacrosCollapsed() {
                 applyMacroCollapsed(macroId, targetCollapsed);
         }
         batchingFolds_ = false;
+        returnDeferredNeighbours();
     };
 
     if (host_.undo())
@@ -578,15 +582,46 @@ void MacroGroupController::selectMacro(const juce::String& macroId, bool additiv
     if (host_.getMacros().find(macroId) == nullptr)
         return;
 
+    const auto memberIds = macroSelectionIds(macroId);
+    host_.applySelectionChange(additive ? synth::ui::unionSelection(host_.getSelection().getSelected(), memberIds)
+                                        : memberIds);
+}
+
+std::vector<juce::AudioProcessorGraph::NodeID>
+MacroGroupController::macroSelectionIds(const juce::String& macroId) const {
     std::vector<juce::AudioProcessorGraph::NodeID> memberIds;
+    if (host_.getMacros().find(macroId) == nullptr)
+        return memberIds;
     for (const auto& uuid : macro_nesting::orderedDescendantMembers(host_.getMacros(), macroId)) {
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid != 0)
             memberIds.push_back(nodeId);
     }
+    return memberIds;
+}
 
-    host_.applySelectionChange(additive ? synth::ui::unionSelection(host_.getSelection().getSelected(), memberIds)
-                                        : memberIds);
+// A macro is "in" the selection when all its members are, so several macros can be selected together (the exact-match
+// test below would call each of two selected macros unselected). The selection's other nodes do not matter.
+bool MacroGroupController::isMacroInSelection(const juce::String& macroId) const {
+    const auto ids = macroSelectionIds(macroId);
+    return !ids.empty() &&
+           std::all_of(ids.begin(), ids.end(), [this](auto id) { return host_.getSelection().contains(id); });
+}
+
+// Adds the macro's members, or takes exactly them out, leaving every other selected node as it was.
+void MacroGroupController::toggleMacroInSelection(const juce::String& macroId) {
+    const auto ids = macroSelectionIds(macroId);
+    if (ids.empty())
+        return;
+    auto next = host_.getSelection().getSelected();
+    if (isMacroInSelection(macroId)) {
+        next.erase(std::remove_if(next.begin(), next.end(),
+                                  [&ids](auto id) { return std::find(ids.begin(), ids.end(), id) != ids.end(); }),
+                   next.end());
+    } else {
+        next = synth::ui::unionSelection(next, ids);
+    }
+    host_.applySelectionChange(next);
 }
 
 // True when the selection is exactly the set selectMacro(macroId) would make.
@@ -613,6 +648,12 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
     // The modules' pictures and the border as they stand now, for the fold that flies them into (or out of) the card.
     // A multi-macro toggle takes one snapshot for all of them and folds them together.
     const auto foldBefore = batchingFolds_ ? nullptr : snapshotFoldState();
+    const auto unitKey = "m:" + macroId;
+    const auto unitBefore = layoutUnitTopLeft(unitKey);
+    auto retargetRecords = [this, &unitKey, &unitBefore] {
+        if (const auto unitAfter = layoutUnitTopLeft(unitKey); unitBefore && unitAfter)
+            retargetPushRecords(unitKey, *unitBefore, *unitAfter);
+    };
 
     if (collapsed)
         m->bounds = foldedCardBounds(macroId); // seeded at what the border wraps, card-sized
@@ -627,10 +668,22 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
             live->expandNudge = nudge;
             live->preExpandCardOrigin = preExpandOrigin;
         }
-        makeRoomFor("m:" + macroId);
+        retargetRecords(); // before makeRoomFor, whose own pushes are recorded against the open border
+        // The folded card is where it sat before the border grew around it: the macros beside it are pushed away
+        // from it, so one below the card goes down rather than up past the grown border.
+        const auto* grown = host_.getMacros().find(macroId);
+        const auto* card = getMacroCard(macroId);
+        makeRoomFor("m:" + macroId,
+                    card != nullptr ? card->getBounds() : (grown != nullptr ? grown->bounds : juce::Rectangle<int>()));
     } else {
         restoreCardAfterCollapse(macroId);
-        returnDisplacedNeighbours(macroId); // neighbours pushed aside when it opened come back if they still can
+        retargetRecords();
+        if (auto* folded = host_.getMacros().find(macroId); folded != nullptr && batchingFolds_) {
+            deferredReturns_.insert(deferredReturns_.end(), folded->displaced.begin(), folded->displaced.end());
+            folded->displaced.clear(); // returned with the whole batch (returnDeferredNeighbours)
+        } else {
+            returnDisplacedNeighbours(macroId); // neighbours pushed aside when it opened come back if they still can
+        }
     }
     foldChangedMacros(foldBefore); // every card is final; this only animates how they got there
 }

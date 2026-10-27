@@ -187,6 +187,7 @@ struct Rows {
     std::vector<int> category;
     std::vector<int> key;
     std::vector<int> stackOrder; // shared-row blocks: their place in the consumer-count order
+    std::vector<bool> shared;    // a modulator placed in the shared row because its consumers sit in several rows
     std::vector<int> finalRank;  // row -> position, top to bottom
     std::vector<int> anchor;     // row -> the block the row starts at (a track's start, a component's leftmost source)
 };
@@ -246,6 +247,7 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
     Rows rows;
     rows.rowOf.assign(g.n, -1);
     rows.stackOrder.assign(g.n, 0);
+    rows.shared.assign(g.n, false);
 
     // A modulator's row follows what it modulates, not what feeds it: a block with modulation consumers and no signal
     // cable leaving it (only a MIDI retrigger cable coming in, say) is placed like a pure modulator further down, so a
@@ -316,6 +318,7 @@ Rows assignRows(const Context& ctx, const Graph& g, const std::map<juce::String,
         for (size_t k = 0; k < shared.size(); ++k) {
             rows.rowOf[shared[k].second] = row;
             rows.stackOrder[shared[k].second] = static_cast<int>(k);
+            rows.shared[shared[k].second] = true;
         }
     }
 
@@ -414,6 +417,37 @@ std::vector<int> placeSourcesAsLateAsPossible(const Graph& g, const Rows& rows, 
     return consumerOf;
 }
 
+// A shared modulator has no edge inside its row, so on depth alone it sits over the first column: above, not before,
+// a macro that starts its row. It goes one column before the leftmost block it modulates instead, in any row. When
+// that block is in the first column, every other block moves one column right to make that column, so the stages of
+// every row stay lined up. Returns which modulators were placed this way (right-aligned like a pulled-up source).
+std::vector<bool> placeSharedModulators(const Graph& g, const Rows& rows, std::vector<int>& depth) {
+    std::vector<int> leftmostConsumer(g.n, -1);
+    bool needsLeadColumn = false;
+    for (int i = 0; i < g.n; ++i) {
+        // One fed inside its own row (a MIDI retrigger cable) keeps the column that cable gives it.
+        const bool fedInRow = std::any_of(g.flowIn[i].begin(), g.flowIn[i].end(),
+                                          [&](int from) { return rows.rowOf[from] == rows.rowOf[i]; });
+        if (!rows.shared[i] || fedInRow)
+            continue;
+        for (int c : g.modOut[i])
+            if (rows.rowOf[c] != rows.rowOf[i] && (leftmostConsumer[i] < 0 || depth[c] < leftmostConsumer[i]))
+                leftmostConsumer[i] = depth[c];
+        needsLeadColumn = needsLeadColumn || leftmostConsumer[i] == 0;
+    }
+    std::vector<bool> placed(g.n, false);
+    for (int i = 0; i < g.n; ++i)
+        placed[i] = leftmostConsumer[i] >= 0;
+    if (needsLeadColumn)
+        for (int i = 0; i < g.n; ++i)
+            if (!placed[i])
+                ++depth[i];
+    for (int i = 0; i < g.n; ++i)
+        if (placed[i])
+            depth[i] = leftmostConsumer[i] + (needsLeadColumn ? 1 : 0) - 1;
+    return placed;
+}
+
 // Stack order of a row (sorted by column): a moved source takes the slot its consumer has in the next column, so it
 // lands beside what it feeds instead of under everything else in its column.
 void seatMovedSources(std::vector<int>& members, const std::vector<int>& depth, const std::vector<int>& consumerOf) {
@@ -472,6 +506,7 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
     const auto ignored = feedbackEdges(g, rows.rowOf);
     auto depth = computeDepths(g, rows.rowOf, ignored);
     const auto consumerOf = placeSourcesAsLateAsPossible(g, rows, ignored, depth);
+    const auto sharedPlaced = placeSharedModulators(g, rows, depth);
 
     int maxDepth = 0;
     for (int d : depth)
@@ -510,7 +545,8 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
             // Left-aligned in its column: a wider block elsewhere in the column never shifts a neighbour sideways. A
             // source pulled up to its consumer is right-aligned instead, so a wide block in another row's cell of
             // the same column never leaves a gap between it and what it feeds.
-            const int x = consumerOf[i] >= 0 ? colX[k] + colW[k] - gridUp(size[i].x) : colX[k];
+            const bool hugRight = consumerOf[i] >= 0 || sharedPlaced[i];
+            const int x = hugRight ? colX[k] + colW[k] - gridUp(size[i].x) : colX[k];
             const juce::Point<int> slot{x, y + stackY[k]};
             const juce::Point<int> anchor{gridUp(slot.x - anchorOff[i].x), gridUp(slot.y - anchorOff[i].y)};
             frame.items.push_back({blocks[i], anchor});
