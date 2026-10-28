@@ -54,6 +54,12 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   clips that differ glide their rectangle (keyed by clip id). A moved clip carries its notes; a trimmed clip leaves them where
   they are, so the edge slides over them.
 
+**Repainting.** `KeyedTween` repaints the WHOLE owner for every frame, retarget, clear, fade step and erase: the lane's
+curve is drawn through the tweened points, so a box around the moving dot would leave the old dot and the segments to its
+neighbours stale. An owner whose paint of a moving thing stays strictly inside that thing's box opts into the tight
+repaint with `repaintOnlyAround(px)`; none does today (lane, curve editor, morph map and clip lane all take the default,
+the clip lane because its selection outline, label and notes reach past the clip rectangle).
+
 Under Reduce Motion a restored point, dot, cursor or clip is already at its new place on the first frame and fades in
 there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(..., fadeWhenReduced = true)`, read with
 `alphaFor`). Animations Off and an owner that is off screen land it plain (a test forces the tween with
@@ -66,4 +72,8 @@ there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(
 surface, makes a move through its real edit path, calls the real `AppUndoManager::undo()` and `redo()`, and
 `UndoGlideSurfaces.EveryMoveSurfaceGlidesOnUndoAndRedo` checks the moved thing is drawn between its two places on the first
 frames and settles at the restored one. **A new move surface adds an entry there; that list is the checklist.**
+`UndoGlideSurfaces.EveryGlideFrameRepaintsEverythingThatChanged` walks it too: each surface returns the component its
+tween repaints (`paintedComponent()`; a surface drawn through a `KeyedTween` must return one), and after every 16 ms
+glide frame of an undo and a redo (also under Reduce Motion) the test re-renders only the areas the tween asked to repaint
+(`setKeyedTweenDirtyProbeForTest`) and compares with a full render.
 The same list is walked under Reduce Motion (a fade for the point surfaces, an instant landing for the rows) and with Animations Off (instant).

@@ -28,7 +28,6 @@ MorphMap::MorphMap() {
     setDescription("Shapes placed on a map; the cursor blends the shapes around it");
     setWantsKeyboardFocus(true);
     glideHost_ = makeDefaultGlideHost();
-    moveTween_.onDirty = [this](juce::Rectangle<int>) { repaint(); };
     cursorStop_ = std::make_unique<Stop>(*this, -1);
     addAndMakeVisible(*cursorStop_);
     cursorStop_->setExplicitFocusOrder(1000);
