@@ -693,7 +693,8 @@ void MainComponent::openMidiRemoteDevices() {
     deviceNames.reserve(profiles.size());
     for (const auto& profile : profiles)
         deviceNames.push_back(profile.input.name);
-    audioEngine.openMidiDevicesForRemote(deviceNames);
+    if (!synth::isAutomationLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray()))
+        audioEngine.openMidiDevicesForRemote(deviceNames);
 
     // Same seam wireMidiRemoteEngine() primed with Hosted's placeholder source above, and the one
     // AudioEngine::onMidiDevicesChanged (wired there too) re-runs on every later device-list

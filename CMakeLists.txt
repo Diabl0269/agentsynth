@@ -677,6 +677,7 @@ add_library(AppUI STATIC ${APPUI_SOURCES})
 include(cmake/MixerRowSources.cmake)
 include(cmake/AudioInputRecordingSources.cmake) # Core and AppUI units, so after both exist
 include(cmake/ClipEdgeSizingSources.cmake)       # Core and AppUI units, so after both exist
+include(cmake/TestModeSources.cmake)             # AppUI units and the app target's flag, so after both exist
 
 # FRO337: the mac-only NSEvent monitor half of "Esc/Cmd+W closes a focused hosted-plugin window"
 # (Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.{h,mm}) — Objective-C++, so it can't sit
@@ -695,8 +696,7 @@ endif()
 target_link_libraries(AppUI PUBLIC Core)
 synth_enable_pch(AppUI)
 
-# WhatsNewData.h (generated above, "What's New" block) — PRIVATE since only AppUI's
-# Source/MainComponent/ units (MainComponent.cpp, MainComponentPanels.cpp) include it.
+# WhatsNewData.h (generated above): PRIVATE, only AppUI's Source/MainComponent/ units include it.
 target_include_directories(AppUI PRIVATE "${SYNTH_WHATSNEW_GENERATED_DIR}")
 
 # The VST3 is a shared object on Linux, and every object linked into a .so must be
