@@ -37,6 +37,11 @@ MorphMap::MorphMap() {
         addAndMakeVisible(*stripStops_[a]);
     }
     refreshStopNames();
+    // An undo or redo glide moves the drawn dots: their keyboard stops (and focus rings) ride with them every frame.
+    moveTween_.onDirty = [this](juce::Rectangle<int>) {
+        layoutStops();
+        repaint();
+    };
 }
 
 MorphMap::~MorphMap() {
@@ -178,10 +183,11 @@ void MorphMap::rebuildStops() {
         takeFocus(wanted > 0 ? *dotStops_.back() : static_cast<juce::Component&>(*this));
 }
 
+// Each stop sits where its dot or the cursor is drawn, so the focus ring is on the dot while an undo glide runs.
 void MorphMap::layoutStops() {
     for (int i = 0; i < (int)dotStops_.size(); ++i)
-        dotStops_[(size_t)i]->setCentrePosition(getDotCentre(i).roundToInt());
-    cursorStop_->setCentrePosition(getCursorCentre().roundToInt());
+        dotStops_[(size_t)i]->setCentrePosition(toPixels(getDrawnDot(i).x, getDrawnDot(i).y).roundToInt());
+    cursorStop_->setCentrePosition(toPixels(getDrawnCursor().x, getDrawnCursor().y).roundToInt());
     stripStops_[0]->setBounds(getStripBounds(Axis::X).expanded(2.0f).toNearestInt());
     stripStops_[1]->setBounds(getStripBounds(Axis::Y).expanded(2.0f).toNearestInt());
 }

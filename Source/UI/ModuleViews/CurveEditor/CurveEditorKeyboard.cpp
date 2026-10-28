@@ -137,6 +137,8 @@ void CurveEditorComponent::focusLost(FocusChangeType) {
 bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
     using Kind = PointKeyAction::Kind;
     const auto action = pointKeyAction(key);
+    if (keyHold_.active() && KeyHold::isArrow(key.getKeyCode()) && keyHold_.anyArrowDown())
+        return true; // an arrow joining a running hold (or its auto-repeat): the hold reads it each frame
     switch (action.kind) {
     case Kind::insert:
         return insertAfterCursor();

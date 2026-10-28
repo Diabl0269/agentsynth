@@ -270,6 +270,7 @@ private:
     // ---- Keyboard drag (CurveEditorKeyGlide.cpp) ----
     void pressNudge(int keyCode, double dx, double dy, bool fine);
     bool beginKeyDrag(int keyCode, double dx, double dy, bool fine);
+    double coveredAlong(KeyAxis axis, double unit) const;
     std::vector<juce::Point<float>> selectionPositions() const;
     juce::Point<float> segmentTweenOffset(int seg, float progress) const;
     void buildCurvePaths(const CurveEditorGeometry& geometry, juce::Path& curvePath, juce::Path& fillPath) const;
@@ -357,10 +358,8 @@ private:
     KeyedPointTween pointTween_{*this};
     KeyHold keyHold_{*this};
     struct KeyDrag {
-        bool time = false;
-        int sign = 1;
-        double start = 0.0; // the cursor point's x or y when the hold began
-        double unit = 0.0;  // one step along the axis: the tap, and the snapped quantum
+        juce::Point<double> start; // the cursor point when the hold began
+        juce::Point<double> unit;  // one step along each axis: the tap, and the snapped quantum
         bool snapped = false;
         bool gestureOpen = false;
     } keyDrag_;

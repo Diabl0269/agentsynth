@@ -24,8 +24,19 @@ void paintFocusRingAlways(juce::Graphics& g, juce::Rectangle<float> area, const 
         g.drawRect(ring, thickness);
 }
 
+namespace {
+bool& focusRingsShownForTest() {
+    static bool shown = false;
+    return shown;
+}
+} // namespace
+
+void setFocusRingsShownForTest(bool shown) { focusRingsShownForTest() = shown; }
+
+bool showsFocusRing(const juce::Component& comp) { return comp.hasKeyboardFocus(false) || focusRingsShownForTest(); }
+
 void paintFocusRing(juce::Graphics& g, juce::Rectangle<float> area, const juce::Component& comp, float cornerRadius) {
-    if (comp.hasKeyboardFocus(false))
+    if (showsFocusRing(comp))
         paintFocusRingAlways(g, area, comp, cornerRadius);
 }
 

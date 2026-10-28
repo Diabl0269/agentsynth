@@ -1,6 +1,6 @@
-// CurveEditorComponent -- the keyboard drag: a held Alt+arrow or Up/Down glides the selection and is one gesture
-// (one undo step) from the first real move to the key-up; a tap or a snapped step eases the drawn points. The class is
-// declared in CurveEditorComponent.h.
+// CurveEditorComponent -- the keyboard drag: a held Alt+arrow or Up/Down glides the selection (diagonally while one
+// of each is held) and is one gesture (one undo step) from the first real move to the last key-up; a tap or a snapped
+// step eases the drawn points. The class is declared in CurveEditorComponent.h.
 
 #include "CurveEditorComponent.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
@@ -36,7 +36,7 @@ double CurveEditorComponent::keyDragSpeedFactor() const {
 // on. A press whose key is not down (a synthesised event) is the plain step.
 void CurveEditorComponent::pressNudge(int keyCode, double dx, double dy, bool fine) {
     if (keyHold_.active()) {
-        if (keyHold_.keyIsDown(keyHold_.keyCode()))
+        if (keyHold_.anyArrowDown())
             return;     // auto-repeat or a second key: the running hold picks the direction up
         keyHold_.end(); // a hold whose key-up was missed
     }
@@ -45,41 +45,54 @@ void CurveEditorComponent::pressNudge(int keyCode, double dx, double dy, bool fi
     nudgeSelectedNode(dx, (float)dy, fine);
 }
 
+// The step the press made sets the scale of both axes (a fine press is fine on either), so an arrow of the other axis
+// held as well steps and glides alike and the point moves diagonally.
 bool CurveEditorComponent::beginKeyDrag(int keyCode, double dx, double dy, bool fine) {
     if (cursorIndex() < 0 || cursorIndex() >= model_.getNumNodes() || dragKind_ != DragKind::None)
         return false;
     const auto& node = model_.getNode(cursorIndex());
+    const auto steps = keyboardStep();
     const bool time = dx != 0.0;
-    const double step = time ? std::abs(dx) : std::abs(dy);
-    const double range = time ? currentGeometry().getVisibleRange() : 1.0;
+    const double along = time ? steps.x : steps.y;
+    const double scale = along > 0.0 ? (time ? std::abs(dx) : std::abs(dy)) / along : 1.0;
     keyDrag_ = {};
-    keyDrag_.time = time;
-    keyDrag_.sign = (time ? dx : dy) < 0.0 ? -1 : 1;
-    keyDrag_.start = time ? node.x : (double)node.y;
-    keyDrag_.unit = step;
+    keyDrag_.start = {node.x, (double)node.y};
+    keyDrag_.unit = steps * scale;
     keyDrag_.snapped = snapToGrid_ && grid_.has_value() && !fine;
     // A snapped hold starts at one grid step per kSnappedStepSeconds (never slower than a free one), the cap scaled
     // alike.
-    const double paceScale =
-        keyDrag_.snapped ? std::max(1.0, step / (lane_key::kSnappedStepSeconds * kStartRangePerSecond * range)) : 1.0;
-    const KeyGlideConfig config{kStartRangePerSecond * range * paceScale, kMaxRangePerSecond * range * paceScale,
-                                lane_key::kTapMs, lane_key::kRampMs};
-    keyHold_.begin(keyCode, config, step);
+    const auto motion = [this](double step, double range) {
+        const double paceScale =
+            keyDrag_.snapped ? std::max(1.0, step / (lane_key::kSnappedStepSeconds * kStartRangePerSecond * range))
+                             : 1.0;
+        return KeyAxisMotion{{kStartRangePerSecond * range * paceScale, kMaxRangePerSecond * range * paceScale,
+                              lane_key::kTapMs, lane_key::kRampMs},
+                             step};
+    };
+    auto timeMotion = motion(keyDrag_.unit.x, currentGeometry().getVisibleRange());
+    timeMotion.joinsWithAltOnly = true;
+    const auto valueMotion = motion(keyDrag_.unit.y, 1.0);
+    keyHold_.begin(keyCode, time ? timeMotion : valueMotion, time ? valueMotion : timeMotion);
     applyKeyDrag(true);
     return true;
 }
 
-// Moves the group to where the key has carried the cursor point: relative to the point's place now, so the same
+// How far the keys have carried the cursor point along `axis`: whole steps when snapped.
+double CurveEditorComponent::coveredAlong(KeyAxis axis, double unit) const {
+    const double distance = keyHold_.distance(axis);
+    if (!keyDrag_.snapped || unit <= 0.0)
+        return distance;
+    return (distance < 0.0 ? -1.0 : 1.0) * std::floor(std::abs(distance) / unit + 1e-9) * unit;
+}
+
+// Moves the group to where the keys have carried the cursor point: relative to the point's place now, so the same
 // move path as a press does the clamping, snapping and neighbour limits.
 void CurveEditorComponent::applyKeyDrag(bool tapStep) {
     if (cursorIndex() < 0 || cursorIndex() >= model_.getNumNodes())
         return;
-    const double distance = keyHold_.distance();
-    const double covered = keyDrag_.snapped ? std::floor(distance / keyDrag_.unit + 1e-9) * keyDrag_.unit : distance;
-    const double target = keyDrag_.start + keyDrag_.sign * covered;
     const auto& node = model_.getNode(cursorIndex());
-    const double dx = keyDrag_.time ? target - node.x : 0.0;
-    const double dy = keyDrag_.time ? 0.0 : target - node.y;
+    const double dx = keyDrag_.start.x + coveredAlong(KeyAxis::time, keyDrag_.unit.x) - node.x;
+    const double dy = keyDrag_.start.y + coveredAlong(KeyAxis::value, keyDrag_.unit.y) - node.y;
     const bool fine = keyHold_.host.isShiftDown && keyHold_.host.isShiftDown();
     moveSelectionBy(dx, (float)dy, fine, true, tapStep || keyDrag_.snapped);
 }

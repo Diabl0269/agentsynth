@@ -12,7 +12,8 @@ on the piano roll. Shortcut table of the app-level commands: [`shortcuts.md`](sh
 | Automation and modulation lanes (`AutomationLaneEditor`) | Under each track | Points have a beat and a value; insert needs a next point. [`timeline/automation.md`](../timeline/automation.md) |
 
 **The exception: the morph map.** It is a 2D map with no left-to-right order, so it keeps its own keys: the arrows move
-the focused dot (Shift: a bigger step; held, they glide on), and Tab steps to the next dot. See
+the focused dot (Shift: a bigger step; held, they glide on; two held at once move it diagonally), and Tab steps to the
+next dot. See
 [`modules/custom-filter.md`](../modules/custom-filter.md).
 
 ## The keys
@@ -23,6 +24,7 @@ the focused dot (Shift: a bigger step; held, they glide on), and Tab steps to th
 | Shift+Left / Shift+Right | Extend the selection one dot toward that side (the cursor moves with it) |
 | Alt+Left / Alt+Right | Move the selection in time (a grid step with snap on, else a small step: four pixels in a lane). Hold the key and it glides, one undo step ([`timeline/automation-points.md`](../timeline/automation-points.md#keyboard-moves)) |
 | Alt+Up / Alt+Down | Move the selection's value (holding glides, like Alt+Left / Right) |
+| Two arrows held | Diagonal: hold Alt+Right, then also Up, and time and value move at once; let one go and the other carries on alone. The whole hold, both keys, is one undo step (`KeyHold` glides each axis on its own) |
 | Alt+Shift+arrows | The fine move: a fifth of the step in the curve editor, a quarter in a lane, never snapped. In a lane with two or more points selected, Alt+Shift+arrows stretch or scale the selection instead ([`timeline/automation.md`](../timeline/automation-points.md#stretching-a-selection)) |
 | Up / Down | Move the selection's value (the same step as Alt+Up / Down). A lane also takes Shift+Up / Down for a coarse step. With nothing selected the key is left to the app |
 | Cmd+A | Select every dot that can move |
@@ -87,6 +89,12 @@ Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifie
 | Double-click empty line | Add a dot; double-click a dot in the curve editor removes it |
 | Drag a box (lanes) | Select the dots inside it |
 
+Everything drawn around a dot (its selection ring or halo, the keyboard focus ring, a morph dot's focus stop, a lane's
+selection box) follows the dot where it is drawn: under the pointer during a drag, at the preview during a key hold,
+and along the glide of a step, undo or redo, never at the old place. A lane takes both from one place
+(`AutomationLaneEditorDrawnPoints.cpp`); the guard is `PointMarkersFollowTheDot` (`Tests/UI/Layout/PointMarkers/`),
+which records every marker painted and fails one left off the dot.
+
 ## Adding a new point editor
 
 1. Order the dots along one axis; if they have none (a 2D map), say so here and keep the arrows for moving.
@@ -95,7 +103,8 @@ Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifie
    `isInsertPointKey` keeps the Mac and
    non-Mac Control rules in one place).
 3. One press is one undo step; open no gesture for a press that changes nothing.
-4. Make it a Tab stop with `paintFocusRing`, a `setTitle` name, a tooltip and a screen-reader description that list the
+4. Make it a Tab stop with `paintFocusRing` (around the cursor dot where it is drawn), a `setTitle` name, a tooltip and a screen-reader description that list the
    keys ([`development/accessibility.md`](../development/accessibility.md)), and read the cursor dot aloud.
 5. Run on the shared model (selection, group move, clipboard) with its own `PointSelectionRules`, add the editor to
-   the tables above and an adapter to the shared suite's `PointEditorTypes`.
+   the tables above, an adapter to the shared suite's `PointEditorTypes` and an entry to `pointSurfaces()` in
+   `PointMarkersFollowTheDotTests.cpp`.
