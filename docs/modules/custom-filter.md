@@ -232,8 +232,9 @@ with a mode other than Off by an older build, where the mode did nothing, now pl
 
 **The Pitch cable is made for you.** Picking **By hand** or **By pitch** in the window, with the Filter's Pitch input
 uncabled, cables that input from the Pitch source of the voice chain feeding the Filter (the Poly MIDI
-Pitch that drives the Oscillator upstream; `upstreamPitchSource`, `Source/Mixer/ChannelFlows/UpstreamPitchSource.cpp`),
-all 8 voices in Poly or the one Pitch channel in mono, in the same undo step as the mode change, so one undo takes
+Pitch that drives the Oscillator upstream, found on a Poly Oscillator's Pitch input or on whatever input a Pitch
+output feeds, which is how a mono Oscillator's pitch CV is found; `upstreamPitchSource`, `Source/Mixer/ChannelFlows/UpstreamPitchSource.cpp`),
+by the same path as a hand-drawn cable (mono reads only voice 0's ch19), in the same undo step as the mode change, so one undo takes
 both back. An input that is already cabled
 gets no second cable; **Random** needs none. A line under the mode switch says why a mode cannot work yet: "Needs a
 Pitch cable: connect your Poly MIDI's Pitch to this Filter's Pitch input." (By hand or By pitch, Pitch uncabled, and

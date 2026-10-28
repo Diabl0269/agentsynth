@@ -19,8 +19,8 @@ bool hasPitchCable(const ConnectionIndex& cables, const juce::AudioProcessorGrap
 /**
  * The Pitch source that feeds the voice chain `module` sits in: walks upstream over the audio cables into `module`
  * (breadth first, nearest first) and returns the source of the first Pitch input found on the way (an Oscillator's,
- * fed by Poly MIDI). `module`'s own Pitch input is not looked at. Nullopt when no module upstream has a Pitch cable.
- * Pure query, message thread only.
+ * fed by Poly MIDI), or of the first input a Pitch output feeds (a mono Oscillator's pitch CV). `module`'s own Pitch
+ * input is not looked at. Nullopt when no module upstream has a Pitch cable. Pure query, message thread only.
  */
 std::optional<PitchSource> upstreamPitchSource(const ConnectionIndex& cables, const juce::AudioProcessorGraph& graph,
                                                juce::AudioProcessorGraph::NodeID module);

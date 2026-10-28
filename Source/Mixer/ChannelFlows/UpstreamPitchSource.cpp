@@ -40,10 +40,15 @@ std::optional<PitchSource> upstreamPitchSource(const ConnectionIndex& cables, co
             if (c.destination.channelIndex == juce::AudioProcessorGraph::midiChannelIndex)
                 continue;
             const auto port = base->mapInputChannel(c.destination.channelIndex);
-            if (port.role == PortRole::Pitch && port.isPolyGroupHead && at != module) {
-                if (auto* source = moduleOf(graph, c.source.nodeID))
-                    return PitchSource{c.source.nodeID,
-                                       source->mapOutputChannel(c.source.channelIndex).visibleJackIndex};
+            auto* source = moduleOf(graph, c.source.nodeID);
+            const auto out = source != nullptr ? source->mapOutputChannel(c.source.channelIndex) : LogicalPort{};
+            // A mono Oscillator's pitch jack is a plain CV input, so the cable also counts when a Pitch output feeds
+            // it.
+            const bool carriesPitch = (port.role == PortRole::Pitch && port.isPolyGroupHead) ||
+                                      (out.role == PortRole::Pitch && out.isPolyGroupHead);
+            if (carriesPitch && at != module) {
+                if (source != nullptr)
+                    return PitchSource{c.source.nodeID, out.visibleJackIndex};
             } else if (port.role == PortRole::Audio && seen.insert(c.source.nodeID.uid).second) {
                 queue.push_back(c.source.nodeID);
             }
