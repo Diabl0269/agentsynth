@@ -6,8 +6,8 @@ until they are given their own key; changing the song key changes what follows i
 ## The Key field
 
 The transport bar shows a **Key** field after the tempo and time signature (`SongKeyField`, a `KeyField` box). A new
-song reads **No key**, so nothing snaps until a key is chosen. Clicking the field, or Tab to it and Space / Return /
-Down, opens the key picker (`Layout/KeyPicker/KeyPicker`) in a call-out that grows out of the field. A mouse click on
+song reads **No key**, so nothing snaps until a key is chosen. Clicking the field, or reach it with the keyboard and press Space or
+Return (Down moves on to the next control), opens the key picker (`Layout/KeyPicker/KeyPicker`) in a call-out that grows out of the field. A mouse click on
 the field never takes keyboard focus, so the next copy or paste still goes to the clips.
 
 The **Set Song Key** command (`setSongKey`, default Shift+Cmd+K, rebindable in Settings) shows the Timeline and opens
