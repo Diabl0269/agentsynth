@@ -76,18 +76,19 @@ void PianoRollComponent::zoomVertical(double factor) {
 }
 
 void PianoRollComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
-    // Trackpad pinch, same pair as the panel's: plain = horizontal zoom around the pinch point
-    // (through the roll's OWN mapping), Shift = vertical (pixels-per-semitone) zoom.
-    // A pinch carries no wheel deltas at all, so there is no axis to disambiguate here — it goes
-    // straight to the same anchored-zoom helpers the Cmd+wheel branches use.
+    // Trackpad pinch, same mapping as the panel's and the patch canvas's: a plain pinch zooms time
+    // (around the pinch x, through the roll's OWN mapping) AND pitch rows (around the pinch y) by
+    // the same factor, so sizes grow and shrink together. A pinch carries no wheel deltas and no
+    // axis, so a modifier picks one: Shift or Option = vertical only, Cmd = horizontal only.
     if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
         return;
     const auto pos = e.getPosition();
-    if (e.mods.isShiftDown()) {
+    const bool verticalOnly = e.mods.isShiftDown() || e.mods.isAltDown();
+    const bool horizontalOnly = !verticalOnly && e.mods.isCommandDown();
+    if (!verticalOnly)
+        zoomHorizontalAroundX((double)scaleFactor, std::max(0.0, (double)pos.x - (double)leftGutterWidth()));
+    if (!horizontalOnly)
         zoomVerticalAroundY((double)scaleFactor, (double)pos.y);
-        return;
-    }
-    zoomHorizontalAroundX((double)scaleFactor, std::max(0.0, (double)pos.x - (double)leftGutterWidth()));
 }
 
 //==============================================================================

@@ -564,9 +564,67 @@ TEST(TimelinePanelInteractionTest, ScrollAndZoomInversionForwardToThePianoRoll) 
     EXPECT_FALSE(panel.getPianoRoll().isZoomScrollInverted());
 }
 
+// Regression test for FRO549: a plain pinch zoomed time only, so sizes did not grow together like
+// on the patch canvas.
+TEST(TimelinePanelInteractionTest, PlainPinchZoomsTimeAndRowHeightTogether) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 320);
+    for (int i = 0; i < 4; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+    auto& state = panel.getViewState();
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
+    auto& clips = panel.getClipLaneArea();
+    const int rowBefore = clips.getRowHeight();
+    panel.mouseMagnify(makeClickEvent(panel, {(float)clips.getX() + 200.0f, (float)clips.getY() + 40.0f}), 1.5f);
+    EXPECT_GT(state.pixelsPerBeat, 24.0);
+    EXPECT_GT(clips.getRowHeight(), rowBefore);
+}
+
+TEST(TimelinePanelInteractionTest, OptionPinchChangesRowHeightOnly) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 320);
+    for (int i = 0; i < 4; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+    auto& state = panel.getViewState();
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
+    auto& clips = panel.getClipLaneArea();
+    const int rowBefore = clips.getRowHeight();
+    panel.mouseMagnify(makeClickEvent(panel, {(float)clips.getX() + 200.0f, (float)clips.getY() + 40.0f},
+                                      juce::ModifierKeys(juce::ModifierKeys::altModifier)),
+                       1.5f);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, 24.0);
+    EXPECT_GT(clips.getRowHeight(), rowBefore);
+}
+
+TEST(TimelinePanelInteractionTest, CmdPinchChangesTimeOnly) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 320);
+    for (int i = 0; i < 4; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+    auto& state = panel.getViewState();
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
+    auto& clips = panel.getClipLaneArea();
+    const int rowBefore = clips.getRowHeight();
+    panel.mouseMagnify(makeClickEvent(panel, {(float)clips.getX() + 200.0f, (float)clips.getY() + 40.0f},
+                                      juce::ModifierKeys(juce::ModifierKeys::commandModifier)),
+                       1.5f);
+    EXPECT_GT(state.pixelsPerBeat, 24.0);
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, 1.0);
+    EXPECT_EQ(clips.getRowHeight(), rowBefore);
+}
+
 // A trackpad's vertical zoom: macOS pinch reports one scale factor and no axis, so Option says
-// "vertical" -- Option+pinch, and Option + a two-finger vertical scroll. Plain pinch stays horizontal,
-// and an Option + sideways scroll stays a horizontal scroll.
+// "rows only" -- Option+pinch, and Option + a two-finger vertical scroll. Plain pinch zooms time and
+// rows together, and an Option + sideways scroll stays a horizontal scroll.
 TEST(TimelinePanelInteractionTest, OptionPinchAndOptionVerticalScrollZoomTheRowsAroundThePointer) {
     synth::TimelineDoc doc;
     synth::ui::TimelinePanelComponent panel;
@@ -581,10 +639,15 @@ TEST(TimelinePanelInteractionTest, OptionPinchAndOptionVerticalScrollZoomTheRows
     auto& clips = panel.getClipLaneArea();
     const juce::Point<float> anchor((float)clips.getX() + 200.0f, (float)clips.getY() + 90.0f);
 
-    // Plain pinch: horizontal only.
+    // Plain pinch: time and rows together.
     panel.mouseMagnify(makeClickEvent(panel, anchor), 1.5f);
     EXPECT_GT(state.pixelsPerBeat, 24.0);
-    EXPECT_DOUBLE_EQ(state.rowHeightScale, 1.0);
+    EXPECT_GT(state.rowHeightScale, 1.0);
+    panel.mouseMagnify(makeClickEvent(panel, anchor), 1.0f / 1.5f);
+    EXPECT_NEAR(state.pixelsPerBeat, 24.0, 1e-6);
+    EXPECT_NEAR(state.rowHeightScale, 1.0, 1e-6);
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
 
     // Option+pinch: rows, not beats; the row under the pointer stays put.
     const double ppb = state.pixelsPerBeat;

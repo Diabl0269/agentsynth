@@ -305,7 +305,7 @@ public:
     synth::ui::TimelineCursorGlide& getCursorGlide() noexcept { return cursorGlide_; }
     void setGlideClockForTest(std::function<double()> nowMs) { glideClockForTest_ = std::move(nowMs); }
 
-    // Trackpad pinch: plain = horizontal zoom, Shift = vertical (row height) zoom.
+    // Trackpad pinch: plain = time and row height together, Option/Shift = rows only, Cmd = time only.
     void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
 
     // Pure geometry getters — later tasks and tests build on the same rects rather than
