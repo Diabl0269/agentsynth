@@ -7,9 +7,11 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
+#include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorAppShortcuts.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeMapController.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 
 using namespace synth::ui;
@@ -466,4 +468,102 @@ TEST(ShapeEditor, ARelayedKeyIsDroppedWhenTheMainWindowIsGoneBeforeItArrives) {
     target.reset();
     pumpMessages(); // must not touch the deleted target
     SUCCEED();
+}
+
+// ---- the morph map's menus (dot menu placement) ----------------------
+
+namespace {
+
+struct MenuRig : ShapeRig {
+    MorphMap map;
+    ShapeMapController controller{map, *adapter};
+    CapturedMenu menu;
+    juce::Rectangle<int> menuArea;
+
+    MenuRig() {
+        map.setSize(252, 150);
+        map.showMenu = [this](juce::PopupMenu& m, juce::Rectangle<int> area) {
+            menu.capture(m);
+            menuArea = area;
+        };
+        controller.refresh();
+    }
+};
+
+juce::MouseEvent rightPress(juce::Component& c, juce::Point<float> p) { return curveRightClick(c, p); }
+
+/** A shown editor whose map can take keyboard focus (skipped where the runner has none). */
+struct ShownWindow {
+    ShapeRig rig;
+    ShapeListEditor editor{rig.adapter, 0};
+    ShownWindow() {
+        editor.addToDesktop(juce::ComponentPeer::windowHasTitleBar);
+        editor.setVisible(true);
+    }
+    ~ShownWindow() { editor.removeFromDesktop(); }
+    bool canFocus() {
+        editor.getMap().getDotStop(0)->grabKeyboardFocus();
+        return editor.getMap().getDotStop(0)->hasKeyboardFocus(false);
+    }
+};
+
+/** The index of the dot nearest the map's top-right corner. */
+int topRightDot(const MorphMap& map) {
+    int best = 0;
+    for (int i = 1; i < map.getNumDots(); ++i)
+        if (map.getDots()[(size_t)i].x - map.getDots()[(size_t)i].y >
+            map.getDots()[(size_t)best].x - map.getDots()[(size_t)best].y)
+            best = i;
+    return best;
+}
+
+} // namespace
+
+TEST(MorphMapMenu, TheDotMenuIsHandedADotSizedScreenAreaAroundTheDot) {
+    MenuRig rig;
+    rig.map.mouseDown(rightPress(rig.map, rig.map.getDotCentre(1)));
+
+    ASSERT_FALSE(rig.menu.items.empty());
+    const auto centre = rig.map.localPointToGlobal(rig.map.getDotCentre(1)).roundToInt();
+    EXPECT_TRUE(rig.menuArea.contains(centre));
+    EXPECT_LT(rig.menuArea.getWidth(), rig.map.getWidth() / 4) << "beside the dot, not the whole map";
+}
+
+TEST(MorphMapMenu, TheShapeWindowsDotMenuOpensBesideTheDot) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    CapturedMenu captured;
+    juce::Rectangle<int> area;
+    editor.showMenuAtArea = [&](juce::PopupMenu& m, juce::Rectangle<int> a) {
+        captured.capture(m);
+        area = a;
+    };
+    auto& map = editor.getMap();
+    const int dot = topRightDot(map);
+
+    map.mouseDown(rightPress(map, map.getDotCentre(dot)));
+
+    EXPECT_EQ(captured.items, (std::vector<std::string>{"Edit", "Duplicate", "Rename", "Delete"}));
+    EXPECT_TRUE(area.contains(map.localPointToGlobal(map.getDotCentre(dot)).roundToInt()));
+    EXPECT_LT(area.getWidth(), map.getWidth() / 4) << "the old target was the whole map, under its bottom-left";
+}
+
+TEST(MorphMapMenu, TheShapeWindowsKeyboardMenuAndTheTestHookAlsoGetTheDotArea) {
+    ShownWindow shown;
+    if (!shown.canFocus())
+        GTEST_SKIP() << "no keyboard focus in this environment";
+    auto& map = shown.editor.getMap();
+    juce::Rectangle<int> area;
+    shown.editor.showMenuAtArea = [&](juce::PopupMenu&, juce::Rectangle<int> a) { area = a; };
+    const int dot = topRightDot(map);
+    map.getDotStop(dot)->grabKeyboardFocus();
+
+    ASSERT_TRUE(map.showContextMenuForKeyboardFocus());
+    EXPECT_TRUE(area.contains(map.localPointToGlobal(map.getDotCentre(dot)).roundToInt()));
+
+    CapturedMenu captured;
+    shown.editor.showMenuAtArea = nullptr;
+    shown.editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
+    ASSERT_TRUE(map.showContextMenuForKeyboardFocus());
+    EXPECT_FALSE(captured.items.empty()) << "the menu-only hook keeps working";
 }

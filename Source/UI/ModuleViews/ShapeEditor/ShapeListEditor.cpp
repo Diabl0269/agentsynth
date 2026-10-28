@@ -113,7 +113,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
         lastGeneration_ = adapter_->getGeneration();
         syncAll();
     };
-    map_.showMenu = [this](juce::PopupMenu& menu) { showMenuNow(menu, map_); };
+    map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int> area) { showMenuNow(menu, area); };
 
     shapes_ = adapter_->getShapes();
     selected_ = juce::jlimit(0, juce::jmax(0, (int)shapes_.size() - 1), selected);
@@ -227,6 +227,17 @@ void ShapeListEditor::showMenuNow(juce::PopupMenu& menu, juce::Component& target
         showMenu(menu);
     else
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target));
+}
+
+/** The map's dot menu: opens beside the dot. A test sees the menu through `showMenu` and the area through
+    `showMenuAtArea`. */
+void ShapeListEditor::showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> screenArea) {
+    if (showMenuAtArea)
+        showMenuAtArea(menu, screenArea);
+    else if (showMenu)
+        showMenu(menu);
+    else
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(screenArea));
 }
 
 /** The lane Draw tool's own flyout, so the six shapes, their icons and their order are the lane's. Headless tests

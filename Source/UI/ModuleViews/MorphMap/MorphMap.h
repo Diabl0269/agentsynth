@@ -106,8 +106,9 @@ public:
     std::function<void(int)> onDuplicateDot;
     std::function<void(int)> onDeleteDot;
     std::function<void(int, const juce::String&)> onRenameDot;
-    /** Shows a menu; unset opens it as a real popup. A test replaces it to inspect the menu. */
-    std::function<void(juce::PopupMenu&)> showMenu;
+    /** Shows a dot menu next to `screenArea` (screen coordinates); unset opens it as a real popup there. A test
+     *  replaces it to inspect the menu and the area. */
+    std::function<void(juce::PopupMenu&, juce::Rectangle<int> screenArea)> showMenu;
     /** Whether Delete may remove a dot; unset means yes. */
     std::function<bool()> canDeleteDot;
     /** Offered every press first (`phase` 0, in this component's coordinates); true claims the whole press: the
@@ -220,6 +221,7 @@ private:
     void paintStrips(juce::Graphics& g) const;
     void paintStripModulation(juce::Graphics& g, Axis axis) const;
     float stripReach() const;
+    juce::Rectangle<int> menuAreaAt(juce::Point<float> localCentre) const;
     void setHoveredAxis(Axis axis);
     void endRename(bool commit);
     void select(int index);

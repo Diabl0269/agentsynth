@@ -31,7 +31,7 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
         lastGeneration_ = adapter_->getGeneration();
         sync(); // the count may have crossed the map's default
     };
-    map_.showMenu = host_.showMenu;
+    map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int>) { host_.showMenu(menu); };
     map_.setShowLabels(false);
     map_.setLandingDotDiameter(host_.landingDotDiameter);
     map_.pressGesture = [this](const juce::MouseEvent& e, int phase) { return routeMapPress(e, phase); };

@@ -163,11 +163,16 @@ void MorphMap::showDotMenu(int index) {
         if (safe != nullptr && safe->onDeleteDot)
             safe->onDeleteDot(index);
     });
+    const auto area = menuAreaAt(getDotCentre(index));
     if (showMenu)
-        showMenu(menu);
+        showMenu(menu, area);
     else
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(
-            localAreaToGlobal(juce::Rectangle<int>(16, 16).withCentre(getDotCentre(index).roundToInt()))));
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(area));
+}
+
+/** A small screen area centred on a point of this map, which a menu opens beside. */
+juce::Rectangle<int> MorphMap::menuAreaAt(juce::Point<float> localCentre) const {
+    return localAreaToGlobal(juce::Rectangle<int>(16, 16).withCentre(localCentre.roundToInt()));
 }
 
 bool MorphMap::showContextMenuForKeyboardFocus() {
