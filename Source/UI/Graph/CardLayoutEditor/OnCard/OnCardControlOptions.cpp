@@ -63,6 +63,7 @@ WidgetKind widgetKindOf(CardWidget widget) {
     case CardWidget::KnobLarge:
         return WidgetKind::Knob;
     case CardWidget::FaderV:
+    case CardWidget::FaderVLong:
     case CardWidget::FaderH:
         return WidgetKind::Fader;
     case CardWidget::Toggle:
@@ -130,7 +131,13 @@ bool offersKnobSize(const std::vector<CardWidget>& widgetChoices, CardWidget cur
 }
 
 bool offersFaderDirection(const std::vector<CardWidget>& widgetChoices, CardWidget current) {
-    return offersPair(widgetChoices, current, CardWidget::FaderV, CardWidget::FaderH);
+    return current == CardWidget::FaderVLong
+               ? offersPair(widgetChoices, CardWidget::FaderV, CardWidget::FaderV, CardWidget::FaderH)
+               : offersPair(widgetChoices, current, CardWidget::FaderV, CardWidget::FaderH);
+}
+
+bool offersFaderSize(const std::vector<CardWidget>& widgetChoices, CardWidget current) {
+    return offersPair(widgetChoices, current, CardWidget::FaderV, CardWidget::FaderVLong);
 }
 
 std::optional<int> visibleLayoutSection(const synth::CardBody& body, const CardLayout& layout,

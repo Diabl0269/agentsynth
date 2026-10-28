@@ -41,6 +41,8 @@ CardWidget widgetForKind(WidgetKind kind, CardWidget current, const std::vector<
  *  `current` is one of them. */
 bool offersKnobSize(const std::vector<CardWidget>& widgetChoices, CardWidget current);
 bool offersFaderDirection(const std::vector<CardWidget>& widgetChoices, CardWidget current);
+/** A vertical fader's Short | Long switch: both are among the choices and `current` is one of them. */
+bool offersFaderSize(const std::vector<CardWidget>& widgetChoices, CardWidget current);
 
 /** The layout section holding the copy of `paramId` the card shows now, for a parameter listed in more than one
  *  look (the ADSR's Sustain in Separate mode); nullopt for any other, where the first item with the id is the

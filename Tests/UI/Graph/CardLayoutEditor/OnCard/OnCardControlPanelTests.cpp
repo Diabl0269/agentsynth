@@ -4,6 +4,7 @@
 
 #include "../../../Accessibility/AccessibilityAudit.h"
 #include "../../../Accessibility/TabOrderHelpers.h"
+#include "Modules/ADSRModule.h"
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
@@ -354,6 +355,71 @@ TEST(OnCardControlPanel, SizeSwitchesAKnobBetweenSmallAndLargeAndTheCellGrowsOnT
     EXPECT_TRUE(rig.canvas.undo.undo());
     EXPECT_TRUE(rig.canvas.undo.undo());
     EXPECT_FALSE(rig.canvas.undo.canUndo());
+}
+
+TEST(OnCardControlPanel, ALongFaderGrowsTheRealCardsCellAndUndoRestoresIt) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    auto* panel = openPanel(rig, *editor, "attack");
+    ASSERT_NE(panel, nullptr);
+    ASSERT_TRUE(panel->isDirectionRowShownForTest());
+    ASSERT_TRUE(panel->isFaderSizeRowShownForTest());
+    EXPECT_FALSE(panel->isSizeRowShownForTest()) << "the knob Size row is not a fader's";
+    auto* size = panel->getFaderSizeForTest();
+    EXPECT_EQ(size->getTitle(), "Fader size");
+    EXPECT_FALSE(size->getTooltip().isEmpty());
+    EXPECT_EQ(size->getSegment(0)->getButtonText(), "Short");
+    EXPECT_EQ(size->getSegment(1)->getButtonText(), "Long");
+    EXPECT_EQ(size->getSelectedIndex(), 0);
+    EXPECT_EQ(widgetOf(*rig.card(id), "attack")->getHeight(), synth::cardbody::kFaderVHeight);
+
+    clickSegment(size, 1);
+    EXPECT_EQ(storedItem(*rig.storedLayout(id), "attack")->widget, CardWidget::FaderVLong);
+    EXPECT_EQ(panel->getOptions().widget, CardWidget::FaderVLong);
+    EXPECT_EQ(size->getSelectedIndex(), 1);
+    EXPECT_EQ(panel->getDirectionForTest()->getSelectedIndex(), 0) << "a long fader still stands up";
+    EXPECT_EQ(widgetOf(*rig.card(id), "attack")->getHeight(), synth::cardbody::kFaderVLongHeight);
+
+    editor->getEditBarForTest().getDoneButton().onClick();
+    EXPECT_TRUE(rig.canvas.undo.undo());
+    EXPECT_EQ(widgetOf(*rig.card(id), "attack")->getHeight(), synth::cardbody::kFaderVHeight);
+}
+
+TEST(OnCardControlPanel, ADirectionPickMovesBetweenLongAndHorizontalAndTheSizeRowFollows) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    auto* panel = openPanel(rig, *editor, "attack");
+    ASSERT_NE(panel, nullptr);
+    clickSegment(panel->getFaderSizeForTest(), 1);
+    clickSegment(panel->getDirectionForTest(), 1);
+    EXPECT_EQ(storedItem(*rig.storedLayout(id), "attack")->widget, CardWidget::FaderH);
+    EXPECT_FALSE(panel->isFaderSizeRowShownForTest()) << "a horizontal fader has no Size row";
+    EXPECT_TRUE(panel->isDirectionRowShownForTest());
+    clickSegment(panel->getDirectionForTest(), 0);
+    EXPECT_EQ(storedItem(*rig.storedLayout(id), "attack")->widget, CardWidget::FaderV);
+    EXPECT_TRUE(panel->isFaderSizeRowShownForTest());
+}
+
+TEST(OnCardControlPanel, AKnobHasNoFaderSizeRowAndFaderSizeStaysOutOfShowAs) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    auto* panel = openPanel(rig, *editor, "resonance");
+    ASSERT_NE(panel, nullptr);
+    EXPECT_FALSE(panel->isFaderSizeRowShownForTest());
+    EXPECT_EQ(panel->getShowAsForTest()->getNumSegments(), 2) << "Long is a size, not a kind";
+    using synth::ui::offersFaderSize;
+    const std::vector<CardWidget> choices{CardWidget::Knob, CardWidget::FaderV, CardWidget::FaderVLong,
+                                          CardWidget::FaderH};
+    EXPECT_TRUE(offersFaderSize(choices, CardWidget::FaderVLong));
+    EXPECT_FALSE(offersFaderSize(choices, CardWidget::FaderH));
+    EXPECT_TRUE(synth::ui::offersFaderDirection(choices, CardWidget::FaderVLong));
+    EXPECT_EQ(synth::ui::widgetKindOf(CardWidget::FaderVLong), synth::ui::WidgetKind::Fader);
 }
 
 TEST(OnCardControlPanel, ShowAsKeepsTheSizeAndTheDirectionRowFollowsAFader) {

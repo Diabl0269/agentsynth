@@ -149,6 +149,8 @@ int cellHeight(CardBodyItem::Kind kind) {
     switch (kind) {
     case Kind::FaderV:
         return cardbody::kLabelHeight + cardbody::kFaderVHeight;
+    case Kind::FaderVLong:
+        return cardbody::kLabelHeight + cardbody::kFaderVLongHeight;
     case Kind::KnobLarge:
         return cardbody::kLabelHeight + cardbody::kKnobLargeHeight;
     case Kind::Knob:
@@ -275,10 +277,11 @@ void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const Car
         planned.kind = cardBodyKindFor(*planned.param, p->widget).value_or(planned.kind);
         // A choice in a look of an alternative group may be asked for as a stepped fader; a fader on a choice anywhere
         // else falls back.
-        if (p->widget == CardWidget::FaderV && planned.kind == CardBodyItem::Kind::Choice &&
-            placer.section.visibleWhen.has_value() &&
+        if ((p->widget == CardWidget::FaderV || p->widget == CardWidget::FaderVLong) &&
+            planned.kind == CardBodyItem::Kind::Choice && placer.section.visibleWhen.has_value() &&
             dynamic_cast<const juce::AudioParameterChoice*>(planned.param) != nullptr)
-            planned.kind = CardBodyItem::Kind::FaderV;
+            planned.kind =
+                p->widget == CardWidget::FaderV ? CardBodyItem::Kind::FaderV : CardBodyItem::Kind::FaderVLong;
         if (p->label.has_value() && p->label->trim().isNotEmpty())
             planned.caption = p->label->trim();
         if (!layout.hidden.contains(p->paramId))
@@ -445,7 +448,8 @@ juce::StringArray cardBodySegmentLabels(const juce::RangedAudioParameter& param)
 
 bool isContinuousKind(CardBodyItem::Kind kind) {
     using Kind = CardBodyItem::Kind;
-    return kind == Kind::Knob || kind == Kind::KnobLarge || kind == Kind::FaderV || kind == Kind::FaderH;
+    return kind == Kind::Knob || kind == Kind::KnobLarge || kind == Kind::FaderV || kind == Kind::FaderVLong ||
+           kind == Kind::FaderH;
 }
 
 std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParameter& param, CardWidget widget) {
@@ -461,6 +465,8 @@ std::optional<CardBodyItem::Kind> cardBodyKindFor(const juce::RangedAudioParamet
         return continuous ? Kind::KnobLarge : automatic;
     case CardWidget::FaderV:
         return continuous ? Kind::FaderV : automatic;
+    case CardWidget::FaderVLong:
+        return continuous ? Kind::FaderVLong : automatic;
     case CardWidget::FaderH:
         return continuous ? Kind::FaderH : automatic;
     case CardWidget::Segmented:

@@ -61,6 +61,8 @@ int naturalHeight(Kind kind) {
         return cardbody::kKnobLargeHeight;
     case Kind::FaderV:
         return cardbody::kFaderVHeight;
+    case Kind::FaderVLong:
+        return cardbody::kFaderVLongHeight;
     case Kind::FaderH:
         return cardbody::kFaderHHeight;
     case Kind::Choice:
@@ -88,7 +90,7 @@ void fitSwapCell(const CardBodyPlan& plan, const Cell& cell) {
         if (item.widget == nullptr)
             continue;
         auto bounds = area.withHeight(std::min(area.getHeight(), naturalHeight(item.kind)));
-        if (item.kind == Kind::FaderV)
+        if (CardBodyItem::isVerticalFader(item.kind))
             bounds = bounds
                          .withSizeKeepingCentre(std::min(bounds.getWidth(), synth::ui::CardFader::kVerticalWidth),
                                                 bounds.getHeight())
@@ -96,8 +98,8 @@ void fitSwapCell(const CardBodyPlan& plan, const Cell& cell) {
         // A one-row member sits in the middle of a taller cell; its caption stays on the cell's top edge like the
         // taller member's.
         const int captionY = bounds.getY();
-        if (plan.swapGroups[(size_t)cell.group].cellKind == Kind::FaderV && item.kind != Kind::FaderV &&
-            area.getHeight() > bounds.getHeight())
+        if (CardBodyItem::isVerticalFader(plan.swapGroups[(size_t)cell.group].cellKind) &&
+            !CardBodyItem::isVerticalFader(item.kind) && area.getHeight() > bounds.getHeight())
             bounds.setY(area.getY() + (area.getHeight() - bounds.getHeight()) / 2);
         item.widget->setBounds(bounds);
         if (item.label != nullptr)
@@ -128,6 +130,9 @@ int layoutRunKind(Kind kind, const std::vector<cardbody::CaptionedWidget>& capti
         return cardbody::layoutGridRun(captioned, columns, cardbody::kKnobLargeHeight, 0, y, g, apply);
     case Kind::FaderV:
         return cardbody::layoutGridRun(captioned, columns, cardbody::kFaderVHeight,
+                                       synth::ui::CardFader::kVerticalWidth, y, g, apply);
+    case Kind::FaderVLong:
+        return cardbody::layoutGridRun(captioned, columns, cardbody::kFaderVLongHeight,
                                        synth::ui::CardFader::kVerticalWidth, y, g, apply);
     case Kind::FaderH:
         return cardbody::layoutCaptionedRows(captioned, cardbody::kFaderHHeight, true, y, g, apply);
@@ -347,6 +352,7 @@ int rowCellWidth(Kind kind) {
     case Kind::FaderH:
         return 124;
     case Kind::FaderV:
+    case Kind::FaderVLong:
         return 40;
     case Kind::View:
         break;
@@ -468,6 +474,8 @@ juce::Point<int> cardBodyCellSize(CardBodyItem::Kind kind, int columns, const ca
         return {gridW, kLabelHeight + kKnobLargeHeight};
     case Kind::FaderV:
         return {gridW, kLabelHeight + kFaderVHeight};
+    case Kind::FaderVLong:
+        return {gridW, kLabelHeight + kFaderVLongHeight};
     case Kind::FaderH:
         return {g.contentW, kLabelHeight + kFaderHHeight};
     case Kind::Segmented:
