@@ -382,7 +382,8 @@ drag the cursor to set Morph X and Y (one host gesture and one undo step per dra
 empty space to add a shape there that copies the current blend (the blended dB curve at the cursor sampled back into at most 16
 points placed on its shape: both ends, every prominent peak with its dip and flanks, then a point wherever the straight segments still miss the blend by more than half a dB, so narrow formants survive and a flat or straight blend is two points; a single click adds nothing, and the new dot takes keyboard focus so Delete or Backspace removes it at once),
 double-click a dot to delete it, press Return on a dot (or choose Edit in its right-click menu, which also has Duplicate,
-Rename and Delete) to open the editor on it. The menu opens beside the dot. Delete on a focused dot removes it and focuses the next dot; the last shape
+Rename and Delete) to open the editor on it. The menu opens beside the dot; in the shape editor window it has no Edit
+(a press already selected the dot). Delete on a focused dot removes it and focuses the next dot; the last shape
 never goes, by any of these routes. A dot that is added (or brought back by an undo) grows in with the 8% bounce over
 200 ms and a removed one shrinks out over 180 ms (`MorphMap.cpp`, dots keyed by name, one `AnimationDriver`); Reduce
 Motion makes both an 80 ms fade and Animations: Off lands at once. Cmd+Z and Cmd+Shift+Z of a dot or cursor move glide it back and forth (160 ms `easeOutCubic`, `MorphMap::setDots`/`setCursor` with the restore flag `ShapeMapController` passes; a plain Reduce Motion or Animations: Off lands at once; [undo-glide.md](../layout/undo-glide.md)). Pressing a dot or the cursor off its centre keeps the

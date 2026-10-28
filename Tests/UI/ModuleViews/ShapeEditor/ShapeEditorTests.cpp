@@ -470,7 +470,7 @@ TEST(ShapeEditor, ARelayedKeyIsDroppedWhenTheMainWindowIsGoneBeforeItArrives) {
     SUCCEED();
 }
 
-// ---- the morph map's menus (dot menu placement) ----------------------
+// ---- the morph map's menus (dot menu placement, no Edit in the window) ----------------------
 
 namespace {
 
@@ -529,7 +529,22 @@ TEST(MorphMapMenu, TheDotMenuIsHandedADotSizedScreenAreaAroundTheDot) {
     EXPECT_LT(rig.menuArea.getWidth(), rig.map.getWidth() / 4) << "beside the dot, not the whole map";
 }
 
-TEST(MorphMapMenu, TheShapeWindowsDotMenuOpensBesideTheDot) {
+TEST(MorphMapMenu, TheEditItemIsOfferedUnlessTheOwnerHidesIt) {
+    MenuRig rig;
+    rig.map.showDotMenu(0);
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Edit", "Duplicate", "Rename", "Delete"}));
+
+    rig.map.setEditItemShown(false);
+    rig.map.showDotMenu(0);
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Duplicate", "Rename", "Delete"}));
+
+    int edited = -1;
+    rig.controller.onEdit = [&](int i) { edited = i; };
+    EXPECT_TRUE(rig.map.getDotStop(1)->keyPressed(key(juce::KeyPress::returnKey)));
+    EXPECT_EQ(edited, 1) << "Return on a dot still edits it";
+}
+
+TEST(MorphMapMenu, TheShapeWindowsDotMenuOpensBesideTheDotWithoutEdit) {
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
     CapturedMenu captured;
@@ -543,9 +558,10 @@ TEST(MorphMapMenu, TheShapeWindowsDotMenuOpensBesideTheDot) {
 
     map.mouseDown(rightPress(map, map.getDotCentre(dot)));
 
-    EXPECT_EQ(captured.items, (std::vector<std::string>{"Edit", "Duplicate", "Rename", "Delete"}));
+    EXPECT_EQ(captured.items, (std::vector<std::string>{"Duplicate", "Rename", "Delete"}));
     EXPECT_TRUE(area.contains(map.localPointToGlobal(map.getDotCentre(dot)).roundToInt()));
     EXPECT_LT(area.getWidth(), map.getWidth() / 4) << "the old target was the whole map, under its bottom-left";
+    EXPECT_EQ(editor.getSelected(), dot) << "the press selected the dot, so nothing is left for Edit to do";
 }
 
 TEST(MorphMapMenu, TheShapeWindowsKeyboardMenuAndTheTestHookAlsoGetTheDotArea) {

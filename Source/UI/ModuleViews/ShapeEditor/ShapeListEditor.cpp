@@ -113,6 +113,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
         lastGeneration_ = adapter_->getGeneration();
         syncAll();
     };
+    map_.setEditItemShown(false); // a press already selected the dot; there is no separate edit step here
     map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int> area) { showMenuNow(menu, area); };
 
     shapes_ = adapter_->getShapes();

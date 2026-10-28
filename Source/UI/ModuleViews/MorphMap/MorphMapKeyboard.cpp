@@ -147,10 +147,11 @@ void MorphMap::showDotMenu(int index) {
     juce::PopupMenu menu;
     juce::Component::SafePointer<MorphMap> safe(this);
     const bool canDelete = !canDeleteDot || canDeleteDot();
-    menu.addItem("Edit", [safe, index] {
-        if (safe != nullptr && safe->onEditDot)
-            safe->onEditDot(index);
-    });
+    if (editItemShown_)
+        menu.addItem("Edit", [safe, index] {
+            if (safe != nullptr && safe->onEditDot)
+                safe->onEditDot(index);
+        });
     menu.addItem("Duplicate", [safe, index] {
         if (safe != nullptr && safe->onDuplicateDot)
             safe->onDuplicateDot(index);

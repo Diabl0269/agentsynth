@@ -423,7 +423,7 @@ to 0 (either mode).
 (`Source/UI/ModuleViews/ShapeEditor/`) turns them into shape-list edits with their undo steps, so the module card's map
 and the shape editor window's map behave identically. The behaviour is in
 [`custom-filter.md`](../modules/custom-filter.md#morph-map). Pointer: drag a dot or the cursor, click empty space to
-add a shape, double-click a dot to edit it, right-click a dot for Edit / Duplicate / Rename / Delete (the menu opens beside the dot). Keyboard: the map,
+add a shape, double-click a dot to edit it, right-click a dot for Edit / Duplicate / Rename / Delete (the menu opens beside the dot; the shape editor window leaves Edit out, since a press already selected the dot: `setEditItemShown`). Keyboard: the map,
 then each dot, then the cursor are Tab stops (transparent, mouse-inert `Stop` children carrying the name, tooltip and
 focus ring over the painted dots, the `PianoRollHeaderChip` idea); an arrow moves the focused dot or cursor one step (Shift for a
 bigger one) and, held, glides it on (`MorphMapGlide`, the timeline cursor glide's curve at 0.15 to 1.2 map units a

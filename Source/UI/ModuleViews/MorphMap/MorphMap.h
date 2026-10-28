@@ -19,7 +19,8 @@ class ReorderFramePump;
  *  through the callbacks, so the module card and the shape editor window drive it the same way.
  *
  *  Pointer: drag a dot to move it, drag the cursor to blend, double-click empty space to add a shape there,
- *  double-click a dot to delete it (one always stays), right-click a dot for Edit / Duplicate / Rename / Delete.
+ *  double-click a dot to delete it (one always stays), right-click a dot for Edit / Duplicate / Rename / Delete
+ *  (a window that has no separate edit step hides Edit: `setEditItemShown`).
  *  A dot added or restored grows in and a removed one shrinks out, keyed by its name.
  *  Keyboard: the map, then each dot, then the cursor are Tab stops. On a dot or the cursor an arrow moves it one
  *  step (Shift for a bigger one); held, it glides on, slowly at first and faster the longer it is held (two arrows
@@ -137,6 +138,8 @@ public:
     juce::Rectangle<float> getModBarTrack(Axis axis) const;
     /** The bar from `fromNorm` to `toNorm` (0..1 along the slider) inside `getModBarTrack`. */
     juce::Rectangle<float> getModBarBetween(Axis axis, float fromNorm, float toNorm) const;
+    /** Whether the dot menu offers Edit; on by default. */
+    void setEditItemShown(bool shown) noexcept { editItemShown_ = shown; }
     /** The slider whose modulation bar is under `point` (this component's coordinates). */
     Axis modBarAt(juce::Point<float> point) const;
     /** The modulation each routing on the slider of `axis` brings; empty for none. Repaints only on change. */
@@ -246,6 +249,7 @@ private:
     juce::Point<float> grabOffset_; ///< pixels from the pointer to the centre of the dot or cursor being dragged
     bool cursorVisible_ = true;
     bool showLabels_ = false;
+    bool editItemShown_ = true;
     int selected_ = -1;
     Axis dropAxis_ = Axis::None;
     Axis hoverAxis_ = Axis::None;
