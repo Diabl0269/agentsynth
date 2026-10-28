@@ -88,7 +88,7 @@ TEST(OnCardEditorUndo, TwoMovesAreTwoUndoSteps) {
 
     drop(*editor, "cutoff", {40, 0});
     const auto first = widgetOf(*rig.card(id), "cutoff")->getPosition();
-    drop(*editor, "cutoff", {0, 30});
+    drop(*editor, "cutoff", {20, 0});
     ASSERT_NE(widgetOf(*rig.card(id), "cutoff")->getPosition(), first);
 
     ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "cutoff"));
@@ -116,7 +116,7 @@ TEST(OnCardEditorUndo, UndoAndRedoKeepWorkingRepeatedlyWhileTheEditorStaysOpen) 
         EXPECT_FALSE(editor->isClosed());
         EXPECT_EQ(editor->getOutlineCountForTest(), outlines);
     }
-    drop(*editor, "cutoff", {0, 30}); // and the editor still writes after all that
+    drop(*editor, "cutoff", {20, 0}); // and the editor still writes after all that
     ASSERT_TRUE(undoWithEditorOpen(rig, *editor, "cutoff"));
     EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getPosition(), moved) << "a new step after a redo is its own";
 }

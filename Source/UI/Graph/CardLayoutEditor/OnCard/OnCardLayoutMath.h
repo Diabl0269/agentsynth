@@ -73,6 +73,36 @@ std::vector<juce::Rectangle<int>> returnHome(std::vector<juce::Rectangle<int>> c
 juce::Point<int> findFreeSpot(juce::Point<int> size, const std::vector<juce::Rectangle<int>>& occupied,
                               const Limits& limits);
 
+/** Where a drop leaves the other cells of a group, by rows. */
+struct RowDrop {
+    std::vector<juce::Rectangle<int>> others; ///< The input cells, same order, after the drop.
+    juce::Rectangle<int> dropped;             ///< Where the dropped cell lands (its top on its row's top).
+    int newRowAt = -1; ///< The y of the new row a drop below the last row starts; -1 when it joins a row.
+};
+
+/** The rows of `cells` as indices: cells whose vertical extents overlap (one after the other, down the
+ *  group) are one row, each row ordered by x, rows top to bottom. */
+std::vector<std::vector<int>> rowsOf(const std::vector<juce::Rectangle<int>>& cells);
+
+/** `dropped` let go among `others` with the pointer at `probe`: it joins the row the probe's y is in (below the
+ *  last row, between two rows or above the first it starts a new one there), at the index the probe's x gives
+ *  among that row's cells, its top on the row's top. The row is then
+ *  swept left to right (a cell never closer than the gap to the one before), from `limits.maxX` back leftwards
+ *  if that runs out of room, and the trailing cells that still do not fit wrap into a new row below. Rows
+ *  that now collide with it move down. Nothing overlaps and everything is inside `limits` afterwards. */
+RowDrop dropIntoRow(juce::Rectangle<int> dropped, juce::Point<int> probe,
+                    const std::vector<juce::Rectangle<int>>& others, const Limits& limits);
+
+/** The same with the probe at the dropped cell's centre. */
+RowDrop dropIntoRow(juce::Rectangle<int> dropped, const std::vector<juce::Rectangle<int>>& others,
+                    const Limits& limits);
+
+/** `cells` after cell `changed` took a new size (it stood at `before`): the cells right of it that abutted its old
+ *  right edge follow it, then its row is swept and wrapped as in `dropIntoRow`, so width a smaller control freed
+ *  is reused and a bigger one pushes its row along. */
+std::vector<juce::Rectangle<int>> repackRow(const std::vector<juce::Rectangle<int>>& cells, size_t changed,
+                                            juce::Rectangle<int> before, const Limits& limits);
+
 /** What a screen reader hears after a move: "Cutoff moved right 8", or "Cutoff moved right 60, down 12". */
 juce::String describeMove(const juce::String& caption, int dx, int dy);
 

@@ -8,6 +8,7 @@
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardLayoutMath.h"
 
 using namespace oncard_test;
+using synth::ui::oncard::tooClose;
 
 namespace {
 
@@ -93,8 +94,9 @@ TEST(OnCardEditorDrag, TheRealWidgetAndItsOutlineFollowThePointerWhileDragging) 
 
     Pointer pointer(*open.editor, "cutoff");
     pointer.moveBy({30, 20}, kCommand);
-    EXPECT_EQ(open.cell("cutoff").getPosition(), start.getPosition() + juce::Point<int>(30, 20));
-    EXPECT_EQ(knob->getPosition(), knobStart + juce::Point<int>(30, 20)) << "the control itself moved";
+    // x follows the pointer; y stays on the control's row (a row's controls share a top).
+    EXPECT_EQ(open.cell("cutoff").getPosition(), start.getPosition() + juce::Point<int>(30, 0));
+    EXPECT_EQ(knob->getPosition(), knobStart + juce::Point<int>(30, 0)) << "the control itself moved";
     EXPECT_FALSE(open.rig.storedLayout(open.id).has_value()) << "nothing is written until the drop";
     pointer.release();
 }
@@ -119,7 +121,8 @@ TEST(OnCardEditorDrag, ALeftEdgeThreePixelsOffAnotherControlsSnapsToItAndCommand
         Pointer pointer(*open.editor, "cutoff");
         pointer.moveBy({dx, dy}, kCommand);
         EXPECT_EQ(open.cell("cutoff").getX(), drive.getX() + 3) << "Cmd places it freely";
-        EXPECT_TRUE(open.editor->getGuidesForTest().empty());
+        for (const auto& guide : open.editor->getGuidesForTest())
+            EXPECT_FALSE(guide.vertical) << "Cmd draws no snap guide";
         EXPECT_TRUE(open.editor->sendEscapeToDragForTest());
     }
 }
@@ -136,11 +139,10 @@ TEST(OnCardEditorDrag, DroppingOnResonancePushesItOutSoTheTwoKeepAGap) {
 
     const auto cutoffAfter = open.cell("cutoff");
     const auto resonanceAfter = open.cell("resonance");
-    EXPECT_EQ(cutoffAfter.getPosition(), resonance.getPosition() + juce::Point<int>(10, 6));
-    EXPECT_NE(resonanceAfter, resonance) << "Resonance was pushed";
-    EXPECT_FALSE(synth::ui::oncard::tooClose(cutoffAfter, resonanceAfter));
-    EXPECT_FALSE(synth::ui::oncard::tooClose(cutoffAfter, open.cell("drive")));
-    EXPECT_FALSE(synth::ui::oncard::tooClose(resonanceAfter, open.cell("drive")));
+    EXPECT_EQ(cutoffAfter.getY(), resonance.getY()) << "it joined Resonance's row, on the row's top";
+    EXPECT_FALSE(cutoffAfter.intersects(resonanceAfter));
+    EXPECT_FALSE(cutoffAfter.intersects(open.cell("drive")));
+    EXPECT_FALSE(resonanceAfter.intersects(open.cell("drive")));
 }
 
 TEST(OnCardEditorDrag, DroppingBackWhereItStartedWritesNothing) {
@@ -197,16 +199,17 @@ TEST(OnCardEditorDrag, DraggingUnisonBackReturnsThePushedNeighboursToTheirOrigin
     const auto unison = editor->getCellRectForTest("unison");
     const auto detune = editor->getCellRectForTest("detune");
     ASSERT_EQ(unison.getY(), detune.getY()) << "one row";
-    const int dx = unison.getWidth() / 2 + 6;
+    const int dx = detune.getCentreX() - unison.getCentreX() + 6; // past Detune's centre: they swap places
 
     {
         Pointer pointer(*editor, "unison");
         pointer.moveBy({dx, 0}, kCommand);
         pointer.release();
     }
-    EXPECT_EQ(editor->getCellRectForTest("unison").getX(), unison.getX() + dx);
-    EXPECT_NE(editor->getCellRectForTest("detune"), detune) << "Detune made way";
-    EXPECT_EQ(editor->getHomeRectForTest("detune"), detune) << "but its home is where it stood";
+    EXPECT_EQ(editor->getCellRectForTest("unison").getY(), unison.getY()) << "still on its row";
+    EXPECT_GE(editor->getCellRectForTest("unison").getX(), editor->getCellRectForTest("detune").getRight())
+        << "Unison now stands after Detune";
+    EXPECT_EQ(editor->getHomeRectForTest("detune"), detune) << "Detune's home is where it stood";
 
     {
         Pointer pointer(*editor, "unison");
@@ -225,13 +228,16 @@ TEST(OnCardEditorDrag, AControlTheUserMovedKeepsItsNewHomeWhenAnotherIsDroppedOn
     const auto detune = editor->getCellRectForTest("detune");
     const int unisonDx = detune.getX() - editor->getCellRectForTest("unison").getX();
 
+    int groupBottom = 0;
+    for (const auto* key : {"unison", "blend", "width", "pulseWidth"})
+        groupBottom = std::max(groupBottom, editor->getCellRectForTest(key).getBottom());
     {
-        Pointer pointer(*editor, "detune");
-        pointer.moveBy({0, 30}, kCommand);
+        Pointer pointer(*editor, "detune"); // down below the group's last row: a row of its own
+        pointer.moveBy({0, groupBottom + 3 - detune.getCentreY()}, kCommand);
         pointer.release();
     }
     const auto moved = editor->getCellRectForTest("detune");
-    ASSERT_EQ(moved.getY(), detune.getY() + 30);
+    ASSERT_NE(moved.getPosition(), detune.getPosition());
     EXPECT_EQ(editor->getHomeRectForTest("detune").getPosition(), moved.getPosition()) << "the user's own move";
 
     {
@@ -241,4 +247,161 @@ TEST(OnCardEditorDrag, AControlTheUserMovedKeepsItsNewHomeWhenAnotherIsDroppedOn
     }
     EXPECT_EQ(editor->getHomeRectForTest("detune").getPosition(), moved.getPosition())
         << "pushed, not moved by the user: the home stays";
+}
+
+// ---- The row model: out and back, a new row, a full group, preview == commit, a style change ----
+
+namespace {
+
+struct OscOpen {
+    OnCardRig rig;
+    NodeID id = rig.add(std::make_unique<OscillatorModule>());
+    CardLayoutOnCardEditor* editor = rig.openOnCard(id);
+
+    juce::Rectangle<int> cell(const juce::String& key) const { return editor->getCellRectForTest(key); }
+    // The cells of `key`'s group by key (the plan's section of that control).
+    std::vector<juce::String> groupOf(const juce::String& key) {
+        const auto& plan = rig.card(id)->getCardBody()->getPlan();
+        const int section = plan.items[(size_t)plan.findParam(key)].section;
+        std::vector<juce::String> keys;
+        for (int i : plan.sections[(size_t)section].items)
+            if (plan.items[(size_t)i].param != nullptr &&
+                editor->getOutlineForTest(plan.items[(size_t)i].param->paramID))
+                keys.push_back(plan.items[(size_t)i].param->paramID);
+        return keys;
+    }
+    // layout-overlap: nothing overlaps (cells no closer than the gap, or flush as the default has them) and
+    // every cell is inside the card's content width.
+    void expectTidy(const std::vector<juce::String>& keys) {
+        const auto g = synth::cardbody::BodyGeometry::forCardWidth(rig.card(id)->getWidth());
+        for (size_t i = 0; i < keys.size(); ++i) {
+            EXPECT_GE(cell(keys[i]).getX(), g.contentX) << keys[i];
+            EXPECT_LE(cell(keys[i]).getRight(), g.contentX + g.contentW) << keys[i];
+            for (size_t j = i + 1; j < keys.size(); ++j)
+                EXPECT_FALSE(cell(keys[i]).intersects(cell(keys[j]))) << keys[i] << " and " << keys[j];
+        }
+    }
+};
+
+} // namespace
+
+// Regression test for FRO720: a control dragged out of a full row and back pushed the others below.
+TEST(OnCardEditorRows, ADragOutOfTheRowAndBackLeavesTheRowAsItWas) {
+    OscOpen open;
+    ASSERT_NE(open.editor, nullptr);
+    const auto keys = open.groupOf("unison");
+    ASSERT_GE(keys.size(), 2u);
+    std::map<juce::String, juce::Rectangle<int>> before;
+    for (const auto& k : keys)
+        before[k] = open.cell(k);
+
+    const juce::Point<int> away(0, 140);
+    {
+        Pointer pointer(*open.editor, "unison");
+        pointer.moveBy(away, kCommand);
+        pointer.release();
+        open.expectTidy(keys);
+    }
+    {
+        Pointer pointer(*open.editor, "unison");
+        pointer.moveBy(-away, kCommand);
+        pointer.release();
+    }
+    open.expectTidy(keys);
+    for (const auto& k : keys)
+        EXPECT_EQ(open.cell(k), before[k]) << k << " is back on its row";
+}
+
+TEST(OnCardEditorRows, DroppingBelowTheGroupsLastRowStartsANewRowAndShowsAGuideThere) {
+    OscOpen open;
+    ASSERT_NE(open.editor, nullptr);
+    const auto keys = open.groupOf("unison");
+    int bottom = 0;
+    for (const auto& k : keys)
+        if (k != "unison")
+            bottom = std::max(bottom, open.cell(k).getBottom());
+
+    Pointer pointer(*open.editor, "unison");
+    // The pointer, not the cell, picks the group and the row: just under the last row, still in the group.
+    pointer.moveBy({0, bottom + 3 - open.cell("unison").getCentreY()}, kCommand);
+    ASSERT_FALSE(open.editor->getGuidesForTest().empty()) << "the new-row band shows a guide";
+    EXPECT_FALSE(open.editor->getGuidesForTest().front().vertical);
+    EXPECT_EQ(open.editor->getGuidesForTest().front().position, bottom + synth::ui::oncard::kControlGap);
+    pointer.release();
+
+    EXPECT_EQ(open.cell("unison").getY(), bottom + synth::ui::oncard::kControlGap);
+    open.expectTidy(keys);
+}
+
+// A drop into another group: the group it joins stays tidy. (Level into the Oscillator's Unison group.)
+TEST(OnCardEditorRows, DroppingAControlIntoAFullGroupLeavesTheGroupTidy) {
+    OscOpen open;
+    ASSERT_NE(open.editor, nullptr);
+    const auto unisonKeys = open.groupOf("unison");
+    const juce::String mover = "level";
+    ASSERT_NE(open.editor->getOutlineForTest(mover), nullptr);
+    const auto to = open.cell("detune").getCentre() - open.cell(mover).getCentre();
+
+    Pointer pointer(*open.editor, mover);
+    pointer.moveBy(to, kCommand);
+    pointer.release();
+
+    auto keys = unisonKeys;
+    keys.push_back(mover);
+    open.expectTidy(keys);
+    EXPECT_EQ(open.groupOf("unison").size(), keys.size()) << "Level joined the group";
+}
+
+// Regression test for FRO720: the committed layout is what the drag showed last.
+TEST(OnCardEditorRows, TheCommittedLayoutEqualsTheLastPreview) {
+    OscOpen open;
+    ASSERT_NE(open.editor, nullptr);
+    const auto keys = open.groupOf("unison");
+    const auto to = open.cell("detune").getCentre() - open.cell("unison").getCentre();
+
+    Pointer pointer(*open.editor, "unison");
+    pointer.moveBy(to + juce::Point<int>(-12, 4), kCommand);
+    std::map<juce::String, juce::Rectangle<int>> preview;
+    for (const auto& k : keys)
+        preview[k] = open.cell(k);
+    pointer.release();
+    for (const auto& k : keys)
+        EXPECT_EQ(open.cell(k), preview[k]) << k;
+}
+
+// Regression test for FRO720: a fader to a knob and back could no longer share one row; the repack is part of
+// the change's own undo step.
+TEST(OnCardEditorRows, AStyleChangeRepacksItsRowInTheSameUndoStep) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>(), 200, 200);
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    {
+        Pointer pointer(*editor, "cutoff"); // freezes the group to positions
+        pointer.moveBy({20, 0}, kCommand);
+        pointer.release();
+    }
+    const auto positioned = rig.storedLayout(id);
+    ASSERT_TRUE(positioned.has_value());
+
+    auto* panel = openControlPanel(rig, *editor, "resonance");
+    ASSERT_NE(panel, nullptr);
+    ASSERT_TRUE(static_cast<bool>(panel->onShowAs));
+    const auto before = editor->getCellRectForTest("resonance");
+    panel->onShowAs(synth::CardWidget::FaderH);
+    ASSERT_NE(editor->getCellRectForTest("resonance").getWidth(), before.getWidth()) << "the control changed size";
+
+    const std::vector<juce::String> keys{"cutoff", "resonance", "drive"};
+    const auto g = synth::cardbody::BodyGeometry::forCardWidth(rig.card(id)->getWidth());
+    for (size_t i = 0; i < keys.size(); ++i) {
+        EXPECT_LE(editor->getCellRectForTest(keys[i]).getRight(), g.contentX + g.contentW) << keys[i];
+        for (size_t j = i + 1; j < keys.size(); ++j)
+            EXPECT_FALSE(editor->getCellRectForTest(keys[i]).intersects(editor->getCellRectForTest(keys[j])))
+                << keys[i] << " and " << keys[j];
+    }
+
+    ASSERT_TRUE(rig.canvas.undo.undo()) << "one step undoes the style change and its repack";
+    editor->runQueuedSyncForTest();
+    EXPECT_EQ(rig.storedLayout(id), positioned) << "back to the layout before the change, not half of it";
+    EXPECT_EQ(editor->getCellRectForTest("resonance"), before);
 }

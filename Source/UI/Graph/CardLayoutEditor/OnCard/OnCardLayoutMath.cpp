@@ -75,6 +75,98 @@ juce::Rectangle<int> pushOut(juce::Rectangle<int> cell, juce::Rectangle<int> anc
     return cell.withY(bottom + kControlGap);
 }
 
+using Rect = juce::Rectangle<int>;
+using Rects = std::vector<Rect>;
+using Ids = std::vector<int>;
+
+int bottomOf(const Rects& all, const Ids& ids) {
+    int bottom = all[(size_t)ids.front()].getBottom();
+    for (int id : ids)
+        bottom = std::max(bottom, all[(size_t)id].getBottom());
+    return bottom;
+}
+
+int topOf(const Rects& all, const Ids& ids) {
+    int top = all[(size_t)ids.front()].getY();
+    for (int id : ids)
+        top = std::min(top, all[(size_t)id].getY());
+    return top;
+}
+
+// Cells left to right, each at least the gap clear of the one before; if the last then stands past maxX, the
+// row is pulled back from there.
+void sweepRow(Rects& all, const Ids& ids, const Limits& limits, int gap) {
+    int edge = limits.minX - gap;
+    for (int id : ids) {
+        auto& r = all[(size_t)id];
+        r.setX(std::max(r.getX(), edge + gap));
+        edge = r.getRight();
+    }
+    if (ids.empty() || all[(size_t)ids.back()].getRight() <= limits.maxX)
+        return;
+    int right = limits.maxX;
+    for (auto id = ids.rbegin(); id != ids.rend(); ++id) {
+        auto& r = all[(size_t)*id];
+        r.setX(std::min(r.getX(), right - r.getWidth()));
+        right = r.getX() - gap;
+    }
+}
+
+// The trailing cells (taken out of `ids`) the row cannot hold in the content width.
+Ids wrapTrailing(const Rects& all, Ids& ids, const Limits& limits, int gap) {
+    const auto width = [&] {
+        int total = gap * std::max(0, (int)ids.size() - 1);
+        for (int id : ids)
+            total += all[(size_t)id].getWidth();
+        return total;
+    };
+    Ids overflow;
+    while (ids.size() > 1 && width() > limits.maxX - limits.minX) {
+        overflow.insert(overflow.begin(), ids.back());
+        ids.pop_back();
+    }
+    return overflow;
+}
+
+// The space a row keeps between its cells: the gap, or less where the row already stands closer (a default layout
+// has its cells flush), so a row that was full is still full once a cell has left and come back. `skip` is a cell
+// not counted (one that is being resized).
+int rowGap(const Rects& all, const Ids& ids, int skip) {
+    int gap = kControlGap;
+    for (size_t i = 1; i < ids.size(); ++i)
+        if (ids[i - 1] != skip && ids[i] != skip)
+            gap = std::min(gap, std::max(0, all[(size_t)ids[i]].getX() - all[(size_t)ids[i - 1]].getRight()));
+    return gap;
+}
+
+// The row laid out (its overflow wrapped into rows below it, left-aligned); the bottom of what it now takes.
+int placeRow(Rects& all, Ids ids, const Limits& limits, int gap) {
+    auto overflow = wrapTrailing(all, ids, limits, gap);
+    sweepRow(all, ids, limits, gap);
+    const int bottom = bottomOf(all, ids);
+    if (overflow.empty())
+        return bottom;
+    int x = limits.minX;
+    for (int id : overflow) {
+        auto& r = all[(size_t)id];
+        r.setPosition(x, bottom + kControlGap);
+        x += r.getWidth() + gap;
+    }
+    return placeRow(all, std::move(overflow), limits, gap);
+}
+
+// The rows from `first` on, each moved down only when it now collides with what is above it, and then far
+// enough to leave the gap (rows that stand flush and are not hit stay flush).
+void shiftRowsBelow(Rects& all, const std::vector<Ids>& rows, size_t first, int bottom) {
+    for (size_t i = first; i < rows.size(); ++i) {
+        const int top = topOf(all, rows[i]);
+        const int shift = bottom > top ? bottom + kControlGap - top : 0;
+        for (int id : rows[i])
+            all[(size_t)id].translate(0, shift);
+        bottom = bottomOf(all, rows[i]);
+    }
+}
+
 } // namespace
 
 juce::String describeMove(const juce::String& caption, int dx, int dy) {
@@ -163,6 +255,96 @@ std::vector<juce::Rectangle<int>> returnHome(std::vector<juce::Rectangle<int>> c
             }
     }
     return cells;
+}
+
+std::vector<std::vector<int>> rowsOf(const std::vector<Rect>& cells) {
+    Ids order(cells.size());
+    for (size_t i = 0; i < order.size(); ++i)
+        order[i] = (int)i;
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+        const auto& ra = cells[(size_t)a];
+        const auto& rb = cells[(size_t)b];
+        return ra.getY() != rb.getY() ? ra.getY() < rb.getY() : ra.getX() < rb.getX();
+    });
+    std::vector<Ids> rows;
+    int rowBottom = 0;
+    for (int id : order) {
+        const auto& r = cells[(size_t)id];
+        if (rows.empty() || r.getY() >= rowBottom) {
+            rows.emplace_back();
+            rowBottom = r.getBottom();
+        }
+        rows.back().push_back(id);
+        rowBottom = std::max(rowBottom, r.getBottom());
+    }
+    for (auto& row : rows)
+        std::stable_sort(row.begin(), row.end(),
+                         [&](int a, int b) { return cells[(size_t)a].getX() < cells[(size_t)b].getX(); });
+    return rows;
+}
+
+RowDrop dropIntoRow(Rect dropped, juce::Point<int> probe, const Rects& others, const Limits& limits) {
+    const int n = (int)others.size();
+    Rects all = others;
+    all.push_back(oncard::clampToLimits(dropped, limits));
+    const auto rows = rowsOf(others);
+    RowDrop out;
+    if (!rows.empty()) {
+        // A row owns the probe down to the middle of the gap under it (the last row, a hair below its bottom).
+        const auto ownedEnd = [&](size_t i) {
+            const int bottom = bottomOf(all, rows[i]);
+            return i + 1 < rows.size() ? (bottom + topOf(all, rows[i + 1])) / 2 : bottom + kControlGap / 4;
+        };
+        size_t r = 0;
+        while (r < rows.size() && probe.y >= ownedEnd(r))
+            ++r;
+        if (r < rows.size() && probe.y >= topOf(all, rows[r])) {
+            Ids ids = rows[r];
+            const auto at =
+                std::count_if(ids.begin(), ids.end(), [&](int id) { return all[(size_t)id].getCentreX() < probe.x; });
+            all.back().setY(topOf(all, ids));
+            ids.insert(ids.begin() + at, n);
+            const int gap = rowGap(all, ids, n);
+            shiftRowsBelow(all, rows, r + 1, placeRow(all, std::move(ids), limits, gap));
+        } else {
+            // Below the last row, between two rows or above the first: a row of its own, against the row above.
+            all.back().setY(r > 0 ? bottomOf(all, rows[r - 1]) + kControlGap : limits.top);
+            out.newRowAt = all.back().getY();
+            shiftRowsBelow(all, rows, r, all.back().getBottom());
+        }
+    }
+    out.dropped = all.back();
+    all.pop_back();
+    out.others = std::move(all);
+    return out;
+}
+
+RowDrop dropIntoRow(Rect dropped, const Rects& others, const Limits& limits) {
+    return dropIntoRow(dropped, oncard::clampToLimits(dropped, limits).getCentre(), others, limits);
+}
+
+Rects repackRow(const Rects& cells, size_t changed, Rect before, const Limits& limits) {
+    Rects all = cells;
+    const auto rows = rowsOf(cells);
+    for (size_t r = 0; r < rows.size(); ++r) {
+        const auto& ids = rows[r];
+        if (std::find(ids.begin(), ids.end(), (int)changed) == ids.end())
+            continue;
+        const int delta = cells[changed].getWidth() - before.getWidth();
+        int oldRight = before.getRight();
+        bool after = false;
+        for (int id : ids) {
+            after = after || id == (int)changed;
+            auto& cell = all[(size_t)id];
+            if (!after || id == (int)changed || delta >= 0 || cell.getX() - oldRight > kControlGap)
+                continue;
+            oldRight = cell.getRight();
+            cell.translate(delta, 0);
+        }
+        shiftRowsBelow(all, rows, r + 1, placeRow(all, ids, limits, rowGap(all, ids, (int)changed)));
+        break;
+    }
+    return all;
 }
 
 // The candidate corners are the limits' own and every occupied rectangle's right and bottom edge plus the

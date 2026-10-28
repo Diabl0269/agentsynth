@@ -14,16 +14,14 @@ namespace {
 constexpr double kPushMs = 160.0;
 constexpr double kSettleMs = 140.0;
 
-// The start no neighbour is flush against: the control was never in the group it lands in.
-const juce::Rectangle<int> kNowhere(-100000, -100000, 0, 0);
-
 } // namespace
 
-// The control (every member of its swap group) leaves its group's items for the target's, free-positioned at the
-// drop: sized as the target group sizes it (its columns can differ), clamped inside it. Both groups are written
-// positioned so nothing else moves: the group it left keeps every other control where it stands, the target gets
-// its neighbours pushed from where they stand (and back home when free). One write, so one undo step.
-void CardLayoutOnCardEditor::commitMoveToSection(int cell, juce::Rectangle<int> dropped, int target) {
+// The control (every member of its swap group) leaves its group's items for the target's, free-positioned where
+// the drop's row plan landed it (sized as the target group sizes it: its columns can differ). Both groups are
+// written positioned so nothing else moves: the group it left keeps every other control where it stands, the
+// target gets its cells as the plan placed them. One write, so one undo step.
+void CardLayoutOnCardEditor::commitMoveToSection(int cell, juce::Rectangle<int> landed, int target,
+                                                 const CellRects& placed) {
     const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
     if (closed_ || source_ == nullptr || body == nullptr || cell < 0 || cell >= (int)cells_.size())
         return;
@@ -33,18 +31,14 @@ void CardLayoutOnCardEditor::commitMoveToSection(int cell, juce::Rectangle<int> 
     const int layoutTarget = layoutSectionIndexOfPlan(layout, target);
     if (layoutTarget < 0 || from == target)
         return;
-    const auto size = addedCellSize(target, moving.key);
-    const auto landed = oncard::clampToLimits(size.isOrigin() ? dropped : dropped.withSize(size.x, size.y),
-                                              limitsFor(*body, target, card_->getWidth()));
-
     const auto indices = cellsOfSection(target);
-    const auto pushed = pushedNeighbours(target, -1, landed, kNowhere);
     std::vector<OnCardCell> placedTarget;
     std::vector<Move> moves{{moving.key, moving.rect, landed, kSettleMs, false}};
-    for (size_t k = 0; k < indices.size(); ++k) {
-        placedTarget.push_back(cells_[(size_t)indices[k]]);
-        placedTarget.back().rect = pushed[k];
-        moves.push_back({placedTarget.back().key, cells_[(size_t)indices[k]].rect, pushed[k], kPushMs, false});
+    for (int index : indices) {
+        placedTarget.push_back(cells_[(size_t)index]);
+        placedTarget.back().rect = placedRect(placed, index, cells_[(size_t)index].rect);
+        moves.push_back(
+            {placedTarget.back().key, cells_[(size_t)index].rect, placedTarget.back().rect, kPushMs, false});
     }
     std::vector<OnCardCell> staying;
     for (int i : cellsOfSection(from))

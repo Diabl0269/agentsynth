@@ -155,7 +155,7 @@ TEST(OnCardTimeTempo, EachLooksSustainKeepsItsOwnPosition) {
 
     ASSERT_NE(editor->getOutlineForTest("sustain"), nullptr);
     Pointer pointer(*editor, "sustain");
-    pointer.moveBy({-40, 0});
+    pointer.moveBy({-90, 0}); // past Hold: a full row only changes when a control passes a neighbour
     pointer.release();
     const auto layout = rig.card(id)->getCardBody()->explicitLayout();
     const auto at = [&](const char* section) {

@@ -253,7 +253,7 @@ TEST(OnCardAddControl, InAPositionedGroupTheControlLandsAtAFreeSpotThatKeepsTheG
     const auto id = rig.add(std::make_unique<FilterModule>());
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
-    drop(*editor, "cutoff", {0, 30}); // Drive's own group turns positioned
+    drop(*editor, "cutoff", {20, 0}); // Drive's own group turns positioned
     hideThroughPanel(rig, *editor, "drive");
     auto* panel = openAddPanel(rig, *editor);
     ASSERT_NE(panel, nullptr);

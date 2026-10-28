@@ -54,7 +54,7 @@ TEST(OnCardEditorSession, CancelPutsTheOpeningLayoutBackAsOneMoreUndoStepThatBri
     const auto start = widgetOf(*rig.card(id), "cutoff")->getPosition();
     auto* editor = rig.openOnCard(id);
     ASSERT_NE(editor, nullptr);
-    drop(*editor, "cutoff", {40, 60});
+    drop(*editor, "cutoff", {40, 0});
     ASSERT_TRUE(rig.storedLayout(id).has_value());
 
     editor->getEditBarForTest().getCancelButton().onClick();
@@ -65,7 +65,7 @@ TEST(OnCardEditorSession, CancelPutsTheOpeningLayoutBackAsOneMoreUndoStepThatBri
 
     EXPECT_TRUE(rig.canvas.undo.undo());
     EXPECT_TRUE(rig.storedLayout(id).has_value()) << "Cmd+Z after Cancel brings the move back";
-    EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getPosition(), start + juce::Point<int>(40, 60));
+    EXPECT_EQ(widgetOf(*rig.card(id), "cutoff")->getPosition(), start + juce::Point<int>(40, 0));
 }
 
 TEST(OnCardEditorSession, CancelRestoresAnExistingOverrideExactly) {

@@ -132,6 +132,7 @@ private:
     CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoManager* undo, juce::AudioProcessorGraph::NodeID nodeId,
                            const ShortcutManager* shortcuts);
 
+    using CellRects = std::vector<std::pair<int, juce::Rectangle<int>>>;
     struct Drag {
         int cell = -1;
         bool pressed = false;
@@ -141,6 +142,9 @@ private:
         juce::Point<int> pressPoint;    // editor pixels
         juce::Rectangle<int> startRect; // the cell's rect at the press
         juce::Point<int> pressOffset;   // the pointer's offset from the cell's top-left at the press
+        std::vector<juce::Rectangle<int>> baseline; // every cell's rect at the press (the drop is planned from it)
+        std::vector<std::pair<int, juce::Rectangle<int>>> placed; // the target group's other cells at the last preview
+        juce::Rectangle<int> droppedRect;                         // where the last preview put the dragged cell
     };
 
     // ---- Session and sync (CardLayoutOnCardEditor.cpp) -----------------------------------------
@@ -179,7 +183,15 @@ private:
     juce::Rectangle<int> clampToSection(int cell, juce::Rectangle<int> rect) const;
     juce::Rectangle<int> clampToTarget(int section, juce::Rectangle<int> rect) const;
     juce::Rectangle<int> sectionArea(int section) const;
-    void commitMoveToSection(int cell, juce::Rectangle<int> dropped, int target);
+    void commitMoveToSection(int cell, juce::Rectangle<int> landed, int target, const CellRects& placed);
+    void previewRowDrop(juce::Rectangle<int> rect, juce::Point<int> pointer,
+                        const std::vector<oncard::Guide>& snapGuides);
+    void restoreBaseline();
+    int dropSectionAt(int y) const;
+    void commitRowDrop(int cell, juce::Rectangle<int> start, const CellRects& placed,
+                       const std::vector<juce::Rectangle<int>>& baseline, juce::Rectangle<int> dropped);
+    void changeShowAs(const juce::String& paramId, CardWidget widget);
+    void repackAfterResize(const juce::String& paramId, juce::Rectangle<int> before);
     std::vector<int> cellsOfSection(int section) const;
 
     /** A cell gliding from one rect to another over `ms`, easing in when it is on its way back. */
