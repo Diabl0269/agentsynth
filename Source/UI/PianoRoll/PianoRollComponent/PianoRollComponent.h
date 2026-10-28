@@ -304,6 +304,7 @@ public:
 
     // Fired after toggleSnap() flipped the shared snap flag — see PianoRollClipboardAndKeys.cpp.
     std::function<void()> onSnapToggled;
+    std::function<void(bool enabled)> onSnapKeyToggled; // J only (not the Q button), after onSnapToggled
 
     // Fired whenever the roll's OWN horizontal mapping changed — see PianoRollComponent.cpp.
     std::function<void()> onHorizontalViewChanged;

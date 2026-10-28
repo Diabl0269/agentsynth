@@ -19,6 +19,7 @@
 #include "../../TestSettingsHelpers.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
+#include "UI/Chrome/Toast/ToastComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -560,9 +561,8 @@ TEST_F(FocusRegionMainComponentTest, AddTrackCommandShowsTheTimelineAndOpensTheP
     ASSERT_TRUE(commandIsActive(mc, AppCommands::openAddTrackMenu));
 
     std::unique_ptr<synth::ui::ModMatrixPicker> picker;
-    synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<synth::ui::ModMatrixPicker> p, juce::Rectangle<int>) {
-        picker = std::move(p);
-    };
+    synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<synth::ui::ModMatrixPicker> p,
+                                                                   juce::Rectangle<int>) { picker = std::move(p); };
     const bool ran = mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
     synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
 
@@ -663,4 +663,30 @@ TEST_F(FocusRegionMainComponentTest, AddTrackPickerIsDroppedWhenTheTimelineClose
 
     EXPECT_EQ(run.opened, 0);
     EXPECT_FALSE(mc.isBottomDockConfiguredVisible());
+}
+
+// A timeline hotkey's message ("Snap on") lands in MainComponent's toast, above the open timeline dock rather than
+// behind it.
+TEST_F(FocusRegionMainComponentTest, ATimelineHotkeyMessageShowsInTheToastAboveTheOpenDock) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    mc.setSize(1600, 900);
+    hideWelcomeScreen(mc);
+    mc.simulateToggleBottomPanelClick();
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
+
+    synth::ui::ToastComponent* toast = nullptr;
+    for (auto* child : mc.getChildren())
+        if (auto* candidate = dynamic_cast<synth::ui::ToastComponent*>(child))
+            toast = candidate;
+    ASSERT_NE(toast, nullptr);
+    ASSERT_TRUE(static_cast<bool>(mc.getTimelinePanel().onShowMessage));
+
+    mc.getTimelinePanel().onShowMessage("Follow: Smooth");
+    EXPECT_TRUE(toast->isToastShown());
+    EXPECT_EQ(toast->getMessageForTest(), "Follow: Smooth");
+    EXPECT_LE(toast->getBounds().getBottom(), mc.getBottomDock().getY()) << "above the dock, not under it";
+    EXPECT_EQ(mc.getIndexOfChildComponent(toast), mc.getNumChildComponents() - 1) << "on top of its siblings";
+
+    mc.getTimelinePanel().onShowMessage("Snap on");
+    EXPECT_EQ(toast->getMessageForTest(), "Snap on") << "a second change replaces the message";
 }

@@ -554,6 +554,11 @@ is a real `TextLinkButton`: focusable, titled "Undo", with a tooltip ("Undo this
 runs. The Poly pill's Undo only undoes while its step is still the last edit (`AppUndoManager::getEditSerial()`).
 Colours are theme tokens only.
 
+A second use is a plain message with no action: a timeline hotkey that changes a setting says what it did ("Follow
+playhead on", "Follow: Smooth", "Snap off"). `TimelinePanelComponent::onShowMessage` is wired to `toast_->show(message)`
+where the toast is created (`MainComponentSetup.cpp`); only key presses call it (a click on the button already shows the new
+state). The toast sits at the bottom of the canvas area above the open timeline dock, so the dock never covers it.
+
 ## Shortcut hint overlay
 
 `Source/UI/Chrome/ShortcutHint/ShortcutHintOverlay` is a second full-window overlay: a child of

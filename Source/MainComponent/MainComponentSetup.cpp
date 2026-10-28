@@ -275,6 +275,8 @@ void MainComponent::wireGraphEditorCallbacks() {
     // and somewhere to say what it changed. The toast is a plain child laid out by resized(), raised when shown.
     toast_ = std::make_unique<synth::ui::ToastComponent>();
     addChildComponent(*toast_);
+    // A timeline hotkey that changes a setting says what it did (follow, follow mode, snap).
+    timelinePanel.onShowMessage = [this](const juce::String& message) { toast_->show(message); };
     graphEditor.getPolyChain().trackProvider = [this] {
         std::vector<synth::PolyTrackRef> tracks;
         for (const auto& track : timelineDoc.getTracks())
