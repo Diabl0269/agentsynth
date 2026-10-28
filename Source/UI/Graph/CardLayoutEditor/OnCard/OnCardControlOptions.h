@@ -42,23 +42,33 @@ CardWidget widgetForKind(WidgetKind kind, CardWidget current, const std::vector<
 bool offersKnobSize(const std::vector<CardWidget>& widgetChoices, CardWidget current);
 bool offersFaderDirection(const std::vector<CardWidget>& widgetChoices, CardWidget current);
 
+/** The layout section holding the copy of `paramId` the card shows now, for a parameter listed in more than one
+ *  look (the ADSR's Sustain in Separate mode); nullopt for any other, where the first item with the id is the
+ *  one. Each edit below takes it as `layoutSection` so a change lands on the look the user sees. */
+std::optional<int> visibleLayoutSection(const synth::CardBody& body, const CardLayout& layout,
+                                        const juce::String& paramId);
+
 /** The panel's contents for `paramId`, or nothing when the card shows no such control. `params` is the
  *  source's parameters(), `layout` the layout the card draws now. */
 std::optional<ControlOptions> readControlOptions(const synth::CardBody& body,
                                                  const std::vector<CardLayoutEditorParam>& params,
-                                                 const CardLayout& layout, const juce::String& paramId);
+                                                 const CardLayout& layout, const juce::String& paramId,
+                                                 std::optional<int> layoutSection = std::nullopt);
 
 /** `layout` with an item for `paramId` in the section the card draws it in, when the layout has none (the
  *  footer's Poly toggle joins the footer without being listed): every edit below needs an item to change. */
-CardLayout withPlacedItem(CardLayout layout, const juce::String& paramId, const synth::CardBody& body);
+CardLayout withPlacedItem(CardLayout layout, const juce::String& paramId, const synth::CardBody& body,
+                          std::optional<int> layoutSection = std::nullopt);
 
 /** `layout` with `paramId`'s item drawn as `widget`, or unchanged when the layout has no such item. */
-CardLayout withShowAs(CardLayout layout, const juce::String& paramId, CardWidget widget);
+CardLayout withShowAs(CardLayout layout, const juce::String& paramId, CardWidget widget,
+                      std::optional<int> layoutSection = std::nullopt);
 /** `layout` with `paramId`'s caption override set from `text` (labelOverrideFor's rule). */
 CardLayout withControlLabel(CardLayout layout, const juce::String& paramId, const juce::String& displayName,
-                            const juce::String& text);
+                            const juce::String& text, std::optional<int> layoutSection = std::nullopt);
 /** `layout` with `paramId`'s range set, or cleared for nullopt. */
-CardLayout withControlRange(CardLayout layout, const juce::String& paramId, std::optional<juce::Range<double>> range);
+CardLayout withControlRange(CardLayout layout, const juce::String& paramId, std::optional<juce::Range<double>> range,
+                            std::optional<int> layoutSection = std::nullopt);
 
 /** What typing a minimum and a maximum means for a parameter whose own range is `full`. */
 struct RangeEntry {

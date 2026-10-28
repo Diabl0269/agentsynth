@@ -198,7 +198,8 @@ private:
     void closePanel();
     void refreshPanel();
     void writeLayout(const CardLayout& layout);
-    void editControl(const juce::String& paramId, const std::function<CardLayout(CardLayout)>& edit);
+    void editControl(const juce::String& paramId,
+                     const std::function<CardLayout(CardLayout, std::optional<int>)>& edit);
     void hideControl(juce::String paramId); ///< By value: the id can belong to an outline the hide deletes.
     juce::Rectangle<int> screenAreaOf(const CardLayoutOutline& outline) const;
 
