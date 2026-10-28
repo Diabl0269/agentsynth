@@ -9,6 +9,7 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
 #include <gtest/gtest.h>
+#include <set>
 
 using namespace synth::ui;
 using namespace synth::ui::test;
@@ -601,4 +602,26 @@ TEST(CurveEditorDuplicatePlacement, ASinglePointKeepsItsSmallExistingOffsetInEve
         ASSERT_EQ(rig.selected().size(), 1u);
         EXPECT_NEAR(rig.node(rig.selected()[0]).x, 0.27, 1e-9);
     }
+}
+
+// Regression test for FRO1199: on a coarse grid the hold started at 0.15 of the range a second, so the cells arrived
+// about once a second.
+TEST(CurveEditorKeyHold, AHoldOnACoarseGridKeepsSteppingAtAPaceScaledToTheGrid) {
+    HeldRig rig(freeModel(1));
+    rig.editor.setGrid(CurveEditorComponent::CurveGrid{8, 2, 0.0, 0.0});
+    rig.editor.setSnapToGrid(true);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    rig.events.clear();
+    rig.hold(juce::KeyPress::rightKey, kAlt);
+    std::set<long> cells{std::lround(rig.node(1).x * 8.0)};
+    for (int ms = 0; ms <= 1000; ms += 50) {
+        rig.frame((double)ms);
+        cells.insert(std::lround(rig.node(1).x * 8.0));
+    }
+    EXPECT_GE(cells.size(), 3u) << "the tap plus further cells within the first second";
+    EXPECT_EQ(rig.count("end"), 0);
+    rig.release();
+    EXPECT_EQ(rig.count("start"), 1);
+    EXPECT_EQ(rig.count("end"), 1) << "the whole hold is one gesture";
 }

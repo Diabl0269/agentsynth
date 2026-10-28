@@ -72,8 +72,13 @@ bool AutomationLaneEditor::beginKeyDrag(int keyCode, const std::vector<LaneBreak
     dragOriginalValue_ = previewValue_ = grabbed->value;
 
     namespace k = lane_key;
+    // A snapped hold starts at one grid step per kSnappedStepSeconds (never slower than a free one) and the cap grows
+    // by the same factor, so a coarse grid keeps stepping instead of waiting seconds for its next line.
+    const double paceScale =
+        keyDrag_.snapped ? std::max(1.0, keyDrag_.unit / (k::kSnappedStepSeconds * k::kTimeStartBeatsPerSecond)) : 1.0;
     const KeyGlideConfig config =
-        time ? KeyGlideConfig{k::kTimeStartBeatsPerSecond, k::kTimeMaxBeatsPerSecond, k::kTapMs, k::kRampMs}
+        time ? KeyGlideConfig{k::kTimeStartBeatsPerSecond * paceScale, k::kTimeMaxBeatsPerSecond * paceScale, k::kTapMs,
+                              k::kRampMs}
              : KeyGlideConfig{k::kValueStartRangePerSecond, k::kValueMaxRangePerSecond, k::kTapMs, k::kRampMs};
     const double valueTap = size == NudgeSize::Coarse ? k::kCoarseValueStep : k::kFineValueStep * fine;
     keyHold_.begin(keyCode, config, time ? keyDrag_.unit : valueTap);

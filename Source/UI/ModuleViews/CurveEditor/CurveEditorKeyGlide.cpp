@@ -4,6 +4,7 @@
 
 #include "CurveEditorComponent.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
@@ -57,8 +58,12 @@ bool CurveEditorComponent::beginKeyDrag(int keyCode, double dx, double dy, bool 
     keyDrag_.start = time ? node.x : (double)node.y;
     keyDrag_.unit = step;
     keyDrag_.snapped = snapToGrid_ && grid_.has_value() && !fine;
-    const KeyGlideConfig config{kStartRangePerSecond * range, kMaxRangePerSecond * range, lane_key::kTapMs,
-                                lane_key::kRampMs};
+    // A snapped hold starts at one grid step per kSnappedStepSeconds (never slower than a free one), the cap scaled
+    // alike.
+    const double paceScale =
+        keyDrag_.snapped ? std::max(1.0, step / (lane_key::kSnappedStepSeconds * kStartRangePerSecond * range)) : 1.0;
+    const KeyGlideConfig config{kStartRangePerSecond * range * paceScale, kMaxRangePerSecond * range * paceScale,
+                                lane_key::kTapMs, lane_key::kRampMs};
     keyHold_.begin(keyCode, config, step);
     applyKeyDrag(true);
     return true;

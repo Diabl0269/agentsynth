@@ -60,7 +60,9 @@ whose key is not physically down (a synthesised event, an assistive tool) is one
 | Value | 1% of the range | 0.15 of the range per second | 1.2 per second | Shift: a 10% tap, hold three times as fast; Alt+Shift: a quarter |
 
 With snap off a hold is continuous. With snap on a time hold is the continuous distance cut into whole grid steps, so
-the points jump from grid line to grid line. Alt+Shift with two or more points still stretches
+the points jump from grid line to grid line; its start speed is one grid step per quarter second (a one-bar grid steps
+about four times a second) and the cap grows by the same factor, but never below the free speeds above, so fine grids
+are unchanged. The curve editor does the same with its grid cell. Alt+Shift with two or more points still stretches
 ([below](#stretching-a-selection)).
 
 **Easing.** A discrete jump of the drawn points (the tap, a snapped step, a one-step key press) is final in the doc
