@@ -34,15 +34,6 @@ add_executable(Tests
     Modules/FilterTests.cpp
     Modules/LadderCoefficientSetterTests.cpp
     Modules/FilterKeyTrackTests.cpp
-    Modules/Filter/AllocationCounter.cpp
-    Modules/Filter/PartitionedConvolverTests.cpp
-    Modules/Filter/CustomFilterEngineTests.cpp
-    Modules/Filter/CustomFilterBlendTests.cpp
-    Modules/Filter/CustomFilterCutoffTests.cpp
-    Modules/Filter/CustomFilterVowelTests.cpp
-    Modules/Filter/CustomFilterPeakMorphTests.cpp
-    Modules/Filter/FilterCustomModuleTests.cpp
-    Modules/Filter/FilterPerNoteTests.cpp
     Modules/CardViewStateTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModulePanLawTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModuleOscillatorTests.cpp
@@ -994,6 +985,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/HostedPluginTests.cmake) # the hosted plugin
 include(${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowserTests.cmake) # the sound index and the Sounds view
 include(${CMAKE_CURRENT_SOURCE_DIR}/LoopWrapTests.cmake) # Track In across a loop wrap, every block size
 include(${CMAKE_CURRENT_SOURCE_DIR}/ControlStyleTests.cmake) # knob and fader styles, per module and per type
+include(${CMAKE_CURRENT_SOURCE_DIR}/CustomFilterTests.cmake) # the Filter's Custom type and its per-note modes
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

@@ -2,7 +2,7 @@
 
 // PerNoteBar.h -- the shape editor's per-note settings, in its bottom bar: "Notes move the cursor" (Off, By hand,
 // By pitch, Random), Smoothness (Hard to Smooth) and, for By hand, the key strip with its octave buttons. A line of
-// hint text fades in under the mode row when the chosen mode cannot work yet (no Pitch cable, or a mono Filter).
+// hint text fades in under the mode row when the chosen mode cannot work yet (no Pitch cable).
 #include "NoteKeyStrip.h"
 #include "ShapeListAdapter.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -16,7 +16,7 @@ namespace synth::ui {
 /** Every change goes to the adapter live, and each click, key step or slider drag is one undo step (choosing By hand
  *  or By pitch also cables the Filter's Pitch input, in the same step). The key and hint rows keep their slots when
  *  hidden, so nothing moves when they fade in or out. The hint follows the cabling at 10 Hz while a mode is on, since a
- *  cable or the Poly switch changed elsewhere is not a change of the shape list. Message thread only. */
+ *  cable changed elsewhere is not a change of the shape list. Message thread only. */
 class PerNoteBar
     : public juce::Component
     , private juce::Timer {
