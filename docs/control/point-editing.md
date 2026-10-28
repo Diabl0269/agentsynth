@@ -41,7 +41,9 @@ app shortcut on Ctrl+T loses to the insert while an editor has focus and wins ev
 
 The shared test of the map is one typed suite run against both editors through a small adapter per editor:
 `Tests/UI/Layout/PointEditing/PointEditorSharedKeyTests.cpp` (the pure model's own tests sit beside it in
-`PointEditingModelTests.cpp`).
+`PointEditingModelTests.cpp`). The mouse gestures have the same kind of guard, `PointEditorSharedMouseTests.cpp`: box
+select (plain, additive, bare click, marquee painted, move after it) runs on both editors, so a gesture added to one
+editor and not the other fails there.
 
 ## The shared model
 
@@ -52,12 +54,13 @@ lands in both at once:
 |---|---|---|
 | Keys | `PointEditorKeys.h` | `pointKeyAction` decodes a key press into one action of the map above (pick, extend, value, move, select all, copy, paste, duplicate, insert, remove, clear); `isInsertPointKey` holds the Ctrl+T rule |
 | Selection | `PointSelectionModel.{h,cpp}` | The selected set (ascending), the cursor and the anchor, keyed by node index in the curve editor and by beat in a lane, and what Left/Right, Shift+Left/Right and Cmd+A do to them |
+| Box select | `PointBoxSelect.{h,cpp}` | The press-drag-release rectangle on empty space, the additive flag, a bare click, and the marquee paint |
 | Group move | `PointGroupMove.{h,cpp}` | How far each moving dot may go (`roomWithin`, `roomBetweenNeighbours`) and the one delta the block moves by (`clampGroupDelta`) |
 | Clipboard | `PointClipboard.h` | The copy/paste/duplicate payload: one entry per dot as its offset from the earliest, its value and the editor's extra data (a curve bend, a lane point's tension and curve) |
 | Duplicate placement | `PointEditorDuplicate.{h,cpp}` (one level up, in `Layout/`) | Where Cmd+D puts the copies (the Duplicate points preference) |
 
 The editors keep only their glue: the curve editor in `CurveEditorSelection.cpp`, `CurveEditorKeyboard.cpp` and
-`CurveEditorClipboard.cpp`; a lane in `LanePointSelection` (the model plus the box-select gesture and repaints) and
+`CurveEditorClipboard.cpp` and `CurveEditorBoxSelect.cpp`; a lane in `LanePointSelection` (the model plus its box-select glue and repaints) and
 `AutomationLaneEditorPoints.cpp`. The keyboard glide, the selection-box ease and the undo glides are unchanged on top.
 
 **Adding a key once:** add its `Kind` and decoding to `pointKeyAction`, then a `case` in each editor's switch
@@ -87,7 +90,16 @@ Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifie
 | Shift- or Cmd-click | Add or remove it from the selection without moving it |
 | Drag a selected dot | Move the whole selection |
 | Double-click empty line | Add a dot; double-click a dot in the curve editor removes it |
-| Drag a box (lanes) | Select the dots inside it |
+| Drag a box on empty space (lanes and curve editor) | Select the dots inside it, replacing the selection; the box is drawn in the accent colour while you drag |
+| Shift-, Cmd- or Ctrl-drag a box | Add the dots inside it to the selection |
+| Click empty space without dragging | Clear the selection |
+
+Alt+arrows then move the boxed dots together and Cmd+Z undoes that move in one step. The box is a mouse shortcut for
+what Shift+Left/Right already do from the keyboard (extend the selection one dot at a time), so nothing needs a
+mouse. In a Fixed (envelope-shaped) curve only dots that can move are boxed; a pinned dot never joins the selection.
+The morph map is out of scope: it keeps a single selected dot and has no box. The gesture is the shared
+`PointBoxSelect` (`Source/UI/Layout/PointEditing/`): it owns the rectangle, the pending click and the marquee, and each
+editor only answers which dots lie inside it (a lane by beat, the curve editor by node index at the drawn position).
 
 Everything drawn around a dot (its selection ring or halo, the keyboard focus ring, a morph dot's focus stop, a lane's
 selection box) follows the dot where it is drawn: under the pointer during a drag, at the preview during a key hold,

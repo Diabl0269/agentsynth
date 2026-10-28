@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/PointEditing/PointBoxSelect.h"
 #include "UI/Layout/PointEditing/PointSelectionModel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -68,20 +69,15 @@ public:
     // live.
     bool release();
     void cancelGesture();
-    bool isBoxActive() const noexcept { return boxActive_; }
+    bool isBoxActive() const noexcept { return box_.isActive(); }
     void paintMarquee(juce::Graphics& g) const;
 
 private:
     void notify();
-    void beginBox(juce::Point<int> anchor, bool additive);
 
     juce::Component& owner_;
     PointSelectionModel<double> model_;
-    bool pendingEmptyClick_ = false;
-    bool boxActive_ = false;
-    juce::Point<int> anchor_;
-    juce::Rectangle<int> box_;
-    std::vector<double> boxBase_; // what an additive box keeps
+    PointBoxSelect<double> box_;
 };
 
 // ---- Moving a selection as one rigid block ----

@@ -413,7 +413,8 @@ rule](animation.md#the-time-bounded-animation-rule).
 records the target with no gesture opened yet, since a plain click that never becomes a drag would
 otherwise push an empty undo step; `mouseDrag` opens the gesture on its first call; `mouseUp` closes
 it. Double-click adds (Free mode, empty space), removes (Free mode, a node), or resets a bend handle
-to 0 (either mode).
+to 0 (either mode). A press on empty space (no node, no handle) is a box select, not a gesture: no undo step
+opens (`CurveEditorBoxSelect.cpp`, [`point-editing.md`](../control/point-editing.md#mouse)).
 
 ## MorphMap
 

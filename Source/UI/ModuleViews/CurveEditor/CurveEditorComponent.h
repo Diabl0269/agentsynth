@@ -4,6 +4,7 @@
 #include "CurveModel.h"
 #include "UI/Layout/KeyGlide/KeyHold.h"
 #include "UI/Layout/KeyGlide/KeyedPointTween.h"
+#include "UI/Layout/PointEditing/PointBoxSelect.h"
 #include "UI/Layout/PointEditing/PointClipboard.h"
 #include "UI/Layout/PointEditing/PointSelectionModel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -251,6 +252,11 @@ private:
     void setSelectedIndex(int index);
     void setSelection(std::vector<int> indices, int cursor, int anchor);
     void selectionChanged();
+    /** The movable nodes whose drawn centre lies inside `box`, then the box selection applied
+     * (CurveEditorBoxSelect.cpp). */
+    std::vector<int> movableNodesInBox(juce::Rectangle<float> box) const;
+    void dragBoxTo(juce::Point<float> position);
+    void endBox();
     bool isSelected(int index) const;
     int cursorIndex() const noexcept;
     /** Every node a selection key may land on, ascending. */
@@ -350,6 +356,7 @@ private:
                                                          PointSelectionRules::Extend::rangeFromAnchor,
                                                          PointSelectionRules::SelectAllCursor::keepSelectedElseLast};
     PointSelectionModel<int> selection_;
+    PointBoxSelect<int> boxSelect_{*this};
     /** A press on an already-selected point settles on release when no drag followed: -1 none. */
     int pendingToggleIndex_ = -1;
     int pendingCollapseIndex_ = -1;
