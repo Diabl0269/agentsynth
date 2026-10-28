@@ -292,7 +292,7 @@ mouse-up, so a multi-note move, scrub or delete is one undo step.
 | Gesture | Effect |
 |---|---|
 | **Single click on empty grid** | DESELECTS (click-through). Creates nothing, writes no undo step |
-| **Double-click on empty grid** | Creates ONE note: pitch from the row, start snapped, length exactly **one snap division** (1 bar quantise → a 1-bar note; 1/4 → a quarter; 1/16 beat when Snap is Off), velocity 100, channel 1. Selected, one undo step. Snapping up past the clip's end steps back one division rather than creating nothing |
+| **Double-click on empty grid** | Creates ONE note: pitch from the row, start at the **left line of the grid cell clicked** (floor, never the nearest line; exactly where clicked when Snap is Off), length exactly **one snap division** (1 bar quantise → a 1-bar note; 1/4 → a quarter; 1/16 beat when Snap is Off), velocity 100, channel 1. Selected, one undo step. Snapping up past the clip's end steps back one division rather than creating nothing |
 | **Drag from empty grid** | Marquee (intersection hit-test) — a plain drag REPLACES the selection; Shift or Cmd/Ctrl makes it additive. A press that never crosses the drag threshold is still just the deselect click above, the same deferred-click promotion the clip lanes use, and the roll has no drag-to-pan (scrolling is wheel-only) |
 | Click a note | Selects it; **Shift** toggles it in or out of the selection, **Cmd** adds it (never removes — the drag that may follow scrubs the whole selection) |
 | Drag a note's body | Moves it plus every other selected note, by one shared snapped beat delta and one shared semitone delta |
@@ -592,7 +592,7 @@ nothing, no deselect, no marquee.
   A note inside a muted clip already contributes nothing to the run (`TimelineSnapshot` excludes
   the whole clip), so a note's own mute only matters inside an unmuted clip.
 
-**Draw** anchors on the floor-snapped beat of a mousedown, grows a length preview on drag
+**Draw** anchors on the left line of the cell under a mousedown (the same rule as the double-click, one shared `computeNewNoteAnchor`), grows a length preview on drag
 (`getDrawPreviewLengthForTest()`), and on release either creates the dragged-length note or — for a
 press that never dragged — falls back to the SAME one-note-per-division gesture the Select tool's
 double-click-on-empty-grid performs.

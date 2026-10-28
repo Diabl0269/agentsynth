@@ -48,7 +48,7 @@ serves a parameter's list and, later, a list with `Off` and `Bar`.
 
 ## Keys
 
-The box is a Tab stop. Space, Enter or Down opens the popup; Left and Right step through the choices without opening.
+The box is a Tab stop. Space or Enter opens the popup; Left and Right step through the choices without opening. Up and Down are not the box's: they bubble to the region around it (a strip or pane walk moves focus on).
 In the popup `S`, `T`, `D` switch the kind (ignored for a disabled kind), Left and Right move between the letters and
 chips, Up and Down walk the same order (`ArrowKeyNavigation` is attached to the popup), Enter or Space picks the focused
 chip, Esc closes without a change. A close from the keyboard hands the focus back to the box; a click elsewhere leaves the

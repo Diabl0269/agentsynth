@@ -6,6 +6,7 @@
 // screen-reader name and the Return/Space target. Real OS focus needs a native peer, so the tests assert
 // the model the focus calls mirror (open roll, visible panes, keyboard clip) and walk the tab order
 // with juce::KeyboardFocusTraverser.
+#include "../Layout/PaneKeysWalk.h"
 #include "PianoRollTestHelpers.h"
 #include "Transport/TransportService.h"
 #include "UI/Layout/FocusStepWithin.h"
@@ -176,9 +177,52 @@ TEST(PianoRollKeyboardReachTest, TheScalePaneIsAFocusRegionOnlyWhileItShows) {
     auto& keys = pane.getPaneKeysForTest();
     EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::escapeKey), &pane.getKeyField()))
         << "Escape leaves the key field";
-    EXPECT_FALSE(keys.keyPressed(plain(juce::KeyPress::downKey), &pane.getKeyField()))
-        << "a combo keeps its arrows (the field opens its picker itself)";
+    EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::downKey), &pane.getKeyField()))
+        << "a combo does not keep Down: the walk steps on to Custom scales";
+    EXPECT_EQ(keys.getLastStepForTest(), &pane.getCustomScalesButton());
     EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::downKey), &pane.getGenerateButton())) << "a button steps on";
+}
+
+// Regression test for FRO1114: a combo and the key field held Up and Down, so a keyboard user could never walk past
+// them.
+TEST(PianoRollKeyboardReachTest, EveryScalePaneControlIsReachedByDownThroughTheRealKeyOrder) {
+    RollWithClip f;
+    f.roll.toggleScalePanel();
+    f.roll.resized();
+    auto& pane = f.roll.getScaleAssistPanel();
+    pane_walk::expectEveryControlReachedByDownAndUp(pane.getPaneKeysForTest(), pane);
+}
+
+TEST(PianoRollKeyboardReachTest, TheCustomScaleEditorsControlsAreKeyStopsToo) {
+    RollWithClip f;
+    f.roll.toggleScalePanel();
+    f.roll.resized();
+    auto& pane = f.roll.getScaleAssistPanel();
+    pane.getCustomScalesButton().onClick();
+    pane.resized();
+    const auto stops = synth::ui::focusableDescendants(pane);
+    ASSERT_TRUE(std::find(stops.begin(), stops.end(), &pane.getCustomScaleNameEditor()) != stops.end())
+        << "the editor is on screen, so its name field is a stop";
+    pane_walk::expectEveryControlReachedByDownAndUp(pane.getPaneKeysForTest(), pane);
+}
+
+TEST(PianoRollKeyboardReachTest, SpaceOpensTheKeyFieldAndDownDoesNot) {
+    RollWithClip f;
+    f.roll.toggleScalePanel();
+    f.roll.resized();
+    auto& pane = f.roll.getScaleAssistPanel();
+    int opened = 0;
+    pane.getKeyField().onOpen = [&] { ++opened; };
+    EXPECT_TRUE(
+        pane_walk::dispatchKey(pane.getPaneKeysForTest(), pane, pane.getKeyField(), plain(juce::KeyPress::spaceKey)));
+    EXPECT_EQ(opened, 1);
+    EXPECT_TRUE(
+        pane_walk::dispatchKey(pane.getPaneKeysForTest(), pane, pane.getKeyField(), plain(juce::KeyPress::returnKey)));
+    EXPECT_EQ(opened, 2);
+    EXPECT_TRUE(
+        pane_walk::dispatchKey(pane.getPaneKeysForTest(), pane, pane.getKeyField(), plain(juce::KeyPress::downKey)));
+    EXPECT_EQ(opened, 2) << "Down moves on";
+    EXPECT_EQ(pane.getPaneKeysForTest().getLastStepForTest(), &pane.getCustomScalesButton());
 }
 
 TEST(PianoRollKeyboardReachTest, ReturnFromClipModeOpensTheRollAndEscapeHandsTheClipBack) {

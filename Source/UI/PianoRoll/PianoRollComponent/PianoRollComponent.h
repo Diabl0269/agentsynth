@@ -513,10 +513,10 @@ private:
 
     // createNoteAt/computeNewNoteAnchor/commitNewNote/beginMoveOrResize/beginVelocityScrub/
     // beginMarquee/updateMarquee/endMarquee — gesture-start helpers; see PianoRollEditTools.cpp for
-    // the full contract of each (snap-vs-floor anchor rules, the one-undo-step shape).
+    // the full contract of each (the one-undo-step shape). A new note starts at the left line of the
+    // grid cell under `pos` and is one division long; Snap Off starts exactly at `pos`.
     void createNoteAt(juce::Point<int> pos);
-    bool computeNewNoteAnchor(juce::Point<int> pos, bool floorToGrid, double& startOut, double& lengthOut,
-                              int& pitchOut) const;
+    bool computeNewNoteAnchor(juce::Point<int> pos, double& startOut, double& lengthOut, int& pitchOut) const;
     void commitNewNote(double startBeat, double lengthBeats, int pitch);
     void beginMoveOrResize(const NoteHit& hit, juce::Point<int> pos);
     void beginVelocityScrub(juce::Point<int> pos);

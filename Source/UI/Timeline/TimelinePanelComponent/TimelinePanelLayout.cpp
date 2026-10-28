@@ -797,6 +797,7 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
 void TimelinePanelComponent::paintOverChildren(juce::Graphics& g) {
     if (!routingPane_.hasKeyboardFocus(true) && !pianoRoll_.getScaleAssistPanel().hasKeyboardFocus(true))
         synth::ui::paintFocusRegionOutline(*this, g);
+    topBarKeys_.paintRing(g);
 }
 
 } // namespace synth::ui

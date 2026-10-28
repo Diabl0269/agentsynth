@@ -335,9 +335,11 @@ TEST(NoteLengthBox, TabsToTheBoxAndKeysOpenPickAndWriteTheParameter) {
     EXPECT_EQ(traverser.getNextComponent(&before), &box);
 
     EXPECT_EQ(box.getCurrentName(), "1/4") << "the box opens showing the parameter's value";
-    ASSERT_TRUE(box.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_FALSE(box.keyPressed(juce::KeyPress(juce::KeyPress::downKey))) << "Down is the region's, not the box's";
+    EXPECT_EQ(box.getPopup(), nullptr);
+    ASSERT_TRUE(box.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     auto* popup = box.getPopup();
-    ASSERT_NE(popup, nullptr) << "Down opens the popup";
+    ASSERT_NE(popup, nullptr) << "Enter opens the popup";
     ASSERT_TRUE(popup->keyPressed(letter('t')));
     ASSERT_TRUE(popup->keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
     ASSERT_TRUE(popup->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));

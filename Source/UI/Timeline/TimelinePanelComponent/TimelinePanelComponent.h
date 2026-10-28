@@ -27,6 +27,7 @@
 #include "UI/Timeline/FollowPlayheadButton.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelineClipboardClip.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelineTopBarKeys.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
 #include "UI/Timeline/TimelineRowLayout.h"
@@ -98,6 +99,8 @@ public:
     // Focus-region outline, drawn OVER children (see its definition in TimelinePanelLayout.cpp).
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
+    void focusLost(FocusChangeType) override { topBarKeys_.leave(); }
+    TimelineTopBarKeys& getTopBarKeysForTest() noexcept { return topBarKeys_; }
 
     // Wheel = horizontal scroll; Cmd+wheel (Ctrl on platforms without a Cmd key) = zoom around the
     // cursor. See mouseWheelMove()'s definition in TimelinePanelLayout.cpp for the full modifier
@@ -971,6 +974,9 @@ private:
     juce::Rectangle<int> trackHeaderBounds_;
     juce::Rectangle<int> lanesBounds_;
     juce::Rectangle<int> gridLanesBounds_; // lanesBounds_ minus the ruler strip at its top
+
+    std::vector<juce::Component*> topBarStops();
+    TimelineTopBarKeys topBarKeys_{*this, [this] { return topBarStops(); }};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelinePanelComponent)
 };

@@ -104,9 +104,17 @@ below for the Mixer region's own keyboard behaviour.
 - **The Timeline's two side panes** — Tab goes track list, routing pane, scale pane, each only while it is on screen
   (Shift+Tab reverses), like any region. Each pane root takes focus and draws the panel outline (the Timeline's own
   outline stands down while focus is in a pane). Inside a pane, Down from the root enters the first control and Up/Down
-  step between controls in on-screen order (no wrap; Up off the first control returns to the root); a combo box or text
-  field keeps its own Up/Down, and Escape from any control returns to the pane root. The rule lives in
-  `Source/UI/Layout/FocusStepWithin.h` (`PaneKeys`). The track list's own Up/Down walk, lanes included, is
+  step between controls in on-screen order (no wrap; Up off the first control returns to the root); only a multi-line
+  text editor keeps its own Up/Down (a one-line field gives them up, or focus would be trapped in it), a combo box or
+  the song Key field opens with Space or Return, a slider moves with Left/Right, and Escape from any control returns
+  to the pane root. A stop is always the control itself, never a part of it (a slider's text box). The rule lives in
+  `Source/UI/Layout/FocusStepWithin.h` (`PaneKeys`).
+- **The Timeline's top bar** (side-pane toggle, tool strip, Sizing, Snap, Follow, the transport buttons, count-in,
+  tempo, time signature, song Key) — focus stays on the Timeline root. Up on the root raises a ring on the first
+  control (`TimelineTopBarKeys`); Left/Right/Home/End move it across the visible, enabled controls in on-screen order
+  (no wrap), Return or Space presses the ringed one (a menu opens, tempo and time signature start typing), Down or
+  Escape drops back to the root, and a chord or a tool digit still reaches the panel. The main Toolbar and the Canvas
+  toolbar already have the same ring; the Mixer's toolbar does not (Up/Down there nudge the fader). The track list's own Up/Down walk, lanes included, is
   in [`timeline/automation.md`](../timeline/automation.md#keyboard-order).
 - **Arrow keys on the Canvas** — the canvas region moves between module cards with the arrows, moves the
   selected cards with Alt+arrows and steps into a card with Return. Unlike the Toolbar and the dock tabs these
