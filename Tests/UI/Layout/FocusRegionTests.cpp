@@ -560,7 +560,7 @@ TEST_F(FocusRegionMainComponentTest, AddTrackCommandShowsTheTimelineAndOpensTheP
     ASSERT_TRUE(commandIsActive(mc, AppCommands::openAddTrackMenu));
 
     std::unique_ptr<synth::ui::ModMatrixPicker> picker;
-    synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<synth::ui::ModMatrixPicker> p) {
+    synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<synth::ui::ModMatrixPicker> p, juce::Rectangle<int>) {
         picker = std::move(p);
     };
     const bool ran = mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
@@ -571,4 +571,96 @@ TEST_F(FocusRegionMainComponentTest, AddTrackCommandShowsTheTimelineAndOpensTheP
     ASSERT_NE(picker, nullptr);
     const auto texts = picker->getVisibleItemTextsForTest();
     EXPECT_NE(std::find(texts.begin(), texts.end(), juce::String("MIDI Track")), texts.end());
+}
+
+namespace {
+// Runs the Add Track command with the launcher hook capturing the picker and the screen bounds it points at.
+struct AddTrackCommandRun {
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    juce::Rectangle<int> anchor;
+    int opened = 0;
+};
+
+void armAddTrackHook(AddTrackCommandRun& run) {
+    synth::ui::test_hooks::addTrackPickerHookForTest() = [&run](std::unique_ptr<synth::ui::ModMatrixPicker> p,
+                                                                juce::Rectangle<int> anchor) {
+        run.picker = std::move(p);
+        run.anchor = anchor;
+        ++run.opened;
+    };
+}
+} // namespace
+
+// Regression test for FRO1094: the picker was launched under the "+ Track" button while the Timeline was still
+// collapsed, so it opened at the bottom of the window. It now anchors at the button's settled place.
+TEST_F(FocusRegionMainComponentTest, AddTrackPickerAnchorsToTheButtonOfAnOpenedTimeline) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    mc.setSize(1600, 900);
+    hideWelcomeScreen(mc);
+    ASSERT_FALSE(mc.isBottomDockConfiguredVisible());
+
+    AddTrackCommandRun run;
+    armAddTrackHook(run);
+    mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
+    synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
+
+    ASSERT_EQ(run.opened, 1) << "animations off: the slide lands at once, so the picker opens in the same call";
+    const auto button = mc.getTimelinePanel().getAddTrackButton().getScreenBounds();
+    EXPECT_FALSE(button.isEmpty());
+    EXPECT_EQ(run.anchor, button);
+}
+
+TEST_F(FocusRegionMainComponentTest, AddTrackPickerOpensAtOnceWhenTheTimelineIsAlreadyOpen) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    mc.setSize(1600, 900);
+    hideWelcomeScreen(mc);
+    mc.simulateToggleBottomPanelClick();
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
+
+    AddTrackCommandRun run;
+    armAddTrackHook(run);
+    mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
+    synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
+
+    EXPECT_EQ(run.opened, 1);
+    EXPECT_EQ(run.anchor, mc.getTimelinePanel().getAddTrackButton().getScreenBounds());
+}
+
+// A slide in flight (stood in for with a tween no VBlank drives) holds the picker back until the slide lands.
+TEST_F(FocusRegionMainComponentTest, AddTrackPickerWaitsForTheTimelineSlideToLand) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    mc.setSize(1600, 900);
+    hideWelcomeScreen(mc);
+    mc.simulateToggleBottomPanelClick();
+    mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).snapTo(0.5f);
+    mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).retarget(1.0f, true);
+    ASSERT_TRUE(mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).isMoving());
+
+    AddTrackCommandRun run;
+    armAddTrackHook(run);
+    mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
+    EXPECT_EQ(run.opened, 0) << "still sliding: nothing to point at yet";
+
+    mc.simulateToggleAiPanelClick(); // the next slide to land (headless: at once) ends this one too
+    synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
+    EXPECT_EQ(run.opened, 1);
+    EXPECT_EQ(run.anchor, mc.getTimelinePanel().getAddTrackButton().getScreenBounds());
+}
+
+TEST_F(FocusRegionMainComponentTest, AddTrackPickerIsDroppedWhenTheTimelineClosesBeforeTheSlideLands) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    mc.setSize(1600, 900);
+    hideWelcomeScreen(mc);
+    mc.simulateToggleBottomPanelClick();
+    mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).snapTo(0.5f);
+    mc.panelSlideForTest(synth::maincomponent::SlidingPanel::Timeline).retarget(1.0f, true);
+
+    AddTrackCommandRun run;
+    armAddTrackHook(run);
+    mc.getCommandManager().invokeDirectly(AppCommands::openAddTrackMenu, false);
+    mc.simulateToggleBottomPanelClick(); // closed again before it landed
+    synth::ui::test_hooks::addTrackPickerHookForTest() = nullptr;
+
+    EXPECT_EQ(run.opened, 0);
+    EXPECT_FALSE(mc.isBottomDockConfiguredVisible());
 }

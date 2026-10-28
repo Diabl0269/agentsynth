@@ -68,7 +68,7 @@ struct PickerFixture {
     // Opens the picker the way the button does, through the launcher's hook.
     std::unique_ptr<ModMatrixPicker> openFromButton() {
         std::unique_ptr<ModMatrixPicker> picker;
-        synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<ModMatrixPicker> p) {
+        synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<ModMatrixPicker> p, juce::Rectangle<int>) {
             picker = std::move(p);
         };
         if (panel.getAddTrackButton().onClick)
@@ -168,7 +168,7 @@ TEST(TimelineAddTrackPicker, TheShortcutFocusesTheButtonAndOpensAPickerWithItsSe
     PickerFixture f;
     ASSERT_FALSE(f.panel.isAddTrackButtonFocused());
     std::unique_ptr<ModMatrixPicker> picker;
-    synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<ModMatrixPicker> p) {
+    synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<ModMatrixPicker> p, juce::Rectangle<int>) {
         picker = std::move(p);
     };
     f.panel.openAddTrackMenuFromShortcut();
@@ -183,7 +183,7 @@ TEST(TimelineAddTrackPicker, TheShortcutFocusesTheButtonAndOpensAPickerWithItsSe
 TEST(TimelineAddTrackPicker, ClosingAKeyboardOpenedPickerHandsFocusBackOnce) {
     PickerFixture f;
     std::unique_ptr<ModMatrixPicker> picker;
-    synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<ModMatrixPicker> p) {
+    synth::ui::test_hooks::addTrackPickerHookForTest() = [&picker](std::unique_ptr<ModMatrixPicker> p, juce::Rectangle<int>) {
         picker = std::move(p);
     };
     f.panel.openAddTrackMenuFromShortcut();

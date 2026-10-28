@@ -63,12 +63,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          [](MainComponent& m) {
              return synth::ui::openContextMenuForFocusedComponent(m.getFocusedComponentForMenu());
          }},
-        // Opens the Timeline if needed (focusRegionById runs the region's open hook), then its "Add Track" picker.
+        // Opens the Timeline if needed (focusRegionById runs the region's open hook), then its "Add Track" picker once the slide has settled.
         {AppCommands::openAddTrackMenu, "Add Track...", "Show the Timeline, focus Add Track and open its search",
          "General", "openAddTrackMenu", [](const MainComponent& m) { return m.isWelcomeScreenHidden(); },
          [](MainComponent& m) {
              m.focusRegions_.focusRegionById("timeline");
-             m.timelinePanel.openAddTrackMenuFromShortcut();
+             // The picker anchors under "+ Track", which has no place until the show slide lands.
+             m.timelineSlide_.whenSettled([safe = juce::Component::SafePointer<MainComponent>(&m), sliding = m.timelineSlide_.isMoving()] {
+                 // A slide closed again before it landed leaves nothing to anchor to.
+                 if (safe != nullptr && (!sliding || safe->isBottomDockVisible))
+                     safe->timelinePanel.openAddTrackMenuFromShortcut();
+             });
              return true;
          }},
         // The same action as the top bar's Feedback button, so the chord works from the canvas, timeline and mixer.

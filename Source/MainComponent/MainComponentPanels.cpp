@@ -724,6 +724,8 @@ void MainComponent::finishPanelSlide() {
         fitMixerAfterDockSlide_ = false;
         fitMixerHostToSections();
     }
+    // Last, so what waited for the timeline (a call-out under one of its buttons) sees the final bounds.
+    timelineSlide_.runSettled();
 }
 
 // Runs once per "the mixer was just shown" (the dock opened or switched to the Mixer tab, the Own

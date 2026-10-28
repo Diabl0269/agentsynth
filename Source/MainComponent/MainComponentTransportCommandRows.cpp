@@ -95,7 +95,12 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          {},
          [](MainComponent& m) {
              m.focusRegions_.focusRegionById("timeline");
-             m.timelinePanel.getTransportBar().getSongKeyField().openPicker();
+             // The picker anchors under the key field, which has no place until the show slide lands.
+             m.timelineSlide_.whenSettled([safe = juce::Component::SafePointer<MainComponent>(&m), sliding = m.timelineSlide_.isMoving()] {
+                 // A slide closed again before it landed leaves nothing to anchor to.
+                 if (safe != nullptr && (!sliding || safe->isBottomDockVisible))
+                     safe->timelinePanel.getTransportBar().getSongKeyField().openPicker();
+             });
              return true;
          }},
         {AppCommands::transportReturnToStart,

@@ -19,9 +19,11 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <juce_animation/juce_animation.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <vector>
 
 namespace synth::ui {
 
@@ -412,6 +414,27 @@ public:
         tweening_ = false;
     }
 
+    /** Runs `fn` once this panel has landed: at once when no tween is in flight (open already, or nothing can
+     *  animate), else when the owner calls runSettled() after the slide's final layout. For anything anchored to
+     *  a control inside the panel (a call-out), which has no true position until then. */
+    void whenSettled(std::function<void()> fn) {
+        if (!tweening_) {
+            fn();
+            return;
+        }
+        settled_.push_back(std::move(fn));
+    }
+
+    /** The owner's end-of-slide hook, called after finish() and the final layout: runs what whenSettled() queued. */
+    void runSettled() {
+        if (tweening_)
+            return;
+        auto waiting = std::move(settled_);
+        settled_.clear();
+        for (auto& fn : waiting)
+            fn();
+    }
+
     /** True while a tween is in flight for THIS panel (the others sharing the driver may be
      *  standing still — their from == to makes applyTweenAt a no-op). */
     bool isMoving() const noexcept { return tweening_; }
@@ -438,6 +461,7 @@ private:
     float from_ = 0.0f;
     float to_ = 0.0f;
     bool tweening_ = false;
+    std::vector<std::function<void()>> settled_;
 };
 
 // ============================================================================
