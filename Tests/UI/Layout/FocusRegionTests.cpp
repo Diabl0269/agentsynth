@@ -685,7 +685,11 @@ TEST_F(FocusRegionMainComponentTest, ATimelineHotkeyMessageShowsInTheToastAboveT
     EXPECT_TRUE(toast->isToastShown());
     EXPECT_EQ(toast->getMessageForTest(), "Follow: Smooth");
     EXPECT_LE(toast->getBounds().getBottom(), mc.getBottomDock().getY()) << "above the dock, not under it";
-    EXPECT_EQ(mc.getIndexOfChildComponent(toast), mc.getNumChildComponents() - 1) << "on top of its siblings";
+    for (int i = mc.getIndexOfChildComponent(toast) + 1; i < mc.getNumChildComponents(); ++i)
+        EXPECT_TRUE(mc.getChildComponent(i)->isAlwaysOnTop())
+            << "only always-on-top siblings (the tooltip) may sit above";
+    EXPECT_GT(mc.getIndexOfChildComponent(toast), mc.getIndexOfChildComponent(&mc.getBottomDock()))
+        << "on top of the dock";
 
     mc.getTimelinePanel().onShowMessage("Snap on");
     EXPECT_EQ(toast->getMessageForTest(), "Snap on") << "a second change replaces the message";
