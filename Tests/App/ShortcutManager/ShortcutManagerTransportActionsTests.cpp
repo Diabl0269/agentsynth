@@ -429,8 +429,10 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, ReturnToStartButtonLocatesToBe
     auto& button = mc.getTimelinePanel().getTransportBar().getReturnToStartButton();
     ASSERT_TRUE(button.isShowing() || button.isVisible());
     button.triggerClick(); // posts the click; it lands on the next dispatch pass
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
-    engine.processHostBlock(buffer, midi);
+    for (int i = 0; i < 50 && transport.getPositionSnapshot().ppq != 0.0; ++i) {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        engine.processHostBlock(buffer, midi);
+    }
     EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 0.0);
     EXPECT_FALSE(transport.getPositionSnapshot().playing) << "returning to start relocates only; it does not stop";
 }

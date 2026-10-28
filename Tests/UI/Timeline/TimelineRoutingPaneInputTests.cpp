@@ -2,6 +2,7 @@
 // input and channel record into a MIDI track. Driven through real mouse and key events on the two buttons, against a
 // stub host that lists made-up devices and makes every edit one undo step, as MainComponent does.
 #include "../Layout/BottomDockActiveTabResetGuard.h"
+#include "../Layout/PaneKeysWalk.h"
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanel/TimelinePanelTestEvents.h"
@@ -209,6 +210,13 @@ TEST(TimelineRoutingPaneInputTest, AnUnpluggedControllerIsNamedAsNotConnected) {
     pane.refresh();
     EXPECT_EQ(pane.getMidiInputDeviceTextForTest(), "Old Keyboard");
     EXPECT_FALSE(pane.isMidiInputDeviceWarningForTest());
+}
+
+TEST(TimelineRoutingPaneInputTest, EveryControlWithTheInputRowsIsReachedByDown) {
+    InputPanel f;
+    f.doc.addTrack(TrackKind::Midi, "Keys");
+    f.select(0);
+    pane_walk::expectEveryControlReachedByDownAndUp(f.pane().getPaneKeysForTest(), f.pane());
 }
 
 // Keyboard path: the two Input buttons are stops in visual order between Canvas node and MIDI destinations, and

@@ -6,6 +6,7 @@
 #include "PianoRollTestHelpers.h"
 
 #include "UI/Timeline/EditTool.h"
+#include <set>
 
 // ============================================================================
 // 4. Edit tools
@@ -620,14 +621,18 @@ void realDoubleClick(PianoRollFixture& f, juce::Point<float> pos) {
 // Clicks `fraction` of the way through the cell starting at `cellStart`, in a fresh clip each time.
 double doubleClickedStart(PianoRollFixture& f, ClipId clipId, double cellStart, double cellLength, double fraction,
                           int pitch) {
-    const auto before = f.doc.getClip(clipId)->notes.size();
+    std::set<synth::NoteId> known;
+    for (const auto& note : f.doc.getClip(clipId)->notes)
+        known.insert(note.id);
     realDoubleClick(f, pointAt(f.roll, cellStart + fraction * cellLength, pitch));
     const auto& notes = f.doc.getClip(clipId)->notes;
-    EXPECT_EQ(notes.size(), before + 1u);
-    if (notes.size() != before + 1u)
-        return -1.0;
-    EXPECT_DOUBLE_EQ(notes.back().lengthBeats, cellLength) << "one division long";
-    return notes.back().startBeat;
+    EXPECT_EQ(notes.size(), known.size() + 1u);
+    for (const auto& note : notes)
+        if (known.count(note.id) == 0) {
+            EXPECT_DOUBLE_EQ(note.lengthBeats, cellLength) << "one division long";
+            return note.startBeat;
+        }
+    return -1.0;
 }
 
 } // namespace
