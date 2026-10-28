@@ -122,8 +122,9 @@ public:
     // TimelineViewState must not move when the wheel lands here. See PianoRollMouse.cpp for the
     // full per-branch contract.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
-    // Trackpad pinch: plain = horizontal zoom around the pinch point, Shift = vertical zoom —
-    // the same pair TimelinePanelComponent::mouseMagnify binds for the lanes.
+    // Trackpad pinch: plain = horizontal and vertical zoom around the pinch point, Shift or Option =
+    // vertical only, Cmd = horizontal only — the same mapping TimelinePanelComponent::mouseMagnify
+    // binds for the lanes.
     void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
     // Hover-only work: the Split tool's cut-position preview and the Select tool's resize-zone
     // cursor — see PianoRollMouse.cpp for the state-change gating that keeps this free while idle.
