@@ -7,4 +7,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/PerNotePitchCableTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeWindowGridTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeWindowSpectrumTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeWindowThemeTests.cpp
 )

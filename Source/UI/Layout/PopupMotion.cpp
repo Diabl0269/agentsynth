@@ -1,11 +1,42 @@
 #include "UI/Layout/PopupMotion.h"
 
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 #include <unordered_map>
 #include <vector>
 
 namespace synth::ui {
+
+namespace popup_motion {
+void applyThemedBackground(juce::DialogWindow::LaunchOptions& options) {
+    if (options.dialogBackgroundColour != juce::Colours::lightgrey)
+        return;
+    if (options.componentToCentreAround != nullptr) {
+        options.dialogBackgroundColour =
+            synth::theme::windowBackgroundFor(synth::theme::themeOf(*options.componentToCentreAround));
+    } else if (auto* lf =
+                   dynamic_cast<synth::theme::AppLookAndFeel*>(&juce::Desktop::getInstance().getDefaultLookAndFeel())) {
+        options.dialogBackgroundColour = synth::theme::windowBackgroundFor(lf->getTheme());
+    } else {
+        options.dialogBackgroundColour = synth::theme::windowBackgroundFor(synth::theme::Theme{});
+    }
+}
+} // namespace popup_motion
+
+juce::DialogWindow* PopupMotion::launchDialog(juce::DialogWindow::LaunchOptions& options) {
+    return launchDialog(options, [](juce::DialogWindow&) { return popup_motion::Style{}; });
+}
+
+juce::DialogWindow*
+PopupMotion::launchDialog(juce::DialogWindow::LaunchOptions& options,
+                          const std::function<popup_motion::Style(juce::DialogWindow&)>& makeStyle) {
+    popup_motion::applyThemedBackground(options);
+    auto* dialog = options.launchAsync();
+    if (dialog != nullptr)
+        attach(*dialog, makeStyle(*dialog));
+    return dialog;
+}
 
 #if JUCE_MAC
 // PopupMotionMac.mm: a picture of a whole native window, title bar included. `topInset` is how

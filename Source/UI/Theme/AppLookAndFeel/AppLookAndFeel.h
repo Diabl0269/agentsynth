@@ -35,6 +35,9 @@ juce::AffineTransform toolbarIconTransform(const synth::ui::ToolbarButton& butto
 // outside any (a bare test fixture). The shared controls below never fall back to colour literals.
 const Theme& themeOf(const juce::Component& comp);
 
+// The opaque colour a top-level window of `theme` is backed with (page colour under the surface).
+juce::Colour windowBackgroundFor(const Theme& theme);
+
 // What a chip is painted for. `raised` fills with surfaceHi instead of surface (a chip on a surface-
 // coloured strip would vanish); `active` is the lit state (toolActive); `warning` outlines in the
 // warning colour.

@@ -31,6 +31,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     , controller_(map_, *adapter_) {
     setTitle(adapter_->getWindowTitle());
     setWantsKeyboardFocus(false);
+    setOpaque(true); // paint() fills every pixel
 
     map_.setShowLabels(true);
     addAndMakeVisible(map_);
@@ -255,11 +256,18 @@ bool ShapeListEditor::keyPressed(const juce::KeyPress& key) {
     return true;
 }
 
-void ShapeListEditor::lookAndFeelChanged() { applyDestructiveLook(deleteButton_); }
+void ShapeListEditor::lookAndFeelChanged() {
+    applyDestructiveLook(deleteButton_);
+    // The window behind the content is backed with the same opaque colour, so a theme switch keeps both in step.
+    if (auto* window = findParentComponentOfClass<juce::DialogWindow>())
+        window->setBackgroundColour(synth::theme::windowBackgroundFor(synth::theme::themeOf(*this)));
+    repaint();
+}
 
 void ShapeListEditor::paint(juce::Graphics& g) {
-    const auto& colors = synth::theme::themeOf(*this).colors;
-    g.fillAll(colors.surface);
+    const auto& theme = synth::theme::themeOf(*this);
+    const auto& colors = theme.colors;
+    g.fillAll(synth::theme::windowBackgroundFor(theme)); // opaque: Neon's surface is translucent
     if (!gridLabelArea_.isEmpty()) {
         g.setColour(colors.textMuted);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
