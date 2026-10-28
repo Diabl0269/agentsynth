@@ -561,6 +561,8 @@ public:
     std::optional<std::pair<double, double>> getEffectiveGeometryForTest(synth::ClipId id) const;
     // Where a clip is drawn right now (trails its place while an undo or redo glide runs), and the glide itself.
     juce::Rectangle<int> getDrawnClipRectForTest(synth::ClipId id) const;
+    /** Tests: the x the clip's `index`th note is drawn at right now (its start edge), gliding included. */
+    double getDrawnNoteXForTest(synth::ClipId id, int index) const;
     KeyedRectTween& getClipGlideForTest() noexcept { return clipGlide_; }
     // The track-row offset the in-flight move/copy drag would apply to the whole selection — 0
     // whenever the drop would be illegal for any clip in it (see mouseDrag's kind check).
@@ -632,6 +634,8 @@ private:
     std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> collectClipRects() const;
     void glideRestoredClips();
     juce::Rectangle<int> drawnClipRect(synth::ClipId id, juce::Rectangle<int> resting) const;
+    // The x a note's resting `restingX` is drawn at while the clip glides from its old place (RestoreGlide.cpp).
+    double glidedNoteX(synth::ClipId id, double restingX, juce::Rectangle<int> restingRect) const;
     Geometry effectiveGeometryFor(const synth::Clip& clip) const;
     // The row a clip PAINTS in right now: its own, except while a plain (non-copy) move drag
     // previews a cross-track drop (see TimelineClipLaneArea.cpp for the copy-drag exception).
@@ -788,6 +792,9 @@ private:
         bool operator==(const ClipPlace&) const = default;
     };
     std::map<std::int64_t, ClipPlace> clipPlaces_;
+    // The notes' relative starts at the same sync, and how a restore's glide moves each clip's notes (ClipNoteGlide).
+    std::map<std::int64_t, std::vector<synth::ClipNoteStart>> clipNoteStarts_;
+    std::map<std::int64_t, synth::ClipNoteGlide> noteGlide_;
     KeyedRectTween clipGlide_{*this};
     RestoreWatch restoreWatch_;
     const AppUndoManager* watchedUndo_ = nullptr;

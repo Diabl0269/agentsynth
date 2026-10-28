@@ -21,8 +21,30 @@ juce::Rectangle<int> TimelineClipLaneArea::getDrawnClipRectForTest(synth::ClipId
     return {};
 }
 
+double TimelineClipLaneArea::glidedNoteX(synth::ClipId id, double restingX, juce::Rectangle<int> restingRect) const {
+    if (!clipGlide_.isAnimating())
+        return restingX;
+    const auto mode = noteGlide_.find(id.value);
+    if (mode == noteGlide_.end())
+        return restingX;
+    const auto rest = restingRect.toFloat();
+    const auto drawn = clipGlide_.drawnAt(id.value, rest);
+    return synth::glidedNoteX(mode->second, restingX, rest.getX(), rest.getWidth(), drawn.getX(), drawn.getWidth());
+}
+
+double TimelineClipLaneArea::getDrawnNoteXForTest(synth::ClipId id, int index) const {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(id) : nullptr;
+    if (clip == nullptr || index < 0 || index >= (int)clip->notes.size())
+        return 0.0;
+    for (const auto& [clipId, rect] : collectClipRects())
+        if (clipId == id)
+            return glidedNoteX(id, viewState_.beatToX(clip->startBeat + clip->notes[(size_t)index].startBeat), rect);
+    return 0.0;
+}
+
 // Runs at the end of every refresh from the doc. A restore (see RestoreWatch) glides the clips whose start, length or
-// row differ from the last sync; any other change lands at once.
+// row differ from the last sync, and works out from the notes' relative starts how their notes ride along; any other
+// change lands at once.
 void TimelineClipLaneArea::glideRestoredClips() {
     bool restored = false;
     if (undoManager_ != watchedUndo_) {
@@ -33,11 +55,14 @@ void TimelineClipLaneArea::glideRestoredClips() {
     }
 
     std::map<std::int64_t, ClipPlace> now;
+    std::map<std::int64_t, std::vector<synth::ClipNoteStart>> noteStartsNow;
     if (doc_ != nullptr) {
         const auto& tracks = doc_->getTracks();
         for (int row = 0; row < (int)tracks.size(); ++row)
-            for (const auto& clip : tracks[(size_t)row].clips)
+            for (const auto& clip : tracks[(size_t)row].clips) {
                 now[clip.id.value] = {clip.startBeat, clip.lengthBeats, row};
+                noteStartsNow[clip.id.value] = synth::clipNoteStarts(clip.notes);
+            }
     }
     for (const auto& [id, place] : clipPlaces_)
         if (now.find(id) == now.end())
@@ -52,10 +77,14 @@ void TimelineClipLaneArea::glideRestoredClips() {
             const auto was = clipPlaces_.find(id);
             if (was == clipPlaces_.end() || was->second == place)
                 continue;
+            noteGlide_[id] =
+                synth::classifyClipNoteGlide(was->second.length, place.length, clipNoteStarts_[id], noteStartsNow[id]);
             clipGlide_.retarget(id, clipGlide_.drawnAt(id, rectOf(was->second)), rectOf(place), true);
         }
     }
+    std::erase_if(noteGlide_, [&](const auto& kv) { return now.find(kv.first) == now.end(); });
     clipPlaces_ = std::move(now);
+    clipNoteStarts_ = std::move(noteStartsNow);
 }
 
 } // namespace synth::ui

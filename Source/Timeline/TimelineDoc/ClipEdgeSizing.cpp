@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 
 namespace synth {
 
@@ -62,6 +63,61 @@ ClipEdgeResult clipEdgeResult(const Clip& clip, ClipEdge edge, ClipSizingMode mo
         break;
     }
     return result;
+}
+
+std::vector<ClipNoteStart> clipNoteStarts(const std::vector<MidiNote>& notes) {
+    std::vector<ClipNoteStart> out;
+    out.reserve(notes.size());
+    for (const auto& note : notes)
+        out.push_back({note.id, note.startBeat});
+    return out;
+}
+
+ClipNoteGlide classifyClipNoteGlide(double oldLength, double newLength, const std::vector<ClipNoteStart>& before,
+                                    const std::vector<ClipNoteStart>& after) {
+    constexpr double kEps = 1e-6;
+    if (std::abs(oldLength - newLength) < kEps)
+        return ClipNoteGlide::Shift; // a move keeps every note's place inside the clip
+    const double ratio = oldLength > 0.0 ? newLength / oldLength : 1.0;
+    bool anyCommon = false;
+    bool allSame = true;
+    bool allScaled = true;
+    bool anyScaleWitness = false;
+    std::unordered_map<std::int64_t, double> wasStart;
+    wasStart.reserve(before.size());
+    for (const auto& b : before)
+        wasStart[b.id.value] = b.startBeat;
+    for (const auto& now : after) {
+        const auto was = wasStart.find(now.id.value);
+        if (was == wasStart.end())
+            continue;
+        anyCommon = true;
+        if (std::abs(was->second - now.startBeat) > kEps)
+            allSame = false;
+        if (was->second > kEps) { // a note at the clip's start does not move under a scale, so it says nothing
+            anyScaleWitness = true;
+            if (std::abs(now.startBeat - was->second * ratio) > kEps * std::max(1.0, was->second))
+                allScaled = false;
+        }
+    }
+    if (!anyCommon)
+        return ClipNoteGlide::Stay;
+    if (allSame)
+        return ClipNoteGlide::Shift;
+    return allScaled && anyScaleWitness ? ClipNoteGlide::Scale : ClipNoteGlide::Stay;
+}
+
+double glidedNoteX(ClipNoteGlide glide, double restingX, double restLeft, double restWidth, double drawnLeft,
+                   double drawnWidth) {
+    switch (glide) {
+    case ClipNoteGlide::Stay:
+        return restingX;
+    case ClipNoteGlide::Shift:
+        return restingX + (drawnLeft - restLeft);
+    case ClipNoteGlide::Scale:
+        return restWidth > 0.0 ? drawnLeft + (restingX - restLeft) * (drawnWidth / restWidth) : restingX;
+    }
+    return restingX;
 }
 
 // The window is the audio the clip plays now: from its source offset for its length in seconds at today's tempo. A
