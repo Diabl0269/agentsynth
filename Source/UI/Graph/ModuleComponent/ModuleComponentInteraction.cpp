@@ -74,7 +74,10 @@ void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter*
 // component built without a real RangedAudioParameter behind it, e.g. the ExternalMidiModule
 // device/channel combos — never true for anything reaching here through `sliders`, but checked
 // anyway since sliderParams can hold a null entry per its own header comment).
-void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* param) {
+// `screenAnchor` (screen coordinates) opens the menu beside a control that is not the slider itself (a morph map
+// slider), like showContextMenu's.
+void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* param,
+                                                std::optional<juce::Rectangle<int>> screenAnchor) {
     if (param == nullptr)
         return;
 
@@ -97,7 +100,9 @@ void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* para
     // Routed through showContextMenuHook_ (rather than a direct showMenuAsync) so a test can
     // capture the built menu headlessly, the same seam buildModuleContextMenu()/
     // buildMacroPortContextMenu() already use.
+    menuAnchor_ = screenAnchor;
     showContextMenuHook_(menu);
+    menuAnchor_.reset();
 }
 
 void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) {

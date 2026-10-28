@@ -470,7 +470,7 @@ TEST(ShapeEditor, ARelayedKeyIsDroppedWhenTheMainWindowIsGoneBeforeItArrives) {
     SUCCEED();
 }
 
-// ---- the morph map's menus (dot menu placement, no Edit in the window) ----------------------
+// ---- the morph map's menus (dot menu placement, no Edit in the window, slider menu) ----------------------
 
 namespace {
 
@@ -479,6 +479,10 @@ struct MenuRig : ShapeRig {
     ShapeMapController controller{map, *adapter};
     CapturedMenu menu;
     juce::Rectangle<int> menuArea;
+    int stripMenus = 0;
+    MorphMap::Axis stripAxis = MorphMap::Axis::None;
+    juce::Rectangle<int> stripArea;
+    int cursorMoves = 0;
 
     MenuRig() {
         map.setSize(252, 150);
@@ -486,6 +490,12 @@ struct MenuRig : ShapeRig {
             menu.capture(m);
             menuArea = area;
         };
+        map.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) {
+            ++stripMenus;
+            stripAxis = axis;
+            stripArea = area;
+        };
+        map.onCursorMoved = [this](float, float) { ++cursorMoves; };
         controller.refresh();
     }
 };
@@ -544,6 +554,41 @@ TEST(MorphMapMenu, TheEditItemIsOfferedUnlessTheOwnerHidesIt) {
     EXPECT_EQ(edited, 1) << "Return on a dot still edits it";
 }
 
+TEST(MorphMapMenu, ARightPressOnEachSliderAsksForItsMenuBesideTheLandingDot) {
+    MenuRig rig;
+    for (const auto axis : {MorphMap::Axis::X, MorphMap::Axis::Y}) {
+        rig.stripMenus = 0;
+        rig.map.mouseDown(rightPress(rig.map, rig.map.getStripBounds(axis).getCentre()));
+        rig.map.mouseUp(rightPress(rig.map, rig.map.getStripBounds(axis).getCentre()));
+
+        EXPECT_EQ(rig.stripMenus, 1);
+        EXPECT_EQ(rig.stripAxis, axis);
+        EXPECT_TRUE(rig.stripArea.contains(rig.map.localPointToGlobal(rig.map.stripAnchor(axis)).roundToInt()));
+        EXPECT_TRUE(rig.menu.items.empty()) << "no dot menu on a slider";
+    }
+    EXPECT_EQ(rig.cursorMoves, 0) << "a right-press does not drag the cursor";
+}
+
+TEST(MorphMapMenu, ARightPressOnADotStillOpensTheDotMenuAndAPlainPressOnASliderStillDrags) {
+    MenuRig rig;
+    rig.map.mouseDown(rightPress(rig.map, rig.map.getDotCentre(0)));
+    EXPECT_FALSE(rig.menu.items.empty());
+    EXPECT_EQ(rig.stripMenus, 0);
+
+    const auto onStrip = rig.map.getStripBounds(MorphMap::Axis::X).getCentre();
+    rig.map.mouseDown(curveLeftClick(rig.map, onStrip));
+    rig.map.mouseUp(curveLeftClick(rig.map, onStrip));
+    EXPECT_EQ(rig.stripMenus, 0);
+    EXPECT_GE(rig.cursorMoves, 1) << "a plain press on a slider moves the cursor";
+}
+
+TEST(MorphMapMenu, AMapWithoutACursorHasNoSliderMenu) {
+    MenuRig rig;
+    rig.map.setCursorVisible(false);
+    rig.map.mouseDown(rightPress(rig.map, rig.map.getStripBounds(MorphMap::Axis::X).getCentre()));
+    EXPECT_EQ(rig.stripMenus, 0);
+}
+
 TEST(MorphMapMenu, TheShapeWindowsDotMenuOpensBesideTheDotWithoutEdit) {
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
@@ -582,4 +627,29 @@ TEST(MorphMapMenu, TheShapeWindowsKeyboardMenuAndTheTestHookAlsoGetTheDotArea) {
     shown.editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
     ASSERT_TRUE(map.showContextMenuForKeyboardFocus());
     EXPECT_FALSE(captured.items.empty()) << "the menu-only hook keeps working";
+}
+
+TEST(MorphMapMenu, TheShapeWindowsSliderMenuIsHandedToTheCardsHook) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    MorphMap::Axis axis = MorphMap::Axis::None;
+    editor.onStripMenu = [&](MorphMap::Axis a, juce::Rectangle<int>) { axis = a; };
+
+    editor.getMap().mouseDown(
+        rightPress(editor.getMap(), editor.getMap().getStripBounds(MorphMap::Axis::Y).getCentre()));
+
+    EXPECT_EQ(axis, MorphMap::Axis::Y);
+}
+
+TEST(MorphMapMenu, KeyboardFocusOnASliderStopOpensItsMenu) {
+    ShownWindow shown;
+    if (!shown.canFocus())
+        GTEST_SKIP() << "no keyboard focus in this environment";
+    auto& map = shown.editor.getMap();
+    MorphMap::Axis axis = MorphMap::Axis::None;
+    shown.editor.onStripMenu = [&](MorphMap::Axis a, juce::Rectangle<int>) { axis = a; };
+
+    map.getStripStop(MorphMap::Axis::X)->grabKeyboardFocus();
+    ASSERT_TRUE(map.showContextMenuForKeyboardFocus());
+    EXPECT_EQ(axis, MorphMap::Axis::X);
 }

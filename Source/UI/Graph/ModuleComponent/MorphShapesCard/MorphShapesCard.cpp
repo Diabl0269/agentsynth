@@ -32,6 +32,7 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
         sync(); // the count may have crossed the map's default
     };
     map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int>) { host_.showMenu(menu); };
+    map_.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) { openStripMenu(axis, area); };
     map_.setShowLabels(false);
     map_.setLandingDotDiameter(host_.landingDotDiameter);
     map_.pressGesture = [this](const juce::MouseEvent& e, int phase) { return routeMapPress(e, phase); };
@@ -141,8 +142,17 @@ juce::DialogWindow* MorphShapesCard::openEditor(int shapeIndex) {
     }
     adapter_->setModuleName(host_.title());
     adapter_->setApplicationProperties(host_.appProperties ? host_.appProperties() : nullptr);
-    window_ = openShapeEditorWindow(adapter_, shapeIndex, host_.card);
+    window_ =
+        openShapeEditorWindow(adapter_, shapeIndex, host_.card,
+                              [this](MorphMap::Axis axis, juce::Rectangle<int> area) { openStripMenu(axis, area); });
     return window_.getComponent();
+}
+
+/** A right-click on a slider of the card's map or of the window's: the owner's control menu for that slider's
+    parameter, at `screenArea`. */
+void MorphShapesCard::openStripMenu(MorphMap::Axis axis, juce::Rectangle<int> screenArea) {
+    if (host_.stripMenu)
+        host_.stripMenu(axisChannel(axis), screenArea);
 }
 
 int MorphShapesCard::getNumShapes() const { return (int)adapter_->getShapes().size(); }

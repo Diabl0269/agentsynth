@@ -20,7 +20,8 @@ class ReorderFramePump;
  *
  *  Pointer: drag a dot to move it, drag the cursor to blend, double-click empty space to add a shape there,
  *  double-click a dot to delete it (one always stays), right-click a dot for Edit / Duplicate / Rename / Delete
- *  (a window that has no separate edit step hides Edit: `setEditItemShown`).
+ *  (a window that has no separate edit step hides Edit: `setEditItemShown`), right-click a slider to ask its owner
+ *  for the slider's control menu (`onStripMenu`).
  *  A dot added or restored grows in and a removed one shrinks out, keyed by its name.
  *  Keyboard: the map, then each dot, then the cursor are Tab stops. On a dot or the cursor an arrow moves it one
  *  step (Shift for a bigger one); held, it glides on, slowly at first and faster the longer it is held (two arrows
@@ -110,6 +111,9 @@ public:
     /** Shows a dot menu next to `screenArea` (screen coordinates); unset opens it as a real popup there. A test
      *  replaces it to inspect the menu and the area. */
     std::function<void(juce::PopupMenu&, juce::Rectangle<int> screenArea)> showMenu;
+    /** A right-click (or Shift+F10 on a focused slider) on the slider of `axis`; `screenArea` is its landing dot, where
+     *  the owner opens the slider's menu. Unset does nothing. */
+    std::function<void(Axis, juce::Rectangle<int> screenArea)> onStripMenu;
     /** Whether Delete may remove a dot; unset means yes. */
     std::function<bool()> canDeleteDot;
     /** Offered every press first (`phase` 0, in this component's coordinates); true claims the whole press: the
@@ -182,6 +186,7 @@ public:
     // ---------- actions the menu and keys share ----------
     void beginRename(int index);
     void showDotMenu(int index);
+    void showStripMenu(Axis axis);
 
     // ---------- Component ----------
     void paint(juce::Graphics& g) override;

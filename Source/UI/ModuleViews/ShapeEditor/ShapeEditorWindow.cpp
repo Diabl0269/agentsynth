@@ -56,8 +56,10 @@ void focusShapeEditorWindow(juce::DialogWindow& window) {
 }
 
 juce::DialogWindow* openShapeEditorWindow(std::shared_ptr<ShapeListAdapter> adapter, int selected,
-                                          juce::Component* anchor) {
+                                          juce::Component* anchor,
+                                          std::function<void(MorphMap::Axis, juce::Rectangle<int>)> onStripMenu) {
     auto content = std::make_unique<ShapeListEditor>(std::move(adapter), selected);
+    content->onStripMenu = std::move(onStripMenu);
     content->onAppShortcut = makeAppShortcutRelay(anchor);
     if (auto& hook = test_hooks::shapeEditorWindowHookForTest()) {
         hook(std::move(content));

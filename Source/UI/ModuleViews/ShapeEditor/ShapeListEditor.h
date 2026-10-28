@@ -59,6 +59,9 @@ public:
     /** Like `showMenu` for the map's dot menu, which also gets the screen area it opens beside; wins over `showMenu`.
      */
     std::function<void(juce::PopupMenu&, juce::Rectangle<int>)> showMenuAtArea;
+    /** A right-click on the map's Morph X / Y slider: the card opens that slider's control menu at the area. Unset
+     *  does nothing. */
+    std::function<void(MorphMap::Axis, juce::Rectangle<int>)> onStripMenu;
     /** Offered every key the editor did not use except Escape; returns whether it took it (the window passes app
      *  shortcuts on to the main window this way). */
     std::function<bool(const juce::KeyPress&)> onAppShortcut;

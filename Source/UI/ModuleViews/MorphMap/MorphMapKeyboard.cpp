@@ -176,10 +176,21 @@ juce::Rectangle<int> MorphMap::menuAreaAt(juce::Point<float> localCentre) const 
     return localAreaToGlobal(juce::Rectangle<int>(16, 16).withCentre(localCentre.roundToInt()));
 }
 
+/** The area of a slider's menu: its landing dot, so the menu opens beside the slider. */
+void MorphMap::showStripMenu(Axis axis) {
+    if (onStripMenu)
+        onStripMenu(axis, menuAreaAt(stripAnchor(axis)));
+}
+
 bool MorphMap::showContextMenuForKeyboardFocus() {
     for (int i = 0; i < (int)dotStops_.size(); ++i)
         if (dotStops_[(size_t)i]->hasKeyboardFocus(false)) {
             showDotMenu(i);
+            return true;
+        }
+    for (const Axis axis : {Axis::X, Axis::Y})
+        if (cursorVisible_ && stripStops_[axis == Axis::X ? 0 : 1]->hasKeyboardFocus(false)) {
+            showStripMenu(axis);
             return true;
         }
     return false;

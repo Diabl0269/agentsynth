@@ -782,7 +782,8 @@ private:
      *  `sliderParams` exactly like reflectParameterValue()'s lookup). Builds "Automate '<Param>'"
      *  plus the MIDI Learn block (appendMidiLearnMenuItems, ModuleComponentMidiLearn.cpp) under one
      *  separator, through showContextMenuHook_ so a test can capture it headlessly. */
-    void showAutomateMenuForSlider(juce::RangedAudioParameter* param);
+    void showAutomateMenuForSlider(juce::RangedAudioParameter* param,
+                                   std::optional<juce::Rectangle<int>> screenAnchor = std::nullopt);
 
     // ---- MIDI Learn (ModuleComponentMidiLearn.cpp) ----
 

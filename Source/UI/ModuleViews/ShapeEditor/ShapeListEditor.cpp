@@ -115,6 +115,10 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     };
     map_.setEditItemShown(false); // a press already selected the dot; there is no separate edit step here
     map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int> area) { showMenuNow(menu, area); };
+    map_.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) {
+        if (onStripMenu)
+            onStripMenu(axis, area);
+    };
 
     shapes_ = adapter_->getShapes();
     selected_ = juce::jlimit(0, juce::jmax(0, (int)shapes_.size() - 1), selected);
