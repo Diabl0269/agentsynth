@@ -545,13 +545,18 @@ void CardLayoutOnCardEditor::startGlide(std::vector<Move> moves) {
                 moveCellTo(cell, lerpRect(m.from, m.to, m.easeIn ? easeInCubic(t) : easeOutCubic(t)));
             }
     };
+    glideFrame_ = place;
     finishGlide_ = [this, place] {
         glidePump_.stop();
+        glideFrame_ = nullptr;
         place(1.0e9f);
     };
     glidePump_.run(
         longest, [place, start] { place((float)(juce::Time::getMillisecondCounterHiRes() - start)); },
-        [this] { finishGlide_ = nullptr; });
+        [this] {
+            finishGlide_ = nullptr;
+            glideFrame_ = nullptr;
+        });
 }
 
 } // namespace synth::ui

@@ -2,6 +2,7 @@
 // outline per control in step with the card the source rebuilds, and ending with Done or Cancel.
 // docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutOnCardEditor.h"
+#include "AppUndoManager.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -90,6 +91,11 @@ std::unique_ptr<CardLayoutOnCardEditor> CardLayoutOnCardEditor::open(GraphEditor
             return nullptr;
         std::unique_ptr<CardLayoutOnCardEditor> opened(new CardLayoutOnCardEditor(editor, undo, nodeId, shortcuts));
         opened->attachTo(*comp);
+        // An undo or redo rebuilds the card; the editor re-syncs to it before the restore returns, so no frame shows
+        // the restored layout under outlines still at the old one.
+        if (undo != nullptr)
+            opened->restoreHook_ =
+                undo->addRestoreSettledHook([self = opened.get()] { self->handleUpdateNowIfNeeded(); });
         opened->rememberSync();
         opened->syncToCard();
         if (opened->isShowing()) {
@@ -152,10 +158,21 @@ void CardLayoutOnCardEditor::rememberCardImage() {
 // The card changed under the editor (an undo or redo, a tab switch): re-sync to it without writing, then let
 // the controls glide from where they were to where the restore put them. A control the card gained grows in,
 // one it lost shrinks away, but only when the card was rebuilt: a tab switch just swaps what is shown.
+//
+// A glide in flight is not landed first: the controls are drawn part-way, so the new glide starts from there and
+// nothing jumps (a second Cmd+Z mid-glide). A re-sync that arrives with no new rebuild while a glide runs is a
+// repeat trigger for a change already handled (the restore hook ran first): it leaves the glide alone.
 void CardLayoutOnCardEditor::syncAfterOutsideChange() {
+    const bool rebuilt = std::exchange(cardRebuilt_, false);
+    if (finishGlide_ && !rebuilt)
+        return;
+    if (finishGlide_) {
+        glidePump_.stop();
+        finishGlide_ = nullptr;
+        glideFrame_ = nullptr;
+    }
     const auto before = cells_;
     const auto beforeImage = cardImage_;
-    const bool rebuilt = std::exchange(cardRebuilt_, false);
     syncToCard();
     if (!closed_)
         animateRestore(before, beforeImage, rebuilt);

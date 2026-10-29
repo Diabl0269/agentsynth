@@ -124,6 +124,22 @@ public:
     bool sendEscapeToDragForTest();
     /** Lands every glide and fade at once (no frame arrives headless). */
     void finishMotionForTest();
+    /** Puts the glide in flight at `elapsedMs` since it began, as a frame would; nothing when none runs. */
+    void stepGlideForTest(float elapsedMs) {
+        if (glideFrame_)
+            glideFrame_(elapsedMs);
+    }
+    /** Puts the view's follow of the card at `elapsedMs` since it began, as a frame would; nothing when none runs. */
+    void stepFollowForTest(float elapsedMs) {
+        if (followFrame_)
+            followFrame_(elapsedMs);
+    }
+    bool isFollowingForTest() const noexcept { return static_cast<bool>(followFrame_); }
+    bool isGlidingForTest() const noexcept { return static_cast<bool>(finishGlide_); }
+    /** Where the removed control's picture is now (overlay pixels); empty when `index` is out of range. */
+    juce::Rectangle<int> getShrinkGhostBoundsForTest(int index) const {
+        return index >= 0 && index < ghosts_.size() ? ghosts_[index]->getBounds() : juce::Rectangle<int>();
+    }
     /** Runs the re-sync a card rebuilt from outside queued, now. */
     void runQueuedSyncForTest() { handleUpdateNowIfNeeded(); }
     const juce::String& getLastAnnouncementForTest() const noexcept { return lastAnnouncement_; }
@@ -281,6 +297,8 @@ private:
     bool closed_ = false; ///< The session has ended; the overlay is only fading out or waiting to be destroyed.
     bool writing_ = false;
     bool cardRebuilt_ = false; ///< The card was deleted for a reason that is not ours, since the last re-sync.
+    /// Keeps the re-sync after an undo or redo inside the restore itself (see open()); the manager holds it weakly.
+    std::shared_ptr<void> restoreHook_;
     juce::Image cardImage_; ///< The card as of the last re-sync (2x), for a control an undo takes away to shrink from.
 
     juce::Component::SafePointer<CardLayoutControlPanel> panel_;
@@ -322,7 +340,10 @@ private:
 
     ReorderFramePump fadePump_{*this};
     ReorderFramePump glidePump_{*this};
-    std::function<void()> finishGlide_; ///< Lands the glide in flight at once; empty when none.
+    std::function<void()> finishGlide_;     ///< Lands the glide in flight at once; empty when none.
+    std::function<void(float)> glideFrame_; ///< The glide in flight at `elapsedMs`; empty when none.
+    ReorderFramePump followPump_{*this};
+    std::function<void(float)> followFrame_; ///< The view's pan after the card at `elapsedMs`; empty when none runs.
     ReorderFramePump addFadePump_{*this};
     std::function<void()> finishAddFade_; ///< Lands the added control's grow at once; empty when none.
     std::function<void(float)> addFrame_; ///< The added control's grow at a progress; empty when none runs.
