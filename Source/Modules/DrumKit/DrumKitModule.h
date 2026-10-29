@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DrumKitPadVoice.h"
+#include "DrumKitPads.h"
 #include "DrumVoices.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/Sampler/SamplerInstrumentHost.h"
@@ -11,37 +13,25 @@
 #include <bitset>
 
 /**
- * Synthesized electronic drum kit on one MIDI track.
+ * Synthesized electronic drum kit on one MIDI track, played through 32 pad slots.
  *
- * Each MIDI note plays a drum (General MIDI numbers), so one track carries a whole beat:
+ * Each pad has a MIDI note, a sound (a built-in drum, the loaded recorded kit, an audio file, or another
+ * instrument) and its own Level, Tune, Decay and Start parameters ("pad1Level" ... "pad32Start"). A new kit's pads
+ * 1-20 play the General MIDI drums on their usual notes; 21-32 are free notes with no sound. The pad count (4..32)
+ * only decides how many pads the card shows: every pad answers its note.
  *
- *   | notes      | drum                       | group parameters         |
- *   | :--------- | :------------------------- | :----------------------- |
- *   | 35, 36     | kick                       | Kick level/tune/decay    |
- *   | 38, 40     | snare                      | Snare level/tune/decay   |
- *   | 37         | rim click                  | Snare level/tune         |
- *   | 39         | clap                       | Clap level/tune/decay    |
- *   | 42, 44     | closed / pedal hat         | Hat level/tune, Closed decay |
- *   | 46         | open hat (choked by 42/44) | Hat level/tune, Open decay   |
- *   | 41 43 45 47 48 50 | toms, low to high   | Tom level/tune/decay     |
- *   | 49, 57     | crash                      | Cymbal level/tune/decay  |
- *   | 51, 59     | ride                       | Cymbal level/tune/decay  |
- *   | 56         | cowbell                    | Cowbell level/tune/decay |
+ * The group parameters (kickLevel, snareTune, closedDecay ... and the *Recorded switches) stay: the AI and older
+ * projects write them. Setting one writes its value to every pad of that group (closedDecay to the closed and pedal
+ * hats, openDecay to the open hat); a Recorded switch moves its group's pads between the kit and the built-in drum.
  *
- * Any other note is ignored. A drum plays out its own decay whatever the note length, so Note-Off
- * does nothing. This module owns its amp envelopes: there is no ADSR or VCA in front of it.
- * Output is mono-summed onto a stereo pair (Declared, ships SPLIT like the Sampler).
- *
- * A recorded kit (a sound pack drum instrument, an SFZ or the user's files, loaded like the Sampler's Instrument)
- * replaces the synth voice of every note it has a region for, group by group (each group's Recorded switch). Group
- * Level and Tune apply to both kinds of hit; Decay only to the synth voices.
- *
- * Hit settings (level, tune, decay) are read when a drum is struck; only the master Level is live.
+ * A drum plays out its own decay whatever the note length, so Note-Off does nothing. A closed or pedal hat pad
+ * chokes every open hat pad. Output is a stereo pair (Declared, ships SPLIT like the Sampler).
  */
 class DrumKitModule
     : public ModuleBase
     , public synth::VoiceCountSource
-    , public synth::sampler::InstrumentHost {
+    , public synth::sampler::InstrumentHost
+    , private juce::AudioProcessorParameter::Listener {
 public:
     static constexpr int kNumChannels = 2;
 
@@ -55,6 +45,7 @@ public:
     static Group groupForNote(int note) noexcept;
 
     DrumKitModule();
+    ~DrumKitModule() override;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
@@ -83,73 +74,101 @@ public:
     synth::sampler::Instrument::Ptr getInstrument() const { return instrumentPlayer.current(); }
     synth::sampler::InstrumentSource::Kind getInstrumentKind() const { return instrumentSlot.loadedKind(); }
     bool hasRecordedKit() const { return getInstrumentKind() != synth::sampler::InstrumentSource::Kind::None; }
-    /** True when `note` plays a recording now: a kit with a region for it and its group's Recorded switch on. */
+    /** True when a pad on `note` plays a recording now. */
     bool playsRecording(int note) const;
     /** True when every note that `decayParamId` (e.g. "kickDecay") shapes plays a recording, so the Decay is moot. */
     bool decayIsMoot(const juce::String& decayParamId) const;
-    /** Any thread. The recorded voices sounding at the end of the last block. */
+    /** Any thread. The recorded and audio-file voices sounding at the end of the last block. */
     int displayVoiceCount() const noexcept override { return recordedVoices_.load(std::memory_order_relaxed); }
 
     juce::var getExtraState() const override;
     void setExtraState(const juce::var& state) override;
 
+    // ---- Pads (message thread unless noted) ----
+    enum class PadParam { Level, Tune, Decay, Start };
+    /** True for "pad<N>Level/Tune/Decay/Start". */
+    static bool isPadParamId(const juce::String& id);
+    const synth::drums::PadTable& padTable() const noexcept { return pads_; }
+    const synth::drums::Pad& pad(int index) const { return pads_.pads[(size_t)juce::jlimit(0, 31, index)]; }
+    int padCount() const noexcept { return pads_.count; }
+    /** Clamped by clampPadCount. A never-used free pad the count shows gets its built-in sound. */
+    void setPadCount(int count);
+    /** Replaces pad `index`; a File pad's file is decoded now (false, leaving the pad, when it cannot be read). */
+    bool setPad(int index, const synth::drums::Pad& pad);
+    /** Makes pad `index` play `file` (decoded now); false when it cannot be read. */
+    bool setPadFile(int index, const juce::File& file);
+    /** Every pad plays the loaded kit (its region for the pad's sound, the built-in drum without one). */
+    void fillPadsWithKit();
+    juce::AudioParameterFloat* padParameter(int index, PadParam which) const;
+    /** True when pad `index` plays a recording now: a kit pad whose sound the loaded kit has a region for. */
+    bool padPlaysRecording(int index) const;
+    /** Plays pad `index` at the start of the next block. Any thread. */
+    void auditionPad(int index) noexcept;
+    /** Any thread. The pad the audio thread last struck, or -1. */
+    int lastPlayedPad() const noexcept { return lastPlayedPad_.load(std::memory_order_relaxed); }
+
 private:
-    using Hit = synth::drums::Hit;
+    struct GroupLink {
+        juce::AudioParameterFloat* param = nullptr;
+        PadParam field = PadParam::Level;
+        Group group = Group::None;
+        int hats = 0;                       // 1: closed and pedal hats only, 2: open hat only
+        float lastSeen = 0.0f;              // message thread
+        std::atomic<float> audioSeen{0.0f}; // audio thread poll, also written by the listener
+    };
+    struct PadParams {
+        juce::AudioParameterFloat* level = nullptr;
+        juce::AudioParameterFloat* tune = nullptr;
+        juce::AudioParameterFloat* decay = nullptr;
+        juce::AudioParameterFloat* start = nullptr;
+    };
 
     juce::AudioParameterFloat* addFloat(const char* id, const char* name, float lo, float hi, float def);
-    void trigger(int note, float velocity);
-    Hit hitFor(juce::AudioParameterFloat* level, juce::AudioParameterFloat* tune, float decaySeconds,
-               float velocity) const;
+    void addGroupLink(juce::AudioParameterFloat* param, PadParam field, Group group, int hats = 0);
     void addRecordedParameters();
+    void addPadParameters();
     void stopAll() noexcept;
     float synthSample() noexcept;
     float limited(float sum) noexcept;
     bool loadInstrument(const synth::sampler::InstrumentSource& source);
     void acquireKit() noexcept;
     void releaseKit() noexcept;
-    bool recordedNow(int note) const noexcept;
-    void chokeOpenHat() noexcept;
-    void triggerRecorded(int note, float velocity);
+
+    // Pads, message thread (DrumKitModulePads.cpp)
+    void parameterValueChanged(int parameterIndex, float newValue) override;
+    void parameterGestureChanged(int, bool) override {}
+    bool linkReaches(const GroupLink& link, int sound) const noexcept;
+    void writeLinkToPads(GroupLink& link, float value, bool notify);
+    void applyRecordedSwitch(int group, bool on);
+    synth::drums::PadTable defaultTableForSwitches() const;
+    void revealPad(int index);
+    void loadPadSamples(bool deferIfOpening);
+    void publishPads();
+
+    // Pads, audio thread (DrumKitModulePadAudio.cpp)
+    void acquirePads() noexcept;
+    void pollGroupLinks() noexcept;
+    void triggerNote(int note, float velocity) noexcept;
+    void triggerPad(int index, float velocity) noexcept;
+    void triggerSynth(int index, int sound, float velocity) noexcept;
+    void triggerRecordedPad(int index, int kitNote, int sound, float velocity) noexcept;
+    void chokeOpenHats() noexcept;
+    void renderSamples(float* left, float* right, int count) noexcept;
+    bool samplesActive() const noexcept;
     void renderChunk(float* left, float* right, int count) noexcept;
 
-    juce::AudioParameterFloat* kickLevel = nullptr;
-    juce::AudioParameterFloat* kickTune = nullptr;
-    juce::AudioParameterFloat* kickDecay = nullptr;
-    juce::AudioParameterFloat* snareLevel = nullptr;
-    juce::AudioParameterFloat* snareTune = nullptr;
-    juce::AudioParameterFloat* snareDecay = nullptr;
-    juce::AudioParameterFloat* clapLevel = nullptr;
-    juce::AudioParameterFloat* clapTune = nullptr;
-    juce::AudioParameterFloat* clapDecay = nullptr;
-    juce::AudioParameterFloat* hatLevel = nullptr;
-    juce::AudioParameterFloat* hatTune = nullptr;
-    juce::AudioParameterFloat* closedDecay = nullptr;
-    juce::AudioParameterFloat* openDecay = nullptr;
-    juce::AudioParameterFloat* tomLevel = nullptr;
-    juce::AudioParameterFloat* tomTune = nullptr;
-    juce::AudioParameterFloat* tomDecay = nullptr;
-    juce::AudioParameterFloat* cymbalLevel = nullptr;
-    juce::AudioParameterFloat* cymbalTune = nullptr;
-    juce::AudioParameterFloat* cymbalDecay = nullptr;
-    juce::AudioParameterFloat* cowbellLevel = nullptr;
-    juce::AudioParameterFloat* cowbellTune = nullptr;
-    juce::AudioParameterFloat* cowbellDecay = nullptr;
     juce::AudioParameterFloat* levelParam = nullptr;
     std::array<juce::AudioParameterBool*, kNumGroups> recorded_{};
-    std::array<juce::AudioParameterFloat*, kNumGroups> groupLevel_{};
-    std::array<juce::AudioParameterFloat*, kNumGroups> groupTune_{};
+    std::array<bool, kNumGroups> lastRecorded_{}; // message thread
+    std::array<GroupLink, 22> links_;
+    int numLinks_ = 0;
+    std::array<PadParams, synth::drums::kMaxPads> padParams_{};
 
-    static constexpr int kNumToms = 6;
     static constexpr int kRenderChunk = 256;
 
     double sampleRate_ = 44100.0;
     synth::drums::NoiseSource noise_;
-    synth::drums::KickVoice kick_;
-    synth::drums::SnareVoice snare_, rim_;
-    synth::drums::ClapVoice clap_;
-    synth::drums::CowbellVoice cowbell_;
-    synth::drums::MetallicVoice closedHat_, openHat_, crash_, ride_;
-    std::array<synth::drums::TomVoice, kNumToms> toms_;
+    std::array<synth::drums::PadVoice, synth::drums::kMaxPads> voices_;
     juce::SmoothedValue<float> smoothedLevel_;
 
     synth::sampler::InstrumentPlayer instrumentPlayer; // before the slot, which refers to it; only hands the kit over
@@ -159,4 +178,17 @@ private:
     const synth::sampler::Instrument* poolKit_ = nullptr;
     std::bitset<128> covered_; // audio thread: the notes the held kit has a region for
     std::atomic<int> recordedVoices_{0};
+
+    synth::drums::PadTable pads_;                                                    // message thread
+    std::array<synth::sampler::SampleData::Ptr, synth::drums::kMaxPads> padSamples_; // decoded File pads
+    std::array<int, synth::drums::kMaxPads> padLoadSerial_{};
+    juce::ReferenceCountedArray<synth::drums::PadSnapshot> retainedSnapshots_; // freed once the audio thread let go
+    juce::ReferenceCountedArray<synth::sampler::SampleData> retainedSamples_;
+    mutable juce::SpinLock padLock_;
+    synth::drums::PadSnapshot::Ptr publishedPads_; // under padLock_
+    synth::drums::PadSnapshot::Ptr heldPads_;      // audio thread
+    std::atomic<std::uint32_t> auditionMask_{0};
+    std::atomic<int> lastPlayedPad_{-1};
+
+    JUCE_DECLARE_WEAK_REFERENCEABLE(DrumKitModule)
 };

@@ -1,36 +1,18 @@
-// DrumKitModuleRecorded.cpp -- the Drum Kit's recorded kit: loading and saving it, which notes play it, and the
-// recorded voices' trigger, choke and mix. The synth drums and the module's parameters are in DrumKitModule.cpp.
+// DrumKitModuleRecorded.cpp -- the Drum Kit's recorded kit: loading it, its Recorded switches and which pads play it.
+// Saving it is in DrumKitModulePads.cpp, with the pads; its voices are triggered in DrumKitModulePadAudio.cpp.
 #include "DrumKitModule.h"
 #include "Modules/ModuleFileStateKeys.h"
 #include "Modules/Sampler/SamplerInstrumentPlayer.h"
 
 namespace {
 
-using synth::sampler::VoiceParams;
-
 constexpr std::array<const char*, DrumKitModule::kNumGroups> kRecordedIds = {
     "kickRecorded", "snareRecorded", "clapRecorded", "hatRecorded", "tomRecorded", "cymbalRecorded", "cowbellRecorded"};
 constexpr std::array<const char*, DrumKitModule::kNumGroups> kRecordedNames = {
     "Kick recorded", "Snare recorded",  "Clap recorded",   "Hat recorded",
     "Tom recorded",  "Cymbal recorded", "Cowbell recorded"};
-constexpr std::array<const char*, DrumKitModule::kNumGroups> kLevelIds = {
-    "kickLevel", "snareLevel", "clapLevel", "hatLevel", "tomLevel", "cymbalLevel", "cowbellLevel"};
-constexpr std::array<const char*, DrumKitModule::kNumGroups> kTuneIds = {
-    "kickTune", "snareTune", "clapTune", "hatTune", "tomTune", "cymbalTune", "cowbellTune"};
 
-constexpr float kChokeSeconds = 0.012f;
-constexpr float kPedalHatGain = 0.8f;
-// How much velocity shapes a recording's level on top of the layer it picks (the Sampler's Feel, fixed).
-constexpr float kVelocityFeel = 0.5f;
-constexpr int kOpenHatNote = 46;
 constexpr int kMaxNote = 127;
-
-// Fresh each call: a drum is one-shot, so only the envelope's attack matters and nothing is ever released.
-VoiceParams recordedVoiceParams() {
-    VoiceParams p;
-    p.maxVoices = synth::sampler::VoicePool::kMaxVoices;
-    return p;
-}
 
 // The notes a kit has a (key press) region for.
 template <class Regions>
@@ -98,8 +80,8 @@ void DrumKitModule::addRecordedParameters() {
     for (size_t g = 0; g < (size_t)kNumGroups; ++g) {
         recorded_[g] = new juce::AudioParameterBool(kRecordedIds[g], kRecordedNames[g], true);
         addParameter(recorded_[g]);
-        groupLevel_[g] = static_cast<juce::AudioParameterFloat*>(findParameterByID(this, kLevelIds[g]));
-        groupTune_[g] = static_cast<juce::AudioParameterFloat*>(findParameterByID(this, kTuneIds[g]));
+        lastRecorded_[g] = true;
+        recorded_[g]->addListener(this);
     }
 }
 
@@ -121,32 +103,22 @@ bool DrumKitModule::loadInstrumentFromFiles(const juce::StringArray& absolutePat
     return !absolutePaths.isEmpty() && loadInstrument(synth::sampler::InstrumentSource::fromFiles(absolutePaths));
 }
 
-// A source still decoding is what the module holds, so a save or an undo snapshot taken before it lands keeps it.
-juce::var DrumKitModule::getExtraState() const {
-    const auto& source = instrumentSlot.sourceToSave();
-    if (source.kind == synth::sampler::InstrumentSource::Kind::None)
-        return {};
-    juce::DynamicObject::Ptr state = new juce::DynamicObject();
-    synth::sampler::writeInstrumentState(source, *state);
-    return juce::var(state.get());
-}
-
-void DrumKitModule::setExtraState(const juce::var& state) {
-    const auto* obj = state.getDynamicObject();
-    const auto source = obj != nullptr ? synth::sampler::readInstrumentState(*obj) : synth::sampler::InstrumentSource{};
-    if (source.kind == synth::sampler::InstrumentSource::Kind::None)
-        instrumentSlot.clear(); // a state saved with no kit: undo of the first load
-    else
-        instrumentSlot.restore(source);
-}
-
 // ---- Which notes play recordings ----
 
 bool DrumKitModule::playsRecording(int note) const {
-    const auto group = groupForNote(note);
-    if (group == Group::None || !recorded_[(size_t)group]->get())
+    for (int i = 0; i < synth::drums::kMaxPads; ++i)
+        if (pads_.pads[(size_t)i].note == note && padPlaysRecording(i))
+            return true;
+    return false;
+}
+
+// A kit pad plays the kit's region for its sound (for its own note when it has no built-in sound).
+bool DrumKitModule::padPlaysRecording(int index) const {
+    const auto& p = pad(index);
+    if (p.kind != synth::drums::PadKind::Kit)
         return false;
-    return coverageOf(instrumentSlot.regions()).test((size_t)juce::jlimit(0, kMaxNote, note));
+    const int kitNote = p.sound != synth::drums::kNoSound ? p.sound : p.note;
+    return coverageOf(instrumentSlot.regions()).test((size_t)juce::jlimit(0, kMaxNote, kitNote));
 }
 
 bool DrumKitModule::decayIsMoot(const juce::String& decayParamId) const {
@@ -179,51 +151,4 @@ void DrumKitModule::releaseKit() noexcept {
     poolKit_ = nullptr;
     covered_.reset();
     recordedVoices_.store(0, std::memory_order_relaxed);
-}
-
-bool DrumKitModule::recordedNow(int note) const noexcept {
-    const auto group = groupForNote(note);
-    return poolKit_ != nullptr && group != Group::None && recorded_[(size_t)group]->get() &&
-           covered_.test((size_t)juce::jlimit(0, kMaxNote, note));
-}
-
-// A closed or pedal hat shuts the open hat, whichever kind of voice the open hat is.
-void DrumKitModule::chokeOpenHat() noexcept {
-    openHat_.choke(sampleRate_);
-    recordedPool_.chokeNote(kOpenHatNote, kChokeSeconds);
-}
-
-void DrumKitModule::triggerRecorded(int note, float velocity) {
-    const auto group = (size_t)groupForNote(note);
-    if (drumForNote(note) == Drum::ClosedHat)
-        chokeOpenHat();
-    const float vel = juce::jlimit(0.0f, 1.0f, velocity);
-    float gain = groupLevel_[group]->get() * ((1.0f - kVelocityFeel) + kVelocityFeel * std::pow(vel, 1.6f));
-    if (note == 44)
-        gain *= kPedalHatGain;
-    recordedPool_.noteOn(note, vel, recordedVoiceParams(), gain, (double)groupTune_[group]->get());
-}
-
-// Mixes `count` samples: the synth drums (mono, onto both sides) plus the recorded voices (stereo), then the module's
-// Level and the soft limit. Recordings get no extra headroom: unlike the Sampler's chords only a few hits overlap, and
-// a -9 dB trim made a recorded kit play about 14 dB below the synth kit at the same settings.
-void DrumKitModule::renderChunk(float* left, float* right, int count) noexcept {
-    std::array<float, kRenderChunk> recL{}, recR{};
-    const bool kit = poolKit_ != nullptr;
-    if (kit)
-        recordedPool_.render(recL.data(), recR.data(), 0, count, recordedVoiceParams());
-    for (int i = 0; i < count; ++i) {
-        const float synthSum = synthSample();
-        const float level = smoothedLevel_.getNextValue();
-        if (!kit) {
-            left[i] = limited(synthSum * level);
-            if (right != nullptr)
-                right[i] = left[i];
-            continue;
-        }
-        left[i] = limited((synthSum + recL[(size_t)i]) * level);
-        if (right != nullptr)
-            right[i] = limited((synthSum + recR[(size_t)i]) * level);
-    }
-    recordedVoices_.store(recordedPool_.activeVoiceCount(), std::memory_order_relaxed);
 }

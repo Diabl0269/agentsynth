@@ -18,6 +18,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/modules/modules.md`](modules/modules.md) — hub: per-module specs (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer, Math, Hosted Plugin …)
 - [`docs/modules/sequencer-design.md`](modules/sequencer-design.md) — the sequencers' pattern as module state, playback, legacy adoption and the shared scale engine (card, pattern tools and chord picker still to come)
 - [`docs/modules/sampler-instruments.md`](modules/sampler-instruments.md) — the Sampler's Instrument mode: regions, velocity layers, round robin, release sounds, the SFZ subset, dropped-file placement, saved sources, sound packs
+- [`docs/modules/drum-kit.md`](modules/drum-kit.md) — the Drum Kit's pads: the 32-slot pad table, per-pad knobs and group links, file pads, saved state and migration, the pads area on the card
 - [`docs/modules/pluck-mallet.md`](modules/pluck-mallet.md) — the Pluck (extended Karplus-Strong string) and Mallet (modal struck bar) instruments: parameters, algorithms, formulas
 - [`docs/modules/fx-modules.md`](modules/fx-modules.md) — FX specs and the shared Dual I/O / Output Level stages (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, Gate, Bitcrusher, Parametric EQ, Pitch Shifter, Ring Modulator)
 - [`docs/modules/modulation.md`](modules/modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow

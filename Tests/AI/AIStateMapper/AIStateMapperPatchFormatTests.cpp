@@ -141,8 +141,24 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Drum Kit", "bypassed, clapDecay, clapLevel, clapRecorded, clapTune, closedDecay, cowbellDecay, "
                      "cowbellLevel, cowbellRecorded, cowbellTune, cymbalDecay, cymbalLevel, cymbalRecorded, "
                      "cymbalTune, dualIO, hatLevel, hatRecorded, hatTune, kickDecay, kickLevel, kickRecorded, "
-                     "kickTune, level, muted, openDecay, snareDecay, snareLevel, snareRecorded, snareTune, "
-                     "tomDecay, tomLevel, tomRecorded, tomTune"},
+                     "kickTune, level, muted, openDecay, pad10Decay, pad10Level, pad10Start, pad10Tune, pad11Decay, "
+                     "pad11Level, pad11Start, pad11Tune, pad12Decay, pad12Level, pad12Start, pad12Tune, pad13Decay, "
+                     "pad13Level, pad13Start, pad13Tune, pad14Decay, pad14Level, pad14Start, pad14Tune, pad15Decay, "
+                     "pad15Level, pad15Start, pad15Tune, pad16Decay, pad16Level, pad16Start, pad16Tune, pad17Decay, "
+                     "pad17Level, pad17Start, pad17Tune, pad18Decay, pad18Level, pad18Start, pad18Tune, pad19Decay, "
+                     "pad19Level, pad19Start, pad19Tune, pad1Decay, pad1Level, pad1Start, pad1Tune, pad20Decay, "
+                     "pad20Level, pad20Start, pad20Tune, pad21Decay, pad21Level, pad21Start, pad21Tune, pad22Decay, "
+                     "pad22Level, pad22Start, pad22Tune, pad23Decay, pad23Level, pad23Start, pad23Tune, pad24Decay, "
+                     "pad24Level, pad24Start, pad24Tune, pad25Decay, pad25Level, pad25Start, pad25Tune, pad26Decay, "
+                     "pad26Level, pad26Start, pad26Tune, pad27Decay, pad27Level, pad27Start, pad27Tune, pad28Decay, "
+                     "pad28Level, pad28Start, pad28Tune, pad29Decay, pad29Level, pad29Start, pad29Tune, pad2Decay, "
+                     "pad2Level, pad2Start, pad2Tune, pad30Decay, pad30Level, pad30Start, pad30Tune, pad31Decay, "
+                     "pad31Level, pad31Start, pad31Tune, pad32Decay, pad32Level, pad32Start, pad32Tune, pad3Decay, "
+                     "pad3Level, pad3Start, pad3Tune, pad4Decay, pad4Level, pad4Start, pad4Tune, pad5Decay, "
+                     "pad5Level, pad5Start, pad5Tune, pad6Decay, pad6Level, pad6Start, pad6Tune, pad7Decay, "
+                     "pad7Level, pad7Start, pad7Tune, pad8Decay, pad8Level, pad8Start, pad8Tune, pad9Decay, "
+                     "pad9Level, pad9Start, pad9Tune, snareDecay, snareLevel, snareRecorded, snareTune, tomDecay, "
+                     "tomLevel, tomRecorded, tomTune"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
         {"Filter", "bypassed, cutoff, depth, drive, dualIO, filterType, keyTrack, mix, morphX, morphY, "

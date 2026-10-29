@@ -1,6 +1,7 @@
 // Request building & sending: sendMessage/sendProjectMessage and the content/body builders they
 // share, plus chat-history bookkeeping (trim/clear) that every send path feeds into.
 #include "AIIntegrationService.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 #include <algorithm>
 
 namespace synth {
@@ -161,7 +162,9 @@ std::vector<AIIntegrationService::AutomationTargetInfo> AIIntegrationService::en
 
         for (auto* p : node->getProcessor()->getParameters()) {
             auto* f = dynamic_cast<juce::AudioParameterFloat*>(p);
-            if (f == nullptr)
+            // A Drum Kit's per-pad parameters stay out: the model drives its group ids, which write the pads.
+            if (f == nullptr || (dynamic_cast<DrumKitModule*>(node->getProcessor()) != nullptr &&
+                                 DrumKitModule::isPadParamId(f->paramID)))
                 continue;
             const auto& range = f->getNormalisableRange();
             // getDefaultValue() is normalised (AudioProcessorParameter contract) and only public

@@ -3,6 +3,7 @@
 #include "AI/PatchEval.h"
 #include "AIIntegrationService.h"
 #include "AppUndoManager.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 
 namespace synth {
 
@@ -354,8 +355,16 @@ juce::String AIIntegrationService::extractJsonFromResponse(const juce::String& r
     return response.trim();
 }
 
+// The model reads a Drum Kit through its group ids, so the 128 per-pad values stay out of its context.
 juce::String AIIntegrationService::getPatchContext() {
     juce::var json = AIStateMapper::graphToJSON(audioGraph);
+    if (auto* nodes = json.getProperty("nodes", {}).getArray())
+        for (auto& node : *nodes)
+            if (node.getProperty("type", {}).toString() == "Drum Kit")
+                if (auto* params = node.getProperty("params", {}).getDynamicObject())
+                    for (int i = params->getProperties().size(); --i >= 0;)
+                        if (DrumKitModule::isPadParamId(params->getProperties().getName(i).toString()))
+                            params->removeProperty(params->getProperties().getName(i));
     return juce::JSON::toString(json);
 }
 
