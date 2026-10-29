@@ -313,15 +313,15 @@ TEST(CurveEditorKeyboard, AltUpAndDownMoveTheLevelAndClampAtTheRangeEnds) {
     for (int i = 0; i < 3; ++i)
         rig.press(juce::KeyPress::rightKey);
     rig.press(juce::KeyPress::upKey, kAlt);
-    EXPECT_NEAR(rig.node(3).y, 0.45f, 1e-5f);
-    for (int i = 0; i < 20; ++i)
+    EXPECT_NEAR(rig.node(3).y, 0.42f, 1e-5f);
+    for (int i = 0; i < 40; ++i)
         rig.press(juce::KeyPress::upKey, kAlt);
     EXPECT_FLOAT_EQ(rig.node(3).y, 1.0f);
     rig.events.clear();
     rig.press(juce::KeyPress::upKey, kAlt);
     EXPECT_TRUE(rig.events.empty()) << "a press that changes nothing records no undo step";
     rig.press(juce::KeyPress::downKey, kAlt | kShift);
-    EXPECT_NEAR(rig.node(3).y, 0.99f, 1e-5f);
+    EXPECT_NEAR(rig.node(3).y, 0.996f, 1e-5f);
 }
 
 TEST(CurveEditorKeyboard, AnAxisThatIsPinnedDoesNotMove) {
