@@ -84,12 +84,12 @@ tool, the Draw shape buttons slide out between the Draw button and the follow-pl
 
 `applyToolStripTheme()` (constructor plus `lookAndFeelChanged()`) re-applies each icon from
 `AppLookAndFeel::getIcon`. The active-tool highlight is a **background**, not a different icon tint: the look-and-feel's
-`drawDrawableButton` paints the lit wash (the theme accent) at paint time, so it follows the theme with no per-button
-colour to refresh — the glyph reads the same lit or not; see
+`drawButtonBackground` paints the lit fill (the button-on colour, the theme accent) at paint time, so it follows the theme
+with no per-button colour to refresh — the glyph reads the same lit or not; see
 [`layout/icons.md`](../layout/icons.md). Null-guarded on both a headless LnF and a headless icon
 library.
 The Draw button is the exception that paints its own glyph (the current shape's icon, then a corner chevron from
-`paintComboChevron`, both in the theme's primary ink). Its background is the same `drawDrawableButton` call the other
+`paintComboChevron`, both in the theme's primary ink, or the best-contrasting theme ink while lit). Its background is the same `drawButtonBackground` call (button / button-on colours) the other
 tool buttons go through, so its lit and unlit fills equal theirs in every built-in theme. (It used to fill from
 `colors.toolActive`, a literal the built-in themes do not override, which is why it stayed blue after a theme switch.)
 

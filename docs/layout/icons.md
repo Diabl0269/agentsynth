@@ -109,7 +109,7 @@ Notes on individual entries:
 | `TransportStop` | `textPrimary` |
 | Category icons (`CatSources` … `CatUtility`, `CatIO`) | `textMuted` |
 | `WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle` | `textPrimary` — the same as the combo text colour, so they stay legible across all themes |
-| `ToolSelect` … `ToolDraw`, `ToolRange` | `textPrimary` — which tool is ACTIVE is a per-button lit wash painted by `drawDrawableButton` (the theme accent), not a different icon tint; the glyph itself never changes colour |
+| `ToolSelect` … `ToolDraw`, `ToolRange` | `textPrimary` — which tool is ACTIVE is a per-button lit fill painted by `drawButtonBackground` (the button-on colour, the theme accent), not a different icon tint; the glyph itself never changes colour |
 | `TrackMidi`, `TrackAudio`, `TrackAutomation` | `textMuted` — quiet identity chrome, the same convention as the category icons |
 | `FollowPlayhead` | `textPrimary` |
 | `ActionDetachWindow`, `ActionDockBack`, `MixerSources` | `textMuted` |

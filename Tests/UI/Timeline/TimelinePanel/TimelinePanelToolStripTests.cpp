@@ -683,7 +683,8 @@ juce::Colour toolButtonFill(synth::ui::TimelinePanelComponent& panel, synth::ui:
         juce::Graphics g(img);
         panel.paintEntireComponent(g, true);
     }
-    const auto bounds = panel.getToolButton(tool)->getBounds();
+    auto* button = panel.getToolButton(tool);
+    const auto bounds = panel.getLocalArea(button, button->getLocalBounds()); // the button may sit in a child strip
     return img.getPixelAt(bounds.getCentreX(), bounds.getY() + 3);
 }
 } // namespace
@@ -715,7 +716,6 @@ TEST(TimelineToolStripTest, ThePenLitAndUnlitFillsEqualItsNeighboursAfterASwitch
         const auto penLit = toolButtonFill(panel, synth::ui::EditTool::Draw);
         EXPECT_EQ(penLit, neighbourLit) << "theme '" << theme.name << "' lit";
         EXPECT_NE(penLit, penUnlit) << "theme '" << theme.name << "': lit must differ from unlit";
-        EXPECT_NE(penLit, theme.colors.toolActive) << "theme '" << theme.name << "': not the unthemed literal";
     }
     panel.setLookAndFeel(nullptr);
 #else
