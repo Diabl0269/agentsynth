@@ -67,9 +67,6 @@ void MainComponent::setPanelOpenProgressForTest(SlidingPanel p, float progress) 
     resized();
 }
 
-// The fraction the in-flight tween STARTED from (never 0 or 1 mid-slide).
-float MainComponent::getPanelSlideStartForTest(SlidingPanel p) const noexcept { return panelSlide(p).getTweenStart(); }
-
 // True only while the shared slide driver is actually running.
 bool MainComponent::isPanelSlideAnimatingForTest() const noexcept { return panelSlideAnim_.isRunning(); }
 

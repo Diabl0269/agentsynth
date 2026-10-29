@@ -171,6 +171,11 @@ TimelinePanelComponent::TimelinePanelComponent() {
         ruler_.repaint();
     };
     wirePianoRollLoopRequest();
+    // The roll's J key also says what it did, like the panel's own J.
+    pianoRoll_.onSnapKeyToggled = [this](bool on) {
+        if (onShowMessage)
+            onShowMessage(on ? "Snap on" : "Snap off");
+    };
     // The roll's Q button / Q key flipped the shared snapEnabled: persist it, sync the transport
     // bar's own Q toggle, and repaint the lanes+ruler that also paint the (now present/absent)
     // snap grid.
@@ -365,11 +370,13 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
     // "Follow playhead" used to carry no key hint at all — the ONE sibling in this strip that
     // didn't say its own shortcut.
     const auto cycleKey = shortcutHintFor(shortcuts_, "timelineFollowModeCycle", {});
-    followPlayheadButton_.setTooltip(synth::ui::formatShortcutHint(
-        juce::String("Follow playhead, ") + followModeName(follow_.mode) + " mode - " +
-            (cycleKey.isEmpty() ? juce::String() : cycleKey + " switches mode, ") + "right-click for the mode menu",
-        shortcutHintFor(shortcuts_, "timelineFollowPlayheadToggle",
-                        juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0))));
+    auto followTip =
+        synth::ui::formatShortcutHint(juce::String("Follow playhead, ") + followModeName(follow_.mode) + " mode",
+                                      shortcutHintFor(shortcuts_, "timelineFollowPlayheadToggle",
+                                                      juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0)));
+    if (cycleKey.isNotEmpty())
+        followTip += juce::String::fromUTF8(" \xc2\xb7 switch mode: ") + cycleKey;
+    followPlayheadButton_.setTooltip(followTip + juce::String::fromUTF8(" \xc2\xb7 right-click for the mode menu"));
 
     // The transport bar's own buttons name their keys too. Record and Metronome have no hardcoded default
     // (no manager: no hint); Loop answers to the timeline's bare L, or to the transport action's binding

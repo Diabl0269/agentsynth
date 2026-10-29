@@ -83,15 +83,15 @@ std::unique_ptr<ModMatrixPicker> buildAddTrackPicker(std::vector<ModMatrixPicker
 
 void showAddTrackPicker(juce::Component& anchor, std::unique_ptr<ModMatrixPicker> picker) {
     if (auto& hook = test_hooks::addTrackPickerHookForTest()) {
-        hook(std::move(picker));
+        hook(std::move(picker), anchor.getScreenBounds());
         return;
     }
     juce::CallOutBox::launchAsynchronously(std::move(picker), anchor.getScreenBounds(), nullptr);
 }
 
 namespace test_hooks {
-std::function<void(std::unique_ptr<ModMatrixPicker>)>& addTrackPickerHookForTest() {
-    static std::function<void(std::unique_ptr<ModMatrixPicker>)> hook;
+std::function<void(std::unique_ptr<ModMatrixPicker>, juce::Rectangle<int>)>& addTrackPickerHookForTest() {
+    static std::function<void(std::unique_ptr<ModMatrixPicker>, juce::Rectangle<int>)> hook;
     return hook;
 }
 } // namespace test_hooks

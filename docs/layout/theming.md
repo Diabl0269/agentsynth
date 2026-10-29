@@ -67,7 +67,7 @@ are also accepted.
 | `meterClip` | `#FFFF4D4F` | Meter CLIP zone fill, above 0 dBFS — also the clip readout's "clipped" text colour (`MixerMeterReadout`) |
 | `modRingPositive` | `#FF00E5FF` | Modulation ring, positive modulation |
 | `modRingNegative` | `#FFFF6E00` | Modulation ring, negative modulation |
-| `toolActive` | `#FF00D1FF` | Timeline edit-tool strip — active-tool button highlight |
+| `toolActive` | `#FF00D1FF` | Lit chips and the piano roll's held key (the edit-tool strip uses the theme's button-on colour, the accent) |
 | `midiMapped` | `#FFB48EF5` | MIDI Learn "mapped" badge on a control with an assignment ([`midi-remote-ui.md`](../control/midi-remote-ui.md#the-learn-interaction)); Daylight overrides it to `#FF9333EA` (the default is ~2.6:1 on white) |
 | `noteFill` | `#FFB48EF5` | Piano-roll note body, unselected — see [colour-overrides](colour-overrides.md#note-colours) |
 | `noteBorder` | `#FF4A3B75` | Piano-roll note outline, unselected — deliberately a distinct literal, not a `.darker()` derivation of `noteFill` |

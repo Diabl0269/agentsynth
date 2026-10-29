@@ -8,7 +8,7 @@ screenshots it takes, writes a JSON-lines run log and prints a summary. The exit
 failed. The format is described in docs/development/test-mode.md (Scenarios).
 
 A scenario file is either a list of steps or a mapping with `steps:` and optional `settings:` (values written to the
-instance's settings file before it first starts). One mapping per step, `- <command>: {args}`:
+instance's settings file before it first starts) and `motion: true` (start with --automation-motion). One mapping per step, `- <command>: {args}`:
 
     - openProject: {path: ${FIXTURES}/macros.agsproj}   # any protocol command (click, drag, key, getState, ...)
     - click: {id: "card:LFO 1", x: 40, y: 12}
@@ -50,11 +50,12 @@ class ScenarioError(ValueError):
 
 
 class Scenario:
-    def __init__(self, name, steps, settings, path=None):
+    def __init__(self, name, steps, settings, path=None, motion=False):
         self.name = name
         self.steps = steps  # [(command, args dict)]
         self.settings = settings  # {name: value}
         self.path = path
+        self.motion = motion  # start with --automation-motion, for a check that needs a slide or fade to run
 
 
 def _substitute(value, variables):
@@ -76,7 +77,9 @@ def parse_scenario(text, name="scenario", path=None):
     except yaml.YAMLError as error:
         raise ScenarioError("%s: not valid YAML: %s" % (name, error))
     settings = {}
+    motion = False
     if isinstance(document, dict):
+        motion = bool(document.get("motion"))
         settings = document.get("settings") or {}
         document = document.get("steps")
         if not isinstance(settings, dict):
@@ -93,7 +96,7 @@ def parse_scenario(text, name="scenario", path=None):
         if not isinstance(args, dict):
             raise ScenarioError("%s: step %d (%s) takes a mapping of arguments, got %r" % (name, index, command, args))
         steps.append((str(command), args))
-    return Scenario(name, steps, settings, path)
+    return Scenario(name, steps, settings, path, motion)
 
 
 def load_scenarios(target):
@@ -212,7 +215,8 @@ class Runner:
         self.variables = {"FIXTURES": FIXTURES, "OUT": out_dir}
 
     def _launch(self):
-        self.app = self.app_factory(self.app_path, settings_dir=self.settings_dir)
+        extra = {"extra_args": ["--automation-motion"]} if self.scenario.motion else {}
+        self.app = self.app_factory(self.app_path, settings_dir=self.settings_dir, **extra)
         self.app.start()
 
     def _record(self, index, command, args, reply, ok, error=None):

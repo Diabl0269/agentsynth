@@ -1,0 +1,22 @@
+# Bug FRO1094: Add Track (Ctrl+T) pressed with the timeline panel closed opened its picker at the bottom of
+# the window: the picker was launched while the panel was still sliding in, so it anchored to where "+ Track" was
+# before the slide. It now waits for the slide (hence `motion: true`: animations are on in this scenario).
+#
+# What a user does: with the timeline closed, presses Ctrl+T. The panel slides open and the picker appears beside the
+# Add Track button, vertically level with it (the picker is a call-out window, so its own PNG is saved next to the
+# window's).
+# On a Mac Ctrl+T is not bound by default (Cmd+T is), so this install binds it, as one that kept the old chord would.
+settings:
+  shortcutMigration_addTrackCmdT: true
+  shortcut_openAddTrackMenu: "116:2"
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false}
+  - key: {keys: ctrl+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - wait: {}
+  - expect: {id: timelineAddTrackButton, bounds: {x: 2, y: 716, w: 196, h: 26}}
+  - screenshot: {name: ctrl-t-closed-window}
+  - screenshot: {id: modMatrixPicker, name: ctrl-t-closed-picker}

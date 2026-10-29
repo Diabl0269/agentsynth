@@ -124,7 +124,7 @@ JSON-lines `run.log` under `<out>` (one folder per scenario when a directory run
 is non-zero when any step failed. A failed `expect` names the field that differed.
 
 A file is a list of steps, or a mapping with `steps:` and optional `settings:` (values written to the instance's settings
-file before it first starts, for an install that has to look old). A step is one mapping, `- <command>: {args}`: any
+file before it first starts, for an install that has to look old), and `motion: true` to start with `--automation-motion`, for a check that needs a slide or fade to run). A step is one mapping, `- <command>: {args}`: any
 protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) with its arguments, plus:
 
 | Step | Meaning |

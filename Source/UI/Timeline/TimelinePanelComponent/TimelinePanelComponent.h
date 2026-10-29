@@ -396,6 +396,8 @@ public:
     void setFollowPointPercent(int percent); // where Smooth pins the cursor (10-90), applied live
     int getFollowPointPercent() const noexcept { return follow_.pointPercent; }
     void refreshTransportTooltips() { refreshShortcutTooltips(); } // after a preference the tooltips quote changes
+    /** A short message when a KEY changes a timeline setting (follow, follow mode, snap); a click says nothing. */
+    std::function<void(const juce::String&)> onShowMessage;
     /** Test seam: a test drives the click via `getFollowPlayheadButtonForTest().onClick()`. */
     FollowPlayheadButton& getFollowPlayheadButtonForTest() noexcept { return followPlayheadButton_; }
     ClipSizingButton& getClipSizingButton() noexcept { return clipSizingButton_; } // the edit-tool strip's Sizing field

@@ -103,7 +103,7 @@ void MainComponent::beginPanelSlide() {
 }
 ```
 
-Four rules live in there:
+Five rules live in there:
 
 1. **`retarget()` starts from the fraction's CURRENT value.** Re-toggling mid-flight reverses from
    where the panel *is*, never from an extreme — the same contract
@@ -119,6 +119,8 @@ Four rules live in there:
    slide the next toggle did not mention frozen half-open.
 4. **A close is a slide too.** The panel is hidden in `finishPanelSlide()`, not at toggle time;
    hiding it up front is what makes "close" not an animation at all.
+5. **A pop-up anchored inside a panel waits for the slide.** `PanelSlide::whenSettled(fn)` runs `fn` at once when
+   idle, else from `runSettled()` after `finishPanelSlide()`'s final layout; mid-slide it would point at the old spot.
 
 `applyPanelSlideFrame(t)` advances all three fractions and calls `resized()`. It adds **no**
 `repaint()` — moving a child's bounds already invalidates the region it left and the one it arrived

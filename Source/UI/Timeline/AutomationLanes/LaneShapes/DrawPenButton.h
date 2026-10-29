@@ -8,7 +8,7 @@
 namespace synth::ui {
 
 // The timeline's Draw (pen) tool button. It paints the CURRENT draw shape's icon (crossfading old to new when the
-// shape changes) and a small triangle in its bottom-right corner. A click on the corner, or a press held for
+// shape changes) and a small chevron in its bottom-right corner. A click on the corner, or a press held for
 // kHoldMs, asks the owner to open the shape flyout; a click anywhere else picks the tool like any tool button.
 // Message thread only.
 class DrawPenButton
@@ -29,7 +29,7 @@ public:
     /** 0..1: how far the crossfade from the previous icon has got (1 at rest). */
     float getCrossfade() const noexcept { return crossfade_; }
 
-    /** True for a point (button coordinates) inside the corner triangle's hit area. */
+    /** True for a point (button coordinates) inside the corner mark's hit area. */
     bool isInCorner(juce::Point<int> p) const noexcept;
 
     /** The owner opens the flyout here. */

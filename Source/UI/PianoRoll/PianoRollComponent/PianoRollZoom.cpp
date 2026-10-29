@@ -150,6 +150,8 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
     }
     if (matchesAction(key, "timelineSnapToggle", plainKey('j'))) {
         toggleSnap();
+        if (onSnapKeyToggled)
+            onSnapKeyToggled(viewState_.snapEnabled);
         return true;
     }
 

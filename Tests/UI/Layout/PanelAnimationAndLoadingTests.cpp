@@ -290,7 +290,7 @@ TEST_F(PanelSlideLayoutTest, TogglingMidSlideReversesFromTheCurrentFraction) {
     // Stand in for the VBlank frame that would have left the slide here, had one run.
     mc.setPanelOpenProgressForTest(SlidingPanel::AiChat, 0.4f);
     mc.simulateToggleAiPanelClick(); // request CLOSE now
-    EXPECT_FLOAT_EQ(mc.getPanelSlideStartForTest(SlidingPanel::AiChat), 0.4f)
+    EXPECT_FLOAT_EQ(mc.panelSlideForTest(SlidingPanel::AiChat).getTweenStart(), 0.4f)
         << "the reversal's start point is the CURRENT width, never an extreme";
     EXPECT_FLOAT_EQ(mc.getPanelOpenProgressForTest(SlidingPanel::AiChat), 0.0f) << "still headless: lands at once";
 }

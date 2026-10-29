@@ -83,9 +83,9 @@ void TimelinePanelComponent::applyToolStripTheme() {
             if (tool != EditTool::Draw)
                 if (auto icon = lf->getIcon(iconForEditTool(tool)))
                     button->setImages(icon.get());
-            // The active tool's highlight is a BACKGROUND colour, not a different icon tint —
-            // the glyph is the same in both states (see AppLookAndFeel::retintIcons).
-            button->setColour(juce::DrawableButton::backgroundOnColourId, lf->getTheme().colors.toolActive);
+            // The active tool's highlight is the look-and-feel's button-on fill (drawButtonBackground), read at paint
+            // time, not a different icon tint: the glyph is the same in both states (see
+            // AppLookAndFeel::retintIcons).
         }
     }
 

@@ -652,7 +652,7 @@ tool and pushes it to every lane editor the same way (`TimelinePanelComponent::s
 amount too and creates its lane like a first pen stroke. The lane range is for ordinary lanes only.
 
 **The pen and its shape flyout.** The Draw tool button (`DrawPenButton`) shows the icon of the current shape, so it
-always shows what the tool will draw, and a tiny triangle in its bottom-right corner says it opens more. When the
+always shows what the tool will draw, and a small chevron (the app's combo chevron, in the glyph's ink) in its bottom-right corner says it opens more. When the
 shape changes the icon crossfades from the old to the new (`AnimationDriver`, `motionMs(160, 80)`: instant under
 Animations: Off and when the panel is not on screen). A click on the corner (the bottom-right 10 x 10 px), pressing
 and holding the button for 400 ms (it opens on the hold, without waiting for the release, and that release does not
