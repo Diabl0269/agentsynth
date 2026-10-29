@@ -209,16 +209,22 @@ void CardLayoutOnCardEditor::previewRowDrop(juce::Rectangle<int> rect, juce::Poi
         return;
     std::vector<int> indices;
     std::vector<juce::Rectangle<int>> others;
+    oncard::DropContext context;
+    if (target == cells_[(size_t)cell].section)
+        context.vacated = drag_.baseline[(size_t)cell];
+    if (const auto origin = origins_.find(cells_[(size_t)cell].key); origin != origins_.end())
+        context.origin = origin->second;
     for (int i : cellsOfSection(target))
         if (i != cell) {
             indices.push_back(i);
             others.push_back(drag_.baseline[(size_t)i]);
+            context.homes.push_back(homeRectOf(i));
         }
     const auto size =
         target != cells_[(size_t)cell].section ? addedCellSize(target, cells_[(size_t)cell].key) : juce::Point<int>();
     const auto limits = limitsFor(*body, target, card_->getWidth());
     const auto drop =
-        oncard::dropIntoRow(size.isOrigin() ? rect : rect.withSize(size.x, size.y), pointer, others, limits);
+        oncard::dropIntoRow(size.isOrigin() ? rect : rect.withSize(size.x, size.y), pointer, others, limits, context);
     drag_.placed.clear();
     for (size_t k = 0; k < indices.size(); ++k)
         drag_.placed.emplace_back(indices[k], drop.others[k]);

@@ -321,8 +321,10 @@ TEST(OnCardLayoutRows, ADropIntoAFullGroupLeavesItTidyWhereverItLands) {
 TEST(OnCardLayoutRows, AFlushRowStaysOneRowWhenACellLeavesAndComesBack) {
     const std::vector<Rectangle<int>> flush{{12, 40, 96, 76}, {108, 40, 96, 76}, {204, 40, 96, 76}};
     const std::vector<Rectangle<int>> rest{flush[1], flush[2]};
+    DropContext context;
+    context.vacated = flush[0];
     for (int x : {12, 15}) {
-        const auto drop = dropIntoRow({x, 40, 96, 76}, rest, kLimits);
+        const auto drop = dropIntoRow({x, 40, 96, 76}, {x + 40, 60}, rest, kLimits, context);
         EXPECT_EQ(rowsOf(withDropped(drop)).size(), 1u) << x;
         EXPECT_EQ(drop.dropped, flush[0]) << x;
         EXPECT_EQ(drop.others, rest) << x;
@@ -334,4 +336,51 @@ TEST(OnCardLayoutRows, ADropBetweenTwoRowsMakesARowOfItsOwnAndLeavesAFlushNeighb
     const auto back = dropIntoRow({12, 20, 90, 98}, {rows[1]}, kLimits);
     EXPECT_EQ(back.dropped.getY(), kLimits.top) << "above the only row: its own row at the top";
     EXPECT_EQ(back.others[0], rows[1]) << "flush against it, so it does not move";
+}
+
+TEST(OnCardLayoutRows, ARowTheDroppedCellLeftEmptyClosesUpAndRowsAboveStayPut) {
+    // Three rows, flush: A (40..116), B alone (116..192), C (192..268). B goes into A's row.
+    const std::vector<Rectangle<int>> others{{12, 40, 90, 76}, {12, 192, 90, 76}};
+    DropContext context;
+    context.vacated = {12, 116, 90, 76};
+    const auto drop = dropIntoRow({110, 116, 90, 76}, {120, 60}, others, kLimits, context);
+    EXPECT_EQ(drop.dropped.getY(), 40) << "on A's row";
+    EXPECT_EQ(drop.others[0], others[0]) << "the row above did not move";
+    EXPECT_EQ(drop.others[1].getPosition(), juce::Point<int>(12, 116)) << "C took B's place";
+}
+
+TEST(OnCardLayoutRows, ALoneCellDroppedOnItsOwnBandStaysThereAndNothingElseMoves) {
+    const std::vector<Rectangle<int>> others{{12, 40, 90, 76}, {12, 192, 90, 76}};
+    DropContext context;
+    context.vacated = {12, 116, 90, 76};
+    const auto drop = dropIntoRow({12, 120, 90, 76}, {50, 150}, others, kLimits, context);
+    EXPECT_EQ(drop.dropped, context.vacated.withY(116)) << "no 4 px drift: the band it left is where it lands";
+    EXPECT_EQ(drop.others, others);
+}
+
+TEST(OnCardLayoutRows, ADisplacedCellWhoseHomeIsOnTheRowComesBackToItWhenItHasTheWidth) {
+    // The row holds two cells; a third (home beside them) stands on a row below. Dropping a cell on the row
+    // brings the third back, and the row it left closes up.
+    const std::vector<Rectangle<int>> others{{12, 40, 64, 76}, {84, 40, 64, 76}, {12, 124, 64, 76}};
+    DropContext context;
+    context.homes = {others[0], others[1], {156, 40, 64, 76}};
+    const auto drop = dropIntoRow({92, 124, 64, 76}, {120, 60}, others, kLimits, context);
+    EXPECT_EQ(rowsOf(withDropped(drop)).size(), 1u);
+    expectTidy(withDropped(drop), kLimits);
+}
+
+TEST(OnCardLayoutRows, ADisplacedCellStaysWhereItIsWhenItsHomeRowHasNoWidthForIt) {
+    const std::vector<Rectangle<int>> others{{12, 40, 90, 76}, {110, 40, 90, 76}, {12, 124, 90, 76}};
+    DropContext context;
+    context.homes = {others[0], others[1], {208, 40, 90, 76}};
+    const auto drop = dropIntoRow({208, 40, 90, 76}, {250, 60}, others, kLimits, context);
+    expectTidy(withDropped(drop), kLimits);
+    EXPECT_EQ(drop.others[2].getX(), 12) << "the row is full";
+}
+
+TEST(OnCardLayoutRows, AControlFromAnotherGroupGetsTheGapEvenOnAFlushRow) {
+    const std::vector<Rectangle<int>> flush{{12, 40, 64, 76}, {76, 40, 64, 76}};
+    DropContext context; // no vacated rect and no origin on the row: it came from elsewhere
+    const auto drop = dropIntoRow({70, 40, 64, 76}, {72, 60}, flush, kLimits, context);
+    expectTidy(withDropped(drop), kLimits);
 }

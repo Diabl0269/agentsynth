@@ -84,14 +84,28 @@ struct RowDrop {
  *  group) are one row, each row ordered by x, rows top to bottom. */
 std::vector<std::vector<int>> rowsOf(const std::vector<juce::Rectangle<int>>& cells);
 
+/** What a drop knows besides the cells it lands among: where the dropped control stood in this group before it
+ *  was picked up (empty when it came from elsewhere), where it stood when the editor opened (`origin`, empty when
+ *  unknown: a control that began on a row keeps that row's flush spacing, one from elsewhere gets the gap), and,
+ *  for each of the other cells, where it would stand but for being displaced (empty `homes`: none is displaced). */
+struct DropContext {
+    juce::Rectangle<int> vacated;
+    juce::Rectangle<int> origin;
+    std::vector<juce::Rectangle<int>> homes;
+};
+
 /** `dropped` let go among `others` with the pointer at `probe`: it joins the row the probe's y is in (below the
  *  last row, between two rows or above the first it starts a new one there), at the index the probe's x gives
- *  among that row's cells, its top on the row's top. The row is then
+ *  among that row's cells, its top on the row's top. A displaced cell whose home is on that row comes back to it
+ *  when the row has the width for it. The row is then
  *  swept left to right (a cell never closer than the gap to the one before), from `limits.maxX` back leftwards
  *  if that runs out of room, and the trailing cells that still do not fit wrap into a new row below. Rows
- *  that now collide with it move down. Nothing overlaps and everything is inside `limits` afterwards. */
+ *  that now collide with it move down, and a row the move left empty (where `context.vacated` stood, or where a
+ *  returning cell stood) closes up: the rows below it move up to take its place, and no others move. Nothing
+ *  overlaps and everything is inside `limits` afterwards. */
 RowDrop dropIntoRow(juce::Rectangle<int> dropped, juce::Point<int> probe,
-                    const std::vector<juce::Rectangle<int>>& others, const Limits& limits);
+                    const std::vector<juce::Rectangle<int>>& others, const Limits& limits,
+                    const DropContext& context = {});
 
 /** The same with the probe at the dropped cell's centre. */
 RowDrop dropIntoRow(juce::Rectangle<int> dropped, const std::vector<juce::Rectangle<int>>& others,

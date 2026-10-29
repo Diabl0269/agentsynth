@@ -283,11 +283,105 @@ std::vector<std::vector<int>> rowsOf(const std::vector<Rect>& cells) {
     return rows;
 }
 
-RowDrop dropIntoRow(Rect dropped, juce::Point<int> probe, const Rects& others, const Limits& limits) {
+namespace {
+
+// The cells of `all` that stand in the vertical span of `band`.
+bool anyInBand(const Rects& all, Rect band) {
+    return std::any_of(all.begin(), all.end(),
+                       [&](const Rect& r) { return r.getY() < band.getBottom() && r.getBottom() > band.getY(); });
+}
+
+// Where `band` stood a row stood that is now empty: the rows below it move up to take its place.
+void closeBand(Rects& all, Rect band) {
+    int nextTop = 0;
+    bool below = false;
+    for (const auto& r : all)
+        if (r.getY() >= band.getBottom() && (!below || r.getY() < nextTop)) {
+            nextTop = r.getY();
+            below = true;
+        }
+    if (!below)
+        return;
+    for (auto& r : all)
+        if (r.getY() >= band.getBottom())
+            r.translate(0, band.getY() - nextTop);
+}
+
+// The cells (not in `ids`) displaced from a home on a row spanning `top`..`bottom` that `ids` could hold with
+// them: all of them or none. Each is put at its home's x, so the sweep keeps their order.
+Ids returningCells(Rects& all, const Ids& ids, int top, int bottom, const Rects& homes, const Limits& limits, int gap) {
+    Ids back;
+    int width = 0;
+    for (int id : ids)
+        width += all[(size_t)id].getWidth() + gap;
+    for (size_t k = 0; k < homes.size(); ++k) {
+        const auto& home = homes[k];
+        if (home == all[k] || home.isEmpty() || home.getY() >= bottom || home.getBottom() <= top ||
+            std::find(ids.begin(), ids.end(), (int)k) != ids.end())
+            continue;
+        back.push_back((int)k);
+        width += all[k].getWidth() + gap;
+    }
+    if (width - gap > limits.maxX - limits.minX)
+        return {};
+    for (int id : back) {
+        all[(size_t)id].setPosition(homes[(size_t)id].getX(), top);
+    }
+    return back;
+}
+
+// The rows below `first` without the cells now elsewhere (`moved`); a row that lost all its cells is gone.
+std::vector<Ids> withoutMoved(const std::vector<Ids>& rows, size_t first, const Ids& moved) {
+    std::vector<Ids> kept;
+    for (size_t i = first; i < rows.size(); ++i) {
+        Ids row;
+        for (int id : rows[i])
+            if (std::find(moved.begin(), moved.end(), id) == moved.end())
+                row.push_back(id);
+        if (!row.empty())
+            kept.push_back(std::move(row));
+    }
+    return kept;
+}
+
+// `ids` (the row `r` the dropped cell joins) with the displaced cells whose home is on it, laid out; the rows
+// under it move down where it now collides with them.
+void joinRow(Rects& all, std::vector<Ids> rows, size_t r, int dropped, juce::Point<int> probe, const Limits& limits,
+             const DropContext& context, std::vector<Rect>& vacated, const Rects& baseline) {
+    Ids ids = rows[r];
+    const auto at =
+        std::count_if(ids.begin(), ids.end(), [&](int id) { return all[(size_t)id].getCentreX() < probe.x; });
+    const int rowTop = topOf(all, ids);
+    all[(size_t)dropped].setY(rowTop);
+    ids.insert(ids.begin() + at, dropped);
+    const int rowBottom = std::max(bottomOf(all, ids), rowTop + all[(size_t)dropped].getHeight());
+    // A control that began on this row keeps its flush spacing; one from another group is spaced with the gap.
+    const bool native = !context.vacated.isEmpty() || (!context.origin.isEmpty() && context.origin.getY() < rowBottom &&
+                                                       context.origin.getBottom() > rowTop);
+    const int gap = native ? rowGap(all, ids, dropped) : kControlGap;
+    const auto back = returningCells(all, ids, rowTop, rowBottom, context.homes, limits, gap);
+    for (int id : back) {
+        vacated.push_back(baseline[(size_t)id]);
+        ids.push_back(id);
+    }
+    std::stable_sort(ids.begin(), ids.end(),
+                     [&](int a, int b) { return all[(size_t)a].getCentreX() < all[(size_t)b].getCentreX(); });
+    const auto below = withoutMoved(rows, r + 1, back);
+    shiftRowsBelow(all, below, 0, placeRow(all, std::move(ids), limits, gap));
+}
+
+} // namespace
+
+RowDrop dropIntoRow(Rect dropped, juce::Point<int> probe, const Rects& others, const Limits& limits,
+                    const DropContext& context) {
     const int n = (int)others.size();
+    const Rects baseline = others;
     Rects all = others;
     all.push_back(oncard::clampToLimits(dropped, limits));
     const auto rows = rowsOf(others);
+    std::vector<Rect> vacated;
+    if (!context.vacated.isEmpty())
+        vacated.push_back(context.vacated);
     RowDrop out;
     if (!rows.empty()) {
         // A row owns the probe down to the middle of the gap under it (the last row, a hair below its bottom).
@@ -295,25 +389,31 @@ RowDrop dropIntoRow(Rect dropped, juce::Point<int> probe, const Rects& others, c
             const int bottom = bottomOf(all, rows[i]);
             return i + 1 < rows.size() ? (bottom + topOf(all, rows[i + 1])) / 2 : bottom + kControlGap / 4;
         };
+        // The band the dropped control left, when it stood alone on its row: the pointer over it keeps it there.
+        const bool inOwnBand = !context.vacated.isEmpty() && !anyInBand(others, context.vacated) &&
+                               probe.y >= context.vacated.getY() && probe.y < context.vacated.getBottom();
         size_t r = 0;
-        while (r < rows.size() && probe.y >= ownedEnd(r))
+        while (r < rows.size() &&
+               (inOwnBand ? topOf(all, rows[r]) < context.vacated.getBottom() : probe.y >= ownedEnd(r)))
             ++r;
-        if (r < rows.size() && probe.y >= topOf(all, rows[r])) {
-            Ids ids = rows[r];
-            const auto at =
-                std::count_if(ids.begin(), ids.end(), [&](int id) { return all[(size_t)id].getCentreX() < probe.x; });
-            all.back().setY(topOf(all, ids));
-            ids.insert(ids.begin() + at, n);
-            const int gap = rowGap(all, ids, n);
-            shiftRowsBelow(all, rows, r + 1, placeRow(all, std::move(ids), limits, gap));
+        if (!inOwnBand && r < rows.size() && probe.y >= topOf(all, rows[r])) {
+            joinRow(all, rows, r, n, probe, limits, context, vacated, baseline);
         } else {
-            // Below the last row, between two rows or above the first: a row of its own, against the row above.
-            all.back().setY(r > 0 ? bottomOf(all, rows[r - 1]) + kControlGap : limits.top);
+            // Below the last row, between two rows or above the first: a row of its own, against the row above (in
+            // the band the control left, where it stood).
+            const int above = r > 0 ? bottomOf(all, rows[r - 1]) + kControlGap : limits.top;
+            all.back().setY(inOwnBand ? context.vacated.getY() : above);
             out.newRowAt = all.back().getY();
             shiftRowsBelow(all, rows, r, all.back().getBottom());
         }
     }
+    std::sort(vacated.begin(), vacated.end(), [](const Rect& a, const Rect& b) { return a.getY() > b.getY(); });
+    for (const auto& band : vacated)
+        if (!anyInBand(all, band))
+            closeBand(all, band);
     out.dropped = all.back();
+    if (out.newRowAt >= 0)
+        out.newRowAt = out.dropped.getY();
     all.pop_back();
     out.others = std::move(all);
     return out;

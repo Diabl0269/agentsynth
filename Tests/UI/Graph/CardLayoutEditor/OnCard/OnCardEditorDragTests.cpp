@@ -139,7 +139,8 @@ TEST(OnCardEditorDrag, DroppingOnResonancePushesItOutSoTheTwoKeepAGap) {
 
     const auto cutoffAfter = open.cell("cutoff");
     const auto resonanceAfter = open.cell("resonance");
-    EXPECT_EQ(cutoffAfter.getY(), resonance.getY()) << "it joined Resonance's row, on the row's top";
+    EXPECT_EQ(cutoffAfter.getY(), resonanceAfter.getY()) << "it joined Resonance's row, on the row's top";
+    EXPECT_EQ(cutoffAfter.getY(), cutoff.getY()) << "the row it left was empty, so Resonance's row closed up to it";
     EXPECT_FALSE(cutoffAfter.intersects(resonanceAfter));
     EXPECT_FALSE(cutoffAfter.intersects(open.cell("drive")));
     EXPECT_FALSE(resonanceAfter.intersects(open.cell("drive")));
@@ -404,4 +405,128 @@ TEST(OnCardEditorRows, AStyleChangeRepacksItsRowInTheSameUndoStep) {
     editor->runQueuedSyncForTest();
     EXPECT_EQ(rig.storedLayout(id), positioned) << "back to the layout before the change, not half of it";
     EXPECT_EQ(editor->getCellRectForTest("resonance"), before);
+}
+
+// ---- A restyled control's row, and a row the move left empty ----
+
+namespace {
+
+struct AdsrOpen {
+    OnCardRig rig;
+    NodeID id = rig.add(std::make_unique<ADSRModule>());
+    CardLayoutOnCardEditor* editor = rig.openOnCard(id);
+    const std::vector<juce::String> stages{"attack", "hold", "decay", "sustain", "release"};
+
+    juce::Rectangle<int> cell(const juce::String& key) const { return editor->getCellRectForTest(key); }
+    // layout-overlap: no two stages overlap (the default row stands flush, so touching is fine), and every one is
+    // inside the card's content width.
+    void expectOneTidyRow() {
+        const auto g = synth::cardbody::BodyGeometry::forCardWidth(rig.card(id)->getWidth());
+        for (size_t i = 0; i < stages.size(); ++i) {
+            EXPECT_GE(cell(stages[i]).getX(), g.contentX) << stages[i];
+            EXPECT_LE(cell(stages[i]).getRight(), g.contentX + g.contentW) << stages[i];
+            EXPECT_LT(cell(stages[i]).getY(), cell(stages[0]).getBottom()) << stages[i] << " is on the first row";
+            EXPECT_GT(cell(stages[i]).getBottom(), cell(stages[0]).getY()) << stages[i] << " is on the first row";
+            for (size_t j = i + 1; j < stages.size(); ++j)
+                EXPECT_FALSE(cell(stages[i]).intersects(cell(stages[j]))) << stages[i] << " and " << stages[j];
+        }
+    }
+    int stageSectionBottom() {
+        const auto& plan = rig.card(id)->getCardBody()->getPlan();
+        return plan.sections[(size_t)plan.items[(size_t)plan.findParam("attack")].section].cellBottom;
+    }
+};
+
+} // namespace
+
+// Regression test for FRO720: Sustain as a knob wraps Release to a row of its own; dragging Sustain back into the
+// stage row brings Release back with it, all five on one row inside the card, with no empty band left below.
+TEST(OnCardEditorRows, ASustainKnobDraggedBackIntoTheStageRowBringsReleaseBackToo) {
+    AdsrOpen open;
+    ASSERT_NE(open.editor, nullptr);
+    const auto fresh = open.rig.storedLayout(open.id);
+    auto* panel = openControlPanel(open.rig, *open.editor, "sustain");
+    ASSERT_NE(panel, nullptr);
+    panel->onShowAs(synth::CardWidget::Knob);
+    EXPECT_GT(open.cell("release").getY(), open.cell("attack").getY()) << "the knob pushed Release off the row";
+
+    const auto to = juce::Point<int>(open.cell("decay").getRight() + 20, open.cell("decay").getCentreY()) -
+                    open.cell("sustain").getCentre();
+    Pointer pointer(*open.editor, "sustain");
+    pointer.moveBy(to, kCommand);
+    pointer.release();
+
+    open.expectOneTidyRow();
+    EXPECT_EQ(open.stageSectionBottom(), std::max({open.cell("sustain").getBottom(), open.cell("release").getBottom(),
+                                                   open.cell("attack").getBottom()}))
+        << "no empty band under the row";
+
+    // The style change is one undo step on its own.
+    ASSERT_TRUE(open.rig.canvas.undo.undo()); // the drag
+    open.editor->runQueuedSyncForTest();
+    ASSERT_TRUE(open.rig.canvas.undo.undo()); // the style change
+    open.editor->runQueuedSyncForTest();
+    EXPECT_EQ(open.rig.storedLayout(open.id), fresh);
+}
+
+// A row the control left empty closes up: the rows below it take its place, and no other row moves.
+TEST(OnCardEditorRows, ARowLeftEmptyByAMoveClosesUpAndNoOtherRowMoves) {
+    OscOpen open;
+    ASSERT_NE(open.editor, nullptr);
+    const auto keys = open.groupOf("unison");
+    ASSERT_TRUE(std::find(keys.begin(), keys.end(), juce::String("pulseWidth")) != keys.end());
+    int bottom = 0;
+    for (const auto& k : keys)
+        bottom = std::max(bottom, open.cell(k).getBottom());
+    { // Blend to a row of its own under Pulse Width: three rows, Pulse Width alone in the middle one.
+        Pointer pointer(*open.editor, "blend");
+        pointer.moveBy({0, bottom + 3 - open.cell("blend").getCentreY()}, kCommand);
+        pointer.release();
+    }
+    const auto middle = open.cell("pulseWidth");
+    const auto last = open.cell("blend");
+    ASSERT_GT(last.getY(), middle.getBottom());
+    const auto first = open.cell("unison");
+
+    Pointer pointer(*open.editor, "pulseWidth");
+    pointer.moveBy({first.getCentreX() + 70 - middle.getCentreX(), first.getCentreY() - middle.getCentreY()}, kCommand);
+    pointer.release();
+
+    EXPECT_EQ(open.cell("pulseWidth").getY(), first.getY()) << "Pulse Width joined the first row";
+    EXPECT_EQ(open.cell("blend").getY(), middle.getY()) << "the row under the empty one moved up to take its place";
+    EXPECT_EQ(open.cell("unison").getY(), first.getY()) << "the first row did not move";
+    open.expectTidy(keys);
+}
+
+// The first drop turns a flowing group into a positioned one; that must not make the card taller.
+TEST(OnCardEditorRows, TurningAGroupIntoAPositionedOneDoesNotChangeTheCardsHeight) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<FilterModule>(), 200, 200);
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    const int height = rig.card(id)->getHeight();
+    Pointer pointer(*editor, "cutoff");
+    pointer.moveBy({20, 0}, kCommand);
+    pointer.release();
+    EXPECT_EQ(rig.card(id)->getHeight(), height);
+}
+
+// Regression test for FRO720: a cell is the box the card gives its control, so a position written for it puts the
+// control where it stood (a fader is narrower than its box and sits centred in it).
+TEST(OnCardEditorRows, AFaderCellIsTheBoxTheCardGivesItAndTheFirstDropMovesNoStage) {
+    AdsrOpen open;
+    ASSERT_NE(open.editor, nullptr);
+    const auto g = synth::cardbody::BodyGeometry::forCardWidth(open.rig.card(open.id)->getWidth());
+    EXPECT_EQ(open.cell("attack").getX(), g.contentX);
+    EXPECT_EQ(open.cell("attack").getWidth(), g.contentW / 5);
+    std::map<juce::String, juce::Rectangle<int>> before;
+    for (const auto& k : open.stages)
+        before[k] = open.cell(k);
+
+    Pointer pointer(*open.editor, "decay");
+    pointer.moveBy({0, 30}, kCommand); // below its row: a row of its own
+    pointer.release();
+    for (const auto& k : open.stages)
+        if (k != "decay")
+            EXPECT_EQ(open.cell(k), before[k]) << k << " stayed where it was";
 }
