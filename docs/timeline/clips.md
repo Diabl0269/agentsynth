@@ -451,7 +451,7 @@ The default destination is `Exports/<patch name>.mid` in an open project bundle,
 against a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed
 (`TimelineClipLaneMouseTests.cpp`), edge sizing in every mode on both edges, Option, the readout, linked copies
 and the painted last-drag-frame-equals-release check (`TimelineClipLaneSizingTests.cpp`, through the fixture's
-`dragEdgeExpectingPreviewEqualsCommit` guard), painting (`TimelineClipLanePaintingTests.cpp`), the tool
+`dragEdgeExpectingPreviewEqualsCommit` guard; `DragSurfaces.EveryMouseDragOverrideIsRegistered` fails for a drag class that names no such guard, see [undo-glide.md](../layout/undo-glide.md#registration)), painting (`TimelineClipLanePaintingTests.cpp`), the tool
 layer (`TimelineClipLaneEditToolsTests.cpp`) and the Range tool — the model, the drag and its
 Shift-extension, the repaint gate and every verb (`TimelineClipLaneRangeTests.cpp`). The doc-level
 range edits are `Tests/Timeline/TimelineDoc/TimelineDocRangesTests.cpp`, and the range clipboard is

@@ -7,6 +7,7 @@
 #include "../../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "../../Timeline/AutomationLanes/AutomationLanesTestFixture.h"
 #include "PointMarkerProbe.h"
+#include "PointMarkerSurfaceNames.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
@@ -320,6 +321,13 @@ void expectPhase(const Entry& entry, const char* phase, const std::function<Plac
 }
 
 } // namespace
+
+std::vector<std::string> pointMarkerSurfaceNames() {
+    std::vector<std::string> names;
+    for (const auto& entry : pointSurfaces())
+        names.push_back(entry.name);
+    return names;
+}
 
 // Regression test for FRO1187: a lane point dragged with the mouse left its keyboard focus ring at the old place.
 TEST(PointMarkersFollowTheDot, AtTheLastFrameOfAMouseDrag) {

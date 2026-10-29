@@ -551,7 +551,7 @@ window out (110 ms, 80 ms plain fade under Reduce motion; the table above) and r
 turn after the fade ends. Never close a popup directly: `closeHostingWindow` (`DialogKeyboard.h`, the
 Escape path of every dialog and call-out), `PopupMotion::dismissCallOut(box)` and
 `PopupMotion::dismissModal(window)` (an `exitModalState(0)` of a `LaunchOptions` dialog) are the three
-forms (never `closeButtonPressed()`, `exitModalState(0)` or `CallOutBox::dismiss()` called directly; `Tests/UI/Layout/PopupMotionTests.cpp` and `Tests/UI/Settings/SettingsWindowEscapeFadeTests.cpp` reach the animated path with `PopupMotion::setAnimateOffScreenForTest(true)`). `reallyClose` runs at once, before `dismiss` returns, for a window with no native peer, one
+forms (never `closeButtonPressed()`, `exitModalState(0)` or `CallOutBox::dismiss()` called directly; `PopupMotionUsers.EveryUserIsRegistered` fails for a file that calls these without a registered motion test or a ticketed gap; `Tests/UI/Layout/PopupMotionTests.cpp` and `Tests/UI/Settings/SettingsWindowEscapeFadeTests.cpp` reach the animated path with `PopupMotion::setAnimateOffScreenForTest(true)`). `reallyClose` runs at once, before `dismiss` returns, for a window with no native peer, one
 that was never attached, one not showing, or with the engine disabled, so headless runs and the full
 test suite see the final state immediately; the frame driver only runs while a fade runs. While the
 fade runs the window ignores the mouse and a second `dismiss` does nothing, so a choice cannot fire
