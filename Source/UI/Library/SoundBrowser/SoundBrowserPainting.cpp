@@ -104,7 +104,10 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
     const juce::Font nameFont(juce::FontOptions(14.0f));
     const juce::Font detailFont(juce::FontOptions(12.0f));
     if (row.kind == RowKind::Sound) {
-        const float detailW = juce::GlyphArrangement::getStringWidth(detailFont, row.detail);
+        const auto detail = row.entry.has_value()
+                                ? soundDetailTextFitting(*row.entry, detailFont, soundDetailMaxWidth(width))
+                                : row.detail;
+        const float detailW = juce::GlyphArrangement::getStringWidth(detailFont, detail);
         const int detailRight = width - kSideMargin;
         const int detailLeft = detailRight - (int)std::ceil(detailW);
         const bool favourite = row.entry.has_value() && lists_.isFavourite(row.entry->path);
@@ -123,7 +126,7 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
             nameFont, c.textPrimary, c.accent.withAlpha(0.28f), c.accent);
         g.setColour(c.textMuted);
         g.setFont(detailFont);
-        g.drawText(row.detail, detailLeft, area.getY(), detailRight - detailLeft, area.getHeight(),
+        g.drawText(detail, detailLeft, area.getY(), detailRight - detailLeft, area.getHeight(),
                    juce::Justification::centredRight);
     } else if (row.kind == RowKind::GetPack) {
         paintPackRow(g, row, index, area);

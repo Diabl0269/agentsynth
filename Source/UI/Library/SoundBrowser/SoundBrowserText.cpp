@@ -22,6 +22,21 @@ juce::String shortKeyName(const juce::String& key) {
 
 juce::String plural(int n, const char* one, const char* many) { return juce::String(n) + " " + (n == 1 ? one : many); }
 
+// The fields a loop's row and spoken description share; 0 means unknown (bpm) or under half a bar (bars).
+struct LoopFields {
+    int bpm = 0;
+    int bars = 0;
+};
+
+LoopFields loopFields(const SoundEntry& entry) {
+    LoopFields fields;
+    if (entry.tempo > 0.0) {
+        fields.bpm = (int)std::lround(entry.tempo);
+        fields.bars = soundBarCount(entry.tempo, entry.lengthSeconds);
+    }
+    return fields;
+}
+
 } // namespace
 
 juce::String formatSoundLength(double seconds) {
@@ -40,16 +55,33 @@ int soundBarCount(double tempo, double seconds) {
     return (int)std::lround(seconds * tempo / 60.0 / 4.0);
 }
 
-juce::String soundDetailText(const SoundEntry& entry) {
+juce::String soundDetailText(const SoundEntry& entry, int maxParts) {
     if (entry.kind == SoundKind::Instrument)
         return "instrument";
+    juce::StringArray parts;
     if (entry.kind == SoundKind::Loop) {
-        const int bars = soundBarCount(entry.tempo, entry.lengthSeconds);
-        if (entry.tempo <= 0.0 || bars <= 0)
-            return "? " + middleDot() + " " + formatSoundLength(entry.lengthSeconds);
-        return juce::String((int)std::lround(entry.tempo)) + " " + middleDot() + " " + plural(bars, "bar", "bars");
+        const auto fields = loopFields(entry);
+        if (fields.bpm > 0)
+            parts.add(juce::String(fields.bpm) + " BPM");
+        if (fields.bars > 0)
+            parts.add(plural(fields.bars, "bar", "bars"));
     }
-    return formatSoundLength(entry.lengthSeconds);
+    parts.add(formatSoundLength(entry.lengthSeconds));
+    while (parts.size() > juce::jmax(1, maxParts))
+        parts.remove(0);
+    return parts.joinIntoString(" " + middleDot() + " ");
+}
+
+float soundDetailMaxWidth(int rowWidth) { return 0.6f * (float)(rowWidth - 2 * kSoundRowSideMargin); }
+
+juce::String soundDetailTextFitting(const SoundEntry& entry, const juce::Font& font, float maxWidth) {
+    juce::String text;
+    for (int parts = 3; parts >= 1; --parts) {
+        text = soundDetailText(entry, parts);
+        if (juce::GlyphArrangement::getStringWidth(font, text) <= maxWidth)
+            break;
+    }
+    return text;
 }
 
 juce::String soundKeyMetaText(const SoundEntry& entry, const juce::String& songKey) {
@@ -68,17 +100,20 @@ juce::String describeSoundForAccessibility(const SoundEntry& entry, int position
     juce::String text = entry.name + ", ";
     if (entry.kind == SoundKind::Instrument) {
         text += "instrument";
-    } else if (entry.kind == SoundKind::Loop) {
-        text += "loop";
-        if (entry.tempo > 0.0)
-            text += ", " + juce::String((int)std::lround(entry.tempo)) + " BPM";
-        const int bars = soundBarCount(entry.tempo, entry.lengthSeconds);
-        if (bars > 0)
-            text += ", " + plural(bars, "bar", "bars");
-        if (entry.key.isNotEmpty())
-            text += ", " + entry.key;
     } else {
-        text += "one-shot, " + juce::String(entry.lengthSeconds, 1) + " seconds";
+        if (entry.kind == SoundKind::Loop) {
+            const auto fields = loopFields(entry);
+            text += "loop, ";
+            if (fields.bpm > 0)
+                text += juce::String(fields.bpm) + " BPM, ";
+            if (fields.bars > 0)
+                text += plural(fields.bars, "bar", "bars") + ", ";
+        } else {
+            text += "one-shot, ";
+        }
+        text += juce::String(entry.lengthSeconds, 1) + " seconds";
+        if (entry.kind == SoundKind::Loop && entry.key.isNotEmpty())
+            text += ", " + entry.key;
     }
     return text + ", " + juce::String(position) + " of " + juce::String(count);
 }
