@@ -10,8 +10,6 @@ const char* const kDrumCategory = "Drums";
 constexpr int kSectionGap = 8;
 constexpr int kButtonGap = 4;
 constexpr int kAvailabilityPollEvery = 8; // card ticks (about 2 Hz): the answer walks every track's graph
-constexpr int kFirstDrumNote = 35;
-constexpr int kLastDrumNote = 59;
 
 InstrumentChoiceOptions drumChoices() {
     InstrumentChoiceOptions options;
@@ -30,7 +28,8 @@ int DrumKitChrome::height() {
 DrumKitChrome::DrumKitChrome(Host host, DrumKitModule& kit)
     : kit_(kit)
     , host_(host)
-    , row_(host, kit, kit, drumChoices()) {
+    , row_(host, kit, kit, drumChoices())
+    , pads_(addDrumMachineButton(host), kit) {
     row_.addPickerToCard();
     row_.addCaptionToCard();
     row_.picker().setNoneLabel("Synth drums", "synth drums");
@@ -39,7 +38,11 @@ DrumKitChrome::DrumKitChrome(Host host, DrumKitModule& kit)
     row_.caption().setVisible(true);
     row_.refresh();
 
-    host.card->addAndMakeVisible(drumMachineButton_);
+    // Picking a kit is asking to hear it: every pad plays it, in the same undo step as the load.
+    row_.afterLoad = [this](bool ok) {
+        if (ok && (kit_.hasRecordedKit() || kit_.isInstrumentLoadPending()))
+            kit_.fillPadsWithKit();
+    };
     drumMachineButton_.setComponentID("drumKitDrumMachineButton");
     drumMachineButton_.setTitle("Drum machine");
     drumMachineButton_.onClick = [this] {
@@ -47,6 +50,12 @@ DrumKitChrome::DrumKitChrome(Host host, DrumKitModule& kit)
             host_.openDrumMachine();
     };
     refreshDrumMachineButton();
+}
+
+// Joins the card before the pads area's components, so the Tab order follows the card top to bottom.
+const InstrumentChrome::Host& DrumKitChrome::addDrumMachineButton(const Host& host) {
+    host.card->addAndMakeVisible(drumMachineButton_);
+    return host;
 }
 
 int DrumKitChrome::layout(int y, int contentX, int contentW, int /*narrowX*/, int /*narrowW*/, bool apply) {
@@ -58,6 +67,11 @@ int DrumKitChrome::layout(int y, int contentX, int contentW, int /*narrowX*/, in
 
 void DrumKitChrome::poll() {
     row_.poll();
+    pads_.poll();
+    if (kit_.padCount() != captionCount_) { // the caption counts the shown pads
+        captionCount_ = kit_.padCount();
+        row_.refresh();
+    }
     if (++pollsSinceRefresh_ >= kAvailabilityPollEvery)
         refreshDrumMachineButton();
 }
@@ -73,16 +87,14 @@ void DrumKitChrome::refreshDrumMachineButton() {
                                               "use the drum machine.");
 }
 
-// What the kit does: how many of the drum groups play recordings now.
+// What the kit does: how many of the shown pads play recordings now.
 juce::String DrumKitChrome::captionText() const {
     if (!kit_.hasRecordedKit())
         return "Playing the synth drums";
-    std::bitset<DrumKitModule::kNumGroups> playing;
-    for (int note = kFirstDrumNote; note <= kLastDrumNote; ++note)
-        if (const auto group = DrumKitModule::groupForNote(note); group != DrumKitModule::Group::None)
-            playing.set((size_t)group, playing.test((size_t)group) || kit_.playsRecording(note));
-    return "Recordings on " + juce::String(playing.count()) + " of " + juce::String(DrumKitModule::kNumGroups) +
-           " drum groups";
+    int playing = 0;
+    for (int i = 0; i < kit_.padCount(); ++i)
+        playing += kit_.padPlaysRecording(i) ? 1 : 0;
+    return "Recordings on " + juce::String(playing) + " of " + juce::String(kit_.padCount()) + " pads";
 }
 
 } // namespace synth::ui

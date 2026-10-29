@@ -14,7 +14,7 @@ void ModuleComponent::createSamplerControls() {
     if (auto* sampler = dynamic_cast<SamplerModule*>(module)) {
         instrumentChrome_ = std::make_unique<synth::ui::SamplerChrome>(host, *sampler);
     } else if (auto* kit = dynamic_cast<DrumKitModule*>(module)) {
-        // The Recorded switches come and go with the kit: the body re-reads its rules when the instrument changes.
+        // The body re-reads its conditions when the instrument changes.
         host.kitChanged = [this] {
             if (cardBody_ != nullptr)
                 cardBody_->refreshConditions();
@@ -23,6 +23,11 @@ void ModuleComponent::createSamplerControls() {
         host.openDrumMachine = [this] {
             if (owner.onOpenDrumMachineRequested)
                 owner.onOpenDrumMachineRequested(nodeId);
+        };
+        host.relayout = [this] {
+            updateLayout();
+            owner.handleModuleResized(this);
+            repaint();
         };
         instrumentChrome_ = std::make_unique<synth::ui::DrumKitChrome>(host, *kit);
     }

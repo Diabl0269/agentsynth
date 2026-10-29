@@ -48,6 +48,9 @@ public:
     void poll();
     juce::StringArray getLoadMessages() const { return loadMessages_; }
 
+    /** Called inside the undo step of every load the user makes, after the load ran, with whether it worked. */
+    std::function<void(bool ok)> afterLoad;
+
     /** Called on every refresh; its text is the caption when the last load left no note. */
     std::function<juce::String()> defaultCaption;
 

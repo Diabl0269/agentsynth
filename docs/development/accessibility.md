@@ -166,6 +166,15 @@ and pinned by `Tests/UI/Accessibility/DialogKeyboardTests.cpp`:
   `launchAsync()` directly. Pinned by `Tests/UI/Layout/ModalCloseKeysTests.cpp`, which delivers both keys from every
   focusable control of the shape editor, sampler map and EQ windows.
 
+## Grids of painted cells
+
+A grid whose cells act on one pick (the Drum Kit's pad grid, [`drum-kit.md`](../modules/drum-kit.md#the-card)) is one
+Tab stop: a `group`-role component titled after the grid, with the solid focus ring around it. It handles the arrows,
+Home/End and Space/Return itself, and passes on any key with Cmd, Ctrl or Alt to the app's shortcuts. Each cell is a
+mouse-inert, non-focusable child with a `button` handler (press does what a click does), titled with its name, kind
+and place ("Snare pad, built-in sound, 2 of 8"). A pick is announced. The grid's tooltip follows the cell under the
+mouse.
+
 ## The morph map and shape editor
 
 The Filter card (Custom type), the LFO card (Custom shape) and the shape editor window use `MorphMap`; the audit covers

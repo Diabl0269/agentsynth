@@ -31,8 +31,8 @@ bool isSequencer(juce::AudioProcessor& module) { return dynamic_cast<SequencerMo
 
 // Parameters with no widget of their own. bypassed/muted/dualIO are the header buttons. The ADSR's
 // three curve amounts are edited on the envelope graph's bend handles, and the Wavetable's Table choice
-// by the card's chrome beside the display it selects. A Drum Kit's per-pad parameters are edited by its pads area.
-// A sequencer's Scale and Follow Song Key are set by its Key
+// by the card's chrome beside the display it selects. A Drum Kit's pads area edits every one of its parameters but
+// the master Level. A sequencer's Scale and Follow Song Key are set by its Key
 // field, which stands in Key's cell, so a layout naming Key (a saved one too) still gets the whole key. A parameter a
 // registered view edits (the Threshold slider inside the Threshold view) gets no knob either. The ADSR's tempoSync and
 // four note divisions are ordinary items: a layout swaps each division in for its time with a condition
@@ -46,7 +46,7 @@ bool isEditedElsewhere(juce::AudioProcessor& module, const juce::RangedAudioPara
         if (id == "attackCurve" || id == "decayCurve" || id == "releaseCurve")
             return true;
     }
-    if (typeOf(module) == ModuleType::DrumKit && DrumKitModule::isPadParamId(id))
+    if (typeOf(module) == ModuleType::DrumKit && id != "level")
         return true;
     if (typeOf(module) == ModuleType::Wavetable && id == "table")
         return true;

@@ -334,6 +334,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ReplaceWithPickerTests.cpp
     UI/Graph/ModuleComponent/SamplerInstrumentCardTests.cpp
     UI/Graph/ModuleComponent/DrumKitCardTests.cpp
+    UI/Graph/ModuleComponent/DrumKitPadsCardTests.cpp
     UI/Graph/ModuleComponent/SamplerPackOfferTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentAudioDropTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMacroBankTests.cpp
