@@ -7,7 +7,7 @@ Each scenario launches its own test-mode instance (port 0, temporary settings di
 screenshots it takes, writes a JSON-lines run log and prints a summary. The exit status is non-zero when any step
 failed. The format is described in docs/development/test-mode.md (Scenarios).
 
-A scenario file is either a list of steps or a mapping with `steps:` and optional `settings:` (values written to the
+A scenario file is either a list of steps or a mapping with `steps:` and optional `settings:` (values, with ${FIXTURES} and ${OUT} filled in, written to the
 instance's settings file before it first starts) and `motion: true` (start with --automation-motion). One mapping per step, `- <command>: {args}`:
 
     - openProject: {path: ${FIXTURES}/macros.agsproj}   # any protocol command (click, drag, key, getState, ...)
@@ -237,7 +237,7 @@ class Runner:
             reply = app.call("waitForIdle", **args)
         elif command == "type":
             for char in str(args.get("text", "")):
-                app.call("key", keys=char)
+                app.call("key", keys="space" if char == " " else char)  # the key parser splits on spaces
             reply = {"typed": len(str(args.get("text", "")))}
         elif command == "restart":
             app.stop()  # the settings directory is the runner's own, so it stays
@@ -265,7 +265,7 @@ class Runner:
         self.settings_dir = tempfile.mkdtemp(prefix="agentsynth-scenario-")
         if self.scenario.settings:
             with open(os.path.join(self.settings_dir, SETTINGS_FILE), "w", encoding="utf-8") as handle:
-                handle.write(settings_xml(self.scenario.settings))
+                handle.write(settings_xml(_substitute(self.scenario.settings, self.variables)))
         try:
             self._launch()
             for index, (command, raw_args) in enumerate(self.scenario.steps, 1):
