@@ -1,0 +1,73 @@
+# Bug: a mono Filter set to Custom showed "Per-note works in Poly: turn on the Filter's Poly." instead of the per-note
+# modes, and the mode tooltip said per-note needs Poly. Per-note modes (By hand / By pitch / Random) work on a mono
+# Filter too.
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator and a Filter from the library (Cmd+F) and cables Osc -> Filter.
+#   2. Sets the Filter's type to Custom and presses Edit shapes.
+#   3. Picks By pitch in "Notes move the cursor": the bar offers the modes and never says "Poly".
+# Not covered: the Poly MIDI -> Oscillator -> Filter chain with the auto-cabled Pitch input. A Poly MIDI "Poly Out"
+# drag onto a mono Oscillator creates no cable through test-mode drags, so only the wording is asserted here.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: oscill}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - expect: {count: {prefix: "card:Oscillator", equals: 1}, within_ms: 1500}
+  - click: {id: Auto Arrange}
+  - wait: {}
+  - key: {keys: cmd+-}                                       # zoom out (5x) so both cards fit above the bottom panel
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - wait: {}
+  - drag: {from: Patch canvas, to: Patch canvas, fromX: 1200, fromY: 300, toX: 1200, toY: 400}   # pan the ports off the toolbar
+  - wait: {}
+  - drag: {from: "card:Oscillator > Audio output", to: "card:Filter > Audio input"}
+  - wait: {}
+  - click: {id: window, x: 680, y: 543}                      # the Filter Type combo at this zoom (its label has the same title)
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - drag: {from: Patch canvas, to: Patch canvas, fromX: 1200, fromY: 400, toX: 1200, toY: 100}   # pan the Filter's lower half above the bottom panel
+  - wait: {}
+  - expect: {id: Edit shapes, exists: true, within_ms: 3000}  # the Custom layout has settled
+  - wait: {}
+  - wait: {}
+  - click: {id: Edit shapes}
+  - wait: {}
+  - expect: {id: Notes move the cursor, exists: true, within_ms: 5000}
+  - expect: {id: Notes move the cursor, contains: {tooltip: "by hand, by pitch or at random"}}
+  - click: {id: By pitch}
+  - wait: {}
+  - expect: {id: By pitch, toggleState: true, within_ms: 1500}
+  - expect: {count: {prefix: "Per-note works in Poly", equals: 0}}
+  - screenshot: {id: Per-note settings, name: per-note-mono-filter-bar}
