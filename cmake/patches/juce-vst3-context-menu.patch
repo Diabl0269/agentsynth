@@ -7,26 +7,39 @@ is shown, appends the items an app-supplied callback adds (juce::VST3PluginForma
 setHostContextMenuExtension). The callback's items carry their own PopupMenu::Item action, which
 JUCE already runs on the message thread after the menu closes (also in the async menu path used
 when JUCE_MODAL_LOOPS_PERMITTED is off). Nothing changes for an instance with no callback.
+A protected accessor for the instance's host context in juce_VST3PluginFormatImpl.h lets the
+GUI-side VST3PluginInstance reach the context that owns the menu hook.
 
 Applied by cmake/ApplyJucePatch.cmake (FetchContent PATCH_COMMAND); mechanism and how to update
 it for a new JUCE tag: docs/development/juce-patches.md. The JUCE files use CRLF line endings.
 
 diff --git a/modules/juce_audio_processors/format_types/juce_VST3PluginFormat.cpp b/modules/juce_audio_processors/format_types/juce_VST3PluginFormat.cpp
-index 14611a9..d512fd3 100644
+index 836e15b..0ef7ee5 100644
 --- a/modules/juce_audio_processors/format_types/juce_VST3PluginFormat.cpp
 +++ b/modules/juce_audio_processors/format_types/juce_VST3PluginFormat.cpp
-@@ -615,10 +615,23 @@ struct VST3HostContext final : public Vst::IComponentHandler,  // From VST V3.0.
-         plugin = instance;
-     }
- 
+@@ -47,11 +47,14 @@ JUCE_BEGIN_NO_SANITIZE ("vptr")
+ class VST3HostContextWithContextMenu : public VST3HostContextHeadless
+ {
+ public:
+-    Vst::IContextMenu* PLUGIN_API createContextMenu (IPlugView*, const Vst::ParamID*) override
 +    /** App-supplied hook that appends items to the context menu a plugin asks for. */
 +    VST3PluginFormat::HostContextMenuExtension contextMenuExtension;
 +
-     //==============================================================================
++    Vst::IContextMenu* PLUGIN_API createContextMenu (IPlugView*, const Vst::ParamID* paramID) override
+     {
+         if (auto* p = getPlugin())
+         {
+-            auto* result = new ContextMenu (*p);
++            auto* result = new ContextMenu (*p, contextMenuExtension, paramID);
+             result->addRef();
+             return result;
+         }
+@@ -62,7 +65,17 @@ public:
+ private:
      struct ContextMenu final : public Vst::IContextMenu
      {
--        ContextMenu (VST3PluginInstance& pluginInstance)  : owner (pluginInstance) {}
-+        ContextMenu (VST3PluginInstance& pluginInstance,
+-        explicit ContextMenu (VST3PluginInstanceHeadless& pluginInstance)  : owner (pluginInstance) {}
++        ContextMenu (VST3PluginInstanceHeadless& pluginInstance,
 +                     VST3PluginFormat::HostContextMenuExtension extensionToUse,
 +                     const Vst::ParamID* paramIDToUse)
 +            : owner (pluginInstance), extension (std::move (extensionToUse))
@@ -37,13 +50,39 @@ index 14611a9..d512fd3 100644
 +                hasParamID = true;
 +            }
 +        }
-         virtual ~ContextMenu() {}
+         ~ContextMenu() = default;
  
          JUCE_DECLARE_VST3_COM_REF_METHODS
-@@ -683,6 +696,12 @@ struct VST3HostContext final : public Vst::IComponentHandler,  // From VST V3.0.
+@@ -159,6 +172,25 @@ private:
+                 }
+             }
+ 
++            if (extension != nullptr && hasParamID && menuStack.size() == 1)
++            {
++                PopupMenu extra;
++                extension ((uint32) paramID, extra);
++
++                if (extra.getNumItems() > 0)
++                {
++                    if (topLevelMenu->getNumItems() > 0)
++                        topLevelMenu->addSeparator();
++
++                    for (PopupMenu::MenuItemIterator it (extra); it.next();)
++                    {
++                        auto extraItem = it.getItem();
++                        extraItem.itemID = extensionItemID;
++                        topLevelMenu->addItem (std::move (extraItem));
++                    }
++                }
++            }
++
+             PopupMenu::Options options;
+ 
+             if (auto* ed = owner.getActiveEditor())
+@@ -197,6 +229,12 @@ private:
  
          Atomic<int> refCount;
-         VST3PluginInstance& owner;
+         VST3PluginInstanceHeadless& owner;
 +        VST3PluginFormat::HostContextMenuExtension extension;
 +        Vst::ParamID paramID = 0;
 +        bool hasParamID = false;
@@ -53,7 +92,7 @@ index 14611a9..d512fd3 100644
  
          struct ItemAndTarget
          {
-@@ -694,7 +713,7 @@ struct VST3HostContext final : public Vst::IComponentHandler,  // From VST V3.0.
+@@ -208,7 +246,7 @@ private:
  
          void handleResult (int result)
          {
@@ -62,62 +101,21 @@ index 14611a9..d512fd3 100644
                  return;
  
              if (result == zeroTagReplacement)
-@@ -717,12 +736,12 @@ struct VST3HostContext final : public Vst::IComponentHandler,  // From VST V3.0.
-         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ContextMenu)
-     };
- 
--    Vst::IContextMenu* PLUGIN_API createContextMenu (IPlugView*, const Vst::ParamID*) override
-+    Vst::IContextMenu* PLUGIN_API createContextMenu (IPlugView*, const Vst::ParamID* paramID) override
-     {
-         if (plugin == nullptr)
-             return nullptr;
- 
--        auto* result = new ContextMenu (*plugin);
-+        auto* result = new ContextMenu (*plugin, contextMenuExtension, paramID);
-         result->addRef();
-         return result;
-     }
-@@ -3221,6 +3240,11 @@ public:
-         return {};
-     }
+@@ -614,6 +652,11 @@ class VST3PluginInstance final : public VST3PluginInstanceHeadless
+ public:
+     using VST3PluginInstanceHeadless::VST3PluginInstanceHeadless;
  
 +    void setHostContextMenuExtension (VST3PluginFormat::HostContextMenuExtension extension)
 +    {
-+        holder->host->contextMenuExtension = std::move (extension);
++        static_cast<VST3HostContextWithContextMenu&> (getHostContext()).contextMenuExtension = std::move (extension);
 +    }
 +
-     bool setStateFromPresetFile (const MemoryBlock& rawData) const
+     bool hasEditor() const override
      {
-         auto rawDataCopy = rawData;
-@@ -3895,6 +3919,25 @@ tresult VST3HostContext::ContextMenu::popup (UCoord x, UCoord y)
-         }
-     }
- 
-+    if (extension != nullptr && hasParamID && menuStack.size() == 1)
-+    {
-+        PopupMenu extra;
-+        extension ((uint32) paramID, extra);
-+
-+        if (extra.getNumItems() > 0)
-+        {
-+            if (topLevelMenu->getNumItems() > 0)
-+                topLevelMenu->addSeparator();
-+
-+            for (PopupMenu::MenuItemIterator it (extra); it.next();)
-+            {
-+                auto extraItem = it.getItem();
-+                extraItem.itemID = extensionItemID;
-+                topLevelMenu->addItem (std::move (extraItem));
-+            }
-+        }
-+    }
-+
-     PopupMenu::Options options;
- 
-     if (auto* ed = owner.getActiveEditor())
-@@ -3936,6 +3979,12 @@ tresult VST3HostContext::notifyProgramListChange (Vst::ProgramListID, Steinberg:
- VST3PluginFormat::VST3PluginFormat()  = default;
- VST3PluginFormat::~VST3PluginFormat() = default;
+         // (if possible, avoid creating a second instance of the editor, because that crashes some plugins)
+@@ -644,6 +687,12 @@ void VST3PluginFormat::createPluginInstance (const PluginDescription& descriptio
+                                                 callback);
+ }
  
 +void VST3PluginFormat::setHostContextMenuExtension (AudioPluginInstance& instance, HostContextMenuExtension extension)
 +{
@@ -125,18 +123,18 @@ index 14611a9..d512fd3 100644
 +        vst3->setHostContextMenuExtension (std::move (extension));
 +}
 +
- bool VST3PluginFormat::setStateFromVSTPresetFile (AudioPluginInstance* api, const MemoryBlock& rawData)
- {
-     if (auto vst3 = dynamic_cast<VST3PluginInstance*> (api))
+ JUCE_END_NO_SANITIZE
+ 
+ } // namespace juce
 diff --git a/modules/juce_audio_processors/format_types/juce_VST3PluginFormat.h b/modules/juce_audio_processors/format_types/juce_VST3PluginFormat.h
-index c9e7ec3..ee8b54f 100644
+index c8eab65..37a9e67 100644
 --- a/modules/juce_audio_processors/format_types/juce_VST3PluginFormat.h
 +++ b/modules/juce_audio_processors/format_types/juce_VST3PluginFormat.h
-@@ -64,6 +64,18 @@ public:
-     static bool setStateFromVSTPresetFile (AudioPluginInstance*, const MemoryBlock&);
-    #endif
- 
-+    //==============================================================================
+@@ -44,6 +44,19 @@ namespace juce
+ */
+ class JUCE_API VST3PluginFormat : public VST3PluginFormatHeadless
+ {
++public:
 +    /** Adds items to the context menu a hosted plugin requests for one of its parameters
 +        (IComponentHandler3::createContextMenu with a ParamID).
 +
@@ -148,6 +146,22 @@ index c9e7ec3..ee8b54f 100644
 +    using HostContextMenuExtension = std::function<void (uint32, PopupMenu&)>;
 +    static void setHostContextMenuExtension (AudioPluginInstance&, HostContextMenuExtension);
 +
-     //==============================================================================
-     static String getFormatName()                   { return "VST3"; }
-     String getName() const override                 { return getFormatName(); }
++private:
+     void createPluginInstance (const PluginDescription&, double, int, PluginCreationCallback) override;
+ };
+ 
+diff --git a/modules/juce_audio_processors_headless/format_types/juce_VST3PluginFormatImpl.h b/modules/juce_audio_processors_headless/format_types/juce_VST3PluginFormatImpl.h
+index 8b20d5d..2233c03 100644
+--- a/modules/juce_audio_processors_headless/format_types/juce_VST3PluginFormatImpl.h
++++ b/modules/juce_audio_processors_headless/format_types/juce_VST3PluginFormatImpl.h
+@@ -2965,6 +2965,10 @@ public:
+         return v;
+     }
+ 
++protected:
++    /** The host context this instance was created with (used by VST3PluginFormat::setHostContextMenuExtension). */
++    VST3HostContextHeadless& getHostContext() const    { return *holder->host; }
++
+ private:
+     void deactivate()
+     {

@@ -24,7 +24,7 @@ int switchWidth(const juce::StringArray& names) {
     float widest = 0.0f;
     const juce::Font font{juce::FontOptions(13.0f)};
     for (const auto& name : names)
-        widest = std::max(widest, font.getStringWidthFloat(name));
+        widest = std::max(widest, juce::GlyphArrangement::getStringWidth(font, name));
     return (int)widest * names.size() + 20 * names.size();
 }
 

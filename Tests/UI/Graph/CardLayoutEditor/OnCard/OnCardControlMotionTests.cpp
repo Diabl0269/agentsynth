@@ -193,12 +193,19 @@ juce::Image paintArea(juce::Component& canvas, juce::Rectangle<int> area) {
     return image;
 }
 
+/** Whether two pixels differ by more than the rounding of a resampled picture (a few levels per channel). */
+bool differsVisibly(juce::Colour a, juce::Colour b) {
+    constexpr int kRounding = 8;
+    return std::abs(a.getRed() - b.getRed()) > kRounding || std::abs(a.getGreen() - b.getGreen()) > kRounding ||
+           std::abs(a.getBlue() - b.getBlue()) > kRounding || std::abs(a.getAlpha() - b.getAlpha()) > kRounding;
+}
+
 /** How wide the part of `frame` that differs from `empty` is, in pixels (0 when nothing differs). */
 int paintedWidth(const juce::Image& frame, const juce::Image& empty) {
     int left = frame.getWidth(), right = -1;
     for (int y = 0; y < frame.getHeight(); ++y)
         for (int x = 0; x < frame.getWidth(); ++x)
-            if (frame.getPixelAt(x, y) != empty.getPixelAt(x, y)) {
+            if (differsVisibly(frame.getPixelAt(x, y), empty.getPixelAt(x, y))) {
                 left = std::min(left, x);
                 right = std::max(right, x);
             }

@@ -334,7 +334,7 @@ juce::Rectangle<int> ModuleComponent::macroPortNameArea(bool boundaryIsInput) co
 
 bool ModuleComponent::macroPortNameIsTruncated(const juce::String& name, bool boundaryIsInput) const {
     const juce::Font font{juce::FontOptions(kMacroPortNameFontSize)};
-    return font.getStringWidthFloat(name) > (float)macroPortNameArea(boundaryIsInput).getWidth();
+    return juce::GlyphArrangement::getStringWidth(font, name) > (float)macroPortNameArea(boundaryIsInput).getWidth();
 }
 
 juce::Colour ModuleComponent::effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const {

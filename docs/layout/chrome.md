@@ -345,7 +345,7 @@ control name) is a `synth::ui::NonModalLabel` (`Source/UI/Layout/NonModalLabel.h
 `NonModalLabel::editorShown` schedules `exitModalState()` one message-loop turn later (the call cannot happen
 inside the hook, because `showEditor()` enters modal state right after it returns). Nothing the modal state did is lost:
 the editor is a child holding keyboard focus, and losing that focus commits (or discards, per `setEditable`) through
-`Label::textEditorFocusLost`, as a click outside did via `inputAttemptWhenModal`. Escape is deferred too: JUCE 8.0.3's
+`Label::textEditorFocusLost`, as a click outside did via `inputAttemptWhenModal`. Escape is deferred too: JUCE 9.0.3's
 `TextEditor::handleCommandMessage` dispatches it under the listener list's lock, and the base
 `Label::textEditorEscapeKeyPressed` deletes the editor there (the unlock then writes freed memory), so
 `NonModalLabel` restores the text at once and calls `hideEditor(true)` from a `callAsync`. The card-title rename is a raw

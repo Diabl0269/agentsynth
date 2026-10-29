@@ -280,9 +280,9 @@ jobs:
         # this did until Aug 2026) minted a fresh ~350 MB entry per platform per workflow on every
         # module PR — 10 CMakeLists edits in nine days, ~2.1 GB apiece, which blew past GitHub's
         # 10 GB per-repo budget and LRU-evicted every ccache entry with it.
-        key: ${{ runner.os }}-deps5-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps5-
+          ${{ runner.os }}-deps6-
 
     - name: Restore ccache
       id: ccache-cache
@@ -430,7 +430,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps5-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps6-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): scripts/ci-cache-budget.sh's static sum bounds what the
         # workflows COMMIT to writing for one generation; this catches what that can't -- a
@@ -527,9 +527,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps5-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps5-
+          ${{ runner.os }}-deps6-
 
     # The ONE exception to rule 6 of docs/development/ci-caching.md ("PR runs restore only"). This
     # job never runs on push:main, so nothing can seed a main-scoped cache for it, and until
@@ -646,9 +646,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps5-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps5-
+          ${{ runner.os }}-deps6-
 
     - name: Restore ccache
       id: ccache-cache
@@ -758,7 +758,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps5-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps6-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see build-and-test's identical comment above its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \
@@ -862,9 +862,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps5-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps5-
+          ${{ runner.os }}-deps6-
 
     - name: Restore ccache
       id: ccache-cache
@@ -968,7 +968,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps5-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps6-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see build-and-test's identical comment above its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \

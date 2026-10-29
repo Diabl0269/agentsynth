@@ -2,6 +2,7 @@
 // plugin's stray files never land in the launch directory, and it ends when its parent does.
 
 #include "Plugin/Hosting/PluginScanService.h"
+#include <filesystem>
 #include <gtest/gtest.h>
 #include <juce_core/juce_core.h>
 
@@ -19,7 +20,12 @@ TEST(PluginScanChildEnvironmentTest, ScratchDirectoryBecomesTheWorkingDirectory)
     const auto now = juce::File::getCurrentWorkingDirectory();
     restore();
 
-    EXPECT_EQ(now.getFullPathName(), synth::pluginScratchDirectory().getFullPathName());
+    // The system temp directory can sit behind a symlink (/var -> /private/var on macOS), and the working
+    // directory is reported with the link resolved, so compare the resolved paths.
+    const auto resolved = [](const juce::File& dir) {
+        return std::filesystem::canonical(dir.getFullPathName().toStdString()).string();
+    };
+    EXPECT_EQ(resolved(now), resolved(synth::pluginScratchDirectory()));
     EXPECT_TRUE(now.isDirectory());
     EXPECT_NE(now.getFullPathName(), original.getFullPathName());
 }

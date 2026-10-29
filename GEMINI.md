@@ -110,7 +110,7 @@ Post-merge, `.github/workflows/build-artifacts.yml` runs on push to main (4 jobs
 
 **Optimizations:**
 - **ccache**: Compiler cache avoids recompiling unchanged files. `CMAKE_C/CXX_COMPILER_LAUNCHER=ccache`, cached at `~/.ccache` (Linux) / `~/Library/Caches/ccache` (macOS), 500M max, keyed by commit SHA with prefix restore.
-- **FetchContent caching**: `build/_deps` (JUCE 8.0.3 + GoogleTest 1.14.0) cached via `actions/cache`, keyed on `CMakeLists.txt` + `Tests/CMakeLists.txt` hashes.
+- **FetchContent caching**: `build/_deps` (JUCE 9.0.3 + GoogleTest 1.14.0) cached via `actions/cache`, keyed on `CMakeLists.txt` + `Tests/CMakeLists.txt` hashes.
 - **JUCE_WEB_BROWSER=0**: Disabled unused WebBrowserComponent, removed WebKit/libsoup deps from Linux builds.
 - **coverage.sh --report-only**: In CI, skips redundant configure/build/test and only does profdata merge + report.
 - **Separate lint job**: Instant formatting feedback (~30s) without waiting for full build.

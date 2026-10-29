@@ -31,7 +31,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/DependencyVersions.cmake)
 
 # Fetch JUCE. GIT_SHALLOW TRUE (FRO341): JUCE's own .git history measured ~294 MB of every ~376 MB
 # build/_deps entry it contributes (a full clone carries the whole upstream history; a build never
-# reads any of it) — only safe because SYNTH_JUCE_GIT_TAG above pins a real tag ("8.0.3"), which a
+# reads any of it) — only safe because SYNTH_JUCE_GIT_TAG above pins a real tag ("9.0.3"), which a
 # shallow clone can fetch directly, not a bare commit SHA (which a shallow fetch of an arbitrary
 # commit cannot always reach on every git-server configuration). A shallow clone still downloads
 # every blob in that one commit's tree (JUCE ships examples/fonts/images in-tree), just not the

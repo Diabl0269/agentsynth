@@ -412,9 +412,9 @@ void collectColours(const juce::Drawable& d, std::vector<juce::Colour>& out) {
         if (shape->getStrokeFill().isColour() && !shape->getStrokeFill().colour.isTransparent())
             out.push_back(shape->getStrokeFill().colour);
     }
-    for (auto* child : d.getChildren())
-        if (auto* cd = dynamic_cast<const juce::Drawable*>(child))
-            collectColours(*cd, out);
+    if (auto* composite = dynamic_cast<const juce::DrawableComposite*>(&d))
+        for (int i = 0; i < composite->getNumChildren(); ++i)
+            collectColours(composite->getChild(i), out);
 }
 
 bool isPlaceholder(juce::Colour c) {

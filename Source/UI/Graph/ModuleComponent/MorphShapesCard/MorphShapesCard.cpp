@@ -288,7 +288,8 @@ void MorphShapesCard::paintShapeDropHint(juce::Graphics& g, juce::Rectangle<floa
     g.drawRoundedRectangle(bounds.reduced(1.0f), theme.metrics.cornerRadius, theme.metrics.borderWidth * 2.0f);
     const juce::Font font{juce::FontOptions(13.0f)};
     const auto label = "Stamp " + dropName_ + " here";
-    const float width = juce::jmin(bounds.getWidth() - 16.0f, font.getStringWidthFloat(label) + 20.0f);
+    const float width =
+        juce::jmin(bounds.getWidth() - 16.0f, juce::GlyphArrangement::getStringWidth(font, label) + 20.0f);
     const auto pill = juce::Rectangle<float>(width, 24.0f).withCentre(bounds.getCentre());
     g.setColour(theme.colors.surfaceHi.withAlpha(0.95f));
     g.fillRoundedRectangle(pill, theme.metrics.cornerRadiusSmall);

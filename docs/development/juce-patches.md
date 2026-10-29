@@ -7,7 +7,7 @@ a change to JUCE itself is a patch file applied after the fetch. There is one:
 |---|---|---|
 | `cmake/patches/juce-vst3-context-menu.patch` | `juce::VST3PluginFormat::setHostContextMenuExtension(AudioPluginInstance&, std::function<void(uint32 paramId, PopupMenu&)>)` | A VST3 plugin asks the host for a parameter's context menu with `IComponentHandler3::createContextMenu(view, &paramId)`. Stock JUCE drops the `ParamID` and returns only the plugin's own items. With the hook the app appends "Add to card" ([`plugin-card-layout.md`](../control/plugin-card-layout.md#add-to-card-from-the-plugin-window)). |
 
-The patch changes `juce_VST3PluginFormat.cpp`/`.h` only, does nothing for an instance without a hook, and
+The patch changes `juce_VST3PluginFormat.cpp`/`.h` and adds one protected accessor to `juce_VST3PluginFormatImpl.h` (in the headless module), does nothing for an instance without a hook, and
 never touches AU or any other format. Items the callback adds are re-added below the plugin's own items
 (after a separator) with a reserved id, carry their own `PopupMenu::Item::action`, and JUCE runs that action
 on the message thread after the menu closes, also in the async path used because the app builds with

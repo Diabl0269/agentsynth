@@ -37,7 +37,8 @@ void SoundBrowserComponent::layoutPathParts() {
     const int maxLabel = juce::jmax(36, (available - (n - 1) * kChevronGap) / juce::jmax(1, n));
     int x = kSideMargin;
     for (auto& part : pathParts_) {
-        const int w = juce::jmin(maxLabel, (int)std::ceil(font.getStringWidthFloat(part.label)) + 2);
+        const int w =
+            juce::jmin(maxLabel, (int)std::ceil(juce::GlyphArrangement::getStringWidth(font, part.label)) + 2);
         part.bounds = {x, getListTop() - kPathHeight, w, kPathHeight};
         x += w + kChevronGap;
     }
@@ -103,7 +104,7 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
     const juce::Font nameFont(juce::FontOptions(14.0f));
     const juce::Font detailFont(juce::FontOptions(12.0f));
     if (row.kind == RowKind::Sound) {
-        const float detailW = detailFont.getStringWidthFloat(row.detail);
+        const float detailW = juce::GlyphArrangement::getStringWidth(detailFont, row.detail);
         const int detailRight = width - kSideMargin;
         const int detailLeft = detailRight - (int)std::ceil(detailW);
         const bool favourite = row.entry.has_value() && lists_.isFavourite(row.entry->path);
