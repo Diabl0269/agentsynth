@@ -83,8 +83,23 @@ class TestModeApp:
         self._sock = socket.create_connection(("127.0.0.1", self.port), timeout=10)
         self._reader = self._sock.makefile("r", encoding="utf-8", newline="\n")
 
+    def activate(self):
+        """Brings the app to the front: key events only reach the focused window of the ACTIVE application, so a
+        scripted run started from a terminal (or with another app's window on top) would otherwise type into nothing.
+        Best effort: needs pyobjc (AppKit) on macOS, a no-op elsewhere."""
+        try:
+            from AppKit import NSRunningApplication  # pyobjc, optional
+
+            app = NSRunningApplication.runningApplicationWithProcessIdentifier_(self.pid)
+            if app is not None:
+                app.activateWithOptions_(3)  # ignoring other apps | all windows
+        except ImportError:
+            pass
+
     def call(self, cmd, timeout_ms=None, **args):
         """Runs one command; returns its result or raises TestModeError."""
+        if cmd in ("key", "click", "drag"):
+            self.activate()
         with self._lock:
             request = {"id": self._next_id, "cmd": cmd, "args": args}
             self._next_id += 1
