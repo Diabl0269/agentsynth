@@ -52,6 +52,10 @@ private:
 struct DialogSurface {
     std::string name;
     std::string sourceFile; // repo-relative, e.g. "Source/UI/Assistant/SignInDialog.cpp"
+    // True for a tool window that edits a module on the canvas (app shortcuts reach the app from it); false for a
+    // modal prompt, where an undo would change the canvas behind a question the user is answering. No default: a new
+    // dialog has to choose.
+    bool relaysAppShortcuts;
     std::function<juce::DialogWindow*(SweepEnvironment&)> open;
     std::string exemptReason;
 };

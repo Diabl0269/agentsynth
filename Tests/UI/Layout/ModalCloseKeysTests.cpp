@@ -93,6 +93,9 @@ protected:
                 }
             }
         }
+        // A closed dialog is deleted a turn later; that must happen while the module behind it is still alive.
+        for (int i = 0; i < 5; ++i)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }
 
     struct DialogDeleter {

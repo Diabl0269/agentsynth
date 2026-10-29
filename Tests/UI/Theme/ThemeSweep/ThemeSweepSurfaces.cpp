@@ -249,17 +249,17 @@ struct CardRigImpl : CardRig {
 
 const std::vector<DialogSurface>& dialogSurfaces() {
     static const std::vector<DialogSurface> surfaces = {
-        {"Shape editor", "Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.cpp", openShape, ""},
-        {"Sampler map", "Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.cpp", openSamplerMap, ""},
-        {"EQ window", "Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp", openEq, ""},
-        {"Sign in", "Source/UI/Assistant/SignInDialog.cpp", openSignIn, ""},
-        {"Macro ports prompt", "Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", openMacroPorts, ""},
-        {"Macro configure I/O", "Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", openMacroConfig, ""},
-        {"Settings", "Source/MainComponent/MainComponentSetupToolbar.cpp", openSettings, ""},
-        {"Render progress", "Source/MainComponent/MainComponentRenderToAudio.cpp", openRenderProgress, ""},
-        {"Export audio", "Source/MainComponent/MainComponentCallbacks.cpp",
+        {"Shape editor", "Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.cpp", true, openShape, ""},
+        {"Sampler map", "Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.cpp", true, openSamplerMap, ""},
+        {"EQ window", "Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp", true, openEq, ""},
+        {"Sign in", "Source/UI/Assistant/SignInDialog.cpp", false, openSignIn, ""},
+        {"Macro ports prompt", "Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", false, openMacroPorts, ""},
+        {"Macro configure I/O", "Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", false, openMacroConfig, ""},
+        {"Settings", "Source/MainComponent/MainComponentSetupToolbar.cpp", false, openSettings, ""},
+        {"Render progress", "Source/MainComponent/MainComponentRenderToAudio.cpp", false, openRenderProgress, ""},
+        {"Export audio", "Source/MainComponent/MainComponentCallbacks.cpp", false,
          [](SweepEnvironment& env) { return openExport(env, false); }, ""},
-        {"Export stems", "Source/MainComponent/MainComponentCallbacks.cpp",
+        {"Export stems", "Source/MainComponent/MainComponentCallbacks.cpp", false,
          [](SweepEnvironment& env) { return openExport(env, true); }, ""},
     };
     return surfaces;

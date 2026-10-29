@@ -1,8 +1,11 @@
-// ShortcutRelayTests.cpp -- app shortcuts (undo, redo, play/stop) pressed from the deepest focused child of any
-// dialog that PopupMotion::launchDialog opened reach the app, delivered in the order a real key takes (the focused
-// component, then each parent up to the window, whose key listeners see it before its own keyPressed). Dialogs come
-// from the theme sweep's registry, so a new dialog joins this guard on its own. A key that edits the canvas selection
-// is not relayed. Windows that open on a real display are skipped on a headless runner.
+// ShortcutRelayTests.cpp -- the rule for app shortcuts (undo, redo, play/stop) in dialogs that
+// PopupMotion::launchDialog opened, pressed from any focused child and delivered in the order a real key takes (the
+// focused component, then each parent up to the window, whose key listeners see it before its own keyPressed):
+//   - a tool window that edits a module on the canvas (relaysAppShortcuts) hands them to the app, and keeps the keys
+//     that act on the main window's selection (select all);
+//   - a modal prompt keeps all of them, since an undo would change the canvas behind a question being answered.
+// Dialogs come from the theme sweep's registry, so a new dialog has to pick a side. Windows that open on a real
+// display are skipped on a headless runner.
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "NativeWindowTestGuard.h"
 #include "UI/Layout/FocusStepWithin.h"
@@ -25,40 +28,16 @@ struct KnownGap {
     const char* ticket;
 };
 
-// Every dialog but the shape editor window leaves app shortcuts unrelayed.
+// Tool windows that do not relay yet.
 const std::vector<KnownGap> kKnownGaps = {
-    {"EQ window / command + Z", "TICKET?"},
-    {"EQ window / shift + command + Z", "TICKET?"},
-    {"EQ window / spacebar", "TICKET?"},
-    {"Export audio / command + Z", "TICKET?"},
-    {"Export audio / shift + command + Z", "TICKET?"},
-    {"Export audio / spacebar", "TICKET?"},
-    {"Export stems / command + Z", "TICKET?"},
-    {"Export stems / shift + command + Z", "TICKET?"},
-    {"Export stems / spacebar", "TICKET?"},
-    {"Macro configure I/O / command + Z", "TICKET?"},
-    {"Macro configure I/O / shift + command + Z", "TICKET?"},
-    {"Macro configure I/O / spacebar", "TICKET?"},
-    {"Macro ports prompt / command + Z", "TICKET?"},
-    {"Macro ports prompt / shift + command + Z", "TICKET?"},
-    {"Macro ports prompt / spacebar", "TICKET?"},
-    {"Render progress / command + Z", "TICKET?"},
-    {"Render progress / shift + command + Z", "TICKET?"},
-    {"Render progress / spacebar", "TICKET?"},
-    {"Sampler map / command + Z", "FRO1036"},
-    {"Sampler map / shift + command + Z", "FRO1036"},
-    {"Sampler map / spacebar", "FRO1036"},
-    {"Settings / command + Z", "TICKET?"},
-    {"Settings / shift + command + Z", "TICKET?"},
-    {"Settings / spacebar", "TICKET?"},
-    {"Sign in / command + Z", "TICKET?"},
-    {"Sign in / shift + command + Z", "TICKET?"},
-    {"Sign in / spacebar", "TICKET?"},
+    {"Sampler map / command + Z", "FRO1036"},       {"Sampler map / shift + command + Z", "FRO1036"},
+    {"Sampler map / spacebar", "FRO1036"},          {"EQ window / command + Z", "FRO1309"},
+    {"EQ window / shift + command + Z", "FRO1309"}, {"EQ window / spacebar", "FRO1309"},
 };
 
 struct Sample {
     juce::KeyPress key;
-    bool relayed; // false: the key acts on the main window only, so a tool window must keep it
+    bool relayed; // false: the key acts on the main window only, so even a tool window keeps it
     bool printable;
 };
 
@@ -151,7 +130,7 @@ TEST_F(ShortcutRelay, EveryDialogHandsAppShortcutsToTheAppFromItsFocusedChildren
                 env.appKeys().clear();
                 dispatchKey(*dialog, *stops[stop], sample.key);
                 pumpMessages();
-                const size_t expected = sample.relayed ? 1 : 0;
+                const size_t expected = surface.relaysAppShortcuts && sample.relayed ? 1 : 0;
                 if (env.appKeys().size() != expected)
                     found.insert(surface.name + " / " + sample.key.getTextDescription().toStdString());
             }
