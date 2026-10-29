@@ -161,6 +161,7 @@ private:
         std::vector<juce::Rectangle<int>> baseline; // every cell's rect at the press (the drop is planned from it)
         std::vector<std::pair<int, juce::Rectangle<int>>> placed; // the target group's other cells at the last preview
         juce::Rectangle<int> droppedRect;                         // where the last preview put the dragged cell
+        juce::Rectangle<int> zoneFrom; // where the dragged cell stood in the card when it moved onto the hide zone
     };
 
     // ---- Session and sync (CardLayoutOnCardEditor.cpp) -----------------------------------------
@@ -181,6 +182,14 @@ private:
     void handleAsyncUpdate() override;
     int indexOfCell(const juce::String& key) const;
 
+    // ---- The hide zone's motion (CardLayoutOnCardEditorHideDrag.cpp) -----------------------------
+    void enterHideZone();
+    void leaveHideZone();
+    void hideFromZone(int cell, juce::Rectangle<int> zoneFrom);
+    void dropHideProxy();
+    juce::Rectangle<int> hideZoneRectFor(juce::Rectangle<int> cell) const;
+    juce::Point<int> hideZoneCentreInCard() const;
+
     // ---- Drag, drop and the write (CardLayoutOnCardEditorDrag.cpp) -------------------------------
     void pressOn(const juce::String& key, const juce::MouseEvent& e);
     void dragTo(const juce::MouseEvent& e);
@@ -189,7 +198,7 @@ private:
     void cancelDrag();
     void endDrag();
     void setHideZoneShown(bool shown);
-    void hideDragged(int cell);
+    void hideDragged(int cell, juce::Rectangle<int> zoneFrom);
     void commitMove(int cell, juce::Rectangle<int> dropped, juce::Rectangle<int> start, bool announceMove);
     juce::Rectangle<int> homeRectOf(int cell) const;
     std::vector<juce::Rectangle<int>> pushedNeighbours(int section, int except, juce::Rectangle<int> dropped,
@@ -245,9 +254,10 @@ private:
     void dragAdded(const juce::String& paramId, CardLayoutAddRow::DragPhase phase, juce::Point<int> screenPosition);
     void dropAdded(const juce::String& paramId, juce::Point<int> at);
     void finishAdded(const juce::String& paramId, const juce::String& name);
-    void fadeInControl(const juce::String& paramId);
+    void fadeInControl(const juce::String& paramId, std::optional<juce::Point<int>> from = std::nullopt);
     bool startShrinkGhost(const juce::String& paramId);
-    void startShrinkGhostOf(juce::Image image, juce::Rectangle<int> cell);
+    void startShrinkGhostOf(juce::Image image, juce::Rectangle<int> cell,
+                            std::optional<juce::Point<int>> travelTo = std::nullopt);
     void tickGhosts();
     void writeHide(juce::String paramId);
     void flushPendingHide();
@@ -350,6 +360,17 @@ private:
     ReorderFramePump ghostPump_{*this};
     juce::OwnedArray<control_motion::ShrinkGhost> ghosts_; ///< Removed controls shrinking away.
     juce::String pendingHide_; ///< A hidden control not yet written: its picture is still shrinking.
+    /// Where the pending hide's cell goes back to before the write (it shrinks into the hide zone from there).
+    std::optional<juce::Rectangle<int>> pendingHideRect_;
+    /// The picture of the control being dragged over the hide zone: the card clips its own children, so the control
+    /// the pointer carries onto the zone is drawn by this, following the dragged cell.
+    std::unique_ptr<control_motion::ShrinkGhost> hideProxy_;
+    std::vector<juce::Component::SafePointer<juce::Component>>
+        hideProxyParts_;          ///< The real widget and caption, hidden.
+    juce::String hideProxyKey_;   ///< The control the proxy stands for.
+    bool proxyReturning_ = false; ///< The proxy glides back after Esc and is dropped when that glide lands.
+    /// Where each control hidden by a drop on the zone went (card pixels): an undo or redo brings it back from there.
+    std::map<juce::String, juce::Point<int>> hiddenFrom_;
     std::vector<juce::Component::SafePointer<juce::Component>> pendingHideParts_; ///< Its widget and caption.
     bool forceAnimateForTest_ = false;
 

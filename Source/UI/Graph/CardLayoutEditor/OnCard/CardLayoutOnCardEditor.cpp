@@ -133,6 +133,7 @@ void CardLayoutOnCardEditor::syncToCard() {
     }
     if (card != card_.getComponent())
         attachTo(*card);
+    dropHideProxy();
     drag_ = {};
     guides_.clear();
     refreshTimeTempo();
@@ -200,13 +201,18 @@ void CardLayoutOnCardEditor::animateRestore(const std::vector<OnCardCell>& befor
     startGlide(std::move(moves));
     if (!rebuilt)
         return;
+    // A control hidden by a drop on the zone comes back out of it and goes back into it.
+    const auto zoneOf = [this](const juce::String& key) -> std::optional<juce::Point<int>> {
+        const auto it = hiddenFrom_.find(key);
+        return it == hiddenFrom_.end() ? std::nullopt : std::optional<juce::Point<int>>(it->second);
+    };
     for (const auto& key : arrived)
-        fadeInControl(key);
+        fadeInControl(key, zoneOf(key));
     for (const auto& was : before)
         if (indexOfCell(was.key) < 0)
             startShrinkGhostOf(beforeImage.getClippedImage({was.rect.getX() * 2, was.rect.getY() * 2,
                                                             was.rect.getWidth() * 2, was.rect.getHeight() * 2}),
-                               was.rect);
+                               was.rect, zoneOf(was.key));
 }
 
 // A tab switch or a Sync flip changes which controls are on the card without resizing it: the card says so,
@@ -293,6 +299,7 @@ void CardLayoutOnCardEditor::close(bool keep) {
     escapeKey_.disarm();
     hideZonePump_.stop();
     hideZone_.setVisible(false);
+    dropHideProxy();
     drag_ = {};
     guides_.clear();
     if (keep) {
