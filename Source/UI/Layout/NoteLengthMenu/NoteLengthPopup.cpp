@@ -470,14 +470,23 @@ popup_motion::Style NoteLengthPopup::motionStyle() const {
     return style;
 }
 
+// Over a modal dialog (a shape editor window, say) the popup would open behind that window, and the dialog's modal
+// state would swallow its clicks as well, since the popup is not inside it. So there it floats on top and becomes
+// the topmost modal component itself, the way a juce::PopupMenu does; a press elsewhere then reaches
+// inputAttemptWhenModal() instead of the global mouse listener.
 void NoteLengthPopup::showOnDesktop() {
     place();
+    const bool overModal = juce::Component::getCurrentlyModalComponent() != nullptr;
     if (!g_skipDesktop) {
+        if (overModal)
+            setAlwaysOnTop(true);
         addToDesktop(juce::ComponentPeer::windowIsTemporary);
         PopupMotion::attach(*this, motionStyle());
         tooltipWindow_ = std::make_unique<AppTooltipWindow>(this, options_.appProperties);
     }
     setVisible(true);
+    if (overModal)
+        enterModalState(false);
     if (!g_skipDesktop)
         toFront(true);
     if (active_ != nullptr)
@@ -497,6 +506,8 @@ void NoteLengthPopup::close() {
         if (self == nullptr)
             return;
         self->setVisible(false);
+        if (self->isCurrentlyModal(false))
+            self->exitModalState(0);
         if (self->onClosed)
             self->onClosed();
     });
@@ -507,6 +518,8 @@ void NoteLengthPopup::mouseDown(const juce::MouseEvent& e) {
         return;
     close();
 }
+
+void NoteLengthPopup::inputAttemptWhenModal() { close(); }
 
 // Like a call-out, the popup does not outlive the app being in front.
 void NoteLengthPopup::timerCallback() {

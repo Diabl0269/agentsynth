@@ -71,6 +71,8 @@ public:
     void resized() override;
     /** A press anywhere outside the popup (the box that opened it included) closes it. */
     void mouseDown(const juce::MouseEvent& e) override;
+    /** Over a modal dialog the popup is modal itself: a press anywhere else closes it. */
+    void inputAttemptWhenModal() override;
 
     /** Test seam: showOnDesktop() shows the popup in place and never opens a native window. */
     static void setSkipDesktopForTest(bool skip);
