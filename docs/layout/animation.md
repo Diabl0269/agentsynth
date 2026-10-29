@@ -449,8 +449,6 @@ or hidden moves the same way: the pure numbers and the leaving picture are `synt
   or the next Hide writes a hide still shrinking first (`flushNudge` runs `flushPendingHide`); Cancel drops it and the
   control is shown again. Parts of the card that are not outlined controls (the card's own buttons, its jacks) take
   their new place at once.
-- **Drop to hide:** a control carried below the card hovers on the zone, shrinks into its centre on release and comes
-  back out of it on Cmd+Z: [details](module-card-layout.md#editing-a-layout).
 - **Reduce Motion:** an 80 ms fade in place instead of the grow or shrink.
 - **Off-screen:** nothing is animated and the write is immediate; tests force the animated path with
   `setForceAnimateForTest` and step it with `setShrinkGhostProgressForTest` / `applyAddFrameForTest`
