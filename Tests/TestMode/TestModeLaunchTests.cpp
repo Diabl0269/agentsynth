@@ -1,13 +1,13 @@
 // `--automation <port>` and its companions: parsing, the policies it implies, the settings directory it redirects, and
 // what startForLaunch announces.
 
+#include "../UniqueTempDir.h"
 #include "AutomationLaunch.h"
 #include "Project/ProjectCommandLine.h"
 #include "ProjectBundle.h"
 #include "SoundBrowser/LoopStretchFile.h"
 #include "TestMode/TestModeLaunch.h"
 #include "UI/Layout/ReducedMotion.h"
-#include "UniqueTempDir.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>
 #include <iostream>
