@@ -38,8 +38,8 @@ void styleCaption(juce::Label& label) {
 
 CardLayoutControlPanel::CardLayoutControlPanel() {
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
-    for (auto* caption :
-         {&showAsCaption_, &sizeCaption_, &directionCaption_, &labelCaption_, &rangeCaption_, &rangeTo_, &hint_}) {
+    for (auto* caption : {&showAsCaption_, &sizeCaption_, &directionCaption_, &faderSizeCaption_, &labelCaption_,
+                          &rangeCaption_, &rangeTo_, &hint_}) {
         styleCaption(*caption);
         addAndMakeVisible(*caption);
     }
@@ -47,9 +47,9 @@ CardLayoutControlPanel::CardLayoutControlPanel() {
     styleEditor(label_, "Label", "The control's name on the card. Empty puts the parameter's own name back");
     styleEditor(minimum_, "Minimum", "The lowest value the control reaches, in the parameter's own units");
     styleEditor(maximum_, "Maximum", "The highest value the control reaches, in the parameter's own units");
-    label_.setExplicitFocusOrder(4);
-    minimum_.setExplicitFocusOrder(5);
-    maximum_.setExplicitFocusOrder(6);
+    label_.setExplicitFocusOrder(5);
+    minimum_.setExplicitFocusOrder(6);
+    maximum_.setExplicitFocusOrder(7);
     label_.onReturnKey = [this] { commitLabel(); };
     label_.onFocusLost = [this] { commitLabel(); };
     for (auto* field : {&minimum_, &maximum_}) {
@@ -64,7 +64,7 @@ CardLayoutControlPanel::CardLayoutControlPanel() {
     };
     hide_.setTitle("Hide from card");
     hide_.setTooltip("Hide this control from the card. It goes to the More row");
-    hide_.setExplicitFocusOrder(7);
+    hide_.setExplicitFocusOrder(8);
     hide_.onClick = [this] {
         if (onHide)
             onHide();
@@ -100,7 +100,7 @@ void CardLayoutControlPanel::buildShowAs() {
     showAsWidth_ = std::max(showAsWidth_, switchWidth(names));
 }
 
-// Size and Direction pick between two widgets of one kind: segment 0 is `first`, segment 1 `second`.
+// Size, Direction and a fader's Size pick between two widgets of one kind: segment 0 is `first`, segment 1 `second`.
 void CardLayoutControlPanel::buildPairSwitch(std::unique_ptr<CardSegmentedSwitch>& target, const juce::String& title,
                                              const juce::String& tooltip, const juce::StringArray& values,
                                              int focusOrder, CardWidget first, CardWidget second) {
@@ -131,6 +131,12 @@ void CardLayoutControlPanel::setOptions(const ControlOptions& options) {
                         {"Small", "Large"}, 2, CardWidget::Knob, CardWidget::KnobLarge);
         buildPairSwitch(direction_, "Direction", "Whether this fader stands up or lies down",
                         {"Vertical", "Horizontal"}, 3, CardWidget::FaderV, CardWidget::FaderH);
+        buildPairSwitch(faderSize_, "Fader size", "How tall this fader is drawn. A long fader has more travel",
+                        {"Short", "Long"}, 4, CardWidget::FaderV, CardWidget::FaderVLong);
+        faderSizeFade_ = std::make_unique<synth::ui::FadeVisibility>(
+            std::initializer_list<juce::Component*>{&faderSizeCaption_, faderSize_.get()});
+        faderSizeFade_->onFrame = [this] { setSize(getWidth(), arrange()); };
+        faderSizeFade_->setShown(false);
         sizeFade_ = std::make_unique<synth::ui::FadeVisibility>(
             std::initializer_list<juce::Component*>{&sizeCaption_, size_.get()});
         directionFade_ = std::make_unique<synth::ui::FadeVisibility>(
@@ -149,8 +155,10 @@ void CardLayoutControlPanel::setOptions(const ControlOptions& options) {
     const bool hasDirection = offersFaderDirection(options_.widgetChoices, options_.widget);
     sizeFade_->setShown(hasSize);
     directionFade_->setShown(hasDirection);
+    faderSizeFade_->setShown(offersFaderSize(options_.widgetChoices, options_.widget));
     size_->setSelectedIndex(options_.widget == CardWidget::KnobLarge ? 1 : 0, juce::dontSendNotification);
     direction_->setSelectedIndex(options_.widget == CardWidget::FaderH ? 1 : 0, juce::dontSendNotification);
+    faderSize_->setSelectedIndex(options_.widget == CardWidget::FaderVLong ? 1 : 0, juce::dontSendNotification);
     const bool hasRange = options_.fullRange.has_value();
     rangeFade_.setShown(hasRange);
     hintFade_.setShown(false);
@@ -190,6 +198,12 @@ int CardLayoutControlPanel::arrange() {
         squeeze(*size_, kPad, y, width, kCaptionH, kSwitchH, slot);
         squeeze(*direction_, kPad, y, width, kCaptionH, kSwitchH, slot);
         y += slot + scaled(kGap, pairShown);
+        // A vertical fader's Size row sits under its Direction row and fades in and out on its own.
+        const float faderSizeShown = faderSizeFade_->progress();
+        const int faderSlot = scaled(full, faderSizeShown);
+        squeeze(faderSizeCaption_, kPad, y, width, 0, kCaptionH, faderSlot);
+        squeeze(*faderSize_, kPad, y, width, kCaptionH, kSwitchH, faderSlot);
+        y += faderSlot + scaled(kGap, faderSizeShown);
     }
     labelCaption_.setBounds(kPad, y, width, kCaptionH);
     label_.setBounds(kPad, y + kCaptionH, width, kFieldH);
@@ -262,8 +276,8 @@ bool CardLayoutControlPanel::keyPressed(const juce::KeyPress& key) {
 
 void CardLayoutControlPanel::applyColours() {
     const auto& colours = synth::theme::themeOf(*this).colors;
-    for (auto* caption :
-         {&showAsCaption_, &sizeCaption_, &directionCaption_, &labelCaption_, &rangeCaption_, &rangeTo_})
+    for (auto* caption : {&showAsCaption_, &sizeCaption_, &directionCaption_, &faderSizeCaption_, &labelCaption_,
+                          &rangeCaption_, &rangeTo_})
         caption->setColour(juce::Label::textColourId, colours.textMuted);
     hint_.setColour(juce::Label::textColourId, colours.warning);
 }

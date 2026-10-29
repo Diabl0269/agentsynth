@@ -26,6 +26,8 @@ CardWidget widgetFor(CardBodyItem::Kind kind) {
         return CardWidget::KnobLarge;
     case Kind::FaderV:
         return CardWidget::FaderV;
+    case Kind::FaderVLong:
+        return CardWidget::FaderVLong;
     case Kind::FaderH:
         return CardWidget::FaderH;
     case Kind::Segmented:
@@ -47,8 +49,8 @@ std::vector<CardWidget> widgetChoicesFor(const juce::RangedAudioParameter& param
     if (!automatic.has_value())
         return choices;
     choices.push_back(widgetFor(*automatic));
-    for (auto widget : {CardWidget::Knob, CardWidget::KnobLarge, CardWidget::FaderV, CardWidget::FaderH,
-                        CardWidget::Choice, CardWidget::Segmented, CardWidget::Stepper}) {
+    for (auto widget : {CardWidget::Knob, CardWidget::KnobLarge, CardWidget::FaderV, CardWidget::FaderVLong,
+                        CardWidget::FaderH, CardWidget::Choice, CardWidget::Segmented, CardWidget::Stepper}) {
         const auto kind = cardBodyKindFor(param, widget);
         if (kind.has_value() && widgetFor(*kind) == widget && widget != choices.front())
             choices.push_back(widget);

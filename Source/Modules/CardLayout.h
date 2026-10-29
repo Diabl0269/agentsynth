@@ -23,7 +23,7 @@ struct CardSlot {
 };
 
 /** How a v2 item is drawn. The first four map onto the v1 kinds; the rest need version 2. */
-enum class CardWidget { Auto, Knob, KnobLarge, FaderV, FaderH, Toggle, Choice, Segmented, Stepper };
+enum class CardWidget { Auto, Knob, KnobLarge, FaderV, FaderH, Toggle, Choice, Segmented, Stepper, FaderVLong };
 
 /** A read-only visual a v2 section can hold. */
 enum class CardView {

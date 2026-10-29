@@ -10,7 +10,7 @@ v2 and its reader/writer, the shared layout store with its `ModuleCardLayouts` r
 every card resolves its per-type default against it), the per-instance `cardLayout` node property with
 its undo, the pure resolver with an empty code-default registry, `CardBody`, which builds and lays out
 every built-in card's body from the resolved layout, with the folded More row, section header rows,
-label overrides and the Threshold and Envelope views in its view registry, the `knobLarge`, `faderV`, `faderH`,
+label overrides and the Threshold and Envelope views in its view registry, the `knobLarge`, `faderV`, `faderVLong`, `faderH`,
 `segmented` and `stepper` widgets, Hide from card / Show on card / Show as fader / Show as knob on every
 control's right-click menu, the **Edit Layout...** editor shared with the hosted plugin's picker,
 conditions read live (dim, swap groups, conditional sections, code dim rules), the footer row with the
@@ -127,7 +127,7 @@ Item = ParamItem | ViewItem
 ParamItem
   paramId  : string
   node     : string | null      // reserved: a node uuid, for the custom module (see below)
-  widget   : auto | knob | knobLarge | faderV | faderH | toggle | choice | segmented | stepper
+  widget   : auto | knob | knobLarge | faderV | faderVLong | faderH | toggle | choice | segmented | stepper
   label    : string | null
   span     : 1..6               // grid cells taken
   when     : Condition | null   // dim or swap, never resize (see below)
@@ -292,7 +292,7 @@ envelope, LFO curve and threshold components plug in unchanged.
   group**: each section is a block (its header row over its cells in one line), and the blocks flow left to right,
   wrapping to a new line only when the card is too narrow. A cell's width is fixed per kind, not measured from the
   font, so the estimate and the real card agree: knob 56, toggle 60, choice 96, stepper 104, horizontal fader 124
-  (large knob 64, segmented 124, vertical fader 40; a sequencer's Key field 184); blocks are 14 px apart with a 1 px rule in the theme's border colour centred in the gap (as tall as the controls, none at the start of a line), cells 4 px, lines 6 px. A toggle in a row
+  (large knob 64, segmented 124, vertical fader, short or long, 40; a sequencer's Key field 184); blocks are 14 px apart with a 1 px rule in the theme's border colour centred in the gap (as tall as the controls, none at the start of a line), cells 4 px, lines 6 px. A toggle in a row
   is a pill; a cell shorter than its line sits at the line's vertical middle. A swapped-out member keeps its cell. Each
   cell is placed by the same run layouts as a freeform cell (`placeFreeCell`), so a widget looks the same in a row as
   in a grid. The Sequencer and Poly Sequencer defaults are four row sections and the `stepGrid` view
@@ -314,6 +314,7 @@ envelope, LFO curve and threshold components plug in unchanged.
 | `knob` | the default for continuous values | today's `CardKnobSlider` |
 | `knobLarge` | the one control a module is "about" (Cutoff, Drive, Delay Time) | same widget, 60 px dial, spans one cell |
 | `faderV` | levels and stages compared side by side (ADSR stages, Reverb Dry/Wet, Limiter Input/Ceiling) | new `CardFader` |
+| `faderVLong` | the same vertical fader, half again as tall (144 px against 96); a size choice, never a kind of its own, and appended last in the widget name table so older files parse unchanged | `CardFader` |
 | `faderH` | a single level across the card (VCA Gain, Voice Mixer Level, footer output trims) | new `CardFader` |
 | `segmented` | a choice with up to about 6 short values (waveform, filter family, clock source) | new; the ADSR MS/BPM control is the precedent; a bool parameter draws as two segments, its off and on texts (the ADSR's Tempo Sync reads "Time" and "Tempo") |
 | `choice` | longer choice lists | today's `ComboBox` |
@@ -326,7 +327,7 @@ carries: MIDI Learn, the modulation-amount drag, the cable-drop target and the r
 fader shows modulation as a 3 px bar beside the slot from the base value to base + CV, in
 `mod-ring-positive` / `mod-ring-negative`.
 
-As built: `knob`, `knobLarge` (the same `CardKnobSlider`, 80 px tall in its cell), `faderV`, `faderH`,
+As built: `knob`, `knobLarge` (the same `CardKnobSlider`, 80 px tall in its cell), `faderV`, `faderVLong`, `faderH`,
 `segmented` and `stepper` are drawn; a widget that does not suit its parameter (a fader on a choice, a
 segmented switch over more than 6 values or a value over 10 characters, a stepper on a float or over
 more than 24 steps) falls back to the automatic one. The knob and the fader share their gestures through
@@ -535,10 +536,13 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     parameter (Knob, Fader, Toggle, Menu, Segmented, Stepper; the list's `widgetChoicesFor` folded by
     `widgetKindOf`), hidden when there is one kind. A knob also gets a **Size** row, Small | Large (`knob` or
     `knobLarge`: the large one draws a 60 px dial in a taller cell, the small a 38 px dial), and a fader a
-    **Direction** row, Vertical | Horizontal (`faderV` or `faderH`); only the row that applies shows, between Show
-    as and Label, and a size or direction change is one undo step like any other field. A fader has no size row
-    yet: grid spans are not drawn, so a longer fader has nothing to ride on. The widget names are "Small knob",
-    "Large knob", "Vertical fader" and "Horizontal fader" in the list editor's and the hosted-plugin layout's
+    **Direction** row, Vertical | Horizontal (`faderV` or `faderH`); a vertical fader also gets a **Size** row
+    (titled "Fader size"), Short | Long (`faderV` or `faderVLong`: 96 or 144 px of travel), hidden once the fader
+    lies down (Horizontal from a long fader gives `faderH`, Vertical from `faderH` gives the short `faderV`). Only
+    the rows that apply show, between Show as and Label, and a size or direction change is one undo step like any
+    other field. A long fader is a vertical fader everywhere (`CardBodyItem::isVerticalFader`), and a footer still
+    draws it as a horizontal one. The widget names are "Small knob",
+    "Large knob", "Vertical fader", "Long vertical fader" and "Horizontal fader" in the list editor's and the hosted-plugin layout's
     widget menu (`cardLayoutWidgetName`); never two sizes both called "Knob". **Label** renames the
     caption; empty or the parameter's own name clears the override (the list's rule, `labelOverrideFor`),
     and the full name stays as the caption's tooltip. **Range** (Minimum and Maximum, in the parameter's
