@@ -114,8 +114,8 @@ TEST(CurveEditorMultiSelect, AltRightMovesEverySelectedPointTogetherAsOneGesture
     EXPECT_TRUE(rig.events.empty()) << "a clamped press records no undo step";
 
     rig.press(juce::KeyPress::upKey, kAlt);
-    EXPECT_NEAR(rig.node(1).y, 0.55f, 1e-5f);
-    EXPECT_NEAR(rig.node(2).y, 0.55f, 1e-5f);
+    EXPECT_NEAR(rig.node(1).y, 0.52f, 1e-5f);
+    EXPECT_NEAR(rig.node(2).y, 0.52f, 1e-5f);
     EXPECT_FLOAT_EQ(rig.node(3).y, 0.5f) << "an unselected point stays";
 }
 
@@ -277,7 +277,7 @@ TEST(CurveEditorMultiSelect, PlainUpAndDownMoveTheSelectionsLevelLikeAltUpAndDow
     rig.events.clear();
 
     EXPECT_TRUE(rig.press(juce::KeyPress::upKey));
-    EXPECT_NEAR(rig.node(1).y, 0.55f, 1e-5f);
+    EXPECT_NEAR(rig.node(1).y, 0.52f, 1e-5f);
     EXPECT_NEAR(rig.node(1).x, 0.25, 1e-12) << "nothing moves in time";
     EXPECT_EQ(rig.events, (std::vector<juce::String>{"start", "node", "end"}));
     EXPECT_TRUE(rig.press(juce::KeyPress::downKey));
@@ -287,7 +287,7 @@ TEST(CurveEditorMultiSelect, PlainUpAndDownMoveTheSelectionsLevelLikeAltUpAndDow
     alt.press(juce::KeyPress::rightKey);
     alt.press(juce::KeyPress::rightKey);
     alt.press(juce::KeyPress::upKey, kAlt);
-    EXPECT_NEAR(alt.node(1).y, 0.55f, 1e-5f) << "the same step as Alt+Up";
+    EXPECT_NEAR(alt.node(1).y, 0.52f, 1e-5f) << "the same step as Alt+Up";
 }
 
 // Regression test for FRO957: a point could only be added with the mouse.
@@ -379,7 +379,8 @@ TEST(CurveEditorKeyHold, HoldingUpMovesTheLevelContinuouslyAcceleratesAndIsOneGe
 
     rig.hold(juce::KeyPress::upKey);
     const float afterTap = rig.node(1).y;
-    EXPECT_NEAR(afterTap - start, 0.05f, 1e-5f) << "the tap is the existing one step";
+    // Regression test for FRO1187: the first Up/Down step jumped a twentieth of the range
+    EXPECT_NEAR(afterTap - start, 0.02f, 1e-5f) << "the tap is the existing one step";
     rig.frame(0.0);
     rig.frame(500.0);
     const float half = rig.node(1).y;
@@ -387,7 +388,7 @@ TEST(CurveEditorKeyHold, HoldingUpMovesTheLevelContinuouslyAcceleratesAndIsOneGe
     const float full = rig.node(1).y;
     EXPECT_GT(half, afterTap);
     EXPECT_GT(full - half, half - afterTap) << "the second half covers more than the first";
-    EXPECT_NE(std::fmod((double)full, 0.05), 0.0) << "continuous, not in steps";
+    EXPECT_NE(std::fmod((double)full, 0.02), 0.0) << "continuous, not in steps";
 
     EXPECT_EQ(rig.count("start"), 1);
     EXPECT_EQ(rig.count("end"), 0) << "the gesture stays open while the key is down";

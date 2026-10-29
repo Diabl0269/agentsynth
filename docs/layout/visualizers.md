@@ -313,7 +313,7 @@ style. The logic is in `CurveEditorSelection.cpp` (selection, group move, remove
 `CurveEditorClipboard.cpp` (copy, paste, duplicate).
 
 A step is one grid cell while snap-to-grid is on (the LFO card) and otherwise a fiftieth of the
-visible time range (a twentieth of the level range). A key move goes through the same
+visible time range and a fiftieth of the level range. A key move goes through the same
 rules a drag does: it honours `xMovable` / `yMovable`, runs `onNodeChanged` (once per moved point) /
 `onPointsChanged`, and is wrapped in exactly one `onGestureStart` / `onGestureEnd`, so the envelope
 and LFO cards record one undo step per press, whatever the number of points. A press that changes

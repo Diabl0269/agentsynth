@@ -14,10 +14,10 @@
 namespace synth::ui {
 
 namespace {
-// Without snapping: a point moves a fiftieth of the visible time range and a twentieth of the level
-// range per press. Shift divides either by this factor.
+// Without snapping: a point moves a fiftieth of the visible time range and of the level range per
+// press. Shift divides either by this factor.
 constexpr double kTimeStepFraction = 1.0 / 50.0;
-constexpr double kLevelStep = 0.05;
+constexpr double kLevelStep = 1.0 / 50.0;
 constexpr double kFineDivisor = 5.0;
 
 } // namespace

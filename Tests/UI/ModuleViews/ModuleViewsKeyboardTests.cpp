@@ -371,7 +371,7 @@ TEST(CurveEditorKeyboard, TheSpokenValueFollowsTheSelectedPoint) {
     rig.press(juce::KeyPress::rightKey);
     EXPECT_EQ(spoken(rig.editor), "Point 3 of 5, time 0.5, level 0.50");
     rig.press(juce::KeyPress::upKey, kAlt);
-    EXPECT_EQ(spoken(rig.editor), "Point 3 of 5, time 0.5, level 0.55");
+    EXPECT_EQ(spoken(rig.editor), "Point 3 of 5, time 0.5, level 0.52");
 }
 
 TEST(CurveEditorKeyboard, TabbingInSelectsAPointButAClickDoesNot) {
