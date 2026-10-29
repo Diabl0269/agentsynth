@@ -65,9 +65,17 @@ CardLayoutOnCardEditor::~CardLayoutOnCardEditor() {
     stopTimer();
     cancelPendingUpdate();
     closePanel();
+    releaseCardGlide();
     if (card_ != nullptr)
         card_->removeComponentListener(this);
     source_.reset();
+}
+
+// The canvas slides every card its restore resized, as a snapshot drawn over the card. The editor animates its own
+// card, so it is left out of that slide while the session lasts.
+void CardLayoutOnCardEditor::releaseCardGlide() {
+    if (auto* graph = graphEditor_.getComponent())
+        graph->getCardGlide().setCardExempt(nodeId_.uid, false);
 }
 
 ModuleComponent* CardLayoutOnCardEditor::findCard() const {
@@ -91,6 +99,7 @@ std::unique_ptr<CardLayoutOnCardEditor> CardLayoutOnCardEditor::open(GraphEditor
             return nullptr;
         std::unique_ptr<CardLayoutOnCardEditor> opened(new CardLayoutOnCardEditor(editor, undo, nodeId, shortcuts));
         opened->attachTo(*comp);
+        editor.getCardGlide().setCardExempt(nodeId.uid, true);
         // An undo or redo rebuilds the card; the editor re-syncs to it before the restore returns, so no frame shows
         // the restored layout under outlines still at the old one.
         if (undo != nullptr)
@@ -287,6 +296,7 @@ void CardLayoutOnCardEditor::close(bool keep) {
     if (closed_ || closing_)
         return;
     closing_ = true;
+    releaseCardGlide();
     closePanel();
     stopTimer();
     glidePump_.stop();

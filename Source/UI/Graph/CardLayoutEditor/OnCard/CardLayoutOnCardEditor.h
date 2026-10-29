@@ -170,6 +170,7 @@ private:
     void syncToCard();
     void syncAfterOutsideChange();
     void followCard(); ///< Pans the canvas to keep the card in view (CardLayoutOnCardEditorFollow.cpp).
+    void releaseCardGlide();
     void animateRestore(const std::vector<OnCardCell>& before, const juce::Image& beforeImage, bool rebuilt);
     void rememberCardImage();
     void reconcileOutlines();

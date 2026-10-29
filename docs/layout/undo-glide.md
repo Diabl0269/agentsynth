@@ -21,7 +21,9 @@ redo.** An undo that jumps looks like a different app from the edit it reverses.
   geometry final at once). A control the restore brings back grows in (`fadeInControl`) and one it takes away shrinks
   out (`startShrinkGhostOf`, from a picture of the card taken at the previous re-sync). Nothing glides under Reduce
   Motion or off screen. The re-sync runs inside the restore (an `addRestoreSettledHook` the editor registers when it
-  opens), so no frame shows the restored layout under outlines still at the old one. A second Cmd+Z or Cmd+Shift+Z
+  opens), so no frame shows the restored layout under outlines still at the old one. The card itself is exempt from the canvas's card slide (`CardGlideAnimator::setCardExempt`)
+  while the editor is open: a restore that changes its height would otherwise hide it behind a snapshot drawn over the
+  editor, showing the restored layout with no outlines. A second Cmd+Z or Cmd+Shift+Z
   mid-glide starts the new glide from where each control is drawn then (nothing is landed first), and a re-sync that
   arrives while a glide runs with no new rebuild is ignored (FRO721).
 - **Macro borders.** `undo()`/`redo()` also snapshot the painted macro borders before the restore and hand them to

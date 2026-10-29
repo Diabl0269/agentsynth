@@ -3,6 +3,7 @@
 // restore itself, so no frame shows the restored layout before the glide starts, and a second undo or redo
 // mid-glide starts from where the control is drawn. Bug kinds: motion-over-time, preview-vs-commit.
 
+#include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
 
 using namespace oncard_test;
@@ -19,9 +20,9 @@ void drop(CardLayoutOnCardEditor& editor, const juce::String& key, juce::Point<i
 
 // What the app does on Cmd+Z / Cmd+Shift+Z: the editor sees the key and leaves it, then the app undoes or redoes.
 // Nothing here runs the message loop, so only what the restore itself did is on screen afterwards.
-bool pressUndo(OnCardRig& rig, CardLayoutOnCardEditor& editor, bool redo) {
+bool pressUndo(OnCardRig& rig, CardLayoutOnCardEditor& editor, bool redo, const char* key = "cutoff") {
     const int mods = kCommand | (redo ? juce::ModifierKeys::shiftModifier : 0);
-    EXPECT_FALSE(editor.getOutlineForTest("cutoff")->keyPressed(juce::KeyPress('z', juce::ModifierKeys(mods), 0)));
+    EXPECT_FALSE(editor.getOutlineForTest(key)->keyPressed(juce::KeyPress('z', juce::ModifierKeys(mods), 0)));
     return redo ? rig.canvas.undo.redo() : rig.canvas.undo.undo();
 }
 
@@ -144,4 +145,118 @@ TEST(OnCardEditorUndoGlide, ARepeatTriggerForTheSameChangeWhileItGlidesDoesNotRe
     EXPECT_TRUE(g.editor->isGlidingForTest());
     g.editor->stepGlideForTest(1000.0f);
     EXPECT_EQ(g.drawnX(), restoredX);
+}
+
+namespace {
+
+// An Oscillator card with Glide dropped on a row of its own below the last one: the card grows by a row.
+struct GrowingMove : OnCardRig {
+    GrowingMove() {
+        synth::ui::setReducedMotionForTest(false);
+        id = add(std::make_unique<OscillatorModule>(), 100, 100);
+        editor = openOnCard(id);
+        canvas.editor.getCardGlideForTest().setForceAnimateForTest(
+            true); // not on screen: a card slide arms only forced
+    }
+    juce::Rectangle<int> glideWidget() {
+        auto* widget = widgetOf(*card(id), "glide");
+        return widget != nullptr ? widget->getBounds() : juce::Rectangle<int>();
+    }
+    int cardHeight() { return card(id)->getHeight(); }
+
+    // The editor is on the card, sized to it with the strip under it, showing every outline, nothing hiding it.
+    void expectAttached(const char* when) {
+        SCOPED_TRACE(when);
+        ASSERT_NE(editor, nullptr);
+        auto* c = card(id);
+        ASSERT_NE(c, nullptr);
+        EXPECT_TRUE(editor->isVisible());
+        EXPECT_EQ(editor->getAlpha(), 1.0f);
+        EXPECT_EQ(c->getAlpha(), 1.0f) << "the card is drawn as itself, not hidden behind a sliding snapshot of it";
+        EXPECT_EQ(canvas.editor.getCardGlideForTest().offsetFor(id.uid), juce::Point<float>())
+            << "the canvas does not slide the card under its editor";
+        EXPECT_EQ(editor->getParentComponent(), c->getParentComponent());
+        EXPECT_EQ(editor->getBounds(),
+                  c->getBounds().withHeight(c->getHeight() + CardLayoutOnCardEditor::kAddStripHeight));
+        EXPECT_NE(editor->getOutlineForTest("level"), nullptr) << "the outlines are there";
+        auto* parent = c->getParentComponent();
+        EXPECT_GT(parent->getIndexOfChildComponent(editor), parent->getIndexOfChildComponent(c))
+            << "the overlay sits above the card";
+    }
+
+    NodeID id;
+    CardLayoutOnCardEditor* editor = nullptr;
+};
+
+} // namespace
+
+// Regression test for FRO721: an undo that shrank the card showed the bare card for two frames, the control already
+// home.
+TEST(OnCardEditorUndoGlide, AnUndoThatShrinksTheCardKeepsTheEditorOnItAndGlidesFromTheDropSpot) {
+    GrowingMove g;
+    ASSERT_NE(g.editor, nullptr);
+    ASSERT_NE(g.editor->getOutlineForTest("glide"), nullptr);
+    ASSERT_NE(g.editor->getOutlineForTest("level"), nullptr);
+    ASSERT_FALSE(g.glideWidget().isEmpty());
+    const auto home = g.editor->getCellRectForTest("glide");
+    const auto homeWidget = g.glideWidget();
+    const int homeHeight = g.cardHeight();
+    const auto lowest = g.editor->getCellRectForTest("level");
+    {
+        Pointer pointer(*g.editor, "glide");
+        pointer.moveBy({0, lowest.getBottom() + 14 - home.getCentreY()}, kCommand);
+        pointer.release();
+    }
+    const auto moved = g.editor->getCellRectForTest("glide");
+    g.editor->finishMotionForTest();
+    ASSERT_GT(g.cardHeight(), homeHeight) << "the drop added a row";
+    ASSERT_NE(moved, home);
+    const auto drawnMoved = g.glideWidget();
+    g.editor->setForceAnimateForTest(true);
+
+    ASSERT_TRUE(pressUndo(g, *g.editor, false, "glide"));
+    ASSERT_EQ(g.cardHeight(), homeHeight);
+    g.expectAttached("right after Cmd+Z returns");
+    EXPECT_TRUE(g.editor->isGlidingForTest());
+    EXPECT_EQ(g.editor->getCellRectForTest("glide").getPosition(), moved.getPosition())
+        << "the outline starts at the drop";
+    EXPECT_NE(g.glideWidget(), homeWidget) << "not already at home";
+    EXPECT_EQ(g.glideWidget().getPosition(), drawnMoved.getPosition()) << "starts from the dropped spot";
+
+    g.editor->stepGlideForTest(80.0f);
+    g.expectAttached("mid glide");
+    g.editor->stepGlideForTest(1000.0f);
+    EXPECT_EQ(g.editor->getCellRectForTest("glide"), home);
+    g.expectAttached("landed");
+
+    // Redo grows the card again.
+    ASSERT_TRUE(pressUndo(g, *g.editor, true, "glide"));
+    ASSERT_GT(g.cardHeight(), homeHeight);
+    g.expectAttached("right after Cmd+Shift+Z returns");
+    EXPECT_TRUE(g.editor->isGlidingForTest());
+    EXPECT_EQ(g.editor->getCellRectForTest("glide").getPosition(), home.getPosition());
+    EXPECT_EQ(g.glideWidget().getPosition(), homeWidget.getPosition()) << "redo starts from the restored place";
+    g.editor->stepGlideForTest(1000.0f);
+    EXPECT_EQ(g.editor->getCellRectForTest("glide"), moved);
+    g.expectAttached("redo landed");
+}
+
+TEST(OnCardEditorUndoGlide, AnUndoOfADropToHideThatGrowsTheCardBackKeepsTheEditorOnIt) {
+    GrowingMove g;
+    ASSERT_NE(g.editor, nullptr);
+    const int fullHeight = g.cardHeight();
+    // Hiding the only control of a row closes the row up: the card shrinks.
+    hideThroughPanel(g, *g.editor, "glide");
+    g.editor->finishMotionForTest();
+    const int hiddenHeight = g.cardHeight();
+    g.editor->setForceAnimateForTest(true);
+
+    ASSERT_TRUE(pressUndo(g, *g.editor, false, "level"));
+    g.expectAttached("right after undoing the hide");
+    EXPECT_EQ(g.cardHeight(), fullHeight);
+    ASSERT_TRUE(pressUndo(g, *g.editor, true, "level"));
+    g.expectAttached("right after redoing the hide");
+    EXPECT_EQ(g.cardHeight(), hiddenHeight);
+    g.editor->finishMotionForTest();
+    g.expectAttached("landed");
 }

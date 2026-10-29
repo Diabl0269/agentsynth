@@ -98,7 +98,7 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
     std::vector<juce::Rectangle<int>> fromRects;
     for (const auto& e : now) {
         if (e.comp == nullptr || !e.comp->isVisible() || e.comp->getBounds().isEmpty() ||
-            e.comp->isMouseButtonDown(true))
+            e.comp->isMouseButtonDown(true) || exempt_.count(e.nodeUid) != 0)
             continue;
         // The same component, or (a restore that rebuilt every card) the card now standing for the same node.
         const auto was = std::find_if(before.begin(), before.end(), [&e](const Captured& c) {
@@ -147,6 +147,13 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
     progress_ = 0.0f;
     ++armCount_;
     return true;
+}
+
+void CardGlideAnimator::setCardExempt(uint32_t nodeUid, bool exempt) {
+    if (exempt)
+        exempt_.insert(nodeUid);
+    else
+        exempt_.erase(nodeUid);
 }
 
 void CardGlideAnimator::applyTweenAt(float t) noexcept {
