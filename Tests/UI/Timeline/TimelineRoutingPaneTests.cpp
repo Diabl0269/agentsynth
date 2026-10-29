@@ -3,6 +3,7 @@
 // same host calls as the track header. Bare-panel tests cover the document-only states; the rest use a real
 // MainComponent as the TrackHeaderHost.
 #include "../Layout/BottomDockActiveTabResetGuard.h"
+#include "../Layout/PaneKeysWalk.h"
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanel/TimelinePanelTestFixture.h"
@@ -152,6 +153,14 @@ TEST(TimelineRoutingPaneTest, TheRootAndItsControlsAreKeyboardStopsInOrderWithUp
     EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::escapeKey), &canvasNode)) << "Escape returns to the pane root";
     EXPECT_FALSE(keys.keyPressed(plain(juce::KeyPress::escapeKey), &pane)) << "on the root it bubbles on";
     EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::downKey), &canvasNode)) << "a button's Up/Down step on";
+}
+
+// Regression test for FRO1114: every control of the pane is reached by Down and left by Up, through the real key order.
+TEST(TimelineRoutingPaneTest, EveryControlIsReachedByDownThroughTheRealKeyOrder) {
+    BarePanel f;
+    f.doc.addTrack(TrackKind::Midi, "Lead");
+    clickRow(f.panel, 0);
+    pane_walk::expectEveryControlReachedByDownAndUp(f.pane().getPaneKeysForTest(), f.pane());
 }
 
 // A short bottom panel must not clip the lower sections: the pane scrolls inside the side pane instead.

@@ -77,6 +77,8 @@ bool TimelinePanelComponent::matchesAction(const juce::KeyPress& key, const juce
 }
 
 bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
+    if (topBarKeys_.handleKey(key))
+        return true;
     if (handleAddTrackButtonKey(key))
         return true;
 

@@ -66,12 +66,15 @@ void KeyField::showPopup() {
         onOpen();
 }
 
+// Space and Return open the picker; Up and Down are not ours (the combo would swallow them to step through items it
+// does not have), so they bubble and the region around the field moves focus on.
 bool KeyField::keyPressed(const juce::KeyPress& key) {
-    if (isEnabled() &&
-        (key == juce::KeyPress::downKey || key == juce::KeyPress::spaceKey || key == juce::KeyPress::returnKey)) {
+    if (isEnabled() && (key == juce::KeyPress::spaceKey || key == juce::KeyPress::returnKey)) {
         showPopup();
         return true;
     }
+    if (key == juce::KeyPress::upKey || key == juce::KeyPress::downKey)
+        return false;
     return ComboBox::keyPressed(key);
 }
 
