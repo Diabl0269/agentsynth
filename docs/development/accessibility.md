@@ -134,6 +134,10 @@ entry in `Tests/UI/Accessibility/AccessibilityBaseline.h`:
   it would fail on one CI platform or another.)
 - Never raise an entry. A new surface is added with its real counts.
 
+## The reach test
+
+`Tests/UI/Layout/KeyboardReachTests.cpp` checks that every operable control (button, slider, combo box, text editor) in every keyboard focus region is a keyboard stop. It walks the regions of a real `MainComponent`'s `FocusRegionRegistry` (each main view in turn, the routing pane and Mod Matrix open, then the piano roll and the drum machine open on a clip) and every dialog of the theme sweep registry, so a new region or dialog is covered without being listed. A control is reached when it is one of `focusableDescendants(region root)`. A region that reaches controls with keys of its own (the toolbars' key rings, the timeline top bar, the mixer's one-leaf keys, the Settings tab strip) has an adapter in the test with a one-line reason; a segmented switch and a lane chip row count as one control. A control that is not reached fails with `<region> / <control>`, unless `kKnownGaps` lists it with its ticket. The list may only shrink: a listed control that is now reached fails with "fixed - remove it from kKnownGaps". A region with no operable control and no adapter fails, since the walk is then not seeing it. The per-region counts are printed in the test output.
+
 ## Dialogs: Tab order, hidden stops, Escape
 
 Every dialog, tab and popup is held to three more things, all in `Source/UI/Layout/DialogKeyboard.h`
