@@ -552,3 +552,55 @@ TEST(OnCardEditorRows, ALongFaderCellIsTheCardsBoxAndADropInItsOwnRowMovesNothin
     for (const auto& k : open.stages)
         EXPECT_EQ(open.cell(k), before[k]) << k << " did not move";
 }
+
+// Regression test for FRO720: a short fader dragged out of the stage group and back onto its spot leaves every stage
+// where it began.
+TEST(OnCardEditorRows, AShortFaderDraggedOutOfTheStageGroupAndBackLeavesEveryStageWhereItWas) {
+    AdsrOpen open;
+    ASSERT_NE(open.editor, nullptr);
+    std::map<juce::String, juce::Rectangle<int>> before;
+    for (const auto& k : open.stages)
+        before[k] = open.cell(k);
+    const auto spot = open.cell("decay").getCentre();
+    {
+        Pointer pointer(*open.editor, "decay");
+        pointer.moveBy({0, 200}, kCommand);
+        pointer.release();
+    }
+    {
+        Pointer pointer(*open.editor, "decay");
+        pointer.moveBy(spot - open.cell("decay").getCentre(), kCommand);
+        pointer.release();
+    }
+    for (const auto& k : open.stages)
+        EXPECT_EQ(open.cell(k), before[k]) << k << " is back where it was";
+}
+
+// Regression test for FRO720: a control dropped into another group's row pushes that group's controls aside; dragged
+// back to its own group, the controls it pushed return and every control stands where it began.
+TEST(OnCardEditorRows, AControlDroppedInAnotherGroupAndDraggedBackLetsThePushedControlsReturn) {
+    OscOpen open;
+    ASSERT_NE(open.editor, nullptr);
+    std::map<juce::String, juce::Rectangle<int>> before;
+    for (const auto* k : {"unison", "detune", "blend", "width", "pulseWidth", "level", "pan"})
+        before[k] = open.cell(k);
+
+    const auto start = open.cell("unison").getCentre();
+    {
+        Pointer pointer(*open.editor, "unison");
+        pointer.moveBy(open.cell("level").getCentre() - start, kCommand);
+        pointer.release();
+    }
+    EXPECT_NE(open.cell("pan"), before["pan"]) << "Pan was pushed by the drop";
+    {
+        Pointer pointer(*open.editor, "unison");
+        pointer.moveBy(start - open.cell("unison").getCentre(), kCommand);
+        pointer.release();
+    }
+    for (const auto& [key, rect] : before)
+        EXPECT_EQ(open.cell(key), rect) << key << " is back where it began";
+
+    ASSERT_TRUE(open.rig.canvas.undo.undo()) << "the drag back is one undo step";
+    open.editor->runQueuedSyncForTest();
+    EXPECT_NE(open.cell("pan"), before["pan"]) << "undone: Unison is in the other group again, Pan pushed";
+}

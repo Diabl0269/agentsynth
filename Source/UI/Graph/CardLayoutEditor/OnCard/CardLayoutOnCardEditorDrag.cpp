@@ -98,14 +98,34 @@ juce::Rectangle<int> CardLayoutOnCardEditor::homeRectOf(int cell) const {
 // after anything else (opening, an undo or redo, a tab switch) every control's home is where it stands.
 void CardLayoutOnCardEditor::refreshHomes() {
     std::map<juce::String, juce::Rectangle<int>> homes, origins;
+    std::map<juce::String, int> tops;
+    std::map<juce::String, std::pair<int, int>> frames;
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    const auto topOf = [body](int section) {
+        return body != nullptr ? body->getPlan().sections[(size_t)section].cellTop : 0;
+    };
     for (const auto& c : cells_) {
         const auto kept = homes_.find(c.key);
         const auto first = origins_.find(c.key);
-        homes[c.key] = keepHomes_ && kept != homes_.end() ? kept->second : c.rect;
-        origins[c.key] = keepHomes_ && first != origins_.end() ? first->second : c.rect;
+        const auto frame = frameTops_.find(c.key);
+        const auto originFrame = originFrames_.find(c.key);
+        const int top = topOf(c.section);
+        const int shift = keepHomes_ && frame != frameTops_.end() ? top - frame->second : 0;
+        homes[c.key] = keepHomes_ && kept != homes_.end() ? kept->second.translated(0, shift) : c.rect;
+        tops[c.key] = top;
+        if (keepHomes_ && first != origins_.end() && originFrame != originFrames_.end()) {
+            const int originTop = topOf(originFrame->second.first);
+            origins[c.key] = first->second.translated(0, originTop - originFrame->second.second);
+            frames[c.key] = {originFrame->second.first, originTop};
+        } else {
+            origins[c.key] = c.rect;
+            frames[c.key] = {c.section, top};
+        }
     }
     homes_ = std::move(homes);
     origins_ = std::move(origins);
+    frameTops_ = std::move(tops);
+    originFrames_ = std::move(frames);
 }
 
 // Where the other cells of `section` stand once `dropped` lands (`start` is where the dropped control stood;
@@ -228,6 +248,8 @@ void CardLayoutOnCardEditor::previewRowDrop(juce::Rectangle<int> rect, juce::Poi
     drag_.placed.clear();
     for (size_t k = 0; k < indices.size(); ++k)
         drag_.placed.emplace_back(indices[k], drop.others[k]);
+    if (target != cells_[(size_t)cell].section)
+        planLeftGroup(cell);
     drag_.droppedRect = drop.dropped;
     for (int i = 0; i < (int)cells_.size(); ++i)
         if (i != cell) {
@@ -240,6 +262,22 @@ void CardLayoutOnCardEditor::previewRowDrop(juce::Rectangle<int> rect, juce::Poi
         guides_ = {{false, drop.newRowAt, limits.minX, limits.maxX}};
     else
         guides_ = drop.dropped.getPosition() == rect.getPosition() ? snapGuides : std::vector<oncard::Guide>{};
+}
+
+// The group the dragged control is leaving: the controls it had pushed aside return home where that is free, and the
+// row it leaves empty closes up, planned from the cells as they stood at the press.
+void CardLayoutOnCardEditor::planLeftGroup(int cell) {
+    std::vector<int> indices;
+    std::vector<juce::Rectangle<int>> standing, homes;
+    for (int i : cellsOfSection(cells_[(size_t)cell].section))
+        if (i != cell) {
+            indices.push_back(i);
+            standing.push_back(drag_.baseline[(size_t)i]);
+            homes.push_back(homeRectOf(i));
+        }
+    const auto left = oncard::leaveGroup(standing, homes, drag_.baseline[(size_t)cell]);
+    for (size_t k = 0; k < indices.size(); ++k)
+        drag_.placed.emplace_back(indices[k], left[k]);
 }
 
 // Every cell but the dragged one back where it stood at the press.

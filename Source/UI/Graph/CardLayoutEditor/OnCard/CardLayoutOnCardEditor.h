@@ -186,6 +186,7 @@ private:
     void commitMoveToSection(int cell, juce::Rectangle<int> landed, int target, const CellRects& placed);
     void previewRowDrop(juce::Rectangle<int> rect, juce::Point<int> pointer,
                         const std::vector<oncard::Guide>& snapGuides);
+    void planLeftGroup(int cell);
     void restoreBaseline();
     int dropSectionAt(int y) const;
     void commitRowDrop(int cell, juce::Rectangle<int> start, const CellRects& placed,
@@ -303,6 +304,12 @@ private:
      *  neighbours from these, so a control pushed aside returns as soon as its home is free. */
     std::map<juce::String, juce::Rectangle<int>> homes_;
     std::map<juce::String, juce::Rectangle<int>> origins_; ///< Where the layout first put each control.
+    /** The top of the group each home and origin is measured in: a group below one that grew or shrank has moved, and
+     *  its homes with it. */
+    std::map<juce::String, int> frameTops_;
+    /** The group (index, top) each origin is measured in: a control moved to another group keeps its origin in the
+     *  group it began in. */
+    std::map<juce::String, std::pair<int, int>> originFrames_;
     bool keepHomes_ = false; ///< A write of ours is re-syncing: pushed cells keep their homes.
 
     Drag drag_;

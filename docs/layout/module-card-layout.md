@@ -498,6 +498,11 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     pushed control remembers its **home**, where it stood before any push, and returns there when the home
     is free; only the user's own drag or nudge of a control gives it a new home. The pure functions are
     `rowsOf`, `dropIntoRow` and `repackRow` in `OnCardLayoutMath`.
+    Dragging a control to another group also plans the group it leaves (`leaveGroup`): the controls it had pushed
+    aside return home where that is free and a row it empties closes up, all in the same write, so dragging it
+    back is one undo step and leaves nothing displaced. A control let go inside the spot where the layout first put
+    it lands exactly there and sends every displaced control home. Homes and origins are measured from their
+    group's top, so they follow the group when the groups above it grow or shrink.
   - *A cell is its box.* The editor's cell for a control is the box the card gives its kind (a knob's or
     fader's grid cell, `cardBodyCellSize`), not just the widget in it: a position written for a cell puts that box
     there and centres the widget in it, so a fader (narrower than its box) must not be taken for the whole box.

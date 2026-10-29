@@ -107,6 +107,13 @@ RowDrop dropIntoRow(juce::Rectangle<int> dropped, juce::Point<int> probe,
                     const std::vector<juce::Rectangle<int>>& others, const Limits& limits,
                     const DropContext& context = {});
 
+/** `cells` after a control left the group from `vacated`: every cell standing off its home goes back when the home
+ *  is free (a control the leaver had pushed aside returns), then a row the leaver left empty closes up. Cells and
+ *  `homes` are index-aligned; an empty home keeps its cell where it is. */
+std::vector<juce::Rectangle<int>> leaveGroup(const std::vector<juce::Rectangle<int>>& cells,
+                                             const std::vector<juce::Rectangle<int>>& homes,
+                                             juce::Rectangle<int> vacated);
+
 /** The same with the probe at the dropped cell's centre. */
 RowDrop dropIntoRow(juce::Rectangle<int> dropped, const std::vector<juce::Rectangle<int>>& others,
                     const Limits& limits);

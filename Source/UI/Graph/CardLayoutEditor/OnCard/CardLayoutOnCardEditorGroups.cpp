@@ -18,8 +18,8 @@ constexpr double kSettleMs = 140.0;
 
 // The control (every member of its swap group) leaves its group's items for the target's, free-positioned where
 // the drop's row plan landed it (sized as the target group sizes it: its columns can differ). Both groups are
-// written positioned so nothing else moves: the group it left keeps every other control where it stands, the
-// target gets its cells as the plan placed them. One write, so one undo step.
+// written positioned: the group it left as the plan placed it (the controls it had pushed aside back home, an empty
+// row closed up), the target with its cells as the plan placed them. One write, so one undo step.
 void CardLayoutOnCardEditor::commitMoveToSection(int cell, juce::Rectangle<int> landed, int target,
                                                  const CellRects& placed) {
     const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
@@ -42,8 +42,11 @@ void CardLayoutOnCardEditor::commitMoveToSection(int cell, juce::Rectangle<int> 
     }
     std::vector<OnCardCell> staying;
     for (int i : cellsOfSection(from))
-        if (i != cell)
+        if (i != cell) {
             staying.push_back(cells_[(size_t)i]);
+            staying.back().rect = placedRect(placed, i, cells_[(size_t)i].rect);
+            moves.push_back({staying.back().key, cells_[(size_t)i].rect, staying.back().rect, kPushMs, false});
+        }
 
     const auto g = cardbody::BodyGeometry::forCardWidth(card_->getWidth());
     const auto& sections = body->getPlan().sections;
@@ -58,6 +61,7 @@ void CardLayoutOnCardEditor::commitMoveToSection(int cell, juce::Rectangle<int> 
             written = withControlAdded(std::move(written), id, at, layoutTarget, codeDefault ? &*codeDefault : nullptr);
 
     homes_[moving.key] = landed;
+    frameTops_[moving.key] = targetTop;
     const auto name = cardSectionDisplayName(written.sections[(size_t)layoutTarget]);
     writeLayout(written);
     announce(moving.caption + " moved to " + name);

@@ -372,8 +372,46 @@ void joinRow(Rects& all, std::vector<Ids> rows, size_t r, int dropped, juce::Poi
 
 } // namespace
 
+namespace {
+
+// A control let go on the spot where the layout first put it goes back there exactly, and every cell that stands off
+// its home returns to it where that is free: dragging out and back is the layout it began as, not one with the
+// row gap in it. Nothing is returned (and the normal plan runs) when the spot is taken or its row would be left empty.
+bool returnToOrigin(Rect dropped, juce::Point<int> probe, const Rects& others, const DropContext& context,
+                    RowDrop& out) {
+    const auto& origin = context.origin;
+    if (origin.isEmpty() || context.vacated == origin || !origin.contains(probe) ||
+        context.homes.size() != others.size() || origin.getWidth() != dropped.getWidth() ||
+        origin.getHeight() != dropped.getHeight())
+        return false;
+    Rects all = others;
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (size_t k = 0; k < all.size(); ++k) {
+            const auto& home = context.homes[k];
+            const bool free = !home.isEmpty() && !home.intersects(origin) &&
+                              std::none_of(all.begin(), all.end(),
+                                           [&](const Rect& r) { return &r != &all[k] && r.intersects(home); });
+            if (all[k] != home && free) {
+                all[k] = home;
+                changed = true;
+            }
+        }
+    }
+    if (std::any_of(all.begin(), all.end(), [&](const Rect& r) { return r.intersects(origin); }) ||
+        (!context.vacated.isEmpty() && !anyInBand(all, context.vacated)))
+        return false;
+    out.dropped = origin;
+    out.others = std::move(all);
+    return true;
+}
+
+} // namespace
+
 RowDrop dropIntoRow(Rect dropped, juce::Point<int> probe, const Rects& others, const Limits& limits,
                     const DropContext& context) {
+    if (RowDrop back; returnToOrigin(dropped, probe, others, context, back))
+        return back;
     const int n = (int)others.size();
     const Rects baseline = others;
     Rects all = others;
@@ -417,6 +455,27 @@ RowDrop dropIntoRow(Rect dropped, juce::Point<int> probe, const Rects& others, c
     all.pop_back();
     out.others = std::move(all);
     return out;
+}
+
+Rects leaveGroup(const Rects& cells, const Rects& homes, Rect vacated) {
+    Rects all = cells;
+    const auto free = [&](size_t k) {
+        for (size_t j = 0; j < all.size(); ++j)
+            if (j != k && all[j].intersects(homes[k]))
+                return false;
+        return true;
+    };
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (size_t k = 0; k < all.size() && k < homes.size(); ++k)
+            if (!homes[k].isEmpty() && all[k] != homes[k] && free(k)) {
+                all[k] = homes[k];
+                changed = true;
+            }
+    }
+    if (!vacated.isEmpty() && !anyInBand(all, vacated))
+        closeBand(all, vacated);
+    return all;
 }
 
 RowDrop dropIntoRow(Rect dropped, const Rects& others, const Limits& limits) {
