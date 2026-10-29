@@ -45,6 +45,8 @@
 #      `cmake --build` -- Core, AppUI, AgentSynth, AgentSynthPlugin, Tests -- into
 #      build-ci-local/. ccache and Ninja are picked up automatically when present (see the
 #      top of CMakeLists.txt), so repeat runs are incremental.
+#   8b. Configure-only into a scratch build-ci-local-ci-flags/ with CI's own flags (AGENTSYNTH_PCH,
+#       explicit compiler launchers), so a configure break only CI's flags hit shows up before the push.
 #   9. Dev-sign the built app bundle with scripts/dev-sign-app.sh (macOS only -- not a CI check,
 #      but the point where a local build exists to sign; see that script's header for why).
 #   10. Run the full suite: build-ci-local/Tests/Tests -- behind the shared test lock
@@ -252,6 +254,33 @@ if [ "$FIRST_CONFIGURE" = true ]; then
 fi
 
 cmake -S . "${cmake_args[@]}"
+
+# --- 8b. Configure-only with CI's own flags (FRO1300) -------------------------------------------
+# The build above configures the way a developer does, so a problem that only CI's flags hit (the
+# explicit compiler launchers JUCE 9's juceaide bootstrap choked on, AGENTSYNTH_PCH=ON) showed
+# up in CI as three red build jobs while this script was green. This repeats ci.yml's macOS/Windows
+# "Configure CMake" step into a scratch dir and builds nothing. It reuses the sources the build
+# above already fetched, so it costs about 25 s warm.
+step "Configure with CI's flags ($BUILD_DIR-ci-flags, configure only)"
+ci_flags_dir="$BUILD_DIR-ci-flags"
+ci_flags_args=(-B "$ci_flags_dir" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DAGENTSYNTH_PCH=ON)
+if command -v ninja >/dev/null 2>&1; then
+    ci_flags_args+=(-G Ninja)
+fi
+if command -v ccache >/dev/null 2>&1; then
+    ci_flags_args+=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+    if [ "$(uname)" = "Darwin" ]; then
+        ci_flags_args+=(-DCMAKE_OBJC_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache)
+    fi
+fi
+for dep_src in "$BUILD_DIR"/_deps/*-src; do
+    [ -d "$dep_src" ] || continue
+    dep="$(basename "$dep_src" -src | tr '[:lower:]' '[:upper:]')"
+    ci_flags_args+=("-DFETCHCONTENT_SOURCE_DIR_$dep=$REPO_ROOT/$dep_src")
+done
+# Pch.cmake refuses a precompiled header next to a ccache base_dir, which CI never sets but a
+# developer's ~/.ccache may; clear it for this one configure only.
+CCACHE_BASEDIR="" cmake -S . "${ci_flags_args[@]}" || fail "configure with CI's flags failed (see above): CI's configure step would fail the same way."
 
 step "Build (all CMake targets: Core, AppUI, AgentSynth, AgentSynthPlugin, Tests)"
 # Cap at a quarter of the cores (min 2): several worktrees build at once, and a full-core
