@@ -53,9 +53,7 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
     juce::Component::SafePointer<CardLayoutOnCardEditor> self(this);
     panel->onShowAs = [self, paramId](CardWidget widget) {
         if (auto* e = self.getComponent())
-            e->editControl(paramId, [paramId, widget](CardLayout l, std::optional<int> section) {
-                return withShowAs(std::move(l), paramId, widget, section);
-            });
+            e->changeShowAs(paramId, widget);
     };
     panel->onLabel = [self, paramId](const juce::String& text) {
         auto* e = self.getComponent();

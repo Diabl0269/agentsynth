@@ -73,6 +73,57 @@ std::vector<juce::Rectangle<int>> returnHome(std::vector<juce::Rectangle<int>> c
 juce::Point<int> findFreeSpot(juce::Point<int> size, const std::vector<juce::Rectangle<int>>& occupied,
                               const Limits& limits);
 
+/** Where a drop leaves the other cells of a group, by rows. */
+struct RowDrop {
+    std::vector<juce::Rectangle<int>> others; ///< The input cells, same order, after the drop.
+    juce::Rectangle<int> dropped;             ///< Where the dropped cell lands (its top on its row's top).
+    int newRowAt = -1; ///< The y of the new row a drop below the last row starts; -1 when it joins a row.
+};
+
+/** The rows of `cells` as indices: cells whose vertical extents overlap (one after the other, down the
+ *  group) are one row, each row ordered by x, rows top to bottom. */
+std::vector<std::vector<int>> rowsOf(const std::vector<juce::Rectangle<int>>& cells);
+
+/** What a drop knows besides the cells it lands among: where the dropped control stood in this group before it
+ *  was picked up (empty when it came from elsewhere), where it stood when the editor opened (`origin`, empty when
+ *  unknown: a control that began on a row keeps that row's flush spacing, one from elsewhere gets the gap), and,
+ *  for each of the other cells, where it would stand but for being displaced (empty `homes`: none is displaced). */
+struct DropContext {
+    juce::Rectangle<int> vacated;
+    juce::Rectangle<int> origin;
+    std::vector<juce::Rectangle<int>> homes;
+};
+
+/** `dropped` let go among `others` with the pointer at `probe`: it joins the row the probe's y is in (below the
+ *  last row, between two rows or above the first it starts a new one there), at the index the probe's x gives
+ *  among that row's cells, its top on the row's top. A displaced cell whose home is on that row comes back to it
+ *  when the row has the width for it. The row is then
+ *  swept left to right (a cell never closer than the gap to the one before), from `limits.maxX` back leftwards
+ *  if that runs out of room, and the trailing cells that still do not fit wrap into a new row below. Rows
+ *  that now collide with it move down, and a row the move left empty (where `context.vacated` stood, or where a
+ *  returning cell stood) closes up: the rows below it move up to take its place, and no others move. Nothing
+ *  overlaps and everything is inside `limits` afterwards. */
+RowDrop dropIntoRow(juce::Rectangle<int> dropped, juce::Point<int> probe,
+                    const std::vector<juce::Rectangle<int>>& others, const Limits& limits,
+                    const DropContext& context = {});
+
+/** `cells` after a control left the group from `vacated`: every cell standing off its home goes back when the home
+ *  is free (a control the leaver had pushed aside returns), then a row the leaver left empty closes up. Cells and
+ *  `homes` are index-aligned; an empty home keeps its cell where it is. */
+std::vector<juce::Rectangle<int>> leaveGroup(const std::vector<juce::Rectangle<int>>& cells,
+                                             const std::vector<juce::Rectangle<int>>& homes,
+                                             juce::Rectangle<int> vacated);
+
+/** The same with the probe at the dropped cell's centre. */
+RowDrop dropIntoRow(juce::Rectangle<int> dropped, const std::vector<juce::Rectangle<int>>& others,
+                    const Limits& limits);
+
+/** `cells` after cell `changed` took a new size (it stood at `before`): the cells right of it that abutted its old
+ *  right edge follow it, then its row is swept and wrapped as in `dropIntoRow`, so width a smaller control freed
+ *  is reused and a bigger one pushes its row along. */
+std::vector<juce::Rectangle<int>> repackRow(const std::vector<juce::Rectangle<int>>& cells, size_t changed,
+                                            juce::Rectangle<int> before, const Limits& limits);
+
 /** What a screen reader hears after a move: "Cutoff moved right 8", or "Cutoff moved right 60, down 12". */
 juce::String describeMove(const juce::String& caption, int dx, int dy);
 

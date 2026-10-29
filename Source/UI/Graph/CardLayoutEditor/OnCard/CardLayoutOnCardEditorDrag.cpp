@@ -70,6 +70,23 @@ juce::Rectangle<int> CardLayoutOnCardEditor::sectionArea(int section) const {
     return {0, top, cardArea().getWidth(), std::max(0, bottom - top)};
 }
 
+// The group a drag at `y` is over. Groups stand flush, so a group has no room under its last row: the upper half of
+// the next group's header counts as that strip, where a drop starts a new row at the end of the group above.
+int CardLayoutOnCardEditor::dropSectionAt(int y) const {
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    const int section = editableSectionAt(y);
+    if (body == nullptr || section < 0)
+        return section;
+    const auto& sections = body->getPlan().sections;
+    const auto& s = sections[(size_t)section];
+    if (!s.hasHeader() || y >= s.cellTop - cardbody::kSectionHeaderHeight / 2)
+        return section;
+    for (int i = section - 1; i >= 0; --i)
+        if (sections[(size_t)i].visible && !sections[(size_t)i].footer && sections[(size_t)i].tabGroup < 0)
+            return i;
+    return section;
+}
+
 // A control's home keeps its position but takes the size the control has now (a fader swapped for a knob).
 juce::Rectangle<int> CardLayoutOnCardEditor::homeRectOf(int cell) const {
     const auto& c = cells_[(size_t)cell];
@@ -81,14 +98,34 @@ juce::Rectangle<int> CardLayoutOnCardEditor::homeRectOf(int cell) const {
 // after anything else (opening, an undo or redo, a tab switch) every control's home is where it stands.
 void CardLayoutOnCardEditor::refreshHomes() {
     std::map<juce::String, juce::Rectangle<int>> homes, origins;
+    std::map<juce::String, int> tops;
+    std::map<juce::String, std::pair<int, int>> frames;
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    const auto topOf = [body](int section) {
+        return body != nullptr ? body->getPlan().sections[(size_t)section].cellTop : 0;
+    };
     for (const auto& c : cells_) {
         const auto kept = homes_.find(c.key);
         const auto first = origins_.find(c.key);
-        homes[c.key] = keepHomes_ && kept != homes_.end() ? kept->second : c.rect;
-        origins[c.key] = keepHomes_ && first != origins_.end() ? first->second : c.rect;
+        const auto frame = frameTops_.find(c.key);
+        const auto originFrame = originFrames_.find(c.key);
+        const int top = topOf(c.section);
+        const int shift = keepHomes_ && frame != frameTops_.end() ? top - frame->second : 0;
+        homes[c.key] = keepHomes_ && kept != homes_.end() ? kept->second.translated(0, shift) : c.rect;
+        tops[c.key] = top;
+        if (keepHomes_ && first != origins_.end() && originFrame != originFrames_.end()) {
+            const int originTop = topOf(originFrame->second.first);
+            origins[c.key] = first->second.translated(0, originTop - originFrame->second.second);
+            frames[c.key] = {originFrame->second.first, originTop};
+        } else {
+            origins[c.key] = c.rect;
+            frames[c.key] = {c.section, top};
+        }
     }
     homes_ = std::move(homes);
     origins_ = std::move(origins);
+    frameTops_ = std::move(tops);
+    originFrames_ = std::move(frames);
 }
 
 // Where the other cells of `section` stand once `dropped` lands (`start` is where the dropped control stood;
@@ -125,6 +162,8 @@ void CardLayoutOnCardEditor::pressOn(const juce::String& key, const juce::MouseE
     drag_.startRect = cells_[(size_t)cell].rect;
     drag_.pressOffset = drag_.pressPoint - drag_.startRect.getPosition();
     drag_.target = cells_[(size_t)cell].section;
+    for (const auto& c : cells_)
+        drag_.baseline.push_back(c.rect);
 }
 
 // The grab point stays under the pointer: the offset was taken once at the press, in this overlay's
@@ -153,12 +192,13 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
     }
     if (below) {
         guides_.clear();
+        restoreBaseline();
         repaint();
         return;
     }
     // The control may leave its group for another one: the group under the pointer is the one it would land in.
     const int own = cells_[(size_t)drag_.cell].section;
-    const int under = cardArea().contains(pointer) ? editableSectionAt(pointer.y) : -1;
+    const int under = cardArea().contains(pointer) ? dropSectionAt(pointer.y) : -1;
     drag_.target = under >= 0 ? under : own;
     const int newDrop = drag_.target != own ? drag_.target : -1;
     if (newDrop != dropSection_) {
@@ -168,13 +208,85 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
     std::vector<juce::Rectangle<int>> others;
     for (int i : cellsOfSection(drag_.target))
         if (i != drag_.cell)
-            others.push_back(cells_[(size_t)i].rect);
+            others.push_back(drag_.baseline[(size_t)i]);
     const auto raw = drag_.startRect.withPosition(pointer - drag_.pressOffset);
     const auto snapped = oncard::snapDraggedRect(raw, others, !e.mods.isCommandDown());
     const auto rect = clampToTarget(drag_.target, snapped.rect);
-    guides_ = rect == snapped.rect ? snapped.guides : std::vector<oncard::Guide>{};
-    moveCellTo(drag_.cell, rect);
+    previewRowDrop(rect, pointer, rect == snapped.rect ? snapped.guides : std::vector<oncard::Guide>{});
     repaint();
+}
+
+// Where the drop would leave everything, planned from the cells as they stood at the press (so a neighbour
+// pushed aside returns the moment the dragged control moves off it) and shown live: the neighbours move to their
+// planned rects and the dragged control sits on its row. The release writes this plan, so it equals the preview.
+// A control going to another group is planned at the size that group gives it.
+void CardLayoutOnCardEditor::previewRowDrop(juce::Rectangle<int> rect, juce::Point<int> pointer,
+                                            const std::vector<oncard::Guide>& snapGuides) {
+    const int cell = drag_.cell;
+    const int target = drag_.target;
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    if (body == nullptr)
+        return;
+    std::vector<int> indices;
+    std::vector<juce::Rectangle<int>> others;
+    oncard::DropContext context;
+    if (target == cells_[(size_t)cell].section)
+        context.vacated = drag_.baseline[(size_t)cell];
+    if (const auto origin = origins_.find(cells_[(size_t)cell].key); origin != origins_.end())
+        context.origin = origin->second;
+    for (int i : cellsOfSection(target))
+        if (i != cell) {
+            indices.push_back(i);
+            others.push_back(drag_.baseline[(size_t)i]);
+            context.homes.push_back(homeRectOf(i));
+        }
+    const auto size =
+        target != cells_[(size_t)cell].section ? addedCellSize(target, cells_[(size_t)cell].key) : juce::Point<int>();
+    const auto limits = limitsFor(*body, target, card_->getWidth());
+    const auto drop =
+        oncard::dropIntoRow(size.isOrigin() ? rect : rect.withSize(size.x, size.y), pointer, others, limits, context);
+    drag_.placed.clear();
+    for (size_t k = 0; k < indices.size(); ++k)
+        drag_.placed.emplace_back(indices[k], drop.others[k]);
+    if (target != cells_[(size_t)cell].section)
+        planLeftGroup(cell);
+    drag_.droppedRect = drop.dropped;
+    for (int i = 0; i < (int)cells_.size(); ++i)
+        if (i != cell) {
+            const auto want = placedRect(drag_.placed, i, drag_.baseline[(size_t)i]);
+            if (cells_[(size_t)i].rect != want)
+                moveCellTo(i, want);
+        }
+    moveCellTo(cell, drop.dropped.withSize(rect.getWidth(), rect.getHeight()));
+    if (drop.newRowAt >= 0)
+        guides_ = {{false, drop.newRowAt, limits.minX, limits.maxX}};
+    else
+        guides_ = drop.dropped.getPosition() == rect.getPosition() ? snapGuides : std::vector<oncard::Guide>{};
+}
+
+// The group the dragged control is leaving: the controls it had pushed aside return home where that is free, and the
+// row it leaves empty closes up, planned from the cells as they stood at the press.
+void CardLayoutOnCardEditor::planLeftGroup(int cell) {
+    std::vector<int> indices;
+    std::vector<juce::Rectangle<int>> standing, homes;
+    for (int i : cellsOfSection(cells_[(size_t)cell].section))
+        if (i != cell) {
+            indices.push_back(i);
+            standing.push_back(drag_.baseline[(size_t)i]);
+            homes.push_back(homeRectOf(i));
+        }
+    const auto left = oncard::leaveGroup(standing, homes, drag_.baseline[(size_t)cell]);
+    for (size_t k = 0; k < indices.size(); ++k)
+        drag_.placed.emplace_back(indices[k], left[k]);
+}
+
+// Every cell but the dragged one back where it stood at the press.
+void CardLayoutOnCardEditor::restoreBaseline() {
+    drag_.placed.clear();
+    drag_.droppedRect = {};
+    for (int i = 0; i < (int)cells_.size() && i < (int)drag_.baseline.size(); ++i)
+        if (i != drag_.cell && cells_[(size_t)i].rect != drag_.baseline[(size_t)i])
+            moveCellTo(i, drag_.baseline[(size_t)i]);
 }
 
 void CardLayoutOnCardEditor::moveCellTo(int cell, juce::Rectangle<int> rect) {
@@ -193,14 +305,16 @@ void CardLayoutOnCardEditor::releaseOn(const juce::MouseEvent&) {
     const int target = drag_.target;
     const int cell = drag_.cell;
     const auto start = drag_.startRect;
-    const auto dropped = cells_[(size_t)cell].rect;
+    const auto dropped = drag_.droppedRect;
+    const auto baseline = std::move(drag_.baseline);
+    const auto placed = std::move(drag_.placed);
     endDrag();
     if (moved && hide)
         hideDragged(cell);
-    else if (moved && target >= 0 && target != cells_[(size_t)cell].section)
-        commitMoveToSection(cell, dropped, target);
-    else if (moved)
-        commitMove(cell, dropped, start, true);
+    else if (moved && !dropped.isEmpty() && target >= 0 && target != cells_[(size_t)cell].section)
+        commitMoveToSection(cell, dropped, target, placed);
+    else if (moved && !dropped.isEmpty())
+        commitRowDrop(cell, start, placed, baseline, dropped);
 }
 
 // A control let go below the card goes the way Backspace takes it: shrinking away from where it was let go, to
@@ -263,6 +377,7 @@ void CardLayoutOnCardEditor::cancelDrag() {
     const auto start = drag_.startRect;
     const auto here = cells_[(size_t)cell].rect;
     const auto key = cells_[(size_t)cell].key;
+    restoreBaseline();
     endDrag();
     moveCellTo(cell, start);
     startGlide({{key, here, start, kSettleMs, true}});
@@ -300,6 +415,85 @@ void CardLayoutOnCardEditor::commitMove(int cell, juce::Rectangle<int> dropped, 
     if (announceMove)
         announce(oncard::describeMove(caption, dropped.getX() - start.getX(), dropped.getY() - start.getY()));
     startGlide(std::move(moves));
+}
+
+// The drop's plan written: every cell of the dropped one's section at its planned rect, then ONE write. A drop
+// that changes nothing (back where it started, nobody moved) writes nothing.
+void CardLayoutOnCardEditor::commitRowDrop(int cell, juce::Rectangle<int> start, const CellRects& placed,
+                                           const std::vector<juce::Rectangle<int>>& baseline,
+                                           juce::Rectangle<int> dropped) {
+    if (cell < 0 || cell >= (int)cells_.size() || card_ == nullptr || card_->getCardBody() == nullptr)
+        return;
+    const int section = cells_[(size_t)cell].section;
+    CellRects finals;
+    std::vector<Move> moves;
+    bool changed = dropped != start;
+    for (int i : cellsOfSection(section)) {
+        const auto& c = cells_[(size_t)i];
+        const auto target = i == cell ? dropped : placedRect(placed, i, c.rect);
+        changed = changed || (i < (int)baseline.size() && target != baseline[(size_t)i]);
+        finals.emplace_back(i, target);
+        moves.push_back({c.key, c.rect, target, i == cell ? kSettleMs : kPushMs, false});
+    }
+    if (!changed) {
+        moveCellTo(cell, start);
+        return;
+    }
+    const auto caption = cells_[(size_t)cell].caption;
+    homes_[cells_[(size_t)cell].key] = dropped;
+    writeSection(section, finals);
+    announce(oncard::describeMove(caption, dropped.getX() - start.getX(), dropped.getY() - start.getY()));
+    startGlide(std::move(moves));
+}
+
+namespace {
+std::function<CardLayout(CardLayout, std::optional<int>)> showAs(const juce::String& paramId, CardWidget widget) {
+    return [paramId, widget](CardLayout l, std::optional<int> section) {
+        return withShowAs(std::move(l), paramId, widget, section);
+    };
+}
+} // namespace
+
+// A control shown as another widget (a fader for a knob) changes size, so its row is repacked in the same
+// undo step as the change: the width it freed is reused, the width it needs is made. A group the card flows
+// itself has nothing to repack.
+void CardLayoutOnCardEditor::changeShowAs(const juce::String& paramId, CardWidget widget) {
+    const int cell = indexOfCell(paramId);
+    if (cell < 0 || source_ == nullptr || card_ == nullptr || card_->getCardBody() == nullptr)
+        return editControl(paramId, showAs(paramId, widget));
+    const auto before = cells_[(size_t)cell].rect;
+    source_->beginGroupedWrite();
+    editControl(paramId, showAs(paramId, widget));
+    repackAfterResize(paramId, before);
+    source_->endGroupedWrite();
+}
+
+void CardLayoutOnCardEditor::repackAfterResize(const juce::String& paramId, juce::Rectangle<int> before) {
+    const int cell = indexOfCell(paramId);
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    if (cell < 0 || body == nullptr ||
+        cells_[(size_t)cell].rect.getWidth() == before.getWidth() &&
+            cells_[(size_t)cell].rect.getHeight() == before.getHeight())
+        return;
+    const int section = cells_[(size_t)cell].section;
+    if (!body->getPlan().sections[(size_t)section].freeform)
+        return;
+    std::vector<int> indices = cellsOfSection(section);
+    std::vector<juce::Rectangle<int>> rects;
+    size_t changed = 0;
+    for (size_t k = 0; k < indices.size(); ++k) {
+        rects.push_back(cells_[(size_t)indices[k]].rect);
+        if (indices[k] == cell)
+            changed = k;
+    }
+    const auto packed = oncard::repackRow(rects, changed, before, limitsFor(*body, section, card_->getWidth()));
+    if (packed == rects)
+        return;
+    CellRects finals;
+    for (size_t k = 0; k < indices.size(); ++k) {
+        finals.emplace_back(indices[k], packed[k]);
+    }
+    writeSection(section, finals);
 }
 
 // The section's cells, each at its final rect, become free positions in the node's layout; the source

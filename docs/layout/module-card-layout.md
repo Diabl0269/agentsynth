@@ -71,7 +71,7 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | Apply to and Preset: the two menus, the scope every write follows, Save as (the shared name prompt), Reset | `OnCard/CardLayoutOnCardEditorScope.cpp`; `CardLayoutEditor/PresetNamePrompt.*`; the writes are `BuiltInCardLayoutSource` |
 | "+ Add control": the strip under the card, the searchable panel and its rows, the click and the drag-out drop, and the pure list, search and layout edit behind them | `OnCard/CardLayoutOnCardEditorAdd.cpp`, `...AddDrop.cpp`, `CardLayoutAddPanel.*`, `CardLayoutAddRow.*`, `OnCardAddControlModel.*`, `findFreeSpot` in `OnCardLayoutMath.*` |
 | The per-control panel (Show as, Size or Direction, Label, Range, Hide from card): its fields, how they open in a call-out and stay anchored to the control, and the pure edits and range rules behind them | `OnCard/CardLayoutControlPanel.*`, `CardLayoutOnCardEditorPanel.cpp`, `OnCardControlOptions.*` |
-| Snapping to guides, pushing a crowded neighbour aside and sending a pushed one home, as pure functions on rectangles | `OnCard/OnCardLayoutMath.*` |
+| Snapping to guides, the row model (`rowsOf`, `dropIntoRow`, `repackRow`), pushing a crowded neighbour aside and sending a pushed one home, as pure functions on rectangles | `OnCard/OnCardLayoutMath.*` |
 | The "Drop to hide" area under the card during a drag | `OnCard/CardLayoutHideZone.*` |
 | Which controls are outlined (read off the plan's real widget bounds), and the free positions written back | `OnCard/OnCardCells.*`; `CardBodyPlan::Section::cellTop` / `cellBottom` (set by every live layout pass) |
 | A fader's modulation bar and drop outline beside the knob rings | `Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp` |
@@ -477,22 +477,43 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
   the canvas, never a child of it: every write rebuilds the card, so the overlay holds the GraphEditor and
   the node id, and after each write re-finds the card and re-syncs its bounds and outlines.
   - *Moving.* Press anywhere on a control, or on its grip, and drag: the real widget and its caption move
-    with the outline and stay under the pointer. Inside the group's content width and no higher than the
-    group's top, the control may go anywhere; a drop below the last row grows the group by up to a row.
-    An accent guide appears in the gap when the control's left, centre or right (or top, centre, bottom)
-    lines up with another control's of the same group, and pulls the control onto the line within 4 px;
-    hold Cmd to place it freely. On release every control the drop leaves closer than 8 px goes the
-    shortest way out (left, right, up or down, inside the group and clear of the others; a pushed control
-    then pushes what it lands on). A neighbour that was already flush with the control before the drag is
-    left alone unless the drop overlaps it, so moving a control one pixel does not shove the flush rows
-    around it. Esc during a drag puts the control back and writes nothing.
-    A pushed control remembers its **home**, where it stood before any push, for as long as the session
-    lasts (it is reset when the session opens and when an undo or redo restores the card). Every drop
-    first pushes the crowded neighbours from where they stand, then sends each one that stands away from
-    its home back there if the home is free (not within 8 px of the dropped control or of another
-    control), so a control pushed out of a full row returns the moment the room is free again, at its
-    original rect. Only the user's own drag or nudge of a control gives it a new home. Cells the
-    layout itself placed flush against each other may return flush.
+    with the outline. A group's controls form **rows**: cells whose vertical extents overlap are one row,
+    ordered by x. The row under the pointer takes the control, at the index the pointer's x gives among that
+    row's cells, its top on the row's top; the other controls move live to where the drop would leave them
+    (planned from where everything stood at the press, so a control that made way returns the moment the
+    dragged one leaves). The row is swept left to right (no cell closer than the gap to the one before it,
+    or closer than a default layout's flush cells already stand), back from the right edge if that runs out
+    of room, and the trailing cells that still do not fit wrap into a new row below. Rows the result
+    collides with move down; flush rows that are not hit stay put. So a control dragged out of a full row
+    and back leaves one row. A control that was pushed off its row (a style change wrapped it) comes back to
+    that row when a drop lands there and the row has the width for it. A row the move leaves empty closes up:
+    the rows under it take its place and no other row moves; a control dropped on the band it left stays where
+    it stood. A control from another group is spaced with the gap even on a flush row. The pointer below a group's last row (the upper half of the next group's header
+    counts, as groups stand flush), between two rows, or above the first makes a **new row** there: an accent
+    guide line marks it while dragging. An accent guide also appears when the control's left, centre or
+    right (or top, centre, bottom) lines up with another control's of the same group, and pulls the control
+    onto the line within 4 px (only while the row result leaves it there); hold Cmd to place it freely. The
+    release writes exactly what the last preview showed. Esc during a drag puts everything back and writes
+    nothing. Arrow-key nudges and Add control drops still use the push model (`pushAside`, `returnHome`): a
+    pushed control remembers its **home**, where it stood before any push, and returns there when the home
+    is free; only the user's own drag or nudge of a control gives it a new home. The pure functions are
+    `rowsOf`, `dropIntoRow` and `repackRow` in `OnCardLayoutMath`.
+    Dragging a control to another group also plans the group it leaves (`leaveGroup`): the controls it had pushed
+    aside return home where that is free and a row it empties closes up, all in the same write, so dragging it
+    back is one undo step and leaves nothing displaced. A control let go inside the spot where the layout first put
+    it lands exactly there and sends every displaced control home. Homes and origins are measured from their
+    group's top, so they follow the group when the groups above it grow or shrink.
+  - *A cell is its box.* The editor's cell for a control is the box the card gives its kind (a knob's or
+    fader's grid cell, `cardBodyCellSize`), not just the widget in it: a position written for a cell puts that box
+    there and centres the widget in it, so a fader (narrower than its box) must not be taken for the whole box.
+    The ADSR's five stages are five 51 px boxes, which fit the 256 px content width flush. The card's width is
+    fixed per module type (280, or 560 on a double-width card), so a row that truly has no room for another
+    box wraps it to a row below; a control is never placed past the content's inner edge.
+  - *Changing a control's style.* "Show as" (fader, knob) in the per-control panel changes the control's
+    size. In a positioned group the control's row is repacked with the same sweep (`repackRow`): the cells
+    that abutted it follow a smaller control left, a bigger one pushes its row along and wraps what no
+    longer fits. The change and the repack are ONE undo step (`BuiltInCardLayoutSource::beginGroupedWrite`).
+    A flowing group re-flows by itself and needs no repack.
   - *Drag below the card to hide.* While a control is being dragged a dashed **Drop to hide** area fades in
     over the strip under the card (120 ms; no fade under Reduce Motion), drawn in the outline's own accent
     dashes. With the pointer below the card's bottom edge the area gets a stronger wash, the control stays
@@ -503,8 +524,9 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     (`CardLayoutHideZone`, `CardLayoutOnCardEditorDrag.cpp`).
   - *Moving between groups.* Drag a control over another group (the pointer is what counts; that group gets a
     faint wash and its controls' guides) and drop: the control, with its widget, label and range, leaves its
-    group's items for the target's, free-positioned at the drop, sized as the target group sizes it, with the
-    target's neighbours pushed per the home rule above. Both groups are written positioned, so nothing else
+    group's items for the target's, free-positioned where the row plan above lands it, sized as the target group
+    sizes it, with the target's cells placed by the same plan (a full group wraps its trailing cell into a new
+    row, never overlaps). Both groups are written positioned, so nothing else
     moves. It is one write, so one undo step, and is announced ("Level moved to Unison")
     (`CardLayoutOnCardEditorGroups.cpp`).
   - *Writing.* A drop writes at once: the group's section gets a free position (`at`) on every control it
@@ -512,9 +534,8 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     theme change), through `BuiltInCardLayoutSource` (the same live write the list uses), which rebuilds
     the card. The rebuilt card starts where everything was, then glides: pushed controls 160 ms, the
     dropped one settles in 140 ms, none under Reduce Motion. A drop that changes nothing writes nothing.
-    The first drop turns a flowing group into a positioned one, with every control exactly where it was.
-    The positioned group is 6 px taller than the flowing one (the free-placement padding), so the groups
-    under it sit 6 px lower.
+    The first drop turns a flowing group into a positioned one, with every control exactly where it was
+    and the group exactly as tall, so the groups under it do not move.
   - *Keys.* Tab moves between the edit bar and the controls (the outlines are one focus stop each, with
     the accent focus ring and a solid outline plus a faint wash on hover or focus). The arrow keys move
     the focused control 1 px, Shift+arrow 8 px; the control moves at once and the write waits until the
@@ -785,7 +806,8 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   The hosted source keeps `Tests/UI/Graph/PluginKnobPicker/` (search, tick, reorder, label, scope,
   presets, reset, touch-to-add, the entry points).
 - `Tests/UI/Graph/CardLayoutEditor/OnCard/` (built): `OnCardLayoutMathTests.cpp` snapping (4 px, centres,
-  Cmd) and pushing (shortest way, clamped, cascading, a flush neighbour left alone) as pure functions, with a pushed cell returning home (`returnHome`);
+  Cmd), pushing (shortest way, clamped, cascading, a flush neighbour left alone) as pure functions, with a pushed cell returning home (`returnHome`), and the rows (rows from y overlap, insert and wrap, out and back, new row, repack after a resize, an emptied row closing up, a displaced cell returning to its row, never overlapping);
+  `OnCardEditorDragTests.cpp` also has the row model through the real handlers: out of a row and back, a new row with its guide, a drop into a full group, the commit equal to the last preview, a style change repacking in one undo step, the ADSR's Sustain knob dragged back into the stage row bringing Release with it (five boxes on one row inside the card), a row left empty closing up, a cell being its box, and a positioned group being no taller than the flowing one;
   `OnCardEditorTests.cpp` opens the editor through the real module and control menus over a Filter with
   one titled, tooltipped outline per control, free placement leaving every control where it was, the
   overlay following the rebuilt card, closing and a vanished module, and the accessibility audit with no

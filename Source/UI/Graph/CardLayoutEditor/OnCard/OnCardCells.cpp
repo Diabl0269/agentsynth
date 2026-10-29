@@ -2,6 +2,7 @@
 // positions into a layout.
 #include "OnCardCells.h"
 #include "UI/Graph/CardBody/CardBody.h"
+#include "UI/Graph/CardBody/CardBodyLayoutWalk.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <map>
 
@@ -21,8 +22,11 @@ std::vector<int> membersAt(const CardBodyPlan& plan, const CardBodyPlan::Section
     return members;
 }
 
-// A cell for `members`, or nothing when no member is drawn on the card now (a view, an empty swap cell).
-bool makeCell(const CardBodyPlan& plan, int sectionIndex, const std::vector<int>& members, OnCardCell& cell) {
+// A cell for `members`, or nothing when no member is drawn on the card now (a view, an empty swap cell). The
+// cell is the box the card gives its kind, not just the widget in it: a position written for the cell puts that
+// box there and centres the widget in it, so a narrower widget (a fader) must not be taken for the whole box.
+bool makeCell(const CardBodyPlan& plan, int sectionIndex, const std::vector<int>& members,
+              const cardbody::BodyGeometry& geometry, OnCardCell& cell) {
     const CardBodyItem* shown = nullptr;
     for (int member : members) {
         const auto& item = plan.items[(size_t)member];
@@ -37,6 +41,10 @@ bool makeCell(const CardBodyPlan& plan, int sectionIndex, const std::vector<int>
     auto rect = shown->widget->getBounds();
     if (shown->label != nullptr && shown->label->isVisible())
         rect = rect.getUnion(shown->label->getBounds());
+    const auto box = cardBodyCellSize(shown->kind, plan.sections[(size_t)sectionIndex].columns, geometry);
+    const int widgetWidth = rect.getWidth();
+    if (box.x > widgetWidth)
+        rect = rect.withX(rect.getX() - (box.x - widgetWidth) / 2).withWidth(box.x);
     cell.key = shown->param->paramID;
     cell.caption = shown->captionText();
     cell.section = sectionIndex;
@@ -58,6 +66,7 @@ std::vector<OnCardCell> collectCells(const ModuleComponent& card) {
     if (body == nullptr)
         return cells;
     const auto& plan = body->getPlan();
+    const auto g = cardbody::BodyGeometry::forCardWidth(card.getWidth());
     for (int s = 0; s < (int)plan.sections.size(); ++s) {
         const auto& section = plan.sections[(size_t)s];
         if (!section.visible)
@@ -67,7 +76,7 @@ std::vector<OnCardCell> collectCells(const ModuleComponent& card) {
             i += members.size();
             OnCardCell cell;
             if (plan.items[(size_t)members.front()].kind != CardBodyItem::Kind::View &&
-                makeCell(plan, s, members, cell)) {
+                makeCell(plan, s, members, g, cell)) {
                 cell.panelOnly = section.footer || section.tabGroup >= 0;
                 cells.push_back(std::move(cell));
             }

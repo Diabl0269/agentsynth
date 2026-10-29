@@ -199,3 +199,188 @@ TEST(OnCardLayoutMath, CellsTheLayoutPlacedFlushToEachOtherMayReturnFlush) {
     EXPECT_EQ(returnHome(next, nextHomes, nextHomes, flushDrop, flushDrop.translated(-50, 0)), next)
         << "not at its origin: the gap applies";
 }
+
+// ---- Rows (dropIntoRow, repackRow) ---------------------------------------------------------------
+
+namespace {
+
+// layout-overlap: no two cells closer than the gap, every cell inside the limits.
+void expectTidy(const std::vector<Rectangle<int>>& cells, const Limits& limits) {
+    for (size_t i = 0; i < cells.size(); ++i) {
+        EXPECT_GE(cells[i].getX(), limits.minX) << i;
+        EXPECT_LE(cells[i].getRight(), limits.maxX) << i;
+        EXPECT_GE(cells[i].getY(), limits.top) << i;
+        for (size_t j = i + 1; j < cells.size(); ++j)
+            EXPECT_FALSE(tooClose(cells[i], cells[j])) << i << " and " << j;
+    }
+}
+
+std::vector<Rectangle<int>> withDropped(const RowDrop& drop) {
+    auto all = drop.others;
+    all.push_back(drop.dropped);
+    return all;
+}
+
+const std::vector<Rectangle<int>> kFullRow{{12, 40, 90, 76}, {110, 40, 90, 76}, {208, 40, 90, 76}};
+
+} // namespace
+
+TEST(OnCardLayoutRows, CellsWhoseVerticalExtentsOverlapAreOneRowOrderedByX) {
+    const std::vector<Rectangle<int>> cells{{110, 60, 90, 76}, {12, 40, 90, 76}, {12, 144, 90, 76}};
+    const auto rows = rowsOf(cells);
+    ASSERT_EQ(rows.size(), 2u);
+    EXPECT_EQ(rows[0], (std::vector<int>{1, 0})) << "y 40..116 and 60..136 overlap, left one first";
+    EXPECT_EQ(rows[1], (std::vector<int>{2}));
+}
+
+TEST(OnCardLayoutRows, InsertingIntoAFullRowWrapsTheTrailingCellToANewRowBelow) {
+    const auto drop = dropIntoRow({100, 40, 90, 76}, kFullRow, kLimits);
+    EXPECT_EQ(drop.newRowAt, -1);
+    EXPECT_EQ(drop.others[0], kFullRow[0]) << "the cell left of the drop stays";
+    EXPECT_LT(drop.dropped.getX(), drop.others[1].getX()) << "inserted before the second cell";
+    EXPECT_EQ(drop.dropped.getY(), 40);
+    EXPECT_EQ(drop.others[2].getPosition(), juce::Point<int>(12, 124)) << "the trailing cell wrapped";
+    expectTidy(withDropped(drop), kLimits);
+}
+
+TEST(OnCardLayoutRows, DraggingACellOutOfAFullRowAndBackRestoresOneRow) {
+    const std::vector<Rectangle<int>> rest{kFullRow[1], kFullRow[2]};
+    for (int x : {12, 14, 20}) {
+        const auto drop = dropIntoRow({x, 40, 90, 76}, rest, kLimits);
+        const auto all = withDropped(drop);
+        EXPECT_EQ(rowsOf(all).size(), 1u) << "dropped at x " << x;
+        expectTidy(all, kLimits);
+        if (x == 12) {
+            EXPECT_EQ(drop.dropped, kFullRow[0]);
+            EXPECT_EQ(drop.others, rest);
+        }
+    }
+}
+
+TEST(OnCardLayoutRows, DroppingBelowTheLastRowStartsANewRowThere) {
+    const auto drop = dropIntoRow({100, 100, 90, 76}, {kFullRow[0], kFullRow[1]}, kLimits);
+    EXPECT_EQ(drop.newRowAt, 116 + kControlGap);
+    EXPECT_EQ(drop.dropped.getY(), drop.newRowAt);
+    EXPECT_EQ(drop.others, (std::vector<Rectangle<int>>{kFullRow[0], kFullRow[1]})) << "the others stay";
+    expectTidy(withDropped(drop), kLimits);
+}
+
+TEST(OnCardLayoutRows, ADropIntoARowAlignsToItsTopAndPushesTheRowsBelowDown) {
+    std::vector<Rectangle<int>> cells = kFullRow;
+    cells.emplace_back(12, 124, 90, 76);
+    const auto drop = dropIntoRow({100, 60, 90, 76}, cells, kLimits);
+    EXPECT_EQ(drop.dropped.getY(), 40);
+    EXPECT_GT(drop.others[3].getY(), 124) << "the wrapped cell took the row below's place";
+    expectTidy(withDropped(drop), kLimits);
+}
+
+TEST(OnCardLayoutRows, ALoneCellInAnEmptyGroupJustLandsInsideTheLimits) {
+    const auto drop = dropIntoRow({400, 90, 90, 76}, {}, kLimits);
+    EXPECT_EQ(drop.dropped.getRight(), kLimits.maxX);
+}
+
+TEST(OnCardLayoutRows, ACellThatShrinksPullsTheCellsThatAbuttedItLeft) {
+    const Limits limits{12, 300, 40};
+    const std::vector<Rectangle<int>> faders{
+        {12, 40, 60, 150}, {80, 40, 60, 150}, {148, 40, 60, 150}, {216, 40, 60, 150}};
+    auto cells = faders;
+    cells[0] = {12, 40, 30, 76}; // a knob where the fader was
+    const auto packed = repackRow(cells, 0, faders[0], limits);
+    EXPECT_EQ(packed[1].getX(), 50);
+    EXPECT_EQ(packed[3].getX(), 186);
+    EXPECT_EQ(rowsOf(packed).size(), 1u);
+    expectTidy(packed, limits);
+}
+
+TEST(OnCardLayoutRows, ACellThatGrowsPushesItsRowAlongAndWrapsWhatNoLongerFits) {
+    const Limits limits{12, 300, 40};
+    const std::vector<Rectangle<int>> row{{12, 40, 60, 150}, {80, 40, 60, 150}, {148, 40, 60, 150}, {216, 40, 60, 150}};
+    auto cells = row;
+    cells[0] = {12, 40, 80, 150};
+    auto packed = repackRow(cells, 0, row[0], limits);
+    EXPECT_EQ(rowsOf(packed).size(), 1u) << "20 px wider still fits one row";
+    expectTidy(packed, limits);
+    cells[0] = {12, 40, 120, 150};
+    packed = repackRow(cells, 0, row[0], limits);
+    EXPECT_EQ(rowsOf(packed).size(), 2u) << "the trailing cell wrapped";
+    EXPECT_EQ(packed[3].getPosition(), juce::Point<int>(12, 198));
+    expectTidy(packed, limits);
+}
+
+TEST(OnCardLayoutRows, ADropIntoAFullGroupLeavesItTidyWhereverItLands) {
+    std::vector<Rectangle<int>> group = kFullRow;
+    group.emplace_back(12, 124, 90, 76);
+    group.emplace_back(110, 124, 90, 76);
+    for (int y = 30; y <= 260; y += 20)
+        for (int x = 0; x <= 300; x += 50) {
+            const auto drop = dropIntoRow({x, y, 90, 76}, group, kLimits);
+            expectTidy(withDropped(drop), kLimits);
+        }
+}
+
+TEST(OnCardLayoutRows, AFlushRowStaysOneRowWhenACellLeavesAndComesBack) {
+    const std::vector<Rectangle<int>> flush{{12, 40, 96, 76}, {108, 40, 96, 76}, {204, 40, 96, 76}};
+    const std::vector<Rectangle<int>> rest{flush[1], flush[2]};
+    DropContext context;
+    context.vacated = flush[0];
+    for (int x : {12, 15}) {
+        const auto drop = dropIntoRow({x, 40, 96, 76}, {x + 40, 60}, rest, kLimits, context);
+        EXPECT_EQ(rowsOf(withDropped(drop)).size(), 1u) << x;
+        EXPECT_EQ(drop.dropped, flush[0]) << x;
+        EXPECT_EQ(drop.others, rest) << x;
+    }
+}
+
+TEST(OnCardLayoutRows, ADropBetweenTwoRowsMakesARowOfItsOwnAndLeavesAFlushNeighbourAlone) {
+    const std::vector<Rectangle<int>> rows{{12, 40, 90, 98}, {12, 138, 90, 76}};
+    const auto back = dropIntoRow({12, 20, 90, 98}, {rows[1]}, kLimits);
+    EXPECT_EQ(back.dropped.getY(), kLimits.top) << "above the only row: its own row at the top";
+    EXPECT_EQ(back.others[0], rows[1]) << "flush against it, so it does not move";
+}
+
+TEST(OnCardLayoutRows, ARowTheDroppedCellLeftEmptyClosesUpAndRowsAboveStayPut) {
+    // Three rows, flush: A (40..116), B alone (116..192), C (192..268). B goes into A's row.
+    const std::vector<Rectangle<int>> others{{12, 40, 90, 76}, {12, 192, 90, 76}};
+    DropContext context;
+    context.vacated = {12, 116, 90, 76};
+    const auto drop = dropIntoRow({110, 116, 90, 76}, {120, 60}, others, kLimits, context);
+    EXPECT_EQ(drop.dropped.getY(), 40) << "on A's row";
+    EXPECT_EQ(drop.others[0], others[0]) << "the row above did not move";
+    EXPECT_EQ(drop.others[1].getPosition(), juce::Point<int>(12, 116)) << "C took B's place";
+}
+
+TEST(OnCardLayoutRows, ALoneCellDroppedOnItsOwnBandStaysThereAndNothingElseMoves) {
+    const std::vector<Rectangle<int>> others{{12, 40, 90, 76}, {12, 192, 90, 76}};
+    DropContext context;
+    context.vacated = {12, 116, 90, 76};
+    const auto drop = dropIntoRow({12, 120, 90, 76}, {50, 150}, others, kLimits, context);
+    EXPECT_EQ(drop.dropped, context.vacated.withY(116)) << "no 4 px drift: the band it left is where it lands";
+    EXPECT_EQ(drop.others, others);
+}
+
+TEST(OnCardLayoutRows, ADisplacedCellWhoseHomeIsOnTheRowComesBackToItWhenItHasTheWidth) {
+    // The row holds two cells; a third (home beside them) stands on a row below. Dropping a cell on the row
+    // brings the third back, and the row it left closes up.
+    const std::vector<Rectangle<int>> others{{12, 40, 64, 76}, {84, 40, 64, 76}, {12, 124, 64, 76}};
+    DropContext context;
+    context.homes = {others[0], others[1], {156, 40, 64, 76}};
+    const auto drop = dropIntoRow({92, 124, 64, 76}, {120, 60}, others, kLimits, context);
+    EXPECT_EQ(rowsOf(withDropped(drop)).size(), 1u);
+    expectTidy(withDropped(drop), kLimits);
+}
+
+TEST(OnCardLayoutRows, ADisplacedCellStaysWhereItIsWhenItsHomeRowHasNoWidthForIt) {
+    const std::vector<Rectangle<int>> others{{12, 40, 90, 76}, {110, 40, 90, 76}, {12, 124, 90, 76}};
+    DropContext context;
+    context.homes = {others[0], others[1], {208, 40, 90, 76}};
+    const auto drop = dropIntoRow({208, 40, 90, 76}, {250, 60}, others, kLimits, context);
+    expectTidy(withDropped(drop), kLimits);
+    EXPECT_EQ(drop.others[2].getX(), 12) << "the row is full";
+}
+
+TEST(OnCardLayoutRows, AControlFromAnotherGroupGetsTheGapEvenOnAFlushRow) {
+    const std::vector<Rectangle<int>> flush{{12, 40, 64, 76}, {76, 40, 64, 76}};
+    DropContext context; // no vacated rect and no origin on the row: it came from elsewhere
+    const auto drop = dropIntoRow({70, 40, 64, 76}, {72, 60}, flush, kLimits, context);
+    expectTidy(withDropped(drop), kLimits);
+}

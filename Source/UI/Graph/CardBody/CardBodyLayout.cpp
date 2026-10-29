@@ -264,7 +264,7 @@ int layoutFreeSection(const CardBodyPlan& plan, juce::AudioProcessor& module, co
         rowBottom = std::max(rowBottom, rowY + free.size.getHeight());
         x += free.size.getWidth();
     }
-    return bottom > top ? bottom + 6 : top;
+    return bottom;
 }
 
 int layoutSectionCells(const CardBodyPlan& plan, juce::AudioProcessor& module, const CardBodyPlan::Section& section,
