@@ -51,6 +51,7 @@ public:
     /** The outline round the whole group, in this component's own coordinates. */
     juce::Rectangle<float> getGroupArea() const;
     float getHoverForTest() const noexcept { return hover_; }
+    void finishHoverForTest() { hoverAnim_.completeForTest(); }
 
 private:
     void animateHover(bool over);

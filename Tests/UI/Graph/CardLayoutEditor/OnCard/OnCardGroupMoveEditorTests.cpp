@@ -132,9 +132,13 @@ TEST(OnCardGroupMoveEditor, OnlyTheTitleRowTakesTheMouseAndHoverOutlinesTheWhole
         return image.getPixelAt(handle->getWidth() / 2, handle->getHeight() - 2).getAlpha();
     };
     EXPECT_EQ(paintedAtEdge(), 0) << "nothing drawn at rest";
+    // The hover fades in only while the handle is showing (Windows CI shows the test window, macOS CI does not),
+    // so land the fade before reading pixels.
     handle->mouseEnter(cardbody_test::mouseAt(*handle, {5.0f, 5.0f}, juce::ModifierKeys()));
+    handle->finishHoverForTest();
     EXPECT_GT(paintedAtEdge(), 0) << "a faint outline round the group's far edge";
     handle->mouseExit(cardbody_test::mouseAt(*handle, {5.0f, 5.0f}, juce::ModifierKeys()));
+    handle->finishHoverForTest();
     EXPECT_EQ(paintedAtEdge(), 0);
 }
 

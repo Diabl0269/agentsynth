@@ -3,6 +3,7 @@
 // overlay following the card a write rebuilds, and leaving the canvas when it closes.
 
 #include "../../../Accessibility/AccessibilityAudit.h"
+#include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardCells.h"
@@ -55,6 +56,25 @@ TEST(OnCardEditor, EditLayoutFromTheModuleMenuOpensOverTheCardWithAnOutlinePerCo
     ASSERT_NE(editor->getOutlineForTest("poly"), nullptr) << "the footer's controls get one too";
     EXPECT_TRUE(editor->getOutlineForTest("poly")->isPanelOnly());
     EXPECT_FALSE(editor->getOutlineForTest("cutoff")->isPanelOnly());
+}
+
+// Regression test for FRO704: the footer's outlines were widened to a body cell's box and drawn off the card.
+TEST(OnCardEditor, EveryOutlineLiesInsideTheCard) {
+    const auto check = [](std::unique_ptr<ModuleBase> module) {
+        OnCardRig rig;
+        const auto id = rig.add(std::move(module), 200, 200);
+        auto* card = rig.card(id);
+        auto* editor = rig.openOnCard(id);
+        ASSERT_NE(editor, nullptr);
+        for (const auto& cell : synth::ui::collectCells(*card)) {
+            SCOPED_TRACE(cell.key.toStdString());
+            auto* outline = editor->getOutlineForTest(cell.key);
+            ASSERT_NE(outline, nullptr);
+            EXPECT_TRUE(card->getLocalBounds().contains(outline->getBounds())) << outline->getBounds().toString();
+        }
+    };
+    check(std::make_unique<FilterModule>());
+    check(std::make_unique<OscillatorModule>());
 }
 
 TEST(OnCardEditor, EditLayoutFromAControlsMenuOpensTheSameEditor) {
