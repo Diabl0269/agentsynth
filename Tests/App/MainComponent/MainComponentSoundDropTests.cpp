@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "Modules/SamplerModule.h"
+#include "SoundBrowser/LoopStretchFile.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Library/LibrarySidebarViews.h"
@@ -120,6 +121,34 @@ TEST_F(SoundDropMainTest, ReturnAddsAClipToTheSelectedAudioTrack) {
     ASSERT_EQ(t->clips.size(), 1u);
     EXPECT_GE(t->clips[0].startBeat, 0.0);
     EXPECT_TRUE(samplers().empty());
+}
+
+// Return is the keyboard twin of a drop: a loop lands fitted to the song's tempo, as the preview played it and as a
+// drop on the track renders it, never as the raw file.
+TEST_F(SoundDropMainTest, ReturnFitsALoopToTheSongTempoOnTheSelectedAudioTrack) {
+    const auto loop = tempRoot.getChildFile("fitloop.wav");
+    writeWav(loop, 44100, 1, 44100.0, [](int i, int) { return 0.3f * std::sin(0.05f * (float)i); });
+    const auto cache = synth::soundbrowser::stretchedLoopCacheFolder();
+    for (const auto& f : cache.findChildFiles(juce::File::findFiles, false, "fitloop-*"))
+        f.deleteFile();
+    auto& sounds = mc->getLibrarySidebarForTest().getSounds();
+    sounds.songTempoProvider = [] { return 96.0; };
+    const auto track = addAudioTrack();
+    mc->getTimelinePanel().selectTracks({track}, track);
+
+    synth::soundbrowser::SoundEntry entry;
+    entry.path = loop.getFullPathName();
+    entry.name = "fitloop";
+    entry.kind = synth::soundbrowser::SoundKind::Loop;
+    entry.tempo = 120.0;
+    entry.lengthSeconds = 1.0;
+    sounds.onSoundActivated(entry);
+
+    const auto* t = mc->getTimelineDoc().getTrack(track);
+    ASSERT_NE(t, nullptr);
+    ASSERT_EQ(t->clips.size(), 1u);
+    EXPECT_EQ(cache.findChildFiles(juce::File::findFiles, false, "fitloop-96bpm*.wav").size(), 1)
+        << "the clip was imported from the copy fitted to 96 BPM, not the 120 BPM file";
 }
 
 TEST_F(SoundDropMainTest, ReturnWithNothingSelectedAddsASamplerHoldingTheSound) {
