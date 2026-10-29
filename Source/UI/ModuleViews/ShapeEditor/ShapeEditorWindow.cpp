@@ -69,10 +69,10 @@ juce::DialogWindow* openShapeEditorWindow(std::shared_ptr<ShapeListAdapter> adap
     options.componentToCentreAround = anchor != nullptr ? anchor->getTopLevelComponent() : nullptr;
     options.useNativeTitleBar = true;
     options.resizable = true;
-    auto* dialog = options.launchAsync();
+    auto* dialog = PopupMotion::launchDialog(
+        options, [anchor](juce::DialogWindow& window) { return motionStyle(anchor, &window); });
     if (dialog == nullptr)
         return nullptr;
-    PopupMotion::attach(*dialog, motionStyle(anchor, dialog));
     // A window that has only just been launched may not be showing yet, and focus can only land on a showing
     // component, so the focus is given one turn later (the window may also be gone by then).
     juce::MessageManager::callAsync([window = juce::Component::SafePointer<juce::DialogWindow>(dialog)] {
