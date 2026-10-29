@@ -241,19 +241,51 @@ bool areAlternatives(const CardBodyPlan::Section& a, const CardBodyPlan::Section
     return true;
 }
 
-// A parameter named again in the other look of an alternative group is one widget standing in both looks, each
-// at its own place; anywhere else a second naming is ignored.
+// The kind a layout item asks for: its widget, with a choice in a look of an alternative group allowed to be a
+// stepped fader (a fader on a choice anywhere else falls back).
+CardBodyItem::Kind kindOf(const CardBodyItem& planned, const CardParamItem& p, const CardBodyPlan::Section& section) {
+    auto kind = cardBodyKindFor(*planned.param, p.widget).value_or(planned.kind);
+    if ((p.widget == CardWidget::FaderV || p.widget == CardWidget::FaderVLong) && kind == CardBodyItem::Kind::Choice &&
+        section.visibleWhen.has_value() && dynamic_cast<const juce::AudioParameterChoice*>(planned.param) != nullptr)
+        kind = p.widget == CardWidget::FaderV ? CardBodyItem::Kind::FaderV : CardBodyItem::Kind::FaderVLong;
+    return kind;
+}
+
+// A parameter named again in the other look of an alternative group stands in both looks, each at its own place.
+// A copy that is drawn the same (kind, caption, range) shares the one widget; one that differs is its own item
+// with the same parameter, so each look draws its own copy's style.
 void placeAlternate(CardBodyPlan& plan, int index, const CardParamItem& source, int sectionIndex) {
-    auto& planned = plan.items[(size_t)index];
-    if (planned.section < 0 || planned.section == sectionIndex || plan.sections[(size_t)sectionIndex].footer ||
-        !areAlternatives(plan.sections[(size_t)planned.section], plan.sections[(size_t)sectionIndex]))
+    const auto primary = plan.items[(size_t)index];
+    if (primary.section < 0 || primary.section == sectionIndex || plan.sections[(size_t)sectionIndex].footer ||
+        !areAlternatives(plan.sections[(size_t)primary.section], plan.sections[(size_t)sectionIndex]))
         return;
-    for (const auto& placement : planned.alsoIn)
+    for (const auto& placement : primary.alsoIn)
         if (placement.section == sectionIndex)
             return;
-    planned.alsoIn.push_back({sectionIndex, source.at});
+    for (const auto& other : plan.items)
+        if (other.param == primary.param && other.section == sectionIndex)
+            return;
     auto& section = plan.sections[(size_t)sectionIndex];
-    section.items.push_back(index);
+    const auto kind = kindOf(primary, source, section);
+    std::optional<juce::String> caption;
+    if (source.label.has_value() && source.label->trim().isNotEmpty())
+        caption = source.label->trim();
+    if (kind == primary.kind && caption == primary.caption && source.range == primary.range) {
+        plan.items[(size_t)index].alsoIn.push_back({sectionIndex, source.at});
+        section.items.push_back(index);
+    } else {
+        CardBodyItem twin = primary;
+        twin.alsoIn.clear();
+        twin.swapGroup = -1;
+        twin.kind = kind;
+        twin.caption = caption;
+        twin.range = source.range;
+        twin.section = sectionIndex;
+        twin.at = source.at;
+        twin.when = source.when;
+        plan.items.push_back(twin);
+        section.items.push_back((int)plan.items.size() - 1);
+    }
     if (source.at)
         section.freeform = true;
 }
@@ -274,14 +306,7 @@ void placeItem(juce::AudioProcessor& module, const CardLayout& layout, const Car
         }
         // The widget applies to a hidden parameter too: it shows that way in the More row.
         auto& planned = plan.items[(size_t)index];
-        planned.kind = cardBodyKindFor(*planned.param, p->widget).value_or(planned.kind);
-        // A choice in a look of an alternative group may be asked for as a stepped fader; a fader on a choice anywhere
-        // else falls back.
-        if ((p->widget == CardWidget::FaderV || p->widget == CardWidget::FaderVLong) &&
-            planned.kind == CardBodyItem::Kind::Choice && placer.section.visibleWhen.has_value() &&
-            dynamic_cast<const juce::AudioParameterChoice*>(planned.param) != nullptr)
-            planned.kind =
-                p->widget == CardWidget::FaderV ? CardBodyItem::Kind::FaderV : CardBodyItem::Kind::FaderVLong;
+        planned.kind = kindOf(planned, *p, placer.section);
         if (p->label.has_value() && p->label->trim().isNotEmpty())
             planned.caption = p->label->trim();
         if (!layout.hidden.contains(p->paramId))

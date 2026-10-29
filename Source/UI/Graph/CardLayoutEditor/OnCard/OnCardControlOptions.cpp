@@ -143,14 +143,18 @@ bool offersFaderSize(const std::vector<CardWidget>& widgetChoices, CardWidget cu
 std::optional<int> visibleLayoutSection(const synth::CardBody& body, const CardLayout& layout,
                                         const juce::String& paramId) {
     const auto& plan = body.getPlan();
-    const int index = plan.findParam(paramId);
-    if (index < 0 || plan.items[(size_t)index].alsoIn.empty())
+    // One parameter drawn in two looks is one plan item sharing a widget (alsoIn) or one item per look (a twin).
+    std::vector<int> candidates;
+    for (const auto& planned : plan.items) {
+        if (planned.param == nullptr || planned.param->paramID != paramId)
+            continue;
+        candidates.push_back(planned.section);
+        for (const auto& placement : planned.alsoIn)
+            candidates.push_back(placement.section);
+    }
+    if (candidates.size() < 2)
         return std::nullopt;
-    const auto& planned = plan.items[(size_t)index];
-    std::vector<int> candidates{planned.section};
-    for (const auto& placement : planned.alsoIn)
-        candidates.push_back(placement.section);
-    int chosen = planned.section;
+    int chosen = candidates.front();
     for (const int candidate : candidates)
         if (candidate >= 0 && candidate < (int)plan.sections.size() && plan.sections[(size_t)candidate].visible) {
             chosen = candidate;
