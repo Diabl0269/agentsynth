@@ -126,14 +126,14 @@ TEST(OnCardGroupMoveEditor, OnlyTheTitleRowTakesTheMouseAndHoverOutlinesTheWhole
     EXPECT_EQ(handle->getMouseCursor(), synth::ui::dragGrabCursor());
 
     const auto paintedAtEdge = [&] {
-        juce::Image image(juce::Image::ARGB, handle->getWidth(), handle->getHeight(), true);
+        // A software image: Windows' default Direct2D image is not drawn into until its Graphics goes away.
+        juce::Image image(juce::Image::ARGB, handle->getWidth(), handle->getHeight(), true, juce::SoftwareImageType());
         juce::Graphics g(image);
         handle->paintEntireComponent(g, true);
         return image.getPixelAt(handle->getWidth() / 2, handle->getHeight() - 2).getAlpha();
     };
     EXPECT_EQ(paintedAtEdge(), 0) << "nothing drawn at rest";
-    // The hover fades in only while the handle is showing (Windows CI shows the test window, macOS CI does not),
-    // so land the fade before reading pixels.
+    // The hover fades in while the handle is showing, so land the fade before reading pixels.
     handle->mouseEnter(cardbody_test::mouseAt(*handle, {5.0f, 5.0f}, juce::ModifierKeys()));
     handle->finishHoverForTest();
     EXPECT_GT(paintedAtEdge(), 0) << "a faint outline round the group's far edge";
