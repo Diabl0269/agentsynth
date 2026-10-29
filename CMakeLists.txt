@@ -42,15 +42,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/DependencyVersions.cmake)
 # workflows' deps cache keys had to be bumped by hand (deps3 -> deps4, release-deps-ninja3 -> 4;
 # see docs/development/ci-caching.md) for the shallow clone to actually take effect instead of
 # forever restoring the old, non-shallow juce-src.
-include(FetchContent)
-FetchContent_Declare(
-    juce
-    GIT_REPOSITORY ${SYNTH_JUCE_GIT_REPOSITORY}
-    GIT_TAG        ${SYNTH_JUCE_GIT_TAG}
-    GIT_SHALLOW    TRUE
-    PATCH_COMMAND  ${SYNTH_JUCE_PATCH_COMMAND}
-)
-FetchContent_MakeAvailable(juce)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/FetchJuce.cmake)
 
 # Fetch Sparkle (macOS auto-update). Prebuilt .xcframework distribution, not a CMake project —
 # FetchContent_MakeAvailable populates it and, finding no CMakeLists.txt at its root, does not try
