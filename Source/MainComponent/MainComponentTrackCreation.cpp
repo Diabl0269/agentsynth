@@ -59,6 +59,11 @@ MainComponent::TrackGrowInScope::~TrackGrowInScope() {
     owner_.bottomDock.getMixerPanel().finishColumnChange();
 }
 
+void MainComponent::TrackGrowInScope::noteOrigin(synth::TrackId copy, synth::TrackId source) const {
+    owner_.timelinePanel.noteDuplicateOrigin(copy, source);
+    owner_.bottomDock.getMixerPanel().noteDuplicateOrigin(copy, source);
+}
+
 void MainComponent::performTrackEdit(const std::function<void()>& mutation) {
     if (!mutation)
         return;

@@ -318,6 +318,11 @@ public:
     DeleteReflow captureDeleteReflow(const std::vector<juce::AudioProcessorGraph::NodeID>& ids);
     /** Call AFTER the removal and updateComponents(), inside the delete's undo record; opens none of its own. */
     void applyDeleteReflow(const DeleteReflow& reflow);
+    /** Inside an open CardGlideAnimator::Scope, after updateComponents(): each {original, copy} node pair's card, and
+     *  the copy's macro card, comes out of the original's place instead of appearing (and goes back into it on undo).
+     *  Returns the {original, copy} macro id pairs so the caller can glide the copy's border from the original's. */
+    std::vector<std::pair<juce::String, juce::String>> glideCopiesOutOfOriginals(
+        const std::vector<std::pair<juce::AudioProcessorGraph::NodeID, juce::AudioProcessorGraph::NodeID>>& nodes);
     /** What a module being PLACED must keep clear of, as boxes for LayoutUtil::findFreeSlot: every visible module,
      *  every collapsed card and every open hull, flattened across nesting levels, except `excludeNodes` themselves,
      *  every macro that contains them (their own hull and its ancestors), the collapsed macros a drag of them carries,

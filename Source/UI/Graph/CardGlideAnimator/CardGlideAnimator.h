@@ -12,7 +12,9 @@
 #include <cstdint>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <utility>
 #include <vector>
@@ -87,6 +89,7 @@ public:
         juce::Component::SafePointer<juce::Component> comp;
         uint32_t nodeUid = 0;
         juce::Rectangle<int> bounds;
+        bool fadeUp = false; // a copy coming out of its original: the glide also fades it up
     };
 
     CardGlideAnimator();
@@ -104,6 +107,15 @@ public:
      *  the Scope's exit glides it from `from` to wherever it ends up. A library drop that snaps into place uses
      *  this to settle from where the cursor aimed. No-op outside a Scope. */
     void noteStartRect(juce::Component* comp, uint32_t nodeUid, juce::Rectangle<int> from);
+
+    /** While a Scope is open: `comp`, a copy created inside it, comes out of its original's rect `from`, gliding to its
+     *  place while it fades up (a fade-in under Reduce Motion), the whole glide as long as a duplicated track's row
+     *  (240 ms). `noteOrigin` makes the undo of that copy go back into the original, and its redo come out again. */
+    void noteGlideOutOf(juce::Component* comp, uint32_t nodeUid, juce::Rectangle<int> from);
+    /** `copyKey` (a node uid, macroKey or borderKey) was copied from `sourceKey`; kept until the copy is deleted by
+     *  hand or `clearOrigins()`. */
+    void noteOrigin(uint32_t copyKey, uint32_t sourceKey);
+    void clearOrigins() noexcept { origins_.clear(); }
 
     /** Hides and snapshots every card whose bounds changed since `before`. Returns false (no-op) when none did. */
     bool arm(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale);
@@ -204,7 +216,9 @@ private:
         juce::Image snapshot;
         float savedAlpha = 1.0f;
         float exitStart = 0.0f; // an Exit ghost an interruption carried over: how far it had already shrunk
-        std::shared_ptr<const Border> border; // a macro border ghost: drawn from this, no card behind it
+        std::shared_ptr<const Border> border;    // a macro border ghost: drawn from this, no card behind it
+        bool fadeUp = false;                     // a Move item that fades up while it glides
+        std::optional<juce::Rectangle<int>> via; // an Exit ghost goes into, an Enter ghost comes out of, this rect
     };
 
     juce::Rectangle<float> currentRect(const Item& item) const noexcept;
@@ -224,6 +238,9 @@ private:
     bool armGhosts(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale);
     void paintGhost(juce::Graphics& g, const Item& item) const;
     bool hasMoveItems() const noexcept;
+    bool hasFadeUpItems() const noexcept;
+    void attachOrigin(Item& item, const std::vector<Entry>& now, const std::vector<Border>& bordersNow) const;
+    juce::Rectangle<float> viaRect(const Item& item, float progress) const noexcept;
     void armBorderGhosts(const std::vector<Entry>& now, bool& anyExit, bool& anyEnter);
     void addEnterItem(juce::Component& comp, uint32_t nodeUid, float snapshotScale);
     bool armRequestedEnters(float snapshotScale);
@@ -239,6 +256,7 @@ private:
     int armCount_ = 0;
     std::vector<Candidate> candidates_;
     std::vector<std::pair<juce::Component::SafePointer<juce::Component>, uint32_t>> enterRequests_; // noteEnter
+    std::map<uint32_t, uint32_t> origins_; // copy key -> the key it was copied from (noteOrigin)
     std::vector<Border> borders_;          // captured by noteMacroBorders
     std::set<uint32_t> preexistingMacros_; // every macro card there when the Scope opened, shown or not
     synth::ui::ExitEnterTimeline timeline_;

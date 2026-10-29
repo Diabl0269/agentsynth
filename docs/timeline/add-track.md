@@ -293,10 +293,11 @@ the reconcile pass:
    track macro to join and is not copied. The copy is named "<name> copy",
    takes the next palette colour, and is never soloed or armed. An unbound track is copied as clips alone.
 
-Focus follows the copy (`TimelinePanelComponent::focusTrackRow`), so Cmd+D again duplicates the copy. The new row and the
-copy's mixer strip grow in (the rows below and the columns after make room first), the mirror of the delete motion, armed
-by `MainComponent::TrackGrowInScope`; adding a track from "Add Track" does the same. Under Reduce Motion it is a plain
-fade, and off-screen it lands at once. A mixer strip's right-click menu also offers "Duplicate Track" (the same action, for
+Focus follows the copy (`TimelinePanelComponent::focusTrackRow`), so Cmd+D again duplicates the copy. The copy's row, its
+mixer strip and its canvas macro and cards come out of the original's while the rows and columns after make room in the
+same movement, and Cmd+Z sends them back in ([duplicate-motion](../layout/duplicate-motion.md)); adding a track from "Add
+Track" grows the new row in after the others make room (`MainComponent::TrackGrowInScope`). Under Reduce Motion it is a
+plain fade, and off-screen it lands at once. A mixer strip's right-click menu also offers "Duplicate Track" (the same action, for
 a strip fed by exactly one track). At `kMaxTracks` nothing happens and the status bar says so.
 
 Tests: `Tests/App/MainComponent/MainComponentDuplicateTrackTests.cpp` (the real key through the row; new ids, remapped

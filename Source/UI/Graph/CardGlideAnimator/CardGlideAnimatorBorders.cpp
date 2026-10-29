@@ -40,16 +40,20 @@ void CardGlideAnimator::armBorderGhosts(const std::vector<Entry>& now, bool& any
             return e.nodeUid == uid && e.comp != nullptr && e.comp->isVisible();
         });
     };
-    const auto addItem = [this](Kind kind, const Border& b) {
+    const auto after = hooks_.borders();
+    const auto addItem = [this, &now, &after](Kind kind, const Border& b) {
         Item item;
         item.kind = kind;
         item.nodeUid = borderKey(b.key);
         item.from = item.to = b.hull.getUnion(b.chip);
         item.border = std::make_shared<const Border>(b);
+        if (restoring_)
+            attachOrigin(item, now, after);
+        else if (kind == Kind::Exit)
+            origins_.erase(item.nodeUid);
         items_.push_back(std::move(item));
     };
 
-    const auto after = hooks_.borders();
     for (const auto& b : borders_) {
         if (!b.open || b.hull.isEmpty() ||
             std::any_of(after.begin(), after.end(), [&b](const Border& a) { return a.key == b.key; }))

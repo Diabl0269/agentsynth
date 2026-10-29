@@ -2,6 +2,7 @@
 
 #include "UI/Layout/ExitEnterTimeline.h"
 #include <juce_graphics/juce_graphics.h>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -35,6 +36,9 @@ struct ExitEnterListItem {
     float extent = 0.0f;
     float fromStart = 0.0f; // Stay: the gap phase slides the slice from here ...
     float toStart = 0.0f;   // ... to here. Exit and Enter slices sit at srcStart.
+    // An Enter or Exit slice that travels: its original's start (where it begins, or where it ends), in the picture.
+    bool travels = false;
+    float originStart = 0.0f;
 
     bool isTail() const noexcept { return key.isEmpty(); }
 };
@@ -51,6 +55,17 @@ struct ExitEnterListPlan {
     static std::vector<Item> forInsertion(const std::vector<Row>& after, const std::vector<juce::String>& added,
                                           float pictureExtent);
 
+    /** Item key -> key of the item it was copied from. */
+    using SourceOf = std::map<juce::String, juce::String>;
+    /** forInsertion where each added item comes out of its source: false (and `items` untouched) unless every added
+     *  item has a source among `after`, so the caller falls back to the plain grow-in. */
+    static bool forInsertionFromSource(const std::vector<Row>& after, const std::vector<juce::String>& added,
+                                       const SourceOf& sourceOf, float pictureExtent, std::vector<Item>& items);
+    /** forRemoval where each removed item goes back into its source: false (and `items` untouched) unless every removed
+     *  item has a source among `after`. */
+    static bool forRemovalIntoSource(const std::vector<Row>& before, const std::vector<Row>& after,
+                                     const SourceOf& sourceOf, float pictureExtent, std::vector<Item>& items);
+
     /** Which phases the items need: exit if one leaves, enter if one comes back, gap if a slice slides. */
     static ExitEnterTimeline timelineFor(const std::vector<Item>& items);
 
@@ -62,6 +77,7 @@ struct ExitEnterListPlan {
         float scale = 1.0f;
         float alpha = 1.0f;
         float outlineAlpha = 0.0f;
+        float lift = 0.0f; // > 0: drawn lifted (shadow, raised fill, accent edge), 1 while it leaves its original
     };
     /** Empty when the slice is not drawn at this moment (an exited item, an item not yet grown). */
     static std::optional<Drawn> drawnAt(const Item& item, const ExitEnterTimeline::Frame& frame, bool reducedMotion);

@@ -265,9 +265,9 @@ every surface that animates a delete:
   accent outline fades. A mixer column moves the same way, sideways, whenever it really leaves or returns (the undo of
   Add Track or Duplicate Track, and the redo that brings it back), and when a track is deleted: its own channel is deleted
   with it, so its column shrinks away in step with the row (exit 180 ms, then the gap), and Cmd+Z makes room, grows it
-  back and fades the outline beside the row. Adding or duplicating a track (Cmd+D, the row menu, the strip menu's
-  "Duplicate Track") runs it forward, no outline: rows and columns after make room, then the new ones grow out of
-  nothing (`MainComponent::TrackGrowInScope` arms `armTrackInsertMotion` for the rows). The mixer arms nothing: each panel sees a column come or go in
+  back and fades the outline beside the row. Adding a track runs it forward, no outline: rows and columns after make
+  room, then the new ones grow out of nothing (`MainComponent::TrackGrowInScope` arms `armTrackInsertMotion` for the rows);
+  a duplicate comes out of its original instead ([duplicate-motion.md](duplicate-motion.md)). The mixer arms nothing: each panel sees a column come or go in
   its own rebuild ([column motion](../mixer/row-motion.md#column-motion)), as do its insert and send rows.
   The panels do not animate their real rows. A picture of the list is cut into one slice per row (`ExitEnterListPlan`, pure)
   and an overlay child of the panel (`ExitEnterListMotion`) draws the slices over the real list, which is already in its

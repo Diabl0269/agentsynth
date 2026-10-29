@@ -283,6 +283,9 @@ public:
      *  landed. The arm lasts until the next finishColumnChange(). */
     void armColumnInsertMotion() noexcept { columnInsertArmed_ = true; }
     void finishColumnChange();
+    /** `copy` is a duplicate of `source`: the copy's column comes out of the source's column (and, on undo, goes back
+     *  into it) in one movement with the others. Call before finishColumnChange(). */
+    void noteDuplicateOrigin(synth::TrackId copy, synth::TrackId source);
     /** Test seam: animate even though the panel is not showing. */
     void forceColumnMotionForTest(bool on) noexcept { columnMotionForced_ = on; }
     synth::ui::ExitEnterListMotion& getColumnMotionForTest() noexcept { return columnMotion_; }
@@ -657,13 +660,19 @@ private:
         juce::Image image;
         float scale = 1.0f;
         std::vector<synth::ui::ExitEnterListRow> rows;
+        std::map<juce::String, std::vector<synth::TrackId>> feeders; // column key -> tracks it carried
     };
     std::vector<synth::ui::ExitEnterListRow> scrollingColumnRows() const;
+    synth::ui::ExitEnterListPlan::SourceOf
+    columnSources(const std::vector<juce::String>& keys,
+                  const std::map<juce::String, std::vector<synth::TrackId>>& feeders) const;
     bool canAnimateColumnMotion() const { return isShowing() || columnMotionForced_; }
     void noteColumnSetChange(const std::vector<juce::String>& added, const std::vector<juce::String>& removed);
     void noteColumnSetComing(const synth::MixerSnapshot& snapshot);
     std::optional<ColumnPicture> pendingColumnPicture_;
     std::vector<juce::String> columnsAdded_, columnsRemoved_;
+    std::map<std::int64_t, std::int64_t> duplicateOrigins_; // copy track id -> source track id
+    bool columnSetRestored_ = false;                        // the last column-set change was an undo or redo
     bool columnInsertArmed_ = false; // an add or duplicate is under way: the rebuild's new columns grow in
     bool columnMotionForced_ = false;
     bool autoColumnFinish_ = false;      // this rebuild started the motion itself and ends it
