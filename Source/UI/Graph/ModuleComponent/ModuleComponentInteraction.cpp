@@ -70,7 +70,9 @@ void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter*
 }
 
 // Right-click-any-knob -> "Automate '<Param>'" plus the MIDI Learn block
-// (appendMidiLearnMenuItems, ModuleComponentMidiLearn.cpp). `param` may be null (a control this
+// (appendMidiLearnMenuItems, ModuleComponentMidiLearn.cpp). This component is a MouseListener on every generic
+// slider (addMouseListener(this, false) in createControls()), so mouseDown() reaches here when e.eventComponent is
+// one of `sliders`, matched by identity. `param` may be null (a control this
 // component built without a real RangedAudioParameter behind it, e.g. the ExternalMidiModule
 // device/channel combos — never true for anything reaching here through `sliders`, but checked
 // anyway since sliderParams can hold a null entry per its own header comment).
