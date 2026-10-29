@@ -34,6 +34,19 @@ bool dispatchKey(juce::DialogWindow& dialog, juce::Component& origin, const juce
     return false;
 }
 
+// A closed dialog is only dismissed: JUCE's modal manager deletes it on a later message-loop turn, and
+// deleteOpenModalDialogs() no longer sees it. Deleting it here keeps it from outliving the model it shows.
+void deleteNow(juce::Component::SafePointer<juce::DialogWindow>& dialog) {
+    deleteOpenModalDialogs();
+    delete dialog.getComponent();
+}
+
+// Declared after the test's own objects (a rig, a module, the content): its windows go before them, also on an early
+// return. The fixture's TearDown runs only after those objects are gone.
+struct DialogsDeletedFirst {
+    ~DialogsDeletedFirst() { deleteOpenModalDialogs(); }
+};
+
 bool isTextEditorPart(juce::Component& c) {
     return dynamic_cast<juce::TextEditor*>(&c) != nullptr ||
            c.findParentComponentOfClass<juce::TextEditor>() != nullptr;
@@ -58,29 +71,34 @@ protected:
     // Esc and Cmd+W from every focusable descendant of `dialog`: each closes it (a text field keeps Escape for
     // itself), and the window is reopened by `reopen` between presses.
     void expectEveryStopCloses(const std::function<juce::DialogWindow*()>& reopen) {
-        auto* probe = reopen();
-        ASSERT_NE(probe, nullptr);
-        const auto stops = focusableDescendants(*probe);
-        ASSERT_FALSE(stops.empty());
+        juce::Component::SafePointer<juce::DialogWindow> probe(reopen());
+        ASSERT_NE(probe.getComponent(), nullptr);
+        const auto stops = focusableDescendants(*probe.getComponent());
         const int count = (int)stops.size();
-        deleteOpenModalDialogs();
+        deleteNow(probe);
+        ASSERT_GT(count, 0);
         for (int i = 0; i < count; ++i) {
             for (const auto& press : {escapeKey(), closeWindowKey()}) {
-                auto* dialog = reopen();
-                ASSERT_NE(dialog, nullptr);
-                auto* stop = focusableDescendants(*dialog)[(size_t)i];
+                juce::Component::SafePointer<juce::DialogWindow> dialog(reopen());
+                ASSERT_NE(dialog.getComponent(), nullptr);
+                const DialogDeleter deleteAfterPress{dialog};
+                auto* stop = focusableDescendants(*dialog.getComponent())[(size_t)i];
                 if (isTextEditorPart(*stop) && press == escapeKey()) {
-                    EXPECT_TRUE(dispatchKey(*dialog, *stop, press)) << "a text field uses Escape itself";
+                    EXPECT_TRUE(dispatchKey(*dialog.getComponent(), *stop, press)) << "a text field uses Escape itself";
                     EXPECT_TRUE(dialog->isVisible());
                 } else {
-                    EXPECT_TRUE(dispatchKey(*dialog, *stop, press))
+                    EXPECT_TRUE(dispatchKey(*dialog.getComponent(), *stop, press))
                         << "stop " << i << " (" << stop->getTitle() << ") press " << press.getTextDescription();
                     EXPECT_FALSE(dialog->isVisible()) << "stop " << i << " (" << stop->getTitle() << ")";
                 }
-                deleteOpenModalDialogs();
             }
         }
     }
+
+    struct DialogDeleter {
+        juce::Component::SafePointer<juce::DialogWindow>& dialog;
+        ~DialogDeleter() { deleteNow(dialog); }
+    };
 
     bool wasEnabled_ = true;
 };
@@ -115,11 +133,13 @@ struct GenericContent : juce::Component {
 // Regression test for FRO1175: Esc on a focused map dot only refocused the map and Cmd+W did nothing
 TEST_F(ModalCloseKeys, EveryStopOfTheShapeEditorWindowClosesIt) {
     ShapeRig rig;
+    const DialogsDeletedFirst dialogsFirst;
     expectEveryStopCloses([&] { return openShapeEditorWindow(rig.adapter, 0, nullptr); });
 }
 
 TEST_F(ModalCloseKeys, EveryStopOfTheSamplerMapWindowClosesIt) {
     SamplerModule sampler;
+    const DialogsDeletedFirst dialogsFirst;
     expectEveryStopCloses([&] {
         auto view = std::make_unique<SamplerMapView>(
             sampler, [](const std::vector<synth::sampler::RegionSpec>&) { return true; });
@@ -129,6 +149,7 @@ TEST_F(ModalCloseKeys, EveryStopOfTheSamplerMapWindowClosesIt) {
 
 TEST_F(ModalCloseKeys, EveryStopOfTheEQWindowClosesIt) {
     std::vector<std::unique_ptr<ParametricEQModule>> modules; // one per window: kept until the test ends
+    const DialogsDeletedFirst dialogsFirst;
     expectEveryStopCloses([&] {
         modules.push_back(std::make_unique<ParametricEQModule>());
         auto& eq = *modules.back();
@@ -142,11 +163,13 @@ TEST_F(ModalCloseKeys, EveryStopOfTheEQWindowClosesIt) {
 
 TEST_F(ModalCloseKeys, EveryStopOfAGenericDialogClosesIt) {
     GenericContent content;
+    const DialogsDeletedFirst dialogsFirst;
     expectEveryStopCloses([&] { return launchGeneric(content); });
 }
 
 TEST_F(ModalCloseKeys, TheListHoldsExactlyTheDialogsLaunchedThroughIt) {
     GenericContent content;
+    const DialogsDeletedFirst dialogsFirst;
     const auto before = PopupMotion::openDialogsForTest().size();
     auto* dialog = launchGeneric(content);
     ASSERT_NE(dialog, nullptr);
@@ -161,6 +184,7 @@ TEST_F(ModalCloseKeys, TheListHoldsExactlyTheDialogsLaunchedThroughIt) {
 
 TEST_F(ModalCloseKeys, EscapeInARenameEditorCancelsTheRenameAndKeepsTheWindow) {
     ShapeRig rig;
+    const DialogsDeletedFirst dialogsFirst;
     auto* dialog = openShapeEditorWindow(rig.adapter, 0, nullptr);
     ASSERT_NE(dialog, nullptr);
     auto* editor = dynamic_cast<ShapeListEditor*>(dialog->getContentComponent());
@@ -187,6 +211,7 @@ TEST_F(ModalCloseKeys, EscapeInARenameEditorCancelsTheRenameAndKeepsTheWindow) {
 
 TEST_F(ModalCloseKeys, EscapeInATextEditorDoesNotCloseTheDialog) {
     GenericContent content;
+    const DialogsDeletedFirst dialogsFirst;
     auto* dialog = launchGeneric(content);
     ASSERT_NE(dialog, nullptr);
     EXPECT_TRUE(dispatchKey(*dialog, content.editor, escapeKey())) << "the editor itself uses it";

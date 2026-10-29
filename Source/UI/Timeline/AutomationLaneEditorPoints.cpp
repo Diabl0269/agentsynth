@@ -242,6 +242,8 @@ bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
     }
     if (action.kind == Kind::remove)
         return action.plain && deleteSelectedPoints();
+    if (keyHold_.active() && KeyHold::isArrow(key.getKeyCode()) && keyHold_.anyArrowDown())
+        return true; // an arrow joining a running hold (or its auto-repeat): the hold reads it each frame
     if (stretchKey(key))
         return true;
     if (action.kind == Kind::insert)
@@ -311,7 +313,7 @@ double AutomationLaneEditor::keyStepBeats() const {
 // committed step. Consumed whenever something is selected, even when a limit left nothing to do.
 bool AutomationLaneEditor::nudgePoints(int keyCode, double beatDirection, double valueDirection, NudgeSize size) {
     if (keyHold_.active()) {
-        if (keyHold_.keyIsDown(keyHold_.keyCode()))
+        if (keyHold_.anyArrowDown())
             return true; // auto-repeat or a second key: the running hold picks the direction up
         keyHold_.end();  // a hold whose key-up was missed
     }
@@ -322,7 +324,7 @@ bool AutomationLaneEditor::nudgePoints(int keyCode, double beatDirection, double
     if (picked.empty())
         return false;
     if (keyHold_.keyIsDown(keyCode))
-        return beginKeyDrag(keyCode, picked, beatDirection, valueDirection, size);
+        return beginKeyDrag(keyCode, picked, size);
 
     const auto& range = doc_->getLane(laneId_)->range;
     const double fine = size == NudgeSize::Fine ? lane_key::kFineScale : 1.0;

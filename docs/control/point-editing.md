@@ -12,7 +12,8 @@ on the piano roll. Shortcut table of the app-level commands: [`shortcuts.md`](sh
 | Automation and modulation lanes (`AutomationLaneEditor`) | Under each track | Points have a beat and a value; insert needs a next point. [`timeline/automation.md`](../timeline/automation.md) |
 
 **The exception: the morph map.** It is a 2D map with no left-to-right order, so it keeps its own keys: the arrows move
-the focused dot (Shift: a bigger step; held, they glide on), and Tab steps to the next dot. Ctrl+T on a dot adds a shape
+the focused dot (Shift: a bigger step; held, they glide on; two held at once move it diagonally), and Tab steps to the
+next dot. Ctrl+T on a dot adds a shape
 halfway between it and the next dot in the list (one undo step; the new dot is selected and focused). On the last dot,
 or with the shape list full, nothing is added and the window says so under the map ("This is the last dot", "No room for
 another shape"). The same goes for a curve: a Ctrl+T it cannot act on says why ("Pick a point first", "No room after
@@ -27,6 +28,7 @@ this point", "No room: the curve has the most points it can hold") in the shape 
 | Shift+Left / Shift+Right | Extend the selection one dot toward that side (the cursor moves with it) |
 | Alt+Left / Alt+Right | Move the selection in time (a grid step with snap on, else a small step: four pixels in a lane). Hold the key and it glides, one undo step ([`timeline/automation-points.md`](../timeline/automation-points.md#keyboard-moves)) |
 | Alt+Up / Alt+Down | Move the selection's value (holding glides, like Alt+Left / Right) |
+| Two arrows held | Diagonal: hold Alt+Right, then also Up, and time and value move at once; let one go and the other carries on alone. The whole hold, both keys, is one undo step (`KeyHold` glides each axis on its own) |
 | Alt+Shift+arrows | The fine move: a fifth of the step in the curve editor, a quarter in a lane, never snapped. In a lane with two or more points selected, Alt+Shift+arrows stretch or scale the selection instead ([`timeline/automation.md`](../timeline/automation-points.md#stretching-a-selection)) |
 | Up / Down | Move the selection's value (the same step as Alt+Up / Down). A lane also takes Shift+Up / Down for a coarse step. With nothing selected the key is left to the app |
 | Cmd+A | Select every dot that can move |
@@ -43,7 +45,9 @@ app shortcut on Ctrl+T loses to the insert while an editor has focus and wins ev
 
 The shared test of the map is one typed suite run against both editors through a small adapter per editor:
 `Tests/UI/Layout/PointEditing/PointEditorSharedKeyTests.cpp` (the pure model's own tests sit beside it in
-`PointEditingModelTests.cpp`).
+`PointEditingModelTests.cpp`). The mouse gestures have the same kind of guard, `PointEditorSharedMouseTests.cpp`: box
+select (plain, additive, bare click, marquee painted, move after it) runs on both editors, so a gesture added to one
+editor and not the other fails there.
 
 ## The shared model
 
@@ -54,12 +58,13 @@ lands in both at once:
 |---|---|---|
 | Keys | `PointEditorKeys.h` | `pointKeyAction` decodes a key press into one action of the map above (pick, extend, value, move, select all, copy, paste, duplicate, insert, remove, clear); `isInsertPointKey` holds the Ctrl+T rule |
 | Selection | `PointSelectionModel.{h,cpp}` | The selected set (ascending), the cursor and the anchor, keyed by node index in the curve editor and by beat in a lane, and what Left/Right, Shift+Left/Right and Cmd+A do to them |
+| Box select | `PointBoxSelect.{h,cpp}` | The press-drag-release rectangle on empty space, the additive flag, a bare click, and the marquee paint |
 | Group move | `PointGroupMove.{h,cpp}` | How far each moving dot may go (`roomWithin`, `roomBetweenNeighbours`) and the one delta the block moves by (`clampGroupDelta`) |
 | Clipboard | `PointClipboard.h` | The copy/paste/duplicate payload: one entry per dot as its offset from the earliest, its value and the editor's extra data (a curve bend, a lane point's tension and curve) |
 | Duplicate placement | `PointEditorDuplicate.{h,cpp}` (one level up, in `Layout/`) | Where Cmd+D puts the copies (the Duplicate points preference) |
 
 The editors keep only their glue: the curve editor in `CurveEditorSelection.cpp`, `CurveEditorKeyboard.cpp` and
-`CurveEditorClipboard.cpp`; a lane in `LanePointSelection` (the model plus the box-select gesture and repaints) and
+`CurveEditorClipboard.cpp` and `CurveEditorBoxSelect.cpp`; a lane in `LanePointSelection` (the model plus its box-select glue and repaints) and
 `AutomationLaneEditorPoints.cpp`. The keyboard glide, the selection-box ease and the undo glides are unchanged on top.
 
 **Adding a key once:** add its `Kind` and decoding to `pointKeyAction`, then a `case` in each editor's switch
@@ -89,7 +94,22 @@ Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifie
 | Shift- or Cmd-click | Add or remove it from the selection without moving it |
 | Drag a selected dot | Move the whole selection |
 | Double-click empty line | Add a dot; double-click a dot in the curve editor removes it |
-| Drag a box (lanes) | Select the dots inside it |
+| Drag a box on empty space (lanes and curve editor) | Select the dots inside it, replacing the selection; the box is drawn in the accent colour while you drag |
+| Shift-, Cmd- or Ctrl-drag a box | Add the dots inside it to the selection |
+| Click empty space without dragging | Clear the selection |
+
+Alt+arrows then move the boxed dots together and Cmd+Z undoes that move in one step. The box is a mouse shortcut for
+what Shift+Left/Right already do from the keyboard (extend the selection one dot at a time), so nothing needs a
+mouse. In a Fixed (envelope-shaped) curve only dots that can move are boxed; a pinned dot never joins the selection.
+The morph map is out of scope: it keeps a single selected dot and has no box. The gesture is the shared
+`PointBoxSelect` (`Source/UI/Layout/PointEditing/`): it owns the rectangle, the pending click and the marquee, and each
+editor only answers which dots lie inside it (a lane by beat, the curve editor by node index at the drawn position).
+
+Everything drawn around a dot (its selection ring or halo, the keyboard focus ring, a morph dot's focus stop, a lane's
+selection box) follows the dot where it is drawn: under the pointer during a drag, at the preview during a key hold,
+and along the glide of a step, undo or redo, never at the old place. A lane takes both from one place
+(`AutomationLaneEditorDrawnPoints.cpp`); the guard is `PointMarkersFollowTheDot` (`Tests/UI/Layout/PointMarkers/`),
+which records every marker painted and fails one left off the dot.
 
 ## Adding a new point editor
 
@@ -99,7 +119,8 @@ Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifie
    `isInsertPointKey` keeps the Mac and
    non-Mac Control rules in one place).
 3. One press is one undo step; open no gesture for a press that changes nothing.
-4. Make it a Tab stop with `paintFocusRing`, a `setTitle` name, a tooltip and a screen-reader description that list the
+4. Make it a Tab stop with `paintFocusRing` (around the cursor dot where it is drawn), a `setTitle` name, a tooltip and a screen-reader description that list the
    keys ([`development/accessibility.md`](../development/accessibility.md)), and read the cursor dot aloud.
 5. Run on the shared model (selection, group move, clipboard) with its own `PointSelectionRules`, add the editor to
-   the tables above and an adapter to the shared suite's `PointEditorTypes`.
+   the tables above, an adapter to the shared suite's `PointEditorTypes` and an entry to `pointSurfaces()` in
+   `PointMarkersFollowTheDotTests.cpp`.

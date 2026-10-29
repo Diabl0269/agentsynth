@@ -45,6 +45,7 @@ public:
     bool gliding() const override { return map_.isMoveGliding(); }
     void stepTo(double elapsedMs) override { map_.stepMoveGlideForTest(elapsedMs); }
     float alpha() const override { return map_.getMoveAlphaForTest(cursor_, 0); }
+    juce::Component* paintedComponent() override { return &map_; }
 
 private:
     bool restore(bool forward) {
@@ -96,6 +97,7 @@ public:
     float alpha() const override {
         return const_cast<ShapeListEditor&>(editor_).getCurveEditor().getPointTweenForTest().alphaFor(kNode);
     }
+    juce::Component* paintedComponent() override { return &editor_.getCurveEditor(); }
 
 private:
     static constexpr int kNode = 3;
@@ -147,6 +149,7 @@ public:
             return 1.0f;
         return editor_->getPointTweenForTest().alphaFor(synth::ui::lane_key::tweenKey(lane->points[1].beat));
     }
+    juce::Component* paintedComponent() override { return editor_; }
 
 private:
     automation_lanes_test::LanesPanel panel_;
@@ -182,6 +185,7 @@ public:
     bool gliding() const override { return f_.lane.getClipGlideForTest().isAnimating(); }
     void stepTo(double elapsedMs) override { f_.lane.getClipGlideForTest().stepForTest(elapsedMs); }
     float alpha() const override { return f_.lane.getClipGlideForTest().alphaFor(clip_.value); }
+    juce::Component* paintedComponent() override { return &f_.lane; }
 
 private:
     bool restore(bool forward) {

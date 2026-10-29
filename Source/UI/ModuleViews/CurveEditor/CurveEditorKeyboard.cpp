@@ -14,10 +14,10 @@
 namespace synth::ui {
 
 namespace {
-// Without snapping: a point moves a fiftieth of the visible time range and a twentieth of the level
-// range per press. Shift divides either by this factor.
+// Without snapping: a point moves a fiftieth of the visible time range and of the level range per
+// press. Shift divides either by this factor.
 constexpr double kTimeStepFraction = 1.0 / 50.0;
-constexpr double kLevelStep = 0.05;
+constexpr double kLevelStep = 1.0 / 50.0;
 constexpr double kFineDivisor = 5.0;
 
 } // namespace
@@ -137,6 +137,8 @@ void CurveEditorComponent::focusLost(FocusChangeType) {
 bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
     using Kind = PointKeyAction::Kind;
     const auto action = pointKeyAction(key);
+    if (keyHold_.active() && KeyHold::isArrow(key.getKeyCode()) && keyHold_.anyArrowDown())
+        return true; // an arrow joining a running hold (or its auto-repeat): the hold reads it each frame
     switch (action.kind) {
     case Kind::insert:
         if (const auto why = insertRefusal(); why.isNotEmpty() && onInsertRefused) {

@@ -233,6 +233,7 @@ void CurveEditorComponent::paint(juce::Graphics& g) {
     paintCurve(g, geometry, colours);
     paintHandles(g, geometry, colours);
     paintPlayheadMarker(g, geometry, colours);
+    boxSelect_.paintMarquee(g);
     paintFocusRing(g, getLocalBounds().toFloat(), *this);
 }
 

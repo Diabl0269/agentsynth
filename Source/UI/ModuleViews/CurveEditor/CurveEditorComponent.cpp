@@ -14,7 +14,7 @@ CurveEditorComponent::CurveEditorComponent() {
                "Delete removes them, Cmd+A selects all, Cmd+C copies, Cmd+V pastes, Cmd+D duplicates. Mouse: "
                "drag points and bend handles, Shift-click adds a point to the selection, double-click to add or "
                "remove a point");
-    keyHold_.speedFactor = [this] { return keyDragSpeedFactor(); };
+    keyHold_.speedFactor = [this](KeyAxis) { return keyDragSpeedFactor(); };
     keyHold_.onFrame = [this] { applyKeyDrag(false); };
     keyHold_.onEnd = [this] { endKeyDrag(); };
 }
@@ -46,6 +46,7 @@ void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
         dragKind_ = DragKind::None;
         dragIndex_ = -1;
         dragFrozenRange_.reset();
+        boxSelect_.cancel();
         hoveredKind_ = CurveHitKind::None;
         hoveredIndex_ = -1;
         selection_ = {};
@@ -316,11 +317,16 @@ void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
     }
     if (dragKind_ != DragKind::None)
         repaint();
+    else if (hit.kind == CurveHitKind::None)
+        boxSelect_.press(e.position.roundToInt(), e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown(),
+                         selection_.selected());
 }
 
 void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
-    if (dragKind_ == DragKind::None)
+    if (dragKind_ == DragKind::None) {
+        dragBoxTo(e.position);
         return;
+    }
 
     if (!gestureActive_) {
         beginGesture();
@@ -340,6 +346,7 @@ void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
 }
 
 void CurveEditorComponent::mouseUp(const juce::MouseEvent&) {
+    endBox();
     if (!gestureActive_) {
         if (pendingToggleIndex_ >= 0)
             toggleSelected(pendingToggleIndex_);

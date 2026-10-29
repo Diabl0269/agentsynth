@@ -41,6 +41,7 @@ juce::Rectangle<float> AutomationLaneEditor::stretchBox() const {
     const auto map = pointMapper();
     const auto around = stretch_.isActive()                 ? pointsBounds(stretch_.result().moved, map)
                         : dragMode_ == DragMode::MoveHandle ? movedPointsBounds()
+                        : pointTween_.isAnimating()         ? drawnSelectionBounds()
                                                             : selection_.boundingBox(*lanePoints(), map);
     // Kept inside the lane: a point at the far left or the top of the lane must not push the box's edge out of view.
     return stretchBoxAround(around).getIntersection(getLocalBounds().toFloat().reduced(0.5f));
@@ -55,10 +56,11 @@ juce::Rectangle<float> AutomationLaneEditor::getStretchHandleRectForTest(Stretch
     return box.isEmpty() ? juce::Rectangle<float>() : stretchHandleRect(handle, box, getLocalBounds().toFloat());
 }
 
-// While points are being moved (the mouse or a held key) the box is the bounds of where they are drawn now, so it
-// never lags behind them; a discrete jump of the selection eases (LanePointStretch::retargetBox).
+// While points are being moved (the mouse, a held key, or the glide of a step, an undo or a redo) the box is the
+// bounds of where they are drawn now, so it never lags behind them; any other jump of the selection eases
+// (LanePointStretch::retargetBox).
 bool AutomationLaneEditor::stretchBoxFollows() const {
-    return dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::Stretch;
+    return dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::Stretch || pointTween_.isAnimating();
 }
 
 // The preview of a move, each point where it is drawn (its eased offset included).

@@ -79,8 +79,10 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/LanePointMathTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditingModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorSharedKeyTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorSharedMouseTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/LanePointStretchTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesStretchTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesSnappedHoldTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesShapeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesShapePaintTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/LaneShapeGeneratorTests.cpp
@@ -121,6 +123,10 @@ target_sources(Tests PRIVATE
     # Holding a key to move points: the shared glide model, its frame glue and the eased drawn offsets.
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyGlide/KeyGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyGlide/KeyedPointTweenTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyGlide/DiagonalHoldTests.cpp
+    # Every marker around a point (ring, halo, focus stop, selection box) follows its drawn dot.
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointMarkers/PointMarkerProbe.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointMarkers/PointMarkersFollowTheDotTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfaces.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesRows.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/UndoGlideSurfacesLfo.cpp

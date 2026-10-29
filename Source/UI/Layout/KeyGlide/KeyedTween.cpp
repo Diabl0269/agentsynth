@@ -4,6 +4,15 @@
 
 namespace synth::ui {
 
+namespace {
+KeyedTweenDirtyProbe& dirtyProbe() {
+    static KeyedTweenDirtyProbe probe;
+    return probe;
+}
+} // namespace
+
+void setKeyedTweenDirtyProbeForTest(KeyedTweenDirtyProbe probe) { dirtyProbe() = std::move(probe); }
+
 template <typename T>
 KeyedTween<T>::KeyedTween(juce::Component& owner)
     : owner_(owner)
@@ -59,14 +68,28 @@ template <typename T>
 void KeyedTween<T>::repaintAround(const std::vector<T>& values) {
     if (values.empty())
         return;
+    // Not Rectangle::getUnion: it drops empty rectangles, and a point's bounds are empty.
     auto box = TweenMath<T>::bounds(values.front());
-    for (const auto& v : values)
-        box = box.getUnion(TweenMath<T>::bounds(v));
-    const auto dirty = box.expanded((float)paddingPx_).getSmallestIntegerContainer();
+    for (const auto& v : values) {
+        const auto b = TweenMath<T>::bounds(v);
+        box = juce::Rectangle<float>::leftTopRightBottom(std::min(box.getX(), b.getX()), std::min(box.getY(), b.getY()),
+                                                         std::max(box.getRight(), b.getRight()),
+                                                         std::max(box.getBottom(), b.getBottom()));
+    }
+    requestRepaint(tightRepaint_ ? box.expanded((float)paddingPx_).getSmallestIntegerContainer()
+                                 : owner_.getLocalBounds());
+}
+
+template <typename T>
+void KeyedTween<T>::requestRepaint(juce::Rectangle<int> area) {
+    if (const auto& probe = dirtyProbe())
+        probe(owner_, area);
     if (onDirty)
-        onDirty(dirty);
+        onDirty(area);
+    else if (area == owner_.getLocalBounds())
+        owner_.repaint();
     else
-        owner_.repaint(dirty);
+        owner_.repaint(area);
 }
 
 template <typename T>
@@ -97,7 +120,7 @@ void KeyedTween<T>::erase(Key key) {
         driver_.stop(vblank_);
     if (fading_.empty())
         fadeDriver_.stop(fadeVblank_);
-    owner_.repaint();
+    requestRepaint(owner_.getLocalBounds());
 }
 
 template <typename T>

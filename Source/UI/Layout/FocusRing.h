@@ -27,4 +27,10 @@ void paintFocusRingAlways(juce::Graphics& g, juce::Rectangle<float> area, const 
 void paintFocusRing(juce::Graphics& g, juce::Rectangle<float> area, const juce::Component& comp,
                     float cornerRadius = 0.0f);
 
+// Whether `comp` paints its focus ring now: it holds keyboard focus, or a test asked every ring to show.
+bool showsFocusRing(const juce::Component& comp);
+
+// Tests: every paintFocusRing paints as if its component held focus (a headless window cannot take focus).
+void setFocusRingsShownForTest(bool shown);
+
 } // namespace synth::ui

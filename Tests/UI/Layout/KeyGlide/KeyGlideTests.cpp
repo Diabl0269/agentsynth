@@ -79,7 +79,7 @@ TEST(KeyHoldTest, DistanceIsTheTapPlusTheGlideAndKeyUpEndsItOnce) {
     EXPECT_NEAR(hold.distance(), 0.5 + expectedDistance(0.5), 1e-9);
 
     keys.shift = true;
-    hold.speedFactor = [&] { return keys.shift ? 2.0 : 1.0; };
+    hold.speedFactor = [&](synth::ui::KeyAxis) { return keys.shift ? 2.0 : 1.0; };
     keys.now += 500.0;
     hold.tick();
     EXPECT_NEAR(hold.distance(), 0.5 + expectedDistance(0.5) + 2.0 * (expectedDistance(1.0) - expectedDistance(0.5)),
