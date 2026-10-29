@@ -4,7 +4,9 @@
 // without a component or a native accessibility peer.
 
 #include "Modules/Shapes/ShapeLibrary.h"
+#include "SoundBrowser/LoopStretch.h"
 #include "SoundBrowser/SoundEntry.h"
+#include "UI/Library/SoundBrowser/SoundBrowserPackLayout.h"
 
 namespace synth::ui {
 
@@ -14,15 +16,30 @@ juce::String formatSoundLength(double seconds);
 /** Whole bars of 4/4 a loop of `seconds` lasts at `tempo`; 0 when either is unknown. */
 int soundBarCount(double tempo, double seconds);
 
-/** The right-hand column of a row: the length of a one-shot, "96 . 2 bars" for a loop ("? . 2.0 s" with no tempo; the
- * dot is U+00B7), "instrument" for an .sfz. */
-juce::String soundDetailText(const synth::soundbrowser::SoundEntry& entry);
+/** The right-hand column of a row, always ending in the length: "0.8 s" for a one-shot, "120 BPM . 2 bars . 4.0 s" for
+ * a loop (the dot is U+00B7; no bars when the length rounds to 0 bars, and just "4.0 s" with no tempo), "instrument"
+ * for an .sfz. `maxParts` keeps only that many parts, dropping from the left (BPM, then bars), for a narrow row. */
+juce::String soundDetailText(const synth::soundbrowser::SoundEntry& entry, int maxParts = 3);
 
 /** What the footer says about a loop's key: "Key Am . song Dm" (the dot is U+00B7), "Key Am" while the song has no
  *  key; empty for a sound that is not a loop or whose key is unknown. */
 juce::String soundKeyMetaText(const synth::soundbrowser::SoundEntry& entry, const juce::String& songKey);
 
-/** "acoustic-snare-center, one-shot, 0.8 seconds, 2 of 23". */
+/** The most a row `rowWidth` wide gives a sound's detail: 60% of the space between the margins, so the name keeps room
+ *  at the narrowest sidebar. */
+float soundDetailMaxWidth(int rowWidth);
+
+/** soundDetailText with the fewest parts dropped (BPM first, then bars) that make it at most `maxWidth` wide in `font`;
+ *  the length alone when even that is wider. */
+juce::String soundDetailTextFitting(const synth::soundbrowser::SoundEntry& entry, const juce::Font& font,
+                                    float maxWidth);
+
+/** What the footer says under a loop about Match key: "Plays 2 semitones up, to D minor", "Already in D minor", "No key
+ *  in the song", "This loop has no key"; empty when Match key is off. */
+juce::String matchKeyText(const synth::soundbrowser::LoopTarget& target);
+
+/** "acoustic-snare-center, one-shot, 0.8 seconds, 2 of 23"; a loop reads "dusty, loop, 120 BPM, 2 bars, 4.0 seconds,
+ *  Am, 3 of 9" (the same fields as the row, in words). */
 juce::String describeSoundForAccessibility(const synth::soundbrowser::SoundEntry& entry, int position, int count);
 /** "Drums, folder, 24 sounds, 2 of 5". */
 juce::String describeFolderForAccessibility(const juce::String& name, int soundCount, int position, int count);

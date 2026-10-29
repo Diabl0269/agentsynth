@@ -9,6 +9,7 @@
 #include "UI/Theme/BuiltInThemes.h"
 
 using namespace sound_browser_test;
+using synth::soundbrowser::SoundKind;
 using synth::ui::LibrarySidebarViews;
 using synth::ui::SidebarView;
 using synth::ui::SoundBrowserComponent;
@@ -55,6 +56,65 @@ TEST(SoundBrowserTextTest, LengthsDetailsAndSpokenDescriptions) {
     EXPECT_NE(synth::ui::describeSoundForAccessibility(entry, 2, 23).indexOf("2 of 23"), -1);
     EXPECT_EQ(synth::ui::describeFolderForAccessibility("Drums", 24, 2, 5), "Drums, folder, 24 sounds, 2 of 5");
     EXPECT_EQ(synth::ui::describePathForAccessibility({"Places", "Core"}), "Path, Places, Core");
+}
+
+TEST(SoundBrowserTextTest, EveryRowEndsWithItsLengthAndTheSpokenTextReadsTheSameFields) {
+    const auto dot = juce::String::fromUTF8("\xc2\xb7");
+    const auto sound = [](SoundKind kind, double tempo, double seconds) {
+        synth::soundbrowser::SoundEntry e;
+        e.name = "dusty";
+        e.kind = kind;
+        e.tempo = tempo;
+        e.lengthSeconds = seconds;
+        return e;
+    };
+    struct Row {
+        const char* what;
+        synth::soundbrowser::SoundEntry entry;
+        juce::String detail;
+        juce::String spoken;
+    };
+    const Row rows[] = {
+        {"loop with tempo", sound(SoundKind::Loop, 120.0, 4.0), "120 BPM " + dot + " 2 bars " + dot + " 4.0 s",
+         "dusty, loop, 120 BPM, 2 bars, 4.0 seconds, 1 of 3"},
+        {"loop of one bar", sound(SoundKind::Loop, 120.0, 2.0), "120 BPM " + dot + " 1 bar " + dot + " 2.0 s",
+         "dusty, loop, 120 BPM, 1 bar, 2.0 seconds, 1 of 3"},
+        {"loop under half a bar", sound(SoundKind::Loop, 120.0, 0.4), "120 BPM " + dot + " 0.4 s",
+         "dusty, loop, 120 BPM, 0.4 seconds, 1 of 3"},
+        {"loop with no tempo", sound(SoundKind::Loop, 0.0, 4.0), "4.0 s", "dusty, loop, 4.0 seconds, 1 of 3"},
+        {"one-shot", sound(SoundKind::OneShot, 0.0, 0.8), "0.8 s", "dusty, one-shot, 0.8 seconds, 1 of 3"},
+        {"instrument", sound(SoundKind::Instrument, 0.0, 0.0), "instrument", "dusty, instrument, 1 of 3"},
+    };
+    for (const auto& row : rows) {
+        EXPECT_EQ(synth::ui::soundDetailText(row.entry), row.detail) << row.what;
+        EXPECT_EQ(synth::ui::describeSoundForAccessibility(row.entry, 1, 3), row.spoken) << row.what;
+    }
+    auto keyed = sound(SoundKind::Loop, 120.0, 4.0);
+    keyed.key = "A minor";
+    EXPECT_EQ(synth::ui::describeSoundForAccessibility(keyed, 1, 3),
+              "dusty, loop, 120 BPM, 2 bars, 4.0 seconds, A minor, 1 of 3");
+}
+
+TEST(SoundBrowserTextTest, ARowDetailDropsPartsFromTheLeftInsteadOfCrowdingTheName) {
+    const auto dot = juce::String::fromUTF8("\xc2\xb7");
+    synth::soundbrowser::SoundEntry loop;
+    loop.name = "dusty";
+    loop.kind = SoundKind::Loop;
+    loop.tempo = 120.0;
+    loop.lengthSeconds = 4.0;
+    EXPECT_EQ(synth::ui::soundDetailText(loop, 2), "2 bars " + dot + " 4.0 s");
+    EXPECT_EQ(synth::ui::soundDetailText(loop, 1), "4.0 s");
+
+    const juce::Font font(juce::FontOptions(12.0f));
+    const auto width = [&](const juce::String& text) { return juce::GlyphArrangement::getStringWidth(font, text); };
+    const float narrow = synth::ui::soundDetailMaxWidth(200); // the narrowest sidebar
+    const auto fitted = synth::ui::soundDetailTextFitting(loop, font, narrow);
+    EXPECT_LE(width(fitted), narrow);
+    EXPECT_TRUE(fitted.endsWith("4.0 s")) << "the length always stays";
+    EXPECT_GE(200 - 2 * synth::ui::kSoundRowSideMargin - width(fitted) - 8.0f, 60.0f) << "the name keeps room";
+    EXPECT_EQ(synth::ui::soundDetailTextFitting(loop, font, 300.0f), synth::ui::soundDetailText(loop))
+        << "a wide row shows everything";
+    EXPECT_EQ(synth::ui::soundDetailTextFitting(loop, font, 1.0f), "4.0 s") << "never less than the length";
 }
 
 TEST(SoundBrowserTextTest, TheFileBrowserHasItsPlatformName) {

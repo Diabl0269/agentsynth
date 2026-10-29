@@ -7,6 +7,7 @@
 
 import json
 import os
+import queue
 import shutil
 import socket
 import subprocess
@@ -15,6 +16,10 @@ import threading
 import time
 
 PORT_PREFIX = "AGENTSYNTH_AUTOMATION_PORT"
+# Passed on every launch, though --automation implies both: a build that predates test mode ignores --automation and
+# would otherwise read the keychain (a sign-in prompt nobody is there to answer) and open the audio device.
+SAFETY_ARGS = ["--no-keychain", "--no-audio-device"]
+SAFETY_ENV = {"AGENTSYNTH_NO_KEYCHAIN": "1", "AGENTSYNTH_NO_AUDIO_DEVICE": "1"}
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 
@@ -37,6 +42,20 @@ def _executable(app_path):
     if app_path.endswith(".app"):
         return os.path.join(app_path, "Contents", "MacOS", "Agent Synth")
     return app_path
+
+
+def has_test_mode(executable):
+    """True when the binary was built with test mode: it carries the port line it prints on start."""
+    marker = PORT_PREFIX.encode("ascii")
+    tail = b""
+    with open(executable, "rb") as f:
+        while True:
+            chunk = f.read(1 << 20)
+            if not chunk:
+                return False
+            if marker in tail + chunk:
+                return True
+            tail = chunk[-len(marker) :]
 
 
 class TestModeApp:
@@ -64,22 +83,41 @@ class TestModeApp:
         self.stop()
 
     def start(self):
-        args = [_executable(self.app_path), "--automation", "0", "--settings-dir", self.settings_dir] + self.extra_args
-        self.process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        executable = _executable(self.app_path)
+        if not os.path.isfile(executable):
+            raise TestModeError("no app at %s; build it with scripts/ci-local.sh" % executable)
+        if not has_test_mode(executable):
+            raise TestModeError(
+                "%s was built without test mode (older than it, or a packaged build); build this worktree with "
+                "scripts/ci-local.sh rather than borrowing another build" % executable
+            )
+        args = [executable, "--automation", "0", "--settings-dir", self.settings_dir] + SAFETY_ARGS + self.extra_args
+        env = dict(os.environ, **SAFETY_ENV)
+        self.process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env)
+        # A reader thread, so the timeout holds even when the app prints nothing at all; it also keeps the pipe
+        # draining afterwards, or a chatty app would block on a full stdout.
+        lines = queue.Queue()
+
+        def drain():
+            for line in self.process.stdout:
+                lines.put(line)
+            lines.put(None)
+
+        threading.Thread(target=drain, daemon=True).start()
         deadline = time.time() + self.startup_timeout
-        while time.time() < deadline:
-            line = self.process.stdout.readline()
-            if not line:
+        while self.port is None and time.time() < deadline:
+            try:
+                line = lines.get(timeout=max(0.0, deadline - time.time()))
+            except queue.Empty:
+                break
+            if line is None:
                 break
             if line.startswith(PORT_PREFIX):
                 _, port, pid = line.split()
                 self.port, self.pid = int(port), int(pid)
-                break
         if self.port is None:
             self.stop()
             raise TestModeError("the app did not announce a test-mode port within %.0fs" % self.startup_timeout)
-        # The pipe must keep draining or a chatty app would block on a full stdout.
-        threading.Thread(target=lambda: [None for _ in self.process.stdout], daemon=True).start()
         self._sock = socket.create_connection(("127.0.0.1", self.port), timeout=10)
         self._reader = self._sock.makefile("r", encoding="utf-8", newline="\n")
 
@@ -123,7 +161,8 @@ class TestModeApp:
             except (TestModeError, OSError):
                 pass
             try:
-                self.process.wait(timeout=15)
+                # With no connection there is nobody to ask to quit, so waiting would only add 15 s.
+                self.process.wait(timeout=15 if self._sock is not None else 0.5)
             except subprocess.TimeoutExpired:
                 self.process.terminate()  # this instance only, by its own pid
                 try:

@@ -4,6 +4,7 @@
 // file-size cap. A friend of MainComponent, so each takes the component as its first parameter. Message thread only.
 
 #include "Modules/Shapes/ShapeLibrary.h"
+#include "SoundBrowser/LoopStretch.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_core/juce_core.h>
 
@@ -23,7 +24,10 @@ struct MainComponentAudioImport {
      * copy, one undo step; a plain resize, with a status-bar message, when the audio cannot be stretched. */
     static void stretchAudioClip(MainComponent& mc, synth::ClipId id, double newStartBeat, double newLengthBeats);
     /** Loads `sound` into the selected Sampler, else the selected audio track at the playhead, else a new Sampler. */
-    static void loadSoundFromBrowser(MainComponent& mc, const juce::File& sound);
+    /** `loop` is how the sound fits the song (the Sounds view's loopTargetFor); an audio track takes the fitted copy,
+     *  as a drop does. */
+    static void loadSoundFromBrowser(MainComponent& mc, const juce::File& sound,
+                                     const synth::soundbrowser::LoopTarget& loop = {});
     /** Return on a shape in the Sounds view: stamps it onto the selected Filter or LFO card (one undo step); false,
      * with nothing changed, when no selected card takes it. */
     static bool stampShapeFromBrowser(MainComponent& mc, const synth::shapes::LibraryShape& shape);

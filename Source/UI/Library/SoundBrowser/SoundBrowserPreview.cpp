@@ -1,6 +1,7 @@
 // SoundBrowserPreview.cpp -- what the Sounds view asks of the preview player: play the selected sound, stop it, Space,
 // the footer's controls, and keeping the footer's waveform on the selected sound.
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
+#include "UI/Library/SoundBrowser/SoundBrowserText.h"
 
 namespace synth::ui {
 
@@ -13,6 +14,7 @@ void SoundBrowserComponent::setupPreview() {
             onPreviewSettingsChanged();
     };
     footer_.onMatchKeyChanged = [this](bool) {
+        refreshMatchKeyHint();
         if (onPreviewSettingsChanged)
             onPreviewSettingsChanged();
     };
@@ -35,6 +37,7 @@ void SoundBrowserComponent::setPreviewPlayer(synth::soundbrowser::SoundPreviewPl
 void SoundBrowserComponent::setPreviewSettings(bool autoPlay, float gainDb, bool matchKey) {
     footer_.setAutoPlay(autoPlay);
     footer_.setMatchKey(matchKey);
+    refreshMatchKeyHint();
     footer_.setGainDb(gainDb);
     if (previewPlayer_ != nullptr)
         previewPlayer_->setGainDb(footer_.getGainDb());
@@ -90,6 +93,31 @@ void SoundBrowserComponent::syncFooterToSelection() {
     }
     footer_.showSound(entry);
     footer_.showShape(shape);
+    refreshMatchKeyHint();
+}
+
+void SoundBrowserComponent::addTestModeState(juce::DynamicObject& into) const {
+    const bool sound =
+        selected_ >= 0 && selected_ < (int)rows_.size() && rows_[(size_t)selected_].kind == RowKind::Sound;
+    into.setProperty("selectedName", sound ? rows_[(size_t)selected_].text : juce::String());
+    into.setProperty("selectedDetail", sound ? rows_[(size_t)selected_].detail : juce::String());
+    into.setProperty("footerLine", sound ? soundFooterLine(*rows_[(size_t)selected_].entry) : juce::String());
+}
+
+juce::String SoundBrowserComponent::selectedMatchKeyText() const {
+    if (selected_ < 0 || selected_ >= (int)rows_.size() || rows_[(size_t)selected_].kind != RowKind::Sound ||
+        rows_[(size_t)selected_].entry->kind != SoundKind::Loop)
+        return {};
+    return matchKeyText(loopTargetFor(*rows_[(size_t)selected_].entry));
+}
+
+// The footer line, the switch's tooltip and its screen-reader description all read this one text.
+void SoundBrowserComponent::refreshMatchKeyHint() {
+    const auto text = selectedMatchKeyText();
+    auto& toggle = footer_.getMatchKey();
+    toggle.setTooltip(text.isNotEmpty() ? text : juce::String("Play loops in the song's key"));
+    toggle.setDescription(text);
+    repaint();
 }
 
 // Showing the view loads the hosted pack list (for "Get more") when it is not loaded and looks again at the user's

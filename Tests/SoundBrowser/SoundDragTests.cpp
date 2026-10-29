@@ -3,6 +3,7 @@
 #include "../App/MainComponent/MainComponentTestFixture.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "SnippetManager.h"
+#include "SoundBrowser/LoopStretchFile.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundDragPayload.h"
@@ -172,4 +173,62 @@ TEST(SoundBrowserDragSourceTest, ThePressMustMovePastTheThresholdFirst) {
     EXPECT_TRUE(f.view->isSoundDragging());
     f.view->mouseUp(mouseAt(*f.view, at, at));
     EXPECT_FALSE(SoundDragState::isActive());
+}
+
+namespace {
+class StretchedAudioTarget
+    : public juce::Component
+    , public juce::FileDragAndDropTarget
+    , public synth::ui::SoundDropAdapter {
+public:
+    bool isInterestedInFileDrag(const juce::StringArray&) override { return true; }
+    void filesDropped(const juce::StringArray& files, int, int) override { dropped = files; }
+    bool takesStretchedLoops() const override { return true; }
+    juce::StringArray dropped;
+};
+} // namespace
+
+TEST(SoundBrowserDropTest, ALoopDroppedWithMatchKeyOnLandsExactlyWhereThePreviewPlayedIt) {
+    TempTree tree;
+    tree.fill();
+    auto index = makeIndex(tree);
+    index->setUserFolders({tree.user});
+    scanAndWait(*index);
+    synth::soundbrowser::SoundLists lists;
+    SoundBrowserComponent view(*index, lists);
+    view.setSize(300, 700);
+    view.songTempoProvider = [] { return 96.0; };
+    view.setSongKey("D minor");
+    view.setPreviewSettings(true, -6.0f, true);
+    view.setQuery("dusty");
+    view.completeListAnimationForTest();
+    int row = -1;
+    for (size_t i = 0; i < view.getRows().size(); ++i)
+        if (view.getRows()[i].kind == SoundBrowserComponent::RowKind::Sound)
+            row = (int)i;
+    ASSERT_GE(row, 0);
+    const auto& entry = *view.getRows()[(size_t)row].entry;
+    const juce::File file(entry.path);
+
+    const auto preview = view.loopTargetFor(entry);
+    ASSERT_EQ(preview.semitones, 5);
+    ASSERT_TRUE(view.beginSoundDrag(row));
+    const auto dragged = SoundDragState::loopTargetFor(file);
+    EXPECT_DOUBLE_EQ(dragged.fileBpm, preview.fileBpm);
+    EXPECT_DOUBLE_EQ(dragged.songBpm, preview.songBpm);
+    EXPECT_DOUBLE_EQ(dragged.tempoRatio(), preview.tempoRatio());
+    EXPECT_EQ(dragged.semitones, preview.semitones);
+    EXPECT_EQ(dragged.keyMatch, preview.keyMatch);
+    EXPECT_EQ(dragged.targetKey, preview.targetKey);
+
+    StretchedAudioTarget track;
+    track.itemDropped({synth::ui::makeSoundPayload(file.getFullPathName()), nullptr, {3, 4}});
+    SoundDragState::end();
+    ASSERT_EQ(track.dropped.size(), 1);
+    const juce::File landed(track.dropped[0]);
+    // The copy's name carries a hash of the source, both tempos and the shift, so the same name is the same render.
+    EXPECT_EQ(landed, synth::soundbrowser::stretchedLoopFile(file, preview));
+    EXPECT_TRUE(landed.getFileName().contains("96bpm"));
+    EXPECT_TRUE(landed.getFileName().contains("+5st"));
+    landed.deleteFile();
 }

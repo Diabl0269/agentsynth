@@ -104,7 +104,10 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
     const juce::Font nameFont(juce::FontOptions(14.0f));
     const juce::Font detailFont(juce::FontOptions(12.0f));
     if (row.kind == RowKind::Sound) {
-        const float detailW = juce::GlyphArrangement::getStringWidth(detailFont, row.detail);
+        const auto detail = row.entry.has_value()
+                                ? soundDetailTextFitting(*row.entry, detailFont, soundDetailMaxWidth(width))
+                                : row.detail;
+        const float detailW = juce::GlyphArrangement::getStringWidth(detailFont, detail);
         const int detailRight = width - kSideMargin;
         const int detailLeft = detailRight - (int)std::ceil(detailW);
         const bool favourite = row.entry.has_value() && lists_.isFavourite(row.entry->path);
@@ -123,7 +126,7 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
             nameFont, c.textPrimary, c.accent.withAlpha(0.28f), c.accent);
         g.setColour(c.textMuted);
         g.setFont(detailFont);
-        g.drawText(row.detail, detailLeft, area.getY(), detailRight - detailLeft, area.getHeight(),
+        g.drawText(detail, detailLeft, area.getY(), detailRight - detailLeft, area.getHeight(),
                    juce::Justification::centredRight);
     } else if (row.kind == RowKind::GetPack) {
         paintPackRow(g, row, index, area);
@@ -172,6 +175,20 @@ void SoundBrowserComponent::paintRows(juce::Graphics& g, int width) const {
     }
 }
 
+// Where the sound lives, led by the key line and then by what Match key will do, so the part that matters most is the
+// last to be cut when the line is ellipsised.
+juce::String SoundBrowserComponent::soundFooterLine(const synth::soundbrowser::SoundEntry& entry) const {
+    auto line = entry.placeName;
+    if (entry.folder.isNotEmpty())
+        line += " > " + entry.folder.replace("/", " > ");
+    if (const auto keyMeta = soundKeyMetaText(entry, filters_.songKey()); keyMeta.isNotEmpty())
+        line = keyMeta + "  -  " + line;
+    if (entry.kind == synth::soundbrowser::SoundKind::Loop)
+        if (const auto match = matchKeyText(loopTargetFor(entry)); match.isNotEmpty())
+            line = match + "  -  " + line;
+    return line;
+}
+
 void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
     if (footerMode_ == FooterMode::Hidden)
         return;
@@ -205,11 +222,7 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
     g.setFont(juce::Font(juce::FontOptions(11.5f)));
     juce::String sub;
     if (row.kind == RowKind::Sound) {
-        sub = row.entry->placeName;
-        if (row.entry->folder.isNotEmpty())
-            sub += " > " + row.entry->folder.replace("/", " > ");
-        if (const auto keyMeta = soundKeyMetaText(*row.entry, filters_.songKey()); keyMeta.isNotEmpty())
-            sub = keyMeta + "  -  " + sub;
+        sub = soundFooterLine(*row.entry);
     } else if (row.kind == RowKind::Shape) {
         sub = shapeKindAndSource(*row.shape);
     } else if (row.kind == RowKind::GetPack) {
