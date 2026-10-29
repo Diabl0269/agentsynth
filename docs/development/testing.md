@@ -150,3 +150,5 @@ edit — both fail the build until the module is accounted for.
 - **Update the references** after a deliberate DSP change (a better filter algorithm, say):
   `bash scripts/update-reference.sh`
 - **Listen**: `scripts/play-reference.sh <filename>` (requires `ffplay` or `aplay`).
+
+To look at the running app instead of asserting, the in-app test mode drives a dev build by script: see [`test-mode.md`](test-mode.md).

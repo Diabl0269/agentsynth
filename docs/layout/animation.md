@@ -103,7 +103,7 @@ void MainComponent::beginPanelSlide() {
 }
 ```
 
-Four rules live in there:
+Five rules live in there:
 
 1. **`retarget()` starts from the fraction's CURRENT value.** Re-toggling mid-flight reverses from
    where the panel *is*, never from an extreme — the same contract
@@ -119,6 +119,8 @@ Four rules live in there:
    slide the next toggle did not mention frozen half-open.
 4. **A close is a slide too.** The panel is hidden in `finishPanelSlide()`, not at toggle time;
    hiding it up front is what makes "close" not an animation at all.
+5. **A pop-up anchored inside a panel waits for the slide.** `PanelSlide::whenSettled(fn)` runs `fn` at once when
+   idle, else from `runSettled()` after `finishPanelSlide()`'s final layout; mid-slide it would point at the old spot.
 
 `applyPanelSlideFrame(t)` advances all three fractions and calls `resized()`. It adds **no**
 `repaint()` — moving a child's bounds already invalidates the region it left and the one it arrived
@@ -530,7 +532,11 @@ earliest look-and-feel call that receives it, before it is first shown
 - dialogs (`DialogWindow::LaunchOptions`) and hand-built `AlertWindow`s have no such call: launch a
   dialog with `PopupMotion::launchDialog(options)` instead of `options.launchAsync()`, and call
   `PopupMotion::attach(*window)` before `enterModalState` on a `new juce::AlertWindow`. Every
-  existing site already does.
+  existing site already does. A dialog whose motion needs the window itself (a grow-out-of-the-card
+  `Style` that points at the window, resize limits that must hold on frame 0) uses
+  `launchDialog(options, makeStyle)`: `makeStyle(dialog)` runs once the window exists and before the
+  first frame, so the window never shows unstyled. `launchDialog` also sets the themed window
+  background ([theming](theming.md#themed-widgets)), never JUCE's light grey.
 
 `attach` installs one self-deleting listener per window. It starts the slide the moment the window
 becomes visible (frame 0 is applied before the first VBlank, a watchdog timer finishes the move if

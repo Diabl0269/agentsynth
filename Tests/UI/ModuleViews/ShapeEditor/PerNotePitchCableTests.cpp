@@ -45,20 +45,21 @@ struct PitchWindowRig {
     }
     juce::AudioProcessor* proc(NodeID id) { return engine.getGraph().getNodeForId(id)->getProcessor(); }
 
-    /** Poly MIDI (-> Oscillator pitch when `cabled`) -> Oscillator audio -> Filter, all Poly. */
-    explicit PitchWindowRig(bool cabled = true) {
+    /** Poly MIDI (-> Oscillator pitch when `cabled`) -> Oscillator audio -> Filter, Oscillator and Filter both Poly
+        or both mono. */
+    explicit PitchWindowRig(bool cabled = true, bool poly = true) {
         engine.getGraph().setPlayConfigDetails(2, 2, 44100.0, 512);
         undo.setGraphEditor(&editor);
         editor.setSize(3000, 1600);
         polyMidi = add("Poly MIDI");
         osc = add("Oscillator");
         filterId = add("Filter");
-        synth::setProcessorPoly(proc(osc), true);
-        synth::setProcessorPoly(proc(filterId), true);
+        synth::setProcessorPoly(proc(osc), poly);
+        synth::setProcessorPoly(proc(filterId), poly);
         filter = dynamic_cast<FilterModule*>(proc(filterId));
         editor.updateComponents();
         if (cabled)
-            editor.connectPorts(polyMidi, 0, osc, jackOf(proc(osc), PortRole::Pitch, true), false, false);
+            editor.connectPorts(polyMidi, 0, osc, 0, false, false); // the Oscillator's Pitch is jack 0 in both modes
         editor.connectPorts(osc, jackOf(proc(osc), PortRole::Audio, false), filterId, 0, false, false);
     }
 
@@ -140,11 +141,42 @@ TEST_F(ModuleComponentTest, WithNoPitchSourceUpstreamTheModeIsSetNothingIsCabled
     EXPECT_FALSE(bar.isHintShown());
 }
 
-TEST_F(ModuleComponentTest, AMonoFilterShowsThePolyHint) {
-    PitchWindowRig rig;
-    synth::setProcessorPoly(rig.proc(rig.filterId), false);
+// Regression test for FRO1097: a mono Filter showed "turn on the Filter's Poly" and never cabled its Pitch, so a mono
+// synth could not switch shapes per note.
+TEST_F(ModuleComponentTest, AMonoFilterCablesItsOnePitchInputAndShowsNoPolyHint) {
+    for (Mode mode : {Mode::ByHand, Mode::ByPitch}) {
+        PitchWindowRig rig(/*cabled*/ true, /*poly*/ false);
+        auto& editor = rig.open();
+        const int serial = rig.undo.getEditSerial();
+        pick(editor, mode);
+        EXPECT_EQ(rig.filter->getCustomPerNote().mode, mode);
+        EXPECT_GE(rig.pitchEdges(), 1) << "the same edges a hand-drawn cable makes; mono reads ch19";
+        bool onVoiceZero = false;
+        for (const auto& c : rig.engine.getGraph().getConnections())
+            onVoiceZero |= c.destination.nodeID == rig.filterId &&
+                           c.destination.channelIndex == FilterModule::kPitchBase && c.source.nodeID == rig.polyMidi;
+        EXPECT_TRUE(onVoiceZero) << "from the Poly MIDI that plays the Oscillator";
+        EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
+        EXPECT_FALSE(editor.getPerNoteBar()->isHintShown());
+        rig.undo.undo();
+        EXPECT_EQ(rig.pitchEdges(), 0);
+        EXPECT_EQ(rig.filter->getCustomPerNote().mode, Mode::Off);
+    }
+}
+
+TEST_F(ModuleComponentTest, AMonoFilterOnRandomNeedsNoCableAndShowsNoHint) {
+    PitchWindowRig rig(/*cabled*/ true, /*poly*/ false);
     auto& editor = rig.open();
     pick(editor, Mode::Random);
+    EXPECT_EQ(rig.pitchEdges(), 0);
+    EXPECT_FALSE(editor.getPerNoteBar()->isHintShown());
+}
+
+TEST_F(ModuleComponentTest, AMonoFilterWithNoPitchSourceShowsTheCableHint) {
+    PitchWindowRig rig(/*cabled*/ false, /*poly*/ false);
+    auto& editor = rig.open();
+    pick(editor, Mode::ByPitch);
+    EXPECT_EQ(rig.pitchEdges(), 0);
     EXPECT_TRUE(editor.getPerNoteBar()->isHintShown());
-    EXPECT_TRUE(editor.getPerNoteBar()->getHint().getText().startsWith("Per-note works in Poly"));
+    EXPECT_TRUE(editor.getPerNoteBar()->getHint().getText().startsWith("Needs a Pitch cable"));
 }

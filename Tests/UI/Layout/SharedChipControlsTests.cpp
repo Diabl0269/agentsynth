@@ -280,7 +280,7 @@ TEST(SharedChipControlsTest, ALinkUnderlinesOnHoverOnly) {
     int bestGain = 0;
     for (int y = 0; y < 20; ++y)
         bestGain = std::max(bestGain, inkInRow(hovered, y) - inkInRow(rest, y));
-    const float textWidth = juce::Font(juce::FontOptions(11.0f)).getStringWidthFloat("Show all");
+    const float textWidth = juce::GlyphArrangement::getStringWidth(juce::Font(juce::FontOptions(11.0f)), "Show all");
     EXPECT_GE(bestGain, (int)textWidth - 2);
     link.setLookAndFeel(nullptr);
 }

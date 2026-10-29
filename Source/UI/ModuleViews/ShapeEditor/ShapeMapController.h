@@ -31,10 +31,14 @@ public:
     int addShapeAt(float x, float y);
     int addShapeInFreeSpot();
     int duplicateShape(int index);
+    /** A new shape halfway between shape `index` and the next one, listed after `index`. -1 at the shape cap or when
+     *  there is no next shape. */
+    int insertShapeAfter(int index);
     bool deleteShape(int index);
     void renameShape(int index, const juce::String& name);
 
 private:
+    int addShapeAtIndex(float x, float y, int listIndex);
     juce::String uniqueName(const std::vector<ShapeItem>& shapes, const juce::String& wanted) const;
     void changed();
 

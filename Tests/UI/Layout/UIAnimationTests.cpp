@@ -210,6 +210,35 @@ TEST(PanelSlide, FinishPinsTheExactEndValue) {
     EXPECT_FALSE(slide.isMoving());
 }
 
+// Regression test for FRO1094: a call-out under a control inside a sliding panel was launched before the panel had a
+// place to point at.
+TEST(PanelSlide, WhenSettledRunsAtOnceWhenNothingIsMoving) {
+    synth::ui::PanelSlide slide;
+    int ran = 0;
+    slide.whenSettled([&] { ++ran; });
+    EXPECT_EQ(ran, 1);
+
+    slide.retarget(1.0f, false); // animations off: lands synchronously
+    slide.whenSettled([&] { ++ran; });
+    EXPECT_EQ(ran, 2);
+}
+
+TEST(PanelSlide, WhenSettledWaitsForARunningSlideAndRunsOnceAfterItLands) {
+    synth::ui::PanelSlide slide;
+    ASSERT_TRUE(slide.retarget(1.0f, true));
+    int ran = 0;
+    slide.whenSettled([&] { ++ran; });
+    slide.applyTweenAt(0.5f);
+    slide.runSettled();
+    EXPECT_EQ(ran, 0) << "runSettled is the owner's end-of-slide call; a moving slide has not ended";
+
+    slide.finish();
+    slide.runSettled();
+    EXPECT_EQ(ran, 1);
+    slide.runSettled();
+    EXPECT_EQ(ran, 1) << "each waiter runs once";
+}
+
 TEST(PanelSlide, SizeBetweenIsExactAtBothEndpointsAndLerpsInBetween) {
     synth::ui::PanelSlide slide;
     EXPECT_EQ(slide.sizeBetween(0, 300), 0);

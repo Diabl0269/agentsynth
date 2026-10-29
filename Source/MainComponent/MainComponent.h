@@ -341,7 +341,7 @@ public:
     void simulateRedoClick();
     float getPanelOpenProgressForTest(SlidingPanel p) const noexcept;
     void setPanelOpenProgressForTest(SlidingPanel p, float progress);
-    float getPanelSlideStartForTest(SlidingPanel p) const noexcept;
+    synth::ui::PanelSlide& panelSlideForTest(SlidingPanel p) noexcept { return panelSlide(p); }
     bool isPanelSlideAnimatingForTest() const noexcept;
     synth::ui::MixerPlacementController& getMixerPlacementControllerForTest() { return mixerPlacement_; }
     synth::MidiRecorder& getMidiRecorderForTest() { return midiRecorder; }

@@ -62,6 +62,10 @@ motion: hover and the selected chip ease with `ButtonStateEase`. The popup is it
 `AppTooltipWindow` (`NoteLengthBox::setApplicationProperties` supplies the "Show info tooltips" preference; without it
 info tooltips stay on).
 
+Inside a modal dialog (the LFO shape window's Grid box) the popup floats on top and becomes the topmost modal component
+itself, as a JUCE `PopupMenu` does: otherwise it would open behind the dialog and the dialog's modal state would block its
+clicks. A press anywhere else then arrives as `inputAttemptWhenModal` and closes only the popup; Esc does the same.
+
 ## Motion
 
 The popup attaches `PopupMotion` with a `Style` whose body scales from 60% about the point of the box it hangs from (the

@@ -41,7 +41,7 @@ void ModuleComponent::paintModHoverChip(juce::Graphics& g) {
 
         const auto sliderBounds = sliders[si]->getBounds().toFloat();
         const juce::Font chipFont(juce::FontOptions(lf->getTheme().type.monoFamily, 11.0f, juce::Font::plain));
-        const float chipWidth = chipFont.getStringWidthFloat(chipText) + 12.0f;
+        const float chipWidth = juce::GlyphArrangement::getStringWidth(chipFont, chipText) + 12.0f;
         const juce::Rectangle<float> chipBounds(sliderBounds.getCentreX() - chipWidth * 0.5f,
                                                 sliderBounds.getBottom() + 2.0f, chipWidth, 16.0f);
 

@@ -41,6 +41,8 @@ public:
     CardSegmentedSwitch* getShowAsForTest() const noexcept { return showAs_.get(); }
     CardSegmentedSwitch* getSizeForTest() const noexcept { return size_.get(); }
     CardSegmentedSwitch* getDirectionForTest() const noexcept { return direction_.get(); }
+    CardSegmentedSwitch* getFaderSizeForTest() const noexcept { return faderSize_.get(); }
+    bool isFaderSizeRowShownForTest() const { return faderSizeFade_ != nullptr && faderSizeFade_->isShown(); }
     bool isSizeRowShownForTest() const { return sizeFade_ != nullptr && sizeFade_->isShown(); }
     bool isDirectionRowShownForTest() const { return directionFade_ != nullptr && directionFade_->isShown(); }
     juce::TextEditor& getLabelEditorForTest() noexcept { return label_; }
@@ -76,7 +78,9 @@ private:
     std::unique_ptr<CardSegmentedSwitch> showAs_;
     std::unique_ptr<CardSegmentedSwitch> size_;      ///< Small | Large, for a knob.
     std::unique_ptr<CardSegmentedSwitch> direction_; ///< Vertical | Horizontal, for a fader.
+    std::unique_ptr<CardSegmentedSwitch> faderSize_; ///< Short | Long, for a vertical fader.
     juce::Label sizeCaption_{{}, "Size"};
+    juce::Label faderSizeCaption_{{}, "Size"};
     juce::Label directionCaption_{{}, "Direction"};
     juce::Label showAsCaption_{{}, "Show as"};
     juce::Label labelCaption_{{}, "Label"};
@@ -88,9 +92,10 @@ private:
     juce::TextEditor maximum_;
     juce::TextButton hide_{"Hide from card"};
     // Rows that come and go fade (and the panel's height follows their progress): FadeVisibility, never setVisible.
-    // The Size and Direction rows are made with their switches.
+    // The Size, Direction and fader Size rows are made with their switches.
     std::unique_ptr<synth::ui::FadeVisibility> sizeFade_;
     std::unique_ptr<synth::ui::FadeVisibility> directionFade_;
+    std::unique_ptr<synth::ui::FadeVisibility> faderSizeFade_;
     synth::ui::FadeVisibility rangeFade_{&rangeCaption_, &rangeTo_, &minimum_, &maximum_};
     synth::ui::FadeVisibility hintFade_{&hint_};
     int focusTries_ = 0;

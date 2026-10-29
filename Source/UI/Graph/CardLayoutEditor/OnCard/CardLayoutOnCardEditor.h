@@ -132,6 +132,7 @@ private:
     CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoManager* undo, juce::AudioProcessorGraph::NodeID nodeId,
                            const ShortcutManager* shortcuts);
 
+    using CellRects = std::vector<std::pair<int, juce::Rectangle<int>>>;
     struct Drag {
         int cell = -1;
         bool pressed = false;
@@ -141,6 +142,9 @@ private:
         juce::Point<int> pressPoint;    // editor pixels
         juce::Rectangle<int> startRect; // the cell's rect at the press
         juce::Point<int> pressOffset;   // the pointer's offset from the cell's top-left at the press
+        std::vector<juce::Rectangle<int>> baseline; // every cell's rect at the press (the drop is planned from it)
+        std::vector<std::pair<int, juce::Rectangle<int>>> placed; // the target group's other cells at the last preview
+        juce::Rectangle<int> droppedRect;                         // where the last preview put the dragged cell
     };
 
     // ---- Session and sync (CardLayoutOnCardEditor.cpp) -----------------------------------------
@@ -179,7 +183,16 @@ private:
     juce::Rectangle<int> clampToSection(int cell, juce::Rectangle<int> rect) const;
     juce::Rectangle<int> clampToTarget(int section, juce::Rectangle<int> rect) const;
     juce::Rectangle<int> sectionArea(int section) const;
-    void commitMoveToSection(int cell, juce::Rectangle<int> dropped, int target);
+    void commitMoveToSection(int cell, juce::Rectangle<int> landed, int target, const CellRects& placed);
+    void previewRowDrop(juce::Rectangle<int> rect, juce::Point<int> pointer,
+                        const std::vector<oncard::Guide>& snapGuides);
+    void planLeftGroup(int cell);
+    void restoreBaseline();
+    int dropSectionAt(int y) const;
+    void commitRowDrop(int cell, juce::Rectangle<int> start, const CellRects& placed,
+                       const std::vector<juce::Rectangle<int>>& baseline, juce::Rectangle<int> dropped);
+    void changeShowAs(const juce::String& paramId, CardWidget widget);
+    void repackAfterResize(const juce::String& paramId, juce::Rectangle<int> before);
     std::vector<int> cellsOfSection(int section) const;
 
     /** A cell gliding from one rect to another over `ms`, easing in when it is on its way back. */
@@ -198,7 +211,8 @@ private:
     void closePanel();
     void refreshPanel();
     void writeLayout(const CardLayout& layout);
-    void editControl(const juce::String& paramId, const std::function<CardLayout(CardLayout)>& edit);
+    void editControl(const juce::String& paramId,
+                     const std::function<CardLayout(CardLayout, std::optional<int>)>& edit);
     void hideControl(juce::String paramId); ///< By value: the id can belong to an outline the hide deletes.
     juce::Rectangle<int> screenAreaOf(const CardLayoutOutline& outline) const;
 
@@ -290,6 +304,12 @@ private:
      *  neighbours from these, so a control pushed aside returns as soon as its home is free. */
     std::map<juce::String, juce::Rectangle<int>> homes_;
     std::map<juce::String, juce::Rectangle<int>> origins_; ///< Where the layout first put each control.
+    /** The top of the group each home and origin is measured in: a group below one that grew or shrank has moved, and
+     *  its homes with it. */
+    std::map<juce::String, int> frameTops_;
+    /** The group (index, top) each origin is measured in: a control moved to another group keeps its origin in the
+     *  group it began in. */
+    std::map<juce::String, std::pair<int, int>> originFrames_;
     bool keepHomes_ = false; ///< A write of ours is re-syncing: pushed cells keep their homes.
 
     Drag drag_;

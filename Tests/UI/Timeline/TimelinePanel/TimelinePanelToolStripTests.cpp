@@ -673,3 +673,52 @@ TEST(TimelineRangeClipboardTest, LeavingTheRangeToolDropsTheRange) {
     f.panel.setActiveTool(synth::ui::EditTool::Select);
     EXPECT_FALSE(f.panel.hasRangeSelection());
 }
+
+namespace {
+// The fill of a tool button once the panel has painted: the pixel at the middle of its top edge, clear of the glyph
+// and of the pen's corner mark.
+juce::Colour toolButtonFill(synth::ui::TimelinePanelComponent& panel, synth::ui::EditTool tool) {
+    juce::Image img(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(img);
+        panel.paintEntireComponent(g, true);
+    }
+    auto* button = panel.getToolButton(tool);
+    const auto bounds = panel.getLocalArea(button, button->getLocalBounds()); // the button may sit in a child strip
+    return img.getPixelAt(bounds.getCentreX(), bounds.getY() + 3);
+}
+} // namespace
+
+// Regression test for FRO1101: the pen filled itself from `toolActive`, a literal the built-in themes do not override,
+// so it kept the first theme's blue after a theme switch while its neighbours followed the theme.
+TEST(TimelineToolStripTest, ThePenLitAndUnlitFillsEqualItsNeighboursAfterASwitchToEveryBuiltInTheme) {
+#ifdef HAS_FONT_ASSETS
+    const auto themes = synth::theme::builtInThemes();
+    ASSERT_FALSE(themes.empty());
+    synth::ui::TimelinePanelComponent panel;
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(themes.back());
+    panel.setLookAndFeel(&lf);
+    panel.setVisible(true);
+    panel.setSize(1200, 320);
+
+    for (const auto& theme : themes) {
+        lf.applyTheme(theme);
+        panel.sendLookAndFeelChange(); // what the theme switch broadcasts
+
+        panel.setActiveTool(synth::ui::EditTool::Select);
+        const auto penUnlit = toolButtonFill(panel, synth::ui::EditTool::Draw);
+        EXPECT_EQ(penUnlit, toolButtonFill(panel, synth::ui::EditTool::Range)) << "theme '" << theme.name << "' unlit";
+
+        panel.setActiveTool(synth::ui::EditTool::Range);
+        const auto neighbourLit = toolButtonFill(panel, synth::ui::EditTool::Range);
+        panel.setActiveTool(synth::ui::EditTool::Draw);
+        const auto penLit = toolButtonFill(panel, synth::ui::EditTool::Draw);
+        EXPECT_EQ(penLit, neighbourLit) << "theme '" << theme.name << "' lit";
+        EXPECT_NE(penLit, penUnlit) << "theme '" << theme.name << "': lit must differ from unlit";
+    }
+    panel.setLookAndFeel(nullptr);
+#else
+    GTEST_SKIP() << "needs the icon assets";
+#endif
+}

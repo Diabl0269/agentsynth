@@ -10,6 +10,8 @@
 #include "OnCardTestHelpers.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/DefaultLayouts/AdsrTimeTempo.h"
+#include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutControlPanel.h"
+#include "UI/Graph/CardLayoutEditor/OnCard/OnCardControlOptions.h"
 
 using namespace oncard_test;
 using synth::AdsrTimeTempo;
@@ -41,6 +43,34 @@ AdsrTimeTempo modeOf(OnCardRig& rig, NodeID id) {
 
 void choose(CardLayoutOnCardEditor& editor, int index) {
     editor.getTimeTempoSwitchForTest().setSelectedIndex(index, juce::sendNotificationSync);
+}
+
+// A copy of the stored Sustain item of one look (a section id), or nothing (explicitLayout() answers by value).
+std::optional<synth::CardParamItem> sustainIn(OnCardRig& rig, NodeID id, const char* section) {
+    const auto layout = rig.card(id)->getCardBody()->explicitLayout();
+    for (const auto& s : layout.sections)
+        if (s.id == section)
+            for (const auto& item : s.items)
+                if (const auto* param = std::get_if<synth::CardParamItem>(&item);
+                    param != nullptr && param->paramId == "sustain")
+                    return *param;
+    return std::nullopt;
+}
+
+// The Sustain item the card draws now: the plan item of that parameter sitting in the look that shows.
+const synth::CardBodyItem* drawnSustain(OnCardRig& rig, NodeID id) {
+    const auto& plan = rig.card(id)->getCardBody()->getPlan();
+    for (int i = 0; i < (int)plan.items.size(); ++i)
+        if (plan.items[(size_t)i].param != nullptr && plan.items[(size_t)i].param->paramID == "sustain" &&
+            plan.isOnCard(i))
+            return &plan.items[(size_t)i];
+    return nullptr;
+}
+
+void flipSync(OnCardRig& rig, CardLayoutOnCardEditor& editor, NodeID id, bool tempo) {
+    setParam(*rig.canvas.processor(id), "tempoSync", tempo ? 1.0f : 0.0f);
+    rig.card(id)->getCardBody()->flushPendingConditionUpdate();
+    editor.runQueuedSyncForTest();
 }
 
 } // namespace
@@ -125,7 +155,7 @@ TEST(OnCardTimeTempo, EachLooksSustainKeepsItsOwnPosition) {
 
     ASSERT_NE(editor->getOutlineForTest("sustain"), nullptr);
     Pointer pointer(*editor, "sustain");
-    pointer.moveBy({-40, 0});
+    pointer.moveBy({-90, 0}); // past Hold: a full row only changes when a control passes a neighbour
     pointer.release();
     const auto layout = rig.card(id)->getCardBody()->explicitLayout();
     const auto at = [&](const char* section) {
@@ -139,6 +169,105 @@ TEST(OnCardTimeTempo, EachLooksSustainKeepsItsOwnPosition) {
     };
     EXPECT_TRUE(at("stages-tempo").has_value()) << "the Tempo look's Sustain was placed";
     EXPECT_FALSE(at("stages-time").has_value()) << "the Time look's was left alone";
+}
+
+// Regression test for FRO725: with Controls = Separate, a Sustain edit in the Tempo look also changed the Time look.
+TEST(OnCardTimeTempo, EachLooksSustainKeepsItsOwnControlStyle) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    choose(*editor, kSeparate);
+    ASSERT_TRUE(sustainIn(rig, id, "stages-time").has_value());
+    ASSERT_TRUE(sustainIn(rig, id, "stages-tempo").has_value());
+    const auto timeBefore = sustainIn(rig, id, "stages-time")->widget;
+    setParam(*rig.canvas.processor(id), "tempoSync", 1.0f);
+    rig.card(id)->getCardBody()->flushPendingConditionUpdate();
+    editor->runQueuedSyncForTest();
+
+    auto* panel = openControlPanel(rig, *editor, "sustain");
+    ASSERT_NE(panel, nullptr);
+    panel->onShowAs(synth::CardWidget::KnobLarge);
+    EXPECT_EQ(sustainIn(rig, id, "stages-tempo")->widget, synth::CardWidget::KnobLarge);
+    EXPECT_EQ(sustainIn(rig, id, "stages-time")->widget, timeBefore) << "the Time look's Sustain is left alone";
+    EXPECT_EQ(panel->getOptions().widget, synth::CardWidget::KnobLarge);
+
+    // The panel stays open across the Sync flip and then reads the Time look's own style.
+    setParam(*rig.canvas.processor(id), "tempoSync", 0.0f);
+    rig.card(id)->getCardBody()->flushPendingConditionUpdate();
+    editor->runQueuedSyncForTest();
+    ASSERT_EQ(editor->getControlPanelForTest(), panel);
+    EXPECT_EQ(panel->getOptions().widget, timeBefore);
+}
+
+TEST(OnCardTimeTempo, EachLooksSustainKeepsItsOwnCaption) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    choose(*editor, kSeparate);
+    setParam(*rig.canvas.processor(id), "tempoSync", 1.0f);
+    rig.card(id)->getCardBody()->flushPendingConditionUpdate();
+    editor->runQueuedSyncForTest();
+    ASSERT_TRUE(sustainIn(rig, id, "stages-time").has_value());
+    const auto timeLabel = sustainIn(rig, id, "stages-time")->label;
+
+    auto* panel = openControlPanel(rig, *editor, "sustain");
+    ASSERT_NE(panel, nullptr);
+    panel->getLabelEditorForTest().setText("Hold level", false);
+    panel->commitLabelForTest();
+    ASSERT_TRUE(sustainIn(rig, id, "stages-tempo")->label.has_value());
+    EXPECT_EQ(*sustainIn(rig, id, "stages-tempo")->label, "Hold level");
+    EXPECT_EQ(sustainIn(rig, id, "stages-time")->label, timeLabel) << "the Time look's caption is left alone";
+}
+
+// Regression test for FRO725: with Controls = Separate the card kept drawing the Time copy of Sustain in the Tempo
+// look.
+TEST(OnCardTimeTempo, EachLooksSustainIsDrawnFromItsOwnCopyOnTheRealCard) {
+    OnCardRig rig;
+    const auto id = rig.add(std::make_unique<ADSRModule>());
+    auto* editor = rig.openOnCard(id);
+    ASSERT_NE(editor, nullptr);
+    choose(*editor, kSeparate);
+
+    // Time look: knob, caption A.
+    flipSync(rig, *editor, id, false);
+    auto* panel = openControlPanel(rig, *editor, "sustain");
+    ASSERT_NE(panel, nullptr);
+    panel->onShowAs(synth::CardWidget::KnobLarge);
+    panel->getLabelEditorForTest().setText("Alpha", false);
+    panel->commitLabelForTest();
+    // Tempo look: fader, caption B.
+    flipSync(rig, *editor, id, true);
+    panel = openControlPanel(rig, *editor, "sustain");
+    ASSERT_NE(panel, nullptr);
+    panel->onShowAs(synth::CardWidget::FaderH);
+    panel->getLabelEditorForTest().setText("Bravo", false);
+    panel->commitLabelForTest();
+
+    const auto expectDrawn = [&](synth::CardBodyItem::Kind kind, const char* caption, const char* look) {
+        const auto* drawn = drawnSustain(rig, id);
+        ASSERT_NE(drawn, nullptr) << look;
+        EXPECT_EQ(drawn->kind, kind) << look;
+        EXPECT_EQ(drawn->captionText(), caption) << look;
+        ASSERT_NE(drawn->widget, nullptr) << look;
+        EXPECT_TRUE(drawn->widget->isVisible()) << look;
+    };
+    expectDrawn(synth::CardBodyItem::Kind::FaderH, "Bravo", "tempo");
+    flipSync(rig, *editor, id, false);
+    expectDrawn(synth::CardBodyItem::Kind::KnobLarge, "Alpha", "time");
+    flipSync(rig, *editor, id, true);
+    expectDrawn(synth::CardBodyItem::Kind::FaderH, "Bravo", "tempo");
+
+    // Undoing the Tempo-only edits (label, then widget) changes only the Tempo drawing.
+    EXPECT_TRUE(rig.canvas.undo.undo());
+    EXPECT_TRUE(rig.canvas.undo.undo());
+    flipSync(rig, *editor, id, false);
+    expectDrawn(synth::CardBodyItem::Kind::KnobLarge, "Alpha", "time after undo");
+    flipSync(rig, *editor, id, true);
+    ASSERT_NE(drawnSustain(rig, id), nullptr);
+    EXPECT_NE(drawnSustain(rig, id)->kind, synth::CardBodyItem::Kind::FaderH) << "tempo after undo";
+    EXPECT_NE(drawnSustain(rig, id)->captionText(), "Bravo");
 }
 
 TEST(OnCardTimeTempo, TheCardsOwnSyncSwitchStaysUsableUnderTheOverlay) {

@@ -210,7 +210,7 @@ void appendCardLayoutMenuItems(juce::PopupMenu& menu, GraphEditor& editor, AppUn
                  action(inMore ? CardQuickEdit::ShowOnCard : CardQuickEdit::Hide));
     const auto kind = plan.items[(size_t)index].kind;
     if (!inMore && isContinuousKind(kind)) {
-        const bool fader = kind == CardBodyItem::Kind::FaderV || kind == CardBodyItem::Kind::FaderH;
+        const bool fader = CardBodyItem::isVerticalFader(kind) || kind == CardBodyItem::Kind::FaderH;
         menu.addItem(fader ? "Show as knob" : "Show as fader",
                      action(fader ? CardQuickEdit::ShowAsKnob : CardQuickEdit::ShowAsFader));
     }

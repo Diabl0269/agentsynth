@@ -37,8 +37,8 @@ PerNoteBar::PerNoteBar(ShapeListAdapter& adapter)
     setTitle("Per-note settings");
     setWantsKeyboardFocus(false);
 
-    mode_.setTooltip("Notes move the cursor: in Poly, each note can sit at its own place on the map, chosen by "
-                     "hand, by pitch or at random (Off: every note shares the cursor)");
+    mode_.setTooltip("Notes move the cursor: each note can sit at its own place on the map, chosen by hand, by "
+                     "pitch or at random (Off: every note shares the cursor)");
     mode_.setExplicitFocusOrder(1);
     mode_.onChange = [this](int index) {
         auto p = adapter_.getPerNote();
@@ -129,16 +129,14 @@ void PerNoteBar::lookAndFeelChanged() {
     hint_.setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.textMuted);
 }
 
-/** One line saying why the mode cannot work yet: a mono Filter first (nothing else matters until it is Poly), then a
-    missing Pitch cable that has no source to take. A Pitch cable that can still be made is made on the next click. */
+/** One line saying why the mode cannot work yet: a missing Pitch cable that has no source to take (mono and Poly
+    alike). A Pitch cable that can still be made is made on the next click. */
 void PerNoteBar::updateHint(const CustomFilterPerNote& perNote) {
     juce::String text;
     if (perNote.mode != Mode::Off) {
         const auto input = adapter_.pitchInput();
         const bool needsPitch = perNote.mode == Mode::ByHand || perNote.mode == Mode::ByPitch;
-        if (input == PitchInput::NotPoly)
-            text = "Per-note works in Poly: turn on the Filter's Poly.";
-        else if (needsPitch && input != PitchInput::Connected)
+        if (needsPitch && input != PitchInput::Connected)
             text = "Needs a Pitch cable: connect your Poly MIDI's Pitch to this Filter's Pitch input.";
     }
     if (text.isNotEmpty() && hint_.getText() != text) {

@@ -100,6 +100,14 @@ TEST(CardBodyFooter, TheFooterRowHoldsAPillAFaderAndTheChromeToggles) {
     EXPECT_TRUE(findParameterByID(canvas.processor(id), "poly")->getValue() > 0.5f);
 }
 
+TEST(CardBodyFooter, ALongVerticalFaderInTheFooterStillBecomesAHorizontalFader) {
+    OscillatorModule osc;
+    const auto plan =
+        synth::CardBodyPlan::forModule(osc, layoutOf({footer({param("level", synth::CardWidget::FaderVLong)}),
+                                                      section("main", std::nullopt, {param("fine")})}));
+    EXPECT_EQ(plan.items[(size_t)plan.findParam("level")].kind, synth::CardBodyItem::Kind::FaderH);
+}
+
 TEST(CardBodyFooter, ACardWithoutAFooterKeepsItsChromeRows) {
     CardCanvas canvas;
     const auto plain = canvas.add(std::make_unique<OscillatorModule>(), 0, 0,

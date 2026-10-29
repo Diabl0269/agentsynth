@@ -807,7 +807,7 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
             auto mid = (cable.p1 + cable.p2) / 2.0f;
             juce::String badge = "x" + juce::String(cable.voiceCount);
             g.setFont(11.0f);
-            int textW = (int)g.getCurrentFont().getStringWidthFloat(badge) + 8;
+            int textW = (int)juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), badge) + 8;
             juce::Rectangle<float> pill((float)((int)mid.x + 5), mid.y - 8.0f, (float)textW, 16.0f);
             g.setColour(surfaceColour);
             const float smallRadius = lf != nullptr ? lf->getTheme().metrics.cornerRadiusSmall : 4.0f;

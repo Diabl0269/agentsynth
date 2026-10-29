@@ -199,7 +199,7 @@ void SoundBrowserComponent::paintPackRow(juce::Graphics& g, const Row& row, int 
     const bool showButton = !row.busy || row.cancellable;
     const int detailRight = showButton ? button.getX() - 8 : area.getRight() - kSoundRowSideMargin;
     const juce::Font detailFont(juce::FontOptions(12.0f));
-    const int detailWidth = (int)std::ceil(detailFont.getStringWidthFloat(row.detail)) + 2;
+    const int detailWidth = (int)std::ceil(juce::GlyphArrangement::getStringWidth(detailFont, row.detail)) + 2;
     g.setColour(c.textMuted);
     g.setFont(detailFont);
     g.drawText(row.detail, detailRight - detailWidth, area.getY(), detailWidth, area.getHeight(),

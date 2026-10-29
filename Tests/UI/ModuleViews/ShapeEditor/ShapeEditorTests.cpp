@@ -7,9 +7,11 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
+#include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorAppShortcuts.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeMapController.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 
 using namespace synth::ui;
@@ -466,4 +468,188 @@ TEST(ShapeEditor, ARelayedKeyIsDroppedWhenTheMainWindowIsGoneBeforeItArrives) {
     target.reset();
     pumpMessages(); // must not touch the deleted target
     SUCCEED();
+}
+
+// ---- the morph map's menus (dot menu placement, no Edit in the window, slider menu) ----------------------
+
+namespace {
+
+struct MenuRig : ShapeRig {
+    MorphMap map;
+    ShapeMapController controller{map, *adapter};
+    CapturedMenu menu;
+    juce::Rectangle<int> menuArea;
+    int stripMenus = 0;
+    MorphMap::Axis stripAxis = MorphMap::Axis::None;
+    juce::Rectangle<int> stripArea;
+    int cursorMoves = 0;
+
+    MenuRig() {
+        map.setSize(252, 150);
+        map.showMenu = [this](juce::PopupMenu& m, juce::Rectangle<int> area) {
+            menu.capture(m);
+            menuArea = area;
+        };
+        map.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) {
+            ++stripMenus;
+            stripAxis = axis;
+            stripArea = area;
+        };
+        map.onCursorMoved = [this](float, float) { ++cursorMoves; };
+        controller.refresh();
+    }
+};
+
+juce::MouseEvent rightPress(juce::Component& c, juce::Point<float> p) { return curveRightClick(c, p); }
+
+/** A shown editor whose map can take keyboard focus (skipped where the runner has none). */
+struct ShownWindow {
+    ShapeRig rig;
+    ShapeListEditor editor{rig.adapter, 0};
+    ShownWindow() {
+        editor.addToDesktop(juce::ComponentPeer::windowHasTitleBar);
+        editor.setVisible(true);
+    }
+    ~ShownWindow() { editor.removeFromDesktop(); }
+    bool canFocus() {
+        editor.getMap().getDotStop(0)->grabKeyboardFocus();
+        return editor.getMap().getDotStop(0)->hasKeyboardFocus(false);
+    }
+};
+
+/** The index of the dot nearest the map's top-right corner. */
+int topRightDot(const MorphMap& map) {
+    int best = 0;
+    for (int i = 1; i < map.getNumDots(); ++i)
+        if (map.getDots()[(size_t)i].x - map.getDots()[(size_t)i].y >
+            map.getDots()[(size_t)best].x - map.getDots()[(size_t)best].y)
+            best = i;
+    return best;
+}
+
+} // namespace
+
+TEST(MorphMapMenu, TheDotMenuIsHandedADotSizedScreenAreaAroundTheDot) {
+    MenuRig rig;
+    rig.map.mouseDown(rightPress(rig.map, rig.map.getDotCentre(1)));
+
+    ASSERT_FALSE(rig.menu.items.empty());
+    const auto centre = rig.map.localPointToGlobal(rig.map.getDotCentre(1)).roundToInt();
+    EXPECT_TRUE(rig.menuArea.contains(centre));
+    EXPECT_LT(rig.menuArea.getWidth(), rig.map.getWidth() / 4) << "beside the dot, not the whole map";
+}
+
+TEST(MorphMapMenu, TheEditItemIsOfferedUnlessTheOwnerHidesIt) {
+    MenuRig rig;
+    rig.map.showDotMenu(0);
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Edit", "Duplicate", "Rename", "Delete"}));
+
+    rig.map.setEditItemShown(false);
+    rig.map.showDotMenu(0);
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Duplicate", "Rename", "Delete"}));
+
+    int edited = -1;
+    rig.controller.onEdit = [&](int i) { edited = i; };
+    EXPECT_TRUE(rig.map.getDotStop(1)->keyPressed(key(juce::KeyPress::returnKey)));
+    EXPECT_EQ(edited, 1) << "Return on a dot still edits it";
+}
+
+TEST(MorphMapMenu, ARightPressOnEachSliderAsksForItsMenuBesideTheLandingDot) {
+    MenuRig rig;
+    for (const auto axis : {MorphMap::Axis::X, MorphMap::Axis::Y}) {
+        rig.stripMenus = 0;
+        rig.map.mouseDown(rightPress(rig.map, rig.map.getStripBounds(axis).getCentre()));
+        rig.map.mouseUp(rightPress(rig.map, rig.map.getStripBounds(axis).getCentre()));
+
+        EXPECT_EQ(rig.stripMenus, 1);
+        EXPECT_EQ(rig.stripAxis, axis);
+        EXPECT_TRUE(rig.stripArea.contains(rig.map.localPointToGlobal(rig.map.stripAnchor(axis)).roundToInt()));
+        EXPECT_TRUE(rig.menu.items.empty()) << "no dot menu on a slider";
+    }
+    EXPECT_EQ(rig.cursorMoves, 0) << "a right-press does not drag the cursor";
+}
+
+TEST(MorphMapMenu, ARightPressOnADotStillOpensTheDotMenuAndAPlainPressOnASliderStillDrags) {
+    MenuRig rig;
+    rig.map.mouseDown(rightPress(rig.map, rig.map.getDotCentre(0)));
+    EXPECT_FALSE(rig.menu.items.empty());
+    EXPECT_EQ(rig.stripMenus, 0);
+
+    const auto onStrip = rig.map.getStripBounds(MorphMap::Axis::X).getCentre();
+    rig.map.mouseDown(curveLeftClick(rig.map, onStrip));
+    rig.map.mouseUp(curveLeftClick(rig.map, onStrip));
+    EXPECT_EQ(rig.stripMenus, 0);
+    EXPECT_GE(rig.cursorMoves, 1) << "a plain press on a slider moves the cursor";
+}
+
+TEST(MorphMapMenu, AMapWithoutACursorHasNoSliderMenu) {
+    MenuRig rig;
+    rig.map.setCursorVisible(false);
+    rig.map.mouseDown(rightPress(rig.map, rig.map.getStripBounds(MorphMap::Axis::X).getCentre()));
+    EXPECT_EQ(rig.stripMenus, 0);
+}
+
+TEST(MorphMapMenu, TheShapeWindowsDotMenuOpensBesideTheDotWithoutEdit) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    CapturedMenu captured;
+    juce::Rectangle<int> area;
+    editor.showMenuAtArea = [&](juce::PopupMenu& m, juce::Rectangle<int> a) {
+        captured.capture(m);
+        area = a;
+    };
+    auto& map = editor.getMap();
+    const int dot = topRightDot(map);
+
+    map.mouseDown(rightPress(map, map.getDotCentre(dot)));
+
+    EXPECT_EQ(captured.items, (std::vector<std::string>{"Duplicate", "Rename", "Delete"}));
+    EXPECT_TRUE(area.contains(map.localPointToGlobal(map.getDotCentre(dot)).roundToInt()));
+    EXPECT_LT(area.getWidth(), map.getWidth() / 4) << "the old target was the whole map, under its bottom-left";
+    EXPECT_EQ(editor.getSelected(), dot) << "the press selected the dot, so nothing is left for Edit to do";
+}
+
+TEST(MorphMapMenu, TheShapeWindowsKeyboardMenuAndTheTestHookAlsoGetTheDotArea) {
+    ShownWindow shown;
+    if (!shown.canFocus())
+        GTEST_SKIP() << "no keyboard focus in this environment";
+    auto& map = shown.editor.getMap();
+    juce::Rectangle<int> area;
+    shown.editor.showMenuAtArea = [&](juce::PopupMenu&, juce::Rectangle<int> a) { area = a; };
+    const int dot = topRightDot(map);
+    map.getDotStop(dot)->grabKeyboardFocus();
+
+    ASSERT_TRUE(map.showContextMenuForKeyboardFocus());
+    EXPECT_TRUE(area.contains(map.localPointToGlobal(map.getDotCentre(dot)).roundToInt()));
+
+    CapturedMenu captured;
+    shown.editor.showMenuAtArea = nullptr;
+    shown.editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
+    ASSERT_TRUE(map.showContextMenuForKeyboardFocus());
+    EXPECT_FALSE(captured.items.empty()) << "the menu-only hook keeps working";
+}
+
+TEST(MorphMapMenu, TheShapeWindowsSliderMenuIsHandedToTheCardsHook) {
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    MorphMap::Axis axis = MorphMap::Axis::None;
+    editor.onStripMenu = [&](MorphMap::Axis a, juce::Rectangle<int>) { axis = a; };
+
+    editor.getMap().mouseDown(
+        rightPress(editor.getMap(), editor.getMap().getStripBounds(MorphMap::Axis::Y).getCentre()));
+
+    EXPECT_EQ(axis, MorphMap::Axis::Y);
+}
+
+TEST(MorphMapMenu, KeyboardFocusOnASliderStopOpensItsMenu) {
+    ShownWindow shown;
+    if (!shown.canFocus())
+        GTEST_SKIP() << "no keyboard focus in this environment";
+    auto& map = shown.editor.getMap();
+    MorphMap::Axis axis = MorphMap::Axis::None;
+    shown.editor.onStripMenu = [&](MorphMap::Axis a, juce::Rectangle<int>) { axis = a; };
+
+    map.getStripStop(MorphMap::Axis::X)->grabKeyboardFocus();
+    ASSERT_TRUE(map.showContextMenuForKeyboardFocus());
+    EXPECT_EQ(axis, MorphMap::Axis::X);
 }

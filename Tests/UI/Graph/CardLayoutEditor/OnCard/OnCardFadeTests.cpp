@@ -67,7 +67,7 @@ TEST(OnCardFades, AnInvalidRangeFadesTheHintInAndAGoodOneFadesItOut) {
     EXPECT_EQ(panel->getHeight(), plain);
 }
 
-TEST(OnCardFades, SwappingKnobSizeForFaderDirectionKeepsThePanelsHeightAndCrossFades) {
+TEST(OnCardFades, SwappingKnobSizeForFaderDirectionCrossFadesOneSlotAndTheFaderSizeRowGrowsTheRest) {
     OnCardRig rig;
     const auto id = rig.add(std::make_unique<FilterModule>());
     auto* editor = rig.openOnCard(id);
@@ -85,11 +85,15 @@ TEST(OnCardFades, SwappingKnobSizeForFaderDirectionKeepsThePanelsHeightAndCrossF
     EXPECT_TRUE(panel->isDirectionRowShownForTest());
     EXPECT_TRUE(panel->getSizeForTest()->isVisible()) << "the leaving row stays until its fade has ended";
     FadeVisibility::stepAllForTest(0.5f);
-    EXPECT_EQ(panel->getHeight(), height) << "one slot between them: nothing jumps";
+    // Size and Direction share one slot; only the fader's own Size row (caption 16 + switch 26 + gap 10) is new.
+    constexpr int kFaderSizeRow = 16 + 26 + 10;
+    EXPECT_GT(panel->getHeight(), height);
+    EXPECT_LT(panel->getHeight(), height + kFaderSizeRow) << "the new row grows with its fade";
     EXPECT_TRUE(panel->getDirectionForTest()->isVisible());
     FadeVisibility::stepAllForTest(1.0f);
     EXPECT_FALSE(panel->getSizeForTest()->isVisible());
-    EXPECT_EQ(panel->getHeight(), height);
+    EXPECT_TRUE(panel->getFaderSizeForTest()->isVisible());
+    EXPECT_EQ(panel->getHeight(), height + kFaderSizeRow);
 }
 
 TEST(OnCardFades, TheControlsSwitchOnAnAdsrCardFadesInAndAddControlSlidesOver) {

@@ -67,7 +67,7 @@ are also accepted.
 | `meterClip` | `#FFFF4D4F` | Meter CLIP zone fill, above 0 dBFS — also the clip readout's "clipped" text colour (`MixerMeterReadout`) |
 | `modRingPositive` | `#FF00E5FF` | Modulation ring, positive modulation |
 | `modRingNegative` | `#FFFF6E00` | Modulation ring, negative modulation |
-| `toolActive` | `#FF00D1FF` | Timeline edit-tool strip — active-tool button highlight |
+| `toolActive` | `#FF00D1FF` | Lit chips and the piano roll's held key (the edit-tool strip uses the theme's button-on colour, the accent) |
 | `midiMapped` | `#FFB48EF5` | MIDI Learn "mapped" badge on a control with an assignment ([`midi-remote-ui.md`](../control/midi-remote-ui.md#the-learn-interaction)); Daylight overrides it to `#FF9333EA` (the default is ~2.6:1 on white) |
 | `noteFill` | `#FFB48EF5` | Piano-roll note body, unselected — see [colour-overrides](colour-overrides.md#note-colours) |
 | `noteBorder` | `#FF4A3B75` | Piano-roll note outline, unselected — deliberately a distinct literal, not a `.darker()` derivation of `noteFill` |
@@ -268,6 +268,15 @@ Hand-drawn copies that predate this rule are being folded onto the shared ones.
 **Alert windows are themed.** `AppLookAndFeel::applyTheme` maps `AlertWindow::backgroundColourId` to `surface`,
 `textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
 of a window's custom components (the confirm window's checkbox) on every light theme.
+
+**Windows are opaque and themed.** `synth::theme::windowBackgroundFor(theme)` is the one window background: `bg0` made
+opaque with `surface` laid over it, so a translucent surface (Neon's glass) never lets the desktop or JUCE's light grey
+show through. `PopupMotion::launchDialog` sets it on every dialog unless the caller chose a colour (JUCE's default
+light grey showed through the shape window's grow and shrink), `DetachedPanelWindow` on every detached panel, and
+content that fills its whole window (the shape window's `ShapeListEditor`) paints it and is opaque. Each one updates
+on a theme switch (`lookAndFeelChanged`). `ShapeWindowThemeTests` checks every built-in theme; with
+`AGENTSYNTH_WRITE_THEME_PNG` set it also writes one PNG per theme to `build-ci-local/theme-sweep/` under the working
+directory.
 
 **Colour fallbacks go through `themeOf`.** A control with no `AppLookAndFeel` above it (a headless
 test, a component not yet parented) reads its colours with `synth::theme::themeOf(component)`, which

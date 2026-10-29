@@ -43,7 +43,9 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
     if (panel_ != nullptr && panelParamId_ == paramId)
         return;
     closePanel();
-    const auto options = readControlOptions(*body, source_->parameters(), body->explicitLayout(), paramId);
+    const auto& layout = body->explicitLayout();
+    const auto options =
+        readControlOptions(*body, source_->parameters(), layout, paramId, visibleLayoutSection(*body, layout, paramId));
     if (!options.has_value())
         return;
 
@@ -51,22 +53,22 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
     juce::Component::SafePointer<CardLayoutOnCardEditor> self(this);
     panel->onShowAs = [self, paramId](CardWidget widget) {
         if (auto* e = self.getComponent())
-            e->editControl(paramId,
-                           [paramId, widget](CardLayout l) { return withShowAs(std::move(l), paramId, widget); });
+            e->changeShowAs(paramId, widget);
     };
     panel->onLabel = [self, paramId](const juce::String& text) {
         auto* e = self.getComponent();
         if (e == nullptr || e->panel_ == nullptr)
             return;
         const auto name = e->panel_->getOptions().displayName;
-        e->editControl(paramId, [paramId, name, text](CardLayout l) {
-            return withControlLabel(std::move(l), paramId, name, text);
+        e->editControl(paramId, [paramId, name, text](CardLayout l, std::optional<int> section) {
+            return withControlLabel(std::move(l), paramId, name, text, section);
         });
     };
     panel->onRange = [self, paramId](std::optional<juce::Range<double>> range) {
         if (auto* e = self.getComponent())
-            e->editControl(paramId,
-                           [paramId, range](CardLayout l) { return withControlRange(std::move(l), paramId, range); });
+            e->editControl(paramId, [paramId, range](CardLayout l, std::optional<int> section) {
+                return withControlRange(std::move(l), paramId, range, section);
+            });
     };
     panel->onHide = [self, paramId] {
         if (auto* e = self.getComponent())
@@ -112,7 +114,9 @@ void CardLayoutOnCardEditor::refreshPanel() {
     auto* outline = getOutlineForTest(panelParamId_);
     if (body == nullptr || outline == nullptr || source_ == nullptr)
         return closePanel();
-    const auto options = readControlOptions(*body, source_->parameters(), body->explicitLayout(), panelParamId_);
+    const auto& layout = body->explicitLayout();
+    const auto options = readControlOptions(*body, source_->parameters(), layout, panelParamId_,
+                                            visibleLayoutSection(*body, layout, panelParamId_));
     if (!options.has_value())
         return closePanel();
     panel->setOptions(*options);
@@ -123,15 +127,17 @@ void CardLayoutOnCardEditor::refreshPanel() {
     }
 }
 
-// A field's change: written at once, from the layout the card draws now, changing only that control.
+// A field's change: written at once, from the layout the card draws now, changing only that control, in the
+// look the card shows now (resolved on every call: the panel stays open while the Sync switch flips the look).
 void CardLayoutOnCardEditor::editControl(const juce::String& paramId,
-                                         const std::function<CardLayout(CardLayout)>& edit) {
+                                         const std::function<CardLayout(CardLayout, std::optional<int>)>& edit) {
     const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
     if (closed_ || source_ == nullptr || body == nullptr)
         return;
     flushNudge();
-    const auto before = withPlacedItem(body->explicitLayout(), paramId, *body);
-    auto after = edit(before);
+    const auto section = visibleLayoutSection(*body, body->explicitLayout(), paramId);
+    const auto before = withPlacedItem(body->explicitLayout(), paramId, *body, section);
+    auto after = edit(before, section);
     if (after != before)
         writeLayout(after);
 }
@@ -156,8 +162,9 @@ void CardLayoutOnCardEditor::writeHide(juce::String paramId) {
     std::vector<std::pair<juce::String, juce::Rectangle<int>>> before;
     for (const auto& c : cells_)
         before.emplace_back(c.key, c.rect);
-    editControl(paramId,
-                [paramId](CardLayout l) { return applyCardQuickEdit(std::move(l), paramId, CardQuickEdit::Hide); });
+    editControl(paramId, [paramId](CardLayout l, std::optional<int>) {
+        return applyCardQuickEdit(std::move(l), paramId, CardQuickEdit::Hide);
+    });
     std::vector<Move> moves;
     for (const auto& [key, rect] : before)
         if (const int cell = indexOfCell(key); cell >= 0 && key != paramId)

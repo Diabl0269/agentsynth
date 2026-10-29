@@ -3,6 +3,7 @@
 // for By hand, and every control is named, tooltipped and reachable from the keyboard.
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "../CurveEditor/CurveEditorTestHelpers.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "ShapeEditorTestHelpers.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 
@@ -174,6 +175,21 @@ TEST(PerNoteBar, ByHandTabOrderAndEveryControlIsNamedAndTooltipped) {
         EXPECT_FALSE(tip->getTooltip().isEmpty()) << c->getTitle();
     }
     EXPECT_FALSE(r.bar.getKeyStrip().getKeyButton(60 + 30) != nullptr) << "only the shown keys have buttons";
+}
+
+// Regression test for FRO1097: a mono Filter showed "turn on the Filter's Poly" for every mode, because per-note
+// worked in Poly only.
+TEST(PerNoteBar, AMonoFilterTakesEveryModeWithNoPolyHint) {
+    BarRig r;
+    synth::setProcessorPoly(r.rig.filter, false);
+    ASSERT_FALSE(synth::isProcessorPoly(r.rig.filter));
+    EXPECT_FALSE(r.bar.getModeSwitch().getTooltip().contains("Poly"));
+    for (int m = 1; m < synth::CustomFilterPerNote::kNumModes; ++m) {
+        clickSegment(r.bar.getModeSwitch(), m);
+        EXPECT_EQ(r.rig.filter->getCustomPerNote().mode, (Mode)m);
+        EXPECT_NE(r.rig.adapter->pitchInput(), PitchInput::MissingNoSource) << "no hooks: treated as cabled";
+        EXPECT_FALSE(r.bar.isHintShown()) << synth::CustomFilterPerNote::modeLabel((Mode)m);
+    }
 }
 
 TEST(PerNoteBar, AnAdapterWithoutPerNoteShowsNoBar) {

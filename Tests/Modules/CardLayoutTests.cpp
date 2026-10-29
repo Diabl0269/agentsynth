@@ -10,6 +10,7 @@
 #include "../StubPluginInstance.h"
 #include "AppUndoManager.h"
 #include "Modules/CardLayout.h"
+#include "Modules/CardLayoutJson.h"
 #include "Plugin/Hosting/HostedPluginCardLayout.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
@@ -427,6 +428,23 @@ TEST(CardLayoutV2Test, FullLayoutRoundTripsThroughJson) {
     ASSERT_EQ(result.status, CardLayout::ParseStatus::Ok);
     EXPECT_EQ(result.layout, layout);
     EXPECT_TRUE(result.layout.slots.empty()) << "a v2 document fills sections, not slots";
+}
+
+TEST(CardLayoutV2Test, ALongVerticalFaderRoundTripsAndEveryOlderWidgetNameStillParses) {
+    CardSection section;
+    section.id = "stages";
+    section.items = {paramItem("attack", CardWidget::FaderVLong), paramItem("decay", CardWidget::FaderV),
+                     paramItem("sustain", CardWidget::KnobLarge), paramItem("release", CardWidget::Stepper)};
+    CardLayout layout;
+    layout.sections = {section};
+    const auto text = juce::JSON::toString(layout.toVar());
+    EXPECT_TRUE(text.contains("\"faderVLong\""));
+    EXPECT_TRUE(text.contains("\"faderV\""));
+
+    const auto result = CardLayout::fromVar(juce::JSON::parse(text));
+    ASSERT_EQ(result.status, CardLayout::ParseStatus::Ok);
+    EXPECT_EQ(result.layout, layout);
+    EXPECT_EQ(synth::detail::slotKindFromWidget(CardWidget::FaderVLong), CardSlotKind::Knob);
 }
 
 TEST(CardLayoutV2Test, RowSectionsAndTheStepGridViewRoundTripThroughJson) {

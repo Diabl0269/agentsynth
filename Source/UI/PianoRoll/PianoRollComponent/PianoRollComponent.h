@@ -302,8 +302,8 @@ public:
     // Fired by P with notes selected: the selection's [start, end] in absolute beats.
     std::function<void(double startBeat, double endBeat)> onLoopRangeRequested;
 
-    // Fired after toggleSnap() flipped the shared snap flag — see PianoRollClipboardAndKeys.cpp.
-    std::function<void()> onSnapToggled;
+    std::function<void()> onSnapToggled; // after toggleSnap() flips the shared snap flag (ClipboardAndKeys.cpp)
+    std::function<void(bool enabled)> onSnapKeyToggled; // J only (not the Q button), after onSnapToggled
 
     // Fired whenever the roll's OWN horizontal mapping changed — see PianoRollComponent.cpp.
     std::function<void()> onHorizontalViewChanged;

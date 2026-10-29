@@ -19,6 +19,8 @@ constexpr int kButtonHeight = 28;
 constexpr int kToolbarHeight = 26;
 constexpr int kBottomBarHeight = 36;
 constexpr int kPollHz = 10;
+constexpr int kStatusHeight = 36;
+constexpr juce::uint32 kStatusShowMs = 4000;
 
 void styleButton(juce::TextButton& button, const juce::String& tooltip) {
     button.setTooltip(tooltip);
@@ -31,6 +33,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     , controller_(map_, *adapter_) {
     setTitle(adapter_->getWindowTitle());
     setWantsKeyboardFocus(false);
+    setOpaque(true); // paint() fills every pixel
 
     map_.setShowLabels(true);
     addAndMakeVisible(map_);
@@ -55,6 +58,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
         curveGestureOpen_ = true;
         adapter_->beginEdit();
     };
+    curve_.onInsertRefused = [this](const juce::String& why) { showStatus(why); };
     curve_.onNodeChanged = [this](int) { writeCurve(); };
     curve_.onBendChanged = [this](int) { writeCurve(); };
     curve_.onPointsChanged = [this] { writeCurve(); };
@@ -112,7 +116,17 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
         lastGeneration_ = adapter_->getGeneration();
         syncAll();
     };
-    map_.showMenu = [this](juce::PopupMenu& menu) { showMenuNow(menu, map_); };
+    map_.onNotice = [this](const juce::String& text) { showStatus(text); };
+    statusLabel_.setJustificationType(juce::Justification::topLeft);
+    statusLabel_.setInterceptsMouseClicks(false, false);
+    statusLabel_.setAccessible(false); // the message is announced when it appears
+    addAndMakeVisible(statusLabel_);
+    map_.setEditItemShown(false); // a press already selected the dot; there is no separate edit step here
+    map_.showMenu = [this](juce::PopupMenu& menu, juce::Rectangle<int> area) { showMenuNow(menu, area); };
+    map_.onStripMenu = [this](MorphMap::Axis axis, juce::Rectangle<int> area) {
+        if (onStripMenu)
+            onStripMenu(axis, area);
+    };
 
     shapes_ = adapter_->getShapes();
     selected_ = juce::jlimit(0, juce::jmax(0, (int)shapes_.size() - 1), selected);
@@ -172,9 +186,21 @@ void ShapeListEditor::focusFirstControl() {
 /** Picks up a change made elsewhere (undo, redo, the card's map, a preset load). Our own writes update
     lastGeneration_ as they go, and nothing is reloaded while a curve gesture is open. */
 void ShapeListEditor::timerCallback() {
+    if (statusClearsAtMs_ != 0 && (juce::int32)(juce::Time::getMillisecondCounter() - statusClearsAtMs_) >= 0) {
+        statusClearsAtMs_ = 0;
+        statusLabel_.setText({}, juce::dontSendNotification);
+    }
     if (curveGestureOpen_ || adapter_->getGeneration() == lastGeneration_)
         return;
     refresh();
+}
+
+/** A refused key says why under the map, and to a screen reader, instead of doing nothing. */
+void ShapeListEditor::showStatus(const juce::String& text) {
+    statusLabel_.setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.error);
+    statusLabel_.setText(text, juce::dontSendNotification);
+    statusClearsAtMs_ = juce::Time::getMillisecondCounter() + kStatusShowMs;
+    juce::AccessibilityHandler::postAnnouncement(text, juce::AccessibilityHandler::AnnouncementPriority::medium);
 }
 
 void ShapeListEditor::updateButtonStates() {
@@ -228,6 +254,17 @@ void ShapeListEditor::showMenuNow(juce::PopupMenu& menu, juce::Component& target
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target));
 }
 
+/** The map's dot menu: opens beside the dot. A test sees the menu through `showMenu` and the area through
+    `showMenuAtArea`. */
+void ShapeListEditor::showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> screenArea) {
+    if (showMenuAtArea)
+        showMenuAtArea(menu, screenArea);
+    else if (showMenu)
+        showMenu(menu);
+    else
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(screenArea));
+}
+
 /** The lane Draw tool's own flyout, so the six shapes, their icons and their order are the lane's. Headless tests
     take the content through the lane's hook instead of a call-out. */
 void ShapeListEditor::openDrawFlyout() {
@@ -255,11 +292,18 @@ bool ShapeListEditor::keyPressed(const juce::KeyPress& key) {
     return true;
 }
 
-void ShapeListEditor::lookAndFeelChanged() { applyDestructiveLook(deleteButton_); }
+void ShapeListEditor::lookAndFeelChanged() {
+    applyDestructiveLook(deleteButton_);
+    // The window behind the content is backed with the same opaque colour, so a theme switch keeps both in step.
+    if (auto* window = findParentComponentOfClass<juce::DialogWindow>())
+        window->setBackgroundColour(synth::theme::windowBackgroundFor(synth::theme::themeOf(*this)));
+    repaint();
+}
 
 void ShapeListEditor::paint(juce::Graphics& g) {
-    const auto& colors = synth::theme::themeOf(*this).colors;
-    g.fillAll(colors.surface);
+    const auto& theme = synth::theme::themeOf(*this);
+    const auto& colors = theme.colors;
+    g.fillAll(synth::theme::windowBackgroundFor(theme)); // opaque: Neon's surface is translucent
     if (!gridLabelArea_.isEmpty()) {
         g.setColour(colors.textMuted);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
@@ -279,6 +323,7 @@ void ShapeListEditor::resized() {
 
     auto left = area.removeFromLeft(kMapSize);
     map_.setBounds(left.removeFromTop(juce::jmin(left.getHeight(), kMapSize)));
+    statusLabel_.setBounds(left.removeFromTop(kStatusHeight).withTrimmedTop(kGap));
     area.removeFromLeft(kMargin);
 
     chips_->setBounds(area.removeFromTop(chips_->getRequiredHeight(area.getWidth())));

@@ -1,6 +1,5 @@
 // FilterShapesAdapter.cpp -- the Filter's Custom shapes behind the generic shape list interface.
 #include "FilterShapesAdapter.h"
-#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/Filter/CustomFilterBlend.h"
 #include <cmath>
 
@@ -117,11 +116,8 @@ CustomFilterPerNote FilterShapesAdapter::getPerNote() const { return filter_.get
 /** The settings are part of the module's extra state, so beginEdit/endEdit record them like a shape edit. */
 void FilterShapesAdapter::setPerNote(const CustomFilterPerNote& perNote) { filter_.setCustomPerNote(perNote); }
 
-PitchInput FilterShapesAdapter::pitchInput() const {
-    if (!synth::isProcessorPoly(&filter_))
-        return PitchInput::NotPoly;
-    return hooks_.state ? hooks_.state() : PitchInput::Connected;
-}
+/** Mono and Poly alike: a mono Filter's notes come from its one Pitch input (ch19). */
+PitchInput FilterShapesAdapter::pitchInput() const { return hooks_.state ? hooks_.state() : PitchInput::Connected; }
 
 /** The mode write and the cable are one structural undo step, so one undo takes both back. */
 bool FilterShapesAdapter::setPerNoteConnectingPitch(const CustomFilterPerNote& perNote) {

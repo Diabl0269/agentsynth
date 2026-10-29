@@ -7,7 +7,7 @@
 
 namespace synth::ui {
 
-// Concern: the pen button's current-shape icon, its crossfade, its corner triangle and the gestures that
+// Concern: the pen button's current-shape icon, its crossfade, its corner chevron and the gestures that
 // open the flyout (corner click, right-click, press and hold).
 
 DrawPenButton::DrawPenButton(const juce::String& name)
@@ -51,14 +51,18 @@ bool DrawPenButton::isInCorner(juce::Point<int> p) const noexcept {
         .contains(p);
 }
 
-// The lit fill is the light `toolActive` highlight, so the theme's primary text (white in a dark theme) would almost
-// vanish on it. The glyph takes whichever of the theme's inks reads best on that fill, which keeps 3:1 in every theme.
+// The background (the lit fill, the hover shift, the focus ring) is what juce::DrawableButton paints behind the Select,
+// Range and other tool buttons: drawButtonBackground with the look-and-feel's button / button-on colours, read from the
+// theme at paint time. The glyph takes
+// the theme's primary ink like theirs; the corner mark is the app's combo chevron in that same ink.
+// The lit fill is the theme accent, so the theme's primary text (white in a dark theme) can almost vanish on it. The
+// lit glyph and chevron take whichever of the theme's inks reads best on that fill, which keeps 3:1 in every theme.
 namespace {
-juce::Colour drawPenLitInk(const synth::theme::Colors& colours) {
+juce::Colour litInk(const synth::theme::Colors& colours, juce::Colour fill) {
     const juce::Colour candidates[] = {colours.iconInk, colours.iconPaper, colours.textPrimary, colours.bg0};
     auto best = candidates[0];
     for (const auto& candidate : candidates)
-        if (colourContrast(candidate, colours.toolActive) > colourContrast(best, colours.toolActive))
+        if (colourContrast(candidate, fill) > colourContrast(best, fill))
             best = candidate;
     return best;
 }
@@ -66,25 +70,21 @@ juce::Colour drawPenLitInk(const synth::theme::Colors& colours) {
 
 void DrawPenButton::paintButton(juce::Graphics& g, bool over, bool down) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const bool lit = getToggleState();
     auto ink = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-    auto secondary = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::grey;
-    if (lit && lf != nullptr)
-        ink = secondary = drawPenLitInk(lf->getTheme().colors);
-    getLookAndFeel().drawButtonBackground(g, *this, findColour(lit ? backgroundOnColourId : backgroundColourId), over,
-                                          down);
+    if (lf != nullptr && getToggleState())
+        ink = litInk(lf->getTheme().colors, findColour(juce::TextButton::buttonOnColourId));
+    getLookAndFeel().drawButtonBackground(
+        g, *this, findColour(getToggleState() ? juce::TextButton::buttonOnColourId : juce::TextButton::buttonColourId),
+        over, down);
 
     const auto iconArea = getLocalBounds().toFloat().reduced(6.0f);
     if (crossfade_ < 1.0f)
         paintDrawShapeIcon(g, previous_, iconArea, ink, 1.0f - crossfade_);
     paintDrawShapeIcon(g, shape_, iconArea, ink, crossfade_ < 1.0f ? crossfade_ : 1.0f);
 
-    // The corner triangle: this button opens more.
-    const float right = (float)getWidth() - 2.5f, bottom = (float)getHeight() - 2.5f;
-    juce::Path tri;
-    tri.addTriangle(right, bottom, right, bottom - 4.5f, right - 4.5f, bottom);
-    g.setColour(secondary);
-    g.fillPath(tri);
+    // The corner mark: this button opens more. Sized to the corner zone that opens the flyout.
+    synth::theme::paintComboChevron(
+        g, {(float)getWidth() - kCornerSize * 0.6f, (float)getHeight() - kCornerSize * 0.5f}, ink);
 }
 
 // A corner press or a right-click opens the flyout at once and is not a click; any other press is a normal button press

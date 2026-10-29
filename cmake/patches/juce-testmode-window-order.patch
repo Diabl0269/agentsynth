@@ -1,0 +1,57 @@
+JUCE patch: let an app switch off the window-order check (macOS, Windows) in ComponentPeer hit testing.
+
+Why: JUCE decides which component a mouse event reaches with ComponentPeer::contains(), and on macOS and Windows that asks
+the OS whether this window is the topmost one at the point. A window behind another window (or
+another app) therefore never receives an event, even a synthetic one. The app's in-app test mode
+(--automation) drives its own windows by script and must not depend on, nor change, the window order on the
+user's screen. This patch adds the process-wide flag juce::ComponentPeer::ignoreWindowOrderForHitTests
+(default false) and makes the macOS and Windows peers' contains() skip their window-order check while it is true
+(NSViewComponentPeer asks the window server, HWNDComponentPeer calls WindowFromPoint).
+Nothing else changes; with the flag false JUCE behaves exactly as stock.
+
+Applied by cmake/ApplyJucePatch.cmake (FetchContent PATCH_COMMAND); mechanism and how to update it for a new
+JUCE tag: docs/development/juce-patches.md. The JUCE files use CRLF line endings.
+
+diff --git a/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm b/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
+index 0436364e9..302586b3e 100644
+--- a/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
++++ b/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
+@@ -531,7 +531,7 @@ bool contains (Point<int> localPos, bool trueIfInAChildWindow) const override
+             && isPositiveAndBelow (localPos.getY(), viewFrame.size.height)))
+             return false;
+ 
+-        if (! SystemStats::isRunningInAppExtensionSandbox())
++        if (! SystemStats::isRunningInAppExtensionSandbox() && ! ignoreWindowOrderForHitTests)
+         {
+             if (NSWindow* const viewWindow = [view window])
+             {
+diff --git a/modules/juce_gui_basics/native/juce_Windowing_windows.cpp b/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
+index 083ade163..e9f7a90ac 100644
+--- a/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
++++ b/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
+@@ -1542,6 +1542,9 @@ public:
+         if (! r.withZeroOrigin().contains (localPhysical))
+             return false;
+ 
++        if (ignoreWindowOrderForHitTests)
++            return true;
++
+         const auto screenPos = (localPhysical + getClientRectInScreen().getPosition().toFloat()).roundToInt();
+         const auto w = WindowFromPoint (D2DUtilities::toPOINT (screenPos));
+ 
+diff --git a/modules/juce_gui_basics/windows/juce_ComponentPeer.h b/modules/juce_gui_basics/windows/juce_ComponentPeer.h
+index fba1b36a0..6a6448b8d 100644
+--- a/modules/juce_gui_basics/windows/juce_ComponentPeer.h
++++ b/modules/juce_gui_basics/windows/juce_ComponentPeer.h
+@@ -480,6 +480,11 @@ public:
+     */
+     static bool isValidPeer (const ComponentPeer* peer) noexcept;
+ 
++    /** When true, the macOS and Windows peers' contains() no longer ask the OS whether another window
++        covers the point, so a window that is behind others (or behind another app) still hit-tests as
++        its own. Set once at startup by an app's automation mode; false (stock behaviour) otherwise. */
++    static inline bool ignoreWindowOrderForHitTests = false;
++
+     //==============================================================================
+     virtual StringArray getAvailableRenderingEngines() = 0;
+     virtual int getCurrentRenderingEngine() const;

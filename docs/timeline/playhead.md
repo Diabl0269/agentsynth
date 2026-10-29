@@ -90,7 +90,14 @@ glyph/fill contrast (>= 3:1) in every built-in theme, on and off.
 
 **The button is labelled with the VERB, not with its key.** A button that spells its own letter
 goes stale the moment a user rebinds it, so the live key is in the tooltip, resolved through
-`synth::shortcutHintFor`.
+`synth::shortcutHintFor`. The tooltip follows the Draw pen's pattern: the name and the toggle key first, then the
+mode key, then the menu: "Follow playhead, Smooth mode (F) · switch mode: Ctrl+F · right-click for the mode menu"
+(the mode part is left out while the mode key is unbound).
+
+**A key press says what it did.** F, Ctrl+F (Ctrl+Alt+F off the Mac) and J (snap, in the panel and in the piano roll)
+call `TimelinePanelComponent::onShowMessage`, which `MainComponent` wires to its toast
+([chrome](../layout/chrome.md#toast)): "Follow playhead on" / "Follow playhead off", "Follow: Smooth" / "Follow:
+Page", "Snap on" / "Snap off". A click on a button says nothing; it is on screen already.
 
 Backed by the boolean preference `"timelineFollowPlayhead"`, loaded and persisted the same way the
 snap-enabled flag is. Turning it on page-flips the panel's view horizontally so the playhead never

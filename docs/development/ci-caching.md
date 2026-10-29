@@ -23,7 +23,9 @@ break in ways that look exactly like a healthy build, just slower — which is w
   the cached JUCE tree is the *patched* one ([`juce-patches.md`](juce-patches.md)), so a patch change must
   change the key. The generation prefix was bumped for it (`deps4` → `deps5`, `release-deps-ninja4` →
   `release-deps-ninja5`), because the `restore-keys` prefix fallback would otherwise restore an unpatched
-  `juce-src` that nothing re-patches.
+  `juce-src` that nothing re-patches. The JUCE 9.0.3 upgrade bumped it again (`deps5` → `deps6`, `release-deps-ninja5` →
+  `release-deps-ninja6`) for the same reason: the fallback would restore a JUCE 8 `juce-src` that FetchContent
+  would not move to the new tag.
 
 ## Six rules, each learned from an outage
 
@@ -128,7 +130,7 @@ break in ways that look exactly like a healthy build, just slower — which is w
    `ci.yml`'s (see below for why), just no longer exempt from cleanup.
 
    **FRO341 also made JUCE's `FetchContent_Declare` a shallow clone** (`GIT_SHALLOW TRUE` in
-   `CMakeLists.txt` — valid because `SYNTH_JUCE_GIT_TAG` pins a tag, `8.0.3`, not a bare SHA):
+   `CMakeLists.txt` — valid because `SYNTH_JUCE_GIT_TAG` pins a tag, `9.0.3`, not a bare SHA):
    JUCE's own `.git` directory measured ~294 of each ~376 MB deps entry (~80%), pure history no
    build ever reads. `build/_deps`'s cache key hashes only `cmake/DependencyVersions.cmake`, which
    this change does not touch, so the key had to be bumped by hand for the shallow clone to take

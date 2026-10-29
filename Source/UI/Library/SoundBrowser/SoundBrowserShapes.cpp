@@ -157,7 +157,8 @@ void SoundBrowserComponent::paintShapeRow(juce::Graphics& g, const Row& row, juc
     g.strokePath(line, juce::PathStrokeType(kThumbLineWidth));
 
     const juce::Font detailFont(juce::FontOptions(12.0f));
-    const int detailWidth = row.detail.isEmpty() ? 0 : (int)std::ceil(detailFont.getStringWidthFloat(row.detail));
+    const int detailWidth =
+        row.detail.isEmpty() ? 0 : (int)std::ceil(juce::GlyphArrangement::getStringWidth(detailFont, row.detail));
     const int nameLeft = area.getX() + side + kThumbWidth + kThumbGap;
     int nameRight = area.getRight() - side - (detailWidth > 0 ? detailWidth + 8 : 0);
     if (lists_.isFavourite(synth::shapes::shapeId(row.shape->kind, row.shape->factory, row.shape->name))) {

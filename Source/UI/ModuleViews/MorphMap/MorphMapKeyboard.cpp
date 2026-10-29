@@ -2,6 +2,7 @@
 // menu and the inline rename.
 #include "MorphMap.h"
 #include "MorphMapInternal.h"
+#include "UI/Layout/PointEditing/PointEditorKeys.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -104,7 +105,30 @@ void MorphMap::deleteDotAndRefocus(int index) {
         safe->takeFocus(*safe->dotStops_[(size_t)juce::jmin(index, (int)safe->dotStops_.size() - 1)]);
 }
 
+/** Ctrl+T: the new dot is the owner's to make (halfway to the next one), and takes focus. The last dot has no next
+    one, and a full map has no room; each says so through `onNotice`. */
+bool MorphMap::insertAfterDot(int index) {
+    if (index + 1 >= (int)dots_.size()) {
+        if (onNotice)
+            onNotice("This is the last dot");
+        return true;
+    }
+    juce::Component::SafePointer<MorphMap> safe(this);
+    const int added = onInsertAfterDot(index);
+    if (safe == nullptr)
+        return true;
+    if (added < 0) {
+        if (onNotice)
+            onNotice("No room for another shape");
+    } else if (added < (int)dotStops_.size()) {
+        takeFocus(*dotStops_[(size_t)added]);
+    }
+    return true;
+}
+
 bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
+    if (isInsertPointKey(key) && onInsertAfterDot && !stop.isCursor() && !stop.isStrip())
+        return insertAfterDot(stop.getIndex());
     const auto mods = key.getModifiers();
     if (mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
         return false;
@@ -112,10 +136,8 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
     if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey || code == juce::KeyPress::upKey ||
         code == juce::KeyPress::downKey)
         return pressArrow(stop, code, mods.isShiftDown());
-    if (code == juce::KeyPress::escapeKey) {
-        grabKeyboardFocus();
-        return true;
-    }
+    if (code == juce::KeyPress::escapeKey)
+        return false; // bubbles up to the window, which closes
     if (stop.isCursor() || stop.isStrip())
         return false;
 
@@ -147,10 +169,11 @@ void MorphMap::showDotMenu(int index) {
     juce::PopupMenu menu;
     juce::Component::SafePointer<MorphMap> safe(this);
     const bool canDelete = !canDeleteDot || canDeleteDot();
-    menu.addItem("Edit", [safe, index] {
-        if (safe != nullptr && safe->onEditDot)
-            safe->onEditDot(index);
-    });
+    if (editItemShown_)
+        menu.addItem("Edit", [safe, index] {
+            if (safe != nullptr && safe->onEditDot)
+                safe->onEditDot(index);
+        });
     menu.addItem("Duplicate", [safe, index] {
         if (safe != nullptr && safe->onDuplicateDot)
             safe->onDuplicateDot(index);
@@ -163,17 +186,33 @@ void MorphMap::showDotMenu(int index) {
         if (safe != nullptr && safe->onDeleteDot)
             safe->onDeleteDot(index);
     });
+    const auto area = menuAreaAt(getDotCentre(index));
     if (showMenu)
-        showMenu(menu);
+        showMenu(menu, area);
     else
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(
-            localAreaToGlobal(juce::Rectangle<int>(16, 16).withCentre(getDotCentre(index).roundToInt()))));
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(area));
+}
+
+/** A small screen area centred on a point of this map, which a menu opens beside. */
+juce::Rectangle<int> MorphMap::menuAreaAt(juce::Point<float> localCentre) const {
+    return localAreaToGlobal(juce::Rectangle<int>(16, 16).withCentre(localCentre.roundToInt()));
+}
+
+/** The area of a slider's menu: its landing dot, so the menu opens beside the slider. */
+void MorphMap::showStripMenu(Axis axis) {
+    if (onStripMenu)
+        onStripMenu(axis, menuAreaAt(stripAnchor(axis)));
 }
 
 bool MorphMap::showContextMenuForKeyboardFocus() {
     for (int i = 0; i < (int)dotStops_.size(); ++i)
         if (dotStops_[(size_t)i]->hasKeyboardFocus(false)) {
             showDotMenu(i);
+            return true;
+        }
+    for (const Axis axis : {Axis::X, Axis::Y})
+        if (cursorVisible_ && stripStops_[axis == Axis::X ? 0 : 1]->hasKeyboardFocus(false)) {
+            showStripMenu(axis);
             return true;
         }
     return false;

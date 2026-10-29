@@ -26,8 +26,9 @@ std::unique_ptr<ModMatrixPicker> buildAddTrackPicker(std::vector<ModMatrixPicker
 void showAddTrackPicker(juce::Component& anchor, std::unique_ptr<ModMatrixPicker> picker);
 
 namespace test_hooks {
-/** When set, showAddTrackPicker() hands its picker here instead of opening a call-out. */
-std::function<void(std::unique_ptr<ModMatrixPicker>)>& addTrackPickerHookForTest();
+/** When set, showAddTrackPicker() hands its picker here, with the screen bounds the call-out would point at,
+ *  instead of opening a call-out. */
+std::function<void(std::unique_ptr<ModMatrixPicker>, juce::Rectangle<int>)>& addTrackPickerHookForTest();
 } // namespace test_hooks
 
 } // namespace synth::ui

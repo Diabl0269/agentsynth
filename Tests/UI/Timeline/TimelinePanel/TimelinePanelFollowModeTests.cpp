@@ -280,15 +280,17 @@ TEST(TimelineFollowModeTest, TheTooltipNamesTheModeAndTheKeysAndFollowsTheMode) 
     ASSERT_FALSE(cycle.isEmpty());
 
     EXPECT_TRUE(button.getTooltip().contains("Page mode")) << button.getTooltip();
-    EXPECT_TRUE(button.getTooltip().contains(cycle + " switches mode")) << button.getTooltip();
-    EXPECT_TRUE(button.getTooltip().endsWith("(f)")) << "the on/off key still closes the tooltip";
+    EXPECT_TRUE(button.getTooltip().contains("(f)")) << "the on/off key follows the name, as every sibling's does";
+    EXPECT_TRUE(button.getTooltip().contains(juce::String::fromUTF8(" \xc2\xb7 switch mode: ") + cycle))
+        << button.getTooltip();
+    EXPECT_TRUE(button.getTooltip().contains("right-click for the mode menu")) << button.getTooltip();
 
     panel.setFollowMode(FollowMode::Smooth);
     EXPECT_TRUE(button.getTooltip().contains("Smooth mode")) << button.getTooltip();
 
     shortcuts.setBinding("timelineFollowModeCycle", juce::KeyPress());
     shortcuts.saveToProperties();
-    EXPECT_FALSE(button.getTooltip().contains("switches mode")) << "an unbound mode key is not advertised";
+    EXPECT_FALSE(button.getTooltip().contains("switch mode")) << "an unbound mode key is not advertised";
     panel.setShortcutManager(nullptr);
 }
 
@@ -314,4 +316,63 @@ TEST(TimelineFollowModeTest, TheModeKeyIsUniqueInTheTimelineCategoryOnBothPlatfo
                 ++sameInTimeline;
         EXPECT_EQ(sameInTimeline, 1) << "platform " << (int)platform;
     }
+}
+
+// A KEY that changes a timeline setting says what it did; the buttons (already on screen) say nothing.
+namespace {
+struct MessageRig {
+    ShortcutManager shortcuts;
+    synth::ui::TimelinePanelComponent panel;
+    std::vector<juce::String> messages;
+
+    MessageRig() {
+        panel.setSize(1200, 320);
+        panel.setShortcutManager(&shortcuts);
+        panel.onShowMessage = [this](const juce::String& m) { messages.push_back(m); };
+    }
+    ~MessageRig() { panel.setShortcutManager(nullptr); }
+};
+} // namespace
+
+TEST(TimelineFollowMessageTest, FSaysWhetherFollowIsOnOrOff) {
+    MessageRig rig;
+    ASSERT_TRUE(rig.panel.keyPressed(rig.shortcuts.getBinding("timelineFollowPlayheadToggle")));
+    ASSERT_TRUE(rig.panel.keyPressed(rig.shortcuts.getBinding("timelineFollowPlayheadToggle")));
+    ASSERT_EQ(rig.messages.size(), 2u);
+    EXPECT_EQ(rig.messages[0], "Follow playhead on");
+    EXPECT_EQ(rig.messages[1], "Follow playhead off");
+}
+
+TEST(TimelineFollowMessageTest, TheModeKeyNamesTheNewMode) {
+    MessageRig rig;
+    ASSERT_TRUE(rig.panel.keyPressed(cycleKeyFor(&rig.shortcuts)));
+    ASSERT_TRUE(rig.panel.keyPressed(cycleKeyFor(&rig.shortcuts)));
+    ASSERT_EQ(rig.messages.size(), 2u);
+    EXPECT_EQ(rig.messages[0], "Follow: Smooth");
+    EXPECT_EQ(rig.messages[1], "Follow: Page");
+}
+
+TEST(TimelineFollowMessageTest, JSaysWhetherSnapIsOnOrOff) {
+    MessageRig rig;
+    const bool wasOn = rig.panel.getViewState().snapEnabled;
+    ASSERT_TRUE(rig.panel.keyPressed(rig.shortcuts.getBinding("timelineSnapToggle")));
+    ASSERT_TRUE(rig.panel.keyPressed(rig.shortcuts.getBinding("timelineSnapToggle")));
+    ASSERT_EQ(rig.messages.size(), 2u);
+    EXPECT_EQ(rig.messages[0], wasOn ? "Snap off" : "Snap on");
+    EXPECT_EQ(rig.messages[1], wasOn ? "Snap on" : "Snap off");
+}
+
+TEST(TimelineFollowMessageTest, ClickingTheButtonsSaysNothing) {
+    MessageRig rig;
+    rig.panel.getFollowPlayheadButtonForTest().onClick();
+    rig.panel.getSnapToggleButton().onClick();
+    rig.panel.setFollowMode(FollowMode::Smooth);
+    EXPECT_TRUE(rig.messages.empty());
+}
+
+TEST(TimelineFollowMessageTest, NoHookIsNoProblem) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('f')));
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('j')));
 }

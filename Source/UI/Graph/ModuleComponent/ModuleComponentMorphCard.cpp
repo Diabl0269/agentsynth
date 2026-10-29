@@ -137,6 +137,12 @@ void ModuleComponent::createMorphShapesCard() {
     host.makeRoom = [this] { owner.handleModuleResized(this); };
     host.settling = &settlingFootprint_;
     host.showMenu = [this](juce::PopupMenu& menu) { showContextMenuHook_(menu); };
+    // A map slider's right-click (card or window) opens the usual knob menu of the hidden Morph knob it stands in for.
+    host.stripMenu = [this](int channel, juce::Rectangle<int> screenArea) {
+        auto* param =
+            const_cast<juce::RangedAudioParameter*>(morphStripParam(dynamic_cast<ModuleBase*>(module), channel));
+        showAutomateMenuForSlider(param, screenArea);
+    };
     host.rememberView = [this](const std::function<void(synth::CardViewState&)>& edit) { rememberCardView(edit); };
     // The Morph X / Y knobs are the card body's "custom" (Filter) or "morph" (LFO) section.
     const char* knobSection = filter != nullptr ? "custom" : "morph";

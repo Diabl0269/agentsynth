@@ -275,6 +275,8 @@ void MainComponent::wireGraphEditorCallbacks() {
     // and somewhere to say what it changed. The toast is a plain child laid out by resized(), raised when shown.
     toast_ = std::make_unique<synth::ui::ToastComponent>();
     addChildComponent(*toast_);
+    // A timeline hotkey that changes a setting says what it did (follow, follow mode, snap).
+    timelinePanel.onShowMessage = [this](const juce::String& message) { toast_->show(message); };
     graphEditor.getPolyChain().trackProvider = [this] {
         std::vector<synth::PolyTrackRef> tracks;
         for (const auto& track : timelineDoc.getTracks())
@@ -693,7 +695,8 @@ void MainComponent::openMidiRemoteDevices() {
     deviceNames.reserve(profiles.size());
     for (const auto& profile : profiles)
         deviceNames.push_back(profile.input.name);
-    audioEngine.openMidiDevicesForRemote(deviceNames);
+    if (!synth::isAutomationLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray()))
+        audioEngine.openMidiDevicesForRemote(deviceNames);
 
     // Same seam wireMidiRemoteEngine() primed with Hosted's placeholder source above, and the one
     // AudioEngine::onMidiDevicesChanged (wired there too) re-runs on every later device-list

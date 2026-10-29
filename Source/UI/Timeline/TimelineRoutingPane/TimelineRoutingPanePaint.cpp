@@ -39,7 +39,8 @@ void drawHeaderLine(juce::Graphics& g, const juce::Rectangle<int>& area, const j
     line.removeFromLeft(kInset);
 
     const juce::Font badgeFont{juce::FontOptions(9.5f, juce::Font::bold)};
-    const int badgeWidth = static_cast<int>(std::ceil(badgeFont.getStringWidthFloat(badge))) + 2 * kBadgePadding;
+    const int badgeWidth =
+        static_cast<int>(std::ceil(juce::GlyphArrangement::getStringWidth(badgeFont, badge))) + 2 * kBadgePadding;
     const auto badgeBounds = line.removeFromRight(badgeWidth).withSizeKeepingCentre(badgeWidth, 16).toFloat();
     g.setColour(colours.border);
     g.drawRoundedRectangle(badgeBounds.reduced(0.5f), 3.0f, 1.0f);

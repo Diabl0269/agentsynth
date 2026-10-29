@@ -48,6 +48,11 @@ public:
      *  changes anything), so undo brings the cancelled edits back. */
     void restoreOpeningLayout();
 
+    /** Writes made between these two calls (a write, then the repack the write called for) are recorded as ONE
+     *  undo step, from the graph as it was at the begin. Calls nest; only the outermost end records. */
+    void beginGroupedWrite();
+    void endGroupedWrite();
+
     bool hasPresets() const override { return store() != nullptr; }
     juce::StringArray listPresets() const override;
     bool savePreset(const juce::String& name, const CardLayout& layout) override;
@@ -72,6 +77,8 @@ private:
     juce::String moduleType_;
     juce::var openingOverride_;                ///< The node's "cardLayout" JSON at construction; void = none.
     std::optional<CardLayout> openingDefault_; ///< The type's stored default at construction; none = no file.
+    int groupDepth_ = 0;                       ///< Open beginGroupedWrite calls; a write records nothing while > 0.
+    juce::var groupBefore_;                    ///< The graph at the outermost begin.
     bool defaultTouched_ = false;              ///< An Apply to all or Reset wrote or cleared the type's default.
 };
 
