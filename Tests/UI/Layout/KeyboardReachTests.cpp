@@ -43,7 +43,7 @@ struct KnownGap {
 
 const std::vector<KnownGap> kKnownGaps = {
     {"mixer / Audio 1 colour", "FRO1206"},
-    {"timelineRouting / timelineChannelChip", "TICKET?"},
+    {"timelineRouting / timelineChannelChip", "FRO1311"},
     {"mixer / Show Gate on canvas", "FRO1203"},
     {"mixer / Gate bypass, on", "FRO1203"},
     {"mixer / Show Parametric EQ on canvas", "FRO1203"},
@@ -52,15 +52,15 @@ const std::vector<KnownGap> kKnownGaps = {
     {"mixer / Compressor bypass, on", "FRO1203"},
     {"mixer / Add Bus", "FRO1292"},
     {"mixer / Reset Meters", "FRO1292"},
-    {"mixer / Side pane", "TICKET?"},
-    {"mixer / Filter channels", "TICKET?"},
-    {"mixer / All channels", "TICKET?"},
-    {"mixer / Tracks channels", "TICKET?"},
-    {"mixer / Buses channels", "TICKET?"},
-    {"mixer / Audio 1 pan", "TICKET?"},
-    {"mixer / Audio 1 visibility", "TICKET?"},
-    {"mixer / Direct visibility", "TICKET?"},
-    {"mixer / Mixer pan law (this project): Compensated", "TICKET?"},
+    {"mixer / Side pane", "FRO1292"},
+    {"mixer / Filter channels", "FRO1292"},
+    {"mixer / All channels", "FRO1292"},
+    {"mixer / Tracks channels", "FRO1292"},
+    {"mixer / Buses channels", "FRO1292"},
+    {"mixer / Audio 1 pan", "FRO1310"},
+    {"mixer / Audio 1 visibility", "FRO1310"},
+    {"mixer / Direct visibility", "FRO1310"},
+    {"mixer / Mixer pan law (this project): Compensated", "FRO1292"},
 };
 
 // A region that reaches some of its controls with keys of its own. `reaches` answers for one control; `reason` says
