@@ -55,8 +55,8 @@ void PianoRollComponent::clampToClipWindow(double& start, double& length) const 
     length = juce::jlimit(0.0, clipLength - start, length);
 }
 
-bool PianoRollComponent::computeNewNoteAnchor(juce::Point<int> pos, bool floorToGrid, double& startOut,
-                                              double& lengthOut, int& pitchOut) const {
+bool PianoRollComponent::computeNewNoteAnchor(juce::Point<int> pos, double& startOut, double& lengthOut,
+                                              int& pitchOut) const {
     const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
     if (clip == nullptr)
         return false;
@@ -66,11 +66,11 @@ bool PianoRollComponent::computeNewNoteAnchor(juce::Point<int> pos, bool floorTo
     const double grid = currentGridBeats();
     const double length = grid > 0.0 ? grid : kMinNoteLengthBeats;
     const double rawStart = xToBeat((double)pos.x) - clip->startBeat;
-    // Nearest division for the double-click (aiming at a line), the containing CELL for the Draw
-    // tool's pencil — see the declaration for why the two differ.
+    // The note starts at the left line of the grid CELL that was clicked (floor), for the
+    // double-click and the Draw pencil alike; Snap Off starts exactly where the pointer is.
     double start = rawStart;
     if (grid > 0.0)
-        start = floorToGrid ? std::floor(rawStart / grid) * grid : snappedBeatAt(rawStart);
+        start = std::floor(rawStart / grid) * grid;
     // Snapping up past the clip's end would leave no room at all — step back one division instead
     // of silently creating nothing.
     if (grid > 0.0 && start >= clip->lengthBeats)
@@ -119,7 +119,7 @@ void PianoRollComponent::commitNewNote(double startBeat, double lengthBeats, int
 void PianoRollComponent::createNoteAt(juce::Point<int> pos) {
     double start = 0.0, length = 0.0;
     int pitch = 60;
-    if (!computeNewNoteAnchor(pos, false, start, length, pitch))
+    if (!computeNewNoteAnchor(pos, start, length, pitch))
         return;
     commitNewNote(start, length, pitch);
 }
@@ -274,7 +274,7 @@ void PianoRollComponent::handleToolMouseDown(juce::Point<int> pos) {
             return; // the pencil never redraws over a note that is already there
         double start = 0.0, length = 0.0;
         int pitch = 60;
-        if (!computeNewNoteAnchor(pos, true, start, length, pitch))
+        if (!computeNewNoteAnchor(pos, start, length, pitch))
             return;
         // Armed, not committed: the note exists only as a preview until mouseUp, so a drag can
         // still change its length and an abandoned gesture costs no undo step.

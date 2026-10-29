@@ -16,15 +16,18 @@ TEST(KeyFieldTest, ShowsTheKeyOrTheNoKeyText) {
     EXPECT_EQ(field.getText(), "None");
 }
 
-TEST(KeyFieldTest, SpaceReturnAndDownOpenOnceAndAreConsumed) {
+TEST(KeyFieldTest, SpaceAndReturnOpenOnceAndAreConsumedButUpAndDownAreNot) {
     KeyField field;
     int opened = 0;
     field.onOpen = [&] { ++opened; };
-    for (const auto& key : {juce::KeyPress(juce::KeyPress::spaceKey), juce::KeyPress(juce::KeyPress::returnKey),
-                            juce::KeyPress(juce::KeyPress::downKey)}) {
+    for (const auto& key : {juce::KeyPress(juce::KeyPress::spaceKey), juce::KeyPress(juce::KeyPress::returnKey)}) {
         const int before = opened;
         EXPECT_TRUE(field.keyPressed(key)) << key.getTextDescription();
         EXPECT_EQ(opened, before + 1);
+    }
+    for (const auto& key : {juce::KeyPress(juce::KeyPress::downKey), juce::KeyPress(juce::KeyPress::upKey)}) {
+        EXPECT_FALSE(field.keyPressed(key)) << key.getTextDescription() << " bubbles so the region can move on";
+        EXPECT_EQ(opened, 2);
     }
 }
 

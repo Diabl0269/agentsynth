@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
@@ -53,8 +54,9 @@ inline bool stepFocusWithin(juce::Component& root, int direction, juce::Componen
 }
 
 /** The keys of a pane whose root is a plain container: bare Up/Down step to the neighbouring control and Escape returns
- *  focus to the root. A combo box or text field keeps its own Up/Down (it uses them), so only Escape leaves one. Attach
- * it to every control with attachToDescendants() once they exist; a control added later needs attach() too. */
+ *  focus to the root. Only a text field keeps its own Up/Down (it uses them), so only Escape leaves one. A combo box
+ *  opens on Space (Return is its own) and a slider moves with Left and Right. Attach it to every control with
+ *  attachToDescendants() once they exist; a control added later needs attach() too. */
 class PaneKeys : public juce::KeyListener {
 public:
     explicit PaneKeys(juce::Component& root)
@@ -70,26 +72,48 @@ public:
         if (usesArrows(*origin))
             return false;
         const bool plain = !key.getModifiers().isAnyModifierKeyDown();
-        if (plain && key.isKeyCode(juce::KeyPress::upKey))
-            return stepFocusWithin(root_, -1, origin);
-        if (plain && key.isKeyCode(juce::KeyPress::downKey))
-            return stepFocusWithin(root_, +1, origin);
-        return false;
+        if (plain && key.isKeyCode(juce::KeyPress::spaceKey)) {
+            auto* menu = dynamic_cast<juce::ComboBox*>(origin);
+            if (menu == nullptr)
+                return false;
+            menu->showPopup();
+            return true;
+        }
+        const bool up = plain && key.isKeyCode(juce::KeyPress::upKey);
+        if (!up && !(plain && key.isKeyCode(juce::KeyPress::downKey)))
+            return false;
+        lastStep_ = neighbourStop(root_, origin, up ? -1 : +1);
+        if (lastStep_ == nullptr && up)
+            lastStep_ = &root_;
+        return stepFocusWithin(root_, up ? -1 : +1, origin);
     }
 
-    void attach(juce::Component& control) { control.addKeyListener(this); }
+    void attach(juce::Component& control) {
+        control.addKeyListener(this);
+        if (!isAttachedTo(control))
+            attached_.push_back(&control);
+    }
+    /** Where the last Up or Down asked focus to go (null: nowhere, the end of the pane). Focus calls do nothing without
+     *  a native window, so this is what a test reads. */
+    juce::Component* getLastStepForTest() const noexcept { return lastStep_; }
+    bool isAttachedTo(const juce::Component& control) const {
+        return std::find(attached_.begin(), attached_.end(), &control) != attached_.end();
+    }
     void attachToDescendants() {
         for (auto* stop : focusableDescendants(root_))
             attach(*stop);
     }
 
 private:
+    // A line editor has no use for Up and Down, and keeping them would trap focus in it: only a multi-line editor does.
     static bool usesArrows(const juce::Component& c) {
-        return dynamic_cast<const juce::ComboBox*>(&c) != nullptr ||
-               dynamic_cast<const juce::TextEditor*>(&c) != nullptr;
+        const auto* editor = dynamic_cast<const juce::TextEditor*>(&c);
+        return editor != nullptr && editor->isMultiLine();
     }
 
     juce::Component& root_;
+    std::vector<const juce::Component*> attached_;
+    juce::Component* lastStep_ = nullptr;
 };
 
 } // namespace synth::ui

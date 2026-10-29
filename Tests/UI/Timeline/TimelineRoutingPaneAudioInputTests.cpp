@@ -5,6 +5,7 @@
 // is one undo step, as MainComponent makes it.
 #include "../Accessibility/AccessibilityAudit.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
+#include "../Layout/PaneKeysWalk.h"
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanel/TimelinePanelTestEvents.h"
@@ -338,6 +339,13 @@ TEST(TimelineRoutingPaneAudioInputTest, TheMonitorSwitchIsOneUndoStepAndFollowsT
     auto& keys = pane.getPaneKeysForTest();
     EXPECT_TRUE(keys.keyPressed(plain(juce::KeyPress::upKey), &monitor));
     EXPECT_EQ(f.doc.getTrack(id)->monitorMode, MonitorMode::On);
+}
+
+TEST(TimelineRoutingPaneAudioInputTest, EveryControlOfAnAudioTrackIsReachedByDown) {
+    AudioPanel f;
+    f.doc.addTrack(TrackKind::Audio, "Vox");
+    f.select(0);
+    pane_walk::expectEveryControlReachedByDownAndUp(f.pane().getPaneKeysForTest(), f.pane());
 }
 
 TEST(TimelineRoutingPaneAudioInputTest, InputAndMonitorAreKeyboardStopsInVisualOrder) {

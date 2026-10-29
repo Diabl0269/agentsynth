@@ -499,3 +499,48 @@ TEST(PianoRollGridVisibilityTest, SnapOffAsADivisionChoiceHasNoSubBeatLevelAtAll
     EXPECT_DOUBLE_EQ(f.roll.getDrawnGridDivisionForTest(), 0.0);
     EXPECT_GT(f.roll.getGridLineCountForTest(1.0), 0) << "beat lines are unconditional";
 }
+
+// ============================================================================
+// Trackpad pinch: plain = time and pitch rows together, Shift/Option = rows, Cmd = time
+// ============================================================================
+
+namespace {
+void openPinchFixture(PianoRollFixture& f) {
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    f.open(f.doc.addClip(trackId, 0.0, 8.0, "Clip"));
+}
+} // namespace
+
+// Regression test for FRO549: a plain pinch zoomed time only, so the roll did not grow like the
+// patch canvas.
+TEST(PianoRollPinchTest, PlainPinchZoomsTimeAndPitchRowsTogether) {
+    PianoRollFixture f;
+    openPinchFixture(f);
+    const double ppsBefore = f.roll.getPixelsPerSemitone();
+    const double ppbBefore = f.roll.getPixelsPerBeat();
+    f.roll.mouseMagnify(leftClick(f.roll, {300.0f, 90.0f}, 0), 1.5f);
+    EXPECT_GT(f.roll.getPixelsPerSemitone(), ppsBefore);
+    EXPECT_GT(f.roll.getPixelsPerBeat(), ppbBefore);
+}
+
+TEST(PianoRollPinchTest, ShiftAndOptionPinchZoomPitchRowsOnly) {
+    for (const int mod : {(int)juce::ModifierKeys::shiftModifier, (int)juce::ModifierKeys::altModifier}) {
+        PianoRollFixture f;
+        openPinchFixture(f);
+        const double ppsBefore = f.roll.getPixelsPerSemitone();
+        const double ppbBefore = f.roll.getPixelsPerBeat();
+        f.roll.mouseMagnify(leftClick(f.roll, {300.0f, 90.0f}, mod), 1.5f);
+        EXPECT_GT(f.roll.getPixelsPerSemitone(), ppsBefore);
+        EXPECT_DOUBLE_EQ(f.roll.getPixelsPerBeat(), ppbBefore);
+    }
+}
+
+TEST(PianoRollPinchTest, CmdPinchZoomsTimeOnly) {
+    PianoRollFixture f;
+    openPinchFixture(f);
+    const double ppsBefore = f.roll.getPixelsPerSemitone();
+    const double ppbBefore = f.roll.getPixelsPerBeat();
+    f.roll.mouseMagnify(leftClick(f.roll, {300.0f, 90.0f}, juce::ModifierKeys::commandModifier), 1.5f);
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), ppsBefore);
+    EXPECT_GT(f.roll.getPixelsPerBeat(), ppbBefore);
+}

@@ -312,7 +312,7 @@ its clips, its lanes and the scroll all follow. A fixed override (the Unassigned
   second strip (`trackHeightHandleBelowLanes`, owned by the panel, same name, tooltip, drag and double-click)
   runs along the bottom of that lane block: the seam above the next track resizes the track it belongs to
   with lanes open or folded.
-- **Vertical zoom:** zooming the tracks in or out (wheel, pinch or Cmd+Shift+= / Cmd+Shift+-) sets ONE height
+- **Vertical zoom:** zooming the tracks in or out (Cmd+Shift+wheel, a plain or Option/Shift pinch, or Cmd+Shift+= / Cmd+Shift+-) sets ONE height
   for all of them. `TimelinePanelComponent::zoomTrackRows()` first clears every track's own height with
   `TimelineDoc::resetTrackHeightScales()` through `performTrackEdit` (one undo step that brings the mixed heights
   back; a run of zoom ticks writes it once, as the heights are then equal), then scales the shared

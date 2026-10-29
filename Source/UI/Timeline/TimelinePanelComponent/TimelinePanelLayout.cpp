@@ -341,16 +341,19 @@ void TimelinePanelComponent::applyWheelScroll(int axis, double amount) {
 }
 
 void TimelinePanelComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
-    // Trackpad pinch: deliberate enough that it needs no modifier. Plain pinch = horizontal zoom
-    // around the pinch point; Option+pinch (or Shift+pinch) = vertical (row height) zoom. A pinch
-    // reports one scale factor and no axis, so the modifier is the only way to say "vertical".
-    if (e.mods.isAltDown() || e.mods.isShiftDown()) {
-        if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
-            return;
-        zoomTrackRows((double)scaleFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
+    // Trackpad pinch, mapped like the patch canvas: a pinch grows everything around the fingers, so
+    // a plain pinch zooms time (around the pinch x) AND the track rows (around the pinch y) by the
+    // same factor, and sizes grow and shrink together. A pinch reports one scale factor and no
+    // axis, so a modifier is the only way to ask for one axis: Option+pinch (or Shift+pinch) =
+    // rows only, Cmd+pinch = time only.
+    if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
         return;
-    }
-    zoomHorizontalAroundX((double)scaleFactor, (double)e.getEventRelativeTo(&ruler_).position.x);
+    const bool rowsOnly = e.mods.isAltDown() || e.mods.isShiftDown();
+    const bool timeOnly = !rowsOnly && e.mods.isCommandDown();
+    if (!rowsOnly)
+        zoomHorizontalAroundX((double)scaleFactor, (double)e.getEventRelativeTo(&ruler_).position.x);
+    if (!timeOnly)
+        zoomTrackRows((double)scaleFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
 }
 
 //==============================================================================
@@ -797,6 +800,7 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
 void TimelinePanelComponent::paintOverChildren(juce::Graphics& g) {
     if (!routingPane_.hasKeyboardFocus(true) && !pianoRoll_.getScaleAssistPanel().hasKeyboardFocus(true))
         synth::ui::paintFocusRegionOutline(*this, g);
+    topBarKeys_.paintRing(g);
 }
 
 } // namespace synth::ui

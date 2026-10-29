@@ -25,6 +25,9 @@ void TimelinePanelComponent::wireClipLaneCallbacks() {
 // (the first stop, with or without tracks), and Down again reaches the first track; the Next Clip key enters the clips
 // of the focused track, else of the first track that has any.
 bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
+    // Up from the panel root climbs to the top bar (tools, snap, follow, transport); Down from the bar comes back.
+    if (key == juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0))
+        return topBarKeys_.enter();
     if (key.isKeyCode(juce::KeyPress::downKey)) {
         addTrackFromTop_ = true;
         focusAddTrackButton();

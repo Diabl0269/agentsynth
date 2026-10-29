@@ -50,4 +50,8 @@ std::unique_ptr<Surface> makeTimelineTrackRows();
 std::unique_ptr<Surface> makeAutomationLaneReorder();
 std::unique_ptr<Surface> makeLfoCardPoint();
 
+/** Clip contents: the notes inside a MIDI clip whose edge was dragged, one entry per sizing mode and edge in which the
+ *  notes change place (UndoGlideSurfacesClipContents.cpp builds them by looping over every mode and both edges). */
+void appendClipContentsEntries(std::vector<Entry>& list);
+
 } // namespace undo_glide_test

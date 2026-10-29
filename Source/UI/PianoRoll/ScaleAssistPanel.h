@@ -62,6 +62,11 @@ public:
         scrollViewport_.setScrollBarsShown(/*vertical=*/true, /*horizontal=*/false);
         showCustomEditor(false);
         paneKeys_.attachToDescendants();
+        // The custom scale block is hidden here, so attachToDescendants() skipped its controls.
+        for (auto& toggle : customPitchToggles_)
+            paneKeys_.attach(toggle);
+        paneKeys_.attach(customScaleNameEditor_);
+        paneKeys_.attach(saveCustomScaleButton_);
     }
     ~ScaleAssistPanel() override {
         if (auto* picker = getOpenKeyPicker()) {
