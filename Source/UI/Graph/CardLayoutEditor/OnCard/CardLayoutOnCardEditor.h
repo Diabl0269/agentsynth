@@ -3,13 +3,17 @@
 #include "CardLayoutAddPanel.h"
 #include "CardLayoutControlPanel.h"
 #include "CardLayoutEditBar.h"
+#include "CardLayoutGroupHandle.h"
 #include "CardLayoutHideZone.h"
 #include "CardLayoutOutline.h"
 #include "OnCardCells.h"
+#include "OnCardGroupMove.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/NonModalLabel.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
+#include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -40,7 +44,9 @@ class BuiltInCardLayoutSource;
  * cancelled edits back. The bar's Preset and Apply to menus, and the "+ Add control"
  * strip the overlay adds under the card, are the other things it hosts; on an ADSR card the strip also holds the
  * "Controls" switch (Shared or Separate), which rewrites the stages' group; the card's own Sync switch
- * stays usable and picks the look being edited, and ending the session puts it back as it was.
+ * stays usable and picks the look being edited, and ending the session puts it back as it was. A titled group's
+ * title row is its handle (CardLayoutGroupHandle): dragging it, or Alt+Up and Alt+Down on it, moves the whole group
+ * among the card's groups as one write, and a double-click, Return or its menu's Rename edits the title in place.
  */
 class CardLayoutOnCardEditor final
     : public juce::Component
@@ -102,6 +108,17 @@ public:
     juce::Rectangle<int> getAddGhostForTest() const noexcept { return addDrag_.ghost; }
     /** The control's home rect (where a push-free layout would put it); empty when it has none. */
     juce::Rectangle<int> getHomeRectForTest(const juce::String& paramId) const;
+    CardLayoutGroupHandle* getGroupHandleForTest(const juce::String& sectionId) const;
+    int getGroupHandleCountForTest() const { return groupHandles_.size(); }
+    /** The open inline title editor's label (hidden unless a rename is running). */
+    NonModalLabel& getRenameLabelForTest() noexcept { return renameLabel_; }
+    /** Where a drop now would put each group of the dragged one's run, by section id (the plan the commit writes). */
+    std::vector<std::pair<juce::String, int>> getGroupDropPlanForTest() const;
+    /** The group's block now: its title row down to its last row (card pixels); empty when it has none. */
+    juce::Rectangle<int> getGroupBlockForTest(const juce::String& sectionId) const;
+    /** Esc as a group drag in progress sees it; false when no group drag is live. */
+    bool sendEscapeToGroupDragForTest() { return groupSession_.sendEscapeForTest(); }
+    bool isDraggingGroupForTest() const noexcept { return groupDrag_.pressed && groupSession_.isReordering(); }
     const std::vector<oncard::Guide>& getGuidesForTest() const noexcept { return guides_; }
     bool isDraggingForTest() const noexcept { return drag_.moving; }
     /** The pointer is below the card mid-drag, so a release hides the control. */
@@ -222,7 +239,8 @@ private:
     void repackAfterResize(const juce::String& paramId, juce::Rectangle<int> before);
     std::vector<int> cellsOfSection(int section) const;
 
-    /** A cell gliding from one rect to another over `ms`, easing in when it is on its way back. */
+    /** A cell (or a group's title, or a view: see moveKeyTo) gliding from one rect to another over `ms`, easing in
+     *  when it is on its way back. */
     struct Move {
         juce::String key;
         juce::Rectangle<int> from;
@@ -231,6 +249,41 @@ private:
         bool easeIn = false;
     };
     void startGlide(std::vector<Move> moves);
+
+    // ---- Groups: move (CardLayoutOnCardEditorGroupMove.cpp) and rename (...GroupRename.cpp) ---------
+    /** One group of a run as it stood at the press: its strip and what is drawn in it (card pixels). */
+    struct GroupBase {
+        int section = -1; ///< Index into the plan's sections.
+        juce::String id;
+        juce::String title;
+        juce::Rectangle<int> block;  ///< Title row down to the last row: the strip the group owns.
+        juce::Rectangle<int> header; ///< The title label's bounds.
+        CellRects cells;
+        std::vector<std::pair<CardView, juce::Rectangle<int>>> views;
+    };
+    struct GroupDrag {
+        bool pressed = false;
+        int dragged = -1; ///< Index into `run`.
+        std::vector<GroupBase> run;
+    };
+    void reconcileGroupHandles();
+    void wireGroupHandle(CardLayoutGroupHandle& handle);
+    std::vector<int> groupRunOf(int planSection) const;
+    int planSectionOfGroup(const juce::String& sectionId) const;
+    std::vector<GroupBase> readGroupRun(const std::vector<int>& run) const;
+    void pressGroup(const juce::String& sectionId, const juce::MouseEvent& e);
+    void dragGroup(const juce::MouseEvent& e);
+    void releaseGroup(const juce::MouseEvent& e);
+    void placeGroups();
+    void commitGroupOrder(const std::vector<GroupBase>& run, const std::vector<int>& order, int moved);
+    void moveGroupByKey(const juce::String& sectionId, int direction);
+    bool handleGroupKey(const juce::String& sectionId, const juce::KeyPress& press);
+    void startRename(const juce::String& sectionId);
+    void commitRename(const juce::String& text);
+    void cancelRename();
+    juce::Rectangle<int> groupBlockOf(int planSection) const;
+    void moveKeyTo(const juce::String& key, juce::Rectangle<int> rect);
+    bool hasMoveTarget(const juce::String& key) const;
 
     // ---- The per-control panel (CardLayoutOnCardEditorPanel.cpp) ---------------------------------
     void launchPanel(std::unique_ptr<juce::Component> panel, juce::Rectangle<int> screenArea);
@@ -328,6 +381,11 @@ private:
     CardLayoutHideZone hideZone_; ///< Fades in under the card while a control is dragged.
     ReorderFramePump hideZonePump_{*this};
     juce::OwnedArray<CardLayoutOutline> outlines_;
+    juce::OwnedArray<CardLayoutGroupHandle> groupHandles_; ///< One per titled group that can move or be renamed.
+    NonModalLabel renameLabel_;                            ///< The inline title editor, over the group's title.
+    juce::String renamingId_;                              ///< The group whose title is being edited; empty when none.
+    GroupDrag groupDrag_;
+    ReorderDragSession groupSession_{*this, [this] { placeGroups(); }};
     std::vector<OnCardCell> cells_;
     /** Where each control stood before any push, by parameter id: set when the session opens or re-syncs to a
      *  restored card, moved only by the user's own drag or nudge of that control. A drop pushes its

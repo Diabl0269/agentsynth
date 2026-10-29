@@ -548,6 +548,27 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     row, never overlaps). Both groups are written positioned, so nothing else
     moves. It is one write, so one undo step, and is announced ("Level moved to Unison")
     (`CardLayoutOnCardEditorGroups.cpp`).
+  - *Moving and renaming a group.* A titled group's title row is its handle (`CardLayoutGroupHandle`, one per
+    group the editor can move: a titled grid group that is shown, outside tabs, alternative looks and `row`
+    groups; the footer and untitled groups have none). The handle spans the whole group but only its title row
+    takes the mouse, so the controls' outlines inside stay reachable. Hover or focus draws a faint accent outline
+    and wash round the whole group with a grip at the title's right end, and the grab cursor (`dragGrabCursor()`).
+    Dragging the title moves the whole group up or down among the **run** it can trade places with (`groupRunOf`:
+    the movable groups standing flush against it); never sideways. The drag is a `ReorderDragSession` over the run's
+    blocks (title row down to the last row): the group follows the pointer, the others make room with the shared
+    reorder motion, and cells, title and views move together (`placeGroups`). Release writes
+    `oncard::withGroupsReordered` (the run's sections swapped into the same layout slots, each keeping its items and
+    positions, which are measured from the group's own top) as ONE write, so one undo step; the preview and the
+    write both come from the animator's new order and `oncard::stackedTops`, and nothing overlaps afterwards and
+    the card keeps its height. A drop where it began, or Esc, writes nothing. Alt+Up and Alt+Down on a focused
+    title do the same one place at a time ("Unison moved below Output"; at an end "Pitch is already first").
+    The write then glides every cell, title and view from where it stood to where the card put it (`Move` keys
+    `group:<id>` and `view:<n>` beside cell keys). Double-click, Return on the title, or **Rename group** in its
+    right-click menu opens the app's inline label editor (`NonModalLabel`) over the title: Return or leaving the
+    field keeps the text, Esc cancels, an empty or unchanged text writes nothing; a rename is one write
+    (`oncard::withGroupTitle`, announced "Group renamed to Voices"). The handle is a button named "<title> group"
+    with a tooltip naming its keys. On a card with no explicit layout yet the first write materialises it as a
+    control move does (`CardLayoutOnCardEditorGroupMove.cpp`, `...GroupRename.cpp`, `OnCardGroupMove.cpp`).
   - *Writing.* A drop writes at once: the group's section gets a free position (`at`) on every control it
     outlines (relative to the group's content origin, so a layout with positions survives a width or
     theme change), through `BuiltInCardLayoutSource` (the same live write the list uses), which rebuilds
@@ -655,8 +676,8 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     the tab strip while editing re-reads the outlines (`CardBody::onTabSelected`): the old tab's outlines go and the
     new tab's appear. The tab strip itself, the group headers and the chrome pills (Show Scope and the like)
     get no outline, and a tab's controls cannot be moved, nor tabs added, renamed, reordered or removed.
-  - *Not built yet:* adding or removing groups, moving a control to another group by dragging, and renaming
-    or reordering tabs.
+  - *Not built yet:* adding or removing groups, renaming or reordering tabs, moving a group sideways (groups
+    are a vertical stack), and rebinding the group keys (Alt+Up and Alt+Down are fixed).
 - **The list editor (built, hosted plugins only).** A hosted plugin's **Edit Layout...** opens
   `CardLayoutEditorComponent` in a
   `juce::CallOutBox` beside the card; built-in cards no longer have a list, the on-card editor replaced it. It lists
@@ -744,7 +765,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
 - Tab strip (built): one Tab stop; Left/Right switch tabs and stop at the ends, Home/End jump to the
   first and last; the accent focus ring; titled "Control tabs" with a tooltip naming those keys; a
   group of radio buttons titled with the tab names, each with a tooltip.
-- On-card editor (built): the edit bar's Cancel and Done are named by their text with tooltips; each
+- On-card editor (built): a titled group's title row is one focus stop (a button named "<title> group", accent focus ring, tooltip "Drag the title to move the group (Alt+Up and Alt+Down move it, Return renames it). Double-click or right-click to rename"): Alt+Up and Alt+Down move the group, Return renames it, and each move or rename is announced; the edit bar's Cancel and Done are named by their text with tooltips; each
   control's outline is one focus stop (the shared accent focus ring, a faint wash and a solid outline on
   hover or focus), a button titled "<caption>, layout: drag to move, Return for options" with the tooltip
   "Drag to move (arrow keys nudge, Shift for 8px, Backspace removes). Right-click for options"; the arrow keys
@@ -833,7 +854,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
   gaps; `OnCardEditorDragTests.cpp` real mouse events: a 60 px drop writing positions, the widget following
   the pointer, guides and Cmd, a drop onto a neighbour, a pushed neighbour coming back to its rect when the control is dragged back, Esc mid-drag; `OnCardEditorGroupTests.cpp` a hidden control added back to its own group and a drag between groups with its undo; `OnCardEditorHideDragTests.cpp` the drop zone, a release below the card hiding (and its undo), moving back up, Esc below; `OnCardEditorKeyboardTests.cpp` the
   nudge (1 px, Shift 8 px, one write), Backspace and Delete removing a control, Esc, Return and the actions; `OnCardEditorSessionTests.cpp` Done keeping per-change steps, Cancel restoring the opening layout as one more
-  step; `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
+  step; `OnCardGroupMoveTests.cpp` the group plan as pure functions, `OnCardGroupMoveEditorTests.cpp` the oscillator's Unison dragged below Output through the title row's mouse events (one write, controls keep their place, nothing overlaps, the plan the drag held equals the write, one Cmd+Z), Alt+Up/Down, Esc and the hover and hit areas, `OnCardGroupRenameTests.cpp` double-click, Return and the menu opening the inline editor (Return keeps, Esc cancels, empty reverts, one undo each); `OnCardEditorUndoTests.cpp` Cmd+Z/Cmd+Shift+Z with the editor open (one change at a time, repeated, past the
   module add, and the glide back). Motion is off in them
   (`setReducedMotionForTest`); the glide and fades need a window and are not exercised headless.
 - E2E (built, `CardLayoutEditorE2ETests.cpp`): add a Filter, hide Drive, rename Cutoff to Freq, make

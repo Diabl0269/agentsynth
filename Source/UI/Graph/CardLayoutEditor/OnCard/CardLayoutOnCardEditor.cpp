@@ -58,6 +58,15 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
     addChildComponent(timeTempo_);
     hideZone_.setVisible(false);
     addChildComponent(hideZone_);
+    renameLabel_.setComponentID("layoutGroupRename");
+    renameLabel_.setEditable(false, false, false); // opened by showEditor() from a handle, never by a click
+    renameLabel_.setJustificationType(juce::Justification::centredLeft);
+    renameLabel_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+    renameLabel_.setWantsKeyboardFocus(false);
+    renameLabel_.setTitle("Group name");
+    renameLabel_.onEditorHide = [this] { renameLabel_.setVisible(false); };
+    renameLabel_.onTextChange = [this] { commitRename(renameLabel_.getText()); };
+    addChildComponent(renameLabel_);
 }
 
 // Ending the session without Done or Cancel (the owner let go of it) keeps the layout, as Done does.
@@ -144,6 +153,9 @@ void CardLayoutOnCardEditor::syncToCard() {
         attachTo(*card);
     dropHideProxy();
     drag_ = {};
+    groupDrag_ = {};
+    groupSession_.discard();
+    cancelRename();
     guides_.clear();
     refreshTimeTempo();
     setBounds(overlayBoundsFor(card->getBounds()));
@@ -151,6 +163,7 @@ void CardLayoutOnCardEditor::syncToCard() {
     refreshHomes();
     watchTabs(*card);
     reconcileOutlines();
+    reconcileGroupHandles();
     toFront(false);
     repaint();
     refreshPanel();
@@ -315,6 +328,9 @@ void CardLayoutOnCardEditor::close(bool keep) {
     hideZone_.setVisible(false);
     dropHideProxy();
     drag_ = {};
+    groupDrag_ = {};
+    groupSession_.discard();
+    cancelRename();
     guides_.clear();
     if (keep) {
         flushNudge();

@@ -544,20 +544,20 @@ void CardLayoutOnCardEditor::writeLayout(const CardLayout& layout) {
 void CardLayoutOnCardEditor::startGlide(std::vector<Move> moves) {
     if (closing_ || closed_ || !canAnimate() || prefersReducedMotion())
         return;
-    std::erase_if(moves, [this](const Move& m) { return m.from == m.to || indexOfCell(m.key) < 0; });
+    std::erase_if(moves, [this](const Move& m) { return m.from == m.to || !hasMoveTarget(m.key); });
     if (moves.empty())
         return;
     double longest = 0.0;
     for (const auto& m : moves) {
         longest = std::max(longest, m.ms);
-        moveCellTo(indexOfCell(m.key), m.from);
+        moveKeyTo(m.key, m.from);
     }
     const auto start = juce::Time::getMillisecondCounterHiRes();
     const auto place = [this, moves](float elapsedMs) {
         for (const auto& m : moves)
-            if (const int cell = indexOfCell(m.key); cell >= 0) {
+            if (hasMoveTarget(m.key)) {
                 const float t = juce::jlimit(0.0f, 1.0f, elapsedMs / (float)m.ms);
-                moveCellTo(cell, lerpRect(m.from, m.to, m.easeIn ? easeInCubic(t) : easeOutCubic(t)));
+                moveKeyTo(m.key, lerpRect(m.from, m.to, m.easeIn ? easeInCubic(t) : easeOutCubic(t)));
             }
     };
     glideFrame_ = place;
