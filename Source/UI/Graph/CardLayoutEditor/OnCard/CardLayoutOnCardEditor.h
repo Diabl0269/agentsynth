@@ -188,7 +188,10 @@ private:
     void syncAfterOutsideChange();
     void followCard(); ///< Pans the canvas to keep the card in view (CardLayoutOnCardEditorFollow.cpp).
     void releaseCardGlide();
-    void animateRestore(const std::vector<OnCardCell>& before, const juce::Image& beforeImage, bool rebuilt);
+    void animateRestore(const std::vector<OnCardCell>& before,
+                        const std::map<juce::String, juce::Rectangle<int>>& shapesBefore,
+                        const juce::Image& beforeImage, bool rebuilt);
+    void rememberGroupShapes();
     void rememberCardImage();
     void reconcileOutlines();
     void watchTabs(ModuleComponent& card);
@@ -387,6 +390,9 @@ private:
     GroupDrag groupDrag_;
     ReorderDragSession groupSession_{*this, [this] { placeGroups(); }};
     std::vector<OnCardCell> cells_;
+    /** Where each group's title and views are drawn, by glide key: read at every sync and moved with every glide,
+     *  so an undo that rebuilds the card still knows where they stood. */
+    std::map<juce::String, juce::Rectangle<int>> groupShapes_;
     /** Where each control stood before any push, by parameter id: set when the session opens or re-syncs to a
      *  restored card, moved only by the user's own drag or nudge of that control. A drop pushes its
      *  neighbours from these, so a control pushed aside returns as soon as its home is free. */

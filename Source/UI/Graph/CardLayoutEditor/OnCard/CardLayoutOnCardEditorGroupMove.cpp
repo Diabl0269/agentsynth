@@ -351,6 +351,22 @@ bool CardLayoutOnCardEditor::handleGroupKey(const juce::String& sectionId, const
     return false;
 }
 
+// Where every group's title and views stand now, under the glide keys, for an undo to glide them back from.
+void CardLayoutOnCardEditor::rememberGroupShapes() {
+    groupShapes_.clear();
+    const auto* body = card_ != nullptr ? card_->getCardBody() : nullptr;
+    if (body == nullptr)
+        return;
+    for (int i = 0; i < (int)body->getPlan().sections.size(); ++i) {
+        const auto& s = body->getPlan().sections[(size_t)i];
+        if (!isMovable(s))
+            continue;
+        groupShapes_[kGroupKey + s.id] = s.header->getBounds();
+        for (const auto& view : collectViews(*card_, i))
+            groupShapes_[kViewKey + juce::String((int)view.view)] = view.rect;
+    }
+}
+
 // ---- Moving what is drawn ----------------------------------------------------------------------------------
 
 bool CardLayoutOnCardEditor::hasMoveTarget(const juce::String& key) const {
@@ -374,11 +390,14 @@ void CardLayoutOnCardEditor::moveKeyTo(const juce::String& key, juce::Rectangle<
             return;
         auto* header = body->getPlan().sections[(size_t)section].header;
         header->setTopLeftPosition(header->getX(), rect.getY());
+        groupShapes_[key] = header->getBounds();
         if (auto* handle = getGroupHandleForTest(id))
             handle->setTopLeftPosition(handle->getX(), rect.getY());
     } else if (key.startsWith(kViewKey)) {
-        if (auto* view = body->findView((CardView)key.substring(kViewKey.length()).getIntValue()))
+        if (auto* view = body->findView((CardView)key.substring(kViewKey.length()).getIntValue())) {
             view->setBounds(rect);
+            groupShapes_[key] = rect;
+        }
     } else if (const int cell = indexOfCell(key); cell >= 0) {
         moveCellTo(cell, rect);
     }

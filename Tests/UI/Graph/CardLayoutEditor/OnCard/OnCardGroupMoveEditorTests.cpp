@@ -363,3 +363,89 @@ TEST(OnCardGroupMoveEditor, MovingEachGroupOfEveryCardTypeNeverOverlapsAnything)
     sweep(std::make_unique<FilterModule>(), "filter");
     sweep(std::make_unique<LFOModule>(), "lfo");
 }
+
+namespace {
+
+/** Cmd+Z or Cmd+Shift+Z as the app takes it: the focused title leaves the key, then the app undoes or redoes. */
+bool undoOrRedo(Oscillator& osc, bool redo) {
+    const int mods = juce::ModifierKeys::commandModifier | (redo ? juce::ModifierKeys::shiftModifier : 0);
+    EXPECT_FALSE(
+        osc.editor->getGroupHandleForTest("unison")->keyPressed(juce::KeyPress('z', juce::ModifierKeys(mods), 0)));
+    return redo ? osc.rig.canvas.undo.redo() : osc.rig.canvas.undo.undo();
+}
+
+/** Where the Unison title and its handle are drawn now. */
+struct TitleAt {
+    int header = 0;
+    int handle = 0;
+};
+
+TitleAt unisonTitle(Oscillator& osc) {
+    for (const auto& section : osc.card().getCardBody()->getPlan().sections)
+        if (section.id == "unison")
+            return {section.header->getY(), osc.editor->getGroupHandleForTest("unison")->getY()};
+    return {};
+}
+
+} // namespace
+
+// Regression guard for the undo-gap kind: Cmd+Z and Cmd+Shift+Z of a group move glide the title and its outline
+// with the group, the way the controls glide: no frame shows the restored place first, and the title travels one
+// way only.
+TEST(OnCardGroupMoveEditor, UndoAndRedoGlideTheTitleAndItsOutlineWithTheGroup) {
+    Oscillator osc;
+    synth::ui::setReducedMotionForTest(false);
+    ASSERT_NE(osc.editor, nullptr);
+    const int openedY = unisonTitle(osc).header;
+    osc.editor->getGroupHandleForTest("unison")->keyPressed(
+        juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys(kAlt), 0));
+    osc.editor->finishMotionForTest();
+    const int movedY = unisonTitle(osc).header;
+    ASSERT_GT(movedY, openedY);
+    osc.editor->setForceAnimateForTest(true);
+
+    ASSERT_TRUE(undoOrRedo(osc, false));
+    EXPECT_EQ(unisonTitle(osc).header, movedY) << "the first frame after Cmd+Z still shows the title where it was";
+    EXPECT_TRUE(osc.editor->isGlidingForTest());
+    int previous = movedY;
+    bool moved = false;
+    for (float ms = 0.0f; ms <= 160.0f; ms += 16.0f) {
+        osc.editor->stepGlideForTest(ms);
+        const auto at = unisonTitle(osc);
+        EXPECT_LE(at.header, previous) << "one way only, at " << ms << " ms";
+        EXPECT_GE(at.header, openedY);
+        EXPECT_EQ(at.handle, at.header) << "the outline goes with the title";
+        moved = moved || at.header < movedY;
+        previous = at.header;
+    }
+    EXPECT_TRUE(moved);
+    osc.editor->stepGlideForTest(1000.0f);
+    EXPECT_EQ(unisonTitle(osc).header, openedY);
+    EXPECT_EQ(unisonTitle(osc).handle, openedY);
+
+    ASSERT_TRUE(undoOrRedo(osc, true));
+    EXPECT_EQ(unisonTitle(osc).header, openedY) << "redo starts from the restored place";
+    previous = openedY;
+    for (float ms = 0.0f; ms <= 160.0f; ms += 16.0f) {
+        osc.editor->stepGlideForTest(ms);
+        EXPECT_GE(unisonTitle(osc).header, previous) << ms;
+        EXPECT_LE(unisonTitle(osc).header, movedY);
+        previous = unisonTitle(osc).header;
+    }
+    osc.editor->stepGlideForTest(1000.0f);
+    EXPECT_EQ(unisonTitle(osc).header, movedY);
+}
+
+TEST(OnCardGroupMoveEditor, UnderReduceMotionUndoPutsTheTitleBackAtOnce) {
+    Oscillator osc;
+    synth::ui::setReducedMotionForTest(true);
+    ASSERT_NE(osc.editor, nullptr);
+    const int openedY = unisonTitle(osc).header;
+    osc.editor->getGroupHandleForTest("unison")->keyPressed(
+        juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys(kAlt), 0));
+    osc.editor->setForceAnimateForTest(true);
+    ASSERT_TRUE(undoOrRedo(osc, false));
+    EXPECT_FALSE(osc.editor->isGlidingForTest());
+    EXPECT_EQ(unisonTitle(osc).header, openedY);
+    synth::ui::setReducedMotionForTest(false);
+}
