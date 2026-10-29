@@ -11,7 +11,7 @@ Scripts for it live in [`Tools/ui-verify/`](../../Tools/ui-verify/README.md).
 
 | Flag | Effect |
 |---|---|
-| `--automation <port>` | Starts the server. Port `0` picks a free port, which is what the client always uses. Implies `--no-audio-device` and `--no-keychain`. |
+| `--automation <port>` | Starts the server. Port `0` picks a free port, which is what the client always uses. Implies `--no-audio-device` and `--no-keychain`; the client passes both anyway (and sets their environment variables), and refuses a binary built without test mode, since such a build ignores `--automation`, starts normally and asks for the keychain. Use the build of your own worktree. |
 | `--settings-dir <absolute dir>` | Every setting and user-data folder of this process (settings file, themes, snippets, history, recordings, the default projects folder, the stretched-loop cache) lives under that directory; installed sound packs stay shared and are only read. Under `--automation` without it, a fresh temporary directory is used, so a running real instance's files are never shared. |
 | `--automation-info <file>` | Also writes `{"port":N,"pid":P}` to the file once the server listens. |
 | `--automation-motion` | Keeps animations on. Under `--automation` they are otherwise switched off, so a click lands in its final state. |
