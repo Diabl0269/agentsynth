@@ -107,6 +107,11 @@ public:
     std::function<void(int)> onEditDot;
     std::function<void(int)> onDuplicateDot;
     std::function<void(int)> onDeleteDot;
+    /** Ctrl+T on dot `index`: add a dot halfway to the next one. Returns the new dot's index, or -1 when refused.
+     *  Unset: the key is not used. */
+    std::function<int(int)> onInsertAfterDot;
+    /** A short message about a key that did nothing (the last dot cannot insert, no room); unset says nothing. */
+    std::function<void(const juce::String&)> onNotice;
     std::function<void(int, const juce::String&)> onRenameDot;
     /** Shows a dot menu next to `screenArea` (screen coordinates); unset opens it as a real popup there. A test
      *  replaces it to inspect the menu and the area. */
@@ -235,6 +240,7 @@ private:
     void select(int index);
     void takeFocus(juce::Component& target);
     void deleteDotAndRefocus(int index);
+    bool insertAfterDot(int index);
     void startDotMotion(const std::vector<Dot>& before);
     void motionFrame(double elapsedMs);
     void endMotion();

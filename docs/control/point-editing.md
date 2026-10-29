@@ -12,7 +12,11 @@ on the piano roll. Shortcut table of the app-level commands: [`shortcuts.md`](sh
 | Automation and modulation lanes (`AutomationLaneEditor`) | Under each track | Points have a beat and a value; insert needs a next point. [`timeline/automation.md`](../timeline/automation.md) |
 
 **The exception: the morph map.** It is a 2D map with no left-to-right order, so it keeps its own keys: the arrows move
-the focused dot (Shift: a bigger step; held, they glide on), and Tab steps to the next dot. See
+the focused dot (Shift: a bigger step; held, they glide on), and Tab steps to the next dot. Ctrl+T on a dot adds a shape
+halfway between it and the next dot in the list (one undo step; the new dot is selected and focused). On the last dot,
+or with the shape list full, nothing is added and the window says so under the map ("This is the last dot", "No room for
+another shape"). The same goes for a curve: a Ctrl+T it cannot act on says why ("Pick a point first", "No room after
+this point", "No room: the curve has the most points it can hold") in the shape window. See
 [`modules/custom-filter.md`](../modules/custom-filter.md).
 
 ## The keys
