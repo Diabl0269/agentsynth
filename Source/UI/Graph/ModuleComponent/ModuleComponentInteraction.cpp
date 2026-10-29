@@ -764,6 +764,8 @@ void ModuleComponent::finishTitleRename(bool commit) {
     // blank and keeps following the numbering instead of freezing today's number in place.
     owner.setModuleDisplayName(
         nodeId, typed.trim() == synth::moduleTitle(juce::NamedValueSet(), module) ? juce::String() : typed);
+    setTitle(cardTitle());
+    setComponentID("card:" + cardTitle());
     repaint();
 }
 

@@ -30,6 +30,20 @@
 
 using namespace detail;
 
+void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
+    into.setProperty("selected", owner.isNodeSelected(nodeId));
+    into.setProperty("moduleType", module != nullptr ? module->getName() : juce::String());
+    into.setProperty("title", cardTitle());
+    into.setProperty("nodeId", static_cast<int>(nodeId.uid));
+    // The macro the module is a member of ("" when it is in none), so a scenario can tell "inside the macro" from
+    // "next to it" without reading the canvas geometry.
+    juce::String macroName;
+    if (auto* node = owner.getAudioEngine().getGraph().getNodeForId(nodeId))
+        if (const auto* macro = owner.getMacros().findByMember(node->properties["uuid"].toString()))
+            macroName = macro->name;
+    into.setProperty("macro", macroName);
+}
+
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {
     if (isMacroPortType(getType(module)))
         return {macroPortJackX(!isOutput), midiJackY(module)};
@@ -178,6 +192,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     createWavetableControls();
 
     setTitle(cardTitle());
+    setComponentID("card:" + cardTitle()); // the stable id the test mode finds a card by; finishTitleRename keeps it
     // Buffered to image (docs/layout/rendering.md) through our own cache so a zoom gesture can pin the
     // raster scale — see ZoomFrozenCachedImage. Do NOT add setBufferedToImage() back anywhere on
     // this component: JUCE asserts if a custom cache is already installed (juce_Component.cpp:567).

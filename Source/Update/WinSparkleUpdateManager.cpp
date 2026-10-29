@@ -1,3 +1,4 @@
+#include "AutomationLaunch.h"
 #include "UpdateManager.h"
 
 #if JUCE_WINDOWS
@@ -25,7 +26,9 @@ public:
         const juce::String feedURL(SYNTH_UPDATE_FEED_URL_STR);
         const juce::String publicKey(SYNTH_WINSPARKLE_PUBLIC_KEY_STR);
 
-        started = (!feedURL.isEmpty() && !publicKey.isEmpty());
+        // An automation launch (test mode) never checks for updates.
+        started = (!feedURL.isEmpty() && !publicKey.isEmpty()) &&
+                  !synth::isAutomationLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray());
 
         if (started) {
             win_sparkle_set_appcast_url(feedURL.toRawUTF8());

@@ -6,6 +6,7 @@
 #include "Project/ProjectCommandLine.h"
 #include "SettingsMigration.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "TestMode/TestModeLaunch.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
@@ -72,7 +73,10 @@ public:
         // directory the app happened to be launched from.
         synth::enterPluginScratchDirectory();
 
-        migrateLegacyUserData();
+        // An automation launch keeps all its settings and user data under its own directory (--settings-dir, else a
+        // fresh temporary one); that directory is new, so there is nothing to migrate into it.
+        if (synth::applySettingsDirForLaunch(getCommandLineParameterArray()).isEmpty())
+            migrateLegacyUserData();
 
         // Apply default theme so the LnF is valid before any Component is created.
         // ThemeManager::initialise() (with appProperties) is called inside MainComponent,
@@ -87,6 +91,8 @@ public:
             pendingProject_ = *bundle;
         if (pendingProject_ != juce::File())
             openProject(std::exchange(pendingProject_, juce::File()));
+
+        startTestModeIfRequested();
     }
 
     // CRITICAL ordering (spec section 7.1, constraint #1):
@@ -97,6 +103,7 @@ public:
     void shutdown() override {
         // Dialogs launched async (Settings) are otherwise deleted by JUCE after this object is gone.
         synth::ui::deleteOpenModalDialogs();
+        testModeServer_ = nullptr; // stop answering before the window it drives goes away
         mainWindow = nullptr;
         juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);
     }
@@ -124,6 +131,32 @@ public:
     }
 
 private:
+    // `--automation <port>`: the local test-mode server (docs/development/test-mode.md). Compiled in only when
+    // AGENTSYNTH_AUTOMATION is on; a packaged build says so and carries on as a normal launch.
+    void startTestModeIfRequested() {
+        const auto args = getCommandLineParameterArray();
+        if (!synth::isAutomationLaunch(args))
+            return;
+#if AGENTSYNTH_AUTOMATION
+        const auto port = synth::automationPortFromArgs(args);
+        if (!port.has_value()) {
+            std::cerr << "--automation needs a port number (0 picks a free one)" << std::endl;
+            return;
+        }
+        synth::testmode::LaunchOptions options;
+        options.port = *port;
+        options.keepAnimations = args.contains(synth::kAutomationMotionFlag);
+        if (const auto info = synth::flagValueFromArgs(args, synth::kAutomationInfoFlag); info.isNotEmpty())
+            options.infoFile = juce::File::getCurrentWorkingDirectory().getChildFile(info);
+        juce::String error;
+        testModeServer_ = synth::testmode::startForLaunch(options, error);
+        if (testModeServer_ == nullptr)
+            std::cerr << "test mode: " << error << std::endl;
+#else
+        juce::Logger::writeToLog("--automation is not available in this build (AGENTSYNTH_AUTOMATION is off)");
+#endif
+    }
+
     // Routes a bundle to the open window (guarded like any Open, so unsaved changes are asked about first), or
     // holds it until the window exists.
     void openProject(const juce::File& bundle) {
@@ -183,7 +216,8 @@ private:
                 // the child processes happens on PluginScanService's own background thread; this
                 // call itself only flips an atomic and (at most) spawns that thread, so it is not on
                 // this window's construction critical path.
-                mc->maybeStartEagerPluginScan();
+                if (!synth::isAutomationLaunch(JUCEApplication::getCommandLineParameterArray()))
+                    mc->maybeStartEagerPluginScan();
 
                 // This is the real app's ONE construction site for MainComponent
                 // (every test builds one directly and never reaches here) — opt both detach hosts
@@ -285,6 +319,7 @@ private:
     synth::theme::ThemeManager themeManager;
     synth::theme::AppLookAndFeel lookAndFeel;
     std::unique_ptr<MainWindow> mainWindow;
+    std::unique_ptr<synth::testmode::TestModeServer> testModeServer_;
     juce::File pendingProject_; // a project the OS handed over before the window existed
 };
 

@@ -1,6 +1,7 @@
 // LoopStretchFile.cpp -- reads a loop, runs stretchLoop on it at the file's own rate and writes a 24-bit WAV copy.
 #include "SoundBrowser/LoopStretchFile.h"
 #include "SoundBrowser/SoundPreviewPlayer.h"
+#include "UserSettings.h"
 #include <cmath>
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -71,6 +72,8 @@ bool writeWav(const juce::File& file, const juce::AudioBuffer<float>& data, doub
 } // namespace
 
 juce::File stretchedLoopCacheFolder() {
+    if (synth::automationUserFolders())
+        return synth::userSettingsRootDirectory().getChildFile("Stretched Loops");
     return juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("Agent Synth Stretched Loops");
 }
 

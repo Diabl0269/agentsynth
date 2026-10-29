@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/CardBody/CardBlockFade.h"
 #include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModuleComponent/HostedParameterAttachment.h"
@@ -57,7 +58,8 @@ class ModuleComponent
     , public juce::FileDragAndDropTarget
     , public synth::ui::SoundDropAdapter
     , public juce::TooltipClient
-    , public juce::AudioProcessorParameter::Listener {
+    , public juce::AudioProcessorParameter::Listener
+    , public synth::testmode::StateSource {
 public:
     ModuleComponent(juce::AudioProcessor* module, juce::AudioProcessorGraph::NodeID nodeId, GraphEditor& owner,
                     AppUndoManager* undoMgr = nullptr);
@@ -83,6 +85,8 @@ public:
     void mouseUp(const juce::MouseEvent& e) override;
     void moved() override;
 
+    /** Test mode: selected, moduleType, title and nodeId (docs/development/test-mode.md). */
+    void addTestModeState(juce::DynamicObject& into) const override;
     juce::AudioProcessor* getModule() const { return module; }
     juce::AudioProcessorGraph::NodeID getNodeId() const { return nodeId; }
 
@@ -114,9 +118,8 @@ public:
     juce::Colour effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const;
     bool hasPortColourPreviewForTest() const noexcept { return portColourPreview_.has_value(); }
 
-    /** Re-measures the card after its VISIBLE PORT COUNT changed for a reason that is not a
-     *  parameter gesture — today only Audio Input, whose jacks follow the audio device. Same three
-     *  steps applyMacroCountChange takes for the Macro bank's "Knobs" parameter. */
+    /** Re-measures the card after its visible port count changed outside a parameter gesture (Audio Input's jacks
+     *  follow the audio device); the same steps applyMacroCountChange takes. */
     void refreshPortLayout();
 
     /** Output-card identity treatment only: repoints the muted destination line drawn under the
@@ -150,9 +153,7 @@ public:
 
     /** Header band the card title is drawn in, and the double-click-to-rename hit zone. */
     static constexpr int kHeaderHeight = 24;
-
-    /** What the header paints: the user's custom title when set, else the auto-numbered module
-     *  name. Never reads the processor name directly — see GraphEditor::getModuleTitle. */
+    /** What the header paints: the custom title, else the auto-numbered name (GraphEditor::getModuleTitle). */
     juce::String cardTitle() const;
 
     /** Opens the inline rename editor over the title. Public so a test can drive it without
