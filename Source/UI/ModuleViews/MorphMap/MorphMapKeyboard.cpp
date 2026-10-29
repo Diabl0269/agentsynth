@@ -112,10 +112,8 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
     if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey || code == juce::KeyPress::upKey ||
         code == juce::KeyPress::downKey)
         return pressArrow(stop, code, mods.isShiftDown());
-    if (code == juce::KeyPress::escapeKey) {
-        grabKeyboardFocus();
-        return true;
-    }
+    if (code == juce::KeyPress::escapeKey)
+        return false; // bubbles up to the window, which closes
     if (stop.isCursor() || stop.isStrip())
         return false;
 

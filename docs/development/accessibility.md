@@ -159,6 +159,12 @@ and pinned by `Tests/UI/Accessibility/DialogKeyboardTests.cpp`:
   hosting `DialogWindow`'s close button or dismisses the `CallOutBox`). A `juce::TextEditor` swallows
   Escape, so each text field calls `bubbleEscapeToParents` and Escape travels up as it would from any
   other control. Return presses the dialog's default button where it has one (Export, Open in Browser).
+  **Every dialog opened through `PopupMotion::launchDialog` also closes on Escape and on Cmd+W (Ctrl+W off the
+  Mac) from any focused child**, through a key listener the window owns: it sees only keys that nothing below used,
+  so an open menu, a text field and a rename editor take Escape first and the window stays. A control inside a
+  dialog must therefore return false for Escape and Cmd+W, never use them to refocus; never open a dialog with
+  `launchAsync()` directly. Pinned by `Tests/UI/Layout/ModalCloseKeysTests.cpp`, which delivers both keys from every
+  focusable control of the shape editor, sampler map and EQ windows.
 
 ## The morph map and shape editor
 
@@ -172,7 +178,7 @@ focused stop and therefore not rebindable actions (the native-control exception 
 move the focused dot, cursor or slider (Shift for a bigger step; held, they glide on, speeding up the longer they are
 held, and the whole hold is one undo step), Return on a dot edits it, Delete or Backspace removes it and focuses the
 next dot (the last shape stays), F2 renames it, the open-context-menu key opens its menu
-(`KeyboardContextMenuProvider`), Escape returns focus to the map. In the window Tab continues through the shape chips
+(`KeyboardContextMenuProvider`), Escape is not used by the map: it closes the window. In the window Tab continues through the shape chips
 (named "<name> shape"), the curve editor ("Shape curve", its own keys above) and the buttons to Done; Escape closes the
 window with the shared fade (`closeHostingWindow`); the window opens with focus on the map, and the app shortcuts that make
 sense there (Space, undo, redo) still work from it (`ShapeEditorAppShortcuts`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.

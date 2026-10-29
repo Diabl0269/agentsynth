@@ -1,5 +1,6 @@
 #include "UI/Layout/PopupMotion.h"
 
+#include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -7,6 +8,51 @@
 #include <vector>
 
 namespace synth::ui {
+
+namespace {
+
+class DialogCloseKeys;
+
+std::vector<DialogCloseKeys*>& closeKeyListeners() {
+    static std::vector<DialogCloseKeys*> listeners;
+    return listeners;
+}
+
+// Closes its dialog on Escape or Cmd+W (Ctrl+W off macOS). A top-level window only sees keys that no focused
+// control, menu or text editor above it used, so those keep their own Escape. Deletes itself with the window.
+class DialogCloseKeys final
+    : public juce::KeyListener
+    , private juce::ComponentListener {
+public:
+    explicit DialogCloseKeys(juce::DialogWindow& window)
+        : window_(&window) {
+        closeKeyListeners().push_back(this);
+        window.addKeyListener(this);
+        window.addComponentListener(this);
+    }
+
+    bool keyPressed(const juce::KeyPress& key, juce::Component*) override {
+        static const juce::KeyPress closeKey('w', juce::ModifierKeys::commandModifier, 0);
+        if (key != juce::KeyPress(juce::KeyPress::escapeKey) && key != closeKey)
+            return false;
+        auto* content = window_->getContentComponent();
+        return content != nullptr && closeHostingWindow(*content);
+    }
+
+    juce::DialogWindow& window() const { return *window_; }
+
+private:
+    void componentBeingDeleted(juce::Component&) override {
+        std::erase(closeKeyListeners(), this);
+        window_->removeKeyListener(this);
+        window_->removeComponentListener(this);
+        delete this;
+    }
+
+    juce::DialogWindow* window_;
+};
+
+} // namespace
 
 namespace popup_motion {
 void applyThemedBackground(juce::DialogWindow::LaunchOptions& options) {
@@ -33,9 +79,25 @@ PopupMotion::launchDialog(juce::DialogWindow::LaunchOptions& options,
                           const std::function<popup_motion::Style(juce::DialogWindow&)>& makeStyle) {
     popup_motion::applyThemedBackground(options);
     auto* dialog = options.launchAsync();
-    if (dialog != nullptr)
+    if (dialog != nullptr) {
         attach(*dialog, makeStyle(*dialog));
+        new DialogCloseKeys(*dialog); // owns itself: deleted with the window
+    }
     return dialog;
+}
+
+std::vector<juce::DialogWindow*> PopupMotion::openDialogsForTest() {
+    std::vector<juce::DialogWindow*> windows;
+    for (auto* listener : closeKeyListeners())
+        windows.push_back(&listener->window());
+    return windows;
+}
+
+bool PopupMotion::offerKeyToDialogForTest(juce::DialogWindow& dialog, const juce::KeyPress& key) {
+    for (auto* listener : closeKeyListeners())
+        if (&listener->window() == &dialog)
+            return listener->keyPressed(key, nullptr);
+    return false;
 }
 
 #if JUCE_MAC
