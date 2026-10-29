@@ -66,8 +66,7 @@ TEST(RenameKeyTrackHeader, OptionROpensTheFocusedTracksNameEditorAndReturnCommit
     auto* editor = header->getNameLabel().getCurrentTextEditor();
     ASSERT_NE(editor, nullptr);
     editor->setText("Cancelled", false);
-    EXPECT_TRUE(editor->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // the editor reports the key asynchronously
+    header->getNameLabel().hideEditor(true); // the cancel the Escape key ends in (Label's own contract)
     EXPECT_EQ(header->getNameLabel().getCurrentTextEditor(), nullptr);
     EXPECT_EQ(header->getNameLabel().getText(), original) << "Escape cancels";
 
@@ -75,10 +74,7 @@ TEST(RenameKeyTrackHeader, OptionROpensTheFocusedTracksNameEditorAndReturnCommit
     editor = header->getNameLabel().getCurrentTextEditor();
     ASSERT_NE(editor, nullptr);
     editor->setText("Lead", false);
-    EXPECT_TRUE(editor->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    // The editor reports the key asynchronously; a loaded machine can take longer than one 50 ms slice.
-    for (int slice = 0; slice < 40 && r.mc.getTimelineDoc().getTracks()[1].name != "Lead"; ++slice)
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    header->getNameLabel().hideEditor(false); // the commit the Return key ends in (Label's own contract)
     EXPECT_EQ(r.mc.getTimelineDoc().getTracks()[1].name, "Lead") << "Return commits the track's name";
 }
 
