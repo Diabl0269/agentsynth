@@ -8,6 +8,29 @@
 
 namespace synth::theme {
 
+int movingPartIndexOf(const juce::String& drawableName) {
+    for (size_t i = 0; i < kMovingPartIds.size(); ++i)
+        if (drawableName.startsWith(juce::String(kMovingPartIds[i]) + "#"))
+            return static_cast<int>(i);
+    return -1;
+}
+
+namespace {
+// Gives every shape under a moving-part group an id naming that group (see movingPartIndexOf). A shape that
+// already has an id keeps it, so a moving part must not carry ids of its own.
+void tagMovingPartMembers(juce::XmlElement& element, const juce::String& partId, int& member) {
+    for (auto* child : element.getChildIterator()) {
+        juce::String childPart = partId;
+        for (const char* id : kMovingPartIds)
+            if (child->getStringAttribute("id") == id)
+                childPart = id;
+        if (childPart.isNotEmpty() && !child->hasAttribute("id"))
+            child->setAttribute("id", childPart + "#" + juce::String(member++));
+        tagMovingPartMembers(*child, childPart, member);
+    }
+}
+} // namespace
+
 //==============================================================================
 IconLibrary::IconLibrary() {
     for (int i = 0; i < (int)Icon::kCount; ++i) {
@@ -83,9 +106,9 @@ void IconLibrary::recolourRoles(juce::Drawable& drawable, const IconRoleColours&
         recolourFill(*shape, false, roles);
         recolourFill(*shape, true, roles);
     }
-    for (auto* child : drawable.getChildren())
-        if (auto* childDrawable = dynamic_cast<juce::Drawable*>(child))
-            recolourRoles(*childDrawable, roles);
+    if (auto* composite = dynamic_cast<juce::DrawableComposite*>(&drawable))
+        for (int i = 0; i < composite->getNumChildren(); ++i)
+            recolourRoles(composite->getChild(i), roles);
 }
 
 std::unique_ptr<juce::Drawable> IconLibrary::getDrawable(Icon id) const {
@@ -196,7 +219,9 @@ std::unique_ptr<juce::Drawable> IconLibrary::loadSVG(const void* data, int size)
     if (xml == nullptr)
         return nullptr;
 
-    return juce::Drawable::createFromSVG(*xml);
+    int member = 0;
+    tagMovingPartMembers(*xml, {}, member);
+    return juce::Drawable::createFromSVGString(xml->toString());
 }
 
 } // namespace synth::theme

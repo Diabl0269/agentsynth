@@ -32,7 +32,9 @@ std::unique_ptr<synth::ui::ModMatrixPicker> pressReplace(MainComponent& mc, juce
     synth::ui::test_hooks::replacePickerHookForTest() = [&captured](auto p) { captured = std::move(p); };
     EXPECT_FALSE(focused.keyPressed(key)) << "the focused lane header / row must not swallow the chord";
     EXPECT_TRUE(mc.keyPressed(key));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    // Wait for the dispatch rather than a fixed slice: a loaded machine can take longer than 50 ms to pump it.
+    for (int slice = 0; slice < 40 && captured == nullptr; ++slice)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     synth::ui::test_hooks::replacePickerHookForTest() = nullptr;
     mc.setFocusedComponentOverrideForTest(nullptr);
     return captured;

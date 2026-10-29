@@ -13,10 +13,10 @@ Applied by cmake/ApplyJucePatch.cmake (FetchContent PATCH_COMMAND); mechanism an
 JUCE tag: docs/development/juce-patches.md. The JUCE files use CRLF line endings.
 
 diff --git a/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm b/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
-index ed9cd36b1..22726a1b8 100644
+index 0436364e9..302586b3e 100644
 --- a/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
 +++ b/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
-@@ -529,7 +529,7 @@ bool contains (Point<int> localPos, bool trueIfInAChildWindow) const override
+@@ -531,7 +531,7 @@ bool contains (Point<int> localPos, bool trueIfInAChildWindow) const override
              && isPositiveAndBelow (localPos.getY(), viewFrame.size.height)))
              return false;
  
@@ -26,24 +26,24 @@ index ed9cd36b1..22726a1b8 100644
              if (NSWindow* const viewWindow = [view window])
              {
 diff --git a/modules/juce_gui_basics/native/juce_Windowing_windows.cpp b/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
-index e0d8833a7..598b87ca5 100644
+index 083ade163..e9f7a90ac 100644
 --- a/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
 +++ b/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
-@@ -1768,6 +1768,9 @@ public:
-         if (! r.withZeroOrigin().contains (localPos))
+@@ -1542,6 +1542,9 @@ public:
+         if (! r.withZeroOrigin().contains (localPhysical))
              return false;
  
 +        if (ignoreWindowOrderForHitTests)
 +            return true;
 +
-         const auto screenPos = convertLogicalScreenPointToPhysical (localPos + getScreenPosition(), hwnd);
+         const auto screenPos = (localPhysical + getClientRectInScreen().getPosition().toFloat()).roundToInt();
+         const auto w = WindowFromPoint (D2DUtilities::toPOINT (screenPos));
  
-         auto w = WindowFromPoint (D2DUtilities::toPOINT (screenPos));
 diff --git a/modules/juce_gui_basics/windows/juce_ComponentPeer.h b/modules/juce_gui_basics/windows/juce_ComponentPeer.h
-index b39b604a9..5226c878a 100644
+index fba1b36a0..6a6448b8d 100644
 --- a/modules/juce_gui_basics/windows/juce_ComponentPeer.h
 +++ b/modules/juce_gui_basics/windows/juce_ComponentPeer.h
-@@ -458,6 +458,11 @@ public:
+@@ -480,6 +480,11 @@ public:
      */
      static bool isValidPeer (const ComponentPeer* peer) noexcept;
  

@@ -145,12 +145,14 @@ original, like `setTintColour`. `setTintColour` on such an icon gives a one-colo
 and soft take the tint, ink and paper are cut out), so the white-tint path still draws something
 sensible.
 
-A group with `id="mv"` (and `id="mv2"`) is the part that moves on hover. `splitToolbarIconArt`
-takes it out of the drawable tree and draws it as its own `Drawable` through the same icon-to-screen
-transform, with its motion applied first (moving a child in place with `Component::setTransform`
-makes its parent composite re-fit its origin and drift the pivot). The SVG parser bakes group
-transforms into the paths, so a nested part (Redo's, inside its mirror group) still draws in icon
-coordinates.
+A group with `id="mv"` (and `id="mv2"`) is the part that moves on hover. JUCE's SVG parser lists
+the shapes flat under one root and names a shape after its own `id` only, so `IconLibrary::loadSVG`
+first gives every shape inside such a group the id `<group id>#<n>` (`movingPartIndexOf` maps a
+shape's name back to its part). `splitToolbarIconArt` copies the icon without those shapes as the
+body and gathers them into a composite laid out like the root, drawn through the same icon-to-screen
+transform with its motion applied first (a moving part must not carry ids of its own). The parser
+bakes group transforms into the paths, so a nested part (Redo's, inside its mirror group) still draws
+in icon coordinates.
 
 ## The null-fallback contract
 

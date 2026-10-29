@@ -47,8 +47,8 @@ static float sizeFactor(float shown) { return prefersReducedMotion() ? (shown > 
 
 int SoundFilterChipRow::fullWidth(const Item& item) const {
     if (item.chip.id == kClearAllId)
-        return (int)std::ceil(chipFont().getStringWidthFloat(item.chip.text)) + 8;
-    return (int)std::ceil(chipFont().getStringWidthFloat(item.chip.text)) + 20 + kCrossWidth;
+        return (int)std::ceil(juce::GlyphArrangement::getStringWidth(chipFont(), item.chip.text)) + 8;
+    return (int)std::ceil(juce::GlyphArrangement::getStringWidth(chipFont(), item.chip.text)) + 20 + kCrossWidth;
 }
 
 float SoundFilterChipRow::rowPresence() const {

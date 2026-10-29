@@ -327,7 +327,8 @@ TEST(SourcesDefaultLayout, EverySegmentedValueFitsItsSegment) {
         for (int i = 0; i < shape->getNumSegments(); ++i) {
             auto* segment = shape->getSegment(i);
             const juce::Font font(juce::FontOptions(15.0f));
-            EXPECT_LE(font.getStringWidth(segment->getButtonText()) * 0.7f, (float)segment->getWidth() - 8.0f)
+            EXPECT_LE(juce::GlyphArrangement::getStringWidth(font, segment->getButtonText()) * 0.7f,
+                      (float)segment->getWidth() - 8.0f)
                 << segment->getButtonText();
         }
     }

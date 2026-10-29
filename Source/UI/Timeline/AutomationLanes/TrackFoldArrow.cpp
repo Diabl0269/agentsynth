@@ -78,7 +78,8 @@ juce::String laneCountBadgeText(int laneCount) {
 
 int laneCountBadgeWidth(int laneCount) {
     const juce::Font font{juce::FontOptions(kBadgeFontSize)};
-    return (int)std::ceil(font.getStringWidthFloat(laneCountBadgeText(laneCount))) + 2 * kBadgePadding;
+    return (int)std::ceil(juce::GlyphArrangement::getStringWidth(font, laneCountBadgeText(laneCount))) +
+           2 * kBadgePadding;
 }
 
 void paintLaneCountBadge(juce::Graphics& g, juce::Rectangle<int> area, int laneCount, const juce::Component& owner) {

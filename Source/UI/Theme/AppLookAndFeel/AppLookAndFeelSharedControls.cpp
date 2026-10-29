@@ -127,7 +127,8 @@ void paintTextLink(juce::Graphics& g, juce::Button& button, const Theme& theme, 
     if (!hot)
         return;
 
-    const float width = std::min(font.getStringWidthFloat(button.getButtonText()), (float)bounds.getWidth());
+    const float width =
+        std::min(juce::GlyphArrangement::getStringWidth(font, button.getButtonText()), (float)bounds.getWidth());
     const float x = justification.testFlags(juce::Justification::right)
                         ? (float)bounds.getRight() - width
                         : (justification.testFlags(juce::Justification::horizontallyCentred)

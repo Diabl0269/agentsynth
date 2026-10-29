@@ -18,7 +18,7 @@
 set(SYNTH_JUCE_GIT_REPOSITORY "https://github.com/juce-framework/JUCE.git"
     CACHE STRING "JUCE upstream fetched via FetchContent")
 
-set(SYNTH_JUCE_GIT_TAG "8.0.3"
+set(SYNTH_JUCE_GIT_TAG "9.0.3"
     CACHE STRING "JUCE release tag fetched via FetchContent (a specific tag, for stability)")
 
 # FetchContent's PATCH_COMMAND for JUCE (cmake/patches/*.patch, docs/development/juce-patches.md). A patch

@@ -539,7 +539,7 @@ TEST(MacroPortWidgetG4, FixedStripWidthFitsARealisticNameAtFullUnscaledSize) {
                      .isEmpty());
 
     const juce::Font nameFont{juce::FontOptions(detail::kMacroPortNameFontSize)};
-    const float textWidth = nameFont.getStringWidthFloat(realisticName);
+    const float textWidth = juce::GlyphArrangement::getStringWidth(nameFont, realisticName);
 
     const auto layout = editor.getMacroController().macroHullPortLayout(macroId);
     ASSERT_EQ(layout.size(), 1u);

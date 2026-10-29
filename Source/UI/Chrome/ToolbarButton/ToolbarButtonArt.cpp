@@ -2,6 +2,8 @@
 // recoloured icon into its static body and moving parts.
 #include "ToolbarButton.h"
 
+#include <vector>
+
 namespace synth::ui {
 
 using synth::theme::Icon;
@@ -105,37 +107,58 @@ juce::AffineTransform toolbarPartTransform(const ToolbarPartMotion& motion, juce
 }
 
 namespace {
-juce::Drawable* findDrawableWithID(juce::Drawable& root, const juce::String& id) {
-    for (auto* child : root.getChildren())
-        if (auto* d = dynamic_cast<juce::Drawable*>(child)) {
-            if (d->getComponentID() == id)
-                return d;
-            if (auto* found = findDrawableWithID(*d, id))
-                return found;
-        }
+using PartMembers = std::array<std::vector<std::unique_ptr<juce::Drawable>>, 2>;
+
+// A composite laid out like `like` (same content area and bounding box), so shapes copied into it draw
+// exactly where they did in `like`.
+std::unique_ptr<juce::DrawableComposite> emptyCompositeLike(const juce::DrawableComposite& like) {
+    auto out = std::make_unique<juce::DrawableComposite>();
+    // The content area first: the bounding box is turned into the composite's transform against it.
+    out->setContentArea(like.getContentArea());
+    out->setBoundingBox(like.getBoundingBox());
+    out->setDrawableTransform(like.getDrawableTransform());
+    return out;
+}
+
+// Copies `source` without the shapes of the moving parts, which go into `members` instead.
+std::unique_ptr<juce::Drawable> copyWithoutParts(const juce::Drawable& source, PartMembers& members) {
+    if (const auto* composite = dynamic_cast<const juce::DrawableComposite*>(&source)) {
+        auto out = emptyCompositeLike(*composite);
+        for (int i = 0; i < composite->getNumChildren(); ++i)
+            if (auto child = copyWithoutParts(composite->getChild(i), members))
+                out->addChild(std::move(child));
+        return out;
+    }
+    const int part = synth::theme::movingPartIndexOf(source.getName());
+    if (part < 0)
+        return source.createCopy();
+    members[static_cast<size_t>(part)].push_back(source.createCopy());
     return nullptr;
 }
 } // namespace
 
-// A part is taken out of the icon's tree rather than moved in place with Component::setTransform:
-// a transformed child makes its DrawableComposite re-fit its bounds and shift its origin, which would
-// drift the pivot. Detached, each piece is drawn with Drawable::draw and one fixed icon-to-screen
-// transform, never drawWithin (a composite's drawable bounds are the union of its children, so the
-// body's bounds change once a part is gone). The SVG parser bakes group transforms into the paths, so
-// a detached part still draws in icon coordinates.
+// A part is taken out of the icon's tree rather than moved in place: a transformed child makes its
+// DrawableComposite re-fit its bounds and shift its origin, which would drift the pivot. Detached, each
+// piece is drawn with Drawable::draw and one fixed icon-to-screen transform, never drawWithin (a
+// composite's drawable bounds are the union of its children, so the body's bounds change once a part is
+// gone). The SVG parser bakes group transforms into the shapes and lists them flat under the root, so a
+// part is a composite laid out like the root holding the shapes of its group (IconLibrary tags those).
 ToolbarIconArt splitToolbarIconArt(std::unique_ptr<juce::Drawable> icon) {
     ToolbarIconArt art;
     if (icon == nullptr)
         return art;
-    const char* ids[2] = {"mv", "mv2"};
-    for (size_t i = 0; i < 2; ++i)
-        if (auto* part = findDrawableWithID(*icon, ids[i])) {
-            if (auto* parent = part->getParentComponent())
-                parent->removeChildComponent(part); // a DrawableComposite owns its children; now we do
-            art.parts[i].reset(part);
-            art.partBounds[i] = part->getDrawableBounds();
-        }
-    art.body = std::move(icon);
+    PartMembers members;
+    art.body = copyWithoutParts(*icon, members);
+    const auto* root = dynamic_cast<const juce::DrawableComposite*>(icon.get());
+    for (size_t i = 0; i < members.size() && root != nullptr; ++i) {
+        if (members[i].empty())
+            continue;
+        auto part = emptyCompositeLike(*root);
+        for (auto& shape : members[i])
+            part->addChild(std::move(shape));
+        art.partBounds[i] = part->getDrawableBounds();
+        art.parts[i] = std::move(part);
+    }
     return art;
 }
 

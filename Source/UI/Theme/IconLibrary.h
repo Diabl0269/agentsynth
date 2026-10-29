@@ -110,6 +110,12 @@ inline constexpr juce::uint32 kRoleInk = 0xff00ffff;
 inline constexpr juce::uint32 kRolePaper = 0xffffff00;
 inline constexpr float kRoleSoftAlpha = 0.45f;
 
+// A toolbar icon's moving parts are the SVG groups with these ids ("mv", "mv2"). JUCE names a parsed shape
+// after its own id only, so loadSVG gives every shape inside such a group the name <group id>#<n>;
+// movingPartIndexOf maps a parsed shape's name back to the part it belongs to (-1: the static body).
+inline constexpr std::array<const char*, 2> kMovingPartIds = {"mv", "mv2"};
+int movingPartIndexOf(const juce::String& drawableName);
+
 class IconLibrary {
 public:
     IconLibrary();

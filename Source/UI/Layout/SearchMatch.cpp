@@ -107,7 +107,7 @@ void drawSearchHighlightedText(juce::Graphics& g, const juce::String& text, cons
     }
 
     // Where the (unclipped) run starts, so the fills line up with the glyphs whatever the justification.
-    const float totalW = font.getStringWidthFloat(text);
+    const float totalW = juce::GlyphArrangement::getStringWidth(font, text);
     float baseX = (float)bounds.getX();
     if (justification.testFlags(juce::Justification::right))
         baseX = (float)bounds.getRight() - totalW;
@@ -115,8 +115,9 @@ void drawSearchHighlightedText(juce::Graphics& g, const juce::String& text, cons
         baseX = (float)bounds.getCentreX() - totalW * 0.5f;
 
     for (const auto& span : spans) {
-        const float preW = font.getStringWidthFloat(text.substring(0, span.start));
-        const float matchW = font.getStringWidthFloat(text.substring(span.start, span.start + span.length));
+        const float preW = juce::GlyphArrangement::getStringWidth(font, text.substring(0, span.start));
+        const float matchW =
+            juce::GlyphArrangement::getStringWidth(font, text.substring(span.start, span.start + span.length));
         g.setColour(highlightFill);
         g.fillRoundedRectangle(baseX + preW - 1.0f, (float)bounds.getY() + 4.0f, matchW + 2.0f,
                                juce::jmax(8.0f, (float)bounds.getHeight() - 8.0f), 2.0f);
