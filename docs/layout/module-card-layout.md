@@ -72,7 +72,7 @@ same idea, which is built, is [plugin-card-layout.md](../control/plugin-card-lay
 | "+ Add control": the strip under the card, the searchable panel and its rows, the click and the drag-out drop, and the pure list, search and layout edit behind them | `OnCard/CardLayoutOnCardEditorAdd.cpp`, `...AddDrop.cpp`, `CardLayoutAddPanel.*`, `CardLayoutAddRow.*`, `OnCardAddControlModel.*`, `findFreeSpot` in `OnCardLayoutMath.*` |
 | The per-control panel (Show as, Size or Direction, Label, Range, Hide from card): its fields, how they open in a call-out and stay anchored to the control, and the pure edits and range rules behind them | `OnCard/CardLayoutControlPanel.*`, `CardLayoutOnCardEditorPanel.cpp`, `OnCardControlOptions.*` |
 | Snapping to guides, the row model (`rowsOf`, `dropIntoRow`, `repackRow`), pushing a crowded neighbour aside and sending a pushed one home, as pure functions on rectangles | `OnCard/OnCardLayoutMath.*` |
-| The "Drop to hide" area under the card during a drag | `OnCard/CardLayoutHideZone.*` |
+| The "Drop to hide" area under the card during a drag, and the motion onto, into and out of it | `OnCard/CardLayoutHideZone.*`, `CardLayoutOnCardEditorHideDrag.cpp` |
 | Which controls are outlined (read off the plan's real widget bounds), and the free positions written back | `OnCard/OnCardCells.*`; `CardBodyPlan::Section::cellTop` / `cellBottom` (set by every live layout pass) |
 | A fader's modulation bar and drop outline beside the knob rings | `Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp` |
 
@@ -521,7 +521,26 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     (it shrinks away from where it was, goes to the More row, is listed in Add control, is announced
     "Cutoff hidden" and is one undo step). Moving back above the edge cancels that and the control follows
     the pointer again; in-card positions keep the group clamp. Esc cancels as always
-    (`CardLayoutHideZone`, `CardLayoutOnCardEditorDrag.cpp`).
+    (`CardLayoutHideZone`, `CardLayoutOnCardEditorDrag.cpp`). The motion
+    (`CardLayoutOnCardEditorHideDrag.cpp`, on screen only; under Reduce Motion, Animations Off or off-screen the
+    control stays in the card and the usual hide fade plays where it was):
+    the card clips its own children, so a picture of the control (the hide proxy, a `ShrinkGhost`) glides from
+    where the control was to the zone's centre (140 ms, `easeOutCubic`, through `startGlide`) and follows the cell
+    and outline from then on, while the real control hides behind it. Moving back above the edge drops the picture
+    and the usual drag preview takes over from the control's place in the card (one plain snap onto the pointer:
+    a dragged thing follows the pointer, nothing eases it); Esc glides the picture back with the control. Letting
+    go shrinks the picture into the zone's centre (150 ms), the outline staying on it, and writes the hide once it
+    has gone, with the cell first put back where it stood in the card, so nothing is written from the zone. The
+    zone is the control's origin (`hiddenFrom_`): Cmd+Z brings it back rising out of the zone (`fadeInControl` with
+    a start point, so the grow also travels from the zone's centre) and Cmd+Shift+Z shrinks it back into it
+    (`ShrinkGhost::travelTo`). A control hidden any other way (Backspace, the panel) has no entry and comes back
+    in place.
+  - *Following the card.* When an undo, a redo or Auto-arrange moves the card being edited, editing goes on and
+    the view pans to it, only if the card plus its Add strip would leave the visible area, and by the least that
+    shows it whole with a 24 px margin (eased over 220 ms with `easeInOutCubic`; at once under Reduce Motion or
+    Animations Off). Nothing pans while a mouse button is down, and the pan stops if something else moves the
+    view (`CardLayoutOnCardEditorFollow.cpp`, using only the public view calls of `GraphEditor`). Starting an edit
+    on a second module ends the first one's edit with no dialog: its changes stay, one Cmd+Z each.
   - *Moving between groups.* Drag a control over another group (the pointer is what counts; that group gets a
     faint wash and its controls' guides) and drop: the control, with its widget, label and range, leaves its
     group's items for the target's, free-positioned where the row plan above lands it, sized as the target group

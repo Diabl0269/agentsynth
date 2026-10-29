@@ -61,7 +61,24 @@ public:
 
     void setProgress(float t) {
         progress_ = juce::jlimit(0.0f, 1.0f, t);
+        if (travels_) {
+            const auto at = from_.toFloat() + (to_ - from_).toFloat() * easeOutCubic(progress_);
+            setCentrePosition(juce::roundToInt(at.x), juce::roundToInt(at.y));
+        }
         repaint();
+    }
+
+    /** Starts the shrink over from now (the picture is handed over from a drag, which began it earlier). */
+    void restart() {
+        startMs_ = juce::Time::getMillisecondCounterHiRes();
+        progress_ = 0.0f;
+    }
+
+    /** The picture also travels, from where it is to `centre` (parent coordinates), as it shrinks. */
+    void travelTo(juce::Point<int> centre) {
+        from_ = getBounds().getCentre();
+        to_ = centre;
+        travels_ = true;
     }
 
     /** The rectangle the picture is drawn in now, in the ghost's own coordinates. */
@@ -87,6 +104,8 @@ private:
     bool reduced_;
     double startMs_;
     float progress_ = 0.0f;
+    bool travels_ = false;
+    juce::Point<int> from_, to_;
 };
 
 } // namespace synth::ui::control_motion

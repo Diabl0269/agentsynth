@@ -124,6 +124,9 @@ public:
     bool isBorderHeld(const juce::String& macroId) const noexcept;
     /** Border ghosts live right now (test seam). */
     int borderGhostCount() const noexcept;
+    /** A card whose own editor animates it (the on-card layout editor) never slides as a snapshot: the snapshot is
+     *  drawn over the editor and hides it. Its bounds still change at once. */
+    void setCardExempt(uint32_t nodeUid, bool exempt);
     /** Test seam: animate even though the canvas is not showing. */
     void setForceAnimateForTest(bool force) noexcept { forceAnimate_ = force; }
     /** The fold of a macro's modules into its closed card and back, drawn by the same overlay. */
@@ -247,6 +250,7 @@ private:
     bool restoring_ = false;
     bool reducedMotion_ = false;
     bool forceAnimate_ = false;
+    std::set<uint32_t> exempt_; // node ids whose card never slides (setCardExempt)
     int repaintCount_ = 0;
     int snapshotCount_ = 0;
     int renderedSnapshotCount_ = 0;

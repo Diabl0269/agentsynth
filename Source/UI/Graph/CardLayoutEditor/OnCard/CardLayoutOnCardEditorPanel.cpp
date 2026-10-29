@@ -146,6 +146,7 @@ void CardLayoutOnCardEditor::editControl(const juce::String& paramId,
 // on; only then does the layout lose it and the rest of the card close the gap, so nothing moves under the
 // shrinking picture. Headless, or with nothing on screen, the write is immediate.
 void CardLayoutOnCardEditor::hideControl(juce::String paramId) {
+    hiddenFrom_.erase(paramId); // not hidden by a drop on the zone: an undo brings it back in place
     closePanel();
     flushNudge(); // a control still shrinking from an earlier Hide leaves the layout first
     if (startShrinkGhost(paramId)) {
@@ -183,12 +184,17 @@ void CardLayoutOnCardEditor::flushPendingHide() {
     for (auto& part : std::exchange(pendingHideParts_, {}))
         if (part != nullptr)
             part->setAlpha(1.0f);
+    // A control that shrank into the hide zone goes back to where it stood in the card before the layout is written.
+    if (const auto rect = std::exchange(pendingHideRect_, std::nullopt); rect.has_value())
+        if (const int cell = indexOfCell(paramId); cell >= 0)
+            moveCellTo(cell, *rect);
     writeHide(paramId);
 }
 
 // Cancel: the hide is never written and the control comes back as it was.
 void CardLayoutOnCardEditor::dropPendingHide() {
     pendingHide_ = {};
+    pendingHideRect_.reset();
     for (auto& part : std::exchange(pendingHideParts_, {}))
         if (part != nullptr)
             part->setAlpha(1.0f);
@@ -215,12 +221,15 @@ bool CardLayoutOnCardEditor::startShrinkGhost(const juce::String& paramId) {
 
 // The same, from `image`, the card's picture of the cell at 2x. An undo uses it: it only finds out a control is
 // gone once the card has been rebuilt without it.
-void CardLayoutOnCardEditor::startShrinkGhostOf(juce::Image image, juce::Rectangle<int> rect) {
+void CardLayoutOnCardEditor::startShrinkGhostOf(juce::Image image, juce::Rectangle<int> rect,
+                                                std::optional<juce::Point<int>> travelTo) {
     using namespace control_motion;
     if (card_ == nullptr || !canAnimate() || image.isNull())
         return;
     auto* ghost = ghosts_.add(new ShrinkGhost(std::move(image), {}, axisFor(rect), prefersReducedMotion()));
     ghost->setBounds(rect.withPosition(getLocalPoint(card_, rect.getPosition())));
+    if (travelTo.has_value() && !prefersReducedMotion())
+        ghost->travelTo(getLocalPoint(card_, *travelTo));
     addAndMakeVisible(ghost);
     ghost->toBack();
     ghostPump_.run(

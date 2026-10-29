@@ -2,6 +2,7 @@
 // outline per control in step with the card the source rebuilds, and ending with Done or Cancel.
 // docs/layout/module-card-layout.md#editing-a-layout.
 #include "CardLayoutOnCardEditor.h"
+#include "AppUndoManager.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardLayoutEditor/BuiltInCardLayoutSource.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -64,9 +65,17 @@ CardLayoutOnCardEditor::~CardLayoutOnCardEditor() {
     stopTimer();
     cancelPendingUpdate();
     closePanel();
+    releaseCardGlide();
     if (card_ != nullptr)
         card_->removeComponentListener(this);
     source_.reset();
+}
+
+// The canvas slides every card its restore resized, as a snapshot drawn over the card. The editor animates its own
+// card, so it is left out of that slide while the session lasts.
+void CardLayoutOnCardEditor::releaseCardGlide() {
+    if (auto* graph = graphEditor_.getComponent())
+        graph->getCardGlide().setCardExempt(nodeId_.uid, false);
 }
 
 ModuleComponent* CardLayoutOnCardEditor::findCard() const {
@@ -90,6 +99,12 @@ std::unique_ptr<CardLayoutOnCardEditor> CardLayoutOnCardEditor::open(GraphEditor
             return nullptr;
         std::unique_ptr<CardLayoutOnCardEditor> opened(new CardLayoutOnCardEditor(editor, undo, nodeId, shortcuts));
         opened->attachTo(*comp);
+        editor.getCardGlide().setCardExempt(nodeId.uid, true);
+        // An undo or redo rebuilds the card; the editor re-syncs to it before the restore returns, so no frame shows
+        // the restored layout under outlines still at the old one.
+        if (undo != nullptr)
+            opened->restoreHook_ =
+                undo->addRestoreSettledHook([self = opened.get()] { self->handleUpdateNowIfNeeded(); });
         opened->rememberSync();
         opened->syncToCard();
         if (opened->isShowing()) {
@@ -127,6 +142,7 @@ void CardLayoutOnCardEditor::syncToCard() {
     }
     if (card != card_.getComponent())
         attachTo(*card);
+    dropHideProxy();
     drag_ = {};
     guides_.clear();
     refreshTimeTempo();
@@ -152,13 +168,26 @@ void CardLayoutOnCardEditor::rememberCardImage() {
 // The card changed under the editor (an undo or redo, a tab switch): re-sync to it without writing, then let
 // the controls glide from where they were to where the restore put them. A control the card gained grows in,
 // one it lost shrinks away, but only when the card was rebuilt: a tab switch just swaps what is shown.
+//
+// A glide in flight is not landed first: the controls are drawn part-way, so the new glide starts from there and
+// nothing jumps (a second Cmd+Z mid-glide). A re-sync that arrives with no new rebuild while a glide runs is a
+// repeat trigger for a change already handled (the restore hook ran first): it leaves the glide alone.
 void CardLayoutOnCardEditor::syncAfterOutsideChange() {
+    const bool rebuilt = std::exchange(cardRebuilt_, false);
+    if (finishGlide_ && !rebuilt)
+        return;
+    if (finishGlide_) {
+        glidePump_.stop();
+        finishGlide_ = nullptr;
+        glideFrame_ = nullptr;
+    }
     const auto before = cells_;
     const auto beforeImage = cardImage_;
-    const bool rebuilt = std::exchange(cardRebuilt_, false);
     syncToCard();
-    if (!closed_)
-        animateRestore(before, beforeImage, rebuilt);
+    if (closed_)
+        return;
+    animateRestore(before, beforeImage, rebuilt);
+    followCard();
 }
 
 void CardLayoutOnCardEditor::animateRestore(const std::vector<OnCardCell>& before, const juce::Image& beforeImage,
@@ -183,13 +212,18 @@ void CardLayoutOnCardEditor::animateRestore(const std::vector<OnCardCell>& befor
     startGlide(std::move(moves));
     if (!rebuilt)
         return;
+    // A control hidden by a drop on the zone comes back out of it and goes back into it.
+    const auto zoneOf = [this](const juce::String& key) -> std::optional<juce::Point<int>> {
+        const auto it = hiddenFrom_.find(key);
+        return it == hiddenFrom_.end() ? std::nullopt : std::optional<juce::Point<int>>(it->second);
+    };
     for (const auto& key : arrived)
-        fadeInControl(key);
+        fadeInControl(key, zoneOf(key));
     for (const auto& was : before)
         if (indexOfCell(was.key) < 0)
             startShrinkGhostOf(beforeImage.getClippedImage({was.rect.getX() * 2, was.rect.getY() * 2,
                                                             was.rect.getWidth() * 2, was.rect.getHeight() * 2}),
-                               was.rect);
+                               was.rect, zoneOf(was.key));
 }
 
 // A tab switch or a Sync flip changes which controls are on the card without resizing it: the card says so,
@@ -262,10 +296,13 @@ void CardLayoutOnCardEditor::close(bool keep) {
     if (closed_ || closing_)
         return;
     closing_ = true;
+    releaseCardGlide();
     closePanel();
     stopTimer();
     glidePump_.stop();
     fadePump_.stop();
+    followPump_.stop();
+    followFrame_ = nullptr;
     if (finishGlide_)
         std::exchange(finishGlide_, nullptr)();
     if (finishAddFade_)
@@ -276,6 +313,7 @@ void CardLayoutOnCardEditor::close(bool keep) {
     escapeKey_.disarm();
     hideZonePump_.stop();
     hideZone_.setVisible(false);
+    dropHideProxy();
     drag_ = {};
     guides_.clear();
     if (keep) {
@@ -338,6 +376,7 @@ void CardLayoutOnCardEditor::componentMovedOrResized(juce::Component& component,
     if (&component != cardIdentity_ || writing_ || closed_)
         return;
     setBounds(overlayBoundsFor(component.getBounds()));
+    followCard();
     if (wasResized && !drag_.pressed && !finishGlide_)
         triggerAsyncUpdate();
 }

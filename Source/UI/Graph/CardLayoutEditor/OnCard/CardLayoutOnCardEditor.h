@@ -124,6 +124,22 @@ public:
     bool sendEscapeToDragForTest();
     /** Lands every glide and fade at once (no frame arrives headless). */
     void finishMotionForTest();
+    /** Puts the glide in flight at `elapsedMs` since it began, as a frame would; nothing when none runs. */
+    void stepGlideForTest(float elapsedMs) {
+        if (glideFrame_)
+            glideFrame_(elapsedMs);
+    }
+    /** Puts the view's follow of the card at `elapsedMs` since it began, as a frame would; nothing when none runs. */
+    void stepFollowForTest(float elapsedMs) {
+        if (followFrame_)
+            followFrame_(elapsedMs);
+    }
+    bool isFollowingForTest() const noexcept { return static_cast<bool>(followFrame_); }
+    bool isGlidingForTest() const noexcept { return static_cast<bool>(finishGlide_); }
+    /** Where the removed control's picture is now (overlay pixels); empty when `index` is out of range. */
+    juce::Rectangle<int> getShrinkGhostBoundsForTest(int index) const {
+        return index >= 0 && index < ghosts_.size() ? ghosts_[index]->getBounds() : juce::Rectangle<int>();
+    }
     /** Runs the re-sync a card rebuilt from outside queued, now. */
     void runQueuedSyncForTest() { handleUpdateNowIfNeeded(); }
     const juce::String& getLastAnnouncementForTest() const noexcept { return lastAnnouncement_; }
@@ -145,6 +161,7 @@ private:
         std::vector<juce::Rectangle<int>> baseline; // every cell's rect at the press (the drop is planned from it)
         std::vector<std::pair<int, juce::Rectangle<int>>> placed; // the target group's other cells at the last preview
         juce::Rectangle<int> droppedRect;                         // where the last preview put the dragged cell
+        juce::Rectangle<int> zoneFrom; // where the dragged cell stood in the card when it moved onto the hide zone
     };
 
     // ---- Session and sync (CardLayoutOnCardEditor.cpp) -----------------------------------------
@@ -152,6 +169,8 @@ private:
     void attachTo(ModuleComponent& card);
     void syncToCard();
     void syncAfterOutsideChange();
+    void followCard(); ///< Pans the canvas to keep the card in view (CardLayoutOnCardEditorFollow.cpp).
+    void releaseCardGlide();
     void animateRestore(const std::vector<OnCardCell>& before, const juce::Image& beforeImage, bool rebuilt);
     void rememberCardImage();
     void reconcileOutlines();
@@ -165,6 +184,14 @@ private:
     void handleAsyncUpdate() override;
     int indexOfCell(const juce::String& key) const;
 
+    // ---- The hide zone's motion (CardLayoutOnCardEditorHideDrag.cpp) -----------------------------
+    void enterHideZone();
+    void leaveHideZone();
+    void hideFromZone(int cell, juce::Rectangle<int> zoneFrom);
+    void dropHideProxy();
+    juce::Rectangle<int> hideZoneRectFor(juce::Rectangle<int> cell) const;
+    juce::Point<int> hideZoneCentreInCard() const;
+
     // ---- Drag, drop and the write (CardLayoutOnCardEditorDrag.cpp) -------------------------------
     void pressOn(const juce::String& key, const juce::MouseEvent& e);
     void dragTo(const juce::MouseEvent& e);
@@ -173,7 +200,7 @@ private:
     void cancelDrag();
     void endDrag();
     void setHideZoneShown(bool shown);
-    void hideDragged(int cell);
+    void hideDragged(int cell, juce::Rectangle<int> zoneFrom);
     void commitMove(int cell, juce::Rectangle<int> dropped, juce::Rectangle<int> start, bool announceMove);
     juce::Rectangle<int> homeRectOf(int cell) const;
     std::vector<juce::Rectangle<int>> pushedNeighbours(int section, int except, juce::Rectangle<int> dropped,
@@ -229,9 +256,10 @@ private:
     void dragAdded(const juce::String& paramId, CardLayoutAddRow::DragPhase phase, juce::Point<int> screenPosition);
     void dropAdded(const juce::String& paramId, juce::Point<int> at);
     void finishAdded(const juce::String& paramId, const juce::String& name);
-    void fadeInControl(const juce::String& paramId);
+    void fadeInControl(const juce::String& paramId, std::optional<juce::Point<int>> from = std::nullopt);
     bool startShrinkGhost(const juce::String& paramId);
-    void startShrinkGhostOf(juce::Image image, juce::Rectangle<int> cell);
+    void startShrinkGhostOf(juce::Image image, juce::Rectangle<int> cell,
+                            std::optional<juce::Point<int>> travelTo = std::nullopt);
     void tickGhosts();
     void writeHide(juce::String paramId);
     void flushPendingHide();
@@ -281,6 +309,8 @@ private:
     bool closed_ = false; ///< The session has ended; the overlay is only fading out or waiting to be destroyed.
     bool writing_ = false;
     bool cardRebuilt_ = false; ///< The card was deleted for a reason that is not ours, since the last re-sync.
+    /// Keeps the re-sync after an undo or redo inside the restore itself (see open()); the manager holds it weakly.
+    std::shared_ptr<void> restoreHook_;
     juce::Image cardImage_; ///< The card as of the last re-sync (2x), for a control an undo takes away to shrink from.
 
     juce::Component::SafePointer<CardLayoutControlPanel> panel_;
@@ -322,13 +352,27 @@ private:
 
     ReorderFramePump fadePump_{*this};
     ReorderFramePump glidePump_{*this};
-    std::function<void()> finishGlide_; ///< Lands the glide in flight at once; empty when none.
+    std::function<void()> finishGlide_;     ///< Lands the glide in flight at once; empty when none.
+    std::function<void(float)> glideFrame_; ///< The glide in flight at `elapsedMs`; empty when none.
+    ReorderFramePump followPump_{*this};
+    std::function<void(float)> followFrame_; ///< The view's pan after the card at `elapsedMs`; empty when none runs.
     ReorderFramePump addFadePump_{*this};
     std::function<void()> finishAddFade_; ///< Lands the added control's grow at once; empty when none.
     std::function<void(float)> addFrame_; ///< The added control's grow at a progress; empty when none runs.
     ReorderFramePump ghostPump_{*this};
     juce::OwnedArray<control_motion::ShrinkGhost> ghosts_; ///< Removed controls shrinking away.
     juce::String pendingHide_; ///< A hidden control not yet written: its picture is still shrinking.
+    /// Where the pending hide's cell goes back to before the write (it shrinks into the hide zone from there).
+    std::optional<juce::Rectangle<int>> pendingHideRect_;
+    /// The picture of the control being dragged over the hide zone: the card clips its own children, so the control
+    /// the pointer carries onto the zone is drawn by this, following the dragged cell.
+    std::unique_ptr<control_motion::ShrinkGhost> hideProxy_;
+    std::vector<juce::Component::SafePointer<juce::Component>>
+        hideProxyParts_;          ///< The real widget and caption, hidden.
+    juce::String hideProxyKey_;   ///< The control the proxy stands for.
+    bool proxyReturning_ = false; ///< The proxy glides back after Esc and is dropped when that glide lands.
+    /// Where each control hidden by a drop on the zone went (card pixels): an undo or redo brings it back from there.
+    std::map<juce::String, juce::Point<int>> hiddenFrom_;
     std::vector<juce::Component::SafePointer<juce::Component>> pendingHideParts_; ///< Its widget and caption.
     bool forceAnimateForTest_ = false;
 
