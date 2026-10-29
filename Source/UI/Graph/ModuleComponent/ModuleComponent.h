@@ -775,14 +775,12 @@ private:
     void paintModHoverChip(juce::Graphics& g); // ModuleComponentModChip.cpp
     static juce::String knobNameForModTarget(const ModuleBase* mod, const ModulationTarget& target);
 
-    /** Right-click-any-knob entry point into the automation lane editor. Attached as a
-     *  MouseListener on every generic auto-UI slider (createControls()'s float/int branches) via
-     *  addMouseListener(this, false) — mouseDown() dispatches here first when e.eventComponent
-     *  isn't this component's own body (checked by identity against `sliders`, index-parallel to
-     *  `sliderParams` exactly like reflectParameterValue()'s lookup). Builds "Automate '<Param>'"
-     *  plus the MIDI Learn block (appendMidiLearnMenuItems, ModuleComponentMidiLearn.cpp) under one
-     *  separator, through showContextMenuHook_ so a test can capture it headlessly. */
-    void showAutomateMenuForSlider(juce::RangedAudioParameter* param);
+    /** Right-click-any-knob menu: "Automate '<Param>'" plus the MIDI Learn block, through
+     *  showContextMenuHook_ so a test can capture it headlessly. mouseDown() dispatches here for a
+     *  generic slider (`sliders`, index-parallel to `sliderParams`); `screenAnchor` places the menu
+     *  beside that area instead of at the mouse. */
+    void showAutomateMenuForSlider(juce::RangedAudioParameter* param,
+                                   std::optional<juce::Rectangle<int>> screenAnchor = std::nullopt);
 
     // ---- MIDI Learn (ModuleComponentMidiLearn.cpp) ----
 

@@ -398,3 +398,42 @@ TEST_F(ModuleComponentTest, ReducedMotionAndOffLandTheMapAtOnce) {
     rig.custom().getToggle().setToggleState(false, juce::sendNotificationSync);
     EXPECT_FALSE(rig.map().isVisible()) << "Animations: Off lands on the final state before the call returns";
 }
+
+// A right-click on a map slider, on the card or in its window, opens the
+// Morph knob's usual menu for that slider's parameter, and the card's own dot menu still has Edit.
+TEST_F(ModuleComponentTest, SliderRightClickOnTheCardAndInTheWindowOpenTheSameKnobMenuAndTheCardDotMenuKeepsEdit) {
+    CardRig rig;
+    CapturedMenu captured;
+    rig.card->setShowContextMenuHookForTest([&](juce::PopupMenu& m) { captured.capture(m); });
+    juce::String automated;
+    rig.editor.onAutomateParameterRequested = [&](juce::AudioProcessorGraph::NodeID, const juce::String& id) {
+        automated = id;
+    };
+    std::vector<std::unique_ptr<ShapeListEditor>> opened;
+    test_hooks::shapeEditorWindowHookForTest() = [&](std::unique_ptr<ShapeListEditor> e) {
+        opened.push_back(std::move(e));
+    };
+    rig.custom().openEditor(0);
+    test_hooks::shapeEditorWindowHookForTest() = nullptr;
+    ASSERT_EQ(opened.size(), 1u);
+    auto& windowMap = opened.back()->getMap();
+    const auto rightClick = [](juce::Component& c, juce::Point<float> p) { return curveRightClick(c, p); };
+
+    for (const auto& [axis, id] : {std::pair{MorphMap::Axis::X, "morphX"}, std::pair{MorphMap::Axis::Y, "morphY"}}) {
+        const auto expected = "Automate '" + findParameterByID(rig.filter, id)->getName(100) + "'";
+        for (MorphMap* map : {&rig.map(), &windowMap}) {
+            captured.items.clear();
+            automated.clear();
+            map->mouseDown(rightClick(*map, map->getStripBounds(axis).getCentre()));
+            ASSERT_FALSE(captured.items.empty()) << id;
+            EXPECT_EQ(captured.items.front(), expected.toStdString());
+            ASSERT_TRUE(captured.run(expected));
+            EXPECT_EQ(automated, id) << (map == &windowMap ? "window" : "card");
+        }
+    }
+
+    captured.items.clear();
+    rig.map().mouseDown(rightClick(rig.map(), rig.map().getDotCentre(0)));
+    ASSERT_FALSE(captured.items.empty());
+    EXPECT_EQ(captured.items.front(), "Edit") << "the card's dot menu keeps Edit";
+}

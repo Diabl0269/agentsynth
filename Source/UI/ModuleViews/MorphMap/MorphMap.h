@@ -19,7 +19,9 @@ class ReorderFramePump;
  *  through the callbacks, so the module card and the shape editor window drive it the same way.
  *
  *  Pointer: drag a dot to move it, drag the cursor to blend, double-click empty space to add a shape there,
- *  double-click a dot to delete it (one always stays), right-click a dot for Edit / Duplicate / Rename / Delete.
+ *  double-click a dot to delete it (one always stays), right-click a dot for Edit / Duplicate / Rename / Delete
+ *  (a window that has no separate edit step hides Edit: `setEditItemShown`), right-click a slider to ask its owner
+ *  for the slider's control menu (`onStripMenu`).
  *  A dot added or restored grows in and a removed one shrinks out, keyed by its name.
  *  Keyboard: the map, then each dot, then the cursor are Tab stops. On a dot or the cursor an arrow moves it one
  *  step (Shift for a bigger one); held, it glides on, slowly at first and faster the longer it is held (two arrows
@@ -106,8 +108,12 @@ public:
     std::function<void(int)> onDuplicateDot;
     std::function<void(int)> onDeleteDot;
     std::function<void(int, const juce::String&)> onRenameDot;
-    /** Shows a menu; unset opens it as a real popup. A test replaces it to inspect the menu. */
-    std::function<void(juce::PopupMenu&)> showMenu;
+    /** Shows a dot menu next to `screenArea` (screen coordinates); unset opens it as a real popup there. A test
+     *  replaces it to inspect the menu and the area. */
+    std::function<void(juce::PopupMenu&, juce::Rectangle<int> screenArea)> showMenu;
+    /** A right-click (or Shift+F10 on a focused slider) on the slider of `axis`; `screenArea` is its landing dot, where
+     *  the owner opens the slider's menu. Unset does nothing. */
+    std::function<void(Axis, juce::Rectangle<int> screenArea)> onStripMenu;
     /** Whether Delete may remove a dot; unset means yes. */
     std::function<bool()> canDeleteDot;
     /** Offered every press first (`phase` 0, in this component's coordinates); true claims the whole press: the
@@ -136,6 +142,8 @@ public:
     juce::Rectangle<float> getModBarTrack(Axis axis) const;
     /** The bar from `fromNorm` to `toNorm` (0..1 along the slider) inside `getModBarTrack`. */
     juce::Rectangle<float> getModBarBetween(Axis axis, float fromNorm, float toNorm) const;
+    /** Whether the dot menu offers Edit; on by default. */
+    void setEditItemShown(bool shown) noexcept { editItemShown_ = shown; }
     /** The slider whose modulation bar is under `point` (this component's coordinates). */
     Axis modBarAt(juce::Point<float> point) const;
     /** The modulation each routing on the slider of `axis` brings; empty for none. Repaints only on change. */
@@ -178,6 +186,7 @@ public:
     // ---------- actions the menu and keys share ----------
     void beginRename(int index);
     void showDotMenu(int index);
+    void showStripMenu(Axis axis);
 
     // ---------- Component ----------
     void paint(juce::Graphics& g) override;
@@ -220,6 +229,7 @@ private:
     void paintStrips(juce::Graphics& g) const;
     void paintStripModulation(juce::Graphics& g, Axis axis) const;
     float stripReach() const;
+    juce::Rectangle<int> menuAreaAt(juce::Point<float> localCentre) const;
     void setHoveredAxis(Axis axis);
     void endRename(bool commit);
     void select(int index);
@@ -244,6 +254,7 @@ private:
     juce::Point<float> grabOffset_; ///< pixels from the pointer to the centre of the dot or cursor being dragged
     bool cursorVisible_ = true;
     bool showLabels_ = false;
+    bool editItemShown_ = true;
     int selected_ = -1;
     Axis dropAxis_ = Axis::None;
     Axis hoverAxis_ = Axis::None;

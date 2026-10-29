@@ -147,10 +147,11 @@ void MorphMap::showDotMenu(int index) {
     juce::PopupMenu menu;
     juce::Component::SafePointer<MorphMap> safe(this);
     const bool canDelete = !canDeleteDot || canDeleteDot();
-    menu.addItem("Edit", [safe, index] {
-        if (safe != nullptr && safe->onEditDot)
-            safe->onEditDot(index);
-    });
+    if (editItemShown_)
+        menu.addItem("Edit", [safe, index] {
+            if (safe != nullptr && safe->onEditDot)
+                safe->onEditDot(index);
+        });
     menu.addItem("Duplicate", [safe, index] {
         if (safe != nullptr && safe->onDuplicateDot)
             safe->onDuplicateDot(index);
@@ -163,17 +164,33 @@ void MorphMap::showDotMenu(int index) {
         if (safe != nullptr && safe->onDeleteDot)
             safe->onDeleteDot(index);
     });
+    const auto area = menuAreaAt(getDotCentre(index));
     if (showMenu)
-        showMenu(menu);
+        showMenu(menu, area);
     else
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(
-            localAreaToGlobal(juce::Rectangle<int>(16, 16).withCentre(getDotCentre(index).roundToInt()))));
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(area));
+}
+
+/** A small screen area centred on a point of this map, which a menu opens beside. */
+juce::Rectangle<int> MorphMap::menuAreaAt(juce::Point<float> localCentre) const {
+    return localAreaToGlobal(juce::Rectangle<int>(16, 16).withCentre(localCentre.roundToInt()));
+}
+
+/** The area of a slider's menu: its landing dot, so the menu opens beside the slider. */
+void MorphMap::showStripMenu(Axis axis) {
+    if (onStripMenu)
+        onStripMenu(axis, menuAreaAt(stripAnchor(axis)));
 }
 
 bool MorphMap::showContextMenuForKeyboardFocus() {
     for (int i = 0; i < (int)dotStops_.size(); ++i)
         if (dotStops_[(size_t)i]->hasKeyboardFocus(false)) {
             showDotMenu(i);
+            return true;
+        }
+    for (const Axis axis : {Axis::X, Axis::Y})
+        if (cursorVisible_ && stripStops_[axis == Axis::X ? 0 : 1]->hasKeyboardFocus(false)) {
+            showStripMenu(axis);
             return true;
         }
     return false;

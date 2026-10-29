@@ -26,6 +26,9 @@ public:
         std::function<void()> makeRoom;
         bool* settling = nullptr;
         std::function<void(juce::PopupMenu&)> showMenu;
+        /** Opens the control menu of the parameter behind raw channel `channel` beside `screenArea`; unset shows none.
+         */
+        std::function<void(int channel, juce::Rectangle<int> screenArea)> stripMenu;
         std::function<void(const std::function<void(synth::CardViewState&)>&)> rememberView;
         std::function<void(bool)> hideMorphKnobs;
         juce::String mapPlace;               ///< where the map sits, for the pill's tooltip ("under the response view")
@@ -105,6 +108,7 @@ private:
     bool mapWanted() const;
     bool routeMapPress(const juce::MouseEvent& e, int phase);
     void routeStripHover(MorphMap::Axis axis);
+    void openStripMenu(MorphMap::Axis axis, juce::Rectangle<int> screenArea);
     void pushStripModulation();
     juce::String stripTooltipAt(juce::Point<float> point) const;
 
