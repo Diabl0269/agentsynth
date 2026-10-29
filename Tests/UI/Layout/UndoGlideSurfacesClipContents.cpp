@@ -76,6 +76,7 @@ public:
     bool gliding() const override { return f_.lane.getClipGlideForTest().isAnimating(); }
     void stepTo(double elapsedMs) override { f_.lane.getClipGlideForTest().stepForTest(elapsedMs); }
     float alpha() const override { return f_.lane.getClipGlideForTest().alphaFor(clip_.value); }
+    juce::Component* paintedComponent() override { return &f_.lane; }
 
     ClipLaneFixture& fixture() { return f_; }
     synth::ClipId clip() const { return clip_; }
