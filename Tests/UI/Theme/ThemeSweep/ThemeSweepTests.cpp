@@ -333,7 +333,8 @@ TEST(ThemeSweepWindowsHeadless, DetachedWindowsAreOpaqueAndReadableInEveryTheme)
     findings.expectOnlyKnownGaps({"Detached panel"});
 }
 
-TEST(ThemeSweepWindowsHeadless, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
+// An alert window lays itself out against the monitor it sits on, so it needs a display like the dialogs do.
+TEST_F(ThemeSweepWindows, AlertWindowsAreOpaqueAndReadableInEveryTheme) {
     Findings findings;
     ProbeLog log;
     for (const auto& theme : synth::theme::builtInThemes()) {
