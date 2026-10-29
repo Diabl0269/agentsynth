@@ -1,0 +1,16 @@
+# Bug FRO1094 (the other half): with the timeline already open, Cmd+T opens the Add Track picker at once, with no wait
+# for a slide. Presses it twice (closing the picker with Escape in between): both times it is level with the button.
+#
+# What a user does: opens the timeline (Cmd+T, then Escape), presses Cmd+T again.
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 300}
+  - screenshot: {name: cmd-t-open-window}
+  - screenshot: {id: modMatrixPicker, name: cmd-t-open-picker}

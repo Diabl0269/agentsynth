@@ -1,0 +1,41 @@
+# Bug FRO1098: the timeline's J (Snap), F (Follow playhead) and Ctrl+F (Follow mode Smooth/Page) changed a setting
+# without saying so; they now show a short toast above the open timeline dock. Clicking the Snap and Follow buttons
+# shows none.
+#
+# What a user does: opens the timeline, clicks its lane to focus it, presses J, F, Ctrl+F; then clicks the Snap and
+# Follow buttons.
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: window, x: 800, y: 800}
+  - key: {keys: j}
+  - expect: {id: "Snap off", showing: true, within_ms: 1000}
+  - screenshot: {name: toast-j}
+  - key: {keys: j}
+  - expect: {id: "Snap on", showing: true, within_ms: 1000}
+  - screenshot: {name: toast-j-on}
+  - key: {keys: f}
+  - expect: {id: "Follow playhead on", showing: true, within_ms: 1000}
+  - screenshot: {name: toast-f}
+  - key: {keys: f}
+  - expect: {id: "Follow playhead off", showing: true, within_ms: 1000}
+  - screenshot: {name: toast-f-off}
+  - key: {keys: ctrl+f}
+  - expect: {id: "Follow: Smooth", showing: true, within_ms: 1000}
+  - screenshot: {name: toast-ctrl-f-smooth}
+  - key: {keys: ctrl+f}
+  - expect: {id: "Follow: Page", showing: true, within_ms: 1000}
+  - screenshot: {name: toast-ctrl-f-page}
+  # The toast is one component whose title is its message: let it fade, click the buttons, and it still holds the last
+  # hotkey's message and is not showing, so the clicks made no toast of their own.
+  - expect: {id: "Follow: Page", showing: false, within_ms: 10000}
+  - click: {id: timelineSnapToggle}
+  - click: {id: timelineFollowPlayheadToggle}
+  - wait: {}
+  - expect: {id: "Follow: Page", showing: false}
+  - screenshot: {name: buttons-no-toast}

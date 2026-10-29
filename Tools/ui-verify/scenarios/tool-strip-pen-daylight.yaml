@@ -1,0 +1,31 @@
+# Bug FRO1101: the timeline tool strip's Draw pen did not follow the theme: its fill differed from Select and Range
+# (lit and unlit) and its corner mark was not the app's chevron. It now paints the same button-on / button fills.
+#
+# What a user does: opens the timeline in the "daylight" theme, looks at the tool strip with Select lit (Draw unlit), then
+# clicks Draw (Draw lit, Select unlit). PNGs of each button and of the whole window per state; the fills are compared
+# in the run notes.
+settings:
+  themeId: daylight
+  themeMode: Dark
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: timelineToolSelect, toggleState: true}
+  - expect: {id: timelineToolDraw, toggleState: false}
+  - screenshot: {name: daylight-draw-unlit-window}
+  - screenshot: {id: timelineToolSelect, name: daylight-select-lit}
+  - screenshot: {id: timelineToolRange, name: daylight-range-unlit}
+  - screenshot: {id: timelineToolDraw, name: daylight-draw-unlit}
+  - click: {id: timelineToolDraw}
+  - wait: {}
+  - expect: {id: timelineToolDraw, toggleState: true}
+  - expect: {id: timelineToolSelect, toggleState: false}
+  - screenshot: {name: daylight-draw-lit-window}
+  - screenshot: {id: timelineToolSelect, name: daylight-select-unlit}
+  - screenshot: {id: timelineToolRange, name: daylight-range-unlit-2}
+  - screenshot: {id: timelineToolDraw, name: daylight-draw-lit}
