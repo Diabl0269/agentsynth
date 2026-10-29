@@ -122,6 +122,8 @@ public:
     std::function<void(int)> onNodeChanged;
     std::function<void(int)> onBendChanged;
     std::function<void()> onPointsChanged;
+    /** Set: a Ctrl+T press that cannot insert is used up and reports why here. Unset: it is left to the app. */
+    std::function<void(const juce::String& why)> onInsertRefused;
 
     /** Right-click hook (Free mode's context menu, e.g. the LFO card's Shapes/Tools/Grid menu).
      *  `hitTest(e.position)` has already run; the result is handed in so the caller doesn't redo
@@ -201,6 +203,9 @@ public:
      *  halfway to the end of the range when the cursor is the last point; the new point becomes the selection.
      *  One gesture. False when there is no cursor, the curve is full, or there is no room between the points. */
     bool insertAfterCursor();
+
+    /** Why insertAfterCursor() would do nothing, as a sentence for the user; empty when it would insert. */
+    juce::String insertRefusal() const;
 
     /** The cursor point: where Left/Right continue from and what a screen reader reads. -1 when none. */
     int getSelectedIndex() const noexcept { return cursorIndex(); }

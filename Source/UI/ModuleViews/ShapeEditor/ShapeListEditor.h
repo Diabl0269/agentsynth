@@ -30,7 +30,8 @@ namespace synth::ui {
  *
  *  Keyboard: Tab visits the map and its dots and cursor, the chips, the grid choice, the spectrum toggle, the curve
  *  editor, the buttons, the per-note controls and Done, in that order. Escape closes the window (`onDone`, else the
- * hosting window).
+ *  hosting window) from any of them. Ctrl+T inserts a point on the curve or a dot on the map; when it cannot, a line
+ *  under the map says why for a few seconds and is announced to screen readers.
  */
 class ShapeListEditor
     : public juce::Component
@@ -115,6 +116,8 @@ public:
     void pollSpectrum();
     ShapeDrawRange getDrawRange() const;
     juce::String getWindowTitle() const { return adapter_->getWindowTitle(); }
+    /** The message under the map ("No room after this point"); empty once it has faded. */
+    juce::String getStatusText() const { return statusLabel_.getText(); }
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -141,6 +144,7 @@ private:
     void showMenuNow(juce::PopupMenu& menu, juce::Component& target);
     void showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> screenArea);
     void syncAll();
+    void showStatus(const juce::String& text);
     void updateButtonStates();
     // ShapeListEditorToolbar.cpp
     bool hasToolbar() const;
@@ -170,6 +174,8 @@ private:
     juce::TextButton drawButton_{"Draw"};
     juce::TextButton saveShapeButton_{"Save shape"};
     juce::TextButton doneButton_{"Done"};
+    juce::Label statusLabel_;
+    juce::uint32 statusClearsAtMs_ = 0;
     std::unique_ptr<PerNoteBar> perNote_;
     std::optional<ShapeGridOffer> gridOffer_;
     std::unique_ptr<NoteLengthBox> gridBox_;

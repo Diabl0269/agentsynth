@@ -139,6 +139,10 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
     const auto action = pointKeyAction(key);
     switch (action.kind) {
     case Kind::insert:
+        if (const auto why = insertRefusal(); why.isNotEmpty() && onInsertRefused) {
+            onInsertRefused(why);
+            return true;
+        }
         return insertAfterCursor();
     case Kind::selectAll:
         return selectAllMovable();

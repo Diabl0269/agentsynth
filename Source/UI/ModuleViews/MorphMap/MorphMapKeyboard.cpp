@@ -2,6 +2,7 @@
 // menu and the inline rename.
 #include "MorphMap.h"
 #include "MorphMapInternal.h"
+#include "UI/Layout/PointEditing/PointEditorKeys.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -104,7 +105,30 @@ void MorphMap::deleteDotAndRefocus(int index) {
         safe->takeFocus(*safe->dotStops_[(size_t)juce::jmin(index, (int)safe->dotStops_.size() - 1)]);
 }
 
+/** Ctrl+T: the new dot is the owner's to make (halfway to the next one), and takes focus. The last dot has no next
+    one, and a full map has no room; each says so through `onNotice`. */
+bool MorphMap::insertAfterDot(int index) {
+    if (index + 1 >= (int)dots_.size()) {
+        if (onNotice)
+            onNotice("This is the last dot");
+        return true;
+    }
+    juce::Component::SafePointer<MorphMap> safe(this);
+    const int added = onInsertAfterDot(index);
+    if (safe == nullptr)
+        return true;
+    if (added < 0) {
+        if (onNotice)
+            onNotice("No room for another shape");
+    } else if (added < (int)dotStops_.size()) {
+        takeFocus(*dotStops_[(size_t)added]);
+    }
+    return true;
+}
+
 bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
+    if (isInsertPointKey(key) && onInsertAfterDot && !stop.isCursor() && !stop.isStrip())
+        return insertAfterDot(stop.getIndex());
     const auto mods = key.getModifiers();
     if (mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
         return false;
