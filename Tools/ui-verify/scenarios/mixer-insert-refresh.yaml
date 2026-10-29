@@ -1,0 +1,40 @@
+# Bug: a module patched into a track's chain on the canvas did not show in the mixer's insert list until some other
+# mixer action happened. A cable patched on the canvas rebuilds no components, and the mixer only looked again after
+# a structural change it could miss.
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator track and opens the Mixer tab: the track lists its five inserts.
+#   2. Opens the track on the canvas (double-click), adds a Distortion module and patches it in beside the chain
+#      (Parametric EQ out -> Distortion -> Compressor in).
+#   3. Without touching the mixer, the insert list now shows the chain split into two paths.
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - wait: {}
+  - click: {id: Mixer}                                       # the Mixer tab
+  - click: {id: macroCard, clicks: 2}                        # open the track on the canvas
+  - wait: {}
+  - expect: {id: "card:Compressor", exists: true}
+  - expect: {count: {prefix: "Split into", field: title, equals: 0}}
+  - key: {keys: cmd+f}                                       # add Distortion from the library
+  - type: {text: dist}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: "cmd+-"}                                     # zoom out so the whole chain is on screen
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 1300, fromY: 280, toX: 1300, toY: 420}   # pan down
+  - wait: {}
+  - drag: {from: "card:Parametric EQ > Audio output", to: "card:Distortion > Audio input"}
+  - drag: {from: "card:Distortion > Audio output", to: "card:Compressor > Audio input"}
+  - wait: {}
+  - expect: {count: {prefix: "Split into 2 paths", field: title, equals: 1}, within_ms: 1500}
+  - screenshot: {name: mixer-insert-refresh}

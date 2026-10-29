@@ -102,3 +102,12 @@ TEST(TestModeComponents, StateIncludesTheStockWidgetFields) {
     EXPECT_EQ(describeState(rig.combo)["text"].toString(), "two");
     EXPECT_TRUE(static_cast<bool>(describeState(rig.left)["enabled"]));
 }
+
+TEST(TestModeComponents, AButtonsTooltipIsReported) {
+    Rig rig;
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    rig.button.setTooltip("Record (Ctrl+R)");
+    EXPECT_EQ(describeState(rig.button)["tooltip"].toString(), "Record (Ctrl+R)");
+    EXPECT_EQ(describeState(rig.left)["tooltip"].toString(), ""); // a component with no tooltip support reports none
+}

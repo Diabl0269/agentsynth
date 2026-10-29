@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "MacroSet.h"
 #include "Modules/MacroPortShape.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -32,12 +33,16 @@ struct Colors;
  *  module names, since the content preview drawn on the card is too small to read as text. */
 class MacroCardComponent
     : public juce::Component
-    , public juce::TooltipClient {
+    , public juce::TooltipClient
+    , public synth::testmode::StateSource {
 public:
     MacroCardComponent(GraphEditor& owner, juce::String macroId);
     ~MacroCardComponent() override;
 
     const juce::String& getMacroId() const noexcept { return macroId; }
+
+    /** Test mode: the macro's `name` and `collapsed` flag, and `members` (its direct member count). */
+    void addTestModeState(juce::DynamicObject& into) const override;
 
     /** Whether this card's own body drag (mouseDown -> beginMacroCardDrag) is currently armed —
      *  GraphEditor::syncMacroCards() checks this before destroying an orphaned card so a macro that

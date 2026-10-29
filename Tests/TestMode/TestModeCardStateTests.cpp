@@ -3,11 +3,13 @@
 #include "../Macros/MacroContainer/MacroContainerTestHelpers.h"
 #include "AppUndoManager.h"
 #include "Modules/ADSRModule.h"
+#include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/OscillatorModule.h"
 #include "TestMode/TestModeComponents.h"
 #include "TestMode/TestModeInput.h"
 #include "TestModeRig.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include <gtest/gtest.h>
 
 using namespace synth::testmode;
@@ -77,4 +79,37 @@ TEST(TestModeCardState, ARealClickOnACardSelectsIt) {
                       juce::ModifierKeys(), error))
         << error;
     EXPECT_TRUE(static_cast<bool>(describeState(*card)["selected"]));
+}
+
+TEST(TestModeCardState, ACardNamesTheMacroItIsAMemberOf) {
+    CardRig rig;
+    const auto a = addModuleAt(rig.editor, rig.engine, std::make_unique<OscillatorModule>(), 300, 200);
+    const auto b = addModuleAt(rig.editor, rig.engine, std::make_unique<FilterModule>(), 700, 200);
+    const auto loose = addModuleAt(rig.editor, rig.engine, std::make_unique<LFOModule>(), 300, 700);
+    rig.editor.setSelectedNodes({a, b});
+    const auto macroId = rig.editor.getMacroController().groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    rig.editor.getMacros().find(macroId)->name = "Lead";
+
+    EXPECT_EQ(describeState(*findComponent(rig.editor, a))["macro"].toString(), "Lead");
+    EXPECT_EQ(describeState(*findComponent(rig.editor, b))["macro"].toString(), "Lead");
+    EXPECT_EQ(describeState(*findComponent(rig.editor, loose))["macro"].toString(), "");
+}
+
+TEST(TestModeCardState, AFoldedMacroCardIsFoundAndReportsItsNameAndMembers) {
+    CardRig rig;
+    const auto a = addModuleAt(rig.editor, rig.engine, std::make_unique<OscillatorModule>(), 300, 200);
+    const auto b = addModuleAt(rig.editor, rig.engine, std::make_unique<FilterModule>(), 700, 200);
+    rig.editor.setSelectedNodes({a, b});
+    const auto macroId = rig.editor.getMacroController().groupSelectionIntoMacro();
+    rig.editor.getMacros().find(macroId)->name = "Lead";
+    rig.editor.getMacroController().setMacroCollapsed(macroId, true);
+
+    auto* card = rig.editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    EXPECT_EQ(card->getComponentID(), "macroCard");
+    const auto state = describeState(*card);
+    EXPECT_EQ(state["name"].toString(), "Lead");
+    EXPECT_TRUE(static_cast<bool>(state["collapsed"]));
+    EXPECT_EQ(static_cast<int>(state["members"]), 2);
 }

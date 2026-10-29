@@ -1,0 +1,35 @@
+# Bug: switching a track to Poly must switch its whole voice chain, not just the card in front of you. The MIDI
+# reaching the oscillator and the envelope has to come through a Poly MIDI module, and switching back to Mono has to
+# take it out again, every time, not only the first.
+#
+# What a user does:
+#   1. Starts a new project and adds an Oscillator track; opens the track on the canvas (double-click).
+#   2. Presses Poly on the track header: the Oscillator's Poly switch turns on and a Poly MIDI module appears.
+#   3. Presses Mono: the Poly switch turns off and the Poly MIDI module is gone.
+#   4. Presses Poly again: the chain comes back the same way.
+# Not asserted: the extra Track In cable some Poly flips leave behind (known and open).
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2}                        # open the track on the canvas
+  - wait: {}
+  - expect: {id: "card:Oscillator > Poly", toggleState: false}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 0}}
+  - click: {id: trackPolyButton}
+  - wait: {}
+  - expect: {id: "card:Oscillator > Poly", toggleState: true, within_ms: 1500}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
+  - click: {id: trackMonoButton}
+  - wait: {}
+  - expect: {id: "card:Oscillator > Poly", toggleState: false, within_ms: 1500}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 0}, within_ms: 1500}
+  - click: {id: trackPolyButton}
+  - wait: {}
+  - expect: {id: "card:Oscillator > Poly", toggleState: true, within_ms: 1500}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
+  - screenshot: {name: poly-switch-chain}

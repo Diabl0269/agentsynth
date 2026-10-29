@@ -20,6 +20,20 @@ Both take `--app <path to Agent Synth.app>` and `--out <dir>`. Each run starts i
 `agentsynth_testmode.TestModeApp` is a context manager: `app.call("click", id="card:LFO 1")` returns the result or raises
 `TestModeError`. Ids come from `list`; `card:<title>` finds a module card.
 
+## Scenarios
+
+`scenarios/*.yaml` replay regressions that came back (a bug header, the steps a user takes, the checks) and `run.py`
+runs them, each in its own instance. Needs python3 with PyYAML:
+
+```bash
+python3 Tools/ui-verify/run.py Tools/ui-verify/scenarios            # every scenario; non-zero exit when one fails
+python3 Tools/ui-verify/run.py Tools/ui-verify/scenarios/poly-switch-chain.yaml --out out/poly
+```
+
+Screenshots and a `run.log` land in the output folder (one per scenario when a directory runs). The step format and how to add a scenario are in
+[`docs/development/test-mode.md`](../../docs/development/test-mode.md#scenarios). `bash scripts/tests/ui-verify-run.test.sh`
+tests the runner without an app.
+
 ## The fixture
 
 `fixtures/macros.agsproj` holds an open macro, a collapsed macro and a nested macro, each with LFO and ADSR cards, and a

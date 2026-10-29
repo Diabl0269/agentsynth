@@ -1,0 +1,33 @@
+# Bug: "Replace with..." on a module inside a track (a macro) put the new module outside the track, and Undo did
+# not put the old module back inside it. The replacement has to take the old module's place in the track, and Undo
+# has to bring back the old module in the track too.
+#
+# What a user does:
+#   1. Starts a new project and adds an Oscillator track; opens the track on the canvas (double-click).
+#   2. Selects the VCA and presses Cmd+Alt+R (Replace with...), types "dist" and presses Return.
+#   3. The Distortion that took the VCA's place is still in the track.
+#   4. Presses Cmd+Z: the VCA is back, in the track, and the Distortion is gone.
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - wait: {}
+  - click: {id: macroCard, clicks: 2}                        # open the track on the canvas
+  - wait: {}
+  - expect: {id: "card:VCA", macro: Oscillator 1}
+  - click: {id: "card:VCA", x: 60, y: 12}                    # select it by its title bar
+  - key: {keys: cmd+alt+r}
+  - wait: {}
+  - type: {text: dist}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: "card:Distortion", macro: Oscillator 1, within_ms: 1500}
+  - expect: {id: "card:VCA", exists: false}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:VCA", macro: Oscillator 1, within_ms: 1500}
+  - expect: {id: "card:Distortion", exists: false}
+  - screenshot: {name: replace-in-macro-undo}

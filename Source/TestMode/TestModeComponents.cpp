@@ -190,6 +190,10 @@ juce::var describeState(const juce::Component& c) {
     }
     if (const auto* editor = dynamic_cast<const juce::TextEditor*>(&c))
         o->setProperty("text", editor->getText());
+    // What a hover would show; a button's tooltip names its shortcut, which a scenario can check.
+    // getTooltip() is not const in JUCE although it only reads.
+    if (auto* client = dynamic_cast<juce::TooltipClient*>(const_cast<juce::Component*>(&c)))
+        o->setProperty("tooltip", client->getTooltip());
     if (const auto* source = dynamic_cast<const StateSource*>(&c))
         source->addTestModeState(*o);
     return out;

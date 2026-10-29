@@ -15,10 +15,18 @@ MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
     : owner(owner)
     , macroId(std::move(macroId)) {
     setInterceptsMouseClicks(true, false);
+    setComponentID("macroCard"); // test mode (docs/development/test-mode.md#ids); `name` tells several apart
     showContextMenuHook_ = [](juce::PopupMenu& menu) { menu.showMenuAsync(synth::ui::contextMenuOptionsAtPointer()); };
 }
 
 MacroCardComponent::~MacroCardComponent() { finishRename(false); }
+
+void MacroCardComponent::addTestModeState(juce::DynamicObject& into) const {
+    const auto* macro = owner.getMacros().find(macroId);
+    into.setProperty("name", macro != nullptr ? macro->name : juce::String());
+    into.setProperty("collapsed", macro != nullptr && macro->collapsed);
+    into.setProperty("members", macro != nullptr ? static_cast<int>(macro->members.size()) : 0);
+}
 
 void MacroCardComponent::paint(juce::Graphics& g) {
     const auto* macro = owner.getMacros().find(macroId);

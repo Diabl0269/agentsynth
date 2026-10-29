@@ -35,6 +35,13 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("moduleType", module != nullptr ? module->getName() : juce::String());
     into.setProperty("title", cardTitle());
     into.setProperty("nodeId", static_cast<int>(nodeId.uid));
+    // The macro the module is a member of ("" when it is in none), so a scenario can tell "inside the macro" from
+    // "next to it" without reading the canvas geometry.
+    juce::String macroName;
+    if (auto* node = owner.getAudioEngine().getGraph().getNodeForId(nodeId))
+        if (const auto* macro = owner.getMacros().findByMember(node->properties["uuid"].toString()))
+            macroName = macro->name;
+    into.setProperty("macro", macroName);
 }
 
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {
