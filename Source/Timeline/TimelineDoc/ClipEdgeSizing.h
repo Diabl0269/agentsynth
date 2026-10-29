@@ -29,6 +29,33 @@ struct ClipEdgeResult {
 ClipEdgeResult clipEdgeResult(const Clip& clip, ClipEdge edge, ClipSizingMode mode, double newStartBeat,
                               double newLengthBeats);
 
+// How the notes inside a clip move on screen while an undo or redo glides the clip from its old place to its restored
+// one. The doc holds the restored notes at once; this says how to draw them back at their old place and bring them
+// along.
+enum class ClipNoteGlide {
+    Stay,  // Trim (or no note moved): the notes keep their beat, the edge slides over them
+    Shift, // Carry contents, or a pure move: the notes follow the clip's left edge
+    Scale, // Stretch: each note is drawn through the gliding clip's own mapping, old span to new span
+};
+
+// A note's id and clip-relative start, taken at each sync so a later restore can tell which of the three it was.
+struct ClipNoteStart {
+    NoteId id;
+    double startBeat = 0.0;
+};
+std::vector<ClipNoteStart> clipNoteStarts(const std::vector<MidiNote>& notes);
+
+// How the notes moved when the clip went from [oldStart, + oldLength) with `before` to [newStart, + newLength) with
+// `after`, matching notes by id: an unchanged length is a move (Shift); all relative starts unchanged is Carry (Shift);
+// all of them scaled by the length ratio is Stretch (Scale); anything else keeps the notes on their beat (Stay).
+ClipNoteGlide classifyClipNoteGlide(double oldLength, double newLength, const std::vector<ClipNoteStart>& before,
+                                    const std::vector<ClipNoteStart>& after);
+
+// Where a note's final x is drawn at the moment the clip's rectangle is `drawn` instead of its resting `rest`
+// (both left and width, in pixels). Stay and Shift read only the left edge; Scale maps through both.
+double glidedNoteX(ClipNoteGlide glide, double restingX, double restLeft, double restWidth, double drawnLeft,
+                   double drawnWidth);
+
 // What a Stretch edge drag of an audio clip to `newLengthBeats` reads from its asset: the clip's own window, and how
 // many times faster to play it. nullopt for a MIDI clip, or a length or tempo that is not finite and positive.
 struct AudioStretchWindow {

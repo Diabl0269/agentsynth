@@ -207,7 +207,12 @@ const std::vector<Entry>& surfaces() {
         {"Timeline track row", false, [] { return makeTimelineTrackRows(); }},
         {"Automation lane row", false, [] { return makeAutomationLaneReorder(); }},
     };
-    return list;
+    static const std::vector<Entry> all = [] {
+        auto withContents = list;
+        appendClipContentsEntries(withContents);
+        return withContents;
+    }();
+    return all;
 }
 
 } // namespace undo_glide_test

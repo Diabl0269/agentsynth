@@ -447,9 +447,7 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     const auto geometry = effectiveGeometryFor(clip);
     auto rect =
         computeClipRect(viewState_, layout, effectiveRowFor(clip.id, trackIndex), geometry.start, geometry.length);
-    const auto glide = clipGlide_.offsetFor(clip.id.value);
-    // A moved clip carries its notes along; a trimmed one (its width changes) leaves them where they are.
-    const double noteShift = glide.getWidth() == 0.0f ? (double)glide.getX() : 0.0;
+    const auto restingRect = rect; // the notes glide relative to it (glidedNoteX)
     rect = drawnClipRect(clip.id, rect);
     const int rowHeight = rect.getHeight(); // the row it is drawn in (a dragged clip's target row)
     // Cull against the area being painted, in both directions: rows scrolled above or below the panel are laid out at
@@ -493,8 +491,8 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
         const auto preview = resizePreviewFor(clip);
         for (const auto& note : preview ? preview->notes : clip.notes) {
             const double noteStartBeat = geometry.start + note.startBeat; // notes are clip-relative
-            const double x0 = viewState_.beatToX(noteStartBeat) + noteShift;
-            const double x1 = viewState_.beatToX(noteStartBeat + note.lengthBeats) + noteShift;
+            const double x0 = glidedNoteX(clip.id, viewState_.beatToX(noteStartBeat), restingRect);
+            const double x1 = glidedNoteX(clip.id, viewState_.beatToX(noteStartBeat + note.lengthBeats), restingRect);
             const auto nx0 = (float)juce::jlimit((double)rect.getX(), (double)rect.getRight(), x0);
             const auto nx1 = (float)juce::jlimit((double)rect.getX(), (double)rect.getRight(), x1);
             if (nx1 <= nx0)
