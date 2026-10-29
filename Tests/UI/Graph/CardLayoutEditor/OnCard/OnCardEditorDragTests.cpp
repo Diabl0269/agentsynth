@@ -530,3 +530,25 @@ TEST(OnCardEditorRows, AFaderCellIsTheBoxTheCardGivesItAndTheFirstDropMovesNoSta
         if (k != "decay")
             EXPECT_EQ(open.cell(k), before[k]) << k << " stayed where it was";
 }
+
+// Regression test for FRO720: a Long fader's cell is the 144 px box the card gives it, and dropping it back in its own
+// row leaves every stage where it was.
+TEST(OnCardEditorRows, ALongFaderCellIsTheCardsBoxAndADropInItsOwnRowMovesNothing) {
+    AdsrOpen open;
+    ASSERT_NE(open.editor, nullptr);
+    auto* panel = openControlPanel(open.rig, *open.editor, "sustain");
+    ASSERT_NE(panel, nullptr);
+    ASSERT_TRUE(static_cast<bool>(panel->onShowAs));
+    panel->onShowAs(synth::CardWidget::FaderVLong);
+
+    EXPECT_EQ(open.cell("sustain").getHeight(), synth::cardbody::kLabelHeight + synth::cardbody::kFaderVLongHeight);
+    std::map<juce::String, juce::Rectangle<int>> before;
+    for (const auto& k : open.stages)
+        before[k] = open.cell(k);
+
+    Pointer pointer(*open.editor, "sustain");
+    pointer.moveBy({0, 12}, kCommand); // still inside its own row
+    pointer.release();
+    for (const auto& k : open.stages)
+        EXPECT_EQ(open.cell(k), before[k]) << k << " did not move";
+}
