@@ -36,7 +36,6 @@ struct KnownGap {
 };
 
 const char* const kOnCardRows = "test:OnCardEditorRows.TheCommittedLayoutEqualsTheLastPreview";
-const char* const kGraphGhost = "test:GraphEditorTest.DragPreviewGhostTracksResolvedPlacement";
 
 const std::vector<Registered> kRegistered = {
     // Preview and commit checked by a shared guard.
@@ -53,9 +52,6 @@ const std::vector<Registered> kRegistered = {
     {"DrumHitLane", {"test:DrumMachineLanesTest.ADragAcrossAnyLaneSetsARampAsOneUndoStepAndCommitsWhatItPreviewed"}},
     {"MixerInsertList",
      {"test:MixerInsertListReorderTests.ARealDragReordersAsOneUndoStepAndThePreviewIsWhatTheDropCommits"}},
-    {"GraphEditor", {kGraphGhost}},
-    {"ModuleComponent", {kGraphGhost}},
-    {"MacroCardComponent", {kGraphGhost}},
     {"DragHandle", {"test:MacroPortConfigDialogTest.DraggingAcrossTwoRowsCommitsOnceOnReleaseWithTheFinalIndex"}},
     {"ControllerSurfaceCell", {"test:ControllerSurfaceComponentTest.MultiStepDragLandsExactlyOnOriginPlusDelta"}},
     // No preview/commit split.
@@ -87,20 +83,23 @@ const std::vector<Registered> kRegistered = {
 
 // A real preview/commit split with no guard that compares the two. Each needs one; the list may only shrink.
 const std::vector<KnownGap> kKnownGaps = {
-    {"CardLayoutEditorGrip", "TICKET?", "list editor row reorder: preview rows vs the committed order"},
-    {"DockTabButton", "TICKET?", "bottom dock tab reorder: lifted tab order vs the saved order"},
-    {"NoteRangePicker", "TICKET?", "range edge/band drag: shown range vs the range committed on release"},
-    {"MixerColumnHeader", "TICKET?", "mixer column reorder: preview slot vs the committed order"},
-    {"MixerSendList", "TICKET?", "send row reorder: preview slot vs the committed order"},
-    {"MixerZonesRow", "TICKET?", "zone row drag: preview slot vs the committed zone and order"},
-    {"PianoRollComponent", "TICKET?",
+    {"GraphEditor", "FRO1319", "canvas card move: shown card bounds vs the node position after release"},
+    {"ModuleComponent", "FRO1319", "module card move: shown card bounds vs the node position after release"},
+    {"MacroCardComponent", "FRO1319", "macro card move: shown card bounds vs the node position after release"},
+    {"CardLayoutEditorGrip", "FRO1316", "list editor row reorder: preview rows vs the committed order"},
+    {"DockTabButton", "FRO1316", "bottom dock tab reorder: lifted tab order vs the saved order"},
+    {"NoteRangePicker", "FRO1318", "range edge/band drag: shown range vs the range committed on release"},
+    {"MixerColumnHeader", "FRO1316", "mixer column reorder: preview slot vs the committed order"},
+    {"MixerSendList", "FRO1316", "send row reorder: preview slot vs the committed order"},
+    {"MixerZonesRow", "FRO1318", "zone row drag: preview slot vs the committed zone and order"},
+    {"PianoRollComponent", "FRO1317",
      "note move/resize/copy: ghost notes vs the notes committed (only the draw tool is checked)"},
-    {"PianoRollVelocityLane", "TICKET?", "velocity stick/ramp gesture: shown velocities vs the committed ones"},
-    {"AutomationLaneHeaderComponent", "TICKET?", "lane header reorder: preview slot vs the committed order"},
-    {"LaneControlChip", "TICKET?", "lane chip reorder: preview order vs the committed order"},
-    {"ModulatorRow", "TICKET?", "modulator row reorder: preview slot vs the committed order"},
-    {"TimelineRulerComponent", "TICKET?", "marker drag: snapped preview vs the marker position committed"},
-    {"TimelineTrackHeaderComponent", "TICKET?", "track row reorder: lifted row slot vs the committed order"},
+    {"PianoRollVelocityLane", "FRO1317", "velocity stick/ramp gesture: shown velocities vs the committed ones"},
+    {"AutomationLaneHeaderComponent", "FRO1316", "lane header reorder: preview slot vs the committed order"},
+    {"LaneControlChip", "FRO1316", "lane chip reorder: preview order vs the committed order"},
+    {"ModulatorRow", "FRO1316", "modulator row reorder: preview slot vs the committed order"},
+    {"TimelineRulerComponent", "FRO1318", "marker drag: snapped preview vs the marker position committed"},
+    {"TimelineTrackHeaderComponent", "FRO1316", "track row reorder: lifted row slot vs the committed order"},
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
