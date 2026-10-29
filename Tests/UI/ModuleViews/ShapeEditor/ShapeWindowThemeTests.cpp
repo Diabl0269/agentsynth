@@ -1,11 +1,11 @@
 // ShapeWindowThemeTests.cpp -- the shape editor window (and every dialog that goes through launchDialog) is backed
 // with an opaque, themed colour: a glass theme's translucent surface must never leave JUCE's light grey showing.
+#include "../../Theme/ThemeSweep/ThemeSweepSupport.h"
 #include "ShapeEditorTestHelpers.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
-#include <cstdlib>
 
 using namespace synth::ui;
 using namespace synth::ui::test;
@@ -31,7 +31,6 @@ TEST(ShapeWindowTheme, WindowBackgroundIsOpaqueAndThemedForEveryBuiltInTheme) {
 }
 
 TEST(ShapeWindowTheme, ShapeEditorPaintsOpaqueThemedPixelsInEveryTheme) {
-    const bool writePng = std::getenv("AGENTSYNTH_WRITE_THEME_PNG") != nullptr;
     juce::MessageManager::getInstance();
     for (const auto& theme : synth::theme::builtInThemes()) {
         ShapeRig rig;
@@ -56,16 +55,7 @@ TEST(ShapeWindowTheme, ShapeEditorPaintsOpaqueThemedPixelsInEveryTheme) {
             EXPECT_EQ(pixel, synth::theme::windowBackgroundFor(theme)) << theme.name << " at " << pt.x << "," << pt.y;
         }
 
-        if (writePng) {
-            const auto dir = juce::File::getCurrentWorkingDirectory().getChildFile("build-ci-local/theme-sweep");
-            dir.createDirectory();
-            const auto file = dir.getChildFile("shape-window-" + theme.id + ".png");
-            if (auto out = file.createOutputStream()) {
-                out->setPosition(0);
-                out->truncate();
-                juce::PNGImageFormat().writeImageToStream(image, *out);
-            }
-        }
+        synth::test::theme_sweep::writeSweepPng("shape-window", theme.id, image);
         editor.setLookAndFeel(nullptr);
     }
 }
