@@ -175,6 +175,20 @@ void SoundBrowserComponent::paintRows(juce::Graphics& g, int width) const {
     }
 }
 
+// Where the sound lives, led by the key line and then by what Match key will do, so the part that matters most is the
+// last to be cut when the line is ellipsised.
+juce::String SoundBrowserComponent::soundFooterLine(const synth::soundbrowser::SoundEntry& entry) const {
+    auto line = entry.placeName;
+    if (entry.folder.isNotEmpty())
+        line += " > " + entry.folder.replace("/", " > ");
+    if (const auto keyMeta = soundKeyMetaText(entry, filters_.songKey()); keyMeta.isNotEmpty())
+        line = keyMeta + "  -  " + line;
+    if (entry.kind == synth::soundbrowser::SoundKind::Loop)
+        if (const auto match = matchKeyText(loopTargetFor(entry)); match.isNotEmpty())
+            line = match + "  -  " + line;
+    return line;
+}
+
 void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
     if (footerMode_ == FooterMode::Hidden)
         return;
@@ -208,11 +222,7 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
     g.setFont(juce::Font(juce::FontOptions(11.5f)));
     juce::String sub;
     if (row.kind == RowKind::Sound) {
-        sub = row.entry->placeName;
-        if (row.entry->folder.isNotEmpty())
-            sub += " > " + row.entry->folder.replace("/", " > ");
-        if (const auto keyMeta = soundKeyMetaText(*row.entry, filters_.songKey()); keyMeta.isNotEmpty())
-            sub = keyMeta + "  -  " + sub;
+        sub = soundFooterLine(*row.entry);
     } else if (row.kind == RowKind::Shape) {
         sub = shapeKindAndSource(*row.shape);
     } else if (row.kind == RowKind::GetPack) {

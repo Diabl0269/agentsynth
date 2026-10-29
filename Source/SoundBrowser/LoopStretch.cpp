@@ -29,17 +29,44 @@ double bestStretchBpm(double fileBpm, double songBpm) {
     return best;
 }
 
-int semitonesToKey(const juce::String& loopKey, const juce::String& songKey) {
+namespace {
+
+// "D minor" / "F major"; a bare root keeps whatever mode is known.
+juce::String keyName(int pitchClass, int mode) {
+    return synth::keyRootName(pitchClass) + (mode == 2 ? " minor" : mode == 1 ? " major" : "");
+}
+
+} // namespace
+
+KeyPlan planKeyMatch(const juce::String& loopKey, const juce::String& songKey) {
     const auto loop = parseSoundKey(loopKey);
     const auto song = parseSoundKey(songKey);
-    if (loop.pitchClass < 0 || song.pitchClass < 0)
-        return 0;
-    if (loop.mode != 0 && song.mode != 0 && loop.mode != song.mode)
-        return 0;
-    int delta = ((song.pitchClass - loop.pitchClass) % 12 + 12) % 12;
+    KeyPlan plan;
+    if (song.pitchClass < 0)
+        return plan;
+    if (loop.pitchClass < 0) {
+        plan.keyMatch = KeyMatch::NoLoopKey;
+        return plan;
+    }
+    int targetRoot = song.pitchClass;
+    int targetMode = song.mode != 0 ? song.mode : loop.mode;
+    if (loop.mode != 0 && song.mode != 0 && loop.mode != song.mode) {
+        // The relative key shares the notes: a minor key's relative major is 3 semitones up, a major key's minor 3
+        // down.
+        targetRoot = (song.pitchClass + (song.mode == 2 ? 3 : 9)) % 12;
+        targetMode = loop.mode;
+    }
+    int delta = ((targetRoot - loop.pitchClass) % 12 + 12) % 12;
     if (delta > 6)
         delta -= 12;
-    return delta;
+    plan.semitones = delta;
+    plan.keyMatch = delta == 0 ? KeyMatch::InKey : KeyMatch::Shifted;
+    plan.targetKey = keyName(targetRoot, targetMode);
+    return plan;
+}
+
+int semitonesToKey(const juce::String& loopKey, const juce::String& songKey) {
+    return planKeyMatch(loopKey, songKey).semitones;
 }
 
 LoopTarget makeLoopTarget(double entryBpm, const juce::String& entryKey, double songBpm, const juce::String& songKey,
@@ -47,23 +74,24 @@ LoopTarget makeLoopTarget(double entryBpm, const juce::String& entryKey, double 
     LoopTarget target;
     target.songBpm = songBpm;
     target.fileBpm = bestStretchBpm(entryBpm, songBpm);
-    target.semitones = matchKey ? semitonesToKey(entryKey, songKey) : 0;
+    if (matchKey) {
+        const auto plan = planKeyMatch(entryKey, songKey);
+        target.semitones = plan.semitones;
+        target.keyMatch = plan.keyMatch;
+        target.targetKey = plan.targetKey;
+    }
     return target;
 }
 
 juce::String soundKeyForScale(const std::optional<synth::MusicalScale>& key) {
     if (!key.has_value())
         return {};
-    static const char* const kMajorLike[] = {"Major", "Major Pentatonic", "Lydian", "Mixolydian"};
-    static const char* const kMinorLike[] = {"Natural Minor", "Minor Pentatonic", "Harmonic Minor",
-                                             "Melodic Minor", "Dorian",           "Phrygian"};
-    for (const char* name : kMajorLike)
-        if (key->name == name)
-            return synth::keyRootName(key->rootPitchClass) + " major";
-    for (const char* name : kMinorLike)
-        if (key->name == name)
-            return synth::keyRootName(key->rootPitchClass) + " minor";
-    return {};
+    // Bit 3 is the minor third, bit 4 the major third (the mask is root-relative).
+    const bool minorThird = (key->mask & (1u << 3)) != 0;
+    const bool majorThird = (key->mask & (1u << 4)) != 0;
+    if (minorThird == majorThird)
+        return {};
+    return synth::keyRootName(key->rootPitchClass) + (minorThird ? " minor" : " major");
 }
 
 juce::AudioBuffer<float> stretchLoop(const juce::AudioBuffer<float>& in, double sampleRate, double tempoRatio,

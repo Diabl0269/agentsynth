@@ -1,0 +1,29 @@
+# Bugs FRO1249 and FRO1250: Match key said nothing when it did nothing (no song key, a loop with no key, a minor loop
+# in a major song), and a loop row's detail column showed "? . 2.0 s" or no length. The footer under a selected loop now
+# says what Match key does ("Plays 5 semitones up, to D minor", "No key in the song", "This loop has no key", or
+# nothing with Match key off), the Match key switch's tooltip reads the same text, and every row ends with its length.
+#
+# What a user does: opens the Sounds view, searches for a loop, selects it, turns Match key on. Needs an installed sound
+# pack with a loop in it. The project has no key, so the footer says so.
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "Sidebar view", x: 140}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - click: {id: "Search sounds"}
+  - type: {text: loop}
+  - wait: {}
+  - click: {id: soundBrowser, x: 100, y: 90}
+  - wait: {}
+  - screenshot: {id: soundBrowser, name: loop-selected-match-key-off}
+  # The row ends with its length in seconds, and nothing reads "?".
+  - expect: {id: soundBrowser, contains: {selectedDetail: " s"}}
+  # Match key is off: the footer says nothing about shifting, and the switch keeps its base tooltip.
+  - expect: {id: "Match key", toggleState: false}
+  - expect: {id: "Match key", tooltip: "Play loops in the song's key"}
+  - click: {id: "Match key"}
+  - wait: {}
+  # On, with no song key (or a loop with no key): the footer and the tooltip give the reason.
+  - expect: {id: "Match key", toggleState: true}
+  - screenshot: {id: soundBrowser, name: loop-selected-match-key-on}
+  - expect: {id: soundBrowser, contains: {footerLine: "key"}}

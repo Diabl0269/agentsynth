@@ -96,6 +96,24 @@ juce::String soundKeyMetaText(const SoundEntry& entry, const juce::String& songK
     return text;
 }
 
+juce::String matchKeyText(const synth::soundbrowser::LoopTarget& target) {
+    using synth::soundbrowser::KeyMatch;
+    switch (target.keyMatch) {
+    case KeyMatch::Shifted:
+        return "Plays " + plural(std::abs(target.semitones), "semitone", "semitones") +
+               (target.semitones > 0 ? " up" : " down") + ", to " + target.targetKey;
+    case KeyMatch::InKey:
+        return "Already in " + target.targetKey;
+    case KeyMatch::NoSongKey:
+        return "No key in the song";
+    case KeyMatch::NoLoopKey:
+        return "This loop has no key";
+    case KeyMatch::Off:
+        break;
+    }
+    return {};
+}
+
 juce::String describeSoundForAccessibility(const SoundEntry& entry, int position, int count) {
     juce::String text = entry.name + ", ";
     if (entry.kind == SoundKind::Instrument) {

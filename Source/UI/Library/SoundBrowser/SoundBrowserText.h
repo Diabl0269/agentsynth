@@ -4,6 +4,7 @@
 // without a component or a native accessibility peer.
 
 #include "Modules/Shapes/ShapeLibrary.h"
+#include "SoundBrowser/LoopStretch.h"
 #include "SoundBrowser/SoundEntry.h"
 #include "UI/Library/SoundBrowser/SoundBrowserPackLayout.h"
 
@@ -32,6 +33,10 @@ float soundDetailMaxWidth(int rowWidth);
  *  the length alone when even that is wider. */
 juce::String soundDetailTextFitting(const synth::soundbrowser::SoundEntry& entry, const juce::Font& font,
                                     float maxWidth);
+
+/** What the footer says under a loop about Match key: "Plays 2 semitones up, to D minor", "Already in D minor", "No key
+ *  in the song", "This loop has no key"; empty when Match key is off. */
+juce::String matchKeyText(const synth::soundbrowser::LoopTarget& target);
 
 /** "acoustic-snare-center, one-shot, 0.8 seconds, 2 of 23"; a loop reads "dusty, loop, 120 BPM, 2 bars, 4.0 seconds,
  *  Am, 3 of 9" (the same fields as the row, in words). */
