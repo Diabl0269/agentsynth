@@ -995,4 +995,5 @@ set(APPUI_SOURCES
 )
 include(cmake/DrumMachineSources.cmake) # appends the drum machine editor to APPUI_SOURCES
 include(cmake/TimelinePanelSources.cmake) # appends the timeline panel to APPUI_SOURCES
+include(cmake/CardLayoutGroupMoveSources.cmake) # appends the Edit Layout group move and rename to APPUI_SOURCES
 list(APPEND APPUI_SOURCES ${SOUND_BROWSER_UI_SOURCES}) # the Sounds view, from SoundBrowserSources.cmake
