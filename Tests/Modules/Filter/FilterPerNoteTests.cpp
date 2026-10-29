@@ -1,4 +1,4 @@
-// FilterModule's Custom type per note: in poly, each voice's note picks its own place on the morph map
+// FilterModule's Custom type per note: each voice's note (mono is voice 0) picks its own place on the morph map
 // (By hand, By pitch, Random), glides there at the chosen Smoothness, and Off stays the one shared kernel.
 // Shapes are flat curves at very different levels, so a voice's gain tells which shape it sits on.
 //
@@ -213,14 +213,73 @@ TEST(FilterPerNote, OffIsTheSharedKernelExactly) {
     EXPECT_NEAR(untouched.gainDb(0), untouched.gainDb(3), 1e-3f) << "one cursor for every voice";
 }
 
-TEST(FilterPerNote, MonoIgnoresThePerNoteMode) {
-    Rig mono(perNote(Mode::ByPitch), false), reference(CustomFilterPerNote{}, false);
-    for (auto* r : {&mono, &reference}) {
-        r->play(0, 96);
-        r->blocks(4);
+// Regression test for FRO1097: a mono Filter ignored every per-note mode, so a mono synth on By pitch kept one shape.
+TEST(FilterPerNote, MonoByPitchPicksTheBandsShapeOnEveryNote) {
+    Rig rig(perNote(Mode::ByPitch), /*poly*/ false);
+    const std::pair<int, int> bands[] = {{36, kLowShape}, {96, kHighShape}, {66, kMidShape}, {40, kLowShape}};
+    const float levels[] = {kLowDb, kHighDb, kMidDb};
+    for (const auto& [note, shape] : bands) {
+        rig.play(0, note);
+        rig.blocks(3);
+        EXPECT_EQ(rig.m.getCustomVoiceCursors().getShape(0), shape) << "note " << note;
+        const float want = shape == kLowShape ? levels[0] : shape == kHighShape ? levels[1] : levels[2];
+        EXPECT_NEAR(rig.gainDb(0), want, 1.0f) << "note " << note;
+        EXPECT_NEAR(rig.gainDb(0, 1), want, 1.0f) << "the right leg follows, note " << note;
     }
-    for (int i = 0; i < kBlock; ++i)
-        ASSERT_EQ(mono.buf.getSample(0, i), reference.buf.getSample(0, i));
+}
+
+TEST(FilterPerNote, MonoByHandAndRandomMoveTheCursorPerNote) {
+    auto hand = perNote(Mode::ByHand);
+    hand.keys[60] = kHighShape;
+    hand.keys[62] = kLowShape;
+    Rig byHand(hand, /*poly*/ false), random(perNote(Mode::Random), /*poly*/ false);
+    byHand.play(0, 60);
+    byHand.blocks(3);
+    EXPECT_NEAR(byHand.gainDb(0), kHighDb, 1.0f);
+    byHand.play(0, 62);
+    byHand.blocks(3);
+    EXPECT_NEAR(byHand.gainDb(0), kLowDb, 1.0f);
+    int previous = -2;
+    for (int note : {60, 64, 67, 72}) {
+        random.play(0, note);
+        random.blocks(3);
+        const int shape = random.m.getCustomVoiceCursors().getShape(0);
+        EXPECT_GE(shape, 0);
+        EXPECT_NE(shape, previous) << "note " << note;
+        previous = shape;
+    }
+}
+
+// Every per-note mode on a mono Filter sounds sample for sample like poly voice 0 playing the same notes, and Off is
+// the untouched filter in both: the mono leg is voice 0, on its own kernel group, through the same code.
+TEST(FilterPerNote, EveryModeInMonoMatchesPolyVoiceZero) {
+    for (int m = 0; m < CustomFilterPerNote::kNumModes; ++m) {
+        auto p = perNote(static_cast<Mode>(m), 0.3f);
+        p.keys[36] = kMidShape;
+        p.keys[96] = kLowShape;
+        Rig mono(p, false), poly(p, true), untouchedMono(CustomFilterPerNote{}, false);
+        int moves = 0, last = -2;
+        for (int note : {36, 96, 66, 36}) {
+            for (auto* r : {&mono, &poly, &untouchedMono})
+                r->play(0, note);
+            for (int b = 0; b < 30; ++b) {
+                for (auto* r : {&mono, &poly, &untouchedMono})
+                    r->block();
+                for (int ch : {0, 11})
+                    for (int i = 0; i < kBlock; ++i) {
+                        ASSERT_NEAR(mono.buf.getSample(ch, i), poly.buf.getSample(ch, i), 1e-6f)
+                            << CustomFilterPerNote::modeLabel(p.mode) << " note " << note << " block " << b;
+                        if (p.mode == Mode::Off)
+                            ASSERT_EQ(mono.buf.getSample(ch, i), untouchedMono.buf.getSample(ch, i));
+                    }
+            }
+            const int shape = mono.m.getCustomVoiceCursors().getShape(0);
+            moves += shape != last ? 1 : 0;
+            last = shape;
+        }
+        if (p.mode != Mode::Off)
+            EXPECT_GE(moves, 3) << CustomFilterPerNote::modeLabel(p.mode) << ": the mono cursor follows the notes";
+    }
 }
 
 TEST(FilterPerNote, AChordSettlesWithinTheDesignBudget) {

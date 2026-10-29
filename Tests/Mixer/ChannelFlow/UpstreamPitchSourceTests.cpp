@@ -93,3 +93,32 @@ TEST(UpstreamPitchSource, TheFiltersOwnPitchCableIsReportedAndNotTakenForAnUpstr
     EXPECT_TRUE(rig.pitchCabled(filter));
     EXPECT_FALSE(rig.sourceFor(filter).has_value());
 }
+
+// Regression test for FRO1097: a mono Oscillator's pitch jack is a plain CV input, so the walk found no Pitch source
+// and a mono Filter's per-note modes could not cable themselves.
+TEST(UpstreamPitchSource, FindsThePolyMidiThatPlaysAMonoOscillator) {
+    PitchRig rig;
+    auto* polyMidi = rig.add("Poly MIDI");
+    auto* osc = rig.add("Oscillator");
+    auto* filter = rig.add("Filter");
+    synth::setProcessorPoly(osc->getProcessor(), false);
+    synth::setProcessorPoly(filter->getProcessor(), false);
+    rig.wire(polyMidi, 0, osc, 0); // the mono Oscillator's pitch CV
+    rig.wire(osc, 0, filter, 0);
+
+    const auto source = rig.sourceFor(filter);
+    ASSERT_TRUE(source.has_value());
+    EXPECT_EQ(source->node, polyMidi->nodeID);
+    EXPECT_EQ(source->visibleJack, 0);
+}
+
+TEST(UpstreamPitchSource, AnLfoOnAMonoOscillatorsPitchIsNotAPitchSource) {
+    PitchRig rig;
+    auto* lfo = rig.add("LFO");
+    auto* osc = rig.add("Oscillator");
+    auto* filter = rig.add("Filter");
+    synth::setProcessorPoly(osc->getProcessor(), false);
+    rig.wire(lfo, 0, osc, 0);
+    rig.wire(osc, 0, filter, 0);
+    EXPECT_FALSE(rig.sourceFor(filter).has_value());
+}

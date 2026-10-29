@@ -602,9 +602,10 @@ private:
         }
     }
 
-    /** Custom type: every audio channel of both legs through one shared kernel, or in poly with a per-note mode
-        on, one kernel per voice (both legs of a voice share it). Morph X/Y, Shift and Depth (and their CV) are
-        read once per block; Key Track adds a shift by the Pitch input in mono only. Cutoff (with its CV, as the
+    /** Custom type: every audio channel of both legs through one shared kernel, or with a per-note mode on, one
+        kernel per voice (both legs of a voice share it; mono is voice 0, so it takes exactly poly voice 0's path).
+        Morph X/Y, Shift and Depth (and their CV) are read once per block; Key Track adds a shift by the Pitch input
+        in mono only. Cutoff (with its CV, as the
         other types sweep it) moves the drawn response along frequency and Resonance adds a bell at the cutoff;
         both are shared by every voice. Drive is ignored. History is cleared on entering the mode or changing the voice
        count, so a stale tail from an earlier stint never plays. */
@@ -640,17 +641,16 @@ private:
             for (int v = 0; v < voices; ++v)
                 if (const int ch = legBaseChannel(leg) + v; ch < buffer.getNumChannels())
                     channels[(size_t)(leg * kNumVoices + v)] = buffer.getWritePointer(ch);
-        if (poly)
-            readVoiceInputs(buffer, numSamples);
-        customEngine.process(channels.data(), (int)channels.size(), numSamples, c, poly ? voiceInputs.data() : nullptr,
-                             poly ? kNumVoices : 0);
+        readVoiceInputs(buffer, numSamples, voices);
+        customEngine.process(channels.data(), (int)channels.size(), numSamples, c, voiceInputs.data(), voices);
     }
 
-    /** What the per-note modes need from each voice before filtering: its Pitch at the block's first and last
-        sample, and whether either leg carries sound (above about -80 dBFS). The Filter has no gate, so these are
-        how it spots a note (CustomFilterVoiceCursors::detectNote). */
-    void readVoiceInputs(const juce::AudioBuffer<float>& buffer, int numSamples) {
-        for (int v = 0; v < kNumVoices; ++v) {
+    /** What the per-note modes need from each of the first `voices` voices before filtering: its Pitch at the
+        block's first and last sample, and whether either leg carries sound (above about -80 dBFS). The Filter has no
+        gate, so these are how it spots a note (CustomFilterVoiceCursors::detectNote). Mono reads voice 0 only: its
+        ch1-7 are not voices. */
+    void readVoiceInputs(const juce::AudioBuffer<float>& buffer, int numSamples, int voices) {
+        for (int v = 0; v < voices; ++v) {
             auto& in = voiceInputs[(size_t)v];
             const int pitchCh = kPitchBase + v;
             in.pitchStartHz = pitchCh < buffer.getNumChannels() ? buffer.getReadPointer(pitchCh)[0] : 0.0f;

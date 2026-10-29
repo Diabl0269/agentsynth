@@ -70,7 +70,7 @@ Resonance keep their old jacks. Drive is ignored in Custom. A patch saved with C
 (or a Resonance above 0.1) sounds different from before Cutoff and Resonance were used: the response is moved and gets
 its bell. **Key Track** adds `keyTrack × 12 × log2(pitch / 261.63 Hz)` semitones of shift, **mono only**:
 in poly the voices share one kernel unless a [per-note mode](#per-note-cursors) is on, and Key Track does not
-follow a voice's pitch there either.
+follow a voice's pitch there either. In mono with a per-note mode on, the shift applies to the note's own kernel too.
 
 ## Cutoff and Resonance
 
@@ -176,8 +176,9 @@ allocation.
   already complete.
 - **Kernel groups**: both legs × up to 8 voices (16 channels), each with its own history and frequency-domain
   delay line, read one of nine kernels: group 0 is the shared kernel every channel starts on, groups 1-8 belong
-  to the poly voices in a [per-note mode](#per-note-cursors) (both legs of voice v read group v + 1). Each group
-  swaps and crossfades on its own. With every channel on group 0 (mono, poly with per-note Off) the arithmetic is
+  to the voices in a [per-note mode](#per-note-cursors) (both legs of voice v read group v + 1; mono is voice 0,
+  so its two legs read group 1). Each group swaps and crossfades on its own. With every channel on group 0
+  (per-note Off, or before the first note) the arithmetic is
   the old single-kernel path plus one index lookup per channel (`CustomFilterEngine.DISABLED_CpuCost` measures
   the same cost as before). A channel can move to another group between any two samples, because the delay line
   holds input spectra only; the group it moves onto starts as a copy of the shared kernel, so the move is silent.
@@ -203,11 +204,12 @@ or freed on the audio thread (`CustomFilterEngine.ShapeEditsReachTheAudioThreadW
 
 ## Per-note cursors
 
-In poly, each note can sit at its own place on the morph map instead of every voice sharing the Morph X/Y cursor.
+Each note can sit at its own place on the morph map instead of sharing the Morph X/Y cursor, in mono and in poly
+alike.
 The setting is **Notes move the cursor** in the [shape editor window](#shape-editor-window)'s bottom bar
 (`CustomFilterPerNote`, saved in the extra state):
 
-- **Off** (default): one shared cursor, exactly the single-kernel path above. Mono always works this way.
+- **Off** (default): one shared cursor, exactly the single-kernel path above.
 - **By hand**: a key map gives each MIDI note a shape (or none). A note with no shape follows the shared cursor.
 - **By pitch**: notes from C2 (36) to C7 (96) are split into as many equal bands as there are shapes, lowest band
   on the leftmost shape (shapes ordered by map x); notes outside the range clamp to the ends.
@@ -220,16 +222,25 @@ so moving a shape (or Morph X/Y, for a note with no shape) moves held notes with
 yet stays on the shared kernel, so turning a mode on changes nothing until notes arrive; switching back to Off puts
 every voice on the shared kernel at once.
 
-**The Pitch cable is made for you.** Picking **By hand** or **By pitch** in the window, with the Filter in Poly and
-its Pitch input uncabled, cables that input from the Pitch source of the voice chain feeding the Filter (the Poly MIDI
-Pitch that drives the Oscillator upstream; `upstreamPitchSource`, `Source/Mixer/ChannelFlows/UpstreamPitchSource.cpp`),
-all 8 voices, in the same undo step as the mode change, so one undo takes both back. An input that is already cabled
+**Mono is voice 0.** A mono Filter runs exactly poly voice 0's path: the same note spotting on its one Pitch input
+(ch19) and its audio, the same shape choice, glide and design budget, and its two legs move together onto kernel
+group 1 at the first note (a silent move: the group starts as a copy of the shared kernel; the note's own kernel then
+crossfades in over its block). So mono and poly voice 0 give the same output, sample for sample, for the same notes
+(`FilterPerNote.EveryModeInMonoMatchesPolyVoiceZero`, `FilterPerNoteMonoRender.*`: per band the magnitude response
+matches poly within 0.01 dB, and a hard shape change under a held tone adds no step or spike). A mono Filter saved
+with a mode other than Off by an older build, where the mode did nothing, now plays per note; Off is unchanged.
+
+**The Pitch cable is made for you.** Picking **By hand** or **By pitch** in the window, with the Filter's Pitch input
+uncabled, cables that input from the Pitch source of the voice chain feeding the Filter (the Poly MIDI
+Pitch that drives the Oscillator upstream, found on a Poly Oscillator's Pitch input or on whatever input a Pitch
+output feeds, which is how a mono Oscillator's pitch CV is found; `upstreamPitchSource`, `Source/Mixer/ChannelFlows/UpstreamPitchSource.cpp`),
+by the same path as a hand-drawn cable (mono reads only voice 0's ch19), in the same undo step as the mode change, so one undo takes
+both back. An input that is already cabled
 gets no second cable; **Random** needs none. A line under the mode switch says why a mode cannot work yet: "Needs a
 Pitch cable: connect your Poly MIDI's Pitch to this Filter's Pitch input." (By hand or By pitch, Pitch uncabled, and
-no source to take it from, or the cable was removed later) and "Per-note works in Poly: turn on the Filter's Poly."
-(any mode but Off on a mono Filter). The line fades in and out and follows the cabling at 10 Hz.
+no source to take it from, or the cable was removed later). The line fades in and out and follows the cabling at 10 Hz.
 
-**How a note is spotted.** The Filter has no gate input and takes no MIDI; it sees each voice's Pitch (ch19-26)
+**How a note is spotted.** The Filter has no gate input and takes no MIDI; it sees each voice's Pitch (ch19-26; ch19 alone in mono)
 and audio. A voice starts a new note when its pitch settles (moves less than 0.1 semitone across a block) more
 than half a semitone away from its current note's pitch, or when its audio returns after a silent block (below
 about -80 dBFS on both legs). An audio return with a pitch still moving waits for the pitch to settle, so a
