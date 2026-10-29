@@ -11,6 +11,7 @@
 #include "../CardBodyTestHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
+#include "UI/Graph/CardBody/DefaultCardLayouts.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/ModuleViews/SampleWaveformComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -514,6 +515,68 @@ TEST(JoinedJackDisable, AGreyedPanStaysInTheAccessibilityTreeAsDisabled) {
     const auto after = cardHandler->getChildren();
     EXPECT_NE(std::find(after.begin(), after.end(), handler), after.end());
     canvas.editor.removeFromDesktop();
+}
+
+// The guard for the ax-tree-drop kind: every default card layout, joined so each disable rule applies, keeps
+// every disabled control in its card's accessibility tree, named, reporting disabled. The types come from the module
+// factory filtered by the default-layout registry, so a new module or rule is swept without an edit here; the
+// controls are the rules' own disabled widgets plus any other visible disabled control found on the card.
+TEST(JoinedJackDisable, EveryDisabledControlOnEveryDefaultCardStaysInTheAccessibilityTree) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
+    int cardsChecked = 0, disabledChecked = 0;
+    for (const auto& type : synth::AIStateMapper::moduleFactoryTypeNames()) {
+        if (synth::DefaultCardLayouts::builtIn().find(type) == nullptr)
+            continue;
+        if (const auto probe = synth::AIStateMapper::createModule(type);
+            probe == nullptr || findParameterByID(probe.get(), "dualIO") == nullptr)
+            continue; // no Dual I/O jack, so no joined-jack rule to apply
+        SCOPED_TRACE(type);
+        CardCanvas canvas;
+        const auto card = buildJoined(canvas, type, true);
+        if (card.card == nullptr || card.card->getCardBody() == nullptr)
+            continue;
+        canvas.editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        canvas.editor.setVisible(true);
+        auto* cardHandler = card.card->getAccessibilityHandler();
+        if (cardHandler == nullptr) {
+            canvas.editor.removeFromDesktop();
+            GTEST_SKIP() << "this machine gave no accessibility handlers to a temporary window";
+        }
+        std::vector<juce::Component*> disabled;
+        for (const auto& rule : card.card->getCardBody()->getPlan().dimRules)
+            if (rule.disabledHint.isNotEmpty() && rule.dims(*card.module))
+                if (auto* w = card.card->getCardBody()->getPlan().items[(size_t)rule.item].widget;
+                    w != nullptr && w->isShowing()) // one on a hidden tab or folded row is out of the tree for now
+                    disabled.push_back(w);
+        std::function<void(juce::Component&)> sweep = [&](juce::Component& parent) {
+            for (auto* child : parent.getChildren()) {
+                if (child->isShowing() && !child->isEnabled() && child->getAccessibilityHandler() != nullptr &&
+                    !child->getAccessibilityHandler()->isIgnored() &&
+                    std::find(disabled.begin(), disabled.end(), child) == disabled.end())
+                    disabled.push_back(child);
+                sweep(*child);
+            }
+        };
+        sweep(*card.card);
+        const auto kids = cardHandler->getChildren();
+        for (auto* w : disabled) {
+            SCOPED_TRACE(w->getComponentID());
+            ASSERT_FALSE(w->isEnabled());
+            auto* handler = w->getAccessibilityHandler();
+            ASSERT_NE(handler, nullptr);
+            EXPECT_FALSE(handler->isIgnored());
+            EXPECT_FALSE(handler->getTitle().isEmpty()) << "a disabled control keeps its accessibility name";
+            EXPECT_FALSE(handler->getComponent().isEnabled());
+            EXPECT_NE(std::find(kids.begin(), kids.end(), handler), kids.end())
+                << "a disabled control is a child of its card in the tree";
+            ++disabledChecked;
+        }
+        ++cardsChecked;
+        canvas.editor.removeFromDesktop();
+    }
+    EXPECT_GT(cardsChecked, 0) << "the registry gave no default card";
+    EXPECT_GT(disabledChecked, 0) << "no default card had a disabled control, so nothing was guarded";
 }
 
 TEST(JoinedJackDisable, AnEffectModuleKeepsItsPanWhenJoined) {

@@ -268,7 +268,7 @@ TEST_F(ProjectLoadPipelineTest, AnotherOpenMidLoadReleasesTheFirst) {
     ASSERT_TRUE(o.mc.openProjectForTest(slow));
     ASSERT_TRUE(o.pipeline().isLoading());
     o.pipeline().assetLoads().holdDecodesForTest(false);
-    ASSERT_TRUE(o.mc.openProjectForTest(fast));
+    ASSERT_TRUE(o.mc.openProjectForTest(fast)) << o.mc.getStatusBar().getTransientMessageForTest();
     EXPECT_FALSE(o.pipeline().isLoading());
     EXPECT_FALSE(o.reveal().isBlockingEdits());
     o.reveal().applyAtMs(o.reveal().endMs());
