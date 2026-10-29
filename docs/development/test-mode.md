@@ -78,12 +78,13 @@ Mouse and key events go through the target's `ComponentPeer` (`handleMouseEvent`
 itself uses, never into a component's `mouseDown` directly and never through the OS event queue. A drag is one message
 thread hop per move, so JUCE's drag threshold, auto-scroll and async repaints behave as they do under a hand.
 
-Stock JUCE on macOS delivers a mouse event only to a window the window server says is topmost at that point, so a
+Stock JUCE on macOS and Windows delivers a mouse event only to a window the OS says is topmost at that point, so a
 window behind another app's (or behind a second test-mode instance at the same spot) would get nothing. The app carries
 a small JUCE patch for this (`juce-testmode-window-order.patch`, see [`juce-patches.md`](juce-patches.md)): the flag
 `juce::ComponentPeer::ignoreWindowOrderForHitTests`, which an automation launch sets at startup and nothing else sets.
 With it on, test windows are never raised or moved, and a click only has to land inside the window (else the reply is
-"the point is outside the window"). Keyboard modifiers of a mouse event are set through `ModifierKeys::currentModifiers`
+"the point is outside the window"). The patch covers the macOS and Windows peers: on Linux a covered window still
+misses the click, so that test skips Linux. Keyboard modifiers of a mouse event are set through `ModifierKeys::currentModifiers`
 for the duration of the event, because JUCE ignores the flags of the event itself.
 
 ## Running in parallel

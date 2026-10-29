@@ -1,18 +1,19 @@
-JUCE patch: let an app switch off the macOS window-order check in ComponentPeer hit testing.
+JUCE patch: let an app switch off the window-order check (macOS, Windows) in ComponentPeer hit testing.
 
-Why: JUCE decides which component a mouse event reaches with ComponentPeer::contains(), and on macOS that asks
-the window server whether this window is the topmost one at the point. A window behind another window (or
+Why: JUCE decides which component a mouse event reaches with ComponentPeer::contains(), and on macOS and Windows that asks
+the OS whether this window is the topmost one at the point. A window behind another window (or
 another app) therefore never receives an event, even a synthetic one. The app's in-app test mode
 (--automation) drives its own windows by script and must not depend on, nor change, the window order on the
 user's screen. This patch adds the process-wide flag juce::ComponentPeer::ignoreWindowOrderForHitTests
-(default false) and makes NSViewComponentPeer::contains() skip the window-order check while it is true.
+(default false) and makes the macOS and Windows peers' contains() skip their window-order check while it is true
+(NSViewComponentPeer asks the window server, HWNDComponentPeer calls WindowFromPoint).
 Nothing else changes; with the flag false JUCE behaves exactly as stock.
 
 Applied by cmake/ApplyJucePatch.cmake (FetchContent PATCH_COMMAND); mechanism and how to update it for a new
 JUCE tag: docs/development/juce-patches.md. The JUCE files use CRLF line endings.
 
 diff --git a/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm b/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
-index ed9cd36..22726a1 100644
+index ed9cd36b1..22726a1b8 100644
 --- a/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
 +++ b/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
 @@ -529,7 +529,7 @@ bool contains (Point<int> localPos, bool trueIfInAChildWindow) const override
@@ -24,15 +25,29 @@ index ed9cd36..22726a1 100644
          {
              if (NSWindow* const viewWindow = [view window])
              {
+diff --git a/modules/juce_gui_basics/native/juce_Windowing_windows.cpp b/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
+index e0d8833a7..598b87ca5 100644
+--- a/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
++++ b/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
+@@ -1768,6 +1768,9 @@ public:
+         if (! r.withZeroOrigin().contains (localPos))
+             return false;
+ 
++        if (ignoreWindowOrderForHitTests)
++            return true;
++
+         const auto screenPos = convertLogicalScreenPointToPhysical (localPos + getScreenPosition(), hwnd);
+ 
+         auto w = WindowFromPoint (D2DUtilities::toPOINT (screenPos));
 diff --git a/modules/juce_gui_basics/windows/juce_ComponentPeer.h b/modules/juce_gui_basics/windows/juce_ComponentPeer.h
-index b39b604..e133acc 100644
+index b39b604a9..5226c878a 100644
 --- a/modules/juce_gui_basics/windows/juce_ComponentPeer.h
 +++ b/modules/juce_gui_basics/windows/juce_ComponentPeer.h
 @@ -458,6 +458,11 @@ public:
      */
      static bool isValidPeer (const ComponentPeer* peer) noexcept;
  
-+    /** When true, the macOS peer's contains() no longer asks the window server whether another window
++    /** When true, the macOS and Windows peers' contains() no longer ask the OS whether another window
 +        covers the point, so a window that is behind others (or behind another app) still hit-tests as
 +        its own. Set once at startup by an app's automation mode; false (stock behaviour) otherwise. */
 +    static inline bool ignoreWindowOrderForHitTests = false;
