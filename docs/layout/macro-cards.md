@@ -29,7 +29,8 @@ the member modules exactly where they are and expanding them back to individual 
 (also surfaced via `onStatusMessage`) when the selection touches no macro. Deleting a macro is the
 opposite of ungrouping it: `deleteMacroAndMembers()` removes the macro **and** every one of its
 member nodes as one step — the right-click "Delete" on a collapsed card, or Delete/Backspace with a
-macro's members as the whole selection.
+macro's members as the whole selection. Both go through `requestDeleteMacro`, so a macro a track plays first asks
+whether the track goes too ([tracks](../timeline/tracks.md#row-context-menu), "Delete the macro of a track").
 
 **Cmd+G does not call `groupSelectionIntoMacro()` directly.** It goes through
 `MacroGroupController::groupOrToggleSelectionMacros()`, the single dispatch point shared by the command

@@ -48,6 +48,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentTrackModule.cpp
     Source/MainComponent/MainComponentTrackCreation.cpp
     Source/MainComponent/MainComponentTrackDelete.cpp
+    Source/MainComponent/MainComponentMacroDelete.cpp
     Source/Timeline/TrackRemovalSet.cpp
     Source/MainComponent/MainComponentTrackPresets.cpp
     Source/MainComponent/MainComponentTrackDuplicate.cpp

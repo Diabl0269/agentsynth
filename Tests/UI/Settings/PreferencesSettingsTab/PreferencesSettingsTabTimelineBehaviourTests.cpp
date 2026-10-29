@@ -245,6 +245,20 @@ TEST_F(PreferencesSettingsTabTest, AskBeforeDeletingTrackDefaultsOnAndRoundTrips
     EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineAskBeforeDeletingTrack"), "1");
 }
 
+// The answer the macro-delete window's "Remember my choice" stored is forgotten when the question is turned back on,
+// as the LFO question's is.
+TEST_F(PreferencesSettingsTabTest, TurningTheDeleteQuestionBackOnForgetsTheRememberedMacroAnswer) {
+    auto* settings = appProperties.getUserSettings();
+    settings->setValue("timelineAskBeforeDeletingTrack", "0");
+    settings->setValue("timelineDeleteMacroChoice", "keep");
+    PreferencesSettingsTab tab(appProperties);
+    tab.setAskBeforeDeletingTrackEnabled(false);
+    EXPECT_EQ(settings->getValue("timelineDeleteMacroChoice"), "keep") << "turning it off keeps the answer";
+    tab.setAskBeforeDeletingTrackEnabled(true);
+    EXPECT_FALSE(settings->containsKey("timelineDeleteMacroChoice"));
+    EXPECT_EQ(settings->getValue("timelineAskBeforeDeletingTrack"), "1");
+}
+
 TEST_F(PreferencesSettingsTabTest, ClickingTheAskBeforeDeletingTrackToggleWritesTheSetting) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(500, 900);
@@ -256,6 +270,8 @@ TEST_F(PreferencesSettingsTabTest, ClickingTheAskBeforeDeletingTrackToggleWrites
     ASSERT_NE(toggle, nullptr);
     EXPECT_TRUE(toggle->getToggleState());
     EXPECT_TRUE(toggle->getTooltip().contains("Cmd+Backspace"));
+    EXPECT_EQ(toggle->getButtonText(), "Ask before deleting a track or its macro") << "it covers macro deletes too";
+    EXPECT_TRUE(toggle->getTooltip().contains("macro"));
     toggle->setToggleState(false, juce::sendNotificationSync); // what a click does
     EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineAskBeforeDeletingTrack"), "0");
     EXPECT_FALSE(tab.isAskBeforeDeletingTrackEnabled());

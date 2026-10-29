@@ -782,18 +782,26 @@ The menu's items:
   `deleteTrack` after asking "Delete Track 1?" with a **Don't ask again** box, **Delete** as the Return default and
   Escape cancelling (`MainComponent::deleteTrackAfterConfirm`, `DeleteTrackConfirm.{h,cpp}`). Ticking the box on
   Delete writes the user setting `timelineAskBeforeDeletingTrack` (default ON); Settings, Preferences, Timeline
-  ("Ask before deleting a track with the keyboard") turns the question back on. Cmd+Z brings the track back either way.
+  ("Ask before deleting a track or its macro") turns the question back on. Cmd+Z brings the track back either way.
   The row (header and its lane line) shrinks away toward its centre and the rows below close the gap, while the macro
   card and the other cards that leave shrink away on the canvas with it; Cmd+Z makes room, grows them all back and fades
   a thin accent outline around each ([delete and undo](../layout/animation.md#delete-and-undo-animation),
   `TimelinePanelTrackListMotion.cpp`). Only a focused track row claims the chord, so Backspace and Delete on clips, lanes and the canvas are unchanged.
-- **Delete the macro of a track** (macro menu on the canvas, "Delete Macro & Modules") deletes the track too: on a macro
-  that is a track's channel (`synth::nearestChannelMacro` of its bound node; exactly one track) it asks "Delete the macro
-  and track <name>?" ("Deleting this macro also deletes the track <name> and the modules only it uses. Delete track and
-  macro?") with the keyboard delete's **Don't ask again** box and setting, and on Delete runs `MainComponent::deleteTrack`:
-  one undo step, the same animation, the same "only it used" rule. Cancel changes nothing. A macro that is no track's, or
-  one several tracks share, deletes its members as before (`MacroGroupController::requestDeleteMacro`,
-  `MainComponent::deleteMacroOfTrack`).
+- **Delete the macro of a track.** Every way of deleting a macro (the macro menu's "Delete Macro & Modules", Delete or
+  Backspace with macro cards selected, folded or open, with or without other modules selected, Cut, and "Delete N
+  Selected Modules") goes through `MacroGroupController::requestDeleteMacro` / `requestDeleteSelection`, whose app hook is
+  `MainComponent::deleteMacrosOfTracks` (`MainComponentMacroDelete.cpp`). A track plays a macro when its bound node is one
+  of the macro's members or one of a nested macro's (`tracksPlayingMacros`), so a parent holding a track's macro, a user group around the channel macro,
+  several tracks under one parent, and a project reopened from a file all count. With no track playing it the macro
+  deletes its members at once, as before. Otherwise it asks "Delete the macro of Audio 1?" (several tracks are named
+  together) on the shared three-way window (`showConfirmChoice`, as the LFO question): **Remove track** (Return) runs
+  `deleteTrack` for each track and deletes whatever of the macros and the selection is left, as one undo step; **Keep track** deletes the
+  macros, their modules and the rest of the selection and leaves the track rows; **Cancel** (Escape) changes nothing. The **Remember my choice**
+  box stores the answer: the user setting `timelineAskBeforeDeletingTrack` turns off (the track row's question stops
+  too, as with its own "Don't ask again") and `timelineDeleteMacroChoice` ("keep" or "remove"; no value reads as
+  "remove", what a macro delete did before Keep track existed) is applied without asking from then on. A Cancel never
+  stores anything. Turning the Preferences switch back on forgets the answer, so the next macro delete asks again.
+  Cmd+Z restores the track, macro, modules and cables in one step either way.
 - **Make Channel** (above Delete Track) turns the track's bound chain into a mixer channel — see
   [`docs/mixer/mixer.md#make-channel-and-shared-modules`](../mixer/mixer.md#make-channel-and-shared-modules) for what moves and what stays shared. Enabled only while
   `TrackHeaderHost::canMakeChannelForTrack()` is true (the chain has no Channel Strip of its own

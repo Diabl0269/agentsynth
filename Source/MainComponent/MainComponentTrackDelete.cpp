@@ -190,26 +190,3 @@ void MainComponent::deleteTrackAfterConfirm(synth::TrackId track) {
     if (const auto* existing = timelineDoc.getTrack(track))
         askThenDeleteTrack(track, synth::ui::deleteTrackConfirmText(existing->name));
 }
-
-// The macro menu's Delete Macro on a track's macro. The macro is the track's when the track's bound node resolves to it
-// as its channel (the same lookup deleteTrack uses to take it). Exactly one such track is required: with none the
-// macro is an ordinary group, and with several the macro is shared, which a track delete leaves in place. The
-// question and its preference are the keyboard delete's, and confirming runs deleteTrack itself.
-bool MainComponent::deleteMacroOfTrack(const juce::String& macroId) {
-    const synth::Track* owner = nullptr;
-    for (const auto& track : timelineDoc.getTracks()) {
-        if (track.bindingUuid.isEmpty())
-            continue;
-        const auto* channel =
-            synth::nearestChannelMacro(audioEngine.getGraph(), graphEditor.getMacros(), track.bindingUuid);
-        if (channel == nullptr || channel->id != macroId)
-            continue;
-        if (owner != nullptr)
-            return false;
-        owner = &track;
-    }
-    if (owner == nullptr)
-        return false;
-    askThenDeleteTrack(owner->id, synth::ui::deleteTrackMacroConfirmText(owner->name));
-    return true;
-}

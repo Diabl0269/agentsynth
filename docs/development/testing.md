@@ -100,6 +100,19 @@ Two tripwire suites then apply automatically: a new audio-output module must be 
 `ModuleAdoptionTests.cpp`, and a new float parameter is swept by `AutomationZipperTest` without any
 edit — both fail the build until the module is accounted for.
 
+## The shared saved project
+
+`Tests/fixtures/saved-project/SavedProjectFixture.h` (header-only, `synth::test::SavedProjectFixture`) is the real saved
+project to open in any test of code that looks up tracks, macros or cables: a bug that only shows after a save and reopen
+(nested macros, a folded or open box, a track bound inside a parent) does not show on a fresh synthetic graph. A real
+`MainComponent` builds it through the app's own flows and `saveProjectForTest` writes it, so the file cannot drift from
+what the app saves. It holds three audio tracks, each in its channel macro (Audio 1's folded with an LFO and an ADSR
+inside, Audio 2's folded and nested under "Nested parent" with an Oscillator, Audio 3's open) and "Plain group", a folded
+macro no track plays (Oscillator, Filter and a Hosted Plugin stand-in from `StubPluginInstance.h`). Use
+`project.open()` for a `MainComponent` with it loaded, and `trackMacroId`, `macroIdNamed` and `memberUuidOfType` to find
+things after the load. Extend it there (one more shape in `build`) rather than building a second project; first user:
+`UI/Timeline/TimelineTrackDeleteMacroTests.cpp`.
+
 ## Known flaky patterns
 
 - **A test Rig whose `RemoteEngine` outlives its `AudioEngine`/graph segfaults at teardown if a MIDI

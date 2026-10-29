@@ -305,9 +305,10 @@ void MainComponent::wireGraphEditorCallbacks() {
                                                          const juce::String& macroId) {
         duplicateIntoChannel(nodeId, macroId);
     };
-    // The macro menu's Delete Macro on a track's macro deletes the track too (MainComponentTrackDelete.cpp).
-    graphEditor.getMacroController().onDeleteMacroRequested = [this](const juce::String& macroId) {
-        return deleteMacroOfTrack(macroId);
+    // Deleting a macro a track plays asks whether the track goes too (MainComponentMacroDelete.cpp).
+    graphEditor.getMacroController().onDeleteMacrosRequested = [this](const std::vector<juce::String>& macroIds,
+                                                                      bool wholeSelection) {
+        return deleteMacrosOfTracks(macroIds, wholeSelection);
     };
     // The channel macro's own right-click "Save Track as Preset.../Set as Default Track Preset" —
     // see handleMacroTrackPresetAction's own comment for why this resolves to the track-header path

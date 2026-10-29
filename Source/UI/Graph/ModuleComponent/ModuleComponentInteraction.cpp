@@ -396,7 +396,8 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         // (docs/macros/auto-ports.md#auto-creating-ports-when-grouping) the same way Cmd+G does.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
                   [this] { owner.requestGroupSelectionIntoMacro(); });
-        m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules", [this] { owner.deleteSelection(); });
+        m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules",
+                  [this] { owner.getMacroController().requestDeleteSelection(); });
     }
 
     // "Make Channel" for the chain this selection belongs to (shown only when one resolves, disabled once it already
