@@ -57,7 +57,7 @@ bool SoundFilterChipGroup::isOn(const juce::String& id) const {
 }
 
 int SoundFilterChipGroup::chipWidth(const Item& item) const {
-    return (int)std::ceil(chipFont().getStringWidthFloat(item.label)) + 18;
+    return (int)std::ceil(juce::GlyphArrangement::getStringWidth(chipFont(), item.label)) + 18;
 }
 
 std::vector<juce::Rectangle<int>> SoundFilterChipGroup::layoutChips(int width) const {

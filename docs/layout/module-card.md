@@ -61,6 +61,7 @@ copies of the geometry disagreed, and body content was drawn on top of the lowes
 | `kKnobHeight` | 58 | rotary plus its text box |
 | `kKnobLargeHeight` | 80 | a large knob: 60 px dial plus its text box |
 | `kFaderVHeight` | 96 | a vertical fader's travel plus its text box (40 px wide, centred in its cell) |
+| `kFaderVLongHeight` | 144 | a long vertical fader's travel plus its text box |
 | `kFaderHHeight` | 28 | a horizontal fader: cap, modulation bar and value box |
 | `kWaveformHeight` | 72 | Sampler waveform overview (Instrument mode: picker, caption and key strip fill the same 112 px with the load row) |
 | `kSectionHeaderHeight` | 18 | a titled section's header row |
@@ -262,6 +263,7 @@ out as its own run, by the same measure-and-apply walk:
 |---|---|---|---|---|
 | `knobLarge` | `CardKnobSlider` | a float or int | a grid, one per cell | 80 |
 | `faderV` | `CardFader` (vertical) | a float or int | a grid, one per cell, 40 px wide | 96 |
+| `faderVLong` | `CardFader` (vertical) | a float or int | a grid, one per cell, 40 px wide | 144 |
 | `faderH` | `CardFader` (horizontal) | a float or int | one per row, full width | 28 |
 | `segmented` | `CardSegmentedSwitch` | a choice with 2 to 6 values of at most 10 characters | one per row, full width | 24 |
 | `stepper` | `CardStepper` | an int spanning at most 24 steps | one per row, centred band | 24 |

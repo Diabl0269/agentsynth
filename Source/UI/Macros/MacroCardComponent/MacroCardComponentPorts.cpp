@@ -24,7 +24,7 @@ float MacroCardComponent::portNameAlpha() const {
 
 bool MacroCardComponent::portNameIsTruncated(const juce::String& name) const {
     const juce::Font font{juce::FontOptions(kMacroPortNameFontSize)};
-    return font.getStringWidthFloat(name) > (float)kMacroPortNameRoom;
+    return juce::GlyphArrangement::getStringWidth(font, name) > (float)kMacroPortNameRoom;
 }
 
 juce::Rectangle<float> MacroCardComponent::getAddPortButtonBounds(bool isInput) const {

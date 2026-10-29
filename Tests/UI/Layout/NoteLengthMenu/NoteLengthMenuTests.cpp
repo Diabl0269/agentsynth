@@ -376,3 +376,79 @@ TEST(NoteLengthBox, AParameterChangeFromElsewhereMovesTheBox) {
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     EXPECT_EQ(box.getCurrentName(), "1/8D");
 }
+
+// ---- over a modal dialog -----------------------------------------------------------------------------------------
+
+namespace {
+// Stands in for a shape editor window: a modal component the popup is not inside.
+struct ModalDialog {
+    juce::Component window;
+    ModalDialog() {
+        window.setSize(400, 300);
+        window.enterModalState(false);
+    }
+    ~ModalDialog() {
+        if (window.isCurrentlyModal(false))
+            window.exitModalState(0);
+    }
+};
+} // namespace
+
+// Regression test for FRO1183: the Grid box in the LFO shape window opened its list behind the window, and the
+// window's modal state blocked the list's clicks.
+TEST(NoteLengthPopup, OverAModalDialogItIsTheTopModalComponentAndItsChipsTakeClicks) {
+    ModalDialog dialog;
+    PopupRig rig(synth::envelopeNoteDivisions(), "1/4");
+    EXPECT_TRUE(rig.popup->isCurrentlyModal(true)) << "the popup is the topmost modal component";
+    ASSERT_FALSE(rig.popup->shownChips().empty());
+    EXPECT_FALSE(rig.popup->shownChips().front()->isCurrentlyBlockedByAnotherModalComponent());
+    EXPECT_TRUE(dialog.window.isCurrentlyBlockedByAnotherModalComponent());
+}
+
+TEST(NoteLengthPopup, OverAModalDialogAPressOnTheDialogClosesOnlyThePopup) {
+    ModalDialog dialog;
+    PopupRig rig(synth::envelopeNoteDivisions(), "1/4");
+    rig.popup->inputAttemptWhenModal();
+    EXPECT_TRUE(rig.closed);
+    EXPECT_FALSE(rig.popup->isCurrentlyModal(false));
+    EXPECT_TRUE(dialog.window.isCurrentlyModal(true)) << "the dialog stays open and modal";
+}
+
+TEST(NoteLengthPopup, OverAModalDialogEscapeClosesOnlyThePopup) {
+    ModalDialog dialog;
+    PopupRig rig(synth::envelopeNoteDivisions(), "1/4");
+    EXPECT_TRUE(rig.popup->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_TRUE(rig.closed);
+    EXPECT_FALSE(rig.popup->isCurrentlyModal(false));
+    EXPECT_TRUE(dialog.window.isCurrentlyModal(true));
+}
+
+TEST(NoteLengthPopup, WithNoModalDialogItStaysNonModal) {
+    PopupRig rig(synth::envelopeNoteDivisions(), "1/4");
+    EXPECT_FALSE(rig.popup->isCurrentlyModal(false));
+}
+
+// The live path: a mouse press on a box inside a modal dialog opens the popup (ComboBox opens it one message-loop
+// turn later), and a chip of it then takes the pick.
+TEST(NoteLengthBox, AClickInsideAModalDialogOpensThePopupAndAChipPicks) {
+    SkipDesktop skip;
+    ModalDialog dialog;
+    NoteLengthBox box;
+    dialog.window.addAndMakeVisible(box);
+    box.setBounds(10, 10, 80, 22);
+    box.setChoices(synth::envelopeNoteDivisions());
+    box.setCurrentName("1/2", juce::dontSendNotification);
+
+    box.mouseDown(mouseEvent(box));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    auto* popup = box.getPopup();
+    ASSERT_NE(popup, nullptr) << "the click opened the popup";
+    EXPECT_TRUE(popup->isCurrentlyModal(true));
+    auto* chip = popup->shownChips().front();
+    ASSERT_FALSE(chip->isCurrentlyBlockedByAnotherModalComponent());
+    const auto name = chip->getTooltip();
+    click(*chip);
+    EXPECT_EQ(box.getCurrentName(), name);
+    EXPECT_EQ(box.getPopup(), nullptr);
+    EXPECT_TRUE(dialog.window.isCurrentlyModal(true));
+}

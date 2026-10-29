@@ -117,7 +117,7 @@ state with no usable shape list leaves the current shapes unchanged. The model s
 Depth, Cutoff (moves the response) and Resonance (a peak at the cutoff) through ordinary `params` (`morphX`, `morphY`,
 `shift`, `depth`, `cutoff`, `resonance`) with `filterType` set to Custom.
 
-The same `state` may carry the per-note settings, which make each note of a poly Filter sit at its own place on
+The same `state` may carry the per-note settings, which make each note of a Filter (mono or poly) sit at its own place on
 the map ([custom-filter.md](../modules/custom-filter.md#per-note-cursors)):
 
 ```json

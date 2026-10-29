@@ -334,6 +334,8 @@ void MorphMap::mouseDown(const juce::MouseEvent& e) {
         if (dot >= 0 && !onCursor) {
             select(dot);
             showDotMenu(dot);
+        } else if (const Axis strip = stripAt(e.position); strip != Axis::None && cursorVisible_) {
+            showStripMenu(strip);
         }
         return;
     }

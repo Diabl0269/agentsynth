@@ -1,6 +1,6 @@
 // CustomFilterEngine.h -- the Filter's Custom type end to end: owns the shape list and the per-note
 // settings (message thread), hands both to the audio thread lock-free, blends the shapes at the
-// morph cursor (one shared cursor, or one per poly voice), redesigns the minimum-phase kernels when
+// morph cursor (one shared cursor, or one per voice), redesigns the minimum-phase kernels when
 // the controls move, and convolves.
 #pragma once
 
@@ -71,8 +71,8 @@ public:
     void resetState() noexcept;
     /** Audio thread. Convolves each non-null `channels[c]` (c < kMaxChannels) in place with the
      *  kernel for `controls`, redesigning it first when needed. No allocation, locks or system calls.
-     *  `voices` (one per poly voice, `numVoices` <= kMaxVoices) turns on the per-note mode when it is not
-     *  Off: each voice then gets its own cursor and kernel; null (mono) keeps the one shared kernel. */
+     *  `voices` (one per voice, `numVoices` <= kMaxVoices; mono passes one) turns on the per-note mode when
+     *  it is not Off: each voice then gets its own cursor and kernel; null keeps the one shared kernel. */
     void process(float* const* channels, int numChannels, int numSamples, const Controls& controls,
                  const VoiceInput* voices = nullptr, int numVoices = 0) noexcept;
     /** Most voice kernels designed in one block of `numSamples` (the shared kernel counts against it). */

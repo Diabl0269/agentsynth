@@ -27,7 +27,7 @@ struct MapRig : ShapeRig {
 
     MapRig() {
         map.setSize(252, 150);
-        map.showMenu = [this](juce::PopupMenu& m) { menu.capture(m); };
+        map.showMenu = [this](juce::PopupMenu& m, juce::Rectangle<int>) { menu.capture(m); };
         controller.refresh();
     }
 };

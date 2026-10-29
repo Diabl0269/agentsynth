@@ -177,6 +177,11 @@ is actually done, same as the sibling panels. See `docs/layout/animation.md` for
 full contract: mid-flight reversal, the synchronous off-screen path, and why one driver serves all
 three panels.
 
+Anything that points at a control inside the panel (the Add Track picker, the song key picker) is launched through
+`timelineSlide_.whenSettled(...)` rather than straight after the panel is asked to open: it runs at once when the panel
+is already open or nothing animates, and otherwise at the end of `finishPanelSlide()`, once the control is where it
+will stay. A slide closed again before it lands drops the call.
+
 ## Always compiled, never gated
 
 Everything past the always-present `TimelinePanelComponent` member and the `resized()` carve — the

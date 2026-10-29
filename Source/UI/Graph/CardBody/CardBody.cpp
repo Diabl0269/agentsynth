@@ -178,7 +178,7 @@ void CardBody::createParameterWidgets() {
             createKnob(item, *item.param);
         else if (item.kind == CardBodyItem::Kind::Toggle)
             createToggle(item, *static_cast<juce::AudioParameterBool*>(item.param));
-        else if (item.kind == CardBodyItem::Kind::FaderV || item.kind == CardBodyItem::Kind::FaderH)
+        else if (CardBodyItem::isVerticalFader(item.kind) || item.kind == CardBodyItem::Kind::FaderH)
             createFader(item, *item.param);
         else if (item.kind == CardBodyItem::Kind::Segmented)
             createSegmented(item, *item.param);
@@ -279,7 +279,7 @@ void CardBody::createChoice(CardBodyItem& item, juce::AudioParameterChoice& para
     if (auto* noteLength = dynamic_cast<synth::ui::NoteLengthBox*>(combo)) {
         noteLength->setChoices(param.choices);
         noteLength->setCompact(item.swapGroup >= 0 &&
-                               plan_.swapGroups[(size_t)item.swapGroup].cellKind == CardBodyItem::Kind::FaderV);
+                               CardBodyItem::isVerticalFader(plan_.swapGroups[(size_t)item.swapGroup].cellKind));
     } else if (isWaveformChoice(param.choices))
         fillWaveformItems(*combo, param.choices, card_.getLookAndFeel());
     else
@@ -413,7 +413,7 @@ juce::Label* CardBody::addCaption(CardBodyItem& item, juce::RangedAudioParameter
 // draws as a fader is a stepped one: the attachment gives it the choice's integer steps, its value box the
 // step's text, and its default is the choice's default.
 void CardBody::createFader(CardBodyItem& item, juce::RangedAudioParameter& param) {
-    const bool vertical = item.kind == CardBodyItem::Kind::FaderV;
+    const bool vertical = CardBodyItem::isVerticalFader(item.kind);
     auto* fader = new synth::ui::CardFader(vertical ? synth::ui::CardFader::Orientation::Vertical
                                                     : synth::ui::CardFader::Orientation::Horizontal);
     widgets_.add(fader);

@@ -10,6 +10,7 @@
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include <utility>
 
 namespace synth::ui {
 
@@ -26,6 +27,8 @@ CardWidget widgetFor(CardBodyItem::Kind kind) {
         return CardWidget::KnobLarge;
     case Kind::FaderV:
         return CardWidget::FaderV;
+    case Kind::FaderVLong:
+        return CardWidget::FaderVLong;
     case Kind::FaderH:
         return CardWidget::FaderH;
     case Kind::Segmented:
@@ -47,8 +50,8 @@ std::vector<CardWidget> widgetChoicesFor(const juce::RangedAudioParameter& param
     if (!automatic.has_value())
         return choices;
     choices.push_back(widgetFor(*automatic));
-    for (auto widget : {CardWidget::Knob, CardWidget::KnobLarge, CardWidget::FaderV, CardWidget::FaderH,
-                        CardWidget::Choice, CardWidget::Segmented, CardWidget::Stepper}) {
+    for (auto widget : {CardWidget::Knob, CardWidget::KnobLarge, CardWidget::FaderV, CardWidget::FaderVLong,
+                        CardWidget::FaderH, CardWidget::Choice, CardWidget::Segmented, CardWidget::Stepper}) {
         const auto kind = cardBodyKindFor(param, widget);
         if (kind.has_value() && widgetFor(*kind) == widget && widget != choices.front())
             choices.push_back(widget);
@@ -89,7 +92,19 @@ juce::var BuiltInCardLayoutSource::snapshotBeforeWrite() const {
     return undo_ != nullptr && g != nullptr ? AIStateMapper::graphToJSON(*g) : juce::var();
 }
 
+void BuiltInCardLayoutSource::beginGroupedWrite() {
+    if (groupDepth_++ == 0)
+        groupBefore_ = snapshotBeforeWrite();
+}
+
+void BuiltInCardLayoutSource::endGroupedWrite() {
+    if (groupDepth_ > 0 && --groupDepth_ == 0)
+        recordSince(std::exchange(groupBefore_, juce::var()));
+}
+
 void BuiltInCardLayoutSource::recordSince(const juce::var& before) {
+    if (groupDepth_ > 0)
+        return;
     if (auto* g = graph(); undo_ != nullptr && g != nullptr)
         undo_->recordGraphChangeSince(*g, before);
 }

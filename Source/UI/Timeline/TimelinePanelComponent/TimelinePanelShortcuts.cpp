@@ -142,6 +142,8 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // which timeline surface happened to have focus.
     if (matchesAction(key, "timelineSnapToggle", plainKey('j'))) {
         setSnapEnabled(!viewState_.snapEnabled);
+        if (onShowMessage)
+            onShowMessage(viewState_.snapEnabled ? "Snap on" : "Snap off");
         return true;
     }
 
@@ -158,12 +160,16 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // (setFollowPlayheadEnabled already persists the choice and forwards the flag into the roll).
     if (matchesAction(key, "timelineFollowPlayheadToggle", plainKey('f'))) {
         setFollowPlayheadEnabled(!isFollowPlayheadEnabled());
+        if (onShowMessage)
+            onShowMessage(isFollowPlayheadEnabled() ? "Follow playhead on" : "Follow playhead off");
         return true;
     }
 
     // Ctrl+F (Ctrl+Alt+F off the Mac) = switch the follow mode between Page and Smooth; follow itself stays as it is.
     if (matchesAction(key, "timelineFollowModeCycle", followModeCycleDefault())) {
         setFollowMode(otherFollowMode(getFollowMode()));
+        if (onShowMessage)
+            onShowMessage(juce::String("Follow: ") + followModeName(getFollowMode()));
         return true;
     }
 

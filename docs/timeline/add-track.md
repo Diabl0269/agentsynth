@@ -38,7 +38,11 @@ with its module type string.
 `"Add Track"` when it closes: `finishAddTrackMenu` does it after a pick, and the picker's `onClosed` (run from its
 destructor) does it after Escape or a click away, once only. The shortcut itself is
 `TimelinePanelComponent::openAddTrackMenuFromShortcut()`: it focuses the button, then opens the picker as a keyboard open;
-`MainComponent` runs it after showing the Timeline.
+`MainComponent` runs it once the Timeline has finished showing: with the panel closed, the show slide (about 190 ms)
+is still moving "+ Track" when the command starts, and a call-out launched then points at the collapsed place at
+the bottom of the window. The command waits with `PanelSlide::whenSettled` on the timeline slide (runs at once when
+the panel is already open or animations are off), then opens the picker under the button's final bounds. The same wait
+guards "Set Song Key", the other command that opens a pop-up under a timeline control right after showing it.
 
 `TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless seam for all of them. A picker never runs
 headless in the test binary, so `synth::ui::test_hooks::addTrackPickerHookForTest()` receives the built picker instead of

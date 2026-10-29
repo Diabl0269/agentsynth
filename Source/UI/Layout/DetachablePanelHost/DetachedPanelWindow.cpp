@@ -151,13 +151,9 @@ void DetachedPanelWindow::lookAndFeelChanged() {
     // panel shows the app's themed surface behind it, not a flat stock-JUCE grey. setLookAndFeel()
     // fires this synchronously (Component::sendLookAndFeelChange()), so it applies on construction,
     // on any later setLookAndFeel() swap, and once more (harmlessly) as the destructor clears it.
-    // Laid over the opaque page colour (bg0) -- a "glass" theme's surface is translucent
-    // (docs/layout/theme-authoring.md), and a top-level window filled with it shows the OS window
-    // backing through as flat light grey. An opaque surface overlays to itself, unchanged.
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-        const auto& colors = lf->getTheme().colors;
-        setBackgroundColour(colors.bg0.withAlpha(1.0f).overlaidWith(colors.surface));
-    }
+    // windowBackgroundFor() is opaque even for a "glass" theme, so no OS grey shows through.
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        setBackgroundColour(synth::theme::windowBackgroundFor(lf->getTheme()));
 }
 
 bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {

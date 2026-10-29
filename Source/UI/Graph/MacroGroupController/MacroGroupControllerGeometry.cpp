@@ -445,7 +445,7 @@ juce::Rectangle<int> MacroGroupController::macroChipBounds(const juce::String& m
     juce::Font font(juce::FontOptions(11.0f, juce::Font::bold));
     // +28, not the original card's +16: paint reserves the left ~12px for the grip-line affordance
     // (see GraphContentComponent::paint), so the label needs the extra room to not look crowded.
-    const int labelW = (int)font.getStringWidthFloat(label) + 28;
+    const int labelW = (int)juce::GlyphArrangement::getStringWidth(font, label) + 28;
     return juce::Rectangle<int>(hull.getX() + 8, hull.getY(), labelW, kMacroChipHeight);
 }
 

@@ -115,18 +115,30 @@ bool CurveEditorComponent::duplicateSelection() {
     return insertClip(clip, duplicateAnchor(duplicatePlacement(), xs, steps));
 }
 
+// Why a Ctrl+T press cannot insert, in words for the user; empty when it can.
+juce::String CurveEditorComponent::insertRefusal() const {
+    if (model_.getMode() != CurveMode::Free)
+        return "Points cannot be added to this curve";
+    if (cursorIndex() < 0 || cursorIndex() >= model_.getNumNodes())
+        return "Pick a point first";
+    if (model_.getNumNodes() >= CurveModel::kMaxNodes)
+        return "No room: the curve has the most points it can hold";
+    const bool last = cursorIndex() + 1 >= model_.getNumNodes();
+    const double toX = last ? model_.getMaxX() : model_.getNode(cursorIndex() + 1).x;
+    if (toX - model_.getNode(cursorIndex()).x <= kMinInsertGap)
+        return "No room after this point";
+    return {};
+}
+
 // Halfway between the cursor point and the next one (or the end of the range when it is the last), at the level
 // halfway between them. A refused press returns before beginGesture(), so it never opens an empty undo step.
 bool CurveEditorComponent::insertAfterCursor() {
-    if (model_.getMode() != CurveMode::Free || cursorIndex() < 0 || cursorIndex() >= model_.getNumNodes() ||
-        model_.getNumNodes() >= CurveModel::kMaxNodes)
+    if (insertRefusal().isNotEmpty())
         return false;
     const CurveNode& from = model_.getNode(cursorIndex());
     const bool last = cursorIndex() + 1 >= model_.getNumNodes();
     const double toX = last ? model_.getMaxX() : model_.getNode(cursorIndex() + 1).x;
     const float toY = last ? from.y : model_.getNode(cursorIndex() + 1).y;
-    if (toX - from.x <= kMinInsertGap)
-        return false;
 
     beginGesture();
     const int index = model_.addPoint(from.x + (toX - from.x) * 0.5, from.y + (toY - from.y) * 0.5f);

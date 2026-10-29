@@ -12,7 +12,7 @@
  *  each one's 30 Hz timer picks the other's edits up on the next tick.
  *
  *  Follows the SettingsWindow pattern: this is just the content Component; the caller wraps it in
- *  a juce::DialogWindow via LaunchOptions::launchAsync().
+ *  a juce::DialogWindow via PopupMotion::launchDialog().
  *
  *  Keyboard: Tab visits the curve (which edits with the keys listed on EQCurveComponent) and the
  *  spectrum toggle; Escape closes the window.

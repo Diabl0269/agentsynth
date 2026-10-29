@@ -345,7 +345,7 @@ control name) is a `synth::ui::NonModalLabel` (`Source/UI/Layout/NonModalLabel.h
 `NonModalLabel::editorShown` schedules `exitModalState()` one message-loop turn later (the call cannot happen
 inside the hook, because `showEditor()` enters modal state right after it returns). Nothing the modal state did is lost:
 the editor is a child holding keyboard focus, and losing that focus commits (or discards, per `setEditable`) through
-`Label::textEditorFocusLost`, as a click outside did via `inputAttemptWhenModal`. Escape is deferred too: JUCE 8.0.3's
+`Label::textEditorFocusLost`, as a click outside did via `inputAttemptWhenModal`. Escape is deferred too: JUCE 9.0.3's
 `TextEditor::handleCommandMessage` dispatches it under the listener list's lock, and the base
 `Label::textEditorEscapeKeyPressed` deletes the editor there (the unlock then writes freed memory), so
 `NonModalLabel` restores the text at once and calls `hideEditor(true)` from a `callAsync`. The card-title rename is a raw
@@ -553,6 +553,11 @@ the last `show()` unless the pointer is over it or its action holds the keyboard
 is a real `TextLinkButton`: focusable, titled "Undo", with a tooltip ("Undo this change"); it dismisses the toast, then
 runs. The Poly pill's Undo only undoes while its step is still the last edit (`AppUndoManager::getEditSerial()`).
 Colours are theme tokens only.
+
+A second use is a plain message with no action: a timeline hotkey that changes a setting says what it did ("Follow
+playhead on", "Follow: Smooth", "Snap off"). `TimelinePanelComponent::onShowMessage` is wired to `toast_->show(message)`
+where the toast is created (`MainComponentSetup.cpp`); only key presses call it (a click on the button already shows the new
+state). The toast sits at the bottom of the canvas area above the open timeline dock, so the dock never covers it.
 
 ## Shortcut hint overlay
 

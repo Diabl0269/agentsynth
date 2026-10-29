@@ -61,6 +61,7 @@ ShapeMapController::ShapeMapController(MorphMap& map, ShapeListAdapter& adapter)
     };
     map_.onDuplicateDot = [this](int index) { duplicateShape(index); };
     map_.onDeleteDot = [this](int index) { deleteShape(index); };
+    map_.onInsertAfterDot = [this](int index) { return insertShapeAfter(index); };
     map_.onRenameDot = [this](int index, const juce::String& name) { renameShape(index, name); };
     map_.canDeleteDot = [this] { return (int)adapter_.getShapes().size() > 1; };
 }
@@ -111,7 +112,10 @@ juce::String ShapeMapController::uniqueName(const std::vector<ShapeItem>& shapes
     return name;
 }
 
-int ShapeMapController::addShapeAt(float x, float y) {
+int ShapeMapController::addShapeAt(float x, float y) { return addShapeAtIndex(x, y, (int)adapter_.getShapes().size()); }
+
+/** The shape lands at `listIndex` in the list (the end for a click), one undo step, selected. */
+int ShapeMapController::addShapeAtIndex(float x, float y, int listIndex) {
     auto shapes = adapter_.getShapes();
     if ((int)shapes.size() >= adapter_.getMaxShapes())
         return -1;
@@ -120,11 +124,11 @@ int ShapeMapController::addShapeAt(float x, float y) {
     shape.name =
         uniqueName(shapes, shape.name.isEmpty() ? "Shape " + juce::String((int)shapes.size() + 1) : shape.name);
     setPosition(shape, x, y);
-    shapes.push_back(std::move(shape));
+    const int index = juce::jlimit(0, (int)shapes.size(), listIndex);
+    shapes.insert(shapes.begin() + index, std::move(shape));
     adapter_.setShapes(shapes);
     adapter_.endEdit();
     changed();
-    const int index = (int)shapes.size() - 1;
     map_.setSelected(index);
     if (onSelect)
         onSelect(index);
@@ -167,6 +171,16 @@ int ShapeMapController::duplicateShape(int index) {
     if (onSelect)
         onSelect(index + 1);
     return index + 1;
+}
+
+int ShapeMapController::insertShapeAfter(int index) {
+    const auto shapes = adapter_.getShapes();
+    if (index < 0 || index + 1 >= (int)shapes.size())
+        return -1;
+    const auto& from = shapes[(size_t)index];
+    const auto& to = shapes[(size_t)index + 1];
+    return addShapeAtIndex((positionOf(from, 0) + positionOf(to, 0)) * 0.5f,
+                           (positionOf(from, 1) + positionOf(to, 1)) * 0.5f, index + 1);
 }
 
 /** At least one shape always stays. */

@@ -1,5 +1,5 @@
 // CustomFilterEngineVoices.cpp -- the Custom filter's per-note path: the per-note settings handoff, one
-// cursor and one kernel per poly voice, and the per-block design budget that keeps eight moving voices
+// cursor and one kernel per voice (mono is voice 0), and the per-block design budget that keeps eight moving voices
 // affordable on the audio thread.
 #include "CustomFilterEngine.h"
 #include <cmath>

@@ -24,8 +24,8 @@ struct NameTable {
     }
 };
 
-constexpr NameTable<CardWidget, 9> kWidgets{
-    {"auto", "knob", "knobLarge", "faderV", "faderH", "toggle", "choice", "segmented", "stepper"}};
+constexpr NameTable<CardWidget, 10> kWidgets{
+    {"auto", "knob", "knobLarge", "faderV", "faderH", "toggle", "choice", "segmented", "stepper", "faderVLong"}};
 constexpr NameTable<CardView, 12> kViews{{"scope", "response", "spectrum", "envelope", "lfoShape", "lfoCurve",
                                           "waveform", "wavetable", "eqCurve", "threshold", "gainReduction",
                                           "stepGrid"}};
@@ -268,6 +268,7 @@ CardSlotKind slotKindFromWidget(CardWidget widget) {
     case CardWidget::Knob:
     case CardWidget::KnobLarge:
     case CardWidget::FaderV:
+    case CardWidget::FaderVLong:
     case CardWidget::FaderH:
         return CardSlotKind::Knob;
     }

@@ -2,6 +2,7 @@
 #include "Branding.h"
 #include "Project/ModuleFileRefs.h"
 #include "Timeline/TimelineReconciler.h"
+#include "UserSettings.h"
 #include <utility>
 #include <vector>
 
@@ -366,8 +367,11 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
 }
 
 juce::File ProjectBundle::getDefaultProjectsDirectory() {
-    juce::File folder =
-        juce::File::getSpecialLocation(juce::File::userMusicDirectory).getChildFile(branding::kProjectsFolderName);
+    // An automation launch keeps even this folder under its own settings directory.
+    juce::File folder = synth::automationUserFolders()
+                            ? synth::userSettingsRootDirectory().getChildFile(branding::kProjectsFolderName)
+                            : juce::File::getSpecialLocation(juce::File::userMusicDirectory)
+                                  .getChildFile(branding::kProjectsFolderName);
 
     if (!folder.exists())
         folder.createDirectory();

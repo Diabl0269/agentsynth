@@ -1,4 +1,4 @@
-// CustomFilterPerNote.h -- the Custom filter's per-note settings: whether each poly note gets its own
+// CustomFilterPerNote.h -- the Custom filter's per-note settings: whether each note (mono or poly) gets its own
 // place on the morph map (and how it is picked), how fast a note glides there, and the By hand key map;
 // plus their versioned JSON form, which rides inside the module's extra state as "perNote".
 // Message-thread data; CustomFilterEngine publishes it to the audio thread.

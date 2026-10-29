@@ -1,0 +1,356 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 16,
+      "type": "Audio Output",
+      "uuid": "5cbf17e2-03cc-4387-b070-ee4627b257fc",
+      "params": {
+      },
+      "position": {
+        "x": 1992,
+        "y": 40
+      }
+    },
+    {
+      "id": 17,
+      "type": "Oscillator",
+      "uuid": "34389f55-81ed-4323-93be-ae6837d59808",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 1.0,
+        "poly": false,
+        "unison": 1.0,
+        "detune": 0.0,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 0.0,
+        "blend": 0.25,
+        "width": 0.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 104,
+        "y": 824
+      }
+    },
+    {
+      "id": 18,
+      "type": "LFO",
+      "uuid": "baf7df1b-f798-4caa-aad4-7d0b6aba1127",
+      "params": {
+        "bypassed": false,
+        "shape": "Sine",
+        "mode": true,
+        "bipolar": true,
+        "rateHz": 1.0,
+        "rateSync": "1/4",
+        "retrig": false,
+        "level": 1.0,
+        "glide": 0.0,
+        "phase": 0.0,
+        "fadeIn": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "muted": false
+      },
+      "position": {
+        "x": 184,
+        "y": 200
+      }
+    },
+    {
+      "id": 19,
+      "type": "ADSR",
+      "uuid": "41203f7e-79d4-41fe-8ea9-b5a0692f785c",
+      "params": {
+        "bypassed": false,
+        "attack": 0.001000000047497,
+        "decay": 1.0,
+        "sustain": 1.0,
+        "release": 0.015000000596046,
+        "hold": 0.0,
+        "attackCurve": -0.300000011920929,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": false,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.5,
+        "poly": false,
+        "velocity": 0.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 488,
+        "y": 200
+      }
+    },
+    {
+      "id": 20,
+      "type": "LFO",
+      "uuid": "b4f327ed-9013-4b70-81bc-8099c86cfcac",
+      "params": {
+        "bypassed": false,
+        "shape": "Sine",
+        "mode": true,
+        "bipolar": true,
+        "rateHz": 1.0,
+        "rateSync": "1/4",
+        "retrig": false,
+        "level": 1.0,
+        "glide": 0.0,
+        "phase": 0.0,
+        "fadeIn": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "muted": false
+      },
+      "position": {
+        "x": 600,
+        "y": 824
+      }
+    },
+    {
+      "id": 21,
+      "type": "ADSR",
+      "uuid": "96ac894a-90e1-4faf-bc2e-74c1d160c431",
+      "params": {
+        "bypassed": false,
+        "attack": 0.001000000047497,
+        "decay": 1.0,
+        "sustain": 1.0,
+        "release": 0.015000000596046,
+        "hold": 0.0,
+        "attackCurve": -0.300000011920929,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": false,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.5,
+        "poly": false,
+        "velocity": 0.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 904,
+        "y": 824
+      }
+    },
+    {
+      "id": 22,
+      "type": "LFO",
+      "uuid": "1e4be52f-fb54-4b63-9fe9-5fe0d3ebf106",
+      "params": {
+        "bypassed": false,
+        "shape": "Sine",
+        "mode": true,
+        "bipolar": true,
+        "rateHz": 1.0,
+        "rateSync": "1/4",
+        "retrig": false,
+        "level": 1.0,
+        "glide": 0.0,
+        "phase": 0.0,
+        "fadeIn": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "muted": false
+      },
+      "position": {
+        "x": 1112,
+        "y": 192
+      }
+    },
+    {
+      "id": 23,
+      "type": "ADSR",
+      "uuid": "b1add962-2dd3-49b0-96fc-168c94a4f7eb",
+      "params": {
+        "bypassed": false,
+        "attack": 0.001000000047497,
+        "decay": 1.0,
+        "sustain": 1.0,
+        "release": 0.015000000596046,
+        "hold": 0.0,
+        "attackCurve": -0.300000011920929,
+        "decayCurve": 0.649999976158142,
+        "releaseCurve": 0.649999976158142,
+        "tempoSync": false,
+        "attackDiv": "1/32",
+        "holdDiv": "1/32",
+        "decayDiv": "1/2",
+        "releaseDiv": "1/32",
+        "gateThreshold": 0.5,
+        "poly": false,
+        "velocity": 0.0,
+        "muted": false,
+        "legato": false
+      },
+      "position": {
+        "x": 1408,
+        "y": 192
+      }
+    },
+    {
+      "id": 24,
+      "type": "Oscillator",
+      "uuid": "2766f213-a05b-4e5e-abdb-0591ec582211",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 1.0,
+        "poly": false,
+        "unison": 1.0,
+        "detune": 0.0,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 0.0,
+        "blend": 0.25,
+        "width": 0.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 1112,
+        "y": 816
+      }
+    }
+  ],
+  "connections": [],
+  "modulations": [],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 1,
+    "nextClipId": 1,
+    "nextLaneId": 1,
+    "nextNoteId": 1,
+    "nextMarkerId": 1,
+    "tracks": [],
+    "markers": []
+  },
+  "macros": [
+    {
+      "id": "ce64ce42-e39a-4a74-a806-2d419569069c",
+      "name": "Open macro",
+      "colour": "ff5a7dff",
+      "collapsed": false,
+      "bounds": {
+        "x": 400,
+        "y": 200,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "baf7df1b-f798-4caa-aad4-7d0b6aba1127",
+        "41203f7e-79d4-41fe-8ea9-b5a0692f785c"
+      ],
+      "ports": []
+    },
+    {
+      "id": "9bb4ee45-db07-40d0-ab57-e429a9203e28",
+      "name": "Collapsed macro",
+      "colour": "ff5a7dff",
+      "collapsed": true,
+      "bounds": {
+        "x": 600,
+        "y": 824,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "b4f327ed-9013-4b70-81bc-8099c86cfcac",
+        "96ac894a-90e1-4faf-bc2e-74c1d160c431"
+      ],
+      "ports": []
+    },
+    {
+      "id": "c1e04dbe-6e3b-45c5-aa82-e005978e5762",
+      "name": "Outer macro",
+      "colour": "ff5a7dff",
+      "collapsed": false,
+      "bounds": {
+        "x": 1112,
+        "y": 192,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "2766f213-a05b-4e5e-abdb-0591ec582211"
+      ],
+      "ports": []
+    },
+    {
+      "id": "0f63e237-b501-436c-ae44-71a953d9864c",
+      "name": "Nested macro",
+      "colour": "ff5a7dff",
+      "collapsed": false,
+      "parent": "c1e04dbe-6e3b-45c5-aa82-e005978e5762",
+      "bounds": {
+        "x": 1112,
+        "y": 192,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "1e4be52f-fb54-4b63-9fe9-5fe0d3ebf106",
+        "b1add962-2dd3-49b0-96fc-168c94a4f7eb"
+      ],
+      "ports": []
+    }
+  ],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": false
+  },
+  "view": {
+    "zoom": 1.0,
+    "panX": -552.0,
+    "panY": -542.0
+  }
+}

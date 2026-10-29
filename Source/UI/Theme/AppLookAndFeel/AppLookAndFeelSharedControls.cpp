@@ -16,6 +16,13 @@ const Theme& themeOf(const juce::Component& comp) {
     return defaultTheme;
 }
 
+// Laid over the opaque page colour (bg0): a "glass" theme's surface is translucent
+// (docs/layout/theme-authoring.md), and a window filled with it shows the OS window backing (or JUCE's default
+// light-grey dialog background) through as flat grey. An opaque surface overlays to itself, unchanged.
+juce::Colour windowBackgroundFor(const Theme& theme) {
+    return theme.colors.bg0.withAlpha(1.0f).overlaidWith(theme.colors.surface);
+}
+
 namespace {
 constexpr float kChipHoverShift = 0.12f;
 constexpr float kChipPressShift = 0.25f;
@@ -120,7 +127,8 @@ void paintTextLink(juce::Graphics& g, juce::Button& button, const Theme& theme, 
     if (!hot)
         return;
 
-    const float width = std::min(font.getStringWidthFloat(button.getButtonText()), (float)bounds.getWidth());
+    const float width =
+        std::min(juce::GlyphArrangement::getStringWidth(font, button.getButtonText()), (float)bounds.getWidth());
     const float x = justification.testFlags(juce::Justification::right)
                         ? (float)bounds.getRight() - width
                         : (justification.testFlags(juce::Justification::horizontallyCentred)

@@ -31,7 +31,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/DependencyVersions.cmake)
 
 # Fetch JUCE. GIT_SHALLOW TRUE (FRO341): JUCE's own .git history measured ~294 MB of every ~376 MB
 # build/_deps entry it contributes (a full clone carries the whole upstream history; a build never
-# reads any of it) — only safe because SYNTH_JUCE_GIT_TAG above pins a real tag ("8.0.3"), which a
+# reads any of it) — only safe because SYNTH_JUCE_GIT_TAG above pins a real tag ("9.0.3"), which a
 # shallow clone can fetch directly, not a bare commit SHA (which a shallow fetch of an arbitrary
 # commit cannot always reach on every git-server configuration). A shallow clone still downloads
 # every blob in that one commit's tree (JUCE ships examples/fonts/images in-tree), just not the
@@ -42,15 +42,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/DependencyVersions.cmake)
 # workflows' deps cache keys had to be bumped by hand (deps3 -> deps4, release-deps-ninja3 -> 4;
 # see docs/development/ci-caching.md) for the shallow clone to actually take effect instead of
 # forever restoring the old, non-shallow juce-src.
-include(FetchContent)
-FetchContent_Declare(
-    juce
-    GIT_REPOSITORY ${SYNTH_JUCE_GIT_REPOSITORY}
-    GIT_TAG        ${SYNTH_JUCE_GIT_TAG}
-    GIT_SHALLOW    TRUE
-    PATCH_COMMAND  ${SYNTH_JUCE_PATCH_COMMAND}
-)
-FetchContent_MakeAvailable(juce)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/FetchJuce.cmake)
 
 # Fetch Sparkle (macOS auto-update). Prebuilt .xcframework distribution, not a CMake project —
 # FetchContent_MakeAvailable populates it and, finding no CMakeLists.txt at its root, does not try
@@ -677,6 +669,7 @@ add_library(AppUI STATIC ${APPUI_SOURCES})
 include(cmake/MixerRowSources.cmake)
 include(cmake/AudioInputRecordingSources.cmake) # Core and AppUI units, so after both exist
 include(cmake/ClipEdgeSizingSources.cmake)       # Core and AppUI units, so after both exist
+include(cmake/TestModeSources.cmake)             # AppUI units and the app target's flag, so after both exist
 
 # FRO337: the mac-only NSEvent monitor half of "Esc/Cmd+W closes a focused hosted-plugin window"
 # (Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.{h,mm}) — Objective-C++, so it can't sit
@@ -695,8 +688,7 @@ endif()
 target_link_libraries(AppUI PUBLIC Core)
 synth_enable_pch(AppUI)
 
-# WhatsNewData.h (generated above, "What's New" block) — PRIVATE since only AppUI's
-# Source/MainComponent/ units (MainComponent.cpp, MainComponentPanels.cpp) include it.
+# WhatsNewData.h (generated above): PRIVATE, only AppUI's Source/MainComponent/ units include it.
 target_include_directories(AppUI PRIVATE "${SYNTH_WHATSNEW_GENERATED_DIR}")
 
 # The VST3 is a shared object on Linux, and every object linked into a .so must be

@@ -62,6 +62,8 @@ juce::String cardLayoutWidgetName(CardWidget widget) {
         return "Large knob";
     case CardWidget::FaderV:
         return "Vertical fader";
+    case CardWidget::FaderVLong:
+        return "Long vertical fader";
     case CardWidget::FaderH:
         return "Horizontal fader";
     case CardWidget::Toggle:
