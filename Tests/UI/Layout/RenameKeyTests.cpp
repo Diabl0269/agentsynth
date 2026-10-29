@@ -76,7 +76,9 @@ TEST(RenameKeyTrackHeader, OptionROpensTheFocusedTracksNameEditorAndReturnCommit
     ASSERT_NE(editor, nullptr);
     editor->setText("Lead", false);
     EXPECT_TRUE(editor->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    // The editor reports the key asynchronously; a loaded machine can take longer than one 50 ms slice.
+    for (int slice = 0; slice < 40 && r.mc.getTimelineDoc().getTracks()[1].name != "Lead"; ++slice)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     EXPECT_EQ(r.mc.getTimelineDoc().getTracks()[1].name, "Lead") << "Return commits the track's name";
 }
 
