@@ -46,6 +46,43 @@ private:
     }
 };
 
+// A dialog still on the desktop when its test ends outlives the test's own objects it shows (a module, a rig): JUCE
+// deletes a closed dialog on a later message-loop turn, here in MessageQueueDrainer, and its destructor then reads
+// freed memory, crashing some later test at random. Listeners end in reverse order, so this runs before the drain. It
+// names each test once per window and fails the run; the test deletes its windows before its objects go
+// (ModalCloseKeys' DialogsDeletedFirst).
+class DialogLeakCheck : public ::testing::EmptyTestEventListener {
+public:
+    static std::vector<std::string>& leakers() {
+        static std::vector<std::string> names;
+        return names;
+    }
+
+private:
+    void OnTestEnd(const ::testing::TestInfo& info) override {
+        auto& desktop = juce::Desktop::getInstance();
+        bool leaked = false;
+        for (int i = 0; i < desktop.getNumComponents(); ++i) {
+            auto* dialog = dynamic_cast<juce::DialogWindow*>(desktop.getComponent(i));
+            if (dialog == nullptr || isReported(*dialog))
+                continue;
+            reported_.emplace_back(dialog);
+            leaked = true;
+        }
+        if (leaked)
+            leakers().push_back(std::string(info.test_suite_name()) + "." + info.name());
+    }
+
+    bool isReported(const juce::Component& dialog) const {
+        for (const auto& seen : reported_)
+            if (seen.getComponent() == &dialog)
+                return true;
+        return false;
+    }
+
+    std::vector<juce::Component::SafePointer<juce::Component>> reported_;
+};
+
 int main(int argc, char** argv) {
     // The real ChildLauncher re-executes THIS binary with `--scan-plugin <fmt> <file> <token>`
     // (any test that lets a MainComponent's eager scan use the default launcher). Serve that as
@@ -69,6 +106,7 @@ int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     ::testing::UnitTest::GetInstance()->listeners().Append(new MessageQueueDrainer());
     ::testing::UnitTest::GetInstance()->listeners().Append(new MotionSeamLeakCheck());
+    ::testing::UnitTest::GetInstance()->listeners().Append(new DialogLeakCheck());
 
     // The ONE call site that reads AGENTSYNTH_SETTINGS_DIR, so a shipped binary can never
     // be redirected via it (see test-patterns.md's "on-disk path" section for the full seam).
@@ -113,6 +151,12 @@ int main(int argc, char** argv) {
         std::cerr << "[  LEAKED  ] " << name
                   << " left a motion test seam changed (FadeVisibility/PopupMotion off-screen animation or the "
                      "Animations mode); restore it before the test returns"
+                  << std::endl;
+        result = 1;
+    }
+    for (const auto& name : DialogLeakCheck::leakers()) {
+        std::cerr << "[  LEAKED  ] " << name
+                  << " left a dialog window open: it is deleted after the objects it shows; delete it before they go"
                   << std::endl;
         result = 1;
     }

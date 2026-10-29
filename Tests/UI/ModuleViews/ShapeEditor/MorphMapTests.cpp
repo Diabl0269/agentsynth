@@ -948,6 +948,23 @@ TEST(MorphMap, UndoAndRedoOfADotMoveGlideItBackAndForth) {
     EXPECT_TRUE(rig.map.isMoveGliding()) << "redo glides too";
 }
 
+// A count change drops the running glides, and each dropped one asks to lay the stops out while the stops still number
+// the old dots (ASAN reads past the dot list here).
+TEST(MorphMap, RemovingADotWhileAnUndoGlideRunsLaysOutOnlyTheDotsThatRemain) {
+    ModeScope scope(AnimationMode::full);
+    MapRig rig;
+    auto dots = rig.map.getDots();
+    ASSERT_GE(dots.size(), 2u);
+    for (auto& dot : dots)
+        dot.x = juce::jlimit(0.0f, 1.0f, dot.x + 0.2f);
+    rig.map.setDots(dots, true);
+    ASSERT_TRUE(rig.map.isMoveGliding());
+    dots.pop_back();
+    rig.map.setDots(dots, true);
+    EXPECT_FALSE(rig.map.isMoveGliding()) << "a count change lands at once";
+    EXPECT_EQ(rig.map.getDots().size(), dots.size());
+}
+
 TEST(MorphMap, UndoOfACursorMoveGlidesItAndUnderReduceMotionLandsAtOnceAndFadesIn) {
     ModeScope scope(AnimationMode::full);
     MapRig rig;

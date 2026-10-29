@@ -183,9 +183,10 @@ void MorphMap::rebuildStops() {
         takeFocus(wanted > 0 ? *dotStops_.back() : static_cast<juce::Component&>(*this));
 }
 
-// Each stop sits where its dot or the cursor is drawn, so the focus ring is on the dot while an undo glide runs.
+// Each stop sits where its dot or the cursor is drawn, so the focus ring is on the dot while an undo glide runs. A
+// glide dropped by a count change lays out before rebuildStops(): only the stops that still have a dot move.
 void MorphMap::layoutStops() {
-    for (int i = 0; i < (int)dotStops_.size(); ++i)
+    for (int i = 0; i < (int)std::min(dotStops_.size(), dots_.size()); ++i)
         dotStops_[(size_t)i]->setCentrePosition(toPixels(getDrawnDot(i).x, getDrawnDot(i).y).roundToInt());
     cursorStop_->setCentrePosition(toPixels(getDrawnCursor().x, getDrawnCursor().y).roundToInt());
     stripStops_[0]->setBounds(getStripBounds(Axis::X).expanded(2.0f).toNearestInt());
