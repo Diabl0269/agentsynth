@@ -11,4 +11,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardGlide/CardGlideFrameCostTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorUndoGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorHideMotionTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorFollowTests.cpp
 )

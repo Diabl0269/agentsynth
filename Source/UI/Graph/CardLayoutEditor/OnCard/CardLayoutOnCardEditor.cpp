@@ -175,8 +175,10 @@ void CardLayoutOnCardEditor::syncAfterOutsideChange() {
     const auto before = cells_;
     const auto beforeImage = cardImage_;
     syncToCard();
-    if (!closed_)
-        animateRestore(before, beforeImage, rebuilt);
+    if (closed_)
+        return;
+    animateRestore(before, beforeImage, rebuilt);
+    followCard();
 }
 
 void CardLayoutOnCardEditor::animateRestore(const std::vector<OnCardCell>& before, const juce::Image& beforeImage,
@@ -289,6 +291,8 @@ void CardLayoutOnCardEditor::close(bool keep) {
     stopTimer();
     glidePump_.stop();
     fadePump_.stop();
+    followPump_.stop();
+    followFrame_ = nullptr;
     if (finishGlide_)
         std::exchange(finishGlide_, nullptr)();
     if (finishAddFade_)
@@ -362,6 +366,7 @@ void CardLayoutOnCardEditor::componentMovedOrResized(juce::Component& component,
     if (&component != cardIdentity_ || writing_ || closed_)
         return;
     setBounds(overlayBoundsFor(component.getBounds()));
+    followCard();
     if (wasResized && !drag_.pressed && !finishGlide_)
         triggerAsyncUpdate();
 }

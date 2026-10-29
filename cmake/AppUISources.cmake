@@ -965,6 +965,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorAdd.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorAddDrop.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorDrag.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorFollow.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorGroups.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorHideDrag.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorKeyboard.cpp

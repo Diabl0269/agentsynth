@@ -535,6 +535,12 @@ group gets its look's `visibleWhen`, the dims go, and the Tempo group gets Susta
     a start point, so the grow also travels from the zone's centre) and Cmd+Shift+Z shrinks it back into it
     (`ShrinkGhost::travelTo`). A control hidden any other way (Backspace, the panel) has no entry and comes back
     in place.
+  - *Following the card.* When an undo, a redo or Auto-arrange moves the card being edited, editing goes on and
+    the view pans to it, only if the card plus its Add strip would leave the visible area, and by the least that
+    shows it whole with a 24 px margin (eased over 220 ms with `easeInOutCubic`; at once under Reduce Motion or
+    Animations Off). Nothing pans while a mouse button is down, and the pan stops if something else moves the
+    view (`CardLayoutOnCardEditorFollow.cpp`, using only the public view calls of `GraphEditor`). Starting an edit
+    on a second module ends the first one's edit with no dialog: its changes stay, one Cmd+Z each.
   - *Moving between groups.* Drag a control over another group (the pointer is what counts; that group gets a
     faint wash and its controls' guides) and drop: the control, with its widget, label and range, leaves its
     group's items for the target's, free-positioned where the row plan above lands it, sized as the target group
