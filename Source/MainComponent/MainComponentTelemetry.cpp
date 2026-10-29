@@ -2,6 +2,7 @@
 // settings-driven on/off switch. The counters themselves are called from the user actions that feed them.
 // Docs: docs/development/usage-statistics.md.
 #include "AudioEngine/AudioEngine.h"
+#include "AutomationLaunch.h"
 #include "MainComponent.h"
 #include "Telemetry/TelemetryService.h"
 #include "Telemetry/UsageStatsChoice.h"
@@ -27,8 +28,9 @@ juce::String runningAppVersion() {
 // queue file, so counting there would give one "session" per editor open; the plugin build records nothing and
 // the setting simply has no effect there.
 void MainComponent::startTelemetry() {
-    if (ownedAudioEngine == nullptr)
-        return;
+    if (ownedAudioEngine == nullptr ||
+        synth::isAutomationLaunch(juce::JUCEApplicationBase::getCommandLineParameterArray()))
+        return; // an automation launch sends nothing (AutomationLaunch.h)
     telemetry_ = std::make_unique<synth::telemetry::TelemetryService>(runningAppVersion(),
                                                                       platform::contracts::TelemetryFormat::Standalone);
     auto* service = telemetry_.get();

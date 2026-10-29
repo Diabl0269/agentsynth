@@ -16,6 +16,13 @@ const Theme& themeOf(const juce::Component& comp) {
     return defaultTheme;
 }
 
+// Laid over the opaque page colour (bg0): a "glass" theme's surface is translucent
+// (docs/layout/theme-authoring.md), and a window filled with it shows the OS window backing (or JUCE's default
+// light-grey dialog background) through as flat grey. An opaque surface overlays to itself, unchanged.
+juce::Colour windowBackgroundFor(const Theme& theme) {
+    return theme.colors.bg0.withAlpha(1.0f).overlaidWith(theme.colors.surface);
+}
+
 namespace {
 constexpr float kChipHoverShift = 0.12f;
 constexpr float kChipPressShift = 0.25f;

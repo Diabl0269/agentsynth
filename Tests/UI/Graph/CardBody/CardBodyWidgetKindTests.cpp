@@ -47,6 +47,16 @@ TEST(CardBodyWidgetKind, ThePlanHonoursEachWidgetThatSuitsItsParameter) {
     EXPECT_EQ(kindOf(plan, "coarse"), CardBodyItem::Kind::Knob) << "auto stays what it always was";
 }
 
+TEST(CardBodyWidgetKind, ALongVerticalFaderIsAVerticalFaderWithATallerCell) {
+    OscillatorModule osc;
+    const auto plan =
+        synth::CardBodyPlan::forModule(osc, automaticLayoutWith(osc, {{"detune", CardWidget::FaderVLong}}));
+    EXPECT_EQ(kindOf(plan, "detune"), CardBodyItem::Kind::FaderVLong);
+    EXPECT_TRUE(CardBodyItem::isVerticalFader(CardBodyItem::Kind::FaderVLong));
+    EXPECT_FALSE(CardBodyItem::isVerticalFader(CardBodyItem::Kind::FaderH));
+    EXPECT_GT(synth::cardbody::kFaderVLongHeight, synth::cardbody::kFaderVHeight);
+}
+
 TEST(CardBodyWidgetKind, AWidgetThatDoesNotSuitItsParameterFallsBack) {
     OscillatorModule osc;
     const auto plan = synth::CardBodyPlan::forModule(osc, automaticLayoutWith(osc, {{"waveform", CardWidget::FaderV},

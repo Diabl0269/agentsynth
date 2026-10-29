@@ -66,12 +66,11 @@ juce::DialogWindow* openSamplerMapWindow(std::unique_ptr<SamplerMapView> view, j
     options.componentToCentreAround = anchor != nullptr ? anchor->getTopLevelComponent() : nullptr;
     options.useNativeTitleBar = true;
     options.resizable = true;
-    auto* dialog = options.launchAsync();
-    if (dialog == nullptr)
-        return nullptr;
-    dialog->setResizeLimits(kMinWidth, kMinHeight, 4096, 4096);
-    PopupMotion::attach(*dialog, motionStyle(anchor, dialog));
-    return dialog;
+    // The limits are set before the motion starts, so its first frame already has the final size.
+    return PopupMotion::launchDialog(options, [anchor](juce::DialogWindow& window) {
+        window.setResizeLimits(kMinWidth, kMinHeight, 4096, 4096);
+        return motionStyle(anchor, &window);
+    });
 }
 
 } // namespace synth::ui

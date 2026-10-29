@@ -277,6 +277,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DAGENTSYNTH_AUTOMATION=OFF \
           -DSYNTH_MARKETING_VERSION=${{ needs.version.outputs.version }} \
           -DSYNTH_BUILD_NUMBER=${{ github.run_number }} \
           -DSYNTH_SPARKLE_PUBLIC_KEY="${{ vars.SPARKLE_PUBLIC_KEY }}" \

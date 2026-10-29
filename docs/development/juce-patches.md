@@ -1,13 +1,14 @@
 # Patches to JUCE
 
 JUCE is fetched by `FetchContent` at a pinned tag (`cmake/DependencyVersions.cmake`) and not vendored, so
-a change to JUCE itself is a patch file applied after the fetch. There is one:
+a change to JUCE itself is a patch file applied after the fetch. There are two:
 
 | Patch | What it adds | Why |
 |---|---|---|
 | `cmake/patches/juce-vst3-context-menu.patch` | `juce::VST3PluginFormat::setHostContextMenuExtension(AudioPluginInstance&, std::function<void(uint32 paramId, PopupMenu&)>)` | A VST3 plugin asks the host for a parameter's context menu with `IComponentHandler3::createContextMenu(view, &paramId)`. Stock JUCE drops the `ParamID` and returns only the plugin's own items. With the hook the app appends "Add to card" ([`plugin-card-layout.md`](../control/plugin-card-layout.md#add-to-card-from-the-plugin-window)). |
+| `cmake/patches/juce-testmode-window-order.patch` | `static inline bool juce::ComponentPeer::ignoreWindowOrderForHitTests` (default false) | On macOS and Windows `ComponentPeer::contains()` asks the OS (the window server, `WindowFromPoint`) whether another window covers the point, so a window behind others never receives a mouse event. With the flag true that check is skipped. Only `--automation` sets it ([`test-mode.md`](test-mode.md#input)); stock behaviour otherwise. |
 
-The patch changes `juce_VST3PluginFormat.cpp`/`.h` and adds one protected accessor to `juce_VST3PluginFormatImpl.h` (in the headless module), does nothing for an instance without a hook, and
+The VST3 patch changes `juce_VST3PluginFormat.cpp`/`.h` and adds one protected accessor to `juce_VST3PluginFormatImpl.h` (in the headless module), does nothing for an instance without a hook, and
 never touches AU or any other format. Items the callback adds are re-added below the plugin's own items
 (after a separator) with a reserved id, carry their own `PopupMenu::Item::action`, and JUCE runs that action
 on the message thread after the menu closes, also in the async path used because the app builds with

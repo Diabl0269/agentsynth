@@ -7,19 +7,33 @@ namespace synth {
 
 namespace detail {
 
-// Tests-only settings-dir override, rationale in test-patterns.md's "on-disk path"
-// section. Nothing but Tests/TestMain.cpp ever sets this.
+// Settings-dir override, rationale in test-patterns.md's "on-disk path" section. Only Tests/TestMain.cpp and an
+// automation launch (--settings-dir, AutomationLaunch.h) ever set this.
 inline juce::String& settingsDirOverride() {
     static juce::String dir;
     return dir;
 }
 
+inline bool& automationUserFolders() {
+    static bool on = false;
+    return on;
+}
+
 } // namespace detail
 
-/** Test-only: redirects every later synth::userSettingsOptions()/userSettingsRootDirectory() call
- *  in this process under `dir`. Call once, before any ApplicationProperties is constructed
- *  (Tests/TestMain.cpp, before RUN_ALL_TESTS()). Empty string restores normal behaviour. */
-inline void setSettingsDirOverrideForTests(const juce::String& dir) { detail::settingsDirOverride() = dir; }
+/** Redirects every later synth::userSettingsOptions()/userSettingsRootDirectory() call in this process under `dir`.
+ *  Call once, before any ApplicationProperties is constructed (Tests/TestMain.cpp before RUN_ALL_TESTS(), or an
+ *  automation launch's applySettingsDirForLaunch). Empty string restores normal behaviour. */
+inline void setSettingsDirOverride(const juce::String& dir) { detail::settingsDirOverride() = dir; }
+/** True while a settings-dir override is in force (tests, or an automation launch). */
+inline bool hasSettingsDirOverride() { return detail::settingsDirOverride().isNotEmpty(); }
+/** True only in an automation launch (--automation): the per-user folders other than the settings file (default
+ *  projects folder, stretched-loop cache) then live under the settings directory too. Tests, which also run under a
+ *  settings-dir override, leave it false so those folders keep their normal places. */
+inline void setAutomationUserFolders(bool on) { detail::automationUserFolders() = on; }
+inline bool automationUserFolders() { return detail::automationUserFolders(); }
+/** The same, named for the tests that call it. */
+inline void setSettingsDirOverrideForTests(const juce::String& dir) { setSettingsDirOverride(dir); }
 
 /**
  * The ONE user settings file this product reads and writes, plus the keys more than one owner

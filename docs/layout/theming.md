@@ -269,6 +269,15 @@ Hand-drawn copies that predate this rule are being folded onto the shared ones.
 `textColourId` to `textPrimary` and `outlineColourId` to `border`; V4's stock dark surface would hide the themed text
 of a window's custom components (the confirm window's checkbox) on every light theme.
 
+**Windows are opaque and themed.** `synth::theme::windowBackgroundFor(theme)` is the one window background: `bg0` made
+opaque with `surface` laid over it, so a translucent surface (Neon's glass) never lets the desktop or JUCE's light grey
+show through. `PopupMotion::launchDialog` sets it on every dialog unless the caller chose a colour (JUCE's default
+light grey showed through the shape window's grow and shrink), `DetachedPanelWindow` on every detached panel, and
+content that fills its whole window (the shape window's `ShapeListEditor`) paints it and is opaque. Each one updates
+on a theme switch (`lookAndFeelChanged`). `ShapeWindowThemeTests` checks every built-in theme; with
+`AGENTSYNTH_WRITE_THEME_PNG` set it also writes one PNG per theme to `build-ci-local/theme-sweep/` under the working
+directory.
+
 **Colour fallbacks go through `themeOf`.** A control with no `AppLookAndFeel` above it (a headless
 test, a component not yet parented) reads its colours with `synth::theme::themeOf(component)`, which
 returns the active theme or a default-constructed `Theme`. Never write the colour as a literal in a

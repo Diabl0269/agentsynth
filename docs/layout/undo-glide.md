@@ -51,8 +51,12 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
 - **Automation lane points.** `AutomationLaneEditor` matches old to new by order when a restore keeps the point count and
   changes beats or values; `LanePointGlide` still animates a pure add or remove.
 - **Timeline clips.** `TimelineClipLaneArea` remembers each clip's start, length and row at every refresh; after a restore the
-  clips that differ glide their rectangle (keyed by clip id). A moved clip carries its notes; a trimmed clip leaves them where
-  they are, so the edge slides over them.
+  clips that differ glide their rectangle (keyed by clip id), and the notes inside glide with it. It also remembers each clip's
+  note ids and relative starts; `classifyClipNoteGlide` (`ClipEdgeSizing.cpp`, next to `clipEdgeResult`) compares the two syncs
+  and `glidedNoteX` draws each note: a moved clip or a Carry edge drag **shifts** the notes with the clip's left edge, a Stretch
+  drag **scales** each note from the old span to the new one through the gliding rectangle, and a Trim drag leaves the notes
+  where they are so the edge slides over them. `UndoGlideSurfaces` registers a clip-contents surface for every sizing mode and
+  both edges in which the notes change place, and a second test holds the rest still.
 
 Under Reduce Motion a restored point, dot, cursor or clip is already at its new place on the first frame and fades in
 there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(..., fadeWhenReduced = true)`, read with

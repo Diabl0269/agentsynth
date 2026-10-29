@@ -530,7 +530,11 @@ earliest look-and-feel call that receives it, before it is first shown
 - dialogs (`DialogWindow::LaunchOptions`) and hand-built `AlertWindow`s have no such call: launch a
   dialog with `PopupMotion::launchDialog(options)` instead of `options.launchAsync()`, and call
   `PopupMotion::attach(*window)` before `enterModalState` on a `new juce::AlertWindow`. Every
-  existing site already does.
+  existing site already does. A dialog whose motion needs the window itself (a grow-out-of-the-card
+  `Style` that points at the window, resize limits that must hold on frame 0) uses
+  `launchDialog(options, makeStyle)`: `makeStyle(dialog)` runs once the window exists and before the
+  first frame, so the window never shows unstyled. `launchDialog` also sets the themed window
+  background ([theming](theming.md#themed-widgets)), never JUCE's light grey.
 
 `attach` installs one self-deleting listener per window. It starts the slide the moment the window
 becomes visible (frame 0 is applied before the first VBlank, a watchdog timer finishes the move if

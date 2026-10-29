@@ -139,6 +139,11 @@ inline Frame frameAt(Phase phase, float eased, juce::Point<int> dir, bool reduce
     return f;
 }
 
+/** Gives `options` the themed opaque window background (theme of the component it centres around, else the default
+ *  look and feel's) unless the caller set its own: JUCE's default light grey shows when the content is translucent or
+ *  scaled. */
+void applyThemedBackground(juce::DialogWindow::LaunchOptions& options);
+
 } // namespace synth::ui::popup_motion
 
 namespace synth::ui {
@@ -202,12 +207,12 @@ public:
     static void stepMotionForTest(juce::Component& window, double ms);
 
     /** Open a DialogWindow from `options` and attach. Use instead of options.launchAsync(). */
-    static juce::DialogWindow* launchDialog(juce::DialogWindow::LaunchOptions& options) {
-        auto* dialog = options.launchAsync();
-        if (dialog != nullptr)
-            attach(*dialog);
-        return dialog;
-    }
+    static juce::DialogWindow* launchDialog(juce::DialogWindow::LaunchOptions& options);
+
+    /** launchDialog() whose motion is `makeStyle(dialog)`, called once the window exists (a Style often points at it).
+     */
+    static juce::DialogWindow* launchDialog(juce::DialogWindow::LaunchOptions& options,
+                                            const std::function<popup_motion::Style(juce::DialogWindow&)>& makeStyle);
 };
 
 /** Deletes every dialog window that is open and modal; call it before the objects the dialogs use are destroyed. */
