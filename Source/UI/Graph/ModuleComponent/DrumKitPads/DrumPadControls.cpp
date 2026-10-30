@@ -33,9 +33,17 @@ bool DrumPadControls::PadKnob::keyPressed(const juce::KeyPress& key) {
     return CardKnobSlider::keyPressed(key);
 }
 
+bool DrumPadControls::ShownSwitch::keyPressed(const juce::KeyPress& key) {
+    if (key.isKeyCode(juce::KeyPress::escapeKey) && !key.getModifiers().isAnyModifierKeyDown() && onEscape) {
+        onEscape();
+        return true;
+    }
+    return juce::ToggleButton::keyPressed(key);
+}
+
 int DrumPadControls::height() {
     return kHeaderHeight + kHeaderGap + synth::cardbody::kRowHeight + kRowGap + synth::cardbody::kLabelHeight +
-           synth::cardbody::kKnobHeight;
+           synth::cardbody::kKnobHeight + kShownGap + kShownHeight;
 }
 
 DrumPadControls::DrumPadControls(DrumKitModule& kit)
@@ -76,6 +84,17 @@ DrumPadControls::DrumPadControls(DrumKitModule& kit)
     addChildComponent(pitch_);
     pitchCaption_.setJustificationType(juce::Justification::centred);
     addChildComponent(pitchCaption_);
+    shown_.setButtonText("Shown");
+    shown_.setComponentID("drumPadShown");
+    shown_.onEscape = [this] {
+        if (onEscape)
+            onEscape();
+    };
+    shown_.onClick = [this] {
+        if (target_ >= 0 && onShownChanged)
+            onShownChanged(target_, shown_.getToggleState());
+    };
+    addAndMakeVisible(shown_);
     for (size_t f = 0; f < knobs_.size(); ++f) {
         auto& knob = knobs_[f];
         knob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -99,12 +118,26 @@ DrumPadControls::~DrumPadControls() { fade_.stop(); }
 // parameter listener makes it one undo step, like any card knob.
 void DrumPadControls::bind(int index) {
     bound_ = index;
+    if (pending_ < 0)
+        target_ = index;
     for (size_t f = 0; f < knobs_.size(); ++f) {
         attachments_[f].reset();
         if (auto* param = kit_.padParameter(index, (PadParam)f))
             attachments_[f] = std::make_unique<juce::SliderParameterAttachment>(*param, knobs_[f]);
     }
     refresh();
+}
+
+// The switch always speaks for the pad picked now, also while the rest of the panel is still fading to it.
+void DrumPadControls::refreshShownSwitch() {
+    if (target_ < 0)
+        return;
+    const auto& pad = kit_.pad(target_);
+    shown_.setToggleState(pad.shown, juce::dontSendNotification);
+    shown_.setTitle("Shown: " + pad.name);
+    shown_.setTooltip("Shown: " + pad.name +
+                      " is on the card, in the clip editor and in the drum machine. Off hides it; it still plays "
+                      "(H on the pads)");
 }
 
 void DrumPadControls::refresh() {
@@ -116,6 +149,7 @@ void DrumPadControls::refresh() {
     note_.setText("plays note " + synth::drums::noteName(pad.note) + " (" + juce::String(pad.note) + ")",
                   juce::dontSendNotification);
     dot_ = drumLaneForPitch(pad.sound >= 0 ? pad.sound : pad.note).colour;
+    refreshShownSwitch();
     for (size_t f = 0; f < knobs_.size(); ++f) {
         const juce::String name = juce::String(kFieldWords[f]) + ": " + pad.name;
         knobs_[f].setTitle(name);
@@ -153,6 +187,8 @@ void DrumPadControls::refreshSoundRow(const synth::drums::Pad& pad) {
 // Out in 80 ms, the knobs re-bind while the panel is clear, in over 160 ms. Under Reduce Motion the new pad fades in
 // over 80 ms; under Animations Off (or off screen) it lands at once.
 void DrumPadControls::showPad(int index, bool animate) {
+    target_ = index;
+    refreshShownSwitch();
     if (fade_.isRunning() && pending_ >= 0) {
         pending_ = index; // still fading out: the newest pick is what fades in
         return;
@@ -206,6 +242,8 @@ void DrumPadControls::resized() {
     row.removeFromRight(open_.isVisible() ? kRowGap : 0);
     sound_.setBounds(row);
     area.removeFromTop(kRowGap);
+    shown_.setBounds(area.removeFromBottom(kShownHeight).withWidth(96));
+    area.removeFromBottom(kShownGap);
     layoutColumns(area);
 }
 
@@ -236,9 +274,11 @@ void DrumPadControls::paint(juce::Graphics& g) {
     g.fillEllipse(0.0f, ((float)kHeaderHeight - kDot) * 0.5f, kDot, kDot);
 }
 
-// The note reads in the theme's muted text, so it follows a theme change.
+// The note reads in the theme's muted text, a step toward the primary text so it stays above 4.5:1 on a light card,
+// and follows a theme change.
 void DrumPadControls::lookAndFeelChanged() {
-    note_.setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.textMuted);
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    note_.setColour(juce::Label::textColourId, colors.textMuted.interpolatedWith(colors.textPrimary, 0.2f));
 }
 
 std::unique_ptr<juce::AccessibilityHandler> DrumPadControls::createAccessibilityHandler() {

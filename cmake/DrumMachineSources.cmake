@@ -25,6 +25,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/DrumMachine/DrumMachineGeometry.cpp
     Source/UI/DrumMachine/DrumMachineGroove.cpp
     Source/UI/DrumMachine/DrumMachineLanes.cpp
+    Source/UI/DrumMachine/DrumMachineKit.cpp
     Source/UI/DrumMachine/DrumMachineMarks.cpp
     Source/UI/DrumMachine/DrumMachineIdeas.cpp
     Source/UI/DrumMachine/DrumMachineEdit.cpp

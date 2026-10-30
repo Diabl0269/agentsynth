@@ -6,6 +6,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineLanesTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineRowLengthTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumIdeasTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineKitRowsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadShownTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumIdeasPanelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/ClipSwingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/DrumLaneModelTests.cpp
@@ -51,6 +53,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTopBarKeysTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineAddTrackPickerTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipKeyboardTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipKitRowsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipKeyboardNavTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneAreaTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneAuthoringTests.cpp

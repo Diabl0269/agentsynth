@@ -77,6 +77,7 @@ void TimelineClipLaneArea::setTimelineDoc(synth::TimelineDoc* doc) {
 // Re-derives the doc-backed truth via synth::ui::ClipSelectionModel::retainOnly. No timer anywhere
 // in this class drives it — every call site above is an explicit doc-mutation notification.
 void TimelineClipLaneArea::refreshFromDoc() {
+    refreshKitRows();
     std::vector<synth::ClipId> alive;
     if (doc_ != nullptr) {
         for (const auto& track : doc_->getTracks())
@@ -489,6 +490,7 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
         g.setColour(juce::Colours::white.withAlpha(0.55f));
         // During an edge drag the notes are the ones the drop will leave (the sizing rule), never the stored ones.
         const auto preview = resizePreviewFor(clip);
+        const auto kitRows = noteRowsFor(track, clip); // a Drum Kit track draws its shown pads, not the pitch scale
         for (const auto& note : preview ? preview->notes : clip.notes) {
             const double noteStartBeat = geometry.start + note.startBeat; // notes are clip-relative
             const double x0 = glidedNoteX(clip.id, viewState_.beatToX(noteStartBeat), restingRect);
@@ -498,7 +500,13 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
             if (nx1 <= nx0)
                 continue;
 
-            const float pitchFrac = 1.0f - (float)juce::jlimit(0, 127, note.pitch) / 127.0f;
+            float pitchFrac = 1.0f - (float)juce::jlimit(0, 127, note.pitch) / 127.0f;
+            if (!kitRows.pitches.empty()) {
+                const int row = kitRows.rowOf(note.pitch);
+                if (row < 0)
+                    continue; // a hidden pad's hit: no row, though it still plays
+                pitchFrac = ((float)row + 0.5f) / (float)kitRows.pitches.size();
+            }
             const float y = (float)rect.getY() + 2.0f + pitchFrac * (float)(rowHeight - 4);
             g.drawLine(nx0, y, nx1, y, 1.2f);
         }

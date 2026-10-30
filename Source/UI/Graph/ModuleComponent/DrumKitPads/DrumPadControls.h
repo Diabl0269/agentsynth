@@ -24,6 +24,8 @@ public:
     static constexpr int kHeaderGap = 2;
     static constexpr int kSoundLabelWidth = 48;
     static constexpr int kRowGap = 4;
+    static constexpr int kShownGap = 4;
+    static constexpr int kShownHeight = 22;
     static constexpr double kFadeOutMs = 80.0;
     static constexpr double kFadeInMs = 160.0;
     static constexpr double kReducedMs = 80.0;
@@ -58,6 +60,10 @@ public:
     /** Plays pitch stepped by `delta`, or typed. */
     std::function<void(int delta)> onPitchStep;
     std::function<void(const juce::String& text)> onPitchTyped;
+    /** The Shown switch of the bound pad. */
+    juce::ToggleButton& shownSwitch() noexcept { return shown_; }
+    /** The switch was flipped for pad `index` (the owner records the undo step and may ask first). */
+    std::function<void(int index, bool shown)> onShownChanged;
 
     /** Called when Escape is pressed on a knob; the owner moves focus back to the pad. */
     std::function<void()> onEscape;
@@ -74,9 +80,16 @@ private:
         bool keyPressed(const juce::KeyPress& key) override;
     };
 
+    class ShownSwitch : public juce::ToggleButton {
+    public:
+        std::function<void()> onEscape;
+        bool keyPressed(const juce::KeyPress& key) override;
+    };
+
     void bind(int index);
     void refreshSoundRow(const synth::drums::Pad& pad);
     void layoutColumns(juce::Rectangle<int> area);
+    void refreshShownSwitch();
 
     DrumKitModule& kit_;
     std::array<PadKnob, 4> knobs_;
@@ -89,8 +102,10 @@ private:
     TrackShowModuleButton open_;
     juce::Label pitchCaption_{"Plays pitch label", "Plays pitch"};
     CardStepper pitch_{"Plays pitch"};
+    ShownSwitch shown_;
     juce::Colour dot_;
     int bound_ = -1;
+    int target_ = -1; // the pad picked now; the panel may still be fading to it
     int pending_ = -1;
     juce::VBlankAnimatorUpdater updater_{this};
     AnimationDriver fade_;

@@ -1,7 +1,8 @@
 #pragma once
 
 // The Drum Kit card's pad grid: four pads a row, pad 1 top left, one Tab stop. A click plays a pad and picks it,
-// Shift+click and the arrow keys pick it without a sound, Space and Return play the picked pad. A right-click or
+// Shift+click and the arrow keys pick it without a sound, Space and Return play the picked pad, H switches the picked
+// pad's Shown off or on. A pad that is not shown leaves the grid and the pads after it move up. A right-click or
 // Shift+F10 opens the pad menu; a sound dragged from the Sounds view drops onto the pad under the pointer.
 // docs/modules/drum-kit.md#the-card.
 
@@ -14,6 +15,8 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <utility>
+#include <vector>
 
 namespace synth::ui {
 
@@ -32,6 +35,9 @@ public:
     static constexpr int kTallPadLimit = 16; // above this many pads they are short
     static constexpr double kFlashMs = 120.0;
     static constexpr double kRingSlideMs = 120.0;
+    static constexpr double kShrinkMs = 110.0; ///< a pad leaving shrinks (ease-in)
+    static constexpr double kSlideMs = 160.0;  ///< the others make room
+    static constexpr double kReducedMs = 80.0; ///< Reduce Motion: the pad fades in place
 
     /** The grid's height for `count` shown pads. */
     static int heightFor(int count);
@@ -40,8 +46,18 @@ public:
     explicit DrumPadGrid(DrumKitModule& kit);
     ~DrumPadGrid() override;
 
-    /** The picked pad, 0-based; always one of the shown pads. */
+    /** The picked pad, 0-based; one of the pads within the count. It stays picked after its Shown switch goes off,
+     *  so the switch can be turned back on from its controls. */
     int picked() const noexcept { return picked_; }
+    /** H on the grid: asks the owner to flip pad `index`'s Shown switch. */
+    std::function<void(int index)> onToggleShown;
+    /** How many pads the grid draws (the shown ones within the count). */
+    int visibleCount() const noexcept { return (int)order_.size(); }
+    bool isPadVisible(int index) const noexcept;
+    /** True while pads slide to make room for one that left or came back. */
+    bool isSliding() const noexcept { return sliding_; }
+    /** Test seam: the slide's driver, to step or finish it without VBlank frames. */
+    AnimationDriver& slideDriverForTest() noexcept { return slide_; }
     /** Picks `index` (clamped to the shown pads); `play` also plays it. */
     void pick(int index, bool play);
     /** Called after every pick with the pad and whether it played. */
@@ -58,7 +74,7 @@ public:
     /** Re-reads the pad count, names and kinds. */
     void refresh();
 
-    /** Local bounds of pad `index`. */
+    /** Local bounds of pad `index` (empty while it is not shown). */
     juce::Rectangle<int> padBounds(int index) const;
     /** The pad under `p` (local), or -1. */
     int padAt(juce::Point<int> p) const;
@@ -100,11 +116,24 @@ private:
     void setDropTarget(int index);
     bool isSoundDragLive() const;
     void paintDropOutlines(juce::Graphics& g) const;
+    int slotOf(int pad) const noexcept;
+    void layoutCells();
+    void startSlide(const std::array<juce::Rectangle<int>, synth::drums::kMaxPads>& before);
+    void stepSlide(float t);
+    void finishSlide();
+    bool pickKey(const juce::KeyPress& key);
 
     DrumKitModule& kit_;
     std::array<std::unique_ptr<Cell>, synth::drums::kMaxPads> cells_;
     int flashing_ = -1;
     int count_ = 0;
+    std::vector<int> order_; ///< the pads drawn, in order: the shown ones within the count
+    bool laidOut_ = false;
+    bool sliding_ = false;
+    int slideWidth_ = 0;
+    bool slideReduced_ = false;
+    std::array<std::pair<juce::Rectangle<float>, juce::Rectangle<float>>, synth::drums::kMaxPads> moves_;
+    AnimationDriver slide_;
     int picked_ = 0;
     int auditioned_ = -1;
     int dropTarget_ = -1;

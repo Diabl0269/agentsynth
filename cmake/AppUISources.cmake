@@ -188,6 +188,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneInternal.h
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneKitRows.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneMouse.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSelection.cpp

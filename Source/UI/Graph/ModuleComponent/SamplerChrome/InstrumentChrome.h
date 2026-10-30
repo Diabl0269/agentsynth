@@ -22,6 +22,9 @@ public:
         std::function<void()> openDrumMachine;      ///< Drum Kit: the "Drum machine" button was pressed.
         std::function<void()> relayout;             ///< The chrome's height changed: lay the card out again.
         std::function<void(juce::AudioProcessorGraph::NodeID)> showNode; ///< Drum Kit: show a module on the canvas.
+        /** Drum Kit: hiding the pad on `note` named `padName`; runs `proceed` now, or after a confirmation when its
+         *  drum has hits in a clip (empty: no question). */
+        std::function<void(int note, const juce::String& padName, std::function<void()> proceed)> confirmHidePad;
     };
 
     virtual ~InstrumentChrome() = default;

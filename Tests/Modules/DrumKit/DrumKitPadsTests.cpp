@@ -342,3 +342,32 @@ TEST(DrumKitPads, TheModelNeverSeesThePadParameters) {
     EXPECT_TRUE(schema.contains("kickDecay"));
     EXPECT_FALSE(schema.contains("pad1Level"));
 }
+
+// Regression test for FRO1304: Shown only decides what the card and the clip editors draw; a hidden pad keeps its
+// sound and its note, so its hits still play, and the switch alone changes no sample.
+TEST(DrumKitPads, AHiddenPadStillPlaysItsHits) {
+    auto shownKit = makeKit();
+    auto hiddenKit = makeKit();
+    ASSERT_TRUE(hiddenKit->setPadShown(6, false)); // the cymbal
+    EXPECT_FALSE(hiddenKit->padShown(6));
+    const auto expected = render(*shownKit, {{49}, {36, 1.0f, 4000}}, 0.5);
+    const auto actual = render(*hiddenKit, {{49}, {36, 1.0f, 4000}}, 0.5);
+    ASSERT_EQ(expected.size(), actual.size());
+    EXPECT_GT(rmsOf(actual, 0.0, 0.1), 1.0e-3f) << "the hidden cymbal sounds";
+    for (size_t i = 0; i < expected.size(); ++i)
+        ASSERT_EQ(expected[i], actual[i]) << "sample " << i;
+}
+
+TEST(DrumKitPads, ShownIsPerPadAndShowAllReachesEveryPad) {
+    DrumKitModule kit;
+    EXPECT_FALSE(kit.setPadShown(2, true)) << "already shown";
+    EXPECT_TRUE(kit.setPadShown(2, false));
+    EXPECT_TRUE(kit.setPadShown(12, false)); // beyond the 8 the card draws
+    EXPECT_EQ(kit.hiddenPadCount(), 1) << "only the pads within the count are counted";
+    EXPECT_EQ((int)kit.shownPads().size(), 7);
+    EXPECT_EQ(kit.shownPads()[2], 3) << "the pads after a hidden one keep their numbers";
+    EXPECT_FALSE(kit.getExtraState().isVoid()) << "a hidden pad is saved";
+    EXPECT_EQ(kit.showAllPads(), 2);
+    EXPECT_EQ(kit.hiddenPadCount(), 0);
+    EXPECT_TRUE(kit.getExtraState().isVoid()) << "all shown is an untouched kit again";
+}

@@ -3,6 +3,7 @@
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumKitPadsSection.h"
 #include "AppUndoManager.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"
 
 namespace synth::ui {
 
@@ -49,7 +50,7 @@ std::uint32_t linkedInstrumentPads(const DrumKitModule& kit) {
 } // namespace
 
 int DrumKitPadsSection::height(const DrumKitModule& kit) {
-    return synth::cardbody::kRowHeight + kGridGap + DrumPadGrid::heightFor(kit.padCount()) + kCaptionGap +
+    return synth::cardbody::kRowHeight + kGridGap + DrumPadGrid::heightFor((int)kit.shownPads().size()) + kCaptionGap +
            kCaptionHeight + kControlsGap + DrumPadControls::height() + kSectionGap;
 }
 
@@ -96,6 +97,16 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
     caption_.setMinimumHorizontalScale(1.0f);
     host_.card->addAndMakeVisible(caption_);
 
+    showAll_.setComponentID("drumPadsShowAll");
+    showAll_.setTitle("Show all hidden pads");
+    showAll_.setTooltip("Show every hidden pad again. Undo hides them again.");
+    showAll_.setWantsKeyboardFocus(true);
+    showAll_.setVisible(false);
+    showAll_.onClick = [this] { showAllPads(); };
+    host_.card->addChildComponent(showAll_);
+
+    grid_.onToggleShown = [this](int index) { setPadShown(index, !kit_.padShown(index)); };
+    controls_.onShownChanged = [this](int index, bool shown) { setPadShown(index, shown); };
     controls_.onEscape = [this] { grid_.grabKeyboardFocus(); };
     host_.card->addAndMakeVisible(controls_);
     wireSoundControls();
@@ -104,6 +115,8 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
     controls_.showPad(grid_.picked(), false);
 }
 
+DrumKitPadsSection::~DrumKitPadsSection() { *alive_ = false; }
+
 int DrumKitPadsSection::layout(int y, int x, int w, bool apply) {
     if (apply) {
         auto row = juce::Rectangle<int>(x, y, w, synth::cardbody::kRowHeight);
@@ -111,12 +124,14 @@ int DrumKitPadsSection::layout(int y, int x, int w, bool apply) {
         stepperLabel_.setBounds(row);
     }
     y += synth::cardbody::kRowHeight + kGridGap;
-    const int gridH = DrumPadGrid::heightFor(kit_.padCount());
+    const int gridH = DrumPadGrid::heightFor((int)kit_.shownPads().size());
     if (apply)
         grid_.setBounds(x, y, w, gridH);
     y += gridH + kCaptionGap;
-    if (apply)
-        caption_.setBounds(x, y, w, kCaptionHeight);
+    if (apply) {
+        captionRow_ = {x, y, w, kCaptionHeight};
+        placeCaption();
+    }
     y += kCaptionHeight + kControlsGap;
     if (apply)
         controls_.setBounds(x, y, w, DrumPadControls::height());
@@ -146,6 +161,43 @@ void DrumKitPadsSection::refreshStepper() {
     stepper_.setTitle("Pads, " + juce::String(count) + " of " + juce::String(kMaxPads) + " maximum");
 }
 
+// ---- Shown ----
+
+void DrumKitPadsSection::setPadShown(int index, bool shown) {
+    if (index < 0 || index >= kMaxPads || kit_.padShown(index) == shown)
+        return;
+    const auto apply = [this, index, shown, alive = alive_] {
+        if (!*alive || !synth::ui::setPadShownUndoably(host_.undo, host_.graph, kit_, index, shown))
+            return;
+        hint_.clear(); // the count of hidden pads, not "picked", is what the caption says now
+        refreshFromKit();
+        relayoutIfGridResized();
+    };
+    if (!shown && host_.confirmHidePad)
+        host_.confirmHidePad(kit_.pad(index).note, kit_.pad(index).name, apply);
+    else
+        apply();
+}
+
+void DrumKitPadsSection::showAllPads() {
+    if (synth::ui::showAllPadsUndoably(host_.undo, host_.graph, kit_) == 0)
+        return;
+    hint_.clear();
+    refreshFromKit();
+    relayoutIfGridResized();
+}
+
+// The card's height follows the rows the shown pads need.
+void DrumKitPadsSection::relayoutIfGridResized() {
+    if (grid_.getHeight() != DrumPadGrid::heightFor(grid_.visibleCount()) && host_.relayout)
+        host_.relayout();
+}
+
+juce::String DrumKitPadsSection::hiddenCaption() const {
+    const int hidden = kit_.hiddenPadCount();
+    return hidden > 0 ? juce::String(hidden) + " hidden" : juce::String();
+}
+
 // ---- Picks ----
 
 // A pick that did not sound says so for a moment on the caption line, so a quiet click never reads as broken.
@@ -170,6 +222,8 @@ void DrumKitPadsSection::refreshCaption() {
         text = drop;
     } else if (hint_.isNotEmpty()) {
         text = hint_;
+    } else if (kit_.hiddenPadCount() > 0) {
+        text = hiddenCaption() + juce::String::fromUTF8(" \xC2\xB7");
     } else if (const int hidden = hiddenPadsWithSettings(kit_); hidden > 0) {
         text = juce::String(hidden) + (hidden == 1 ? " hidden pad keeps its sound" : " hidden pads keep their sounds");
     } else {
@@ -177,6 +231,20 @@ void DrumKitPadsSection::refreshCaption() {
     }
     if (caption_.getText() != text)
         caption_.setText(text, juce::dontSendNotification);
+    placeCaption();
+}
+
+// "2 hidden · Show all": the link sits right after the count (and is away while a pick hint has the line).
+void DrumKitPadsSection::placeCaption() {
+    const bool link = hint_.isEmpty() && kit_.hiddenPadCount() > 0;
+    const float textWidth = juce::GlyphArrangement::getStringWidth(caption_.getFont(), caption_.getText());
+    constexpr int kLinkWidth = 56;
+    const int textW = link ? juce::jmin(captionRow_.getWidth() - kLinkWidth,
+                                        (int)std::ceil(textWidth) + caption_.getBorderSize().getLeftAndRight() + 2)
+                           : captionRow_.getWidth();
+    caption_.setBounds(captionRow_.withWidth(textW));
+    showAll_.setBounds(captionRow_.withTrimmedLeft(textW).withWidth(kLinkWidth));
+    showAll_.setVisible(link);
 }
 
 // ---- Following the kit ----
@@ -208,6 +276,8 @@ void DrumKitPadsSection::poll() {
         refreshFromKit();
         if (countChanged && host_.relayout)
             host_.relayout();
+        else
+            relayoutIfGridResized(); // a pad switched off or on elsewhere (undo, a load)
     }
 }
 

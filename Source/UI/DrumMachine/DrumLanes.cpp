@@ -3,6 +3,8 @@
 
 #include "DrumLanes.h"
 
+#include "Modules/DrumKit/DrumKitModule.h"
+
 #include <algorithm>
 #include <set>
 
@@ -51,11 +53,58 @@ DrumLane drumLaneForPitch(int pitch) {
     return {pitch, "Note " + juce::String(pitch), kUnknown};
 }
 
-std::vector<DrumLane> visibleDrumLanes(const synth::Clip* clip, bool showAll) {
+bool KitRows::operator==(const KitRows& other) const {
+    if (total != other.total || hiddenCount != other.hiddenCount || hidden != other.hidden ||
+        lanes.size() != other.lanes.size())
+        return false;
+    for (size_t i = 0; i < lanes.size(); ++i)
+        if (lanes[i].pitch != other.lanes[i].pitch || lanes[i].name != other.lanes[i].name)
+            return false;
+    return true;
+}
+
+KitRows kitRowsFor(const DrumKitModule& kit) {
+    KitRows rows;
+    rows.total = kit.padCount();
+    std::set<int> shownNotes;
+    std::set<int> laneNotes;
+    for (int i = 0; i < synth::drums::kMaxPads; ++i) {
+        const auto& pad = kit.pad(i);
+        if (pad.shown)
+            shownNotes.insert(pad.note);
+        else
+            rows.hidden.insert(pad.note);
+        if (i >= rows.total)
+            continue;
+        rows.hiddenCount += pad.shown ? 0 : 1;
+        if (pad.shown && laneNotes.insert(pad.note).second) {
+            DrumLane lane = drumLaneForPitch(pad.sound >= 0 ? pad.sound : pad.note);
+            lane.pitch = pad.note;
+            lane.name = pad.name;
+            rows.lanes.push_back(lane);
+        }
+    }
+    for (int note : shownNotes)
+        rows.hidden.erase(note);
+    return rows;
+}
+
+std::vector<DrumLane> visibleDrumLanes(const synth::Clip* clip, bool showAll, const KitRows* kit) {
     std::set<int> held;
     if (clip != nullptr)
         for (const auto& note : clip->notes)
             held.insert(note.pitch);
+
+    if (kit != nullptr) {
+        std::vector<DrumLane> lanes = kit->lanes;
+        std::set<int> listed;
+        for (const auto& lane : lanes)
+            listed.insert(lane.pitch);
+        for (int pitch : held)
+            if (listed.count(pitch) == 0 && kit->hidden.count(pitch) == 0)
+                lanes.push_back(drumLaneForPitch(pitch));
+        return lanes;
+    }
 
     // Canonical order, a subset of it shown: defaults, then extras, then pitches outside the table by number.
     std::vector<DrumLane> lanes = defaultDrumLanes();

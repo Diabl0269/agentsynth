@@ -249,7 +249,7 @@ struct LoopHost : AuditionRecordingHost {
     std::vector<Start> starts;
     std::vector<synth::TrackId> stops;
     double beat = std::nan("");
-    bool isDrumKitTrack(synth::TrackId t) const override { return t == drumTrack; }
+    bool drumKitRows(synth::TrackId t, synth::ui::KitRows*) const override { return t == drumTrack; }
     bool startClipPreview(synth::TrackId t, double a, double b) override {
         starts.push_back({t, a, b});
         return true;

@@ -101,6 +101,7 @@ The group tabs and the Recorded switches are gone from the card (layout revision
   - The knobs re-bind to the pad's own parameters, so a drag is one undo step like any card knob.
   - Switching pads cross-fades the panel: out over 80 ms, in over 160 ms. Under Reduce Motion it is an 80 ms fade in;
     with Animations Off it is instant.
+- **Shown.** Each pad can be hidden: see [Hiding a pad](#hiding-a-pad).
 - **Undo.** A count change is one undo step, and the card resizes to match. So is every Sound choice, a reset, a
   pitch change and a drop.
 - **Accessibility.**
@@ -114,14 +115,15 @@ The group tabs and the Recorded switches are gone from the card (layout revision
     Pluck 1 on the canvas". Plays pitch is a stepper like Pads.
   - Shift+F10 (or the context-menu key) on the grid opens the picked pad's menu.
 - **Test mode.** The grid (`drumPads`) reports `padCount`, `pickedPad`, `lastPlayedPad` (1-based, 0 for none),
-  `pickedName`, `pickedKind`, `pickedSound`, `soundOutline` (a sound drag is over the card) and `dropTargetPad`.
+  `pickedName`, `pickedKind`, `pickedSound`, `visiblePads` (the shown ones), `soundOutline` (a sound drag is over the card) and `dropTargetPad`.
   The Sound row is `drumPadSound`, Open is `drumPadOpenInstrument`, Plays pitch is `drumPadPitch`.
-  Scenarios: `Tools/ui-verify/scenarios/drum-kit-pads.yaml`, `Tools/ui-verify/scenarios/drum-kit-pad-sound.yaml`.
+  Scenarios: `Tools/ui-verify/scenarios/drum-kit-pads.yaml`, `Tools/ui-verify/scenarios/drum-kit-pad-sound.yaml`, `drum-kit-pad-shown.yaml`.
 
 ## A pad's sound
 
 The Sound row's button opens the **Sound menu** (`DrumPadSoundMenu`). Right-click on a pad, or Shift+F10 on the grid,
-opens the **pad menu**: Play, Replace from file..., Reset to kit sound, then the same groups inline. The current choice
+opens the **pad menu**: Play, Replace from file..., Reset to kit sound, Hide pad (H; Show pad when the pad is hidden),
+Show all pads (enabled while a pad is hidden), then the same groups inline. The current choice
 has a tick.
 
 - **Audio file**: Choose a file..., and Recent files (pad files chosen this session plus the files this kit's pads
@@ -166,4 +168,23 @@ insert gap on the canvas, so the card stays put while the pointer travels to the
 Not built yet:
 
 - The panel knobs are not MIDI-learnable: the learnable registry binds one parameter per control and has no remove.
-- The Shown switch.
+
+## Hiding a pad
+
+- Each pad has a **Shown** switch under the picked pad's knobs ("Shown: Cymbal"), and **H** flips it for the picked
+  pad while the grid has focus (Cmd/Ctrl/Alt+H pass on to the app).
+- A hidden pad leaves the card grid and the pads after it move up. The pad shrinks over 110 ms and the others slide
+  over 160 ms; Reduce Motion is an 80 ms fade and Animations Off is instant. The card height follows the rows.
+- A hidden pad stays picked if it was, so the switch can bring it back. Arrow keys, Home and End skip hidden pads.
+  A pad's name for a screen reader counts the shown pads ("Cowbell pad, kit sound, 7 of 7").
+- The caption line reads "N hidden ·" followed by a **Show all** link (Tab-reachable, focus ring, named "Show all
+  hidden pads"). Show all switches on every pad, also those beyond the count, as one undo step. A pick hint
+  replaces the link for its two seconds.
+- **Hiding never mutes.** A hidden pad keeps its sound and note, so its hits still play. Hiding only decides what the
+  card, and the [drum machine](../timeline/drum-machine.md#a-drum-kits-pads-as-rows), draw.
+- A hidden pad's hits are not drawn in the timeline clip's note preview either, and the other rows close up.
+- Hiding a pad whose drum has hits in a clip of a track playing the kit asks first: "Cowbell has 1 hit; hide it
+  anyway?", with a "Don't ask again" box (user setting `drumKitAskBeforeHidingPad`). Showing never asks.
+- The pad menu (right-click, Shift+F10) has the same two actions: Hide pad or Show pad, and Show all pads.
+- Each switch, and Show all, is one undo step. `shown` is saved per pad; a kit with every pad shown writes nothing
+  new, so older projects load as before.

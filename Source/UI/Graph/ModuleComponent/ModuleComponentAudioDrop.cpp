@@ -19,10 +19,16 @@ void ModuleComponent::createSamplerControls() {
             if (cardBody_ != nullptr)
                 cardBody_->refreshConditions();
         };
-        host.drumMachineAvailable = [this] { return owner.drumKitHasTrack && owner.drumKitHasTrack(nodeId); };
+        host.drumMachineAvailable = [this] { return owner.drumKit.hasTrack && owner.drumKit.hasTrack(nodeId); };
         host.openDrumMachine = [this] {
-            if (owner.onOpenDrumMachineRequested)
-                owner.onOpenDrumMachineRequested(nodeId);
+            if (owner.drumKit.openDrumMachine)
+                owner.drumKit.openDrumMachine(nodeId);
+        };
+        host.confirmHidePad = [this](int note, const juce::String& padName, std::function<void()> proceed) {
+            if (owner.drumKit.confirmHidePad)
+                owner.drumKit.confirmHidePad(nodeId, note, padName, std::move(proceed));
+            else
+                proceed();
         };
         host.relayout = [this] {
             updateLayout();

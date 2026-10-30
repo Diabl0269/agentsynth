@@ -229,6 +229,34 @@ void DrumKitModule::setPadCount(int count) {
     publishPads();
 }
 
+std::vector<int> DrumKitModule::shownPads() const {
+    std::vector<int> shown;
+    for (int i = 0; i < pads_.count; ++i)
+        if (pads_.pads[(size_t)i].shown)
+            shown.push_back(i);
+    return shown;
+}
+
+int DrumKitModule::hiddenPadCount() const { return pads_.count - (int)shownPads().size(); }
+
+// Shown is card and editor chrome only: a hidden pad keeps its sound and its note, so its hits still play.
+bool DrumKitModule::setPadShown(int index, bool shown) {
+    if (index < 0 || index >= kMaxPads || pads_.pads[(size_t)index].shown == shown)
+        return false;
+    pads_.pads[(size_t)index].shown = shown;
+    return true;
+}
+
+int DrumKitModule::showAllPads() {
+    int changed = 0;
+    for (auto& p : pads_.pads)
+        if (!p.shown) {
+            p.shown = true;
+            ++changed;
+        }
+    return changed;
+}
+
 bool DrumKitModule::setPad(int index, const synth::drums::Pad& pad) {
     if (index < 0 || index >= kMaxPads)
         return false;

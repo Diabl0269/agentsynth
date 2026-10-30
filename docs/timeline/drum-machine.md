@@ -15,6 +15,27 @@ opens the roll. It edits the same notes the roll shows, so a clip can be viewed 
 - Cells are rounded squares with every other beat group (the cells of beats 2 and 4 in 4/4) shaded with text-primary at 3%, as the step sequencer shades its groups. A hit fills the cell to its velocity; an accent adds
   a white tick on top. While the transport plays the playing column is tinted and a hit flashes as it plays. A hit that carries per-hit settings shows [marks](#grid-marks).
 
+## A Drum Kit's pads as rows
+
+When the clip's track plays a Drum Kit, the kit's pads decide the rows, not the General MIDI table:
+
+- One row per **shown** pad within the pad count, in pad order, named and coloured by the pad. A pad the person hid
+  with its Shown switch (see [Drum Kit pads](../modules/drum-kit.md#hiding-a-pad)) has no row, though its hits stay in the
+  clip and still play. A note on a pad that is hidden and has no shown twin is not drawn either; a note no pad owns still
+  gets a "Note N" row.
+- The "Show all drums" button becomes **Show all**: enabled while a pad is hidden, titled with the count ("Show all,
+  6 of 8 drums · 2 hidden"), and it switches every pad on as one undo step.
+- The rows follow the kit while the editor is open (the timeline's 15 Hz tick re-reads them), so hiding a pad on the
+  card removes its row at once, and undo brings it back.
+- If the row the lanes under the grid edit (the "for Cowbell" row) is the one that was hidden, the pick moves to the first
+  row left.
+
+- The **timeline clip** follows the same rows: its note preview spreads the shown pads evenly down the clip, a hidden
+  pad's hits are not drawn, and the rows below close up. A clip shows only its name (no caption line), so the count of
+  hidden drums is not repeated there.
+
+A clip on a track with no Drum Kit keeps the General MIDI rows above.
+
 ## Opening it
 
 Besides double-clicking a clip, a "Drum machine" button opens it from the Drum Kit card on the canvas and from the
