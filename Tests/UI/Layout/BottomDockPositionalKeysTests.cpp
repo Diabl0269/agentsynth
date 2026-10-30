@@ -2,6 +2,7 @@
 // defaults, a reorder re-keying the tabs (and the hint and tooltip texts with it), the main window being raised for a
 // target that is not detached, and the keys working from inside a detached panel's window
 // (docs/control/shortcuts.md#switching-tabs).
+#include "../../TestWait.h"
 #include "BottomDockMainAreaFixture.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
@@ -157,12 +158,12 @@ TEST_F(BottomDockPositionalKeysTest, TheKeysReachTheActionsFromInsideADetachedPa
     const int raised = mc_->getMainWindowRaiseCountForTest();
 
     EXPECT_TRUE(window->keyPressed(cmd('3'))); // the real key path through the window's keyPressed
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return (dock().getActiveTab()) == (Tab::MidiRemote); });
     EXPECT_EQ(dock().getActiveTab(), Tab::MidiRemote);
     EXPECT_EQ(mc_->getMainWindowRaiseCountForTest(), raised + 1) << "the app window comes forward over the window";
 
     EXPECT_TRUE(window->keyPressed(cmd('0')));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return (mc_->getMainWindowRaiseCountForTest()) == (raised + 2); });
     EXPECT_EQ(mc_->getMainWindowRaiseCountForTest(), raised + 2);
     EXPECT_TRUE(dock().getMixerHost().isDetached());
     dock().getMixerHost().setDetached(false);

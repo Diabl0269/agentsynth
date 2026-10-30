@@ -1,6 +1,7 @@
 // Concern: grid (snap) commands and zoom commands routed by resolveEditSurface(), the
 // inactive-while-hidden gate, and the Preferences natural-scrolling/scroll-to-zoom toggles
 // reaching both the timeline and the roll live.
+#include "../../TestWait.h"
 #include "FocusArbitrationTestFixture.h"
 
 // ============================================================================
@@ -207,7 +208,7 @@ TEST_F(FocusArbitrationTest, NaturalScrollingPreferenceReachesTheTimelineAndTheR
     prefs.setNaturalScrollingEnabled(false);
     // ChangeBroadcaster posts its notification, so the loop has to turn once — the same idiom the
     // triggerClick() tests above use.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getTimelinePanel().isScrollInverted(); });
     EXPECT_TRUE(mc.getTimelinePanel().isScrollInverted());
     EXPECT_TRUE(mc.getTimelinePanel().getPianoRoll().isScrollInverted());
 
@@ -244,7 +245,7 @@ TEST_F(FocusArbitrationTest, ZoomScrollPreferenceReachesTheTimelineAndTheRoll) {
     EXPECT_TRUE(prefs.isZoomScrollUpZoomsInEnabled()) << "default ON";
 
     prefs.setZoomScrollUpZoomsInEnabled(false);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getTimelinePanel().isZoomScrollInverted(); });
     EXPECT_TRUE(mc.getTimelinePanel().isZoomScrollInverted());
     EXPECT_TRUE(mc.getTimelinePanel().getPianoRoll().isZoomScrollInverted());
     // The two wheel preferences are independent: inverting the zoom must not touch plain scrolling.

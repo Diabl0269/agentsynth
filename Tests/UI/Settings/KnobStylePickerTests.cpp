@@ -2,6 +2,7 @@
 // mouseDown/mouseUp entry points of the style buttons, and the owner persists what onChanged hands it,
 // the way AppearanceSettingsTab does.
 
+#include "../../TestWait.h"
 #include "UI/Settings/KnobStylePicker.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
@@ -88,7 +89,7 @@ TEST(KnobStylePickerTest, ReturnPicksTheFocusedPreview) {
     PickerRig rig;
     juce::Component& button = rig.picker.getStyleButtonForTest((int)KnobStyle::Analog);
     EXPECT_TRUE(button.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // triggerClick() posts the click
+    synth::test::waitUntil([&] { return (rig.props->getValue(knobStyleKey())) == ("analog"); });
     EXPECT_EQ(rig.props->getValue(knobStyleKey()), "analog");
 }
 
@@ -98,7 +99,7 @@ TEST(KnobStylePickerTest, SpacePicksTheFocusedPreview) {
     PickerRig rig;
     juce::Component& button = rig.picker.getFaderStyleButtonForTest((int)KnobStyle::Ring);
     EXPECT_TRUE(button.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // triggerClick() posts the click
+    synth::test::waitUntil([&] { return (rig.props->getValue(faderStyleKey())) == ("ring"); });
     EXPECT_EQ(rig.props->getValue(faderStyleKey()), "ring");
 }
 

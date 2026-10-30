@@ -8,6 +8,7 @@
 // History/upsell/rating-sync tests live in AIChatComponentHistoryTests.cpp; Arrange-mode tests
 // live in AIChatComponentArrangeTests.cpp.
 
+#include "../../../TestWait.h"
 #include "AIChatComponentTestFixture.h"
 
 TEST_F(AIChatComponentTest, InitializationAndResizing) {
@@ -528,7 +529,10 @@ TEST_F(AIChatComponentTest, UpgradeButtonDoesNotSurviveNewChat) {
 
     inputField->setText("hello");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] {
+        return (findDescendantWithText<juce::TextButton>(findMessageList(chatComponent), "Upgrade to Pro")) !=
+               (nullptr);
+    });
 
     ASSERT_NE(findDescendantWithText<juce::TextButton>(findMessageList(chatComponent), "Upgrade to Pro"), nullptr)
         << "setup failed: the upgrade button never appeared";
@@ -745,7 +749,7 @@ TEST_F(AIChatComponentTest, ThinkingStatusShowsLiveElapsedTime) {
     // Let the 500 ms waiting-status timer tick at least once. Deliberately generous (3x the
     // interval, not a 200 ms sliver above it): a loaded CI runner can easily miss the first tick
     // inside a tight margin, and this only needs ONE tick to have landed, not a specific one.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(1500);
+    synth::test::waitUntil([&] { return chatComponent.isWaiting(); });
 
     ASSERT_TRUE(chatComponent.isWaiting());
     const auto updated = chatComponent.getWaitingStatusText();

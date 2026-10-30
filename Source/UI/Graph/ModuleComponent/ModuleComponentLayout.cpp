@@ -167,6 +167,10 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
     y = layoutBodyControls(y, width, apply);
 
+    // --- Drum Kit pads: the count, the pad grid and the picked pad's controls, under the master Level ---
+    if (instrumentChrome_ != nullptr)
+        y = instrumentChrome_->layoutBelowBody(y, contentX, contentW, apply);
+
     // LFO custom-waveform section: the Grid/Shapes/Tools toolbar, then the curve editor
     // itself while shape == Custom -- see ModuleComponentLfoCard.cpp. A no-op for every other
     // module (and for an LFO not currently on the Custom shape).

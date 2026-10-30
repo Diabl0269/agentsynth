@@ -4,6 +4,7 @@
 #include "ProjectBundle.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
+#include "../../TestWait.h"
 #include <set>
 #include <vector>
 
@@ -63,7 +64,7 @@ TEST_F(MainComponentTest, OpeningAProjectStartsAFreshUndoHistory) {
     mc.getGraphEditor().addModuleAtCanvasPosition("Oscillator", {1440, 1040}, {});
     ASSERT_TRUE(mc.saveProjectForTest(bundleDir));
     mc.simulateAddMidiTrackClick(); // an edit after the save: history is non-empty before the open
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return mc.getUndoManager().canUndo(); });
     ASSERT_TRUE(mc.getUndoManager().canUndo());
 
     ASSERT_TRUE(mc.openProjectForTest(bundleDir));

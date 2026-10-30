@@ -3,6 +3,7 @@
 // Windows/Linux table (ShortcutManager::setDefaultsPlatform), so both platforms are checked from any host.
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AudioEngine/AudioEngine.h"
 #include "UI/Chrome/ShortcutHint/ShortcutHintOverlay.h"
@@ -92,7 +93,7 @@ TEST_P(TransportCtrlChordsTest, CtrlRTogglesRecordFromAFocusedTimelineControl) {
     ASSERT_FALSE(bar.isRecordingForTest());
 
     EXPECT_TRUE(dispatchFrom(bar.getMetronomeButton(), peerKey('r')));
-    pump();
+    synth::test::waitUntil([&] { return bar.isRecordingForTest(); });
     EXPECT_TRUE(bar.isRecordingForTest());
 
     EXPECT_TRUE(dispatchFrom(bar.getMetronomeButton(), peerKey('r')));
@@ -115,7 +116,7 @@ TEST_P(TransportCtrlChordsTest, CtrlMAndCtrlRReachTheTransportFromTheCanvasTheTi
         EXPECT_EQ(bar.getMetronomeButton().getToggleState(), metronomeBefore);
 
         EXPECT_TRUE(dispatchFrom(*surface, peerKey('r')));
-        pump();
+        synth::test::waitUntil([&] { return bar.isRecordingForTest(); });
         EXPECT_TRUE(bar.isRecordingForTest());
         EXPECT_TRUE(dispatchFrom(*surface, peerKey('r')));
         pump();

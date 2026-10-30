@@ -5,6 +5,7 @@
 // (the focused control first, then up its parents) to the box or to the popup; the popup tracks its own keyboard
 // cursor for exactly this reason.
 
+#include "../../../TestWait.h"
 #include "Modules/Envelope/EnvelopeTempoSync.h"
 #include "Modules/LFOModule.h"
 #include "Modules/LfoRateDivisions.h"
@@ -373,7 +374,7 @@ TEST(NoteLengthBox, AParameterChangeFromElsewhereMovesTheBox) {
     box.setChoices(param->choices);
     juce::ComboBoxParameterAttachment attachment(*param, box);
     *param = synth::lfoRateDivisions().indexOf("1/8D");
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (box.getCurrentName()) == ("1/8D"); });
     EXPECT_EQ(box.getCurrentName(), "1/8D");
 }
 

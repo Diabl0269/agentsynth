@@ -1,6 +1,7 @@
 // SplitButtonTests.cpp -- the shared split button (mod dot "Add source", hosted card "Add controls"): two halves
 // with configurable icons, names and tooltips; lit state; and the Left/Right hop between them. Its two real uses
 // are covered where they live (ModDotInlineAddTests.cpp, PluginKnobPickerTests.cpp).
+#include "../../TestWait.h"
 #include "UI/Layout/SplitButton.h"
 #include <gtest/gtest.h>
 
@@ -66,7 +67,7 @@ TEST(SplitButtonTest, ReturnAndSpaceClickAHalfAndArrowsHopBetweenTheHalves) {
 
     EXPECT_TRUE(pressKey(split.leftHalf(), juce::KeyPress(juce::KeyPress::returnKey)));
     EXPECT_TRUE(pressKey(split.rightHalf(), juce::KeyPress(juce::KeyPress::spaceKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::waitUntil([&] { return (left) == (1); });
     EXPECT_EQ(left, 1);
     EXPECT_EQ(right, 1);
 

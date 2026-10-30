@@ -1,5 +1,6 @@
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "ShortcutManager/AppCommands.h"
 #include "Telemetry/TelemetryIdStore.h"
 #include "Telemetry/TelemetryRecorder.h"
@@ -94,7 +95,7 @@ TEST_F(WelcomeUsageStatsTest, ShareWritesBothKeysCreatesTheIdAndTurnsTheRunningS
     EXPECT_TRUE(stored.share);
     EXPECT_TRUE(stored.asked);
     EXPECT_TRUE(synth::telemetry::TelemetryIdStore().load().isNotEmpty());
-    pump();
+    synth::test::waitUntil([&] { return service->getRecorder().isEnabled(); });
     EXPECT_TRUE(service->getRecorder().isEnabled()) << "the settings change reached TelemetryService";
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isUsageStatsPromptShown());
 }
@@ -151,7 +152,7 @@ TEST_F(WelcomeUsageStatsTest, WhatWeCollectOpensThePrivacySectionThroughTheUrlSe
     std::vector<juce::String> opened;
     mc.setUrlOpenerForTest([&opened](const juce::URL& u) { opened.push_back(u.toString(true)); });
     mc.getWelcomeScreenForTest()->getUsageStatsPromptForTest().getLearnMoreButtonForTest().triggerClick();
-    pump();
+    synth::test::waitUntil([&] { return (opened.size()) == (1u); });
     ASSERT_EQ(opened.size(), 1u);
     EXPECT_EQ(opened[0], "https://agentsynth.app/privacy#telemetry");
     EXPECT_TRUE(mc.getWelcomeScreenForTest()->isUsageStatsPromptShown()) << "reading about it is not an answer";
@@ -164,7 +165,7 @@ TEST_F(WelcomeUsageStatsTest, TheOtherStartButtonsStayUsableWhileTheCardIsUp) {
     int fired = 0;
     ws.onNewProject = [&fired] { ++fired; };
     ws.getNewProjectButtonForTest().triggerClick();
-    pump();
+    synth::test::waitUntil([&] { return (fired) == (1); });
     EXPECT_EQ(fired, 1);
     EXPECT_TRUE(ws.isUsageStatsPromptShown());
 }
@@ -204,7 +205,7 @@ TEST_F(WelcomeUsageStatsTest, HeadlessAndReducedMotionLayOutAtOnceAndNeverReopen
     const int open = ws.getCardHeightForTest();
 
     ws.getUsageStatsPromptForTest().getShareButtonForTest().triggerClick();
-    pump();
+    synth::test::waitUntil([&] { return (choices.size()) == (1u); });
 
     ASSERT_EQ(choices.size(), 1u);
     EXPECT_TRUE(choices[0]);

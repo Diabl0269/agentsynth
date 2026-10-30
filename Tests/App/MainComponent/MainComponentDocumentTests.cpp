@@ -1,5 +1,6 @@
 // Concern: patch-name/dirty-state tracking and the save/load/export round trip (project bundle,
 // factory presets, legacy .json patches).
+#include "../../TestWait.h"
 #include "../../UI/Graph/OutputDockTestHelpers.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
@@ -36,7 +37,7 @@ TEST_F(MainComponentTest, DirtyFlagTracksARealUndoStepThenClearsOnSave) {
 
     mc.simulateAddMidiTrackClick();
     ASSERT_TRUE(mc.getUndoManager().canUndo());
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.isProjectDirty(); });
     EXPECT_TRUE(mc.isProjectDirty());
 
     mc.saveProjectForTest(tempRoot.getChildFile("DirtyFlag.agsproj"));

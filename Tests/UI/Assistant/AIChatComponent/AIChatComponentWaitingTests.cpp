@@ -1,5 +1,6 @@
 // AIChatComponentWaitingTests.cpp -- onWaitingChanged tells the host when a request goes out (true)
 // and when it ends by reply or cancel (false), so the AI toolbar button can show the assistant working.
+#include "../../../TestWait.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AIChatComponentTestFixture.h"
 
@@ -46,7 +47,7 @@ TEST(AIChatWaitingCallbackTest, FiresTrueOnSendAndFalseOnReply) {
     response.success = true;
     response.content = "Hi there.";
     provider->resolvePrompt(response);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return (seen.size()) == (2u); });
     ASSERT_EQ(seen.size(), 2u);
     EXPECT_FALSE(seen[1]);
 }

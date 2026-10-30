@@ -10,6 +10,7 @@
 //      so each surface's existing menu test seam captures the built menu instead.
 //   3. Rebinding the action moves the behaviour.
 //   4. The clip lane and the detached panel window.
+#include "../../TestWait.h"
 #include "../Mixer/MixerZonesTestRig.h"
 #include "../Timeline/TimelineClipLane/TimelineClipLaneTestFixture.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
@@ -272,7 +273,7 @@ TEST(KeyboardContextMenuRebind, RebindingMovesTheBehaviourToTheNewKey) {
     EXPECT_EQ(menus, 0);
 
     EXPECT_TRUE(r.mc.keyPressed(shiftF9));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (menus) == (1); });
     EXPECT_EQ(menus, 1);
 }
 

@@ -11,6 +11,7 @@
 //   * showWhatsNewDialog()/AppCommands::whatsNew are never invoked from a test — they open a real
 //     modal juce::AlertWindow.
 
+#include "../../TestWait.h"
 #include "../Layout/FadeVisibilityTestGuard.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
@@ -239,7 +240,7 @@ TEST_F(WelcomeScreenTest, NewProjectButton_ClearsCanvasAndHidesWelcomeScreen) {
     ASSERT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
 
     mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (mc.getCurrentPatchName()) == ("Untitled"); });
 
     EXPECT_EQ(mc.getCurrentPatchName(), "Untitled");
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
@@ -253,7 +254,7 @@ TEST_F(WelcomeScreenTest, OpenDefaultButton_LoadsFactoryPresetZeroAndHidesWelcom
     ASSERT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
 
     mc.getWelcomeScreenForTest()->getOpenDefaultButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (mc.getCurrentPatchName()) == ("Default"); });
 
     EXPECT_EQ(mc.getCurrentPatchName(), "Default"); // PresetManager::getPresetList()[0].name
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
@@ -294,7 +295,7 @@ TEST_F(WelcomeScreenTest, NewProjectButton_SetsTheMixerPanLawToCompensated) {
     mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
 
     mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Compensated); });
 
     EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
 }
@@ -306,7 +307,7 @@ TEST_F(WelcomeScreenTest, OpenDefaultButton_SetsTheMixerPanLawToCompensated) {
     mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
 
     mc.getWelcomeScreenForTest()->getOpenDefaultButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Compensated); });
 
     EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
 }
@@ -321,7 +322,7 @@ TEST_F(WelcomeScreenTest, LoadMenuFactoryPresetBranch_LeavesAnAlreadyOpenProject
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
     mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Compensated); });
     ASSERT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
 
     // The user then deliberately switches this already-open project to Balance...
@@ -330,7 +331,7 @@ TEST_F(WelcomeScreenTest, LoadMenuFactoryPresetBranch_LeavesAnAlreadyOpenProject
     // ...and loads a factory preset the same way the Load menu's "result > 0" branch does
     // (MainComponentSetupToolbar.cpp), i.e. isNewDocument left at its default false.
     mc.loadPresetGuardedForTest(0);
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Balance); });
 
     EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Balance);
 }
@@ -348,7 +349,7 @@ TEST_F(WelcomeScreenTest, OpenExistingButton_InvokesTheSameGuardedPathAsOpenProj
     makeDirty(mc);
 
     mc.getWelcomeScreenForTest()->getOpenExistingButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (prompt.calls) == (1); });
 
     EXPECT_EQ(prompt.calls, 1);
     EXPECT_EQ(prompt.lastLabel, "Opening a project") << "the same label openProjectFromFile() uses";
@@ -392,7 +393,7 @@ TEST_F(WelcomeScreenTest, ContributeButton_FiresCallbackExactlyOnce) {
     EXPECT_TRUE(button.isVisible());
     EXPECT_TRUE(button.getTooltip().isNotEmpty());
     button.triggerClick();
-    pumpMessageLoop(); // triggerClick() dispatches asynchronously
+    synth::test::waitUntil([&] { return (fired) == (1); });
     EXPECT_EQ(fired, 1);
 }
 
@@ -406,7 +407,7 @@ TEST_F(WelcomeScreenTest, ContributeButton_OpensContributePageAndKeepsOverlayVis
     ASSERT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
 
     mc.getWelcomeScreenForTest()->getContributeButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (opened.size()) == (1u); });
 
     ASSERT_EQ(opened.size(), 1u);
     EXPECT_EQ(opened[0], juce::String(synth::branding::kContributeUrl));
@@ -485,7 +486,7 @@ TEST_F(WelcomeScreenTest, DirtyDocumentIsGuardedBeforeWelcomeScreenReplacesIt) {
     ASSERT_TRUE(mc.isProjectDirty());
 
     mc.getWelcomeScreenForTest()->getOpenDefaultButtonForTest().triggerClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (prompt.calls) == (1); });
 
     EXPECT_EQ(prompt.calls, 1);
     EXPECT_EQ(prompt.lastLabel, "Loading a preset");

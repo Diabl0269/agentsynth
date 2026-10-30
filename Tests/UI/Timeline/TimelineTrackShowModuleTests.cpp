@@ -5,6 +5,7 @@
 // (select, centre, open or close the window) is MainComponentShowTrackModuleTests.cpp's concern; here the host is a
 // stub that records the call.
 
+#include "../../TestWait.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -139,7 +140,7 @@ TEST(TimelineTrackShowModuleTest, TheButtonShowsTheModuleOnClickAndOnReturnOrSpa
     auto& button = header->getShowModuleButton();
 
     button.triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // triggerClick posts its click
+    synth::test::waitUntil([&] { return !f.host.shown.empty(); });
     EXPECT_TRUE(button.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
     EXPECT_TRUE(button.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     ASSERT_EQ(f.host.shown.size(), 3u);

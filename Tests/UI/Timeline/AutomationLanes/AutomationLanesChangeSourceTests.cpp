@@ -5,6 +5,7 @@
 // (reading the channel the source catalogue gives it), keeps its drawn amount curve (re-keyed to the new routing's
 // Attenuverter) and the whole change is ONE graph + timeline undo step.
 
+#include "../../../TestWait.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AutomationLanesAmountFixture.h"
 #include "AutomationLanesMenuFixture.h"
@@ -381,7 +382,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceWithNoAmountLaneStillMovesTheRo
     ASSERT_EQ(s.amountLane(), nullptr);
 
     ASSERT_TRUE(s.mc.changeModulatorSourceForTest(s.row()->getInfo(), otherUuid));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (s.chainsInto(otherUuid, raw).size()) == (1u); });
     EXPECT_EQ(s.chainsInto(otherUuid, raw).size(), 1u);
     EXPECT_TRUE(s.chainsInto(oldLfo, raw).empty());
 
@@ -587,7 +588,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowI
     first->setForceSwapMotionForTest(true);
 
     ASSERT_TRUE(s.mc.changeModulatorSourceForTest(first->getInfo(), spareUuid, 0));
-    s.flush();
+    synth::test::waitUntil([&] { return (lanes.modulatorCount(s.lane)) == (2); });
 
     ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
     EXPECT_EQ(s.row(0), first) << "the same row, re-bound in place";
@@ -605,7 +606,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowI
     ASSERT_FALSE(first->isSwapMotionRunning());
 
     ASSERT_TRUE(s.undo().undo());
-    s.flush();
+    synth::test::waitUntil([&] { return (lanes.modulatorCount(s.lane)) == (2); });
     ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
     EXPECT_EQ(s.row(0), first) << "the undo re-binds the same row back";
     EXPECT_EQ(s.row(1), second);
@@ -616,7 +617,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowI
     EXPECT_EQ(s.panel().modulatorRowBoundsForTest(s.lane, 0).getHeight(), foldedHeight);
 
     ASSERT_TRUE(s.undo().redo());
-    s.flush();
+    synth::test::waitUntil([&] { return (s.row(0)) == (first); });
     EXPECT_EQ(s.row(0), first);
     EXPECT_EQ(first->getInfo().sourceUuid, spareUuid);
 }

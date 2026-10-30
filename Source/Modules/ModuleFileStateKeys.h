@@ -17,6 +17,8 @@ inline constexpr const char* kInstrumentGainDb = "instrumentGainDb";
 inline constexpr const char* kInstrumentFiles = "instrumentFiles";
 inline constexpr const char* kInstrumentRegions = "instrumentRegions";
 inline constexpr const char* kInstrumentName = "instrumentName";
+// The Drum Kit's audio-file pads: one path per pad slot, empty for a pad that plays no file.
+inline constexpr const char* kPadFiles = "padFiles";
 
 inline constexpr const char* kWavetableType = "Wavetable";
 inline constexpr const char* kWavetableFile = "wavetableFile";

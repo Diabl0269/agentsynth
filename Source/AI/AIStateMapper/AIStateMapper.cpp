@@ -527,7 +527,7 @@ juce::String AIStateMapper::getModuleSchema() {
         schema += "| :--- | :--- | :--- | :--- |\n";
 
         for (auto* param : processor->getParameters()) {
-            if (auto* p = dynamic_cast<juce::RangedAudioParameter*>(param)) {
+            if (auto* p = detail::modelVisibleParam(*processor, param)) {
                 juce::String rangeStr;
                 if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
                     rangeStr = "Choice: [" + choice->choices.joinIntoString(", ") + "]";

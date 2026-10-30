@@ -4,6 +4,7 @@
 // an existing lane (the last point takes the lane), the bipolar picture, and the band's keyboard and
 // screen-reader surface.
 
+#include "../../../TestWait.h"
 #include "AutomationLanesAmountFixture.h"
 #include "UI/Layout/DragCursor.h"
 
@@ -113,7 +114,7 @@ TEST_F(TimelinePanelIntegrationTest, TheKnobDragShowsTheGrabbingHandAndTheValueB
     // With a lane (even a single flat segment) the editor takes the press, so the band's knob path is not used.
     s.doubleClick({s.x(16.0), s.yFor(-0.25)});
     ASSERT_NE(s.amountLane(), nullptr);
-    s.flush();
+    synth::test::waitUntil([&] { return (s.target(mid).first) == (s.band()->getEditor()); });
     EXPECT_EQ(s.target(mid).first, s.band()->getEditor());
 }
 

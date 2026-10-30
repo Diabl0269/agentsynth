@@ -2,6 +2,7 @@
 // (a 160 ms fade and a short slide out of the element that opened it) and lands exactly on its final state; it lands at
 // once under the OS's reduced-motion setting or when the callout is not on screen. The frame maths is pure; the
 // landing rules drive a real CallOutBox hosted in a plain parent component (no native window).
+#include "../../TestWait.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -78,7 +79,7 @@ TEST(CalloutRevealTest, ReducedMotionLandsAtOnceWithNoFadeAtAll) {
     synth::ui::setReducedMotionForTest(true);
     HostedPopup hosted;
     EXPECT_EQ(hosted.box->getAlpha(), 1.0f) << "never hidden under reduced motion";
-    pumpMessages();
+    synth::test::waitUntil([&] { return (hosted.box->getAlpha()) == (1.0f); });
     EXPECT_EQ(hosted.box->getAlpha(), 1.0f);
 }
 

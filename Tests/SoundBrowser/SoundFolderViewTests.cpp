@@ -1,6 +1,7 @@
 // The Sounds view's own folders: the "Add folder..." row and its chooser, folders dropped from Finder, the folder menu,
 // renaming in place, Remove, and a folder whose drive is gone. The native pieces (the chooser, Finder, the pop-up menu)
 // are replaced by the view's test seams, so nothing here opens a window.
+#include "../TestWait.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
@@ -180,7 +181,7 @@ TEST(SoundFolderView, RenamingChangesTheShownNameOnly) {
     EXPECT_EQ(label.getText(), "other");
 
     label.setText("Drum hits", juce::sendNotification);
-    pump();
+    synth::test::waitUntil([&] { return (rig.rowOf(Kind::Place, "Drum hits")) >= (0); });
     EXPECT_GE(rig.rowOf(Kind::Place, "Drum hits"), 0);
     EXPECT_EQ(rig.rowOf(Kind::Place, "other"), -1);
     EXPECT_TRUE(rig.other.isDirectory()) << "the folder on disk is untouched";

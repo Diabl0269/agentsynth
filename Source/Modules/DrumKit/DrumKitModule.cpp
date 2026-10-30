@@ -1,23 +1,9 @@
-// DrumKitModule: parameters, the MIDI note map, sample-accurate triggering and the per-sample mix.
-// The drum sounds themselves are in DrumVoices.h; the recorded kit side is in DrumKitModuleRecorded.cpp.
+// DrumKitModule: parameters, the MIDI note map, the block loop and the per-sample mix. The drum sounds are in
+// DrumVoices.h, the pads in DrumKitModulePads.cpp (message thread) and DrumKitModulePadAudio.cpp (triggering), the
+// recorded kit in DrumKitModuleRecorded.cpp.
 
 #include "DrumKitModule.h"
 #include "Modules/ParameterText.h"
-
-namespace {
-
-constexpr std::array<int, 6> kTomNotes = {41, 43, 45, 47, 48, 50};
-// Low floor tom up to high tom, in Hz.
-constexpr std::array<float, 6> kTomHz = {82.0f, 98.0f, 117.0f, 140.0f, 165.0f, 196.0f};
-
-int tomIndexForNote(int note) {
-    for (std::size_t i = 0; i < kTomNotes.size(); ++i)
-        if (kTomNotes[i] == note)
-            return static_cast<int>(i);
-    return -1;
-}
-
-} // namespace
 
 DrumKitModule::Drum DrumKitModule::drumForNote(int note) noexcept {
     switch (note) {
@@ -45,7 +31,7 @@ DrumKitModule::Drum DrumKitModule::drumForNote(int note) noexcept {
     case 56:
         return Drum::Cowbell;
     default:
-        return tomIndexForNote(note) >= 0 ? Drum::Tom : Drum::None;
+        return synth::drums::tomIndexForSound(note) >= 0 ? Drum::Tom : Drum::None;
     }
 }
 
@@ -59,33 +45,47 @@ juce::AudioParameterFloat* DrumKitModule::addFloat(const char* id, const char* n
 
 DrumKitModule::DrumKitModule()
     : ModuleBase("Drum Kit", 0, kNumChannels, StereoAudio::Declared) {
-    // Tune is in semitones around the drum's own pitch; decay is the time the drum takes to fall 60 dB.
-    kickLevel = addFloat("kickLevel", "Kick level", 0.0f, 1.0f, 0.9f);
-    kickTune = addFloat("kickTune", "Kick tune", -12.0f, 12.0f, 0.0f);
-    kickDecay = addFloat("kickDecay", "Kick decay", 0.1f, 1.2f, 0.35f);
-    snareLevel = addFloat("snareLevel", "Snare level", 0.0f, 1.0f, 0.8f);
-    snareTune = addFloat("snareTune", "Snare tune", -12.0f, 12.0f, 0.0f);
-    snareDecay = addFloat("snareDecay", "Snare decay", 0.05f, 0.6f, 0.18f);
-    clapLevel = addFloat("clapLevel", "Clap level", 0.0f, 1.0f, 0.8f);
-    clapTune = addFloat("clapTune", "Clap tune", -12.0f, 12.0f, 0.0f);
-    clapDecay = addFloat("clapDecay", "Clap decay", 0.05f, 0.8f, 0.2f);
-    hatLevel = addFloat("hatLevel", "Hat level", 0.0f, 1.0f, 0.6f);
-    hatTune = addFloat("hatTune", "Hat tune", -12.0f, 12.0f, 0.0f);
-    closedDecay = addFloat("closedDecay", "Closed decay", 0.02f, 0.3f, 0.05f);
-    openDecay = addFloat("openDecay", "Open decay", 0.1f, 1.5f, 0.45f);
-    tomLevel = addFloat("tomLevel", "Tom level", 0.0f, 1.0f, 0.8f);
-    tomTune = addFloat("tomTune", "Tom tune", -12.0f, 12.0f, 0.0f);
-    tomDecay = addFloat("tomDecay", "Tom decay", 0.1f, 1.0f, 0.3f);
-    cymbalLevel = addFloat("cymbalLevel", "Cymbal level", 0.0f, 1.0f, 0.5f);
-    cymbalTune = addFloat("cymbalTune", "Cymbal tune", -12.0f, 12.0f, 0.0f);
-    cymbalDecay = addFloat("cymbalDecay", "Cymbal decay", 0.3f, 4.0f, 1.5f);
-    cowbellLevel = addFloat("cowbellLevel", "Cowbell level", 0.0f, 1.0f, 0.8f);
-    cowbellTune = addFloat("cowbellTune", "Cowbell tune", -12.0f, 12.0f, 0.0f);
-    cowbellDecay = addFloat("cowbellDecay", "Cowbell decay", 0.1f, 0.6f, 0.25f);
+    // Tune is in semitones around the drum's own pitch; decay is the time the drum takes to fall 60 dB. These are the
+    // group parameters: each one writes its value to its group's pads (see addGroupLink).
+    using P = PadParam;
+    const auto group = [this](const char* id, const char* name, float lo, float hi, float def, P field, Group g,
+                              int hats = 0) { addGroupLink(addFloat(id, name, lo, hi, def), field, g, hats); };
+    group("kickLevel", "Kick level", 0.0f, 1.0f, 0.9f, P::Level, Group::Kick);
+    group("kickTune", "Kick tune", -12.0f, 12.0f, 0.0f, P::Tune, Group::Kick);
+    group("kickDecay", "Kick decay", 0.1f, 1.2f, 0.35f, P::Decay, Group::Kick);
+    group("snareLevel", "Snare level", 0.0f, 1.0f, 0.8f, P::Level, Group::Snare);
+    group("snareTune", "Snare tune", -12.0f, 12.0f, 0.0f, P::Tune, Group::Snare);
+    group("snareDecay", "Snare decay", 0.05f, 0.6f, 0.18f, P::Decay, Group::Snare);
+    group("clapLevel", "Clap level", 0.0f, 1.0f, 0.8f, P::Level, Group::Clap);
+    group("clapTune", "Clap tune", -12.0f, 12.0f, 0.0f, P::Tune, Group::Clap);
+    group("clapDecay", "Clap decay", 0.05f, 0.8f, 0.2f, P::Decay, Group::Clap);
+    group("hatLevel", "Hat level", 0.0f, 1.0f, 0.6f, P::Level, Group::Hat);
+    group("hatTune", "Hat tune", -12.0f, 12.0f, 0.0f, P::Tune, Group::Hat);
+    group("closedDecay", "Closed decay", 0.02f, 0.3f, 0.05f, P::Decay, Group::Hat, 1);
+    group("openDecay", "Open decay", 0.1f, 1.5f, 0.45f, P::Decay, Group::Hat, 2);
+    group("tomLevel", "Tom level", 0.0f, 1.0f, 0.8f, P::Level, Group::Tom);
+    group("tomTune", "Tom tune", -12.0f, 12.0f, 0.0f, P::Tune, Group::Tom);
+    group("tomDecay", "Tom decay", 0.1f, 1.0f, 0.3f, P::Decay, Group::Tom);
+    group("cymbalLevel", "Cymbal level", 0.0f, 1.0f, 0.5f, P::Level, Group::Cymbal);
+    group("cymbalTune", "Cymbal tune", -12.0f, 12.0f, 0.0f, P::Tune, Group::Cymbal);
+    group("cymbalDecay", "Cymbal decay", 0.3f, 4.0f, 1.5f, P::Decay, Group::Cymbal);
+    group("cowbellLevel", "Cowbell level", 0.0f, 1.0f, 0.8f, P::Level, Group::Cowbell);
+    group("cowbellTune", "Cowbell tune", -12.0f, 12.0f, 0.0f, P::Tune, Group::Cowbell);
+    group("cowbellDecay", "Cowbell decay", 0.1f, 0.6f, 0.25f, P::Decay, Group::Cowbell);
     levelParam = addFloat("level", "Level", 0.0f, 1.0f, 0.7f);
     addMuteParameter();
     addRecordedParameters(); // after the mute switch, so every older parameter keeps its index
+    addPadParameters();      // after the group parameters, so a restore sets a group before its saved pads
+    pads_ = synth::drums::defaultPadTable();
+    publishPads();
     enableVisualBuffer(true);
+}
+
+DrumKitModule::~DrumKitModule() {
+    for (int i = 0; i < numLinks_; ++i)
+        links_[(size_t)i].param->removeListener(this);
+    for (auto* r : recorded_)
+        r->removeListener(this);
 }
 
 void DrumKitModule::prepareToPlay(double sampleRate, int /*samplesPerBlock*/) {
@@ -97,105 +97,21 @@ void DrumKitModule::prepareToPlay(double sampleRate, int /*samplesPerBlock*/) {
 }
 
 void DrumKitModule::stopAll() noexcept {
-    kick_.stop();
-    snare_.stop();
-    rim_.stop();
-    clap_.stop();
-    closedHat_.stop();
-    openHat_.stop();
-    crash_.stop();
-    ride_.stop();
-    cowbell_.stop();
-    for (auto& tom : toms_)
-        tom.stop();
+    for (auto& voice : voices_)
+        voice.stop();
     recordedPool_.stopAll();
 }
 
-DrumKitModule::Hit DrumKitModule::hitFor(juce::AudioParameterFloat* level, juce::AudioParameterFloat* tune,
-                                         float decaySeconds, float velocity) const {
-    Hit hit;
-    hit.velocity = juce::jlimit(0.0f, 1.0f, velocity);
-    hit.gain = level->get();
-    hit.tune = synth::drums::semitoneRatio(tune->get());
-    hit.decay = decaySeconds;
-    return hit;
-}
-
-void DrumKitModule::trigger(int note, float velocity) {
-    using synth::drums::MetallicKind;
-    if (recordedNow(note)) {
-        triggerRecorded(note, velocity);
-        return;
-    }
-    switch (drumForNote(note)) {
-    case Drum::Kick:
-        kick_.trigger(hitFor(kickLevel, kickTune, kickDecay->get(), velocity), sampleRate_);
-        break;
-    case Drum::Snare:
-        snare_.trigger(hitFor(snareLevel, snareTune, snareDecay->get(), velocity), false, sampleRate_);
-        break;
-    case Drum::Rim:
-        rim_.trigger(hitFor(snareLevel, snareTune, snareDecay->get(), velocity), true, sampleRate_);
-        break;
-    case Drum::Clap:
-        clap_.trigger(hitFor(clapLevel, clapTune, clapDecay->get(), velocity), sampleRate_);
-        break;
-    case Drum::ClosedHat: {
-        // The pedal hat (44) is a little shorter and softer than the closed hat (42).
-        const bool pedal = note == 44;
-        auto hit = hitFor(hatLevel, hatTune, closedDecay->get() * (pedal ? 0.8f : 1.0f), velocity);
-        if (pedal)
-            hit.gain *= 0.8f;
-        chokeOpenHat();
-        closedHat_.trigger(hit, MetallicKind::ClosedHat, sampleRate_);
-        break;
-    }
-    case Drum::OpenHat:
-        openHat_.trigger(hitFor(hatLevel, hatTune, openDecay->get(), velocity), MetallicKind::OpenHat, sampleRate_);
-        break;
-    case Drum::Tom: {
-        const auto index = static_cast<std::size_t>(tomIndexForNote(note));
-        toms_[index].trigger(hitFor(tomLevel, tomTune, tomDecay->get(), velocity), kTomHz[index], sampleRate_);
-        break;
-    }
-    case Drum::Crash:
-        crash_.trigger(hitFor(cymbalLevel, cymbalTune, cymbalDecay->get(), velocity), MetallicKind::Crash, sampleRate_);
-        break;
-    case Drum::Ride:
-        ride_.trigger(hitFor(cymbalLevel, cymbalTune, cymbalDecay->get() * 0.8f, velocity), MetallicKind::Ride,
-                      sampleRate_);
-        break;
-    case Drum::Cowbell:
-        cowbell_.trigger(hitFor(cowbellLevel, cowbellTune, cowbellDecay->get(), velocity), sampleRate_);
-        break;
-    case Drum::None:
-        break;
-    }
-}
-
+// Sums the synthesized pad voices in the old kit's voice order (the shared noise source is read in that order).
 float DrumKitModule::synthSample() noexcept {
     float sum = 0.0f;
-    if (kick_.active())
-        sum += kick_.tick(sampleRate_, noise_);
-    if (snare_.active())
-        sum += snare_.tick(sampleRate_, noise_);
-    if (rim_.active())
-        sum += rim_.tick(sampleRate_, noise_);
-    if (clap_.active())
-        sum += clap_.tick(noise_);
-    if (closedHat_.active())
-        sum += closedHat_.tick(sampleRate_, noise_);
-    if (openHat_.active())
-        sum += openHat_.tick(sampleRate_, noise_);
-    if (crash_.active())
-        sum += crash_.tick(sampleRate_, noise_);
-    if (ride_.active())
-        sum += ride_.tick(sampleRate_, noise_);
-    if (cowbell_.active())
-        sum += cowbell_.tick(sampleRate_);
-    for (auto& tom : toms_)
-        if (tom.active())
-            sum += tom.tick(sampleRate_);
+    if (heldPads_ == nullptr)
+        return sum;
+    for (const auto index : heldPads_->tickOrder) {
+        auto& voice = voices_[(size_t)index];
+        if (voice.synthActive())
+            sum += voice.tickSynth(sampleRate_, noise_);
+    }
     return sum;
 }
 
@@ -229,6 +145,12 @@ void DrumKitModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     smoothedLevel_.setTargetValue(levelParam->get());
     acquireKit();
+    acquirePads();
+    pollGroupLinks();
+    if (const auto audition = auditionMask_.exchange(0, std::memory_order_acq_rel); audition != 0)
+        for (int i = 0; i < synth::drums::kMaxPads; ++i)
+            if ((audition >> i) & 1u)
+                triggerPad(i, 0.8f);
     float* left = buffer.getWritePointer(0);
     float* right = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
@@ -244,7 +166,7 @@ void DrumKitModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::M
         if (!message.isNoteOn())
             continue; // a drum plays out its own decay; Note-Off and the rest do nothing
         renderTo(juce::jlimit(position, numSamples, metadata.samplePosition));
-        trigger(message.getNoteNumber(), message.getFloatVelocity());
+        triggerNote(message.getNoteNumber(), message.getFloatVelocity());
     }
     renderTo(numSamples);
 

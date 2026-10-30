@@ -148,6 +148,8 @@ bool InstrumentPickerRow::loadUndoably(const std::function<bool(synth::sampler::
     if (record)
         host_.undo->captureBeforeState(*host_.graph);
     const bool ok = load(instruments_);
+    if (afterLoad)
+        afterLoad(ok);
     if (record)
         host_.undo->pushSnapshotFromCapture(*host_.graph);
     reportLoad(ok);

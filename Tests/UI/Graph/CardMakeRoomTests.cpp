@@ -6,6 +6,7 @@
 
 #include "../../Macros/MacroContainer/MacroContainerTestHelpers.h"
 
+#include "../../TestWait.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "Modules/MacroControlModule.h"
@@ -250,13 +251,13 @@ TEST(CardMakeRoom, TheScopeToggleMakesRoomAndGivesItBack) {
     ASSERT_NE(toggle, nullptr);
 
     toggle->triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return toggle->getToggleState(); });
     ASSERT_TRUE(toggle->getToggleState());
     EXPECT_FALSE(c.rect(neighbour).intersects(card->getBounds()));
     EXPECT_NE(c.rect(neighbour), home);
 
     toggle->triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return (c.rect(neighbour)) == (home); });
     EXPECT_EQ(c.rect(neighbour), home);
 }
 

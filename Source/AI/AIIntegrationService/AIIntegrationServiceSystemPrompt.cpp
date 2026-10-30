@@ -60,7 +60,7 @@ const char* timelineOpsOpsText() {
            "Oscillators. Its instrumentParams are kickLevel, kickTune, kickDecay, snareLevel, snareTune, "
            "snareDecay, clapLevel, clapTune, clapDecay, hatLevel, hatTune, closedDecay, openDecay, tomLevel, tomTune, "
            "tomDecay, cymbalLevel, cymbalTune, cymbalDecay, cowbellLevel, cowbellTune, cowbellDecay, level (tune is in "
-           "semitones). "
+           "semitones); each sets every pad of its drum group, and the user fine-tunes single pads on the card. "
            "\"Pluck\" (plucked string: guitar, harp, koto) and \"Mallet\" (struck bar: marimba, vibraphone, bells) "
            "are played the same way - ordinary pitched placeClips notes on one track, 8 voices each, no poly, no "
            "envelope. Pluck's instrumentParams: decay, decayTrack, brightness, pickPosition, pickHardness, body, "

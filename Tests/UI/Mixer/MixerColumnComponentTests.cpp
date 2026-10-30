@@ -25,6 +25,7 @@
 // calls before freeing the node) requires an actual predecessor/successor signal edge, which the
 // rest of this file's hand-built MixerColumn models never wire.
 #include "../../Mixer/MixerModel/MixerModelTestFixture.h"
+#include "../../TestWait.h"
 
 namespace {
 
@@ -483,7 +484,7 @@ TEST(MixerColumnComponentTests, EveryColumnShowsAnEditOnCanvasButtonBesideItsIns
     EXPECT_TRUE(rig.column.getInsertListForTest().hasAddRow()) << "an editable chain still ends in \"+ Insert\"";
 
     button.triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // triggerClick posts its click
+    synth::test::waitUntil([&] { return (rig.clicked) == ("strip-uuid"); });
     EXPECT_EQ(rig.clicked, "strip-uuid") << "an unboxed straight chain edits the channel itself";
 }
 
@@ -499,7 +500,7 @@ TEST(MixerColumnComponentTests, TheEditOnCanvasButtonStaysWhenTheChainBranchesAn
     EXPECT_EQ(rig.button().getTitle(), "Edit Strip on canvas");
 
     rig.button().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::waitUntil([&] { return (rig.clicked) == ("macro-1"); });
     EXPECT_EQ(rig.clicked, "macro-1");
 }
 

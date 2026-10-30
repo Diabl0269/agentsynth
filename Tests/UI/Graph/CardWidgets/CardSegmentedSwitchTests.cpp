@@ -5,6 +5,7 @@
 // reader sees a group of titled radio buttons with the selected one checked. On a card it drives its
 // choice parameter as one undo step and follows the parameter back.
 
+#include "../../../TestWait.h"
 #include "../CardBody/CardBodyTestHelpers.h"
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
@@ -76,7 +77,7 @@ TEST(CardSegmentedSwitch, ScreenReaderSeesAGroupOfTitledRadioButtons) {
     // An accessibility press on a segment selects it.
     auto press = static_cast<juce::Component*>(s.control.getSegment(3))->createAccessibilityHandler();
     ASSERT_TRUE(press->getActions().invoke(juce::AccessibilityActionType::press));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return (s.control.getSelectedIndex()) == (3); });
     EXPECT_EQ(s.control.getSelectedIndex(), 3);
 }
 

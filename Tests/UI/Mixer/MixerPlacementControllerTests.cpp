@@ -4,6 +4,7 @@
 // "mixerPlacement" into its ApplicationProperties BEFORE construction -- the same "persist first,
 // then construct" shape BottomDockComponentTests.cpp's ActiveTabPersistsAcrossApplicationPropertiesReload
 // uses for "bottomDockActiveTab".
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -148,7 +149,9 @@ TEST(MixerPlacementControllerTests, LivePreferenceChangeAppliesWithoutRestart) {
     // juce::PropertiesFile's ChangeBroadcaster notification is posted, not synchronous -- the loop
     // has to turn once before MainComponent::changeListenerCallback sees it. Same idiom as
     // FocusArbitrationZoomGridTests.cpp's NaturalScrollingPreferenceReachesTheTimelineAndTheRoll.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] {
+        return (mc.getBottomDock().getMixerHost().getParentComponent()) == (&mc.getMixerPlacementControllerForTest());
+    });
 
     EXPECT_EQ(mc.getBottomDock().getMixerHost().getParentComponent(), &mc.getMixerPlacementControllerForTest())
         << "a live Preferences change must move the Mixer immediately, no restart";
@@ -190,7 +193,7 @@ TEST(MixerPlacementControllerTests, LivePlacementChangeRebuildsTheMixerFocusRegi
     // Window -> Tab: the region reappears live, no restart.
     mc.getAppPropertiesForTest().getUserSettings()->setValue("mixerPlacement", "tab");
     mc.getAppPropertiesForTest().getUserSettings()->saveIfNeeded();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (mc.getFocusRegionsForTest().findById("mixer")) != (nullptr); });
 
     EXPECT_NE(mc.getFocusRegionsForTest().findById("mixer"), nullptr)
         << "switching back to Tab placement live re-registers the docked mixer region";

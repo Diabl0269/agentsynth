@@ -2,6 +2,7 @@
 // panel's own selection state and its null-safety before configure() runs. The three region
 // components (ControllersListComponent/ControllerSurfaceComponent/ControlInspectorComponent) have
 // their own test files; this one covers only what MidiRemotePanelComponent itself owns.
+#include "../../TestWait.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "AppUndoManager.h"
@@ -137,7 +138,7 @@ TEST_F(MidiRemotePanelLiveRefreshTest, ForgetThenUndoIsReflectedWithoutATabSwitc
     controller_->arm(node_->nodeID, "cutoff");
     send(juce::MidiMessage::controllerEvent(1, 20, 64));
     settle();
-    pump();
+    synth::test::waitUntil([&] { return (panel_.getControllersListRowCountForTest()) == (1); });
     ASSERT_EQ(panel_.getControllersListRowCountForTest(), 1);
     const juce::String nodeUuid = node_->properties["uuid"].toString();
     ASSERT_FALSE(nodeUuid.isEmpty());
@@ -150,7 +151,7 @@ TEST_F(MidiRemotePanelLiveRefreshTest, ForgetThenUndoIsReflectedWithoutATabSwitc
     undo_.undo();
     EXPECT_EQ(doc_.assignments.size(), 1u) << "MidiRemoteSnapshotAction's undo() restores doc_ synchronously";
 
-    pump(); // runs the deferred rebuild the forget()+undo() pair each queued via onChanged
+    synth::test::waitUntil([&] { return panel_.selectAssignmentForParameter(nodeUuid, "cutoff"); });
     EXPECT_TRUE(panel_.selectAssignmentForParameter(nodeUuid, "cutoff"))
         << "the panel re-pulled its Surface/Inspector state after the live-refresh pump, matching doc_ again -- "
            "before FRO263 this stayed stale until a tab switch";

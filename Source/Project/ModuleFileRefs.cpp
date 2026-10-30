@@ -37,6 +37,7 @@ const std::vector<ModuleFileKey>& ModuleFileRefs::keys() {
         {fk::kSamplerType, fk::kInstrumentFiles, false, ProjectBundle::kSamplesSubdirName, true},
         {fk::kDrumKitType, fk::kInstrumentFolder, true, ProjectBundle::kInstrumentsSubdirName, false, true},
         {fk::kDrumKitType, fk::kInstrumentFiles, false, ProjectBundle::kSamplesSubdirName, true},
+        {fk::kDrumKitType, fk::kPadFiles, false, ProjectBundle::kSamplesSubdirName, true},
     };
     return registry;
 }

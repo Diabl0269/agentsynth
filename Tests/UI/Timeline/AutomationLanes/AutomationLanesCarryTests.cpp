@@ -4,6 +4,7 @@
 // parameter with no CV jack leaves the modulators where they are; the lane's modulator order follows the routings; and
 // a pick in the real picker reaches the host call.
 
+#include "../../../TestWait.h"
 #include "AutomationLanesAmountFixture.h"
 #include "AutomationLanesMenuFixture.h"
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h"
@@ -99,7 +100,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterMovesBothModulatorsWithTheir
     ASSERT_EQ(s.routingsInto("cutoff"), 2u);
 
     ASSERT_TRUE(s.pick(Header::kChangeParameterMenuId, "Resonance"));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (s.doc().getLane(s.lane)->paramId) == ("resonance"); });
 
     EXPECT_EQ(s.doc().getLane(s.lane)->paramId, "resonance");
     EXPECT_EQ(s.chainsInto(s.lfoUuid, resonance).size(), 1u);
@@ -228,7 +229,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterKeepsTheRowsTheirFoldsAndThe
     ASSERT_LT(before[1], before[2]) << "the premise: the folded row is the shorter one";
 
     ASSERT_TRUE(s.pick(Header::kChangeParameterMenuId, "Resonance"));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (s.doc().getLane(s.lane)->paramId) == ("resonance"); });
 
     ASSERT_EQ(s.doc().getLane(s.lane)->paramId, "resonance");
     ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
@@ -242,7 +243,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterKeepsTheRowsTheirFoldsAndThe
     EXPECT_EQ(heights(), before);
 
     ASSERT_TRUE(s.undo().undo());
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (lanes.modulatorCount(s.lane)) == (2); });
     ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
     EXPECT_EQ(s.panel().modulatorRowForTest(s.lane, 0), first);
     EXPECT_EQ(first->getInfo().paramId, "cutoff");

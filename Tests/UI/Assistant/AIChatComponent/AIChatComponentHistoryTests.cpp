@@ -8,6 +8,7 @@
 // Core component tests live in AIChatComponentTests.cpp; Arrange-mode tests live in
 // AIChatComponentArrangeTests.cpp.
 
+#include "../../../TestWait.h"
 #include "AIChatComponentTestFixture.h"
 
 // ============================================================================
@@ -290,7 +291,7 @@ TEST_F(AIChatComponentTest, NotSignedInHistoryPanelListsFromLocalBackendOnly) {
     chatComponent.setHistorySourcesForTesting(std::move(localFake), std::move(cloudFake));
 
     chatComponent.simulateHistoryButtonClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return chatComponent.didShowHistoryPopupForTesting(); });
 
     EXPECT_TRUE(chatComponent.didShowHistoryPopupForTesting());
     EXPECT_FALSE(chatComponent.lastHistoryPopupWasCloudForTesting());
@@ -322,7 +323,7 @@ TEST_F(AIChatComponentTest, ProPlanHistoryPanelListsFromCloudBackend) {
     chatComponent.setHistorySourcesForTesting(std::move(localFake), std::move(cloudFake));
 
     chatComponent.simulateHistoryButtonClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.didShowHistoryPopupForTesting(); });
 
     EXPECT_TRUE(chatComponent.didShowHistoryPopupForTesting());
     EXPECT_TRUE(chatComponent.lastHistoryPopupWasCloudForTesting());
@@ -363,7 +364,7 @@ TEST_F(AIChatComponentTest, LapsedFreePlanListsLocallyButShowsDowngradeStripWith
     EXPECT_EQ(findDirectChildLabelContaining(chatComponent, "lapsed"), nullptr);
 
     chatComponent.simulateHistoryButtonClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.didShowHistoryPopupForTesting(); });
 
     EXPECT_TRUE(chatComponent.didShowHistoryPopupForTesting());
     EXPECT_FALSE(chatComponent.lastHistoryPopupWasCloudForTesting())
