@@ -30,12 +30,13 @@ struct KnownGap {
 
 // Tool windows that do not relay yet.
 const std::vector<KnownGap> kKnownGaps = {
-    {"Sampler map / command + Z", "FRO1036"},       {"Sampler map / shift + command + Z", "FRO1036"},
-    {"Sampler map / spacebar", "FRO1036"},          {"EQ window / command + Z", "FRO1309"},
-    {"EQ window / shift + command + Z", "FRO1309"}, {"EQ window / spacebar", "FRO1309"},
+    {"Sampler map / Cmd+Z", "FRO1036"}, {"Sampler map / Cmd+Shift+Z", "FRO1036"}, {"Sampler map / Space", "FRO1036"},
+    {"EQ window / Cmd+Z", "FRO1309"},   {"EQ window / Cmd+Shift+Z", "FRO1309"},   {"EQ window / Space", "FRO1309"},
 };
 
 struct Sample {
+    // The same on every platform (JUCE describes the command modifier as "ctrl" off macOS), so kKnownGaps holds.
+    const char* name;
     juce::KeyPress key;
     bool relayed; // false: the key acts on the main window only, so even a tool window keeps it
     bool printable;
@@ -45,10 +46,10 @@ std::vector<Sample> samples() {
     const auto cmd = juce::ModifierKeys::commandModifier;
     const auto shift = juce::ModifierKeys::shiftModifier;
     return {
-        {juce::KeyPress(' ', juce::ModifierKeys(), ' '), true, true},
-        {juce::KeyPress('z', juce::ModifierKeys(cmd), 0), true, false},
-        {juce::KeyPress('z', juce::ModifierKeys(cmd | shift), 0), true, false},
-        {juce::KeyPress('a', juce::ModifierKeys(cmd), 0), false, false}, // select all modules
+        {"Space", juce::KeyPress(' ', juce::ModifierKeys(), ' '), true, true},
+        {"Cmd+Z", juce::KeyPress('z', juce::ModifierKeys(cmd), 0), true, false},
+        {"Cmd+Shift+Z", juce::KeyPress('z', juce::ModifierKeys(cmd | shift), 0), true, false},
+        {"Cmd+A", juce::KeyPress('a', juce::ModifierKeys(cmd), 0), false, false}, // select all modules
     };
 }
 
@@ -132,7 +133,7 @@ TEST_F(ShortcutRelay, EveryDialogHandsAppShortcutsToTheAppFromItsFocusedChildren
                 pumpMessages();
                 const size_t expected = surface.relaysAppShortcuts && sample.relayed ? 1 : 0;
                 if (env.appKeys().size() != expected)
-                    found.insert(surface.name + " / " + sample.key.getTextDescription().toStdString());
+                    found.insert(surface.name + " / " + sample.name);
             }
         }
     }
