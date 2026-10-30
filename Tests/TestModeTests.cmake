@@ -12,3 +12,7 @@ target_sources(Tests PRIVATE
 )
 # The committed project the UI-verification examples open (Tools/ui-verify/).
 target_compile_definitions(Tests PRIVATE UI_VERIFY_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tools/ui-verify/fixtures")
+# Hidden automation windows, checked on the NSWindow itself (macOS only).
+if(APPLE)
+    target_sources(Tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/AutomationHidingMacTests.mm)
+endif()

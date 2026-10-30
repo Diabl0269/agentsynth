@@ -17,6 +17,9 @@ inline constexpr const char* kNoAudioDeviceEnvVar = "AGENTSYNTH_NO_AUDIO_DEVICE"
 inline constexpr const char* kAutomationFlag = "--automation";
 // `--automation-motion` leaves the app's animations on (they are switched off under --automation otherwise).
 inline constexpr const char* kAutomationMotionFlag = "--automation-motion";
+// `--automation-visible` keeps the windows of an automation launch on screen and focusable, for a person who wants to
+// watch. Without it an automation launch is hidden (docs/development/test-mode.md#hidden-windows).
+inline constexpr const char* kAutomationVisibleFlag = "--automation-visible";
 // `--automation-info <file>` also writes {"port":N,"pid":P} to that file once the server listens.
 inline constexpr const char* kAutomationInfoFlag = "--automation-info";
 // `--settings-dir <absolute dir>` keeps every setting and user-data folder of this process under that directory.
@@ -26,6 +29,10 @@ inline constexpr const char* kSettingsDirFlag = "--settings-dir";
 // stays off the network and off shared machine state: no update check, no telemetry, no eager plugin scan and no
 // MIDI device opened, so any number of instances run side by side.
 bool isAutomationLaunch(const juce::StringArray& commandLineArgs);
+
+// True when this launch must put no window on the user's screen and never take focus: a valid kAutomationFlag launch
+// without kAutomationVisibleFlag.
+bool isHiddenAutomationLaunch(const juce::StringArray& commandLineArgs);
 
 // The port after kAutomationFlag (0..65535), or nullopt when the flag is absent or not followed by such a number.
 std::optional<int> automationPortFromArgs(const juce::StringArray& commandLineArgs);

@@ -52,7 +52,7 @@
 #       explicit compiler launchers), so a configure break only CI's flags hit shows up before the push.
 #   9. Dev-sign the built app bundle with scripts/dev-sign-app.sh (macOS only -- not a CI check,
 #      but the point where a local build exists to sign; see that script's header for why).
-#   10. Run the full suite: build-ci-local/Tests/Tests -- behind the shared test lock
+#   10. Run the full suite: build-ci-local/Tests/Tests --gtest_brief=1 (failures and summary only) -- behind the shared test lock
 #       (scripts/lib/test-lock.sh, FRO192): two suites running at once on one machine collide
 #       through the shared on-disk settings file and produce false failures, so this step waits
 #       (up to CI_LOCAL_TEST_LOCK_TIMEOUT seconds, default 3600) for any other suite of this
@@ -336,7 +336,9 @@ else
     # shellcheck source=scripts/lib/test-lock.sh
     source "$REPO_ROOT/scripts/lib/test-lock.sh"
     test_lock="$(test_lock_path "$REPO_ROOT")"
-    test_lock_run "$test_lock" "${CI_LOCAL_TEST_LOCK_TIMEOUT:-3600}" "$TESTS_BIN"
+    # --gtest_brief=1 prints only failures and the summary (the full run is ~9,000 lines of "OK"). The suite keeps its
+    # windows invisible and unfocused (Tests/TestMain.cpp); AGENTSYNTH_TESTS_VISIBLE=1 in the environment shows them.
+    test_lock_run "$test_lock" "${CI_LOCAL_TEST_LOCK_TIMEOUT:-3600}" "$TESTS_BIN" --gtest_brief=1
     tests_rc=$?
     if [ "$tests_rc" -eq "$TEST_LOCK_TIMEOUT_STATUS" ]; then
         fail "gave up waiting for the shared test lock ($test_lock) -- another suite is still running; re-run, or raise CI_LOCAL_TEST_LOCK_TIMEOUT."

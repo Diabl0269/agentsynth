@@ -3,6 +3,7 @@
 #include "ModDotPanelFrame.h"
 
 #include "ModDotPalette.h"
+#include "TestMode/AutomationHiding.h"
 #include "UI/Layout/PopupMotion.h"
 
 namespace synth::ui {
@@ -163,7 +164,7 @@ void ModDotPanelFrame::mouseDown(const juce::MouseEvent& e) {
 
 // Like a call-out, the panel does not outlive the app being in front.
 void ModDotPanelFrame::timerCallback() {
-    if (!juce::Process::isForegroundProcess())
+    if (!synth::testmode::appIsInFront())
         close();
 }
 

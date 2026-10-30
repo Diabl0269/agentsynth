@@ -6,6 +6,7 @@
 #include "Project/ProjectCommandLine.h"
 #include "SettingsMigration.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "TestMode/AutomationHiding.h"
 #include "TestMode/TestModeLaunch.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -68,6 +69,13 @@ public:
         synth::applyKeychainPolicyForLaunch(getCommandLineParameterArray(),
                                             juce::SystemStats::getEnvironmentVariable(synth::kNoKeychainEnvVar, {}),
                                             juce::SystemStats::getEnvironmentVariable(synth::kNoAudioDeviceEnvVar, {}));
+
+        // An automation launch keeps its windows off the user's screen unless asked otherwise; this must run before
+        // the first window exists.
+#if AGENTSYNTH_AUTOMATION
+        if (synth::isHiddenAutomationLaunch(getCommandLineParameterArray()))
+            synth::testmode::hideAutomationWindows();
+#endif
 
         // Hosted plugins write files relative to the working directory; keep that out of the
         // directory the app happened to be launched from.
@@ -165,7 +173,7 @@ private:
             return;
         }
         if (auto* mc = dynamic_cast<MainComponent*>(mainWindow->getContentComponent())) {
-            mainWindow->toFront(true);
+            mainWindow->toFront(!juce::ComponentPeer::hideWindowsForAutomation); // a hidden run never takes focus
             mc->openProjectFromCommandLine(bundle);
         }
     }

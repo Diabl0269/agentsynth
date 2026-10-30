@@ -147,6 +147,19 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual([c for c in app.calls if c[0] == "key"], [("key", {"keys": "a"}), ("key", {"keys": "b"})])
         self.assertTrue(app.stopped)
 
+    def test_visible_is_passed_to_the_app_only_when_asked(self):
+        seen = []
+
+        def factory(*a, **k):
+            seen.append(k)
+            return FakeApp({})
+
+        for visible in (False, True):
+            with tempfile.TemporaryDirectory() as out:
+                run.Runner(None, out, run.parse_scenario("- wait: {}\n", "demo"), app_factory=factory, visible=visible).run()
+        self.assertNotIn("visible", seen[0])
+        self.assertTrue(seen[1]["visible"])
+
     def test_type_sends_a_space_as_the_space_key(self):
         app = FakeApp({})
         (ok, _), _ = self.run_steps("- type: {text: a b}\n", app)

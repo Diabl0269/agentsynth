@@ -204,11 +204,12 @@ def run_expect(args, app, sleep=time.sleep, clock=time.monotonic):
 
 
 class Runner:
-    def __init__(self, app_path, out_dir, scenario, app_factory=TestModeApp):
+    def __init__(self, app_path, out_dir, scenario, app_factory=TestModeApp, visible=False):
         self.scenario = scenario
         self.out_dir = out_dir
         self.app_path = app_path
         self.app_factory = app_factory
+        self.visible = visible
         self.log = []
         self.app = None
         self.settings_dir = None
@@ -216,6 +217,8 @@ class Runner:
 
     def _launch(self):
         extra = {"extra_args": ["--automation-motion"]} if self.scenario.motion else {}
+        if self.visible:
+            extra["visible"] = True
         self.app = self.app_factory(self.app_path, settings_dir=self.settings_dir, **extra)
         self.app.start()
 
@@ -292,6 +295,7 @@ def main(argv=None):
     parser.add_argument("target", help="a scenario .yaml file, or a directory of them")
     parser.add_argument("--app", help="path to Agent Synth.app (default: build-ci-local)")
     parser.add_argument("--out", help="output directory (default Tools/ui-verify/out/<scenario>/)")
+    parser.add_argument("--visible", action="store_true", help="show the app windows (default: hidden, no focus taken)")
     options = parser.parse_args(argv)
     try:
         scenarios = load_scenarios(options.target)
@@ -304,7 +308,7 @@ def main(argv=None):
         out_dir = base if options.out and len(scenarios) == 1 else os.path.join(base, scenario.name)
         started = time.time()
         try:
-            passed, message = Runner(options.app, out_dir, scenario).run()
+            passed, message = Runner(options.app, out_dir, scenario, visible=options.visible).run()
         except TestModeError as error:
             passed, message = False, "could not run: %s" % error
         seconds = time.time() - started

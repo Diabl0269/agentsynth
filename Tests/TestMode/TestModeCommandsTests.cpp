@@ -61,6 +61,43 @@ TEST(TestModeCommands, ClickOnAMissingIdOrBadModifierFails) {
     EXPECT_EQ(run("click", args({{"id", "left"}, {"mods", mods}})).state, StepResult::State::failed);
 }
 
+TEST(TestModeCommands, ModsMayBeASingleString) {
+    // Regression test for FRO1313: a string "shift" was read as no modifiers at all.
+    Rig rig;
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    const auto r = run("click", args({{"id", "left"}, {"mods", "shift"}}));
+    ASSERT_EQ(r.state, StepResult::State::done) << r.error;
+    EXPECT_TRUE(rig.left.downMods.isShiftDown());
+}
+
+TEST(TestModeCommands, AnUnknownOrMalformedModifierIsAnErrorNamingIt) {
+    Rig rig;
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    for (const char* command : {"click", "drag"}) {
+        const auto base = std::string(command) == "click"
+                              ? juce::var(args({{"id", "left"}, {"mods", "hyper"}}))
+                              : juce::var(args({{"from", "left"}, {"to", "right"}, {"mods", "hyper"}}));
+        const auto r = run(command, base);
+        EXPECT_EQ(r.state, StepResult::State::failed) << command;
+        EXPECT_TRUE(r.error.contains("hyper")) << command << ": " << r.error;
+    }
+    const auto number = run("click", args({{"id", "left"}, {"mods", 3}}));
+    EXPECT_EQ(number.state, StepResult::State::failed);
+    EXPECT_TRUE(number.error.contains("mods")) << number.error;
+    EXPECT_EQ(rig.left.downs, 0);
+}
+
+TEST(TestModeCommands, DragTakesAStringModifierToo) {
+    Rig rig;
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    const auto r = run("drag", args({{"from", "left"}, {"to", "right"}, {"steps", 4}, {"mods", "alt"}}));
+    ASSERT_EQ(r.state, StepResult::State::done) << r.error;
+    EXPECT_TRUE(rig.left.downMods.isAltDown());
+}
+
 TEST(TestModeCommands, DragPressesMovesInStepsAndReleases) {
     Rig rig;
     if (!rig.show())

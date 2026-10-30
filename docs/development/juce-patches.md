@@ -6,7 +6,7 @@ a change to JUCE itself is a patch file applied after the fetch. There are two:
 | Patch | What it adds | Why |
 |---|---|---|
 | `cmake/patches/juce-vst3-context-menu.patch` | `juce::VST3PluginFormat::setHostContextMenuExtension(AudioPluginInstance&, std::function<void(uint32 paramId, PopupMenu&)>)` | A VST3 plugin asks the host for a parameter's context menu with `IComponentHandler3::createContextMenu(view, &paramId)`. Stock JUCE drops the `ParamID` and returns only the plugin's own items. With the hook the app appends "Add to card" ([`plugin-card-layout.md`](../control/plugin-card-layout.md#add-to-card-from-the-plugin-window)). |
-| `cmake/patches/juce-testmode-window-order.patch` | `static inline bool juce::ComponentPeer::ignoreWindowOrderForHitTests` (default false) | On macOS and Windows `ComponentPeer::contains()` asks the OS (the window server, `WindowFromPoint`) whether another window covers the point, so a window behind others never receives a mouse event. With the flag true that check is skipped. Only `--automation` sets it ([`test-mode.md`](test-mode.md#input)); stock behaviour otherwise. |
+| `cmake/patches/juce-testmode-window-order.patch` | `static inline bool juce::ComponentPeer::ignoreWindowOrderForHitTests` and `hideWindowsForAutomation` (both default false) | On macOS and Windows `ComponentPeer::contains()` asks the OS (the window server, `WindowFromPoint`) whether another window covers the point, so a window behind others never receives a mouse event. With the first flag true that check is skipped. With the second true (macOS only) every new `NSWindow` has alpha 0, ignores mouse events and has no shadow, `setAlpha` cannot undo that, the peer never calls `activateIgnoringOtherApps:`, and focus is tracked by JUCE instead of the OS (a hidden process is never the active app, so the foreground checks of pop-ups, call-outs, tooltips and key commands treat it as foreground). Only `--automation` and the `Tests` binary set them ([`test-mode.md`](test-mode.md#hidden-windows)); stock behaviour otherwise. |
 
 The VST3 patch changes `juce_VST3PluginFormat.cpp`/`.h` and adds one protected accessor to `juce_VST3PluginFormatImpl.h` (in the headless module), does nothing for an instance without a hook, and
 never touches AU or any other format. Items the callback adds are re-added below the plugin's own items
@@ -29,6 +29,9 @@ Two things bypass the patch step and must be kept in mind:
 
 - **CI caches.** The cached `build/_deps` holds the patched tree, so its key hashes the patch files and the
   apply script ([`ci-caching.md`](ci-caching.md)); the generation prefix was bumped when the patch was added.
+  Its `restore-keys` prefix can still restore an older entry whose tree carries a patch's previous revision, so
+  `ApplyJucePatch.cmake` resets that patch's own files to the pinned tag and applies it again (the patches touch
+  disjoint files; keep it that way).
 - **`FETCHCONTENT_SOURCE_DIR_JUCE`.** A source dir given on the command line skips the patch step.
   `scripts/ci-local.sh`'s worktree reuse therefore reuses the main checkout's JUCE only when it already carries
   the worktree's patches ([`local-ci.md`](local-ci.md)).

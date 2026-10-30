@@ -18,10 +18,10 @@ from agentsynth_testmode import TestModeApp  # noqa: E402
 from select_card import select_card  # noqa: E402
 
 
-def run_one(index, app_path, out_dir, results):
+def run_one(index, app_path, out_dir, results, visible=False):
     try:
         os.makedirs(out_dir, exist_ok=True)
-        with TestModeApp(app_path) as app:
+        with TestModeApp(app_path, visible=visible) as app:
             print("instance %d: pid %d port %d settings %s" % (index, app.pid, app.port, app.settings_dir), flush=True)
             results[index] = {"png": select_card(app, out_dir), "port": app.port, "settings": app.settings_dir}
     except Exception as exc:  # reported below, with the instance number
@@ -32,11 +32,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app")
     parser.add_argument("--out", default=None, help="parent of the per-instance output directories")
+    parser.add_argument("--visible", action="store_true", help="show the app windows (default: hidden)")
     options = parser.parse_args()
     out_root = os.path.abspath(options.out) if options.out else tempfile.mkdtemp(prefix="agentsynth-parallel-")
     results = {}
     threads = [
-        threading.Thread(target=run_one, args=(i, options.app, os.path.join(out_root, "instance%d" % i), results))
+        threading.Thread(target=run_one, args=(i, options.app, os.path.join(out_root, "instance%d" % i), results, options.visible))
         for i in (1, 2)
     ]
     for t in threads:

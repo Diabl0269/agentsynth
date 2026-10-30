@@ -60,10 +60,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", help="path to Agent Synth.app (default: build-ci-local)")
     parser.add_argument("--out", default=os.path.join(os.path.dirname(HERE), "out"), help="where the PNG goes")
+    parser.add_argument("--visible", action="store_true", help="show the app window (default: hidden)")
     options = parser.parse_args()
     out_dir = os.path.abspath(options.out)
     os.makedirs(out_dir, exist_ok=True)
-    with TestModeApp(options.app) as app:
+    with TestModeApp(options.app, visible=options.visible) as app:
         png = select_card(app, out_dir)
     print("PASS select_card ->", png)
 

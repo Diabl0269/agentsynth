@@ -2,6 +2,8 @@
 # read a control's state and save a PNG of any component. It needs MainComponent, so it lives in AppUI; every platform
 # compiles it, so CI tests and coverage reach it. Only Main.cpp's activation sits behind AGENTSYNTH_AUTOMATION.
 target_sources(AppUI PRIVATE
+    Source/TestMode/AutomationHiding.cpp
+    Source/TestMode/AutomationHiding.h
     Source/TestMode/TestModeCommands.cpp
     Source/TestMode/TestModeCommands.h
     Source/TestMode/TestModeComponents.cpp
@@ -16,6 +18,13 @@ target_sources(AppUI PRIVATE
     Source/TestMode/TestModeServer.h
     Source/TestMode/TestModeStateSource.h
 )
+
+# Hidden automation runs (alpha-0 windows, accessory activation policy, no App Nap): the Cocoa half. AppUI so the app and
+# the Tests binary share it; ARC for the retained activity token.
+if(APPLE)
+    target_sources(AppUI PRIVATE Source/TestMode/AutomationHidingMac.mm)
+    set_source_files_properties(Source/TestMode/AutomationHidingMac.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+endif()
 
 # Packaged builds configure -DAGENTSYNTH_AUTOMATION=OFF, so `--automation` is refused there.
 option(AGENTSYNTH_AUTOMATION "Let --automation <port> start the local test-mode server" ON)

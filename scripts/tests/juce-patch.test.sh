@@ -62,6 +62,31 @@ check "a drifted tree fails" [ $? -ne 0 ]
 apply "$WORK/tree" "$WORK/missing.patch" >/dev/null
 check "a missing patch file fails" [ $? -ne 0 ]
 
+# A git tree (FetchContent's JUCE clone) still carrying an OLDER revision of the patch -- what a CI cache restored by
+# key prefix hands over after the patch was edited: the new revision replaces it instead of failing.
+cat >"$WORK/p2.patch" <<'PATCH'
+diff --git a/f.txt b/f.txt
+--- a/f.txt
++++ b/f.txt
+@@ -1 +1 @@
+-unpatched
++patched again
+PATCH
+mkdir -p "$WORK/gtree"
+(cd "$WORK/gtree" && git init -q && echo "unpatched" >f.txt && echo "other patch" >g.txt && git add . &&
+    git -c user.email=t@t -c user.name=t commit -qm pin && echo "patched" >f.txt && echo "kept" >g.txt)
+out="$(apply "$WORK/gtree" "$WORK/p2.patch")"
+check "an older revision of the patch in a git tree is replaced" content_is "$WORK/gtree/f.txt" "patched again"
+check "it says it reset and re-applied" grep -q "re-applied" <<<"$out"
+check "files the patch doesn't touch are left alone" content_is "$WORK/gtree/g.txt" "kept"
+apply "$WORK/gtree" "$WORK/p2.patch" >/dev/null
+check "the replaced patch is then idempotent" [ $? -eq 0 ]
+
+# In a git tree whose pinned file itself no longer matches (a new JUCE tag), it is still a hard error.
+(cd "$WORK/gtree" && echo "moved on" >f.txt && git -c user.email=t@t -c user.name=t commit -qam tag)
+apply "$WORK/gtree" "$WORK/p2.patch" >/dev/null
+check "a git tree whose pinned file drifted still fails" [ $? -ne 0 ]
+
 # --- the real patches against a JUCE checkout, when one is on disk -------------------------------
 juce_src=""
 for candidate in "${JUCE_SRC:-}" "$ROOT/build-ci-local/_deps/juce-src" "$ROOT/build/_deps/juce-src"; do

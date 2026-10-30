@@ -51,6 +51,17 @@ TEST(TestModeLaunch, AutomationImpliesNoAudioDeviceAndNoKeychain) {
     EXPECT_FALSE(isKeychainFreeLaunch({"--fullscreen"}, {}, {}));
 }
 
+TEST(TestModeLaunch, AnAutomationLaunchIsHiddenUnlessVisibleIsAsked) {
+    EXPECT_TRUE(isHiddenAutomationLaunch({"--automation", "0"}));
+    EXPECT_FALSE(isHiddenAutomationLaunch({"--automation", "0", "--automation-visible"}));
+    EXPECT_FALSE(isHiddenAutomationLaunch({"--automation-visible", "--automation", "0"}));
+    // Without a usable port the server never starts, so nothing should hide the app either.
+    EXPECT_FALSE(isHiddenAutomationLaunch({"--automation"}));
+    EXPECT_FALSE(isHiddenAutomationLaunch({"--no-audio-device"}));
+    EXPECT_FALSE(isHiddenAutomationLaunch({}));
+    EXPECT_TRUE(isAutomationLaunch({"--automation", "0", "--automation-visible"}));
+}
+
 TEST(TestModeLaunch, FlagValuesAreReadAfterTheirFlag) {
     const juce::StringArray args{"--automation", "0", "--settings-dir", "/x/y", "--automation-info", "info.json"};
     EXPECT_EQ(flagValueFromArgs(args, kSettingsDirFlag), "/x/y");

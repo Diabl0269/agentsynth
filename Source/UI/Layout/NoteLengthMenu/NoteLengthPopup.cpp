@@ -1,5 +1,6 @@
 #include "UI/Layout/NoteLengthMenu/NoteLengthPopup.h"
 
+#include "TestMode/AutomationHiding.h"
 #include "UI/Layout/ButtonStateEase.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -523,7 +524,7 @@ void NoteLengthPopup::inputAttemptWhenModal() { close(); }
 
 // Like a call-out, the popup does not outlive the app being in front.
 void NoteLengthPopup::timerCallback() {
-    if (!juce::Process::isForegroundProcess())
+    if (!synth::testmode::appIsInFront())
         close();
 }
 

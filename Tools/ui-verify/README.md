@@ -12,8 +12,16 @@ python3 Tools/ui-verify/examples/select_card.py   # opens fixtures/macros.agspro
 python3 Tools/ui-verify/examples/parallel.py      # two instances at once, each with its own settings directory
 ```
 
-Both take `--app <path to Agent Synth.app>` and `--out <dir>`. Each run starts its own app with `--automation 0`
+Both take `--app <path to Agent Synth.app>`, `--out <dir>` and `--visible`. Each run starts its own app with `--automation 0`
 (a free port) and a fresh temporary settings directory, so it runs next to your own Agent Synth and next to other runs.
+
+## Hidden by default
+
+A run never puts a window on your screen, shows a Dock icon or takes keyboard focus, so you can keep working while it
+runs: the app is launched with `--automation 0` and, unless you ask otherwise, its windows are invisible and
+click-through. Screenshots still work, since they render the component rather than read the screen. Pass `--visible` to
+`run.py` and the examples (`TestModeApp(visible=True)`, which adds `--automation-visible` and brings the app to the front)
+to watch it. Details: [`docs/development/test-mode.md`](../../docs/development/test-mode.md#hidden-windows).
 
 ## Writing a script
 

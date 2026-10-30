@@ -59,14 +59,18 @@ def has_test_mode(executable):
 
 
 class TestModeApp:
-    """Launches the app with --automation 0 (an OS-picked port, never a fixed one) and its own settings directory."""
+    """Launches the app with --automation 0 (an OS-picked port, never a fixed one) and its own settings directory.
 
-    def __init__(self, app_path=None, settings_dir=None, startup_timeout=60.0, extra_args=()):
+    The app is hidden by default (no window on screen, no Dock icon, never takes focus), so a run does not disturb
+    whoever is using the machine. `visible=True` passes --automation-visible to watch it, and brings it to the front."""
+
+    def __init__(self, app_path=None, settings_dir=None, startup_timeout=60.0, extra_args=(), visible=False):
         self.app_path = app_path or default_app_path()
         self._own_settings_dir = settings_dir is None
         self.settings_dir = settings_dir or tempfile.mkdtemp(prefix="agentsynth-testmode-")
         self.startup_timeout = startup_timeout
         self.extra_args = list(extra_args)
+        self.visible = visible
         self.process = None
         self.port = None
         self.pid = None
@@ -91,7 +95,8 @@ class TestModeApp:
                 "%s was built without test mode (older than it, or a packaged build); build this worktree with "
                 "scripts/ci-local.sh rather than borrowing another build" % executable
             )
-        args = [executable, "--automation", "0", "--settings-dir", self.settings_dir] + SAFETY_ARGS + self.extra_args
+        visible_args = ["--automation-visible"] if self.visible else []
+        args = [executable, "--automation", "0", "--settings-dir", self.settings_dir] + SAFETY_ARGS + visible_args + self.extra_args
         env = dict(os.environ, **SAFETY_ENV)
         self.process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env)
         # A reader thread, so the timeout holds even when the app prints nothing at all; it also keeps the pipe
@@ -124,7 +129,10 @@ class TestModeApp:
     def activate(self):
         """Brings the app to the front: key events only reach the focused window of the ACTIVE application, so a
         scripted run started from a terminal (or with another app's window on top) would otherwise type into nothing.
-        Best effort: needs pyobjc (AppKit) on macOS, a no-op elsewhere."""
+        Best effort: needs pyobjc (AppKit) on macOS, a no-op elsewhere. A hidden app (the default) is never activated:
+        test-mode input goes straight to the window, and activating would take focus from the user."""
+        if not self.visible:
+            return
         try:
             from AppKit import NSRunningApplication  # pyobjc, optional
 

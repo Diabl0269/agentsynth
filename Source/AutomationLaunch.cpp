@@ -17,6 +17,10 @@ bool isTruthyEnv(const juce::String& envValue) {
 
 bool isAutomationLaunch(const juce::StringArray& commandLineArgs) { return commandLineArgs.contains(kAutomationFlag); }
 
+bool isHiddenAutomationLaunch(const juce::StringArray& commandLineArgs) {
+    return automationPortFromArgs(commandLineArgs).has_value() && !commandLineArgs.contains(kAutomationVisibleFlag);
+}
+
 std::optional<int> automationPortFromArgs(const juce::StringArray& commandLineArgs) {
     const int at = commandLineArgs.indexOf(kAutomationFlag);
     if (at < 0 || at + 1 >= commandLineArgs.size())

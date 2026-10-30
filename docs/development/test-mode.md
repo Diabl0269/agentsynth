@@ -14,6 +14,7 @@ Scripts for it live in [`Tools/ui-verify/`](../../Tools/ui-verify/README.md).
 | `--automation <port>` | Starts the server. Port `0` picks a free port, which is what the client always uses. Implies `--no-audio-device` and `--no-keychain`; the client passes both anyway (and sets their environment variables), and refuses a binary built without test mode, since such a build ignores `--automation`, starts normally and asks for the keychain. Use the build of your own worktree. |
 | `--settings-dir <absolute dir>` | Every setting and user-data folder of this process (settings file, themes, snippets, history, recordings, the default projects folder, the stretched-loop cache) lives under that directory; installed sound packs stay shared and are only read. Under `--automation` without it, a fresh temporary directory is used, so a running real instance's files are never shared. |
 | `--automation-info <file>` | Also writes `{"port":N,"pid":P}` to the file once the server listens. |
+| `--automation-visible` | Keeps the windows on screen and focusable, for a person who wants to watch (see [Hidden windows](#hidden-windows)). Without it an automation launch is hidden. |
 | `--automation-motion` | Keeps animations on. Under `--automation` they are otherwise switched off, so a click lands in its final state. |
 
 On start the app prints exactly one line to stdout: `AGENTSYNTH_AUTOMATION_PORT <port> <pid>`.
@@ -48,7 +49,7 @@ thread is never blocked and timers and animations run in between.
 |---|---|---|
 | `ping` | | `{pid, version}` |
 | `list` | `root?`, `depth` (6), `all` (false) | tree of `{id,name,title,type,bounds,visible,showing,children}`; bounds are relative to the main window; without `root`, every showing top-level |
-| `click` | `id`, `x?`, `y?` (local, default centre), `button` (`left`/`right`), `clicks` (1/2), `mods` (`cmd`,`shift`,`alt`,`ctrl`) | `{id, point}` |
+| `click` | `id`, `x?`, `y?` (local, default centre), `button` (`left`/`right`), `clicks` (1/2), `mods` (one of `cmd`,`shift`,`alt`,`ctrl` as a string, or a list of them; an unknown name is an error naming it) | `{id, point}` |
 | `drag` | `from`, `to`, `fromX?`, `fromY?`, `toX?`, `toY?`, `steps` (12), `mods` | `{from, to}` |
 | `key` | `keys` (`cmd+z`, `space`, `shift+tab`, `escape`, `up` ...), `target?` | `{handled}` |
 | `getState` | `id` | the `list` fields plus `enabled`, `hasFocus`, and per type: Button `text`/`toggleState`, Label `text`, Slider `value`/`min`/`max`, ComboBox `text`/`selectedId`, TextEditor `text`; a module card adds `selected`, `moduleType`, `title`, `nodeId` |
@@ -86,6 +87,26 @@ With it on, test windows are never raised or moved, and a click only has to land
 "the point is outside the window"). The patch covers the macOS and Windows peers: on Linux a covered window still
 misses the click, so that test skips Linux. Keyboard modifiers of a mouse event are set through `ModifierKeys::currentModifiers`
 for the duration of the event, because JUCE ignores the flags of the event itself.
+
+## Hidden windows
+
+An automation launch does not disturb whoever is using the machine: no window appears, no Dock icon, and the app never
+takes keyboard focus. Unless `--automation-visible` is passed, `Source/Main.cpp` calls `hideAutomationWindows()`
+(`Source/TestMode/AutomationHiding.*`) before the first window exists. On macOS that sets the JUCE flag
+`juce::ComponentPeer::hideWindowsForAutomation` (second flag of the patch above), so each window is alpha 0, ignores
+the real mouse and has no shadow, `setAlpha` cannot undo it, and nothing activates the app; it also switches the
+process to the accessory activation policy and holds an `NSProcessInfo` activity for the process lifetime, so App Nap
+cannot slow a process with no visible window. The windows are still ordered in and rendered, which is why screenshots
+(they render the component) and display-linked animation keep working. Test-mode input goes to the `ComponentPeer`, not
+through the OS event queue, so it needs neither visibility nor focus. Because the app is never active, the OS never
+reports a window as key and `Process::isForegroundProcess()` is false; the patch therefore tracks focus inside JUCE
+(`toFront(true)` gives the window JUCE focus) and counts a hidden process as foreground for pop-up menus, call-out
+boxes, tooltips, key commands and the active top-level window. App code that closes something when the app is not in
+front uses `synth::testmode::appIsInFront()` instead of `juce::Process::isForegroundProcess()`. Windows and Linux do
+not hide anything (the flag is only set on macOS) and build and run as before.
+
+The `Tests` binary does the same right after JUCE starts (`Tests/TestMain.cpp`); `AGENTSYNTH_TESTS_VISIBLE=1` skips it.
+`Tools/ui-verify` is hidden by default and takes `--visible`.
 
 ## Running in parallel
 
