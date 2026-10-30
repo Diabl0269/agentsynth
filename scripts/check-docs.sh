@@ -239,6 +239,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # see that file's own header comment for why.
 # shellcheck source=scripts/lib/check-docs-checks.sh
 source "$SCRIPT_DIR/lib/check-docs-checks.sh"
+# A pass is remembered by a hash over everything this guard reads (scripts/lib/guard-cache.sh).
+# shellcheck source=scripts/lib/guard-cache.sh
+source "$SCRIPT_DIR/lib/guard-cache.sh"
 if [ -n "$ROOT_OVERRIDE" ]; then
     ROOT="$(cd "$ROOT_OVERRIDE" && pwd)"
 else
@@ -399,14 +402,40 @@ write_step_summary() {
 
 # --- check mode -----------------------------------------------------------------------------
 
+# run_check -- skips the scan when every file it reads (the scanned files and their names, the
+# baseline) and this guard's own scripts are unchanged since the same inputs last passed. Anything
+# that differs, a deleted link target included, changes the hash and scans in full. Only a pass is
+# remembered.
 run_check() {
+    local scanned key stored out rc
+    scanned="$(mktemp)"
+    stored="$(mktemp)"
+    out="$(mktemp)"
+    list_scanned_paths >"$scanned"
+    gc_init docs "" "${BASH_SOURCE[0]}" "$SCRIPT_DIR/lib/check-docs-checks.sh"
+    key="$(gc_whole_key "$scanned" "$DOCS_BASELINE")"
+    if [ -n "$key" ] && gc_whole_get "$key" >"$stored"; then
+        cat "$stored"
+        echo "check-docs: skipped the scan, every input is unchanged since it last passed (GUARD_CACHE=0 forces a scan)."
+        rm -f "$scanned" "$stored" "$out"
+        return 0
+    fi
+    run_check_scan "$scanned" | tee "$out"
+    rc="${PIPESTATUS[0]}"
+    [ "$rc" -eq 0 ] && gc_whole_put "$key" "$out"
+    rm -f "$scanned" "$stored" "$out"
+    return "$rc"
+}
+
+# run_check_scan <scanned-file> -- the full scan, over the paths already listed in <scanned-file>.
+run_check_scan() {
     workdir="$(mktemp -d)"
     trap 'rm -rf "$workdir"' EXIT
 
     # ONE `find` over the whole tree, shared by every check below -- see build_pairs_file's own
     # comment on why (this alone took check-docs.sh from ~4.2s to well under 2s on the real tree:
     # `find` was being re-walked 4 times per run, once per consumer, before this).
-    list_scanned_paths >"$workdir/scanned.txt"
+    cp "$1" "$workdir/scanned.txt"
     build_pairs_file "$workdir/scanned.txt" "$workdir/pairs_all.txt"
     build_pairs_file "$workdir/scanned.txt" "$workdir/pairs_md.txt" md_only
 

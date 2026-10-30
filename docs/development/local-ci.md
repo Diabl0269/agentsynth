@@ -12,6 +12,8 @@ bash scripts/ci-local.sh --skip-tests   # skip the Tests suite for a faster loca
 bash scripts/ci-local.sh --help         # usage
 ```
 
+A gate skips what has not changed, never what might have: see [What a gate skips](#what-a-gate-skips).
+
 ## What it does, in order
 
 Fast checks first, so a lint failure does not wait on a full build.
@@ -39,7 +41,9 @@ Fast checks first, so a lint failure does not wait on a full build.
    header; see [Header reach guard](#header-reach-guard) below.
 6. `bash scripts/check-docs.sh` against the real tree — see [`docs-guard.md`](docs-guard.md).
 7. Every `scripts/tests/*.test.sh`, globbed, so a newly added one is picked up automatically without
-   editing this script. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree
+   editing this script. A test that checks a script against fixtures reruns only when it, a file it
+   names, or what those name changed since it last passed (see
+   [What a gate skips](#what-a-gate-skips)); the ones that scan the real tree below run every time. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree
    itself, so this also covers the Lint job's
    [ASCII-literal gate](ascii-literal-guard.md) on live code, not just the checker's fixtures.
    `no-pipe-into-grep-q.test.sh` scans `scripts/` for `echo`/`printf` piped into `grep -q` in a script
@@ -243,8 +247,42 @@ filtered suite while iterating) takes no slot, so keep such runs short.
 `bash scripts/ci-local.sh --fast` is for iterating. It checks formatting of changed files only, builds
 only `Tests`, and runs only the suites whose test files include a changed header or changed themselves
 (`scripts/lib/changed-tests.py`, reading the build's own dependency data). A build-input change, or one
-reaching over 40% of the test files, runs the full suite. CI still runs everything, so `--fast` passing
-is not a promise that CI passes.
+reaching over 40% of the test files, runs the full suite. It skips the guards and the script self-tests
+entirely and prints that it did, leaving them to the full gate (the pre-push hook) and CI. CI still runs
+everything, so `--fast` passing is not a promise that CI passes.
+
+## What a gate skips
+
+Every skip is keyed by content, so a change that matters changes the key and the work runs. A pass is
+the only thing ever remembered; a failure is never stored. Each skip has a self-test that makes a real
+change and expects the failure ([`guard-cache.test.sh`](../../scripts/tests/guard-cache.test.sh),
+[`ci-local-skip.test.sh`](../../scripts/tests/ci-local-skip.test.sh)).
+
+| What | Skipped when | Never skipped |
+|---|---|---|
+| Per-file scans of `check-function-sizes`, `check-file-sizes`, `check-fixed-waits`, `check-header-comments` | the file's content, the guard script and its scanner are unchanged (and, for fixed waits, the wrapper names every header defines) | the comparison with the baseline and the limits: a changed baseline, a lowered cap or a deleted sibling file fails on the next run |
+| `check-docs` | every scanned file's name and content, the baseline and the guard's own scripts hash the same as the last passing run | a deleted link target, a new doc, a changed baseline: each changes the hash |
+| Script self-tests | the test, the scripts it names (followed through `source` and the like), and anything it reads by name hash the same as when it last passed | the tree-scanning tests (`tree_scanning` in `ci-local.sh`), a test with no resolvable dependency, a test that reaches scripts by glob |
+| The whole gate | the tracked content, uncommitted changes, untracked files, flags and `clang-format` version hash the same as a gate that passed | an `--open` launch, `CI_LOCAL_FORCE=1`, any difference in the tree or flags |
+
+Where things live, all under the git common dir so every worktree shares them:
+
+- `agentsynth-guard-cache/<guard>-<hash>/`: one file per scanned file (`<content hash>_<path>`), written to
+  a temporary name and renamed, so gates writing at once cannot tear an entry. A missing, half-written or
+  unreadable entry is just a rescan; an unwritable folder turns the cache off for that run. The folder name
+  hashes the guard script, its scanner and `scripts/lib/guard-cache.sh`, so editing any of them starts
+  over. Unused folders and entries older than a month are pruned about daily. `GUARD_CACHE=0` turns the
+  cache off.
+- `agentsynth-gate-stamps/`: one small file per passing script test and per passing gate.
+
+A script test's dependencies are read from the text by `scripts/lib/test-deps.py`: file names that
+resolve under the repo, the scripts folders, `.github/workflows` and `cmake`, followed through each
+`.sh`, `.awk` and `.py` it finds (whole-line comments are ignored). It over-approximates on purpose. When
+the mapping is in doubt it gives no key and the test runs.
+
+CI is untouched: its Lint job starts from a fresh checkout with an empty cache, so it runs every guard and
+every script test in full, as before. Restoring the cache there would add steps to a workflow file that is
+at its size cap, for a saving that has not been measured on a runner.
 
 **ccache settings for parallel worktrees.** The dependency-source reuse above only covers the
 FetchContent download; the compiler cache is a separate concern and needs its own configuration to
