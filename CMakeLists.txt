@@ -553,6 +553,7 @@ add_library(Core STATIC
 include(cmake/JuceModules.cmake)
 target_link_libraries(Core PUBLIC JuceModules)
 synth_enable_pch(Core)
+synth_enable_unity(Core)
 include(cmake/PopupMotionSources.cmake)
 include(cmake/TelemetrySources.cmake)
 include(cmake/KnobStyleSources.cmake)
@@ -690,6 +691,7 @@ endif()
 # the Assets binary-data lib and HAS_FONT_ASSETS.
 target_link_libraries(AppUI PUBLIC Core)
 synth_enable_pch(AppUI)
+synth_enable_unity(AppUI)
 
 # WhatsNewData.h (generated above): PRIVATE, only AppUI's Source/MainComponent/ units include it.
 target_include_directories(AppUI PRIVATE "${SYNTH_WHATSNEW_GENERATED_DIR}")

@@ -1,6 +1,7 @@
 // The Sounds view of the left sidebar: its pure wording, keyboard and mouse navigation, search, favourites, the
 // Modules / Sounds switch, the width handle, and every built-in theme rendered to a PNG strip for review.
 #include "../App/MainComponent/MainComponentTestFixture.h"
+#include "../TestWait.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
@@ -247,7 +248,7 @@ TEST_F(MainComponentTest, LibraryShortcutsFollowTheClosedModulesSoundsStateMachi
         const auto binding = mc.getShortcutManager().getBinding(action);
         ASSERT_TRUE(binding.isValid());
         EXPECT_TRUE(mc.keyPressed(binding));
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+        synth::test::flushMessageQueue();
     };
     ASSERT_TRUE(mc.isLibraryConfiguredVisible());
     sidebar.setView(SidebarView::Modules, false);

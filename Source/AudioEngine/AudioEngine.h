@@ -26,6 +26,7 @@
 #include <juce_core/juce_core.h>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 namespace synth {
@@ -69,6 +70,9 @@ public:
 
     // Standalone only; call before initialise(). Skips opening any audio/MIDI device (automation launch).
     void setAudioDeviceDisabled(bool disabled) noexcept;
+    // Test seam, process-wide: off, initialiseDevices() opens no MIDI input.
+    static void setOpenAllMidiInputsForTest(bool open) noexcept;
+    static bool openAllMidiInputsEnabled() noexcept;
     bool isAudioDeviceDisabled() const noexcept;
 
     // MESSAGE THREAD, installed by the OWNER (MainComponent on the standalone path) before
@@ -184,6 +188,8 @@ public:
 
     // MESSAGE THREAD. Sampler MIDI-fed flags and Drum Kit pad links; see AudioEngineTimelinePublish.cpp.
     void refreshMidiWiring();
+    // MESSAGE THREAD. Re-collects the nodes the MIDI driver thread delivers into.
+    void refreshExternalMidiNodes();
 
     // ---- Right-borrows-Left normalling (docs/architecture/audio-engine.md#normalling-fro324) ------------
     // MESSAGE THREAD. See AudioEngineTimelinePublish.cpp for every call site.
@@ -778,6 +784,9 @@ private:
     synth::MidiInputSources midiInputSources_;
     synth::MidiInputSources::Block midiSourcedBlock_; // this device callback's per-device notes, audio thread only
     std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;
+    // Taken by driver threads and the message thread, never the audio thread.
+    std::mutex externalMidiNodesLock_;
+    std::vector<juce::AudioProcessorGraph::Node::Ptr> externalMidiNodes_;
 
     // MESSAGE THREAD, Standalone only. Returns whether the open set changed.
     bool reconcileMidiInputs();

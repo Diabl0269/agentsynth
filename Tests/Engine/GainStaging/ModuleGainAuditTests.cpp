@@ -40,6 +40,7 @@
 #include "Modules/VCAModule.h"
 #include "Modules/VoiceMixerModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
+#include "TestPaths.h"
 
 #include <algorithm>
 #include <cmath>

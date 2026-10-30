@@ -72,27 +72,10 @@ done
 CI_YML="${CI_YML:-$ROOT/.github/workflows/ci.yml}"
 BUILD_ARTIFACTS_YML="${BUILD_ARTIFACTS_YML:-$ROOT/.github/workflows/build-artifacts.yml}"
 EXCLUDED_CI_JOBS="${EXCLUDED_CI_JOBS:-build-and-test-asan}"
-# ~2.4 GB before FRO341 (measured: ci.yml's deps3 family ~1.1 GB + build-artifacts.yml's
-# release-deps-ninja3 family ~1.1 GB, summed across all 3 OSes each). FRO341 also made JUCE's
-# FetchContent_Declare a shallow clone (CMakeLists.txt). Measured 2026-09-28 via a real
-# `cmake -S . -B <dir>` configure on macOS against THIS PR's own CMakeLists.txt (the whole of
-# build/_deps, which is what the cache path actually covers -- not just the fetched "-src" trees):
-# juce-src 198 MB (a shallow clone still downloads every blob in that one commit's tree -- JUCE
-# ships examples/fonts/images in-tree -- so it saves the multi-commit *history* pack, not the
-# tree itself) + juce-build 106 MB (juceaide, JUCE's own code-gen helper, built at CONFIGURE time,
-# before this project's own `cmake --build` does anything) + juce-subbuild ~0 + sparkle-src 92 MB
-# + sparkle-subbuild 15 MB (APPLE-only) = 411 MB for a macOS entry. Linux/Windows entries are
-# estimated, not directly measured in this session (no Linux/Windows machine at hand): juce-src +
-# juce-build are platform-independent (~304 MB), and WinSparkle's zip distribution is far smaller
-# than Sparkle's xcframework bundle, so a Windows entry is estimated at ~330 MB. Sum per workflow
-# (Linux 304 + macOS 411 + Windows ~330) =~ 1045 MB; both ci.yml's deps4 and build-artifacts.yml's
-# release-deps-ninja4 share this shape (neither sets ENABLE_TESTS, so googletest is never fetched
-# into either), so ~2090 MB total. Rounded up to 2560 MB for margin against the unmeasured
-# Linux/Windows estimate. Re-measure via `gh api repos/:owner/:repo/actions/caches` once main has
-# re-seeded deps4/release-deps-ninja4 (this PR's own first run is cold under the bumped key -- see
-# DEPS_KEY_CHANGED in ci-cache-check.sh -- so there is nothing to measure from CI yet) and tighten
-# this constant once real per-OS numbers exist.
-DEPS_ALLOWANCE_MB="${DEPS_ALLOWANCE_MB:-2560}"
+# Measured from the Actions cache listing on 2026-10-30: ci.yml's deps6 entries 192 + 185 + 142 MB,
+# build-artifacts.yml's release-deps-ninja6 entries 188 + 182 + 139 MB, 1028 MB for one generation.
+# The allowance leaves about a quarter of margin for a dependency that grows.
+DEPS_ALLOWANCE_MB="${DEPS_ALLOWANCE_MB:-1280}"
 BUDGET_CAP_MB="${BUDGET_CAP_MB:-8192}"
 MIN_CI_MAX_SIZE_LINES="${MIN_CI_MAX_SIZE_LINES:-3}"
 MIN_BA_MAX_SIZE_LINES="${MIN_BA_MAX_SIZE_LINES:-3}"

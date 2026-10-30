@@ -27,6 +27,7 @@
 #include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/SequencerModule.h"
+#include "TestPaths.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>

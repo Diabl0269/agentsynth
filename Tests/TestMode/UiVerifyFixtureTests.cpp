@@ -11,6 +11,7 @@
 #include "MacroSet.h"
 #include "PatchDocument.h"
 #include "ProjectBundle.h"
+#include "TestPaths.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <gtest/gtest.h>

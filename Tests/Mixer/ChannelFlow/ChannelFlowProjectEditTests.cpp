@@ -15,6 +15,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Music/SongKey.h"
+#include "TestPaths.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <gtest/gtest.h>

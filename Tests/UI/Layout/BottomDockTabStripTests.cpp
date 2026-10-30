@@ -2,6 +2,7 @@
 // (docs/layout/chrome.md#tab-strip-keyboard-and-screen-reader-access): real juce::KeyPress objects through the
 // strip's focus target, the data the tab handlers are built from, and the strip's focus region.
 #include "../../App/MainComponent/MainComponentTestFixture.h"
+#include "../../TestWait.h"
 #include "BottomDockActiveTabResetGuard.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
@@ -178,7 +179,7 @@ namespace {
 // message queue is drained before the caller looks at the result.
 bool pressKey(MainComponent& mc, const juce::KeyPress& key) {
     const bool used = mc.keyPressed(key);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::flushMessageQueue();
     return used;
 }
 

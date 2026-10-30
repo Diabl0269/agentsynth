@@ -1,5 +1,6 @@
 // MainComponentModuleKeysTests.cpp -- the Rename Module and Replace Module With... commands, dispatched through the
 // application command manager the way F2 / Cmd+Alt+R reach them.
+#include "../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "Modules/AudioInputModule.h"
@@ -86,7 +87,7 @@ TEST_F(MainComponentTest, OptionROpensTheSelectedCardsTitleEditorLikeF2) {
     editor.selectModule(oscId, false);
 
     EXPECT_TRUE(mc.keyPressed(juce::KeyPress('r', juce::ModifierKeys::altModifier, juce::juce_wchar(0xAE))));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
 
     ModuleComponent* osc = nullptr;
     for (auto* c : editor.getModuleComponents())

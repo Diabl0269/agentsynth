@@ -3,6 +3,7 @@
 // Covers ThemeManager, ThemeLoader, BuiltInThemes, AppLookAndFeel::applyTheme,
 // and the WCAG contrast requirement.  All 15 cases from spec section 9.
 
+#include "TestPaths.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/Theme.h"
