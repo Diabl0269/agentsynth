@@ -43,7 +43,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"Card: Amp Env / daylight / Button 'Time'", "FRO1307"},
     {"Card: Delay / daylight / Button 'Time'", "FRO1307"},
     {"Card: Distortion / daylight / Button 'Soft'", "FRO1307"},
-    {"Card: Drum Kit / daylight / Button 'Kick'", "FRO1307"},
     {"Card: Envelope Follower / daylight / Button 'Peak'", "FRO1307"},
     {"Card: Filter Env / daylight / Button 'Time'", "FRO1307"},
     {"Card: LFO / daylight / Button 'Sync'", "FRO1307"},
