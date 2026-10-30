@@ -62,6 +62,9 @@ void KeyField::lookAndFeelChanged() {
 // The mouse path reaches here through ComboBox's own asynchronous open; there are no items, so the stock menu never
 // shows.
 void KeyField::showPopup() {
+    // ComboBox raised its "menu active" latch before calling this and only the stock menu's close lowers it; with no
+    // stock menu, left raised every later click is ignored as already open.
+    hidePopup();
     if (isEnabled() && onOpen)
         onOpen();
 }
