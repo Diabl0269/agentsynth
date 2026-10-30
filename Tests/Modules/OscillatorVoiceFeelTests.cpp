@@ -1,5 +1,5 @@
 // Oscillator voice feel: Phase and Rand restart every unison voice on a note, and Blend and Width
-// shape the unison stack. The defaults (Phase 0, Rand 0, Blend 25 %, Width 0) keep the stack mono.
+// shape the unison stack. A new Oscillator starts at Phase 0, Rand 0, Detune 35 cents, Blend 75 %, Width 100 %.
 
 #include "../Engine/AudioRendering/ClickDetector.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -101,12 +101,12 @@ double energy(const std::vector<float>& x, size_t from, size_t to) {
 
 // ---- Parameters -----------------------------------------------------------------------------------
 
-TEST(OscillatorVoiceFeel, NewParametersExistWithNeutralDefaults) {
+TEST(OscillatorVoiceFeel, NewParametersExistWithTheirDefaults) {
     OscillatorModule osc;
     EXPECT_NEAR(actualOf(osc, "phase"), 0.0f, 1e-4f);
     EXPECT_NEAR(actualOf(osc, "randomPhase"), 0.0f, 1e-4f);
-    EXPECT_NEAR(actualOf(osc, "blend"), 0.25f, 1e-4f) << "a new Oscillator starts at Blend 25 %";
-    EXPECT_NEAR(actualOf(osc, "width"), 0.0f, 1e-4f);
+    EXPECT_NEAR(actualOf(osc, "blend"), 0.75f, 1e-4f) << "a new Oscillator starts at Blend 75 %";
+    EXPECT_NEAR(actualOf(osc, "width"), 1.0f, 1e-4f);
     EXPECT_NEAR(param(osc, "phase")->convertFrom0to1(1.0f), 360.0f, 1e-3f);
     EXPECT_NEAR(param(osc, "randomPhase")->convertFrom0to1(1.0f), 100.0f, 1e-3f);
 }
@@ -158,8 +158,8 @@ TEST(OscillatorVoiceFeel, NewParametersSurviveSaveAndLoad) {
     EXPECT_NEAR(actualOf(viaBinary, "detune"), 37.0f, 0.05f);
 }
 
-// Regression test for FRO1077: the default Blend moved from 100 % to 25 %, which must not touch a project (or a
-// preset or generated patch) that never recorded a Blend.
+// Regression test for FRO1077: the default Blend moved from 100 % (then to 25 %, now 75 %), which must not touch a
+// project (or a preset or generated patch) that never recorded a Blend.
 TEST(OscillatorVoiceFeel, ANodeStoredWithoutBlendKeepsBlendAtOneHundredPercent) {
     juce::AudioProcessorGraph source;
     source.addNode(std::make_unique<OscillatorModule>());
@@ -170,7 +170,7 @@ TEST(OscillatorVoiceFeel, ANodeStoredWithoutBlendKeepsBlendAtOneHundredPercent) 
 
     juce::AudioProcessorGraph kept;
     ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, kept, true, /*trusted=*/true));
-    EXPECT_NEAR(actualOf(*kept.getNodes().getFirst()->getProcessor(), "blend"), 0.25f, 1e-4f)
+    EXPECT_NEAR(actualOf(*kept.getNodes().getFirst()->getProcessor(), "blend"), 0.75f, 1e-4f)
         << "a stored value is loaded as it is";
 
     params->removeProperty("blend");
@@ -402,6 +402,7 @@ TEST(OscillatorVoiceFeel, BlendOneWidthZeroIsTheConstantPowerSum) {
     setActual(rig.osc, "unison", 4.0f);
     setActual(rig.osc, "detune", 30.0f);
     setActual(rig.osc, "blend", 1.0f);
+    setActual(rig.osc, "width", 0.0f);
     rig.settle();
     rig.render(4, {{0, 0, 69, true}});
     const auto expected = expectedStack(4, 30.0, 1.0, /*useBlend*/ true, rig.left.size());
@@ -416,6 +417,7 @@ TEST(OscillatorVoiceFeel, BlendZeroLeavesOnlyTheCentreVoices) {
         setActual(rig.osc, "unison", (float)count);
         setActual(rig.osc, "detune", 50.0f);
         setActual(rig.osc, "blend", 0.0f);
+        setActual(rig.osc, "width", 0.0f);
         rig.settle();
         rig.render(4, {{0, 0, 69, true}});
         const auto expected = expectedStack(count, 50.0, 0.0, /*useBlend*/ true, rig.left.size());

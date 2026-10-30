@@ -102,8 +102,8 @@ public:
         // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
         juce::NormalisableRange<float> detuneRange(0.0f, 100.0f);
         detuneRange.setSkewForCentre(25.0f);
-        addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", detuneRange, 0.0f,
-                                                                 synth::centsAttributes()));
+        addParameter(detuneParam = new juce::AudioParameterFloat(
+                         "detune", "Detune", detuneRange, synth::kDefaultUnisonDetuneCents, synth::centsAttributes()));
         addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
         // Pulse Width is the Square's duty cycle in percent (50 = today's square); Glide is the
         // portamento time in ms (0 = off, today's behaviour).
@@ -127,10 +127,10 @@ public:
                                                                       0.0f, synth::percentAttributes()));
         addParameter(blendParam =
                          new juce::AudioParameterFloat("blend", "Blend", juce::NormalisableRange<float>(0.0f, 1.0f),
-                                                       0.25f, synth::fractionPercentAttributes()));
+                                                       synth::kDefaultUnisonBlend, synth::fractionPercentAttributes()));
         addParameter(widthParam =
                          new juce::AudioParameterFloat("width", "Width", juce::NormalisableRange<float>(0.0f, 1.0f),
-                                                       0.0f, synth::fractionPercentAttributes()));
+                                                       synth::kDefaultUnisonWidth, synth::fractionPercentAttributes()));
         // Mono voice feel. Glide Mode "Scaled" makes Glide the time per octave; Glide Curve "Exponential" is
         // fast at the start and slow at the end; Legato (mono only) glides and keeps the phase only for
         // overlapping notes.
@@ -149,17 +149,18 @@ public:
         enableVisualBuffer(true);
     }
 
-    /** A stored Oscillator node with no Blend predates the 25 % default: it keeps Blend at 100 %. */
+    /** A stored Oscillator node with no Detune, Blend or Width predates the current defaults: it keeps the sound it
+        had (Detune 0, Blend 100 %, Width 0). */
     void applyStoredParamDefaults(const juce::NamedValueSet& storedParams) override {
-        if (!storedParams.contains("blend"))
-            blendParam->setValueNotifyingHost(blendParam->convertTo0to1(1.0f));
+        synth::restoreLegacyUnisonDefaults([&](const char* key) { return storedParams.contains(key); }, *detuneParam,
+                                           *blendParam, *widthParam);
     }
-    /** The binary state of a module saved before Blend existed has no Blend key: it keeps Blend at 100 %. */
+    /** The binary state of a module saved before these defaults has no key for them: it keeps the legacy values. */
     void setStateInformation(const void* data, int sizeInBytes) override {
         ModuleBase::setStateInformation(data, sizeInBytes);
-        if (auto xml = getXmlFromBinary(data, sizeInBytes);
-            xml != nullptr && xml->hasTagName("ModuleState") && !xml->hasAttribute("blend"))
-            blendParam->setValueNotifyingHost(blendParam->convertTo0to1(1.0f));
+        if (auto xml = getXmlFromBinary(data, sizeInBytes); xml != nullptr && xml->hasTagName("ModuleState"))
+            synth::restoreLegacyUnisonDefaults([&](const char* key) { return xml->hasAttribute(key); }, *detuneParam,
+                                               *blendParam, *widthParam);
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {

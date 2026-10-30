@@ -14,6 +14,25 @@ namespace synth {
 
 constexpr int kMaxUnisonVoices = 8;
 
+/** What a new Oscillator or Wavetable starts with, so raising Unison is heard at once: a +/-35 cent spread with the
+    outer voices at 78 % of the centre and fully panned. They match the measured reference stack at its own defaults. */
+constexpr float kDefaultUnisonDetuneCents = 35.0f;
+constexpr float kDefaultUnisonBlend = 0.75f;
+constexpr float kDefaultUnisonWidth = 1.0f;
+
+/** A stored module that has no Detune, Blend or Width key was saved before those defaults: give it the values it
+    sounded with then (Detune 0, Blend 100 %, Width 0). `stores(key)` says whether the saved data holds that key. */
+template <typename StoresKey>
+void restoreLegacyUnisonDefaults(const StoresKey& stores, juce::AudioParameterFloat& detune,
+                                 juce::AudioParameterFloat& blend, juce::AudioParameterFloat& width) {
+    if (!stores("detune"))
+        detune.setValueNotifyingHost(detune.convertTo0to1(0.0f));
+    if (!stores("blend"))
+        blend.setValueNotifyingHost(blend.convertTo0to1(1.0f));
+    if (!stores("width"))
+        width.setValueNotifyingHost(width.convertTo0to1(0.0f));
+}
+
 /** Position of unison voice `u` of `count` in the detune spread: -1 (lowest) .. +1 (highest), 0 for a
     single voice. Detune cents are multiplied by this. */
 inline float unisonOffsetFraction(int u, int count) { return (count > 1) ? (2.0f * u / (count - 1) - 1.0f) : 0.0f; }

@@ -218,6 +218,9 @@ public:
 
     void setStateInformation(const void* data, int sizeInBytes) override;
 
+    /** A stored node without Detune, Blend or Width keeps the values it had before those defaults changed. */
+    void applyStoredParamDefaults(const juce::NamedValueSet& storedParams) override;
+
     // -------------------------------------------------------------------------
     // Wavetable loading (message thread)
     // -------------------------------------------------------------------------

@@ -80,6 +80,8 @@ TEST_F(WavetableOscillatorModuleTest, StackModesTransposeUnisonVoices) {
     setFloat(*module, "position", 0.0f);
     setInt(*module, "unison", 4);
     setFloat(*module, "detune", 0.0f);
+    setFloat(*module, "blend", 1.0f); // the stacked voices at full level, whatever the default Blend
+    setFloat(*module, "width", 0.0f); // and centred, so Audio L carries every voice
     setChoice(*module, "stack", (int)WavetableOscillatorModule::Stack::PowerChord);
     module->prepareToPlay(kSampleRate, kBlockSize);
 
@@ -115,6 +117,7 @@ TEST_F(WavetableOscillatorModuleTest, BlendFadesTheStackAgainstTheCentreVoice) {
 TEST_F(WavetableOscillatorModuleTest, BlendZeroInAStackModeLeavesOnlyTheRoot) {
     setFloat(*module, "position", 0.0f);
     setFloat(*module, "detune", 0.0f);
+    setFloat(*module, "width", 0.0f); // compare Audio L of a centred stack
     setInt(*module, "unison", 1);
     module->prepareToPlay(kSampleRate, kBlockSize);
     const auto single = renderNote(*module, 57, 2);
@@ -122,6 +125,7 @@ TEST_F(WavetableOscillatorModuleTest, BlendZeroInAStackModeLeavesOnlyTheRoot) {
     auto stacked = std::make_unique<WavetableOscillatorModule>(); // heap: the module is large for a Windows stack
     setFloat(*stacked, "position", 0.0f);
     setFloat(*stacked, "detune", 0.0f);
+    setFloat(*stacked, "width", 0.0f);
     setInt(*stacked, "unison", 3);
     setChoice(*stacked, "stack", (int)WavetableOscillatorModule::Stack::Octave);
     setFloat(*stacked, "blend", 0.0f);

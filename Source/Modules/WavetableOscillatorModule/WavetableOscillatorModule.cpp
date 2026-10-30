@@ -272,8 +272,8 @@ WavetableOscillatorModule::WavetableOscillatorModule()
     // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
     juce::NormalisableRange<float> detuneRange(0.0f, 100.0f);
     detuneRange.setSkewForCentre(25.0f);
-    addParameter(detuneParam =
-                     new juce::AudioParameterFloat("detune", "Detune", detuneRange, 0.0f, synth::centsAttributes()));
+    addParameter(detuneParam = new juce::AudioParameterFloat(
+                     "detune", "Detune", detuneRange, synth::kDefaultUnisonDetuneCents, synth::centsAttributes()));
 
     // ---- Phase 2: warp ----
     addParameter(warpParam = new juce::AudioParameterChoice("warp", "Warp",
@@ -288,8 +288,8 @@ WavetableOscillatorModule::WavetableOscillatorModule()
     addParameter(spreadParam = synth::newFractionParameter("spread", "Spread", 0.0f));
 
     // ---- Phase 3: richer voicing ----
-    addParameter(widthParam = synth::newFractionParameter("width", "Width", 0.0f));
-    addParameter(blendParam = synth::newFractionParameter("blend", "Blend", 1.0f));
+    addParameter(widthParam = synth::newFractionParameter("width", "Width", synth::kDefaultUnisonWidth));
+    addParameter(blendParam = synth::newFractionParameter("blend", "Blend", synth::kDefaultUnisonBlend));
     addParameter(stackParam = new juce::AudioParameterChoice(
                      "stack", "Stack", {"Detune", "Octave", "Power Chord", "12th", "Major", "Minor"}, 0));
     addParameter(subLevelParam = synth::newFractionParameter("subLevel", "Sub", 0.0f));
@@ -505,6 +505,13 @@ void WavetableOscillatorModule::setExtraState(const juce::var& state) {
     }
 }
 
+// Applied by AIStateMapper after a node's params: a stored node (project, preset or patch) with no Detune, Blend or
+// Width keeps the legacy values instead of the new module defaults.
+void WavetableOscillatorModule::applyStoredParamDefaults(const juce::NamedValueSet& storedParams) {
+    synth::restoreLegacyUnisonDefaults([&](const char* key) { return storedParams.contains(key); }, *detuneParam,
+                                       *blendParam, *widthParam);
+}
+
 void WavetableOscillatorModule::setStateInformation(const void* data, int sizeInBytes) {
     auto xmlState = getXmlFromBinary(data, sizeInBytes);
     if (xmlState == nullptr || !xmlState->hasTagName("ModuleState"))
@@ -521,6 +528,10 @@ void WavetableOscillatorModule::setStateInformation(const void* data, int sizeIn
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             if (state.hasProperty(p->paramID))
                 param->setValue((float)state.getProperty(p->paramID));
+
+    // A state saved before the current unison defaults has no key for them and keeps the sound it had.
+    synth::restoreLegacyUnisonDefaults([&](const char* key) { return state.hasProperty(key); }, *detuneParam,
+                                       *blendParam, *widthParam);
 
     if (path.isNotEmpty()) {
         const juce::File file(path);
