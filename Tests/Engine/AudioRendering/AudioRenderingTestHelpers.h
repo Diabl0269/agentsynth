@@ -25,6 +25,7 @@
 #include "Modules/SequencerModule.h"
 #include "Modules/VCAModule.h"
 #include "PresetManager.h"
+#include "TestPaths.h"
 #include <bit>
 #include <gtest/gtest.h>
 

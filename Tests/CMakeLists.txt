@@ -957,20 +957,11 @@ target_compile_definitions(Tests PRIVATE
     # For MessageManager::runDispatchLoopUntil in the fixtures. Only the test sources (and Tests'
     # own copy of the JUCE modules) see it; Core and AppUI are linked in built without it.
     JUCE_MODAL_LOOPS_PERMITTED=1
-    THEMES_DIR="${CMAKE_SOURCE_DIR}/themes"
-    # Tests/ itself, for data resolved relative to the test tree (Tests/reference/) — a test file's own
-    # __FILE__ depth changes whenever tests are reorganized into area directories.
-    TESTS_ROOT_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-    # Same fixture files TimelineOpsHarness replays — one recorded set, asserted here as
-    # fast gtest cases so CI covers them without building the harness target.
-    TIMELINE_OPS_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tools/TimelineOpsHarness/Fixtures"
-    # Real model output recorded once by Tools/AIPatchHarness (--json), replayed offline by
-    # AIPatchFixtureReplayTests.cpp — no live model, no network. See
-    # Tools/AIPatchHarness/README.md "Recording the fixture corpus".
-    AI_PATCH_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tests/fixtures/ai-patches"
-    # A recorded song answer that names a core pack sound, replayed through the real app host.
-    AI_PLAN_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tests/fixtures/ai-plans"
 )
+# TestPaths.h.in says why these are not compile definitions.
+set(UI_VERIFY_FIXTURES_DIR "${CMAKE_SOURCE_DIR}/Tools/ui-verify/fixtures")
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/TestPaths.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/TestPaths.h @ONLY)
+target_include_directories(Tests PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 # JUCE comes through Core's PUBLIC link to JuceModules (cmake/JuceModules.cmake): headers/definitions only; linking juce::juce_* here would compile a second copy.
 include(${CMAKE_CURRENT_SOURCE_DIR}/TestModeTests.cmake) # the in-app test mode
 include(${CMAKE_CURRENT_SOURCE_DIR}/ProjectLoadTests.cmake) # the project-load reveal tests

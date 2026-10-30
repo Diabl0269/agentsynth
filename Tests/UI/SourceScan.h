@@ -2,6 +2,7 @@
 // call sites, the drag surfaces and the popup openers. A new instance that no registry knows about fails by name.
 #pragma once
 
+#include "TestPaths.h"
 #include <gtest/gtest.h>
 #include <iterator>
 #include <juce_core/juce_core.h>

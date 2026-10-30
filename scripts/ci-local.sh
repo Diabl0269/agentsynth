@@ -52,19 +52,26 @@
 #       explicit compiler launchers), so a configure break only CI's flags hit shows up before the push.
 #   9. Dev-sign the built app bundle with scripts/dev-sign-app.sh (macOS only -- not a CI check,
 #      but the point where a local build exists to sign; see that script's header for why).
-#   10. Run the full suite: build-ci-local/Tests/Tests --gtest_brief=1 (failures and summary only) -- behind the shared test lock
-#       (scripts/lib/test-lock.sh, FRO192): two suites running at once on one machine collide
-#       through the shared on-disk settings file and produce false failures, so this step waits
-#       (up to CI_LOCAL_TEST_LOCK_TIMEOUT seconds, default 3600) for any other suite of this
-#       repository -- in any worktree -- to finish first, printing a "waiting" line meanwhile.
+#   10. Run the full suite as parallel GoogleTest shards (scripts/lib/test-shards.sh): each shard has
+#       its own settings folder, temp folder and hard link of the binary, and holds one of the
+#       machine-wide test slots while it runs, so several gates at once overlap rather than queue.
+#
+# Speed: lint checks run in parallel; builds use every core, limited by load average
+# (CI_LOCAL_JOBS, CI_LOCAL_LOAD); step 7 skips the script tests when nothing they read changed since
+# they last passed on this machine, except the ones that scan the real tree. Every step prints its
+# time and the run ends with a table.
+#
+# --fast is the iteration mode, not a replacement for CI: clang-format on changed files only, the
+# Tests target only, and only the test suites the change can reach (scripts/lib/changed-tests.py).
 #
 # NOT reproduced here (deliberately -- see docs/development/local-ci.md): the Ubuntu coverage gate
 # (a separate opt-in, `bash scripts/coverage.sh`), the label-gated ASAN job, and actual
 # cross-platform compilation -- this only exercises the toolchain installed on THIS machine.
 #
 # Usage:
-#   bash scripts/ci-local.sh [--open] [--skip-tests] [-h|--help]
+#   bash scripts/ci-local.sh [--fast] [--open] [--skip-tests] [-h|--help]
 #
+#   --fast        Check only what the change reaches, against origin/main; CI still runs the rest.
 #   --open        After every check passes, `open` the built app bundle (macOS only). Default
 #                 off, since this also runs headless in the pre-push hook.
 #   --skip-tests  Skip step 10 (the full Tests suite, often the slowest step). Everything else
@@ -89,10 +96,11 @@ cd "$REPO_ROOT"
 BUILD_DIR="build-ci-local"
 OPEN_APP=false
 SKIP_TESTS=false
+FAST=false
 
 usage() {
     cat <<'EOF'
-Usage: bash scripts/ci-local.sh [--open] [--skip-tests] [-h|--help]
+Usage: bash scripts/ci-local.sh [--fast] [--open] [--skip-tests] [-h|--help]
 
 Reproduces .github/workflows/ci.yml's Lint job plus this machine's platform
 build-and-test job: clang-format check, the UTF-8/ASCII literal checks, the
@@ -104,12 +112,15 @@ ENABLE_TESTS=ON, followed by the full test suite. See the header comment in
 this file, and docs/development/local-ci.md, for the
 full mapping to what CI actually runs.
 
+  --fast        Check only what the change reaches, against origin/main:
+                formatting of changed files, the Tests target, and the test
+                suites that include a changed file. CI runs the rest.
   --open        After every check passes, `open` the built app bundle
                 (macOS only). Default off, since this also runs headless
                 in the pre-push hook.
   --skip-tests  Skip the Tests suite (step 10), often the slowest step.
-                The suite runs behind a lock shared by every worktree of this
-                repository (CI_LOCAL_TEST_LOCK_TIMEOUT, default 3600 s).
+                The suite runs as shards limited by test slots shared by every
+                worktree of this repository (see scripts/lib/test-shards.sh).
                 Everything else still runs, including the dev-sign step,
                 so a rebuild still keeps the same TCC identity for a
                 live/manual app run. Default off -- the pre-push hook and
@@ -127,6 +138,9 @@ for arg in "$@"; do
         --skip-tests)
             SKIP_TESTS=true
             ;;
+        --fast)
+            FAST=true
+            ;;
         -h | --help)
             usage
             exit 0
@@ -139,8 +153,69 @@ for arg in "$@"; do
     esac
 done
 
+CORES="$( (command -v nproc >/dev/null 2>&1 && nproc) || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+RUN_START="$(date +%s)"
+STEP_NAME=""
+STEP_START=0
+STEP_TIMES=""
+
+end_step() {
+    if [ -n "$STEP_NAME" ]; then
+        STEP_TIMES="$STEP_TIMES$(printf '%6s s  %s' "$(($(date +%s) - STEP_START))" "$STEP_NAME")"$'\n'
+    fi
+    STEP_NAME=""
+}
+
 step() {
+    end_step
+    STEP_NAME="$1"
+    STEP_START="$(date +%s)"
     printf '\n=== %s ===\n' "$1"
+}
+
+# content_key <git pathspec>... -- a hash of what those paths hold now, committed or not.
+content_key() {
+    { git ls-files -s -- "$@"; git diff HEAD -- "$@"; } | git hash-object --stdin
+}
+
+# Stamps remember "this exact content passed on this machine", across worktrees and gates.
+STAMP_DIR="$(git rev-parse --git-common-dir 2>/dev/null || echo .git)"
+case "$STAMP_DIR" in /*) : ;; *) STAMP_DIR="$REPO_ROOT/$STAMP_DIR" ;; esac
+STAMP_DIR="$STAMP_DIR/agentsynth-gate-stamps"
+mkdir -p "$STAMP_DIR"
+find "$STAMP_DIR" -type f -mtime +14 -delete 2>/dev/null || true
+
+# run_parallel <max> <label::command>... -- runs them together; a failure prints its log and fails the gate.
+run_parallel() {
+    local max="$1" dir item i=0 rc=0 running=0
+    shift
+    dir="$(mktemp -d)"
+    local pids=() labels=()
+    for item in "$@"; do
+        bash -c "${item#*::}" >"$dir/$i.log" 2>&1 &
+        pids+=("$!")
+        labels+=("${item%%::*}")
+        i=$((i + 1))
+        running=$((running + 1))
+        if [ "$running" -ge "$max" ]; then
+            # bash 3.2 has no `wait -n`; the oldest of a batch is a fine throttle for a handful of checks.
+            wait "${pids[$((i - running))]}" || rc=1
+            [ "$rc" -ne 0 ] && { echo "--- ${labels[$((i - running))]} FAILED ---"; cat "$dir/$((i - running)).log"; }
+            running=$((running - 1))
+        fi
+    done
+    while [ "$running" -gt 0 ]; do
+        local at=$((i - running)) one=0
+        wait "${pids[$at]}" || one=1
+        if [ "$one" -ne 0 ]; then
+            rc=1
+            echo "--- ${labels[$at]} FAILED ---"
+            cat "$dir/$at.log"
+        fi
+        running=$((running - 1))
+    done
+    rm -rf "$dir"
+    return "$rc"
 }
 
 fail() {
@@ -161,42 +236,34 @@ if [ -n "$pinned" ] && [ "$have" != "$pinned" ]; then
     echo "          Match it: pip install \"clang-format==$pinned\""
 fi
 
-if ! find Source Tests Tools -name "*.h" -o -name "*.cpp" | xargs clang-format --dry-run --Werror; then
+if [ "$FAST" = true ]; then
+    CHANGE_BASE="$(git merge-base origin/main HEAD 2>/dev/null || echo HEAD)"
+    { git diff --name-only "$CHANGE_BASE" -- Source Tests Tools; git ls-files -o --exclude-standard -- Source Tests Tools; } |
+        grep -E '\.(h|cpp)$' >"$REPO_ROOT/$BUILD_DIR.format-list" || true
+else
+    find Source Tests Tools -name "*.h" -o -name "*.cpp" >"$REPO_ROOT/$BUILD_DIR.format-list"
+fi
+format_ok=true
+# A deleted file in the fast list is skipped by the `test -f` filter.
+while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done <"$REPO_ROOT/$BUILD_DIR.format-list" |
+    xargs -n 64 -P "$CORES" clang-format --dry-run --Werror || format_ok=false
+rm -f "$REPO_ROOT/$BUILD_DIR.format-list"
+if [ "$format_ok" = false ]; then
     fail "clang-format violations found (see above). Fix: find Source Tests Tools -name '*.h' -o -name '*.cpp' | xargs clang-format -i"
 fi
 echo "ci-local: formatting OK."
 
-# --- 2. UTF-8 literal check, against the real tree -------------------------------------------
-step "scripts/utf8-literal-check.sh (real Source/Tests tree)"
-bash scripts/utf8-literal-check.sh || fail "un-decoded UTF-8 escape check failed (see above)."
-
-# --- 3. File-size guard, against the real tree -------------------------------------------------
-step "scripts/check-file-sizes.sh (real tree, 1000-line cap + ratchet baseline)"
-bash scripts/check-file-sizes.sh || fail "file-size guard failed (see above)."
-
-# --- 3b. CI cache budget guard, against the real workflows (FRO341) ---------------------------
-step "scripts/ci-cache-budget.sh (real ci.yml/build-artifacts.yml, one-generation cache budget)"
-bash scripts/ci-cache-budget.sh || fail "CI cache budget guard failed (see above)."
-
-# --- 4. Function-size guard, against the real tree -----------------------------------------------
-step "scripts/check-function-sizes.sh (real tree, 200-line-per-function cap + ratchet baseline)"
-bash scripts/check-function-sizes.sh || fail "function-size guard failed (see above)."
-
-# --- 5. Header-comment-placement guard, against the real tree -----------------------------------
-step "scripts/check-header-comments.sh (real tree, comment-placement threshold + ratchet baseline)"
-bash scripts/check-header-comments.sh || fail "header-comment-placement guard failed (see above)."
-
-# --- 5b. Comment-provenance guard, against the real tree ---------------------------------------
-step "scripts/check-comment-provenance.sh (real tree, ticket-id/date comment count + ratchet baseline)"
-bash scripts/check-comment-provenance.sh || fail "comment-provenance guard failed (see above)."
-
-# --- 5c. Fixed-wait guard, against the real tree ------------------------------------------------
-step "scripts/check-fixed-waits.sh (real tree, fixed-time pump then assert + ratchet baseline)"
-bash scripts/check-fixed-waits.sh || fail "fixed-wait guard failed (see above)."
-
-# --- 6. Docs guard, against the real tree -------------------------------------------------------
-step "scripts/check-docs.sh (docs link/anchor/naming integrity)"
-bash scripts/check-docs.sh || fail "docs integrity guard failed (see above)."
+# --- 2-6. Guards against the real tree, together: they only read the tree -----------------------
+step "Guards: UTF-8 literals, file sizes, cache budget, function sizes, header comments, comment provenance, fixed waits, docs"
+run_parallel "$CORES" \
+    "utf8-literal-check::bash scripts/utf8-literal-check.sh" \
+    "check-file-sizes::bash scripts/check-file-sizes.sh" \
+    "ci-cache-budget::bash scripts/ci-cache-budget.sh" \
+    "check-function-sizes::bash scripts/check-function-sizes.sh" \
+    "check-header-comments::bash scripts/check-header-comments.sh" \
+    "check-comment-provenance::bash scripts/check-comment-provenance.sh" \
+    "check-fixed-waits::bash scripts/check-fixed-waits.sh" \
+    "check-docs::bash scripts/check-docs.sh" || fail "a guard failed (see above)."
 
 # --- 7. Every scripts/tests/*.test.sh ----------------------------------------------------------
 step "scripts/tests/*.test.sh"
@@ -206,10 +273,23 @@ shopt -u nullglob
 if [ "${#test_scripts[@]}" -eq 0 ]; then
     fail "no scripts/tests/*.test.sh found -- expected at least ci-cache-check.test.sh etc."
 fi
+# These scan the real tree, so they answer a new question on every run. The rest test scripts against
+# fixtures, so the same scripts give the same answer: they are skipped when these paths are unchanged
+# since they last passed on this machine. CI's Lint job always runs them all.
+tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q"
+scripts_key="$(content_key scripts .github/workflows .clang-format .clang-format-version cmake/ApplyJucePatch.cmake cmake/patches Tests/CMakeLists.txt)"
+scripts_stamp="$STAMP_DIR/script-tests-$scripts_key"
+to_run=()
 for t in "${test_scripts[@]}"; do
-    echo "--- $t ---"
-    bash "$t" || fail "$t failed (see above)."
+    name="$(basename "$t" .test.sh)"
+    case " $tree_scanning " in
+        *" $name "*) to_run+=("$name::bash $t") ;;
+        *) [ -f "$scripts_stamp" ] || to_run+=("$name::bash $t") ;;
+    esac
 done
+[ -f "$scripts_stamp" ] && echo "ci-local: scripts unchanged since they last passed; running only the tests that scan the real tree."
+run_parallel "$CORES" "${to_run[@]}" || fail "a script test failed (see above)."
+touch "$scripts_stamp"
 
 # --- 8. Configure + build every target the CI build-and-test jobs build -----------------------
 step "Configure ($BUILD_DIR)"
@@ -260,7 +340,16 @@ if [ "$FIRST_CONFIGURE" = true ]; then
     fi
 fi
 
-cmake -S . "${cmake_args[@]}"
+# A plain build re-runs CMake by itself when a CMake input changed, so an explicit configure only
+# matters the first time and when the flags here change.
+cmake_key="$(content_key CMakeLists.txt cmake Tests/CMakeLists.txt 'Tests/*.cmake' scripts/ci-local.sh)"
+if [ "$FIRST_CONFIGURE" = true ] || [ ! -f "$BUILD_DIR/.gate-configured-$cmake_key" ]; then
+    rm -f "$BUILD_DIR"/.gate-configured-*
+    cmake -S . "${cmake_args[@]}"
+    touch "$BUILD_DIR/.gate-configured-$cmake_key"
+else
+    echo "ci-local: CMake inputs unchanged, build re-runs CMake itself if needed."
+fi
 
 # --- 8b. Configure-only with CI's own flags (FRO1300) -------------------------------------------
 # The build above configures the way a developer does, so a problem that only CI's flags hit (the
@@ -268,41 +357,52 @@ cmake -S . "${cmake_args[@]}"
 # up in CI as three red build jobs while this script was green. This repeats ci.yml's macOS/Windows
 # "Configure CMake" step into a scratch dir and builds nothing. It reuses the sources the build
 # above already fetched, so it costs about 25 s warm.
-step "Configure with CI's flags ($BUILD_DIR-ci-flags, configure only)"
-ci_flags_dir="$BUILD_DIR-ci-flags"
-ci_flags_args=(-B "$ci_flags_dir" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DAGENTSYNTH_PCH=ON)
-if command -v ninja >/dev/null 2>&1; then
-    ci_flags_args+=(-G Ninja)
-fi
-if command -v ccache >/dev/null 2>&1; then
-    ci_flags_args+=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
-    if [ "$(uname)" = "Darwin" ]; then
-        ci_flags_args+=(-DCMAKE_OBJC_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache)
+ci_flags_stamp="$STAMP_DIR/ci-flags-$cmake_key"
+if [ "$FAST" = true ]; then
+    step "Configure with CI's flags (skipped: --fast)"
+elif [ -f "$ci_flags_stamp" ]; then
+    step "Configure with CI's flags (unchanged since it last passed)"
+else
+    step "Configure with CI's flags ($BUILD_DIR-ci-flags, configure only)"
+    ci_flags_dir="$BUILD_DIR-ci-flags"
+    ci_flags_args=(-B "$ci_flags_dir" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DAGENTSYNTH_PCH=ON)
+    if command -v ninja >/dev/null 2>&1; then
+        ci_flags_args+=(-G Ninja)
     fi
+    if command -v ccache >/dev/null 2>&1; then
+        ci_flags_args+=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+        if [ "$(uname)" = "Darwin" ]; then
+            ci_flags_args+=(-DCMAKE_OBJC_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache)
+        fi
+    fi
+    for dep_src in "$BUILD_DIR"/_deps/*-src; do
+        [ -d "$dep_src" ] || continue
+        dep="$(basename "$dep_src" -src | tr '[:lower:]' '[:upper:]')"
+        ci_flags_args+=("-DFETCHCONTENT_SOURCE_DIR_$dep=$REPO_ROOT/$dep_src")
+    done
+    # Pch.cmake refuses a precompiled header next to a ccache base_dir, which CI never sets but a
+    # developer's ~/.ccache may; clear it for this one configure only.
+    CCACHE_BASEDIR="" cmake -S . "${ci_flags_args[@]}" || fail "configure with CI's flags failed (see above): CI's configure step would fail the same way."
+    touch "$ci_flags_stamp"
 fi
-for dep_src in "$BUILD_DIR"/_deps/*-src; do
-    [ -d "$dep_src" ] || continue
-    dep="$(basename "$dep_src" -src | tr '[:lower:]' '[:upper:]')"
-    ci_flags_args+=("-DFETCHCONTENT_SOURCE_DIR_$dep=$REPO_ROOT/$dep_src")
-done
-# Pch.cmake refuses a precompiled header next to a ccache base_dir, which CI never sets but a
-# developer's ~/.ccache may; clear it for this one configure only.
-CCACHE_BASEDIR="" cmake -S . "${ci_flags_args[@]}" || fail "configure with CI's flags failed (see above): CI's configure step would fail the same way."
 
 step "Build (all CMake targets: Core, AppUI, AgentSynth, AgentSynthPlugin, Tests)"
-# Cap at a quarter of the cores (min 2): several worktrees build at once, and a full-core
-# --parallel per build once drove the load average past 150. CI_LOCAL_JOBS=<n> overrides.
-CORES="$( (command -v nproc >/dev/null 2>&1 && nproc) || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
-JOBS=$((CORES / 4))
-if [ "$JOBS" -lt 2 ]; then JOBS=2; fi
+# Every core, held back by load average: alone a gate takes the whole machine, and beside other gates
+# each one stops starting compiles while the load is above the limit. CI_LOCAL_JOBS and CI_LOCAL_LOAD override.
+JOBS="$CORES"
 case "${CI_LOCAL_JOBS:-}" in
     ''|*[!0-9]*|0) ;;
     *) JOBS="$CI_LOCAL_JOBS" ;;
 esac
-# --parallel (not the native `-- -jN`) works across every generator CMake might pick here --
-# Ninja, Unix Makefiles, and on Windows/macOS potentially Visual Studio or Xcode, none of which
-# understand a raw `-jN` passed through to the native tool.
-cmake --build "$BUILD_DIR" --parallel "$JOBS"
+LOAD="$CORES"
+case "${CI_LOCAL_LOAD:-}" in
+    ''|*[!0-9]*|0) ;;
+    *) LOAD="$CI_LOCAL_LOAD" ;;
+esac
+build_args=(--parallel "$JOBS")
+[ "$FAST" = true ] && build_args+=(--target Tests)
+# -l is understood by Ninja and make, which are the two generators this script can pick.
+cmake --build "$BUILD_DIR" "${build_args[@]}" -- -l "$LOAD"
 
 # --- 9. Dev-sign the app bundle (macOS only, before tests so a signing failure surfaces early) --
 step "Dev-sign app bundle (stable TCC identity)"
@@ -310,7 +410,9 @@ step "Dev-sign app bundle (stable TCC identity)"
 # `find` see SIGPIPE and exit non-zero, which -- since this is a plain assignment, not `local` --
 # would trip `set -e` and abort the whole script here instead of just leaving APP_PATH empty.
 APP_PATH="$( (find "$BUILD_DIR" -name "Agent Synth.app" -type d 2>/dev/null || true) | head -n 1)"
-if [ "$(uname)" = "Darwin" ]; then
+if [ "$FAST" = true ]; then
+    echo "ci-local: --fast builds no app bundle, skipping dev-sign."
+elif [ "$(uname)" = "Darwin" ]; then
     if [ -n "$APP_PATH" ]; then
         bash scripts/dev-sign-app.sh "$APP_PATH" || fail "scripts/dev-sign-app.sh failed (see above)."
     else
@@ -329,25 +431,36 @@ else
     if [ ! -x "$TESTS_BIN" ]; then
         fail "$TESTS_BIN not found or not executable -- the Tests target did not build."
     fi
-    # Serialise against every other suite of this repository (any worktree): see the header of
-    # scripts/lib/test-lock.sh for the false-failure story. The lock covers only the test run --
-    # concurrent BUILDS are fine, ccache is safe under contention -- so a waiting session still
-    # gets its compile errors immediately.
-    # shellcheck source=scripts/lib/test-lock.sh
-    source "$REPO_ROOT/scripts/lib/test-lock.sh"
-    test_lock="$(test_lock_path "$REPO_ROOT")"
-    # --gtest_brief=1 prints only failures and the summary (the full run is ~9,000 lines of "OK"). The suite keeps its
-    # windows invisible and unfocused (Tests/TestMain.cpp); AGENTSYNTH_TESTS_VISIBLE=1 in the environment shows them.
-    test_lock_run "$test_lock" "${CI_LOCAL_TEST_LOCK_TIMEOUT:-3600}" "$TESTS_BIN" --gtest_brief=1
-    tests_rc=$?
-    if [ "$tests_rc" -eq "$TEST_LOCK_TIMEOUT_STATUS" ]; then
-        fail "gave up waiting for the shared test lock ($test_lock) -- another suite is still running; re-run, or raise CI_LOCAL_TEST_LOCK_TIMEOUT."
-    elif [ "$tests_rc" -ne 0 ]; then
-        fail "test suite failed (see above)."
+    # shellcheck source=scripts/lib/test-shards.sh
+    source "$REPO_ROOT/scripts/lib/test-shards.sh"
+    # --gtest_brief=1 prints only failures and the summary. The suite keeps its windows invisible and unfocused
+    # (Tests/TestMain.cpp); AGENTSYNTH_TESTS_VISIBLE=1 in the environment shows them.
+    test_args=(--gtest_brief=1)
+    run_suite=true
+    if [ "$FAST" = true ]; then
+        filter="$(python3 scripts/lib/changed-tests.py --build "$BUILD_DIR" --base "$CHANGE_BASE")"
+        case "$filter" in
+            ALL) echo "ci-local: --fast: the change reaches too much, running the full suite." ;;
+            NONE)
+                echo "ci-local: --fast: the change reaches no tests."
+                run_suite=false
+                ;;
+            *)
+                echo "ci-local: --fast: running $(tr ':' '\n' <<<"$filter" | wc -l | tr -d ' ') suites; CI runs the full suite."
+                test_args+=("--gtest_filter=$filter")
+                ;;
+        esac
+    fi
+    if [ "$run_suite" = true ]; then
+        test_shards_run "$REPO_ROOT" "$REPO_ROOT/$BUILD_DIR/test-shards" "$REPO_ROOT/$TESTS_BIN" "${test_args[@]}" ||
+            fail "test suite failed (see above)."
     fi
 fi
 
 # --- Done: point at a build the user can actually launch ---------------------------------------
+end_step
+printf '\n=== Time per step ===\n%s%6s s  total\n' "$STEP_TIMES" "$(($(date +%s) - RUN_START))"
+[ "$FAST" = true ] && echo "ci-local: --fast passed; CI still runs every test and target."
 step "All checks passed"
 
 if [ -n "$APP_PATH" ]; then
@@ -362,7 +475,7 @@ if [ -n "$APP_PATH" ]; then
         echo "Run it yourself:  open \"$APP_PATH\""
         echo "(or re-run with --open to launch it automatically once everything passes)"
     fi
-else
+elif [ "$FAST" = false ]; then
     echo "ci-local: WARNING could not find 'Agent Synth.app' under $BUILD_DIR -- the AgentSynth target may not have built an app bundle on this platform."
 fi
 
