@@ -36,6 +36,7 @@
 #include "PatchDocument.h"
 #include "ProjectBundle.h"
 #include "ShortcutManager/AppCommands.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/AutomationRecorder.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"

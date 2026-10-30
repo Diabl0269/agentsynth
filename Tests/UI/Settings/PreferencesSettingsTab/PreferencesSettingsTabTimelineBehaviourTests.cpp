@@ -1,4 +1,5 @@
 #include "PreferencesSettingsTabTestFixture.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 // Topic: timeline/piano-roll editing preferences — loop-selection-arms, double-click-spans-
 // locators, piano-roll key-label density, and the wheel-zoom-direction checkbox.

@@ -4,6 +4,7 @@
 // Shared PianoRollFixture and helpers live in PianoRollTestHelpers.h.
 
 #include "PianoRollTestHelpers.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 // ============================================================================
 // 9. Rebindable surface keys (ShortcutManager-resolved)

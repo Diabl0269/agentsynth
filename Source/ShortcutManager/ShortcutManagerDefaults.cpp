@@ -1,7 +1,7 @@
 // ShortcutManagerDefaults.cpp
 //
 // The factory default key for every action, one function per category. resetToDefaults()
-// (ShortcutManager.h) clears the map and runs all four in category order.
+// (ShortcutManager.cpp) clears the map and runs all four in category order.
 
 #include "ShortcutManager.h"
 #include "ShortcutManager/SnapNoteValueActions.h"
@@ -59,7 +59,7 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // 'j' with plain Cmd is unused by any other binding (the bare J is the timeline's snap toggle, a
     // different modifier set) — the ONE bottom-dock open/close toggle. It was Cmd+T until the key was
     // released for the Mac's new-tab convention (see migrateBottomPanelToggleKeys() and
-    // migrateBottomPanelCmdJ() in ShortcutManager.h).
+    // migrateBottomPanelCmdJ() in ShortcutManagerMigrations.cpp).
     bindings["toggleBottomPanel"] = juce::KeyPress('j', juce::ModifierKeys::commandModifier, 0);
     // Cmd+1/2/3 -- "show the tab at this place of the dock's tab order" (never closes the dock): the key follows the
     // position, not the view, so dragging a tab to a new place re-keys it (BottomDockComponent::tabAtKeyPosition).

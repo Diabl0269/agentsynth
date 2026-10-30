@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRing.h"
@@ -46,6 +45,8 @@
 // bindings, and the owner calls it every time the popover is (re)shown — otherwise a rebind made
 // in Settings while this object is alive would freeze at whatever it said when the popup was
 // first built, staling exactly the thing the "resolved live" design promised never to stale.
+class ShortcutManager;
+
 namespace synth::ui {
 
 class ModuleLibraryHelpPopup : public juce::Component {
@@ -237,15 +238,7 @@ public:
      *  stale) and the label via ShortcutManager::getActionDescription (so the two can never drift
      *  apart from the Settings tab's own wording either). `manager` may be null — see the class
      *  comment. */
-    static juce::StringArray shortcutLines(const ShortcutManager* manager) {
-        juce::StringArray lines;
-        for (const auto& entry : curatedShortcuts()) {
-            const auto key = shortcutHintFor(manager, entry.actionId, entry.fallback);
-            const auto label = ShortcutManager::getActionDescription(entry.actionId);
-            lines.add(key.isNotEmpty() ? (label + "  -  " + key) : label);
-        }
-        return lines;
-    }
+    static juce::StringArray shortcutLines(const ShortcutManager* manager);
 
     // -------------------------------------------------------------------------
     // Test seams

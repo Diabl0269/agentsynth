@@ -1,7 +1,8 @@
 #pragma once
 
-#include "ShortcutManager/ShortcutManager.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+
+class ShortcutManager;
 
 // Opening a surface's right-click menu from the keyboard (the rebindable "openContextMenu" action,
 // Shift+F10 by default). A surface opts in by implementing KeyboardContextMenuProvider on a
@@ -30,8 +31,6 @@ inline bool openContextMenuForFocusedComponent(juce::Component* focused) {
 /** True when `key` is bound to the open-context-menu action right now, so a top-level window with
  *  no command target of its own (a detached panel) can honour a user's rebind the same way the
  *  command table does. */
-inline bool isOpenContextMenuKeyPress(const juce::KeyPress& key, const ShortcutManager& shortcutManager) {
-    return shortcutManager.getActionsForKeyPress(key).contains("openContextMenu");
-}
+bool isOpenContextMenuKeyPress(const juce::KeyPress& key, const ShortcutManager& shortcutManager);
 
 } // namespace synth::ui

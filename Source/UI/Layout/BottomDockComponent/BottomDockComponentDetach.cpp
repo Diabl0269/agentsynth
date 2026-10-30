@@ -2,6 +2,7 @@
 // mirror (docs/mixer/panel.md).
 #include "BottomDockComponent.h"
 
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 
