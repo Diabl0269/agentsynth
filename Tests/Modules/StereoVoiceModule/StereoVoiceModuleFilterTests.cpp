@@ -11,7 +11,7 @@
 
 TEST(FilterStereo, AudioRIsItsOwnBlockInAndOut) {
     EXPECT_EQ(FilterModule::kRightBase, 11);
-    EXPECT_EQ(FilterModule::kNumChannels, 32)
+    EXPECT_EQ(FilterModule::kNumChannels, 35)
         << "Pitch ch19-26, Key Track CV ch27 and Custom CV ch28-31 are appended above Audio R";
 
     FilterModule filter;
@@ -19,7 +19,7 @@ TEST(FilterStereo, AudioRIsItsOwnBlockInAndOut) {
     EXPECT_EQ(filter.getTotalNumInputChannels(), FilterModule::kNumChannels);
     EXPECT_EQ(filter.getTotalNumOutputChannels(), FilterModule::kNumChannels);
     EXPECT_EQ(filter.getVisibleInputPortCount(),
-              11); // Audio L/R, Cutoff, Resonance, Drive, Pitch, Key Track, Custom x4
+              14); // Audio L/R, Cutoff, Resonance, Drive, Pitch, Key Track, Custom x4, Level, Mix, Pan
     EXPECT_EQ(filter.getVisibleOutputPortCount(), 2);
 }
 
@@ -58,14 +58,14 @@ TEST(FilterStereo, CVTargetChannelsAreUnchangedInBothVoiceModes) {
     FilterModule filter;
 
     auto mono = filter.getModulationTargets();
-    ASSERT_EQ(mono.size(), 8u) << "Cutoff, Resonance, Drive, then Key Track and Custom CV on their own channels";
+    ASSERT_EQ(mono.size(), 11u) << "Cutoff, Resonance, Drive, then Key Track and Custom CV on their own channels";
     EXPECT_EQ(mono[0].channelIndex, 1);
     EXPECT_EQ(mono[1].channelIndex, 2);
     EXPECT_EQ(mono[2].channelIndex, 3);
 
     setBoolParam(filter, "poly", true);
     auto poly = filter.getModulationTargets();
-    ASSERT_EQ(poly.size(), 8u);
+    ASSERT_EQ(poly.size(), 11u);
     EXPECT_EQ(poly[0].channelIndex, 8);
     EXPECT_EQ(poly[1].channelIndex, 9);
     EXPECT_EQ(poly[2].channelIndex, 10);

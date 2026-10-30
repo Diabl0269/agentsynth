@@ -22,4 +22,5 @@ type Voice Mixer size 280x277
   in 5 10, 158
   in 6 10, 178
   in 7 10, 198
+  in 8 18, 256
   out 0 270, 58

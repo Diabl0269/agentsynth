@@ -14,11 +14,13 @@ class CompressorModule
 public:
     static constexpr int kNumCvInputs = 5;
     static constexpr int kKeyBase = sidechainKeyBase(kNumCvInputs); // Key L = 7, Key R = 8
-    static constexpr int kKneeCvChannel = kKeyBase + 2;             // appended after the key pair
+    static constexpr int kKneeCvChannel = kKeyBase + 2;
+    static constexpr int kMixCvChannel = kKneeCvChannel + 1;
+    static constexpr int kPanCvChannel = kMixCvChannel + 1; // appended after the key pair
 
     CompressorModule()
-        : ModuleBase("Compressor", 10,
-                     2) { // 2 audio + 5 CV (Threshold, Ratio, Attack, Release, Makeup) + Key L/R + Knee
+        : ModuleBase("Compressor", 12,
+                     2) { // 2 audio + 5 CV (Threshold, Ratio, Attack, Release, Makeup) + Key L/R + Knee, Mix, Pan
         addParameter(thresholdParam =
                          new juce::AudioParameterFloat("threshold", "Threshold (dB)", -60.0f, 0.0f, -12.0f));
         addParameter(ratioParam = new juce::AudioParameterFloat("ratio", "Ratio", 1.0f, 20.0f, 4.0f));
@@ -29,8 +31,8 @@ public:
         // Width of the soft knee centred on the threshold; 0 is the hard knee every patch had before.
         addParameter(kneeParam = new juce::AudioParameterFloat("knee", "Knee (dB)", 0.0f, 24.0f, 0.0f));
         addMuteParameter();
-        addMixParameter(); // shared output stage: added after Mute so no existing index moves
-        addPanParameter();
+        addMixParameter(kMixCvChannel); // shared output stage: added after Mute so no existing index moves
+        addPanParameter(kPanCvChannel);
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -155,18 +157,20 @@ public:
 
     juce::String getInputPortLabel(int i) const override {
         const juce::String cv[] = {"Threshold", "Ratio", "Attack", "Release", "Makeup"};
-        if (i == kneeJack())
-            return "Knee";
+        const juce::String appended[] = {"Knee", "Mix", "Pan"};
+        const int extra = i - kneeJack();
+        if (extra >= 0 && extra < 3)
+            return appended[extra];
         return stereoKeyInputLabel(i, kNumCvInputs, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return kneeJack() + 1; }
+    int getVisibleInputPortCount() const override { return kneeJack() + 3; }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
     LogicalPort mapInputChannel(int raw) const override {
-        if (raw != kKneeCvChannel)
+        if (raw < kKneeCvChannel)
             return mapStereoKeyInput(raw, kNumCvInputs);
         LogicalPort p;
-        p.visibleJackIndex = kneeJack();
+        p.visibleJackIndex = kneeJack() + raw - kKneeCvChannel;
         p.role = PortRole::ModCV;
         p.isPolyGroupHead = true;
         p.polyVoiceSpan = 1;
@@ -177,11 +181,17 @@ public:
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    // Every continuous parameter has a CV jack; paramId binds each jack to its knob ("Threshold"
+    // Mix and Pan are appended last and reached through their knobs; paramId binds each jack to its knob ("Threshold"
     // is the jack label, "Threshold (dB)" the knob) so the card rings it and accepts a drop on it.
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Threshold", 2, "threshold"}, {"Ratio", 3, "ratio"},       {"Attack", 4, "attack"},
-                {"Release", 5, "release"},     {"Makeup", 6, "makeupGain"}, {"Knee", kKneeCvChannel, "knee"}};
+        return {{"Threshold", 2, "threshold"},
+                {"Ratio", 3, "ratio"},
+                {"Attack", 4, "attack"},
+                {"Release", 5, "release"},
+                {"Makeup", 6, "makeupGain"},
+                {"Knee", kKneeCvChannel, "knee"},
+                {"Mix", kMixCvChannel, "mix", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
 
     float getGainReductionDb() const override { return meter.get(); }

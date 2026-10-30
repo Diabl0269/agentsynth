@@ -6,8 +6,11 @@
 
 class DelayModule : public ModuleBase {
 public:
+    static constexpr int kLevelCvChannel = 5;
+    static constexpr int kPanCvChannel = 6;
+
     DelayModule()
-        : ModuleBase("Delay", 5, 2) { // 2 audio + 3 CV (Time, Feedback, Mix)
+        : ModuleBase("Delay", 7, 2) { // 2 audio + 5 CV (Time, Feedback, Mix, Level, Pan)
         addParameter(timeParam = new juce::AudioParameterFloat("time", "Time (ms)", 1.0f, 1000.0f, 250.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, 0.95f, 0.5f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
@@ -24,9 +27,9 @@ public:
         addParameter(timeDivParam =
                          new juce::AudioParameterChoice("timeDiv", "Time Div", synth::envelopeNoteDivisions(), 5));
         addParameter(pingPongParam = new juce::AudioParameterBool("pingPong", "Ping-Pong", false));
-        addOutputLevelParameter();
+        addOutputLevelParameter(1.0f, kLevelCvChannel);
         addMuteParameter();
-        addPanParameter(); // shared output stage: this module keeps its own Mix
+        addPanParameter(kPanCvChannel); // shared output stage: this module keeps its own Mix
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -99,21 +102,25 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Time", "Feedback", "Mix"};
-        return stereoInputLabel(i, 3, cv);
+        const juce::String cv[] = {"Time", "Feedback", "Mix", "Level", "Pan"};
+        return stereoInputLabel(i, 5, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(3); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(5); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 3); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 5); }
     // This module reads its audio input through mapStereoPairInput/mapStereoKeyInput
     // above -- a genuine stereo pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    // Every continuous parameter has a CV jack; paramId binds "Time" to the "Time (ms)" knob.
+    // paramId binds "Time" to the "Time (ms)" knob. Level and Pan are appended last and reached through their knobs.
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Time", 2, "time"}, {"Feedback", 3, "feedback"}, {"Mix", 4, "mix"}};
+        return {{"Time", 2, "time"},
+                {"Feedback", 3, "feedback"},
+                {"Mix", 4, "mix"},
+                {"Level", kLevelCvChannel, "outputLevel", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }

@@ -301,7 +301,7 @@ TEST(LogicalPortTests, DualIOExposesSeparateLeftRightJacks) {
     setDualIOParam(delay, true);
 
     // Left + Right, then the three CV jacks (Time/Feedback/Mix) behind them.
-    EXPECT_EQ(delay.getVisibleInputPortCount(), 5);
+    EXPECT_EQ(delay.getVisibleInputPortCount(), 7);
     auto left = delay.mapInputChannel(0);
     auto right = delay.mapInputChannel(1);
     EXPECT_EQ(left.visibleJackIndex, 0);

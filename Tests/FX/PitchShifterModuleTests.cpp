@@ -140,14 +140,14 @@ TEST(PitchShifterModuleTest, ModuleTypeAndCategoryAreCorrect) {
 
 TEST(PitchShifterModuleTest, ChannelLayoutMatchesPortLabels) {
     PitchShifterModule module;
-    EXPECT_EQ(module.getTotalNumInputChannels(), 8);
+    EXPECT_EQ(module.getTotalNumInputChannels(), 10);
     EXPECT_EQ(module.getTotalNumOutputChannels(), 2);
 }
 
 TEST(PitchShifterModuleTest, ModulationTargetsMatchCVChannels) {
     PitchShifterModule module;
     const auto targets = module.getModulationTargets();
-    ASSERT_EQ(targets.size(), 6u);
+    ASSERT_EQ(targets.size(), 8u);
     EXPECT_EQ(targets[0].name, "Pitch");
     EXPECT_EQ(targets[0].channelIndex, 2);
     EXPECT_EQ(targets[1].name, "Shift");

@@ -27,6 +27,7 @@ OscillatorModule::GlobalParamCV OscillatorModule::readGlobalParamCV(const juce::
     result.glideSeconds = 0.001f * modulateNormalised(*glideParam, glideParam->get(), first(kGlideCVChannel));
     result.blend = modulateNormalised(*blendParam, blendParam->get(), first(kBlendCVChannel));
     result.width = modulateNormalised(*widthParam, widthParam->get(), first(kWidthCVChannel));
+    result.fixedRateCv = first(kFixedRateCVChannel);
     return result;
 }
 
@@ -69,6 +70,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     // Unison/Detune/Pulse Width/Glide/Blend/Width CV (ch14-19) alias the Audio R output block -- must be read
     // before the clear below touches those channels. See readGlobalParamCV.
     const GlobalParamCV global = readGlobalParamCV(buffer, numSamples);
+    fixedRateCv_ = global.fixedRateCv;
 
     // The Gate edges are found now, before the clear below wipes ch20: each one restarts voice 0 like a
     // MIDI note-on, through the same per-sample restart list.

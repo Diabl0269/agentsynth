@@ -13,8 +13,11 @@
 // allow-listed there. See docs/modules/fx-modules.md#reverb-module.
 class ReverbModule : public ModuleBase {
 public:
+    static constexpr int kLevelCvChannel = 8;
+    static constexpr int kPanCvChannel = 9;
+
     ReverbModule()
-        : ModuleBase("Reverb", 8, 2) { // 2 audio + 6 CV (Size, Damping, Wet, Dry, Width, Pre-Delay)
+        : ModuleBase("Reverb", 10, 2) { // 2 audio + 8 CV (Size, Damping, Wet, Dry, Width, Pre-Delay, Level, Pan)
         addParameter(roomSizeParam = new juce::AudioParameterFloat("roomSize", "Room Size",
                                                                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f,
                                                                    synth::fractionPercentAttributes()));
@@ -31,10 +34,10 @@ public:
         // Pre-Delay: a delay in front of the reverb's wet path only (the dry signal is not delayed).
         // 0 ms is the plain reverb, sample for sample.
         addParameter(preDelayParam = new juce::AudioParameterFloat("preDelay", "Pre-Delay (ms)", 0.0f, 250.0f, 0.0f));
-        addOutputLevelParameter();
+        addOutputLevelParameter(1.0f, kLevelCvChannel);
         addMuteParameter();
-        addPanParameter();             // shared output stage: this module keeps its own Mix
-        allocateBuffers(44100.0, 512); // usable before prepareToPlay, like the juce::Reverb it wraps
+        addPanParameter(kPanCvChannel); // shared output stage: this module keeps its own Mix
+        allocateBuffers(44100.0, 512);  // usable before prepareToPlay, like the juce::Reverb it wraps
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -97,22 +100,28 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Size", "Damping", "Wet", "Dry", "Width", "Pre-Delay"};
-        return stereoInputLabel(i, 6, cv);
+        const juce::String cv[] = {"Size", "Damping", "Wet", "Dry", "Width", "Pre-Delay", "Level", "Pan"};
+        return stereoInputLabel(i, 8, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(6); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(8); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 6); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 8); }
     // This module reads its audio input through mapStereoPairInput/mapStereoKeyInput
     // above -- a genuine stereo pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    // Every continuous parameter has a CV jack; paramId binds "Size" to the "Room Size" knob.
+    // paramId binds "Size" to the "Room Size" knob. Level and Pan are appended last and reached through their knobs.
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Size", 2, "roomSize"}, {"Damping", 3, "damping"}, {"Wet", 4, "wet"},
-                {"Dry", 5, "dry"},       {"Width", 6, "width"},     {"Pre-Delay", 7, "preDelay"}};
+        return {{"Size", 2, "roomSize"},
+                {"Damping", 3, "damping"},
+                {"Wet", 4, "wet"},
+                {"Dry", 5, "dry"},
+                {"Width", 6, "width"},
+                {"Pre-Delay", 7, "preDelay"},
+                {"Level", kLevelCvChannel, "outputLevel", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }

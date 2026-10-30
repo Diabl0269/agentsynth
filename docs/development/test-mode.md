@@ -57,6 +57,7 @@ thread is never blocked and timers and animations run in between.
 | `getState` | `id` | the `list` fields plus `enabled`, `hasFocus`, and per type: Button `text`/`toggleState`, Label `text`, Slider `value`/`min`/`max`, ComboBox `text`/`selectedId`, TextEditor `text`; a module card adds `selected`, `moduleType`, `title`, `nodeId` |
 | `screenshot` | `id` or `window`, `path` (absolute), `scale` (1) | `{path, width, height}`; parent folders are created |
 | `openProject` | `path` (a `.agsproj` bundle) | `{name}` once it has loaded; refused while the open project has unsaved changes or the bundle has an autosave sidecar, because opening would ask first |
+| `saveProject` | `path` (ends in `.agsproj`) | `{path}` once written; what the Save dialog runs, without the dialog |
 | `waitForIdle` | `timeoutMs` (5000), `settleMs` (100) | `{waitedMs}` once no component animation has run for `settleMs` |
 | `quit` | | quits at once, without the unsaved-changes prompt |
 
@@ -71,7 +72,7 @@ type distinct, and a renamed card takes its new title. Add a `setComponentID` on
 do not rename existing ones.
 
 A component with state worth reading implements `synth::testmode::StateSource` (`addTestModeState`), as `ModuleComponent`
-(`selected`, `moduleType`, `nodeId`, `macro`: the name of the macro the module sits in, empty when none) and
+(`selected`, `moduleType`, `nodeId`, `macro`: the name of the macro the module sits in, empty when none, `cabledTargets`: the modulation targets with a cable on them) and
 `MacroCardComponent` (id `macroCard`: `name`, `collapsed`, `members`) and `KeyPicker` (id `keyPicker`: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`) do. `getState` also reports a component's `tooltip`
 when it has one, so a scenario can check the shortcut a button's tooltip names.
 

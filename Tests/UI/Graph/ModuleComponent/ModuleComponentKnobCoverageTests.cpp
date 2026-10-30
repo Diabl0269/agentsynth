@@ -17,6 +17,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/ThresholdMeterSource.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
@@ -72,12 +73,11 @@ const std::set<juce::String> kSkippedModuleTypes = {
     // step by the sequencer's own clock: no continuous input for a modulation cable to reach.
     "Sequencer",
     "Poly Sequencer",
-    // Mixer-panel gain stages (Master/bus/channel gain, VoiceMixer per-voice level). Adding CV
+    // Mixer-panel gain stages (Master/bus/channel gain). Adding CV
     // jacks to these is out of scope for this sweep: ChannelStripModule's channel layout is
     // frozen-once-set with fixed send legs on raw ch8-15 (Source/Modules/CLAUDE.md), so a CV jack
     // there needs its own careful channel-map change, not a drive-by fix here.
     "Master",
-    "Voice Mixer",
     "Channel Strip",
 };
 
@@ -86,46 +86,13 @@ bool isContinuousParam(const juce::RangedAudioParameter* param) {
            dynamic_cast<const juce::AudioParameterInt*>(param) != nullptr;
 }
 
-// The module's own "outputLevel" parameter, when it has opted into the shared stage
-// (ModuleBase::addOutputLevelParameter). docs/modules/modulation.md is explicit that this one
-// never gets a CV jack ("nor does the shared output Level stage") -- see
-// docs/modules/fx-modules.md#output-level-shared-stage for why: a level control almost every
-// audio module carries by composition, not a hand-authored per-module knob.
-bool isSharedOutputLevelParam(const ModuleBase& mb, const juce::RangedAudioParameter& param) {
-    for (auto* p : mb.getParameters())
-        if (auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(p))
-            if (ranged == &param)
-                return ranged->paramID == "outputLevel";
-    return false;
-}
+// Oscillator knobs with no CV input: Phase and Rand are read once, when a note starts, so a continuous input would
+// have nothing to modulate.
+const std::set<juce::String> kOscillatorKnobsWithoutJack = {"Phase", "Rand"};
 
-// Oscillator knobs that deliberately have no CV jack yet. Phase and Rand are read once, when a note starts, so a
-// continuous input would have nothing to modulate; Blend and Width are unison voicing knobs whose jacks are not
-// added yet (the Oscillator's declared inputs are fixed by saved routings, and a new jack is its own change).
-const std::set<juce::String> kOscillatorKnobsWithoutJack = {"Phase", "Rand", "Fixed rate"};
-
-// The shared `mix` / `pan` of ModuleBase's output stage (docs/modules/fx-modules.md#mix-and-pan-shared-stage), on
-// exactly the modules that opted in: like the shared Level they get no CV jack -- adding jacks to every FX is out of
-// scope -- and stay automatable and MIDI-learnable. A module's own `mix` (Delay, Reverb, ...) declares a target and is
-// not listed; a listed id the module also targets passes check (b) either way.
-bool isSharedMixOrPanParam(const ModuleBase& mb, const juce::RangedAudioParameter& param) {
-    static const std::map<juce::String, std::set<juce::String>> kShared = {
-        {"Filter", {"mix", "pan"}},  {"Compressor", {"mix", "pan"}},
-        {"Gate", {"mix", "pan"}},    {"Parametric EQ", {"mix", "pan"}},
-        {"Bitcrusher", {"pan"}},     {"Chorus", {"pan"}},
-        {"Delay", {"pan"}},          {"Distortion", {"pan"}},
-        {"Flanger", {"pan"}},        {"Phaser", {"pan"}},
-        {"Pitch Shifter", {"pan"}},  {"Reverb", {"pan"}},
-        {"Ring Modulator", {"pan"}}, {"Limiter", {"pan"}},
-    };
-    const auto it = kShared.find(mb.getName());
-    return it != kShared.end() && it->second.count(param.paramID) > 0;
-}
-
-// Every visible rotary knob's componentID, when it is bound to a Float/Int parameter that ISN'T
-// the shared output Level stage. Choice/Bool knobs (waveform pickers, on/off toggles) are excluded
-// by TYPE, not by an allow-list guess. No module has a known gap (Sampler "rootNote" is covered),
-// so there is no per-module deferred-gap escape hatch left to check against.
+// Every visible rotary knob's componentID, when it is bound to a Float/Int parameter. Choice/Bool knobs (waveform
+// pickers, on/off toggles) are excluded by TYPE, not by an allow-list guess. No module has a known gap (Sampler
+// "rootNote" is covered), so there is no per-module deferred-gap escape hatch left to check against.
 std::set<juce::String> continuousKnobParamNames(const ModuleBase& mb, ModuleComponent& card) {
     std::set<juce::String> names;
     for (auto* child : card.getChildren()) {
@@ -135,8 +102,7 @@ std::set<juce::String> continuousKnobParamNames(const ModuleBase& mb, ModuleComp
         const auto id = slider->getComponentID();
         for (auto* p : mb.getParameters()) {
             auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(p);
-            if (ranged != nullptr && ranged->getName(100) == id && isContinuousParam(ranged) &&
-                !isSharedOutputLevelParam(mb, *ranged) && !isSharedMixOrPanParam(mb, *ranged)) {
+            if (ranged != nullptr && ranged->getName(100) == id && isContinuousParam(ranged)) {
                 names.insert(id);
                 break;
             }
@@ -266,6 +232,9 @@ TEST_F(ModuleComponentTest, EveryModuleTypeKnobAcceptsADroppedModulationCable) {
                     setChoiceByName(*mb, kModeChoices.at(typeName).first, choiceMode);
 
                 ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+                // A cable dragged over the folded More row unfolds it, so a knob in there is reachable.
+                if (auto* body = card.getCardBody(); body != nullptr && body->hasMoreRow())
+                    body->setMoreUnfolded(true);
 
                 // (a) every declared target must resolve to a bound, visible knob -- except the
                 // documented no-generic-knob-by-design exceptions above.

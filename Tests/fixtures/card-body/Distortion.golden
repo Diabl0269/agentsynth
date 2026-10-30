@@ -23,4 +23,6 @@ type Distortion size 280x401
   in 0 10, 58
   in 1 29, 195
   in 2 37, 274
+  in 3 200, 324
+  in 4 10, 78
   out 0 270, 58

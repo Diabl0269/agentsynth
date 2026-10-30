@@ -235,9 +235,10 @@ public:
         -1. The output stage fades it with the legs so the copy does not switch on and off by itself. */
     virtual int duplicateOutputChannel() const { return -1; }
 
-    /** Opt-in `mix` (0..1, default 1) and `pan` (-1..1, default 0) applied after processModuleBlock; add last. */
-    void addMixParameter() { outputStage_.addMix(*this); }
-    void addPanParameter() { outputStage_.addPan(*this); }
+    /** Opt-in `mix` (0..1, default 1) and `pan` (-1..1, default 0) applied after processModuleBlock; add last.
+        `cvChannel`: the raw input channel that modulates it, appended after the module's others, or -1 for none. */
+    void addMixParameter(int cvChannel = -1) { outputStage_.addMix(*this, cvChannel); }
+    void addPanParameter(int cvChannel = -1) { outputStage_.addPan(*this, cvChannel); }
 
     bool hasDualIOParameter() const { return dualIOParam != nullptr; }
     bool isDualIO() const { return dualIOParam != nullptr && dualIOParam->get(); }
@@ -583,9 +584,10 @@ public:
     // scaling a gate drops it under the > 0.5f trigger threshold. Each module opts in,
     // and MUST call this AFTER its own addParameter() calls so the new parameter lands
     // last and existing positional lookups keep resolving to the same parameter.
-    void addOutputLevelParameter(float defaultValue = 1.0f) {
+    void addOutputLevelParameter(float defaultValue = 1.0f, int cvChannel = -1) {
         if (outputLevelParam)
             return;
+        outputLevelCvChannel_ = cvChannel;
         addParameter(outputLevelParam = new juce::AudioParameterFloat(
                          "outputLevel", "Level", juce::NormalisableRange<float>(0.0f, 1.0f), defaultValue,
                          synth::fractionPercentAttributes()));
@@ -632,6 +634,7 @@ public:
         if (auto* inbox = noteInbox_.load(std::memory_order_acquire))
             inbox->drainInto(midiMessages, buffer.getNumSamples());
         applyInputDownMix(buffer);
+        latchOutputStageCv(buffer);
         if (outputStage_.isIdle(bypassedParam->get(), mutedParam != nullptr && mutedParam->get()))
             processModuleBlock(buffer, midiMessages);
         else
@@ -955,6 +958,8 @@ protected:
 private:
     void renderThroughOutputStage(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
     void buildOutputLegs(synth::OutputLegs& legs, int bufferChannels) const;
+    void latchOutputStageCv(const juce::AudioBuffer<float>& buffer) noexcept;
+    float outputLevelTarget() const noexcept;
 
     synth::ModuleOutputStage outputStage_;
     juce::String moduleName;
@@ -973,6 +978,8 @@ private:
     std::atomic<synth::NoteInbox*> noteInbox_{nullptr};
     synth::CardViewState cardViewState_;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOutputLevel;
+    int outputLevelCvChannel_ = -1;
+    float outputLevelCv_ = 0.0f; // this block's Level CV, render thread only
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModuleBase)
 };

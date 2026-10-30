@@ -37,8 +37,11 @@ public:
     void prepare(double sampleRate, int maxBlock, int legs);
 
     /** Message thread (constructor): register the shared parameters on `owner`. */
-    void addMix(juce::AudioProcessor& owner);
-    void addPan(juce::AudioProcessor& owner);
+    void addMix(juce::AudioProcessor& owner, int cvChannel = -1);
+    void addPan(juce::AudioProcessor& owner, int cvChannel = -1);
+
+    /** Audio thread, before the module renders (it clears its CV channels): takes this block's Mix and Pan CV. */
+    void latchCv(const juce::AudioBuffer<float>& buffer) noexcept;
 
     /** True when nothing needs doing this block: the effective state equals the parameters, no fade is
         running and Mix / Pan rest at 1 / 0. Audio thread; a handful of loads. */
@@ -81,8 +84,8 @@ public:
 
 private:
     bool mixPanWanted() const noexcept {
-        return (mix_ != nullptr && (mixSm_.isSmoothing() || mix_->get() != 1.0f || mixSm_.getCurrentValue() != 1.0f)) ||
-               (pan_ != nullptr && (panSm_.isSmoothing() || pan_->get() != 0.0f || panSm_.getCurrentValue() != 0.0f));
+        return (mix_ != nullptr && (mixSm_.isSmoothing() || mixTarget() != 1.0f || mixSm_.getCurrentValue() != 1.0f)) ||
+               (pan_ != nullptr && (panSm_.isSmoothing() || panTarget() != 0.0f || panSm_.getCurrentValue() != 0.0f));
     }
     static std::size_t threadKey() noexcept {
         return std::hash<std::thread::id>{}(std::this_thread::get_id()) | std::size_t{1};
@@ -92,6 +95,8 @@ private:
         return owner != 0 && owner == threadKey();
     }
     void syncTargets() noexcept;
+    float mixTarget() const noexcept;
+    float panTarget() const noexcept;
 
     juce::AudioParameterFloat* mix_ = nullptr;
     juce::AudioParameterFloat* pan_ = nullptr;
@@ -99,6 +104,10 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> panSm_{0.0f};
     juce::AudioBuffer<float> dry_;
     float panFill_ = 0.0f;
+    int mixCvChannel_ = -1;
+    int panCvChannel_ = -1;
+    float mixCv_ = 0.0f;
+    float panCv_ = 0.0f;
 
     bool synced_ = false;
     bool effBypass_ = false;

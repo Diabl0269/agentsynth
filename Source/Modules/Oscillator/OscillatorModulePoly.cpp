@@ -76,6 +76,7 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
     // Unison/Detune/Pulse Width/Glide/Blend/Width CV (ch14-19) alias the Audio R output block -- must be read
     // before the clear below writes to those channels. See readGlobalParamCV.
     const GlobalParamCV global = readGlobalParamCV(buffer, numSamples);
+    fixedRateCv_ = global.fixedRateCv;
 
     // Materialised once, before the voice loop -- see fillLevelRamp.
     fillLevelRamp(ns);

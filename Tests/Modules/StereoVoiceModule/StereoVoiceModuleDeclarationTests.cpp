@@ -173,7 +173,7 @@ TEST(StereoDeclaration, RingModulatorGetsTheTogglePurelyByInheritance) {
     // ...and its five input jacks are still its own, in both states.
     for (bool dual : {false, true}) {
         setBoolParam(ringMod, "dualIO", dual);
-        EXPECT_EQ(ringMod.getVisibleInputPortCount(), 5) << "dual=" << dual;
+        EXPECT_EQ(ringMod.getVisibleInputPortCount(), 7) << "dual=" << dual;
         EXPECT_EQ(ringMod.getInputPortLabel(0), "Carrier") << "dual=" << dual;
         EXPECT_EQ(ringMod.getInputPortLabel(1), "Modulator") << "dual=" << dual;
         EXPECT_NE(ringMod.mapInputChannel(1).role, PortRole::Audio) << "dual=" << dual;
@@ -321,7 +321,7 @@ TEST(StereoDeclaration, APatchSavedBeforeTheMoveLoadsWithTheSameLayout) {
     EXPECT_FALSE(osc->isDualIO()) << "an explicit false must survive the move to the base";
     EXPECT_EQ(osc->getVisibleOutputPortCount(), 1);
     EXPECT_TRUE(filter->isDualIO()) << "an explicit true must survive";
-    EXPECT_EQ(filter->getVisibleInputPortCount(), 11);
+    EXPECT_EQ(filter->getVisibleInputPortCount(), 14);
     EXPECT_TRUE(reverb->isDualIO());
     EXPECT_EQ(reverb->getVisibleOutputPortCount(), 2);
     EXPECT_FALSE(delay->isDualIO()) << "an omitted dualIO must fall to the module's default (collapsed)";
@@ -387,7 +387,7 @@ TEST(StereoDeclaration, ALegacyStateBlobWithNoDualIOPropertyLoadsAtTheModuleDefa
         FilterModule target; // fresh
         target.setStateInformation(legacy.getData(), (int)legacy.getSize());
         EXPECT_TRUE(target.isDualIO()) << "a blob with no dualIO must leave a Declared module split";
-        EXPECT_EQ(target.getVisibleInputPortCount(), 11);
+        EXPECT_EQ(target.getVisibleInputPortCount(), 14);
     }
 
     {

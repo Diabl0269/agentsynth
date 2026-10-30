@@ -50,11 +50,14 @@ public:
     static constexpr int kJackBlend = 11;
     static constexpr int kJackWidth = 12;
     static constexpr int kJackGate = 13;
-    static constexpr int kNumJacks = kJackGate + 1;           // Pitch..Gate
-    static constexpr int kPolyModCVBase = kNumVoices;         // poly shared-CV block start
-    static constexpr int kGateBase = 20;                      // mono: one channel; poly: 8-wide fan
-    static constexpr int kNumInputs = kGateBase + kNumVoices; // 8 pitch + 6 shared mod CV + 6 global CV + 8 gate
-    static constexpr int kUnisonCVChannel = 14;               // same raw channel, mono and poly
+    static constexpr int kJackFixedRate = 14;
+    static constexpr int kNumJacks = kJackFixedRate + 1;               // Pitch..Gate, then Fixed rate
+    static constexpr int kPolyModCVBase = kNumVoices;                  // poly shared-CV block start
+    static constexpr int kGateBase = 20;                               // mono: one channel; poly: 8-wide fan
+    static constexpr int kFixedRateCVChannel = kGateBase + kNumVoices; // appended after the fan, same in both modes
+    static constexpr int kNumInputs =
+        kFixedRateCVChannel + 1;                // 8 pitch + 6 shared CV + 6 global CV + 8 gate + Fixed rate
+    static constexpr int kUnisonCVChannel = 14; // same raw channel, mono and poly
     static constexpr int kDetuneCVChannel = 15;
     static constexpr int kPulseWidthCVChannel = 16;
     static constexpr int kGlideCVChannel = 17;
@@ -68,7 +71,7 @@ public:
     // Outputs must stay at or above every input channel (the Gate fan ends at kGateBase + 7): JUCE only
     // copies a shared input buffer for channels below the output count, and the bypass/mute clear would
     // otherwise wipe a Poly MIDI gate that also feeds the ADSR.
-    static constexpr int kNumOutputs = kGateBase + kNumVoices; // 28
+    static constexpr int kNumOutputs = kNumInputs; // 29
     static_assert(kNumOutputs >= kNumInputs, "outputs must cover every input channel");
 
     /** Raw channel carrying jack `jack`'s CV, for the current voice mode. Only valid for the
@@ -77,9 +80,9 @@ public:
     static constexpr int modCVChannelFor(int jack, bool poly) { return poly ? (kPolyModCVBase + jack - 1) : jack; }
 
     OscillatorModule()
-        // 28 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13) + Unison/Detune/Pulse Width/Glide/
-        // Blend/Width CV (14-19) + Gate (20-27).
-        // 28 out: Audio L on 0-7, silent pass-throughs on 8-13, Audio R on 14-21, silent on 22-27. Declaring outputs
+        // 29 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13) + Unison/Detune/Pulse Width/Glide/
+        // Blend/Width CV (14-19) + Gate (20-27) + Fixed rate CV (28).
+        // 29 out: Audio L on 0-7, silent pass-throughs on 8-13, Audio R on 14-21, silent on 22-28. Declaring outputs
         // ABOVE every CV input channel below kRightBase is what makes JUCE copy shared-mod-CV input
         // buffers when they fan out to several downstream nodes, so our post-render clear cannot
         // corrupt them — see the processPolyMode clear note. ch14-19 are the one exception (they
@@ -248,7 +251,8 @@ public:
                     {"Pulse Width", kPulseWidthCVChannel, "pulseWidth"},
                     {"Glide", kGlideCVChannel, "glide"},
                     {"Blend", kBlendCVChannel, "blend"},
-                    {"Width", kWidthCVChannel, "width"}};
+                    {"Width", kWidthCVChannel, "width"},
+                    {"Fixed rate", kFixedRateCVChannel, "fixedRate", true}};
         return {{"Pitch", 0},
                 {"Waveform", 1, "waveform"},
                 {"Octave", 2, "octave"},
@@ -261,11 +265,13 @@ public:
                 {"Pulse Width", kPulseWidthCVChannel, "pulseWidth"},
                 {"Glide", kGlideCVChannel, "glide"},
                 {"Blend", kBlendCVChannel, "blend"},
-                {"Width", kWidthCVChannel, "width"}};
+                {"Width", kWidthCVChannel, "width"},
+                {"Fixed rate", kFixedRateCVChannel, "fixedRate", true}};
     }
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Pitch",  "Waveform", "Octave",      "Coarse", "Fine",  "Level", "Pan",
-                                       "Unison", "Detune",   "Pulse Width", "Glide",  "Blend", "Width", "Restart"};
+        const juce::String labels[] = {"Pitch", "Waveform", "Octave", "Coarse",  "Fine",
+                                       "Level", "Pan",      "Unison", "Detune",  "Pulse Width",
+                                       "Glide", "Blend",    "Width",  "Restart", "Fixed rate"};
         return (i >= 0 && i < kNumJacks) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
     /** What the last input does, shown when the pointer rests on its jack. The jack keeps its channel and its
@@ -382,8 +388,10 @@ public:
             int jack;
         };
         static constexpr GlobalJack kGlobalJacks[] = {
-            {kUnisonCVChannel, kJackUnison}, {kDetuneCVChannel, kJackDetune}, {kPulseWidthCVChannel, kJackPulseWidth},
-            {kGlideCVChannel, kJackGlide},   {kBlendCVChannel, kJackBlend},   {kWidthCVChannel, kJackWidth}};
+            {kUnisonCVChannel, kJackUnison},         {kDetuneCVChannel, kJackDetune},
+            {kPulseWidthCVChannel, kJackPulseWidth}, {kGlideCVChannel, kJackGlide},
+            {kBlendCVChannel, kJackBlend},           {kWidthCVChannel, kJackWidth},
+            {kFixedRateCVChannel, kJackFixedRate}};
         for (const auto& jack : kGlobalJacks) {
             if (raw == jack.channel) {
                 p.visibleJackIndex = jack.jack;
@@ -517,6 +525,7 @@ private:
         float glideSeconds;
         float blend;
         float width;
+        float fixedRateCv;
     };
     GlobalParamCV readGlobalParamCV(const juce::AudioBuffer<float>& buffer, int numSamples) const;
 
@@ -775,5 +784,6 @@ private:
     juce::AudioParameterBool* legatoParam = nullptr;
     juce::AudioParameterChoice* rateModeParam = nullptr;
     juce::AudioParameterFloat* fixedRateParam = nullptr;
+    float fixedRateCv_ = 0.0f; // this block's Fixed rate CV, render thread only
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OscillatorModule)
 };

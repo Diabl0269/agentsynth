@@ -34,8 +34,11 @@
 */
 class PitchShifterModule : public ModuleBase {
 public:
+    static constexpr int kLevelCvChannel = 8;
+    static constexpr int kPanCvChannel = 9;
+
     PitchShifterModule()
-        : ModuleBase("Pitch Shifter", 8, 2) // 2 audio + 6 CV (Pitch, Shift, Mix, Feedback, Fine, Window)
+        : ModuleBase("Pitch Shifter", 10, 2) // 2 audio + 8 CV (Pitch, Shift, Mix, Feedback, Fine, Window, Level, Pan)
     {
         addParameter(modeParam = new juce::AudioParameterChoice("shiftMode", "Mode", {"Pitch", "Frequency"}, 0));
         addParameter(pitchParam = new juce::AudioParameterFloat("pitch", "Pitch (semi)", -24.0f, 24.0f, 0.0f));
@@ -46,9 +49,9 @@ public:
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, kMaxFeedback, 0.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                               1.0f, synth::fractionPercentAttributes()));
-        addOutputLevelParameter();
+        addOutputLevelParameter(1.0f, kLevelCvChannel);
         addMuteParameter();
-        addPanParameter(); // shared output stage: this module keeps its own Mix
+        addPanParameter(kPanCvChannel); // shared output stage: this module keeps its own Mix
         enableVisualBuffer(true);
     }
 
@@ -262,24 +265,30 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Pitch", "Shift", "Mix", "Feedback", "Fine", "Window"};
-        return stereoInputLabel(i, 6, cv);
+        const juce::String cv[] = {"Pitch", "Shift", "Mix", "Feedback", "Fine", "Window", "Level", "Pan"};
+        return stereoInputLabel(i, 8, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(6); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(8); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 6); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 8); }
     // This module reads its audio input through mapStereoPairInput/mapStereoKeyInput
     // above -- a genuine stereo pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    // Every continuous parameter has a CV jack; paramId binds each jack to its knob ("Pitch" is
+    // Level and Pan are appended last and reached through their knobs; paramId binds each jack to its knob ("Pitch" is
     // the jack label, "Pitch (semi)" the knob) so the card rings it and accepts a drop on it.
     // Fine/Window sit after the original four so every saved patch keeps its channel numbers.
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Pitch", 2, "pitch"},       {"Shift", 3, "shiftHz"}, {"Mix", 4, "mix"},
-                {"Feedback", 5, "feedback"}, {"Fine", 6, "fine"},     {"Window", 7, "window"}};
+        return {{"Pitch", 2, "pitch"},
+                {"Shift", 3, "shiftHz"},
+                {"Mix", 4, "mix"},
+                {"Feedback", 5, "feedback"},
+                {"Fine", 6, "fine"},
+                {"Window", 7, "window"},
+                {"Level", kLevelCvChannel, "outputLevel", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
 
     // Pure audio FX — processBlock never touches the MIDI buffer.

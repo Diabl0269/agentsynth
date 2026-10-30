@@ -26,4 +26,6 @@ type Ring Modulator size 280x275
   in 2 207, 148
   in 3 37, 148
   in 4 122, 148
+  in 5 200, 198
+  in 6 10, 98
   out 0 270, 58

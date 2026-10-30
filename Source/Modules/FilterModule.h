@@ -40,13 +40,17 @@ public:
     static constexpr int kMorphYCVChannel = kMorphXCVChannel + 1;   // 29
     static constexpr int kShiftCVChannel = kMorphYCVChannel + 1;    // 30
     static constexpr int kDepthCVChannel = kShiftCVChannel + 1;     // 31
-    static constexpr int kNumChannels = kDepthCVChannel + 1;        // 32, in and out
-    static constexpr float kKeyTrackRefHz = 261.63f;                // middle C: no shift at any Key Track
-    static constexpr int kLegCount = 2;                             // 0 = Audio L, 1 = Audio R
-    static constexpr int kNumVisibleInputs = 2 + kNumCVInputs;      // Audio L, Audio R, then CV
-    static constexpr int kExtraJacks = 6;                           // Pitch, Key Track, Morph X, Morph Y, Shift, Depth
-    static constexpr int kCustomTypeIndex = 7;                      // "Custom", appended last
-    static constexpr int kLegacyFilterTypeCount = 7;                // choices before Custom existed
+    // Level, Mix and Pan of the shared output stage, appended the same way; their knobs land the cable.
+    static constexpr int kLevelCVChannel = kDepthCVChannel + 1; // 32
+    static constexpr int kMixCVChannel = kLevelCVChannel + 1;   // 33
+    static constexpr int kPanCVChannel = kMixCVChannel + 1;     // 34
+    static constexpr int kNumChannels = kPanCVChannel + 1;      // 35, in and out
+    static constexpr float kKeyTrackRefHz = 261.63f;            // middle C: no shift at any Key Track
+    static constexpr int kLegCount = 2;                         // 0 = Audio L, 1 = Audio R
+    static constexpr int kNumVisibleInputs = 2 + kNumCVInputs;  // Audio L, Audio R, then CV
+    static constexpr int kExtraJacks = 9;      // Pitch, Key Track, Morph X, Morph Y, Shift, Depth, Level, Mix, Pan
+    static constexpr int kCustomTypeIndex = 7; // "Custom", appended last
+    static constexpr int kLegacyFilterTypeCount = 7; // choices before Custom existed
 
     /** Raw channel carrying CV jack `cv` (0 = Cutoff, 1 = Resonance, 2 = Drive). Mono packs the CV
         block directly above the single audio channel (1-3); poly puts it above the voice fan (8-10). */
@@ -56,11 +60,11 @@ public:
     static constexpr int legBaseChannel(int leg) { return leg == 0 ? 0 : kRightBase; }
 
     FilterModule()
-        // 32 in / 32 out: Audio L on 0-7, shared CV on 8-10, Audio R on 11-18, Pitch on 19-26, Key
-        // Track CV on 27 and Morph X/Y, Shift, Depth CV on 28-31. Declaring the
+        // 35 in / 35 out: Audio L on 0-7, shared CV on 8-10, Audio R on 11-18, Pitch on 19-26, Key
+        // Track CV on 27, Morph X/Y, Shift, Depth CV on 28-31 and Level, Mix, Pan CV on 32-34. Declaring the
         // outputs above every CV input channel also makes JUCE hand this node private copies of
         // shared CV buffers, so the end-of-block CV clear can only ever zero our own copy.
-        // StereoAudio::Declared: 32 outputs, so the Auto shape test cannot see this module's stereo
+        // StereoAudio::Declared: 35 outputs, so the Auto shape test cannot see this module's stereo
         // pair — its right leg is the kRightBase block, and it ships SPLIT.
         : ModuleBase("Filter", kNumChannels, kNumChannels, StereoAudio::Declared) {
         addParameter(cutoffParam = new juce::AudioParameterFloat("cutoff", "Cutoff",
@@ -93,10 +97,10 @@ public:
         // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
         // filters in stereo). Collapsed, its jack layout is the plain mono one — Audio,
         // Cutoff, Resonance, Drive.
-        addOutputLevelParameter();
+        addOutputLevelParameter(1.0f, kLevelCVChannel);
         addMuteParameter();
-        addMixParameter(); // shared output stage: added after Mute so no existing index moves
-        addPanParameter();
+        addMixParameter(kMixCVChannel); // shared output stage: added after Mute so no existing index moves
+        addPanParameter(kPanCVChannel);
         enableVisualBuffer(true);
     }
 
@@ -201,7 +205,10 @@ public:
                     {"Morph X", kMorphXCVChannel, "morphX", true},
                     {"Morph Y", kMorphYCVChannel, "morphY", true},
                     {"Shift", kShiftCVChannel, "shift", true},
-                    {"Depth", kDepthCVChannel, "depth", true}};
+                    {"Depth", kDepthCVChannel, "depth", true},
+                    {"Level", kLevelCVChannel, "outputLevel", true},
+                    {"Mix", kMixCVChannel, "mix", true},
+                    {"Pan", kPanCVChannel, "pan", true}};
         return {{"Cutoff", 1, "cutoff"},
                 {"Resonance", 2, "resonance"},
                 {"Drive", 3, "drive"},
@@ -209,7 +216,10 @@ public:
                 {"Morph X", kMorphXCVChannel, "morphX", true},
                 {"Morph Y", kMorphYCVChannel, "morphY", true},
                 {"Shift", kShiftCVChannel, "shift", true},
-                {"Depth", kDepthCVChannel, "depth", true}};
+                {"Depth", kDepthCVChannel, "depth", true},
+                {"Level", kLevelCVChannel, "outputLevel", true},
+                {"Mix", kMixCVChannel, "mix", true},
+                {"Pan", kPanCVChannel, "pan", true}};
     }
     /** Audio R sits next to Audio L rather than after Drive, so the two legs read as a pair. Visible
         jack order is presentation only — connections persist by raw channel index, so the CV jacks
@@ -218,8 +228,8 @@ public:
         const int audioJacks = splitAudioJackCount();
         if (i >= 0 && i < audioJacks)
             return splitAudioLabel(i);
-        const juce::String cvLabels[] = {"Cutoff",  "Resonance", "Drive", "Pitch", "Key Track",
-                                         "Morph X", "Morph Y",   "Shift", "Depth"};
+        const juce::String cvLabels[] = {"Cutoff",  "Resonance", "Drive", "Pitch", "Key Track", "Morph X",
+                                         "Morph Y", "Shift",     "Depth", "Level", "Mix",       "Pan"};
         const int cv = i - audioJacks;
         return (cv >= 0 && cv < kNumCVInputs + kExtraJacks) ? cvLabels[cv] : ModuleBase::getInputPortLabel(i);
     }
@@ -267,7 +277,7 @@ public:
             p.polyVoiceSpan = (raw == kPitchBase) ? pitchSpan : 1;
             return p;
         }
-        if (raw >= kKeyTrackCVChannel && raw <= kDepthCVChannel) { // Key Track, Morph X/Y, Shift, Depth
+        if (raw >= kKeyTrackCVChannel && raw < kNumChannels) { // Key Track, Morph X/Y, Shift, Depth, Level, Mix, Pan
             LogicalPort p;
             p.visibleJackIndex = pitchJack + 1 + (raw - kKeyTrackCVChannel);
             p.role = PortRole::ModCV;

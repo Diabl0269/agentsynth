@@ -21,10 +21,11 @@ class LimiterModule
     : public ModuleBase
     , public GainReductionMeterSource {
 public:
+    static constexpr int kPanCvChannel = 6;     // appended last; reached through its knob, no gutter jack
     static constexpr int kCeilingCvChannel = 5; // appended after Input Gain
 
     LimiterModule()
-        : ModuleBase("Limiter", 6, 2) { // 2 audio + 4 CV (Threshold, Release, Input Gain, Ceiling)
+        : ModuleBase("Limiter", 7, 2) { // 2 audio + 5 CV (Threshold, Release, Input Gain, Ceiling, Pan)
         addParameter(thresholdParam =
                          new juce::AudioParameterFloat("threshold", "Threshold (dB)", -20.0f, 0.0f, -1.0f));
         addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release (ms)", 1.0f, 500.0f, 100.0f));
@@ -32,7 +33,7 @@ public:
                          new juce::AudioParameterFloat("inputGain", "Input Gain (dB)", -20.0f, 20.0f, 0.0f));
         addParameter(ceilingParam = new juce::AudioParameterFloat("ceiling", "Ceiling (dB)", -24.0f, 0.0f, 0.0f));
         addMuteParameter();
-        addPanParameter(); // no Mix: the lookahead latency would misalign the dry signal
+        addPanParameter(kPanCvChannel); // no Mix: the lookahead latency would misalign the dry signal
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -124,7 +125,7 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Threshold", "Release", "Input Gain", "Ceiling"};
+        const juce::String cv[] = {"Threshold", "Release", "Input Gain", "Ceiling", "Pan"};
         return stereoInputLabel(i, kNumCvInputs, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
@@ -136,13 +137,14 @@ public:
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    // Every continuous parameter has a CV jack; paramId binds each jack to its knob ("Threshold"
+    // paramId binds each jack to its knob ("Threshold"
     // is the jack label, "Threshold (dB)" the knob) so the card rings it and accepts a drop on it.
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Threshold", 2, "threshold"},
                 {"Release", 3, "release"},
                 {"Input Gain", 4, "inputGain"},
-                {"Ceiling", kCeilingCvChannel, "ceiling"}};
+                {"Ceiling", kCeilingCvChannel, "ceiling"},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
 
     float getGainReductionDb() const override { return meter.get(); }
@@ -154,7 +156,7 @@ public:
     ModuleType getModuleType() const override { return ModuleType::Limiter; }
 
 private:
-    static constexpr int kNumCvInputs = 4;
+    static constexpr int kNumCvInputs = 5;
 
     // The two stages of juce::dsp::Limiter, in its order: a gentle 4:1 stage at -10 dB, then the
     // 1000:1 stage at the Threshold, then the smoothed output volume and a clip at +-1. Returns the

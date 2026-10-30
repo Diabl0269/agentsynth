@@ -192,8 +192,8 @@ TEST(OscillatorGateRestart, GateChannelsAreMappedInBothModes) {
 TEST(OscillatorGateRestart, OutputsStayAtOrAboveEveryInputAndAudioRDoesNotMove) {
     static_assert(OscillatorModule::kNumOutputs >= OscillatorModule::kNumInputs);
     EXPECT_EQ(OscillatorModule::kRightBase, 14);
-    EXPECT_EQ(OscillatorModule::kNumInputs, 28);
-    EXPECT_EQ(OscillatorModule::kNumOutputs, 28);
+    EXPECT_EQ(OscillatorModule::kNumInputs, 29);
+    EXPECT_EQ(OscillatorModule::kNumOutputs, 29);
 
     OscillatorModule osc;
     setActual(osc, "poly", 1.0f);

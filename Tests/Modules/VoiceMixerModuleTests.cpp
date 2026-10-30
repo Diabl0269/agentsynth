@@ -33,7 +33,9 @@ TEST_F(VoiceMixerModuleTest, SumsMultipleInputChannels) {
     EXPECT_LT(output0, 4.0f); // But less than raw sum (since we multiply by level param)
 }
 
-TEST_F(VoiceMixerModuleTest, HasEightInputChannels) { EXPECT_EQ(mixer->getTotalNumInputChannels(), 8); }
+TEST_F(VoiceMixerModuleTest, HasEightVoicesAndTheLevelCvAsInputChannels) {
+    EXPECT_EQ(mixer->getTotalNumInputChannels(), 9);
+}
 
 TEST_F(VoiceMixerModuleTest, HasTwoOutputChannels) { EXPECT_EQ(mixer->getTotalNumOutputChannels(), 2); }
 

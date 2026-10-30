@@ -42,6 +42,15 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
         if (const auto* macro = owner.getMacros().findByMember(node->properties["uuid"].toString()))
             macroName = macro->name;
     into.setProperty("macro", macroName);
+    // The targets with a cable on them, so a scenario can tell a cable landed and a reopened project kept it.
+    juce::StringArray cabledTargets;
+    if (auto* base = dynamic_cast<ModuleBase*>(module))
+        for (const auto& target : base->getModulationTargets())
+            for (const auto& connection : owner.getAudioEngine().getGraph().getConnections())
+                if (connection.destination.nodeID == nodeId &&
+                    connection.destination.channelIndex == target.channelIndex)
+                    cabledTargets.addIfNotAlreadyThere(target.name);
+    into.setProperty("cabledTargets", cabledTargets.joinIntoString(", "));
 }
 
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {

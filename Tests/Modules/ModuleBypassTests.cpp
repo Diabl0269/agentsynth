@@ -79,7 +79,7 @@ TEST_F(ModuleBypassTest, BypassedEffectPassesAudioThrough) {
     // 8 voice audio + 3 shared CV + the 8-wide Audio R block added in #219 + the 8-wide Pitch block
     // and the Key Track CV above it, then the Custom type's four CV channels.
     EXPECT_EQ(numChannels, FilterModule::kNumChannels);
-    EXPECT_EQ(numChannels, 32);
+    EXPECT_EQ(numChannels, 35);
 
     juce::AudioBuffer<float> buffer(numChannels, blockSize);
     // juce::AudioBuffer's constructor does NOT zero its memory, and FilterModule reads channels 1-3
@@ -162,7 +162,7 @@ TEST_F(ModuleBypassTest, BypassedSourceOutputsSilence) {
     // above every CV input channel is what makes JUCE copy shared CV buffers that fan out to multiple nodes.
     int numChannels = oscillator.getTotalNumOutputChannels();
     EXPECT_EQ(numChannels, OscillatorModule::kNumOutputs);
-    EXPECT_EQ(numChannels, 28);
+    EXPECT_EQ(numChannels, 29);
 
     juce::AudioBuffer<float> buffer(numChannels, blockSize);
     juce::MidiBuffer midiBuffer;

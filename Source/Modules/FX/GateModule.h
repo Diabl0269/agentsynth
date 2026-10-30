@@ -17,10 +17,14 @@ public:
     // scope, documented in docs/modules/fx-modules.md#gate-module).
     static constexpr float kGateHysteresisDb = 3.0f;
     static constexpr int kNumCvInputs = 5;
+    static constexpr int kLevelCvChannel = sidechainKeyBase(kNumCvInputs) + 2; // above the key pair, so nothing moves
+    static constexpr int kMixCvChannel = kLevelCvChannel + 1;
+    static constexpr int kPanCvChannel = kMixCvChannel + 1;
     static constexpr int kKeyBase = sidechainKeyBase(kNumCvInputs); // Key L = 7, Key R = 8
 
     GateModule()
-        : ModuleBase("Gate", 9, 2) { // 2 audio + 5 CV (Threshold, Attack, Hold, Release, Range) + Key L/R
+        : ModuleBase("Gate", 12,
+                     2) { // 2 audio + 5 CV (Threshold, Attack, Hold, Release, Range) + Key L/R + Level, Mix, Pan
         addParameter(thresholdParam =
                          new juce::AudioParameterFloat("threshold", "Threshold (dB)", -80.0f, 0.0f, -40.0f));
         addParameter(attackParam = new juce::AudioParameterFloat("attack", "Attack (ms)", 0.1f, 200.0f, 2.0f));
@@ -34,10 +38,10 @@ public:
         // Every audio-output module needs a level control (docs/modules/fx-modules.md#output-level-shared-stage);
         // Range is the closed-state floor, not a general trim, so it cannot double as this the
         // way Compressor's makeupGain / Limiter's inputGain do — adopt the shared stage instead.
-        addOutputLevelParameter();
+        addOutputLevelParameter(1.0f, kLevelCvChannel);
         addMuteParameter();
-        addMixParameter(); // shared output stage: added after Mute so no existing index moves
-        addPanParameter();
+        addMixParameter(kMixCvChannel); // shared output stage: added after Mute so no existing index moves
+        addPanParameter(kPanCvChannel);
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -169,25 +173,41 @@ public:
 
     juce::String getInputPortLabel(int i) const override {
         const juce::String cv[] = {"Threshold", "Attack", "Hold", "Release", "Range"};
+        const juce::String appended[] = {"Level", "Mix", "Pan"};
+        const int extra = i - stereoKeyVisibleInputCount(kNumCvInputs);
+        if (extra >= 0 && extra < 3)
+            return appended[extra];
         return stereoKeyInputLabel(i, kNumCvInputs, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoKeyVisibleInputCount(kNumCvInputs); }
+    int getVisibleInputPortCount() const override { return stereoKeyVisibleInputCount(kNumCvInputs) + 3; }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoKeyInput(raw, kNumCvInputs); }
+    LogicalPort mapInputChannel(int raw) const override {
+        if (raw < kLevelCvChannel)
+            return mapStereoKeyInput(raw, kNumCvInputs);
+        LogicalPort p;
+        p.visibleJackIndex = stereoKeyVisibleInputCount(kNumCvInputs) + raw - kLevelCvChannel;
+        p.role = PortRole::ModCV;
+        p.isPolyGroupHead = true;
+        p.polyVoiceSpan = 1;
+        return p;
+    }
     // This module reads its audio input through mapStereoPairInput/mapStereoKeyInput
     // above -- a genuine stereo pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    // Every continuous parameter has a CV jack (paramId binds "Threshold" to the "Threshold (dB)"
-    // knob, and so on). These are parameter CVs; the Key pair is not a modulation target.
+    // Level, Mix and Pan are appended last and reached through their knobs (paramId binds "Threshold" to the "Threshold
+    // (dB)" knob, and so on). These are parameter CVs; the Key pair is not a modulation target.
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Threshold", 2, "threshold"},
                 {"Attack", 3, "attack"},
                 {"Hold", 4, "hold"},
                 {"Release", 5, "release"},
-                {"Range", 6, "range"}};
+                {"Range", 6, "range"},
+                {"Level", kLevelCvChannel, "outputLevel", true},
+                {"Mix", kMixCvChannel, "mix", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }
