@@ -5,6 +5,7 @@
 // Shared PianoRollFixture and makeScaleAssistTestProps live in PianoRollTestHelpers.h.
 
 #include "../Layout/FadeVisibilityTestGuard.h"
+#include "PianoRollKeyPickerHelpers.h"
 #include "PianoRollTestHelpers.h"
 
 #include "Music/MusicalScale.h"

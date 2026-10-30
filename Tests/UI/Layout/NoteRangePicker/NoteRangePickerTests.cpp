@@ -1,6 +1,7 @@
 // NoteRangePickerTests.cpp -- the shared note range picker: edge drags add or remove notes and snap to the scale, the
 // middle moves the range by octaves (by one note with Option), the range stays ordered, and the keys reach every part.
 #include "../../ModuleViews/StepGrid/StepGridCardFixture.h"
+#include "../../PianoRoll/PianoRollKeyPickerHelpers.h"
 #include "../../PianoRoll/PianoRollTestHelpers.h"
 #include "UI/Layout/NoteRangePicker/NoteRangeGeometry.h"
 #include "UI/Layout/NoteRangePicker/NoteRangePicker.h"

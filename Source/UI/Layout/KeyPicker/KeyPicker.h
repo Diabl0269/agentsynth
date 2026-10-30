@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Music/SongKey.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/FilteredRowFades.h"
 #include "UI/Layout/NavigationSearchField.h"
@@ -25,16 +26,20 @@ class KeyPickerRow;
  */
 class KeyPicker
     : public juce::Component
+    , public synth::testmode::StateSource
     , private juce::Timer {
 public:
     struct Options {
-        std::optional<MusicalScale> current; // the key shown ticked; nullopt = no key
-        bool showFollowRow = false;          // a "Follow song key" row at the top
-        bool following = false;              // that row is on (ticked) instead of a key
-        juce::String followDetail;           // muted text at the right of the follow row
-        bool showNoKey = true;               // the "No key" button
-        std::vector<UserScale> userScales;   // a "Your scales" group at the end, each at the picker's root
-        juce::String what = "Song key";      // accessible title prefix
+        std::optional<MusicalScale> current;     // the key shown ticked; nullopt = no key
+        bool showFollowRow = false;              // a "Follow song key" row at the top
+        bool following = false;                  // that row is on (ticked) instead of a key
+        juce::String followDetail;               // muted text at the right of the follow row
+        bool showNoKey = true;                   // the "No key" button
+        std::vector<UserScale> userScales;       // a "Your scales" group at the end, each at the picker's root
+        juce::String what = "Song key";          // accessible title prefix
+        bool showPreviewSound = false;           // a "Preview sound" combo above the buttons
+        std::vector<juce::String> previewTracks; // its choices after "Default sound", one per instrument track
+        int previewSelected = 0;                 // 0 = Default sound, n = previewTracks[n - 1]
     };
 
     KeyPicker(Options options, std::function<void(std::optional<MusicalScale>)> onPick);
@@ -46,6 +51,8 @@ public:
     std::function<void()> onFollow;
     /** The highlighted key settled for kAuditionDelayMs; nullopt when it leaves, or the picker closes. */
     std::function<void(std::optional<MusicalScale>)> onAudition;
+    /** The Preview sound combo changed: 0 = Default sound, n = Options::previewTracks[n - 1]. */
+    std::function<void(int choice)> onPreviewSoundChanged;
     /** "Detect from notes": the key that fits the notes. Unset hides the button; set it before the picker is shown. */
     std::function<std::optional<MusicalScale>()> detect;
     /** Runs once from the destructor, however the picker closed. */
@@ -62,6 +69,8 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
     void mouseExit(const juce::MouseEvent& e) override;
     void focusOfChildComponentChanged(FocusChangeType) override { repaint(); }
+
+    void addTestModeState(juce::DynamicObject& into) const override;
 
     /** Closes the launching CallOutBox, if any. */
     void dismiss();
@@ -82,6 +91,10 @@ public:
     void clickNoKey();
     void clickFollow();
     void clickKeyboardRoot(int pitchClass);
+    bool isPreviewSoundShown() const;
+    juce::StringArray getPreviewSoundItems() const;
+    int getPreviewSoundChoice() const;
+    void choosePreviewSound(int choice);
     void hoverVisibleKey(int index);
     bool sendKey(const juce::KeyPress& key);
     std::vector<juce::String> visibleGroupTitles() const;
@@ -89,6 +102,7 @@ public:
 private:
     CalloutReveal reveal_{*this};
 
+    void buildPreviewSound();
     void buildRows();
     void applyFilter();
     void layoutRowColumn();
@@ -107,7 +121,7 @@ private:
     std::vector<KeyPickerRow*> visibleItemRows() const;
     void timerCallback() override;
     void endAudition();
-    static int preferredHeight(bool followRow);
+    static int preferredHeight(bool followRow, bool previewRow);
 
     Options options_;
     int root_ = 0;
@@ -127,6 +141,8 @@ private:
     std::unique_ptr<KeyPickerButton> relative_;
     std::unique_ptr<KeyPickerButton> detectButton_;
     std::unique_ptr<KeyPickerButton> noKey_;
+    juce::Label previewLabel_;
+    juce::ComboBox previewCombo_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(KeyPicker)
 };

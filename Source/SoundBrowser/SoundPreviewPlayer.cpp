@@ -34,6 +34,27 @@ std::uint64_t SoundPreviewPlayer::play(const juce::File& file, bool alignToBar, 
     return id;
 }
 
+// Posts a finished clip the way the decoder does: the Stop first (so the old sound fades), then a Play that carries a
+// clip the player owns until the audio thread has moved past it. The audio thread only reads the finished buffer.
+std::uint64_t SoundPreviewPlayer::playRendered(juce::AudioBuffer<float> audio) {
+    const double rate = sampleRate_.load(std::memory_order_relaxed);
+    if (rate <= 0.0 || audio.getNumChannels() < 1 || audio.getNumSamples() < 1)
+        return 0;
+    const auto id = ++requestCounter_;
+    decoder_->cancel();
+    post({Command::Kind::Stop, nullptr, id, false, 0});
+    if (heldClips() >= kMaxHeldClips)
+        return id;
+    auto clip = std::make_shared<Clip>();
+    clip->sampleRate = rate;
+    clip->data = std::move(audio);
+    Command command;
+    command.kind = Command::Kind::Play;
+    command.requestId = id;
+    post(command, clip);
+    return id;
+}
+
 void SoundPreviewPlayer::stop() {
     decoder_->cancel();
     post({Command::Kind::Stop, nullptr, 0, false, 0});

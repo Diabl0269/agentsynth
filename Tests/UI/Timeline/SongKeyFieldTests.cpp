@@ -2,6 +2,7 @@
 // audition's note-ons and note-offs.
 #include "Music/SongKey.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include "UI/Timeline/SongKeyField.h"
 #include <gtest/gtest.h>
@@ -24,12 +25,22 @@ protected:
     TransportService transport;
     TimelineDoc doc;
     TrackId track = doc.addTrack(TrackKind::Midi, "Keys");
+    TrackId bass = doc.addTrack(TrackKind::Midi, "Bass");
+    std::vector<TrackId> listed{track, bass}; // the instrument tracks the Preview sound combo offers
     std::vector<NoteEvent> events;
+    int defaultRuns = 0;
     std::unique_ptr<juce::Component> launched;
 
     void wire(SongKeyField& field) {
         field.setTransport(&transport);
-        field.resolveAuditionTrack = [this]() -> std::optional<TrackId> { return track; };
+        field.previewTracks = [this] {
+            std::vector<SongKeyField::PreviewTrack> tracks;
+            for (const auto id : listed)
+                tracks.push_back({id, doc.getTrack(id)->name});
+            return tracks;
+        };
+        field.getAuditioner().playDefaultSound = [this](const std::vector<int>&) { ++defaultRuns; };
+        field.setPreviewTrack(track);
         field.auditionNote = [this](TrackId t, int pitch, int, bool on) { events.push_back({t, pitch, on}); };
         field.pickerLauncher = [this](std::unique_ptr<juce::Component> picker, juce::Rectangle<int>) {
             launched = std::move(picker);
@@ -136,22 +147,94 @@ TEST_F(SongKeyFieldTest, AuditionPlaysTheScaleUpTheOctaveAndEndsEveryNote) {
 }
 
 TEST_F(SongKeyFieldTest, AStoppedOrDestroyedAuditionSendsItsNoteOffToTheLatchedTrack) {
-    const TrackId other = doc.addTrack(TrackKind::Midi, "Bass");
     {
         SongKeyField field;
         wire(field);
         field.startAudition(makeScale(2, scalePresetIndex("Dorian")));
         field.advanceAuditionForTest();
-        track = other; // the audition track changes mid-run: the note-off must still go where the note-on went
+        field.setPreviewTrack(bass); // the choice changes mid-run: the note-off must still go where the note-on went
         field.stopAudition();
         EXPECT_EQ(onCount(), 0);
         ASSERT_FALSE(events.empty());
         EXPECT_EQ(events.back().track, events.front().track);
-        EXPECT_NE(events.back().track, other);
+        EXPECT_EQ(events.back().track, track);
 
         field.startAudition(makeScale(2, scalePresetIndex("Dorian")));
     }
     EXPECT_EQ(onCount(), 0) << "destroying the field ends the note it was holding";
+}
+
+TEST_F(SongKeyFieldTest, WithNoChoiceTheScalePlaysTheDefaultSoundEvenWithTracksInTheProject) {
+    SongKeyField field;
+    wire(field);
+    field.setPreviewTrack(std::nullopt);
+    field.startAudition(makeScale(0, scalePresetIndex("Major")));
+    EXPECT_EQ(defaultRuns, 1);
+    EXPECT_TRUE(events.empty());
+}
+
+TEST_F(SongKeyFieldTest, ThePreviewSoundComboListsDefaultSoundThenTheInstrumentTracksAndOnlyThisPickerHasIt) {
+    SongKeyField field;
+    wire(field);
+    field.setPreviewTrack(std::nullopt);
+    field.openPicker();
+    auto* picker = dynamic_cast<KeyPicker*>(launched.get());
+    ASSERT_NE(picker, nullptr);
+    ASSERT_TRUE(picker->isPreviewSoundShown());
+    EXPECT_EQ(picker->getPreviewSoundItems(), juce::StringArray({"Default sound", "Keys", "Bass"}));
+    EXPECT_EQ(picker->getPreviewSoundChoice(), 0) << "Default sound, even with tracks to choose";
+
+    KeyPicker plain(KeyPicker::Options{}, [](std::optional<MusicalScale>) {});
+    EXPECT_FALSE(plain.isPreviewSoundShown());
+}
+
+TEST_F(SongKeyFieldTest, ChoosingATrackInThePickerRoutesTheNextAuditionToIt) {
+    SongKeyField field;
+    wire(field);
+    field.setPreviewTrack(std::nullopt);
+    field.openPicker();
+    auto* picker = dynamic_cast<KeyPicker*>(launched.get());
+    ASSERT_NE(picker, nullptr);
+    picker->choosePreviewSound(2); // Bass
+    EXPECT_EQ(field.getPreviewTrack(), bass);
+    field.startAudition(makeScale(0, scalePresetIndex("Major")));
+    field.advanceAuditionForTest();
+    ASSERT_FALSE(events.empty());
+    EXPECT_EQ(events.front().track, bass);
+    EXPECT_EQ(defaultRuns, 0);
+    field.stopAudition();
+
+    picker->choosePreviewSound(0);
+    EXPECT_FALSE(field.getPreviewTrack().has_value());
+    field.startAudition(makeScale(0, scalePresetIndex("Major")));
+    EXPECT_EQ(defaultRuns, 1);
+}
+
+TEST_F(SongKeyFieldTest, TheChoiceIsKeptForTheSessionAndShownWhenThePickerOpensAgain) {
+    SongKeyField field;
+    wire(field);
+    field.setPreviewTrack(bass);
+    field.openPicker();
+    auto* picker = dynamic_cast<KeyPicker*>(launched.get());
+    ASSERT_NE(picker, nullptr);
+    EXPECT_EQ(picker->getPreviewSoundChoice(), 2);
+}
+
+TEST_F(SongKeyFieldTest, ATrackThatIsGoneFallsBackToTheDefaultSound) {
+    SongKeyField field;
+    wire(field);
+    field.setPreviewTrack(bass);
+    listed = {track}; // Bass was deleted
+    field.startAudition(makeScale(0, scalePresetIndex("Major")));
+    EXPECT_EQ(defaultRuns, 1);
+    EXPECT_TRUE(events.empty());
+    field.stopAudition();
+
+    field.openPicker();
+    auto* picker = dynamic_cast<KeyPicker*>(launched.get());
+    ASSERT_NE(picker, nullptr);
+    EXPECT_EQ(picker->getPreviewSoundItems(), juce::StringArray({"Default sound", "Keys"}));
+    EXPECT_EQ(picker->getPreviewSoundChoice(), 0);
 }
 
 TEST_F(SongKeyFieldTest, ThePickersHoverDrivesTheAudition) {

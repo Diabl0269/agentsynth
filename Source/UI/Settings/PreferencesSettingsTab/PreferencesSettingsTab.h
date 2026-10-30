@@ -204,6 +204,10 @@ public:
 
     // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
     // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
+    // "Play the scale when browsing keys" (default ON): off, no key picker plays a scale while a key is hovered.
+    // Read at the start of each audition (KeyAuditioner), so it applies at once.
+    bool isPlayScaleOnBrowseEnabled() const;
+    void setPlayScaleOnBrowseEnabled(bool enabled);
     bool isPianoRollKeyLabelModeAll() const;
     void setPianoRollKeyLabelModeAll(bool labelEveryKey);
 
@@ -379,6 +383,7 @@ private:
     void persistShowToolbarLabels(bool enabled);
     void persistAnimationMode(synth::ui::AnimationMode mode);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
+    void persistPlayScaleOnBrowse(bool enabled);
     void persistDualIOPerModuleOverrides();
     void persistMidiRemoteDefaultTakeover(synth::Takeover takeover);
     void persistMidiRemoteShowBadges(bool enabled);
@@ -626,6 +631,7 @@ private:
     // On (the default) labels every row in the piano roll's keys column; off labels only the Cs —
     // PianoRollComponent::KeyLabelMode::AllNotes / OctavesOnly.
     juce::ToggleButton pianoRollKeyLabelsToggle{"Label every key"};
+    juce::ToggleButton playScaleOnBrowseToggle{"Play the scale when browsing keys"};
     juce::Label duplicatePointsLabel;
     juce::ComboBox duplicatePointsCombo;
     // Autosave. One single line: the toggle, then "Every: [field] min", then

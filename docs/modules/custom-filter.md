@@ -244,7 +244,7 @@ no source to take it from, or the cable was removed later). The line fades in an
 and audio. A voice starts a new note when its pitch settles (moves less than 0.1 semitone across a block) more
 than half a semitone away from its current note's pitch, or when its audio returns after a silent block (below
 about -80 dBFS on both legs). An audio return with a pitch still moving waits for the pitch to settle, so a
-Poly MIDI note, whose pitch glides for 5 ms while its sound starts (from 0 on a voice's first note), counts once
+Poly MIDI note, whose pitch steps while its sound starts (from 0 on a voice's first note), counts once
 and with its final pitch. With no
 Pitch cable, only the audio return counts (By hand and By pitch then have no note and use the shared cursor). A
 repeat of the same note on the same voice, into a Filter whose input never falls silent (an oscillator straight

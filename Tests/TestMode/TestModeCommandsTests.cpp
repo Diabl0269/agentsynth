@@ -12,8 +12,8 @@ using testmode_rig::run;
 
 TEST(TestModeCommands, TheRegistryHasEveryProtocolCommand) {
     const auto names = CommandTable::standard().names();
-    for (const char* name :
-         {"ping", "list", "click", "drag", "key", "getState", "screenshot", "openProject", "waitForIdle", "quit"})
+    for (const char* name : {"ping", "list", "click", "hover", "drag", "key", "getState", "screenshot", "openProject",
+                             "waitForIdle", "quit"})
         EXPECT_TRUE(names.contains(name)) << name;
     EXPECT_EQ(CommandTable::standard().find("nope"), nullptr);
 }
@@ -33,6 +33,17 @@ TEST(TestModeCommands, ClickDefaultsToTheCentreAndReportsThePoint) {
     EXPECT_EQ(static_cast<int>(r.value["point"]["x"]), 50);
     EXPECT_EQ(rig.left.downs, 1);
     EXPECT_EQ(rig.left.ups, 1);
+}
+
+TEST(TestModeCommands, HoverRestsThePointerOnAComponentWithoutPressing) {
+    Rig rig;
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    const auto r = run("hover", args({{"id", "left"}}));
+    ASSERT_EQ(r.state, StepResult::State::done) << r.error;
+    EXPECT_GE(rig.left.enters, 1);
+    EXPECT_EQ(rig.left.downs, 0);
+    EXPECT_EQ(run("hover", args({{"id", "nope"}})).state, StepResult::State::failed);
 }
 
 TEST(TestModeCommands, ClickTakesAPointButtonClicksAndMods) {
