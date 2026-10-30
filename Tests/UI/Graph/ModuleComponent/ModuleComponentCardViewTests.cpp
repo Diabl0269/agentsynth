@@ -1,5 +1,6 @@
 // Concern: the optional card panels (Show Scope, Show Response, Show Spectrum) open the way the module
 // remembers them when a card is built, exactly as a click opens them, and a click is remembered on the module.
+#include "../../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
 #include "ModuleComponentTestFixture.h"
@@ -28,7 +29,7 @@ juce::ToggleButton* findToggle(juce::Component& card, const juce::String& text) 
 void click(juce::Button* button) {
     ASSERT_NE(button, nullptr);
     button->triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::flushMessageQueue();
 }
 
 template <typename T>

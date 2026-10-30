@@ -14,6 +14,7 @@
 #include "Modules/PendingSound.h"
 #include "Modules/SamplerModule.h"
 #include "SoundPacks/CoreSounds.h"
+#include "TestPaths.h"
 #include <gtest/gtest.h>
 #include <map>
 

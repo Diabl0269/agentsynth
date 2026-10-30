@@ -24,6 +24,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
+#include "TestPaths.h"
 
 #include <algorithm>
 #include <cmath>

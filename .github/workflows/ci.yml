@@ -168,12 +168,9 @@ jobs:
       # FRO92: ci-local's worktree FetchContent reuse (scripts/lib/deps-reuse.sh) runs against fixture
       # trees here, no compiler involved; then the JUCE patch script (cmake/ApplyJucePatch.cmake).
       run: bash scripts/tests/ci-local-deps-reuse.test.sh && bash scripts/tests/juce-patch.test.sh
-    - name: Test ci-local shared test lock
-      # FRO192: scripts/ci-local.sh serialises its test run behind a lock shared by every worktree
-      # (scripts/lib/test-lock.sh) so two local suites cannot collide through the shared settings
-      # file. Only ever exercised locally otherwise -- this checks the lock path, serialisation,
-      # timeout status and exit-code passthrough with shell stand-ins, no compiler. A few seconds.
-      run: bash scripts/tests/ci-local-test-lock.test.sh
+    - name: Test ci-local test shards
+      # Only ever exercised locally otherwise: the slot limit, per-shard state, and red-shard handling.
+      run: bash scripts/tests/ci-local-test-shards.test.sh
     - name: Check for un-decoded UTF-8 escapes
       # juce::String(const char*) decodes as ASCII, not UTF-8 -- a "\xe2\x80\x94"-style escape
       # passed straight to a String-taking API silently renders as mojibake (P6-16, 2026-08-26).
@@ -430,7 +427,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps6-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): scripts/ci-cache-budget.sh's static sum bounds what the
         # workflows COMMIT to writing for one generation; this catches what that can't -- a
@@ -758,7 +755,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps6-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see build-and-test's identical comment above its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \
@@ -884,10 +881,9 @@ jobs:
       shell: bash
       run: |
         mkdir -p "$CCACHE_DIR"
-        # Right-sized, not the Linux job's 2G: a seeded Windows-ccache-main entry measured 160 MB
-        # on 2026-09-15, so 512M leaves >3x headroom while bounding what a single main-only save
-        # (see the Save ccache step below) can add to the repo's 10 GB cache budget.
-        ccache --set-config=max_size=512M
+        # Unity batches: fewer, larger objects. At 512M the separate-file build evicted its own entries,
+        # 72-84% hits on a PR against 96-99% on the other jobs.
+        ccache --set-config=max_size=1G
         ccache --set-config=compiler_check=content
         ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
@@ -901,6 +897,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
           -DAGENTSYNTH_PCH=ON \
+          -DAGENTSYNTH_UNITY=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -968,7 +965,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps6-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see build-and-test's identical comment above its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \

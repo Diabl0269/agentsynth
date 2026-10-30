@@ -101,7 +101,8 @@ TEST(MixerSpaceKeyTest, EveryFocusableMixerButtonConsumesSpaceAndClicksOnce) {
         const auto label = pointer->getTitle() + " / " + pointer->getName();
         const int expectedClicks = pointer->isEnabled() ? 1 : 0; // a greyed control consumes Space and does nothing
         const bool consumed = static_cast<juce::Component&>(*pointer).keyPressed(space);
-        synth::test::waitUntil([&] { return (pointer.getComponent()) != (nullptr); });
+        // Button::triggerClick posts the click as a command message; run it before counting.
+        synth::test::flushMessageQueue();
         ASSERT_NE(pointer.getComponent(), nullptr) << label << " was destroyed by its own press";
         EXPECT_TRUE(consumed) << label << " lets Space bubble to the window";
         EXPECT_EQ(clicks, expectedClicks) << label;

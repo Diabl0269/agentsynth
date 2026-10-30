@@ -10,6 +10,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
+#include "TestPaths.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineOps.h"
 #include <gtest/gtest.h>

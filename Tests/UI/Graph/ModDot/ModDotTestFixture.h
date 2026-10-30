@@ -4,6 +4,7 @@
 // card showing "gain" as a knob, and helpers that deliver real mouse events to it. Header-only; not compiled on its
 // own and not registered in Tests/CMakeLists.txt.
 
+#include "../../../TestWait.h"
 #include "../ModuleComponent/ModuleComponentTestFixture.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -24,7 +25,7 @@ namespace {
 // Button::triggerClick() posts the click as a command message, so it takes effect after one dispatch pass.
 void clickNow(juce::Button& button) {
     button.triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::flushMessageQueue();
 }
 
 juce::Slider* findKnob(ModuleComponent& card, const juce::String& componentId) {

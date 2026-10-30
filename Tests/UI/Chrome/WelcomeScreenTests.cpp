@@ -240,7 +240,8 @@ TEST_F(WelcomeScreenTest, NewProjectButton_ClearsCanvasAndHidesWelcomeScreen) {
     ASSERT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
 
     mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
-    synth::test::waitUntil([&] { return (mc.getCurrentPatchName()) == ("Untitled"); });
+    synth::test::waitUntil(
+        [&] { return mc.getCurrentPatchName() == "Untitled" && !mc.getWelcomeScreenForTest()->isVisible(); });
 
     EXPECT_EQ(mc.getCurrentPatchName(), "Untitled");
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
@@ -254,7 +255,8 @@ TEST_F(WelcomeScreenTest, OpenDefaultButton_LoadsFactoryPresetZeroAndHidesWelcom
     ASSERT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
 
     mc.getWelcomeScreenForTest()->getOpenDefaultButtonForTest().triggerClick();
-    synth::test::waitUntil([&] { return (mc.getCurrentPatchName()) == ("Default"); });
+    synth::test::waitUntil(
+        [&] { return mc.getCurrentPatchName() == "Default" && !mc.getWelcomeScreenForTest()->isVisible(); });
 
     EXPECT_EQ(mc.getCurrentPatchName(), "Default"); // PresetManager::getPresetList()[0].name
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
@@ -331,7 +333,8 @@ TEST_F(WelcomeScreenTest, LoadMenuFactoryPresetBranch_LeavesAnAlreadyOpenProject
     // ...and loads a factory preset the same way the Load menu's "result > 0" branch does
     // (MainComponentSetupToolbar.cpp), i.e. isNewDocument left at its default false.
     mc.loadPresetGuardedForTest(0);
-    synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Balance); });
+    // Balance already holds, so waiting for it proves nothing: run whatever the load posted, then check the law.
+    synth::test::flushMessageQueue();
 
     EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Balance);
 }

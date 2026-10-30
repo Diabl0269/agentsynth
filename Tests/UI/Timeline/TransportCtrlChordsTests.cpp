@@ -67,8 +67,6 @@ protected:
         mc_->getBottomDock().setActiveTab(synth::ui::BottomDockComponent::Tab::Timeline);
     }
 
-    void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
-
     std::unique_ptr<MainComponent> mc_;
 };
 
@@ -79,12 +77,12 @@ TEST_P(TransportCtrlChordsTest, CtrlMTogglesTheMetronomeFromAFocusedTimelineCont
     const bool before = bar.getMetronomeButton().getToggleState();
 
     EXPECT_TRUE(dispatchFrom(bar.getRecordButton(), peerKey('m')));
-    pump();
+    synth::test::waitUntil([&] { return bar.getMetronomeButton().getToggleState() == !before; });
     EXPECT_EQ(bar.getMetronomeButton().getToggleState(), !before);
     EXPECT_EQ(mc_->getAudioEngine().getMetronome().isEnabled(), !before);
 
     EXPECT_TRUE(dispatchFrom(bar.getRecordButton(), peerKey('m')));
-    pump();
+    synth::test::waitUntil([&] { return bar.getMetronomeButton().getToggleState() == before; });
     EXPECT_EQ(bar.getMetronomeButton().getToggleState(), before);
 }
 
@@ -97,7 +95,7 @@ TEST_P(TransportCtrlChordsTest, CtrlRTogglesRecordFromAFocusedTimelineControl) {
     EXPECT_TRUE(bar.isRecordingForTest());
 
     EXPECT_TRUE(dispatchFrom(bar.getMetronomeButton(), peerKey('r')));
-    pump();
+    synth::test::waitUntil([&] { return !bar.isRecordingForTest(); });
     EXPECT_FALSE(bar.isRecordingForTest());
 }
 
@@ -109,17 +107,17 @@ TEST_P(TransportCtrlChordsTest, CtrlMAndCtrlRReachTheTransportFromTheCanvasTheTi
     for (auto* surface : surfaces) {
         const bool metronomeBefore = bar.getMetronomeButton().getToggleState();
         EXPECT_TRUE(dispatchFrom(*surface, peerKey('m')));
-        pump();
+        synth::test::waitUntil([&] { return bar.getMetronomeButton().getToggleState() == !metronomeBefore; });
         EXPECT_EQ(bar.getMetronomeButton().getToggleState(), !metronomeBefore);
         EXPECT_TRUE(dispatchFrom(*surface, peerKey('m')));
-        pump();
+        synth::test::waitUntil([&] { return bar.getMetronomeButton().getToggleState() == metronomeBefore; });
         EXPECT_EQ(bar.getMetronomeButton().getToggleState(), metronomeBefore);
 
         EXPECT_TRUE(dispatchFrom(*surface, peerKey('r')));
         synth::test::waitUntil([&] { return bar.isRecordingForTest(); });
         EXPECT_TRUE(bar.isRecordingForTest());
         EXPECT_TRUE(dispatchFrom(*surface, peerKey('r')));
-        pump();
+        synth::test::waitUntil([&] { return !bar.isRecordingForTest(); });
         EXPECT_FALSE(bar.isRecordingForTest());
     }
 }

@@ -64,7 +64,8 @@ TEST_F(MainComponentTest, ChangingTheSongKeyIsOneUndoStepAndUndoPutsItBack) {
     EXPECT_TRUE(mc.isProjectDirty());
 
     mc.getUndoManager().undo();
-    settle();
+    synth::test::waitUntil([&] { return !transport.getDocumentState().songKey.has_value(); });
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(transport.getDocumentState().songKey.has_value());
     EXPECT_FALSE(mc.getUndoManager().canUndo()) << "the change was exactly one undo step";
 
