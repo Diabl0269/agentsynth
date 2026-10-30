@@ -190,6 +190,7 @@ public:
             v.glide.reset();
             v.active = false;
             v.ghosts.count = 0;
+            v.lastBaseDt = 0.0f;
             // Every playback starts from the same phases: the first note's run-out must not depend on where the
             // previous playback (or render) happened to leave the free-running oscillators.
             for (auto& osc : v.unisonOscs)
