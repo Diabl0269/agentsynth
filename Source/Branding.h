@@ -72,7 +72,7 @@ constexpr const char* kDiscordUrl = "https://agentsynth.app/discord";
 constexpr const char* kYouTubeUrl = "https://www.youtube.com/@DiabolusLark";
 constexpr const char* kGitHubUrl = "https://github.com/Diabl0269/agentsynth";
 constexpr const char* kTikTokUrl = "https://www.tiktok.com/@agentsynth";
-constexpr const char* kInstagramUrl = "https://www.instagram.com/talefronny";
+constexpr const char* kInstagramUrl = "https://www.instagram.com/agentsynth";
 
 // Production base URL for the synth-platform inference/auth/billing service (Cloud Run,
 // apps/infra/Pulumi.prod.yaml's authPublicBaseUrl in the synth-platform repo). Default host for
