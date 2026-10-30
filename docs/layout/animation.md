@@ -703,7 +703,7 @@ The status bar's transient and sticky messages do the same with their own
 driver: the message fades in over the normal text (160 ms) and the normal text returns as it fades out (110 ms),
 the cleared message's words staying painted until then. Inside a module card, the Show Scope and Show Response
 panels (with the Spectrum toggle), the LFO's custom wave section (curve editor, Grid, Shapes and Tools), the ADSR's
-Show Envelope Graph view, the More row's controls and a layout section that comes or goes with a mode fade the same
+Show Envelope Graph view, the More row's controls (also when a cable drag that opened the row leaves the card, is released elsewhere or is cancelled, [module card](module-card.md#the-more-row)) and a layout section that comes or goes with a mode fade the same
 way, and the card's height follows (`CardBlockFade`, `Source/UI/Graph/CardBody/CardBlockFade.h`, a `FadeVisibility`
 plus `height(full)` = `full * progress()`): each frame re-measures the card, so the rows below slide, and the
 neighbours make room once per direction (a growing card asks for its final footprint when the fade starts, a

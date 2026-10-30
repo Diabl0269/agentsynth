@@ -1,0 +1,32 @@
+# The extra controls a cable drag opened stayed open after the cable left the card or was released elsewhere.
+#
+# What a user does (macros fixture, zoomed out so the Oscillator and the LFO are both in the window):
+#   1. Drags a cable from LFO 3's CV jack onto Oscillator 2's "More controls" button and lets go there: the drag
+#      opened the row, so it folds again and the card is as tall as before.
+#   2. Does the same ending on the hidden Phase knob, which takes no cable: it folds again too.
+#   3. Opens the row by hand, drags a cable over the card the same way and lets go: the row the person opened stays.
+# A script cannot hold a cable mid-drag (`drag` presses, moves and releases in one step), so hovering and leaving
+# without releasing, Escape and a drop on a hidden knob that takes the cable are covered by CableFoldTests
+# (Tests/UI/Graph/CableFold/), which drive the editor's drag calls and its Escape key.
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - expect: {id: "card:Oscillator 2", bounds: {x: 828, y: 420, w: 144, h: 305}}
+  - screenshot: {name: folded-before}
+  - drag: {from: "card:LFO 3", to: "card:Oscillator 2", fromX: 269, fromY: 58, toX: 140, toY: 567, steps: 80}
+  - expect: {id: "card:Oscillator 2", bounds: {x: 828, y: 420, w: 144, h: 305}, within_ms: 2000}
+  - screenshot: {name: folded-after-drop-on-more-button}
+  - drag: {from: "card:LFO 3", to: "card:Oscillator 2", fromX: 269, fromY: 58, toX: 55, toY: 605, steps: 80}
+  - expect: {id: "card:Oscillator 2", bounds: {x: 828, y: 420, w: 144, h: 305}, within_ms: 2000}
+  - screenshot: {name: folded-after-drop-on-hidden-knob-that-takes-no-cable}
+  - click: {id: "card:Oscillator 2 > cardMoreRow"}
+  - expect: {id: "card:Oscillator 2", bounds: {x: 828, y: 420, w: 144, h: 431}, within_ms: 2000}
+  - drag: {from: "card:LFO 3", to: "card:Oscillator 2", fromX: 269, fromY: 58, toX: 140, toY: 567, steps: 80}
+  - wait: {}
+  - expect: {id: "card:Oscillator 2", bounds: {x: 828, y: 420, w: 144, h: 431}, within_ms: 2000}
+  - screenshot: {name: still-open-when-opened-by-hand}

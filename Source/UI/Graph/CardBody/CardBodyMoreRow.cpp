@@ -11,6 +11,10 @@
 
 namespace synth {
 
+namespace {
+constexpr int kCableFoldGraceMs = 250;
+}
+
 CardMoreButton::CardMoreButton(int hiddenCount)
     : juce::TextButton("More controls (" + juce::String(hiddenCount) + ")") {
     setComponentID("cardMoreRow");
@@ -58,7 +62,11 @@ void CardMoreButton::focusLost(FocusChangeType cause) {
 // Built after every parameter widget, so it is the last child and the last Tab stop on the card body.
 void CardBody::createMoreButton() {
     moreButton_ = std::make_unique<CardMoreButton>((int)plan_.more.size());
-    moreButton_->onToggle = [this] { setMoreUnfolded(!moreUnfolded_); };
+    moreButton_->onToggle = [this] { setMoreUnfolded(!moreUnfolded_); }; // clears the cable's claim on the row
+    foldGrace_.onExpire = [this] {
+        if (moreOpenedByDrag_)
+            setMoreUnfolded(false);
+    };
     card_.addAndMakeVisible(*moreButton_);
 }
 
@@ -71,6 +79,8 @@ void CardBody::setMoreUnfolded(bool unfolded) {
     if (!hasMoreRow() || unfolded == moreUnfolded_)
         return;
     moreUnfolded_ = unfolded;
+    moreOpenedByDrag_ = false; // any other change is the person's or already settled
+    foldGrace_.stopTimer();
     if (!moreFade_.isAttached()) {
         applyVisibility();
         card_.updateLayout();
@@ -92,7 +102,37 @@ bool CardBody::unfoldForCableDragAt(juce::Point<int> cardLocal) {
         !moreButton_->getBounds().contains(cardLocal))
         return false;
     setMoreUnfolded(true);
+    moreOpenedByDrag_ = true;
     return true;
+}
+
+// The editor reports where the cable is on every move; the grace timer is the only clock, so a cable that leaves
+// and then stops still folds the row once the grace ends.
+void CardBody::cableDragMoved(bool inside) {
+    if (!moreOpenedByDrag_)
+        return;
+    if (inside)
+        foldGrace_.stopTimer();
+    else if (!foldGrace_.isTimerRunning())
+        foldGrace_.startTimer(kCableFoldGraceMs);
+}
+
+void CardBody::cableDragEnded(bool keepOpen) {
+    foldGrace_.stopTimer();
+    if (!moreOpenedByDrag_)
+        return;
+    if (keepOpen)
+        moreOpenedByDrag_ = false;
+    else
+        setMoreUnfolded(false);
+}
+
+bool CardBody::moreRowWidgetAt(juce::Point<int> cardLocal) const {
+    for (int i : plan_.more)
+        if (auto* widget = plan_.items[(size_t)i].widget;
+            widget != nullptr && widget->isVisible() && widget->getBounds().contains(cardLocal))
+            return true;
+    return false;
 }
 
 int CardBody::layoutMoreRow(int y, const cardbody::BodyGeometry& g, bool apply) const {

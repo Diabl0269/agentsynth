@@ -284,6 +284,11 @@ bool GraphEditor::keyPressed(const juce::KeyPress& key) {
          code == juce::KeyPress::upKey || code == juce::KeyPress::downKey) &&
         getLoadReveal().refuseEdit())
         return true;
+    if (key == juce::KeyPress::escapeKey && isDraggingConnection) {
+        // Escape is a release over nothing: no cable lands, the rows the drag opened fold, the keyboard goes back.
+        endConnectionDrag({-100000, -100000});
+        return true;
+    }
     if (cardKeyboard_->keyPressed(key))
         return true;
 

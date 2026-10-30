@@ -12,6 +12,7 @@
 #include "Modules/MacroOutletModule.h"
 #include "Modules/ModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
@@ -20,6 +21,7 @@
 #include "UserSettings.h"
 
 #include <algorithm>
+#include <utility>
 
 using namespace detail;
 
@@ -172,6 +174,10 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
     return link;
 }
 
+namespace {
+juce::Component::SafePointer<juce::Component>& focusBeforeCableDrag();
+}
+
 void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
                                       juce::Point<int> screenPos) {
     isDraggingConnection = true;
@@ -180,6 +186,10 @@ void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channel
     dragSourceIsInput = isInput;
     dragSourceIsMidi = isMidi;
     dragCurrentPos = screenPos;
+    // Escape has to reach GraphEditor::keyPressed even when a card's control held the focus; the drag ends by giving it
+    // back.
+    focusBeforeCableDrag() = juce::Component::getCurrentlyFocusedComponent();
+    grabKeyboardFocus();
     maybeShowModDropHint(sourceModule, channelIndex, isInput, isMidi);
     repaintCanvas();
 }
@@ -222,6 +232,8 @@ void GraphEditor::dragConnection(juce::Point<int> screenPos) {
         if (!dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule) {
             const auto localPos = comp->getLocalPoint(nullptr, screenPos);
             comp->unfoldMoreRowForCableDrag(localPos);
+            if (auto* body = comp->getCardBody())
+                body->cableDragMoved(comp->getLocalBounds().contains(localPos)); // leaving folds a row the cable opened
             if (!comp->getPortForPoint(localPos)) {
                 if (auto port = comp->getModTargetPortForPoint(localPos))
                     target = port->index;
@@ -268,6 +280,44 @@ bool offerHostedModTarget(GraphEditor& editor, ModuleComponent& source, int sour
         return true;
     }
     return false;
+}
+} // namespace
+
+namespace {
+// The control that held the keyboard when the cable was picked up (one cable at a time, message thread only).
+juce::Component::SafePointer<juce::Component>& focusBeforeCableDrag() {
+    static juce::Component::SafePointer<juce::Component> focused;
+    return focused;
+}
+
+// Gives the keyboard back to what had it, unless the drag or the drop has already moved it somewhere on purpose.
+void restoreFocusAfterCableDrag(juce::Component& editor) {
+    auto previous = std::exchange(focusBeforeCableDrag(), nullptr);
+    if (previous != nullptr && previous->isShowing() && editor.hasKeyboardFocus(false))
+        previous->grabKeyboardFocus();
+}
+
+// A More row this cable drag opened, and whether the drop is on a control of that row (which keeps it open).
+struct CableOpenedRow {
+    juce::Component::SafePointer<ModuleComponent> card;
+    bool dropOnRevealedControl = false;
+};
+
+std::vector<CableOpenedRow> cableOpenedRows(const juce::OwnedArray<ModuleComponent>& cards,
+                                            juce::Point<int> screenPos) {
+    std::vector<CableOpenedRow> rows;
+    for (auto* card : cards)
+        if (auto* body = card->getCardBody(); body != nullptr && body->isMoreOpenedByCableDrag())
+            rows.push_back({card, body->moreRowWidgetAt(card->getLocalPoint(nullptr, screenPos))});
+    return rows;
+}
+
+// The drag is over: every row it opened folds, except the one whose control took the cable (`landedOn`), which
+// stays and is the person's from now on. A card the connection rebuilt is gone from `rows` (its pointer is null).
+void settleCableOpenedRows(const std::vector<CableOpenedRow>& rows, const ModuleComponent* landedOn) {
+    for (const auto& row : rows)
+        if (auto* card = row.card.getComponent(); card != nullptr && card->getCardBody() != nullptr)
+            card->getCardBody()->cableDragEnded(row.dropOnRevealedControl && card == landedOn);
 }
 } // namespace
 
@@ -334,7 +384,9 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
     if (!isDraggingConnection)
         return;
 
-    bool connectedToAModule = false; // gates the macro-card fallback below — unchanged loop otherwise
+    const auto openedRows = cableOpenedRows(content.getModules(), screenPos);
+    const ModuleComponent* landedOn = nullptr; // the card whose jack or knob took the cable
+    bool connectedToAModule = false;           // gates the macro-card fallback below — unchanged loop otherwise
 
     // A connection can rebuild the cards (a macro port minted by the drop, a Dual I/O change, a Track In's auto
     // channel all reach updateComponents), which frees and reallocates the very array a walk over
@@ -408,6 +460,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                                                        dragSourceIsMidi, /*recordUndo=*/true,
                                                        content.getLocalPoint(nullptr, screenPos).toFloat());
                 connectedToAModule = true;
+                landedOn = comp;
                 break;
             }
         }
@@ -506,6 +559,8 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         }
     }
 
+    settleCableOpenedRows(openedRows, landedOn);
+    restoreFocusAfterCableDrag(*this);
     isDraggingConnection = false;
     dragSourceModule = nullptr;
     clearModDropTargets();
