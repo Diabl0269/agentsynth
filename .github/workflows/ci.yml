@@ -822,8 +822,7 @@ jobs:
           # GoogleTest's own summary line, e.g. "[==========] 1843 tests from 210 test suites
           # ran. (12345 ms total)" -- its absence, or a "0 tests" count, means the binary crashed
           # or the shard's slice of the split was empty, either of which a nonzero process exit
-          # code alone would not always catch (a segfault does; a hung/killed runner step might
-          # not surface as this shard's own exit code).
+          # code alone would not always catch (a segfault does; a hung/killed runner step might not).
           ran_count="$(grep -oE '^\[==========\] [0-9]+ tests? from' "$log" | grep -oE '[0-9]+' | head -1 || true)"
 
           if [ "$shard_rc" -ne 0 ]; then
@@ -836,6 +835,7 @@ jobs:
           fi
         done
 
+        [ "$overall_rc" -eq 0 ] || bash scripts/print-crash-report.sh
         exit "$overall_rc"
 
   build-and-test-windows:
