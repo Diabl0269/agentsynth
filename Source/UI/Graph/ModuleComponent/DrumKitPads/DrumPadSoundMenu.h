@@ -1,8 +1,8 @@
 #pragma once
 
 // The Drum Kit pad's Sound menu (an audio file, a built-in drum, an instrument on the canvas, the loaded kit's
-// sounds, or back to the kit sound) and the pad menu around it (Play, Replace from file...). Built for one pad;
-// a chosen item id turns back into a Choice. docs/modules/drum-kit.md#a-pads-sound.
+// sounds, or back to the kit sound) and the pad menu around it (Play, Replace from file..., Hide pad, Show all pads).
+// Built for one pad; a chosen item id turns back into a Choice. docs/modules/drum-kit.md#a-pads-sound.
 
 #include "Modules/DrumKit/DrumKitModule.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -14,7 +14,7 @@ namespace synth::ui {
 class DrumPadSoundMenu {
 public:
     struct Choice {
-        enum class Kind { None, Play, ChooseFile, File, BuiltIn, KitSound, Instrument, Reset };
+        enum class Kind { None, Play, ChooseFile, File, BuiltIn, KitSound, Instrument, Reset, ToggleShown, ShowAll };
         Kind kind = Kind::None;
         int sound = synth::drums::kNoSound;
         juce::String file;
@@ -40,7 +40,8 @@ public:
 
     /** The Sound menu for pad `index` of `kit`. */
     juce::PopupMenu buildSoundMenu(const DrumKitModule& kit, int index, const std::vector<Instrument>& instruments);
-    /** Play, Replace from file..., Reset to kit sound, then the Sound groups. */
+    /** Play, Replace from file..., Reset to kit sound, Hide pad (Show pad when hidden), Show all pads (enabled while
+     *  a pad is hidden), then the Sound groups. */
     juce::PopupMenu buildPadMenu(const DrumKitModule& kit, int index, const std::vector<Instrument>& instruments);
     /** What item `result` of the last built menu means (Kind::None for 0 or an unknown id). */
     Choice choiceFor(int result) const;

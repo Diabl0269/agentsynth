@@ -242,6 +242,9 @@ void DrumMachineComponent::refreshFromDoc() {
 void DrumMachineComponent::syncLanes(bool animate) {
     pullKitRows();
     const auto target = visibleDrumLanes(clip(), showAll_, hasKit_ ? &kitRows_ : nullptr);
+    // The picked row's pad was just switched off: the lane below the grid moves to the first row left.
+    if (hasKit_ && kitRows_.hidden.count(selectedPitch_) > 0 && !target.empty())
+        setSelectedPitch(target.front().pitch);
     const int focusPitch = slotIndexForRow(focus_.row) >= 0 ? slots_[(size_t)focus_.row].lane.pitch : -1;
 
     std::map<int, const LaneSlot*> old;

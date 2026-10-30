@@ -27,6 +27,8 @@ When the clip's track plays a Drum Kit, the kit's pads decide the rows, not the 
   6 of 8 drums · 2 hidden"), and it switches every pad on as one undo step.
 - The rows follow the kit while the editor is open (the timeline's 15 Hz tick re-reads them), so hiding a pad on the
   card removes its row at once, and undo brings it back.
+- If the row the lanes under the grid edit (the "for Cowbell" row) is the one that was hidden, the pick moves to the first
+  row left.
 
 - The **timeline clip** follows the same rows: its note preview spreads the shown pads evenly down the clip, a hidden
   pad's hits are not drawn, and the rows below close up. A clip shows only its name (no caption line), so the count of

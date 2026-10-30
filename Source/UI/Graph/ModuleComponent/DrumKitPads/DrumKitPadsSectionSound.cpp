@@ -73,6 +73,12 @@ void DrumKitPadsSection::applyChoice(int index, const DrumPadSoundMenu::Choice& 
     case Kind::File:
         setPadFileUndoably(index, juce::File(choice.file));
         return;
+    case Kind::ToggleShown:
+        setPadShown(index, !kit_.padShown(index));
+        return;
+    case Kind::ShowAll:
+        showAllPads();
+        return;
     case Kind::Reset:
         editPadUndoably([&] {
             kit_.resetPad(index);

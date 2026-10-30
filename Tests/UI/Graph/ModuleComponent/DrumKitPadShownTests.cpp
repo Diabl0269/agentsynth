@@ -9,6 +9,7 @@
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
 #include "UI/Layout/FadeVisibility.h"
+#include <optional>
 
 using namespace cardbody_test;
 using synth::ui::DrumKitChrome;
@@ -289,4 +290,51 @@ TEST(DrumKitPadShown, TheSwitchActsOnTheNewPickBeforeThePanelFinishesFading) {
     scene.flipSwitch();
     EXPECT_FALSE(scene.kit().padShown(3)) << "the new pick changed";
     EXPECT_TRUE(scene.kit().padShown(0)) << "the previous pick did not";
+}
+
+namespace {
+
+// Opens the pad menu of `pad` through the same path as a right-click and returns it.
+juce::PopupMenu openPadMenu(Scene& scene, int pad, juce::PopupMenu& out) {
+    scene.pads().showMenuForTest = [&out](juce::PopupMenu& menu, int, bool) { out = menu; };
+    scene.pads().openMenu(pad, true, false);
+    return out;
+}
+
+std::optional<juce::PopupMenu::Item> itemNamed(const juce::PopupMenu& menu, const juce::String& text) {
+    for (juce::PopupMenu::MenuItemIterator it(menu); it.next();)
+        if (it.getItem().text == text)
+            return it.getItem();
+    return std::nullopt;
+}
+
+} // namespace
+
+TEST(DrumKitPadShown, ThePadMenuHidesAPadAndShowsThemAll) {
+    Scene scene;
+    juce::PopupMenu menu;
+    openPadMenu(scene, 3, menu);
+    const auto hide = itemNamed(menu, "Hide pad");
+    ASSERT_TRUE(hide);
+    EXPECT_EQ(hide->shortcutKeyDescription, "H");
+    auto all = itemNamed(menu, "Show all pads");
+    ASSERT_TRUE(all);
+    EXPECT_FALSE(all->isEnabled) << "nothing is hidden yet";
+
+    scene.pads().applyMenuResult(3, hide->itemID);
+    EXPECT_FALSE(scene.kit().padShown(3));
+    EXPECT_TRUE(scene.undo());
+    EXPECT_TRUE(scene.kit().padShown(3));
+    scene.pads().applyMenuResult(3, hide->itemID);
+
+    openPadMenu(scene, 3, menu);
+    EXPECT_FALSE(itemNamed(menu, "Hide pad"));
+    EXPECT_TRUE(itemNamed(menu, "Show pad"));
+    all = itemNamed(menu, "Show all pads");
+    ASSERT_TRUE(all);
+    EXPECT_TRUE(all->isEnabled);
+    scene.pads().applyMenuResult(3, all->itemID);
+    EXPECT_EQ(scene.kit().hiddenPadCount(), 0);
+    EXPECT_TRUE(scene.undo());
+    EXPECT_FALSE(scene.kit().padShown(3));
 }

@@ -122,7 +122,8 @@ The group tabs and the Recorded switches are gone from the card (layout revision
 ## A pad's sound
 
 The Sound row's button opens the **Sound menu** (`DrumPadSoundMenu`). Right-click on a pad, or Shift+F10 on the grid,
-opens the **pad menu**: Play, Replace from file..., Reset to kit sound, then the same groups inline. The current choice
+opens the **pad menu**: Play, Replace from file..., Reset to kit sound, Hide pad (H; Show pad when the pad is hidden),
+Show all pads (enabled while a pad is hidden), then the same groups inline. The current choice
 has a tick.
 
 - **Audio file**: Choose a file..., and Recent files (pad files chosen this session plus the files this kit's pads
@@ -184,5 +185,6 @@ Not built yet:
 - A hidden pad's hits are not drawn in the timeline clip's note preview either, and the other rows close up.
 - Hiding a pad whose drum has hits in a clip of a track playing the kit asks first: "Cowbell has 1 hit; hide it
   anyway?", with a "Don't ask again" box (user setting `drumKitAskBeforeHidingPad`). Showing never asks.
+- The pad menu (right-click, Shift+F10) has the same two actions: Hide pad or Show pad, and Show all pads.
 - Each switch, and Show all, is one undo step. `shown` is saved per pad; a kit with every pad shown writes nothing
   new, so older projects load as before.

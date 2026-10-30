@@ -1,6 +1,6 @@
-type Drum Kit size 280x581
+type Drum Kit size 280x607
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 12,541 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 12,567 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
@@ -10,13 +10,14 @@ type Drum Kit size 280x581
   child 8 component id="drumPadCount" at 164,249 104x24 visible=1 title="Pads, 8 of 32 maximum" tip="How many pads the card shows. Hidden pads keep their sounds." focusOrder=0 wantsFocus=0
   child 9 component id="drumPads" at 12,279 256x92 visible=1 title="Drum pads" tip="" focusOrder=0 wantsFocus=1
   child 10 label id="drumPadsCaption" at 12,375 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 11 component id="drumPadControls" at 12,399 256x126 visible=1 title="Kick controls" tip="" focusOrder=0 wantsFocus=0
-  child 12 button id="" at 12,93 256x24 visible=1 title="Instrument, synth drums" tip="Choose an instrument (Enter)" focusOrder=0 wantsFocus=1
-  child 13 label id="" at 12,121 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 14 knob id="Level" at 12,191 256x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 15 label id="" at 12,173 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 16 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
-  child 17 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
-  child 18 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  child 11 button id="drumPadsShowAll" at 268,375 56x16 visible=0 title="Show all hidden pads" tip="Show every hidden pad again. Undo hides them again." focusOrder=0 wantsFocus=1
+  child 12 component id="drumPadControls" at 12,399 256x152 visible=1 title="Kick controls" tip="" focusOrder=0 wantsFocus=0
+  child 13 button id="" at 12,93 256x24 visible=1 title="Instrument, synth drums" tip="Choose an instrument (Enter)" focusOrder=0 wantsFocus=1
+  child 14 label id="" at 12,121 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 15 knob id="Level" at 12,191 256x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 16 label id="" at 12,173 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 17 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
+  child 18 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
+  child 19 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
   out 0 270, 58
   out 1 270, 78

@@ -192,10 +192,9 @@ TEST(DrumKitPadSoundCard, ARightClickOpensThePadMenuOnThatPad) {
     EXPECT_TRUE(s.shown.padMenu);
     EXPECT_EQ(s.shown.index, 3);
     EXPECT_EQ(grid.picked(), 3);
-    for (const char* text : {"Play", "Replace from file...", "Reset to kit sound", DrumPadSoundMenu::kBuiltInGroup,
-                             DrumPadSoundMenu::kInstrumentGroup})
+    for (const char* text : {"Play", "Replace from file...", "Reset to kit sound", "Hide pad", "Show all pads",
+                             DrumPadSoundMenu::kBuiltInGroup, DrumPadSoundMenu::kInstrumentGroup})
         EXPECT_TRUE(s.hasText(text)) << text;
-    EXPECT_FALSE(s.hasText("Hide pad"));
 }
 
 TEST(DrumKitPadSoundCard, ShiftF10OpensThePadMenuForThePickedPad) {

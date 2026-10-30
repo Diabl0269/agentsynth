@@ -91,3 +91,16 @@ TEST(DrumMachineKitRows, AClipWithoutAKitKeepsTheGeneralMidiRows) {
     EXPECT_EQ(f.grid.getShowAllButton().getButtonText(), "Show all drums");
     EXPECT_GE(f.grid.rowOfPitch(36), 0);
 }
+
+// Regression test for FRO1304: the picked row's pad was switched off, and the lane below the grid kept editing it.
+TEST(DrumMachineKitRows, HidingThePickedDrumMovesThePickToARowThatIsStillThere) {
+    KitRowsFixture f;
+    f.open();
+    const int cowbell = f.notePad(7);
+    f.grid.setSelectedPitch(cowbell);
+    ASSERT_EQ(f.grid.getSelectedPitch(), cowbell);
+    f.kit.setPadShown(7, false);
+    f.grid.refreshKitRows();
+    EXPECT_NE(f.grid.getSelectedPitch(), cowbell);
+    EXPECT_GE(f.grid.rowOfPitch(f.grid.getSelectedPitch()), 0) << "the pick is on a row that exists";
+}
