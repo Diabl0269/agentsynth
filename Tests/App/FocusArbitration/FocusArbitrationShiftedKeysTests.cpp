@@ -3,6 +3,7 @@
 // them. NOTE: ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGridCommands is a documented
 // macOS flake under concurrent test suites -- rerun the locked ci-local step before assuming a
 // real regression.
+#include "../../TestWait.h"
 #include "FocusArbitrationTestFixture.h"
 
 // ============================================================================
@@ -22,7 +23,7 @@
 // keyPressed directly has to pump the message loop before asserting the command's effect.
 static bool pressAndPump(MainComponent& mc, const juce::KeyPress& key) {
     const bool consumed = mc.keyPressed(key);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::flushMessageQueue();
     return consumed;
 }
 

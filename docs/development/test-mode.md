@@ -117,8 +117,7 @@ Any number of instances can run at once (several worktrees, several agents, plus
   stretched-loop cache all follow that directory (installed sound packs stay shared and are only read);
 - no audio or MIDI device, no keychain, no update check, no telemetry, no plugin scan.
 
-The repository test lock (`scripts/lib/test-lock.sh`) guards the shared settings file of the GoogleTest suite and is not
-needed for test-mode runs. Give each run its own output directory for screenshots (`select_card.py --out`, and
+Test-mode runs take no test slot (`scripts/lib/test-shards.sh`, which limits the GoogleTest suite's processes). Give each run its own output directory for screenshots (`select_card.py --out`, and
 `parallel.py` does this per instance). One thing still shared: the out-of-process plugin scan's temporary folder, which
 test mode never starts.
 

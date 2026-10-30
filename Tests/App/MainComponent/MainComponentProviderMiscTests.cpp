@@ -123,7 +123,7 @@ TEST_F(MainComponentTest, LocateMasterCmdShiftMSelectsMasterThroughTheRealKeyPat
     // Async, like every other command MainComponent::keyPressed dispatches (see
     // FocusRegionTests.cpp's Cmd+Shift+T/L tests for the same pattern) — perform() runs on the
     // next message-loop pump, not synchronously inside keyPressed() itself.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
 
     const auto selected = mc.getGraphEditor().getSelectedNodes();
     ASSERT_EQ(selected.size(), 1u);

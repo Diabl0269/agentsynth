@@ -3,6 +3,7 @@
 // source, and removing the row takes the port with it, one undo bringing both back. Mirrors
 // Tests/UI/Graph/ModMatrixMacroRoutingTests.cpp. docs/modules/modulation.md#the-mod-dot-menu.
 
+#include "../../../TestWait.h"
 #include "../ModMatrixCanvasHelpers.h"
 
 #include "AudioEngine/ModuleTitle.h"
@@ -16,7 +17,7 @@ namespace {
 // Button::triggerClick() posts the click as a command message, so it takes effect after one dispatch pass.
 void click(juce::Button& button) {
     button.triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::flushMessageQueue();
 }
 struct NoMotion {
     NoMotion() { synth::ui::setReducedMotionForTest(true); }

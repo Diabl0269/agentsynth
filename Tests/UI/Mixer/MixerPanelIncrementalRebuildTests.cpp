@@ -2,6 +2,7 @@
 // rebuilds only the rest, and a restore that frees some nodes unbinds only the columns bound to them
 // (MixerPanelColumnReuse.cpp). Counted with MixerPanelComponent::getStripColumnsBuiltForTest(); the kept columns are
 // checked for being bound, showing the restored state, and matching what a fresh snapshot shows.
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -210,7 +211,11 @@ std::vector<juce::String> insertUuids(synth::ui::MixerColumnComponent& column) {
     return out;
 }
 
-void deliverBroadcasts() { juce::MessageManager::getInstance()->runDispatchLoopUntil(20); }
+// The graph's change broadcast is queued, and the work it triggers may queue more: run the queue a few times.
+void deliverBroadcasts() {
+    for (int i = 0; i < 3; ++i)
+        synth::test::flushMessageQueue();
+}
 } // namespace
 
 TEST(MixerPanelIncrementalRebuild, AModulePatchedIntoATrackOnTheCanvasShowsInItsInsertsAtOnce) {
@@ -247,6 +252,7 @@ TEST(MixerPanelIncrementalRebuild, AModulePatchedIntoATrackOnTheCanvasShowsInIts
                                       [&] { spliced = synth::spliceInInsert(rig.graph(), feeder, stripId, added); });
     ASSERT_TRUE(spliced);
     deliverBroadcasts();
+    synth::test::waitUntil([&] { return rig.mixer().getStripColumnsBuiltForTest() > builtBeforeAdd; });
 
     const auto after = rig.columns();
     ASSERT_EQ(after.size(), before.size());

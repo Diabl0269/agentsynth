@@ -122,7 +122,7 @@ TEST(TimelineTopBarKeysTest, ReturnAndSpacePressTheRingedControl) {
     const bool snapBefore = f.panel.getSnapToggleButton().getToggleState();
     ringTo(&f.panel.getSnapToggleButton());
     EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::returnKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // a button's click is delivered as a message
+    synth::test::flushMessageQueue(); // a button's click is delivered as a message
     EXPECT_NE(f.panel.getSnapToggleButton().getToggleState(), snapBefore);
 
     ringTo(f.panel.getToolButton(EditTool::Split));

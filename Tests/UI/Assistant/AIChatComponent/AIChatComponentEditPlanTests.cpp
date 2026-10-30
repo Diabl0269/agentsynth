@@ -9,6 +9,7 @@
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AIChatComponentTestFixture.h"
+#include "TestPaths.h"
 #include "UI/Assistant/AIChatComponent/EditPlanDetailsText.h"
 
 namespace {

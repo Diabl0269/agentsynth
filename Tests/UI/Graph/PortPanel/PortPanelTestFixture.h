@@ -4,6 +4,7 @@
 // helpers that deliver real mouse events to a card's jack, and a launcher that keeps the panel the click opened (a
 // real window needs a display). Header-only; not compiled on its own and not registered in Tests/CMakeLists.txt.
 
+#include "../../../TestWait.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 
 #include "AppUndoManager.h"
@@ -31,12 +32,12 @@ inline juce::MouseEvent portEvent(juce::Component& comp, juce::Point<int> pos, j
 // Button::triggerClick() posts the click as a command message, so it takes effect after one dispatch pass.
 inline void clickNow(juce::Button& button) {
     button.triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::flushMessageQueue();
 }
 
 inline void pressKey(synth::ui::ModDotGlyphButton& button, const juce::KeyPress& key) {
     button.keyPressed(key);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::flushMessageQueue();
 }
 
 struct PortFixture {

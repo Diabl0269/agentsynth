@@ -1,3 +1,4 @@
+#include "TestPaths.h"
 #include "UniqueTempDir.h"
 #include <set>
 

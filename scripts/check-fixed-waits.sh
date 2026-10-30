@@ -15,6 +15,11 @@
 # checks state (the poll pattern `for (int i = 0; i < 50 && !done; ++i) pump(20);`, a `while (!x)`
 # or a `do { ... } while`), because that loop is the polling.
 #
+# ALSO FLAGGED: a short helper (a block of at most 4 lines) that calls keyPressed / triggerClick /
+# invokeDirectly and ends with a fixed pump, e.g. `auto press = [&](auto& b) { b.triggerClick(); runDispatchLoopUntil(30); };`.
+# Those calls dispatch asynchronously, so the pump is a bet on the machine; use flushMessageQueue() from
+# Tests/TestWait.h, which runs exactly the messages already posted.
+#
 # This is a deliberate HEURISTIC scanner, not a C++ parser: comments, string literals and char
 # literals are stripped, braces and parentheses are tracked, wrappers are recognised only in the
 # one-line form `name(...) { ...runDispatchLoopUntil(N); }` (or a lambda of that shape, or the same
@@ -195,6 +200,43 @@ function stateful_loop(h,   cond, start, seg, k) {
     return 0
 }
 
+# 1 when the text calls something that dispatches asynchronously (a key press, a click, a command).
+function async_dispatch(t) { return (t ~ /(keyPressed|triggerClick|invokeDirectly)[ ]*\(/) ? 1 : 0 }
+
+function emit_helper(i) { printf "F\t%s\t%d\t%s\n", cur, i, trim(code[i]); seenline[i] = 1 }
+
+# A short helper (a block of at most 4 lines) that dispatches asynchronously and ends with a fixed pump: there is no
+# assertion after the pump here, but every caller is racing the same fixed time.
+function find_dispatch_helpers(   i, pos, rest, arg, nb, k, t, seen_open, tail) {
+    for (i = 1; i <= nl; i++) {
+        pos = index(code[i], "runDispatchLoopUntil(")
+        if (!pos || seenline[i]) continue
+        rest = substr(code[i], pos + length("runDispatchLoopUntil("))
+        arg = grabparen(rest, 1)
+        if (!fixed_arg(arg)) continue
+        tail = substr(rest, length(arg) + 2)
+        # The pump must be the last statement of its block: a closing brace follows on this line or the next one.
+        if (tail !~ /^[ ]*;[ ]*\}/) {
+            nb = i + 1
+            while (nb <= nl && trim(code[nb]) == "") nb++
+            if (nb > nl || trim(code[nb]) !~ /^\}[;), ]*$/ || tail !~ /^[ ]*;[ ]*$/) continue
+        }
+        t = substr(code[i], 1, pos - 1)
+        if (t ~ /\{/) { sub(/^[^{]*\{/, "", t); if (async_dispatch(t)) emit_helper(i); continue }
+        if (async_dispatch(t)) { emit_helper(i); continue }
+        k = i - 1; seen_open = 0
+        while (k >= 1 && i - k <= 4 && !seen_open) {
+            t = code[k]
+            if (trim(t) != "") {
+                if (t ~ /\{/) { seen_open = 1; sub(/^[^{]*\{/, "", t) }
+                if (async_dispatch(t)) { emit_helper(i); break }
+                if (t ~ /\}/) break
+            }
+            k--
+        }
+    }
+}
+
 # Name of the function/lambda declared by a wrapper header ("void pump()", "auto pump = [] ").
 function wrapper_name(h,   depth, i, c, e, nm, pre) {
     sub(/[ ]*(const|override|noexcept|mutable)[ ]*$/, "", h)
@@ -254,6 +296,7 @@ function remove_closed(   w) {
 
 function flag(w) {
     wact[w] = 0
+    seenline[wline[w]] = 1
     printf "F\t%s\t%d\t%s\n", cur, wline[w], wtext[w]
 }
 
@@ -277,7 +320,7 @@ function process_file(   i, L, n, j, c, id, k, k2, arg, w, tail, hasassert, nonb
     for (i = 1; i <= nl; i++) code[i] = clean(raw[i])
     find_wrappers()
     sp = 0; hdr = ""; pdepth = 0; wn = 0
-    delete wact; delete stk
+    delete wact; delete stk; delete seenline
     for (i = 1; i <= nl; i++) {
         L = code[i]
         nonblank = (trim(L) != "")
@@ -332,6 +375,7 @@ function process_file(   i, L, n, j, c, id, k, k2, arg, w, tail, hasassert, nonb
             }
         }
     }
+    find_dispatch_helpers()
 }
 
 BEGIN { ngw = split(gw, gwe, " "); for (k = 1; k <= ngw; k++) { split(gwe[k], gwp, "|"); gwb[k] = gwp[1]; gwn[k] = gwp[2] } }
