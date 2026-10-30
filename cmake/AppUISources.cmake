@@ -820,11 +820,9 @@ set(APPUI_SOURCES
     Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     Source/Plugin/Hosting/HostedPluginEditorWindow.h
     Source/Plugin/Hosting/HostedPluginWindowManager.h
-    # FRO337 (Esc/Cmd+W closes a focused hosted-plugin window) — the header is always listed (it is
-    # inert everywhere but mac, guarded by `#if JUCE_MAC` internally, same idiom as
-    # Source/Update/UpdateManager.h below); the mac-only .mm implementation is added to the AppUI
-    # target directly below, right after add_library(AppUI ...), mirroring root CMakeLists.txt's
-    # SparkleUpdateManager.mm registration.
+    # The Esc/Cmd+W key monitor header is always listed (inert off mac, `#if JUCE_MAC` inside, like
+    # Source/Update/UpdateManager.h below); its mac-only .mm is added to the AppUI target right after
+    # add_library(AppUI ...), mirroring root CMakeLists.txt's SparkleUpdateManager.mm registration.
     Source/Plugin/Hosting/HostedPluginWindowMacKeyMonitor.h
     # Plugin card layout (FRO126) — the per-plugin-type store reads the settings folder, so it is
     # app layer, not Core; the resolver that consults it sits beside it.
