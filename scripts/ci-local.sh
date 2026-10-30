@@ -56,8 +56,7 @@
 #       its own settings folder, temp folder and hard link of the binary, and holds one of the
 #       machine-wide test slots while it runs, so several gates at once overlap rather than queue.
 #
-# Speed: lint checks run in parallel; builds use every core, limited by load average
-# (CI_LOCAL_JOBS, CI_LOCAL_LOAD); step 7 skips the script tests when nothing they read changed since
+# Speed: lint checks run in parallel; builds use half the cores (CI_LOCAL_JOBS); step 7 skips the script tests when nothing they read changed since
 # they last passed on this machine, except the ones that scan the real tree. Every step prints its
 # time and the run ends with a table.
 #
@@ -387,22 +386,19 @@ else
 fi
 
 step "Build (all CMake targets: Core, AppUI, AgentSynth, AgentSynthPlugin, Tests)"
-# Every core, held back by load average: alone a gate takes the whole machine, and beside other gates
-# each one stops starting compiles while the load is above the limit. CI_LOCAL_JOBS and CI_LOCAL_LOAD override.
-JOBS="$CORES"
+# Half the cores, with no load limit. Measured against 60 uncached compiles on a busy 16-core machine:
+# twice as fast as a quarter of the cores for one gate and no slower for six, where every core made
+# six gates 2-3x slower, and a load limit (-l) starved a gate whenever other sessions held the load
+# above it. CI_LOCAL_JOBS overrides.
+JOBS=$((CORES / 2))
+[ "$JOBS" -lt 2 ] && JOBS=2
 case "${CI_LOCAL_JOBS:-}" in
     ''|*[!0-9]*|0) ;;
     *) JOBS="$CI_LOCAL_JOBS" ;;
 esac
-LOAD="$CORES"
-case "${CI_LOCAL_LOAD:-}" in
-    ''|*[!0-9]*|0) ;;
-    *) LOAD="$CI_LOCAL_LOAD" ;;
-esac
 build_args=(--parallel "$JOBS")
 [ "$FAST" = true ] && build_args+=(--target Tests)
-# -l is understood by Ninja and make, which are the two generators this script can pick.
-cmake --build "$BUILD_DIR" "${build_args[@]}" -- -l "$LOAD"
+cmake --build "$BUILD_DIR" "${build_args[@]}"
 
 # --- 9. Dev-sign the app bundle (macOS only, before tests so a signing failure surfaces early) --
 step "Dev-sign app bundle (stable TCC identity)"

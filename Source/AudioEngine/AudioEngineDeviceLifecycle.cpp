@@ -113,6 +113,8 @@ bool AudioEngine::savedDeviceStateEnablesInput() const {
 // initialise() from calling initialiseDevices() at all -- opening a device and then immediately
 // closing it would still have shown the prompt. Message-thread only, and must be called before
 // initialise(); flipping it afterward has no effect on an already-initialised engine.
+// Off, a test engine never receives messages from other processes' virtual sources or the machine's real devices.
+// openMidiInput() and ensureMidiDeviceOpen() are unaffected, so a test opens its own source by name.
 namespace {
 std::atomic<bool> openAllMidiInputs{true};
 }

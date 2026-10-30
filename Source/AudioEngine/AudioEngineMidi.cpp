@@ -119,6 +119,9 @@ bool AudioEngine::reconcileMidiInputs() {
     return changed;
 }
 
+// The driver thread reads this list because the message thread mutates the graph. Holding the nodes keeps each module
+// alive for a whole delivery; the list lags a graph change by one broadcast. Hosted delivery passes no source and never
+// takes the lock, so the audio thread never does.
 void AudioEngine::refreshExternalMidiNodes() {
     std::vector<juce::AudioProcessorGraph::Node::Ptr> found;
     for (auto* node : mainProcessorGraph.getNodes())

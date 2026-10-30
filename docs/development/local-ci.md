@@ -203,8 +203,10 @@ audio device, which a stuck run can wedge for everyone.
 - **A red shard runs once more, alone, after the others finish.** A test that only fails on a fully
   loaded machine doesn't cost the whole gate. It is printed as `FLAKY` with the test names either way,
   and those tests need fixing. CI doesn't retry.
-- **Builds use every core, limited by load.** Ninja gets `-j<cores> -l<cores>`, so a gate alone takes
-  the whole machine and several gates back off each other. `CI_LOCAL_JOBS` and `CI_LOCAL_LOAD` override.
+- **Builds use half the cores** (`CI_LOCAL_JOBS` overrides). Measured with 60 uncached compiles on a busy
+  16-core machine: about twice as fast as a quarter of the cores for one gate and no slower for six. Every
+  core made six gates 2-3x slower, and a load limit (`-l`) starved a gate whenever other sessions held the
+  load above it.
 
 Tests must not depend on the order they run in or on another test having run first: shards split the
 order, and a test's neighbours differ from one run to the next. Running the binary directly (a single

@@ -70,9 +70,7 @@ public:
 
     // Standalone only; call before initialise(). Skips opening any audio/MIDI device (automation launch).
     void setAudioDeviceDisabled(bool disabled) noexcept;
-    // Test seam, process-wide. Off, initialiseDevices() opens no MIDI input, so a test
-    // engine never receives messages from other processes' virtual sources or the machine's real devices.
-    // openMidiInput() and ensureMidiDeviceOpen() are unaffected, so a test opens its own source by name.
+    // Test seam, process-wide: off, initialiseDevices() opens no MIDI input.
     static void setOpenAllMidiInputsForTest(bool open) noexcept;
     static bool openAllMidiInputsEnabled() noexcept;
     bool isAudioDeviceDisabled() const noexcept;
@@ -190,9 +188,7 @@ public:
 
     // MESSAGE THREAD. Sampler MIDI-fed flags and Drum Kit pad links; see AudioEngineTimelinePublish.cpp.
     void refreshMidiWiring();
-    // MESSAGE THREAD. Re-collects the graph's ExternalMidiModule nodes into externalMidiNodes_ (the graph broadcast and
-    // shutdown() call it). The MIDI driver thread reads that list instead of walking the graph, which the message
-    // thread mutates.
+    // MESSAGE THREAD. Re-collects the nodes the MIDI driver thread delivers into.
     void refreshExternalMidiNodes();
 
     // ---- Right-borrows-Left normalling (docs/architecture/audio-engine.md#normalling-fro324) ------------
@@ -788,10 +784,7 @@ private:
     synth::MidiInputSources midiInputSources_;
     synth::MidiInputSources::Block midiSourcedBlock_; // this device callback's per-device notes, audio thread only
     std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;
-    // The ExternalMidiModule nodes a MIDI driver thread delivers into. Guarded by externalMidiNodesLock_, which only
-    // driver threads and the message thread take, never the audio thread (hosted delivery passes no source and skips
-    // it). Holding the nodes keeps each module alive for the whole of a delivery; the list lags a graph change by one
-    // broadcast.
+    // Taken by driver threads and the message thread, never the audio thread.
     std::mutex externalMidiNodesLock_;
     std::vector<juce::AudioProcessorGraph::Node::Ptr> externalMidiNodes_;
 
