@@ -35,9 +35,14 @@ namespace synth::ui {
 // Escape, that button or a click outside the card report onDismissRequested, which the owner answers by hiding
 // the overlay, leaving the project untouched.
 //
+// Social links: a row of five icon buttons in the footer, between the version label and What's New, in the order
+// Discord, YouTube, GitHub, TikTok, Instagram. Each reports its address through onSocialLinkRequested and never
+// hides the overlay. The footer keeps its height, so the card does too.
+//
 // Keyboard: Tab and Shift+Tab visit the close button (dismissible only), the three start buttons, the recent
-// projects, Contribute and What's New, top to bottom, and wrap inside the overlay (it is a keyboard focus
-// container). Escape dismisses only in the dismissible mode.
+// projects, Contribute, the five social links and What's New, top to bottom and left to right (the version label is
+// not a stop), and wrap inside the overlay (it is a keyboard focus container). Escape dismisses only in the
+// dismissible mode.
 //
 // Pure UI: every action is reported through a callback and MainComponent decides what actually
 // happens (including running it through guardUnsavedChanges) — this class knows nothing about
@@ -78,7 +83,8 @@ public:
     std::function<void()> onOpenExistingProject;
     std::function<void(const juce::File&)> onOpenRecentProject;
     std::function<void()> onWhatsNewRequested;
-    std::function<void()> onContributeRequested;        // Contribute... button; never hides the overlay
+    std::function<void()> onContributeRequested;                        // Contribute... button; never hides the overlay
+    std::function<void(const juce::String& url)> onSocialLinkRequested; // a social icon; never hides the overlay
     std::function<void(bool share)> onUsageStatsChoice; // Share (true) / No thanks (false) on the usage statistics card
     std::function<void()> onUsageStatsLearnMoreRequested; // "What we collect" on that card
 
@@ -101,6 +107,9 @@ public:
     juce::Button& getOpenExistingButtonForTest() { return openExistingButton; }
     juce::Button& getWhatsNewButtonForTest() { return whatsNewButton; }
     juce::Button& getContributeButtonForTest() { return contributeButton; }
+    int getSocialButtonCountForTest() const { return (int)socialButtons_.size(); }
+    IconButton& getSocialButtonForTest(int index) { return *socialButtons_[(size_t)index]; }
+    juce::Label& getVersionLabelForTest() { return versionLabel; }
     juce::Label& getContributeLabelForTest() { return contributeLabel; }
     UsageStatsPromptComponent& getUsageStatsPromptForTest() { return usageStatsPrompt_; }
     // The height the card gives the panel and its gap right now (0 once it is gone).
@@ -151,6 +160,8 @@ private:
     juce::TextButton openExistingButton{"Open an existing project..."};
     juce::TextButton whatsNewButton{"What's New..."};
     juce::TextButton contributeButton;
+
+    std::vector<std::unique_ptr<IconButton>> socialButtons_; // footer row, in visual order
 
     juce::Label titleLabel;
     juce::Label subtitleLabel;

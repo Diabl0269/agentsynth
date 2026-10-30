@@ -59,7 +59,8 @@ now is towards development time, one-off or monthly, at https://agentsynth.app/c
 me put more hours into this instead of other work, and hopefully one day most of them. Sharing
 it with someone who'd use it, opening an issue with feedback, starring the repo, following the
 [YouTube channel](https://www.youtube.com/@DiabolusLark), and code contributions (see
-[CONTRIBUTING.md](CONTRIBUTING.md)) genuinely help too. No pressure, it stays free either way.
+[CONTRIBUTING.md](CONTRIBUTING.md)) genuinely help too. No pressure, it stays free either way. To share patches, ask questions and give feedback, join the
+Discord at https://agentsynth.app/discord.
 
 ## Building
 

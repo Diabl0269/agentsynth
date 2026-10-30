@@ -3,6 +3,7 @@
 // duplicate a command. Uses getCommandTableForTest() (CommandSpec itself stays private -- read
 // via auto, per that accessor's own comment).
 #include "AudioEngine/AudioEngine.h"
+#include "Branding.h"
 #include "MainComponentTestFixture.h"
 #include "ShortcutManager/AppCommands.h"
 #include <algorithm>
@@ -104,6 +105,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::checkForUpdates,
 #endif
     AppCommands::contribute,
+    AppCommands::joinDiscord,
     // buildTransportCommandRows(), appended last in commandTable() -- see that function's
     // own comment for why appending (never interleaving) is always safe here.
     AppCommands::transportPlay,
@@ -205,6 +207,23 @@ TEST_F(MainComponentTest, ContributeCommandOpensTheContributePageExactlyOnce) {
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::contribute, false));
     ASSERT_EQ(opened.size(), 1u);
     EXPECT_EQ(opened[0], juce::String(synth::branding::kContributeUrl));
+}
+
+// The Help > Join the Discord item: same shape as contribute, opening kDiscordUrl.
+TEST_F(MainComponentTest, JoinDiscordCommandOpensTheDiscordPageExactlyOnce) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    std::vector<juce::String> opened;
+    mc.setUrlOpenerForTest([&opened](const juce::URL& u) { opened.push_back(u.toString(true)); });
+
+    juce::ApplicationCommandInfo info(AppCommands::joinDiscord);
+    mc.getCommandInfo(AppCommands::joinDiscord, info);
+    EXPECT_TRUE((info.flags & juce::ApplicationCommandInfo::isDisabled) == 0) << "must not be greyed out";
+    EXPECT_TRUE(info.defaultKeypresses.isEmpty()) << "menu-only: no chord";
+    EXPECT_EQ(info.shortName, juce::String("Join the Discord..."));
+
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::joinDiscord, false));
+    ASSERT_EQ(opened.size(), 1u);
+    EXPECT_EQ(opened[0], juce::String(synth::branding::kDiscordUrl));
 }
 
 // Export MIDI is menu-only and never gated on the offline render (it reads the document). With a

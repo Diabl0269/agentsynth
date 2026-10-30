@@ -13,6 +13,30 @@ constexpr double kPromptCollapseMs = 180.0; // leaving: easeInCubic
 constexpr double kThanksHoldMs = 1100.0;    // Share's one-line thanks, faded over its last third
 constexpr double kLogoRevealMs = 320.0;     // fade + rise on show: easeOutCubic
 constexpr float kLogoRisePx = 10.0f;
+constexpr int kSocialButtonSize = 28;
+constexpr int kSocialGap = 4;
+
+// One row of the footer's social links; the order here is the visual and the Tab order.
+struct SocialLinkSpec {
+    synth::theme::Glyph glyph;
+    const char* title;
+    const char* tooltip;
+    const char* description;
+    const char* url;
+};
+
+const SocialLinkSpec kSocialLinks[] = {
+    {synth::theme::Glyph::SocialDiscord, "Agent Synth on Discord", "Join the Agent Synth Discord",
+     "Opens the Agent Synth Discord invite in your browser", synth::branding::kDiscordUrl},
+    {synth::theme::Glyph::SocialYouTube, "Agent Synth on YouTube", "Watch Agent Synth on YouTube",
+     "Opens the Agent Synth YouTube channel in your browser", synth::branding::kYouTubeUrl},
+    {synth::theme::Glyph::SocialGitHub, "Agent Synth on GitHub", "See the Agent Synth source on GitHub",
+     "Opens the Agent Synth GitHub repository in your browser", synth::branding::kGitHubUrl},
+    {synth::theme::Glyph::SocialTikTok, "Agent Synth on TikTok", "Follow Agent Synth on TikTok",
+     "Opens the Agent Synth TikTok page in your browser", synth::branding::kTikTokUrl},
+    {synth::theme::Glyph::SocialInstagram, "Agent Synth on Instagram", "Follow Agent Synth on Instagram",
+     "Opens the Agent Synth Instagram page in your browser", synth::branding::kInstagramUrl},
+};
 } // namespace
 
 WelcomeScreenComponent::WelcomeScreenComponent() {
@@ -105,6 +129,21 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
         if (onWhatsNewRequested)
             onWhatsNewRequested();
     };
+
+    for (const auto& link : kSocialLinks) {
+        auto button = std::make_unique<IconButton>(link.title, link.glyph, IconButton::Style::Bare);
+        button->setTitle(link.title);
+        button->setTooltip(link.tooltip);
+        button->setDescription(link.description);
+        button->setMouseCursor(juce::MouseCursor::PointingHandCursor);
+        button->setWantsKeyboardFocus(true); // a Tab stop; Space and Return press it
+        button->onClick = [this, url = juce::String(link.url)] {
+            if (onSocialLinkRequested)
+                onSocialLinkRequested(url);
+        };
+        addAndMakeVisible(*button);
+        socialButtons_.push_back(std::move(button));
+    }
 
     versionLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.6f));
     addAndMakeVisible(versionLabel);
@@ -352,6 +391,13 @@ void WelcomeScreenComponent::resized() {
     auto footer = area.removeFromTop(28);
     whatsNewButton.setBounds(footer.removeFromRight(110));
     footer.removeFromRight(10);
+    // The social links sit against What's New, 4 px apart, vertically centred in the footer row.
+    for (auto it = socialButtons_.rbegin(); it != socialButtons_.rend(); ++it) {
+        (*it)->setBounds(
+            footer.removeFromRight(kSocialButtonSize).withSizeKeepingCentre(kSocialButtonSize, kSocialButtonSize));
+        footer.removeFromRight(kSocialGap);
+    }
+    footer.removeFromRight(6);
     versionLabel.setBounds(footer);
 }
 

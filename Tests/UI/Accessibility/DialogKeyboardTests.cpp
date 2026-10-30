@@ -274,8 +274,10 @@ TEST(DialogKeyboard, WelcomeScreenTabOrderCyclesInsideTheOverlay) {
     synth::ui::WelcomeScreenComponent welcome;
     welcome.setSize(900, 700);
     welcome.setRecentProjects({juce::File("/tmp/Alpha.synthproj"), juce::File("/tmp/Beta.synthproj")});
-    expectTabOrder(welcome, names({"New empty project", "Open our default project", "Open an existing project...",
-                                   "Alpha", "Beta", "Contribute", "What's New..."}));
+    expectTabOrder(
+        welcome, names({"New empty project", "Open our default project", "Open an existing project...", "Alpha", "Beta",
+                        "Contribute", "Agent Synth on Discord", "Agent Synth on YouTube", "Agent Synth on GitHub",
+                        "Agent Synth on TikTok", "Agent Synth on Instagram", "What's New..."}));
     EXPECT_TRUE(welcome.isKeyboardFocusContainer());
     EXPECT_FALSE(sendEscape(welcome)) << "the start screen has no cancel";
 }

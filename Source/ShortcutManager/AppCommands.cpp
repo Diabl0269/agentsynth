@@ -29,6 +29,9 @@ namespace AppCommands {
  *  - contribute: opens the site's contribute page (branding::kContributeUrl) in the default browser
  *    -- no dialog, no prompt, no analytics event. Menu-only like showWelcomeScreen/whatsNew and
  *    registered unconditionally. Appended last, so no existing enumerator's value moves.
+ *  - joinDiscord: opens the community Discord page (branding::kDiscordUrl) in the default browser,
+ *    the same way contribute does. Menu-only, no chord, registered unconditionally. Appended at the
+ *    very end of the enum, so no existing enumerator's value moves.
  *  - collectAndArchive: copies every external sample/wavetable into the project, saves, and
  *    optionally zips it (MainComponentCollectArchive.cpp). Menu-only like exportMidi. Appended last,
  *    so no existing enumerator's value moves.

@@ -309,6 +309,7 @@ private:
 #endif
                     menu.addSeparator();
                     menu.addCommandItem(&cm, AppCommands::contribute);
+                    menu.addCommandItem(&cm, AppCommands::joinDiscord);
                 }
             }
             return menu;

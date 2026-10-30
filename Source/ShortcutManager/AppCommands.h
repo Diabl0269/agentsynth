@@ -158,7 +158,9 @@ enum CommandIDs {
     snapSetSixtyFourthDotted,
     snapSetHundredTwentyEighthDotted,
     // Opens the transport bar's song key picker.
-    setSongKey
+    setSongKey,
+    // Opens the community Discord page (branding::kDiscordUrl) in the default browser. Menu-only.
+    joinDiscord
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
