@@ -2,6 +2,7 @@
 
 #include "AudioEngine/ModuleTitle.h"
 #include "Modules/ModuleBase.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/ModDot/ModSourceCatalog.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
 #include <map>
@@ -107,9 +108,18 @@ void ModMatrixLists::buildDestinations() {
         if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
             modulesByCategory[module->getModulationCategory()].push_back(node);
 
+    // A plugin's parameters are listed by hostedDestinations, modulated or not, so a bound slot has no row here: only
+    // the label its closed box shows.
+    std::vector<std::pair<int, juce::String>> hostedLabels;
     for (const auto& [category, modules] : modulesByCategory) {
         for (auto* node : modules) {
             const auto title = synth::moduleTitle(*node);
+            if (dynamic_cast<HostedPluginModule*>(node->getProcessor()) != nullptr) {
+                for (const auto& target : modDestinationCandidates(static_cast<ModuleBase*>(node->getProcessor())))
+                    hostedLabels.emplace_back((int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex),
+                                              title + " - " + target.name);
+                continue;
+            }
             for (const auto& target : modDestinationCandidates(static_cast<ModuleBase*>(node->getProcessor()))) {
                 const int id = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
                 destinations_.items.push_back({id, flat_ ? juce::String() : modulationCategoryNames().at(category),
@@ -118,6 +128,8 @@ void ModMatrixLists::buildDestinations() {
         }
     }
     index(destinations_);
+    for (auto& [id, label] : hostedLabels)
+        destinations_.labels[id] = std::move(label);
 }
 
 } // namespace synth::ui

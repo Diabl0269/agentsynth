@@ -72,6 +72,31 @@ void showHostedModTargetPicker(GraphEditor& editor, ModuleComponent& card, juce:
                                            nullptr);
 }
 
+namespace {
+int bindHostedModTarget(GraphEditor& editor, HostedPluginModule& module, HostedCardLayoutSource& source,
+                        const juce::String& paramId) {
+    if (source.parameterState(paramId) == HostedCardLayoutSource::ParameterState::Available)
+        source.showParameter(paramId);
+    const int channel = module.bindModSlot(paramId);
+    if (channel < 0 && editor.onStatusMessage)
+        editor.onStatusMessage("This plugin already has " + juce::String(HostedPluginModule::kMaxModSlots) +
+                               " modulated parameters");
+    return channel;
+}
+} // namespace
+
+int bindHostedModTarget(GraphEditor& editor, juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+    auto* module = hostedAt(editor, nodeId);
+    if (module == nullptr || !module->hasInstance())
+        return -1;
+    HostedCardLayoutSource source(*module, editor.getPluginCardLayoutStore(), editor.getAudioEngine().getGraph(),
+                                  nodeId,
+                                  /*undoManager=*/nullptr);
+    if (source.parameterState(paramId) == HostedCardLayoutSource::ParameterState::Unknown)
+        return -1;
+    return bindHostedModTarget(editor, *module, source, paramId);
+}
+
 // The knob, its slot and the cable are one gesture and so one undo step: the source writes with no undo manager of
 // its own, and the connection does not record either, so the outer snapshot holds all three.
 bool applyHostedModTarget(GraphEditor& editor, juce::AudioProcessorGraph::NodeID nodeId,
@@ -81,21 +106,14 @@ bool applyHostedModTarget(GraphEditor& editor, juce::AudioProcessorGraph::NodeID
         return false;
     auto& graph = editor.getAudioEngine().getGraph();
     HostedCardLayoutSource source(*module, editor.getPluginCardLayoutStore(), graph, nodeId, /*undoManager=*/nullptr);
-    const auto state = source.parameterState(paramId);
-    if (state == HostedCardLayoutSource::ParameterState::Unknown)
+    if (source.parameterState(paramId) == HostedCardLayoutSource::ParameterState::Unknown)
         return false;
 
     bool connected = false;
     const auto gesture = [&] {
-        if (state == HostedCardLayoutSource::ParameterState::Available)
-            source.showParameter(paramId);
-        const int channel = module->bindModSlot(paramId);
-        if (channel < 0) {
-            if (editor.onStatusMessage)
-                editor.onStatusMessage("This plugin already has " + juce::String(HostedPluginModule::kMaxModSlots) +
-                                       " modulated parameters");
+        const int channel = bindHostedModTarget(editor, *module, source, paramId);
+        if (channel < 0)
             return;
-        }
         connected = PortConnector::connectJacks(editor, sourceId, sourceJack, nodeId,
                                                 module->mapInputChannel(channel).visibleJackIndex, /*isMidi=*/false,
                                                 /*recordUndo=*/false)

@@ -29,17 +29,22 @@ std::vector<ModSourceOutput> modSourceOutputs(const ModuleBase& module);
  *  Macro In port spliced into an existing routing (display only, see the definition). */
 std::vector<ModulationTarget> modDestinationCandidates(ModuleBase* module);
 
-/** A plugin parameter the Mod Matrix offers as a destination before it has a modulation slot (picker rows only). */
+/** A plugin parameter the Mod Matrix offers as a destination, with or without a modulation slot (picker rows only). */
 struct HostedDestination {
     juce::AudioProcessorGraph::NodeID node;
     juce::String paramId;
-    juce::String label; // "<card title> - <parameter name>"
+    juce::String label;    // "<card title> - <parameter name>"
+    int boundChannel = -1; // its slot's raw channel when it is modulated; with no paramId, a slot of an unloaded plugin
 };
 /** Picker row ids for HostedDestination start here, clear of the (node uid << 8 | channel) ids of the rest. */
 constexpr int kHostedDestinationIdBase = 0x7F000000;
 
-/** Every parameter of every hosted plugin in `graph` that is not modulated yet, keyed by picker row id. */
+/** Every parameter of every hosted plugin in `graph`, modulated or not: the one list of them, keyed by picker row id.
+ */
 std::map<int, HostedDestination> hostedDestinations(juce::AudioProcessorGraph& graph);
+
+/** Whether a pick of `dest` can land: it already has a slot, or the plugin has one free for it. */
+bool canClaimHostedDestination(juce::AudioProcessorGraph& graph, const HostedDestination& dest);
 
 /** Claims `dest`'s modulation slot: its raw channel, or -1 when the plugin is gone or every slot is taken. */
 int claimHostedDestination(juce::AudioProcessorGraph& graph, const HostedDestination& dest);

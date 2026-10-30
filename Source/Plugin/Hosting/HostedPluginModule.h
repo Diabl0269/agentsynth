@@ -273,6 +273,8 @@ public:
 
     /** The parameter id bound to `rawChannel`, or empty. */
     juce::String modSlotParamId(int rawChannel) const;
+    /** The display name of the parameter on `rawChannel`'s slot, from the cached list; empty when there is none. */
+    juce::String modSlotParamName(int rawChannel) const;
 
     /** The resting value (0..1) of `paramId` while it is modulated: what the card knob shows and
      *  the ring starts from. Empty when `paramId` has no slot or its base is not known yet. */

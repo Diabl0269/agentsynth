@@ -446,6 +446,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditor.cpp
     Source/UI/Graph/GraphEditor/GraphEditor.h
     Source/UI/Graph/GraphEditor/GraphEditorTypes.h
+    Source/UI/Graph/GraphEditor/CableEndName.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
     Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
     Source/UI/Graph/GraphEditor/GraphEditorModAmount.cpp

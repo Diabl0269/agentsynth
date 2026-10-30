@@ -11,6 +11,7 @@
 #include "UI/Graph/ModMatrixKeyboard.h"
 #include "UI/Graph/ModMatrixLists.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -184,7 +185,9 @@ struct ModMatrixComponent::ModRow
     void refresh(const ModRoutingInfo& info, const synth::ConnectionIndex& cables);
 
     // Re-points the attenuverter's edges and runs the change as ONE undo step.
-    void reroute(bool sourceChanged, Endpoint source, Endpoint dest);
+    // `claimDest`, when given, picks the destination inside the same undo step; invalid leaves the routing as it was.
+    void reroute(bool sourceChanged, Endpoint source, Endpoint dest, std::function<Endpoint()> claimDest = {});
+    void pickHostedDestination(const synth::ui::HostedDestination& dest);
     // Runs graph mutations, in order, through the macro-port seam (or plain, in a bare panel) as ONE undo step.
     void applyRoutingChange(const std::vector<std::function<bool()>>& mutations, bool slideAttenuverter);
 };
@@ -736,30 +739,30 @@ void ModMatrixComponent::ModRow::showPicker(bool forSource) {
     if (open != nullptr)
         return;
 
-    // Destinations also list every plugin parameter without a slot yet; a pick claims one, then selects it like
-    // any other destination.
+    // Destinations also list every plugin parameter, modulated or not, always in the same section.
     auto items = forSource ? owner.lists_->sources() : owner.lists_->destinations();
-    const int selected = selectedRawId(combo);
+    int selected = selectedRawId(combo);
     // A source no longer listed keeps the row its closed box shows (see refresh).
     if (forSource && selected != 0 && owner.lists_->sourceLabel(selected).isEmpty())
         items.push_back({selected, {}, combo.getText()});
     auto& graph = owner.audioEngine.getGraph();
     const auto hosted =
         forSource ? std::map<int, synth::ui::HostedDestination>{} : synth::ui::hostedDestinations(graph);
-    for (const auto& [id, dest] : hosted)
-        items.push_back({id, "Plugins", dest.label});
+    for (const auto& [id, dest] : hosted) {
+        items.push_back({id, "Plugins", dest.label, {}, dest.boundChannel >= 0 ? "Modulated" : ""});
+        if (dest.boundChannel >= 0 && selected == (int)((dest.node.uid << 8) | (uint32_t)dest.boundChannel))
+            selected = id;
+    }
+    juce::Component::SafePointer<ModRow> safeRow(this);
     juce::Component::SafePointer<juce::ComboBox> safeCombo(&combo);
     auto picker = std::make_unique<synth::ui::ModMatrixPicker>(
-        forSource ? "source" : "destination", std::move(items), selected, [safeCombo, hosted, &graph](int id) {
-            if (safeCombo == nullptr)
+        forSource ? "source" : "destination", std::move(items), selected, [safeCombo, safeRow, hosted](int id) {
+            if (safeCombo == nullptr || safeRow == nullptr)
                 return;
-            if (const auto it = hosted.find(id); it != hosted.end()) {
-                const int channel = synth::ui::claimHostedDestination(graph, it->second);
-                if (channel < 0)
-                    return;
-                id = (int)((it->second.node.uid << 8) | (uint32_t)channel);
-            }
-            safeCombo->setSelectedId(id, juce::sendNotificationSync);
+            if (const auto it = hosted.find(id); it != hosted.end())
+                safeRow->pickHostedDestination(it->second);
+            else
+                safeCombo->setSelectedId(id, juce::sendNotificationSync);
         });
     open = picker.get();
     if (owner.pickerLauncher)
@@ -814,7 +817,35 @@ void ModMatrixComponent::ModRow::comboBoxChanged(juce::ComboBox* comboBox) {
         reroute(comboBox == &sourceCombo, source, dest);
 }
 
-void ModMatrixComponent::ModRow::reroute(bool sourceChanged, Endpoint source, Endpoint dest) {
+// The same binding a cable dropped on the card makes: the knob shows and the slot is claimed, with the routing, as one
+// undo step.
+void ModMatrixComponent::ModRow::pickHostedDestination(const synth::ui::HostedDestination& dest) {
+    auto& graph = owner.audioEngine.getGraph();
+    auto* editor = owner.graphEditor;
+    if (!synth::ui::canClaimHostedDestination(graph, dest)) {
+        if (editor != nullptr && editor->onStatusMessage)
+            editor->onStatusMessage("This plugin has no free modulation slot");
+        return;
+    }
+    auto landed = std::make_shared<Endpoint>();
+    const auto claim = [&graph, editor, dest, landed] {
+        const int channel = dest.paramId.isEmpty() ? dest.boundChannel
+                            : editor != nullptr    ? synth::ui::bindHostedModTarget(*editor, dest.node, dest.paramId)
+                                                   : synth::ui::claimHostedDestination(graph, dest);
+        *landed = channel >= 0 ? Endpoint{dest.node, channel} : Endpoint{};
+        return *landed;
+    };
+    const auto rawSource = (juce::uint32)selectedRawId(sourceCombo);
+    juce::Component::SafePointer<ModRow> self(this);
+    reroute(false, Endpoint{NodeID(rawSource >> 8), (int)(rawSource & 0xFF)}, Endpoint{}, claim);
+    if (self != nullptr && landed->valid()) {
+        const int id = (int)((landed->node.uid << 8) | (uint32_t)landed->channel);
+        showSelection(self->destCombo, id, self->owner.lists_->destinationLabel(id));
+    }
+}
+
+void ModMatrixComponent::ModRow::reroute(bool sourceChanged, Endpoint source, Endpoint dest,
+                                         std::function<Endpoint()> claimDest) {
     auto& graph = owner.audioEngine.getGraph();
     auto* editor = owner.graphEditor;
     const bool throughPorts = editor != nullptr && editor->getAutoCreateMacroPortsOnDragEnabled();
@@ -834,21 +865,35 @@ void ModMatrixComponent::ModRow::reroute(bool sourceChanged, Endpoint source, En
     // makes the untouched end a fresh edge too, so it gets a port if the new path needs one.
     // By value, never `this`: nothing here may reach back into the row once the change has started.
     const auto atten = attenuverterId;
-    const auto removeEdges = [atten, &graph] {
+    const bool claiming = (bool)claimDest;
+    auto destCell = std::make_shared<Endpoint>(dest);
+    const auto removeEdges = [atten, &graph, claiming, destCell] {
+        if (claiming && !destCell->valid())
+            return true;
         if (auto edge = attenuverterEdge(graph, atten, true))
             graph.removeConnection(*edge);
         if (auto edge = attenuverterEdge(graph, atten, false))
             graph.removeConnection(*edge);
         return true;
     };
-    const auto addEdges = [atten, &graph, source, dest] {
+    const auto addEdges = [atten, &graph, source, claiming, destCell] {
+        if (claiming && !destCell->valid())
+            return true;
         if (source.valid())
             graph.addConnection({{source.node, source.channel}, {atten, 0}});
-        if (dest.valid())
-            graph.addConnection({{atten, 0}, {dest.node, dest.channel}});
+        if (destCell->valid())
+            graph.addConnection({{atten, 0}, {destCell->node, destCell->channel}});
         return true;
     };
-    applyRoutingChange({removeEdges, addEdges}, /*slideAttenuverter=*/throughPorts);
+    std::vector<std::function<bool()>> mutations;
+    if (claiming)
+        mutations.push_back([destCell, claimDest = std::move(claimDest)] {
+            *destCell = claimDest();
+            return destCell->valid();
+        });
+    mutations.push_back(removeEdges);
+    mutations.push_back(addEdges);
+    applyRoutingChange(mutations, /*slideAttenuverter=*/throughPorts);
 }
 
 // With a canvas behind the panel, the edit goes through the macro-port seam the mixer sends use: the edge

@@ -24,6 +24,11 @@ std::vector<ModMatrixPicker::Item> hostedModTargetItems(HostedPluginModule& modu
 void showHostedModTargetPicker(GraphEditor& editor, ModuleComponent& card, juce::AudioProcessorGraph::NodeID sourceId,
                                int sourceJack, juce::Point<int> screenPos);
 
+/** Puts `paramId` on the card when it is not there and claims its modulation slot, the part every way of binding a
+ *  plugin parameter shares. Call inside the gesture's undo record. Returns the slot's raw channel, or -1 (the person is
+ *  told when every slot is taken). */
+int bindHostedModTarget(GraphEditor& editor, juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
+
 /** Puts `paramId` on the card when it is not there, claims its modulation slot and cables `sourceId`'s output jack
  *  `sourceJack` to it with the cable-drop rules, all as one undo step. False when nothing was cabled. */
 bool applyHostedModTarget(GraphEditor& editor, juce::AudioProcessorGraph::NodeID nodeId,
