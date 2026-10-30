@@ -22,14 +22,33 @@ the same picker from anywhere.
   the root; the highlight stays on the same scale.
 - **List.** Grouped as Common, Modes, Pentatonic and blues, More, then **Your scales** (the user scales saved from
   the piano roll's Scale Assist). Chromatic is not a key. Up / Down move, Return picks, Escape closes unchanged.
-- **Hover to hear.** A key the pointer or keyboard rests on plays its scale once up the octave, quietly, on the first
-  selected MIDI track that plays somewhere (else the first such track; never a drum kit). The track is latched for
-  the run, so the last note-off always reaches the track its note-on went to; closing the picker ends it.
+- **Hover to hear.** A key the pointer or keyboard rests on plays its scale; [Hearing a key](#hearing-a-key).
 - **Relative** switches between a major key and its relative minor (and the two pentatonics).
 - **Detect from notes** suggests the major or natural minor key that best fits every unmuted note on the MIDI tracks
   (drum kits left out), by note length (`synth::songPitchClassWeights`, `synth::detectKey`, Krumhansl-Kessler
   profiles). It highlights the suggestion; Return picks it.
 - **No key** turns the song key off.
+
+## Hearing a key
+
+Every key picker (the Song key, the piano roll's scale Key, a Sequencer's Key and a Follow field) plays the key the
+pointer or keyboard highlight rests on, after a 150 ms pause (`KeyPicker::onAudition`, one `Layout/KeyPicker/KeyAuditioner`
+per owner). The run goes up one octave from the root at middle C's octave (root, each scale note, the root again), a
+note every 140 ms, quietly. Leaving the key or closing the picker ends it, and the last note is always switched off
+where its note-on went.
+
+- **Where it plays.** The Song key picker plays on the track chosen in its **Preview sound** row (**Default sound**, or
+  any instrument track; a drum kit is never offered). The choice lasts for the session and the track list is read when
+  the picker opens; a track that is gone falls back to the default sound. The piano roll plays on the open clip's
+  track, a Sequencer through its own note output (one short note at a time, about 300 ms each, as its step grid does).
+- **Default sound.** With no instrument to play on (no track chosen, a track with no instrument, a Sequencer that is
+  bypassed or has no MIDI cable) the run is a built-in sound rendered by `KeyAuditionSound` and played by the engine's
+  sound preview ([audio engine](../architecture/audio-engine.md#sound-preview)), so a key is always audible, even in
+  an empty project. It shares the preview's gain with the Sounds view and is never in a bounce. It plays as one run, so
+  closing the picker cuts it only while it is still ringing.
+- **Switch.** Settings, Timeline, **Play the scale when browsing keys** (on by default,
+  `playScaleWhenBrowsingKeys`; [settings](../layout/settings-preferences.md)) turns hover-to-hear off everywhere. It is
+  read each time an audition starts.
 
 ## Saved, undone, never rewriting
 

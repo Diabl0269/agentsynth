@@ -1,0 +1,49 @@
+# Every key picker plays its scale while a key is hovered, and the Song key picker offers a Preview sound choice.
+#
+# What a user does: opens a project with a clip and a Sequencer, opens the Song key picker and rests the pointer on
+# "C Major": after a short pause the scale plays (the picker reports it is auditioning that key); moving to another key
+# switches the audition; Escape closes the picker and the audition ends. The same on the piano roll's scale Key and on
+# the Sequencer card's Key. Only the Song key picker shows a Preview sound row, set to "Default sound".
+# The picker is its own desktop window, so the PNGs capture the picker, not the main window.
+# The sound itself is not heard here: KeyAuditionerTests and KeyAuditionSoundTests check the notes and the audio.
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineTransportSongKey, showing: true, within_ms: 2000}
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - expect: {id: keyPicker, auditioning: false, previewSoundShown: true, previewSound: Default sound}
+  - hover: {id: "C Major, C D E F G A B"}
+  - expect: {id: keyPicker, auditioning: true, auditionKey: C Major, within_ms: 2000}
+  - screenshot: {id: keyPicker, name: song-key-hover}
+  - hover: {id: "C Natural Minor, C D D# F G G# A#"}
+  - expect: {id: keyPicker, auditioning: true, auditionKey: C Natural Minor, within_ms: 2000}
+  - key: {keys: escape}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: timelineClipLaneArea, x: 120, y: 30, clicks: 2}
+  - wait: {}
+  - click: {id: pianoRollScaleChip}
+  - wait: {}
+  - click: {id: scaleAssistKeyField}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - expect: {id: keyPicker, previewSoundShown: false}
+  - hover: {id: "C Major, C D E F G A B"}
+  - expect: {id: keyPicker, auditioning: true, auditionKey: C Major, within_ms: 2000}
+  - screenshot: {id: keyPicker, name: piano-roll-key-hover}
+  - key: {keys: escape}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: Show Canvas in the main area}
+  - wait: {}
+  - expect: {id: sequencerKey, showing: true, within_ms: 2000}
+  - click: {id: sequencerKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - expect: {id: keyPicker, previewSoundShown: false}
+  - hover: {id: "C Major, C D E F G A B"}
+  - expect: {id: keyPicker, auditioning: true, auditionKey: C Major, within_ms: 2000}
+  - screenshot: {id: keyPicker, name: sequencer-key-hover}
+  - key: {keys: escape}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}

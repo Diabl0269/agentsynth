@@ -8,7 +8,6 @@ namespace synth::soundbrowser {
 
 namespace {
 constexpr int kReadChunk = 65536;
-constexpr int kMaxHeldClips = 8;
 } // namespace
 
 void SoundPreviewPlayer::Decoder::fitToTarget(Clip& clip, const LoopTarget& target) {

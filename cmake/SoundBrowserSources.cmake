@@ -5,6 +5,8 @@ target_sources(Core PRIVATE
     Source/Modules/Shapes/FactoryShapes.cpp
     Source/Modules/Shapes/ShapeLibrary.cpp
     Source/Modules/Shapes/ShapeLibrary.h
+    Source/SoundBrowser/KeyAuditionSound.cpp
+    Source/SoundBrowser/KeyAuditionSound.h
     Source/SoundBrowser/LoopStretch.cpp
     Source/SoundBrowser/LoopStretch.h
     Source/SoundBrowser/LoopStretchFile.cpp

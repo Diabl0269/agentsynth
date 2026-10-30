@@ -4,6 +4,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
     Source/UI/Timeline/TimelinePanelComponent/TimelineClipboardClip.h
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelKeyAudition.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShapes.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
