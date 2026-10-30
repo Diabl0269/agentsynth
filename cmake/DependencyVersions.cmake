@@ -28,6 +28,8 @@ set(SYNTH_JUCE_PATCH_COMMAND
     ${CMAKE_COMMAND} -DPATCH_FILE=${CMAKE_CURRENT_LIST_DIR}/patches/juce-vst3-context-menu.patch
     -P ${CMAKE_CURRENT_LIST_DIR}/ApplyJucePatch.cmake
     COMMAND ${CMAKE_COMMAND} -DPATCH_FILE=${CMAKE_CURRENT_LIST_DIR}/patches/juce-testmode-window-order.patch
+    -P ${CMAKE_CURRENT_LIST_DIR}/ApplyJucePatch.cmake
+    COMMAND ${CMAKE_COMMAND} -DPATCH_FILE=${CMAKE_CURRENT_LIST_DIR}/patches/juce-aggregate-null-clock.patch
     -P ${CMAKE_CURRENT_LIST_DIR}/ApplyJucePatch.cmake)
 
 set(SYNTH_GOOGLETEST_URL "https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip"
