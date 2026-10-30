@@ -57,12 +57,26 @@ juce::Point<int> localPointArg(const juce::var& args, const juce::Component& c, 
             args.hasProperty(yKey) ? static_cast<int>(args[yKey]) : centre.y};
 }
 
-juce::StringArray stringArrayArg(const juce::var& args, const char* key) {
-    juce::StringArray out;
-    if (const auto* list = args.getProperty(key, {}).getArray())
-        for (const auto& item : *list)
-            out.add(item.toString());
-    return out;
+// The modifier names of args.mods: one string ("shift") or a list of strings. Anything else sets `error` rather than
+// being dropped, so a typo in a scenario never silently clicks without its modifier.
+juce::ModifierKeys modifiersArg(const juce::var& args, juce::String& error) {
+    const auto value = args.getProperty("mods", {});
+    juce::StringArray names;
+    if (const auto* list = value.getArray()) {
+        for (const auto& item : *list) {
+            if (!item.isString()) {
+                error = "\"mods\" must hold modifier names (cmd, shift, alt, ctrl)";
+                return {};
+            }
+            names.add(item.toString());
+        }
+    } else if (value.isString()) {
+        names.add(value.toString());
+    } else if (!value.isVoid()) {
+        error = "\"mods\" must be a modifier name or a list of them (cmd, shift, alt, ctrl)";
+        return {};
+    }
+    return modifiersFromNames(names, error);
 }
 
 MainComponent* mainComponent() {
@@ -99,7 +113,7 @@ StepResult cmdClick(const juce::var& args, Scratch&, int) {
     if (found.component == nullptr)
         return StepResult::failed(found.error);
     juce::String error;
-    const auto keys = modifiersFromNames(stringArrayArg(args, "mods"), error);
+    const auto keys = modifiersArg(args, error);
     const auto button = args.getProperty("button", "left").toString() == "right" ? Button::right : Button::left;
     if (error.isNotEmpty())
         return StepResult::failed(error);
@@ -115,7 +129,7 @@ StepResult cmdClick(const juce::var& args, Scratch&, int) {
 StepResult cmdDrag(const juce::var& args, Scratch& s, int attempt) {
     const int steps = juce::jmax(2, args.hasProperty("steps") ? static_cast<int>(args["steps"]) : kDefaultDragSteps);
     juce::String error;
-    const auto keys = modifiersFromNames(stringArrayArg(args, "mods"), error);
+    const auto keys = modifiersArg(args, error);
     if (error.isNotEmpty())
         return StepResult::failed(error);
 

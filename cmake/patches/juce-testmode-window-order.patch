@@ -1,22 +1,93 @@
-JUCE patch: let an app switch off the window-order check (macOS, Windows) in ComponentPeer hit testing.
+JUCE patch: two process-wide flags that let an app's in-app test mode (--automation) and the test suite run without
+touching the user's screen or window order.
 
+ignoreWindowOrderForHitTests (macOS, Windows)
 Why: JUCE decides which component a mouse event reaches with ComponentPeer::contains(), and on macOS and Windows that asks
 the OS whether this window is the topmost one at the point. A window behind another window (or
-another app) therefore never receives an event, even a synthetic one. The app's in-app test mode
-(--automation) drives its own windows by script and must not depend on, nor change, the window order on the
-user's screen. This patch adds the process-wide flag juce::ComponentPeer::ignoreWindowOrderForHitTests
-(default false) and makes the macOS and Windows peers' contains() skip their window-order check while it is true
-(NSViewComponentPeer asks the window server, HWNDComponentPeer calls WindowFromPoint).
-Nothing else changes; with the flag false JUCE behaves exactly as stock.
+another app) therefore never receives an event, even a synthetic one. The test mode drives its own windows by script and
+must not depend on, nor change, the window order on the user's screen. The flag (default false) makes the macOS and
+Windows peers' contains() skip their window-order check while it is true (NSViewComponentPeer asks the window server,
+HWNDComponentPeer calls WindowFromPoint).
+
+hideWindowsForAutomation (macOS only; Windows and Linux ignore it and compile unchanged)
+Why: an automation run or a test run must not flash windows on the user's screen or take keyboard focus, so the user can
+keep using the Mac. While the flag (default false) is true, every NSWindow the NSViewComponentPeer creates has alpha 0,
+ignores mouse events (user clicks pass through; test-mode input goes straight to the ComponentPeer, not through NSEvents)
+and has no shadow; setAlpha() keeps it at 0, so an app fade animation on a dialog cannot make it visible; and a real
+input attempt on a blocked window no longer calls [NSApp activateIgnoringOtherApps:]. Because the app is then never active, the OS never reports a window as key: ComponentPeer::isFocused() follows the
+JUCE-tracked focused peer instead (as for a plugin), toFront(true) gives the window JUCE focus directly, and an app-focus
+change does not drop it. The foreground checks behind pop-up
+menus, call-out boxes, tooltips, key commands and the active top-level window count a hidden process as foreground. The
+windows are still ordered in and composited, so painting, display links and snapshots work as before. The flag is read when a window is created, so set it
+before the first window.
+
+With both flags false JUCE behaves exactly as stock.
 
 Applied by cmake/ApplyJucePatch.cmake (FetchContent PATCH_COMMAND); mechanism and how to update it for a new
 JUCE tag: docs/development/juce-patches.md. The JUCE files use CRLF line endings.
 
+diff --git a/modules/juce_gui_basics/detail/juce_TopLevelWindowManager.h b/modules/juce_gui_basics/detail/juce_TopLevelWindowManager.h
+index a461c65..a241110 100644
+--- a/modules/juce_gui_basics/detail/juce_TopLevelWindowManager.h
++++ b/modules/juce_gui_basics/detail/juce_TopLevelWindowManager.h
+@@ -119,7 +119,7 @@ private:
+ 
+     TopLevelWindow* findCurrentlyActiveWindow() const
+     {
+-        if (Process::isForegroundProcess())
++        if (Process::isForegroundProcess() || ComponentPeer::hideWindowsForAutomation)
+         {
+             auto* focusedComp = Component::getCurrentlyFocusedComponent();
+             auto* w = dynamic_cast<TopLevelWindow*> (focusedComp);
+diff --git a/modules/juce_gui_basics/detail/juce_WindowingHelpers.h b/modules/juce_gui_basics/detail/juce_WindowingHelpers.h
+index 543d23a..3a5ce86 100644
+--- a/modules/juce_gui_basics/detail/juce_WindowingHelpers.h
++++ b/modules/juce_gui_basics/detail/juce_WindowingHelpers.h
+@@ -54,7 +54,9 @@ struct WindowingHelpers
+     */
+     static bool isForegroundOrEmbeddedProcess (Component* viewComponent)
+     {
+-        return Process::isForegroundProcess() || isEmbeddedInForegroundProcess (viewComponent);
++        // A hidden automation process is never the foreground one, yet its popups, call-outs and key commands must work.
++        return ComponentPeer::hideWindowsForAutomation
++            || Process::isForegroundProcess() || isEmbeddedInForegroundProcess (viewComponent);
+     }
+ 
+     template <typename Value>
 diff --git a/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm b/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
-index 0436364e9..302586b3e 100644
+index 0436364..833a9b9 100644
 --- a/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
 +++ b/modules/juce_gui_basics/native/juce_NSViewComponentPeer_mac.mm
-@@ -531,7 +531,7 @@ bool contains (Point<int> localPos, bool trueIfInAChildWindow) const override
+@@ -279,6 +279,15 @@ static void setOwner (id self, Callback* newOwner)
+             [window setExcludedFromWindowsMenu: (windowStyleFlags & windowIsTemporary) != 0];
+             [window setIgnoresMouseEvents: (windowStyleFlags & windowIgnoresMouseClicks) != 0];
+ 
++            if (hideWindowsForAutomation)
++            {
++                // Invisible to the user and transparent to their clicks; the window still exists, is ordered in and
++                // is composited, so rendering, display links and snapshots keep working.
++                [window setAlphaValue: 0.0];
++                [window setIgnoresMouseEvents: YES];
++                [window setHasShadow: NO];
++            }
++
+             setCollectionBehaviour (false);
+ 
+             [window setRestorable: NO];
+@@ -445,6 +454,12 @@ void setBounds (const Rectangle<int>& newBounds, bool) override
+ 
+     void setAlpha (float newAlpha) override
+     {
++        if (hideWindowsForAutomation && ! isSharedWindow)
++        {
++            [window setAlphaValue: 0.0];
++            return;
++        }
++
+         if (isSharedWindow)
+             [view setAlphaValue: (CGFloat) newAlpha];
+         else
+@@ -531,7 +546,7 @@ bool contains (Point<int> localPos, bool trueIfInAChildWindow) const override
              && isPositiveAndBelow (localPos.getY(), viewFrame.size.height)))
              return false;
  
@@ -25,8 +96,48 @@ index 0436364e9..302586b3e 100644
          {
              if (NSWindow* const viewWindow = [view window])
              {
+@@ -637,6 +652,10 @@ void toFront (bool makeActiveWindow) override
+             else
+                 [window orderFront: nil];
+ 
++            // The app is never active, so the window never becomes key by itself; give it JUCE focus directly.
++            if (hideWindowsForAutomation && makeActiveWindow && ! inBecomeKeyWindow && [window canBecomeKeyWindow])
++                grabFocus();
++
+             if (insideToFrontCall <= 1)
+             {
+                 Desktop::getInstance().getMainMouseSource().forceMouseCursorUpdate();
+@@ -1582,7 +1601,9 @@ void viewFocusLoss()
+ 
+     bool isFocused() const override
+     {
+-        return (isSharedWindow || ! JUCEApplication::isStandaloneApp())
++        // A hidden automation process is never the active app, so the OS never reports its windows as key; focus is
++        // tracked here instead, as for a plugin.
++        return (isSharedWindow || ! JUCEApplication::isStandaloneApp() || hideWindowsForAutomation)
+                     ? this == currentlyFocusedPeer
+                     : [window isKeyWindow];
+     }
+@@ -1896,7 +1917,7 @@ static void appFocusChanged()
+ 
+         if (isValidPeer (currentlyFocusedPeer))
+         {
+-            if (Process::isForegroundProcess())
++            if (Process::isForegroundProcess() || hideWindowsForAutomation)
+             {
+                 currentlyFocusedPeer->handleFocusGain();
+                 ModalComponentManager::getInstance()->bringModalComponentsToFront();
+@@ -1999,7 +2020,7 @@ static bool checkEventBlockedByModalComps (NSEvent* e)
+ 
+         if (isInputAttempt)
+         {
+-            if (! [NSApp isActive])
++            if (! [NSApp isActive] && ! hideWindowsForAutomation)
+                 [NSApp activateIgnoringOtherApps: YES];
+ 
+             if (auto* modal = Component::getCurrentlyModalComponent())
 diff --git a/modules/juce_gui_basics/native/juce_Windowing_windows.cpp b/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
-index 083ade163..e9f7a90ac 100644
+index 083ade1..e9f7a90 100644
 --- a/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
 +++ b/modules/juce_gui_basics/native/juce_Windowing_windows.cpp
 @@ -1542,6 +1542,9 @@ public:
@@ -40,10 +151,10 @@ index 083ade163..e9f7a90ac 100644
          const auto w = WindowFromPoint (D2DUtilities::toPOINT (screenPos));
  
 diff --git a/modules/juce_gui_basics/windows/juce_ComponentPeer.h b/modules/juce_gui_basics/windows/juce_ComponentPeer.h
-index fba1b36a0..6a6448b8d 100644
+index fba1b36..0076696 100644
 --- a/modules/juce_gui_basics/windows/juce_ComponentPeer.h
 +++ b/modules/juce_gui_basics/windows/juce_ComponentPeer.h
-@@ -480,6 +480,11 @@ public:
+@@ -480,6 +480,18 @@ public:
      */
      static bool isValidPeer (const ComponentPeer* peer) noexcept;
  
@@ -51,6 +162,13 @@ index fba1b36a0..6a6448b8d 100644
 +        covers the point, so a window that is behind others (or behind another app) still hit-tests as
 +        its own. Set once at startup by an app's automation mode; false (stock behaviour) otherwise. */
 +    static inline bool ignoreWindowOrderForHitTests = false;
++
++    /** When true (macOS only; other platforms ignore it), every window the process creates after this is set is
++        invisible and transparent to the user's mouse (alpha 0, ignores mouse events, no shadow), setAlpha cannot make
++        it visible, and nothing in the peer activates the application. The windows are still ordered in and rendered,
++        so a script that drives them through the ComponentPeer and reads their pixels works unchanged. Set once at
++        startup by an app's (or the test suite's) automation mode, before the first window; false otherwise. */
++    static inline bool hideWindowsForAutomation = false;
 +
      //==============================================================================
      virtual StringArray getAvailableRenderingEngines() = 0;

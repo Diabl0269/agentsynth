@@ -2,6 +2,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "SoundPacks/SoundPackFetch.h"
+#include "TestMode/AutomationHiding.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
@@ -103,6 +104,12 @@ int main(int argc, char** argv) {
     }
 
     juce::ScopedJuceInitialiser_GUI juceInit;
+
+    // The suite puts real native windows and dialogs on the desktop; they stay invisible, click-through and never take
+    // focus, so the developer keeps using the machine while it runs. AGENTSYNTH_TESTS_VISIBLE=1 shows them again.
+    const char* visible = std::getenv("AGENTSYNTH_TESTS_VISIBLE");
+    if (visible == nullptr || std::string(visible) != "1")
+        synth::testmode::hideAutomationWindows();
     ::testing::InitGoogleTest(&argc, argv);
     ::testing::UnitTest::GetInstance()->listeners().Append(new MessageQueueDrainer());
     ::testing::UnitTest::GetInstance()->listeners().Append(new MotionSeamLeakCheck());

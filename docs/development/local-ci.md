@@ -64,11 +64,13 @@ Fast checks first, so a lint failure does not wait on a full build.
 9. Dev-sign the built app bundle (macOS only): `bash scripts/dev-sign-app.sh "$APP_PATH"`. Not a CI
    check — it runs only locally, after the build and before the test suite, so a signing failure
    surfaces early rather than after a multi-minute test run.
-10. Run the full suite: `build-ci-local/Tests/Tests`, behind the shared test lock described in
+10. Run the full suite: `build-ci-local/Tests/Tests --gtest_brief=1` (only failures and the summary print), behind the shared test lock described in
    [Running suites in parallel](#running-suites-in-parallel) below. Skippable with `--skip-tests`
    (default off — the pre-push hook and CI both expect the full suite) for a faster local loop;
    every earlier step, including dev-signing, still runs, so a `--skip-tests` rebuild keeps the
-   same TCC identity for a live or manual app run.
+   same TCC identity for a live or manual app run. The suite's native windows and dialogs are invisible,
+   click-through and never take focus (macOS), so you can keep using the machine; set
+   `AGENTSYNTH_TESTS_VISIBLE=1` to see them ([`test-mode.md`](test-mode.md#hidden-windows)).
 
 On success it prints the path to the built `Agent Synth.app` bundle under `build-ci-local/`, found
 the same way the release workflow locates it for packaging, so a green terminal is not the only
