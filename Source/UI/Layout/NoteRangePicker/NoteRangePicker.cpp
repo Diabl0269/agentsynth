@@ -324,8 +324,11 @@ void NoteRangePicker::mouseDrag(const juce::MouseEvent& e) {
 void NoteRangePicker::mouseUp(const juce::MouseEvent&) {
     if (!drag_.active)
         return;
+    const bool changed = low_ != drag_.startLow || high_ != drag_.startHigh;
     drag_.active = false;
     afterRangeChanged();
+    if (changed && onGestureEnd)
+        onGestureEnd(low_, high_);
 }
 
 void NoteRangePicker::mouseMove(const juce::MouseEvent& e) {
@@ -391,6 +394,8 @@ bool NoteRangePicker::keyPressedOn(Part part, const juce::KeyPress& key) {
     if (code != juce::KeyPress::leftKey && code != juce::KeyPress::rightKey)
         return false;
     const int direction = code == juce::KeyPress::rightKey ? 1 : -1;
+    const int lowBefore = low_;
+    const int highBefore = high_;
     const bool octave = key.getModifiers().isShiftDown();
     const auto snapped = [this](int pitch) {
         pitch = std::clamp(pitch, 0, 127);
@@ -411,6 +416,9 @@ bool NoteRangePicker::keyPressedOn(Part part, const juce::KeyPress& key) {
         const int shift = std::clamp(direction * 12, -low_, 127 - high_);
         commit(low_ + shift, high_ + shift, true);
     }
+    // One key step is one finished gesture (so one undo step), but only when it moved something.
+    if ((low_ != lowBefore || high_ != highBefore) && onGestureEnd)
+        onGestureEnd(low_, high_);
     return true;
 }
 

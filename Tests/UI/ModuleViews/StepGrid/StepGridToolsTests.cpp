@@ -237,3 +237,64 @@ TEST(StepGridPageStrip, AtOneHundredTwentyEightStepsTheLastPageBarEndsBeforeTheF
     for (int page = 1; page < 8; ++page)
         EXPECT_GT(strip.pageBounds(page).getX(), strip.pageBounds(page - 1).getRight());
 }
+
+namespace {
+
+// Opens the Randomize popover and returns it (the test hook keeps it, headless).
+std::unique_ptr<synth::ui::StepGridRandomizePanel> openRandomize(SeqCard& c) {
+    std::unique_ptr<synth::ui::StepGridRandomizePanel> panel;
+    synth::ui::test_hooks::randomizePanelHookForTest() = [&](auto p) { panel = std::move(p); };
+    click(c, Tool::Randomize);
+    synth::ui::test_hooks::randomizePanelHookForTest() = nullptr;
+    return panel;
+}
+
+} // namespace
+
+// Regression test for FRO1238: the popover's note range was not saved, so Cmd+Z skipped over it.
+TEST(StepGridTools, MovingTheRandomizeRangeIsOneUndoStepThatSurvivesReopeningThePopover) {
+    SeqCard c;
+    auto panel = openRandomize(c);
+    ASSERT_NE(panel, nullptr);
+    auto& picker = panel->getRangePicker();
+    const int low = picker.getLow();
+    const int high = picker.getHigh();
+    EXPECT_FALSE(c.module->getPattern().noteRange.has_value()) << "a seed is never saved";
+
+    picker.getStop(synth::ui::NoteRangePicker::Part::HighEdge).keyPressed(juce::KeyPress(juce::KeyPress::leftKey));
+    ASSERT_EQ(picker.getHigh(), high - 1);
+    ASSERT_TRUE(c.module->getPattern().noteRange.has_value());
+    EXPECT_EQ(*c.module->getPattern().noteRange, std::make_pair(low, high - 1));
+    panel.reset();
+
+    EXPECT_EQ(openRandomize(c)->getRangePicker().getHigh(), high - 1) << "reopened: the saved range wins";
+    c.canvas.undo.getUndoManager().undo();
+    EXPECT_FALSE(c.module->getPattern().noteRange.has_value());
+    EXPECT_FALSE(c.canvas.undo.canUndo());
+    auto after = openRandomize(c);
+    EXPECT_EQ(after->getRangePicker().getHigh(), high) << "undo gives the seeded range back";
+    c.canvas.undo.getUndoManager().redo();
+    EXPECT_EQ(openRandomize(c)->getRangePicker().getHigh(), high - 1);
+}
+
+TEST(StepGridTools, TheRandomizeRangeIsSavedWithThePatternAndAnOldPatternHasNone) {
+    SeqCard c;
+    auto panel = openRandomize(c);
+    ASSERT_NE(panel, nullptr);
+    panel->getRangePicker()
+        .getStop(synth::ui::NoteRangePicker::Part::LowEdge)
+        .keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
+    const auto range = c.module->getPattern().noteRange;
+    ASSERT_TRUE(range.has_value());
+
+    const auto saved = c.module->getExtraState();
+    const auto reloaded = synth::SequencerPattern::fromVar(juce::JSON::parse(juce::JSON::toString(saved)), false, 0);
+    EXPECT_EQ(reloaded.noteRange, range);
+
+    auto* object = saved.getDynamicObject();
+    ASSERT_NE(object, nullptr);
+    object->removeProperty("noteRange");
+    EXPECT_FALSE(synth::SequencerPattern::fromVar(saved, false, 0).noteRange.has_value());
+    EXPECT_FALSE(synth::SequencerPattern::makeDefault(false).toVar(false).getProperty("noteRange", {}).isObject())
+        << "an untouched pattern writes no range";
+}

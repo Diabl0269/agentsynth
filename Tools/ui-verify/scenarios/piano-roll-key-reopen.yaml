@@ -1,0 +1,28 @@
+# The piano roll's Key field opens its key picker every time it is clicked: a second click after Escape opens it again.
+#
+# What a user does:
+#   1. Opens a project with a MIDI clip, shows the timeline in the main area and opens the clip in the piano roll.
+#   2. Opens Scale assist and clicks the Key field: the key picker shows.
+#   3. Presses Escape: it closes. Clicks the Key field again: it shows again.
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 120, y: 30, clicks: 2}
+  - wait: {}
+  - click: {id: pianoRollScaleChip}
+  - wait: {}
+  - click: {id: scaleAssistKeyField}
+  - wait: {}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPicker, name: key-picker-first}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: scaleAssistKeyField}
+  - wait: {}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPicker, name: key-picker-second}

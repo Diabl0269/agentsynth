@@ -237,6 +237,8 @@ struct Clip {
     // Piano roll scale choice (nullopt = none made) and "show only scale notes". Per clip; additive.
     std::optional<synth::MusicalScale> scale;
     bool scaleVisible = false;
+    // The note range the piano roll's scale panel shows (lowest, highest; 0..127, low <= high); nullopt = never moved.
+    std::optional<std::pair<int, int>> noteRange;
 };
 
 // One automated parameter. Identity is the (nodeUuid, paramId) pair, doc-wide: there is at
@@ -541,6 +543,7 @@ public:
     bool setClipRowLength(ClipId id, int pitch, int lengthSteps);
     bool setClipRowSwing(ClipId id, int pitch, double swing);
     bool setClipScale(ClipId id, std::optional<synth::MusicalScale> scale, bool visible);
+    bool setClipNoteRange(ClipId id, std::optional<std::pair<int, int>> range);
     bool setClipPitchMuted(ClipId id, int pitch, bool muted);
     bool setClipPitchSoloed(ClipId id, int pitch, bool soloed);
 

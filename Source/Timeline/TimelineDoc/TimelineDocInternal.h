@@ -162,5 +162,8 @@ bool readClipScaleFields(const juce::DynamicObject& obj, Clip& clip);
 // The one normal form a scale takes inside a clip (root 0..11, 12-bit mask), or none for an empty mask.
 std::optional<synth::MusicalScale> normaliseClipScale(const std::optional<synth::MusicalScale>& scale);
 
+// A note range in its one normal form (0..127, low <= high).
+std::optional<std::pair<int, int>> normaliseNoteRange(const std::optional<std::pair<int, int>>& range);
+
 } // namespace detail
 } // namespace synth
