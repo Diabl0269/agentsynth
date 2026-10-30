@@ -30,17 +30,16 @@ def header_users(build, wanted):
     out = subprocess.run(["ninja", "-C", build, "-t", "deps"], capture_output=True, text=True, errors="replace")
     if out.returncode != 0 or not out.stdout:
         return None
-    users, source, in_tests = set(), None, False
+    users, source = set(), None
     for line in out.stdout.splitlines():
         if line and not line[0].isspace():
-            in_tests = "/Tests.dir/" in line
-            source = None
-        elif in_tests and line.strip():
+            # The object names its source; the dependency list can start with an SDK file instead.
+            match = re.match(r"Tests/CMakeFiles/Tests\.dir/(.+)\.o:", line)
+            source = f"Tests/{match.group(1)}" if match else None
+        elif source and line.strip():
             path = line.strip()
             while path.startswith("../"):
                 path = path[3:]
-            if source is None:
-                source = path  # ninja lists the compiled file first
             if path in wanted:
                 users.add(source)
     return users
