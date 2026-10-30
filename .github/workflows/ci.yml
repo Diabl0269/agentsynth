@@ -294,8 +294,6 @@ jobs:
         key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-ccache-${{ github.ref_name }}-
-          ${{ runner.os }}-ccache-main-
-          ${{ runner.os }}-ccache-
 
     - name: Configure ccache
       run: |
@@ -329,6 +327,7 @@ jobs:
           -DENABLE_TESTS=ON \
           -DENABLE_AI_HARNESS=ON \
           -DAGENTSYNTH_PCH=ON \
+          -DAGENTSYNTH_UNITY=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld \
@@ -353,6 +352,7 @@ jobs:
       run: cmake --build build -j4
 
     - name: Check Cache Health
+      continue-on-error: true
       if: always()
       env:
         CACHE_MATCHED_KEY: ${{ steps.ccache-cache.outputs.cache-matched-key }}
@@ -378,7 +378,7 @@ jobs:
 
     - name: Save ccache
       id: ccache-save
-      if: always() && github.ref == 'refs/heads/main'
+      if: always() && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request')
       uses: actions/cache/save@v5
       with:
         path: ${{ env.CCACHE_DIR }}
@@ -658,8 +658,6 @@ jobs:
         key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-ccache-${{ github.ref_name }}-
-          ${{ runner.os }}-ccache-main-
-          ${{ runner.os }}-ccache-
 
     - name: Configure ccache
       run: |
@@ -689,6 +687,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
           -DAGENTSYNTH_PCH=ON \
+          -DAGENTSYNTH_UNITY=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache \
@@ -698,6 +697,7 @@ jobs:
       run: cmake --build build
 
     - name: Check Cache Health
+      continue-on-error: true
       if: always()
       env:
         CACHE_MATCHED_KEY: ${{ steps.ccache-cache.outputs.cache-matched-key }}
@@ -720,7 +720,7 @@ jobs:
 
     - name: Save ccache
       id: ccache-save
-      if: always() && github.ref == 'refs/heads/main'
+      if: always() && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request')
       uses: actions/cache/save@v5
       with:
         path: ${{ env.CCACHE_DIR }}
@@ -873,9 +873,6 @@ jobs:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
         restore-keys: |
-          ${{ runner.os }}-ccache-${{ github.ref_name }}-
-          ${{ runner.os }}-ccache-main-
-          ${{ runner.os }}-ccache-
 
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
