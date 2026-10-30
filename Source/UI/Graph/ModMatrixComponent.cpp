@@ -4,10 +4,12 @@
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModDot/ModSourceCatalog.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModMatrixKeyboard.h"
+#include "UI/Graph/ModMatrixLists.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -15,6 +17,8 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace {
@@ -124,8 +128,9 @@ struct ModMatrixComponent::ModRow
     void setRowIndex(int index) {
         if (rowIndex != index)
             applyRowNames(index);
+        if (rowIndex != index)
+            repaint();
         rowIndex = index;
-        repaint();
     }
     // Screen-reader names carry the row number, so VoiceOver says which routing a control belongs to.
     void applyRowNames(int index);
@@ -156,9 +161,7 @@ struct ModMatrixComponent::ModRow
 
     PickerComboBox sourceCombo;
     PickerComboBox destCombo;
-    // What each picker lists, rebuilt with the combos; and the picker currently open for each, if any.
-    std::vector<synth::ui::ModMatrixPicker::Item> sourceItems;
-    std::vector<synth::ui::ModMatrixPicker::Item> destItems;
+    // The picker currently open for each combo, if any. A combo holds only its selected row: the lists are the panel's.
     juce::Component::SafePointer<juce::Component> sourcePicker;
     juce::Component::SafePointer<juce::Component> destPicker;
     AmountSlider amountSlider;
@@ -178,10 +181,7 @@ struct ModMatrixComponent::ModRow
     void showPicker(bool forSource);
 
     void detach();
-    void refresh(const ModRoutingInfo& info);
-    void populateCombos();
-    void populateSourceCombo();
-    void populateDestCombo();
+    void refresh(const ModRoutingInfo& info, const synth::ConnectionIndex& cables);
 
     // Re-points the attenuverter's edges and runs the change as ONE undo step.
     void reroute(bool sourceChanged, Endpoint source, Endpoint dest);
@@ -192,7 +192,8 @@ struct ModMatrixComponent::ModRow
 ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr, GraphEditor* editor)
     : audioEngine(engine)
     , undoManager(undoMgr)
-    , graphEditor(editor) {
+    , graphEditor(editor)
+    , lists_(std::make_unique<synth::ui::ModMatrixLists>(engine.getGraph())) {
     // Makes grabKeyboardFocus() on THIS component (the "modMatrix" focus region's root)
     // succeed deterministically rather than depending on JUCE's position-ordered descent into
     // children finding a focus-wanting one (see the identical comment in ModuleLibraryComponent's
@@ -256,6 +257,13 @@ juce::ComboBox* ModMatrixComponent::getRowSourceComboForTest(int rowIndex) {
     return rowIndex >= 0 && rowIndex < (int)rows.size() ? &rows[(size_t)rowIndex]->sourceCombo : nullptr;
 }
 
+std::vector<std::pair<int, juce::String>> ModMatrixComponent::getSourceListForTest() {
+    std::vector<std::pair<int, juce::String>> list;
+    for (const auto& item : lists_->sources())
+        list.emplace_back(item.id, item.text);
+    return list;
+}
+
 juce::ComboBox* ModMatrixComponent::getRowDestComboForTest(int rowIndex) {
     return rowIndex >= 0 && rowIndex < (int)rows.size() ? &rows[(size_t)rowIndex]->destCombo : nullptr;
 }
@@ -263,8 +271,8 @@ juce::ComboBox* ModMatrixComponent::getRowDestComboForTest(int rowIndex) {
 void ModMatrixComponent::setFlatSourceMenu(bool shouldBeFlat) {
     if (isSourceMenuFlat != shouldBeFlat) {
         isSourceMenuFlat = shouldBeFlat;
-        for (auto& row : rows)
-            row->populateCombos();
+        lists_->setFlat(shouldBeFlat);
+        updateRowsFromGraph();
     }
 }
 
@@ -394,69 +402,50 @@ void ModMatrixComponent::updateRowsFromGraph() {
 
     bool componentsChanged = false;
 
-    // Check for removed rows
+    std::unordered_map<juce::uint32, const AudioEngine::ModRoutingInfo*> routingByAttenuverter;
+    routingByAttenuverter.reserve(activeRoutings.size());
+    for (const auto& routing : activeRoutings)
+        routingByAttenuverter[routing.attenuverterNodeID.uid] = &routing;
+
+    // Rows whose routing has gone leave; a routing with no row gets one.
+    std::unordered_set<juce::uint32> hasRow;
+    hasRow.reserve(rows.size());
     for (int i = (int)rows.size() - 1; i >= 0; --i) {
-        bool found = false;
-        for (const auto& routing : activeRoutings) {
-            if (routing.attenuverterNodeID == rows[i]->attenuverterId) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
+        if (routingByAttenuverter.count(rows[(size_t)i]->attenuverterId.uid) == 0) {
             rows.erase(rows.begin() + i);
             componentsChanged = true;
+        } else {
+            hasRow.insert(rows[(size_t)i]->attenuverterId.uid);
         }
     }
-
-    // Check for new or changed rows
     for (const auto& routing : activeRoutings) {
-        bool existingFound = false;
-        for (auto& row : rows) {
-            if (row->attenuverterId == routing.attenuverterNodeID) {
-                row->refresh(routing);
-                existingFound = true;
-                break;
-            }
-        }
-
-        if (!existingFound) {
+        if (hasRow.count(routing.attenuverterNodeID.uid) == 0) {
             auto newRow = std::make_unique<ModRow>(*this, routing.attenuverterNodeID);
-            newRow->populateCombos();
             contentContainer.addAndMakeVisible(*newRow);
             rows.push_back(std::move(newRow));
             componentsChanged = true;
         }
     }
 
-    // Refresh combo items if the number of nodes in graph changed, or a module was renamed. This must
-    // happen BEFORE the refresh pass below: populateCombos() clears the combo boxes (deselecting them),
-    // so a selection applied first would be wiped and every row's label would go blank until the next
-    // update call. A popup a person has open is left alone (clearing under it would pull its items
-    // away); the change is picked up on the first tick after it closes, since nothing is recorded as
-    // seen until then.
+    // A node added or removed, or a module renamed, refreshes the shared lists before the rows read their labels. A
+    // popup a person has open is left alone: the change is picked up on the first tick after it closes, since nothing
+    // is recorded as seen until then.
     const int currentNodeCount = audioEngine.getGraph().getNumNodes();
     const bool countChanged = currentNodeCount != lastNodeCount;
     if (countChanged)
         audioEngine.updateModuleNames();
     const auto namesSignature = moduleTitlesSignature(audioEngine.getGraph());
     if ((countChanged || namesSignature != lastNamesSignature) && !anyPopupOpen()) {
-        for (auto& row : rows)
-            row->populateCombos();
+        lists_->invalidate();
         lastNodeCount = currentNodeCount;
         lastNamesSignature = namesSignature;
     }
 
-    // Assign indices for display
+    // One cable index for the whole tick; every row reads it.
+    const synth::ui::ConnectionIndex cables(audioEngine.getGraph());
     for (int i = 0; i < (int)rows.size(); ++i) {
-        rows[i]->setRowIndex(i);
-        // Find corresponding routing for refresh
-        for (const auto& r : activeRoutings) {
-            if (r.attenuverterNodeID == rows[i]->attenuverterId) {
-                rows[i]->refresh(r);
-                break;
-            }
-        }
+        rows[(size_t)i]->setRowIndex(i);
+        rows[(size_t)i]->refresh(*routingByAttenuverter.at(rows[(size_t)i]->attenuverterId.uid), cables);
     }
 
     if (componentsChanged) {
@@ -719,114 +708,24 @@ void ModMatrixComponent::ModRow::applyRowNames(int index) {
     deleteButton->setTitle("Remove routing " + juce::String(index + 1));
 }
 
-void ModMatrixComponent::ModRow::populateCombos() {
-    sourceCombo.clear(juce::dontSendNotification);
-    destCombo.clear(juce::dontSendNotification);
-    sourceItems.clear();
-    destItems.clear();
-    populateSourceCombo();
-    populateDestCombo();
-}
-
 namespace {
-const std::map<ModulationCategory, juce::String>& modulationCategoryNames() {
-    static const std::map<ModulationCategory, juce::String> names = {{ModulationCategory::Envelope, "Envelopes"},
-                                                                     {ModulationCategory::LFO, "LFOs"},
-                                                                     {ModulationCategory::Oscillator, "Oscillators"},
-                                                                     {ModulationCategory::Sequencer, "Sequencers"},
-                                                                     {ModulationCategory::Filter, "Filters"},
-                                                                     {ModulationCategory::FX, "Effects"},
-                                                                     {ModulationCategory::Other, "Other"}};
-    return names;
-}
-} // namespace
+int selectedRawId(juce::ComboBox& combo) { return (int)combo.getSelectedIdAsValue().getValue(); }
 
-// The sources come from synth::ui::enumerateModSources, the list the mod dot's Add source list reads too.
-void ModMatrixComponent::ModRow::populateSourceCombo() {
-    const auto sources = synth::ui::enumerateModSources(owner.audioEngine.getGraph());
-    if (owner.isSourceMenuFlat) {
-        for (const auto& source : sources) {
-            sourceCombo.addItem(source.label(), source.itemId());
-            sourceItems.push_back({source.itemId(), {}, source.label(), source.aliases});
-        }
+// The combo holds one row, the selected one: its closed label and all a screen reader needs. Id 0 is no selection.
+void showSelection(juce::ComboBox& combo, int id, const juce::String& label) {
+    if (id == 0 || label.isEmpty()) {
+        if (combo.getNumItems() > 0 || selectedRawId(combo) != 0)
+            combo.clear(juce::dontSendNotification);
         return;
     }
-
-    juce::PopupMenu sourceMenu;
-    size_t i = 0;
-    while (i < sources.size()) {
-        const auto category = sources[i].category;
-        const auto& categoryName = modulationCategoryNames().at(category);
-        juce::PopupMenu categoryMenu;
-        while (i < sources.size() && sources[i].category == category) {
-            const auto node = sources[i].node;
-            size_t end = i;
-            while (end < sources.size() && sources[end].category == category && sources[end].node == node)
-                ++end;
-            if (end - i == 1) {
-                const auto& source = sources[i];
-                categoryMenu.addItem(source.itemId(), source.moduleTitle);
-                sourceCombo.addItem(source.moduleTitle, source.itemId());
-                sourceItems.push_back({source.itemId(), categoryName, source.moduleTitle, source.aliases});
-            } else {
-                juce::PopupMenu instanceMenu;
-                for (size_t k = i; k < end; ++k) {
-                    // The closed combo's label comes only from the leaf item's own text, so the module name
-                    // is part of it: a multi-output module's box never shows a bare jack name.
-                    const auto label = sources[k].label();
-                    instanceMenu.addItem(sources[k].itemId(), label);
-                    sourceCombo.addItem(label, sources[k].itemId());
-                    sourceItems.push_back({sources[k].itemId(), categoryName, label, sources[k].aliases});
-                }
-                categoryMenu.addSubMenu(sources[i].moduleTitle, instanceMenu);
-            }
-            i = end;
-        }
-        sourceMenu.addSubMenu(categoryName, categoryMenu);
-    }
-    *sourceCombo.getRootMenu() = sourceMenu;
+    if (combo.getNumItems() == 1 && combo.getItemId(0) == id && combo.getItemText(0) == label &&
+        selectedRawId(combo) == id)
+        return;
+    combo.clear(juce::dontSendNotification);
+    combo.addItem(label, id);
+    combo.setSelectedId(id, juce::dontSendNotification);
 }
-
-void ModMatrixComponent::ModRow::populateDestCombo() {
-    auto& graph = owner.audioEngine.getGraph();
-    std::map<ModulationCategory, std::vector<juce::AudioProcessorGraph::Node*>> modulesByCategory;
-    for (auto* node : graph.getNodes())
-        if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
-            modulesByCategory[module->getModulationCategory()].push_back(node);
-
-    juce::PopupMenu destMenu;
-    for (auto const& [cat, modules] : modulesByCategory) {
-        juce::PopupMenu catDestSub;
-        int destCount = 0;
-        for (auto* node : modules) {
-            auto* module = static_cast<ModuleBase*>(node->getProcessor());
-            const juce::String displayName = synth::moduleTitle(*node);
-            const auto targets = synth::ui::modDestinationCandidates(module);
-            if (targets.empty())
-                continue;
-            juce::PopupMenu instDestSub;
-            for (const auto& target : targets) {
-                const int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
-                const auto flat = displayName + ": " + target.name;
-                destCombo.addItem(flat, itemId);
-                // Nested: the module name is baked into the leaf, as for the sources (the closed combo's label
-                // comes only from the item's own text).
-                destItems.push_back({itemId,
-                                     owner.isSourceMenuFlat ? juce::String() : modulationCategoryNames().at(cat),
-                                     owner.isSourceMenuFlat ? flat : displayName + " - " + target.name});
-                if (!owner.isSourceMenuFlat)
-                    instDestSub.addItem(itemId, displayName + " - " + target.name);
-            }
-            if (!owner.isSourceMenuFlat)
-                catDestSub.addSubMenu(displayName, instDestSub);
-            ++destCount;
-        }
-        if (!owner.isSourceMenuFlat && destCount > 0)
-            destMenu.addSubMenu(modulationCategoryNames().at(cat), catDestSub);
-    }
-    if (!owner.isSourceMenuFlat)
-        *destCombo.getRootMenu() = destMenu;
-}
+} // namespace
 
 // Opens the searchable picker over the row's combo. A pick selects the combo's id with a synchronous
 // notification, so it lands in comboBoxChanged exactly like a menu choice would (and through the same
@@ -839,29 +738,29 @@ void ModMatrixComponent::ModRow::showPicker(bool forSource) {
 
     // Destinations also list every plugin parameter without a slot yet; a pick claims one, then selects it like
     // any other destination.
-    auto items = forSource ? sourceItems : destItems;
+    auto items = forSource ? owner.lists_->sources() : owner.lists_->destinations();
+    const int selected = selectedRawId(combo);
+    // A source no longer listed keeps the row its closed box shows (see refresh).
+    if (forSource && selected != 0 && owner.lists_->sourceLabel(selected).isEmpty())
+        items.push_back({selected, {}, combo.getText()});
     auto& graph = owner.audioEngine.getGraph();
     const auto hosted =
         forSource ? std::map<int, synth::ui::HostedDestination>{} : synth::ui::hostedDestinations(graph);
     for (const auto& [id, dest] : hosted)
         items.push_back({id, "Plugins", dest.label});
     juce::Component::SafePointer<juce::ComboBox> safeCombo(&combo);
-    auto picker =
-        std::make_unique<synth::ui::ModMatrixPicker>(forSource ? "source" : "destination", std::move(items),
-                                                     combo.getSelectedId(), [safeCombo, hosted, &graph](int id) {
-                                                         if (safeCombo == nullptr)
-                                                             return;
-                                                         if (const auto it = hosted.find(id); it != hosted.end()) {
-                                                             const int channel =
-                                                                 synth::ui::claimHostedDestination(graph, it->second);
-                                                             if (channel < 0)
-                                                                 return;
-                                                             id = (int)((it->second.node.uid << 8) | (uint32_t)channel);
-                                                             if (safeCombo->indexOfItemId(id) < 0)
-                                                                 safeCombo->addItem(it->second.label, id);
-                                                         }
-                                                         safeCombo->setSelectedId(id, juce::sendNotificationSync);
-                                                     });
+    auto picker = std::make_unique<synth::ui::ModMatrixPicker>(
+        forSource ? "source" : "destination", std::move(items), selected, [safeCombo, hosted, &graph](int id) {
+            if (safeCombo == nullptr)
+                return;
+            if (const auto it = hosted.find(id); it != hosted.end()) {
+                const int channel = synth::ui::claimHostedDestination(graph, it->second);
+                if (channel < 0)
+                    return;
+                id = (int)((it->second.node.uid << 8) | (uint32_t)channel);
+            }
+            safeCombo->setSelectedId(id, juce::sendNotificationSync);
+        });
     open = picker.get();
     if (owner.pickerLauncher)
         owner.pickerLauncher(std::move(picker), combo.getScreenBounds());
@@ -871,41 +770,46 @@ void ModMatrixComponent::ModRow::showPicker(bool forSource) {
 
 // A routing that crosses a macro border runs through ports only it uses; the row names the real modules
 // behind them (the LFO, not "In 1"), so what a person picked is what they read back and can search for.
-void ModMatrixComponent::ModRow::refresh(const AudioEngine::ModRoutingInfo& info) {
+void ModMatrixComponent::ModRow::refresh(const AudioEngine::ModRoutingInfo& info,
+                                         const synth::ConnectionIndex& cables) {
+    ++graph_editor_paint::workCounters().modRowRefreshes;
     Endpoint source{info.sourceNodeID, info.sourceChannelIndex};
     Endpoint dest{info.destNodeID, info.destChannelIndex};
     if (auto* editor = owner.graphEditor) {
-        auto& graph = owner.audioEngine.getGraph();
         const auto isPort = [editor](NodeID id) { return editor->getMacroController().nodeIsMacroPort(id); };
-        if (const auto real = realEndpointBehindPorts(graph, attenuverterId, /*incoming=*/true, isPort); real.valid())
+        if (const auto real = realEndpointBehindPorts(cables, attenuverterId, /*incoming=*/true, isPort); real.valid())
             source = real;
-        if (const auto real = realEndpointBehindPorts(graph, attenuverterId, /*incoming=*/false, isPort); real.valid())
+        if (const auto real = realEndpointBehindPorts(cables, attenuverterId, /*incoming=*/false, isPort); real.valid())
             dest = real;
     }
     // A routing saved from a raw channel that is no longer listed (an LFO's hidden pass-through, in a
     // project from before the list followed the card's jacks) keeps a row of its own, so the box never
     // goes blank and the routing stays editable.
-    const int sourceId = (int)((source.node.uid << 8) | (uint32_t)source.channel);
-    if (source.valid() && sourceCombo.indexOfItemId(sourceId) < 0) {
-        if (auto* node = owner.audioEngine.getGraph().getNodeForId(source.node)) {
-            const auto label = synth::moduleTitle(*node) + " - Out " + juce::String(source.channel + 1);
-            sourceCombo.addItem(label, sourceId);
-            sourceItems.push_back({sourceId, {}, label});
-        }
-    }
-    sourceCombo.setSelectedId(sourceId, juce::dontSendNotification);
-    destCombo.setSelectedId((int)((dest.node.uid << 8) | (uint32_t)dest.channel), juce::dontSendNotification);
+    const int sourceId = source.valid() ? (int)((source.node.uid << 8) | (uint32_t)source.channel) : 0;
+    auto sourceLabel = owner.lists_->sourceLabel(sourceId);
+    if (sourceLabel.isEmpty() && source.valid())
+        if (auto* node = owner.audioEngine.getGraph().getNodeForId(source.node))
+            sourceLabel = synth::moduleTitle(*node) + " - Out " + juce::String(source.channel + 1);
+    showSelection(sourceCombo, sourceId, sourceLabel);
+    const int destId = dest.valid() ? (int)((dest.node.uid << 8) | (uint32_t)dest.channel) : 0;
+    showSelection(destCombo, destId, owner.lists_->destinationLabel(destId));
 }
 
 void ModMatrixComponent::ModRow::comboBoxChanged(juce::ComboBox* comboBox) {
     if (comboBox != &sourceCombo && comboBox != &destCombo)
         return;
-    const auto decode = [](const juce::ComboBox& combo) {
-        const auto encoded = (juce::uint32)combo.getSelectedId();
+    // By raw id: a pick is usually not the one row the combo holds yet.
+    const auto decode = [](juce::ComboBox& combo) {
+        const auto encoded = (juce::uint32)selectedRawId(combo);
         return Endpoint{NodeID(encoded >> 8), (int)(encoded & 0xFF)};
     };
     const auto source = decode(sourceCombo);
     const auto dest = decode(destCombo);
+    const int picked = selectedRawId(*comboBox);
+    if (const auto label =
+            comboBox == &sourceCombo ? owner.lists_->sourceLabel(picked) : owner.lists_->destinationLabel(picked);
+        label.isNotEmpty())
+        showSelection(*comboBox, picked, label);
     if (source.valid() || dest.valid())
         reroute(comboBox == &sourceCombo, source, dest);
 }

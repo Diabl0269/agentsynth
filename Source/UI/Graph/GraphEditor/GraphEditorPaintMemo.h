@@ -115,6 +115,7 @@ struct WorkCounters {
     int hullsPainted = 0;
     int canvasFrameFits = 0;
     int cardLayoutModelBuilds = 0;
+    int modRowRefreshes = 0;
 };
 
 /** Message thread only. */

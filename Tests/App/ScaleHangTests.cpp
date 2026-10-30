@@ -181,6 +181,74 @@ TEST(ScaleHang, APickFromTheParameterListCostsAFixedNumberOfLayoutReads) {
     EXPECT_EQ(work(750), work(3000));
 }
 
+// One tick of the open matrix reads the cables once and refreshes each row once, however many routings there are.
+TEST(ScaleHang, AMatrixTickIndexesTheCablesOnceAndRefreshesEachRowOnce) {
+    int scans[2]{};
+    const int sizes[2]{10, 40};
+    for (int i = 0; i < 2; ++i) {
+        ManyRoutingCanvas c(sizes[i]);
+        auto& matrix = c.editor.getModMatrix();
+        matrix.updateRowsFromGraph();
+        auto& counters = graph_editor_paint::workCounters();
+        counters = {};
+        matrix.updateRowsFromGraph();
+        scans[i] = counters.cableScans;
+        EXPECT_EQ(counters.modRowRefreshes, sizes[i]);
+    }
+    EXPECT_EQ(scans[0], scans[1]);
+    EXPECT_LE(scans[1], 1);
+}
+
+namespace {
+std::vector<synth::ui::ModMatrixPicker::Item> manyPickerItems(int count) {
+    std::vector<synth::ui::ModMatrixPicker::Item> items;
+    for (int i = 0; i < count; ++i)
+        items.push_back({i + 1, "Plugins", "Param " + juce::String(i + 1)});
+    return items;
+}
+constexpr int kMostRowsInAPicker = 40; // what fits in the picker's height at the shortest row, plus the overscan
+} // namespace
+
+// A list of thousands makes only the rows in view, and a key press steers only those.
+TEST(ScaleHang, APickerOfThousandsMakesOnlyTheRowsInViewAndAKeySteersOnlyThose) {
+    synth::ui::ModMatrixPicker picker("destination", manyPickerItems(3000), 0, [](int) {});
+    EXPECT_GT(picker.getRowComponentCountForTest(), 0);
+    EXPECT_LE(picker.getRowComponentCountForTest(), kMostRowsInAPicker);
+    const int steered = picker.getRowsSteeredForTest();
+    picker.setSearchTextForTest("param 29");
+    EXPECT_EQ(picker.getVisibleItemTextsForTest().size(), 159u); // every number holding "29"
+    EXPECT_LE(picker.getRowsSteeredForTest() - steered, 2 * kMostRowsInAPicker);
+    EXPECT_LE(picker.getRowComponentCountForTest(), 2 * kMostRowsInAPicker);
+}
+
+// Up, Down and Return reach rows that had no component when the list opened.
+TEST(ScaleHang, TheKeyboardWalksAPickerOfThousandsPastTheRowsThatExisted) {
+    int chosen = 0;
+    synth::ui::ModMatrixPicker picker("destination", manyPickerItems(3000), 0, [&](int id) { chosen = id; });
+    for (int i = 0; i < 500; ++i) {
+        picker.sendKeyForTest(juce::KeyPress(juce::KeyPress::downKey));
+        ASSERT_TRUE(picker.isHighlightInViewForTest()) << i;
+    }
+    EXPECT_EQ(picker.getHighlightedItemIndexForTest(), 500);
+    EXPECT_GT(picker.getViewTopForTest(), 0);
+    EXPECT_LE(picker.getRowComponentCountForTest(), kMostRowsInAPicker);
+    for (int i = 0; i < 100; ++i)
+        picker.sendKeyForTest(juce::KeyPress(juce::KeyPress::upKey));
+    EXPECT_TRUE(picker.isHighlightInViewForTest());
+    picker.sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    EXPECT_EQ(chosen, 401);
+}
+
+// Regression test for FRO874: a filter pass scrolled to the top after the highlight, losing the best match's row.
+TEST(ScaleHang, FilteringAScrolledPickerKeepsTheBestMatchInView) {
+    synth::ui::ModMatrixPicker picker("destination", manyPickerItems(3000), 0, [](int) {});
+    for (int i = 0; i < 300; ++i)
+        picker.sendKeyForTest(juce::KeyPress(juce::KeyPress::downKey));
+    picker.setSearchTextForTest("param 2999");
+    EXPECT_EQ(picker.getVisibleItemTextsForTest().size(), 1u);
+    EXPECT_TRUE(picker.isHighlightInViewForTest());
+}
+
 TEST(ScaleHang, DISABLED_PrintsWhatEachActionCosts) {
     for (const int params : {750, 3000}) {
         ManyParamCanvas c(params);

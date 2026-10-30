@@ -24,6 +24,12 @@ bool searchMatches(const juce::String& text, const juce::String& query);
  *  worst (highest) over the words, so one weak word weakens the whole match. A blank query scores 0. */
 int searchScore(const juce::String& text, const juce::String& query);
 
+/** `query` split into its words, for a list that tests many texts against one query: searchWordsMatch and
+ * searchWordsScore below take it, so a key press does not split the query once per row. */
+juce::StringArray searchQueryWords(const juce::String& query);
+bool searchWordsMatch(const juce::String& text, const juce::StringArray& queryWords);
+int searchWordsScore(const juce::String& text, const juce::StringArray& queryWords);
+
 /** Extra words a module-type search matches besides its name, so the names other synths use find the module:
  *  "env", "envelope", "eg" and "contour" find the ADSR, "vco" the Oscillator, "vcf" the Filter, "amp" and
  *  "amplifier" the VCA. `moduleName` is the module's own name, with or without the number a second copy gets

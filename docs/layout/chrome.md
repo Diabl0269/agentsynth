@@ -651,7 +651,9 @@ Its rows paint under these rules:
   "osc 8" finds "Oscillator 8", and the matched letters are highlighted in the row text and detail line; rows sit under the same category headers the menu
   had (Envelopes, LFOs, Oscillators, Sequencers, Filters, Effects, Other), and a header hides when none
   of its rows match. "Flat Sources" drops the headers. The popup's height comes from the full list, so it
-  does not resize while typing. Up/Down move the highlight, Return picks the highlighted row (the best match
+  does not resize while typing. Only the rows in view, plus a few past each edge, exist as components: scrolling
+  recycles them, a filter pass reads precomputed search text and steers only that screenful (a list of thousands stays
+  instant), and an Up/Down move is announced to screen readers since most rows are not in the tree. Up/Down move the highlight, Return picks the highlighted row (the best match
   by `searchScore`, the first among equals, until moved), Escape closes, a click picks. A pick selects the combo's id with a synchronous
   notification, so it goes through `ModRow::comboBoxChanged` and the macro-port routing like any other
   choice. The picker paints its own opaque themed panel (a parentless call-out is a new window that does
@@ -676,8 +678,11 @@ Its rows paint under these rules:
   `synth::moduleTitle` (`Source/AudioEngine/ModuleTitle.h`): the custom title the user gave the card,
   else the auto-numbered name ("LFO 3"). The 10 Hz tick compares a hash of every module title
   (`moduleTitlesSignature`) as well as the node count, so a rename (which changes no node count)
-  re-populates the combos; a combo popup or picker that is open is never repopulated underneath the
+  refreshes the panel's lists; a picker that is open is never refreshed underneath the
   user, the change lands on the first tick after it closes.
+- **One set of lists for all rows.** `ModMatrixLists` builds what the pickers list once, when something first
+  asks, and each closed combo holds only its selected row. A tick builds one cable index and refreshes each
+  row once, touching a combo only when its selection or label changed.
 - **Re-pointing a row goes through macro ports**, exactly like a dragged mod cable, as one undo step
   (the row's "Add Modulation" and delete buttons are undo steps too). See
   [`macros/auto-ports.md`](../macros/auto-ports.md#the-mod-matrix-re-points-like-a-drag).
