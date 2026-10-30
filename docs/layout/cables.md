@@ -150,7 +150,9 @@ predictable offset from the ring, never a hand-rolled approximation.
 **Fallback — the gutter jack, unchanged.** A knob on a hidden tab page (`getModTargetKnobAnchor`
 returns `nullopt` the same way `getModRingSliderIndex` does) is not knob-bound for layout purposes
 either — `ModuleComponent::isInputJackKnobBound` says false, so the jack stays drawn and a cable
-still lands there, rather than painting a landing dot over empty card.
+still lands there, rather than painting a landing dot over empty card. A knob-only target (Level's sibling Pan,
+the shared Mix) draws no jack, so while its knob is folded into the More row its cable ends at the left edge of the
+More button (`moreRowButtonForKnobOnlyJack`), never on a gutter row that belongs to the next real jack.
 
 **The landing dot.** `paint()` draws cables BEFORE module cards paint as children, so a cable
 re-anchored deep into a card's knob has its final stretch drawn underneath the opaque card.

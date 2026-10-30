@@ -218,8 +218,9 @@ public:
     bool isInputJackKnobBound(int index) const;
 
 private:
-    /** getModTargetKnobAnchor for whichever target maps to visible input `index`, or nullopt. */
+    /** Visible input `index`: its knob's anchor, or nullopt; the More button when a knob-only one is folded. */
     std::optional<juce::Point<float>> knobAnchorForVisibleInputJack(int index) const;
+    const juce::Component* moreRowButtonForKnobOnlyJack(int index) const;
 
 public:
     /** Fixed MIDI jack anchor, in local coordinates — MIDI In sits top-left, MIDI Out top-right,

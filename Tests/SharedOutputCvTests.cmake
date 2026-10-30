@@ -3,4 +3,5 @@
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/OutputLevelCvTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/SavedCablesKeepChannelsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/LevelRingMovesTests.cpp
 )

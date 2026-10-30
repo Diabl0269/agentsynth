@@ -32,6 +32,6 @@ type Compressor size 280x391
   in 5 216, 216
   in 6 10, 78
   in 7 72, 346
-  in 8 10, 98
-  in 9 10, 98
+  in 8 10, 365
+  in 9 10, 365
   out 0 270, 58

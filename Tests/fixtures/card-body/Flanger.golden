@@ -29,5 +29,5 @@ type Flanger size 280x335
   in 4 122, 240
   in 5 207, 146
   in 6 50, 290
-  in 7 10, 78
+  in 7 10, 309
   out 0 270, 58
