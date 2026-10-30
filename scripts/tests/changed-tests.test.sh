@@ -33,7 +33,7 @@ git init -q
 printf 'TEST(ASuite, One) {}\nTEST_F(AFixture, Two) {}\n' >Tests/A.cpp
 printf 'TEST(BSuite, One) {}\nINSTANTIATE_TEST_SUITE_P(Each, BParam, x);\n' >Tests/B.cpp
 for i in 1 2 3 4 5 6; do printf 'TEST(Extra%s, One) {}\n' "$i" >"Tests/E$i.cpp"; done
-touch Source/Wide.h Source/Wide.cpp Source/Other.h Source/Lone.h CMakeLists.txt
+touch Source/WideConcern.cpp Source/Wide.h Source/Wide.cpp Source/Other.h Source/Lone.h CMakeLists.txt
 git add -A
 git -c user.name=t -c user.email=t@t commit -qm base
 base="$(git rev-parse HEAD)"
@@ -49,6 +49,15 @@ reset
 
 echo x >>Source/Wide.cpp
 expect "a source counts as its same-named header" "AFixture.*:ASuite.*" "$(run)"
+reset
+
+echo x >>Source/WideConcern.cpp
+expect "a split-out source with no header of its own counts as its folder's headers" "ALL" "$(run --max-share 0.1)"
+reset
+
+mkdir Source/Loose && echo x >Source/Loose/NoHeaders.cpp
+expect "a source with no header anywhere near means everything" ALL "$(run)"
+rm -rf Source/Loose
 reset
 
 echo x >>Tests/B.cpp

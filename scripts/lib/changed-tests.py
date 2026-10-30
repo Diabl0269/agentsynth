@@ -3,7 +3,7 @@
 
 A test file is reached when it changed, or when its compile included a changed header, read from the
 build's own dependency data (`ninja -t deps`). A changed .cpp under Source/ counts as a change to its
-same-named header, the usual way tests reach it. The answer is the suites those test files define.
+same-named header, or every header in its folder when it has none (a class split by concern). The answer is the suites those test files define.
 
 Prints ALL when the change reaches too much to be worth filtering, or anything the dependency data
 cannot answer (a build input, or no Ninja data), and NONE when nothing is reached.
@@ -64,7 +64,17 @@ def filter_for(files, build, max_share):
     if not code:
         return "NONE"
     wanted = {f for f in code if f.endswith(".h")}
-    wanted |= {re.sub(r"\.(cpp|mm)$", ".h", f) for f in code if f.startswith("Source/")}
+    for source in (f for f in code if f.startswith("Source/") and not f.endswith(".h")):
+        header = re.sub(r"\.(cpp|mm)$", ".h", source)
+        if os.path.exists(header):
+            wanted.add(header)
+            continue
+        # A class split by concern (AudioEngineMidi.cpp): its header is some other one in the folder.
+        folder = os.path.dirname(source)
+        neighbours = [f"{folder}/{n}" for n in os.listdir(folder) if n.endswith(".h")] if os.path.isdir(folder) else []
+        if not neighbours:
+            return "ALL"
+        wanted.update(neighbours)
     reached = {f for f in code if f.startswith("Tests/") and not f.endswith(".h")}
     users = header_users(build, wanted)
     if users is None:
