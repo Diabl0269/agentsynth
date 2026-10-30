@@ -188,6 +188,10 @@ bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std
         item.nodeUid = cand.nodeUid;
         item.from = item.to = cand.rect;
         item.snapshot = cand.snapshot;
+        if (restoring_)
+            attachOrigin(item, now, hooks_.borders ? hooks_.borders() : std::vector<Border>());
+        else
+            origins_.erase(item.nodeUid); // a copy deleted by hand is no copy any more
         items_.push_back(std::move(item));
         anyExit = true;
     }
@@ -205,6 +209,7 @@ bool CardGlideAnimator::armGhosts(const std::vector<Captured>& before, const std
             if (existed || !e.comp->getBounds().intersects(card_glide_detail::visibleCanvasArea(*e.comp)))
                 continue;
             addEnterItem(*e.comp, e.nodeUid, snapshotScale);
+            attachOrigin(items_.back(), now, hooks_.borders ? hooks_.borders() : std::vector<Border>());
             anyEnter = true;
         }
     }
@@ -254,9 +259,27 @@ void CardGlideAnimator::paintGhost(juce::Graphics& g, const Item& item) const {
         const float progress = exiting ? exitProgress(item) : frame_.grow;
         if (item.grown || (!exiting && frame_.grow <= 0.0f))
             return;
+        if (item.via && !reducedMotion_) { // the border travels with its cards
+            juce::Graphics::ScopedSaveState state(g);
+            const auto centre = viaRect(item, progress).getCentre() - item.to.toFloat().getCentre();
+            g.addTransform(juce::AffineTransform::translation(centre.x, centre.y));
+            paintBorder(g, *item.border, 1.0f - 0.2f * (exiting ? progress : 1.0f - progress),
+                        exiting ? 1.0f - progress : progress);
+            return;
+        }
         paintBorder(g, *item.border, ExitEnterTimeline::ghostScale(progress, exiting, reducedMotion_),
                     ExitEnterTimeline::ghostAlpha(progress, exiting, reducedMotion_));
         return;
+    }
+    if (item.via && !reducedMotion_ && !item.snapshot.isNull() && !item.grown) {
+        const bool exiting = item.kind == Kind::Exit;
+        const float progress = exiting ? exitProgress(item) : frame_.grow;
+        if (exiting || progress > 0.0f) {
+            juce::Graphics::ScopedSaveState state(g);
+            g.setOpacity(exiting ? 1.0f - progress : std::min(1.0f, 0.4f + progress));
+            g.drawImage(item.snapshot, viaRect(item, progress), juce::RectanglePlacement::stretchToFit);
+        }
+        return; // no outline: this card came from its original, it was not brought back
     }
     if (item.kind == Kind::Exit) {
         const float scale = ExitEnterTimeline::ghostScale(exitProgress(item), true, reducedMotion_);
@@ -307,6 +330,8 @@ juce::Rectangle<float> CardGlideAnimator::ghostRectFor(uint32_t nodeUid) const n
     for (const auto& item : items_) {
         if (item.nodeUid != nodeUid || item.kind == Kind::Move)
             continue;
+        if (item.via && !reducedMotion_ && !item.grown)
+            return viaRect(item, item.kind == Kind::Exit ? exitProgress(item) : frame_.grow);
         if (item.kind == Kind::Exit)
             return ExitEnterTimeline::scaledAboutCentre(
                 item.from, ExitEnterTimeline::ghostScale(exitProgress(item), true, reducedMotion_));

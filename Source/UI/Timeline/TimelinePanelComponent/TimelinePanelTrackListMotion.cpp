@@ -36,6 +36,10 @@ juce::Rectangle<int> TimelinePanelComponent::trackListMotionArea() const {
             gridLanesBounds_.getHeight()};
 }
 
+void TimelinePanelComponent::noteDuplicateOrigin(synth::TrackId copy, synth::TrackId source) {
+    duplicateOrigins_[keyFor(copy)] = keyFor(source);
+}
+
 void TimelinePanelComponent::noteTracksLeaving() {
     trackListMotion_.finishNow();
     pendingTrackPicture_.reset();
@@ -54,9 +58,24 @@ void TimelinePanelComponent::noteTracksLeaving() {
 // lands at once.
 void TimelinePanelComponent::noteTrackSetChange(const std::vector<synth::Track>& tracks) {
     trackListMotion_.finishNow();
-    trackRowsAdded_.clear();
-    trackRowsRemoved_.clear();
-    if (!pendingTrackPicture_ && !trackInsertArmed_ && (undoManager_ == nullptr || !undoManager_->isRestoring()))
+    if (!trackInsertArmed_) { // an armed insert collects the rows of every rebuild it causes (one per copy)
+        trackRowsAdded_.clear();
+        trackRowsRemoved_.clear();
+    }
+    trackSetRestored_ = undoManager_ != nullptr && undoManager_->isRestoring();
+    if (!trackSetRestored_ && doc_ != nullptr && originsReplaceSeen_ != doc_->getReplaceCount()) {
+        originsReplaceSeen_ = doc_->getReplaceCount(); // a project was loaded: its ids mean nothing to the old ones
+        duplicateOrigins_.clear();
+    }
+    if (!trackSetRestored_) { // a track the user removes is no copy any more: its undo grows it back where it stood
+        const auto stillThere = [&tracks](const juce::String& key) {
+            return std::any_of(tracks.begin(), tracks.end(),
+                               [&key](const synth::Track& t) { return keyFor(t.id) == key; });
+        };
+        for (auto it = duplicateOrigins_.begin(); it != duplicateOrigins_.end();)
+            it = stillThere(it->first) ? std::next(it) : duplicateOrigins_.erase(it);
+    }
+    if (!pendingTrackPicture_ && !trackInsertArmed_ && !trackSetRestored_)
         return;
     for (const auto& track : tracks) {
         const bool had = std::any_of(trackHeaderList_.headers.begin(), trackHeaderList_.headers.end(),
@@ -97,10 +116,13 @@ void TimelinePanelComponent::finishTrackListChange() {
             return;
         job.picture = pending->image;
         job.pictureScale = pending->scale;
-        job.items = ExitEnterListPlan::forRemoval(pending->rows, after, extent);
+        if (!trackSetRestored_ ||
+            !ExitEnterListPlan::forRemovalIntoSource(pending->rows, after, duplicateOrigins_, extent, job.items))
+            job.items = ExitEnterListPlan::forRemoval(pending->rows, after, extent);
     } else {
         job.picture = ExitEnterListMotion::pictureOf(*this, area, job.pictureScale);
-        job.items = ExitEnterListPlan::forInsertion(after, added, extent);
+        if (!ExitEnterListPlan::forInsertionFromSource(after, added, duplicateOrigins_, extent, job.items))
+            job.items = ExitEnterListPlan::forInsertion(after, added, extent);
     }
     trackListMotion_.start(std::move(job));
 }

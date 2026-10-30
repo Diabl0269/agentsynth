@@ -2,6 +2,7 @@
 #include "ExitEnterListMotion.h"
 
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include <algorithm>
 #include <cmath>
 
@@ -68,6 +69,8 @@ public:
             if (!d || item.extent <= 0.0f)
                 continue;
             const auto slot = slotOf(*d);
+            if (d->lift > 0.0f)
+                paintReorderLift(g, scaled(slot, d->scale), d->lift, job_.background, job_.accent);
             if (d->outlineAlpha > 0.0f) {
                 g.setColour(job_.accent.withAlpha(d->outlineAlpha));
                 g.drawRoundedRectangle(slot.reduced(0.5f), kOutlineRadius, 1.0f);
@@ -84,6 +87,10 @@ public:
             g.setOpacity(d->alpha);
             g.drawImage(job_.picture.getClippedImage(pixels), scaled(slot, d->scale),
                         juce::RectanglePlacement::stretchToFit);
+            if (d->lift > 0.0f) { // the raised edge stays on top of the picture
+                g.setColour(job_.accent.withMultipliedAlpha(d->lift));
+                g.drawRoundedRectangle(scaled(slot, d->scale).reduced(1.0f), 3.0f, 1.0f);
+            }
         }
     }
 
@@ -113,9 +120,11 @@ bool ExitEnterListMotion::start(Job job) {
     driver_.stop(updater_);
     finishNow();
     timeline_ = ExitEnterListPlan::timelineFor(job.items);
+    reduced_ = prefersReducedMotion();
+    if (timeline_.together && reduced_)
+        timeline_.togetherMs = ExitEnterTimeline::kTogetherFadeMs;
     if (timeline_.totalMs() <= 0.0 || job.area.isEmpty() || job.picture.isNull())
         return false;
-    reduced_ = prefersReducedMotion();
     overlay_ = std::make_unique<ExitEnterListOverlay>(std::move(job));
     host_.addAndMakeVisible(*overlay_);
     overlay_->toFront(false);

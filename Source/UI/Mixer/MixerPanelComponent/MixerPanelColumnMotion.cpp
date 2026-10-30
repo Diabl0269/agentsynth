@@ -31,6 +31,34 @@ std::vector<ExitEnterListRow> MixerPanelComponent::scrollingColumnRows() const {
     return rows;
 }
 
+void MixerPanelComponent::noteDuplicateOrigin(synth::TrackId copy, synth::TrackId source) {
+    duplicateOrigins_[copy.value] = source.value;
+}
+
+// For each column key that has a duplicated track among its feeders, the key of the shown column that carries the track
+// it was copied from. Keys without one are left out, which makes the plan fall back to the plain grow-in.
+ExitEnterListPlan::SourceOf
+MixerPanelComponent::columnSources(const std::vector<juce::String>& keys,
+                                   const std::map<juce::String, std::vector<synth::TrackId>>& feeders) const {
+    ExitEnterListPlan::SourceOf out;
+    for (const auto& key : keys) {
+        const auto fed = feeders.find(key);
+        if (fed == feeders.end())
+            continue;
+        for (const auto track : fed->second) {
+            const auto origin = duplicateOrigins_.find(track.value);
+            if (origin == duplicateOrigins_.end())
+                continue;
+            for (const auto& entry : columnEntries_)
+                if (entry.kind == ColumnEntry::Kind::Strip && entry.channelId != key &&
+                    std::any_of(entry.feedingTracks.begin(), entry.feedingTracks.end(),
+                                [&origin](synth::TrackId t) { return t.value == origin->second; }))
+                    out[key] = entry.channelId;
+        }
+    }
+    return out;
+}
+
 void MixerPanelComponent::noteColumnsLeaving() {
     columnMotion_.finishNow();
     pendingColumnPicture_.reset();
@@ -41,6 +69,9 @@ void MixerPanelComponent::noteColumnsLeaving() {
     ColumnPicture picture;
     picture.rows = scrollingColumnRows();
     picture.image = ExitEnterListMotion::pictureOf(*this, viewport_.getBounds(), picture.scale);
+    for (const auto& entry : columnEntries_)
+        if (entry.kind == ColumnEntry::Kind::Strip)
+            picture.feeders[entry.channelId] = entry.feedingTracks;
     pendingColumnPicture_ = std::move(picture);
 }
 
@@ -52,6 +83,8 @@ void MixerPanelComponent::noteColumnSetComing(const synth::MixerSnapshot& snapsh
     autoColumnFinish_ = false;
     const bool restoring = undoManager_ != nullptr && undoManager_->isRestoring();
     const bool loaded = doc_ != nullptr && doc_->getReplaceCount() != replaceCountSeen_ && !restoring;
+    if (loaded)
+        duplicateOrigins_.clear(); // a loaded project's track ids mean nothing to the old ones
     if (doc_ != nullptr)
         replaceCountSeen_ = doc_->getReplaceCount();
     if (loaded || catchingUp_ || !canAnimateColumnMotion() || viewport_.getBounds().isEmpty() || viewDoc_ == nullptr)
@@ -93,7 +126,13 @@ void MixerPanelComponent::noteColumnSetChange(const std::vector<juce::String>& a
     if (added.empty() && removed.empty())
         return;
     columnMotion_.finishNow();
-    if (!pendingColumnPicture_ && !columnInsertArmed_ && (undoManager_ == nullptr || !undoManager_->isRestoring()))
+    columnSetRestored_ = undoManager_ != nullptr && undoManager_->isRestoring();
+    if (!columnSetRestored_ && pendingColumnPicture_) // a column the user removes is no copy any more
+        for (const auto& key : removed)
+            if (const auto fed = pendingColumnPicture_->feeders.find(key); fed != pendingColumnPicture_->feeders.end())
+                for (const auto track : fed->second)
+                    duplicateOrigins_.erase(track.value);
+    if (!pendingColumnPicture_ && !columnInsertArmed_ && !columnSetRestored_)
         return;
     for (const auto& key : added)
         addUnique(columnsAdded_, key);
@@ -136,10 +175,17 @@ void MixerPanelComponent::finishColumnChange() {
             return;
         job.picture = pending->image;
         job.pictureScale = pending->scale;
-        job.items = ExitEnterListPlan::forRemoval(pending->rows, after, extent);
+        if (!columnSetRestored_ ||
+            !ExitEnterListPlan::forRemovalIntoSource(pending->rows, after, columnSources(removed, pending->feeders),
+                                                     extent, job.items))
+            job.items = ExitEnterListPlan::forRemoval(pending->rows, after, extent);
     } else {
         job.picture = ExitEnterListMotion::pictureOf(*this, area, job.pictureScale);
-        job.items = ExitEnterListPlan::forInsertion(after, added, extent);
+        std::map<juce::String, std::vector<synth::TrackId>> feeders;
+        for (const auto& entry : columnEntries_)
+            feeders[entry.channelId] = entry.feedingTracks;
+        if (!ExitEnterListPlan::forInsertionFromSource(after, added, columnSources(added, feeders), extent, job.items))
+            job.items = ExitEnterListPlan::forInsertion(after, added, extent);
     }
     columnMotion_.start(std::move(job));
 }

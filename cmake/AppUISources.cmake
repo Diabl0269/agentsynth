@@ -206,9 +206,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerHeader/MixerColourDot.cpp
     Source/UI/Mixer/MixerMeterScale.h
     Source/UI/Mixer/MixerMeterBallistics.h
-    # MeterColourStops.h/.cpp moved to Core's own source list (root CMakeLists.txt, FRO147) --
-    # AppLookAndFeel (Core) caches an effective MeterColourStops itself now, and this file's
-    # PUBLIC link to Core is how MixerMeter.cpp below still reaches it.
+    # MeterColourStops.h/.cpp live in Core's source list (root CMakeLists.txt): AppLookAndFeel (Core) caches
+    # one, and this file's PUBLIC link to Core is how MixerMeter.cpp below still reaches it.
     Source/UI/Mixer/MixerMeter.h
     Source/UI/Mixer/MixerMeter.cpp
     Source/UI/Mixer/MixerMeterReadout.h
@@ -484,6 +483,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardOutline.h
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimator.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorGhosts.cpp
+    Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorOrigins.cpp
     Source/UI/Graph/CardGlideAnimator/CardGlideAnimatorBorders.cpp
     Source/UI/Graph/MacroFoldAnimator/MacroFoldAnimator.cpp
     Source/UI/Graph/NewModulePlacement/NewModulePlacement.h
@@ -513,6 +513,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroGroupControllerFoldPack.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerMacroDrop.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerDeleteReflow.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerDuplicateGlide.cpp
     Source/UI/Graph/MacroGroupController/MacroPackLayout.h
     Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp
