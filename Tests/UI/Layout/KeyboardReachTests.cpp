@@ -20,7 +20,9 @@
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
+#if defined(__GNUG__)
 #include <cxxabi.h>
+#endif
 #include <gtest/gtest.h>
 #include <iostream>
 #include <map>
@@ -148,10 +150,18 @@ struct Control {
 };
 
 std::string className(const juce::Component& c) {
+#if defined(__GNUG__)
     int status = 0;
     char* demangled = abi::__cxa_demangle(typeid(c).name(), nullptr, nullptr, &status);
     std::string name = status == 0 && demangled != nullptr ? demangled : typeid(c).name();
     std::free(demangled);
+#else
+    // MSVC already gives a readable name, prefixed with "class " or "struct ".
+    std::string name = typeid(c).name();
+    for (const char* prefix : {"class ", "struct "})
+        if (name.rfind(prefix, 0) == 0)
+            name = name.substr(std::char_traits<char>::length(prefix));
+#endif
     const auto colons = name.rfind("::");
     return colons == std::string::npos ? name : name.substr(colons + 2);
 }
