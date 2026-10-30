@@ -292,12 +292,9 @@ public:
     synth::telemetry::TelemetryService* getTelemetryServiceForTest() noexcept { return telemetry_.get(); }
     bool midiRemoteDevicesOpenedAfterEngineUpForTest() const noexcept { return midiRemoteDevicesOpenedAfterEngineUp_; }
     const auto& getCommandTableForTest() const { return commandTable(); } // CommandSpec stays private; read via auto
-    // The "Add automation..." host calls (TrackHeaderHost is a private base): what a track offers, and creating the
-    // lane on a given track.
-    std::vector<synth::ui::TrackHeaderHost::AutomatableParameter>
-    getAutomatableParametersForTest(synth::TrackId track) {
-        return getAutomatableParameters(track);
-    }
+    // The "Add automation..." host calls (TrackHeaderHost is a private base), plus deleteTrack.
+    auto getAutomatableParametersForTest(synth::TrackId track) { return getAutomatableParameters(track); }
+    void deleteTrackForTest(synth::TrackId track) { deleteTrack(track); }
     synth::LaneId addAutomationLaneForTest(synth::TrackId track,
                                            const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) {
         return addAutomationLane(track, parameter);
@@ -498,6 +495,8 @@ private:
         ~TrackGrowInScope();
         TrackGrowInScope(const TrackGrowInScope&) = delete;
         TrackGrowInScope& operator=(const TrackGrowInScope&) = delete;
+        /** `copy` duplicates `source`: its row and strip come out of the source's. */
+        void noteOrigin(synth::TrackId copy, synth::TrackId source) const;
 
     private:
         MainComponent& owner_;

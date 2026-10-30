@@ -68,18 +68,22 @@ void MainComponent::duplicateTracksBelow(const std::vector<synth::TrackId>& sour
         return;
     }
     std::vector<synth::TrackId> copies;
+    std::vector<std::pair<synth::TrackId, synth::TrackId>> origins; // {copy, source}
     const TrackGrowInScope growIn(*this);
     bool pushed = false;
     {
         const juce::ScopedValueSetter<int> reconcileFollows(fullReconcileFollowsDepth_, fullReconcileFollowsDepth_ + 1);
+        CardGlideAnimator::Scope glide(graphEditor.getCardGlide()); // each copy's cards glide out of its original's
         pushed = undoManager.recordGraphTimelineAndMacroChange(
-            audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, &sources, after, &copies] {
+            audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, &sources, after, &copies, &origins] {
                 synth::GraphRebuildBatch oneRebuild(audioEngine.getGraph()); // one render-sequence rebuild for all
                 for (const auto source : sources)
                     if (const auto* t = timelineDoc.getTrack(source)) {
                         const auto copy = duplicateTrackBody(source, t->name + " copy");
-                        if (copy.isValid())
+                        if (copy.isValid()) {
                             copies.push_back(copy);
+                            origins.emplace_back(copy, source);
+                        }
                     }
                 // Each copy landed right below its own source; gather them below `after`, in the sources' order.
                 std::vector<synth::TrackId> order;
@@ -96,6 +100,8 @@ void MainComponent::duplicateTracksBelow(const std::vector<synth::TrackId>& sour
             });
     }
 
+    for (const auto& [copy, source] : origins)
+        growIn.noteOrigin(copy, source);
     reconcileTimelineAfterGraphChange();
     if (pushed && !copies.empty()) {
         timelinePanel.selectTracks(copies, copies.back());

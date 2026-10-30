@@ -17,6 +17,7 @@
 
 namespace {
 constexpr double kGlideMs = 160.0;
+constexpr float kFadeUpFrom = 0.35f;
 
 juce::Rectangle<float> lerpRect(juce::Rectangle<int> a, juce::Rectangle<int> b, float t) {
     auto lerp = [t](int x, int y) { return static_cast<float>(x) + static_cast<float>(y - x) * t; };
@@ -96,6 +97,7 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
         return false;
     std::vector<const Entry*> changed;
     std::vector<juce::Rectangle<int>> fromRects;
+    std::vector<bool> fadeUps;
     for (const auto& e : now) {
         if (e.comp == nullptr || !e.comp->isVisible() || e.comp->getBounds().isEmpty() ||
             e.comp->isMouseButtonDown(true) || exempt_.count(e.nodeUid) != 0)
@@ -108,6 +110,7 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
             continue;
         changed.push_back(&e);
         fromRects.push_back(was->bounds);
+        fadeUps.push_back(was->fadeUp);
     }
     if (changed.empty())
         return false;
@@ -136,6 +139,7 @@ bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vect
         item.comp = comp;
         item.nodeUid = changed[i]->nodeUid;
         item.from = fromRects[i];
+        item.fadeUp = fadeUps[i];
         item.to = comp->getBounds();
         item.savedAlpha = comp->getAlpha();
         if (item.from.getUnion(item.to).intersects(visible)) {
@@ -195,6 +199,9 @@ void CardGlideAnimator::paint(juce::Graphics& g) const {
         }
         if (item.snapshot.isNull())
             continue;
+        juce::Graphics::ScopedSaveState state(g);
+        if (item.fadeUp) // faint on the original, fully there by halfway
+            g.setOpacity(kFadeUpFrom + (1.0f - kFadeUpFrom) * std::min(1.0f, progress_ * 2.0f));
         g.drawImage(item.snapshot, currentRect(item), juce::RectanglePlacement::stretchToFit);
     }
 }
@@ -331,8 +338,8 @@ void CardGlideAnimator::startDriver() {
             [this]() { finishFrame(); });
     else
         driver_.start(
-            *hooks_.updater, kGlideMs, synth::ui::easeOutCubic, [this](float t) { frameAt(t); },
-            [this]() { finishFrame(); });
+            *hooks_.updater, hasFadeUpItems() ? synth::ui::ExitEnterTimeline::kOutOfSourceMs : kGlideMs,
+            synth::ui::easeOutCubic, [this](float t) { frameAt(t); }, [this]() { finishFrame(); });
 }
 
 CardGlideAnimator::Scope::Scope(CardGlideAnimator& animator, bool restore)

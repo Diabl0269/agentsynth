@@ -279,6 +279,7 @@ add_executable(Tests
     App/MainComponent/MainComponentUnsavedGuardTests.cpp
     App/MainComponent/MainComponentFreshUndoTests.cpp
     App/MainComponent/MainComponentDuplicateTrackTests.cpp
+    App/MainComponent/MainComponentDuplicateTrackMotionTests.cpp
     App/MainComponent/MainComponentTrackPolySwitchTests.cpp
     App/MainComponent/MainComponentShowTrackModuleTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
@@ -548,6 +549,7 @@ add_executable(Tests
     UI/Layout/ReorderDrag/ReorderDragAnimatorTests.cpp
     UI/Layout/ExitEnterTimelineTests.cpp
     UI/Layout/ExitEnterList/ExitEnterListMotionTests.cpp
+    UI/Layout/ExitEnterList/ExitEnterListFromSourceTests.cpp
     UI/Graph/GraphEditorOnboardingTests.cpp
     UI/Library/ModuleLibraryComponentTests.cpp
     UI/Library/ModuleLibraryCollapseTests.cpp

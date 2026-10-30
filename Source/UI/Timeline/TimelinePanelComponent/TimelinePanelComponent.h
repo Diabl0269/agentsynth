@@ -540,6 +540,9 @@ public:
     void noteTracksLeaving();
     void armTrackInsertMotion() noexcept { trackInsertArmed_ = true; }
     void finishTrackListChange();
+    /** `copy` is a duplicate of `source`: its row comes out of the source row (and, on undo, goes back into it) in one
+     *  movement with the rows below, instead of growing out of nothing. Call before finishTrackListChange(). */
+    void noteDuplicateOrigin(synth::TrackId copy, synth::TrackId source);
     synth::ui::ExitEnterListMotion& getTrackListMotionForTest() noexcept { return trackListMotion_; }
     void focusTrackRow(synth::TrackId id);
     bool handleRootFocusKey(const juce::KeyPress& key);
@@ -716,7 +719,10 @@ private:
     void noteTrackSetChange(const std::vector<synth::Track>& tracks);
     std::optional<TrackListPicture> pendingTrackPicture_;
     std::vector<juce::String> trackRowsAdded_, trackRowsRemoved_;
-    bool trackInsertArmed_ = false; // an add or duplicate is under way: the rebuild's new rows grow in
+    bool trackInsertArmed_ = false;        // an add or duplicate is under way: the rebuild's new rows grow in
+    bool trackSetRestored_ = false;        // the last track-set change was an undo or redo
+    std::int64_t originsReplaceSeen_ = -1; // the doc's replace count when duplicateOrigins_ was last valid
+    synth::ui::ExitEnterListPlan::SourceOf duplicateOrigins_; // track key -> the track it was copied from
     synth::ui::ExitEnterListMotion trackListMotion_{*this};
 
     ReorderDragAnimator trackReorder_;

@@ -53,6 +53,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/layout/animation.md`](layout/animation.md) — `AnimationDriver`, `PanelSlide`, what moves, and the time-bounded animation rule with its two exceptions
 - [`docs/layout/undo-glide.md`](layout/undo-glide.md) — what glides on Cmd+Z / Cmd+Shift+Z, `KeyedTween`/`RestoreWatch`, and the `UndoGlideSurfaces` checklist
 - [`docs/layout/insert-motion.md`](layout/insert-motion.md) — the dragged module's ghost sliding to a gap, a cable splitting around an inserted module and joining over a deleted one, and outlines that follow the card's corners
+- [`docs/layout/duplicate-motion.md`](layout/duplicate-motion.md) — a duplicated track's row, mixer strip and canvas macro coming out of the original (and back on undo): the from-source plan variant, timings, Reduce Motion
 - [`docs/layout/visualizers.md`](layout/visualizers.md) — in-card signal displays and editors (frequency response, EQ curve, scope, threshold meter, wavetable, curve editor)
 - [`docs/layout/theming.md`](layout/theming.md) — the token reference (colours, metrics, typography, treatment), the font limitation, reload, themed widgets
 - [`docs/layout/theme-authoring.md`](layout/theme-authoring.md) — the `*.gtheme.json` schema, a worked example, and what each treatment parameter does

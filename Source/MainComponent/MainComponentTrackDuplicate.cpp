@@ -217,6 +217,23 @@ std::vector<juce::AudioProcessorGraph::NodeID> MainComponent::nodesAttachedToTra
     return originals;
 }
 
+// Inside the caller's CardGlideAnimator::Scope: the copy's cards and macro come out of the original's place, and its
+// border (an open macro) from the original's border.
+static void glideCopyOutOfOriginal(GraphEditor& graphEditor,
+                                   const std::map<int, juce::AudioProcessorGraph::NodeID>& copies) {
+    std::vector<std::pair<NodeID, NodeID>> nodes;
+    for (const auto& [oldUid, copy] : copies)
+        nodes.emplace_back(NodeID(static_cast<juce::uint32>(oldUid)), copy);
+    const auto macros = graphEditor.getMacroController().glideCopiesOutOfOriginals(nodes);
+    if (macros.empty())
+        return;
+    auto hulls = graphEditor.snapshotPaintedHulls(); // everything final: only the copies' borders start elsewhere
+    for (const auto& [from, to] : macros)
+        if (const auto it = hulls.find(from); it != hulls.end() && hulls.count(to) != 0)
+            hulls[to] = it->second;
+    graphEditor.glideHullsFrom(hulls);
+}
+
 // The graph half, then the timeline half, inside the caller's ONE undo transaction. Returns the new
 // track, or an invalid id when the copy failed (the caller checked kMaxTracks, so only a snippet
 // the insert path refuses can fail).
@@ -258,6 +275,7 @@ synth::TrackId MainComponent::duplicateTrackBody(synth::TrackId trackId, const j
         mapInnerAmountLanes(audioEngine, copies, uuidRemap);
         rewireBoundary(audioEngine, copies, uuidRemap);
         graphEditor.updateComponents();
+        glideCopyOutOfOriginal(graphEditor, copies);
     }
 
     const int index = static_cast<int>(timelineDoc.getTracks().size());
@@ -283,11 +301,14 @@ void MainComponent::duplicateTrack(synth::TrackId trackId) {
     bool pushed = false;
     {
         const juce::ScopedValueSetter<int> reconcileFollows(fullReconcileFollowsDepth_, fullReconcileFollowsDepth_ + 1);
+        CardGlideAnimator::Scope glide(graphEditor.getCardGlide()); // the copy's cards glide out of the original's
         pushed = undoManager.recordGraphTimelineAndMacroChange(
             audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
             [this, trackId, &copyName, &copy] { copy = duplicateTrackBody(trackId, copyName); });
     }
 
+    if (copy.isValid())
+        growIn.noteOrigin(copy, trackId);
     reconcileTimelineAfterGraphChange();
     if (copy.isValid() && pushed) {
         timelinePanel.focusTrackRow(copy); // the copy is what the user will want to act on next
