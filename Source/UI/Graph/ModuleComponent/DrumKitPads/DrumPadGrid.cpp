@@ -8,6 +8,7 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Library/SoundBrowser/SoundDragPayload.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -94,6 +95,7 @@ DrumPadGrid::DrumPadGrid(DrumKitModule& kit)
 }
 
 DrumPadGrid::~DrumPadGrid() {
+    slide_.stop();
     ringSlide_.stop();
     flash_.stop();
 }
@@ -102,28 +104,53 @@ juce::Component& DrumPadGrid::padCell(int index) {
     return *cells_[(size_t)juce::jlimit(0, synth::drums::kMaxPads - 1, index)];
 }
 
+bool DrumPadGrid::isPadVisible(int index) const noexcept { return slotOf(index) >= 0; }
+
+// The place pad `index` has among the pads drawn, or -1 while it is not shown.
+int DrumPadGrid::slotOf(int pad) const noexcept {
+    const auto it = std::lower_bound(order_.begin(), order_.end(), pad);
+    return it != order_.end() && *it == pad ? (int)(it - order_.begin()) : -1;
+}
+
 void DrumPadGrid::refresh() {
     const int count = kit_.padCount();
     const bool countChanged = count != count_;
     count_ = count;
+    std::array<juce::Rectangle<int>, synth::drums::kMaxPads> before;
+    for (int i = 0; i < synth::drums::kMaxPads; ++i)
+        before[(size_t)i] = cells_[(size_t)i]->isVisible() ? cells_[(size_t)i]->getBounds() : juce::Rectangle<int>();
+    auto shown = kit_.shownPads();
+    const bool orderChanged = shown != order_;
+    order_ = std::move(shown);
     for (int i = 0; i < synth::drums::kMaxPads; ++i) {
         auto& cell = *cells_[(size_t)i];
-        cell.setVisible(i < count_);
-        if (i < count_)
+        cell.setVisible(isPadVisible(i));
+        if (isPadVisible(i))
             cell.setTitle(padTitle(i));
     }
     if (picked_ >= count_)
         pick(count_ - 1, false);
-    if (countChanged)
+    if (countChanged || (orderChanged && !laidOut_)) {
         resized();
+    } else if (orderChanged) {
+        const bool animate = FadeVisibility::canAnimateIn(this) && getWidth() > 0;
+        if (animate)
+            startSlide(before);
+        else
+            resized();
+    }
+    laidOut_ = true;
     repaint();
 }
 
 juce::Rectangle<int> DrumPadGrid::padBounds(int index) const {
-    const int padH = count_ > kTallPadLimit ? kShortPad : kTallPad;
+    const int slot = slotOf(index);
+    if (slot < 0)
+        return {};
+    const int padH = order_.size() > (size_t)kTallPadLimit ? kShortPad : kTallPad;
     const int padW = (getWidth() - (kColumns - 1) * kGap) / kColumns;
-    const int row = index / kColumns;
-    const int col = index % kColumns;
+    const int row = slot / kColumns;
+    const int col = slot % kColumns;
     // The last column takes the pixels the division leaves, so the grid's right edge lines up with the card's.
     const int x = col * (padW + kGap);
     const int w = col == kColumns - 1 ? getWidth() - x : padW;
@@ -131,15 +158,15 @@ juce::Rectangle<int> DrumPadGrid::padBounds(int index) const {
 }
 
 int DrumPadGrid::padAt(juce::Point<int> p) const {
-    for (int i = 0; i < count_; ++i)
-        if (padBounds(i).contains(p))
-            return i;
+    for (const int pad : order_)
+        if (padBounds(pad).contains(p))
+            return pad;
     return -1;
 }
 
 juce::String DrumPadGrid::padTitle(int index) const {
-    return kit_.pad(index).name + " pad, " + kindWords(kit_, index) + ", " + juce::String(index + 1) + " of " +
-           juce::String(count_);
+    return kit_.pad(index).name + " pad, " + kindWords(kit_, index) + ", " + juce::String(slotOf(index) + 1) + " of " +
+           juce::String(visibleCount());
 }
 
 juce::String DrumPadGrid::padTooltip(int index) const {
@@ -153,10 +180,96 @@ juce::String DrumPadGrid::getTooltip() {
 
 bool DrumPadGrid::isFlashing(int index) const { return index == flashing_; }
 
+void DrumPadGrid::layoutCells() {
+    for (int i = 0; i < synth::drums::kMaxPads; ++i) {
+        cells_[(size_t)i]->setAlpha(1.0f);
+        cells_[(size_t)i]->setBounds(padBounds(i));
+    }
+}
+
 void DrumPadGrid::resized() {
-    for (int i = 0; i < synth::drums::kMaxPads; ++i)
-        cells_[(size_t)i]->setBounds(i < count_ ? padBounds(i) : juce::Rectangle<int>());
+    if (sliding_ && getWidth() == slideWidth_) { // only the height changed (a row went): the pads keep sliding
+        repaint();
+        return;
+    }
+    slide_.stop();
+    sliding_ = false;
+    layoutCells();
     ringSlide_.stop();
+    ringRect_ = padBounds(picked_).toFloat();
+    repaint();
+}
+
+// ---- Pads leaving and coming back ----
+
+// A pad that went shrinks over 110 ms (ease-in) while the pads after it slide up over 160 ms; one that came back
+// grows in from its centre. Under Reduce Motion the pad fades in place over 80 ms and the others move at the end;
+// with Animations Off (or off screen) refresh() lays out at once and never gets here.
+void DrumPadGrid::startSlide(const std::array<juce::Rectangle<int>, synth::drums::kMaxPads>& before) {
+    slide_.stop();
+    slideReduced_ = prefersReducedMotion();
+    bool any = false;
+    for (int i = 0; i < synth::drums::kMaxPads; ++i) {
+        const auto from = before[(size_t)i].toFloat();
+        const auto to = padBounds(i).toFloat();
+        moves_[(size_t)i] = {from, to};
+        if (from.isEmpty() && to.isEmpty())
+            continue;
+        any = true;
+        if (to.isEmpty())
+            cells_[(size_t)i]->setVisible(true); // leaving: it shrinks away before it goes
+    }
+    if (!any) {
+        resized();
+        return;
+    }
+    sliding_ = true;
+    slideWidth_ = getWidth();
+    ringSlide_.stop();
+    if (!isPadVisible(picked_))
+        ringRect_ = {};
+    slide_.start(
+        updater_, slideReduced_ ? kReducedMs : kSlideMs, [](float t) { return t; }, [this](float t) { stepSlide(t); },
+        [this] { finishSlide(); });
+}
+
+void DrumPadGrid::stepSlide(float t) {
+    for (int i = 0; i < synth::drums::kMaxPads; ++i) {
+        const auto [from, to] = moves_[(size_t)i];
+        if (from.isEmpty() && to.isEmpty())
+            continue;
+        auto& cell = *cells_[(size_t)i];
+        const auto scaled = [](juce::Rectangle<float> r, float k) {
+            return r.withSizeKeepingCentre(r.getWidth() * k, r.getHeight() * k);
+        };
+        juce::Rectangle<float> rect;
+        float alpha = 1.0f;
+        if (to.isEmpty()) { // leaving
+            const float shrink = easeInCubic(std::min(1.0f, t * (float)(kSlideMs / kShrinkMs)));
+            rect = slideReduced_ ? from : scaled(from, 1.0f - shrink);
+            alpha = slideReduced_ ? 1.0f - t : 1.0f;
+        } else if (from.isEmpty()) { // coming back
+            rect = slideReduced_ ? to : scaled(to, easeOutCubic(t));
+            alpha = slideReduced_ ? t : 1.0f;
+        } else {
+            const float k = slideReduced_ ? 0.0f : easeOutCubic(t);
+            rect = {from.getX() + (to.getX() - from.getX()) * k, from.getY() + (to.getY() - from.getY()) * k,
+                    from.getWidth() + (to.getWidth() - from.getWidth()) * k,
+                    from.getHeight() + (to.getHeight() - from.getHeight()) * k};
+        }
+        cell.setAlpha(alpha);
+        cell.setBounds(rect.toNearestInt());
+    }
+    if (isPadVisible(picked_))
+        ringRect_ = cells_[(size_t)picked_]->getBounds().toFloat();
+    repaint();
+}
+
+void DrumPadGrid::finishSlide() {
+    sliding_ = false;
+    for (int i = 0; i < synth::drums::kMaxPads; ++i)
+        cells_[(size_t)i]->setVisible(isPadVisible(i));
+    layoutCells();
     ringRect_ = padBounds(picked_).toFloat();
     repaint();
 }
@@ -189,7 +302,8 @@ void DrumPadGrid::pick(int index, bool play) {
 // The ring slides to the new pad; under Reduce Motion or Animations Off it moves at once.
 void DrumPadGrid::moveRingTo(int index, bool animate) {
     const auto target = padBounds(index).toFloat();
-    if (!animate || ringRect_.isEmpty() || prefersReducedMotion() || !FadeVisibility::canAnimateIn(this)) {
+    if (!animate || ringRect_.isEmpty() || target.isEmpty() || prefersReducedMotion() ||
+        !FadeVisibility::canAnimateIn(this)) {
         ringSlide_.stop();
         ringRect_ = target;
         repaint();
@@ -279,32 +393,48 @@ void DrumPadGrid::filesDropped(const juce::StringArray& files, int x, int y) {
 }
 
 // Left/Right step one pad, Up/Down one row, Home/End jump to the ends: all pick without a sound. Space and Return play
-// the picked pad. Every other key, and any key with Cmd, Ctrl or Alt, passes on to the card and the app's shortcuts.
+// the picked pad and H flips its Shown switch. Every other key, and any key with Cmd, Ctrl or Alt, passes on to the
+// card and the app's shortcuts. The steps count the pads drawn, so a hidden pad is skipped.
 bool DrumPadGrid::keyPressed(const juce::KeyPress& key) {
     const auto mods = key.getModifiers();
     if (mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
         return false;
+    if (key.getTextCharacter() == 'h' || key.getTextCharacter() == 'H') {
+        if (onToggleShown)
+            onToggleShown(picked_);
+        return true;
+    }
+    return pickKey(key);
+}
+
+bool DrumPadGrid::pickKey(const juce::KeyPress& key) {
     const int code = key.getKeyCode();
-    int target = -1;
-    if (code == juce::KeyPress::leftKey)
-        target = picked_ - 1;
-    else if (code == juce::KeyPress::rightKey)
-        target = picked_ + 1;
-    else if (code == juce::KeyPress::upKey)
-        target = picked_ - kColumns;
-    else if (code == juce::KeyPress::downKey)
-        target = picked_ + kColumns;
-    else if (code == juce::KeyPress::homeKey)
-        target = 0;
-    else if (code == juce::KeyPress::endKey)
-        target = count_ - 1;
-    else if (code == juce::KeyPress::spaceKey || code == juce::KeyPress::returnKey) {
+    if (code == juce::KeyPress::spaceKey || code == juce::KeyPress::returnKey) {
         pick(picked_, true);
         return true;
-    } else {
-        return false;
     }
-    target = juce::jlimit(0, count_ - 1, target);
+    // The place of the picked pad among the pads drawn; a hidden one sits between its neighbours.
+    const bool drawn = isPadVisible(picked_);
+    const int here =
+        drawn ? slotOf(picked_) : (int)(std::lower_bound(order_.begin(), order_.end(), picked_) - order_.begin());
+    int slot = -1;
+    if (code == juce::KeyPress::leftKey)
+        slot = here - 1;
+    else if (code == juce::KeyPress::rightKey)
+        slot = drawn ? here + 1 : here;
+    else if (code == juce::KeyPress::upKey)
+        slot = here - kColumns;
+    else if (code == juce::KeyPress::downKey)
+        slot = drawn ? here + kColumns : here + kColumns - 1;
+    else if (code == juce::KeyPress::homeKey)
+        slot = 0;
+    else if (code == juce::KeyPress::endKey)
+        slot = visibleCount() - 1;
+    else
+        return false;
+    if (visibleCount() == 0)
+        return true;
+    const int target = order_[(size_t)juce::jlimit(0, visibleCount() - 1, slot)];
     if (target != picked_)
         pick(target, false);
     return true;
@@ -342,8 +472,10 @@ void DrumPadGrid::paintOverChildren(juce::Graphics& g) {
     if (count_ <= 0)
         return;
     const auto& c = synth::theme::themeOf(*this).colors;
-    g.setColour(c.accent);
-    g.drawRoundedRectangle(ringRect_.reduced(1.0f), kCorner, 2.0f);
+    if (!ringRect_.isEmpty()) { // none while the picked pad is hidden
+        g.setColour(c.accent);
+        g.drawRoundedRectangle(ringRect_.reduced(1.0f), kCorner, 2.0f);
+    }
     paintDropOutlines(g);
     if (hasKeyboardFocus(false))
         paintFocusRingAlways(g, getLocalBounds().toFloat(), *this, kCorner);
@@ -369,6 +501,7 @@ std::unique_ptr<juce::AccessibilityHandler> DrumPadGrid::createAccessibilityHand
 
 void DrumPadGrid::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("padCount", count_);
+    into.setProperty("visiblePads", visibleCount());
     into.setProperty("pickedPad", picked_ + 1);
     // auditionedPad is the last pad this grid asked to play; lastPlayedPad is set by the audio thread, so it stays 0
     // in a test-mode instance, which has no audio device.

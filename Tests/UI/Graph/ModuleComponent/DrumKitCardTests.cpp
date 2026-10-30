@@ -251,7 +251,7 @@ TEST(DrumKitCard, TheDrumMachineButtonIsDisabledWithAReasonWhenNoTrackPlaysTheKi
     EXPECT_FALSE(button.isEnabled());
     EXPECT_TRUE(button.getTooltip().contains("No track plays this Drum Kit")) << button.getTooltip();
 
-    scene.canvas.editor.drumKitHasTrack = [](NodeID) { return false; };
+    scene.canvas.editor.drumKit.hasTrack = [](NodeID) { return false; };
     scene.chrome().refreshDrumMachineButton();
     EXPECT_FALSE(button.isEnabled());
 }
@@ -259,8 +259,8 @@ TEST(DrumKitCard, TheDrumMachineButtonIsDisabledWithAReasonWhenNoTrackPlaysTheKi
 TEST(DrumKitCard, TheDrumMachineButtonOpensTheGridForThisKitWhenATrackPlaysIt) {
     Scene scene;
     NodeID opened;
-    scene.canvas.editor.drumKitHasTrack = [](NodeID) { return true; };
-    scene.canvas.editor.onOpenDrumMachineRequested = [&opened](NodeID n) { opened = n; };
+    scene.canvas.editor.drumKit.hasTrack = [](NodeID) { return true; };
+    scene.canvas.editor.drumKit.openDrumMachine = [&opened](NodeID n) { opened = n; };
     scene.chrome().refreshDrumMachineButton();
     auto& button = scene.chrome().getDrumMachineButton();
     EXPECT_TRUE(button.isEnabled());

@@ -249,7 +249,7 @@ TEST(DrumMachineGridTest, EveryOtherBeatGroupOfEmptyCellsIsShaded) {
 namespace {
 struct DrumKitHost : AuditionRecordingHost {
     synth::TrackId drumTrack;
-    bool isDrumKitTrack(synth::TrackId t) const override { return t == drumTrack; }
+    bool drumKitRows(synth::TrackId t, synth::ui::KitRows*) const override { return t == drumTrack; }
 };
 
 struct PanelFixture {

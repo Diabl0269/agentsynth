@@ -13,6 +13,7 @@
 #include <bitset>
 #include <functional>
 #include <set>
+#include <vector>
 
 /**
  * Synthesized electronic drum kit on one MIDI track, played through 32 pad slots.
@@ -96,6 +97,16 @@ public:
     int padCount() const noexcept { return pads_.count; }
     /** Clamped by clampPadCount. A never-used free pad the count shows gets its built-in sound. */
     void setPadCount(int count);
+    /** Whether pad `index` is on the card, in the clip editors' rows. A hidden pad still plays its hits. */
+    bool padShown(int index) const { return pad(index).shown; }
+    /** The pads within the count the card draws: shown ones, in pad order. */
+    std::vector<int> shownPads() const;
+    /** How many pads within the count are switched off. */
+    int hiddenPadCount() const;
+    /** Sets pad `index`'s Shown switch; false when it already read so. Never touches the sound. */
+    bool setPadShown(int index, bool shown);
+    /** Switches every pad's Shown on (also beyond the count); how many changed. */
+    int showAllPads();
     /** Replaces pad `index`; a File pad's file is decoded now (false, leaving the pad, when it cannot be read). */
     bool setPad(int index, const synth::drums::Pad& pad);
     /** Makes pad `index` play `file` (decoded now); false when it cannot be read. */

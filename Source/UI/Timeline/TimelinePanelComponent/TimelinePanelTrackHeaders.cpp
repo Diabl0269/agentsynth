@@ -37,6 +37,10 @@ juce::String shortPluginFormatLabel(const juce::String& format) {
 // whole conversation with the app goes through one seam.
 void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     trackHeaderHost_ = host;
+    clipLaneArea_.kitRowsProvider = [this](synth::TrackId track, KitRows& rows) {
+        return trackHeaderHost_ != nullptr && trackHeaderHost_->drumKitRows(track, &rows);
+    };
+    clipLaneArea_.refreshKitRows();
     routingPane_.setHost(host);
     automationLanes_.setHost(host); // lane headers name their parameter and module through it
     // Headers are constructed with the host, so any that already exist have to be rebuilt against
@@ -68,6 +72,9 @@ void TimelinePanelComponent::timerCallback() {
         if (header != nullptr)
             header->tickChannelMeter();
     tickRoutingPane();
+    clipLaneArea_.refreshKitRows();
+    if (drum_ != nullptr && drum_->grid.isOpen())
+        drum_->grid.refreshKitRows(); // a pad switched on or off on the Drum Kit card
 }
 
 // The headless test seam for a menu that never runs in a test process -- the same split

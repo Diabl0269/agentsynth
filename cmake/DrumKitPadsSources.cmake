@@ -10,4 +10,6 @@ target_sources(AppUI PRIVATE
     Source/UI/Graph/ModuleComponent/DrumKitPads/DrumPadControls.cpp
     Source/UI/Graph/ModuleComponent/DrumKitPads/DrumPadGrid.h
     Source/UI/Graph/ModuleComponent/DrumKitPads/DrumPadGrid.cpp
+    Source/UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h
+    Source/UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.cpp
 )

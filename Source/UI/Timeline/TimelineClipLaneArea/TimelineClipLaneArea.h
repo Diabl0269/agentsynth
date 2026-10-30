@@ -3,6 +3,7 @@
 #include "Timeline/PeaksFile.h"
 #include "Timeline/TimelineDoc/ClipEdgeSizing.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/DrumMachine/DrumLanes.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyboardContextMenu.h"
@@ -406,6 +407,10 @@ public:
     // called once by setTimelineDoc() and, thereafter, by TimelinePanelComponent::timelineChanged()
     // on every effective doc mutation.
     void refreshFromDoc();
+    /** A Drum Kit track's clips draw the kit's shown pads as their rows; set by the panel, which owns the app host. */
+    std::function<bool(synth::TrackId, KitRows&)> kitRowsProvider;
+    /** Re-reads every track's kit rows; repaints when they changed (a pad switched on or off on the card). */
+    void refreshKitRows();
 
     // ---- Waveform peaks (committed clips) ----
 
@@ -809,6 +814,12 @@ private:
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
     // Non-owning, may stay null (see setApplicationProperties). Read at use time, never cached.
+    struct NoteRows {
+        std::vector<int> pitches; // empty: not a Drum Kit track
+        int rowOf(int pitch) const;
+    };
+    NoteRows noteRowsFor(const synth::Track& track, const synth::Clip& clip) const;
+    std::vector<std::pair<synth::TrackId, KitRows>> kitRows_; // the Drum Kit tracks only
     juce::ApplicationProperties* appProperties_ = nullptr;
     // Non-owning, may stay null (see setShortcutManager). const — this component only reads.
     const ShortcutManager* shortcuts_ = nullptr;

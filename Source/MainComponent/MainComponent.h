@@ -649,7 +649,8 @@ private:
     void setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) override;
     std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> getMidiInputDevices() override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
-    bool isDrumKitTrack(synth::TrackId track) const override;
+    bool drumKitRows(synth::TrackId track, synth::ui::KitRows* rows) const override;
+    void showAllDrumKitPads(synth::TrackId track) override;
     bool startClipPreview(synth::TrackId track, double startBeat, double endBeat) override;
     void stopClipPreview(synth::TrackId track) override;
     double clipPreviewBeat(synth::TrackId track) override;

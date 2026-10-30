@@ -8,6 +8,7 @@
 
 #include "UI/Graph/CableColour.h"
 #include <cstdint>
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -129,6 +130,18 @@ struct AlignmentGuide {
     juce::Point<float> start; // line start point (canvas coords)
     juce::Point<float> end;   // line end point (canvas coords)
     int type;                 // 0=left,1=right,2=top,3=bottom,4=centerX,5=centerY
+};
+
+// ---- Drum Kit card hooks -----------------------------------------------------------------------
+// Set by MainComponent; the card owns no timeline.
+struct DrumKitCardHooks {
+    // Is a track playing the kit (else the card's "Drum machine" button is disabled), and a press of that button.
+    std::function<bool(juce::AudioProcessorGraph::NodeID)> hasTrack;
+    std::function<void(juce::AudioProcessorGraph::NodeID)> openDrumMachine;
+    // Hiding the pad on `note`: runs `proceed` at once, or after the person confirms when its drum has hits in a clip.
+    std::function<void(juce::AudioProcessorGraph::NodeID, int note, const juce::String& padName,
+                       std::function<void()> proceed)>
+        confirmHidePad;
 };
 
 } // namespace graph_editor_types

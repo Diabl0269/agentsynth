@@ -9,6 +9,8 @@
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadGrid.h"
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadSoundMenu.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/InstrumentChrome.h"
+#include "UI/Layout/TextLinkButton.h"
+#include <memory>
 
 namespace synth::ui {
 
@@ -28,6 +30,7 @@ public:
 
     /** Adds its components to `host.card`; the kit must outlive this. */
     DrumKitPadsSection(const InstrumentChrome::Host& host, DrumKitModule& kit);
+    ~DrumKitPadsSection();
 
     /** Places the area from `y` at `x`, `w` wide, and returns the y below it. */
     int layout(int y, int x, int w, bool apply);
@@ -36,6 +39,13 @@ public:
 
     /** Sets the pad count as one undo step and resizes the card. */
     void setPadCountUndoably(int count);
+    /** Flips pad `index`'s Shown switch as one undo step. Hiding a drum that has hits in a clip asks first (the
+     *  Host's confirmHidePad); a hidden pad still plays. */
+    void setPadShown(int index, bool shown);
+    /** Switches every pad on, as one undo step. */
+    void showAllPads();
+    /** "2 hidden" while any pad within the count is off, else empty. */
+    juce::String hiddenCaption() const;
 
     // ---- A pad's sound (DrumKitPadsSectionSound.cpp); each edit is one undo step ----
     /** Opens pad `index`'s Sound menu (from the Sound row) or its pad menu (right-click, Shift+F10). */
@@ -58,6 +68,8 @@ public:
     DrumPadGrid& grid() noexcept { return grid_; }
     DrumPadControls& controls() noexcept { return controls_; }
     juce::Label& caption() noexcept { return caption_; }
+    /** The caption's "Show all" link, visible while any pad is hidden. */
+    juce::Button& showAllLink() noexcept { return showAll_; }
     /** The last thing said to a screen reader ("Snare picked"). */
     const juce::String& lastAnnouncement() const noexcept { return lastAnnouncement_; }
 
@@ -78,6 +90,8 @@ private:
     juce::AudioProcessorGraph::Node* nodeForUuid(const juce::String& uuid) const;
     void chooseFileFor(int index);
     juce::String dropHint() const;
+    void placeCaption();
+    void relayoutIfGridResized();
 
     InstrumentChrome::Host host_;
     DrumKitModule& kit_;
@@ -85,6 +99,9 @@ private:
     CountStepper stepper_{"Pads"};
     DrumPadGrid grid_;
     juce::Label caption_{"Pads caption", juce::String()};
+    TextLinkButton showAll_{"Show all"};
+    juce::Rectangle<int> captionRow_;
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true); // a confirmation can outlive the card
     DrumPadControls controls_;
     synth::drums::PadTable shownTable_;
     bool shownRecordedKit_ = false;

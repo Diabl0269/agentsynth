@@ -1,0 +1,46 @@
+# The Drum Kit card's Shown switch: H hides the picked pad and the others move up, the caption counts it and offers
+# Show all, the pad's switch hides one more, and Show all brings both back.
+#
+# What a user does:
+#   1. Starts a new project and adds a Drum Kit from the library (Cmd+F).
+#   2. Clicks pad 8 (the cowbell) and presses H: the pad leaves the grid, "1 hidden" shows.
+#   3. Shift+clicks pad 2 (the snare) and turns its Shown switch off: two hidden.
+#   4. Presses the Show all link: all 8 pads are back.
+# Pad centres are for the 280 px card: pads 61 px wide with 4 px gaps, 44 px tall, two rows of four.
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: drum kit}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
+  - key: {keys: cmd+-}                                       # zoom out so the whole card sits inside the window
+  - key: {keys: cmd+-}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", padCount: 8, visiblePads: 8}
+  - click: {id: "card:Drum Kit > drumPads", x: 225, y: 70}          # pad 8: second row, fourth column
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 8, within_ms: 1500}
+  - screenshot: {id: "card:Drum Kit", name: drum-kit-shown-before}
+  - key: {keys: h}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 7, pickedPad: 8, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPadsCaption", contains: {text: "1 hidden"}}
+  - screenshot: {id: "card:Drum Kit", name: drum-kit-shown-one-hidden}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}   # pad 2, quietly
+  - wait: {}
+  - click: {id: "card:Drum Kit > Shown: Snare"}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 6, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPadsCaption", contains: {text: "2 hidden"}}
+  - screenshot: {id: "card:Drum Kit", name: drum-kit-shown-two-hidden}
+  - click: {id: "card:Drum Kit > Show all hidden pads"}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 8, within_ms: 1500}
+  - screenshot: {id: "card:Drum Kit", name: drum-kit-shown-all-back}

@@ -43,6 +43,17 @@ void TimelinePanelComponent::wireDrumMachine() {
     };
     grid.onClipCreated = [this](synth::ClipId id) { clipSelection_.setSelection({id}); };
     wireClipPreview();
+    // A clip on a Drum Kit track takes its rows from the kit's pads; the panel's timer keeps them current.
+    grid.kitRowsProvider = [this](KitRows& rows) {
+        const auto* track = doc_ != nullptr ? doc_->getTrackForClip(drum_->grid.getClipId()) : nullptr;
+        return track != nullptr && trackHeaderHost_ != nullptr && trackHeaderHost_->drumKitRows(track->id, &rows);
+    };
+    grid.onShowAllKitPads = [this] {
+        const auto* track = doc_ != nullptr ? doc_->getTrackForClip(drum_->grid.getClipId()) : nullptr;
+        if (track != nullptr && trackHeaderHost_ != nullptr)
+            trackHeaderHost_->showAllDrumKitPads(track->id);
+        drum_->grid.refreshKitRows();
+    };
     pianoRoll_.onDrumMachineRequested = [this](synth::ClipId id) {
         closePianoRoll();
         openDrumMachine(id);

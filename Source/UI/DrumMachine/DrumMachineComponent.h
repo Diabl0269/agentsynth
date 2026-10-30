@@ -162,6 +162,20 @@ public:
     void setFocusCell(Cell cell);
     bool isShowAllDrums() const noexcept { return showAll_; }
     void setShowAllDrums(bool showAll);
+
+    // ---- A Drum Kit's pads as the rows (DrumMachineKit.cpp) ----
+    /** Set by the owner: fills the rows of the Drum Kit that plays the open clip's track and answers true, or answers
+     *  false when the track plays no Drum Kit (the rows then come from the General MIDI table). Called on the message
+     *  thread. */
+    std::function<bool(KitRows&)> kitRowsProvider;
+    /** "Show all" was pressed while the kit has hidden pads: the owner switches them all on, as one undo step. */
+    std::function<void()> onShowAllKitPads;
+    /** Re-reads the kit's pads and, when they changed, grows or shrinks the rows to match. Cheap when they did not. */
+    void refreshKitRows();
+    /** The kit's rows now, or null when the open clip plays no Drum Kit. */
+    const KitRows* kitRows() const noexcept { return hasKit_ ? &kitRows_ : nullptr; }
+    /** "6 of 8 drums . 2 hidden" while the kit hides any, else "8 of 8 drums"; empty without a kit. */
+    juce::String kitRowsCaption() const;
     juce::String getAccessibilityValueText() const;
 
     // ---- Groove: swing and humanise (DrumMachineGroove.cpp) ----
@@ -315,6 +329,8 @@ private:
     double beatsPerBar() const;
     int stepsPerBar() const;
     void syncLanes(bool animate);
+    bool pullKitRows();
+    void refreshShowAllButton();
     void layoutRows();
     void pushRowsToLabels();
     void requestClose();
@@ -453,6 +469,8 @@ private:
     int rulerBandHeight_ = 0;
     double scrollY_ = 0.0;
     bool showAll_ = false;
+    KitRows kitRows_;
+    bool hasKit_ = false;
 
     std::vector<LaneSlot> slots_;
     std::vector<int> rowTops_;

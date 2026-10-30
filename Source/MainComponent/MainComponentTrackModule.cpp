@@ -9,6 +9,8 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h" // findMidiNodesReachedFrom
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/DrumMachine/DrumLanes.h"
+#include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"
 
 namespace {
 
@@ -41,10 +43,22 @@ juce::AudioProcessorGraph::Node* MainComponent::trackModuleNode(synth::TrackId t
     return instrument != nullptr ? instrument : bound;
 }
 
-// A track's clips open in the drum machine when its instrument is a Drum Kit.
-bool MainComponent::isDrumKitTrack(synth::TrackId trackId) const {
+// A track's clips open in the drum machine when its instrument is a Drum Kit; `rows` gets the kit's shown pads.
+bool MainComponent::drumKitRows(synth::TrackId trackId, synth::ui::KitRows* rows) const {
     auto* node = const_cast<MainComponent*>(this)->trackModuleNode(trackId);
-    return node != nullptr && dynamic_cast<DrumKitModule*>(node->getProcessor()) != nullptr;
+    auto* kit = node != nullptr ? dynamic_cast<DrumKitModule*>(node->getProcessor()) : nullptr;
+    if (kit == nullptr)
+        return false;
+    if (rows != nullptr)
+        *rows = synth::ui::kitRowsFor(*kit);
+    return true;
+}
+
+// The drum machine's Show all: every pad of the track's kit on, as one undo step.
+void MainComponent::showAllDrumKitPads(synth::TrackId trackId) {
+    auto* node = trackModuleNode(trackId);
+    if (auto* kit = node != nullptr ? dynamic_cast<DrumKitModule*>(node->getProcessor()) : nullptr)
+        synth::ui::showAllPadsUndoably(&undoManager, &audioEngine.getGraph(), *kit);
 }
 
 // Selects and centres the module; it never opens a window (that is toggleTrackPluginWindow's job).

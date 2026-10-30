@@ -41,6 +41,7 @@ class ShortcutManager; // non-owning, may-stay-null pointer, like TimelinePanelC
 // lands on the undo stack. It is rebuilt/refreshed only when the doc notifies — there is no timer
 // here and no per-frame repaint (see CLAUDE.md's repaint discipline).
 namespace synth::ui {
+struct KitRows; // the Drum Kit rows (UI/DrumMachine/DrumLanes.h); only a reference crosses this header
 
 /**
  * @brief What a track header needs from the app to resolve and re-bind its track's "Track In" node.
@@ -103,8 +104,7 @@ struct TrackHeaderHost {
     /** Cmd+Backspace on a focused row: asks first (unless switched off), then deleteTrack. */
     virtual void deleteTrackAfterConfirm(synth::TrackId track) { deleteTrack(track); }
 
-    /** Right-click -> "Delete Track": removes the track AND its bound Track In node as one compound
-     *  undo step. */
+    /** Right-click -> "Delete Track": removes the track AND its bound Track In node as one compound undo step. */
     virtual void deleteTrack(synth::TrackId track) = 0;
 
     /** Cmd+D / right-click -> "Duplicate Track": a copy of the track directly below it with its modules, clips and
@@ -433,8 +433,11 @@ struct TrackHeaderHost {
      *  node through a wait-free FIFO. Non-pure with an inert default so test stubs keep compiling. */
     virtual void auditionTrackNote(synth::TrackId, int /*pitch*/, int /*velocity*/, bool /*noteOn*/) {}
 
-    /** True when the track's instrument is a Drum Kit: its clips open in the drum machine, not the piano roll. */
-    virtual bool isDrumKitTrack(synth::TrackId) const { return false; }
+    /** True for a Drum Kit track: its clips open in the drum machine. `rows`, when given, gets the shown pads. */
+    bool isDrumKitTrack(synth::TrackId t) const { return drumKitRows(t, nullptr); }
+    virtual bool drumKitRows(synth::TrackId, KitRows*) const { return false; } // rows: null for just the yes/no
+    /** Switches every pad of the track's Drum Kit on, as one undo step. */
+    virtual void showAllDrumKitPads(synth::TrackId) {}
 
     /** CLIP PREVIEW (the drum machine's Play clip): loops [startBeat, endBeat) of the track on its Track In while the
      *  transport is stopped; false when nothing can play it. clipPreviewBeat is NaN when none runs. Inert defaults. */
@@ -739,8 +742,7 @@ public:
      *  repaint" list. A no-op (false) for a row with no channel chip showing. */
     bool tickChannelMeter();
 
-    /** Applies a header context-menu choice (kDeleteTrackMenuId today). Same test seam as
-     *  applyBindingMenuChoice. */
+    /** Applies a header context-menu choice (kDeleteTrackMenuId today). Same test seam as applyBindingMenuChoice. */
     void applyContextMenuChoice(int menuId);
 
     /** The header context menu (Make Channel, Delete Track) as showContextMenu() builds it —

@@ -85,7 +85,16 @@ DrumMachineComponent::DrumMachineComponent()
     showAllButton_.setClickingTogglesState(true);
     showAllButton_.setTitle("Show all drums");
     showAllButton_.setTooltip("Show every General MIDI drum as a row, not only the common ones");
-    showAllButton_.onClick = [this] { setShowAllDrums(showAllButton_.getToggleState()); };
+    showAllButton_.onClick = [this] {
+        if (hasKit_) { // a kit's Show all switches its pads on; it is not a toggle
+            showAllButton_.setToggleState(false, juce::dontSendNotification);
+            if (onShowAllKitPads)
+                onShowAllKitPads();
+            refreshKitRows(); // the rows come back now, not at the next timer tick
+            return;
+        }
+        setShowAllDrums(showAllButton_.getToggleState());
+    };
     setupGroove();
     setupIdeas();
 }
@@ -231,7 +240,8 @@ void DrumMachineComponent::refreshFromDoc() {
 // Merges the rows the clip needs into the rows on screen, in table order. A row that arrives grows in and one that
 // goes shrinks out (startRowMotion); `animate` false, or no motion allowed, lands every row at once.
 void DrumMachineComponent::syncLanes(bool animate) {
-    const auto target = visibleDrumLanes(clip(), showAll_);
+    pullKitRows();
+    const auto target = visibleDrumLanes(clip(), showAll_, hasKit_ ? &kitRows_ : nullptr);
     const int focusPitch = slotIndexForRow(focus_.row) >= 0 ? slots_[(size_t)focus_.row].lane.pitch : -1;
 
     std::map<int, const LaneSlot*> old;
@@ -257,6 +267,8 @@ void DrumMachineComponent::syncLanes(bool animate) {
             slot = *old[pitch];
         else
             slot.lane = *wanted[pitch], slot.reveal = animating ? 0.0f : 1.0f;
+        if (wanted.count(pitch) > 0)
+            slot.lane = *wanted[pitch]; // a renamed pad renames its row
         slot.from = slot.reveal;
         slot.to = wanted.count(pitch) > 0 ? 1.0f : 0.0f;
         if (!animating)

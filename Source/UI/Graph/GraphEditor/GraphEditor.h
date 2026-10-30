@@ -392,9 +392,8 @@ public:
     // Repaints every card so its MIDI-mapped badges follow the Preferences switch (a card paints from a cached image).
     void repaintMidiLearnBadges();
 
-    // The Drum Kit card's "Drum machine" button: is a track playing the kit (else disabled), and a press.
-    std::function<bool(juce::AudioProcessorGraph::NodeID)> drumKitHasTrack;
-    std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenDrumMachineRequested;
+    graph_editor_types::DrumKitCardHooks
+        drumKit; // the Drum Kit card's "Drum machine" button and its hide-a-pad question
     // Hosted-plugin card hooks ("Open Editor", the add-by-moving mode), wired to HostedPluginWindowManager.
     std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenPluginEditorRequested;
     std::function<void(juce::AudioProcessorGraph::NodeID, bool)> onPluginAddingControlsChanged;
