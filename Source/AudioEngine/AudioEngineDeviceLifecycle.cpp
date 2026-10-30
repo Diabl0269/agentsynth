@@ -113,6 +113,11 @@ bool AudioEngine::savedDeviceStateEnablesInput() const {
 // initialise() from calling initialiseDevices() at all -- opening a device and then immediately
 // closing it would still have shown the prompt. Message-thread only, and must be called before
 // initialise(); flipping it afterward has no effect on an already-initialised engine.
+namespace {
+std::atomic<bool> openAllMidiInputs{true};
+}
+void AudioEngine::setOpenAllMidiInputsForTest(bool open) noexcept { openAllMidiInputs.store(open); }
+bool AudioEngine::openAllMidiInputsEnabled() noexcept { return openAllMidiInputs.load(); }
 void AudioEngine::setAudioDeviceDisabled(bool disabled) noexcept { audioDeviceDisabled_ = disabled; }
 bool AudioEngine::isAudioDeviceDisabled() const noexcept { return audioDeviceDisabled_; }
 
@@ -154,8 +159,9 @@ void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
     midiMessageCollector.reset(collectorRate > 0.0 ? collectorRate : 44100.0);
 
     // Enable all available MIDI inputs by default
-    for (auto& info : availableMidiInputs())
-        openMidiInput(info);
+    if (openAllMidiInputsEnabled())
+        for (auto& info : availableMidiInputs())
+            openMidiInput(info);
 }
 
 void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
@@ -170,6 +176,7 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
         refreshSidechainKeys();
         refreshNormalling();
         refreshMidiWiring();
+        refreshExternalMidiNodes();
         refreshAudioInputGate();
         return;
     }
@@ -223,6 +230,13 @@ void AudioEngine::shutdown() {
     }
     // The callback is gone, so no push can race the finalise: every input take's WAV and peaks are written.
     inputRecorder_.stopAll();
+    // Hosted mode keeps its inputs closed, so this only matters where a driver thread was delivering; the list holds
+    // the nodes alive, so it goes before the graph is cleared.
+    {
+        std::vector<juce::AudioProcessorGraph::Node::Ptr> released;
+        const std::lock_guard<std::mutex> lock(externalMidiNodesLock_);
+        released.swap(externalMidiNodes_);
+    }
     mainProcessorGraph.clear();
 
     // Last, after the device callback is gone and the graph is empty: nothing can call

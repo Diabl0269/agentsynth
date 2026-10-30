@@ -389,6 +389,57 @@ else
     record 1 "--list prints every site as path:line: code"
 fi
 
+# --- an async dispatch helper that ends in a fixed pump ------------------------------------------------------
+
+reset_repo
+write_file Tests/ATests.cpp <<EOF
+void clickNow(juce::Button& button) {
+    button.triggerClick();
+    $PUMP(30);
+}
+EOF
+assert_fail "a three-line helper that calls triggerClick and then pumps for a fixed time is flagged" "Tests/ATests.cpp:3:"
+
+reset_repo
+write_file Tests/ATests.cpp <<EOF
+TEST(A, B) {
+    auto press = [&](juce::Component& c) { c.keyPressed(key); $PUMP(30); };
+    press(a);
+}
+EOF
+assert_fail "a one-line lambda that calls keyPressed and then pumps for a fixed time is flagged" "Tests/ATests.cpp:2:"
+
+reset_repo
+write_file Tests/ATests.cpp <<EOF
+void run(juce::ApplicationCommandManager& m) {
+    m.invokeDirectly(id, true);
+    $PUMP(kSettleMs);
+}
+EOF
+assert_fail "invokeDirectly followed by a k-constant pump at the end of a helper is flagged" "Tests/ATests.cpp:3:"
+
+reset_repo
+write_file Tests/ATests.cpp <<EOF
+void settleAfter(juce::Button& button) {
+    button.triggerClick();
+    synth::test::flushMessageQueue();
+}
+void idle() {
+    $PUMP(30);
+}
+EOF
+assert_pass "flushMessageQueue after a click, and a pump with no dispatch before it, are not flagged"
+
+reset_repo
+write_file Tests/ATests.cpp <<EOF
+void clickNow(juce::Button& button) {
+    button.triggerClick();
+    $PUMP(30);
+}
+EOF
+printf 'Tests/ATests.cpp | %s(30); | a reason\n' "$PUMP" >"$BASELINE"
+assert_pass "a flagged dispatch helper with a baseline entry passes"
+
 # --- hook environment ----------------------------------------------------------------------------------------
 
 reset_repo

@@ -2,6 +2,7 @@
 // raw edges (left to left, right to right, or one mono source wired to both legs) that land on one visible jack with
 // the same far end. Removing the row removes every edge behind it, as one undo step.
 
+#include "../../../TestWait.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 
 #include "AppUndoManager.h"
@@ -76,7 +77,7 @@ struct PairFixture {
         ASSERT_NE(panel, nullptr);
         ASSERT_NE(panel->rowAt(0), nullptr);
         panel->rowAt(0)->removeButton().triggerClick();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+        synth::test::flushMessageQueue();
     }
 };
 

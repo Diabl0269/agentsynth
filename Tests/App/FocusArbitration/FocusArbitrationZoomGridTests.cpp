@@ -213,7 +213,8 @@ TEST_F(FocusArbitrationTest, NaturalScrollingPreferenceReachesTheTimelineAndTheR
     EXPECT_TRUE(mc.getTimelinePanel().getPianoRoll().isScrollInverted());
 
     prefs.setNaturalScrollingEnabled(true);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return !mc.getTimelinePanel().isScrollInverted(); });
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.getTimelinePanel().isScrollInverted());
     EXPECT_FALSE(mc.getTimelinePanel().getPianoRoll().isScrollInverted());
 }
@@ -252,7 +253,8 @@ TEST_F(FocusArbitrationTest, ZoomScrollPreferenceReachesTheTimelineAndTheRoll) {
     EXPECT_FALSE(mc.getTimelinePanel().isScrollInverted());
 
     prefs.setZoomScrollUpZoomsInEnabled(true);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return !mc.getTimelinePanel().isZoomScrollInverted(); });
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.getTimelinePanel().isZoomScrollInverted());
     EXPECT_FALSE(mc.getTimelinePanel().getPianoRoll().isZoomScrollInverted());
 }

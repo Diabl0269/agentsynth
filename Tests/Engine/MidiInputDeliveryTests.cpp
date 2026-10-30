@@ -10,8 +10,10 @@
 // Needs a working OS MIDI service, which a bare CI container may lack: every test skips (not
 // fails) when the virtual device cannot be created or does not enumerate.
 
+#include "../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MidiRemote/RemoteEngine/RemoteMessageSink.h"
+#include "Modules/ExternalMidiModule.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -23,10 +25,15 @@ namespace {
 
 class CountingSink : public synth::midi::RemoteMessageSink {
 public:
-    bool handleMessage(const juce::String&, const juce::MidiMessage&) noexcept override {
+    /** Counts only messages from the test's own source: an engine that opens every input also hears other processes'
+     *  virtual sources, which are visible machine-wide. */
+    bool handleMessage(const juce::String& sourceKey, const juce::MidiMessage&) noexcept override {
+        if (sourceKey != onlyFrom)
+            return false;
         ++calls;
         return true;
     }
+    juce::String onlyFrom;
     std::atomic<int> calls{0};
 };
 
@@ -54,9 +61,7 @@ std::unique_ptr<juce::MidiOutput> makeVirtualSource(const juce::String& name) {
 
 /** A per-run source name no other process can share: virtual sources are visible machine-wide, so two test
  *  processes (parallel shards, another session) creating the same name would see each other's. */
-juce::String uniqueSourceName(const juce::String& base) {
-    return base + " " + juce::Uuid().toString().substring(0, 8);
-}
+juce::String uniqueSourceName(const juce::String& base) { return base + " " + juce::Uuid().toString().substring(0, 8); }
 
 /** The OS publishes a new virtual source to the input list asynchronously, and the first CoreMIDI
  *  use in a process takes the longest. Polls (bounded) until the source is enumerable. */
@@ -85,7 +90,7 @@ juce::String identifierOf(const juce::String& name) {
 
 /** Waits (bounded) for the driver thread to deliver; the OS MIDI callback is asynchronous. */
 void settle(const std::atomic<int>& counter, int atLeast) {
-    for (int i = 0; i < 100 && counter.load() < atLeast; ++i)
+    for (int i = 0; i < 500 && counter.load() < atLeast; ++i)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     // A duplicate delivery lands right behind the first; give it room to show up.
     std::this_thread::sleep_for(std::chrono::milliseconds(150));
@@ -103,6 +108,7 @@ TEST(MidiInputDeliveryTest, OneMessageFromAnOpenedSourceIsDeliveredOnce) {
 
     AudioEngine engine(AudioEngine::HostMode::Standalone);
     CountingSink sink;
+    sink.onlyFrom = identifierOf(name);
     engine.setRemoteMessageSink(&sink);
 
     engine.openMidiDevicesForRemote({name});
@@ -133,6 +139,7 @@ TEST(MidiInputDeliveryTest, ProfileOpenFollowedByLaunchLoopOpensTheSourceOnce) {
 
     LaunchLoopEngine engine(AudioEngine::HostMode::Standalone);
     CountingSink sink;
+    sink.onlyFrom = identifierOf(name);
     engine.setRemoteMessageSink(&sink);
 
     engine.openMidiDevicesForRemote({name});
@@ -166,6 +173,7 @@ TEST(MidiInputDeliveryTest, LaunchLoopFollowedByProfileOpenOpensTheSourceOnce) {
 
     LaunchLoopEngine engine(AudioEngine::HostMode::Standalone);
     CountingSink sink;
+    sink.onlyFrom = identifierOf(name);
     engine.setRemoteMessageSink(&sink);
 
     engine.runLaunchLoop();
@@ -182,4 +190,41 @@ TEST(MidiInputDeliveryTest, LaunchLoopFollowedByProfileOpenOpensTheSourceOnce) {
     EXPECT_EQ(sink.calls.load(), 1);
     engine.setRemoteMessageSink(nullptr);
     engine.drainRemoteSinkCalls();
+}
+
+// A driver thread delivers into ExternalMidiModule nodes while the message thread adds and removes them. Delivery used
+// to walk the graph's node array itself, which that churn mutates underneath it (a null node read, a SIGSEGV).
+TEST(MidiInputDeliveryTest, DeliveryWhileExternalMidiNodesComeAndGoIsSafe) {
+    const juce::String name = uniqueSourceName("External Node Churn Test Source");
+    auto virtualSource = makeVirtualSource(name);
+    if (virtualSource == nullptr)
+        GTEST_SKIP() << "no OS MIDI service: cannot create a virtual source";
+    if (!waitUntilEnumerated(name))
+        GTEST_SKIP() << "the virtual source did not enumerate as an input";
+
+    AudioEngine engine(AudioEngine::HostMode::Standalone);
+    engine.openMidiDevicesForRemote({name});
+    if (engine.getOpenMidiInputIdentifiers().empty())
+        GTEST_SKIP() << "the virtual source did not enumerate as an input";
+
+    std::atomic<bool> sending{true};
+    std::thread sender([&] {
+        while (sending.load()) {
+            virtualSource->sendMessageNow(juce::MidiMessage::controllerEvent(1, 23, 127));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1)); // an unbounded backlog outlives the input
+        }
+    });
+
+    auto& graph = engine.getGraph();
+    for (int i = 0; i < 300; ++i) {
+        auto node = graph.addNode(std::make_unique<ExternalMidiModule>());
+        if (i % 10 == 0)
+            synth::test::flushMessageQueue();
+        graph.removeNode(node->nodeID);
+    }
+    sending = false;
+    sender.join();
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(100)); // let the OS deliver what was sent before the input closes
+    EXPECT_TRUE(synth::test::flushMessageQueue());
 }

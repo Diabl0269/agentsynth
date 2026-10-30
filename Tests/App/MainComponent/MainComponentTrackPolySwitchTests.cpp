@@ -1,5 +1,6 @@
 // Concern: the track header's Mono | Poly switch end to end on a real MainComponent -- an instrument track shows it,
 // pressing a side switches the track's whole voice chain as one undo step, and the header follows the graph both ways.
+#include "../../TestWait.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
@@ -31,7 +32,7 @@ TEST_F(TrackPolySwitchAppTest, PressingASideOnAnInstrumentTrackSwitchesItsChainA
     auto& sw = header->getPolySwitch();
     auto press = [&](juce::Button& button) {
         button.triggerClick();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+        synth::test::flushMessageQueue();
     };
 
     // The track plays through a poly-capable oscillator, so the switch is there.

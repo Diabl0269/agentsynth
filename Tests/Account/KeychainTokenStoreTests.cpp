@@ -16,9 +16,15 @@ namespace {
 // Each test gets its own item (the test's name is appended): CI runs the suite as concurrent shards
 // sharing one login keychain, and with one shared item another shard's save or clear landed between
 // a test's two saves and made "updated in place" read as "re-created".
+// One id per process: the same test runs in every concurrent suite on the machine, and they share the login keychain.
+const juce::String& processSuffix() {
+    static const juce::String suffix = juce::Uuid().toDashedString().substring(0, 8);
+    return suffix;
+}
+
 juce::String testService() {
     const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-    return juce::String(synth::branding::kBundleIdentifier) + ".refreshtoken.test." +
+    return juce::String(synth::branding::kBundleIdentifier) + ".refreshtoken.test." + processSuffix() + "." +
            (info != nullptr ? juce::String(info->name()) : juce::String("none"));
 }
 } // namespace
@@ -142,9 +148,15 @@ TEST_F(KeychainTokenStoreTest, SavingAnUnchangedTokenSucceeds) {
 namespace {
 // A per-test service name ending in ".test.<TestName>", so a run can never touch the real
 // credential and concurrent test shards never share one entry in the Credential Manager.
+// One id per process: the same test runs in every concurrent suite on the machine, and they share the login keychain.
+const juce::String& processSuffix() {
+    static const juce::String suffix = juce::Uuid().toDashedString().substring(0, 8);
+    return suffix;
+}
+
 juce::String testService() {
     const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-    return juce::String(synth::branding::kBundleIdentifier) + ".refreshtoken.test." +
+    return juce::String(synth::branding::kBundleIdentifier) + ".refreshtoken.test." + processSuffix() + "." +
            (info != nullptr ? juce::String(info->name()) : juce::String("none"));
 }
 } // namespace

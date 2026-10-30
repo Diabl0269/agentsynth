@@ -1,3 +1,4 @@
+#include "../TestWait.h"
 #include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -334,12 +335,15 @@ TEST(AIUndoWiringTest, EditorRebuildsAndRepaintsAcrossUndoAndRedo) {
     auto& editor = mc.getGraphEditor();
 
     // Let MainComponent settle any construction-time async work before the baseline snapshot.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
+    synth::test::waitUntil([&] { return editor.getModuleComponents().size() > 0; });
 
     const int baselineModules = editor.getModuleComponents().size();
 
-    auto pumpAndPaint = [&mc] {
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    // The editor rebuilds from a deferred call: wait for the module count the step promises, then paint.
+    auto pumpAndPaint = [&mc, &editor](int expectedModules) {
+        synth::test::waitUntil([&] { return editor.getModuleComponents().size() == expectedModules; });
+        synth::test::flushMessageQueue();
         juce::Image img(juce::Image::ARGB, 1600, 900, true);
         juce::Graphics g(img);
         EXPECT_NO_THROW(mc.paint(g));
@@ -347,18 +351,18 @@ TEST(AIUndoWiringTest, EditorRebuildsAndRepaintsAcrossUndoAndRedo) {
 
     // Apply: three modules (Oscillator + VCA + Audio Output).
     ASSERT_TRUE(svc.applyPatch(kReplacePatch));
-    pumpAndPaint();
+    pumpAndPaint(3);
     EXPECT_EQ(editor.getModuleComponents().size(), 3) << "editor should show the patched modules";
 
     // Undo: the editor must drop the patched components and rebuild the pre-patch ones.
     ASSERT_TRUE(appUndo.undo());
-    pumpAndPaint();
+    pumpAndPaint(baselineModules);
     EXPECT_EQ(editor.getModuleComponents().size(), baselineModules)
         << "undo must leave the editor showing the pre-patch modules, not stale ones";
 
     // Redo: back to the patched state, still rendering.
     ASSERT_TRUE(appUndo.redo());
-    pumpAndPaint();
+    pumpAndPaint(3);
     EXPECT_EQ(editor.getModuleComponents().size(), 3) << "redo must restore the patched modules";
 }
 

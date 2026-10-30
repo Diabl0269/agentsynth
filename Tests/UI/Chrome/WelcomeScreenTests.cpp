@@ -333,7 +333,8 @@ TEST_F(WelcomeScreenTest, LoadMenuFactoryPresetBranch_LeavesAnAlreadyOpenProject
     // ...and loads a factory preset the same way the Load menu's "result > 0" branch does
     // (MainComponentSetupToolbar.cpp), i.e. isNewDocument left at its default false.
     mc.loadPresetGuardedForTest(0);
-    synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Balance); });
+    // Balance already holds, so waiting for it proves nothing: run whatever the load posted, then check the law.
+    synth::test::flushMessageQueue();
 
     EXPECT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Balance);
 }

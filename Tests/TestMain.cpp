@@ -1,3 +1,4 @@
+#include "AudioEngine/AudioEngine.h"
 #include "Auth/KeychainTokenStore.h"
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
@@ -152,6 +153,10 @@ int main(int argc, char** argv) {
     // (an unsigned or re-signed Tests binary would otherwise raise the login-keychain password
     // prompt on every run).
     synth::KeychainTokenStore::useInMemoryStoreForProcess(true);
+
+    // No test engine opens the machine's MIDI inputs: virtual sources are visible machine-wide, so under parallel
+    // shards a test's engine would receive another process's messages while its own graph changes.
+    AudioEngine::setOpenAllMidiInputsForTest(false);
 
     int result = RUN_ALL_TESTS();
     for (const auto& name : MotionSeamLeakCheck::leakers()) {
