@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include <memory>
 #include <vector>
 
 namespace {
@@ -206,6 +207,8 @@ TEST(UnisonDefaults, AProjectMissingTheKeysKeepsTheOldDefaults) {
     }
 }
 
+// The modules are held on the heap: a Wavetable carries large per-block buffers, and two of them on the stack
+// overflow a Windows thread's 1 MB stack.
 TEST(UnisonDefaults, BinaryStateMissingTheKeysKeepsTheOldDefaults) {
     auto legacyState = [](juce::AudioProcessor& fresh) {
         juce::MemoryBlock state;
@@ -220,19 +223,19 @@ TEST(UnisonDefaults, BinaryStateMissingTheKeysKeepsTheOldDefaults) {
         }
         return out;
     };
-    OscillatorModule osc;
-    WavetableOscillatorModule wt;
-    for (juce::AudioProcessor* m :
-         {static_cast<juce::AudioProcessor*>(&osc), static_cast<juce::AudioProcessor*>(&wt)}) {
-        const auto state = legacyState(*m);
-        OscillatorModule viaOsc;
-        WavetableOscillatorModule viaWt;
-        juce::AudioProcessor& target = m == &osc ? static_cast<juce::AudioProcessor&>(viaOsc) : viaWt;
-        target.setStateInformation(state.getData(), (int)state.getSize());
-        EXPECT_NEAR(unisonDefaultsActual(target, "detune"), 0.0f, 1e-3f) << m->getName();
-        EXPECT_NEAR(unisonDefaultsActual(target, "blend"), 1.0f, 1e-4f) << m->getName();
-        EXPECT_NEAR(unisonDefaultsActual(target, "width"), 0.0f, 1e-4f) << m->getName();
-        EXPECT_NEAR(unisonDefaultsActual(target, "randomPhase"), 0.0f, 1e-4f) << m->getName();
+    for (const bool wavetable : {false, true}) {
+        auto makeModule = [wavetable]() -> std::unique_ptr<juce::AudioProcessor> {
+            if (wavetable)
+                return std::make_unique<WavetableOscillatorModule>();
+            return std::make_unique<OscillatorModule>();
+        };
+        const auto state = legacyState(*makeModule());
+        const auto target = makeModule();
+        target->setStateInformation(state.getData(), (int)state.getSize());
+        EXPECT_NEAR(unisonDefaultsActual(*target, "detune"), 0.0f, 1e-3f) << wavetable;
+        EXPECT_NEAR(unisonDefaultsActual(*target, "blend"), 1.0f, 1e-4f) << wavetable;
+        EXPECT_NEAR(unisonDefaultsActual(*target, "width"), 0.0f, 1e-4f) << wavetable;
+        EXPECT_NEAR(unisonDefaultsActual(*target, "randomPhase"), 0.0f, 1e-4f) << wavetable;
     }
 }
 
