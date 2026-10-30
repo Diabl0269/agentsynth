@@ -41,9 +41,17 @@ check "each shard has its own executable name" test "$(cut -d' ' -f4 "$TMP/seen"
 fake "$TMP/red" "[ \"\$GTEST_SHARD_INDEX\" = 1 ] && { echo '[  FAILED  ] Suite.Name'; exit 1; }
 echo '[==========] 1 test from 1 test suite ran.'"
 out="$(CI_LOCAL_TEST_SHARDS=3 test_shards_run "$TMP/repo" "$TMP/work" "$TMP/red" 2>&1)"
-check "a red shard fails the run" test $? -ne 0
+check "a shard red twice fails the run" test $? -ne 0
 check "the failing test is printed" grep -q 'FAILED  \] Suite.Name' <<<"$out"
 check "a red run keeps its logs" test -f "$TMP/work/shard-1/log"
+
+fake "$TMP/flaky" "if [ \"\$GTEST_SHARD_INDEX\" = 1 ] && [ ! -e \"$TMP/flaked\" ]; then touch \"$TMP/flaked\"; echo '[  FAILED  ] Suite.Flaky'; exit 1; fi
+echo '[==========] 1 test from 1 test suite ran.'"
+out="$(CI_LOCAL_TEST_SHARDS=3 test_shards_run "$TMP/repo" "$TMP/work" "$TMP/flaky" 2>&1)"
+check "a shard green the second time passes the run" test $? -eq 0
+check "the flaky test is named" grep -q 'FAILED  \] Suite.Flaky' <<<"$out"
+check "the flaky shard is called out" grep -q 'FLAKY shard 1 passed' <<<"$out"
+check "the second run's tests are counted once" grep -q '3 tests ran' <<<"$out"
 
 fake "$TMP/silent" "exit 0"
 CI_LOCAL_TEST_SHARDS=2 test_shards_run "$TMP/repo" "$TMP/work" "$TMP/silent" >/dev/null 2>&1

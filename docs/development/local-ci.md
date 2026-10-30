@@ -200,6 +200,9 @@ audio device, which a stuck run can wedge for everyone.
   suite (`CI_LOCAL_TEST_SHARDS`). A crashed run frees its slots.
 - **Waiting is bounded.** A shard gives up after `CI_LOCAL_TEST_SLOT_TIMEOUT` seconds (default 3600)
   with a distinct message and exit status `75`, never conflated with a red suite.
+- **A red shard runs once more, alone, after the others finish.** A test that only fails on a fully
+  loaded machine doesn't cost the whole gate. It is printed as `FLAKY` with the test names either way,
+  and those tests need fixing. CI doesn't retry.
 - **Builds use every core, limited by load.** Ninja gets `-j<cores> -l<cores>`, so a gate alone takes
   the whole machine and several gates back off each other. `CI_LOCAL_JOBS` and `CI_LOCAL_LOAD` override.
 

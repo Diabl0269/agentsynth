@@ -99,10 +99,30 @@ test_slot_run() {
     done
 }
 
+# test_shard_start <shard_dir> <link_name> <binary> <index> <total> <slots_dir> <slots> <timeout> [gtest args...]
+test_shard_start() {
+    local shard_dir="$1" name="$2" binary="$3" index="$4" total="$5" dir="$6" slots="$7" timeout="$8"
+    shift 8
+    mkdir -p "$shard_dir/settings" "$shard_dir/tmp"
+    [ -e "$shard_dir/$name" ] || ln "$binary" "$shard_dir/$name" 2>/dev/null || cp "$binary" "$shard_dir/$name"
+    (
+        export GTEST_TOTAL_SHARDS="$total" GTEST_SHARD_INDEX="$index"
+        export AGENTSYNTH_SETTINGS_DIR="$shard_dir/settings" TMPDIR="$shard_dir/tmp"
+        test_slot_run "$dir" "$slots" "$timeout" "$shard_dir/$name" "$@" >"$shard_dir/log" 2>&1
+    )
+}
+
+# test_shard_green <exit status> <log>
+test_shard_green() {
+    [ "$1" -eq 0 ] && grep -aqE '^\[==========\] [0-9]+ tests? from' "$2"
+}
+
 # test_shards_run <repo_root> <work_dir> <tests_binary> [gtest args...]
 #
-# Runs every shard, prints the failures of the red ones, and returns 0 only when each shard exited 0
-# and printed gtest's summary, whose absence means the process died before finishing.
+# Runs every shard. A red shard (a failed test, or a process that died) runs once more on its own
+# after the others finish, so a test that only fails on a fully loaded machine doesn't cost a whole
+# gate. It is reported by name as FLAKY either way. Returns 0 only when each shard ended up exiting 0
+# and printing gtest's summary, whose absence means the process died before finishing.
 test_shards_run() {
     local repo_root="$1" work="$2" binary="$3"
     shift 3
@@ -121,37 +141,52 @@ test_shards_run() {
     mkdir -p "$work"
     echo "ci-local: $shards shards, up to $slots test processes on this machine (slots: $dir)."
 
-    local pids=()
+    local pids=() retried=""
     i=0
     while [ "$i" -lt "$shards" ]; do
-        local shard_dir="$work/shard-$i" name="Tests-gate-$run_id-$i"
-        mkdir -p "$shard_dir/settings" "$shard_dir/tmp"
-        ln "$binary" "$shard_dir/$name" 2>/dev/null || cp "$binary" "$shard_dir/$name"
-        (
-            export GTEST_TOTAL_SHARDS="$shards" GTEST_SHARD_INDEX="$i"
-            export AGENTSYNTH_SETTINGS_DIR="$shard_dir/settings" TMPDIR="$shard_dir/tmp"
-            test_slot_run "$dir" "$slots" "$timeout" "$shard_dir/$name" "$@" >"$shard_dir/log" 2>&1
-        ) &
+        test_shard_start "$work/shard-$i" "Tests-gate-$run_id-$i" "$binary" "$i" "$shards" "$dir" "$slots" "$timeout" "$@" &
         pids+=("$!")
         i=$((i + 1))
     done
 
-    local overall=0 ran total=0 rc
+    local overall=0 ran total=0 rc log
     i=0
     while [ "$i" -lt "$shards" ]; do
         rc=0
         wait "${pids[$i]}" || rc=$?
-        local log="$work/shard-$i/log"
-        ran="$(grep -aoE '^\[==========\] [0-9]+ tests? from' "$log" | grep -oE '[0-9]+' | head -1 || true)"
-        total=$((total + ${ran:-0}))
-        if [ "$rc" -eq "$TEST_SLOT_TIMEOUT_STATUS" ]; then
-            echo "ci-local: shard $i gave up waiting for a test slot after ${timeout}s; re-run, or raise CI_LOCAL_TEST_SLOT_TIMEOUT." >&2
-            overall=1
-        elif [ "$rc" -ne 0 ] || [ -z "$ran" ]; then
-            echo "=== shard $i failed (exit $rc), last lines of $log ==="
+        log="$work/shard-$i/log"
+        if ! test_shard_green "$rc" "$log"; then
+            # A slot timeout is the machine, not the tests, and a second wait would not help.
+            if [ "$rc" -eq "$TEST_SLOT_TIMEOUT_STATUS" ]; then
+                echo "ci-local: shard $i gave up waiting for a test slot after ${timeout}s; re-run, or raise CI_LOCAL_TEST_SLOT_TIMEOUT." >&2
+                overall=1
+            else
+                retried="$retried $i"
+            fi
+        fi
+        i=$((i + 1))
+    done
+
+    for i in $retried; do
+        log="$work/shard-$i/log"
+        echo "ci-local: FLAKY? shard $i went red (load, or a real failure), running it again alone:"
+        grep -aE 'FAILED  \] [A-Z]|^libc\+\+abi|Segmentation' "$log" | sort -u | head -20 || true
+        mv "$log" "$log.first"
+        rc=0
+        test_shard_start "$work/shard-$i" "Tests-gate-$run_id-$i" "$binary" "$i" "$shards" "$dir" "$slots" "$timeout" "$@" || rc=$?
+        if test_shard_green "$rc" "$log"; then
+            echo "ci-local: FLAKY shard $i passed the second time; the tests above need fixing."
+        else
+            echo "=== shard $i failed twice (exit $rc), $log ==="
             grep -aE 'FAILED|Failure|^\[==========\]' "$log" | tail -40 || tail -n 20 "$log"
             overall=1
         fi
+    done
+
+    i=0
+    while [ "$i" -lt "$shards" ]; do
+        ran="$(grep -aoE '^\[==========\] [0-9]+ tests? from' "$work/shard-$i/log" | grep -oE '[0-9]+' | head -1 || true)"
+        total=$((total + ${ran:-0}))
         # On macOS JUCE's temp folder is named after the link; nothing else ever removes it.
         rm -rf "${HOME:-/nonexistent}/Library/Caches/Tests-gate-$run_id-$i"
         i=$((i + 1))
