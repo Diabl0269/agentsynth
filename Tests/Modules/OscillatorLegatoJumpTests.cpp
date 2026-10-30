@@ -54,6 +54,7 @@ std::vector<Hit> touchingNotes(int lead, int passes, int gap = 0) {
 
 std::vector<float> render(const std::vector<Hit>& hits, int total, const Settings& cfg) {
     OscillatorModule osc;
+    setActual(osc, "randomPhase", 0.0f); // passes are compared sample for sample
     setActual(osc, "glide", cfg.glideMs);
     setActual(osc, "legato", cfg.legato ? 1.0f : 0.0f);
     osc.prepareToPlay(kSampleRate, cfg.block);

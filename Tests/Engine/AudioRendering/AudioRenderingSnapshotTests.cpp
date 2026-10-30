@@ -12,7 +12,8 @@
 
 TEST_F(AudioRenderingTest, SnapshotOscillatorSine) {
     OscillatorModule osc;
-    setChoiceParam(&osc, "waveform", 0); // Sine
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference files start every note at phase 0
+    setChoiceParam(&osc, "waveform", 0);      // Sine
     prepareModule(osc);
 
     auto midi = TestAudioHelpers::createNoteOnMidi(60, 1.0f);
@@ -32,7 +33,8 @@ TEST_F(AudioRenderingTest, SnapshotOscillatorSine) {
 
 TEST_F(AudioRenderingTest, SnapshotOscillatorSaw) {
     OscillatorModule osc;
-    setChoiceParam(&osc, "waveform", 2); // Saw
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference files start every note at phase 0
+    setChoiceParam(&osc, "waveform", 2);      // Saw
     prepareModule(osc);
 
     auto midi = TestAudioHelpers::createNoteOnMidi(60, 1.0f);
@@ -52,10 +54,10 @@ TEST_F(AudioRenderingTest, SnapshotOscillatorSaw) {
 
 TEST_F(AudioRenderingTest, SnapshotFilterLowPass) {
     OscillatorModule osc;
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference files start every note at phase 0
     FilterModule filter;
     setChoiceParam(&osc, "waveform", 2); // Saw
     setParamValue(&filter, "cutoff", 500.0f);
-    setParamValue(&osc, "randomPhase", 0.0f); // the reference file starts every note at phase 0
     prepareModule(osc);
     prepareModule(filter);
 
@@ -76,12 +78,12 @@ TEST_F(AudioRenderingTest, SnapshotFilterLowPass) {
 
 TEST_F(AudioRenderingTest, SnapshotOscFilterVCAChain) {
     OscillatorModule osc;
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference files start every note at phase 0
     FilterModule filter;
     VCAModule vca;
     ADSRModule adsr;
 
-    setChoiceParam(&osc, "waveform", 2);      // Saw
-    setParamValue(&osc, "randomPhase", 0.0f); // the reference file starts every note at phase 0
+    setChoiceParam(&osc, "waveform", 2); // Saw
     setParamValue(&filter, "cutoff", 1000.0f);
     setParamValue(&adsr, "attack", 0.01f);
     setParamValue(&adsr, "sustain", 0.8f);
@@ -154,6 +156,7 @@ TEST_F(AudioRenderingTest, SnapshotOscFilterVCAChain) {
 // ===========================================================================
 TEST_F(AudioRenderingTest, SnapshotLFOToFilterCutoff) {
     OscillatorModule osc;
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference files start every note at phase 0
     FilterModule filter;
     LFOModule lfo;
 
@@ -219,6 +222,7 @@ TEST_F(AudioRenderingTest, SnapshotLFOToFilterCutoff) {
 // ===========================================================================
 TEST_F(AudioRenderingTest, SnapshotADSRToVCAEnvelope) {
     OscillatorModule osc;
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference files start every note at phase 0
     VCAModule vca;
     ADSRModule adsr;
 
@@ -298,6 +302,7 @@ TEST_F(AudioRenderingTest, SnapshotADSRToVCAEnvelope) {
 // ===========================================================================
 TEST_F(AudioRenderingTest, SnapshotLFOToOscPitch) {
     OscillatorModule osc;
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference files start every note at phase 0
     LFOModule lfo;
 
     setChoiceParam(&osc, "waveform", 0); // Sine
@@ -357,6 +362,7 @@ TEST_F(AudioRenderingTest, SnapshotLFOToOscPitch) {
 // ===========================================================================
 TEST_F(AudioRenderingTest, SnapshotFullPatchWithModulation) {
     OscillatorModule osc;
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference files start every note at phase 0
     FilterModule filter;
     VCAModule vca;
     ADSRModule adsr;
@@ -446,6 +452,7 @@ TEST_F(AudioRenderingTest, SnapshotFullPatchWithModulation) {
 TEST_F(AudioRenderingTest, SnapshotExternalMidiToOscillator) {
     ExternalMidiModule midiModule;
     OscillatorModule osc;
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference files start every note at phase 0
 
     setChoiceParam(&osc, "waveform", 0); // Sine
     prepareModule(midiModule);

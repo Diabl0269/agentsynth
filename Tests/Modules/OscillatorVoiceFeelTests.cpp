@@ -1,5 +1,5 @@
 // Oscillator voice feel: Phase and Rand restart every unison voice on a note, and Blend and Width
-// shape the unison stack. A new Oscillator starts at Phase 0, Rand 0, Detune 35 cents, Blend 75 %, Width 100 %.
+// shape the unison stack. A new Oscillator starts at Phase 0, Rand 100 %, Detune 35 cents, Blend 75 %, Width 100 %.
 
 #include "../Engine/AudioRendering/ClickDetector.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -55,6 +55,7 @@ struct Rig {
     explicit Rig(bool polyMode = false)
         : poly(polyMode) {
         osc.prepareToPlay(kSampleRate, kBlock);
+        setActual(osc, "randomPhase", 0.0f); // exact start phases; a test that wants Rand sets it
         if (polyMode)
             setActual(osc, "poly", 1.0f);
     }
@@ -104,7 +105,7 @@ double energy(const std::vector<float>& x, size_t from, size_t to) {
 TEST(OscillatorVoiceFeel, NewParametersExistWithTheirDefaults) {
     OscillatorModule osc;
     EXPECT_NEAR(actualOf(osc, "phase"), 0.0f, 1e-4f);
-    EXPECT_NEAR(actualOf(osc, "randomPhase"), 0.0f, 1e-4f);
+    EXPECT_NEAR(actualOf(osc, "randomPhase"), 100.0f, 1e-4f) << "a new Oscillator starts every voice at a random phase";
     EXPECT_NEAR(actualOf(osc, "blend"), 0.75f, 1e-4f) << "a new Oscillator starts at Blend 75 %";
     EXPECT_NEAR(actualOf(osc, "width"), 1.0f, 1e-4f);
     EXPECT_NEAR(param(osc, "phase")->convertFrom0to1(1.0f), 360.0f, 1e-3f);
@@ -493,7 +494,7 @@ TEST(OscillatorVoiceFeel, AnAutomatedBlendAndWidthGlideInsteadOfStepping) {
     EXPECT_LT(worst, 0.2f);
 }
 
-// A constant-power stack can peak at sqrt(N) when its voices start in phase (the default Rand 0 does exactly
+// A constant-power stack can peak at sqrt(N) when its voices start in phase (Rand 0 does exactly
 // that); the headroom for it is handled downstream, so the source only has to stay within sqrt(N). Its loudness
 // is checked with decorrelated start phases, where uncorrelated voices must keep the level of one.
 TEST(OscillatorVoiceFeel, SourcePeakStaysUnderRootNAcrossBlendAndWidth) {
