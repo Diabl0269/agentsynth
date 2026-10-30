@@ -2,7 +2,6 @@
 
 #include "Music/MusicalScale.h"
 #include "UI/Layout/KeyField.h"
-#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <memory>
@@ -11,7 +10,8 @@
 
 namespace synth::ui {
 
-class KeyPicker; // Source/UI/Layout/KeyPicker/KeyPicker.h
+class KeyAuditioner; // Source/UI/Layout/KeyPicker/KeyAuditioner.h
+class KeyPicker;     // Source/UI/Layout/KeyPicker/KeyPicker.h
 
 /** The Key field of something that follows the song key or has its own: reads "Song key · D Dorian" in the muted
  *  colour while following and "A Phrygian · own" otherwise, and opens the key picker with a Follow song key row on
@@ -40,7 +40,7 @@ public:
 
     /** Plays the scale of a hovered key; its owner sets where (`resolveTarget`), what the default sound is and where
      *  the on/off setting is read. */
-    KeyAuditioner& getAuditioner() noexcept { return auditioner_; }
+    KeyAuditioner& getAuditioner() noexcept { return *auditioner_; }
 
     /** Opens the key picker (the field's click, Space, Return or Down). */
     void openPicker();
@@ -66,7 +66,7 @@ private:
     std::optional<MusicalScale> songKey_;
     std::optional<MusicalScale> ownKey_;
     std::vector<UserScale> userScales_;
-    KeyAuditioner auditioner_;
+    std::unique_ptr<KeyAuditioner> auditioner_;
     juce::Component::SafePointer<juce::Component> openPicker_;
 
     float glow_ = 0.0f;

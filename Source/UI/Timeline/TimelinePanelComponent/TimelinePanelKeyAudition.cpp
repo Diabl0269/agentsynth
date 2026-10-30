@@ -2,6 +2,7 @@
 // roll's Scale assist Key. Both play the scale of a hovered key (KeyAuditioner); this unit says where.
 #include "Timeline/SongKeyNotes.h"
 #include "TimelinePanelComponent.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 
 namespace synth::ui {
 

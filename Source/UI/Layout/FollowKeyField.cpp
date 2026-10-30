@@ -1,5 +1,6 @@
 #include "UI/Layout/FollowKeyField.h"
 #include "Music/SongKey.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -20,7 +21,8 @@ juce::String keyText(const std::optional<MusicalScale>& key, const char* none) {
 
 } // namespace
 
-FollowKeyField::FollowKeyField() {
+FollowKeyField::FollowKeyField()
+    : auditioner_(std::make_unique<KeyAuditioner>()) {
     setTitle("Key");
     onOpen = [this] { openPicker(); };
     refreshLook();
@@ -104,7 +106,7 @@ void FollowKeyField::openPicker() {
         if (self != nullptr && self->onFollow)
             self->onFollow();
     };
-    auditioner_.wire(*picker);
+    auditioner_->wire(*picker);
     openPicker_ = picker.get();
     const auto area = getScreenBounds();
     if (pickerLauncher)

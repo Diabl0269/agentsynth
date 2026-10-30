@@ -63,7 +63,7 @@
 769 Source/Mixer/PeakMeterLatch.h
 762 Source/SoundBrowser/SoundPreviewPlayer.h
 760 Source/Modules/Shapes/ShapeLibrary.h
-752 Source/UI/Layout/NavigationSearchField.h
+658 Source/UI/Layout/NavigationSearchField.h
 750 Source/UI/Layout/KeyGlide/KeyGlide.h
 749 Source/UI/Layout/KeyGlide/KeyGlideHost.h
 749 Source/UI/Layout/KeyGlide/RestoreWatch.h
@@ -248,7 +248,6 @@
 382 Source/UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h
 382 Source/UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.h
 382 Source/UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.h
-381 Source/UI/Layout/KeyPicker/KeyPicker.h
 381 Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlChip.h
 381 Source/UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControlMoreRow.h
 381 Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h

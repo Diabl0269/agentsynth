@@ -1,17 +1,32 @@
 #include "UI/Timeline/SongKeyField.h"
 #include "Music/SongKey.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include <algorithm>
 
 namespace synth::ui {
 
-SongKeyField::SongKeyField() {
+SongKeyField::SongKeyField()
+    : auditioner_(std::make_unique<KeyAuditioner>()) {
     setComponentID("timelineTransportSongKey");
     setTitle("Song key");
     setTooltip("Song key: what sequencers, the piano roll and new clips follow. Click to change.");
     onOpen = [this] { openPicker(); };
-    auditioner_.resolveTarget = [this] { return resolveAuditionTarget(); };
+    // Asked once per run: the previewed instrument track while it is still in the project, else the default sound.
+    auditioner_->resolveTarget = [this]() -> KeyAuditioner::Target {
+        if (!previewTrack_.has_value() || !auditionNote || !previewTracks)
+            return {};
+        const auto track = *previewTrack_;
+        const auto tracks = previewTracks();
+        const bool listed = std::any_of(tracks.begin(), tracks.end(), [track](const auto& t) { return t.id == track; });
+        if (!listed)
+            return {};
+        return {[this, track](int pitch, int velocity, bool on) {
+            if (auditionNote)
+                auditionNote(track, pitch, velocity, on);
+        }};
+    };
 }
 
 SongKeyField::~SongKeyField() {
@@ -64,7 +79,7 @@ void SongKeyField::openPicker() {
             return detectKey(self->pitchClassWeights());
         };
     }
-    auditioner_.wire(*picker);
+    auditioner_->wire(*picker);
     picker->onPreviewSoundChanged = [self, tracks = std::move(tracks)](int choice) {
         if (self != nullptr)
             self->setPreviewTrack(choice >= 1 && (size_t)choice <= tracks.size()
@@ -91,18 +106,14 @@ void SongKeyField::pick(const std::optional<MusicalScale>& key) {
 
 // The chosen track is used only while the project still lists it; otherwise (or with no choice) the run plays the
 // default sound, even when a track is selected. The target is built once per run by the auditioner.
-KeyAuditioner::Target SongKeyField::resolveAuditionTarget() const {
-    if (!previewTrack_.has_value() || !auditionNote || !previewTracks)
-        return {};
-    const auto track = *previewTrack_;
-    const auto tracks = previewTracks();
-    const bool listed = std::any_of(tracks.begin(), tracks.end(), [track](const auto& t) { return t.id == track; });
-    if (!listed)
-        return {};
-    return {[this, track](int pitch, int velocity, bool on) {
-        if (auditionNote)
-            auditionNote(track, pitch, velocity, on);
-    }};
+void SongKeyField::setApplicationProperties(juce::ApplicationProperties* props) {
+    appProperties_ = props;
+    auditioner_->setSettings(props != nullptr ? props->getUserSettings() : nullptr);
 }
+
+void SongKeyField::startAudition(const MusicalScale& scale) { auditioner_->start(scale); }
+void SongKeyField::stopAudition() { auditioner_->stop(); }
+bool SongKeyField::isAuditioning() const noexcept { return auditioner_->isAuditioning(); }
+void SongKeyField::advanceAuditionForTest() { auditioner_->advanceForTest(); }
 
 } // namespace synth::ui

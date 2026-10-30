@@ -8,6 +8,7 @@
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/ModuleViews/SequencerKey/SequencerKeyField.h"
 #include "UI/ModuleViews/StepGrid/StepGridComponent.h"
 

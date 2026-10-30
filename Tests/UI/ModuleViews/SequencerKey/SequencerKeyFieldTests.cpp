@@ -2,9 +2,14 @@
 // the follow-or-own field (no Scale or follow widget of its own), it reads the song key from the app's transport on
 // the card's tick, a pick is one undo step that writes Key, Scale and the switch, a song key change moves and glows
 // only the followers, the grid plays in the resolved key, and the Randomize range starts at the key's root.
+#include "../../../TestWait.h"
+#include "../../Layout/KeyAuditionRenderRig.h"
 #include "../StepGrid/StepGridCardFixture.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "Modules/Sequencer/SequencerModuleBase.h"
 #include "Music/SongKey.h"
 #include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/SequencerKey/SequencerKeyField.h"
@@ -170,4 +175,91 @@ TEST(SequencerKeyField, TheRandomizeRangeStartsAtTheKeysRoot) {
     ASSERT_NE(panel, nullptr);
     EXPECT_EQ(panel->getRangePicker().getLow(), 50) << "D2 in the grid's numbering";
     EXPECT_EQ(panel->getRangePicker().getHigh(), 74) << "D4";
+}
+
+TEST(SequencerKeyField, ItsKeyFieldIsHeardThroughTheMalletItIsCabledTo) {
+    cardbody_test::CardCanvas canvas;
+    auto& graph = canvas.engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, synth::test::kFakeDeviceSampleRate, keyaudition_test::kBlock);
+    const auto seqId = canvas.add(synth::AIStateMapper::createModule("Sequencer"), 40, 40);
+    const auto malletId = canvas.add(synth::AIStateMapper::createModule("Mallet"), 400, 40);
+    const auto out = graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
+        juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode));
+    ASSERT_TRUE(graph.addConnection({{seqId, juce::AudioProcessorGraph::midiChannelIndex},
+                                     {malletId, juce::AudioProcessorGraph::midiChannelIndex}}));
+    ASSERT_TRUE(graph.addConnection({{malletId, 0}, {out->nodeID, 0}}));
+    canvas.engine.refreshNormalling();
+    canvas.editor.updateComponents();
+    auto* card = canvas.card(seqId);
+    ASSERT_NE(card, nullptr);
+    auto* key = card->getCardBody() != nullptr
+                    ? dynamic_cast<synth::ui::SequencerKeyField*>(card->getCardBody()->findWidget("scaleRoot"))
+                    : nullptr;
+    ASSERT_NE(key, nullptr);
+    card->timerCallback(); // the card's tick wires the field's auditioner (wireSequencerKeyAudition)
+
+    keyaudition_test::Render render(canvas.engine);
+    EXPECT_LT(render.peak(20), keyaudition_test::kQuiet) << "silent before anything is hovered";
+
+    key->getAuditioner().start(keyaudition_test::kMajor);
+    ASSERT_TRUE(key->getAuditioner().isAuditioning());
+    EXPECT_FALSE(key->getAuditioner().isUsingDefaultSound()) << "the cabled Mallet is the target, not the fallback";
+    const float heard = render.peak(30);
+    RecordProperty("sequencer_route_peak", std::to_string(heard));
+    EXPECT_GT(heard, 0.001f) << "the note reaches the output through the Mallet";
+
+    key->getAuditioner().stop();
+    const int quietAfter = render.blocksUntilQuiet(keyaudition_test::kQuiet, 1500);
+    EXPECT_GE(quietAfter, 0) << "the Mallet's ring dies away after the note-off";
+    EXPECT_LT(render.peak(20), keyaudition_test::kQuiet) << "and stays silent";
+}
+
+// Hovering a key in a sequencer card's picker plays the scale (the default sound when nothing is cabled), and the
+// "Play the scale when browsing keys" setting silences it. The other owners are in KeyAuditionOwnersTests.
+TEST(SequencerKeyField, HoveringAKeyInItsPickerPlaysTheScaleUnlessTheSettingIsOff) {
+    SeqCard seq;
+    seq.card->timerCallback(); // wires the card's Key field
+    auto* field = keyFieldOf(seq);
+    ASSERT_NE(field, nullptr);
+    std::unique_ptr<juce::Component> held;
+    field->pickerLauncher = [&held](std::unique_ptr<juce::Component> picker, juce::Rectangle<int>) {
+        held = std::move(picker);
+    };
+    int runs = 0;
+    field->getAuditioner().playDefaultSound = [&runs](const std::vector<int>&) { ++runs; };
+
+    const auto hover = [&](int expectFired) {
+        field->openPicker();
+        auto* picker = dynamic_cast<KeyPicker*>(held.get());
+        EXPECT_NE(picker, nullptr);
+        if (picker == nullptr)
+            return;
+        int fired = 0;
+        const auto original = picker->onAudition;
+        picker->onAudition = [&fired, original](std::optional<synth::MusicalScale> scale) {
+            ++fired;
+            if (original)
+                original(scale);
+        };
+        picker->hoverVisibleKey(1);
+        synth::test::waitUntil([&] { return fired >= expectFired; }, 2000);
+        held.reset();
+    };
+
+    hover(1);
+    EXPECT_EQ(runs, 1);
+
+    juce::ApplicationProperties app;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "SequencerKeyFieldAuditionTest";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    app.setStorageParameters(options);
+    auto& props = *app.getUserSettings();
+    props.clear();
+    props.setValue(synth::kPlayScaleOnBrowseSettingsKey, "0");
+    field->getAuditioner().setSettings(&props);
+    hover(1);
+    EXPECT_EQ(runs, 1) << "the setting is off: the picker's hover raises the audition but nothing plays";
+    EXPECT_FALSE(field->getAuditioner().isAuditioning());
 }

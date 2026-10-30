@@ -1,11 +1,11 @@
 // Concern: every owner of a key picker wires the hover audition and obeys the setting. A key picker owner added
-// without the wiring shows up here as a row of the table that never auditions.
+// without the wiring shows up here as a row of the table that never auditions. The sequencer card is in
+// SequencerKeyFieldTests.cpp: its card fixture would pull the whole card body into this file.
 #include "../../TestWait.h"
-#include "../ModuleViews/StepGrid/StepGridCardFixture.h"
 #include "Music/SongKey.h"
 #include "UI/Layout/FollowKeyField.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
-#include "UI/ModuleViews/SequencerKey/SequencerKeyField.h"
 #include "UI/PianoRoll/ScaleAssistPanel.h"
 #include "UI/Timeline/SongKeyField.h"
 #include <gtest/gtest.h>
@@ -31,8 +31,6 @@ struct Table {
     synth::ui::SongKeyField songField;
     synth::ui::FollowKeyField followField;
     synth::ui::ScaleAssistPanel panel;
-    stepgrid_test::SeqCard seq;
-    synth::ui::SequencerKeyField* seqField = nullptr;
 
     Table() {
         const auto launcher = [this](std::unique_ptr<juce::Component> picker, juce::Rectangle<int>) {
@@ -41,16 +39,12 @@ struct Table {
         songField.pickerLauncher = launcher;
         followField.pickerLauncher = launcher;
         panel.pickerLauncher = launcher;
-        seq.card->timerCallback(); // wires the card's Key field
-        seqField = dynamic_cast<synth::ui::SequencerKeyField*>(seq.card->getCardBody()->findWidget("scaleRoot"));
-        seqField->pickerLauncher = launcher;
 
         owners = {{"SongKeyField", &songField.getAuditioner(), [this] { songField.openPicker(); }},
                   {"FollowKeyField", &followField.getAuditioner(), [this] { followField.openPicker(); }},
-                  {"ScaleAssistPanel", &panel.getAuditioner(), [this] { panel.openKeyPicker(); }},
-                  {"SequencerKeyField", &seqField->getAuditioner(), [this] { seqField->openPicker(); }}};
+                  {"ScaleAssistPanel", &panel.getAuditioner(), [this] { panel.openKeyPicker(); }}};
         for (auto& owner : owners) {
-            // The sequencer card, with nothing cabled, and the others with no resolver all take the default sound.
+            // With no resolver, every owner takes the default sound.
             owner.auditioner->playDefaultSound = [this](const std::vector<int>&) { ++runs; };
         }
     }

@@ -19,6 +19,8 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/KeyPicker/KeyPickerPalette.h
     Source/UI/Layout/KeyPicker/KeyPickerParts.cpp
     Source/UI/Layout/KeyPicker/KeyPickerParts.h
+    Source/UI/PianoRoll/ScaleAssistPanel.cpp
+    Source/UI/PianoRoll/ScaleAssistPanel.h
     Source/UI/Timeline/SongKeyField.cpp
     Source/UI/Timeline/SongKeyField.h
 )

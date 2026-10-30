@@ -11,6 +11,7 @@
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TrackColourPicker.h"

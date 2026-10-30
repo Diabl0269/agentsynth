@@ -2,6 +2,7 @@
 // audition's note-ons and note-offs.
 #include "Music/SongKey.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include "UI/Timeline/SongKeyField.h"
 #include <gtest/gtest.h>

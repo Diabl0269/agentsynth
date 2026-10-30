@@ -3,7 +3,6 @@
 #include "Music/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/KeyField.h"
-#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include <array>
 #include <functional>
 #include <memory>
@@ -15,7 +14,8 @@ class TransportService; // Source/Transport/TransportService.h
 
 namespace synth::ui {
 
-class KeyPicker; // Source/UI/Layout/KeyPicker/KeyPicker.h
+class KeyAuditioner; // Source/UI/Layout/KeyPicker/KeyAuditioner.h
+class KeyPicker;     // Source/UI/Layout/KeyPicker/KeyPicker.h
 
 /** The transport bar's Key field: shows the song key, opens the key picker, and sets the song key on the transport
  *  (one undo step, through the transport poll). Hovering a key in the picker plays its scale once up the octave,
@@ -29,10 +29,7 @@ public:
     /** Non-owning; null makes the field show No key and picks do nothing. */
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
     /** Where the user's own scales are read from; optional. */
-    void setApplicationProperties(juce::ApplicationProperties* props) noexcept {
-        appProperties_ = props;
-        auditioner_.setSettings(props != nullptr ? props->getUserSettings() : nullptr);
-    }
+    void setApplicationProperties(juce::ApplicationProperties* props);
 
     /** Message thread: re-reads the song key from the transport (the bar's 10 Hz poll). */
     void refreshFromTransport();
@@ -57,31 +54,27 @@ public:
     KeyPicker* getOpenPicker() const noexcept;
 
     /** Starts (or restarts) playing `scale` once up the octave; ends any audition already sounding. */
-    void startAudition(const MusicalScale& scale) { auditioner_.start(scale); }
+    void startAudition(const MusicalScale& scale);
     /** Ends the audition, sending the note-off it still owes. */
-    void stopAudition() { auditioner_.stop(); }
-    bool isAuditioning() const noexcept { return auditioner_.isAuditioning(); }
+    void stopAudition();
+    bool isAuditioning() const noexcept;
     /** The default sound's player is `getAuditioner().playDefaultSound`; the app sets it. */
-    KeyAuditioner& getAuditioner() noexcept { return auditioner_; }
+    KeyAuditioner& getAuditioner() noexcept { return *auditioner_; }
     /** The instrument track the next audition plays through; nullopt = the default sound. Held for the session, never
      *  saved; a track that is gone by the next audition falls back to the default sound. */
     void setPreviewTrack(std::optional<synth::TrackId> track) { previewTrack_ = track; }
     std::optional<synth::TrackId> getPreviewTrack() const noexcept { return previewTrack_; }
     /** Test seam: plays the next audition step at once. */
-    void advanceAuditionForTest() { auditioner_.advanceForTest(); }
-
-    static constexpr int kAuditionStepMs = KeyAuditioner::kStepMs;
-    static constexpr int kAuditionVelocity = KeyAuditioner::kVelocity;
+    void advanceAuditionForTest();
 
 private:
     void pick(const std::optional<MusicalScale>& key);
-    KeyAuditioner::Target resolveAuditionTarget() const;
 
     synth::TransportService* transport_ = nullptr;
     juce::ApplicationProperties* appProperties_ = nullptr;
     juce::Component::SafePointer<juce::Component> openPicker_;
     std::optional<synth::TrackId> previewTrack_;
-    KeyAuditioner auditioner_;
+    std::unique_ptr<KeyAuditioner> auditioner_;
 
     JUCE_DECLARE_NON_COPYABLE(SongKeyField)
 };

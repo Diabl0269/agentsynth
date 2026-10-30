@@ -8,6 +8,7 @@
 #include "SoundBrowser/SoundPreviewPlayer.h"
 #include "Transport/BounceGuards.h"
 #include "Transport/OfflineTransportDriver.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include "UI/Timeline/SongKeyField.h"
 #include <cmath>
