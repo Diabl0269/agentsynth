@@ -18,6 +18,7 @@
 #include "Branding.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"

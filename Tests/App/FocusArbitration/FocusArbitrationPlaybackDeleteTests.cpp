@@ -2,6 +2,7 @@
 // (override path + panel-visibility fallback + surface actions falling through the global
 // handler).
 #include "FocusArbitrationTestFixture.h"
+#include "ShortcutManager/AppCommands.h"
 
 // ============================================================================
 // 6. Space — global play/stop toggle

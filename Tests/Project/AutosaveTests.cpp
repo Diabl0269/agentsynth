@@ -16,6 +16,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
+#include "ShortcutManager/AppCommands.h"
 #include "Transport/BounceExporter.h"
 #include "UserSettings.h"
 #include <gtest/gtest.h>

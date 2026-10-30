@@ -6,6 +6,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MidiRemote/MidiRemotePreferences.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PointEditorDuplicate.h"

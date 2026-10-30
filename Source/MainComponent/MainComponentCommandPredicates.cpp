@@ -4,6 +4,7 @@
 // declared in MainComponent.h; the table itself and the named perform() bodies stay in
 // MainComponentCommandTable.cpp.
 #include "MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"

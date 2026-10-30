@@ -24,7 +24,6 @@
 1088 Source/UI/Theme/AppLookAndFeel/AppLookAndFeel.h
 1056 Source/UI/Layout/FadeVisibility.h
 1047 Source/Mixer/MixerPanLaw.h
-1023 Source/ShortcutManager/AppCommands.h
 1023 Source/Transport/BlockTimeInfo.h
 1021 Source/ShortcutManager/ShortcutManager.h
 1003 Source/Transport/TransportDoc.h

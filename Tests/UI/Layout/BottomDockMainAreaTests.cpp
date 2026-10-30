@@ -4,6 +4,7 @@
 // Moved up through MainComponent::setMainViewForTest; the swap icon's own path is BottomDockSwapIconTests.cpp.
 #include "../../TestSettingsHelpers.h"
 #include "BottomDockMainAreaFixture.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"

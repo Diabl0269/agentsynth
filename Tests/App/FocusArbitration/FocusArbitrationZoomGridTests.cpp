@@ -3,6 +3,7 @@
 // reaching both the timeline and the roll live.
 #include "../../TestWait.h"
 #include "FocusArbitrationTestFixture.h"
+#include "ShortcutManager/AppCommands.h"
 
 // ============================================================================
 // 10. Grid (snap) commands — one shared value, gated on the panel being on screen

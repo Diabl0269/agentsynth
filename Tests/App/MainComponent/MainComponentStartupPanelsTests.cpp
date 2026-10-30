@@ -3,6 +3,7 @@
 // command table, the Redo shortcut, and copy/paste/duplicate reaching the canvas.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"

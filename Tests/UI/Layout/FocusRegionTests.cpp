@@ -20,6 +20,7 @@
 #include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Chrome/Toast/ToastComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRegion.h"

@@ -2,6 +2,7 @@
 // table (MainComponentCommandTable.cpp appends them last): the positional Cmd+N / Opt+Cmd+N / Cmd+0 keys, then each
 // view's own swap action.
 #include "MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 
 std::vector<MainComponent::CommandSpec> MainComponent::buildViewSwapCommandRows() {
     using Tab = synth::ui::BottomDockComponent::Tab;

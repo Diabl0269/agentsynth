@@ -5,6 +5,7 @@
 // The full matrix is in MacroNestedGroupingTests.cpp, driven one layer lower.
 
 #include "../../App/FocusArbitration/FocusArbitrationTestFixture.h"
+#include "ShortcutManager/AppCommands.h"
 
 #include <set>
 

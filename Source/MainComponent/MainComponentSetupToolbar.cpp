@@ -7,6 +7,7 @@
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
 #include "MainComponentShortcutHints.h"
+#include "ShortcutManager/AppCommands.h"
 #include "SoundBrowser/LoopStretch.h"
 #include "Telemetry/UsageStatsChoice.h"
 #include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"

@@ -4,6 +4,7 @@
 // order below IS getAllCommands()'s order (menu order).
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 #include "ShortcutManager/SnapNoteValueActions.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"

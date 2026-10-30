@@ -7,6 +7,7 @@
 #include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
 #include "MainComponentRenderToAudio.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
