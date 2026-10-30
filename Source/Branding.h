@@ -66,6 +66,14 @@ constexpr const char* kUpgradeUrl = "https://buy.polar.sh/polar_cl_DkiJlmel2CXVt
 // see invoices, cancel).
 constexpr const char* kBillingPortalUrl = "https://polar.sh/agentsynth/portal";
 
+// The community and social links on the welcome screen. kDiscordUrl is a stable redirect on the site, deliberately
+// not a discord.gg invite: invites change and a shipped binary cannot.
+constexpr const char* kDiscordUrl = "https://agentsynth.app/discord";
+constexpr const char* kYouTubeUrl = "https://www.youtube.com/@DiabolusLark";
+constexpr const char* kGitHubUrl = "https://github.com/Diabl0269/agentsynth";
+constexpr const char* kTikTokUrl = "https://www.tiktok.com/@agentsynth";
+constexpr const char* kInstagramUrl = "https://www.instagram.com/talefronny";
+
 // Production base URL for the synth-platform inference/auth/billing service (Cloud Run,
 // apps/infra/Pulumi.prod.yaml's authPublicBaseUrl in the synth-platform repo). Default host for
 // RemoteProvider, AuthClient and AccountService — see AIProviderRegistry.cpp and

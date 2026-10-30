@@ -291,6 +291,8 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     expectedCommandCount += 2;
     // Contribute joins them as a third unconditional, chord-less Help command.
     expectedCommandCount += 1;
+    // Join the Discord is a fourth, with the same treatment.
+    expectedCommandCount += 1;
     // openPreset is a menu-only command: patch-load is reached via the Load menu/chooser, so
     // only openProject took the rebindable Cmd+O binding. openPreset is still registered in
     // getAllCommands so the menu can invoke it but, like checkForUpdates, has no shortcut-table

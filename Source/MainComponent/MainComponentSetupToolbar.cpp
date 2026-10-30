@@ -451,6 +451,7 @@ void MainComponent::createWelcomeScreen() {
         welcomeScreen_->onOpenExistingProject = [this] { openProjectFromFile(); };
         welcomeScreen_->onOpenRecentProject = [this](const juce::File& file) { openRecentProjectGuarded(file); };
         welcomeScreen_->onContributeRequested = [this] { openContributePage(); };
+        welcomeScreen_->onSocialLinkRequested = [this](const juce::String& url) { urlOpener_(juce::URL(url)); };
         // The card writes through the same function as the Preferences toggle; the settings change that write
         // broadcasts reaches applyTelemetryPreference() like any other, so the running service follows.
         welcomeScreen_->onUsageStatsChoice = [this](bool share) {

@@ -1,5 +1,6 @@
 // MainComponentFocusCommandRows.cpp -- the focus-region, open-context-menu and help rows of the
 // MainComponent command table (MainComponentCommandTable.cpp appends them in menu order).
+#include "Branding.h"
 #include "MainComponent.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 
@@ -126,6 +127,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          {},
          [](MainComponent& m) {
              m.openContributePage();
+             return true;
+         }},
+        // Menu-only, always active, no chord. Opens the community Discord page in the browser.
+        {AppCommands::joinDiscord,
+         "Join the Discord...",
+         "Opens the Agent Synth Discord in your browser: share patches, ask questions, give feedback.",
+         "Help",
+         nullptr,
+         {},
+         [](MainComponent& m) {
+             m.urlOpener_(juce::URL(synth::branding::kDiscordUrl));
              return true;
          }},
     };

@@ -533,7 +533,7 @@ out, and the project, its dirty state and its undo history are untouched. The la
 opaque with no close button and no Escape or click-outside action. Tests: `Tests/UI/Chrome/WelcomeScreenDismissTests.cpp`.
 
 Keyboard: the overlay is a keyboard focus container, so Tab and Shift+Tab cycle through its buttons
-(the close button when dismissible, New, Open default, Open existing, the recents, Contribute, What's New) instead of escaping to the
+(the close button when dismissible, New, Open default, Open existing, the recents, Contribute, the five social links, What's New) instead of escaping to the
 toolbar and canvas hidden underneath. Reopening it from the Help menu focuses the first button. It has
 Escape action only in the dismissible mode above; the launch screen has no cancel, only a choice of how to start.
 
@@ -541,6 +541,14 @@ Between the Recent Projects list and the footer the card carries a low-key contr
 "Contribute..." button. It fires `onContributeRequested`, which `MainComponent` wires to
 `openContributePage()` (the same `kContributeUrl` page as `AppCommands::contribute`) without hiding
 the overlay, and it shows whenever the overlay is shown.
+
+The footer row carries five social icon buttons between the version label and What's New (28 px, 4 px apart,
+right-aligned against What's New): Discord, YouTube, GitHub, TikTok, Instagram, in that visual and Tab order. They are
+`synth::ui::IconButton`s (Bare) drawn with the `Glyph::Social*` glyphs, the same drawings as the website, each with a
+title, tooltip, description, pointing-hand cursor and a keyboard stop. A click calls `onSocialLinkRequested(url)` with the
+`branding::k*Url` address, which `MainComponent` opens through `urlOpener_`; the overlay stays up. The footer height does
+not change, so neither does the card. The Discord address is the site redirect `agentsynth.app/discord`, not an invite.
+The same page opens from Help > Join the Discord... (`AppCommands::joinDiscord`).
 
 ## Toast
 

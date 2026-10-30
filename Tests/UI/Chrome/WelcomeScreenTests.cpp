@@ -452,6 +452,96 @@ TEST_F(WelcomeScreenTest, ContributeRow_FitsInsideCardWithoutOverlappingNeighbou
     EXPECT_LE(button.getRight(), card.getRight());
 }
 
+namespace {
+const char* const kExpectedSocialUrls[] = {synth::branding::kDiscordUrl, synth::branding::kYouTubeUrl,
+                                           synth::branding::kGitHubUrl, synth::branding::kTikTokUrl,
+                                           synth::branding::kInstagramUrl};
+} // namespace
+
+TEST_F(WelcomeScreenTest, SocialButtons_EachReportsItsExactUrlOnce) {
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setBounds(0, 0, 1600, 900);
+    std::vector<juce::String> urls;
+    ws.onSocialLinkRequested = [&urls](const juce::String& url) { urls.push_back(url); };
+    ASSERT_EQ(ws.getSocialButtonCountForTest(), 5);
+    for (int i = 0; i < 5; ++i) {
+        urls.clear();
+        ws.getSocialButtonForTest(i).triggerClick();
+        synth::test::waitUntil([&] { return urls.size() == 1u; });
+        ASSERT_EQ(urls.size(), 1u) << "button " << i;
+        EXPECT_EQ(urls[0], juce::String(kExpectedSocialUrls[i])) << "button " << i;
+    }
+}
+
+TEST_F(WelcomeScreenTest, SocialButtons_OpenThroughTheOwnerAndKeepOverlayVisible) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    std::vector<juce::String> opened;
+    mc.setUrlOpenerForTest([&opened](const juce::URL& u) { opened.push_back(u.toString(true)); });
+    ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
+
+    mc.getWelcomeScreenForTest()->getSocialButtonForTest(0).triggerClick();
+    synth::test::waitUntil([&] { return opened.size() == 1u; });
+    ASSERT_EQ(opened.size(), 1u);
+    EXPECT_EQ(opened[0], juce::String(synth::branding::kDiscordUrl));
+    EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible());
+}
+
+TEST_F(WelcomeScreenTest, SocialButtons_AreNamedFocusableAndInOrder) {
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setBounds(0, 0, 1600, 900);
+    const synth::theme::Glyph expected[] = {synth::theme::Glyph::SocialDiscord, synth::theme::Glyph::SocialYouTube,
+                                            synth::theme::Glyph::SocialGitHub, synth::theme::Glyph::SocialTikTok,
+                                            synth::theme::Glyph::SocialInstagram};
+    int previousRight = -1;
+    for (int i = 0; i < 5; ++i) {
+        auto& b = ws.getSocialButtonForTest(i);
+        EXPECT_EQ(b.getGlyph(), expected[i]);
+        EXPECT_EQ(b.getStyle(), synth::ui::IconButton::Style::Bare);
+        EXPECT_TRUE(b.getTitle().isNotEmpty());
+        EXPECT_TRUE(b.getTooltip().isNotEmpty());
+        EXPECT_TRUE(b.getDescription().isNotEmpty());
+        EXPECT_TRUE(b.getWantsKeyboardFocus());
+        EXPECT_TRUE(b.isVisible());
+        EXPECT_EQ(b.getWidth(), 28);
+        EXPECT_EQ(b.getHeight(), 28);
+        if (previousRight >= 0)
+            EXPECT_EQ(b.getX() - previousRight, 4) << "4 px gap";
+        previousRight = b.getRight();
+    }
+    EXPECT_EQ(ws.getWhatsNewButtonForTest().getX() - previousRight, 10) << "right-aligned against What's New";
+}
+
+TEST_F(WelcomeScreenTest, SocialButtons_DoNotChangeTheCardHeight) {
+    // The card height before this row existed: 20 + 96 + 12 + 34 + 4 + 22 + 20 + 3 * 36 + 2 * 10 + 24 + 20 + 6 + 28
+    // (no recents) + 16 + 36 + 20 + 28 + 20.
+    synth::ui::WelcomeScreenComponent ws;
+    ws.setBounds(0, 0, 1600, 900);
+    EXPECT_EQ(ws.getCardHeightForTest(),
+              20 + 96 + 12 + 34 + 4 + 22 + 20 + 108 + 20 + 24 + 20 + 6 + 28 + 16 + 36 + 20 + 28 + 20);
+}
+
+TEST_F(WelcomeScreenTest, SocialButtons_SitInsideTheCardWithoutOverlapAtTheNarrowestCard) {
+    for (const int width : {1600, 640, 400}) {
+        synth::ui::WelcomeScreenComponent ws;
+        ws.setLatestVersionLabel("Agent Synth v0.309.0");
+        ws.setBounds(0, 0, width, 900);
+        const auto card = ws.getCardBoundsForTest();
+        const auto whatsNew = ws.getWhatsNewButtonForTest().getBounds();
+        const auto version = ws.getVersionLabelForTest().getBounds();
+        for (int i = 0; i < 5; ++i) {
+            const auto b = ws.getSocialButtonForTest(i).getBounds();
+            EXPECT_TRUE(card.contains(b)) << "width " << width << " button " << i;
+            EXPECT_FALSE(b.intersects(whatsNew));
+            EXPECT_FALSE(b.intersects(version));
+            for (int j = i + 1; j < 5; ++j)
+                EXPECT_FALSE(b.intersects(ws.getSocialButtonForTest(j).getBounds()));
+        }
+        EXPECT_FALSE(version.intersects(whatsNew));
+    }
+}
+
 // Regression test for the footer squeezing "What's New..." to ~40px ("What'..."): the version label
 // used to take half the row before the button was placed.
 TEST_F(WelcomeScreenTest, FooterGivesWhatsNewItsFullWidth) {

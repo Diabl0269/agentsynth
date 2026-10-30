@@ -36,7 +36,13 @@ enum class Glyph {
     LaneMod,        // one wave: a modulator moves the parameter
     Swap,           // two opposite arrows: two views trade places
     Detach,         // a window with an arrow leaving its corner: a view opens in its own window
-    Link            // two linked chain rings: two things joined into one (a stereo pair)
+    Link,           // two linked chain rings: two things joined into one (a stereo pair)
+    // The brand marks of the welcome screen's social links, the same drawings as the website's.
+    SocialDiscord,  // a chat bubble with two eyes
+    SocialYouTube,  // a rounded screen with a play triangle
+    SocialGitHub,   // the Octicons mark
+    SocialTikTok,   // a note with a flag
+    SocialInstagram // a rounded square, a lens and a dot
 };
 
 // Fills or strokes `glyph` in `colour`, centred in the shorter side of `area`. Nothing else is drawn.
