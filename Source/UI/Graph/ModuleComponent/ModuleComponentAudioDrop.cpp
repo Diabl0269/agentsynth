@@ -29,8 +29,33 @@ void ModuleComponent::createSamplerControls() {
             owner.handleModuleResized(this);
             repaint();
         };
+        host.showNode = [this](juce::AudioProcessorGraph::NodeID id) { showModuleOnCanvas(owner, id); };
         instrumentChrome_ = std::make_unique<synth::ui::DrumKitChrome>(host, *kit);
     }
+}
+
+// An instrument pad's Open: selects its module and centres the canvas on it (on its collapsed macro when it sits in
+// one), then gives the card keyboard focus so the next keys act on it.
+void ModuleComponent::showModuleOnCanvas(GraphEditor& editor, juce::AudioProcessorGraph::NodeID id) {
+    auto* node = editor.getAudioEngine().getGraph().getNodeForId(id);
+    if (node == nullptr)
+        return;
+    editor.selectModule(id, false);
+    const synth::Macro* collapsed = nullptr;
+    auto& macros = editor.getMacros();
+    for (const auto* macro = macros.findByMember(node->properties["uuid"].toString()); macro != nullptr;
+         macro = macro->parentId.isEmpty() ? nullptr : macros.find(macro->parentId))
+        if (macro->collapsed)
+            collapsed = macro;
+    if (collapsed != nullptr) {
+        editor.centreViewOn(collapsed->bounds.toFloat().getCentre());
+        return;
+    }
+    for (auto* comp : editor.getModuleComponents())
+        if (comp != nullptr && comp->getNodeId() == id) {
+            editor.centreViewOn(comp->getBounds().toFloat().getCentre());
+            comp->grabKeyboardFocus();
+        }
 }
 
 bool ModuleComponent::isInterestedInFileDrag(const juce::StringArray& files) {

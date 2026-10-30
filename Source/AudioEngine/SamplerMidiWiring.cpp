@@ -1,5 +1,6 @@
 #include "SamplerMidiWiring.h"
 
+#include "../Modules/DrumKit/DrumKitModule.h"
 #include "../Modules/SamplerModule.h"
 #include <set>
 
@@ -9,7 +10,7 @@ namespace synth {
 // block. JUCE's graph never says which inputs of a processor are connected, so this is read off the
 // connection list.
 void publishSamplerMidiWiring(juce::AudioProcessorGraph& graph) {
-    std::set<juce::AudioProcessorGraph::NodeID> midiFed;
+    auto midiFed = DrumKitModule::linkAllInstrumentPads(graph);
     for (const auto& connection : graph.getConnections())
         if (connection.destination.isMIDI())
             midiFed.insert(connection.destination.nodeID);

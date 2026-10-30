@@ -37,6 +37,15 @@ bool sameTable(const synth::drums::PadTable& a, const synth::drums::PadTable& b)
     return a.count == b.count && a.pads == b.pads;
 }
 
+// One bit per instrument pad that reaches its module, so the card notices a module deleted under it.
+std::uint32_t linkedInstrumentPads(const DrumKitModule& kit) {
+    std::uint32_t mask = 0;
+    for (int i = 0; i < kMaxPads; ++i)
+        if (kit.padInstrumentLinked(i))
+            mask |= 1u << (unsigned)i;
+    return mask;
+}
+
 } // namespace
 
 int DrumKitPadsSection::height(const DrumKitModule& kit) {
@@ -89,6 +98,7 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
 
     controls_.onEscape = [this] { grid_.grabKeyboardFocus(); };
     host_.card->addAndMakeVisible(controls_);
+    wireSoundControls();
 
     refreshFromKit();
     controls_.showPad(grid_.picked(), false);
@@ -156,12 +166,14 @@ void DrumKitPadsSection::picked(int index, bool played) {
 
 void DrumKitPadsSection::refreshCaption() {
     juce::String text;
-    if (hint_.isNotEmpty()) {
+    if (const auto drop = dropHint(); drop.isNotEmpty()) {
+        text = drop;
+    } else if (hint_.isNotEmpty()) {
         text = hint_;
     } else if (const int hidden = hiddenPadsWithSettings(kit_); hidden > 0) {
         text = juce::String(hidden) + (hidden == 1 ? " hidden pad keeps its sound" : " hidden pads keep their sounds");
     } else {
-        text = "Click a pad to hear it, Shift+click to pick it quietly";
+        text = "Click to play, right-click for a sound";
     }
     if (caption_.getText() != text)
         caption_.setText(text, juce::dontSendNotification);
@@ -170,6 +182,8 @@ void DrumKitPadsSection::refreshCaption() {
 // ---- Following the kit ----
 
 void DrumKitPadsSection::refreshFromKit() {
+    relinkInstruments();
+    shownLinks_ = linkedInstrumentPads(kit_);
     shownTable_ = kit_.padTable();
     shownRecordedKit_ = kit_.hasRecordedKit();
     shownGeneration_ = kit_.getInstrumentGeneration();
@@ -184,9 +198,13 @@ void DrumKitPadsSection::poll() {
         hint_.clear();
         refreshCaption();
     }
+    if (grid_.isShowingSoundOutline() != shownOutline_) {
+        shownOutline_ = grid_.isShowingSoundOutline();
+        refreshCaption();
+    }
     const bool countChanged = kit_.padCount() != shownTable_.count;
     if (countChanged || !sameTable(kit_.padTable(), shownTable_) || kit_.hasRecordedKit() != shownRecordedKit_ ||
-        kit_.getInstrumentGeneration() != shownGeneration_) {
+        kit_.getInstrumentGeneration() != shownGeneration_ || linkedInstrumentPads(kit_) != shownLinks_) {
         refreshFromKit();
         if (countChanged && host_.relayout)
             host_.relayout();

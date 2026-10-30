@@ -67,6 +67,23 @@ Pad defaultPad(int index) {
     return pad;
 }
 
+const std::array<int, 20>& builtInSounds() noexcept {
+    static const std::array<int, 20> sounds = [] {
+        std::array<int, 20> out{};
+        for (size_t i = 0; i < out.size(); ++i)
+            out[i] = kDefaults[i].sound;
+        return out;
+    }();
+    return sounds;
+}
+
+juce::String soundName(int sound) {
+    for (const auto& d : kDefaults)
+        if (d.sound == sound && sound != kNoSound)
+            return d.name;
+    return {};
+}
+
 PadTable defaultPadTable() {
     PadTable table;
     for (int i = 0; i < kMaxPads; ++i)

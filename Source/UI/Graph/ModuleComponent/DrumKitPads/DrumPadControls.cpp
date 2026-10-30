@@ -1,5 +1,5 @@
-// DrumPadControls.cpp -- the picked pad's panel: binding its knobs to the pad's parameters, the cross-fade between
-// pads, and the dimmed Decay of a pad that plays a recording.
+// DrumPadControls.cpp -- the picked pad's panel: binding its knobs to the pad's parameters, the Sound row, the
+// cross-fade between pads, and the dimmed Decay of a pad that plays a recording or another instrument.
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadControls.h"
 #include "UI/DrumMachine/DrumLanes.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
@@ -19,6 +19,7 @@ constexpr float kDot = 8.0f;
 constexpr int kDotSpace = 14;
 
 bool showsStart(const synth::drums::Pad& pad) { return pad.kind == PadKind::File; }
+bool isInstrument(const synth::drums::Pad& pad) { return pad.kind == PadKind::Instrument; }
 
 } // namespace
 
@@ -33,7 +34,8 @@ bool DrumPadControls::PadKnob::keyPressed(const juce::KeyPress& key) {
 }
 
 int DrumPadControls::height() {
-    return kHeaderHeight + kHeaderGap + synth::cardbody::kLabelHeight + synth::cardbody::kKnobHeight;
+    return kHeaderHeight + kHeaderGap + synth::cardbody::kRowHeight + kRowGap + synth::cardbody::kLabelHeight +
+           synth::cardbody::kKnobHeight;
 }
 
 DrumPadControls::DrumPadControls(DrumKitModule& kit)
@@ -46,6 +48,34 @@ DrumPadControls::DrumPadControls(DrumKitModule& kit)
     note_.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(name_);
     addAndMakeVisible(note_);
+    soundLabel_.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(soundLabel_);
+    sound_.setComponentID("drumPadSound");
+    sound_.onClick = [this] {
+        if (onSoundMenu)
+            onSoundMenu();
+    };
+    addAndMakeVisible(sound_);
+    open_.setComponentID("drumPadOpenInstrument");
+    open_.onClick = [this] {
+        if (onOpenInstrument)
+            onOpenInstrument();
+    };
+    addChildComponent(open_);
+    pitch_.setComponentID("drumPadPitch");
+    pitch_.setTooltip("The note this pad sends to its instrument, before Tune");
+    pitch_.setTypable(true);
+    pitch_.onStep = [this](int delta) {
+        if (onPitchStep)
+            onPitchStep(delta);
+    };
+    pitch_.onTypedValue = [this](const juce::String& text) {
+        if (onPitchTyped)
+            onPitchTyped(text);
+    };
+    addChildComponent(pitch_);
+    pitchCaption_.setJustificationType(juce::Justification::centred);
+    addChildComponent(pitchCaption_);
     for (size_t f = 0; f < knobs_.size(); ++f) {
         auto& knob = knobs_[f];
         knob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -91,9 +121,10 @@ void DrumPadControls::refresh() {
         knobs_[f].setTitle(name);
         knobs_[f].setTooltip(name);
     }
-    // A recording plays out at its own length, so the Decay has nothing to shape (it stays operable, like every
-    // dimmed control).
-    const bool moot = kit_.padPlaysRecording(bound_);
+    refreshSoundRow(pad);
+    // A recording plays out at its own length and an instrument shapes its own notes, so the Decay has nothing to
+    // shape (it stays operable, like every dimmed control).
+    const bool moot = kit_.padPlaysRecording(bound_) || isInstrument(pad);
     auto& decay = knobs_[(size_t)PadParam::Decay];
     if ((bool)decay.getProperties()[synth::theme::AppLookAndFeel::kDimmedProperty] != moot) {
         decay.getProperties().set(synth::theme::AppLookAndFeel::kDimmedProperty, moot);
@@ -102,8 +133,21 @@ void DrumPadControls::refresh() {
     const bool start = showsStart(pad);
     knobs_[(size_t)PadParam::Start].setVisible(start);
     captions_[(size_t)PadParam::Start].setVisible(start);
+    pitch_.setVisible(isInstrument(pad));
+    pitchCaption_.setVisible(isInstrument(pad));
     resized();
     repaint();
+}
+
+// The Sound row names what the pad plays; an instrument pad adds Open and its pitch.
+void DrumPadControls::refreshSoundRow(const synth::drums::Pad& pad) {
+    auto [name, detail] = describeSound ? describeSound(bound_) : std::make_pair(pad.name, juce::String());
+    sound_.setInstrument(name, detail);
+    sound_.setTitle("Sound for " + pad.name + ", " + name + (detail.isNotEmpty() ? ", " + detail : juce::String()));
+    sound_.setTooltip("Choose what " + pad.name + " plays: a file, a built-in drum or an instrument (Enter)");
+    open_.setVisible(isInstrument(pad));
+    open_.setTexts("Open " + name + " on the canvas", "Show the instrument " + pad.name + " plays on the canvas");
+    pitch_.setValueText(synth::drums::noteName(pad.instrumentPitch) + " (" + juce::String(pad.instrumentPitch) + ")");
 }
 
 // Out in 80 ms, the knobs re-bind while the panel is clear, in over 160 ms. Under Reduce Motion the new pad fades in
@@ -154,11 +198,32 @@ void DrumPadControls::resized() {
     name_.setBounds(header.removeFromLeft(header.getWidth() / 2));
     note_.setBounds(header);
     area.removeFromTop(kHeaderGap);
+    auto row = area.removeFromTop(synth::cardbody::kRowHeight);
+    soundLabel_.setBounds(row.removeFromLeft(kSoundLabelWidth));
+    if (open_.isVisible())
+        open_.setBounds(row.removeFromRight(TrackShowModuleButton::kSize)
+                            .withSizeKeepingCentre(TrackShowModuleButton::kSize, TrackShowModuleButton::kSize));
+    row.removeFromRight(open_.isVisible() ? kRowGap : 0);
+    sound_.setBounds(row);
+    area.removeFromTop(kRowGap);
+    layoutColumns(area);
+}
+
+// Level, Tune, Decay, then Start (a file pad) or Plays pitch (an instrument pad) in a fourth column. Plays pitch
+// takes two fifths of the row so its stepper has room for "C3 (60)" between its buttons.
+void DrumPadControls::layoutColumns(juce::Rectangle<int> area) {
     const bool start = knobs_[(size_t)PadParam::Start].isVisible();
-    const int columns = start ? 4 : 3;
-    const int colW = area.getWidth() / columns;
+    const bool pitch = pitch_.isVisible();
+    const int columns = start || pitch ? 4 : 3;
+    const int colW = area.getWidth() / (pitch ? 5 : columns);
     for (int f = 0; f < columns; ++f) {
         auto column = juce::Rectangle<int>(area.getX() + f * colW, area.getY(), colW, area.getHeight());
+        if (f == 3 && pitch) {
+            column.setRight(area.getRight());
+            pitchCaption_.setBounds(column.removeFromTop(synth::cardbody::kLabelHeight));
+            pitch_.setBounds(column.removeFromTop(synth::cardbody::kRowHeight).reduced(2, 0));
+            continue;
+        }
         captions_[(size_t)f].setBounds(column.removeFromTop(synth::cardbody::kLabelHeight));
         knobs_[(size_t)f].setBounds(column.removeFromTop(synth::cardbody::kKnobHeight));
     }

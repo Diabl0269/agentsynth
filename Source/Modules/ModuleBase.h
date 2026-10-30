@@ -3,6 +3,7 @@
 #include "CardViewState.h"
 #include "ModuleChoiceState.h"
 #include "ModuleOutputStage.h"
+#include "Modules/NoteInbox.h"
 #include "Modules/ParameterText.h"
 #include "PortRole.h"
 #include "VisualBuffer.h"
@@ -628,6 +629,8 @@ public:
     /** Final on purpose: every module's render goes through here so the stereo down-mix below
         (applyInputDownMix) can never be forgotten by one module. Override processModuleBlock. */
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) final {
+        if (auto* inbox = noteInbox_.load(std::memory_order_acquire))
+            inbox->drainInto(midiMessages, buffer.getNumSamples());
         applyInputDownMix(buffer);
         if (outputStage_.isIdle(bypassedParam->get(), mutedParam != nullptr && mutedParam->get()))
             processModuleBlock(buffer, midiMessages);
@@ -639,6 +642,9 @@ public:
         input already reads as its average; the bypass/mute contract (Source/CLAUDE.md) and
         applyLeftRightNormalling() start here, exactly as they did at the top of processBlock. */
     virtual void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) = 0;
+
+    /** Message thread. Where other modules post notes for this one (made on first use); drained before each block. */
+    synth::NoteInbox& noteInbox();
 
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override { return nullptr; } // To be implemented later
@@ -963,6 +969,8 @@ private:
     // See setInputDownMixMask().
     std::atomic<std::uint64_t> inputDownMixMask_{0};
     std::unique_ptr<VisualBuffer> visualBuffer;
+    synth::NoteInbox::Ptr noteInboxOwner_;
+    std::atomic<synth::NoteInbox*> noteInbox_{nullptr};
     synth::CardViewState cardViewState_;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOutputLevel;
 

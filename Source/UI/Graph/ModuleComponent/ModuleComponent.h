@@ -897,6 +897,7 @@ private:
 
     // Builds the Sampler's or Drum Kit's instrument chrome. No-op for other modules.
     void createSamplerControls();
+    static void showModuleOnCanvas(GraphEditor& editor, juce::AudioProcessorGraph::NodeID id);
 
     // Repoints the file-name label at whatever the module currently holds.
     void refreshSampleLabel(const juce::String& fallbackMessage = {});

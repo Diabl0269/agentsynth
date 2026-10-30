@@ -11,6 +11,8 @@
 #include <array>
 #include <atomic>
 #include <bitset>
+#include <functional>
+#include <set>
 
 /**
  * Synthesized electronic drum kit on one MIDI track, played through 32 pad slots.
@@ -24,8 +26,9 @@
  * projects write them. Setting one writes its value to every pad of that group (closedDecay to the closed and pedal
  * hats, openDecay to the open hat); a Recorded switch moves its group's pads between the kit and the built-in drum.
  *
- * A drum plays out its own decay whatever the note length, so Note-Off does nothing. A closed or pedal hat pad
- * chokes every open hat pad. Output is a stereo pair (Declared, ships SPLIT like the Sampler).
+ * A drum plays out its own decay whatever the note length, so Note-Off does nothing to it. An instrument pad sends its
+ * pitch to another module's note inbox and its Note-Off when the hit ends. A closed or pedal hat pad chokes every open
+ * hat pad. Output is a stereo pair (Declared, ships SPLIT like the Sampler).
  */
 class DrumKitModule
     : public ModuleBase
@@ -106,6 +109,22 @@ public:
     void auditionPad(int index) noexcept;
     /** Any thread. The pad the audio thread last struck, or -1. */
     int lastPlayedPad() const noexcept { return lastPlayedPad_.load(std::memory_order_relaxed); }
+    /** Pad `index` plays its slot's kit sound again (name and kind too); its note and knobs stay. */
+    void resetPad(int index);
+    /** True when the loaded kit has a region for `sound`. */
+    bool kitHasSound(int sound) const;
+
+    // ---- Instrument pads (DrumKitModuleInstrumentPads.cpp) ----
+    /** The modules an instrument pad may play: sounding MIDI instruments other than a Drum Kit or a sequencer. */
+    static bool canPlayFromPad(ModuleType type) noexcept;
+    /** Points each instrument pad at `inboxFor(uuid)` (null: the module is gone, the pad is silent). */
+    void linkInstrumentPads(const std::function<synth::NoteInbox*(const juce::String& uuid)>& inboxFor);
+    /** True when instrument pad `index` found its module at the last link. */
+    bool padInstrumentLinked(int index) const;
+    /** Links every Drum Kit in `graph`; returns the nodes some pad plays. Message thread. */
+    static std::set<juce::AudioProcessorGraph::NodeID> linkAllInstrumentPads(juce::AudioProcessorGraph& graph);
+    /** How long a pad played from the card holds an instrument's note. */
+    static constexpr double kAuditionHoldSeconds = 0.25;
 
 private:
     struct GroupLink {
@@ -157,6 +176,14 @@ private:
     bool samplesActive() const noexcept;
     void renderChunk(float* left, float* right, int count) noexcept;
 
+    // Instrument pads, audio thread (DrumKitModuleInstrumentPads.cpp)
+    void strikeInstrumentPad(int index, const synth::drums::PadSnapshot::Entry& e, float velocity) noexcept;
+    void releaseInstrumentPad(int index, int offset) noexcept;
+    void releaseInstrumentNote(int note, int offset) noexcept;
+    void releaseAllInstrumentPads(int offset) noexcept;
+    void releaseMovedInstrumentPads(const synth::drums::PadSnapshot& next) noexcept;
+    void advanceAuditionReleases(int numSamples) noexcept;
+
     juce::AudioParameterFloat* levelParam = nullptr;
     std::array<juce::AudioParameterBool*, kNumGroups> recorded_{};
     std::array<bool, kNumGroups> lastRecorded_{}; // message thread
@@ -189,6 +216,13 @@ private:
     synth::drums::PadSnapshot::Ptr heldPads_;      // audio thread
     std::atomic<std::uint32_t> auditionMask_{0};
     std::atomic<int> lastPlayedPad_{-1};
+    std::array<synth::NoteInbox::Ptr, synth::drums::kMaxPads> padInboxes_; // message thread
+    std::array<juce::String, synth::drums::kMaxPads> padLinkUuid_;         // the uuid padInboxes_ was found for
+    std::array<synth::NoteInbox*, synth::drums::kMaxPads> heldInbox_{};    // audio thread: a note is held there
+    std::array<int, synth::drums::kMaxPads> heldPitch_{};
+    std::array<int, synth::drums::kMaxPads> releaseIn_{}; // audio thread: samples to an auditioned note's end, 0 none
+    int eventOffset_ = 0;                                 // audio thread: where in the block the hit lands
+    bool auditioning_ = false;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(DrumKitModule)
 };

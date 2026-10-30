@@ -5,6 +5,7 @@
 
 #include "DrumKitPads.h"
 #include "DrumVoices.h"
+#include "Modules/NoteInbox.h"
 #include "Modules/Sampler/SamplerSampleData.h"
 #include <cstdint>
 
@@ -18,6 +19,8 @@ struct PadSnapshot : public juce::ReferenceCountedObject {
         int sound = kNoSound;
         int note = 60;
         sampler::SampleData::Ptr sample; // PadKind::File, once decoded
+        NoteInbox::Ptr inbox;            // PadKind::Instrument, while its module is in the patch
+        int pitch = 60;                  // PadKind::Instrument: the note it sends before Tune
     };
     std::array<Entry, kMaxPads> pads;
     std::array<std::int8_t, kMaxPads> tickOrder{}; // every pad, in the order the old one-voice-per-drum kit mixed

@@ -4,12 +4,10 @@
 // Sampler's SamplerChrome, the Drum Kit's DrumKitChrome). Message thread only for every member.
 
 #include <functional>
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class AppUndoManager;
-namespace juce {
-class AudioProcessorGraph;
-}
 
 namespace synth::ui {
 
@@ -23,6 +21,7 @@ public:
         std::function<bool()> drumMachineAvailable; ///< Drum Kit: does a track play it? (empty: no)
         std::function<void()> openDrumMachine;      ///< Drum Kit: the "Drum machine" button was pressed.
         std::function<void()> relayout;             ///< The chrome's height changed: lay the card out again.
+        std::function<void(juce::AudioProcessorGraph::NodeID)> showNode; ///< Drum Kit: show a module on the canvas.
     };
 
     virtual ~InstrumentChrome() = default;

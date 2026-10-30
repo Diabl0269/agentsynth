@@ -93,8 +93,9 @@ Drag a Sound row (past 4 px) and a small chip with its name follows the pointer.
 
 | Drop on | What happens | Undo |
 | --- | --- | --- |
-| Empty canvas | A new Sampler holding the sound (an .sfz loads as its instrument). The ghost is a Sampler's size. `GraphDragDropController::addSamplerLoadedWith` is the one path the OS file drop uses too. | one step |
+| Empty canvas | A new Sampler holding the sound (an .sfz loads as its instrument). The ghost is a Sampler's size and lands in the nearest free slot: a sound never opens an insert gap, so a card it is carried to never slides away. `GraphDragDropController::addSamplerLoadedWith` is the one path the OS file drop uses too. | one step |
 | A Sampler card | Replaces its sample (an .sfz, or the Load Sample button, goes through the same path); the old waveform fades out while the new one draws in left to right over 220 ms (80 ms cross-fade under Reduce Motion, instant with Animations off). | one step |
+| A Drum Kit pad | That pad (only the one under the pointer) plays the file. While the drag is over the pad grid every pad has a faint outline, the hovered pad a full accent one, and the caption says "Drop to make Snare play this sound". Elsewhere on the Drum Kit card the drop falls through to the canvas. An OS audio file lands on a pad the same way ([drum-kit](../modules/drum-kit.md#dropping-a-sound-on-a-pad)). | one step |
 | An audio track row | A clip at the snapped beat under the pointer, like an OS file drop. A loop arrives as a copy fitted to the song ([Loops match the song](#loops-match-the-song)). | one step |
 | Empty space under the last track | A "New audio track" strip lights up; the drop makes an audio track (with its mixer channel) and the clip at that beat. An OS file dropped there does the same. | one step for both |
 

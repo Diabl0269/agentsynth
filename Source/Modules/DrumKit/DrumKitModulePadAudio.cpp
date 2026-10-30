@@ -121,8 +121,11 @@ int kitNoteOf(const synth::drums::PadSnapshot::Entry& e) {
 // Once per block, with a try-lock: a block that races a publish keeps the pads it had.
 void DrumKitModule::acquirePads() noexcept {
     const juce::SpinLock::ScopedTryLockType lock(padLock_);
-    if (lock.isLocked() && publishedPads_.get() != heldPads_.get())
-        heldPads_ = publishedPads_;
+    if (!lock.isLocked() || publishedPads_.get() == heldPads_.get())
+        return;
+    if (publishedPads_ != nullptr)
+        releaseMovedInstrumentPads(*publishedPads_);
+    heldPads_ = publishedPads_;
 }
 
 // Automation writes a group parameter with setValue, which tells no listener: its new value reaches the pads here,
@@ -160,6 +163,7 @@ void DrumKitModule::triggerPad(int index, float velocity) noexcept {
     lastPlayedPad_.store(index, std::memory_order_relaxed);
     switch (e.kind) {
     case PadKind::Instrument:
+        strikeInstrumentPad(index, e, velocity);
         return;
     case PadKind::File: {
         if (e.sample == nullptr)

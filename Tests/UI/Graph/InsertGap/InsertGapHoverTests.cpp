@@ -6,6 +6,7 @@
 // calls and real ModuleComponent mouse events on a real canvas.
 
 #include "InsertGapTestFixture.h"
+#include "UI/Library/SoundBrowser/SoundDragPayload.h"
 
 using namespace insert_gap_test;
 
@@ -89,6 +90,26 @@ TEST(InsertGapHover, ThePointerDeepInsideACardPushesNothing) {
 }
 
 // Only one gap is open at a time, and sweeping across every gap of a long row and back, then leaving, leaves no drift.
+// Regression test for FRO1116: a sound dragged in from the left opened a gap before a Drum Kit, so the kit slid away
+// from under the pointer before it reached the pads.
+TEST(InsertGapHover, ASoundNeverPushesACard) {
+    Canvas c;
+    const auto row = c.filterRow(3);
+    c.editor.finishCardGlideForTest();
+    const auto before = c.allRects();
+    const auto sound = synth::ui::makeSoundPayload("/sounds/kick.wav");
+    const auto first = c.rect(row[0]);
+    c.libraryEnter(sound, {first.getX() - 60, first.getCentreY()});
+    EXPECT_FALSE(c.gap().isOpen()) << "before the first card";
+    for (const auto& p :
+         {between(c.rect(row[0]), c.rect(row[1])), c.rect(row[1]).getPosition() + juce::Point<int>(4, 40)}) {
+        c.libraryMove(sound, p);
+        EXPECT_FALSE(c.gap().isOpen());
+    }
+    expectAllAt(c, before, "after a sound crossed the row");
+    c.libraryExit(sound, {0, 0});
+}
+
 TEST(InsertGapHover, SweepingAcrossManyGapsKeepsOneOpenAndLeavesNoDrift) {
     for (int n : {5, 10}) {
         SCOPED_TRACE(n);
