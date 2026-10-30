@@ -1,12 +1,15 @@
 #pragma once
 
-#include "GateEdges.h"
 #include "ModuleBase.h"
 #include <algorithm>
 #include <atomic>
 
 class PolyMidiModule : public ModuleBase {
 public:
+    /** The Gate level where the Oscillator restarts a note (GateEdges::kThreshold), where a sounding voice's pitch
+     * steps. */
+    static constexpr float kPitchStepGateLevel = 0.1f;
+
     /** Voice-steal strategy, in `voiceSteal` choice order. Index 0 is the historical behaviour,
      *  so a patch saved before this parameter existed loads with unchanged voice allocation. */
     enum class StealMode { Oldest = 0, RoundRobin, Random };
@@ -211,7 +214,7 @@ private:
                 gateCh[s] = v.smoothedGate.getNextValue();
                 // A voice that sounded before changes pitch on the sample its gate rises, which is where the
                 // Oscillator restarts the note, so the previous note's tail never steps in pitch.
-                if (v.pendingFreq > 0.0f && gateCh[s] >= juce::jmin(GateEdges::kThreshold, 0.5f * v.gateLevel)) {
+                if (v.pendingFreq > 0.0f && gateCh[s] >= juce::jmin(kPitchStepGateLevel, 0.5f * v.gateLevel)) {
                     v.smoothedFreq.setCurrentAndTargetValue(v.pendingFreq);
                     v.pendingFreq = 0.0f;
                 }

@@ -15,6 +15,7 @@
 #include "MacroSet.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/ChannelStripModule.h"
+#include "Modules/GateEdges.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/PolyMidiModule.h"
 #include "Modules/TimelineMidiSourceModule.h"
@@ -28,6 +29,9 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+static_assert(PolyMidiModule::kPitchStepGateLevel == GateEdges::kThreshold,
+              "a sounding voice must change pitch where the Oscillator restarts the note");
 
 namespace {
 
