@@ -274,9 +274,11 @@ void DrumPadControls::paint(juce::Graphics& g) {
     g.fillEllipse(0.0f, ((float)kHeaderHeight - kDot) * 0.5f, kDot, kDot);
 }
 
-// The note reads in the theme's muted text, so it follows a theme change.
+// The note reads in the theme's muted text, a step toward the primary text so it stays above 4.5:1 on a light card,
+// and follows a theme change.
 void DrumPadControls::lookAndFeelChanged() {
-    note_.setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.textMuted);
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    note_.setColour(juce::Label::textColourId, colors.textMuted.interpolatedWith(colors.textPrimary, 0.2f));
 }
 
 std::unique_ptr<juce::AccessibilityHandler> DrumPadControls::createAccessibilityHandler() {
