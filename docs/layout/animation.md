@@ -553,8 +553,8 @@ Escape path of every dialog and call-out), `PopupMotion::dismissCallOut(box)` an
 forms (never `closeButtonPressed()`, `exitModalState(0)` or `CallOutBox::dismiss()` called directly; `PopupMotionUsers.EveryUserIsRegistered` fails for a file that calls these without a registered motion test or a ticketed gap; `Tests/UI/Layout/PopupMotionTests.cpp` and `Tests/UI/Settings/SettingsWindowEscapeFadeTests.cpp` reach the animated path with `PopupMotion::setAnimateOffScreenForTest(true)`). `reallyClose` runs at once, before `dismiss` returns, for a window with no native peer, one
 that was never attached, one not showing, or with the engine disabled, so headless runs and the full
 test suite see the final state immediately; the frame driver only runs while a fade runs. While the
-fade runs the window ignores the mouse and a second `dismiss` does nothing, so a choice cannot fire
-twice. Tests reach the animated path with `PopupMotion::setAnimateOffScreenForTest(true)`.
+fade runs the window ignores the mouse, is always-on-top (the press that closes a popup also raises the app window, which buried the fade so a panel seemed to pop out on a click-away; put back if the window lives on) and a second `dismiss` does nothing, so a choice cannot fire
+twice. `PopupDismissPaths` (`Tests/UI/Layout/PopupDismissPathsTests.cpp`) closes each popup kind by Escape, a click outside and the app deactivating and reads the frames. Tests reach the animated path with `PopupMotion::setAnimateOffScreenForTest(true)`.
 
 Closes JUCE performs itself (click-away on a menu or call-out, a menu row chosen, an alert button, a
 dialog's title-bar button) cannot be deferred, so they leave on a picture of the window: a
@@ -796,8 +796,8 @@ does not show anywhere else and keeps showing: mark its component with `synth::u
 (`Source/UI/Layout/HelperTooltip.h`). Today those are the mixer sources badge ("Plays into this channel: ...") and the
 preference's own toggle, so it can always say how to bring tips back. The window reads the setting each time it is
 asked for a tip (`AppTooltipWindow::getTipFor`), so a toggle applies at once in every window with no push. The mod-dot
-drag readout is painted on the canvas, not a hover tooltip, and is unaffected. Tests:
-`Tests/UI/Layout/AppTooltipWindowTests.cpp`.
+readout is painted on the canvas, not a hover tooltip; while it shows it blocks hover tips (`blockHoverTips`), as juce shows a
+changed tip at once within 500 ms of the last. Tests: `AppTooltipWindowTests.cpp`, `ModDot/ModDotSingleReadoutTests.cpp`.
 
 A window can opt into a different look by passing a `popup_motion::Style` to `PopupMotion::attach`:
 the slide distances, `overshoot` (the arrival eases with `easeOutBackSoft`, peaking 3% past rest

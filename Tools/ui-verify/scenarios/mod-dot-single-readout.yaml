@@ -1,0 +1,20 @@
+# Stepping the mod dot with the keyboard shows one readout and no second tooltip; the knob's own hover tip is still
+# there afterwards. Hover tips are separate top-level windows that a window screenshot does not include, so the tip
+# count itself is checked by ModDotSingleReadoutTests in the unit tests; this replays the gesture in the real app and
+# checks the knob's tip is unchanged. The step's readout is gone again by the time the screenshot is taken.
+#
+# What a user does:
+#   1. Opens a project with an LFO modulating the Filter's Cutoff.
+#   2. Tabs to the Cutoff mod dot and presses Up twice: the dot's readout shows.
+#   3. Looks at the Cutoff knob again: its normal tooltip is unchanged.
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - expect: {id: Cutoff, tooltip: Cutoff}
+  - key: {keys: up, target: "Cutoff modulation, 1 source"}
+  - key: {keys: up, target: "Cutoff modulation, 1 source"}
+  - screenshot: {id: window, name: mod-dot-readout-while-stepping}
+  - wait: {}
+  - expect: {id: Cutoff, tooltip: Cutoff, within_ms: 2000}
+  - screenshot: {id: window, name: mod-dot-readout-after}

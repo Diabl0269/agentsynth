@@ -9,6 +9,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeCommandsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/TestModeCardStateTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/UiVerifyFixtureTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/TestMode/UiVerifyModDotFixtureTests.cpp
 )
 # Hidden automation windows, checked on the NSWindow itself (macOS only).
 if(APPLE)

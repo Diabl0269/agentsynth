@@ -1,6 +1,7 @@
 #include "ModDotTooltip.h"
 
 #include "UI/Graph/ModuleComponent/ModuleComponentModChip.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -45,7 +46,11 @@ ModDotTooltip::ModDotTooltip(juce::Component& canvas)
     : canvas_(canvas)
     , vblank_(&canvas) {}
 
-ModDotTooltip::~ModDotTooltip() { fade_.stop(vblank_); }
+ModDotTooltip::~ModDotTooltip() {
+    fade_.stop(vblank_);
+    if (wanted_)
+        AppTooltipWindow::blockHoverTips(false);
+}
 
 juce::Point<float> ModDotTooltip::sizeFor(const juce::String& text) const {
     const float textW = juce::GlyphArrangement::getStringWidth(monoFont(canvas_), text);
@@ -72,16 +77,19 @@ void ModDotTooltip::show(juce::Component& knob, const juce::String& name, float 
                        amount >= 0.0f};
     const bool appeared = !wanted_;
     wanted_ = true;
-    if (appeared)
+    if (appeared) {
+        AppTooltipWindow::blockHoverTips(true); // the readout is the one tip of this gesture
         fadeTo(1.0f, kFadeInMs, easeOutCubic);
-    else
+    } else {
         canvas_.repaint((before.getUnion(getBounds())).getSmallestIntegerContainer().expanded(2));
+    }
 }
 
 void ModDotTooltip::hide() {
     if (!wanted_)
         return;
     wanted_ = false;
+    AppTooltipWindow::blockHoverTips(false);
     fadeTo(0.0f, kFadeOutMs, easeInCubic);
 }
 
