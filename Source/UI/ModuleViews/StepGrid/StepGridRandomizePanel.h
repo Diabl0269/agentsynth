@@ -30,6 +30,8 @@ public:
 
     /** Roll was pressed (click, Space or Enter), with the settings as shown. */
     std::function<void(const sequencer_ops::RandomizeSettings&)> onRoll;
+    /** A note-range gesture finished (one drag, or one key step); the owner records one undo step. */
+    std::function<void(int minPitch, int maxPitch)> onRangeGestureEnd;
     /** The range, density or rhythm choice changed, so the owner can remember it for the session. */
     std::function<void(const sequencer_ops::RandomizeSettings&)> onSettingsChanged;
 

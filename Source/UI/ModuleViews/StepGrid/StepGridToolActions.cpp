@@ -128,6 +128,19 @@ void StepGridComponent::roll(const ops::RandomizeSettings& settings) {
 // numbering), widened to take in any note the pattern already plays. A key change before the range was touched
 // moves it to the new root; a range the user set stays.
 void StepGridComponent::seedRandomizeRange() {
+    // A saved range wins over any seed and counts as touched, so a key change never moves it. When it is gone (an
+    // undo to before it was saved) the range is seeded afresh.
+    if (const auto saved = module_.getPattern().noteRange) {
+        randomize_.minPitch = saved->first;
+        randomize_.maxPitch = saved->second;
+        randomizeSeeded_ = true;
+        randomizeFromSaved_ = true;
+        return;
+    }
+    if (randomizeFromSaved_) {
+        randomizeFromSaved_ = false;
+        randomizeSeeded_ = false;
+    }
     const int root = scale_.isChromatic() ? 0 : ((scale_.rootPitchClass % 12) + 12) % 12;
     if (randomizeSeeded_ && (root == seededRoot_ || randomizeRangeTouched()))
         return;
@@ -144,6 +157,21 @@ void StepGridComponent::seedRandomizeRange() {
     seededRange_ = {lo, hi};
 }
 
+// One finished gesture on the panel's note range: the range is saved in the pattern and recorded as one undo step.
+void StepGridComponent::saveRandomizeRange(int lo, int hi) {
+    auto pattern = module_.getPattern();
+    const auto range = std::make_pair(lo, hi);
+    if (pattern.noteRange == range)
+        return;
+    const auto before = module_.getExtraState();
+    pattern.noteRange = range;
+    module_.setPattern(pattern);
+    seenGeneration_ = module_.patternGeneration();
+    lastSeen_ = module_.getPattern();
+    randomizeFromSaved_ = true;
+    commit(before);
+}
+
 void StepGridComponent::openRandomizePanel() {
     seedRandomizeRange();
     auto panel = std::make_unique<StepGridRandomizePanel>(randomize_, scale_, kMiddleCOctave);
@@ -151,6 +179,10 @@ void StepGridComponent::openRandomizePanel() {
     panel->onSettingsChanged = [safe](const ops::RandomizeSettings& settings) {
         if (safe != nullptr)
             safe->randomize_ = settings;
+    };
+    panel->onRangeGestureEnd = [safe](int lo, int hi) {
+        if (safe != nullptr)
+            safe->saveRandomizeRange(lo, hi);
     };
     panel->onRoll = [safe](const ops::RandomizeSettings& settings) {
         if (safe != nullptr)
