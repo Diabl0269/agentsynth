@@ -10,6 +10,7 @@
 TEST_F(WavetableOscillatorModuleTest, RetriggerPhaseStartsTheWaveWhereAsked) {
     setFloat(*module, "position", 0.0f); // sine: phase is directly readable
     setFloat(*module, "level", 1.0f);
+    setFloat(*module, "randomPhase", 0.0f); // the start phase is compared exactly
     const double dt = 440.0 / kSampleRate;
     constexpr int kFade = 64;
     for (const float degrees : {0.0f, 90.0f, 270.0f}) {

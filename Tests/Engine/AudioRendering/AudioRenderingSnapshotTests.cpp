@@ -55,6 +55,7 @@ TEST_F(AudioRenderingTest, SnapshotFilterLowPass) {
     FilterModule filter;
     setChoiceParam(&osc, "waveform", 2); // Saw
     setParamValue(&filter, "cutoff", 500.0f);
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference file starts every note at phase 0
     prepareModule(osc);
     prepareModule(filter);
 
@@ -79,7 +80,8 @@ TEST_F(AudioRenderingTest, SnapshotOscFilterVCAChain) {
     VCAModule vca;
     ADSRModule adsr;
 
-    setChoiceParam(&osc, "waveform", 2); // Saw
+    setChoiceParam(&osc, "waveform", 2);      // Saw
+    setParamValue(&osc, "randomPhase", 0.0f); // the reference file starts every note at phase 0
     setParamValue(&filter, "cutoff", 1000.0f);
     setParamValue(&adsr, "attack", 0.01f);
     setParamValue(&adsr, "sustain", 0.8f);

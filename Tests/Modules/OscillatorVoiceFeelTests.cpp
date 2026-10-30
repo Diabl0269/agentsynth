@@ -239,6 +239,7 @@ TEST(UnisonVoicing, CentreVoicesAreTheOnesNearestTheRoot) {
 
 TEST(OscillatorVoiceFeel, TwoIdenticalNotesStartIdenticallyWithoutRand) {
     Rig rig;
+    setActual(rig.osc, "randomPhase", 0.0f);
     setActual(rig.osc, "unison", 3.0f);
     setActual(rig.osc, "detune", 12.0f);
     const std::vector<NoteEvent> notes = {{0, 0, 69, true}, {3, 100, 69, false}, {8, 0, 69, true}};
@@ -357,6 +358,7 @@ TEST(OscillatorVoiceFeel, PolyVoiceRestartsWhenItGoesFromSilentToSounding) {
     Rig rig(/*poly*/ true);
     rig.polyVoice = 1;
     setActual(rig.osc, "phase", 90.0f);
+    setActual(rig.osc, "randomPhase", 0.0f);
     const std::vector<NoteEvent> none;
     rig.renderBlock(0, none, 0.0f); // silent
     rig.renderBlock(1, none, 440.0f);
@@ -403,6 +405,7 @@ TEST(OscillatorVoiceFeel, BlendOneWidthZeroIsTheConstantPowerSum) {
     setActual(rig.osc, "detune", 30.0f);
     setActual(rig.osc, "blend", 1.0f);
     setActual(rig.osc, "width", 0.0f);
+    setActual(rig.osc, "randomPhase", 0.0f);
     rig.settle();
     rig.render(4, {{0, 0, 69, true}});
     const auto expected = expectedStack(4, 30.0, 1.0, /*useBlend*/ true, rig.left.size());
