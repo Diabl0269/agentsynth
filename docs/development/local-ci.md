@@ -203,6 +203,9 @@ audio device, which a stuck run can wedge for everyone.
 - **A red shard runs once more, alone, after the others finish.** A test that only fails on a fully
   loaded machine doesn't cost the whole gate. It is printed as `FLAKY` with the test names either way,
   and those tests need fixing. CI doesn't retry.
+- **An app check or a recording can stop test runs.** `scripts/hold-test-slots.sh <got-file> <done-file>`
+  takes every slot, because a running Tests binary can wedge the audio device. Running shards finish, new ones
+  wait, and it lets go when the done file appears.
 - **Builds use half the cores** (`CI_LOCAL_JOBS` overrides). Measured with 60 uncached compiles on a busy
   16-core machine: about twice as fast as a quarter of the cores for one gate and no slower for six. Every
   core made six gates 2-3x slower, and a load limit (`-l`) starved a gate whenever other sessions held the

@@ -88,6 +88,22 @@ check "a dead holder frees its slot" test $? -eq 0
 TEST_SLOT_TOOL=none test_slot_run "$dir" 1 1 true
 check "no lock tool still runs the command" test $? -eq 0
 
+# --- holding every slot keeps new test runs off, and releases ------------------------------------
+# hold-test-slots.sh finds its own repository, so these run on a copy of the scripts inside the fixture.
+mkdir -p "$TMP/repo/scripts/lib"
+cp "$REPO_ROOT/scripts/hold-test-slots.sh" "$TMP/repo/scripts/"
+cp "$REPO_ROOT/scripts/lib/test-shards.sh" "$TMP/repo/scripts/lib/"
+CI_LOCAL_TEST_SLOTS=2 bash "$TMP/repo/scripts/hold-test-slots.sh" "$TMP/got" "$TMP/release" &
+hold=$!
+for _ in $(seq 1 50); do [ -f "$TMP/got" ] && break; sleep 0.1; done
+check "the holder reports it holds the slots" test -f "$TMP/got"
+test_slot_run "$(test_slots_dir "$TMP/repo")" 2 1 true
+check "a test run can't start while they are held" test $? -eq "$TEST_SLOT_TIMEOUT_STATUS"
+touch "$TMP/release"
+wait "$hold"
+test_slot_run "$(test_slots_dir "$TMP/repo")" 2 5 true
+check "a test run starts once they are released" test $? -eq 0
+
 # --- the slot folder is shared between worktrees ------------------------------------------------
 git -C "$TMP/repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m x
 git -C "$TMP/repo" worktree add -q "$TMP/wt"
