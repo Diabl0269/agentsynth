@@ -10,6 +10,7 @@
 #include <juce_events/juce_events.h>
 
 #include <functional>
+#include <memory>
 
 namespace synth::test {
 
@@ -27,6 +28,16 @@ inline bool waitUntil(const std::function<bool()>& predicate, int timeoutMs = 20
             return true;
     } while ((juce::int32)(deadline - juce::Time::getMillisecondCounter()) > 0);
     return predicate();
+}
+
+/** Runs every message already posted to the message thread (an async command dispatch, an AsyncUpdater, a
+ *  callAsync): posts a marker behind them and pumps until it runs, so it is as fast as the queue and as patient as the
+ *  machine needs, unlike a fixed slice that a loaded or first-in-process turn can overrun. Work those messages post
+ *  in turn is not waited for; use waitUntil() for a state that arrives later than the queue. False on a timeout. */
+inline bool flushMessageQueue(int timeoutMs = 5000) {
+    auto reached = std::make_shared<bool>(false);
+    juce::MessageManager::callAsync([reached] { *reached = true; });
+    return waitUntil([reached] { return *reached; }, timeoutMs, 5);
 }
 
 } // namespace synth::test

@@ -1,6 +1,7 @@
 // BottomDockDetachedFocusTests.cpp -- Cmd+1/2/3 on a tab whose panel is in its own window raise that window and put
 // keyboard focus in its panel; with the Mixer shown in both places the second window is raised and the docked copy
 // gets the focus; a docked tab behaves as before (docs/control/shortcuts.md#switching-tabs).
+#include "../../TestWait.h"
 #include "BottomDockMainAreaFixture.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include <gtest/gtest.h>
@@ -46,7 +47,7 @@ protected:
     // A key as the app receives it: the shortcut runs its command on the next turn of the message loop.
     static void press(juce::Component& target, const juce::KeyPress& key) {
         EXPECT_TRUE(target.keyPressed(key));
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+        synth::test::flushMessageQueue();
     }
     // Starts recording where the detached window's own registry puts focus; the window's one region is its panel.
     void watch(synth::ui::DetachedPanelWindow& window) {

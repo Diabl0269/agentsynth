@@ -52,6 +52,37 @@ std::unique_ptr<juce::MidiOutput> makeVirtualSource(const juce::String& name) {
 #endif
 }
 
+/** A per-run source name no other process can share: virtual sources are visible machine-wide, so two test
+ *  processes (parallel shards, another session) creating the same name would see each other's. */
+juce::String uniqueSourceName(const juce::String& base) {
+    return base + " " + juce::Uuid().toString().substring(0, 8);
+}
+
+/** The OS publishes a new virtual source to the input list asynchronously, and the first CoreMIDI
+ *  use in a process takes the longest. Polls (bounded) until the source is enumerable. */
+bool waitUntilEnumerated(const juce::String& name) {
+    const auto deadline = juce::Time::getMillisecondCounter() + 5000;
+    for (;;) {
+        for (auto& info : juce::MidiInput::getAvailableDevices())
+            if (info.name == name)
+                return true;
+        if (juce::Time::getMillisecondCounter() > deadline)
+            return false;
+        // CoreMIDI refreshes its source list from the run loop of the thread that first used it.
+        if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+        else
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+juce::String identifierOf(const juce::String& name) {
+    for (auto& info : juce::MidiInput::getAvailableDevices())
+        if (info.name == name)
+            return info.identifier;
+    return {};
+}
+
 /** Waits (bounded) for the driver thread to deliver; the OS MIDI callback is asynchronous. */
 void settle(const std::atomic<int>& counter, int atLeast) {
     for (int i = 0; i < 100 && counter.load() < atLeast; ++i)
@@ -63,10 +94,12 @@ void settle(const std::atomic<int>& counter, int atLeast) {
 } // namespace
 
 TEST(MidiInputDeliveryTest, OneMessageFromAnOpenedSourceIsDeliveredOnce) {
-    const juce::String name = "FRO279 Delivery Test Source";
+    const juce::String name = uniqueSourceName("FRO279 Delivery Test Source");
     auto virtualSource = makeVirtualSource(name);
     if (virtualSource == nullptr)
         GTEST_SKIP() << "no OS MIDI service: cannot create a virtual source";
+    if (!waitUntilEnumerated(name))
+        GTEST_SKIP() << "the virtual source did not enumerate as an input";
 
     AudioEngine engine(AudioEngine::HostMode::Standalone);
     CountingSink sink;
@@ -91,10 +124,12 @@ TEST(MidiInputDeliveryTest, OneMessageFromAnOpenedSourceIsDeliveredOnce) {
 // must keep this a single open input regardless of which side runs first (a relative encoder at
 // double speed, a toggle that flips back, otherwise) -- this test covers that ordering.
 TEST(MidiInputDeliveryTest, ProfileOpenFollowedByLaunchLoopOpensTheSourceOnce) {
-    const juce::String name = "FRO279 Launch Order Test Source";
+    const juce::String name = uniqueSourceName("FRO279 Launch Order Test Source");
     auto virtualSource = makeVirtualSource(name);
     if (virtualSource == nullptr)
         GTEST_SKIP() << "no OS MIDI service: cannot create a virtual source";
+    if (!waitUntilEnumerated(name))
+        GTEST_SKIP() << "the virtual source did not enumerate as an input";
 
     LaunchLoopEngine engine(AudioEngine::HostMode::Standalone);
     CountingSink sink;
@@ -106,7 +141,7 @@ TEST(MidiInputDeliveryTest, ProfileOpenFollowedByLaunchLoopOpensTheSourceOnce) {
     engine.runLaunchLoop();
 
     const auto identifiers = engine.getOpenMidiInputIdentifiers();
-    EXPECT_EQ(std::count(identifiers.begin(), identifiers.end(), identifiers.front()), 1);
+    EXPECT_EQ(std::count(identifiers.begin(), identifiers.end(), identifierOf(name)), 1);
 
     virtualSource->sendMessageNow(juce::MidiMessage::controllerEvent(1, 23, 127));
     settle(sink.calls, 1);
@@ -122,10 +157,12 @@ TEST(MidiInputDeliveryTest, ProfileOpenFollowedByLaunchLoopOpensTheSourceOnce) {
 // mirror image of the historical ordering above. Same dedupe, same single-delivery guarantee,
 // covering the order MainComponent actually uses today.
 TEST(MidiInputDeliveryTest, LaunchLoopFollowedByProfileOpenOpensTheSourceOnce) {
-    const juce::String name = "FRO260 Launch Order Test Source";
+    const juce::String name = uniqueSourceName("FRO260 Launch Order Test Source");
     auto virtualSource = makeVirtualSource(name);
     if (virtualSource == nullptr)
         GTEST_SKIP() << "no OS MIDI service: cannot create a virtual source";
+    if (!waitUntilEnumerated(name))
+        GTEST_SKIP() << "the virtual source did not enumerate as an input";
 
     LaunchLoopEngine engine(AudioEngine::HostMode::Standalone);
     CountingSink sink;
@@ -137,7 +174,7 @@ TEST(MidiInputDeliveryTest, LaunchLoopFollowedByProfileOpenOpensTheSourceOnce) {
     engine.openMidiDevicesForRemote({name});
 
     const auto identifiers = engine.getOpenMidiInputIdentifiers();
-    EXPECT_EQ(std::count(identifiers.begin(), identifiers.end(), identifiers.front()), 1);
+    EXPECT_EQ(std::count(identifiers.begin(), identifiers.end(), identifierOf(name)), 1);
 
     virtualSource->sendMessageNow(juce::MidiMessage::controllerEvent(1, 23, 127));
     settle(sink.calls, 1);

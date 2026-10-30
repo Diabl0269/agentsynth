@@ -169,11 +169,18 @@ TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutOpensThePickerOnlyOnceTheUnf
     synth::ui::test_hooks::replacePickerHookForTest() = [&captured](auto p) { captured = std::move(p); };
     s.mc.setFocusedComponentOverrideForTest(header);
     EXPECT_TRUE(s.mc.keyPressed(s.mc.getShortcutManager().getBinding("replaceSelectedModule")));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    // The chord dispatches on a later message-loop turn (the first in a process can take well over a slice), so wait
+    // for the unfold to start rather than a fixed slice, and judge the picker at that moment, not after the glide.
+    bool gliding = false;
+    for (int slice = 0; slice < 200 && !gliding && captured == nullptr; ++slice) {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(5);
+        gliding = editor.getCardGlide().fold().isLive();
+    }
+    const bool pickerOpenedEarly = captured != nullptr;
     s.mc.setFocusedComponentOverrideForTest(nullptr);
 
-    EXPECT_TRUE(editor.getCardGlide().fold().isLive()) << "the unfold is gliding";
-    EXPECT_EQ(captured, nullptr) << "the card is still held back, so no picker yet";
+    EXPECT_TRUE(gliding) << "the unfold is gliding";
+    EXPECT_FALSE(pickerOpenedEarly) << "the card is still held back, so no picker yet";
 
     editor.finishCardGlideForTest();
     synth::ui::test_hooks::replacePickerHookForTest() = nullptr;

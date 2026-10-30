@@ -49,7 +49,7 @@ private:
 bool pressShiftF10(MainComponent& mc, juce::Component* focused) {
     mc.setFocusedComponentOverrideForTest(focused);
     const bool handled = mc.keyPressed(shiftF10());
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     return handled;
 }
 
@@ -269,7 +269,7 @@ TEST(KeyboardContextMenuRebind, RebindingMovesTheBehaviourToTheNewKey) {
     r.mc.setFocusedComponentOverrideForTest(header);
 
     EXPECT_FALSE(r.mc.keyPressed(shiftF10())) << "the old chord no longer opens anything";
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     EXPECT_EQ(menus, 0);
 
     EXPECT_TRUE(r.mc.keyPressed(shiftF9));

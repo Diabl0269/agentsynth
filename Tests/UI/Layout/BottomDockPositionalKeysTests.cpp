@@ -56,7 +56,7 @@ protected:
     // The command manager runs the matched command asynchronously, so the queue is drained before the caller looks.
     bool press(const juce::KeyPress& key) {
         const bool used = mc_->keyPressed(key);
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        synth::test::flushMessageQueue();
         return used;
     }
     // The platform's spelling of Cmd+<digit> ("Cmd + 1" on macOS, "Ctrl + 1" elsewhere).
