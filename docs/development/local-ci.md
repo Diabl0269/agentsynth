@@ -35,6 +35,8 @@ Fast checks first, so a lint failure does not wait on a full build.
    [`comment-provenance-guard.md`](comment-provenance-guard.md).
 5c. `bash scripts/check-fixed-waits.sh` against the real tree — tests that pump the message loop for a
    fixed time and then assert; see [`testing.md`](testing.md#waiting-for-async-work).
+5d. `bash scripts/check-header-reach.sh` against the real tree — how many `.cpp` files reach each
+   header; see [Header reach guard](#header-reach-guard) below.
 6. `bash scripts/check-docs.sh` against the real tree — see [`docs-guard.md`](docs-guard.md).
 7. Every `scripts/tests/*.test.sh`, globbed, so a newly added one is picked up automatically without
    editing this script. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree
@@ -79,6 +81,26 @@ the same way the release workflow locates it for packaging, so a green terminal 
 thing you are left with — you can open and try the real app. `--open` does that automatically
 (macOS only; a no-op notice elsewhere, since the flag also has to be safe to leave on in a
 headless run).
+
+## Header reach guard
+
+`scripts/check-header-reach.sh` counts, for every header under `Source/`, how many `.cpp` files in
+`Source/` and `Tests/` include it, directly or through other headers. Editing a header that reaches
+a thousand files recompiles a thousand files, which is what turns a small change into a 30-minute CI
+run. It reads the `#include` lines (no build, about two seconds), resolving each include next to the
+including file and then under `Source/`, as the build does; JUCE and system headers are ignored.
+
+Headers reached by more than 100 files are listed in `scripts/header-reach-baseline.txt` at their
+current count. The check fails when a listed header grows by more than 5 files or 3%, whichever is
+more, and when any header not listed passes 100. The failure names the header, old and new count,
+and the files that include it directly, widest first; the fix is usually to forward-declare, or to
+include the header only in the `.cpp` that uses it.
+
+A ratchet stops growth. It does not shrink anything: the listed headers stay as wide as they are
+until someone cuts their reach. When you do, run `bash scripts/check-header-reach.sh --update` to
+tighten the entries (it never raises one; `--allow-raise` is the reviewed exception). `--list [N]`
+prints the widest headers. The count is a little higher than the number of object files a build
+recompiles (about 2% on `Source/`), and `scripts/tests/check-header-reach.test.sh` covers the checker.
 
 ## Deliberately not reproduced
 

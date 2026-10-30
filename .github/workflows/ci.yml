@@ -230,6 +230,9 @@ jobs:
       # scripts/check-comment-provenance.sh's own doc comment and
       # docs/development/comment-provenance-guard.md for the full mechanism.
       run: bash scripts/check-comment-provenance.sh && bash scripts/check-fixed-waits.sh
+    - name: Check header reach
+      # Caps how many .cpp files include each header (strict ratchet, scripts/header-reach-baseline.txt); the self-test runs first.
+      run: bash scripts/tests/check-header-reach.test.sh && bash scripts/check-header-reach.sh
     - name: Test docs checker
       # A hole in the docs-integrity scanner (a mis-scanned exclusion, a regex that matches the
       # wrong `]`, a ratchet that doesn't actually ratchet) makes the link/section/naming/map
