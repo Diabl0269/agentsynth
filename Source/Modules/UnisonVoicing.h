@@ -19,18 +19,24 @@ constexpr int kMaxUnisonVoices = 8;
 constexpr float kDefaultUnisonDetuneCents = 35.0f;
 constexpr float kDefaultUnisonBlend = 0.75f;
 constexpr float kDefaultUnisonWidth = 1.0f;
+/** Rand as a 0..1 fraction: every unison voice starts each note at a random phase, as the measured reference does. */
+constexpr float kDefaultUnisonRand = 1.0f;
 
-/** A stored module that has no Detune, Blend or Width key was saved before those defaults: give it the values it
-    sounded with then (Detune 0, Blend 100 %, Width 0). `stores(key)` says whether the saved data holds that key. */
+/** A stored module that has no Detune, Blend, Width or Rand key was saved before those defaults: give it the values it
+    sounded with then (Detune 0, Blend 100 %, Width 0, Rand 0). `stores(key)` says whether the saved data holds that
+   key. */
 template <typename StoresKey>
 void restoreLegacyUnisonDefaults(const StoresKey& stores, juce::AudioParameterFloat& detune,
-                                 juce::AudioParameterFloat& blend, juce::AudioParameterFloat& width) {
+                                 juce::AudioParameterFloat& blend, juce::AudioParameterFloat& width,
+                                 juce::AudioParameterFloat& rand) {
     if (!stores("detune"))
         detune.setValueNotifyingHost(detune.convertTo0to1(0.0f));
     if (!stores("blend"))
         blend.setValueNotifyingHost(blend.convertTo0to1(1.0f));
     if (!stores("width"))
         width.setValueNotifyingHost(width.convertTo0to1(0.0f));
+    if (!stores("randomPhase"))
+        rand.setValueNotifyingHost(0.0f);
 }
 
 /** Position of unison voice `u` of `count` in the detune spread: -1 (lowest) .. +1 (highest), 0 for a

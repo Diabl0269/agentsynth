@@ -54,8 +54,8 @@ juce::String explainedKnobTooltip(juce::AudioProcessor& module, const juce::Rang
                "not change a note that is already sounding.";
     if (paramId == "randomPhase")
         return param.getName(100) +
-               ". How far each unison voice's start is randomised on every new note, so repeats of a note differ a "
-               "little. It sets the start of every new note and does not change a note that is already sounding.";
+               ". How far each unison voice's start is randomised on every new note, so repeats of a note differ. It "
+               "sets the start of every new note and does not change a note that is already sounding.";
     return {};
 }
 

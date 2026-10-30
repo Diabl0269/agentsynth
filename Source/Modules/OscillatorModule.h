@@ -122,9 +122,9 @@ public:
         addParameter(phaseParam =
                          new juce::AudioParameterFloat("phase", "Phase", juce::NormalisableRange<float>(0.0f, 360.0f),
                                                        0.0f, synth::degreesAttributes()));
-        addParameter(randomPhaseParam = new juce::AudioParameterFloat("randomPhase", "Rand",
-                                                                      juce::NormalisableRange<float>(0.0f, 100.0f),
-                                                                      0.0f, synth::percentAttributes()));
+        addParameter(randomPhaseParam = new juce::AudioParameterFloat(
+                         "randomPhase", "Rand", juce::NormalisableRange<float>(0.0f, 100.0f),
+                         synth::kDefaultUnisonRand * 100.0f, synth::percentAttributes()));
         addParameter(blendParam =
                          new juce::AudioParameterFloat("blend", "Blend", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        synth::kDefaultUnisonBlend, synth::fractionPercentAttributes()));
@@ -149,18 +149,18 @@ public:
         enableVisualBuffer(true);
     }
 
-    /** A stored Oscillator node with no Detune, Blend or Width predates the current defaults: it keeps the sound it
-        had (Detune 0, Blend 100 %, Width 0). */
+    /** A stored Oscillator node with no Detune, Blend, Width or Rand predates the current defaults: it keeps the
+        sound it had (Detune 0, Blend 100 %, Width 0, Rand 0). */
     void applyStoredParamDefaults(const juce::NamedValueSet& storedParams) override {
         synth::restoreLegacyUnisonDefaults([&](const char* key) { return storedParams.contains(key); }, *detuneParam,
-                                           *blendParam, *widthParam);
+                                           *blendParam, *widthParam, *randomPhaseParam);
     }
     /** The binary state of a module saved before these defaults has no key for them: it keeps the legacy values. */
     void setStateInformation(const void* data, int sizeInBytes) override {
         ModuleBase::setStateInformation(data, sizeInBytes);
         if (auto xml = getXmlFromBinary(data, sizeInBytes); xml != nullptr && xml->hasTagName("ModuleState"))
             synth::restoreLegacyUnisonDefaults([&](const char* key) { return xml->hasAttribute(key); }, *detuneParam,
-                                               *blendParam, *widthParam);
+                                               *blendParam, *widthParam, *randomPhaseParam);
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {

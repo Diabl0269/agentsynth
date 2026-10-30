@@ -284,7 +284,8 @@ WavetableOscillatorModule::WavetableOscillatorModule()
 
     // ---- Phase 1: phase control ----
     addParameter(phaseParam = new juce::AudioParameterFloat("phase", "Phase", 0.0f, 360.0f, 0.0f));
-    addParameter(randomPhaseParam = synth::newFractionParameter("randomPhase", "Rand Phase", 0.0f));
+    addParameter(randomPhaseParam =
+                     synth::newFractionParameter("randomPhase", "Rand Phase", synth::kDefaultUnisonRand));
     addParameter(spreadParam = synth::newFractionParameter("spread", "Spread", 0.0f));
 
     // ---- Phase 3: richer voicing ----
@@ -505,11 +506,11 @@ void WavetableOscillatorModule::setExtraState(const juce::var& state) {
     }
 }
 
-// Applied by AIStateMapper after a node's params: a stored node (project, preset or patch) with no Detune, Blend or
-// Width keeps the legacy values instead of the new module defaults.
+// Applied by AIStateMapper after a node's params: a stored node (project, preset or patch) with no Detune, Blend, Width
+// or Rand keeps the legacy values instead of the new module defaults.
 void WavetableOscillatorModule::applyStoredParamDefaults(const juce::NamedValueSet& storedParams) {
     synth::restoreLegacyUnisonDefaults([&](const char* key) { return storedParams.contains(key); }, *detuneParam,
-                                       *blendParam, *widthParam);
+                                       *blendParam, *widthParam, *randomPhaseParam);
 }
 
 void WavetableOscillatorModule::setStateInformation(const void* data, int sizeInBytes) {
@@ -531,7 +532,7 @@ void WavetableOscillatorModule::setStateInformation(const void* data, int sizeIn
 
     // A state saved before the current unison defaults has no key for them and keeps the sound it had.
     synth::restoreLegacyUnisonDefaults([&](const char* key) { return state.hasProperty(key); }, *detuneParam,
-                                       *blendParam, *widthParam);
+                                       *blendParam, *widthParam, *randomPhaseParam);
 
     if (path.isNotEmpty()) {
         const juce::File file(path);

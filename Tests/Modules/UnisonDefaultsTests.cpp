@@ -131,6 +131,9 @@ TEST(UnisonDefaults, NewModulesStartWithTheMeasuredReferenceStack) {
         EXPECT_NEAR(unisonDefaultsActual(*m, "width"), 1.0f, 1e-4f);
         EXPECT_NEAR(unisonDefaultsActual(*m, "unison"), 1.0f, 1e-4f) << "Unison itself still starts at one voice";
     }
+    // Rand starts full so the stack's voices open apart on every note instead of pulsing in phase.
+    EXPECT_NEAR(unisonDefaultsActual(osc, "randomPhase"), 100.0f, 1e-3f);
+    EXPECT_NEAR(unisonDefaultsActual(wt, "randomPhase"), 1.0f, 1e-4f);
 }
 
 // Regression test for FRO1226: a new Oscillator at Unison 7 sounded no different from Unison 1 (Detune 0, Width 0).
@@ -156,7 +159,8 @@ TEST(UnisonDefaults, DefaultWavetableUnisonSevenIsHeardAsSpectralSpreadAndSideEn
 
 TEST(UnisonDefaults, SavedProjectKeepsItsStoredUnisonDefaults) {
     // Stored values that equal the OLD defaults, and values that equal neither, both load as stored.
-    for (const auto& stored : {std::array<float, 3>{0.0f, 0.25f, 0.0f}, std::array<float, 3>{12.0f, 0.5f, 0.3f}}) {
+    for (const auto& stored :
+         {std::array<float, 4>{0.0f, 0.25f, 0.0f, 0.0f}, std::array<float, 4>{12.0f, 0.5f, 0.3f, 0.4f}}) {
         juce::AudioProcessorGraph source;
         source.addNode(std::make_unique<OscillatorModule>());
         source.addNode(std::make_unique<WavetableOscillatorModule>());
@@ -164,6 +168,7 @@ TEST(UnisonDefaults, SavedProjectKeepsItsStoredUnisonDefaults) {
             unisonDefaultsSet(*node->getProcessor(), "detune", stored[0]);
             unisonDefaultsSet(*node->getProcessor(), "blend", stored[1]);
             unisonDefaultsSet(*node->getProcessor(), "width", stored[2]);
+            unisonDefaultsSet(*node->getProcessor(), "randomPhase", stored[3]);
         }
         const auto loaded = loadTrusted(synth::AIStateMapper::graphToJSON(source));
         ASSERT_EQ(loaded->getNumNodes(), 2);
@@ -172,6 +177,7 @@ TEST(UnisonDefaults, SavedProjectKeepsItsStoredUnisonDefaults) {
             EXPECT_NEAR(unisonDefaultsActual(m, "detune"), stored[0], 0.05f) << m.getName();
             EXPECT_NEAR(unisonDefaultsActual(m, "blend"), stored[1], 1e-4f) << m.getName();
             EXPECT_NEAR(unisonDefaultsActual(m, "width"), stored[2], 1e-4f) << m.getName();
+            EXPECT_NEAR(unisonDefaultsActual(m, "randomPhase"), stored[3], 1e-3f) << m.getName();
         }
     }
 }
@@ -186,11 +192,12 @@ TEST(UnisonDefaults, AProjectMissingTheKeysKeepsTheOldDefaults) {
         const auto json = synth::AIStateMapper::graphToJSON(source);
         ASSERT_TRUE(json["nodes"][0]["params"].getDynamicObject()->hasProperty("detune"));
 
-        const auto legacy = loadTrusted(stripStoredKeys(json, {"detune", "blend", "width"}));
+        const auto legacy = loadTrusted(stripStoredKeys(json, {"detune", "blend", "width", "randomPhase"}));
         auto& m = firstNode(*legacy);
         EXPECT_NEAR(unisonDefaultsActual(m, "detune"), 0.0f, 1e-3f) << type;
         EXPECT_NEAR(unisonDefaultsActual(m, "blend"), 1.0f, 1e-4f) << type;
         EXPECT_NEAR(unisonDefaultsActual(m, "width"), 0.0f, 1e-4f) << type;
+        EXPECT_NEAR(unisonDefaultsActual(m, "randomPhase"), 0.0f, 1e-4f) << type << ": Rand was 0 before";
 
         const auto partial = loadTrusted(stripStoredKeys(json, {"width"}));
         EXPECT_NEAR(unisonDefaultsActual(firstNode(*partial), "detune"), 35.0f, 0.05f) << "a stored key is kept";
@@ -207,7 +214,7 @@ TEST(UnisonDefaults, BinaryStateMissingTheKeysKeepsTheOldDefaults) {
         EXPECT_NE(xml, nullptr);
         juce::MemoryBlock out;
         if (xml != nullptr) {
-            for (const char* key : {"detune", "blend", "width"})
+            for (const char* key : {"detune", "blend", "width", "randomPhase"})
                 xml->removeAttribute(key);
             juce::AudioProcessor::copyXmlToBinary(*xml, out);
         }
@@ -225,6 +232,7 @@ TEST(UnisonDefaults, BinaryStateMissingTheKeysKeepsTheOldDefaults) {
         EXPECT_NEAR(unisonDefaultsActual(target, "detune"), 0.0f, 1e-3f) << m->getName();
         EXPECT_NEAR(unisonDefaultsActual(target, "blend"), 1.0f, 1e-4f) << m->getName();
         EXPECT_NEAR(unisonDefaultsActual(target, "width"), 0.0f, 1e-4f) << m->getName();
+        EXPECT_NEAR(unisonDefaultsActual(target, "randomPhase"), 0.0f, 1e-4f) << m->getName();
     }
 }
 
@@ -242,12 +250,14 @@ TEST(UnisonDefaults, AGeneratedPatchThatOmitsTheKeysGetsTheOldDefaultsAndOneThat
     EXPECT_NEAR(unisonDefaultsActual(a, "detune"), 0.0f, 1e-3f);
     EXPECT_NEAR(unisonDefaultsActual(a, "blend"), 1.0f, 1e-4f);
     EXPECT_NEAR(unisonDefaultsActual(a, "width"), 0.0f, 1e-4f);
+    EXPECT_NEAR(unisonDefaultsActual(a, "randomPhase"), 0.0f, 1e-4f);
 
     juce::AudioProcessorGraph written;
     ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(
-        parse("{\"unison\":5,\"detune\":35,\"blend\":0.75,\"width\":1.0}"), written, true, false));
+        parse("{\"unison\":5,\"detune\":35,\"blend\":0.75,\"width\":1.0,\"randomPhase\":100}"), written, true, false));
     auto& b = firstNode(written);
     EXPECT_NEAR(unisonDefaultsActual(b, "detune"), 35.0f, 0.5f);
     EXPECT_NEAR(unisonDefaultsActual(b, "blend"), 0.75f, 0.01f);
     EXPECT_NEAR(unisonDefaultsActual(b, "width"), 1.0f, 0.01f);
+    EXPECT_NEAR(unisonDefaultsActual(b, "randomPhase"), 100.0f, 0.5f);
 }

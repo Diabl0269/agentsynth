@@ -28,7 +28,7 @@ type Oscillator size 280x593
   child 26 label id="" at 204,179 64x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 27 knob id="Phase" at 0,0 0x0 visible=0 title="Phase" tip="Phase. Where each new note starts the wave, in degrees. It sets the start of every new note and does not change a note that is already sounding." focusOrder=0 wantsFocus=1
   child 28 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 29 knob id="Rand" at 0,0 0x0 visible=0 title="Rand" tip="Rand. How far each unison voice's start is randomised on every new note, so repeats of a note differ a little. It sets the start of every new note and does not change a note that is already sounding." focusOrder=0 wantsFocus=1
+  child 29 knob id="Rand" at 0,0 0x0 visible=0 title="Rand" tip="Rand. How far each unison voice's start is randomised on every new note, so repeats of a note differ. It sets the start of every new note and does not change a note that is already sounding." focusOrder=0 wantsFocus=1
   child 30 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 31 knob id="Blend" at 140,291 64x58 visible=1 title="Blend" tip="Blend (inactive in this mode)" focusOrder=0 wantsFocus=1
   child 32 label id="" at 140,273 64x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
