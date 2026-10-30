@@ -1,5 +1,6 @@
+# total-cpp: 2234
 # Headers reached by more .cpp files than the cap. STRICT ratchet: an entry is the current count.
-# A header may grow by max(5 files, 3%) and no more; when it shrinks, run `bash scripts/check-header-reach.sh --update`
+# Each entry is scaled by total-cpp now / above; a header may then grow by max(5 files, 3%); when it shrinks, run `bash scripts/check-header-reach.sh --update`
 # so the entry tightens; once under the cap the entry is removed (--update does that).
 # Never add a NEW header here -- include it only where it is used instead.
 1292 Source/UI/Layout/ReducedMotion.h

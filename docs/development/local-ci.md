@@ -91,8 +91,9 @@ run. It reads the `#include` lines (no build, about two seconds), resolving each
 including file and then under `Source/`, as the build does; JUCE and system headers are ignored.
 
 Headers reached by more than 100 files are listed in `scripts/header-reach-baseline.txt` at their
-current count. The check fails when a listed header grows by more than 5 files or 3%, whichever is
-more, and when any header not listed passes 100. The failure names the header, old and new count,
+current count, plus the total number of `.cpp` files at that time. As the tree gains `.cpp` files every
+header's reach grows with it, so each entry is scaled by the tree's growth first. The check fails
+when a listed header grows past that scaled count by more than 5 files or 3%, whichever is more, and when any header not listed passes 100. The failure names the header, old and new count,
 and the files that include it directly, widest first; the fix is usually to forward-declare, or to
 include the header only in the `.cpp` that uses it.
 

@@ -7,6 +7,7 @@ next to the including file first, then under Source/ (the only include directory
 JUCE, system and generated headers resolve to nothing and are ignored.
 
   header-reach.py <root>                 prints "<count> <header>" lines, largest first
+  header-reach.py <root> --total         prints the number of .cpp files scanned
   header-reach.py <root> --includers H   prints "<header-count> <includer>" for each file that includes H directly
 """
 import collections
@@ -57,6 +58,9 @@ def main():
     root = sys.argv[1]
     files, graph = build_graph(root)
     counts = reach_counts(files, graph)
+    if len(sys.argv) > 2 and sys.argv[2] == "--total":
+        print(sum(1 for f in files if f.endswith(".cpp")))
+        return
     if len(sys.argv) > 3 and sys.argv[2] == "--includers":
         target = sys.argv[3]
         rows = [(counts.get(f, 1 if f.endswith(".cpp") else 0), f) for f in files if target in graph.get(f, [])]

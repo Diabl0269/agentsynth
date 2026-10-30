@@ -16,7 +16,10 @@
 # one .cpp can build into several targets; it moves the same way.
 #
 # Headers over the cap (HEADER_REACH_CAP, default 100) are grandfathered in
-# scripts/header-reach-baseline.txt at their current count. A header may grow by the slack,
+# scripts/header-reach-baseline.txt at their current count, together with the total number of .cpp
+# files at that time (the "# total-cpp:" line). A tree that gains .cpp files makes every header's
+# reach grow in proportion, so each entry is scaled by total_now / total_baseline first; only growth
+# beyond that is a violation. On top of the scaled entry a header may grow by the slack,
 # max(5 files, 3%), so an ordinary new .cpp does not trip it. A header not in the baseline fails the
 # moment it is over the cap: add the include somewhere narrower instead. --update only lowers
 # entries and drops those that fell under the cap; raising one or adding one needs --allow-raise,
@@ -128,6 +131,13 @@ CAP="${HEADER_REACH_CAP:-100}"
 BASELINE_FILE="${HEADER_REACH_BASELINE:-$ROOT/scripts/header-reach-baseline.txt}"
 HELPER="$SCRIPT_DIR/lib/header-reach.py"
 
+# baseline_total -- the .cpp total recorded in the baseline; 0 when absent (then nothing is scaled).
+baseline_total() {
+    [ -f "$BASELINE_FILE" ] || { echo 0; return; }
+    t="$(sed -n 's/^# total-cpp: *\([0-9][0-9]*\).*$/\1/p' "$BASELINE_FILE" | head -n 1)"
+    echo "${t:-0}"
+}
+
 # build_current_data -- "<count> <header>" for every header that any .cpp reaches, widest first.
 build_current_data() {
     python3 "$HELPER" "$ROOT"
@@ -159,7 +169,13 @@ run_check() {
         return 1
     fi
 
-    awk_out="$(awk -v cap="$CAP" -v baseline_file="$workdir/baseline.txt" '
+    total_now="$(python3 "$HELPER" "$ROOT" --total)"
+    total_base="$(baseline_total)"
+    [ "$total_base" -gt 0 ] || total_base="$total_now"
+    # A tree that lost .cpp files keeps its recorded limits; they only scale up.
+    [ "$total_now" -ge "$total_base" ] || total_base="$total_now"
+
+    awk_out="$(awk -v cap="$CAP" -v tn="$total_now" -v tb="$total_base" -v baseline_file="$workdir/baseline.txt" '
         FILENAME == baseline_file { entry[$2] = $1 + 0; next }
         {
             count[$2] = $1 + 0
@@ -171,14 +187,17 @@ run_check() {
             errors = 0
             for (p in count) {
                 if (p in entry) {
-                    slack = int(entry[p] * 0.03)
+                    scaled = entry[p] * tn / tb
+                    scaled = (scaled == int(scaled)) ? scaled : int(scaled) + 1
+                    slack = int(scaled * 0.03)
                     if (slack < 5) slack = 5
-                    if (count[p] > entry[p] + slack) {
-                        printf "ERR %s reaches %d .cpp files, up from %d in the baseline (allowed up to %d) -- add the include where it is used, or forward-declare, instead of in a widely included header\n", p, count[p], entry[p], entry[p] + slack
+                    limit = scaled + slack
+                    if (count[p] > limit) {
+                        printf "ERR %s reaches %d .cpp files, up from %d in the baseline (scaled for %d .cpp files now vs %d then: %d, allowed up to %d) -- add the include where it is used, or forward-declare, instead of in a widely included header\n", p, count[p], entry[p], tn, tb, scaled, limit
                         printf "EXPLAIN %s\n", p
                         errors++
-                    } else if (count[p] < entry[p] - slack) {
-                        printf "WARN %s fell from %d to %d -- run --update to tighten the baseline\n", p, entry[p], count[p]
+                    } else if (count[p] < scaled - slack) {
+                        printf "WARN %s fell from %d (scaled %d) to %d -- run --update to tighten the baseline\n", p, entry[p], scaled, count[p]
                     }
                 } else if (count[p] > cap) {
                     printf "ERR %s reaches %d .cpp files (cap %d) and is not in the baseline -- the baseline never grows by adding headers; include it only where used, or split it so most files need only a small part\n", p, count[p], cap
@@ -243,6 +262,11 @@ run_update() {
         return 1
     fi
     awk -v cap="$CAP" '($1 + 0) > cap' "$workdir/all.txt" | sort -k2,2 >"$workdir/new.txt"
+    total_now="$(python3 "$HELPER" "$ROOT" --total)"
+    total_base="$(baseline_total)"
+    [ "$total_base" -gt 0 ] || total_base="$total_now"
+    # A tree that lost .cpp files keeps its recorded limits; they only scale up.
+    [ "$total_now" -ge "$total_base" ] || total_base="$total_now"
 
     baseline_existed=0
     [ -f "$BASELINE_FILE" ] && baseline_existed=1
@@ -255,8 +279,8 @@ run_update() {
             old_count="$(awk -v p="$path" '$2 == p { print $1 }' "$workdir/old.txt")"
             if [ -z "$old_count" ]; then
                 what="is a new over-cap header ($new_count files, cap $CAP)"
-            elif [ "$new_count" -gt "$old_count" ]; then
-                what="would raise the baseline from $old_count to $new_count"
+            elif [ "$new_count" -gt $(((old_count * total_now + total_base - 1) / total_base)) ]; then
+                what="would raise the baseline from $old_count to $new_count (more than its $(((old_count * total_now + total_base - 1) / total_base)) scaled for the tree's growth)"
             else
                 continue
             fi
@@ -276,8 +300,9 @@ run_update() {
     fi
 
     {
+        echo "# total-cpp: $total_now"
         echo "# Headers reached by more .cpp files than the cap. STRICT ratchet: an entry is the current count."
-        echo "# A header may grow by max(5 files, 3%) and no more; when it shrinks, run \`bash scripts/check-header-reach.sh --update\`"
+        echo "# Each entry is scaled by total-cpp now / above; a header may then grow by max(5 files, 3%); when it shrinks, run \`bash scripts/check-header-reach.sh --update\`"
         echo "# so the entry tightens; once under the cap the entry is removed (--update does that)."
         echo "# Never add a NEW header here -- include it only where it is used instead."
         sort -k1,1nr -k2,2 "$workdir/new.txt"
