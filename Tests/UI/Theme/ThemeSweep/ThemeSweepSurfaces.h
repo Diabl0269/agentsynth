@@ -15,6 +15,8 @@
 
 namespace synth::test::theme_sweep {
 
+struct AppHost;
+
 /** One theme made current the way the app does it: an AppLookAndFeel with the theme applied, installed as the
  *  Desktop default, and an anchor component that carries it (what a dialog centres around). Closing the dialogs and
  *  putting the previous default back happens in the destructor. */
@@ -29,6 +31,11 @@ public:
     synth::theme::AppLookAndFeel& lookAndFeel() noexcept { return lookAndFeel_; }
     juce::Component& anchor() noexcept { return anchor_; }
 
+    /** A card on a canvas under a stand-in for the main window, built on first use: a dialog opened from it can hand
+     *  app shortcuts to that window. `appKeys()` lists the keys the stand-in received, in order. */
+    juce::Component& appAnchor();
+    std::vector<juce::KeyPress>& appKeys();
+
     /** Keeps `object` alive until the environment goes (after its dialogs are gone). */
     void keepAlive(std::shared_ptr<void> object) { kept_.push_back(std::move(object)); }
 
@@ -38,12 +45,17 @@ private:
     juce::Component anchor_;
     juce::LookAndFeel* previousDefault_ = nullptr;
     std::vector<std::shared_ptr<void>> kept_;
+    std::unique_ptr<AppHost> appHost_;
 };
 
 /** A PopupMotion::launchDialog call site. `open` is empty for an exempt one, which then says why. */
 struct DialogSurface {
     std::string name;
     std::string sourceFile; // repo-relative, e.g. "Source/UI/Assistant/SignInDialog.cpp"
+    // True for a tool window that edits a module on the canvas (app shortcuts reach the app from it); false for a
+    // modal prompt, where an undo would change the canvas behind a question the user is answering. No default: a new
+    // dialog has to choose.
+    bool relaysAppShortcuts;
     std::function<juce::DialogWindow*(SweepEnvironment&)> open;
     std::string exemptReason;
 };

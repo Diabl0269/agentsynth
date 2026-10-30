@@ -4,6 +4,7 @@
 // Findings that are known and ticketed live in kKnownGaps; the list may only shrink (docs/layout/theming.md).
 #include "../../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../Layout/NativeWindowTestGuard.h"
+#include "../../SourceScan.h"
 #include "ThemeSweepSupport.h"
 #include "ThemeSweepSurfaces.h"
 #include "UI/Layout/PopupMotion.h"
@@ -17,6 +18,7 @@
 #include <string>
 
 using namespace synth::test::theme_sweep;
+using synth::test::source_scan::countCallSites;
 using synth::theme::Theme;
 
 namespace {
@@ -170,76 +172,12 @@ void checkSurface(Findings& findings, ProbeLog& log, const std::string& surface,
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Scanning Source for call sites.
+// Scanning Source for call sites (SourceScan.h).
 // ---------------------------------------------------------------------------------------------------------------------
-
-juce::File sourceDir() { return juce::File(TESTS_ROOT_DIR).getParentDirectory().getChildFile("Source"); }
-
-// `text` without its comments (string literals are left alone).
-std::string stripComments(const std::string& text) {
-    std::string out;
-    bool inString = false;
-    for (size_t i = 0; i < text.size(); ++i) {
-        const char c = text[i];
-        if (inString) {
-            out += c;
-            if (c == '\\' && i + 1 < text.size())
-                out += text[++i];
-            else if (c == '"')
-                inString = false;
-        } else if (c == '/' && i + 1 < text.size() && text[i + 1] == '/') {
-            while (i < text.size() && text[i] != '\n')
-                ++i;
-            out += '\n';
-        } else if (c == '/' && i + 1 < text.size() && text[i + 1] == '*') {
-            i += 2;
-            while (i + 1 < text.size() && !(text[i] == '*' && text[i + 1] == '/'))
-                ++i;
-            ++i;
-        } else {
-            out += c;
-            inString = c == '"';
-        }
-    }
-    return out;
-}
-
-// Occurrences of `pattern` per Source file (repo-relative path), comments excluded.
-std::map<std::string, int> countCallSites(const std::regex& pattern, const std::string& skipPrefix) {
-    std::map<std::string, int> counts;
-    juce::Array<juce::File> files;
-    sourceDir().findChildFiles(files, juce::File::findFiles, true, "*.cpp;*.h;*.mm");
-    for (const auto& file : files) {
-        const auto relative =
-            "Source/" + file.getRelativePathFrom(sourceDir()).replaceCharacter('\\', '/').toStdString();
-        if (!skipPrefix.empty() && relative.rfind(skipPrefix, 0) == 0)
-            continue;
-        const auto text = stripComments(file.loadFileAsString().toStdString());
-        const auto n =
-            (int)std::distance(std::sregex_iterator(text.begin(), text.end(), pattern), std::sregex_iterator());
-        if (n > 0)
-            counts[relative] = n;
-    }
-    return counts;
-}
 
 void expectRegistered(const char* what, const std::map<std::string, int>& scanned,
                       const std::map<std::string, int>& registered) {
-    std::set<std::string> files;
-    for (const auto& [file, n] : scanned)
-        files.insert(file);
-    for (const auto& [file, n] : registered)
-        files.insert(file);
-    for (const auto& file : files) {
-        const int found = scanned.count(file) ? scanned.at(file) : 0;
-        const int listed = registered.count(file) ? registered.at(file) : 0;
-        if (found > listed)
-            ADD_FAILURE() << "not registered: " << file << " (" << found << " " << what << " call sites, " << listed
-                          << " registered) - add it to ThemeSweepSurfaces.cpp";
-        else if (found < listed)
-            ADD_FAILURE() << "stale: " << file << " has " << found << " " << what << " call sites but " << listed
-                          << " are registered - remove the extra from ThemeSweepSurfaces.cpp";
-    }
+    synth::test::source_scan::expectCountsMatch(what, scanned, registered, "ThemeSweepSurfaces.cpp");
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

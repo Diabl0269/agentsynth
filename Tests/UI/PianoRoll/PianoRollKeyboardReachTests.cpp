@@ -120,7 +120,9 @@ TEST(PianoRollKeyboardReachTest, ReturnOnTheBackChipClosesTheRoll) {
     EXPECT_FALSE(f.roll.isOpen());
 }
 
-TEST(PianoRollKeyboardReachTest, TabWalksTheHeaderChipsThenTheVelocityControls) {
+// The roll's own focus order (what juce::KeyboardFocusTraverser walks). The app spends Tab on its region cycle, so
+// this does not prove a user can reach a control: KeyboardReachTests holds every region to that.
+TEST(PianoRollKeyboardReachTest, TheHeaderChipsThenTheVelocityControlsAreInTheRollsFocusOrder) {
     RollWithClip f;
     f.roll.toggleScalePanel();
     f.roll.resized();

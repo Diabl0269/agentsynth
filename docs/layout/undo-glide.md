@@ -86,3 +86,16 @@ tween repaints (`paintedComponent()`; a surface drawn through a `KeyedTween` mus
 glide frame of an undo and a redo (also under Reduce Motion) the test re-renders only the areas the tween asked to repaint
 (`setKeyedTweenDirtyProbeForTest`) and compares with a full render.
 The same list is walked under Reduce Motion (a fade for the point surfaces, an instant landing for the rows) and with Animations Off (instant).
+
+## Registration
+
+Two discovery tests keep the guards above from being skipped by a new surface. `DragSurfaces.EveryMouseDragOverrideIsRegistered`
+(`Tests/UI/Layout/DragSurfaceRegistryTests.cpp`) scans `Source/` for every class that overrides `mouseDrag` and fails by
+name for one that is not in its table. A class maps to the guard that checks its preview against its commit
+(`clip-edge` = `dragEdgeExpectingPreviewEqualsCommit`, `point-markers:<name>` = `pointSurfaces()`, `undo-glide:<name>` =
+`surfaces()` above, or the name of another test that checks it) or to `exempt: <reason>` for a drag with no preview/commit
+split. The guard names are checked against the real lists, and a table entry whose class no longer overrides `mouseDrag`
+fails as stale. A class with a real split and no guard goes in `kKnownGaps` with a ticket; that list may only shrink.
+`PopupMotionUsers.EveryUserIsRegistered` (`Tests/UI/Layout/PopupMotionRegistryTests.cpp`) does the same for every file that
+calls `PopupMotion::attach`, `dismiss`, `dismissModal` or `dismissCallOut` (`launchDialog` is registered by the theme sweep).
+Both scan through `Tests/UI/SourceScan.h`, which the theme sweep uses too.

@@ -14,6 +14,7 @@
 #include "UI/Assistant/SignInDialog.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/RenderProgressDialog.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.h"
@@ -31,6 +32,32 @@ using namespace synth::ui::test;
 
 namespace synth::test::theme_sweep {
 
+// Stands in for MainComponent: the command target above the canvas, recording the keys handed to it.
+struct AppHost
+    : juce::Component
+    , juce::ApplicationCommandTarget {
+    AppHost()
+        : canvas(engine) {
+        canvas.getCardKeyboard().setShortcutManager(&shortcuts);
+        addAndMakeVisible(canvas);
+        canvas.addAndMakeVisible(anchor);
+    }
+    bool keyPressed(const juce::KeyPress& key) override {
+        received.push_back(key);
+        return true;
+    }
+    ApplicationCommandTarget* getNextCommandTarget() override { return nullptr; }
+    void getAllCommands(juce::Array<juce::CommandID>&) override {}
+    void getCommandInfo(juce::CommandID, juce::ApplicationCommandInfo&) override {}
+    bool perform(const InvocationInfo&) override { return false; }
+
+    AudioEngine engine;
+    GraphEditor canvas;
+    ShortcutManager shortcuts;
+    juce::Component anchor;
+    std::vector<juce::KeyPress> received;
+};
+
 SweepEnvironment::SweepEnvironment(const synth::theme::Theme& theme)
     : theme_(theme) {
     lookAndFeel_.applyTheme(theme_);
@@ -38,6 +65,17 @@ SweepEnvironment::SweepEnvironment(const synth::theme::Theme& theme)
     anchor_.setLookAndFeel(&lookAndFeel_);
     previousDefault_ = &juce::Desktop::getInstance().getDefaultLookAndFeel();
     juce::Desktop::getInstance().setDefaultLookAndFeel(&lookAndFeel_);
+}
+
+juce::Component& SweepEnvironment::appAnchor() {
+    if (appHost_ == nullptr)
+        appHost_ = std::make_unique<AppHost>();
+    return appHost_->anchor;
+}
+
+std::vector<juce::KeyPress>& SweepEnvironment::appKeys() {
+    appAnchor();
+    return appHost_->received;
 }
 
 SweepEnvironment::~SweepEnvironment() {
@@ -132,7 +170,7 @@ juce::DialogWindow* openSignIn(SweepEnvironment& env) {
 juce::DialogWindow* openShape(SweepEnvironment& env) {
     auto rig = std::make_shared<ShapeRig>();
     env.keepAlive(rig);
-    return openShapeEditorWindow(rig->adapter, 0, nullptr);
+    return openShapeEditorWindow(rig->adapter, 0, &env.appAnchor());
 }
 
 juce::DialogWindow* openSamplerMap(SweepEnvironment& env) {
@@ -211,17 +249,17 @@ struct CardRigImpl : CardRig {
 
 const std::vector<DialogSurface>& dialogSurfaces() {
     static const std::vector<DialogSurface> surfaces = {
-        {"Shape editor", "Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.cpp", openShape, ""},
-        {"Sampler map", "Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.cpp", openSamplerMap, ""},
-        {"EQ window", "Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp", openEq, ""},
-        {"Sign in", "Source/UI/Assistant/SignInDialog.cpp", openSignIn, ""},
-        {"Macro ports prompt", "Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", openMacroPorts, ""},
-        {"Macro configure I/O", "Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", openMacroConfig, ""},
-        {"Settings", "Source/MainComponent/MainComponentSetupToolbar.cpp", openSettings, ""},
-        {"Render progress", "Source/MainComponent/MainComponentRenderToAudio.cpp", openRenderProgress, ""},
-        {"Export audio", "Source/MainComponent/MainComponentCallbacks.cpp",
+        {"Shape editor", "Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.cpp", true, openShape, ""},
+        {"Sampler map", "Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.cpp", true, openSamplerMap, ""},
+        {"EQ window", "Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp", true, openEq, ""},
+        {"Sign in", "Source/UI/Assistant/SignInDialog.cpp", false, openSignIn, ""},
+        {"Macro ports prompt", "Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", false, openMacroPorts, ""},
+        {"Macro configure I/O", "Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", false, openMacroConfig, ""},
+        {"Settings", "Source/MainComponent/MainComponentSetupToolbar.cpp", false, openSettings, ""},
+        {"Render progress", "Source/MainComponent/MainComponentRenderToAudio.cpp", false, openRenderProgress, ""},
+        {"Export audio", "Source/MainComponent/MainComponentCallbacks.cpp", false,
          [](SweepEnvironment& env) { return openExport(env, false); }, ""},
-        {"Export stems", "Source/MainComponent/MainComponentCallbacks.cpp",
+        {"Export stems", "Source/MainComponent/MainComponentCallbacks.cpp", false,
          [](SweepEnvironment& env) { return openExport(env, true); }, ""},
     };
     return surfaces;
