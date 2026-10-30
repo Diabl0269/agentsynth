@@ -22,6 +22,7 @@
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/KeyField.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include "UI/Layout/NoteRangePicker/NoteRangePicker.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -183,6 +184,7 @@ public:
     // when non-null, since a freshly-wired properties file is the canonical on-disk state.
     void setPropertiesFile(juce::PropertiesFile* props) {
         propertiesFile_ = props;
+        auditioner_.setSettings(props);
         if (propertiesFile_ != nullptr)
             userScales_ = synth::parseUserScales(propertiesFile_->getValue(kUserScalesPropertyKey, {}));
     }
@@ -258,6 +260,7 @@ public:
             if (self != nullptr && self->onFollowSongKey)
                 self->onFollowSongKey();
         };
+        auditioner_.wire(*picker);
         openPicker_ = picker.get();
         const auto area = keyField_.getScreenBounds();
         if (pickerLauncher)
@@ -265,6 +268,8 @@ public:
         else
             juce::CallOutBox::launchAsynchronously(std::move(picker), area, nullptr);
     }
+    /** Plays the scale of a key hovered in the Key picker; the owner sets where it plays (`resolveTarget`). */
+    KeyAuditioner& getAuditioner() noexcept { return auditioner_; }
     KeyPicker* getOpenKeyPicker() const noexcept { return dynamic_cast<KeyPicker*>(openPicker_.getComponent()); }
     std::function<void(bool)> onPitchVisibilityChanged;
     // `addToExisting` is the toggle's state at the moment Generate was pressed, passed BY VALUE
@@ -528,6 +533,7 @@ private:
     }
 
     juce::PropertiesFile* propertiesFile_ = nullptr;
+    KeyAuditioner auditioner_;
     std::vector<synth::UserScale> userScales_;
     std::optional<synth::MusicalScale> selectedScale_;
     std::optional<synth::MusicalScale> songKey_;

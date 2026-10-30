@@ -2,6 +2,7 @@
 #include "Music/SongKey.h"
 #include "Transport/TransportService.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -10,6 +11,7 @@ SongKeyField::SongKeyField() {
     setTitle("Song key");
     setTooltip("Song key: what sequencers, the piano roll and new clips follow. Click to change.");
     onOpen = [this] { openPicker(); };
+    auditioner_.resolveTarget = [this] { return resolveAuditionTarget(); };
 }
 
 SongKeyField::~SongKeyField() {
@@ -40,6 +42,16 @@ void SongKeyField::openPicker() {
     if (appProperties_ != nullptr && appProperties_->getUserSettings() != nullptr)
         options.userScales = parseUserScales(appProperties_->getUserSettings()->getValue(kUserScalesSettingsKey, {}));
 
+    // The Preview sound combo lists the project's instrument tracks as they are now; a track that was chosen and is
+    // gone is shown as the default sound, which is also what its next audition plays.
+    const auto tracks = previewTracks ? previewTracks() : std::vector<PreviewTrack>{};
+    options.showPreviewSound = true;
+    for (size_t i = 0; i < tracks.size(); ++i) {
+        options.previewTracks.push_back(tracks[i].name);
+        if (previewTrack_.has_value() && *previewTrack_ == tracks[i].id)
+            options.previewSelected = (int)i + 1;
+    }
+
     juce::Component::SafePointer<SongKeyField> self(this);
     auto picker = std::make_unique<KeyPicker>(std::move(options), [self](std::optional<MusicalScale> key) {
         if (self != nullptr)
@@ -52,17 +64,12 @@ void SongKeyField::openPicker() {
             return detectKey(self->pitchClassWeights());
         };
     }
-    picker->onAudition = [self](std::optional<MusicalScale> scale) {
-        if (self == nullptr)
-            return;
-        if (scale.has_value())
-            self->startAudition(*scale);
-        else
-            self->stopAudition();
-    };
-    picker->onClosed = [self] {
+    auditioner_.wire(*picker);
+    picker->onPreviewSoundChanged = [self, tracks = std::move(tracks)](int choice) {
         if (self != nullptr)
-            self->stopAudition();
+            self->setPreviewTrack(choice >= 1 && (size_t)choice <= tracks.size()
+                                      ? std::optional<synth::TrackId>(tracks[(size_t)choice - 1].id)
+                                      : std::nullopt);
     };
 
     openPicker_ = picker.get();
@@ -82,51 +89,20 @@ void SongKeyField::pick(const std::optional<MusicalScale>& key) {
     setKey(key);
 }
 
-// Root at middle C's octave, then every scale note up to the root an octave above. The track is latched for the
-// whole run, so the note-off always goes where its note-on went even if the selection changes mid-run.
-void SongKeyField::startAudition(const MusicalScale& scale) {
-    stopAudition();
-    if (!resolveAuditionTrack || !auditionNote)
-        return;
-    const auto track = resolveAuditionTrack();
-    if (!track.has_value())
-        return;
-    auditionPitches_.clear();
-    const int root = 60 + ((scale.rootPitchClass % 12) + 12) % 12;
-    for (int pitch = root; pitch <= root + 12; ++pitch)
-        if (scale.contains(pitch))
-            auditionPitches_.push_back(pitch);
-    if (auditionPitches_.empty())
-        return;
-    auditionTrack_ = track;
-    auditionStep_ = 0;
-    timerCallback();
-    startTimer(kAuditionStepMs);
-}
-
-void SongKeyField::stopAudition() {
-    stopTimer();
-    if (auditionTrack_.has_value() && soundingPitch_ >= 0 && auditionNote)
-        auditionNote(*auditionTrack_, soundingPitch_, 0, false);
-    soundingPitch_ = -1;
-    auditionTrack_.reset();
-    auditionPitches_.clear();
-}
-
-void SongKeyField::timerCallback() {
-    if (!auditionTrack_.has_value() || !auditionNote) {
-        stopAudition();
-        return;
-    }
-    if (soundingPitch_ >= 0)
-        auditionNote(*auditionTrack_, soundingPitch_, 0, false);
-    soundingPitch_ = -1;
-    if (auditionStep_ >= auditionPitches_.size()) {
-        stopAudition();
-        return;
-    }
-    soundingPitch_ = auditionPitches_[auditionStep_++];
-    auditionNote(*auditionTrack_, soundingPitch_, kAuditionVelocity, true);
+// The chosen track is used only while the project still lists it; otherwise (or with no choice) the run plays the
+// default sound, even when a track is selected. The target is built once per run by the auditioner.
+KeyAuditioner::Target SongKeyField::resolveAuditionTarget() const {
+    if (!previewTrack_.has_value() || !auditionNote || !previewTracks)
+        return {};
+    const auto track = *previewTrack_;
+    const auto tracks = previewTracks();
+    const bool listed = std::any_of(tracks.begin(), tracks.end(), [track](const auto& t) { return t.id == track; });
+    if (!listed)
+        return {};
+    return {[this, track](int pitch, int velocity, bool on) {
+        if (auditionNote)
+            auditionNote(track, pitch, velocity, on);
+    }};
 }
 
 } // namespace synth::ui

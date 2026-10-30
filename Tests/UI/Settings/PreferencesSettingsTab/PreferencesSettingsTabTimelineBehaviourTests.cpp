@@ -1,4 +1,5 @@
 #include "PreferencesSettingsTabTestFixture.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 
 // Topic: timeline/piano-roll editing preferences — loop-selection-arms, double-click-spans-
 // locators, piano-roll key-label density, and the wheel-zoom-direction checkbox.
@@ -372,4 +373,33 @@ TEST_F(PreferencesSettingsTabTest, DuplicatePointsChoiceSurvivesAFreshTabAndUnkn
     appProperties.getUserSettings()->setValue("duplicatePointsPlacement", "notARealValue");
     PreferencesSettingsTab tab3(appProperties);
     EXPECT_EQ(tab3.getDuplicatePlacement(), DuplicatePlacement::afterLast);
+}
+
+// "Play the scale when browsing keys": DEFAULT ON, its own key (read by KeyAuditioner when a scale starts), kept across
+// restarts, named, tooltipped and reachable by keyboard like its neighbours; the real switch writes it.
+TEST_F(PreferencesSettingsTabTest, PlayScaleWhenBrowsingKeysDefaultsOnPersistsAndTheSwitchWritesIt) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        tab.setSize(500, 1400);
+        EXPECT_TRUE(tab.isPlayScaleOnBrowseEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("playScaleWhenBrowsingKeys"));
+        EXPECT_TRUE(synth::ui::KeyAuditioner::isEnabledIn(appProperties.getUserSettings()));
+
+        juce::ToggleButton* toggle = nullptr;
+        for (auto* child : descendantsOf(tab))
+            if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
+                if (tb->getButtonText() == "Play the scale when browsing keys")
+                    toggle = tb;
+        ASSERT_NE(toggle, nullptr) << "the row exists";
+        EXPECT_TRUE(toggle->getWantsKeyboardFocus());
+        EXPECT_FALSE(toggle->getTooltip().isEmpty());
+        EXPECT_FALSE(toggle->getButtonText() == toggle->getButtonText().toUpperCase()) << "no all-caps text";
+        toggle->setToggleState(false, juce::sendNotificationSync); // what a click does
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("playScaleWhenBrowsingKeys"), "0");
+        EXPECT_FALSE(synth::ui::KeyAuditioner::isEnabledIn(appProperties.getUserSettings()));
+    }
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_FALSE(tab.isPlayScaleOnBrowseEnabled()) << "kept across a restart";
+    tab.setPlayScaleOnBrowseEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("playScaleWhenBrowsingKeys"), "1");
 }

@@ -7,6 +7,7 @@
 #include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
 #include "MainComponentRenderToAudio.h"
+#include "SoundBrowser/KeyAuditionSound.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -14,6 +15,21 @@
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TrackColourPicker.h"
 #include <algorithm>
+
+namespace {
+
+// The key pickers' default sound plays through the sound preview: after the master, never in a bounce.
+void wireKeyAuditionDefaultSound(AudioEngine& engine, synth::ui::TimelinePanelComponent& panel) {
+    for (auto* auditioner : {&panel.getTransportBar().getSongKeyField().getAuditioner(),
+                             &panel.getPianoRoll().getScaleAssistPanel().getAuditioner()}) {
+        auditioner->playDefaultSound = [&engine](const std::vector<int>& pitches) {
+            synth::soundbrowser::playKeyAuditionSound(engine.getSoundPreview(), pitches);
+        };
+        auditioner->stopDefaultSound = [&engine] { engine.getSoundPreview().stop(); };
+    }
+}
+
+} // namespace
 
 void MainComponent::wireTimelinePanel() {
     wireTimelinePanelServicesAndShortcuts();
@@ -49,7 +65,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     timelinePanel.setTransportNudgeState(&transportNudge_);
     timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
-
+    wireKeyAuditionDefaultSound(audioEngine, timelinePanel);
     // Preferences > Animations: the saved choice applies from the first frame (the Preferences tab applies changes).
     synth::ui::setAnimationMode(synth::ui::animationModeFromString(
         appProperties.getUserSettings()->getValue(synth::ui::kAnimationModeKey, "follow")));

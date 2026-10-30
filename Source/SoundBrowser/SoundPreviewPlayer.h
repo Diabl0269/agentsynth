@@ -35,8 +35,14 @@ public:
     /** As above, and the decoded sound is first fitted to `target` (time-stretched to the song's tempo, shifted to its
      *  key) when target.needsStretch(); an unknown file tempo (fileBpm 0) plays as recorded. */
     std::uint64_t play(const juce::File& file, bool alignToBar, const LoopTarget& target);
+    /** Cuts the sound that plays (5 ms fade), drops one still decoding and plays `audio` (one or two channels at the
+     *  output rate, see getSampleRate()) as soon as the audio thread meets it; the preview takes ownership. Returns
+     *  the request's id, or 0 when the buffer is empty or no output rate is set yet. */
+    std::uint64_t playRendered(juce::AudioBuffer<float> audio);
     /** Cuts the sound that plays with a 5 ms fade and drops one still decoding. */
     void stop();
+    /** The output rate set by prepare(); 0 before the first call. Any thread. */
+    double getSampleRate() const noexcept { return sampleRate_.load(std::memory_order_relaxed); }
     /** The preview's own level in dB; clamped to -60..+6, and -60 is silence. Any thread. */
     void setGainDb(float db) noexcept;
     float getGainDb() const noexcept { return gainDb_.load(std::memory_order_relaxed); }

@@ -104,6 +104,7 @@ void FollowKeyField::openPicker() {
         if (self != nullptr && self->onFollow)
             self->onFollow();
     };
+    auditioner_.wire(*picker);
     openPicker_ = picker.get();
     const auto area = getScreenBounds();
     if (pickerLauncher)

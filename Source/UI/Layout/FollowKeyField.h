@@ -2,6 +2,7 @@
 
 #include "Music/MusicalScale.h"
 #include "UI/Layout/KeyField.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <memory>
@@ -14,7 +15,8 @@ class KeyPicker; // Source/UI/Layout/KeyPicker/KeyPicker.h
 
 /** The Key field of something that follows the song key or has its own: reads "Song key · D Dorian" in the muted
  *  colour while following and "A Phrygian · own" otherwise, and opens the key picker with a Follow song key row on
- *  top. When the song key it follows changes, it glows once. docs/timeline/song-key.md#following-the-song-key. */
+ *  top. Hovering a key in its picker plays the scale (KeyAuditioner). When the song key it follows changes, it glows
+ * once. docs/timeline/song-key.md#following-the-song-key. */
 class FollowKeyField : public KeyField {
 public:
     FollowKeyField();
@@ -35,6 +37,10 @@ public:
     std::function<void()> onFollow;
     /** Launches the picker; unset = a CallOutBox from the field. Tests replace it to keep the picker in hand. */
     std::function<void(std::unique_ptr<juce::Component> picker, juce::Rectangle<int> screenArea)> pickerLauncher;
+
+    /** Plays the scale of a hovered key; its owner sets where (`resolveTarget`), what the default sound is and where
+     *  the on/off setting is read. */
+    KeyAuditioner& getAuditioner() noexcept { return auditioner_; }
 
     /** Opens the key picker (the field's click, Space, Return or Down). */
     void openPicker();
@@ -60,6 +66,7 @@ private:
     std::optional<MusicalScale> songKey_;
     std::optional<MusicalScale> ownKey_;
     std::vector<UserScale> userScales_;
+    KeyAuditioner auditioner_;
     juce::Component::SafePointer<juce::Component> openPicker_;
 
     float glow_ = 0.0f;

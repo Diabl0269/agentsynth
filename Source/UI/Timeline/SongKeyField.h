@@ -3,6 +3,7 @@
 #include "Music/MusicalScale.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/KeyField.h"
+#include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include <array>
 #include <functional>
 #include <memory>
@@ -18,10 +19,9 @@ class KeyPicker; // Source/UI/Layout/KeyPicker/KeyPicker.h
 
 /** The transport bar's Key field: shows the song key, opens the key picker, and sets the song key on the transport
  *  (one undo step, through the transport poll). Hovering a key in the picker plays its scale once up the octave,
- *  quietly, on the audition track. docs/timeline/song-key.md. */
-class SongKeyField
-    : public KeyField
-    , private juce::Timer {
+ *  quietly: with the built-in default sound, or through the instrument track the picker's Preview sound combo chose
+ *  (kept for the session). docs/timeline/song-key.md. */
+class SongKeyField : public KeyField {
 public:
     SongKeyField();
     ~SongKeyField() override;
@@ -29,15 +29,23 @@ public:
     /** Non-owning; null makes the field show No key and picks do nothing. */
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
     /** Where the user's own scales are read from; optional. */
-    void setApplicationProperties(juce::ApplicationProperties* props) noexcept { appProperties_ = props; }
+    void setApplicationProperties(juce::ApplicationProperties* props) noexcept {
+        appProperties_ = props;
+        auditioner_.setSettings(props != nullptr ? props->getUserSettings() : nullptr);
+    }
 
     /** Message thread: re-reads the song key from the transport (the bar's 10 Hz poll). */
     void refreshFromTransport();
 
     /** How long each pitch class sounds in the song (Detect from notes); unset hides the button. */
     std::function<std::array<double, 12>()> pitchClassWeights;
-    /** The track a scale audition plays on, resolved once per audition; nullopt = silent. */
-    std::function<std::optional<synth::TrackId>()> resolveAuditionTrack;
+    /** One instrument track the Preview sound combo offers. */
+    struct PreviewTrack {
+        synth::TrackId id;
+        juce::String name;
+    };
+    /** The project's instrument tracks, in track order; unset = only the default sound is offered. */
+    std::function<std::vector<PreviewTrack>()> previewTracks;
     /** Plays or ends one audition note on `track`. */
     std::function<void(synth::TrackId track, int pitch, int velocity, bool on)> auditionNote;
     /** Launches the picker; unset = a CallOutBox from the field. Tests replace it to keep the picker in hand. */
@@ -49,28 +57,31 @@ public:
     KeyPicker* getOpenPicker() const noexcept;
 
     /** Starts (or restarts) playing `scale` once up the octave; ends any audition already sounding. */
-    void startAudition(const MusicalScale& scale);
+    void startAudition(const MusicalScale& scale) { auditioner_.start(scale); }
     /** Ends the audition, sending the note-off it still owes. */
-    void stopAudition();
-    bool isAuditioning() const noexcept { return auditionTrack_.has_value(); }
+    void stopAudition() { auditioner_.stop(); }
+    bool isAuditioning() const noexcept { return auditioner_.isAuditioning(); }
+    /** The default sound's player is `getAuditioner().playDefaultSound`; the app sets it. */
+    KeyAuditioner& getAuditioner() noexcept { return auditioner_; }
+    /** The instrument track the next audition plays through; nullopt = the default sound. Held for the session, never
+     *  saved; a track that is gone by the next audition falls back to the default sound. */
+    void setPreviewTrack(std::optional<synth::TrackId> track) { previewTrack_ = track; }
+    std::optional<synth::TrackId> getPreviewTrack() const noexcept { return previewTrack_; }
     /** Test seam: plays the next audition step at once. */
-    void advanceAuditionForTest() { timerCallback(); }
+    void advanceAuditionForTest() { auditioner_.advanceForTest(); }
 
-    static constexpr int kAuditionStepMs = 140;
-    static constexpr int kAuditionVelocity = 48;
+    static constexpr int kAuditionStepMs = KeyAuditioner::kStepMs;
+    static constexpr int kAuditionVelocity = KeyAuditioner::kVelocity;
 
 private:
-    void timerCallback() override;
     void pick(const std::optional<MusicalScale>& key);
+    KeyAuditioner::Target resolveAuditionTarget() const;
 
     synth::TransportService* transport_ = nullptr;
     juce::ApplicationProperties* appProperties_ = nullptr;
     juce::Component::SafePointer<juce::Component> openPicker_;
-
-    std::vector<int> auditionPitches_;
-    size_t auditionStep_ = 0;
-    int soundingPitch_ = -1;
-    std::optional<synth::TrackId> auditionTrack_;
+    std::optional<synth::TrackId> previewTrack_;
+    KeyAuditioner auditioner_;
 
     JUCE_DECLARE_NON_COPYABLE(SongKeyField)
 };

@@ -8,6 +8,9 @@
 
 namespace synth::soundbrowser {
 
+/** Finished clips the player keeps for the audio thread before it stops accepting new ones. */
+inline constexpr int kMaxHeldClips = 8;
+
 struct SoundPreviewPlayer::Clip {
     juce::AudioBuffer<float> data; ///< One or two channels at the output rate.
     double sampleRate = 0.0;
