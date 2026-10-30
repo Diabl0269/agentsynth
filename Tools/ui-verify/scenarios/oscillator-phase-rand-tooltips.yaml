@@ -2,7 +2,7 @@
 # held note hears nothing and thinks the knobs are broken. Their tooltips now say what they do and when.
 #
 # What a user does:
-#   1. Opens a project with a free Oscillator and unfolds its More controls row (Phase and Rand wait there).
+#   1. Opens a project with a free Oscillator (the one outside every macro) and unfolds its More controls row (Phase and Rand wait there).
 #   2. Rests the pointer on Phase, then on Rand: each tooltip says it sets the start of every new note and does not
 #      change a note that is already sounding.
 # The tooltip window itself is not drawn into a component screenshot, so the card shot shows the knobs and the checks
@@ -10,12 +10,15 @@
 steps:
   - openProject: {path: "${FIXTURES}/macros.agsproj"}
   - wait: {}
-  - click: {id: "card:Oscillator 1 > cardMoreRow"}
+  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 100, fromY: 500, toX: 100, toY: 200}   # pan the free oscillator up
+  - drag: {from: "card:Oscillator 2", fromX: 60, fromY: 12, to: "Patch canvas", toX: 620, toY: 60}  # and lift it clear of the window edge
   - wait: {}
-  - expect: {id: "card:Oscillator 1 > Phase", showing: true, within_ms: 2000}
-  - expect: {id: "card:Oscillator 1 > Phase", contains: {tooltip: "start of every new note"}}
-  - expect: {id: "card:Oscillator 1 > Phase", contains: {tooltip: "not change a note that is already sounding"}}
-  - expect: {id: "card:Oscillator 1 > Rand", contains: {tooltip: "start of every new note"}}
-  - expect: {id: "card:Oscillator 1 > Rand", contains: {tooltip: "not change a note that is already sounding"}}
-  - getState: {id: "card:Oscillator 1 > Phase"}
-  - screenshot: {id: "card:Oscillator 1", name: oscillator-phase-rand}
+  - click: {id: "card:Oscillator 2 > cardMoreRow"}
+  - wait: {}
+  - expect: {id: "card:Oscillator 2 > Phase", showing: true, within_ms: 2000}
+  - expect: {id: "card:Oscillator 2 > Phase", contains: {tooltip: "start of every new note"}}
+  - expect: {id: "card:Oscillator 2 > Phase", contains: {tooltip: "not change a note that is already sounding"}}
+  - expect: {id: "card:Oscillator 2 > Rand", contains: {tooltip: "start of every new note"}}
+  - expect: {id: "card:Oscillator 2 > Rand", contains: {tooltip: "not change a note that is already sounding"}}
+  - getState: {id: "card:Oscillator 2 > Phase"}
+  - screenshot: {id: "card:Oscillator 2", name: oscillator-phase-rand}
