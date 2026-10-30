@@ -189,10 +189,13 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
     if (below != drag_.hiding) {
         drag_.hiding = below;
         hideZone_.setActive(below);
+        if (!below)
+            leaveHideZone();
     }
     if (below) {
         guides_.clear();
         restoreBaseline();
+        enterHideZone();
         repaint();
         return;
     }
@@ -295,6 +298,8 @@ void CardLayoutOnCardEditor::moveCellTo(int cell, juce::Rectangle<int> rect) {
     placeCell(c, rect.getPosition());
     if (auto* outline = getOutlineForTest(c.key))
         outline->setCell(rect);
+    if (hideProxy_ != nullptr && c.key == hideProxyKey_)
+        hideProxy_->setBounds(rect.withPosition(getLocalPoint(card_, rect.getPosition())));
 }
 
 void CardLayoutOnCardEditor::releaseOn(const juce::MouseEvent&) {
@@ -306,11 +311,12 @@ void CardLayoutOnCardEditor::releaseOn(const juce::MouseEvent&) {
     const int cell = drag_.cell;
     const auto start = drag_.startRect;
     const auto dropped = drag_.droppedRect;
+    const auto zoneFrom = drag_.zoneFrom;
     const auto baseline = std::move(drag_.baseline);
     const auto placed = std::move(drag_.placed);
     endDrag();
     if (moved && hide)
-        hideDragged(cell);
+        hideDragged(cell, zoneFrom);
     else if (moved && !dropped.isEmpty() && target >= 0 && target != cells_[(size_t)cell].section)
         commitMoveToSection(cell, dropped, target, placed);
     else if (moved && !dropped.isEmpty())
@@ -319,11 +325,14 @@ void CardLayoutOnCardEditor::releaseOn(const juce::MouseEvent&) {
 
 // A control let go below the card goes the way Backspace takes it: shrinking away from where it was let go, to
 // the More row, as one undo step.
-void CardLayoutOnCardEditor::hideDragged(int cell) {
+void CardLayoutOnCardEditor::hideDragged(int cell, juce::Rectangle<int> zoneFrom) {
     if (cell < 0 || cell >= (int)cells_.size() || closed_)
         return;
     const auto caption = cells_[(size_t)cell].caption;
-    hideControl(cells_[(size_t)cell].key);
+    if (hideProxy_ != nullptr)
+        hideFromZone(cell, zoneFrom);
+    else
+        hideControl(cells_[(size_t)cell].key);
     announce(caption + " hidden");
 }
 
@@ -381,6 +390,12 @@ void CardLayoutOnCardEditor::cancelDrag() {
     endDrag();
     moveCellTo(cell, start);
     startGlide({{key, here, start, kSettleMs, true}});
+    // A picture still on the hide zone glides back with the control, then goes.
+    if (hideProxy_ != nullptr) {
+        proxyReturning_ = finishGlide_ != nullptr;
+        if (!proxyReturning_)
+            dropHideProxy();
+    }
 }
 
 // The final place of every cell in the dropped one's section, then ONE write: a drop that changes
@@ -529,29 +544,38 @@ void CardLayoutOnCardEditor::writeLayout(const CardLayout& layout) {
 void CardLayoutOnCardEditor::startGlide(std::vector<Move> moves) {
     if (closing_ || closed_ || !canAnimate() || prefersReducedMotion())
         return;
-    std::erase_if(moves, [this](const Move& m) { return m.from == m.to || indexOfCell(m.key) < 0; });
+    std::erase_if(moves, [this](const Move& m) { return m.from == m.to || !hasMoveTarget(m.key); });
     if (moves.empty())
         return;
     double longest = 0.0;
     for (const auto& m : moves) {
         longest = std::max(longest, m.ms);
-        moveCellTo(indexOfCell(m.key), m.from);
+        moveKeyTo(m.key, m.from);
     }
     const auto start = juce::Time::getMillisecondCounterHiRes();
     const auto place = [this, moves](float elapsedMs) {
         for (const auto& m : moves)
-            if (const int cell = indexOfCell(m.key); cell >= 0) {
+            if (hasMoveTarget(m.key)) {
                 const float t = juce::jlimit(0.0f, 1.0f, elapsedMs / (float)m.ms);
-                moveCellTo(cell, lerpRect(m.from, m.to, m.easeIn ? easeInCubic(t) : easeOutCubic(t)));
+                moveKeyTo(m.key, lerpRect(m.from, m.to, m.easeIn ? easeInCubic(t) : easeOutCubic(t)));
             }
     };
+    glideFrame_ = place;
     finishGlide_ = [this, place] {
         glidePump_.stop();
+        glideFrame_ = nullptr;
         place(1.0e9f);
+        if (proxyReturning_)
+            dropHideProxy();
     };
     glidePump_.run(
         longest, [place, start] { place((float)(juce::Time::getMillisecondCounterHiRes() - start)); },
-        [this] { finishGlide_ = nullptr; });
+        [this] {
+            finishGlide_ = nullptr;
+            glideFrame_ = nullptr;
+            if (proxyReturning_)
+                dropHideProxy();
+        });
 }
 
 } // namespace synth::ui

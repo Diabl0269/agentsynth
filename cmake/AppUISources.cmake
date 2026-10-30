@@ -206,9 +206,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerHeader/MixerColourDot.cpp
     Source/UI/Mixer/MixerMeterScale.h
     Source/UI/Mixer/MixerMeterBallistics.h
-    # MeterColourStops.h/.cpp moved to Core's own source list (root CMakeLists.txt, FRO147) --
-    # AppLookAndFeel (Core) caches an effective MeterColourStops itself now, and this file's
-    # PUBLIC link to Core is how MixerMeter.cpp below still reaches it.
+    # MeterColourStops.h/.cpp live in Core's source list (root CMakeLists.txt): AppLookAndFeel (Core) caches
+    # one, and this file's PUBLIC link to Core is how MixerMeter.cpp below still reaches it.
     Source/UI/Mixer/MixerMeter.h
     Source/UI/Mixer/MixerMeter.cpp
     Source/UI/Mixer/MixerMeterReadout.h
@@ -385,6 +384,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLaneEditorPoints.cpp
     Source/UI/Timeline/AutomationLaneEditorValueField.cpp
     Source/UI/Timeline/AutomationLaneEditorStretch.cpp
+    Source/UI/Timeline/AutomationLaneEditorDrawnPoints.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.h
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h
@@ -967,7 +967,9 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorAdd.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorAddDrop.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorDrag.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorFollow.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorGroups.cpp
+    Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorHideDrag.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorKeyboard.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorPanel.cpp
     Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorScope.cpp
@@ -994,4 +996,5 @@ set(APPUI_SOURCES
 )
 include(cmake/DrumMachineSources.cmake) # appends the drum machine editor to APPUI_SOURCES
 include(cmake/TimelinePanelSources.cmake) # appends the timeline panel to APPUI_SOURCES
+include(cmake/CardLayoutGroupMoveSources.cmake) # appends the Edit Layout group move and rename to APPUI_SOURCES
 list(APPEND APPUI_SOURCES ${SOUND_BROWSER_UI_SOURCES}) # the Sounds view, from SoundBrowserSources.cmake

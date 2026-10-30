@@ -3,13 +3,17 @@
 #include "CardLayoutAddPanel.h"
 #include "CardLayoutControlPanel.h"
 #include "CardLayoutEditBar.h"
+#include "CardLayoutGroupHandle.h"
 #include "CardLayoutHideZone.h"
 #include "CardLayoutOutline.h"
 #include "OnCardCells.h"
+#include "OnCardGroupMove.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/NonModalLabel.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
+#include "UI/Layout/ReorderDrag/ReorderDragSession.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -40,7 +44,9 @@ class BuiltInCardLayoutSource;
  * cancelled edits back. The bar's Preset and Apply to menus, and the "+ Add control"
  * strip the overlay adds under the card, are the other things it hosts; on an ADSR card the strip also holds the
  * "Controls" switch (Shared or Separate), which rewrites the stages' group; the card's own Sync switch
- * stays usable and picks the look being edited, and ending the session puts it back as it was.
+ * stays usable and picks the look being edited, and ending the session puts it back as it was. A titled group's
+ * title row is its handle (CardLayoutGroupHandle): dragging it, or Alt+Up and Alt+Down on it, moves the whole group
+ * among the card's groups as one write, and a double-click, Return or its menu's Rename edits the title in place.
  */
 class CardLayoutOnCardEditor final
     : public juce::Component
@@ -102,6 +108,17 @@ public:
     juce::Rectangle<int> getAddGhostForTest() const noexcept { return addDrag_.ghost; }
     /** The control's home rect (where a push-free layout would put it); empty when it has none. */
     juce::Rectangle<int> getHomeRectForTest(const juce::String& paramId) const;
+    CardLayoutGroupHandle* getGroupHandleForTest(const juce::String& sectionId) const;
+    int getGroupHandleCountForTest() const { return groupHandles_.size(); }
+    /** The open inline title editor's label (hidden unless a rename is running). */
+    NonModalLabel& getRenameLabelForTest() noexcept { return renameLabel_; }
+    /** Where a drop now would put each group of the dragged one's run, by section id (the plan the commit writes). */
+    std::vector<std::pair<juce::String, int>> getGroupDropPlanForTest() const;
+    /** The group's block now: its title row down to its last row (card pixels); empty when it has none. */
+    juce::Rectangle<int> getGroupBlockForTest(const juce::String& sectionId) const;
+    /** Esc as a group drag in progress sees it; false when no group drag is live. */
+    bool sendEscapeToGroupDragForTest() { return groupSession_.sendEscapeForTest(); }
+    bool isDraggingGroupForTest() const noexcept { return groupDrag_.pressed && groupSession_.isReordering(); }
     const std::vector<oncard::Guide>& getGuidesForTest() const noexcept { return guides_; }
     bool isDraggingForTest() const noexcept { return drag_.moving; }
     /** The pointer is below the card mid-drag, so a release hides the control. */
@@ -124,6 +141,22 @@ public:
     bool sendEscapeToDragForTest();
     /** Lands every glide and fade at once (no frame arrives headless). */
     void finishMotionForTest();
+    /** Puts the glide in flight at `elapsedMs` since it began, as a frame would; nothing when none runs. */
+    void stepGlideForTest(float elapsedMs) {
+        if (glideFrame_)
+            glideFrame_(elapsedMs);
+    }
+    /** Puts the view's follow of the card at `elapsedMs` since it began, as a frame would; nothing when none runs. */
+    void stepFollowForTest(float elapsedMs) {
+        if (followFrame_)
+            followFrame_(elapsedMs);
+    }
+    bool isFollowingForTest() const noexcept { return static_cast<bool>(followFrame_); }
+    bool isGlidingForTest() const noexcept { return static_cast<bool>(finishGlide_); }
+    /** Where the removed control's picture is now (overlay pixels); empty when `index` is out of range. */
+    juce::Rectangle<int> getShrinkGhostBoundsForTest(int index) const {
+        return index >= 0 && index < ghosts_.size() ? ghosts_[index]->getBounds() : juce::Rectangle<int>();
+    }
     /** Runs the re-sync a card rebuilt from outside queued, now. */
     void runQueuedSyncForTest() { handleUpdateNowIfNeeded(); }
     const juce::String& getLastAnnouncementForTest() const noexcept { return lastAnnouncement_; }
@@ -145,6 +178,7 @@ private:
         std::vector<juce::Rectangle<int>> baseline; // every cell's rect at the press (the drop is planned from it)
         std::vector<std::pair<int, juce::Rectangle<int>>> placed; // the target group's other cells at the last preview
         juce::Rectangle<int> droppedRect;                         // where the last preview put the dragged cell
+        juce::Rectangle<int> zoneFrom; // where the dragged cell stood in the card when it moved onto the hide zone
     };
 
     // ---- Session and sync (CardLayoutOnCardEditor.cpp) -----------------------------------------
@@ -152,7 +186,12 @@ private:
     void attachTo(ModuleComponent& card);
     void syncToCard();
     void syncAfterOutsideChange();
-    void animateRestore(const std::vector<OnCardCell>& before, const juce::Image& beforeImage, bool rebuilt);
+    void followCard(); ///< Pans the canvas to keep the card in view (CardLayoutOnCardEditorFollow.cpp).
+    void releaseCardGlide();
+    void animateRestore(const std::vector<OnCardCell>& before,
+                        const std::map<juce::String, juce::Rectangle<int>>& shapesBefore,
+                        const juce::Image& beforeImage, bool rebuilt);
+    void rememberGroupShapes();
     void rememberCardImage();
     void reconcileOutlines();
     void watchTabs(ModuleComponent& card);
@@ -165,6 +204,14 @@ private:
     void handleAsyncUpdate() override;
     int indexOfCell(const juce::String& key) const;
 
+    // ---- The hide zone's motion (CardLayoutOnCardEditorHideDrag.cpp) -----------------------------
+    void enterHideZone();
+    void leaveHideZone();
+    void hideFromZone(int cell, juce::Rectangle<int> zoneFrom);
+    void dropHideProxy();
+    juce::Rectangle<int> hideZoneRectFor(juce::Rectangle<int> cell) const;
+    juce::Point<int> hideZoneCentreInCard() const;
+
     // ---- Drag, drop and the write (CardLayoutOnCardEditorDrag.cpp) -------------------------------
     void pressOn(const juce::String& key, const juce::MouseEvent& e);
     void dragTo(const juce::MouseEvent& e);
@@ -173,7 +220,7 @@ private:
     void cancelDrag();
     void endDrag();
     void setHideZoneShown(bool shown);
-    void hideDragged(int cell);
+    void hideDragged(int cell, juce::Rectangle<int> zoneFrom);
     void commitMove(int cell, juce::Rectangle<int> dropped, juce::Rectangle<int> start, bool announceMove);
     juce::Rectangle<int> homeRectOf(int cell) const;
     std::vector<juce::Rectangle<int>> pushedNeighbours(int section, int except, juce::Rectangle<int> dropped,
@@ -195,7 +242,8 @@ private:
     void repackAfterResize(const juce::String& paramId, juce::Rectangle<int> before);
     std::vector<int> cellsOfSection(int section) const;
 
-    /** A cell gliding from one rect to another over `ms`, easing in when it is on its way back. */
+    /** A cell (or a group's title, or a view: see moveKeyTo) gliding from one rect to another over `ms`, easing in
+     *  when it is on its way back. */
     struct Move {
         juce::String key;
         juce::Rectangle<int> from;
@@ -204,6 +252,41 @@ private:
         bool easeIn = false;
     };
     void startGlide(std::vector<Move> moves);
+
+    // ---- Groups: move (CardLayoutOnCardEditorGroupMove.cpp) and rename (...GroupRename.cpp) ---------
+    /** One group of a run as it stood at the press: its strip and what is drawn in it (card pixels). */
+    struct GroupBase {
+        int section = -1; ///< Index into the plan's sections.
+        juce::String id;
+        juce::String title;
+        juce::Rectangle<int> block;  ///< Title row down to the last row: the strip the group owns.
+        juce::Rectangle<int> header; ///< The title label's bounds.
+        CellRects cells;
+        std::vector<std::pair<CardView, juce::Rectangle<int>>> views;
+    };
+    struct GroupDrag {
+        bool pressed = false;
+        int dragged = -1; ///< Index into `run`.
+        std::vector<GroupBase> run;
+    };
+    void reconcileGroupHandles();
+    void wireGroupHandle(CardLayoutGroupHandle& handle);
+    std::vector<int> groupRunOf(int planSection) const;
+    int planSectionOfGroup(const juce::String& sectionId) const;
+    std::vector<GroupBase> readGroupRun(const std::vector<int>& run) const;
+    void pressGroup(const juce::String& sectionId, const juce::MouseEvent& e);
+    void dragGroup(const juce::MouseEvent& e);
+    void releaseGroup(const juce::MouseEvent& e);
+    void placeGroups();
+    void commitGroupOrder(const std::vector<GroupBase>& run, const std::vector<int>& order, int moved);
+    void moveGroupByKey(const juce::String& sectionId, int direction);
+    bool handleGroupKey(const juce::String& sectionId, const juce::KeyPress& press);
+    void startRename(const juce::String& sectionId);
+    void commitRename(const juce::String& text);
+    void cancelRename();
+    juce::Rectangle<int> groupBlockOf(int planSection) const;
+    void moveKeyTo(const juce::String& key, juce::Rectangle<int> rect);
+    bool hasMoveTarget(const juce::String& key) const;
 
     // ---- The per-control panel (CardLayoutOnCardEditorPanel.cpp) ---------------------------------
     void launchPanel(std::unique_ptr<juce::Component> panel, juce::Rectangle<int> screenArea);
@@ -229,9 +312,10 @@ private:
     void dragAdded(const juce::String& paramId, CardLayoutAddRow::DragPhase phase, juce::Point<int> screenPosition);
     void dropAdded(const juce::String& paramId, juce::Point<int> at);
     void finishAdded(const juce::String& paramId, const juce::String& name);
-    void fadeInControl(const juce::String& paramId);
+    void fadeInControl(const juce::String& paramId, std::optional<juce::Point<int>> from = std::nullopt);
     bool startShrinkGhost(const juce::String& paramId);
-    void startShrinkGhostOf(juce::Image image, juce::Rectangle<int> cell);
+    void startShrinkGhostOf(juce::Image image, juce::Rectangle<int> cell,
+                            std::optional<juce::Point<int>> travelTo = std::nullopt);
     void tickGhosts();
     void writeHide(juce::String paramId);
     void flushPendingHide();
@@ -281,6 +365,8 @@ private:
     bool closed_ = false; ///< The session has ended; the overlay is only fading out or waiting to be destroyed.
     bool writing_ = false;
     bool cardRebuilt_ = false; ///< The card was deleted for a reason that is not ours, since the last re-sync.
+    /// Keeps the re-sync after an undo or redo inside the restore itself (see open()); the manager holds it weakly.
+    std::shared_ptr<void> restoreHook_;
     juce::Image cardImage_; ///< The card as of the last re-sync (2x), for a control an undo takes away to shrink from.
 
     juce::Component::SafePointer<CardLayoutControlPanel> panel_;
@@ -298,7 +384,15 @@ private:
     CardLayoutHideZone hideZone_; ///< Fades in under the card while a control is dragged.
     ReorderFramePump hideZonePump_{*this};
     juce::OwnedArray<CardLayoutOutline> outlines_;
+    juce::OwnedArray<CardLayoutGroupHandle> groupHandles_; ///< One per titled group that can move or be renamed.
+    NonModalLabel renameLabel_;                            ///< The inline title editor, over the group's title.
+    juce::String renamingId_;                              ///< The group whose title is being edited; empty when none.
+    GroupDrag groupDrag_;
+    ReorderDragSession groupSession_{*this, [this] { placeGroups(); }};
     std::vector<OnCardCell> cells_;
+    /** Where each group's title and views are drawn, by glide key: read at every sync and moved with every glide,
+     *  so an undo that rebuilds the card still knows where they stood. */
+    std::map<juce::String, juce::Rectangle<int>> groupShapes_;
     /** Where each control stood before any push, by parameter id: set when the session opens or re-syncs to a
      *  restored card, moved only by the user's own drag or nudge of that control. A drop pushes its
      *  neighbours from these, so a control pushed aside returns as soon as its home is free. */
@@ -322,13 +416,27 @@ private:
 
     ReorderFramePump fadePump_{*this};
     ReorderFramePump glidePump_{*this};
-    std::function<void()> finishGlide_; ///< Lands the glide in flight at once; empty when none.
+    std::function<void()> finishGlide_;     ///< Lands the glide in flight at once; empty when none.
+    std::function<void(float)> glideFrame_; ///< The glide in flight at `elapsedMs`; empty when none.
+    ReorderFramePump followPump_{*this};
+    std::function<void(float)> followFrame_; ///< The view's pan after the card at `elapsedMs`; empty when none runs.
     ReorderFramePump addFadePump_{*this};
     std::function<void()> finishAddFade_; ///< Lands the added control's grow at once; empty when none.
     std::function<void(float)> addFrame_; ///< The added control's grow at a progress; empty when none runs.
     ReorderFramePump ghostPump_{*this};
     juce::OwnedArray<control_motion::ShrinkGhost> ghosts_; ///< Removed controls shrinking away.
     juce::String pendingHide_; ///< A hidden control not yet written: its picture is still shrinking.
+    /// Where the pending hide's cell goes back to before the write (it shrinks into the hide zone from there).
+    std::optional<juce::Rectangle<int>> pendingHideRect_;
+    /// The picture of the control being dragged over the hide zone: the card clips its own children, so the control
+    /// the pointer carries onto the zone is drawn by this, following the dragged cell.
+    std::unique_ptr<control_motion::ShrinkGhost> hideProxy_;
+    std::vector<juce::Component::SafePointer<juce::Component>>
+        hideProxyParts_;          ///< The real widget and caption, hidden.
+    juce::String hideProxyKey_;   ///< The control the proxy stands for.
+    bool proxyReturning_ = false; ///< The proxy glides back after Esc and is dropped when that glide lands.
+    /// Where each control hidden by a drop on the zone went (card pixels): an undo or redo brings it back from there.
+    std::map<juce::String, juce::Point<int>> hiddenFrom_;
     std::vector<juce::Component::SafePointer<juce::Component>> pendingHideParts_; ///< Its widget and caption.
     bool forceAnimateForTest_ = false;
 

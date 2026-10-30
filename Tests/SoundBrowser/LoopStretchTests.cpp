@@ -149,9 +149,9 @@ TEST(LoopStretchTest, SemitonesToKeyTakesTheShortestWayRound) {
     EXPECT_EQ(semitonesToKey("C", "F#"), 6);
     EXPECT_EQ(semitonesToKey("C#", "C#"), 0);
     EXPECT_EQ(semitonesToKey("A minor", "C# minor"), 4);
-    EXPECT_EQ(semitonesToKey("C major", "A minor"), 0) << "different modes: no shift";
-    EXPECT_EQ(semitonesToKey("Am", "D major"), 0);
-    EXPECT_EQ(semitonesToKey("C major", "D minor"), 0);
+    EXPECT_EQ(semitonesToKey("C major", "A minor"), 0) << "A minor's relative key is C major";
+    EXPECT_EQ(semitonesToKey("Am", "D major"), 2) << "D major's relative key is B minor";
+    EXPECT_EQ(semitonesToKey("C major", "D minor"), 5) << "D minor's relative key is F major";
     EXPECT_EQ(semitonesToKey("C", "D minor"), 2) << "a bare root has no mode, so it follows the root";
     EXPECT_EQ(semitonesToKey("", "Dm"), 0) << "an unknown loop key";
     EXPECT_EQ(semitonesToKey("Am", ""), 0) << "no song key";
@@ -181,14 +181,73 @@ TEST(LoopStretchTest, MakeLoopTargetFollowsTempoAlwaysAndKeyOnlyWhenAsked) {
     EXPECT_DOUBLE_EQ(makeLoopTarget(0.0, "", 128.0, "", false).fileBpm, 0.0);
 }
 
-TEST(LoopStretchTest, SoundKeyForScaleNamesMajorAndMinorKeysOnly) {
+TEST(LoopStretchTest, ALoopSaysWhyItIsOrIsNotShifted) {
+    struct Row {
+        const char* what;
+        bool matchKey;
+        const char* loopKey;
+        const char* songKey;
+        KeyMatch expected;
+        int semitones;
+        const char* targetKey;
+    };
+    const Row rows[] = {
+        {"match key off", false, "Am", "Dm", KeyMatch::Off, 0, ""},
+        {"no song key", true, "Am", "", KeyMatch::NoSongKey, 0, ""},
+        {"no song key, no loop key", true, "", "", KeyMatch::NoSongKey, 0, ""},
+        {"no loop key", true, "", "D minor", KeyMatch::NoLoopKey, 0, ""},
+        {"a loop key that does not read", true, "not a key", "D minor", KeyMatch::NoLoopKey, 0, ""},
+        {"already in key", true, "D minor", "D minor", KeyMatch::InKey, 0, "D minor"},
+        {"shifted up", true, "A minor", "D minor", KeyMatch::Shifted, 5, "D minor"},
+        {"shifted down", true, "D minor", "A minor", KeyMatch::Shifted, -5, "A minor"},
+        {"major loop in a minor song goes to the relative major", true, "C major", "D minor", KeyMatch::Shifted, 5,
+         "F major"},
+        {"minor loop in a major song goes to the relative minor", true, "A minor", "F major", KeyMatch::Shifted, 5,
+         "D minor"},
+        {"a major loop in D minor, from below", true, "D major", "D minor", KeyMatch::Shifted, 3, "F major"},
+        {"a minor loop in F major, the short way", true, "F minor", "F major", KeyMatch::Shifted, -3, "D minor"},
+        {"the relative key is already the loop's", true, "C major", "A minor", KeyMatch::InKey, 0, "C major"},
+        {"a bare loop root follows the song's mode", true, "A", "D minor", KeyMatch::Shifted, 5, "D minor"},
+    };
+    for (const auto& row : rows) {
+        const auto target = makeLoopTarget(120.0, row.loopKey, 96.0, row.songKey, row.matchKey);
+        EXPECT_EQ(target.keyMatch, row.expected) << row.what;
+        EXPECT_EQ(target.semitones, row.semitones) << row.what;
+        EXPECT_EQ(target.targetKey, row.targetKey) << row.what;
+    }
+}
+
+TEST(LoopStretchTest, ALoopNeverMovesMoreThanSixSemitones) {
+    for (const char* song : {"C major", "F# minor", "A minor", "D# major"})
+        for (const char* loop : {"C major", "G minor", "B minor", "F major", "Am", "C#"}) {
+            const int shift = semitonesToKey(loop, song);
+            EXPECT_GE(shift, -6) << loop << " in " << song;
+            EXPECT_LE(shift, 6) << loop << " in " << song;
+        }
+}
+
+TEST(LoopStretchTest, SoundKeyForScaleNamesEveryScaleByItsThird) {
     EXPECT_EQ(soundKeyForScale(std::nullopt), "");
-    synth::MusicalScale d;
-    d.rootPitchClass = 2;
-    d.name = "Natural Minor";
-    EXPECT_EQ(soundKeyForScale(d), "D minor");
-    d.name = "Major";
-    EXPECT_EQ(soundKeyForScale(d), "D major");
-    d.name = "Whole Tone";
-    EXPECT_EQ(soundKeyForScale(d), "");
+    const auto key = [](const char* name, int root) {
+        for (const auto& preset : synth::builtInScalePresets())
+            if (juce::String(preset.name) == name) {
+                synth::MusicalScale scale;
+                scale.rootPitchClass = root;
+                scale.mask = preset.mask;
+                scale.name = name;
+                return soundKeyForScale(scale);
+            }
+        return juce::String("missing scale ") + name;
+    };
+    for (const char* name : {"Natural Minor", "Minor Pentatonic", "Harmonic Minor", "Melodic Minor", "Dorian",
+                             "Phrygian", "Blues", "Locrian"})
+        EXPECT_EQ(key(name, 2), "D minor") << name;
+    for (const char* name : {"Major", "Major Pentatonic", "Lydian", "Mixolydian", "Phrygian Dominant", "Whole Tone"})
+        EXPECT_EQ(key(name, 2), "D major") << name;
+    EXPECT_EQ(key("Chromatic", 2), "") << "both thirds: no key";
+
+    synth::MusicalScale noThird;
+    noThird.rootPitchClass = 2;
+    noThird.mask = 0x0081; // root and fifth only
+    EXPECT_EQ(soundKeyForScale(noThird), "");
 }

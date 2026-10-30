@@ -5,6 +5,7 @@
 #pragma once
 
 #include <functional>
+#include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <vector>
 
@@ -27,6 +28,10 @@ public:
     virtual void stepTo(double elapsedMs) = 0;
     /** How opaque the moved thing is drawn right now (below 1 only during a Reduce Motion fade). */
     virtual float alpha() const { return 1.0f; }
+    /** The component whose paint shows the glide: the owner of the KeyedTween the surface moves things through.
+     *  nullptr only for a surface that does not use a KeyedTween (the rows);
+     * EveryGlideFrameRepaintsEverythingThatChanged fails a KeyedTween surface that returns none. */
+    virtual juce::Component* paintedComponent() { return nullptr; }
 };
 
 struct Entry {

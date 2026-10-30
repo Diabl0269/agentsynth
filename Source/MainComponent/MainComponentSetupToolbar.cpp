@@ -29,7 +29,11 @@ void MainComponent::addCanvasAndPanels() {
     // The Sounds view previews through the engine, after the master; Near song tempo reads the transport's tempo.
     librarySidebar_->getSounds().setPreviewPlayer(&audioEngine.getSoundPreview());
     librarySidebar_->getSounds().onSoundActivated = [this](const synth::soundbrowser::SoundEntry& sound) {
-        MainComponentAudioImport::loadSoundFromBrowser(*this, juce::File(sound.path));
+        auto& sounds = librarySidebar_->getSounds();
+        MainComponentAudioImport::loadSoundFromBrowser(*this, juce::File(sound.path),
+                                                       sound.kind == synth::soundbrowser::SoundKind::Loop
+                                                           ? sounds.loopTargetFor(sound)
+                                                           : synth::soundbrowser::LoopTarget{});
     };
     librarySidebar_->getSounds().onShapeActivated = [this](const synth::shapes::LibraryShape& shape) {
         return MainComponentAudioImport::stampShapeFromBrowser(*this, shape);

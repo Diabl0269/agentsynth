@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <optional>
 #include <set>
 #include <vector>
@@ -282,6 +283,15 @@ private:
     juce::Rectangle<int> meltRect() const;
     void paintToolPreview(juce::Graphics& g);
     void paintHandles(juce::Graphics& g, const synth::AutomationLane& lane);
+
+    // ---- Where points are drawn (AutomationLaneEditorDrawnPoints.cpp) ----
+    // The points a drag or stretch is moving, where it has put them, by the beat they rest at.
+    std::map<double, LaneBreakpoint> movedPointsByRestingBeat() const;
+    // Where `point` (as the document has it) is drawn: its preview place, plus its eased offset.
+    juce::Point<float> drawnPointPosition(const LaneBreakpoint& point,
+                                          const std::map<double, LaneBreakpoint>& moved) const;
+    juce::Rectangle<float> drawnSelectionBounds() const;
+    void paintKeyboardCursorRing(juce::Graphics& g);
     juce::Path curvePath(const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane) const;
     std::vector<LaneBreakpoint> tweenedPoints(const std::vector<LaneBreakpoint>& points) const;
     void strokeCurve(juce::Graphics& g, const std::vector<LaneBreakpoint>& points, const synth::AutomationLane& lane,
@@ -312,12 +322,11 @@ private:
     bool nudgePoints(int keyCode, double beatDirection, double valueDirection, NudgeSize size);
 
     // ---- Keyboard drag (AutomationLaneEditorKeyGlide.cpp) ----
-    bool beginKeyDrag(int keyCode, const std::vector<LaneBreakpoint>& picked, double beatDirection,
-                      double valueDirection, NudgeSize size);
+    bool beginKeyDrag(int keyCode, const std::vector<LaneBreakpoint>& picked, NudgeSize size);
     void applyKeyDrag(bool tapStep);
     void endKeyDrag();
     void cancelKeyDrag();
-    double keyDragSpeedFactor() const;
+    double keyDragSpeedFactor(KeyAxis axis) const;
     bool restoreSinceLastSync();
     void glideRestoredPoints(const std::vector<LaneBreakpoint>& before, const std::vector<LaneBreakpoint>& now);
     void easeMovedPoints(const std::vector<LaneBreakpoint>& from, const std::vector<LaneBreakpoint>& to,
@@ -426,8 +435,6 @@ private:
     KeyedPointTween pointTween_{*this};
     KeyHold keyHold_{*this};
     struct KeyDrag {
-        bool time = false;
-        int sign = 1;
         double unit = 0.0; // beats of one step in time (the tap, and the snapped quantum)
         bool snapped = false;
         bool cancelled = false;

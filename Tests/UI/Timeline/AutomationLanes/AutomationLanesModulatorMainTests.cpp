@@ -119,7 +119,9 @@ TEST_F(TimelinePanelIntegrationTest, AnLfoCablePatchedByHandShowsUpAsAModulatorR
     auto* filter = dynamic_cast<ModuleBase*>(s.target->getProcessor());
     s.mc.getGraphEditor().connectPorts(lfo->nodeID, 0, s.target->nodeID, filter->mapInputChannel(raw).visibleJackIndex,
                                        false, true);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // the undo broadcast is async
+    // The undo broadcast is async and the row lands some 60-80 ms later on a loaded machine: wait for it, up to 1 s.
+    for (int i = 0; i < 50 && s.row() == nullptr; ++i)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 
     auto* row = s.row();
     ASSERT_NE(row, nullptr);

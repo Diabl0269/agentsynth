@@ -54,6 +54,13 @@ Fast checks first, so a lint failure does not wait on a full build.
    cold one. On the **first** configure only, and only when this checkout is a git worktree, it also
    reuses the main checkout's already-fetched dependency sources — see
    [Worktree dependency-source reuse](#worktree-dependency-source-reuse) below.
+8b. Configure a scratch `build-ci-local-ci-flags/` with CI's own macOS/Windows flags (`-DAGENTSYNTH_PCH=ON`
+   and the explicit ccache compiler launchers, with the ccache `base_dir` cleared because `cmake/Pch.cmake` refuses
+   a precompiled header beside one) and build nothing. The build above configures the way a developer does, so a
+   configure problem that only CI's flags hit (JUCE 9's `juceaide` bootstrap choking on the list-valued launcher)
+   went green here and red on all three CI jobs. It reuses the dependency sources the build above fetched, so it
+   adds about 25 s warm. `scripts/tests/ci-local-ci-flags.test.sh` fails when `ci.yml`'s macOS configure gains a
+   `-D` flag this step lacks.
 9. Dev-sign the built app bundle (macOS only): `bash scripts/dev-sign-app.sh "$APP_PATH"`. Not a CI
    check — it runs only locally, after the build and before the test suite, so a signing failure
    surfaces early rather than after a multi-minute test run.

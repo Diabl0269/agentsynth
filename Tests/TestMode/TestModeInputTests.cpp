@@ -24,6 +24,9 @@ TEST(TestModeInput, KeyTextBecomesAKeyPress) {
 
     // A plain character is typed as itself, so a text field would receive it.
     EXPECT_EQ(keyPressFromText("a", error).getTextCharacter(), L'a');
+    // The space bar types a space too (a scenario's "type: {text: test loop}" sends it); with Cmd it types nothing.
+    EXPECT_EQ(keyPressFromText("space", error).getTextCharacter(), L' ');
+    EXPECT_EQ(keyPressFromText("cmd+space", error).getTextCharacter(), 0);
 }
 
 TEST(TestModeInput, BadKeyAndModifierTextIsAnError) {

@@ -145,7 +145,7 @@ fractions; each frame it calls `onLayoutNeeded` (wired to `MainComponent::resize
 
 ## Reorder drag
 
-Every reorderable list (the bottom dock's tab strip, the mixer's track columns, the mixer's zones rows and send rows, the timeline's track list and a track's automation lanes, the macro port dialog's rows and the plugin knob picker's rows) uses one behaviour, in `Source/UI/Layout/ReorderDrag/`:
+Every reorderable list (the bottom dock's tab strip, the mixer's track columns, Edit Layout's group titles (a group dragged by its title among the card's groups, `CardLayoutOnCardEditorGroupMove.cpp`), the mixer's zones rows and send rows, the timeline's track list and a track's automation lanes, the macro port dialog's rows and the plugin knob picker's rows) uses one behaviour, in `Source/UI/Layout/ReorderDrag/`:
 
 - `ReorderDragAnimator` — pure logic along ONE axis (x for a strip, y for a list), no components and
   no painting, with an injectable clock so it is unit-tested headlessly

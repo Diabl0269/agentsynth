@@ -7,6 +7,7 @@
 #include "SoundBrowser/SoundLists.h"
 #include "SoundBrowser/SoundPreviewPlayer.h"
 #include "SoundPacks/SoundPackInstaller.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/NonModalLabel.h"
@@ -32,6 +33,7 @@ class SoundBrowserComponent
     , public juce::FileDragAndDropTarget
     , public juce::SettableTooltipClient
     , public KeyboardContextMenuProvider
+    , public synth::testmode::StateSource
     , private juce::ScrollBar::Listener
     , private synth::soundpacks::SoundPackInstaller::Listener
     , private synth::soundbrowser::SoundFolderBook::Listener
@@ -129,6 +131,9 @@ public:
     /** How a loop is fitted to the song now: its tempo to the transport's, and its key to the song's with Match key on.
      */
     synth::soundbrowser::LoopTarget loopTargetFor(const synth::soundbrowser::SoundEntry& entry) const;
+    /** Test mode: `selectedName`, `selectedDetail` (the row's right-hand text) and `footerLine` (the footer's second
+     *  line) of the selected sound, empty when none is. */
+    void addTestModeState(juce::DynamicObject& into) const override;
     float getPreviewGainDb() const { return footer_.getGainDb(); }
     /** Auto-play, Match key or the preview volume was changed by the user. */
     std::function<void()> onPreviewSettingsChanged;
@@ -383,6 +388,12 @@ private:
     // Preview (SoundBrowserPreview.cpp)
     void setupPreview();
     void syncFooterToSelection();
+    /** The footer line and the Match key switch's tooltip and description for the selected sound; repaints. */
+    void refreshMatchKeyHint();
+    /** What Match key does to the selected loop right now; empty for any other sound or with Match key off. */
+    juce::String selectedMatchKeyText() const;
+    /** The footer's second line for a sound: the Match key text, the key line, then where the sound lives. */
+    juce::String soundFooterLine(const synth::soundbrowser::SoundEntry& entry) const;
 
     // Drag (SoundBrowserDrag.cpp)
     juce::ScaledImage makeSoundDragImage(const juce::String& name) const;

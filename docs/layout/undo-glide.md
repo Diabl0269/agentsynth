@@ -20,7 +20,12 @@ redo.** An undo that jumps looks like a different app from the edit it reverses.
   glides every control whose rect changed from there to the restored place (`startGlide`, 160 ms `easeOutCubic`, the
   geometry final at once). A control the restore brings back grows in (`fadeInControl`) and one it takes away shrinks
   out (`startShrinkGhostOf`, from a picture of the card taken at the previous re-sync). Nothing glides under Reduce
-  Motion or off screen.
+  Motion or off screen. The re-sync runs inside the restore (an `addRestoreSettledHook` the editor registers when it
+  opens), so no frame shows the restored layout under outlines still at the old one. The card itself is exempt from the canvas's card slide (`CardGlideAnimator::setCardExempt`)
+  while the editor is open: a restore that changes its height would otherwise hide it behind a snapshot drawn over the
+  editor, showing the restored layout with no outlines. A second Cmd+Z or Cmd+Shift+Z
+  mid-glide starts the new glide from where each control is drawn then (nothing is landed first), and a re-sync that
+  arrives while a glide runs with no new rebuild is ignored (FRO721).
 - **Macro borders.** `undo()`/`redo()` also snapshot the painted macro borders before the restore and hand them to
   `GraphEditor::glideHullsFrom` after it, so the border a take-out or join moved glides (220 ms, `MacroHullGlide`) back
   to where it was, like it glided out.
@@ -58,6 +63,12 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   where they are so the edge slides over them. `UndoGlideSurfaces` registers a clip-contents surface for every sizing mode and
   both edges in which the notes change place, and a second test holds the rest still.
 
+**Repainting.** `KeyedTween` repaints the WHOLE owner for every frame, retarget, clear, fade step and erase: the lane's
+curve is drawn through the tweened points, so a box around the moving dot would leave the old dot and the segments to its
+neighbours stale. An owner whose paint of a moving thing stays strictly inside that thing's box opts into the tight
+repaint with `repaintOnlyAround(px)`; none does today (lane, curve editor, morph map and clip lane all take the default,
+the clip lane because its selection outline, label and notes reach past the clip rectangle).
+
 Under Reduce Motion a restored point, dot, cursor or clip is already at its new place on the first frame and fades in
 there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(..., fadeWhenReduced = true)`, read with
 `alphaFor`). Animations Off and an owner that is off screen land it plain (a test forces the tween with
@@ -70,4 +81,8 @@ there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(
 surface, makes a move through its real edit path, calls the real `AppUndoManager::undo()` and `redo()`, and
 `UndoGlideSurfaces.EveryMoveSurfaceGlidesOnUndoAndRedo` checks the moved thing is drawn between its two places on the first
 frames and settles at the restored one. **A new move surface adds an entry there; that list is the checklist.**
+`UndoGlideSurfaces.EveryGlideFrameRepaintsEverythingThatChanged` walks it too: each surface returns the component its
+tween repaints (`paintedComponent()`; a surface drawn through a `KeyedTween` must return one), and after every 16 ms
+glide frame of an undo and a redo (also under Reduce Motion) the test re-renders only the areas the tween asked to repaint
+(`setKeyedTweenDirtyProbeForTest`) and compares with a full render.
 The same list is walked under Reduce Motion (a fade for the point surfaces, an instant landing for the rows) and with Animations Off (instant).

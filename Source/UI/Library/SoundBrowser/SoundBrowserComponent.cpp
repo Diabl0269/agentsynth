@@ -19,6 +19,7 @@ SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& in
     : index_(index)
     , lists_(lists) {
     setTitle("Sounds");
+    setComponentID("soundBrowser");
     setTooltip("Sounds. Up and Down move, Right opens a folder, Left goes back, F adds to Favourites. Return loads it "
                "into the selected Sampler or audio track.");
     setWantsKeyboardFocus(true);

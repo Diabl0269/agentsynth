@@ -4,6 +4,7 @@
 #include "CurveModel.h"
 #include "UI/Layout/KeyGlide/KeyHold.h"
 #include "UI/Layout/KeyGlide/KeyedPointTween.h"
+#include "UI/Layout/PointEditing/PointBoxSelect.h"
 #include "UI/Layout/PointEditing/PointClipboard.h"
 #include "UI/Layout/PointEditing/PointSelectionModel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -256,6 +257,11 @@ private:
     void setSelectedIndex(int index);
     void setSelection(std::vector<int> indices, int cursor, int anchor);
     void selectionChanged();
+    /** The movable nodes whose drawn centre lies inside `box`, then the box selection applied
+     * (CurveEditorBoxSelect.cpp). */
+    std::vector<int> movableNodesInBox(juce::Rectangle<float> box) const;
+    void dragBoxTo(juce::Point<float> position);
+    void endBox();
     bool isSelected(int index) const;
     int cursorIndex() const noexcept;
     /** Every node a selection key may land on, ascending. */
@@ -275,6 +281,7 @@ private:
     // ---- Keyboard drag (CurveEditorKeyGlide.cpp) ----
     void pressNudge(int keyCode, double dx, double dy, bool fine);
     bool beginKeyDrag(int keyCode, double dx, double dy, bool fine);
+    double coveredAlong(KeyAxis axis, double unit) const;
     std::vector<juce::Point<float>> selectionPositions() const;
     juce::Point<float> segmentTweenOffset(int seg, float progress) const;
     void buildCurvePaths(const CurveEditorGeometry& geometry, juce::Path& curvePath, juce::Path& fillPath) const;
@@ -354,6 +361,7 @@ private:
                                                          PointSelectionRules::Extend::rangeFromAnchor,
                                                          PointSelectionRules::SelectAllCursor::keepSelectedElseLast};
     PointSelectionModel<int> selection_;
+    PointBoxSelect<int> boxSelect_{*this};
     /** A press on an already-selected point settles on release when no drag followed: -1 none. */
     int pendingToggleIndex_ = -1;
     int pendingCollapseIndex_ = -1;
@@ -362,10 +370,8 @@ private:
     KeyedPointTween pointTween_{*this};
     KeyHold keyHold_{*this};
     struct KeyDrag {
-        bool time = false;
-        int sign = 1;
-        double start = 0.0; // the cursor point's x or y when the hold began
-        double unit = 0.0;  // one step along the axis: the tap, and the snapped quantum
+        juce::Point<double> start; // the cursor point when the hold began
+        juce::Point<double> unit;  // one step along each axis: the tap, and the snapped quantum
         bool snapped = false;
         bool gestureOpen = false;
     } keyDrag_;

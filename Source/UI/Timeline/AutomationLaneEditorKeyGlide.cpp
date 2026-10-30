@@ -1,6 +1,6 @@
 // AutomationLaneEditor -- the keyboard drag: a held Alt+Left/Right or Up/Down moves the selection like a mouse drag of
-// its points (same preview state, one undo step on release), and a discrete jump of the drawn points eases. The class
-// is declared in AutomationLaneEditor.h.
+// its points (same preview state, one undo step on release), both at once when both are held, and a discrete jump of
+// the drawn points eases. The class is declared in AutomationLaneEditor.h.
 
 #include "AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
@@ -39,27 +39,24 @@ void AutomationLaneEditor::easeMovedPoints(const std::vector<LaneBreakpoint>& fr
     }
 }
 
-double AutomationLaneEditor::keyDragSpeedFactor() const {
+double AutomationLaneEditor::keyDragSpeedFactor(KeyAxis axis) const {
     const auto& host = keyHold_.host;
     const bool shift = host.isShiftDown && host.isShiftDown();
     const bool alt = host.isAltDown && host.isAltDown();
     if (alt && shift)
         return lane_key::kFineScale;
-    return shift && !keyDrag_.time ? lane_key::kValueShiftSpeedFactor : 1.0;
+    return shift && axis == KeyAxis::value ? lane_key::kValueShiftSpeedFactor : 1.0;
 }
 
 // The tap is the first step of the drag, so a tap and a hold are one undo step. The grabbed point is the keyboard
-// cursor's (or the first selected), the same fields a mouse drag of it would fill.
-bool AutomationLaneEditor::beginKeyDrag(int keyCode, const std::vector<LaneBreakpoint>& picked, double beatDirection,
-                                        double valueDirection, NudgeSize size) {
+// cursor's (or the first selected), the same fields a mouse drag of it would fill. The hold knows both axes: an arrow
+// of the other one held as well (Alt+Left/Right for time) moves the points diagonally.
+bool AutomationLaneEditor::beginKeyDrag(int keyCode, const std::vector<LaneBreakpoint>& picked, NudgeSize size) {
     if (dragMode_ != DragMode::None)
         return true;
-    const bool time = beatDirection != 0.0;
     const double fine = size == NudgeSize::Fine ? lane_key::kFineScale : 1.0;
     keyDrag_ = {};
-    keyDrag_.time = time;
-    keyDrag_.sign = (time ? beatDirection : valueDirection) < 0.0 ? -1 : 1;
-    keyDrag_.snapped = time && viewState_.divisionBeats(currentBeatsPerBar()) > 0.0;
+    keyDrag_.snapped = viewState_.divisionBeats(currentBeatsPerBar()) > 0.0;
     keyDrag_.unit = keyStepBeats() * fine;
 
     const LaneBreakpoint* grabbed = &picked.front();
@@ -72,34 +69,40 @@ bool AutomationLaneEditor::beginKeyDrag(int keyCode, const std::vector<LaneBreak
     dragOriginalValue_ = previewValue_ = grabbed->value;
 
     namespace k = lane_key;
-    const KeyGlideConfig config =
-        time ? KeyGlideConfig{k::kTimeStartBeatsPerSecond, k::kTimeMaxBeatsPerSecond, k::kTapMs, k::kRampMs}
-             : KeyGlideConfig{k::kValueStartRangePerSecond, k::kValueMaxRangePerSecond, k::kTapMs, k::kRampMs};
+    // A snapped hold starts at one grid step per kSnappedStepSeconds (never slower than a free one) and the cap grows
+    // by the same factor, so a coarse grid keeps stepping instead of waiting seconds for its next line.
+    const double paceScale =
+        keyDrag_.snapped ? std::max(1.0, keyDrag_.unit / (k::kSnappedStepSeconds * k::kTimeStartBeatsPerSecond)) : 1.0;
+    const KeyAxisMotion time{
+        {k::kTimeStartBeatsPerSecond * paceScale, k::kTimeMaxBeatsPerSecond * paceScale, k::kTapMs, k::kRampMs},
+        keyDrag_.unit,
+        true};
     const double valueTap = size == NudgeSize::Coarse ? k::kCoarseValueStep : k::kFineValueStep * fine;
-    keyHold_.begin(keyCode, config, time ? keyDrag_.unit : valueTap);
+    const KeyAxisMotion value{{k::kValueStartRangePerSecond, k::kValueMaxRangePerSecond, k::kTapMs, k::kRampMs},
+                              valueTap};
+    const bool alongTime = KeyHold::axisOf(keyCode) == KeyAxis::time;
+    keyHold_.begin(keyCode, alongTime ? time : value, alongTime ? value : time);
     applyKeyDrag(true);
     return true;
 }
 
-// Sets the preview from how far the key has moved things. With snap on a time move is whole steps, so it jumps from
-// grid line to grid line and each jump eases; a free move and any value move follow the glide continuously.
+// Sets the preview from how far the keys have moved things along each axis. With snap on a time move is whole steps,
+// so it jumps from grid line to grid line and each jump eases; a free move and any value move follow the glide
+// continuously.
 void AutomationLaneEditor::applyKeyDrag(bool tapStep) {
     const auto* lane = dragMode_ == DragMode::MoveHandle && doc_ != nullptr ? doc_->getLane(laneId_) : nullptr;
     if (lane == nullptr)
         return;
     const auto before = dragMovedPoints();
-    const double distance = keyHold_.distance();
-    if (keyDrag_.time) {
-        double delta = keyDrag_.sign * distance;
-        if (keyDrag_.snapped)
-            delta = keyDrag_.sign * std::floor(distance / keyDrag_.unit + 1e-9) * keyDrag_.unit;
-        previewBeat_ = dragOriginalBeat_ + clampBeatDelta(dragPoints_, delta);
-    } else {
-        previewValue_ =
-            dragOriginalValue_ + keyDrag_.sign * distance * (double)(lane->range.maxValue - lane->range.minValue);
-    }
+    const double beatBefore = previewBeat_;
+    double delta = keyHold_.distance(KeyAxis::time);
+    if (keyDrag_.snapped)
+        delta = (delta < 0.0 ? -1.0 : 1.0) * std::floor(std::abs(delta) / keyDrag_.unit + 1e-9) * keyDrag_.unit;
+    previewBeat_ = dragOriginalBeat_ + clampBeatDelta(dragPoints_, delta);
+    previewValue_ =
+        dragOriginalValue_ + keyHold_.distance(KeyAxis::value) * (double)(lane->range.maxValue - lane->range.minValue);
     showBubbleAt(previewBeat_, clampValue(previewValue_));
-    if (tapStep || keyDrag_.snapped) {
+    if (tapStep || (keyDrag_.snapped && previewBeat_ != beatBefore)) {
         const auto keys = beatsOf(dragPoints_);
         easeMovedPoints(before, dragMovedPoints(), keys, keys);
     }

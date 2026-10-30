@@ -111,10 +111,72 @@ TEST(SoundPreviewFooterMatchKeyTest, ALoopIsFittedToTheSongTempoAndToItsKeyOnlyW
 
     view.setPreviewSettings(true, -6.0f, true);
     EXPECT_EQ(view.loopTargetFor(loopEntry("Am")).semitones, 5);
+    EXPECT_EQ(view.loopTargetFor(loopEntry("Am")).keyMatch, synth::soundbrowser::KeyMatch::Shifted);
+    EXPECT_EQ(view.loopTargetFor(loopEntry("C major")).semitones, 5) << "a major loop goes to the relative major";
+    EXPECT_EQ(view.loopTargetFor(loopEntry("C major")).targetKey, "F major");
     EXPECT_EQ(view.loopTargetFor(loopEntry("")).semitones, 0) << "a loop with no key stays put";
+    EXPECT_EQ(view.loopTargetFor(loopEntry("")).keyMatch, synth::soundbrowser::KeyMatch::NoLoopKey);
     EXPECT_DOUBLE_EQ(view.loopTargetFor(loopEntry("Am", 0.0)).fileBpm, 0.0) << "unknown tempo: no time-stretch";
     view.setSongKey("");
     EXPECT_EQ(view.loopTargetFor(loopEntry("Am")).semitones, 0) << "no song key";
+    EXPECT_EQ(view.loopTargetFor(loopEntry("Am")).keyMatch, synth::soundbrowser::KeyMatch::NoSongKey);
+}
+
+TEST(SoundPreviewFooterMatchKeyTest, MatchKeyTextSaysWhatTheLoopWillDo) {
+    using synth::soundbrowser::KeyMatch;
+    using synth::soundbrowser::LoopTarget;
+    const auto target = [](KeyMatch match, int semitones, const char* key) {
+        LoopTarget t;
+        t.keyMatch = match;
+        t.semitones = semitones;
+        t.targetKey = key;
+        return t;
+    };
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::Shifted, 2, "D minor")), "Plays 2 semitones up, to D minor");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::Shifted, -1, "F major")), "Plays 1 semitone down, to F major");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::Shifted, 1, "F major")), "Plays 1 semitone up, to F major");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::InKey, 0, "D minor")), "Already in D minor");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::NoSongKey, 0, "")), "No key in the song");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::NoLoopKey, 0, "")), "This loop has no key");
+    EXPECT_EQ(synth::ui::matchKeyText(target(KeyMatch::Off, 0, "")), "");
+}
+
+TEST(SoundPreviewFooterMatchKeyTest, TheFooterTooltipAndDescriptionReadWhatTheLoopWillDo) {
+    sound_browser_test::TempTree tree;
+    tree.fill();
+    auto index = sound_browser_test::makeIndex(tree);
+    index->setUserFolders({tree.user});
+    sound_browser_test::scanAndWait(*index);
+    synth::soundbrowser::SoundLists lists;
+    SoundBrowserComponent view(*index, lists);
+    view.setSize(300, 700);
+    view.songTempoProvider = [] { return 96.0; };
+    view.setQuery("dusty");
+    view.completeListAnimationForTest();
+    int loopRow = -1;
+    for (size_t i = 0; i < view.getRows().size(); ++i)
+        if (view.getRows()[i].kind == SoundBrowserComponent::RowKind::Sound)
+            loopRow = (int)i;
+    ASSERT_GE(loopRow, 0);
+    view.selectRow(loopRow);
+    auto& toggle = view.getPreviewFooter().getMatchKey();
+    const juce::String base = "Play loops in the song's key";
+
+    view.setSongKey("D minor");
+    EXPECT_EQ(toggle.getTooltip(), base) << "Match key is off: nothing about shifting";
+    EXPECT_EQ(toggle.getDescription(), "");
+
+    toggle.setToggleState(true, juce::sendNotificationSync);
+    EXPECT_EQ(toggle.getTooltip(), "Plays 5 semitones up, to D minor");
+    EXPECT_EQ(toggle.getDescription(), toggle.getTooltip());
+
+    view.setSongKey("A minor");
+    EXPECT_EQ(toggle.getTooltip(), "Already in A minor") << "a song key change updates the footer";
+    EXPECT_EQ(toggle.getDescription(), "Already in A minor");
+
+    view.setSongKey("");
+    EXPECT_EQ(toggle.getTooltip(), "No key in the song");
+    EXPECT_EQ(toggle.getDescription(), "No key in the song");
 }
 
 TEST(SoundPreviewFooterMatchKeyTest, TheFooterLineShowsTheLoopsKeyNextToTheSongs) {

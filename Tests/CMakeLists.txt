@@ -988,6 +988,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowserTests.cmake) # the sound index a
 include(${CMAKE_CURRENT_SOURCE_DIR}/LoopWrapTests.cmake) # Track In across a loop wrap, every block size
 include(${CMAKE_CURRENT_SOURCE_DIR}/ControlStyleTests.cmake) # knob and fader styles, per module and per type
 include(${CMAKE_CURRENT_SOURCE_DIR}/CustomFilterTests.cmake) # the Filter's Custom type and its per-note modes
+include(${CMAKE_CURRENT_SOURCE_DIR}/ThemeSweepTests.cmake) # the theme sweep: every dialog, window, card and the shell in all themes
 include(GoogleTest)
 # The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
 # that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build

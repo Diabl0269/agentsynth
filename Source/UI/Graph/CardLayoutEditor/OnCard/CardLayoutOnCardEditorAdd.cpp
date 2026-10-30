@@ -124,7 +124,7 @@ void CardLayoutOnCardEditor::finishAdded(const juce::String& paramId, const juce
 
 // The added control grows in at its spot: from its centre (a fader along its length) with an 8% bounce, 200 ms;
 // a plain 80 ms fade under Reduce Motion. Nothing on screen, nothing to animate.
-void CardLayoutOnCardEditor::fadeInControl(const juce::String& paramId) {
+void CardLayoutOnCardEditor::fadeInControl(const juce::String& paramId, std::optional<juce::Point<int>> from) {
     using namespace control_motion;
     const int cell = indexOfCell(paramId);
     if (cell < 0 || !canAnimate() || animationsOff())
@@ -139,12 +139,19 @@ void CardLayoutOnCardEditor::fadeInControl(const juce::String& paramId) {
             parts.push_back({c, c->getBounds()});
     const auto axis = axisFor(cells_[(size_t)cell].rect);
     const bool reduced = prefersReducedMotion();
-    const auto apply = [parts, axis, reduced](float t) {
+    // A control an undo brings back from the hide zone rises out of it: the grow also travels from the zone's centre.
+    const bool rises = from.has_value() && !reduced;
+    const auto origin = from.value_or(juce::Point<int>());
+    const auto apply = [parts, axis, reduced, rises, origin](float t) {
         for (const auto& part : parts) {
             if (part.comp == nullptr)
                 continue;
             part.comp->setAlpha(juce::jlimit(0.0f, 1.0f, easeOutCubic(t)));
-            part.comp->setTransform(reduced ? juce::AffineTransform() : scaleAbout(part.bounds, growScale(t), axis));
+            const auto travel =
+                rises ? (origin - part.bounds.getCentre()).toFloat() * (1.0f - easeOutCubic(t)) : juce::Point<float>();
+            part.comp->setTransform(reduced
+                                        ? juce::AffineTransform()
+                                        : scaleAbout(part.bounds, growScale(t), axis).translated(travel.x, travel.y));
         }
     };
     const auto land = [parts] {

@@ -7,6 +7,8 @@
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AutomationLanesMenuFixture.h"
 #include "AutomationLanesModulatorHost.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 
 using namespace modulator_rows_test;
 using synth::TrackKind;
@@ -160,4 +162,39 @@ TEST(AutomationLanesUndoGlideTest, UnderReduceMotionAnUndoneLaneMoveLandsAtOnce)
     ASSERT_TRUE(f.undo.undo());
     EXPECT_FALSE(f.lanes().isLaneReorderActive());
     EXPECT_EQ(f.y(f.cutoff), top);
+}
+
+// Regression test for FRO1197: the lane's curve is drawn through the tweened points, so a glide frame that repainted
+// only the box around the moving dot left the line segments to its far neighbours (and the old dot) stale.
+TEST(AutomationLanesUndoGlideTest, UndoOfAMovedPointRepaintsTheSegmentsToItsFarNeighbours) {
+    automation_lanes_test::LanesPanel p;
+    FadeAnimateGuard animate;
+    const auto bass = p.doc.addTrack(TrackKind::Midi, "Bass");
+    const auto lane = p.addLane(bass, "cutoff");
+    p.panel.setTrackAutomationExpanded(bass, true);
+    auto* editor = p.panel.laneEditorForTest(lane);
+    editor->setTool(synth::ui::AutomationLaneEditor::Tool::Pointer);
+    for (const auto& [beat, value] : {std::pair{0.5, 20.0}, {2.0, 60.0}, {3.5, 40.0}})
+        p.doc.addBreakpoint(lane, beat, value);
+    editor->getPointTweenForTest().forceAnimateForTest(true);
+
+    const auto& view = p.panel.getViewState();
+    const juce::Point<float> from{(float)view.beatToX(2.0), (float)editor->valueToY(60.0)};
+    automation_lanes_test::dragAcross(*editor, from, {from.x, (float)editor->valueToY(10.0)}, 6);
+    editor->getPointTweenForTest().stepForTest(1000.0);
+
+    juce::RectangleList<int> dirty;
+    synth::ui::setKeyedTweenDirtyProbeForTest([&](juce::Component& owner, juce::Rectangle<int> area) {
+        if (&owner == editor)
+            dirty.add(area);
+    });
+    ASSERT_TRUE(p.undo.undo());
+    editor->getPointTweenForTest().stepForTest(32.0);
+    synth::ui::setKeyedTweenDirtyProbeForTest({});
+
+    for (const double beat : {0.5, 3.5}) {
+        const auto neighbour =
+            juce::Point<int>((int)view.beatToX(beat), (int)editor->valueToY(beat < 1.0 ? 20.0 : 40.0));
+        EXPECT_TRUE(dirty.containsPoint(neighbour)) << "the far neighbour at beat " << beat << " is repainted";
+    }
 }

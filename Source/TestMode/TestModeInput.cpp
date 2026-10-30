@@ -72,7 +72,9 @@ juce::KeyPress keyPressFromText(const juce::String& text, juce::String& error) {
         error = "unknown key \"" + keyName + "\"";
         return {};
     }
-    return juce::KeyPress(key.getKeyCode(), mods, 0);
+    // A real space bar types a space into a text field, as a single character does.
+    const bool typesSpace = key.getKeyCode() == juce::KeyPress::spaceKey && !mods.isCommandDown() && !mods.isCtrlDown();
+    return juce::KeyPress(key.getKeyCode(), mods, typesSpace ? ' ' : 0);
 }
 
 juce::Point<int> centreOf(const juce::Component& c) { return c.getLocalBounds().getCentre(); }
