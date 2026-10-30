@@ -10,6 +10,7 @@
 // or undo manager to exercise.
 
 #include "../../../StubPluginInstance.h"
+#include "../../../TestWait.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/PluginKnobPicker/PluginKnobPickerTouchCapture.h"
 #include <algorithm>
@@ -188,7 +189,7 @@ TEST(PluginKnobPickerTouchFallbackTest, TheGesturePathStillWorksAlongsideTheValu
     capture.setArmed(true);
 
     capture.simulateGestureStartForTest(0); // reported immediately, no burst window involved
-    pump();
+    synth::test::waitUntil([&] { return (touched.size()) == (1u); });
     ASSERT_EQ(touched.size(), 1u);
     EXPECT_EQ(touched[0], 0);
 

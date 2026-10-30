@@ -10,6 +10,7 @@
 //   3. Render-to-image -- the hosted panel paints across the whole window.
 //   4. Themed background + the dock-back button's icon paints; a real click docks.
 
+#include "../../../TestWait.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include "UI/Layout/DetachablePanelHost/DockBackButton.h"
@@ -210,6 +211,6 @@ TEST_F(DetachedPanelWindowLayoutTest, SpacePressesTheDockBackButtonOnlyWhileItHa
     int clicks = 0;
     button.onClick = [&] { ++clicks; };
     EXPECT_TRUE(button.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey))) << "a focused button consumes Space";
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20); // triggerClick posts its click
+    synth::test::waitUntil([&] { return (clicks) == (1); });
     EXPECT_EQ(clicks, 1);
 }

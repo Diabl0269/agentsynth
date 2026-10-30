@@ -1,5 +1,6 @@
 #include "../App/MainComponent/MainComponentTestFixture.h"
 #include "../TestSettingsHelpers.h"
+#include "../TestWait.h"
 #include "../UniqueTempDir.h"
 #include "AudioEngine/AudioEngine.h"
 #include "ShortcutManager/AppCommands.h"
@@ -134,7 +135,7 @@ TEST_F(TelemetryWiringTest, ThePlayStopButtonCountsTimelineUseWhenItStartsTheTra
     // Space runs togglePlayback, which clicks the transport bar's Play / Stop button; triggerClick() posts the
     // click, so pump the message loop before reading the counter.
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::togglePlayback, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (featureCount(*service, Feature::TimelineUsed)) == (1); });
     EXPECT_EQ(featureCount(*service, Feature::TimelineUsed), 1);
 }
 
@@ -146,7 +147,7 @@ TEST_F(TelemetryWiringTest, TheSettingSwitchesRecordingOnAndOffWhileRunning) {
     auto& settings = *mc.getAppPropertiesForTest().getUserSettings();
     synth::telemetry::TelemetryIdStore().create(); // what the Preferences toggle does first
     settings.setValue(synth::kShareUsageStatsSettingKey, true);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return service->getRecorder().isEnabled(); });
     ASSERT_TRUE(service->getRecorder().isEnabled());
     mc.getGraphEditor().addModuleAtCanvasPosition("Oscillator", {100, 100}, {});
     EXPECT_EQ(moduleCount(*service, "Oscillator"), 1);

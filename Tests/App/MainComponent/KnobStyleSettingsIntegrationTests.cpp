@@ -1,6 +1,7 @@
 // KnobStyleSettingsIntegrationTests.cpp -- the live-apply wire for the knob style, mirroring
 // MeterColourStopsSettingsIntegrationTests.cpp: a write to the settings file reaches the shared
 // AppLookAndFeel through MainComponent's settings-changed branch.
+#include "../../TestWait.h"
 #include "MainComponentTestFixture.h"
 #include "UI/Theme/KnobStyle.h"
 #include "UserSettings.h"
@@ -50,7 +51,8 @@ TEST_F(MainComponentTest, WritingTheKnobKeysPushesTheAppearanceIntoTheSharedLook
 
     synth::theme::writeKnobAppearance(*mc.getAppPropertiesForTest().getUserSettings(),
                                       {synth::theme::KnobStyle::Ring, false});
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil(
+        [&] { return (mc.getLookAndFeelForTest().getKnobAppearance().style) == (synth::theme::KnobStyle::Ring); });
 
     EXPECT_EQ(mc.getLookAndFeelForTest().getKnobAppearance().style, synth::theme::KnobStyle::Ring);
     EXPECT_FALSE(mc.getLookAndFeelForTest().getKnobAppearance().colourByFamily);
@@ -64,7 +66,8 @@ TEST_F(MainComponentTest, WritingOnlyTheFaderStyleReachesTheSharedLookAndFeel) {
     settings->setValue(synth::theme::knobStyleKey(), "classic");
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     settings->setValue(synth::theme::faderStyleKey(), "neon"); // only the fader key changes
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil(
+        [&] { return (mc.getLookAndFeelForTest().getKnobAppearance().style) == (synth::theme::KnobStyle::Classic); });
 
     EXPECT_EQ(mc.getLookAndFeelForTest().getKnobAppearance().style, synth::theme::KnobStyle::Classic);
     EXPECT_EQ(mc.getLookAndFeelForTest().getKnobAppearance().faderStyle, synth::theme::KnobStyle::Neon);

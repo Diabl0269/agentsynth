@@ -5,6 +5,7 @@
 
 #include "ModDotTestFixture.h"
 
+#include "../../../TestWait.h"
 #include "AudioEngine/ModuleTitle.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/FilterModule.h"
@@ -179,7 +180,7 @@ TEST_F(ModuleComponentTest, GroupsFoldByClickKeysAndTheExpandAndCollapseAllLinks
     EXPECT_TRUE(lfos->keyPressed(juce::KeyPress(juce::KeyPress::leftKey)));
     EXPECT_FALSE(f.add().isGroupExpanded("LFOs"));
     EXPECT_TRUE(lfos->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // Return clicks, and a click is posted
+    synth::test::waitUntil([&] { return f.add().isGroupExpanded("LFOs"); });
     EXPECT_TRUE(f.add().isGroupExpanded("LFOs"));
 
     clickNow(f.add().collapseAllButton());

@@ -4,6 +4,7 @@
 // take it is "not here" and changes nothing). The move itself runs against a real MainComponent: the routing lands on
 // the new parameter, the amount lane keeps its id and points, the row sits at the drop slot, one undo puts it all back.
 
+#include "../../../TestWait.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AutomationLanesAmountFixture.h"
 #include "AutomationLanesModulatorHost.h"
@@ -267,7 +268,7 @@ TEST_F(TimelinePanelIntegrationTest, DroppingTheLfoRowOnTheResonanceLaneMovesThe
     EXPECT_EQ(s.panel().getAutomationLanes().modulatorDrop().lane, s.resLane);
     EXPECT_TRUE(s.panel().getAutomationLanes().modulatorDrop().valid);
     drag.release();
-    s.flushUi();
+    synth::test::waitUntil([&] { return (s.chainsInto(s.lfoUuid, resonance).size()) == (1u); });
 
     EXPECT_EQ(s.chainsInto(s.lfoUuid, resonance).size(), 1u) << "the LFO now drives Resonance";
     EXPECT_EQ(s.chainsInto(s.lfoUuid, cutoff).size(), 0u);
@@ -285,7 +286,7 @@ TEST_F(TimelinePanelIntegrationTest, DroppingTheLfoRowOnTheResonanceLaneMovesThe
 
     ASSERT_TRUE(s.undo().undo());
     EXPECT_FALSE(s.undo().canUndo()) << "ONE step";
-    s.flushUi();
+    synth::test::waitUntil([&] { return (s.chainsInto(s.lfoUuid, cutoff).size()) == (1u); });
     EXPECT_EQ(s.chainsInto(s.lfoUuid, cutoff).size(), 1u);
     EXPECT_EQ(s.chainsInto(s.lfoUuid, resonance).size(), 0u);
     EXPECT_EQ(s.panel().getAutomationLanes().modulatorCount(s.lane), 1);
@@ -312,13 +313,13 @@ TEST_F(TimelinePanelIntegrationTest, TheMovedRowTakesTheSlotItWasDroppedInAmongT
     drag.moveToScreenY(s.rowsTopOnScreen(s.resLane) + 4); // above the middle of Resonance's one row: slot 0
     EXPECT_EQ(s.panel().getAutomationLanes().modulatorDrop().index, 0);
     drag.release();
-    s.flushUi();
+    synth::test::waitUntil([&] { return (s.panel().getAutomationLanes().modulatorCount(s.resLane)) == (2); });
 
     ASSERT_EQ(s.panel().getAutomationLanes().modulatorCount(s.resLane), 2);
     EXPECT_EQ(s.panel().modulatorRowForTest(s.resLane, 0)->getInfo().sourceUuid, s.lfoUuid) << "at the drop slot";
     EXPECT_EQ(s.panel().modulatorRowForTest(s.resLane, 1)->getInfo().sourceUuid, adsrUuid);
     ASSERT_TRUE(s.undo().undo());
-    s.flushUi();
+    synth::test::waitUntil([&] { return (s.panel().getAutomationLanes().modulatorCount(s.resLane)) == (1); });
     EXPECT_EQ(s.panel().getAutomationLanes().modulatorCount(s.resLane), 1);
     EXPECT_EQ(s.panel().modulatorRowForTest(s.resLane, 0)->getInfo().sourceUuid, adsrUuid);
 }
@@ -341,7 +342,7 @@ TEST_F(TimelinePanelIntegrationTest, ALaneWhoseParameterHasNoCvJackIsNotHereAndT
     EXPECT_FALSE(s.panel().getAutomationLanes().modulatorDrop().valid);
     EXPECT_FALSE(s.panel().getAutomationLanes().modulatorDropIndicator().isVisible());
     drag.release();
-    s.flushUi();
+    synth::test::waitUntil([&] { return (s.chainsInto(s.lfoUuid, cutoff).size()) == (1u); });
 
     EXPECT_EQ(s.chainsInto(s.lfoUuid, cutoff).size(), 1u);
     EXPECT_EQ(s.doc().getRevision(), revision);

@@ -3,6 +3,7 @@
 // The key picker: a search field that understands "d dor", a keyboard strip, a grouped scale list, and the
 // Relative / Detect / No key / Follow actions. Opened headless (no CallOutBox): a pick reports through onPick.
 
+#include "../../TestWait.h"
 #include "Music/SongKey.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include "UI/Layout/SearchMatch.h"
@@ -202,7 +203,7 @@ TEST(KeyPicker, AnAuditionFiresAfterTheDelayAndEndsWhenThePickerGoes) {
         Fixture f(cMajor(), [&heard](KeyPicker& p) { p.onAudition = [&heard](auto k) { heard.push_back(k); }; });
         f.picker->hoverVisibleKey(2);
         EXPECT_TRUE(heard.empty()) << "not before the delay";
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(KeyPicker::kAuditionDelayMs + 150);
+        synth::test::waitUntil([&] { return (heard.size()) == (1u); });
         ASSERT_EQ(heard.size(), 1u);
         expectKey(heard[0], 0, f.picker->getHighlighted()->name.toRawUTF8());
     }

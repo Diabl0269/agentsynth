@@ -18,6 +18,7 @@
 //      patched JUCE host calls, and the item's action is invoked directly.
 
 #include "../../../StubPluginInstance.h"
+#include "../../../TestWait.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "../../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
@@ -852,7 +853,7 @@ TEST(AddByMovingTest, EachControlMovedInThePluginIsAddedToTheCardAndTheModeStays
     auto& params = instance->getParameters();
     params[1]->beginChangeGesture(); // the user grabs "j" in the plugin's own window
     params[1]->endChangeGesture();
-    pump();
+    synth::test::waitUntil([&] { return (childWithId<juce::Slider>(*a.card, "hostedKnob:j")) != (nullptr); });
 
     EXPECT_NE(childWithId<juce::Slider>(*a.card, "hostedKnob:j"), nullptr) << "the touched control is on the card";
     EXPECT_EQ(childWithId<juce::Slider>(*a.card, "hostedKnob:k"), nullptr);
@@ -860,7 +861,7 @@ TEST(AddByMovingTest, EachControlMovedInThePluginIsAddedToTheCardAndTheModeStays
 
     params[2]->beginChangeGesture();
     params[2]->endChangeGesture();
-    pump();
+    synth::test::waitUntil([&] { return (childWithId<juce::Slider>(*a.card, "hostedKnob:m")) != (nullptr); });
     EXPECT_NE(childWithId<juce::Slider>(*a.card, "hostedKnob:m"), nullptr) << "and the next one is added too";
     EXPECT_NE(childWithId<juce::Slider>(*a.card, "hostedKnob:j"), nullptr);
     EXPECT_TRUE(a.card->isPluginTouchToAdd());

@@ -5,6 +5,7 @@
 
 #include "ModDotTestFixture.h"
 
+#include "../../../TestWait.h"
 #include "AudioEngine/ModuleTitle.h"
 #include "Modules/ADSRModule.h"
 #include "UI/Graph/ModDot/ModSourceCatalog.h"
@@ -276,7 +277,7 @@ TEST_F(ModuleComponentTest, TheListIsReachableAndOperableFromTheKeyboardAlone) {
     InlineFixture f;
     auto& split = f.panel->sourcesPage().splitButton();
     EXPECT_TRUE(pressKey(split.leftHalf(), juce::KeyPress(juce::KeyPress::returnKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::waitUntil([&] { return f.panel->isListOpen(); });
     ASSERT_TRUE(f.panel->isListOpen()) << "Return on the list half opens the list";
 
     EXPECT_TRUE(pressKey(split.leftHalf(), juce::KeyPress(juce::KeyPress::rightKey))) << "Right hops to the next half";
@@ -291,7 +292,7 @@ TEST_F(ModuleComponentTest, TheListIsReachableAndOperableFromTheKeyboardAlone) {
 
     EXPECT_TRUE(pressKey(split.rightHalf(), juce::KeyPress(juce::KeyPress::leftKey))) << "Left hops back";
     EXPECT_TRUE(pressKey(split.rightHalf(), juce::KeyPress(juce::KeyPress::spaceKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::waitUntil([&] { return f.panel->isPicking(); });
     EXPECT_TRUE(f.panel->isPicking()) << "Space on the pick half starts the pick";
 }
 

@@ -139,7 +139,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## Development: testing, CI & distribution
 
-- [`docs/development/testing.md`](development/testing.md) — running the suite, the build flags, adding tests for a new module, snapshot references
+- [`docs/development/testing.md`](development/testing.md) — running the suite, the build flags, adding tests for a new module, waiting for async work (`waitUntil`, the fixed-wait guard), snapshot references
 - [`docs/development/test-layers.md`](development/test-layers.md) — what each suite in the test binary covers, grouped by layer
 - [`docs/development/test-mode.md`](development/test-mode.md) — `--automation <port>`: drive a dev build by script (click, drag, keys, state, PNGs) without the real mouse, in parallel
 - [`docs/development/test-patterns.md`](development/test-patterns.md) — the conventions every test follows: the real mouse path, headless seams, settings isolation, sanitizers

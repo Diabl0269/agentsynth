@@ -1,5 +1,6 @@
 // Concern: the song key in the app: saved with the project, one undo step per change, reset by New Patch, shown in the
 // transport bar and opened by the Set Song Key command.
+#include "../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "Music/SongKey.h"
@@ -58,7 +59,7 @@ TEST_F(MainComponentTest, ChangingTheSongKeyIsOneUndoStepAndUndoPutsItBack) {
     transport.setSongKey(dDorian());
     mc.pollTransportEditsForTest(kStart);
     mc.pollTransportEditsForTest(kStart + kHeld);
-    settle();
+    synth::test::waitUntil([&] { return mc.getUndoManager().canUndo(); });
     ASSERT_TRUE(mc.getUndoManager().canUndo());
     EXPECT_TRUE(mc.isProjectDirty());
 
@@ -68,7 +69,7 @@ TEST_F(MainComponentTest, ChangingTheSongKeyIsOneUndoStepAndUndoPutsItBack) {
     EXPECT_FALSE(mc.getUndoManager().canUndo()) << "the change was exactly one undo step";
 
     mc.getUndoManager().redo();
-    settle();
+    synth::test::waitUntil([&] { return transport.getDocumentState().songKey.has_value(); });
     ASSERT_TRUE(transport.getDocumentState().songKey.has_value());
     EXPECT_TRUE(synth::sameKey(*transport.getDocumentState().songKey, dDorian()));
 }

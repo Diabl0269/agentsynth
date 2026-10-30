@@ -17,6 +17,7 @@
 //     command active/inactive, keyPressed's return value) rather than asserting real focus moved.
 
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "UI/Chrome/Toast/ToastComponent.h"
@@ -453,7 +454,7 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftTOpensTheTimelinePanelIfClosedThenD
     // MainComponent::keyPressed dispatches via ApplicationCommandManager::invokeDirectly(id, true) --
     // ASYNCHRONOUSLY, like every other command it dispatches (see keyPressed's own loop) -- so
     // perform() runs on the next message-loop pump, not synchronously inside keyPressed() itself.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.isBottomDockConfiguredVisible(); });
     EXPECT_TRUE(mc.isBottomDockConfiguredVisible()) << "Cmd+Shift+T must open a closed Timeline panel";
 }
 
@@ -478,7 +479,7 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftLOpensTheLibraryIfClosedThenDispatc
     const auto binding = mc.getShortcutManager().getBinding("focusLibrary");
     ASSERT_TRUE(binding.isValid());
     EXPECT_TRUE(mc.keyPressed(binding));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // see the Cmd+Shift+T test's comment
+    synth::test::waitUntil([&] { return mc.isLibraryConfiguredVisible(); });
     EXPECT_TRUE(mc.isLibraryConfiguredVisible()) << "Cmd+Shift+L must open a closed Library sidebar";
 }
 
@@ -506,7 +507,7 @@ TEST_F(FocusRegionMainComponentTest, CmdFOpensTheLibraryIfClosedThenDispatches) 
     const auto binding = mc.getShortcutManager().getBinding("focusLibrarySearch");
     ASSERT_TRUE(binding.isValid());
     EXPECT_TRUE(mc.keyPressed(binding));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // see the Cmd+Shift+T test's comment
+    synth::test::waitUntil([&] { return mc.isLibraryConfiguredVisible(); });
     EXPECT_TRUE(mc.isLibraryConfiguredVisible()) << "Cmd+F must open a closed Library sidebar";
 }
 

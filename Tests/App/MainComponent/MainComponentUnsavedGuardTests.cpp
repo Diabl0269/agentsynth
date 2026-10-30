@@ -1,6 +1,7 @@
 // Concern: guardUnsavedChanges(), the async dialog-fronted gate on New Patch/Open/the
 // factory-preset Load branch. See the safety-rule comment below for why every test here must
 // install mc.unsavedChangesPrompt before touching a dirty document.
+#include "../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "ProjectBundle.h"
@@ -141,7 +142,7 @@ TEST_F(MainComponentTest, SavingFromThePromptWritesTheProjectThenRunsTheAction) 
 
     // A second edit AFTER the save, so what the Save arm writes is strictly newer than the file.
     mc.simulateAddMidiTrackClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return mc.isProjectDirty(); });
     ASSERT_TRUE(mc.isProjectDirty());
     ASSERT_EQ(mc.getTimelineDoc().getTracks().size(), 2u);
 
@@ -411,7 +412,7 @@ TEST_F(MainComponentTest, FactoryPresetLoadKeepsADirtyTimelineDirty) {
     ASSERT_EQ(mc.getTimelineDoc().getTracks().size(), 1u);
 
     mc.simulateLoadFactoryPresetForTest(1);
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return (mc.getTimelineDoc().getTracks().size()) == (1u); });
 
     EXPECT_EQ(mc.getTimelineDoc().getTracks().size(), 1u) << "the load leaves the timeline in place...";
     EXPECT_TRUE(mc.isProjectDirty()) << "...so the document is still unsaved, and must still say so";

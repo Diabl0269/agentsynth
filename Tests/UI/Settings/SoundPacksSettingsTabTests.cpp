@@ -3,6 +3,7 @@
 // runs inline on a fake network (SoundPackTestKit.h).
 #include "../../SoundBrowser/SoundBrowserTestKit.h"
 #include "../../SoundPacks/SoundPackTestKit.h"
+#include "../../TestWait.h"
 #include "../Accessibility/AccessibilitySettingsFixture.h"
 #include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
 
@@ -298,7 +299,7 @@ TEST(SoundPacksSettingsTab, YourFoldersListsTheSoundsViewFoldersAndRemoveKeepsTh
     EXPECT_TRUE(row.getRemoveButton().getTooltip().contains("The files stay where they are"));
 
     book.rename(tree.user, "Field loops");
-    pump();
+    synth::test::waitUntil([&] { return (tab.getFolderRowForTest(0).getNameText()) == ("Field loops"); });
     EXPECT_EQ(tab.getFolderRowForTest(0).getNameText(), "Field loops") << "a rename in the Sounds view shows here";
 
     const auto file = tree.user.getChildFile("Field/dusty_keys_120_Am_loop.wav");

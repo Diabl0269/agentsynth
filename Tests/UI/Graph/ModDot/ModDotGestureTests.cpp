@@ -3,6 +3,7 @@
 // of a modulated knob drags the amount of the source chosen last (never the knob's own value, one undo
 // step); Cmd keeps the old cable re-drag; an unmodulated knob's dot still starts a cable drag.
 
+#include "../../../TestWait.h"
 #include "ModDotTestFixture.h"
 
 TEST_F(ModuleComponentTest, DraggingTheDotChangesTheAmountNotTheKnobAndUndoesInOneStep) {
@@ -199,7 +200,7 @@ TEST_F(ModuleComponentTest, AScreenReaderPressOnTheDotButtonCallsTheClickHook) {
     auto handler = static_cast<juce::Component*>(button)->createAccessibilityHandler();
     ASSERT_NE(handler, nullptr);
     EXPECT_TRUE(handler->getActions().invoke(juce::AccessibilityActionType::press));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // a Button press is delivered async
+    synth::test::waitUntil([&] { return (clicks) == (1); });
     EXPECT_EQ(clicks, 1) << "VoiceOver's press must open the menu like Return does";
 }
 

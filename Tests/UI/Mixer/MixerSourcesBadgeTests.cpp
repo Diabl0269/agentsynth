@@ -2,6 +2,7 @@
 // column header, not a row under it. There is no blank row on any column; the badge shows only on a channel with a
 // source that differs from its name; hovering it, its screen-reader title and its description list every source; it
 // is a Tab stop that acts on Return. A real off-screen MainComponent and its mixer panel.
+#include "../../TestWait.h"
 #include "MixerHeaderTestRig.h"
 #include "UI/Layout/HelperTooltip.h"
 #include <gtest/gtest.h>
@@ -89,7 +90,7 @@ TEST(MixerSourcesBadgeTest, TheBadgeIsAKeyboardReachableButtonThatSelectsTheChan
     rig.busColumn()->onColumnClicked = [&selected] { ++selected; };
     EXPECT_TRUE(static_cast<juce::Component&>(badge).keyPressed(juce::KeyPress(juce::KeyPress::returnKey)))
         << "Return acts on it";
-    HeaderRig::pumpMessages();
+    synth::test::waitUntil([&] { return (selected) == (1); });
     EXPECT_EQ(selected, 1) << "activating it selects the channel, like a click on the header";
 
     mixer_header_test::clickThroughMouse(badge);

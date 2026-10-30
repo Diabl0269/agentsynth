@@ -6,6 +6,7 @@
 
 #include "../UI/MidiRemote/MidiRemotePanelTestFixture.h"
 
+#include "../TestWait.h"
 #include "MidiRemote/ControllerProfileStore.h"
 #include "MidiRemote/ProfileEditHistory.h"
 
@@ -235,7 +236,7 @@ TEST_F(MidiRemoteProfileHistoryTest, ToolbarCueNamesTheNextUndoOnlyWhileThePanel
 
     // The cue follows the history through the live-refresh path.
     ASSERT_TRUE(controller_->undoProfileEdit());
-    pump();
+    synth::test::waitUntil([&] { return panel_.getToolbarForTest().getUndoHint().endsWith("undoes: Add controller"); });
     EXPECT_TRUE(panel_.getToolbarForTest().getUndoHint().endsWith("undoes: Add controller"));
     ASSERT_TRUE(controller_->undoProfileEdit());
     pump();

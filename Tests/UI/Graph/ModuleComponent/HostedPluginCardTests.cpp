@@ -15,6 +15,7 @@
 //   6. PNG render hook (PLUGIN_CARD_PNG).
 
 #include "../../../StubPluginInstance.h"
+#include "../../../TestWait.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/CardLayout.h"
@@ -405,7 +406,7 @@ TEST(HostedParameterAttachmentTest, SliderRoundTripsValueAndText) {
 
     // parameter -> widget, after the async hop
     param->setValueNotifyingHost(0.25f);
-    pump();
+    synth::test::waitUntil([&] { return std::abs((slider.getValue()) - (0.25)) <= (1e-6); });
     EXPECT_NEAR(slider.getValue(), 0.25, 1e-6);
     EXPECT_EQ(slider.getTextFromValue(0.25), param->getText(0.25f, 1024)) << "the readout is the parameter's own text";
 
@@ -428,7 +429,7 @@ TEST(HostedParameterAttachmentTest, ToggleRoundTripsBothWays) {
     EXPECT_FALSE(toggle.getToggleState());
 
     param->setValueNotifyingHost(1.0f);
-    pump();
+    synth::test::waitUntil([&] { return toggle.getToggleState(); });
     EXPECT_TRUE(toggle.getToggleState());
 
     toggle.setToggleState(false, juce::sendNotificationSync);
@@ -457,7 +458,7 @@ TEST(HostedParameterAttachmentTest, ComboMapsEveryIndexToTheNormalisedValueAndBa
             // parameter -> widget (from a different index first, so a change is really required)
             combo.setSelectedItemIndex((index + 1) % strings.size(), juce::dontSendNotification);
             param->setValueNotifyingHost(normalised);
-            pump();
+            synth::test::waitUntil([&] { return (combo.getSelectedItemIndex()) == (index); });
             EXPECT_EQ(combo.getSelectedItemIndex(), index) << strings.size() << " entries, index " << index;
         }
         // The text the parameter reports for a step is the item shown for it.
@@ -479,7 +480,7 @@ TEST(HostedParameterAttachmentTest, APluginSideChangeReachesTheWidgetOnlyOnTheMe
     std::thread worker([param] { param->setValueNotifyingHost(0.6f); });
     worker.join();
     EXPECT_NEAR(slider.getValue(), 0.0, 1e-9) << "the widget must never be touched from the reporting thread";
-    pump();
+    synth::test::waitUntil([&] { return std::abs((slider.getValue()) - (0.6)) <= (1e-6); });
     EXPECT_NEAR(slider.getValue(), 0.6, 1e-6);
 
     // A gesture reported from another thread never reaches the gesture callback (which acts on the card).
@@ -495,7 +496,7 @@ TEST(HostedParameterAttachmentTest, APluginSideChangeReachesTheWidgetOnlyOnTheMe
     // From the message thread too: still applied by the async update, never inline in the caller's own write.
     param->setValueNotifyingHost(0.4f);
     EXPECT_NEAR(slider.getValue(), 0.6, 1e-6);
-    pump();
+    synth::test::waitUntil([&] { return std::abs((slider.getValue()) - (0.4)) <= (1e-6); });
     EXPECT_NEAR(slider.getValue(), 0.4, 1e-6);
 }
 
@@ -507,13 +508,13 @@ TEST(HostedParameterAttachmentTest, AWidgetDrivenWriteIsNotEchoedBackIntoThePara
 
     slider.setValue(0.3, juce::sendNotificationSync);
     pump();
-    pump();
+    synth::test::waitUntil([&] { return (param->setValueCalls.load()) == (1); });
     EXPECT_EQ(param->setValueCalls.load(), 1) << "one widget change is exactly one parameter write";
     EXPECT_NEAR(slider.getValue(), 0.3, 1e-6);
 
     // An incoming value does not write back either.
     param->setValueNotifyingHost(0.8f);
-    pump();
+    synth::test::waitUntil([&] { return (param->setValueCalls.load()) == (2); });
     EXPECT_EQ(param->setValueCalls.load(), 2);
     EXPECT_NEAR(slider.getValue(), 0.8, 1e-6);
 }
@@ -709,7 +710,7 @@ TEST(HostedPluginCardTest, UnloadingThePluginUnbindsTheCardAndEmptiesItsBody) {
     EXPECT_TRUE(childrenOfType<juce::ToggleButton>(*card).empty());
     EXPECT_NE(childWithId<juce::TextButton>(*card, "openPluginEditor"), nullptr) << "the chrome stays";
     EXPECT_NE(childWithId<synth::ui::SplitButton>(*card, "addControls"), nullptr);
-    pump(); // the re-measure is deferred one loop turn
+    synth::test::waitUntil([&] { return (card->getHeight()) < (heightWithKnobs); });
     EXPECT_LT(card->getHeight(), heightWithKnobs) << "the card shrinks back";
     (void)param; // the retired parameter may be freed by now: it must not be touched again
 }
@@ -732,7 +733,7 @@ TEST(HostedPluginCardTest, ReplacingThePluginRebindsTheCardToTheNewInstance) {
     auto* slider = childWithId<juce::Slider>(*card, "hostedKnob:k");
     ASSERT_NE(slider, nullptr);
     rig.param(0)->setValueNotifyingHost(0.65f);
-    pump();
+    synth::test::waitUntil([&] { return std::abs((slider->getValue()) - (0.65)) <= (1e-6); });
     EXPECT_NEAR(slider->getValue(), 0.65, 1e-6) << "the knob follows the NEW instance's parameter";
 }
 

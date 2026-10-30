@@ -2,6 +2,7 @@
 // PanelSlide (inside MixerPlacementController, separate from MainComponent's three fractions).
 // Headless there is no VBlank, so the slide's frames are stood in for by the controller's test seams.
 
+#include "../../TestWait.h"
 #include "MixerOwnPanelTestFixture.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
@@ -133,7 +134,7 @@ TEST_F(MixerOwnPanelTest, SwitchingPlacementSnapsWithNoAnimation) {
     own.forceSlideAnimationForTest(true); // even with animation available, a placement change never tweens
     mc.getAppPropertiesForTest().getUserSettings()->setValue("mixerPlacement", "ownPanel");
     mc.getAppPropertiesForTest().getUserSettings()->saveIfNeeded();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (own.getPlacement()) == (Controller::Placement::OwnPanel); });
 
     EXPECT_EQ(own.getPlacement(), Controller::Placement::OwnPanel);
     EXPECT_EQ(own.getSlideProgressForTest(), 1.0f);

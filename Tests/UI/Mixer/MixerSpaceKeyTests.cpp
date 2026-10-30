@@ -3,6 +3,7 @@
 // (a strip with an insert chain and a send, a bus, the toolbar and the zones pane) rather than a list of
 // classes, so a new focusable button joins the check by existing.
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
@@ -100,7 +101,7 @@ TEST(MixerSpaceKeyTest, EveryFocusableMixerButtonConsumesSpaceAndClicksOnce) {
         const auto label = pointer->getTitle() + " / " + pointer->getName();
         const int expectedClicks = pointer->isEnabled() ? 1 : 0; // a greyed control consumes Space and does nothing
         const bool consumed = static_cast<juce::Component&>(*pointer).keyPressed(space);
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+        synth::test::waitUntil([&] { return (pointer.getComponent()) != (nullptr); });
         ASSERT_NE(pointer.getComponent(), nullptr) << label << " was destroyed by its own press";
         EXPECT_TRUE(consumed) << label << " lets Space bubble to the window";
         EXPECT_EQ(clicks, expectedClicks) << label;

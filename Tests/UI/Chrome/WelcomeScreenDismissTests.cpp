@@ -1,4 +1,5 @@
 #include "../../App/MainComponent/MainComponentTestFixture.h"
+#include "../../TestWait.h"
 #include "../Layout/FadeVisibilityTestGuard.h"
 #include "AudioEngine/AudioEngine.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
@@ -109,7 +110,7 @@ TEST_F(WelcomeDismissTest, CloseButtonIsAccessibleAndWorksFromTheKeyboard) {
 
     // juce::Button turns Space and Return on a focused button into this same click.
     close.triggerClick();
-    pump();
+    synth::test::waitUntil([&] { return mc.isWelcomeScreenHiddenForTest(); });
     EXPECT_TRUE(mc.isWelcomeScreenHiddenForTest());
 }
 
@@ -117,7 +118,7 @@ TEST_F(WelcomeDismissTest, CloseButtonClickDismissesWithTheProjectStillThere) {
     MainComponent mc(std::make_unique<MockProvider>());
     reopenOverProject(mc);
     welcome->getCloseButtonForTest().triggerClick();
-    pump();
+    synth::test::waitUntil([&] { return mc.isWelcomeScreenHiddenForTest(); });
     EXPECT_TRUE(mc.isWelcomeScreenHiddenForTest());
 }
 

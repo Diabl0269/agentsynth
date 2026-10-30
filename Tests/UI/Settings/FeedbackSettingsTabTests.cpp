@@ -1,3 +1,4 @@
+#include "../../TestWait.h"
 #include "AI/AccountService.h"
 #include "Auth/InMemoryTokenStore.h"
 #include "Branding.h"
@@ -169,7 +170,7 @@ TEST_F(FeedbackSettingsTabTest, TypingTextEnablesSendButton) {
     tab.setFeedbackFileForTesting(tempFile);
 
     tab.getFeedbackEditorForTest().setText("something broke", juce::sendNotificationSync);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::waitUntil([&] { return tab.getSendButtonForTest().isEnabled(); });
     EXPECT_TRUE(tab.getSendButtonForTest().isEnabled());
 
     tab.getFeedbackEditorForTest().setText("", juce::sendNotificationSync);
@@ -248,7 +249,6 @@ TEST_F(FeedbackSettingsTabTest, SignedInUserSyncsFeedbackToServer) {
     juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
     tab.getCategoryComboForTest().setSelectedId(2, juce::sendNotificationSync); // Feature Request
     tab.getSendButtonForTest().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
 
     ASSERT_TRUE(waitUntil([&] { return captured->callCount.load() >= 1; }))
         << "feedback POST never landed on the background thread";
@@ -292,7 +292,6 @@ TEST_F(FeedbackSettingsTabTest, SyncUsesLocalApiUrlOverrideWhenSet) {
     tab.getFeedbackEditorForTest().setText("local server test", juce::sendNotificationSync);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
     tab.getSendButtonForTest().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
 
     ASSERT_TRUE(waitUntil([&] { return captured->callCount.load() >= 1; }));
     EXPECT_EQ(captured->url, juce::String("http://localhost:9999/v1/feedback"));
@@ -316,7 +315,6 @@ TEST_F(FeedbackSettingsTabTest, SignedOutStillSyncsFeedbackAnonymouslyViaDeviceI
     tab.getFeedbackEditorForTest().setText("crashes on launch", juce::sendNotificationSync);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
     tab.getSendButtonForTest().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
 
     ASSERT_TRUE(waitUntil([&] { return captured->callCount.load() >= 1; }))
         << "feedback POST never landed on the background thread while signed out";

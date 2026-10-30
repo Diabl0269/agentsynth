@@ -5,6 +5,7 @@
 // needs a native peer, so the panel's record-focus test mode stands in for it while the keys go
 // through the real handlers (a header's keyPressed, the panel's keyPressed).
 
+#include "../../TestWait.h"
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -157,10 +158,10 @@ TEST(TimelineAddTrackKeyboard, ReturnAndSpacePressTheButtonAndDownStaysPut) {
     // Button::triggerClick posts the click, so the loop is pumped before counting it.
     auto pump = [] { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); };
     EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::returnKey)));
-    pump();
+    synth::test::waitUntil([&] { return (f.clicks) == (1); });
     EXPECT_EQ(f.clicks, 1);
     EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::spaceKey))) << "Space is not left to toggle playback";
-    pump();
+    synth::test::waitUntil([&] { return (f.clicks) == (2); });
     EXPECT_EQ(f.clicks, 2);
     EXPECT_TRUE(f.panel.keyPressed(downKey()));
     EXPECT_TRUE(f.panel.isAddTrackButtonFocused());

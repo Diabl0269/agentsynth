@@ -1,6 +1,7 @@
 // TimelineRoutingPaneInputTests.cpp: the routing pane's Input row (docs/timeline/tracks.md#the-input-row) -- which MIDI
 // input and channel record into a MIDI track. Driven through real mouse and key events on the two buttons, against a
 // stub host that lists made-up devices and makes every edit one undo step, as MainComponent does.
+#include "../../TestWait.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "../Layout/PaneKeysWalk.h"
 #include "AppUndoManager.h"
@@ -241,6 +242,6 @@ TEST(TimelineRoutingPaneInputTest, TheInputButtonsAreKeyboardStopsAndReturnOpens
     pane.setShowInputMenuHookForTest([&opened](juce::PopupMenu&) { ++opened; });
     auto& channel = static_cast<juce::Component&>(pane.getMidiInputChannelButtonForTest());
     EXPECT_TRUE(channel.keyPressed(plain(juce::KeyPress::returnKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // a Return click is delivered as a message
+    synth::test::waitUntil([&] { return (opened) == (1); });
     EXPECT_EQ(opened, 1);
 }

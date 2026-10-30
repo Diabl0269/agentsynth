@@ -16,6 +16,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MacroAutoPortTestHelpers.h"
 
+#include "../../TestWait.h"
 #include "AppUndoManager.h"
 #include "Modules/AudioInputModule.h"
 #include "Modules/FX/DistortionModule.h"
@@ -100,7 +101,7 @@ TEST(MacroUndoNamePreservation, GroupThenUndoLeavesEveryModuleNameByteIdentical)
     const auto macroId =
         patch.editor.getMacroController().groupSelectionIntoMacro(true); // real entry point, auto ports
     ASSERT_FALSE(macroId.isEmpty());
-    pump();
+    synth::test::waitUntil([&] { return patch.undo.canUndo(); });
 
     ASSERT_TRUE(patch.undo.canUndo());
     patch.undo.undo();
@@ -127,7 +128,7 @@ TEST(MacroUndoNamePreservation, GroupUndoRedoLeavesEveryModuleNameByteIdentical)
     EXPECT_EQ(patch.snapshotNames(), before) << "undo";
 
     patch.undo.redo();
-    pump();
+    synth::test::waitUntil([&] { return (patch.snapshotNames()) == (afterGroup); });
     EXPECT_EQ(patch.snapshotNames(), afterGroup) << "redo restores exactly what grouping produced, byte-identical";
     EXPECT_FALSE(patch.editor.getMacros().empty());
 }
@@ -143,11 +144,11 @@ TEST(MacroUndoNamePreservation, UngroupThenUndoLeavesEveryModuleNameByteIdentica
 
     patch.editor.setSelectedNodes({patch.input, patch.osc});
     patch.editor.getMacroController().ungroupSelection();
-    pump();
+    synth::test::waitUntil([&] { return patch.undo.canUndo(); });
 
     ASSERT_TRUE(patch.undo.canUndo());
     patch.undo.undo();
-    pump();
+    synth::test::waitUntil([&] { return (patch.snapshotNames()) == (afterGroup); });
 
     EXPECT_EQ(patch.snapshotNames(), afterGroup)
         << "undoing the ungroup must restore the macro without renaming anything";

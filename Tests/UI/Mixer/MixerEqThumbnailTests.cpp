@@ -3,6 +3,7 @@
 // band, dark/light PNG render showing a boost/cut difference, dimmed when bypassed, and the
 // recompute-only-on-parameter-change discipline (root CLAUDE.md "No unconditional per-tick
 // repaint") -- plus the click-forwards-to-onClicked seam MixerColumnComponent binds to.
+#include "../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "UI/Mixer/MixerEqThumbnail.h"
@@ -158,7 +159,7 @@ TEST(MixerEqThumbnailTests, RecomputeOnlyOnParameterChange) {
 
     // One parameter write + a pumped dispatch loop coalesces to exactly one more recompute.
     eq.setBandGain(1, -6.0f);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return (thumbnail.getRecomputeCountForTest()) == (afterBind + 1); });
     EXPECT_EQ(thumbnail.getRecomputeCountForTest(), afterBind + 1);
 
     thumbnail.paint(g);

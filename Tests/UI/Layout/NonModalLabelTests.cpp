@@ -1,6 +1,7 @@
 // Concern: a juce::Label goes modal while its inline editor is open, and on macOS a modal Label makes the rest of the
 // window inaccessible (the accessibility tree collapses to the title bar). Every label edited in place is a
 // NonModalLabel, which leaves modal state again right after the editor opens.
+#include "../../TestWait.h"
 #include "UI/Layout/NonModalLabel.h"
 #include "UI/Mixer/MixerColumnHeader.h"
 #include "UI/Timeline/TimelineTransportBar.h"
@@ -42,7 +43,7 @@ TEST(NonModalLabelTest, APlainLabelIsModalWhileItsEditorIsOpen) {
     host.addAndMakeVisible(label);
     label.setEditable(false, true, false);
     label.showEditor();
-    pump();
+    synth::test::waitUntil([&] { return windowIsBlockedByAnEditor(bystander); });
 
     EXPECT_TRUE(windowIsBlockedByAnEditor(bystander));
     label.hideEditor(true);
@@ -91,7 +92,7 @@ TEST(NonModalLabelTest, EscapeDiscardsTheEditWithoutALingeringModalState) {
     ASSERT_NE(editor, nullptr);
     editor->setText("nonsense", false);
     EXPECT_TRUE(editor->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
-    pump();
+    synth::test::waitUntil([&] { return (host.label.getText()) == ("120.0"); });
     EXPECT_EQ(host.label.getText(), "120.0");
     EXPECT_EQ(host.label.getCurrentTextEditor(), nullptr);
     EXPECT_FALSE(host.label.isCurrentlyModal(false));
@@ -113,7 +114,7 @@ TEST(NonModalLabelTest, TransportBarLabelsDoNotBlockTheWindow) {
     for (auto* label : {&bar.getBpmLabel(), &bar.getTimeSigLabel()}) {
         ASSERT_NE(dynamic_cast<synth::ui::NonModalLabel*>(label), nullptr);
         label->showEditor();
-        pump();
+        synth::test::waitUntil([&] { return (label->getCurrentTextEditor()) != (nullptr); });
         EXPECT_NE(label->getCurrentTextEditor(), nullptr);
         EXPECT_FALSE(windowIsBlockedByAnEditor(bar.getPlayStopButton())) << label->getComponentID();
         label->hideEditor(true);
@@ -128,7 +129,7 @@ TEST(NonModalLabelTest, MixerColumnNameEditorDoesNotBlockTheWindow) {
     auto& nameLabel = header.getNameLabelForTest();
     ASSERT_NE(dynamic_cast<synth::ui::NonModalLabel*>(&nameLabel), nullptr);
     nameLabel.showEditor();
-    pump();
+    synth::test::waitUntil([&] { return (nameLabel.getCurrentTextEditor()) != (nullptr); });
     ASSERT_NE(nameLabel.getCurrentTextEditor(), nullptr);
     EXPECT_FALSE(windowIsBlockedByAnEditor(header));
     nameLabel.hideEditor(true);

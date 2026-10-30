@@ -3,6 +3,7 @@
 // through MixerPanelComponent::keyPressed with a real juce::KeyPress, on a real off-screen
 // MainComponent, the same rig style MixerPanelKeyboardFocusTests.cpp uses.
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
@@ -542,7 +543,7 @@ TEST(MixerHeaderControlsTest, ReturnOnResetMetersRunsItsAction) {
     auto& toolbar = rig.panel().getToolbarForTest();
     toolbar.onResetMeters = [&] { ++runs; };
     EXPECT_TRUE(static_cast<juce::Component&>(toolbar.getResetMetersButtonForTest()).keyPressed(returnKey()));
-    RowRig::pumpMessages();
+    synth::test::waitUntil([&] { return (runs) == (1); });
     EXPECT_EQ(runs, 1);
 }
 
@@ -551,7 +552,7 @@ TEST(MixerHeaderControlsTest, ASectionToggleActsOnReturnAndFollowsTheLayout) {
     auto& toggle = rig.panel().getToolbarForTest().getSectionToggle(synth::ui::MixerSection::Sends);
     ASSERT_TRUE(rig.panel().getSectionLayout().isHidden(synth::ui::MixerSection::Sends) == false);
     EXPECT_TRUE(static_cast<juce::Component&>(toggle).keyPressed(returnKey()));
-    RowRig::pumpMessages();
+    synth::test::waitUntil([&] { return rig.panel().getSectionLayout().isHidden(synth::ui::MixerSection::Sends); });
     EXPECT_TRUE(rig.panel().getSectionLayout().isHidden(synth::ui::MixerSection::Sends));
 }
 

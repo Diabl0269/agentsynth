@@ -7,6 +7,7 @@
 // MainComponent + AudioEngine (mirroring FocusArbitrationPlaybackDeleteTests.cpp's
 // SpaceTogglesPlayback), since a bare ShortcutManager has no ApplicationCommandManager to invoke
 // through.
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
@@ -332,7 +333,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordSurvivesATimerT
     // Same reachability path as the test above: invoke the command, pump only far enough for the
     // posted click to run (the real timer is stopped, so it can't coincidentally self-heal here).
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getMidiRecorderForTest().isRecording(); });
     ASSERT_TRUE(mc.getMidiRecorderForTest().isRecording())
         << "the click must have started the take before the race window below";
 
@@ -374,7 +375,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordEngagedMidRollS
     doc.setTrackArmed(trackA, true);
 
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getMidiRecorderForTest().isRecording(); });
     ASSERT_TRUE(mc.getMidiRecorderForTest().isRecording());
 
     // Stop right away, then a single tick -- no intervening tick ever observed "playing" for

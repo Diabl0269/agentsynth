@@ -14,6 +14,7 @@
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UserSettings.h"
 
+#include "../../TestWait.h"
 #include <gtest/gtest.h>
 #include <tuple>
 #include <vector>
@@ -62,12 +63,14 @@ TEST(MidiRemotePreferencesTests, DefaultTakeoverReachesTheEngineLive) {
 
     PreferencesSettingsTab tab(props);
     tab.setMidiRemoteDefaultTakeover(synth::Takeover::jump);
-    pump();
+    synth::test::waitUntil(
+        [&] { return (mc.getRemoteEngineForTest().getDefaultTakeover()) == (synth::Takeover::jump); });
     EXPECT_EQ(mc.getRemoteEngineForTest().getDefaultTakeover(), synth::Takeover::jump)
         << "a Preferences change reaches the engine without a restart";
 
     tab.setMidiRemoteDefaultTakeover(synth::Takeover::pickup);
-    pump();
+    synth::test::waitUntil(
+        [&] { return (mc.getRemoteEngineForTest().getDefaultTakeover()) == (synth::Takeover::pickup); });
     EXPECT_EQ(mc.getRemoteEngineForTest().getDefaultTakeover(), synth::Takeover::pickup);
 }
 
@@ -184,7 +187,7 @@ TEST(MidiRemotePreferencesTests, BadgeSwitchReachesThePainterLive) {
     EXPECT_FALSE(synth::ui::midilearn::areMappedBadgesVisible());
 
     tab.setMidiRemoteShowBadgesEnabled(true);
-    pump();
+    synth::test::waitUntil([&] { return synth::ui::midilearn::areMappedBadgesVisible(); });
     EXPECT_TRUE(synth::ui::midilearn::areMappedBadgesVisible());
 }
 

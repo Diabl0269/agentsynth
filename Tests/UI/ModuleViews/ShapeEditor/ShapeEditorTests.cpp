@@ -1,5 +1,6 @@
 // ShapeEditorTests.cpp -- the Filter shape editor window's content: selection, the curve editor driven through real
 // mouse events, the buttons, Start from, the lane draw shapes, undo and Escape.
+#include "../../../TestWait.h"
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "Modules/Filter/CustomFilterShapes.h"
 #include "ShapeEditorTestHelpers.h"
@@ -417,7 +418,7 @@ TEST(ShapeEditor, TheRelayHandsSpaceAndUndoToTheMainWindowLaterAndLeavesEditingK
     EXPECT_TRUE(relay(key('z', cmd)));
     EXPECT_TRUE(relay(key('z', cmd | juce::ModifierKeys::shiftModifier)));
     EXPECT_TRUE(target.received.empty()) << "delivered a turn later, outside the window's own key handler";
-    pumpMessages();
+    synth::test::waitUntil([&] { return (target.received.size()) == (3u); });
     ASSERT_EQ(target.received.size(), 3u);
     EXPECT_EQ(target.received[0].getKeyCode(), ' ');
     EXPECT_EQ(target.received[1].getKeyCode(), 'z');

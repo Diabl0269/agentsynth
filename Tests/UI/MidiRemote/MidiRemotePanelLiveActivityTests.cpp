@@ -4,6 +4,7 @@
 // MidiRemotePanelComponent::refreshActivity -> ControllerSurfaceCell::noteActivity.
 #include "MidiRemotePanelTestFixture.h"
 
+#include "../../TestWait.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 
@@ -22,7 +23,7 @@ protected:
         controller_->arm(node_->nodeID, "cutoff");
         send(juce::MidiMessage::controllerEvent(1, kMappedCc, 64));
         settle();
-        pump();
+        synth::test::waitUntil([&] { return (doc_.assignments.size()) == (1u); });
         ASSERT_EQ(doc_.assignments.size(), 1u);
         profileId_ = doc_.assignments.front().control.profileId;
         mappedControlId_ = doc_.assignments.front().control.controlId;
@@ -135,7 +136,9 @@ TEST_F(MidiRemotePanelLiveActivityTest, MovesInterleavedWithPumpsStayCurrent) {
         remoteEngine_.drain();
         pump();
         panel_.refreshActivity();
-        pump();
+        synth::test::waitUntil([&] {
+            return std::abs((panel_.getSurfaceCellValueForTest(mappedControlId_)) - (value / 127.0f)) <= (0.02f);
+        });
         EXPECT_NEAR(panel_.getSurfaceCellValueForTest(mappedControlId_), value / 127.0f, 0.02f)
             << "after moving the mapped knob to " << value;
     }

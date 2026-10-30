@@ -5,6 +5,7 @@
 // same convention as ControllerSurfaceTests.cpp/ControllerSurfaceGroupDragTests.cpp. Reuses
 // MidiRemotePanelTestFixture.h exactly like MidiRemotePanelGroupDeleteTests.cpp.
 
+#include "../../TestWait.h"
 #include "ControllerSurfaceTestHelpers.h"
 #include "MidiRemotePanelTestFixture.h"
 
@@ -83,7 +84,7 @@ TEST_F(MidiRemotePanelMoveTest, OneUndoAfterADragRestoresTheOriginalPosition) {
     drag.stepToOffset(2, 0);
     drag.stepToOffset(3, 1);
     drag.end();
-    pump();
+    synth::test::waitUntil([&] { return (findControl("k1")) != (nullptr); });
 
     ASSERT_NE(findControl("k1"), nullptr);
     EXPECT_EQ(findControl("k1")->layout.col, 3);

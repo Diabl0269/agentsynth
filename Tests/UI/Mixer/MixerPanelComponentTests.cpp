@@ -2,6 +2,7 @@
 // set, PNG render smoke test (dark + light built-in theme, per the ticket's own test list), and
 // the column-click-selects-macro gesture. Drives a real, off-screen MainComponent
 // (newPatchForTest() + simulateAddAudioTrackClick(), the ChannelFlow suite's own rig style).
+#include "../../TestWait.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
@@ -172,7 +173,7 @@ TEST(MixerPanelComponentTests, TheEditOnCanvasButtonSelectsTheMacroAndBringsItIn
     auto* column = mixerPanel.getStripColumnForTest(0);
     ASSERT_NE(column, nullptr);
     column->getHeaderForTest().getEditOnCanvasButtonForTest().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // triggerClick posts its click
+    synth::test::waitUntil([&] { return canvas.getMacroController().isMacroSelected(macro.id); });
 
     EXPECT_TRUE(canvas.getMacroController().isMacroSelected(macro.id));
     EXPECT_TRUE(canvas.getVisibleCanvasRect().contains(macroCentre));

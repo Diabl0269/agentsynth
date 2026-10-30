@@ -2,6 +2,7 @@
 // Build streams the steps card and applies the envelope, Cancel closes the stream, and a service without the routes
 // falls back to the single project request without a word about it.
 #include "../../../AI/AIIntegrationService/PlanFakeHost.h"
+#include "../../../TestWait.h"
 #include "AIChatComponentTestFixture.h"
 #include "UI/Assistant/AIChatComponent/BuildStepsCard.h"
 #include "UI/Assistant/AIChatComponent/SongPlanCard.h"
@@ -177,7 +178,7 @@ TEST_F(AIChatComponentTest, ChangingLengthReplansWithThePreviousPlanAndUpdatesTh
     rig.provider->planAnswers = {kPlanData, kRePlanData};
     rig.send("dark drum and bass");
     rig.planCard()->chooseForTesting(2, rig.chat->getLastSongSessionForTesting()->detailIndex);
-    SongRig::pump();
+    synth::test::waitUntil([&] { return (rig.provider->planBodies.size()) == (2u); });
 
     ASSERT_EQ(rig.provider->planBodies.size(), 2u);
     EXPECT_TRUE(rig.provider->planBodies[1]["previousPlan"].isObject());
@@ -192,7 +193,7 @@ TEST_F(AIChatComponentTest, BuildStreamsTheStepsCardThenAppliesTheEnvelopeAsTheS
     SongRig rig;
     rig.send("dark drum and bass");
     rig.planCard()->pressBuildForTesting();
-    SongRig::pump();
+    synth::test::waitUntil([&] { return (rig.provider->routes.back()) == (juce::String("/v1/song/build")); });
 
     EXPECT_EQ(rig.provider->routes.back(), juce::String("/v1/song/build"));
     EXPECT_EQ(rig.provider->buildBody["token"].toString(), juce::String("tok"));
@@ -214,7 +215,7 @@ TEST_F(AIChatComponentTest, BuildStreamsTheStepsCardThenAppliesTheEnvelopeAsTheS
     rig.provider->line(juce::String(R"({"type":"done","envelope":)") + kEnvelope +
                        R"(,"notes":[],"summary":{"tracks":1,"sections":2,"bars":48,"seconds":66}})");
     rig.provider->end();
-    SongRig::pump();
+    synth::test::waitUntil([&] { return (rig.engine.getGraph().getNumNodes()) == (2); });
 
     EXPECT_EQ(rig.engine.getGraph().getNumNodes(), 2) << "the envelope was applied";
     EXPECT_EQ(rig.chat->getLastSongSessionForTesting()->phase, synth::SongSession::Phase::built);
@@ -232,7 +233,7 @@ TEST_F(AIChatComponentTest, CancellingABuildClosesTheStreamAndTheCardSaysTheUses
     SongRig rig;
     rig.send("dark drum and bass");
     rig.planCard()->pressBuildForTesting();
-    SongRig::pump();
+    synth::test::waitUntil([&] { return (rig.buildCard()) != (nullptr); });
     ASSERT_NE(rig.buildCard(), nullptr);
 
     rig.chat->simulateCancelClick();

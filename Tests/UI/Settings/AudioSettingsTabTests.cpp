@@ -2,6 +2,7 @@
 // table and its pair button, the Remembered interfaces list and Forget, the layout at the tab's smallest size under
 // every built-in theme, and the Tab order. Driven by a fake interface source, so none of it depends on the audio
 // hardware the test runs on, and by real mouse and key events on the controls.
+#include "../../TestWait.h"
 #include "../Accessibility/AccessibilitySettingsFixture.h"
 #include "../Accessibility/TabOrderHelpers.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -260,7 +261,7 @@ TEST_F(AudioSettingsTabTest, ANameTypedInTheFieldIsStoredOnReturnAndShownWhenThe
     editor->setText("Vocal mic", juce::dontSendNotification);
     const bool consumed = synth::test::sendReturn(*editor);
     EXPECT_TRUE(consumed);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // JUCE posts Return to the editor as a command
+    synth::test::waitUntil([&] { return (source.store.getName(kType, source.info.deviceName, 0)) == ("Vocal mic"); });
     EXPECT_EQ(source.store.getName(kType, source.info.deviceName, 0), "Vocal mic");
 
     auto again = makeTab();

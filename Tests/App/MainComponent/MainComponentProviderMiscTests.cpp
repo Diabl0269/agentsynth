@@ -2,6 +2,7 @@
 // post-setProvider() refresh regression lock), toolbar button bounds after construction,
 // the Locate Master command reached through the real Cmd+Shift+M key path, and that a
 // test-constructed MainComponent never touches the real MIDI Remote controller profiles folder.
+#include "../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "MidiRemote/ControllerProfileStore.h"
@@ -140,7 +141,7 @@ TEST_F(MainComponentTest, CmdShiftFOpensFeedbackThroughTheRealKeyPathAndTheButto
     const auto binding = mc.getShortcutManager().getBinding("openFeedback");
     ASSERT_TRUE(binding.isValid());
     EXPECT_TRUE(mc.keyPressed(binding));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // commands dispatch asynchronously
+    synth::test::waitUntil([&] { return (opened) == (1); });
 
     EXPECT_EQ(opened, 1);
     const auto chord = ShortcutManager::keyPressToDisplayString(binding);

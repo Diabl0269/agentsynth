@@ -1,5 +1,6 @@
 // The Shapes place of the Sounds view: both groups, user shapes first, thumbnails that paint, the spoken row and the
 // drag that starts from a row.
+#include "../TestWait.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Library/SoundBrowser/ShapeDragPayload.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
@@ -299,7 +300,7 @@ TEST(ShapesPlaceTest, RenamingOverATakenNameLeavesTheShapeAsItWas) {
     f.openShapes();
     ASSERT_TRUE(f.view->applyShapeAction(f.rowOf("zz mine"), SoundBrowserComponent::ShapeAction::Rename));
     f.view->getRenameLabel().setText("taken", juce::sendNotification);
-    pump();
+    synth::test::waitUntil([&] { return (f.rowOf("zz mine")) >= (0); });
     EXPECT_GE(f.rowOf("zz mine"), 0);
     EXPECT_TRUE(f.library.exists(ShapeKind::Filter, "zz mine"));
 }

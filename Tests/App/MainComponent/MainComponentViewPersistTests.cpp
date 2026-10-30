@@ -1,5 +1,6 @@
 // Concern: the graph canvas view (zoom and pan) is part of the saved project, and neither saving it, loading it
 // nor changing it is an edit: the document is never marked unsaved by it. Also the command-line open hook.
+#include "../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "Project/ViewDoc.h"
@@ -167,7 +168,7 @@ TEST_F(MainComponentTest, CommandLineOpenAsksBeforeReplacingUnsavedWork) {
     prompt.answer = MainComponent::UnsavedChangesChoice::Cancel;
     const auto nameBefore = mc.getCurrentPatchName();
     mc.openProjectFromCommandLine(bundleDir);
-    settle();
+    synth::test::waitUntil([&] { return (prompt.calls) == (1); });
     EXPECT_EQ(prompt.calls, 1);
     EXPECT_EQ(mc.getCurrentPatchName(), nameBefore);
     EXPECT_TRUE(mc.isProjectDirty());
@@ -175,7 +176,7 @@ TEST_F(MainComponentTest, CommandLineOpenAsksBeforeReplacingUnsavedWork) {
     // Discard: the project opens.
     prompt.answer = MainComponent::UnsavedChangesChoice::Discard;
     mc.openProjectFromCommandLine(bundleDir);
-    settle();
+    synth::test::waitUntil([&] { return (prompt.calls) == (2); });
     EXPECT_EQ(prompt.calls, 2);
     EXPECT_EQ(mc.getCurrentPatchName(), "Guarded");
     EXPECT_FALSE(mc.isProjectDirty());
