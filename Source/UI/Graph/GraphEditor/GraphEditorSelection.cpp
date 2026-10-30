@@ -16,6 +16,8 @@
 #include "UI/Graph/ModuleStepOrder.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
+#include <algorithm>
+
 // ---------------------------------------------------------------------------------------
 // Selection
 // ---------------------------------------------------------------------------------------
@@ -197,8 +199,14 @@ void GraphEditor::removeNodesNow(const std::vector<juce::AudioProcessorGraph::No
     // after.
     if (narrowDetach)
         detachModuleComponentsFor(ids);
-    else
+    else {
         fireBeforeDetachAllModuleComponents();
+        // The cards stay until updateComponents() below, which is after the processors are freed: a card body that
+        // listens to a parameter (the compressor's threshold control) would remove that listener from freed memory.
+        for (auto* card : content.getModules())
+            if (std::find(ids.begin(), ids.end(), card->getNodeId()) != ids.end())
+                card->detachFromProcessor();
+    }
     for (auto id : ids)
         graph.removeNode(id, juce::AudioProcessorGraph::UpdateKind::none);
     // Heal BEFORE the macro-port sweeps below, so a macro port a heal just gave a fresh
