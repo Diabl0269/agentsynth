@@ -98,8 +98,9 @@ void OscillatorModule::addRestartOffset(int offset) {
 // while the previous note may still sound would otherwise jump the waveform. The ghost starts with
 // the share the interrupted stack holds at that sample (all of it when nothing was fading, less when
 // ghosts are still leaving), and every ghost fades along its own curve to nothing, so a restart during
-// a fade is continuous too and an audio-rate gate cannot step the output. Past RestartGhosts' capacity (restarts
-// closer than a few samples) the quietest ghost is dropped and its share goes to the current stack.
+// a fade is continuous too and an audio-rate gate cannot step the output. A ghost keeps the pitch the
+// interrupted note was playing at, so a new note's pitch never reaches the tail it fades out. Past RestartGhosts'
+// capacity (restarts closer than a few samples) the quietest ghost is dropped and its share goes to the current stack.
 void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld) {
     const float startPhase = phaseParam->get() / 360.0f;
     const float randomAmount = randomPhaseParam->get() * 0.01f;
@@ -109,6 +110,7 @@ void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld) {
     } else {
         UnisonStack current;
         std::copy(std::begin(voice.unisonOscs), std::end(voice.unisonOscs), std::begin(current.oscs));
+        current.baseDt = voice.lastBaseDt;
         voice.ghosts.start(current);
     }
     for (auto& osc : voice.unisonOscs)
