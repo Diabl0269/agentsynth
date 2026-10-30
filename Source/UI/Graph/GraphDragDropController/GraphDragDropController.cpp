@@ -213,11 +213,12 @@ void GraphDragDropController::updateDragPreview(juce::Point<int> desiredTopLeftC
 
 // A canvas card is placed among the cards of the macro it is in now (a crossing made mid-drag has already moved it);
 // a library module among those of the macro it would join, or the top level. A snippet (a whole group) and a group drag
-// never open a gap.
+// never open a gap, nor does a sound: the card it is carried to (a Sampler, a Drum Kit pad) may take it itself, so no
+// card may slide away from under the pointer on the way there.
 void GraphDragDropController::hoverInsertGap(juce::Rectangle<int> aim) {
     if (insertGap_ == nullptr)
         return;
-    if (dragPreviewIsSnippet_ || host_.isSelectionDragActive() || aim.isEmpty()) {
+    if (dragPreviewIsSnippet_ || dragPreviewIsSound_ || host_.isSelectionDragActive() || aim.isEmpty()) {
         insertGap_->endSession();
         return;
     }
@@ -238,6 +239,7 @@ void GraphDragDropController::endDragPreview() {
     alignmentGuides_.clear();
     host_.clearSmartSuggestions();
     dragPreviewIsSnippet_ = false;
+    dragPreviewIsSound_ = false;
     dragPreviewProbe_.reset();
     host_.repaintCanvas();
 }
@@ -278,12 +280,14 @@ void GraphDragDropController::itemDragEnter(const juce::DragAndDropTarget::Sourc
         // A Sound is a Sampler about to exist: sized like one, no probe (it joins no macro and is never a module type).
         dragPreviewIsSnippet_ = false;
         dragPreviewIsPlainModule_ = false;
+        dragPreviewIsSound_ = true;
         dragPreviewProbe_.reset();
         const auto size = host_.estimateModuleSizeForType("Sampler");
         beginDragPreview(size.x, size.y, juce::AudioProcessorGraph::NodeID{});
         updateDragPreview(ghostTopLeftForCursor(host_.canvasPositionOfLocalPoint(dragSourceDetails.localPosition)));
         return;
     }
+    dragPreviewIsSound_ = false;
     juce::String name = dragSourceDetails.description.toString();
 
     // A snippet covers a whole group, so size the ghost from the snippet's own bounding box

@@ -121,6 +121,11 @@ bool DrumKitModule::padPlaysRecording(int index) const {
     return coverageOf(instrumentSlot.regions()).test((size_t)juce::jlimit(0, kMaxNote, kitNote));
 }
 
+bool DrumKitModule::kitHasSound(int sound) const {
+    return sound >= 0 && sound <= kMaxNote && hasRecordedKit() &&
+           coverageOf(instrumentSlot.regions()).test((size_t)sound);
+}
+
 bool DrumKitModule::decayIsMoot(const juce::String& decayParamId) const {
     const auto notes = notesOfDecay(decayParamId);
     if (notes.empty())

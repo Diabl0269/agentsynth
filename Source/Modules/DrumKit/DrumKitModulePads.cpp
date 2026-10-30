@@ -272,6 +272,23 @@ void DrumKitModule::fillPadsWithKit() {
     publishPads();
 }
 
+// A free pad's kit sound is the one the count gives it when first shown.
+void DrumKitModule::resetPad(int index) {
+    if (index < 0 || index >= kMaxPads)
+        return;
+    auto p = defaultTableForSwitches().pads[(size_t)index];
+    const auto& now = pads_.pads[(size_t)index];
+    if (p.sound == kNoSound) {
+        p.sound = synth::drums::revealSoundFor(index);
+        const auto group = p.sound != kNoSound ? groupForNote(p.sound) : Group::None;
+        p.kind = group != Group::None && recorded_[(size_t)group]->get() ? PadKind::Kit : PadKind::BuiltIn;
+    }
+    p.note = now.note;
+    p.shown = now.shown;
+    p.instrumentPitch = now.instrumentPitch;
+    setPad(index, p);
+}
+
 void DrumKitModule::auditionPad(int index) noexcept {
     if (index >= 0 && index < kMaxPads)
         auditionMask_.fetch_or(1u << (unsigned)index, std::memory_order_acq_rel);
@@ -322,6 +339,9 @@ void DrumKitModule::publishPads() {
         e.sound = p.sound;
         e.note = p.note;
         e.sample = p.kind == PadKind::File ? padSamples_[(size_t)i] : nullptr;
+        const bool linked = p.kind == PadKind::Instrument && padLinkUuid_[(size_t)i] == p.instrumentUuid;
+        e.inbox = linked ? padInboxes_[(size_t)i] : nullptr;
+        e.pitch = p.instrumentPitch;
         if (e.sample != nullptr && !retainedSamples_.contains(e.sample.get()))
             retainedSamples_.add(e.sample);
         snap->tickOrder[(size_t)i] = (std::int8_t)i;

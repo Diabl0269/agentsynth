@@ -97,6 +97,7 @@ void DrumKitModule::prepareToPlay(double sampleRate, int /*samplesPerBlock*/) {
 }
 
 void DrumKitModule::stopAll() noexcept {
+    releaseAllInstrumentPads(0);
     for (auto& voice : voices_)
         voice.stop();
     recordedPool_.stopAll();
@@ -147,10 +148,13 @@ void DrumKitModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::M
     acquireKit();
     acquirePads();
     pollGroupLinks();
+    eventOffset_ = 0;
+    auditioning_ = true;
     if (const auto audition = auditionMask_.exchange(0, std::memory_order_acq_rel); audition != 0)
         for (int i = 0; i < synth::drums::kMaxPads; ++i)
             if ((audition >> i) & 1u)
                 triggerPad(i, 0.8f);
+    auditioning_ = false;
     float* left = buffer.getWritePointer(0);
     float* right = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
@@ -163,12 +167,20 @@ void DrumKitModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::M
     };
     for (const auto metadata : midiMessages) {
         const auto message = metadata.getMessage();
+        const int at = juce::jlimit(position, numSamples, metadata.samplePosition);
+        // A drum plays out its own decay; only an instrument pad's note ends on a Note-Off.
+        if (message.isNoteOff())
+            releaseInstrumentNote(message.getNoteNumber(), at);
+        else if (message.isAllNotesOff() || message.isAllSoundOff())
+            releaseAllInstrumentPads(at);
         if (!message.isNoteOn())
-            continue; // a drum plays out its own decay; Note-Off and the rest do nothing
-        renderTo(juce::jlimit(position, numSamples, metadata.samplePosition));
+            continue;
+        renderTo(at);
+        eventOffset_ = at;
         triggerNote(message.getNoteNumber(), message.getFloatVelocity());
     }
     renderTo(numSamples);
+    advanceAuditionReleases(numSamples);
 
     if (auto* vb = getVisualBuffer())
         vb->pushBlock(left, numSamples);

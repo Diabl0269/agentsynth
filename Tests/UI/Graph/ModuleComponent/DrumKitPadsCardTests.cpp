@@ -189,7 +189,8 @@ TEST(DrumKitPadsCard, ThePadsAndTheirControlsHaveNamesAndTooltips) {
     EXPECT_TRUE(grid.getWantsKeyboardFocus());
     EXPECT_FALSE(grid.getTooltip().isEmpty());
     EXPECT_EQ(grid.padCell(1).getTitle(), "Snare pad, built-in sound, 2 of 8");
-    EXPECT_EQ(grid.padTooltip(3), "Closed hat: click to play, Shift+click to pick without sound");
+    EXPECT_EQ(grid.padTooltip(3),
+              "Closed hat: click to play, Shift+click to pick without sound, right-click for its sound");
     for (int i = 0; i < synth::drums::kMaxPads; ++i)
         EXPECT_FALSE(grid.padCell(i).getWantsKeyboardFocus()) << "the grid is one Tab stop";
     const auto tabbable = scene.card().createKeyboardFocusTraverser()->getAllComponents(&scene.card());

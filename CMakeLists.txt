@@ -378,6 +378,8 @@ add_library(Core STATIC
     Source/Modules/ModuleBase.h
     Source/Modules/ModuleOutputStage.h
     Source/Modules/ModuleOutputStage.cpp
+    Source/Modules/NoteInbox.h
+    Source/Modules/NoteInbox.cpp
     Source/Modules/ModuleFileStateKeys.h
     Source/Modules/PortRole.h
     Source/Modules/AudioInputModule.h

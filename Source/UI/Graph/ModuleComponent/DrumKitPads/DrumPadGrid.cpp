@@ -1,9 +1,12 @@
-// DrumPadGrid.cpp -- the pad grid: geometry, the pad faces, the sliding selection ring, the mouse and keys.
+// DrumPadGrid.cpp -- the pad grid: geometry, the pad faces, the sliding selection ring, the mouse and keys, and a
+// sound dropped on one pad.
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadGrid.h"
+#include "Modules/SamplerModule.h"
 #include "UI/DrumMachine/DrumLanes.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Library/SoundBrowser/SoundDragPayload.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -140,7 +143,7 @@ juce::String DrumPadGrid::padTitle(int index) const {
 }
 
 juce::String DrumPadGrid::padTooltip(int index) const {
-    return kit_.pad(index).name + ": click to play, Shift+click to pick without sound";
+    return kit_.pad(index).name + ": click to play, Shift+click to pick without sound, right-click for its sound";
 }
 
 juce::String DrumPadGrid::getTooltip() {
@@ -203,8 +206,76 @@ void DrumPadGrid::moveRingTo(int index, bool animate) {
 
 void DrumPadGrid::mouseDown(const juce::MouseEvent& e) {
     const int index = padAt(e.getPosition());
-    if (index >= 0)
-        pick(index, !e.mods.isShiftDown());
+    if (index < 0)
+        return;
+    if (e.mods.isPopupMenu()) {
+        pick(index, false);
+        if (onContextMenu)
+            onContextMenu(index, false);
+        return;
+    }
+    pick(index, !e.mods.isShiftDown());
+}
+
+bool DrumPadGrid::showContextMenuForKeyboardFocus() {
+    if (count_ <= 0 || !onContextMenu)
+        return false;
+    onContextMenu(picked_, true);
+    return true;
+}
+
+// ---- A sound dropped on a pad ----
+
+// JUCE finds a drop target by hit-testing from the window down, then asks it with the drag's starting details (not
+// the pointer's position here). So the gaps stop hit-testing while a sound is dragged: over a gap the drop goes to the
+// card and on to the canvas, as it did before pads took sounds, and over a pad the grid takes it. The Sounds view
+// ends its drag state on the release before the container drops, so the container's own drag counts too.
+bool DrumPadGrid::hitTest(int x, int y) {
+    if (isSoundDragLive())
+        return padAt({x, y}) >= 0;
+    return juce::Component::hitTest(x, y);
+}
+
+// Every container up the tree: the canvas has one of its own, and the Sounds view drags through the window's.
+bool DrumPadGrid::isSoundDragLive() const {
+    if (SoundDragState::isActive())
+        return true;
+    for (auto* c = getParentComponent(); c != nullptr; c = c->getParentComponent())
+        if (auto* container = dynamic_cast<juce::DragAndDropContainer*>(c);
+            container != nullptr && container->isDragAndDropActive() &&
+            isSoundPayload(container->getCurrentDragDescription()))
+            return true;
+    return false;
+}
+
+// One audio file, from the Sounds view or the Finder, like a Sampler card's drop.
+bool DrumPadGrid::isInterestedInFileDrag(const juce::StringArray& files) {
+    return files.size() == 1 && SamplerModule::isSupportedAudioFile(juce::File(files[0]));
+}
+
+void DrumPadGrid::setDropTarget(int index) {
+    if (index == dropTarget_)
+        return;
+    dropTarget_ = index;
+    repaint();
+    if (onDropTargetChanged)
+        onDropTargetChanged();
+}
+
+void DrumPadGrid::fileDragEnter(const juce::StringArray&, int x, int y) { setDropTarget(padAt({x, y})); }
+
+void DrumPadGrid::fileDragMove(const juce::StringArray&, int x, int y) { setDropTarget(padAt({x, y})); }
+
+void DrumPadGrid::fileDragExit(const juce::StringArray&) { setDropTarget(-1); }
+
+void DrumPadGrid::filesDropped(const juce::StringArray& files, int x, int y) {
+    const int index = padAt({x, y});
+    setDropTarget(-1);
+    if (index < 0 || files.isEmpty())
+        return;
+    pick(index, false);
+    if (onFileDropped)
+        onFileDropped(index, juce::File(files[0]));
 }
 
 // Left/Right step one pad, Up/Down one row, Home/End jump to the ends: all pick without a sound. Space and Return play
@@ -273,8 +344,21 @@ void DrumPadGrid::paintOverChildren(juce::Graphics& g) {
     const auto& c = synth::theme::themeOf(*this).colors;
     g.setColour(c.accent);
     g.drawRoundedRectangle(ringRect_.reduced(1.0f), kCorner, 2.0f);
+    paintDropOutlines(g);
     if (hasKeyboardFocus(false))
         paintFocusRingAlways(g, getLocalBounds().toFloat(), *this, kCorner);
+}
+
+// While a sound is dragged every pad gets a faint outline; the pad under the pointer gets the accent one.
+void DrumPadGrid::paintDropOutlines(juce::Graphics& g) const {
+    if (!isShowingSoundOutline())
+        return;
+    const auto& c = synth::theme::themeOf(*this).colors;
+    for (int i = 0; i < count_; ++i) {
+        const bool target = i == dropTarget_;
+        g.setColour(target ? c.accent : c.accent.withAlpha(0.35f));
+        g.drawRoundedRectangle(padBounds(i).toFloat().reduced(target ? 1.5f : 1.0f), kCorner, target ? 2.5f : 1.0f);
+    }
 }
 
 // ---- Screen reader and test mode ----
@@ -290,6 +374,12 @@ void DrumPadGrid::addTestModeState(juce::DynamicObject& into) const {
     // in a test-mode instance, which has no audio device.
     into.setProperty("auditionedPad", auditioned_ + 1);
     into.setProperty("lastPlayedPad", kit_.lastPlayedPad() + 1);
+    const auto& pad = kit_.pad(picked_);
+    into.setProperty("pickedName", pad.name);
+    into.setProperty("pickedKind", kindWords(kit_, picked_));
+    into.setProperty("pickedSound", pad.sound);
+    into.setProperty("soundOutline", isShowingSoundOutline());
+    into.setProperty("dropTargetPad", dropTarget_ + 1);
 }
 
 } // namespace synth::ui

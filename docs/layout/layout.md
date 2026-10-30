@@ -233,8 +233,9 @@ pure geometry is `synth::insert_gap` (`Source/UI/Layout/InsertGap/InsertGapPlan.
   which dodges as before. In empty space the ghost has to touch a card (12 px clearance); beside it is a row, above or
   below it a column. The leading half of a card means "in front of it", the trailing half "in front of the next card
   in its row (column)". Past the last card of a row nothing needs to move, so there is no gap and the drop is ordinary.
-  A dock card or a macro port is never an anchor, and a snippet, a group drag, a dock card or a port widget never
-  opens a gap. A card dragged from the canvas opens none while its centre is still over the place it was picked up
+  A dock card or a macro port is never an anchor, and a snippet, a group drag, a dock card, a port widget or a sound
+  from the Sounds view never opens a gap (a sound may be meant for a card, a Sampler or a Drum Kit pad, so no card may
+  slide away from under the pointer; dropped on the canvas it lands in the nearest free slot). A card dragged from the canvas opens none while its centre is still over the place it was picked up
   from, so nudging a card never pushes its neighbours.
   A drag whose centre is over a macro border it is not in yet (or has just left) opens no gap either, and a library
   drop released over an open gap joins the macro the gap was made in: the join or leave is decided on the borders as

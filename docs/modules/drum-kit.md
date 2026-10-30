@@ -20,7 +20,7 @@ table, `DrumKitModulePads.cpp` for the message thread, `DrumKitModulePadAudio.cp
   - A `builtIn` pad plays the synth drum.
   - A `file` pad plays its audio file from `Start` (0 to 1 of the file). `Decay` is how long it holds, then a 50 ms
     fade.
-  - An `instrument` pad is kept in the state but is silent for now.
+  - An `instrument` pad plays a module on the canvas: see [Instrument pads](#instrument-pads).
   - Picking a kit on the card makes every pad a `kit` pad and turns every Recorded switch on, in the load's undo step.
 - **Per-pad knobs.** Each pad has its own `pad<N>Level` (0..1), `pad<N>Tune` (-12..+12 semitones), `pad<N>Decay`
   (0.02..4 s, centred on 0.4 s) and `pad<N>Start` (0..1). These are ordinary automatable parameters. They are hidden
@@ -88,15 +88,21 @@ The group tabs and the Recorded switches are gone from the card (layout revision
 - **Caption.**
   - "3 hidden pads keep their sounds" while pads beyond the count hold a setting of their own: a changed note, name,
     sound or file, or a knob off its default.
-  - Otherwise a one-line hint.
+  - While a sound is dragged from the Sounds view: "Drop on a pad to play this sound there", or "Drop to make Snare
+    play this sound" over a pad.
+  - Otherwise a one-line hint: "Click to play, right-click for a sound".
 - **Controls.**
   - The picked pad's dot, name and "plays note D1 (38)".
-  - Then Level, Tune and Decay, plus Start for a file pad. The panel's height is the same for every pad.
-  - Decay dims while the pad plays a recording.
+  - The **Sound** row: what the pad plays ("Snare, built-in", "kick.wav, audio file", "Pluck 1, instrument") on a
+    button that opens the Sound menu, plus Open for an instrument pad. See [A pad's sound](#a-pads-sound).
+  - Then Level, Tune and Decay, plus Start for a file pad or Plays pitch for an instrument pad. The panel's height is
+    the same for every pad.
+  - Decay dims while the pad plays a recording or an instrument.
   - The knobs re-bind to the pad's own parameters, so a drag is one undo step like any card knob.
   - Switching pads cross-fades the panel: out over 80 ms, in over 160 ms. Under Reduce Motion it is an 80 ms fade in;
     with Animations Off it is instant.
-- **Undo.** A count change is one undo step, and the card resizes to match.
+- **Undo.** A count change is one undo step, and the card resizes to match. So is every Sound choice, a reset, a
+  pitch change and a drop.
 - **Accessibility.**
   - The stepper reads "Pads, 16 of 32 maximum".
   - The grid is one Tab stop after the stepper: group "Drum pads". Each pad is a child button named "Snare pad,
@@ -104,13 +110,60 @@ The group tabs and the Recorded switches are gone from the card (layout revision
   - A pick announces "Snare picked".
   - The panel is the group "Snare controls", and its knobs read "Level: Snare".
   - Escape on a knob returns focus to the grid.
-- **Test mode.** The grid (`drumPads`) reports `padCount`, `pickedPad` and `lastPlayedPad` (1-based, 0 for none).
-  Scenario: `Tools/ui-verify/scenarios/drum-kit-pads.yaml`.
+  - The Sound button reads "Sound for Snare, Pluck 1, instrument"; Return or Space opens its menu. Open reads "Open
+    Pluck 1 on the canvas". Plays pitch is a stepper like Pads.
+  - Shift+F10 (or the context-menu key) on the grid opens the picked pad's menu.
+- **Test mode.** The grid (`drumPads`) reports `padCount`, `pickedPad`, `lastPlayedPad` (1-based, 0 for none),
+  `pickedName`, `pickedKind`, `pickedSound`, `soundOutline` (a sound drag is over the card) and `dropTargetPad`.
+  The Sound row is `drumPadSound`, Open is `drumPadOpenInstrument`, Plays pitch is `drumPadPitch`.
+  Scenarios: `Tools/ui-verify/scenarios/drum-kit-pads.yaml`, `Tools/ui-verify/scenarios/drum-kit-pad-sound.yaml`.
+
+## A pad's sound
+
+The Sound row's button opens the **Sound menu** (`DrumPadSoundMenu`). Right-click on a pad, or Shift+F10 on the grid,
+opens the **pad menu**: Play, Replace from file..., Reset to kit sound, then the same groups inline. The current choice
+has a tick.
+
+- **Audio file**: Choose a file..., and Recent files (pad files chosen this session plus the files this kit's pads
+  play, newest first, at most eight).
+- **Built-in drum sounds**: Kick, Snare and Clap, and a "Hats, toms and cymbals" submenu with the other 17.
+- **Instruments on your canvas**: every instrument module except a Drum Kit, a Sequencer or a Poly Sequencer
+  (`DrumKitModule::canPlayFromPad`).
+- **Use the kit's sound**: a submenu, named after the loaded kit, of the sounds it has a recording for.
+- **Reset to kit sound** (Sound menu, after a line): the pad's default for the kit's Recorded setting. The pad keeps
+  its note, name position and shown state.
+
+Each choice is one undo step. Choosing a built-in drum on a file pad replaces the file without asking; Undo brings it
+back.
+
+### Instrument pads
+
+An instrument pad sends a note to its module instead of playing a sound of its own. Choosing "Note only" was
+deliberate: the graph does not change, and the module plays wherever its cables already go.
+
+- **The note.** Pitch is the pad's Plays pitch (default C3, 60) plus Tune rounded to semitones; velocity is Level
+  times the hit's velocity. Decay does not apply. The note-off is sent when the hit's note ends, or 0.25 s after a
+  click on the card (`kAuditionHoldSeconds`). A second hit releases the first note before it starts.
+- **Delivery.** Each module has a `NoteInbox` (`Source/Modules/NoteInbox.h`): a lock-free FIFO that
+  `ModuleBase::processBlock` drains into the block's MIDI before the module runs, at most 32 events a block. A full
+  inbox drops note-ons but never note-offs. The note lands in the module's current or next block.
+- **The link.** A pad stores only its module's `uuid`. `publishSamplerMidiWiring` (run after every graph change, a
+  project load and an AI patch) resolves it to the module's inbox and republishes the pads, and counts a Sampler a pad
+  plays as MIDI-fed. A pad whose module is gone is silent, and its row reads "Pluck 1, removed, silent".
+- **Open** selects the module's card and centres the canvas on it (or on its collapsed macro).
+- Bypass, stop and all-notes-off release every held instrument note.
+
+### Dropping a sound on a pad
+
+A sound dragged from the Sounds view onto the pad grid goes to the pad under the pointer only, as one undo step,
+and the pad becomes a file pad. While the drag is over the grid every pad has a faint accent outline, the pad under
+the pointer a full one, and the caption says what the drop will do. A drop elsewhere on the card falls through to the
+canvas (a new Sampler). One audio file dragged in from Finder lands on a pad the same way. After the drop the pad
+is named after the file and the caption says "Snare now plays kick.wav" for a moment. A sound never opens an
+insert gap on the canvas, so the card stays put while the pointer travels to the pads
+([layout](../layout/layout.md#making-room-for-a-module-dropped-between-others)).
 
 Not built yet:
 
 - The panel knobs are not MIDI-learnable: the learnable registry binds one parameter per control and has no remove.
-- The per-pad Sound menu and reset to the kit sound.
-- Instrument pads that play.
 - The Shown switch.
-- Dropping a browser sound onto a pad.

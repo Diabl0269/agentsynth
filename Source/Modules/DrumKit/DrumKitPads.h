@@ -52,6 +52,11 @@ int clampPadCount(int count) noexcept;
 /** The built-in sound a never-used free pad gets when the count first shows it (kNoSound for any other pad). */
 int revealSoundFor(int index) noexcept;
 
+/** The built-in sounds a pad can play (the General MIDI drums of pads 1-20), in pad order. */
+const std::array<int, 20>& builtInSounds() noexcept;
+/** "Snare" for 38; empty for kNoSound or a note with no built-in drum. */
+juce::String soundName(int sound);
+
 /** "D1" for 38 (middle C is C3). */
 juce::String noteName(int note);
 
