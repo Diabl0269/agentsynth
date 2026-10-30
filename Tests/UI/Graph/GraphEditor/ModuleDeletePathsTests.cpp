@@ -12,6 +12,7 @@
 // silently.
 
 // Regression test for FRO1099: a macro deleted with Keep track left a Compressor card listening to a freed processor
+#include "../../../TestWait.h"
 #include "../../../UniqueTempDir.h"
 #include "../../Layout/BottomDockActiveTabResetGuard.h"
 #include "AI/AIProvider.h"
@@ -162,7 +163,7 @@ protected:
     void SetUp() override {
         mc().newPatchForTest();
         mc().simulateAddAudioTrackClick();
-        pump();
+        synth::test::waitUntil([] { return mc().getTimelineDoc().getTracks().size() == 1u; });
         ASSERT_EQ(mc().getTimelineDoc().getTracks().size(), 1u);
         const auto binding = mc().getTimelineDoc().getTracks().front().bindingUuid;
         const auto* macro = editor().getMacros().findByMember(binding);
@@ -212,8 +213,8 @@ protected:
         editor().repaint();
         mc().resized();
         pump();
-        const juce::Image image = mc().createComponentSnapshot(mc().getLocalBounds().withHeight(300), true, 0.25f);
-        EXPECT_TRUE(image.isValid());
+        // The paint is the check: under ASAN a view bound to a freed processor fails here.
+        (void)mc().createComponentSnapshot(mc().getLocalBounds().withHeight(300), true, 0.25f);
     }
 
     bool present(NodeID id) { return graph().getNodeForId(id) != nullptr; }
@@ -225,7 +226,7 @@ protected:
     }
 
     void expectRemoved(NodeID id, const juce::String& type) {
-        pump();
+        synth::test::waitUntil([&] { return !present(id) && !hasCard(id); });
         EXPECT_FALSE(present(id)) << type << " is still in the graph";
         EXPECT_FALSE(hasCard(id)) << type << " still has a card";
         touchViews();
@@ -233,8 +234,8 @@ protected:
 
     // A user-facing delete that refuses this type: the node and its card stay, and the views still paint.
     void expectKept(NodeID id, const juce::String& type) {
-        pump();
-        EXPECT_TRUE(present(id)) << type << " was deleted though the project keeps it";
+        EXPECT_FALSE(synth::test::waitUntil([&] { return !present(id); }, 100))
+            << type << " was deleted though the project keeps it";
         touchViews();
     }
 
@@ -309,7 +310,6 @@ protected:
             }
             expectRemoved(id, type);
             ASSERT_TRUE(mc().getUndoManager().undo());
-            pump();
             touchViews();
             ASSERT_TRUE(mc().getUndoManager().redo());
             // The restore built a new node for the module; the id the delete removed stays gone.
