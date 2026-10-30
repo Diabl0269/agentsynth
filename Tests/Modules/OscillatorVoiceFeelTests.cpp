@@ -759,3 +759,28 @@ TEST(OscillatorPhaseRand, RandSpreadsTheStackPerVoiceAndPerNote) {
     EXPECT_LT(half.meanRms(kFade, 1323) / half.meanRms(1323, 4410),
               together.meanRms(kFade, 1323) / together.meanRms(1323, 4410));
 }
+
+// Regression test for FRO1223: Phase and Rand looked dead because they only set where each unison voice starts when a
+// NEW note begins. That is measured here on a detuned five-voice Saw: Phase 180 changes the first 20 ms of the note
+// against Phase 0, Rand 0 repeats the note identically, and Rand 50 makes each repeat start differently.
+TEST(OscillatorPhaseRand, PhaseAndRandSetTheStartOfEachNewNoteOfADetunedUnisonSaw) {
+    constexpr size_t kTwentyMs = 882;
+    // Largest difference between two repeats over the first 20 ms (after the hand-over), against the first one's peak.
+    auto repeatGap = [&](const Repeats& r, size_t a, size_t b) {
+        double diff = 0.0, peak = 1e-9;
+        for (size_t i = kFade; i < kTwentyMs; ++i) {
+            diff = std::max(diff, (double)std::abs(r.notes[a][i] - r.notes[b][i]));
+            peak = std::max(peak, (double)std::abs(r.notes[a][i]));
+        }
+        return diff / peak;
+    };
+    const auto phaseZero = renderRepeats(5, 0.0f, 0.0f, 2);
+    const auto phaseHalf = renderRepeats(5, 180.0f, 0.0f, 2);
+    EXPECT_GT(relativeDifference(phaseZero, phaseHalf, kFade, kTwentyMs), 0.5)
+        << "Phase 180 starts the note differently";
+
+    EXPECT_LT(repeatGap(phaseZero, 1, 2), 1e-3) << "Rand 0 repeats the note identically";
+
+    const auto randHalf = renderRepeats(5, 0.0f, 50.0f, 2);
+    EXPECT_GT(repeatGap(randHalf, 1, 2), 0.3) << "Rand 50 starts each repeat differently";
+}

@@ -40,6 +40,25 @@ juce::String explainedChoiceTooltip(const juce::String& paramId) {
     return {};
 }
 
+// Phase and Rand on the two oscillators only act when a note starts, so their tooltip says so: moving them on a
+// sounding note changes nothing, and a knob that seems dead looks broken.
+juce::String explainedKnobTooltip(juce::AudioProcessor& module, const juce::RangedAudioParameter& param) {
+    auto* mb = dynamic_cast<ModuleBase*>(&module);
+    if (mb == nullptr ||
+        (mb->getModuleType() != ModuleType::Oscillator && mb->getModuleType() != ModuleType::Wavetable))
+        return {};
+    const auto& paramId = param.paramID;
+    if (paramId == "phase")
+        return param.getName(100) +
+               ". Where each new note starts the wave, in degrees. It sets the start of every new note and does "
+               "not change a note that is already sounding.";
+    if (paramId == "randomPhase")
+        return param.getName(100) +
+               ". How far each unison voice's start is randomised on every new note, so repeats of a note differ a "
+               "little. It sets the start of every new note and does not change a note that is already sounding.";
+    return {};
+}
+
 bool isAdsr(juce::AudioProcessor& module) {
     auto* mb = dynamic_cast<ModuleBase*>(&module);
     return mb != nullptr && mb->getModuleType() == ModuleType::ADSR;
@@ -335,6 +354,7 @@ void CardBody::createKnob(CardBodyItem& item, juce::RangedAudioParameter& param)
         knob->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
     }
     card_.addAndMakeVisible(knob);
+    knob->setTooltip(explainedKnobTooltip(module_, param));
     knob->addMouseListener(&card_, false);
     card_.registerMidiLearnable(*knob, &param);
     card_.wireCardControlGestures(*knob, *knob, &param);
