@@ -58,6 +58,7 @@
 // openClip so "copy in one clip, paste in another" works.
 
 #include "PianoRollComponent.h"
+#include "AppUndoManager.h"
 #include "PianoRollHeaderChip.h"
 #include "PianoRollInternal.h"
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
@@ -80,6 +81,15 @@ int medianPitchOf(const std::vector<synth::MidiNote>& notes) {
     std::sort(pitches.begin(), pitches.end());
     return pitches[pitches.size() / 2];
 }
+
+// True when the band disagrees with the clip: a different saved range, or a saved range the clip no longer has.
+bool noteRangeShownDiffers(const ScaleAssistPanel& panel, const synth::Clip& clip) {
+    if (!clip.noteRange.has_value())
+        return panel.isShowingSavedRange();
+    return panel.getMinPitchSelection() != clip.noteRange->first ||
+           panel.getMaxPitchSelection() != clip.noteRange->second;
+}
+
 } // namespace
 
 //==============================================================================
@@ -97,7 +107,18 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
 
     addChildComponent(scalePanel_); // starts INVISIBLE; the header button / persisted flag show it
     scalePanel_.onScaleChanged = [this](std::optional<synth::MusicalScale> scale) {
-        commitClipScale(std::move(scale), isScaleFilterOn());
+        commitClipScale(std::move(scale), isScaleFilterOn(), /*carryRange=*/true);
+    };
+    // One finished range gesture is saved on the clip as one undo step (every timeline undo restores a whole-document
+    // snapshot, so a range kept outside the doc would be lost or reverted by undoing something else).
+    scalePanel_.onRangeGestureEnd = [this](int lo, int hi) {
+        if (doc_ == nullptr || !clipId_.isValid())
+            return;
+        auto mutate = [this, id = clipId_, lo, hi] { doc_->setClipNoteRange(id, std::make_pair(lo, hi)); };
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
     };
     scalePanel_.onFollowSongKey = [this] {
         commitClipScale(std::nullopt, isScaleFilterOn()); // no own scale = follow
@@ -287,7 +308,7 @@ void PianoRollComponent::refreshFromDoc() {
     const auto resolved = resolvedKeyForOpenClip();
     if (!synth::sameKey(scalePanel_.getSelectedScale(), resolved.key) ||
         scalePanel_.isFollowingSongKey() != resolved.following ||
-        scalePanel_.isPitchVisibilityOn() != clip->scaleVisible)
+        scalePanel_.isPitchVisibilityOn() != clip->scaleVisible || noteRangeShownDiffers(scalePanel_, *clip))
         restoreScaleForOpenClip();
     else
         rebuildVisiblePitches();

@@ -646,7 +646,7 @@ private:
     std::optional<synth::MusicalScale> activeScaleForOpenClip() const;
     void pushScaleContextFromClip();
     void restoreScaleForOpenClip();
-    void commitClipScale(std::optional<synth::MusicalScale> scale, bool pitchVisibilityOn);
+    void commitClipScale(std::optional<synth::MusicalScale> scale, bool pitchVisibilityOn, bool carryRange = false);
 
     // ---- Velocity strip plumbing ---- see PianoRollVelocity.cpp.
     void initVelocityControls();

@@ -41,6 +41,9 @@ public:
 
     /** Called after the user changes the range (mouse or keys), never by setRange. */
     std::function<void(int lo, int hi)> onChange;
+    /** Called once when a drag ends with a different range than it began with, and once per key step that moved the
+     *  range; never by setRange. The place to record one undo step. */
+    std::function<void(int lo, int hi)> onGestureEnd;
 
     // ---- Geometry, for tests ---------------------------------------------------------------------------
     /** The first C of the four octaves shown. */

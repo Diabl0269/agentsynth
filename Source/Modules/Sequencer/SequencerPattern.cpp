@@ -108,6 +108,19 @@ void readCustomScale(const juce::var& v, SequencerPattern& pattern) {
     pattern.customName = name.isString() ? name.toString().substring(0, kMaxNameLength) : juce::String();
 }
 
+// Written only when set; a missing or malformed range loads as none.
+void readNoteRange(const juce::var& v, SequencerPattern& pattern) {
+    auto* obj = v.getDynamicObject();
+    if (obj == nullptr)
+        return;
+    int low = 0;
+    int high = 0;
+    if (!sequencer_detail::readInt(obj->getProperty("low"), 0, 127, low) ||
+        !sequencer_detail::readInt(obj->getProperty("high"), 0, 127, high))
+        return;
+    pattern.noteRange = std::make_pair(std::min(low, high), std::max(low, high));
+}
+
 } // namespace
 
 juce::String chordId(SequencerChord chord) {
@@ -150,6 +163,12 @@ juce::var SequencerPattern::toVar(bool poly) const {
         custom->setProperty("mask", (int)customMask);
         root->setProperty("customScale", juce::var(custom));
     }
+    if (noteRange.has_value()) {
+        auto* range = new juce::DynamicObject();
+        range->setProperty("low", noteRange->first);
+        range->setProperty("high", noteRange->second);
+        root->setProperty("noteRange", juce::var(range));
+    }
     root->setProperty("steps", juce::var(stepList));
     return juce::var(root);
 }
@@ -165,6 +184,7 @@ SequencerPattern SequencerPattern::fromVar(const juce::var& v, bool poly, std::u
     if (sequencer_detail::readNumber(obj->getProperty("seed"), seed))
         pattern.seed = (std::uint32_t)std::clamp(seed, 0.0, 4294967295.0);
     readCustomScale(obj->getProperty("customScale"), pattern);
+    readNoteRange(obj->getProperty("noteRange"), pattern);
 
     if (const auto* list = obj->getProperty("steps").getArray()) {
         const int count = std::min(list->size(), kMaxSequencerSteps);

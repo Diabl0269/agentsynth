@@ -199,6 +199,21 @@ public:
         showCustomEditor(false);
         repaint();
     }
+    /** Shows the clip's saved note range, or with none the default range moved to the key's root; never calls a
+     *  callback. Call after setSelection, which may shift the band for a root change. */
+    void showClipRange(std::optional<std::pair<int, int>> saved) {
+        showingSavedRange_ = saved.has_value();
+        if (saved.has_value()) {
+            rangePicker_.setRange(saved->first, saved->second);
+            rangeRoot_ = currentRoot();
+            return;
+        }
+        rangePicker_.setRange(kDefaultMinPitch, kDefaultMaxPitch);
+        rangeRoot_ = 0;
+        showSelectedKey();
+    }
+    /** True once the band shows a clip's saved range (so the owner can tell it to go back to defaults). */
+    bool isShowingSavedRange() const noexcept { return showingSavedRange_; }
     /** The song key the picker's Follow row names; a reflection, like setSelection. */
     void setSongKey(std::optional<synth::MusicalScale> songKey) { songKey_ = std::move(songKey); }
 
@@ -217,7 +232,9 @@ public:
 
     // ---- Callbacks the owner wires (see the class comment) ----
     std::function<void(std::optional<synth::MusicalScale>)> onScaleChanged; // an own key was picked
-    std::function<void()> onFollowSongKey;                                  // the Follow song key row
+    /** The user finished moving the note range (once per drag, once per key step); record one undo step. */
+    std::function<void(int minPitch, int maxPitch)> onRangeGestureEnd;
+    std::function<void()> onFollowSongKey; // the Follow song key row
     /** Launches the key picker; unset = a CallOutBox from the field. Tests replace it to keep the picker. */
     std::function<void(std::unique_ptr<juce::Component> picker, juce::Rectangle<int> screenArea)> pickerLauncher;
 
@@ -413,6 +430,11 @@ private:
         scaleContent_.addAndMakeVisible(rangePicker_);
         rangePicker_.setComponentID("scaleAssistRangePicker");
         rangePicker_.setRange(kDefaultMinPitch, kDefaultMaxPitch);
+        rangePicker_.onGestureEnd = [this](int lo, int hi) {
+            showingSavedRange_ = true;
+            if (onRangeGestureEnd)
+                onRangeGestureEnd(lo, hi);
+        };
 
         scaleContent_.addAndMakeVisible(generateButton_);
         generateButton_.setComponentID("scaleAssistGenerateButton");
@@ -512,6 +534,7 @@ private:
     bool following_ = true;
     bool pitchVisibilityOn_ = false;
     int rangeRoot_ = 0; // the root the range picker last followed
+    bool showingSavedRange_ = false;
     bool customEditorVisible_ = false;
     juce::Component::SafePointer<juce::Component> openPicker_;
 

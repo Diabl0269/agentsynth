@@ -108,6 +108,9 @@ else
     fi
 fi
 BASELINE_FILE="${FIXED_WAITS_BASELINE:-$ROOT/scripts/fixed-waits-baseline.txt}"
+# Per-file results are cached by content (scripts/lib/guard-cache.sh); the baseline is applied fresh every run.
+# shellcheck source=scripts/lib/guard-cache.sh
+source "$SCRIPT_DIR/lib/guard-cache.sh"
 
 list_scanned_paths() {
     git -C "$ROOT" ls-files | while IFS= read -r path; do
@@ -388,20 +391,29 @@ END { process_file() }
 '
 
 # scan_paths -- read repo-relative paths on stdin and print the scanner's F lines for the ones that
-# exist as files. Wrappers defined in Tests/ headers apply everywhere.
+# exist as files. Wrappers defined in Tests/ headers apply everywhere. A file's lines depend on its own
+# text and on the wrapper names every header defines, so the cache key carries those names.
 scan_paths() {
-    (
-        cd "$ROOT" || exit 1
-        paths="$(while IFS= read -r path; do [ -f "$path" ] && printf '%s\n' "$path"; done)"
-        [ -n "$paths" ] || exit 0
-        headers="$(printf '%s\n' "$paths" | grep -E '\.(h|hpp)$' || true)"
-        gw=" "
-        if [ -n "$headers" ]; then
-            names="$(printf '%s\n' "$headers" | xargs awk -v mode=defs "$SCAN_AWK" | sed 's/^W //' | sort -u | tr '\n' ' ')"
-            gw=" $names"
-        fi
-        printf '%s\n' "$paths" | xargs awk -v mode=scan -v "gw=$gw" "$SCAN_AWK"
-    )
+    local paths headers names="" gw list
+    paths="$(while IFS= read -r path; do [ -f "$ROOT/$path" ] && printf '%s\n' "$path"; done)"
+    [ -n "$paths" ] || return 0
+    gw=" "
+    headers="$(printf '%s\n' "$paths" | grep -E '\.(h|hpp)$' || true)"
+    if [ -n "$headers" ]; then
+        names="$(cd "$ROOT" && printf '%s\n' "$headers" | xargs awk -v mode=defs "$SCAN_AWK" | sed 's/^W //' | sort -u | tr '\n' ' ')"
+    fi
+    [ -n "$names" ] && gw=" $names"
+    list="$(mktemp)"
+    printf '%s\n' "$paths" >"$list"
+    SCAN_GW="$gw"
+    gc_init fixed-waits "$gw" "${BASH_SOURCE[0]}"
+    gc_scan_files 'split($0, a, "\t"); p = a[2]' "$list" scan_files_with_wrappers
+    rm -f "$list"
+}
+
+# scan_files_with_wrappers -- scans the repo-relative paths on stdin, with the wrapper names in SCAN_GW.
+scan_files_with_wrappers() {
+    (cd "$ROOT" && xargs awk -v mode=scan -v "gw=$SCAN_GW" "$SCAN_AWK")
 }
 
 # flagged_sites -- "path<TAB>line<TAB>code" for every flagged site, sorted by path then line.
