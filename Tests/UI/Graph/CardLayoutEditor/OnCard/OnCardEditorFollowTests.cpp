@@ -165,14 +165,16 @@ TEST(OnCardEditorFollow, StartingAnEditOnASecondModuleEndsTheFirstAndKeepsItsCha
     };
 
     rig.card(first)->showCardLayoutEditor();
-    auto* a = editorOver(first);
+    // Starting the second edit deletes the first editor, so it is held by a SafePointer: a closed editor either says
+    // so or is already gone.
+    juce::Component::SafePointer<CardLayoutOnCardEditor> a(editorOver(first));
     ASSERT_NE(a, nullptr);
     drop(*a, "cutoff", {40, 0});
     ASSERT_TRUE(rig.storedLayout(first).has_value());
     const auto kept = rig.storedLayout(first);
 
     rig.card(second)->showCardLayoutEditor();
-    EXPECT_TRUE(a->isClosed()) << "the first module's edit ended, no dialog";
+    EXPECT_TRUE(a == nullptr || a->isClosed()) << "the first module's edit ended, no dialog";
     EXPECT_EQ(rig.storedLayout(first), kept) << "its change stays";
     auto* b = editorOver(second);
     ASSERT_NE(b, nullptr);
