@@ -9,6 +9,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CardLayoutEditor/HostedCardLayoutSource.h"
 #include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModMatrixComponent.h"
 #include "UI/Graph/ModMatrixPicker.h"
@@ -158,6 +159,47 @@ TEST(HostedPluginCardModTest, ACableDroppedOnTheCardBodyOffersEveryParameterAndT
     EXPECT_TRUE(canvas.routedTo(channel));
     canvas.editor.updateComponents();
     canvas.knobPoint("p9"); // the parameter is on the card now
+}
+
+// Regression test for FRO1157: the knob was its own undo step, so one Cmd+Z took the cable and left the knob.
+TEST(HostedPluginCardModTest, OneUndoTakesBackThePicksKnobAndCableAndOneRedoBringsThemBack) {
+    PluginCanvas canvas;
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    synth::ui::test_hooks::hostedModTargetPickerHookForTest() = [&picker](auto p) { picker = std::move(p); };
+    auto* plugin = canvas.card(canvas.pluginId);
+    canvas.dropCableAt(plugin->getPosition() +
+                       juce::Point<int>(plugin->getWidth() / 2, ModuleComponent::kHeaderHeight / 2));
+    synth::ui::test_hooks::hostedModTargetPickerHookForTest() = nullptr;
+    ASSERT_NE(picker, nullptr);
+    picker->setSearchTextForTest("param 9");
+    const auto knobs = [&canvas] {
+        return synth::ui::HostedCardLayoutSource(*canvas.hosted, nullptr, canvas.engine.getGraph(), canvas.pluginId,
+                                                 nullptr)
+            .parameterState("p9");
+    };
+    using State = synth::ui::HostedCardLayoutSource::ParameterState;
+    ASSERT_EQ(knobs(), State::Available);
+    const int loads = canvas.backend.createCount;
+
+    picker->chooseVisibleItemForTest(0);
+    canvas.editor.updateComponents();
+    const int channel = canvas.hosted->modChannelForParam("p9");
+    ASSERT_GE(channel, 0);
+    ASSERT_TRUE(canvas.routedTo(channel));
+    ASSERT_EQ(knobs(), State::OnCard);
+
+    canvas.undo.undo();
+    canvas.editor.updateComponents();
+    EXPECT_EQ(knobs(), State::Available) << "the knob goes with the cable";
+    EXPECT_EQ(canvas.hosted->modChannelForParam("p9"), -1);
+    EXPECT_FALSE(canvas.routedTo(channel));
+    EXPECT_EQ(canvas.backend.createCount, loads) << "undo restores in place, it never reloads the plugin";
+
+    canvas.undo.redo();
+    canvas.editor.updateComponents();
+    EXPECT_EQ(knobs(), State::OnCard);
+    EXPECT_GE(canvas.hosted->modChannelForParam("p9"), 0);
+    EXPECT_TRUE(canvas.routedTo(canvas.hosted->modChannelForParam("p9")));
 }
 
 namespace {

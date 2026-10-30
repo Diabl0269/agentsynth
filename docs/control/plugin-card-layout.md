@@ -437,7 +437,9 @@ Any parameter of a hosted plugin can take a mod cable, up to 48 at once per plug
   Matrix row all work.
 - **Drop on the card's body.** A cable released on the card but not on a knob opens a search over every parameter
   (`HostedModTargetPicker`): "On the card" first, then "All parameters". The pick is added to the card as a knob
-  (its own undo step, the "Add to card" write) and the cable lands on it. Escape or a click away changes nothing.
+  and the cable lands on it, as one undo step. Escape or a click away changes nothing. The list costs one read of
+  the layout however many parameters the plugin has, and the module asks the plugin for each name once
+  (`getInstanceParameters` keeps the list until the instance or its parameter info changes).
 - **Timeline.** "Add modulator..." on a plugin parameter's automation lane works for any parameter while a slot
   is free.
 - **Mod Matrix.** A row's destination picker lists every plugin parameter without a slot under "Plugins"

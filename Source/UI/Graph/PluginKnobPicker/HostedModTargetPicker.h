@@ -24,8 +24,8 @@ std::vector<ModMatrixPicker::Item> hostedModTargetItems(HostedPluginModule& modu
 void showHostedModTargetPicker(GraphEditor& editor, ModuleComponent& card, juce::AudioProcessorGraph::NodeID sourceId,
                                int sourceJack, juce::Point<int> screenPos);
 
-/** Puts `paramId` on the card when it is not there (its own undo step), claims its modulation slot and cables
- *  `sourceId`'s output jack `sourceJack` to it with the cable-drop rules. False when nothing was cabled. */
+/** Puts `paramId` on the card when it is not there, claims its modulation slot and cables `sourceId`'s output jack
+ *  `sourceJack` to it with the cable-drop rules, all as one undo step. False when nothing was cabled. */
 bool applyHostedModTarget(GraphEditor& editor, juce::AudioProcessorGraph::NodeID nodeId,
                           juce::AudioProcessorGraph::NodeID sourceId, int sourceJack, const juce::String& paramId);
 

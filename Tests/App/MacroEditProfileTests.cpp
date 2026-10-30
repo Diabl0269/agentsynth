@@ -15,6 +15,7 @@
 #include "../UniqueTempDir.h"
 #include "AppUndoManager.h"
 #include "MacroSet.h"
+#include "StallProbe.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -30,26 +31,6 @@ double benchPumpMs() {
     const double t0 = benchNowMs();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     return benchNowMs() - t0 - 20.0;
-}
-
-// Runs the message loop for `ms` and returns the longest stretch the loop was blocked (a frozen UI), measured by a
-// 1 ms timer: animation frames, deferred refreshes and async graph work all run inside it.
-struct StallProbe : juce::Timer {
-    double last = 0, worst = 0;
-    void timerCallback() override {
-        const double now = juce::Time::getMillisecondCounterHiRes();
-        if (last > 0)
-            worst = std::max(worst, now - last);
-        last = now;
-    }
-};
-
-double benchWorstStallMs(double ms) {
-    StallProbe probe;
-    probe.startTimer(1);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil((int)ms);
-    probe.stopTimer();
-    return probe.worst;
 }
 
 double benchPaintMs(juce::Component& c) {
@@ -116,14 +97,14 @@ DragCost timedDrag(MainComponent& mc, ModuleComponent& comp, juce::Point<int> de
         const double tick = benchNowMs() - t0;
         cost.drag += tick;
         cost.worstTick = std::max(cost.worstTick, tick);
-        cost.worstTick = std::max(cost.worstTick, benchWorstStallMs(16));
+        cost.worstTick = std::max(cost.worstTick, bench::worstStallMs(16));
     }
     t0 = benchNowMs();
     comp.mouseUp(realMouseEvent(comp, dragPos, pressPos, kCmdClick, true));
     cost.up = benchNowMs() - t0;
     cost.pump = benchPumpMs();
     cost.paint = benchPaintMs(mc);
-    cost.stall = benchWorstStallMs(800);
+    cost.stall = bench::worstStallMs(800);
     return cost;
 }
 
@@ -207,7 +188,7 @@ void timedEdit(MainComponent& mc, const char* label, const std::function<void()>
     const double t0 = benchNowMs();
     edit();
     const double call = benchNowMs() - t0;
-    const double stall = benchWorstStallMs(600);
+    const double stall = bench::worstStallMs(600);
     std::printf("[edit] %-22s call=%.1f stall=%.1f paint=%.1f\n", label, call, stall, benchPaintMs(mc));
     std::fflush(stdout);
 }
@@ -230,7 +211,7 @@ std::unique_ptr<MainComponent> openBenchCopy(juce::File& copyOut) {
         mc->addToDesktop(juce::ComponentPeer::windowHasTitleBar), mc->setVisible(true);
     if (!mc->openProjectForTest(copyOut))
         return nullptr;
-    benchWorstStallMs(300);
+    bench::worstStallMs(300);
     benchPaintMs(*mc);
     return mc;
 }
@@ -305,12 +286,12 @@ TEST_F(ChannelFlowTest, DISABLED_LoadTestOpenProfile) {
             mc.getAudioEngine().suspendDeviceCallback();
         if (std::getenv("PROFILE_ON_SCREEN") != nullptr)
             mc.addToDesktop(juce::ComponentPeer::windowHasTitleBar), mc.setVisible(true);
-        benchWorstStallMs(200);
+        bench::worstStallMs(200);
         const double t0 = benchNowMs();
         ASSERT_TRUE(mc.openProjectForTest(copy));
         const double open = benchNowMs() - t0;
         const double paint = benchPaintMs(mc);
-        const double stall = benchWorstStallMs(1500);
+        const double stall = bench::worstStallMs(1500);
         std::printf("[open] #%d open=%.1f paint=%.1f stall=%.1f\n", run + 1, open, paint, stall);
         std::fflush(stdout);
     }

@@ -105,7 +105,8 @@ private:
 };
 
 /** Counts since the last reset (test seam): borders computed, whole-graph node scans by uuid or node id,
- *  whole-cable-set scans, the cables and macro borders a paint actually drew, and canvas frame fits. */
+ *  whole-cable-set scans, the cables and macro borders a paint actually drew, canvas frame fits, and the plugin card
+ *  layout models built to answer where a parameter stands. */
 struct WorkCounters {
     int hullComputations = 0;
     int nodeScans = 0;
@@ -113,6 +114,7 @@ struct WorkCounters {
     int cablesPainted = 0;
     int hullsPainted = 0;
     int canvasFrameFits = 0;
+    int cardLayoutModelBuilds = 0;
 };
 
 /** Message thread only. */

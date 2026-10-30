@@ -314,6 +314,7 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
     // Release: everything above (prepareToPlay, the state blob, the port counts) must be visible to
     // the audio thread's acquire-load before it can see the pointer.
     activeInstance_.store(raw, std::memory_order_release);
+    instanceParametersStale_.store(true, std::memory_order_relaxed);
 
     statusMessage_.clear();
 
@@ -357,6 +358,7 @@ void HostedPluginModule::retireActiveInstance() {
     detachInstanceListener();
 
     activeInstance_.store(nullptr, std::memory_order_release);
+    instanceParametersStale_.store(true, std::memory_order_relaxed);
 
     // The "instance gone" edge — fired here, BEFORE the retired instance is moved into
     // retired_/reapRetired() below, which may free it SYNCHRONOUSLY if the module isn't currently
@@ -614,13 +616,21 @@ int HostedPluginModule::getInstanceParamIndexFallback(const juce::String& paramI
     return param != nullptr ? param->getParameterIndex() : -1;
 }
 
-std::vector<HostedPluginModule::InstanceParameterInfo> HostedPluginModule::getInstanceParameters() const {
-    std::vector<InstanceParameterInfo> result;
+// Kept between calls because asking a real plugin for a name crosses its wrapper, and a big plugin has thousands of
+// them: one list per instance, rebuilt when the plugin says its parameter info changed (any thread, hence the flag).
+const std::vector<HostedPluginModule::InstanceParameterInfo>& HostedPluginModule::getInstanceParameters() const {
+    auto& result = instanceParameters_;
 
     auto* instance = activeInstance_.load(std::memory_order_acquire);
-    if (instance == nullptr)
+    if (instance == nullptr) {
+        result.clear();
+        instanceParametersStale_.store(true, std::memory_order_relaxed);
+        return result;
+    }
+    if (!instanceParametersStale_.exchange(false, std::memory_order_relaxed))
         return result;
 
+    result.clear();
     const auto& params = instance->getParameters();
     result.reserve(static_cast<std::size_t>(params.size()));
     for (int i = 0; i < params.size(); ++i) {

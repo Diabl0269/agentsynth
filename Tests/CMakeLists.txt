@@ -272,6 +272,7 @@ add_executable(Tests
     App/ManyTracksProfileTests.cpp
     App/MacroEditProfileTests.cpp
     App/EditRefreshWorkTests.cpp
+    App/ScaleHangTests.cpp
     App/ModuleCpuProfileTests.cpp
     App/MainComponent/MainComponentStartupPanelsTests.cpp
     App/MainComponent/MainComponentLayoutTests.cpp
