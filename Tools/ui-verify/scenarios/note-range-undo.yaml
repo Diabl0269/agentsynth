@@ -1,0 +1,65 @@
+# Moving the note range band is undoable one gesture at a time, in a sequencer's Randomize panel and in the piano
+# roll's Scale assist panel.
+#
+# What a user does:
+#   1. Opens a project with one MIDI clip and a Sequencer (fixture clip-and-sequencer.agsproj).
+#   2. Opens the Sequencer's Randomize panel, drags its range, closes the panel, presses Cmd+Z and reopens it: the
+#      range is the seeded one again; Cmd+Shift+Z moves it again.
+#   3. Shows the timeline in the main area, opens the clip in the piano roll, opens Scale assist and drags the high edge of the Note range band down.
+#   4. Presses Cmd+Z: the band is back at C2 to C5. Presses Cmd+Shift+Z: it is moved again.
+# Saving and reopening is covered by the round-trip unit tests: a scenario cannot save without changing the fixture.
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  # The sequencer's Randomize panel (a separate window, so the screenshots are of its picker).
+  - click: {id: Randomize notes in the scale}
+  - wait: {}
+  - expect: {id: randomizeRangePicker, showing: true, within_ms: 2000}
+  - expect: {id: randomizeRangePicker, title: "Note range, C2 to C4"}
+  - screenshot: {id: randomizeRangePicker, name: randomize-range-before}
+  - drag: {from: randomizeRangePicker, fromX: 90, fromY: 17, to: randomizeRangePicker, toX: 60, toY: 17}
+  - wait: {}
+  - getState: {id: randomizeRangePicker}
+  - screenshot: {id: randomizeRangePicker, name: randomize-range-dragged}
+  - key: {keys: escape}
+  - wait: {}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - click: {id: Randomize notes in the scale}
+  - wait: {}
+  - expect: {id: randomizeRangePicker, title: "Note range, C2 to C4", within_ms: 1500}
+  - screenshot: {id: randomizeRangePicker, name: randomize-range-undone}
+  - key: {keys: escape}
+  - wait: {}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - click: {id: Randomize notes in the scale}
+  - wait: {}
+  - expect: {id: randomizeRangePicker, title: "Note range, C1 to C3", within_ms: 1500}
+  - screenshot: {id: randomizeRangePicker, name: randomize-range-redone}
+  - key: {keys: escape}
+  - wait: {}
+  # The piano roll's Scale assist panel.
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 120, y: 30, clicks: 2}
+  - wait: {}
+  - click: {id: pianoRollScaleChip}
+  - wait: {}
+  - expect: {id: scaleAssistRangePicker, showing: true, within_ms: 2000}
+  - expect: {id: scaleAssistRangePicker, title: "Note range, C2 to C5"}
+  - screenshot: {id: window, name: piano-roll-range-before}
+  - drag: {from: scaleAssistRangePicker, fromX: 124, fromY: 17, to: scaleAssistRangePicker, toX: 100, toY: 17}
+  - wait: {}
+  - getState: {id: scaleAssistRangePicker}
+  - screenshot: {id: window, name: piano-roll-range-dragged}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: scaleAssistRangePicker, title: "Note range, C2 to C5", within_ms: 1500}
+  - screenshot: {id: window, name: piano-roll-range-undone}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {id: scaleAssistRangePicker, title: "Note range, C2 to F4", within_ms: 1500}
+  - screenshot: {id: window, name: piano-roll-range-redone}

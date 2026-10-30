@@ -32,5 +32,5 @@ reads "Note range, C2 to C3".
 
 `setRange(lo, hi)` (does not notify), `getLow()`, `getHigh()`, `setScale(const MusicalScale*)` (copied; null or chromatic
 means every note), `setMiddleCOctave(int)` (4 in the piano roll, 3 in the step grid, so note names agree with each place),
-`onChange(lo, hi)` (user changes only). The pointer maths is pure, in `NoteRangeGeometry.h`; the shared note name is
+`onChange(lo, hi)` (every user change, live, for a preview) and `onGestureEnd(lo, hi)` (once when a drag ends with a different range than it began with, and once per key step that moved the range; never by `setRange`; the owner records one undo step here, so every keyboard step is one step too). The pointer maths is pure, in `NoteRangeGeometry.h`; the shared note name is
 `synth::noteNameWithOctave` in `Source/Music/NoteNames.h`.

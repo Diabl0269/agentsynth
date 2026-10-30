@@ -35,5 +35,6 @@ struct TimelineClipboardClip {
     std::vector<int> mutedPitches, soloPitches;
     std::optional<synth::MusicalScale> scale; // the piano roll's scale choice
     bool scaleVisible = false;
+    std::optional<std::pair<int, int>> noteRange; // the piano roll's saved note range
 };
 } // namespace synth::ui

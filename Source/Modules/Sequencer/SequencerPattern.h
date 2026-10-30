@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <juce_core/juce_core.h>
 #include <optional>
+#include <utility>
 
 namespace synth {
 
@@ -70,6 +71,9 @@ struct SequencerPattern {
     std::uint32_t seed = 0;
     std::uint16_t customMask = 0xFFF;
     juce::String customName;
+    /** The note range the Randomize panel shows (lowest, highest; 0..127, low <= high); nullopt = never moved, so the
+     *  panel seeds it from the key. Saved with the pattern so undo and reopening restore it. */
+    std::optional<std::pair<int, int>> noteRange;
 
     /** The factory pattern (steps 9..128 repeat steps 1..8); `seed` is left for the caller. */
     static SequencerPattern makeDefault(bool poly);

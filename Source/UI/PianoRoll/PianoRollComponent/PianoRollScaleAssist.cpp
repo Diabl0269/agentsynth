@@ -145,6 +145,9 @@ void PianoRollComponent::restoreScaleForOpenClip() {
     const auto resolved = resolvedKeyForOpenClip();
     scalePanel_.setSongKey(transport_ != nullptr ? transport_->getDocumentState().songKey : std::nullopt);
     scalePanel_.setSelection(resolved.key, isScaleFilterOn(), resolved.following);
+    // The saved range wins over the band's shift for a root change, so a song-key change never rewrites it.
+    const auto* clip = clipId_.isValid() && doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    scalePanel_.showClipRange(clip != nullptr ? clip->noteRange : std::nullopt);
     pushScaleContextFromClip();
 }
 
@@ -152,12 +155,19 @@ void PianoRollComponent::restoreScaleForOpenClip() {
 // changed and survives a restart) and as an undo step. It must be an undo step: every timeline undo
 // restores a whole-document snapshot, so a scale change made outside the undo stack would be
 // silently reverted by undoing an earlier note edit.
-void PianoRollComponent::commitClipScale(std::optional<synth::MusicalScale> scale, bool pitchVisibilityOn) {
+// `carryRange` (an own key was picked): a clip with a saved range gets the band as the panel shifted it for the new
+// root, inside this same step, so one undo restores key and range together. A clip with none stays without one.
+void PianoRollComponent::commitClipScale(std::optional<synth::MusicalScale> scale, bool pitchVisibilityOn,
+                                         bool carryRange) {
     if (doc_ == nullptr || !clipId_.isValid())
         return;
     const auto id = clipId_;
-    auto mutate = [this, id, scale = std::move(scale), pitchVisibilityOn] {
+    const std::pair<int, int> shown{scalePanel_.getMinPitchSelection(), scalePanel_.getMaxPitchSelection()};
+    auto mutate = [this, id, scale = std::move(scale), pitchVisibilityOn, carryRange, shown] {
         doc_->setClipScale(id, scale, pitchVisibilityOn);
+        const auto* clip = doc_->getClip(id);
+        if (carryRange && clip != nullptr && clip->noteRange.has_value())
+            doc_->setClipNoteRange(id, shown);
     };
     if (undoManager_)
         undoManager_->recordTimelineChange(*doc_, mutate);

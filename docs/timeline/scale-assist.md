@@ -137,6 +137,17 @@ and the roll's own scale context, rebuilding `visiblePitches_` against it; `refr
 same after an undo, but only when the panel disagrees with the clip (re-showing it also closes the
 custom-scale editor).
 
+## The note range is saved and undoable
+
+The band of the Note range picker is saved on the clip as `Clip::noteRange` (lowest and highest note), written as an
+optional `"noteRange": {"low", "high"}` next to `"scale"`; a project without it loads unchanged and shows C2 to C5 (moved
+to the key's root). Like the scale it is carried by duplicate, split and copy/paste and is not shared by linked clips.
+The picker's `onGestureEnd` reaches `PianoRollComponent::commitClipNoteRange()`: one drag, or one key step, is one undo
+step. `restoreScaleForOpenClip()` shows the saved range (or the defaults), and `refreshFromDoc()` re-shows it after an
+undo or redo. Picking an own key with a saved range writes the band as it moved for the new root inside the same undo
+step as the key, so one Cmd+Z gives back both; a clip with no saved range gets none. Following the song key, and a song
+key change while the clip follows it, write no range: a saved range stays where it was saved.
+
 ## Pitch-visibility row collapse
 
 `visiblePitches_` — the sorted, ascending list of every pitch that currently gets a drawn row — is

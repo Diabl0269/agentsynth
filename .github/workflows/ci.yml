@@ -230,6 +230,9 @@ jobs:
       # scripts/check-comment-provenance.sh's own doc comment and
       # docs/development/comment-provenance-guard.md for the full mechanism.
       run: bash scripts/check-comment-provenance.sh && bash scripts/check-fixed-waits.sh
+    - name: Check header reach
+      # Caps how many .cpp files include each header (strict ratchet, scripts/header-reach-baseline.txt); the self-test runs first.
+      run: bash scripts/tests/check-header-reach.test.sh && bash scripts/check-header-reach.sh
     - name: Test docs checker
       # A hole in the docs-integrity scanner (a mis-scanned exclusion, a regex that matches the
       # wrong `]`, a ratchet that doesn't actually ratchet) makes the link/section/naming/map
@@ -819,8 +822,7 @@ jobs:
           # GoogleTest's own summary line, e.g. "[==========] 1843 tests from 210 test suites
           # ran. (12345 ms total)" -- its absence, or a "0 tests" count, means the binary crashed
           # or the shard's slice of the split was empty, either of which a nonzero process exit
-          # code alone would not always catch (a segfault does; a hung/killed runner step might
-          # not surface as this shard's own exit code).
+          # code alone would not always catch (a segfault does; a hung/killed runner step might not).
           ran_count="$(grep -oE '^\[==========\] [0-9]+ tests? from' "$log" | grep -oE '[0-9]+' | head -1 || true)"
 
           if [ "$shard_rc" -ne 0 ]; then
@@ -833,6 +835,7 @@ jobs:
           fi
         done
 
+        [ "$overall_rc" -eq 0 ] || bash scripts/print-crash-report.sh
         exit "$overall_rc"
 
   build-and-test-windows:
