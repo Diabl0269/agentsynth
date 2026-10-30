@@ -35,12 +35,15 @@
 #   5c. scripts/check-fixed-waits.sh against the real tree -- the Lint job's "Check fixed-time
 #      waits" step: tests that pump the message loop for a fixed time and then assert, plus a
 #      strict ratchet baseline, run directly (not just its unit test).
+#   5d. scripts/check-header-reach.sh against the real tree -- the Lint job's "Check header reach"
+#      step: how many .cpp files reach each header, capped per header + strict ratchet baseline,
+#      run directly (not just its unit test).
 #   6. scripts/check-docs.sh against the real tree -- docs link/anchor/naming integrity: markdown
 #      link targets, docs/... path mentions, section (§) references, and the docs/ filename
 #      convention, run directly (not just its unit test). See that script's own doc comment.
 #   7. Every scripts/tests/*.test.sh -- ci-cache-check, ci-install-linux-deps,
 #      check-nonascii-literals, check-ui-caps, ai-eval-ratchet, utf8-literal-check, check-file-sizes,
-#      check-function-sizes, check-header-comments, check-comment-provenance, check-fixed-waits, check-docs as of this writing, globbed so a
+#      check-function-sizes, check-header-comments, check-comment-provenance, check-fixed-waits, check-header-reach, check-docs as of this writing, globbed so a
 #      newly added one is picked up automatically. check-nonascii-literals.test.sh's own last case
 #      scans the real Source/ tree, so this also covers the Lint job's ASCII-literal gate.
 #   8. Configure (-DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON, Release) and build EVERY target the
@@ -253,7 +256,7 @@ fi
 echo "ci-local: formatting OK."
 
 # --- 2-6. Guards against the real tree, together: they only read the tree -----------------------
-step "Guards: UTF-8 literals, file sizes, cache budget, function sizes, header comments, comment provenance, fixed waits, docs"
+step "Guards: UTF-8 literals, file sizes, cache budget, function sizes, header comments, comment provenance, fixed waits, header reach, docs"
 run_parallel "$CORES" \
     "utf8-literal-check::bash scripts/utf8-literal-check.sh" \
     "check-file-sizes::bash scripts/check-file-sizes.sh" \
@@ -262,6 +265,7 @@ run_parallel "$CORES" \
     "check-header-comments::bash scripts/check-header-comments.sh" \
     "check-comment-provenance::bash scripts/check-comment-provenance.sh" \
     "check-fixed-waits::bash scripts/check-fixed-waits.sh" \
+    "check-header-reach::bash scripts/check-header-reach.sh" \
     "check-docs::bash scripts/check-docs.sh" || fail "a guard failed (see above)."
 
 # --- 7. Every scripts/tests/*.test.sh ----------------------------------------------------------
