@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineTypes.h"
 #include "Timeline/TrackAudioInput.h"
 #include <atomic>
 #include <cmath>
@@ -11,6 +11,8 @@
 #include <vector>
 
 namespace synth {
+
+class TimelineDoc;
 
 // The audio thread's view of the timeline: a flat, immutable, allocation-free-to-read
 // projection of TimelineDoc.

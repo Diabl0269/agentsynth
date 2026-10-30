@@ -15,6 +15,7 @@
 #include "Modules/OscillatorModule.h"
 #include "Modules/PolyMidiModule.h"
 #include "Modules/VCAModule.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
 #include <iostream>
 #include <set>

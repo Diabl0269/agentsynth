@@ -4,8 +4,8 @@
 # so the entry tightens; once under the cap the entry is removed (--update does that).
 # Never add a NEW header here -- include it only where it is used instead.
 1293 Source/UI/Layout/ReducedMotion.h
-1289 Source/Music/MusicalScale.h
 1289 Source/UI/Layout/UIAnimation.h
+1287 Source/Music/MusicalScale.h
 1217 Source/UI/Theme/Theme.h
 1207 Source/Modules/Sequencer/SequencerLanes.h
 1206 Source/Modules/VisualBuffer.h
@@ -16,7 +16,7 @@
 1202 Source/Modules/ModuleOutputStage.h
 1202 Source/Modules/NoteInbox.h
 1202 Source/Modules/ParameterText.h
-1139 Source/Timeline/TimelineDoc/TimelineDoc.h
+1139 Source/Timeline/TimelineDoc/TimelineTypes.h
 1101 Source/UI/Theme/IconLibrary.h
 1099 Source/UI/Mixer/MixerMeterScale.h
 1099 Source/UI/Theme/KnobStyle.h
@@ -59,6 +59,7 @@
 776 Source/Timeline/TakeCaptureWriter.h
 772 Source/UI/Layout/SearchMatch.h
 770 Source/Mixer/PeakMeterLatch.h
+769 Source/Timeline/TimelineDoc/TimelineDoc.h
 763 Source/SoundBrowser/SoundPreviewPlayer.h
 761 Source/Modules/Shapes/ShapeLibrary.h
 753 Source/UI/Layout/NavigationSearchField.h
@@ -294,7 +295,7 @@
 361 Source/UI/Timeline/TimelinePanelComponent/TimelineTopBarKeys.h
 361 Source/UI/Timeline/TrackSelectionModel.h
 358 Source/Branding.h
-355 Source/UI/Library/ModuleLibraryHelpPopup.h
+356 Source/UI/Library/ModuleLibraryHelpPopup.h
 354 Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
 342 Source/UI/Layout/ControlMotion.h
 338 Source/MidiRemote/RemoteEngine/RemoteEvent.h

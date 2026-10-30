@@ -10,6 +10,7 @@
 #include "Modules/OscillatorModule.h"
 #include "Modules/PolyMidiModule.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 

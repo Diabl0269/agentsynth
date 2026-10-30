@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineTypes.h"
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -11,6 +11,8 @@
 class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
 
 namespace synth {
+
+class TimelineDoc;
 
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
 
