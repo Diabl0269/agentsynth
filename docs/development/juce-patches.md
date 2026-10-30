@@ -29,6 +29,9 @@ Two things bypass the patch step and must be kept in mind:
 
 - **CI caches.** The cached `build/_deps` holds the patched tree, so its key hashes the patch files and the
   apply script ([`ci-caching.md`](ci-caching.md)); the generation prefix was bumped when the patch was added.
+  Its `restore-keys` prefix can still restore an older entry whose tree carries a patch's previous revision, so
+  `ApplyJucePatch.cmake` resets that patch's own files to the pinned tag and applies it again (the patches touch
+  disjoint files; keep it that way).
 - **`FETCHCONTENT_SOURCE_DIR_JUCE`.** A source dir given on the command line skips the patch step.
   `scripts/ci-local.sh`'s worktree reuse therefore reuses the main checkout's JUCE only when it already carries
   the worktree's patches ([`local-ci.md`](local-ci.md)).
