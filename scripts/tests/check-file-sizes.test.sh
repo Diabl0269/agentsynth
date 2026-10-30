@@ -227,6 +227,7 @@ make_file "Big.cpp" 30
 commit_all
 mkdir -p "$REPO/scripts"
 cp "$CHECK" "$REPO/scripts/check-file-sizes.sh"   # deliberately NOT `git add`ed -- must not self-scan
+mkdir -p "$REPO/scripts/lib" && cp "$SCRIPT_DIR/scripts/lib/guard-cache.sh" "$REPO/scripts/lib/guard-cache.sh"
 set_baseline "30 Big.cpp"
 hook_output="$(cd "$REPO" && FILE_SIZE_CAP="$FILE_SIZE_CAP" FILE_SIZE_BASELINE="$BASELINE" GIT_DIR=.git bash scripts/check-file-sizes.sh 2>&1)"
 hook_status=$?
