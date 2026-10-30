@@ -56,12 +56,16 @@
 #       its own settings folder, temp folder and hard link of the binary, and holds one of the
 #       machine-wide test slots while it runs, so several gates at once overlap rather than queue.
 #
-# Speed: lint checks run in parallel; builds use half the cores (CI_LOCAL_JOBS); step 7 skips the script tests when nothing they read changed since
-# they last passed on this machine, except the ones that scan the real tree. Every step prints its
-# time and the run ends with a table.
+# Speed: lint checks run in parallel; builds use half the cores (CI_LOCAL_JOBS). Nothing that has not
+# changed runs twice (docs/development/local-ci.md, "What a gate skips"): the guards remember per-file
+# results by content (scripts/lib/guard-cache.sh), step 7 reruns a script test only when it, a file it
+# names or what those name changed since it last passed (scripts/lib/test-deps.py; the ones that scan
+# the real tree always run), and a whole gate that already passed on this exact tree returns at once.
+# Every step prints its time and the run ends with a table.
 #
-# --fast is the iteration mode, not a replacement for CI: clang-format on changed files only, the
-# Tests target only, and only the test suites the change can reach (scripts/lib/changed-tests.py).
+# --fast is the iteration mode, not a replacement for CI: clang-format on changed files only, no
+# guards and no script tests, the Tests target only, and only the test suites the change can reach
+# (scripts/lib/changed-tests.py).
 #
 # NOT reproduced here (deliberately -- see docs/development/local-ci.md): the Ubuntu coverage gate
 # (a separate opt-in, `bash scripts/coverage.sh`), the label-gated ASAN job, and actual
@@ -70,7 +74,8 @@
 # Usage:
 #   bash scripts/ci-local.sh [--fast] [--open] [--skip-tests] [-h|--help]
 #
-#   --fast        Check only what the change reaches, against origin/main; CI still runs the rest.
+#   --fast        Check only what the change reaches, against origin/main; skips the guards and
+#                 the script tests (the full gate and CI run them); CI still runs the rest.
 #   --open        After every check passes, `open` the built app bundle (macOS only). Default
 #                 off, since this also runs headless in the pre-push hook.
 #   --skip-tests  Skip step 10 (the full Tests suite, often the slowest step). Everything else
@@ -113,7 +118,8 @@ full mapping to what CI actually runs.
 
   --fast        Check only what the change reaches, against origin/main:
                 formatting of changed files, the Tests target, and the test
-                suites that include a changed file. CI runs the rest.
+                suites that include a changed file. Skips the guards and the
+                script tests; the full gate and CI run them.
   --open        After every check passes, `open` the built app bundle
                 (macOS only). Default off, since this also runs headless
                 in the pre-push hook.
@@ -184,6 +190,26 @@ STAMP_DIR="$STAMP_DIR/agentsynth-gate-stamps"
 mkdir -p "$STAMP_DIR"
 find "$STAMP_DIR" -type f -mtime +14 -delete 2>/dev/null || true
 
+# gate_key -- a hash of everything this gate's answer depends on: tracked content, uncommitted changes,
+# untracked files, the flags, and (for --fast) the base it diffs against.
+gate_key() {
+    {
+        git ls-files -s
+        git diff HEAD
+        git ls-files -o --exclude-standard | git hash-object --no-filters --stdin-paths | paste - <(git ls-files -o --exclude-standard)
+        printf 'flags fast=%s skip-tests=%s\n' "$FAST" "$SKIP_TESTS"
+        [ "$FAST" = true ] && git merge-base origin/main HEAD 2>/dev/null
+        clang-format --version 2>/dev/null
+    } | git hash-object --stdin
+}
+GATE_STAMP="$STAMP_DIR/gate-$(gate_key)"
+if [ -f "$GATE_STAMP" ] && [ "$OPEN_APP" = false ] && [ "${CI_LOCAL_FORCE:-0}" != 1 ]; then
+    echo "ci-local: this exact tree already passed this gate ($(cat "$GATE_STAMP")); nothing to run. CI_LOCAL_FORCE=1 runs it anyway."
+    APP_PATH="$( (find "$BUILD_DIR" -name "Agent Synth.app" -type d 2>/dev/null || true) | head -n 1)"
+    [ -n "$APP_PATH" ] && echo "App bundle: $APP_PATH"
+    exit 0
+fi
+
 # run_parallel <max> <label::command>... -- runs them together; a failure prints its log and fails the gate.
 run_parallel() {
     local max="$1" dir item i=0 rc=0 running=0
@@ -222,6 +248,12 @@ fail() {
     exit 1
 }
 
+# fast_skip <what> -- under --fast, says it skipped <what> and succeeds; otherwise fails, so `fast_skip x || run x` runs x.
+fast_skip() {
+    [ "$FAST" = true ] || return 1
+    echo "ci-local: --fast skips $1; the full gate and CI run them."
+}
+
 # --- 1. clang-format (check-only, pinned version) -------------------------------------------
 step "clang-format --dry-run --Werror (Source/ Tests/ Tools/)"
 
@@ -254,7 +286,7 @@ echo "ci-local: formatting OK."
 
 # --- 2-6. Guards against the real tree, together: they only read the tree -----------------------
 step "Guards: UTF-8 literals, file sizes, cache budget, function sizes, header comments, comment provenance, fixed waits, docs"
-run_parallel "$CORES" \
+fast_skip "the guards" || run_parallel "$CORES" \
     "utf8-literal-check::bash scripts/utf8-literal-check.sh" \
     "check-file-sizes::bash scripts/check-file-sizes.sh" \
     "ci-cache-budget::bash scripts/ci-cache-budget.sh" \
@@ -272,23 +304,33 @@ shopt -u nullglob
 if [ "${#test_scripts[@]}" -eq 0 ]; then
     fail "no scripts/tests/*.test.sh found -- expected at least ci-cache-check.test.sh etc."
 fi
-# These scan the real tree, so they answer a new question on every run. The rest test scripts against
-# fixtures, so the same scripts give the same answer: they are skipped when these paths are unchanged
-# since they last passed on this machine. CI's Lint job always runs them all.
+# These scan the real tree, so they answer a new question on every run. Every other test checks a script
+# against fixtures: it gives the same answer until its own file, a file it names, or what those name
+# changes (scripts/lib/test-deps.py; an empty key means the mapping is in doubt, so the test runs). A pass
+# leaves a stamp keyed by that hash. CI's Lint job always runs them all.
 tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q"
-scripts_key="$(content_key scripts .github/workflows .clang-format .clang-format-version cmake/ApplyJucePatch.cmake cmake/patches Tests/CMakeLists.txt)"
-scripts_stamp="$STAMP_DIR/script-tests-$scripts_key"
 to_run=()
-for t in "${test_scripts[@]}"; do
-    name="$(basename "$t" .test.sh)"
-    case " $tree_scanning " in
-        *" $name "*) to_run+=("$name::bash $t") ;;
-        *) [ -f "$scripts_stamp" ] || to_run+=("$name::bash $t") ;;
-    esac
-done
-[ -f "$scripts_stamp" ] && echo "ci-local: scripts unchanged since they last passed; running only the tests that scan the real tree."
-run_parallel "$CORES" "${to_run[@]}" || fail "a script test failed (see above)."
-touch "$scripts_stamp"
+if ! fast_skip "the script self-tests"; then
+    dep_keys="$(python3 scripts/lib/test-deps.py --root "$REPO_ROOT" "${test_scripts[@]}" 2>/dev/null || true)"
+    for t in "${test_scripts[@]}"; do
+        name="$(basename "$t" .test.sh)"
+        key="$(awk -F'\t' -v n="$name" '$1 == n { print $2 }' <<<"$dep_keys")"
+        stamp="$STAMP_DIR/script-test-$name-$key"
+        case " $tree_scanning " in
+            *" $name "*) to_run+=("$name::bash $t") ;;
+            *)
+                if [ -n "$key" ] && [ -f "$stamp" ]; then
+                    echo "ci-local: $name unchanged since it last passed, skipped."
+                else
+                    to_run+=("$name::bash $t${key:+ && touch \"$stamp\"}")
+                fi
+                ;;
+        esac
+    done
+    if [ "${#to_run[@]}" -gt 0 ]; then
+        run_parallel "$CORES" "${to_run[@]}" || fail "a script test failed (see above)."
+    fi
+fi
 
 # --- 8. Configure + build every target the CI build-and-test jobs build -----------------------
 step "Configure ($BUILD_DIR)"
@@ -456,8 +498,9 @@ fi
 # --- Done: point at a build the user can actually launch ---------------------------------------
 end_step
 printf '\n=== Time per step ===\n%s%6s s  total\n' "$STEP_TIMES" "$(($(date +%s) - RUN_START))"
-[ "$FAST" = true ] && echo "ci-local: --fast passed; CI still runs every test and target."
+[ "$FAST" = true ] && echo "ci-local: --fast passed; the full gate and CI still run the guards, the script tests, every test and every target."
 step "All checks passed"
+echo "passed $(date '+%Y-%m-%d %H:%M')" >"$GATE_STAMP"
 
 if [ -n "$APP_PATH" ]; then
     echo "App bundle: $APP_PATH"
