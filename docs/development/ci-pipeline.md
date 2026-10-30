@@ -211,7 +211,7 @@ Groups come from a file's folder and a hash of its name, so a new file changes o
 rather than shifting every later one. About 2,230 compiles become about 680.
 
 A clash shows up as a redefinition or ambiguity error on Windows only: usually two files in a group with the
-same name in an anonymous namespace. Rename it, or add the file to `cmake/UnityExclusions.cmake` (202 files today).
+same name in an anonymous namespace. Rename it, or add the file to `cmake/UnityExclusions.cmake` (203 files today).
 To try it on any machine: configure with `-DAGENTSYNTH_UNITY=ON` and build Core, AppUI and Tests.
 
 ## What did not work
