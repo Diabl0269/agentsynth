@@ -455,6 +455,7 @@ private:
     /** The phases of every unison voice of one stack: the state a ghost keeps running. */
     struct UnisonStack {
         UnisonOsc oscs[MAX_UNISON];
+        float baseDt = 0.0f; ///< the pitch (phase increment before detune) the stack ran at; 0 = the current one
     };
 
     struct VoiceState {
@@ -462,7 +463,8 @@ private:
         /** The stacks of phases from before a restart, running out over CROSSFADE_SAMPLES while the restarted stack
             comes in. */
         synth::RestartGhosts<UnisonStack, kMaxGhosts> ghosts;
-        bool active = false; ///< poly: was this voice sounding last block?
+        float lastBaseDt = 0.0f; ///< the pitch the previous sample rendered at, which a ghost keeps running at
+        bool active = false;     ///< poly: was this voice sounding last block?
         juce::SmoothedValue<float> smoothedFreq;
         synth::PitchGlide glide;
         GateEdges gateEdges; ///< this block's rising Gate edges, each a note that restarts the phases
@@ -600,10 +602,10 @@ private:
     };
 
     /** Weighted sum of one stack at sample `i` of the block, advancing every phase. Not yet normalised. */
-    StackSample sumStack(UnisonOsc* oscs, const StackContext& c, int i) const {
+    StackSample sumStack(UnisonOsc* oscs, const StackContext& c, int i, float baseDt) const {
         StackSample s;
         for (int u = 0; u < c.count; ++u) {
-            const float uniDt = c.baseDt * c.ratio[u];
+            const float uniDt = baseDt * c.ratio[u];
             float g;
             if (c.waveformAlpha > 0.0f) {
                 g = generateSample(c.fadingFromWaveform, oscs[u].phase, uniDt, c.pulseWidth) * c.waveformAlpha +
@@ -623,14 +625,17 @@ private:
 
     /** One normalised sample of `voice`'s stack, blending in the run-out phases after a restart. */
     StackSample renderStack(VoiceState& voice, const StackContext& c, int i) const {
-        StackSample s = sumStack(voice.unisonOscs, c, i);
+        StackSample s = sumStack(voice.unisonOscs, c, i, c.baseDt);
+        voice.lastBaseDt = c.baseDt;
         if (voice.ghosts.count > 0) {
             // Each ghost leaves along its own raised cosine; the current stack takes whatever share they give up.
             float ghostTotal = 0.0f;
             StackSample mixed;
             for (int g = 0; g < voice.ghosts.count; ++g) {
                 auto& ghost = voice.ghosts.items[g];
-                const StackSample old = sumStack(ghost.state.oscs, c, i);
+                // A ghost is the previous note's tail, so it keeps that note's pitch instead of taking the new one.
+                const StackSample old =
+                    sumStack(ghost.state.oscs, c, i, ghost.state.baseDt > 0.0f ? ghost.state.baseDt : c.baseDt);
                 const float w = synth::RestartGhosts<UnisonStack, kMaxGhosts>::share(ghost);
                 mixed.left += old.left * w;
                 mixed.right += old.right * w;

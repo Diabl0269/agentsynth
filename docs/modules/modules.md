@@ -327,7 +327,7 @@ Two more MIDI instruments with eight voices of their own, built like the Drum Ki
   pinned at 1.0 between Attack finishing and Decay starting, default 0 s (no hold).
 - **Curves**: `attackCurve` (default -0.3), `decayCurve` (default 0.65), `releaseCurve` (default
   0.65), each -1..+1. `0` is linear; `> 0` is fast-first/slow-tail (the natural decay/release
-  shape); `< 0` is slow-first/fast-finish. Exact endpoints hold for every curve amount:
+  shape); `< 0` is slow-first/fast-finish. The attack's top is rounded (`EnvelopeGenerator::attackShape`): the last ~6% of level, or the last 1.5 ms when that is shorter in time and never more than half the stage, lands on 1 with a zero slope, joined to the curve at the same level and slope, so a fast attack ends without a corner (a corner is a tick); the stage time and the curve before the landing are unchanged, and a curve `> 0` already ends flat. Exact endpoints hold for every curve amount:
   `shape(0, c) == 0`, `shape(1, c) == 1`. Not exposed to the AI few-shot examples.
 - **Times retired their minimum clamps (FRO110)**: `attack`/`hold`/`decay`/`release` move to a
   **linear** `NormalisableRange(0.0, 5.0)` — the parameter's own minimum is genuinely 0 s (an
@@ -349,7 +349,7 @@ Two more MIDI instruments with eight voices of their own, built like the Drum Ki
   wave along a raised cosine with no corner (`Source/Modules/RestartFade.h`, see
   [oscillator-voice](oscillator-voice.md#phase-and-rand)), a track mute fades a hosted plug-in like any other
   module, and `SourceClickGuard` (`Tests/Engine/AudioRendering/SourceClickGuardTests.cpp`) plays every
-  registered sound source through an ADSR and VCA and fails on any second-difference spike at a note start or end. It plays the Oscillator and Wavetable at Phase 0, 90, 250 and 274. `TimelineClickGuard` (`Tests/Engine/AudioRendering/TimelineClickGuardTests.cpp`) plays Track In -> Poly MIDI -> Oscillator -> ADSR -> VCA through the transport for four loop passes, with a clip starting in bar 2 and a note held across the loop end, and lists every tick per note and pass; setting `AGENTSYNTH_REAL_PROJECT_DIR` to the folder holding `FRO848 test.agsproj` and `legato-quircks.agsproj` makes it render those and list their ticks per mixer strip.
+  registered sound source through an ADSR and VCA and fails on any second-difference spike at a note start or end. It plays the Oscillator and Wavetable at Phase 0, 90, 250 and 274. `TimelineClickGuard` (`Tests/Engine/AudioRendering/TimelineClickGuardTests.cpp`) plays Track In -> Poly MIDI -> Oscillator -> ADSR -> VCA through the transport for four loop passes, with a clip starting in bar 2 and a note held across the loop end, and lists every tick per note and pass; setting `AGENTSYNTH_REAL_PROJECT_DIR` to the folder holding `FRO848 test.agsproj` and `legato-quircks.agsproj` makes it render those and list their ticks per mixer strip. `TimelineClickGuardAttack` plays sixteen consecutive pitches (200 ms long, 300 ms apart, 1 ms attack) and fails on any tick above 0.015 of the peak, and on any tick 1.2-1.8 ms after a touching note's start (the previous note's hand-over tail).
   The knob feel at the new 1 ms attack default lives on the **slider**, not the parameter: the
   0.3 skew that used to sit on these four `NormalisableRange`s now lives purely in the UI layer
   (the card body's ADSR special case, `applyAdsrTimeSkew` in `CardBody.cpp`, runs on the four time

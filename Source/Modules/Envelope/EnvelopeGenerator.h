@@ -103,7 +103,8 @@ public:
                 progress_ = time <= 0.0f ? 1.0f : std::min(1.0f, progress_ + static_cast<float>(sampleDt_ / time));
 
                 const float target = stageTarget(params);
-                const float shaped = shape(progress_, stageCurve(params));
+                const float shaped = stage_ == EnvelopeStage::Attack ? attackShape(progress_, params.attackCurve, time)
+                                                                     : shape(progress_, stageCurve(params));
                 currentLevel_ = stageStart_ + (target - stageStart_) * shaped;
 
                 if (progress_ >= 1.0f) {
@@ -143,7 +144,39 @@ public:
         return std::pow(p, n);
     }
 
+    /** The attack's shape: `shape(p, c)` with its top rounded off, so the attack lands on 1 with a
+     *  zero slope instead of a corner (a bent-in-the-last-sample ramp is a tick on a fast attack).
+     *  The landing covers the last ~6% of level, or the last 1.5 ms when that is shorter in time,
+     *  and never more than the second half of the stage; it joins the curve with the same level
+     *  and slope, so the stage's duration and the curve before the landing are unchanged. A
+     *  curve with `c > 0` already ends flat and is returned as is. `attackShape(0) == 0` and
+     *  `attackShape(1) == 1` exactly.
+     */
+    static float attackShape(float p, float c, float stageSeconds) noexcept {
+        if (c > 0.0f || p >= 1.0f)
+            return shape(p, c);
+        const float n = 1.0f + 4.0f * std::abs(c);
+        const float landingFraction = std::min(0.5f, kAttackLandingSeconds / std::max(stageSeconds, 1.0e-6f));
+        const float levelStart = std::exp(std::log(1.0f - kAttackLandingLevel) / n); // shape(levelStart) = 0.94
+        const float start = std::min(levelStart, 1.0f - landingFraction);
+        if (p <= start)
+            return shape(p, c);
+
+        const float h = 1.0f - start;
+        const float y0 = std::pow(start, n);
+        const float rise = 1.0f - y0;
+        // Entry slope of the curve per unit progress, capped so the landing never overshoots 1.
+        const float m0h = std::min(n * std::pow(start, n - 1.0f) * h, 3.0f * rise);
+        const float t = (p - start) / h;
+        const float t2 = t * t;
+        const float t3 = t2 * t;
+        return (2.0f * t3 - 3.0f * t2 + 1.0f) * y0 + (t3 - 2.0f * t2 + t) * m0h + (3.0f * t2 - 2.0f * t3);
+    }
+
 private:
+    static constexpr float kAttackLandingLevel = 0.06f;
+    static constexpr float kAttackLandingSeconds = 0.0015f;
+
     static EnvelopeStage nextStage(EnvelopeStage current) noexcept {
         switch (current) {
         case EnvelopeStage::Attack:

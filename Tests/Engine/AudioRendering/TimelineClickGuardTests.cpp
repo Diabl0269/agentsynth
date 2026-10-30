@@ -105,6 +105,9 @@ std::vector<std::string> tlClickLines(const std::string& label, const std::vecto
 
 void tlSetParam(juce::AudioProcessor& p, const char* id, float value) { setParamValue(&p, id, value); }
 
+// Click sizes are given relative to the signal peak, so they read as a fraction of the sound's level.
+constexpr float kTlMaxRelativeClick = 0.015f;
+
 enum class TlStage { Source, AfterEnvelope };
 
 struct TlCase {
@@ -154,6 +157,7 @@ struct TlChain {
             tlSetParam(proc, "poly", 1.0f);
         }
         tlSetParam(*adsr->getProcessor(), "attack", 0.001f);
+        tlSetParam(*adsr->getProcessor(), "decay", 0.0f);
         tlSetParam(*adsr->getProcessor(), "release", 0.015f);
         tlSetParam(*adsr->getProcessor(), "sustain", 1.0f);
         tlSetParam(*vca->getProcessor(), "gain", 0.5f);
@@ -176,7 +180,11 @@ struct TlChain {
 
         const auto trackId = doc.addTrack(synth::TrackKind::Midi, "Track 1");
         doc.setTrackBinding(trackId, kTlTrackUuid);
-        for (const double clipStart : {0.0, 4.0}) {
+        std::vector<double> clipStarts;
+        for (const auto& n : notes)
+            if (std::find(clipStarts.begin(), clipStarts.end(), n.clipStart) == clipStarts.end())
+                clipStarts.push_back(n.clipStart);
+        for (const double clipStart : clipStarts) {
             const auto clip = doc.addClip(trackId, clipStart, 4.0, "Clip");
             for (const auto& n : notes) {
                 if (n.clipStart != clipStart)
@@ -206,7 +214,7 @@ std::string tlCaseName(const TlCase& c) {
 class TimelineClickGuard : public ::testing::TestWithParam<TlCase> {};
 
 // Regression test for FRO1228: a timeline note start ticked on the first pass and on later passes because the
-// voice's pitch was still sliding while the envelope's attack began.
+// voice's pitch was still sliding while the envelope's attack began, and the attack ended in a corner.
 TEST_P(TimelineClickGuard, EveryNoteEdgeOfEveryPassIsClean) {
     const auto c = GetParam();
     const auto notes = tlNotes();
@@ -244,13 +252,15 @@ TEST_P(TimelineClickGuard, EveryNoteEdgeOfEveryPassIsClean) {
                   << std::endl;
         return;
     }
-    // What remains on a sine are the envelope's own corners (the end of a 1 ms attack, which lands 2.5 ms after the
-    // note starts because the gate is smoothed) and a small kink where a retriggered voice restarts. The case is
-    // skipped while it clicks and fails once it is clean, so the entry is removed then.
-    if (!lines.empty())
-        GTEST_SKIP() << "known clicks (envelope attack/release corners, retrigger restart): " << lines.size()
-                     << ", first: " << lines.front();
-    FAIL() << tlCaseName(c) << " no longer clicks; make this case a hard check";
+    // The raw oscillator has no envelope, so a sine from it never ticks. After the VCA the only things left are the
+    // envelope's own release corner and a retrigger kink, which stay under the limit.
+    if (c.stage == TlStage::Source) {
+        EXPECT_TRUE(lines.empty()) << lines.size() << " clicks, first: " << lines.front();
+        return;
+    }
+    for (const auto& click : clickdetector::findClicks(out))
+        EXPECT_LE(click.size / peak, kTlMaxRelativeClick)
+            << tlCaseName(c) << " sample " << click.index << " relative size " << click.size / peak;
 }
 
 namespace {
@@ -271,6 +281,85 @@ INSTANTIATE_TEST_SUITE_P(EveryChain, TimelineClickGuard, ::testing::ValuesIn(tlC
                              std::replace(s.begin(), s.end(), ' ', '_');
                              return s;
                          });
+
+namespace {
+
+// Sixteen consecutive pitches (MIDI 60-75), each 200 ms long, 300 ms apart, as notes of timeline clips.
+std::vector<TlNote> tlSixteenPitchNotes() {
+    std::vector<TlNote> notes;
+    for (int i = 0; i < 16; ++i) {
+        const double startBeat = i * 0.6; // 300 ms at 120 bpm
+        const double clipStart = std::floor(startBeat / 4.0) * 4.0;
+        notes.push_back({clipStart, startBeat - clipStart, 0.4, 60 + i});
+    }
+    return notes;
+}
+
+// Plays `chain` once from the start (no loop) for `samples` samples and returns the left channel.
+std::vector<float> tlPlayOnce(TlChain& chain, int samples) {
+    std::vector<float> out;
+    if (!chain.driver->getTransport().play())
+        return out;
+    chain.driver->streamBlocks(samples / kTlBlock + 1,
+                               [&](const juce::AudioBuffer<float>& b, const synth::BlockTimeInfo&) {
+                                   out.insert(out.end(), b.getReadPointer(0), b.getReadPointer(0) + b.getNumSamples());
+                               });
+    out.resize((size_t)samples);
+    return out;
+}
+
+float tlPeak(const std::vector<float>& x) {
+    float peak = 0.0f;
+    for (float v : x)
+        peak = std::max(peak, std::abs(v));
+    return peak;
+}
+
+} // namespace
+
+// Regression test for FRO1228: a 1 ms attack ended in a corner that ticked on most notes (12 of 16 flagged, 0.02-0.05
+// of the peak). The attack now lands softly, so no note start or end of a sine ticks above 0.015 of its peak, at any
+// phase the oscillator can start in.
+TEST(TimelineClickGuardAttack, SixteenPitchesNeverTickAboveTheLimit) {
+    const auto notes = tlSixteenPitchNotes();
+    int total = 0;
+    for (const float phase : {0.0f, 90.0f, 250.0f, 274.0f}) {
+        TlChain chain;
+        ASSERT_TRUE(chain.build({phase, 1, 0, TlStage::AfterEnvelope}, notes));
+        const auto out = tlPlayOnce(chain, (int)(16 * 0.6 * kTlSamplesPerBeat) + 24000);
+        const float peak = tlPeak(out);
+        ASSERT_GT(peak, 0.05f) << "phase " << phase << " played nothing";
+        const auto found = clickdetector::findClicks(out);
+        std::cout << "[attack] phase " << phase << ": " << found.size() << " clicks" << std::endl;
+        total += (int)found.size();
+        for (const auto& c : found)
+            EXPECT_LE(c.size / peak, kTlMaxRelativeClick) << "phase " << phase << " sample " << c.index
+                                                          << " relative size " << c.size / peak << " ratio " << c.ratio;
+    }
+    std::cout << "[attack] total flagged " << total << std::endl;
+}
+
+// Regression test for FRO1228: after a note retriggered on the same voice, the tail of the previous note's restart
+// hand-over took the new pitch for a moment, a small tick about 1.5 ms into the new note. The tail now keeps the old
+// pitch, so nothing ticks in the window after each touching note's start.
+TEST(TimelineClickGuardAttack, NoTickShortlyAfterARetrigger) {
+    const auto notes = tlNotes();
+    constexpr int kLoopSamples = (int)(8.0 * kTlSamplesPerBeat);
+    TlChain chain;
+    ASSERT_TRUE(chain.build({0.0f, 1, 0, TlStage::AfterEnvelope}, notes));
+    const auto out = tlPlayOnce(chain, kLoopSamples);
+    const auto spans = tlSpans(notes, 8.0);
+    const auto found = clickdetector::findClicks(out);
+    for (size_t i = 1; i < spans.size(); ++i) {
+        if (spans[i].start != spans[i - 1].end)
+            continue; // not touching, so no retrigger hand-over
+        for (const auto& c : found) {
+            const double ms = (c.index - spans[i].start) * 1000.0 / kTlRate;
+            EXPECT_FALSE(ms >= 1.2 && ms <= 1.8)
+                << "note " << i << " ticked " << ms << " ms after its start, size " << c.size / tlPeak(out);
+        }
+    }
+}
 
 // A note starts at its own pitch. A fresh voice steps to it on the note's own sample (it never slides in from
 // 0 Hz). A voice that sounded before changes pitch on the sample its gate rises, never earlier (the tail of its
