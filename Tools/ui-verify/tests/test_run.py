@@ -147,6 +147,27 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual([c for c in app.calls if c[0] == "key"], [("key", {"keys": "a"}), ("key", {"keys": "b"})])
         self.assertTrue(app.stopped)
 
+    def test_type_sends_a_space_as_the_space_key(self):
+        app = FakeApp({})
+        (ok, _), _ = self.run_steps("- type: {text: a b}\n", app)
+        self.assertTrue(ok)
+        self.assertEqual([c[1]["keys"] for c in app.calls if c[0] == "key"], ["a", "space", "b"])
+
+    def test_settings_fill_in_the_fixtures_folder(self):
+        app = FakeApp({})
+        with tempfile.TemporaryDirectory() as out:
+            scenario = run.parse_scenario("settings:\n  folder: \"${FIXTURES}/sounds\"\nsteps:\n  - wait: {}\n", "demo")
+            runner = run.Runner(None, out, scenario, app_factory=lambda *a, **k: app)
+            written = {}
+            real_launch = runner._launch
+            def launch():
+                with open(os.path.join(runner.settings_dir, run.SETTINGS_FILE)) as f:
+                    written["xml"] = f.read()
+                real_launch()
+            runner._launch = launch
+            runner.run()
+        self.assertIn(os.path.join(run.FIXTURES, "sounds"), written["xml"])
+
     def test_a_failed_expect_stops_the_scenario_and_is_named(self):
         app = FakeApp({"c": {"selected": False}})
         (ok, message), log = self.run_steps("- expect: {id: c, selected: true, within_ms: 0}\n- click: {id: c}\n", app)

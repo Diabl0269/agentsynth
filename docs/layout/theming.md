@@ -274,8 +274,20 @@ opaque with `surface` laid over it, so a translucent surface (Neon's glass) neve
 show through. `PopupMotion::launchDialog` sets it on every dialog unless the caller chose a colour (JUCE's default
 light grey showed through the shape window's grow and shrink), `DetachedPanelWindow` on every detached panel, and
 content that fills its whole window (the shape window's `ShapeListEditor`) paints it and is opaque. Each one updates
-on a theme switch (`lookAndFeelChanged`). `ShapeWindowThemeTests` checks every built-in theme; with
-`AGENTSYNTH_WRITE_THEME_PNG` set it also writes one PNG per theme to `build-ci-local/theme-sweep/` under the working
+on a theme switch (`lookAndFeelChanged`). `ShapeWindowThemeTests` checks every built-in theme.
+
+**Theme sweep guard.** `Tests/UI/Theme/ThemeSweep/` renders every dialog, the detached panel window, the alert box,
+every module card and the main shell in each built-in theme and checks that the probe pixels in their background areas
+are opaque, are not one of JUCE's default window colours and differ between Daylight and the other themes (so a
+hard-coded colour shows), and that every visible, enabled Label, TextButton, ToggleButton and ComboBox draws its text
+at 4.5:1 or better over the background rendered behind it (disabled controls are exempt). Cards need nothing from you:
+the sweep walks every key of the module factory, so a new module type joins at once. A dialog or window is found by
+scanning `Source` for `PopupMotion::launchDialog(` and `DocumentWindow(`: a new call site fails
+`ThemeSweep.EveryDialogCallSiteIsRegistered` until it gets a line in `ThemeSweepSurfaces.cpp` (an opener that builds the
+same content with the same options as the call site, or an exemption with a reason). Findings that are known and
+ticketed sit in `kKnownGaps` in `ThemeSweepTests.cpp`; the list is shrink-only: a new finding fails, and so does an
+entry that no longer fails ("fixed - remove it from kKnownGaps"). With `AGENTSYNTH_WRITE_THEME_PNG` set the sweep (and
+`ShapeWindowThemeTests`) also writes one PNG per surface and theme to `build-ci-local/theme-sweep/` under the working
 directory.
 
 **Colour fallbacks go through `themeOf`.** A control with no `AppLookAndFeel` above it (a headless

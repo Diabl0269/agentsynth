@@ -3,8 +3,12 @@
 // keyboard step, a snapped step or an undo moves things by a discrete jump.
 //
 // The owner must outlive it, adds offsetFor(key) to a thing's resting place when it paints (drawnAt), and is
-// repainted by it (the union of where the moving things were and are, through onDirty when set). Plain (no offsets at
-// all) under Reduce Motion, Animations Off or a hidden owner. Message thread only.
+// repainted by it: the WHOLE owner on every frame, retarget, clear, fade step and erase, because an owner's paint
+// usually depends on more than the moving thing's own box (a curve drawn through the tweened points, a halo, a line
+// to a neighbour) and a box-only repaint leaves stale pixels. An owner that paints strictly inside each
+// moving thing's own box opts into the tight repaint (the union of where the moving things were and are, plus padding)
+// with repaintOnlyAround(). onDirty, when set, takes the request instead of the owner's repaint. Plain (no offsets
+// at all) under Reduce Motion, Animations Off or a hidden owner. Message thread only.
 #pragma once
 
 #include "UI/Layout/UIAnimation.h"
@@ -15,6 +19,11 @@
 #include <vector>
 
 namespace synth::ui {
+
+/** Tests: told about every repaint a KeyedTween asks for (the owner, and the area in the owner's coordinates; a full
+ *  repaint reports owner.getLocalBounds()). Empty by default. */
+using KeyedTweenDirtyProbe = std::function<void(juce::Component& owner, juce::Rectangle<int> area)>;
+void setKeyedTweenDirtyProbeForTest(KeyedTweenDirtyProbe probe);
 
 /** Arithmetic a tweened value type needs: offsets are differences that scale toward zero. */
 template <typename T>
@@ -66,10 +75,15 @@ public:
     bool isFading() const noexcept { return !fading_.empty(); }
     bool isAnimating() const noexcept { return !entries_.empty() || !fading_.empty(); }
 
-    /** Asked to repaint instead of the owner's own repaint(rect); may be null. */
+    /** Asked to repaint instead of the owner's own repaint; may be null. Gets the area the tween would repaint (the
+     *  owner's whole bounds unless repaintOnlyAround was called). */
     std::function<void(juce::Rectangle<int>)> onDirty;
-    /** How far past a moving point's centre the dirty rectangle reaches, in pixels. */
-    void setPaddingPx(int px) noexcept { paddingPx_ = px; }
+    /** Opt-in tight repaint: only the box of the moving things plus `paddingPx` around it. Only for an owner whose
+     *  paint of a moving thing stays inside that thing's own box plus the padding; the default is the whole owner. */
+    void repaintOnlyAround(int paddingPx) noexcept {
+        tightRepaint_ = true;
+        paddingPx_ = paddingPx;
+    }
 
     /** Tests: animate as if the owner were on screen, step the clock like AnimationDriver::stepForTest, or land. */
     void forceAnimateForTest(bool force) noexcept { forceAnimateForTest_ = force; }
@@ -95,11 +109,13 @@ private:
     void startRun();
     void onFrame(float eased);
     void repaintAround(const std::vector<T>& values);
+    void requestRepaint(juce::Rectangle<int> area);
     std::vector<T> drawnValues() const;
 
     juce::Component& owner_;
     std::map<Key, Entry> entries_;
     float eased_ = 0.0f;
+    bool tightRepaint_ = false;
     int paddingPx_ = 12;
     bool forceAnimateForTest_ = false;
     juce::VBlankAnimatorUpdater vblank_;

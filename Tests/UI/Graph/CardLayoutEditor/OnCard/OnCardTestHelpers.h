@@ -81,6 +81,44 @@ private:
     juce::Point<int> at_;
 };
 
+/** One press-drag-release on a group's title row, in the overlay's coordinates (the handle moves with the drag, so
+ *  every event is relative to its current bounds, as a window would deliver them). */
+class GroupPointer {
+public:
+    GroupPointer(CardLayoutOnCardEditor& editor, const juce::String& sectionId)
+        : handle_(*editor.getGroupHandleForTest(sectionId))
+        , at_(handle_.getPosition() + handle_.getTitleRowArea().getCentre()) {
+        handle_.mouseDown(event(juce::ModifierKeys::leftButtonModifier));
+    }
+
+    /** Moves the pointer by `by` in steps, with the left button down. */
+    void moveBy(juce::Point<int> by) {
+        const auto from = at_;
+        for (int step = 1; step <= 4; ++step) {
+            at_ = from + juce::Point<int>(by.x * step / 4, by.y * step / 4);
+            handle_.mouseDrag(event(juce::ModifierKeys::leftButtonModifier));
+        }
+    }
+
+    void release() { handle_.mouseUp(event(0)); }
+
+private:
+    juce::MouseEvent event(int mods) {
+        return cardbody_test::mouseAt(handle_, (at_ - handle_.getPosition()).toFloat(), juce::ModifierKeys(mods));
+    }
+
+    synth::ui::CardLayoutGroupHandle& handle_;
+    juce::Point<int> at_;
+};
+
+/** The ids of `layout`'s sections, top to bottom. */
+inline juce::StringArray sectionIds(const synth::CardLayout& layout) {
+    juce::StringArray ids;
+    for (const auto& section : layout.sections)
+        ids.add(section.id);
+    return ids;
+}
+
 /** The item for `paramId` in the stored layout, or null. */
 inline const synth::CardParamItem* storedItem(const synth::CardLayout& layout, const juce::String& paramId) {
     for (const auto& section : layout.sections)

@@ -14,6 +14,7 @@ inline constexpr double kTapPixels = 4.0;        // a time step with snap off, a
 
 inline constexpr double kTimeStartBeatsPerSecond = 1.0;
 inline constexpr double kTimeMaxBeatsPerSecond = 16.0;
+inline constexpr double kSnappedStepSeconds = 0.25; // a snapped hold starts at one grid step per this long
 inline constexpr double kValueStartRangePerSecond = 0.15;
 inline constexpr double kValueMaxRangePerSecond = 1.2;
 inline constexpr double kValueShiftSpeedFactor = 3.0;

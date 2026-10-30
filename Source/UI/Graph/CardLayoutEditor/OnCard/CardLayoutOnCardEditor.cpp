@@ -58,6 +58,15 @@ CardLayoutOnCardEditor::CardLayoutOnCardEditor(GraphEditor& editor, ::AppUndoMan
     addChildComponent(timeTempo_);
     hideZone_.setVisible(false);
     addChildComponent(hideZone_);
+    renameLabel_.setComponentID("layoutGroupRename");
+    renameLabel_.setEditable(false, false, false); // opened by showEditor() from a handle, never by a click
+    renameLabel_.setJustificationType(juce::Justification::centredLeft);
+    renameLabel_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+    renameLabel_.setWantsKeyboardFocus(false);
+    renameLabel_.setTitle("Group name");
+    renameLabel_.onEditorHide = [this] { renameLabel_.setVisible(false); };
+    renameLabel_.onTextChange = [this] { commitRename(renameLabel_.getText()); };
+    addChildComponent(renameLabel_);
 }
 
 // Ending the session without Done or Cancel (the owner let go of it) keeps the layout, as Done does.
@@ -144,6 +153,9 @@ void CardLayoutOnCardEditor::syncToCard() {
         attachTo(*card);
     dropHideProxy();
     drag_ = {};
+    groupDrag_ = {};
+    groupSession_.discard();
+    cancelRename();
     guides_.clear();
     refreshTimeTempo();
     setBounds(overlayBoundsFor(card->getBounds()));
@@ -151,10 +163,12 @@ void CardLayoutOnCardEditor::syncToCard() {
     refreshHomes();
     watchTabs(*card);
     reconcileOutlines();
+    reconcileGroupHandles();
     toFront(false);
     repaint();
     refreshPanel();
     refreshAddPanel();
+    rememberGroupShapes();
     rememberCardImage();
 }
 
@@ -182,16 +196,18 @@ void CardLayoutOnCardEditor::syncAfterOutsideChange() {
         glideFrame_ = nullptr;
     }
     const auto before = cells_;
+    const auto shapesBefore = groupShapes_;
     const auto beforeImage = cardImage_;
     syncToCard();
     if (closed_)
         return;
-    animateRestore(before, beforeImage, rebuilt);
+    animateRestore(before, shapesBefore, beforeImage, rebuilt);
     followCard();
 }
 
-void CardLayoutOnCardEditor::animateRestore(const std::vector<OnCardCell>& before, const juce::Image& beforeImage,
-                                            bool rebuilt) {
+void CardLayoutOnCardEditor::animateRestore(const std::vector<OnCardCell>& before,
+                                            const std::map<juce::String, juce::Rectangle<int>>& shapesBefore,
+                                            const juce::Image& beforeImage, bool rebuilt) {
     if (!canAnimate())
         return;
     const auto rectBefore = [&before](const juce::String& key) -> const OnCardCell* {
@@ -209,6 +225,10 @@ void CardLayoutOnCardEditor::animateRestore(const std::vector<OnCardCell>& befor
         else if (was->rect != cell.rect)
             moves.push_back({cell.key, was->rect, cell.rect, 160.0, false});
     }
+    // A group's title (with its outline) and views glide with the group's controls.
+    for (const auto& [key, rect] : shapesBefore)
+        if (const auto now = groupShapes_.find(key); now != groupShapes_.end() && now->second != rect)
+            moves.push_back({key, rect, now->second, 160.0, false});
     startGlide(std::move(moves));
     if (!rebuilt)
         return;
@@ -315,6 +335,9 @@ void CardLayoutOnCardEditor::close(bool keep) {
     hideZone_.setVisible(false);
     dropHideProxy();
     drag_ = {};
+    groupDrag_ = {};
+    groupSession_.discard();
+    cancelRename();
     guides_.clear();
     if (keep) {
         flushNudge();

@@ -1,5 +1,5 @@
 # Moving and duplicating points from the keyboard (docs/layout/animation.md#motion-rules, docs/control/point-editing.md):
-# the shared point model both point editors run on (PointEditing/: selection, group move, clipboard, keys), the shared
+# the shared point model both point editors run on (PointEditing/: selection, box select, group move, clipboard, keys), the shared
 # glide model, the hold's frame glue, the eased drawn offsets, the keyboard drags of the automation lane and
 # the curve editor, where Cmd+D puts the copies, and the units that glide moved things back on undo and redo
 # (RestoreWatch and the per-surface RestoreGlide files). Appended to APPUI_SOURCES (cmake/AppUISources.cmake is at the
@@ -17,7 +17,10 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/PointEditing/PointSelectionModel.h
     Source/UI/Layout/PointEditing/PointSelectionModel.cpp
     Source/UI/Layout/PointEditing/PointGroupMove.h
+    Source/UI/Layout/PointEditing/PointBoxSelect.h
+    Source/UI/Layout/PointEditing/PointBoxSelect.cpp
     Source/UI/Layout/PointEditing/PointGroupMove.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorBoxSelect.cpp
     Source/UI/Layout/PointEditing/PointClipboard.h
     Source/UI/Layout/PointEditing/PointEditorKeys.h
     Source/UI/Layout/PointEditorDuplicate.h

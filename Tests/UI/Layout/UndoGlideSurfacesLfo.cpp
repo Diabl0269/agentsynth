@@ -58,6 +58,7 @@ public:
     bool gliding() const override { return curve_->getPointTweenForTest().isAnimating(); }
     void stepTo(double elapsedMs) override { curve_->getPointTweenForTest().stepForTest(elapsedMs); }
     float alpha() const override { return curve_->getPointTweenForTest().alphaFor(kNode); }
+    juce::Component* paintedComponent() override { return curve_; }
 
 private:
     synth::ui::CurveEditorGeometry geometry() const {

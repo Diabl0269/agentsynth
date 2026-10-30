@@ -242,6 +242,7 @@ void SoundBrowserComponent::applyFiltersChanged() {
 void SoundBrowserComponent::setSongKey(const juce::String& key) {
     filters_.setSongKey(key);
     applyFiltersChanged();
+    refreshMatchKeyHint();
 }
 
 void SoundBrowserComponent::completeFilterMotionForTest() {

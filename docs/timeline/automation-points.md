@@ -54,20 +54,28 @@ not touched until the key goes up: release (or focus lost) commits ONCE through 
 hold are one undo step and the committed points are exactly the last preview; Escape cancels with no edit. A press
 whose key is not physically down (a synthesised event, an assistive tool) is one committed step, as before.
 
+The hold reads all four arrows each frame and runs one glide per axis, so holding an arrow of the other axis as well
+(Alt+Right, then Up) moves time and value together; that axis steps its tap at once and glides from its own start
+speed, and letting either key go leaves the other moving alone. The hold, both keys included, ends and commits when
+the last arrow goes up. Left/Right join a hold only with Alt down (a plain Left/Right picks a point). While a hold
+runs, every arrow press is swallowed: the frames read the keys.
+
 | | Tap | Hold starts at | Hold cap | Modifiers |
 |---|---|---|---|---|
 | Time | one grid step; four pixels at the current zoom with snap off | 1 beat/s | 16 beats/s | Alt+Shift (one point): a quarter |
 | Value | 1% of the range | 0.15 of the range per second | 1.2 per second | Shift: a 10% tap, hold three times as fast; Alt+Shift: a quarter |
 
 With snap off a hold is continuous. With snap on a time hold is the continuous distance cut into whole grid steps, so
-the points jump from grid line to grid line. Alt+Shift with two or more points still stretches
+the points jump from grid line to grid line; its start speed is one grid step per quarter second (a one-bar grid steps
+about four times a second) and the cap grows by the same factor, but never below the free speeds above, so fine grids
+are unchanged. The curve editor does the same with its grid cell. Alt+Shift with two or more points still stretches
 ([below](#stretching-a-selection)).
 
 **Easing.** A discrete jump of the drawn points (the tap, a snapped step, a one-step key press) is final in the doc
 or the preview at once; the drawn dots trail it by an offset that eases to zero over 160 ms `easeOutCubic`
 (`KeyedPointTween`, keyed by the point's beat, an `AnimationDriver` that stops when settled). A new jump retargets
 from where the dot is drawn, and the offsets carry across the commit at release. Under Reduce Motion or Animations
-Off, or off screen, nothing eases (a hold still moves). The stretch box follows the drawn dots, and so does the line (`AutomationLaneEditor::tweenedPoints` feeds the kernel the moved points, so it meets every dot). Undo and redo of a move use the same tween: when a restore keeps the point count and changes beats or values, `AutomationLaneEditor::glideRestoredPoints` matches old to new by order and glides each dot back ([undo-glide.md](../layout/undo-glide.md)); a pure add or remove stays `LanePointGlide`'s.
+Off, or off screen, nothing eases (a hold still moves). The stretch box and the keyboard focus ring follow the drawn dots (during a drag, a hold and any glide, `AutomationLaneEditorDrawnPoints.cpp`), and so does the line (`AutomationLaneEditor::tweenedPoints` feeds the kernel the moved points, so it meets every dot). Undo and redo of a move use the same tween: when a restore keeps the point count and changes beats or values, `AutomationLaneEditor::glideRestoredPoints` matches old to new by order and glides each dot back ([undo-glide.md](../layout/undo-glide.md)); a pure add or remove stays `LanePointGlide`'s.
 
 Each point is reachable from the keyboard, following the shared map in [`control/point-editing.md`](../control/point-editing.md): Tab into the editor, Left/Right walk the points
 (nothing moves in time), Shift+Left/Right add the next point past the selection on that side (the cursor moves there),

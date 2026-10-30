@@ -33,7 +33,7 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
                "Shift+Left/Right select several, Up/Down change the value, Alt+arrows move the selection "
                "(Alt+Shift: finely), Ctrl+T inserts a point after the current one");
     selection_.onChange = [this] { selectionChanged(); };
-    keyHold_.speedFactor = [this] { return keyDragSpeedFactor(); };
+    keyHold_.speedFactor = [this](KeyAxis axis) { return keyDragSpeedFactor(axis); };
     keyHold_.onFrame = [this] { applyKeyDrag(false); };
     keyHold_.onEnd = [this] { endKeyDrag(); };
     refreshDescription();
@@ -277,20 +277,7 @@ void AutomationLaneEditor::paint(juce::Graphics& g) {
     selection_.paintMarquee(g);
     paintStretchBox(g);
     bubble_.paint(g);
-    if (hasKeyboardFocus(false)) {
-        const auto cursor = selection_.getCursor();
-        const auto* points = lanePoints();
-        const LaneBreakpoint* focused = nullptr;
-        if (cursor.has_value() && points != nullptr)
-            for (const auto& bp : *points)
-                if (bp.beat == *cursor)
-                    focused = &bp;
-        const auto area = focused != nullptr ? juce::Rectangle<float>((float)viewState_.beatToX(focused->beat),
-                                                                      (float)valueToY(focused->value), 0.0f, 0.0f)
-                                                   .expanded(kHandleRadiusPx + 2.0f)
-                                             : getLocalBounds().toFloat();
-        paintFocusRing(g, area, *this, focused != nullptr ? area.getWidth() / 2.0f : 0.0f);
-    }
+    paintKeyboardCursorRing(g);
 }
 
 void AutomationLaneEditor::paintGridBackdrop(juce::Graphics& g) {
@@ -421,18 +408,7 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
         erase = juce::Colours::red;
     }
 
-    std::map<double, LaneBreakpoint> moved; // the grabbed points where the drag has put them
-    if (dragMode_ == DragMode::MoveHandle) {
-        const auto now = dragMovedPoints();
-        for (std::size_t i = 0; i < dragPoints_.size(); ++i)
-            moved[dragPoints_[i].beat] = now[i];
-    } else if (dragMode_ == DragMode::Stretch) {
-        const auto& result = stretch_.result();
-        for (std::size_t i = 0; i < result.moved.size(); ++i)
-            moved[stretch_.original()[i].beat] = result.moved[i];
-        for (std::size_t i = 0; i < result.pushed.size(); ++i)
-            moved[result.pushedFrom[i]] = result.pushed[i];
-    }
+    const auto moved = movedPointsByRestingBeat();
     const auto drawDot = [&](float x, float y, juce::Colour fill, float presence) {
         const float r = kHandleRadiusPx * (0.5f + 0.5f * presence);
         g.setColour(fill.withMultipliedAlpha(presence));
@@ -446,25 +422,16 @@ void AutomationLaneEditor::paintHandles(juce::Graphics& g, const synth::Automati
     const auto visible = visibleHandleMask(handleScreenPositions(lane), kHandleRadiusPx * 4.0f);
     for (std::size_t i = 0; i < lane.points.size(); ++i) {
         const auto& bp = lane.points[i];
-        double beat = bp.beat;
-        double value = bp.value;
-        bool active = false;
-        if (const auto it = moved.find(bp.beat); it != moved.end()) {
-            beat = it->second.beat;
-            value = it->second.value;
-            active = true;
-        } else if (dragMode_ == DragMode::TensionScrub && bp.beat == tensionSegLeftBeat_) {
-            active = true;
-        }
+        const bool active =
+            moved.count(bp.beat) > 0 || (dragMode_ == DragMode::TensionScrub && bp.beat == tensionSegLeftBeat_);
 
         const bool erased = dragMode_ == DragMode::Eraser && erasedBeats_.count(bp.beat) > 0;
         const bool hovered = hoveredBeat_ == bp.beat;
         const bool selected = selection_.contains(bp.beat);
         if (!visible[i] && !active && !erased && !hovered && !selected)
             continue;
-        const auto eased = pointTween_.offsetFor(lane_key::tweenKey(bp.beat));
-        drawDot((float)viewState_.beatToX(beat) + eased.x, (float)valueToY(value) + eased.y,
-                erased ? erase : (active || selected ? accent : normal),
+        const auto at = drawnPointPosition(bp, moved);
+        drawDot(at.x, at.y, erased ? erase : (active || selected ? accent : normal),
                 glide_.presence(bp.beat) * pointTween_.alphaFor(lane_key::tweenKey(bp.beat)));
     }
     for (const auto& gone : glide_.leaving()) // removed points shrink and fade out where they were

@@ -313,7 +313,7 @@ style. The logic is in `CurveEditorSelection.cpp` (selection, group move, remove
 `CurveEditorClipboard.cpp` (copy, paste, duplicate).
 
 A step is one grid cell while snap-to-grid is on (the LFO card) and otherwise a fiftieth of the
-visible time range (a twentieth of the level range). A key move goes through the same
+visible time range and a fiftieth of the level range. A key move goes through the same
 rules a drag does: it honours `xMovable` / `yMovable`, runs `onNodeChanged` (once per moved point) /
 `onPointsChanged`, and is wrapped in exactly one `onGestureStart` / `onGestureEnd`, so the envelope
 and LFO cards record one undo step per press, whatever the number of points. A press that changes
@@ -413,7 +413,8 @@ rule](animation.md#the-time-bounded-animation-rule).
 records the target with no gesture opened yet, since a plain click that never becomes a drag would
 otherwise push an empty undo step; `mouseDrag` opens the gesture on its first call; `mouseUp` closes
 it. Double-click adds (Free mode, empty space), removes (Free mode, a node), or resets a bend handle
-to 0 (either mode).
+to 0 (either mode). A press on empty space (no node, no handle) is a box select, not a gesture: no undo step
+opens (`CurveEditorBoxSelect.cpp`, [`point-editing.md`](../control/point-editing.md#mouse)).
 
 ## MorphMap
 

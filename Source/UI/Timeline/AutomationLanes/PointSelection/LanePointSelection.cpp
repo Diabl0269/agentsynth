@@ -1,6 +1,5 @@
 #include "LanePointSelection.h"
 #include "UI/Layout/PointEditing/PointGroupMove.h"
-#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <limits>
 #include <set>
@@ -8,7 +7,8 @@
 namespace synth::ui {
 
 LanePointSelection::LanePointSelection(juce::Component& owner)
-    : owner_(owner) {}
+    : owner_(owner)
+    , box_(owner) {}
 
 void LanePointSelection::notify() {
     owner_.repaint();
@@ -112,78 +112,30 @@ juce::Rectangle<float> LanePointSelection::boundingBox(const std::vector<LaneBre
 }
 
 //==============================================================================
-// A plain press on empty space cannot be told from the start of a box, so it only arms; the first drag turns it
-// into a box that replaces the selection, the release without one deselects. Shift, Cmd and Ctrl start the box at
-// once and keep what was selected.
+// The gesture itself is the shared PointBoxSelect; the lane supplies the beats inside the box.
 void LanePointSelection::pressEmpty(juce::Point<int> pos, bool additive) {
-    anchor_ = pos;
-    if (additive)
-        beginBox(pos, true);
-    else
-        pendingEmptyClick_ = true;
-}
-
-void LanePointSelection::beginBox(juce::Point<int> anchor, bool additive) {
-    pendingEmptyClick_ = false;
-    boxActive_ = true;
-    anchor_ = anchor;
-    box_ = {};
-    boxBase_ = additive ? model_.selected() : std::vector<double>{};
+    box_.press(pos, additive, model_.selected());
 }
 
 bool LanePointSelection::dragTo(juce::Point<int> pos, const std::vector<LaneBreakpoint>& lane,
                                 const LanePointMapper& map) {
-    if (pendingEmptyClick_)
-        beginBox(anchor_, false);
-    if (!boxActive_)
+    const auto next = box_.dragTo(pos, [&](juce::Rectangle<float> r) { return beatsInBox(lane, map, r); });
+    if (!next)
         return false;
-
-    const auto previous = box_;
-    box_ = juce::Rectangle<int>::leftTopRightBottom(std::min(anchor_.x, pos.x), std::min(anchor_.y, pos.y),
-                                                    std::max(anchor_.x, pos.x), std::max(anchor_.y, pos.y));
-    std::vector<double> next = boxBase_;
-    for (double beat : beatsInBox(lane, map, box_.toFloat()))
-        next.push_back(beat);
-    setSelection(next);
-    owner_.repaint(previous.getUnion(box_).expanded(2));
+    setSelection(*next);
     return true;
 }
 
 bool LanePointSelection::release() {
-    if (boxActive_) {
-        boxActive_ = false;
-        owner_.repaint(box_.expanded(2));
-        box_ = {};
-        return true;
-    }
-    if (pendingEmptyClick_) {
-        pendingEmptyClick_ = false;
+    const auto ended = box_.release();
+    if (ended == PointBoxGesture::Release::click)
         clear();
-        return true;
-    }
-    return false;
+    return ended != PointBoxGesture::Release::none;
 }
 
-void LanePointSelection::cancelGesture() {
-    pendingEmptyClick_ = false;
-    if (boxActive_) {
-        boxActive_ = false;
-        owner_.repaint(box_.expanded(2));
-        box_ = {};
-    }
-}
+void LanePointSelection::cancelGesture() { box_.cancel(); }
 
-void LanePointSelection::paintMarquee(juce::Graphics& g) const {
-    if (!boxActive_ || box_.isEmpty())
-        return;
-    juce::Colour accent = juce::Colours::yellow;
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&owner_.getLookAndFeel()))
-        accent = lf->getTheme().colors.accent;
-    g.setColour(accent.withAlpha(0.14f));
-    g.fillRect(box_);
-    g.setColour(accent.withAlpha(0.8f));
-    g.drawRect(box_, 1);
-}
+void LanePointSelection::paintMarquee(juce::Graphics& g) const { box_.paintMarquee(g); }
 
 //==============================================================================
 // A lane has no end and its block may pass unselected points (a move onto a point's beat replaces it), so the only

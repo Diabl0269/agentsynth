@@ -4,6 +4,7 @@
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
 #include "Modules/SamplerModule.h"
+#include "SoundBrowser/LoopStretchFile.h"
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -27,8 +28,10 @@ ModuleComponent* selectedSamplerCard(GraphEditor& editor) {
 
 // The first target that fits wins: the selected Sampler (replaces its sample in one undo step), the selected audio
 // track (a clip at the playhead), else a new Sampler in the middle of the visible canvas. An .sfz is an instrument:
-// only the Sampler and the canvas take it.
-void MainComponentAudioImport::loadSoundFromBrowser(MainComponent& mc, const juce::File& sound) {
+// only the Sampler and the canvas take it. A loop lands on the track fitted to the song's tempo (and key, with Match
+// key on) exactly as a drop on the track does; the Sampler and the canvas take the file as it is.
+void MainComponentAudioImport::loadSoundFromBrowser(MainComponent& mc, const juce::File& sound,
+                                                    const synth::soundbrowser::LoopTarget& loop) {
     juce::String message;
     if (auto* card = selectedSamplerCard(mc.graphEditor)) {
         card->filesDropped({sound.getFullPathName()}, 0, 0);
@@ -37,7 +40,7 @@ void MainComponentAudioImport::loadSoundFromBrowser(MainComponent& mc, const juc
                track != nullptr && track->kind == synth::TrackKind::Audio && synth::ui::isAudioSound(sound)) {
         const double playhead = std::max(0.0, mc.audioEngine.getTransport().getPositionSnapshot().ppq);
         const auto clipsBefore = track->clips.size();
-        mc.importAudioFileToClip(track->id, playhead, sound);
+        mc.importAudioFileToClip(track->id, playhead, synth::soundbrowser::stretchedLoopFile(sound, loop));
         const auto* after = mc.timelineDoc.getTrack(track->id);
         if (after != nullptr && after->clips.size() > clipsBefore)
             message = "Added " + sound.getFileName() + " to " + after->name + " at the playhead";

@@ -28,7 +28,6 @@ MorphMap::MorphMap() {
     setDescription("Shapes placed on a map; the cursor blends the shapes around it");
     setWantsKeyboardFocus(true);
     glideHost_ = makeDefaultGlideHost();
-    moveTween_.onDirty = [this](juce::Rectangle<int>) { repaint(); };
     cursorStop_ = std::make_unique<Stop>(*this, -1);
     addAndMakeVisible(*cursorStop_);
     cursorStop_->setExplicitFocusOrder(1000);
@@ -38,6 +37,11 @@ MorphMap::MorphMap() {
         addAndMakeVisible(*stripStops_[a]);
     }
     refreshStopNames();
+    // An undo or redo glide moves the drawn dots: their keyboard stops (and focus rings) ride with them every frame.
+    moveTween_.onDirty = [this](juce::Rectangle<int>) {
+        layoutStops();
+        repaint();
+    };
 }
 
 MorphMap::~MorphMap() {
@@ -179,10 +183,12 @@ void MorphMap::rebuildStops() {
         takeFocus(wanted > 0 ? *dotStops_.back() : static_cast<juce::Component&>(*this));
 }
 
+// Each stop sits where its dot or the cursor is drawn, so the focus ring is on the dot while an undo glide runs. A
+// glide dropped by a count change lays out before rebuildStops(): only the stops that still have a dot move.
 void MorphMap::layoutStops() {
-    for (int i = 0; i < (int)dotStops_.size(); ++i)
-        dotStops_[(size_t)i]->setCentrePosition(getDotCentre(i).roundToInt());
-    cursorStop_->setCentrePosition(getCursorCentre().roundToInt());
+    for (int i = 0; i < (int)std::min(dotStops_.size(), dots_.size()); ++i)
+        dotStops_[(size_t)i]->setCentrePosition(toPixels(getDrawnDot(i).x, getDrawnDot(i).y).roundToInt());
+    cursorStop_->setCentrePosition(toPixels(getDrawnCursor().x, getDrawnCursor().y).roundToInt());
     stripStops_[0]->setBounds(getStripBounds(Axis::X).expanded(2.0f).toNearestInt());
     stripStops_[1]->setBounds(getStripBounds(Axis::Y).expanded(2.0f).toNearestInt());
 }

@@ -127,3 +127,38 @@ TEST(KeyedPointTween, AnimationsOffLandsARestoreWithoutAFade) {
     EXPECT_FALSE(tween.isAnimating());
     EXPECT_FLOAT_EQ(tween.alphaFor(1), 1.0f);
 }
+
+namespace {
+struct DirtyRecorder {
+    DirtyRecorder() {
+        synth::ui::setKeyedTweenDirtyProbeForTest(
+            [this](juce::Component&, juce::Rectangle<int> a) { areas.push_back(a); });
+    }
+    ~DirtyRecorder() { synth::ui::setKeyedTweenDirtyProbeForTest({}); }
+    std::vector<juce::Rectangle<int>> areas;
+};
+} // namespace
+
+// Regression test for FRO1197: a box-only repaint left stale pixels for owners that paint more than the moving dot.
+TEST(KeyedPointTween, EveryRepaintItAsksForIsTheWholeOwnerByDefault) {
+    Rig r;
+    r.owner.setSize(300, 200);
+    DirtyRecorder dirty;
+    r.tween.retarget(1, {10.0f, 10.0f}, {20.0f, 20.0f});
+    r.tween.stepForTest(40.0);
+    r.tween.retarget(2, {250.0f, 150.0f}, {260.0f, 160.0f});
+    r.tween.clear();
+    ASSERT_FALSE(dirty.areas.empty());
+    for (const auto& a : dirty.areas)
+        EXPECT_EQ(a, r.owner.getLocalBounds());
+}
+
+TEST(KeyedPointTween, AnOwnerThatOptsInRepaintsOnlyTheMovingBoxPlusPadding) {
+    Rig r;
+    r.owner.setSize(300, 200);
+    r.tween.repaintOnlyAround(5);
+    DirtyRecorder dirty;
+    r.tween.retarget(1, {10.0f, 10.0f}, {20.0f, 30.0f});
+    ASSERT_FALSE(dirty.areas.empty());
+    EXPECT_EQ(dirty.areas.front(), juce::Rectangle<int>(5, 5, 20, 30));
+}
