@@ -1,0 +1,38 @@
+# The Drum Kit card's pads: the Pads stepper grows the grid, a click plays a pad and picks it, and Shift+click picks a
+# pad without playing it.
+#
+# What a user does:
+#   1. Starts a new project and adds a Drum Kit from the library (Cmd+F).
+#   2. Presses the Pads "+" twice (8 -> 16 pads).
+#   3. Clicks pad 5 (the open hat): it plays and is picked.
+#   4. Shift+clicks pad 6: it is picked, the open hat stays the last pad played, and the caption says so.
+# The pad centres below are for the 280 px card: pads 61 px wide with 4 px gaps, 44 px tall up to 16 pads.
+# Test mode has no audio device, so "played" is the pad the grid sent to the kit (auditionedPad); the sound itself is
+# covered by DrumKitPadsTests.
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: drum kit}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPads", padCount: 8, pickedPad: 1}
+  - click: {id: "card:Drum Kit > Pads up"}
+  - wait: {}
+  - click: {id: "card:Drum Kit > Pads up"}
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", padCount: 16, within_ms: 1500}
+  - click: {id: "card:Drum Kit > drumPads", x: 30, y: 70}          # pad 5: second row, first column
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 5, auditionedPad: 5, within_ms: 1500}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 70, mods: [shift]}   # pad 6, quietly
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 6, auditionedPad: 5, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPadsCaption", contains: {text: "picked (no sound)"}}
+  - screenshot: {id: "card:Drum Kit", name: drum-kit-pads-16}

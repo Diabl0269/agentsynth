@@ -667,6 +667,7 @@ include(cmake/AppUISources.cmake) # APPUI_SOURCES, split out for the 1,000-line 
 include(cmake/ShapeWindowSources.cmake)
 add_library(AppUI STATIC ${APPUI_SOURCES})
 include(cmake/MixerRowSources.cmake)
+include(cmake/DrumKitPadsSources.cmake)
 include(cmake/AudioInputRecordingSources.cmake) # Core and AppUI units, so after both exist
 include(cmake/ClipEdgeSizingSources.cmake)       # Core and AppUI units, so after both exist
 include(cmake/TestModeSources.cmake)             # AppUI units and the app target's flag, so after both exist

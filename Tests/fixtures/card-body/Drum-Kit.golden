@@ -1,69 +1,22 @@
-type Drum Kit size 280x439
+type Drum Kit size 280x553
   child 0 component id="" at 0,0 0x0 visible=0 title="Oscilloscope" tip="Oscilloscope: the module's output waveform" focusOrder=0 wantsFocus=0
-  child 1 toggle id="" at 12,399 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
+  child 1 toggle id="" at 12,513 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 3 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 4 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
-  child 6 button id="" at 12,93 256x24 visible=1 title="Instrument, synth drums" tip="Choose an instrument (Enter)" focusOrder=0 wantsFocus=1
-  child 7 label id="" at 12,121 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 textButton id="drumKitDrumMachineButton" at 12,141 256x24 visible=1 title="Drum machine" tip="No track plays this Drum Kit. Add a track and connect it to this kit to use the drum machine." focusOrder=0 wantsFocus=0
-  child 9 knob id="Kick level" at 12,307 85x58 visible=1 title="Kick level" tip="Kick level" focusOrder=0 wantsFocus=1
-  child 10 label id="" at 12,289 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 11 knob id="Kick tune" at 97,307 85x58 visible=1 title="Kick tune" tip="Kick tune" focusOrder=0 wantsFocus=1
-  child 12 label id="" at 97,289 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 13 knob id="Kick decay" at 182,307 85x58 visible=1 title="Kick decay" tip="Kick decay" focusOrder=0 wantsFocus=1
-  child 14 label id="" at 182,289 85x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 15 knob id="Snare level" at 0,0 0x0 visible=0 title="Snare level" tip="Snare level" focusOrder=0 wantsFocus=1
-  child 16 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 17 knob id="Snare tune" at 0,0 0x0 visible=0 title="Snare tune" tip="Snare tune" focusOrder=0 wantsFocus=1
-  child 18 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 19 knob id="Snare decay" at 0,0 0x0 visible=0 title="Snare decay" tip="Snare decay" focusOrder=0 wantsFocus=1
-  child 20 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 21 knob id="Clap level" at 0,0 0x0 visible=0 title="Clap level" tip="Clap level" focusOrder=0 wantsFocus=1
-  child 22 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 23 knob id="Clap tune" at 0,0 0x0 visible=0 title="Clap tune" tip="Clap tune" focusOrder=0 wantsFocus=1
-  child 24 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 25 knob id="Clap decay" at 0,0 0x0 visible=0 title="Clap decay" tip="Clap decay" focusOrder=0 wantsFocus=1
-  child 26 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 27 knob id="Hat level" at 0,0 0x0 visible=0 title="Hat level" tip="Hat level" focusOrder=0 wantsFocus=1
-  child 28 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 29 knob id="Hat tune" at 0,0 0x0 visible=0 title="Hat tune" tip="Hat tune" focusOrder=0 wantsFocus=1
-  child 30 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 31 knob id="Closed decay" at 0,0 0x0 visible=0 title="Closed decay" tip="Closed decay" focusOrder=0 wantsFocus=1
-  child 32 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 33 knob id="Open decay" at 0,0 0x0 visible=0 title="Open decay" tip="Open decay" focusOrder=0 wantsFocus=1
-  child 34 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 35 knob id="Tom level" at 0,0 0x0 visible=0 title="Tom level" tip="Tom level" focusOrder=0 wantsFocus=1
-  child 36 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 37 knob id="Tom tune" at 0,0 0x0 visible=0 title="Tom tune" tip="Tom tune" focusOrder=0 wantsFocus=1
-  child 38 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 39 knob id="Tom decay" at 0,0 0x0 visible=0 title="Tom decay" tip="Tom decay" focusOrder=0 wantsFocus=1
-  child 40 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 41 knob id="Cymbal level" at 0,0 0x0 visible=0 title="Cymbal level" tip="Cymbal level" focusOrder=0 wantsFocus=1
-  child 42 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 43 knob id="Cymbal tune" at 0,0 0x0 visible=0 title="Cymbal tune" tip="Cymbal tune" focusOrder=0 wantsFocus=1
-  child 44 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 45 knob id="Cymbal decay" at 0,0 0x0 visible=0 title="Cymbal decay" tip="Cymbal decay" focusOrder=0 wantsFocus=1
-  child 46 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 47 knob id="Cowbell level" at 0,0 0x0 visible=0 title="Cowbell level" tip="Cowbell level" focusOrder=0 wantsFocus=1
-  child 48 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 49 knob id="Cowbell tune" at 0,0 0x0 visible=0 title="Cowbell tune" tip="Cowbell tune" focusOrder=0 wantsFocus=1
-  child 50 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 51 knob id="Cowbell decay" at 0,0 0x0 visible=0 title="Cowbell decay" tip="Cowbell decay" focusOrder=0 wantsFocus=1
-  child 52 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 53 knob id="Level" at 12,191 256x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
-  child 54 label id="" at 12,173 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 55 toggle id="Kick recorded" at 12,365 256x24 visible=0 title="Kick recorded" tip="Kick recorded" focusOrder=0 wantsFocus=1
-  child 56 toggle id="Snare recorded" at 0,0 0x0 visible=0 title="Snare recorded" tip="Snare recorded" focusOrder=0 wantsFocus=1
-  child 57 toggle id="Clap recorded" at 0,0 0x0 visible=0 title="Clap recorded" tip="Clap recorded" focusOrder=0 wantsFocus=1
-  child 58 toggle id="Hat recorded" at 0,0 0x0 visible=0 title="Hat recorded" tip="Hat recorded" focusOrder=0 wantsFocus=1
-  child 59 toggle id="Tom recorded" at 0,0 0x0 visible=0 title="Tom recorded" tip="Tom recorded" focusOrder=0 wantsFocus=1
-  child 60 toggle id="Cymbal recorded" at 0,0 0x0 visible=0 title="Cymbal recorded" tip="Cymbal recorded" focusOrder=0 wantsFocus=1
-  child 61 toggle id="Cowbell recorded" at 0,0 0x0 visible=0 title="Cowbell recorded" tip="Cowbell recorded" focusOrder=0 wantsFocus=1
-  child 62 component id="cardTabStrip" at 12,257 256x24 visible=1 title="Control tabs" tip="Pages of this card's controls: Left and Right switch between them" focusOrder=0 wantsFocus=1
-  child 63 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
-  child 64 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
-  child 65 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
+  child 6 textButton id="drumKitDrumMachineButton" at 12,141 256x24 visible=1 title="Drum machine" tip="No track plays this Drum Kit. Add a track and connect it to this kit to use the drum machine." focusOrder=0 wantsFocus=0
+  child 7 label id="" at 12,249 152x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 8 component id="drumPadCount" at 164,249 104x24 visible=1 title="Pads, 8 of 32 maximum" tip="How many pads the card shows. Hidden pads keep their sounds." focusOrder=0 wantsFocus=0
+  child 9 component id="drumPads" at 12,279 256x92 visible=1 title="Drum pads" tip="" focusOrder=0 wantsFocus=1
+  child 10 label id="drumPadsCaption" at 12,375 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 11 component id="drumPadControls" at 12,399 256x98 visible=1 title="Kick controls" tip="" focusOrder=0 wantsFocus=0
+  child 12 button id="" at 12,93 256x24 visible=1 title="Instrument, synth drums" tip="Choose an instrument (Enter)" focusOrder=0 wantsFocus=1
+  child 13 label id="" at 12,121 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 14 knob id="Level" at 12,191 256x58 visible=1 title="Level" tip="Level" focusOrder=0 wantsFocus=1
+  child 15 label id="" at 12,173 256x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
+  child 16 component id="" at 4,32 12x12 visible=1 title="Midi input" tip="" focusOrder=0 wantsFocus=0
+  child 17 component id="" at 264,52 12x12 visible=1 title="Audio L output" tip="" focusOrder=0 wantsFocus=0
+  child 18 component id="" at 264,72 12x12 visible=1 title="Audio R output" tip="" focusOrder=0 wantsFocus=0
   out 0 270, 58
   out 1 270, 78

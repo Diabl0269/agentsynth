@@ -22,12 +22,15 @@ public:
         std::function<void()> kitChanged;           ///< Called when the loaded instrument changed (may be empty).
         std::function<bool()> drumMachineAvailable; ///< Drum Kit: does a track play it? (empty: no)
         std::function<void()> openDrumMachine;      ///< Drum Kit: the "Drum machine" button was pressed.
+        std::function<void()> relayout;             ///< The chrome's height changed: lay the card out again.
     };
 
     virtual ~InstrumentChrome() = default;
 
     /** Places the chrome from `y` (the card's content origin) and returns the y below it. */
     virtual int layout(int y, int contentX, int contentW, int narrowX, int narrowW, bool apply) = 0;
+    /** Places what the chrome shows under the card's body controls from `y`; returns the y below it. */
+    virtual int layoutBelowBody(int y, int /*contentX*/, int /*contentW*/, bool /*apply*/) { return y; }
     /** The card's gated tick. */
     virtual void poll() = 0;
     /** Re-reads the module (after a project's deferred loads landed). */

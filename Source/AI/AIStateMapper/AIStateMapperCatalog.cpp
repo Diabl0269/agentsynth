@@ -61,7 +61,7 @@ juce::var parameterEntry(juce::RangedAudioParameter& p, ModuleBase* module) {
 juce::var parameterList(juce::AudioProcessor& processor) {
     juce::Array<juce::var> params;
     for (auto* param : processor.getParameters())
-        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
+        if (auto* ranged = detail::modelVisibleParam(processor, param))
             params.add(parameterEntry(*ranged, dynamic_cast<ModuleBase*>(&processor)));
     return juce::var(params);
 }

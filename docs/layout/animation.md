@@ -13,8 +13,7 @@ Pure, stateless helpers, no component state required:
 | `easeInOutCubic` | `float easeInOutCubic(float t)` | Smooth in and out |
 | `easeOutBack` | `float easeOutBack(float t)` | Overshoots slightly, then settles |
 
-All take `t` in `[0, 1]` and return a mapped `[0, 1]` value, which may exceed 1 briefly for
-`easeOutBack`.
+All take `t` in `[0, 1]` and return a mapped `[0, 1]` value, which may exceed 1 briefly for `easeOutBack`.
 
 ## AnimationDriver
 
@@ -887,6 +886,7 @@ strings.
 | **Card parts: scope, response, LFO wave section, envelope view, More row, conditional section** | Fade in 160 ms / out 110 ms (plain 80 ms under Reduce Motion) with `FadeVisibility` while the card's height follows the fade; neighbours make room once per direction; lands at once off screen or under Animations Off; a swap of controls keeps its own motion; see [Fading things in and out](#fading-things-in-and-out) | `CardBlockFade` via `ModuleComponent`, `CardBody` |
 | **Pick on canvas overlay** | Fades in 160 ms / out 110 ms as one component, takes no click once ended, outlines stay until it has faded out | `PickTargetOverlay` via `FadeVisibility` |
 | **Status bar message** | A transient or sticky message cross-fades with the normal status text (160 ms in, 110 ms out, plain 80 ms under Reduce Motion); its words stay painted while it fades out; lands at once off screen or under Animations Off | `StatusBarComponent` |
+| **Drum Kit pads** | A pad that plays from the card flashes for 120 ms; the picked pad's accent ring slides to a new pick over 120 ms (`easeOutCubic`); the pad controls cross-fade on a pick (out 80 ms linear, the knobs re-bind while the panel is clear, in 160 ms `easeOutCubic`; a pick during the fade-out is the one that fades in). Under Reduce Motion the ring moves at once and the controls fade in over 80 ms; off screen or under Animations Off everything lands at once and there is no flash. The card height never changes on a pick; see [the card](../modules/drum-kit.md#the-card) | `DrumPadGrid`, `DrumPadControls` |
 | **Timeline playhead** | 30 Hz vertical position line, **playing only** (or while a drum machine Play clip loop runs), repainting only the strip between its old and new x | `TimelinePlayheadOverlay` |
 | **Cursor glide** | While Cmd+Left / Cmd+Right is held, a VBlank frame per refresh moves the transport cursor (ease-in speed, capped); on release a 140 ms `easeOutCubic` settle lands it on the grid. Both are `ReorderFramePump` runs, so frames stop with the key; see [`docs/timeline/transport.md`](../timeline/transport.md#gliding-the-cursor) | `TimelineCursorGlide` via `TimelinePanelComponent`; the morph map's arrow hold is the same pump and curve (`MorphMapGlide` via `MorphMap`) |
 | **Zoom settle debounce** | `zoomSettleAnim`: a DEBOUNCE `AnimationDriver` (140 ms, `kZoomSettleMs`) with a no-op `onUpdate` — zero repaints while running, all the work in `onComplete`, which thaws the frozen card rasters | `GraphEditor` |

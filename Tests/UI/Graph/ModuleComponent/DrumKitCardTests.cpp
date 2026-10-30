@@ -1,7 +1,8 @@
 // DrumKitCardTests.cpp
 // The Drum Kit card with a recorded kit (DrumKitChrome): the instrument picker above the body, its list (drum kits
-// only, plus "Synth drums"), the Recorded switches that are on the card only while a kit is loaded, the Decay knobs
-// that grey out while their drums play recordings, the one-step undo of a load and a missing pack on the caption.
+// only, plus "Synth drums"), a pick that makes every pad play the kit, the pad Decay that greys out while its pad
+// plays a recording, the one-step undo of a load and a missing pack on the caption. The pads area itself:
+// DrumKitPadsCardTests.cpp.
 
 #include "../../../Modules/Sampler/SamplerTestWavs.h"
 #include "../CardBody/CardBodyTestHelpers.h"
@@ -61,7 +62,6 @@ struct Scene {
                 return t;
         return nullptr;
     }
-    juce::ToggleButton* recorded(const juce::String& group) { return child<juce::ToggleButton>(group + " recorded"); }
     bool shown(juce::Component* c) { return c != nullptr && c->isVisible(); }
 };
 
@@ -165,23 +165,26 @@ TEST(DrumKitCard, EachKitLoadAndEachClearIsOneUndoStep) {
     EXPECT_TRUE(scene.kit().hasRecordedKit());
 }
 
-TEST(DrumKitCard, TheRecordedSwitchesAreOnTheCardOnlyWhileAKitIsLoaded) {
+TEST(DrumKitCard, PickingAKitMakesEveryPadPlayItWithoutResizingTheCard) {
     PackRoot packs;
     Scene scene;
     const auto size = scene.card().getBounds();
-    for (const char* group : {"Kick", "Snare", "Clap", "Hat", "Tom", "Cymbal", "Cowbell"})
-        ASSERT_NE(scene.recorded(group), nullptr) << group << " has a switch on the card";
-    EXPECT_FALSE(scene.shown(scene.recorded("Kick"))) << "no kit, no switch";
+    auto pad = scene.kit().pad(0);
+    pad.kind = synth::drums::PadKind::BuiltIn;
+    ASSERT_TRUE(scene.kit().setPad(0, pad));
+    for (const char* group : {"Kick", "Snare", "Hat"})
+        EXPECT_EQ(scene.child<juce::ToggleButton>(juce::String(group) + " recorded"), nullptr)
+            << "the pads replace the Recorded switches";
 
     choose(scene, "acoustic");
-    scene.settle();
-    EXPECT_TRUE(scene.shown(scene.recorded("Kick")));
+    EXPECT_EQ(scene.kit().pad(0).kind, synth::drums::PadKind::Kit);
+    EXPECT_TRUE(scene.kit().padPlaysRecording(0));
     EXPECT_EQ(scene.card().getBounds(), size) << "a kit never resizes the card";
+    EXPECT_TRUE(scene.chrome().getRow().caption().getText().startsWith("Recordings on 1 of 8 pads"))
+        << scene.chrome().getRow().caption().getText();
 
-    scene.kit().clearInstrument();
-    scene.card().timerCallback();
-    scene.settle();
-    EXPECT_FALSE(scene.shown(scene.recorded("Kick")));
+    ASSERT_TRUE(scene.canvas.undo.undo());
+    EXPECT_EQ(scene.kit().pad(0).kind, synth::drums::PadKind::BuiltIn) << "the fill is part of the load's undo step";
 }
 
 TEST(DrumKitCard, EveryNewControlHasAnAccessibleNameAndATooltip) {
@@ -189,34 +192,30 @@ TEST(DrumKitCard, EveryNewControlHasAnAccessibleNameAndATooltip) {
     Scene scene;
     choose(scene, "acoustic");
     scene.settle();
-    for (const char* group : {"Kick", "Snare", "Clap", "Hat", "Tom", "Cymbal", "Cowbell"}) {
-        auto* toggle = scene.recorded(group);
-        ASSERT_NE(toggle, nullptr) << group;
-        EXPECT_TRUE(toggle->getWantsKeyboardFocus()) << group;
-        EXPECT_FALSE(toggle->getTooltip().isEmpty()) << group;
-        EXPECT_FALSE(toggle->getTitle().isEmpty()) << group;
-    }
     auto& row = scene.chrome().getRow();
     EXPECT_FALSE(row.picker().getTitle().isEmpty());
     EXPECT_FALSE(row.picker().getTooltip().isEmpty());
+    auto& pads = scene.chrome().getPads();
+    EXPECT_FALSE(pads.stepper().getTitle().isEmpty());
+    EXPECT_FALSE(pads.stepper().getTooltip().isEmpty());
+    EXPECT_FALSE(pads.grid().getTitle().isEmpty());
+    EXPECT_FALSE(pads.grid().getTooltip().isEmpty());
 }
 
-TEST(DrumKitCard, ADecayKnobGreysOutWhileItsDrumsPlayRecordings) {
+TEST(DrumKitCard, APadDecayGreysOutWhileThePadPlaysARecording) {
     PackRoot packs;
     Scene scene;
-    auto* decay = scene.child<juce::Slider>("Kick decay");
-    ASSERT_NE(decay, nullptr);
-    EXPECT_FALSE(synth::theme::AppLookAndFeel::paintsDimmed(*decay));
+    auto& decay = scene.chrome().getPads().controls().knob(DrumKitModule::PadParam::Decay);
+    EXPECT_FALSE(synth::theme::AppLookAndFeel::paintsDimmed(decay));
 
     choose(scene, "acoustic");
-    scene.settle();
-    EXPECT_TRUE(synth::theme::AppLookAndFeel::paintsDimmed(*decay)) << "the kick plays its recording";
-    EXPECT_TRUE(decay->isEnabled()) << "it stays operable, like every dimmed control";
+    scene.card().timerCallback();
+    EXPECT_TRUE(synth::theme::AppLookAndFeel::paintsDimmed(decay)) << "the kick plays its recording";
+    EXPECT_TRUE(decay.isEnabled()) << "it stays operable, like every dimmed control";
 
-    auto* recorded = findParameterByID(&scene.kit(), "kickRecorded");
-    recorded->setValueNotifyingHost(0.0f);
-    scene.settle();
-    EXPECT_FALSE(synth::theme::AppLookAndFeel::paintsDimmed(*decay)) << "Recorded off: the synth kick uses it";
+    findParameterByID(&scene.kit(), "kickRecorded")->setValueNotifyingHost(0.0f);
+    scene.card().timerCallback();
+    EXPECT_FALSE(synth::theme::AppLookAndFeel::paintsDimmed(decay)) << "the synth kick uses it";
 }
 
 TEST(DrumKitCard, AMissingPackShowsItsMessageOnTheCaptionAndKeepsTheReference) {
@@ -232,7 +231,6 @@ TEST(DrumKitCard, AMissingPackShowsItsMessageOnTheCaptionAndKeepsTheReference) {
         EXPECT_TRUE(caption.getText().contains("core/acoustic-kit")) << caption.getText();
         EXPECT_TRUE(caption.getText().contains("not found")) << caption.getText();
         EXPECT_EQ(scene.kit().getExtraState()["instrumentPack"].toString(), "core/acoustic-kit");
-        EXPECT_FALSE(scene.shown(scene.recorded("Kick")));
     }
     synth::sampler::SoundPackLibrary::setRootsForTests(std::nullopt);
 }

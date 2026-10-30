@@ -55,6 +55,7 @@ doc); this map changes only when a new area or topic appears.
 
 - `Source/CLAUDE.md`: audio thread, host modes, `EpochExchange`, MIDI Remote threading, timeline ownership, solo/sends, unsaved-changes guard, autosave, ASCII literals, NaN/Inf scrub
 - `Source/Modules/CLAUDE.md`: stereo/Dual I/O legs, fixed channel counts, Wavetable warp aliasing, gain staging
+- `Source/Modules/DrumKit/CLAUDE.md`: Drum Kit group ids as an alias surface, 32 pad slots, restore order
 - `Source/Timeline/CLAUDE.md`: audio-clip streaming, automation-lane binding
 - `Source/AI/CLAUDE.md`: `applyJSONToGraph` auto-connect, patch-format reserved fields, conversation-history entitlement, refresh-token rotation, AI model discovery ordering
 - `Source/UI/CLAUDE.md`, `Source/Plugin/CLAUDE.md`: repaint/animation budget, cable identity, theming, plugin editor look-and-feel, logging limits, `GraphEditor` collaborator ownership, mixer-column/parameter unbinding, MIDI Learn registry

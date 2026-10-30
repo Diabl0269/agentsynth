@@ -215,6 +215,17 @@ inline const std::set<juce::String> kNonAuthorableModuleTypes = {
 
 inline bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
 
+// The parameter as the model may see it, or null for one it never sees: the Drum Kit's per-pad parameters, which
+// its group ids (kickLevel, closedDecay ...) write.
+inline juce::RangedAudioParameter* modelVisibleParam(juce::AudioProcessor& processor,
+                                                     juce::AudioProcessorParameter* param) {
+    auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param);
+    if (ranged != nullptr && dynamic_cast<DrumKitModule*>(&processor) != nullptr &&
+        DrumKitModule::isPadParamId(ranged->paramID))
+        return nullptr;
+    return ranged;
+}
+
 // Whether a merge patch's "type" designates the module that already lives under that node id.
 // Two namespaces meet here: the factory key graphToJSON writes, and the processor's display name.
 // They differ for the ADSR aliases — an "Amp Env" node serializes as type "ADSR" — so comparing

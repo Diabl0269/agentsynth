@@ -1,4 +1,5 @@
 #include "PatchDiff.h"
+#include "../Modules/DrumKit/DrumKitModule.h"
 #include "../Modules/ModuleBase.h"
 #include "AIStateMapper/AIStateMapper.h"
 #include <algorithm>
@@ -299,7 +300,8 @@ std::vector<PatchChange> computeDiff(const juce::var& before, const juce::var& a
         for (const auto& key : keys) {
             juce::var beforeVal = entry.params != nullptr ? entry.params->getProperty(key) : juce::var();
             juce::var afterVal = afterEntry.params != nullptr ? afterEntry.params->getProperty(key) : juce::var();
-            if (varsEqual(beforeVal, afterVal))
+            // A Drum Kit's pads follow its group ids: the group change is the one the user reads.
+            if (varsEqual(beforeVal, afterVal) || (entry.type == "Drum Kit" && DrumKitModule::isPadParamId(key)))
                 continue;
 
             PatchChange c;

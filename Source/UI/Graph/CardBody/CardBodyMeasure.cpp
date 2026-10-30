@@ -157,6 +157,8 @@ std::optional<int> measureHeight(ModuleBase& module, const DefaultCardLayouts& d
     if (module.getModuleType() == ModuleType::Wavetable) // beside the jack gutter on its double-width card
         y = std::max(y, ModuleComponent::wavetableChromeBottomY());
     y = layoutCardBodySections(plan, module, y, g, /*apply*/ false);
+    if (auto* kit = dynamic_cast<DrumKitModule*>(&module))
+        y += ui::DrumKitPadsSection::height(*kit);
     y = measureRowsBelowBody(plan, module, y, g);
     return std::max(100, y + kBottomPadding);
 }
