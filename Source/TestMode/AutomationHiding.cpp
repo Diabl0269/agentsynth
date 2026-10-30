@@ -21,6 +21,19 @@ void hideAutomationWindows() {
 
 bool automationWindowsAreHidden() { return juce::ComponentPeer::hideWindowsForAutomation; }
 
-bool appIsInFront() { return automationWindowsAreHidden() || juce::Process::isForegroundProcess(); }
+namespace {
+std::optional<bool>& appInFrontOverride() {
+    static std::optional<bool> forced;
+    return forced;
+}
+} // namespace
+
+bool appIsInFront() {
+    if (appInFrontOverride().has_value())
+        return *appInFrontOverride();
+    return automationWindowsAreHidden() || juce::Process::isForegroundProcess();
+}
+
+void setAppInFrontForTest(std::optional<bool> inFront) { appInFrontOverride() = inFront; }
 
 } // namespace synth::testmode

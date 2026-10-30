@@ -106,6 +106,7 @@ bool PopupMotion::offerKeyToDialogForTest(juce::DialogWindow& dialog, const juce
 juce::Image captureNativeWindowImage(void* nativeView, int& topInset);
 void disableNativeWindowAnimation(void* nativeView);
 bool nativeWindowAnimationIsOff(void* nativeView);
+bool nativeWindowIsAbove(void* upperView, void* lowerView);
 #endif
 
 // The app animates popups itself; the platform's own window animation must not run on top of it.
@@ -186,6 +187,8 @@ public:
     }
 
     ~Ghost() override { std::erase(liveGhosts(), this); }
+
+    void stepForTest(double ms) { driver_.stepForTest(ms); }
 
     void paint(juce::Graphics& g) override {
         g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
@@ -283,6 +286,7 @@ public:
         dir_ = popup_motion::slideDirection(window_->getScreenBounds(), anchorPoint());
         window_->setInterceptsMouseClicks(false, false);
         disablePlatformAnimation(*window_);
+        raiseForFade();
 
         driver_.start(
             updater_, popup_motion::durationMs(Phase::Out, reduce_, style_),
@@ -298,6 +302,15 @@ public:
             },
             [this] { finishOut(); });
         startTimer((int)popup_motion::durationMs(Phase::Out, reduce_, style_) + kWatchdogSlackMs);
+    }
+
+    /** Whether the live window is above `other` on screen right now (always-on-top counts on every platform). */
+    bool isAboveForTest(const juce::Component& other) const {
+#if JUCE_MAC
+        if (window_->getPeer() != nullptr && other.getPeer() != nullptr)
+            return nativeWindowIsAbove(window_->getPeer()->getNativeHandle(), other.getPeer()->getNativeHandle());
+#endif
+        return window_->isAlwaysOnTop() && !other.isAlwaysOnTop();
     }
 
     void componentBeingDeleted(juce::Component&) override {
@@ -335,6 +348,23 @@ private:
         const bool buffered = body->getCachedComponentImage() != nullptr;
         if (buffered != scaled)
             body->setBufferedToImage(scaled);
+    }
+
+    // A press outside the window raises the app window it landed in (the press that closes a popup is also the one
+    // that brings the app window forward), which at the normal window level buries the fading popup at once: it
+    // seemed to pop out instead of shrinking. The fade runs above every normal window, as the leaving picture does.
+    void raiseForFade() {
+        if (window_->isAlwaysOnTop())
+            return;
+        window_->setAlwaysOnTop(true);
+        raisedForFade_ = true;
+    }
+
+    void lowerAfterFade() {
+        if (!raisedForFade_)
+            return;
+        raisedForFade_ = false;
+        window_->setAlwaysOnTop(false);
     }
 
     juce::Point<int> anchorPoint() const { return style_.anchor ? style_.anchor() : juce::Desktop::getMousePosition(); }
@@ -446,6 +476,7 @@ private:
     void settleAfterClose() {
         leaving_ = false;
         closeScheduled_ = false;
+        lowerAfterFade();
         driver_.stop(updater_);
         window_->setInterceptsMouseClicks(true, true);
         window_->setAlpha(1.0f);
@@ -534,6 +565,7 @@ private:
     bool ghosted_ = false;
     bool leaving_ = false;
     bool closeScheduled_ = false;
+    bool raisedForFade_ = false; // the fade made the window always-on-top: put back when it lives on
     std::function<void()> pendingClose_;
     juce::Image cache_;
     juce::Rectangle<int> cacheBounds_;
@@ -556,6 +588,11 @@ int PopupMotion::getNumLeavingGhosts() { return (int)liveGhosts().size(); }
 
 std::vector<juce::Component*> PopupMotion::getLeavingGhostsForTest() { return liveGhosts(); }
 
+void PopupMotion::stepLeavingGhostsForTest(double ms) {
+    for (auto* ghost : liveGhosts())
+        static_cast<Ghost*>(ghost)->stepForTest(ms);
+}
+
 bool PopupMotion::isPlatformAnimationOffForTest([[maybe_unused]] juce::Component& window) {
 #if JUCE_MAC
     auto* peer = window.getPeer();
@@ -571,6 +608,11 @@ bool PopupMotion::animatesOffScreenForTest() { return offscreenForTestFlag(); }
 void PopupMotion::stepMotionForTest(juce::Component& window, double ms) {
     if (const auto it = registry().find(&window); it != registry().end())
         it->second->stepForTest(ms);
+}
+
+bool PopupMotion::isAboveForTest(const juce::Component& window, const juce::Component& other) {
+    const auto it = registry().find(&window);
+    return it != registry().end() && it->second->isAboveForTest(other);
 }
 
 void PopupMotion::dismiss(juce::Component& window, std::function<void()> reallyClose) {

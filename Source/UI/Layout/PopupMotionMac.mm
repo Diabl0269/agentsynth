@@ -45,6 +45,20 @@ bool nativeWindowAnimationIsOff(void* nativeView) {
     return view.window != nil && view.window.animationBehavior == NSWindowAnimationBehaviorNone;
 }
 
+// Front-to-back position in the application's window list: smaller is nearer the viewer. Levels count.
+bool nativeWindowIsAbove(void* upperView, void* lowerView) {
+    NSWindow* upper = ((__bridge NSView*)upperView).window;
+    NSWindow* lower = ((__bridge NSView*)lowerView).window;
+    if (upper == nil || lower == nil)
+        return false;
+    NSArray<NSWindow*>* ordered = [NSApp orderedWindows];
+    const NSUInteger upperIndex = [ordered indexOfObject:upper];
+    const NSUInteger lowerIndex = [ordered indexOfObject:lower];
+    if (upperIndex == NSNotFound || lowerIndex == NSNotFound)
+        return upper.level > lower.level;
+    return upperIndex < lowerIndex;
+}
+
 } // namespace synth::ui
 
 #endif
