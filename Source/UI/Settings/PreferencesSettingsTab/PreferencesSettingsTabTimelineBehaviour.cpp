@@ -1,9 +1,11 @@
+#include "Music/SongKey.h"
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 #include "UI/Timeline/FollowPlayhead.h"
 
 // Concern: timeline/piano-roll editing preferences — loop-selection-arms, double-click-spans-
-// locators, natural scrolling, wheel-zoom direction, and piano-roll key-label density.
+// locators, natural scrolling, wheel-zoom direction, piano-roll key-label density, and
+// whether a hovered key in a key picker plays its scale.
 
 bool PreferencesSettingsTab::isLoopSelectionArmsEnabled() const { return loopSelectionArmsToggle.getToggleState(); }
 
@@ -98,6 +100,15 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
     recordStartsPlaybackToggle.onClick = [this] {
         persistRecordStartsPlayback(recordStartsPlaybackToggle.getToggleState());
     };
+
+    contentHost.addAndMakeVisible(playScaleOnBrowseToggle);
+    playScaleOnBrowseToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue(synth::kPlayScaleOnBrowseSettingsKey, true),
+        juce::dontSendNotification);
+    playScaleOnBrowseToggle.setTooltip(
+        "When on (the default), hovering a key in a key picker (the transport bar's Song key, the piano roll's Key, "
+        "a sequencer's Key) plays its scale. Turn it off to browse in silence; picking a key still works.");
+    playScaleOnBrowseToggle.onClick = [this] { persistPlayScaleOnBrowse(playScaleOnBrowseToggle.getToggleState()); };
 
     contentHost.addAndMakeVisible(followPointLabel);
     followPointLabel.setText("Follow playhead point:", juce::dontSendNotification);
@@ -227,6 +238,19 @@ void PreferencesSettingsTab::persistPianoRollKeyLabelMode(bool labelEveryKey) {
     // — MainComponent wires the live re-push in a parallel task.
 }
 
+bool PreferencesSettingsTab::isPlayScaleOnBrowseEnabled() const { return playScaleOnBrowseToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setPlayScaleOnBrowseEnabled(bool enabled) {
+    playScaleOnBrowseToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistPlayScaleOnBrowse(enabled);
+}
+
+void PreferencesSettingsTab::persistPlayScaleOnBrowse(bool enabled) {
+    // Nothing live to push: KeyAuditioner reads this key when each scale starts.
+    appProperties.getUserSettings()->setValue(synth::kPlayScaleOnBrowseSettingsKey, enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+}
+
 void PreferencesSettingsTab::styleMutedHintLabel(juce::Label& hint) {
     hint.setFont(juce::Font(juce::FontOptions(11.5f)));
     hint.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.65f));
@@ -306,13 +330,16 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 7: piano roll key labels
+    // Group 7: piano roll key labels, and the scale the key pickers play
     {
-        const bool visible = groupMatches({&pianoRollKeyLabelsToggle});
-        setGroupVisible({&pianoRollKeyLabelsToggle}, visible);
+        const std::initializer_list<juce::Component*> rows{&pianoRollKeyLabelsToggle, &playScaleOnBrowseToggle};
+        const bool visible = groupMatches(rows);
+        setGroupVisible(rows, visible);
         beginGroup(visible);
         if (visible) {
             pianoRollKeyLabelsToggle.setBounds({0, y, contentWidth, 24});
+            y += 34;
+            playScaleOnBrowseToggle.setBounds({0, y, contentWidth, 24});
             y += 24;
         }
         pendingDivider = pendingDivider || visible;

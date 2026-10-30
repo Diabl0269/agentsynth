@@ -4,6 +4,7 @@
 // Shared PianoRollFixture, rgbDistance and chooseMajorScaleForOpenClip live in
 // PianoRollTestHelpers.h.
 
+#include "PianoRollKeyPickerHelpers.h"
 #include "PianoRollTestHelpers.h"
 
 #include "UI/Theme/BuiltInThemes.h"

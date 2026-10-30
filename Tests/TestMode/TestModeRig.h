@@ -16,7 +16,7 @@ namespace testmode_rig {
 
 // Counts the events it receives.
 struct Probe : juce::Component {
-    int downs = 0, ups = 0, drags = 0, doubleClicks = 0, keys = 0, wheels = 0;
+    int downs = 0, ups = 0, drags = 0, doubleClicks = 0, keys = 0, wheels = 0, enters = 0, moves = 0;
     float lastWheelY = 0.0f;
     juce::ModifierKeys downMods;
     void mouseDown(const juce::MouseEvent& e) override {
@@ -28,6 +28,8 @@ struct Probe : juce::Component {
         ++wheels;
         lastWheelY = w.deltaY;
     }
+    void mouseEnter(const juce::MouseEvent&) override { ++enters; }
+    void mouseMove(const juce::MouseEvent&) override { ++moves; }
     void mouseDrag(const juce::MouseEvent&) override { ++drags; }
     void mouseDoubleClick(const juce::MouseEvent&) override { ++doubleClicks; }
     bool keyPressed(const juce::KeyPress&) override {

@@ -6,6 +6,10 @@
 
 class PolyMidiModule : public ModuleBase {
 public:
+    /** The Gate level where the Oscillator restarts a note (GateEdges::kThreshold), where a sounding voice's pitch
+     * steps. */
+    static constexpr float kPitchStepGateLevel = 0.1f;
+
     /** Voice-steal strategy, in `voiceSteal` choice order. Index 0 is the historical behaviour,
      *  so a patch saved before this parameter existed loads with unchanged voice allocation. */
     enum class StealMode { Oldest = 0, RoundRobin, Random };
@@ -42,8 +46,9 @@ public:
             v.currentFreq = 0.0f;
             v.gateLevel = 1.0f;
             v.gateReopenAtSample = 0;
-            v.smoothedGate.reset(sampleRate, 0.005); // 5ms smoothing for gates
-            v.smoothedFreq.reset(sampleRate, 0.005); // 5ms smoothing for pitch
+            v.smoothedGate.reset(sampleRate, 0.005);       // 5ms smoothing for gates
+            v.smoothedFreq.setCurrentAndTargetValue(0.0f); // a pitch is only ever stepped to, never ramped
+            v.pendingFreq = 0.0f;
         }
     }
 
@@ -173,7 +178,8 @@ private:
         float gateLevel = 1.0f;             // height the gate rises to while this note is held
         juce::int64 gateReopenAtSample = 0; // absolute sample the gate may go high again (see startNote)
         juce::SmoothedValue<float> smoothedGate;
-        juce::SmoothedValue<float> smoothedFreq;
+        juce::SmoothedValue<float> smoothedFreq; // holds the pitch; only ever stepped, never ramped
+        float pendingFreq = 0.0f;                // a new note's pitch waiting for its gate to rise (0 = none)
     };
     Voice voices[MAX_VOICES];
 
@@ -194,8 +200,6 @@ private:
             float* pitchCh = buffer.getWritePointer(i);
             float* gateCh = buffer.getWritePointer(i + 8);
 
-            v.smoothedFreq.setTargetValue(v.currentFreq);
-
             // While a voice is inside its re-articulation gap the target stays at 0 no matter what
             // `active` says; the per-sample check below flips it up on the exact sample the gap
             // ends. Chunk boundaries are MIDI event samples, so a gap routinely ends mid-chunk.
@@ -203,12 +207,18 @@ private:
             v.smoothedGate.setTargetValue(v.active && !gapOpen ? v.gateLevel : 0.0f);
 
             for (int s = startSample; s < endSample; ++s) {
-                pitchCh[s] = v.smoothedFreq.getNextValue();
                 if (gapOpen && (blockStartSample_ + s) >= v.gateReopenAtSample) {
                     v.smoothedGate.setTargetValue(v.active ? v.gateLevel : 0.0f);
                     gapOpen = false;
                 }
                 gateCh[s] = v.smoothedGate.getNextValue();
+                // A voice that sounded before changes pitch on the sample its gate rises, which is where the
+                // Oscillator restarts the note, so the previous note's tail never steps in pitch.
+                if (v.pendingFreq > 0.0f && gateCh[s] >= juce::jmin(kPitchStepGateLevel, 0.5f * v.gateLevel)) {
+                    v.smoothedFreq.setCurrentAndTargetValue(v.pendingFreq);
+                    v.pendingFreq = 0.0f;
+                }
+                pitchCh[s] = v.smoothedFreq.getNextValue();
             }
         }
     }
@@ -259,6 +269,14 @@ private:
         v.lastUsedSample = stamp;
         v.currentFreq = freq;
         v.gateLevel = level;
+        // The pitch steps, it never slides, so a note's attack never sounds while the pitch is still moving. A voice
+        // that never sounded steps on the note's own sample; one that did waits for its gate to rise (see renderChunk).
+        if (v.smoothedFreq.getCurrentValue() < 20.0f) {
+            v.smoothedFreq.setCurrentAndTargetValue(freq);
+            v.pendingFreq = 0.0f;
+        } else {
+            v.pendingFreq = freq;
+        }
     }
 
     // Voice ages must be strictly increasing, not merely non-decreasing: a chord whose notes share

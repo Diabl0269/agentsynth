@@ -10,6 +10,8 @@ target_sources(Core PRIVATE
 list(APPEND APPUI_SOURCES
     Source/UI/Layout/KeyField.cpp
     Source/UI/Layout/KeyField.h
+    Source/UI/Layout/KeyPicker/KeyAuditioner.cpp
+    Source/UI/Layout/KeyPicker/KeyAuditioner.h
     Source/UI/Layout/KeyPicker/KeyPicker.cpp
     Source/UI/Layout/KeyPicker/KeyPicker.h
     Source/UI/Layout/KeyPicker/KeyPickerKeyboard.cpp
@@ -17,6 +19,8 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/KeyPicker/KeyPickerPalette.h
     Source/UI/Layout/KeyPicker/KeyPickerParts.cpp
     Source/UI/Layout/KeyPicker/KeyPickerParts.h
+    Source/UI/PianoRoll/ScaleAssistPanel.cpp
+    Source/UI/PianoRoll/ScaleAssistPanel.h
     Source/UI/Timeline/SongKeyField.cpp
     Source/UI/Timeline/SongKeyField.h
 )

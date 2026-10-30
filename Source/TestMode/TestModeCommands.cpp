@@ -140,6 +140,18 @@ StepResult cmdWheel(const juce::var& args, Scratch&, int) {
     return StepResult::done(object({{"id", found.component->getComponentID()}, {"point", pointToVar(point)}}));
 }
 
+// A mouse move with no button down: what a user does to rest the pointer on something (a hover, a tooltip).
+StepResult cmdHover(const juce::var& args, Scratch&, int) {
+    const auto found = lookupArg(args, "id");
+    if (found.component == nullptr)
+        return StepResult::failed(found.error);
+    const auto point = localPointArg(args, *found.component, "x", "y");
+    juce::String error;
+    if (!sendMouse({found.component, point, juce::ModifierKeys(), false, Button::left}, error))
+        return StepResult::failed(error);
+    return StepResult::done(object({{"id", found.component->getComponentID()}, {"point", pointToVar(point)}}));
+}
+
 // A drag is one hop per mouse event, so timers and async repaints run between the moves (JUCE's drag threshold and
 // auto-scroll both depend on that).
 StepResult cmdDrag(const juce::var& args, Scratch& s, int attempt) {
@@ -299,6 +311,7 @@ CommandTable CommandTable::standard() {
     table.add("list", {cmdList});
     table.add("click", {cmdClick});
     table.add("wheel", {cmdWheel});
+    table.add("hover", {cmdHover});
     table.add("drag", {cmdDrag});
     table.add("key", {cmdKey});
     table.add("getState", {cmdGetState});

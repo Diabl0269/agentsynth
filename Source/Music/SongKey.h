@@ -17,6 +17,10 @@ namespace synth {
 /** The settings key the user's own scales (UserScale JSON) are saved under, shared by every scale and key picker. */
 inline constexpr const char* kUserScalesSettingsKey = "pianoRollUserScales";
 
+/** The settings key of "Play the scale when browsing keys" (a bool, on when absent): off, no key picker plays a scale
+ *  while the user hovers a key; picking still works. */
+inline constexpr const char* kPlayScaleOnBrowseSettingsKey = "playScaleWhenBrowsingKeys";
+
 /** Root name with sharps ("C#"), for any integer pitch class. */
 inline juce::String keyRootName(int pitchClass) {
     static const char* const kNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};

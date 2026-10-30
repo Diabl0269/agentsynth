@@ -1,0 +1,26 @@
+JUCE patch: do not crash on a CoreAudio aggregate device that has no clock device and no main sub-device.
+
+Why: AggregateAudioDevice::getClockingDeviceUid() reads the aggregate's clock-device property, then its main (master)
+sub-device property, and tests each with CFStringGetLength(). Those properties come back as a null CFStringRef when
+the aggregate was created without either one, or has just been destroyed by another process (private aggregate devices
+come and go while the device list is scanned). CFStringGetLength(nullptr) dereferences address 0: createDevice() on such
+an aggregate (CoreAudioIODeviceType::createDevice -> CoreAudioIODevice -> AggregateDeviceDescription::rebuild ->
+getClockingDevice) died with SIGSEGV on the calling thread. With the null check the loop moves on to the next property,
+then to the first sub-device, and finally returns an empty uid, which getClockingDevice() already treats as "no clocking
+device" (an invalid AudioDevice; rebuild() and toDictionary() cope with it, and String::fromCFString() accepts null).
+
+Touches only juce_CoreAudio_mac.cpp (macOS); behaviour is unchanged for every aggregate that has a clock uid.
+
+diff --git a/modules/juce_audio_devices/native/juce_CoreAudio_mac.cpp b/modules/juce_audio_devices/native/juce_CoreAudio_mac.cpp
+index ede3c22da..816fc9de1 100644
+--- a/modules/juce_audio_devices/native/juce_CoreAudio_mac.cpp
++++ b/modules/juce_audio_devices/native/juce_CoreAudio_mac.cpp
+@@ -1010,7 +1010,7 @@ public:
+            #endif
+ 
+         for (auto selector : { kAudioAggregateDevicePropertyClockDevice, subDeviceSelector })
+-            if (auto uid = getPropertyOrDefault<CFStringProperty> (selector); CFStringGetLength (uid.get()) > 0)
++            if (auto uid = getPropertyOrDefault<CFStringProperty> (selector); uid.get() != nullptr && CFStringGetLength (uid.get()) > 0)
+                 return String::fromCFString (uid.get());
+ 
+         if (auto devices = getSubDevices(); ! devices.empty())
