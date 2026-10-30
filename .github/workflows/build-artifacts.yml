@@ -382,7 +382,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-release-ccache-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-release-deps-ninja6-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-release-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see ci.yml's identical comment in its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \

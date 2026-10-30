@@ -427,7 +427,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps6-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): scripts/ci-cache-budget.sh's static sum bounds what the
         # workflows COMMIT to writing for one generation; this catches what that can't -- a
@@ -755,7 +755,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps6-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see build-and-test's identical comment above its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \
@@ -881,10 +881,9 @@ jobs:
       shell: bash
       run: |
         mkdir -p "$CCACHE_DIR"
-        # Right-sized, not the Linux job's 2G: a seeded Windows-ccache-main entry measured 160 MB
-        # on 2026-09-15, so 512M leaves >3x headroom while bounding what a single main-only save
-        # (see the Save ccache step below) can add to the repo's 10 GB cache budget.
-        ccache --set-config=max_size=512M
+        # Unity batches: fewer, larger objects. At 512M the separate-file build evicted its own entries,
+        # 72-84% hits on a PR against 96-99% on the other jobs.
+        ccache --set-config=max_size=1G
         ccache --set-config=compiler_check=content
         ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
@@ -898,6 +897,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
           -DAGENTSYNTH_PCH=ON \
+          -DAGENTSYNTH_UNITY=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -965,7 +965,7 @@ jobs:
           done
         }
         prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
-        prune "${{ runner.os }}-deps6-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
         # Runtime usage alarm (FRO341): see build-and-test's identical comment above its own prune step.
         usage_bytes="$(gh api "repos/${{ github.repository }}/actions/cache/usage" \

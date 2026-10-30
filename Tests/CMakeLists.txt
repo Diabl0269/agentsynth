@@ -945,6 +945,7 @@ target_link_libraries(Tests PRIVATE
     AppUI
 )
 synth_enable_pch(Tests gtest/gtest.h)
+synth_enable_unity(Tests)
 
 target_include_directories(Tests PRIVATE
     ${CMAKE_SOURCE_DIR}/Source
