@@ -285,6 +285,20 @@ bool TimelineDoc::setClipScale(ClipId id, std::optional<synth::MusicalScale> sca
     });
 }
 
+// Clamped to 0..127 and swapped if reversed; nullopt clears it. Not synced across a link group, like the scale.
+bool TimelineDoc::setClipNoteRange(ClipId id, std::optional<std::pair<int, int>> range) {
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    range = detail::normaliseNoteRange(range);
+    if (clip->noteRange == range)
+        return true;
+    return applyMutation([&] {
+        clip->noteRange = range;
+        return true;
+    });
+}
+
 namespace {
 // Adds or removes `pitch` in a sorted, unique list. Returns false when nothing changed.
 bool setPitchMembership(std::vector<int>& list, int pitch, bool member) {
@@ -398,6 +412,7 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
         right.soloPitches = clip->soloPitches;
         right.scale = clip->scale;
         right.scaleVisible = clip->scaleVisible;
+        right.noteRange = clip->noteRange;
         clip->fadeOutBeats = 0.0;
 
         // `clip` (and therefore `id`, the original/left id) stays valid; only insert may
@@ -501,6 +516,7 @@ ClipId TimelineDoc::duplicateClipImpl(ClipId id, bool linked) {
         dup.soloPitches = clip->soloPitches;
         dup.scale = clip->scale;
         dup.scaleVisible = clip->scaleVisible;
+        dup.noteRange = clip->noteRange;
         dup.notes.reserve(clip->notes.size());
         for (const auto& note : clip->notes) {
             MidiNote copy = note;

@@ -37,6 +37,11 @@ StepGridRandomizePanel::StepGridRandomizePanel(const sequencer_ops::RandomizeSet
         settings_.maxPitch = hi;
         settingsChanged();
     };
+    range_.setComponentID("randomizeRangePicker");
+    range_.onGestureEnd = [this](int lo, int hi) {
+        if (onRangeGestureEnd)
+            onRangeGestureEnd(lo, hi);
+    };
     addAndMakeVisible(range_);
 
     density_.setRange(0.0, 100.0, 1.0);

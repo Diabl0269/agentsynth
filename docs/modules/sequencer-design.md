@@ -196,8 +196,11 @@ pattern change and the parameter change in one transaction, so a single undo giv
 **Randomize** opens a 250 px popover (`StepGridRandomizePanel`, a `juce::CallOutBox` with `CalloutReveal`) with the note range
 picker ([note-range-picker.md](../layout/note-range-picker.md)), a "Steps that play" slider (75 percent by default), the
 "Keep my rhythm" pill (on by default) and Roll. Roll applies `randomized` once and each Roll is one undo step; the popover
-stays open between rolls. Esc closes it. The range, density and rhythm choice live on the grid for the session and are not
-saved; the range starts at C2 to C4 (the grid's note numbering), widened to cover the pattern's notes.
+stays open between rolls. Esc closes it. The density and rhythm choice live on the grid for the session and are not saved. The note range is saved with the
+pattern (`SequencerPattern::noteRange`, optional `"noteRange": {"low", "high"}` in the module state) once the user moves
+it: one drag or one key step is one undo step, and opening the popover reads the saved range, so undo shows after
+reopening (a popover left open does not follow an undo). With no saved range it starts at C2 to C4 (the grid's note
+numbering), widened to cover the pattern's notes; that seed is never saved.
 
 ---
 
@@ -243,7 +246,7 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
   once (300 ms; none under reduced motion). The field is bound to no single parameter, so it has no MIDI Learn.
 - **Randomize range** starts two octaves up from the resolved key's root in octave 2 (C2 to C4 with no key, D2 to
   D4 in D; the grid's numbering), widened to take in the notes the pattern plays. A key change moves it until the
-  range is touched.
+  range is touched; a range the user moved is saved with the pattern and stays.
 - **The grid** (`Source/UI/ModuleViews/StepGrid/`): the pattern tools row ([Pattern tools](#pattern-tools)), a page strip, 16 columns of the viewed page, the Pitch lane as a
   mini piano roll, a row of step pads, the lane chips ([lane-chips.md](../layout/lane-chips.md)) and the other lanes
   stacked under them. Steps past `steps` are dimmed, never removed.

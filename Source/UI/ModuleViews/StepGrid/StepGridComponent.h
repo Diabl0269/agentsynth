@@ -197,6 +197,7 @@ private:
     void commitPatternTool(const SequencerPattern& next, std::optional<int> newSteps);
     void openRandomizePanel();
     void seedRandomizeRange();
+    void saveRandomizeRange(int lo, int hi);
     bool randomizeRangeTouched() const noexcept {
         return randomize_.minPitch != seededRange_.first || randomize_.maxPitch != seededRange_.second;
     }
@@ -217,6 +218,7 @@ private:
     StepGridTools tools_;
     sequencer_ops::RandomizeSettings randomize_;
     bool randomizeSeeded_ = false;
+    bool randomizeFromSaved_ = false; ///< randomize_'s range came from the pattern's saved range, not a seed.
     StepGridPageStrip pages_;
     LaneChipRow chips_;
 
