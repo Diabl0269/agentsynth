@@ -40,6 +40,8 @@ public:
         bool showPreviewSound = false;           // a "Preview sound" combo above the buttons
         std::vector<juce::String> previewTracks; // its choices after "Default sound", one per instrument track
         int previewSelected = 0;                 // 0 = Default sound, n = previewTracks[n - 1]
+        bool showFitProject = false;             // a "Fit project to key" button above the buttons
+        bool fitProjectEnabled = false;          // that button can be pressed (the owner has a key to fit to)
     };
 
     KeyPicker(Options options, std::function<void(std::optional<MusicalScale>)> onPick);
@@ -55,6 +57,8 @@ public:
     std::function<void(int choice)> onPreviewSoundChanged;
     /** "Detect from notes": the key that fits the notes. Unset hides the button; set it before the picker is shown. */
     std::function<std::optional<MusicalScale>()> detect;
+    /** "Fit project to key" was pressed; the picker closes first. Needs Options::showFitProject. */
+    std::function<void()> onFitProject;
     /** Runs once from the destructor, however the picker closed. */
     std::function<void()> onClosed;
 
@@ -89,6 +93,9 @@ public:
     void clickRelative();
     void clickDetect();
     void clickNoKey();
+    void clickFitProject();
+    bool isFitProjectShown() const;
+    bool isFitProjectEnabled() const;
     void clickFollow();
     void clickKeyboardRoot(int pitchClass);
     bool isPreviewSoundShown() const;
@@ -103,6 +110,7 @@ private:
     CalloutReveal reveal_{*this};
 
     void buildPreviewSound();
+    void buildFitProject();
     void buildRows();
     void applyFilter();
     void layoutRowColumn();
@@ -121,7 +129,7 @@ private:
     std::vector<KeyPickerRow*> visibleItemRows() const;
     void timerCallback() override;
     void endAudition();
-    static int preferredHeight(bool followRow, bool previewRow);
+    static int preferredHeight(bool followRow, bool previewRow, bool fitRow);
 
     Options options_;
     int root_ = 0;
@@ -143,6 +151,7 @@ private:
     std::unique_ptr<KeyPickerButton> noKey_;
     juce::Label previewLabel_;
     juce::ComboBox previewCombo_;
+    std::unique_ptr<KeyPickerButton> fitProject_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(KeyPicker)
 };

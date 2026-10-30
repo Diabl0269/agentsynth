@@ -155,3 +155,99 @@ TEST(TimelineClipLaneInteractionTest, FitToKeyPushesNoUndoStepWhenEverythingIsIn
     EXPECT_EQ(f.pitchAt(2.0), 62);
     EXPECT_FALSE(f.undo.canUndo());
 }
+
+namespace {
+
+// Three MIDI clips of one off-key note (C#) each, a selection over them, and the real menu a right-click on one shows.
+struct FitAllToKeyFixture : FitToKeyMenuFixture {
+    ClipId second, third;
+
+    FitAllToKeyFixture() {
+        const auto track = doc.addTrack(TrackKind::Midi, "Track 2");
+        second = doc.addClip(track, 0.0, 8.0, "Second");
+        doc.addNote(second, makeNote(0.0, 61));
+        third = doc.addClip(track, 8.0, 8.0, "Third");
+        doc.addNote(third, makeNote(0.0, 66)); // F#: between F and G, a tie that goes down
+        selection.setSelection({clip, second, third});
+    }
+
+    int firstPitch(ClipId id) const { return doc.getClip(id)->notes.front().pitch; }
+
+    // The "Fit all clips to key" item of the menu for a right-click on `on`: {present, enabled}; runs it when asked.
+    std::pair<bool, bool> fitAllItem(ClipId on, bool press = false) {
+        auto menu = lane.buildClipContextMenu(on, {0, 0});
+        juce::PopupMenu::MenuItemIterator it(menu);
+        while (it.next()) {
+            if (it.getItem().text != "Fit all clips to key")
+                continue;
+            if (press && it.getItem().action)
+                it.getItem().action();
+            return {true, it.getItem().isEnabled};
+        }
+        return {false, false};
+    }
+};
+
+} // namespace
+
+// Regression test for FRO1236: right-clicking one of several selected clips fits them all, in one undo step.
+TEST(TimelineClipLaneInteractionTest, FitAllClipsToKeyFitsEverySelectedClipAsOneUndoStep) {
+    FitAllToKeyFixture f;
+    f.setSongKey("Major");
+    const auto [present, enabled] = f.fitAllItem(f.second, true);
+    EXPECT_TRUE(present);
+    EXPECT_TRUE(enabled);
+    EXPECT_EQ(f.firstPitch(f.clip), 60);
+    EXPECT_EQ(f.pitchAt(1.0), 60);
+    EXPECT_EQ(f.firstPitch(f.second), 60);
+    EXPECT_EQ(f.firstPitch(f.third), 65);
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.pitchAt(1.0), 61);
+    EXPECT_EQ(f.firstPitch(f.second), 61);
+    EXPECT_EQ(f.firstPitch(f.third), 66);
+    f.undo.undo(); // nothing else was recorded
+    EXPECT_EQ(f.firstPitch(f.second), 61);
+}
+
+TEST(TimelineClipLaneInteractionTest, FitAllClipsToKeyIsOnlyOfferedForASelectionOfSeveralClips) {
+    FitAllToKeyFixture f;
+    f.setSongKey("Major");
+    f.selection.setSelection({f.clip});
+    EXPECT_FALSE(f.fitAllItem(f.clip).first) << "one selected clip: Fit to key covers it";
+    f.selection.setSelection({f.clip, f.second});
+    EXPECT_FALSE(f.fitAllItem(f.third).first) << "the clicked clip is outside the selection";
+    EXPECT_TRUE(f.fitAllItem(f.second).first);
+}
+
+TEST(TimelineClipLaneInteractionTest, FitAllClipsToKeySkipsAudioAndClipsWithNoKey) {
+    FitAllToKeyFixture f;
+    f.setSongKey("Major");
+    const auto audioTrack = f.doc.addTrack(TrackKind::Audio, "Audio");
+    const auto audio = f.doc.addClip(audioTrack, 0.0, 8.0, "Audio");
+    ASSERT_TRUE(f.doc.setClipAsset(audio, "Audio/take.wav", 0.0));
+    f.doc.setClipScale(f.third, synth::makeScale(1, synth::scalePresetIndex("Major")), false); // C# major: F# is in key
+    f.selection.setSelection({f.clip, f.second, f.third, audio});
+    f.fitAllItem(f.clip, true);
+    EXPECT_EQ(f.firstPitch(f.second), 60);
+    EXPECT_EQ(f.firstPitch(f.third), 66) << "fitted to its own key, where F# already is";
+    EXPECT_EQ(f.doc.getClip(audio)->assetRef, "Audio/take.wav");
+}
+
+TEST(TimelineClipLaneInteractionTest, FitAllClipsToKeyIsGreyedWhenNoSelectedClipCanFit) {
+    FitAllToKeyFixture f;
+    auto [present, enabled] = f.fitAllItem(f.clip);
+    EXPECT_TRUE(present) << "greyed, not hidden";
+    EXPECT_FALSE(enabled) << "no song key and no own key";
+    f.fitAllItem(f.clip, true);
+    EXPECT_FALSE(f.undo.canUndo());
+
+    // Everything already in key: the item is offered, and pressing it records nothing.
+    f.setSongKey("Major");
+    f.doc.moveNote(f.doc.getClip(f.clip)->notes[1].id, 1.0, 62);
+    f.doc.moveNote(f.doc.getClip(f.second)->notes[0].id, 0.0, 62);
+    f.doc.moveNote(f.doc.getClip(f.third)->notes[0].id, 0.0, 65);
+    EXPECT_TRUE(f.fitAllItem(f.clip, true).second);
+    EXPECT_FALSE(f.undo.canUndo());
+}

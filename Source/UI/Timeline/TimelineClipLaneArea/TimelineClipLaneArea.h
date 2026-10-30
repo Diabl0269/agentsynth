@@ -456,6 +456,9 @@ public:
     int getLiveStripRepaintCountForTest() const noexcept { return liveStripRepaintCount_; }
     int getClipsPaintedForTest() const noexcept { return clipsPainted_; } // clips drawn since construction
 
+    /** Test-mode: adds the hidden `timelineClipPitches` child that reports every clip's note pitches (see the unit). */
+    void addTestModeProbe();
+
     // ---- Context-menu hook ("showMenuAsync doesn't run headless" idiom) ----
     // Every tool action is ALSO a menu item; see TimelineClipLaneEditTools.cpp for why Rename is
     // the one entry applyClipContextChoice treats as a no-op (its commit path is renameClip()).
@@ -468,11 +471,15 @@ public:
         Rename,
         DuplicateLinked,
         MakeUnique,
-        FitToKey
+        FitToKey,
+        FitSelectionToKey // every selected clip to its own key; the clicked clip alone when it is not in a selection
     };
 
     // The clip's context menu exactly as a right-click at `localPos` would show it (empty with no clip).
     juce::PopupMenu buildClipContextMenu(synth::ClipId id, juce::Point<int> localPos);
+    // The clips a clip-menu action on `clicked` covers: the whole selection when `clicked` is one of two or more
+    // selected clips, else just `clicked`.
+    std::vector<synth::ClipId> clipsForMenuAction(synth::ClipId clicked) const;
     // The Range tool's right-click menu; empty without a range.
     juce::PopupMenu buildRangeContextMenu();
     std::vector<RenderSpan> renderSpansForRange() const;
@@ -806,6 +813,7 @@ private:
     // Screen area the real clip menu opens at while showContextMenuForKeyboardFocus() runs; empty = at the mouse.
     std::optional<juce::Rectangle<int>> keyboardMenuAnchor_;
     ClipSelectionModel& selection_;
+    std::unique_ptr<juce::Component> testModeProbe_; // reports the clips' pitches to test mode; no size, no input
     synth::TimelineDoc* doc_ = nullptr;
     std::vector<int> trackExtraHeights_;       // see setTrackExtraHeights
     std::vector<int> trackRowHeightOverrides_; // see setTrackRowHeightOverrides
