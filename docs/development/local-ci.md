@@ -188,28 +188,40 @@ green again under a lock. Every run now gets its own private settings folder (se
 and a run no longer touches the developer's real settings. Concurrent runs still share the machine's
 audio device, which a stuck run can wedge for everyone.
 
-`scripts/ci-local.sh` therefore takes a lock around its test step (step 10) — `scripts/lib/test-lock.sh`,
-unit-tested by `scripts/tests/ci-local-test-lock.test.sh` in the Lint job:
+`scripts/ci-local.sh` therefore runs the suite as parallel shards (step 10) —
+`scripts/lib/test-shards.sh`, unit-tested by `scripts/tests/ci-local-test-shards.test.sh` in the Lint job:
 
-- **One lock file per repository, shared by every worktree.** The path is resolved from `git
-  rev-parse --git-common-dir`, which every linked worktree of the same checkout shares, so two
-  worktrees serialise against each other without knowing the other exists. Nothing to configure.
-- **Uses the platform's advisory lock tool**: `flock` on Linux, `lockf` on macOS. Neither present
-  (not a supported setup) — the suite runs unlocked with a loud warning rather than failing.
-- **Waits, visibly.** When the lock is held it prints `waiting for another test run to finish`
-  so a session watching the output does not look hung, and gives up after
-  `CI_LOCAL_TEST_LOCK_TIMEOUT` seconds (default 3600) with a distinct message and exit status
-  `75`, never conflated with a red suite.
-- **Only the test run is locked.** Builds run concurrently as before — ccache is safe under
-  contention — so a waiting session still gets its compile errors immediately.
-- **Build parallelism is capped.** Concurrent builds each get `max(2, cores/4)` compile jobs, so
-  several worktrees building at once no longer starve the machine. Set `CI_LOCAL_JOBS=<n>`
-  (a positive integer) to override, e.g. on a quiet machine or a CI runner.
+- **Each shard owns its on-disk state**: its own `AGENTSYNTH_SETTINGS_DIR`, its own `TMPDIR`, and a
+  uniquely named hard link of the binary. The link matters on macOS, where JUCE ignores `TMPDIR` and
+  puts its temp folder at `~/Library/Caches/<executable name>`.
+- **Test slots limit the machine, not the gate.** A shard holds one slot while it runs, an advisory
+  lock (`flock` on Linux, `lockf` on macOS) under `git rev-parse --git-common-dir`, which every
+  worktree shares. Default is three quarters of the cores (`CI_LOCAL_TEST_SLOTS`), with 8 shards per
+  suite (`CI_LOCAL_TEST_SHARDS`). A crashed run frees its slots.
+- **Waiting is bounded.** A shard gives up after `CI_LOCAL_TEST_SLOT_TIMEOUT` seconds (default 3600)
+  with a distinct message and exit status `75`, never conflated with a red suite.
+- **A red shard runs once more, alone, after the others finish.** A test that only fails on a fully
+  loaded machine doesn't cost the whole gate. It is printed as `FLAKY` with the test names either way,
+  and those tests need fixing. CI doesn't retry.
+- **An app check or a recording can stop test runs.** `scripts/hold-test-slots.sh <got-file> <done-file>`
+  takes every slot, because a running Tests binary can wedge the audio device. Running shards finish, new ones
+  wait, and it lets go when the done file appears.
+- **Builds use half the cores** (`CI_LOCAL_JOBS` overrides). Measured with 60 uncached compiles on a busy
+  16-core machine: about twice as fast as a quarter of the cores for one gate and no slower for six. Every
+  core made six gates 2-3x slower, and a load limit (`-l`) starved a gate whenever other sessions held the
+  load above it.
 
-So there is no longer a `lockf` wrapper to hand-roll around `build-ci-local/Tests/Tests`; run
-`bash scripts/ci-local.sh` and let it wait. Running the binary directly (a single filtered suite
-while iterating) is still unlocked, so keep such runs short or take the same lock by hand:
-`flock`/`lockf` on the path `test_lock_path` prints.
+Tests must not depend on the order they run in or on another test having run first: shards split the
+order, and a test's neighbours differ from one run to the next. Running the binary directly (a single
+filtered suite while iterating) takes no slot, so keep such runs short.
+
+### `--fast`
+
+`bash scripts/ci-local.sh --fast` is for iterating. It checks formatting of changed files only, builds
+only `Tests`, and runs only the suites whose test files include a changed header or changed themselves
+(`scripts/lib/changed-tests.py`, reading the build's own dependency data). A build-input change, or one
+reaching over 40% of the test files, runs the full suite. CI still runs everything, so `--fast` passing
+is not a promise that CI passes.
 
 **ccache settings for parallel worktrees.** The dependency-source reuse above only covers the
 FetchContent download; the compiler cache is a separate concern and needs its own configuration to

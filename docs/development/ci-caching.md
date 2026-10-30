@@ -10,7 +10,7 @@ break in ways that look exactly like a healthy build, just slower — which is w
   platform. Max size is set per OS, measured from what a warm main build actually uses: **2 GB on
   Linux** (the Debug+coverage+AI-harness job — a seeded `Linux-ccache-main` entry measured 1.96 GB,
   already saturating a smaller cap), **1 GB on macOS** (one Release+tests build measured 238 MB with
-  the precompiled headers that job turns on) and **512 MB on Windows** (160 MB measured). An entry
+  the precompiled headers that job turns on) and **1 GB on Windows** (unity batches). An entry
   fills to its cap over time as merges add objects, so the cap is a few builds' worth rather than
   the measured size — every configured byte is a byte a save could write toward the 10 GB repo
   budget). Keyed `<os>-ccache-<ref>-<sha>`;

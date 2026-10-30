@@ -5,6 +5,7 @@
 // may only shrink (docs/layout/undo-glide.md, "Registration").
 #include "../SourceScan.h"
 #include "PointMarkers/PointMarkerSurfaceNames.h"
+#include "TestPaths.h"
 #include "UndoGlideSurfaces.h"
 #include <algorithm>
 #include <gtest/gtest.h>

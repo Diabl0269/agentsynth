@@ -1,0 +1,55 @@
+# A Key field opened its picker only once: ComboBox's "menu active" latch was never lowered, so every later click was
+# ignored as "already open" (the keyboard path skipped the latch, so Space and Return kept working).
+#
+# What a user does: with the timeline open, clicks the transport bar's Key field (the picker opens), closes the picker
+# with Escape, clicks the field again (the picker opens again), closes it, and clicks a third time. Then adds a
+# Sequencer and does the same on its card's Key field.
+# The picker is its own desktop window, so a screenshot of the main window never shows it; the PNGs capture the picker.
+# Not driven here: the piano roll's scale Key, since no committed fixture has a clip;
+# KeyFieldTest.EveryKeyFieldOpensItsPickerOnASecondClick clicks all five owners twice.
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 4000}
+  - key: {keys: escape}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {id: timelineTransportSongKey, showing: true, within_ms: 2000}
+  - expect: {id: keyPicker, exists: false}
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPicker, name: song-key-first-open}
+  - key: {keys: escape}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPicker, name: song-key-second-open}
+  - key: {keys: escape}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - key: {keys: escape}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: sequencer}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: sequencerKey, showing: true, within_ms: 2000}
+  - click: {id: sequencerKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPicker, name: sequencer-key-first-open}
+  - key: {keys: escape}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - click: {id: sequencerKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: keyPicker, name: sequencer-key-second-open}

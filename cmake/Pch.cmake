@@ -94,3 +94,52 @@ function(synth_enable_pch target)
             "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
     endif()
 endfunction()
+
+# Merged translation units for the same three targets. Only the Windows CI job turns this on: MSVC is
+# the slowest compiler by far, and the macOS and Linux jobs keep separate files so a source that
+# compiles only because a neighbour included something still fails there.
+#
+# Groups come from a file's folder and name, not its position in the target: with CMake's own batches
+# a new file shifts every later batch, which misses the cache for all of them and puts new neighbours
+# together. Here a new file touches one group.
+option(AGENTSYNTH_UNITY "Merge the sources of Core, AppUI and Tests into unity groups" OFF)
+set(AGENTSYNTH_UNITY_GROUP_SIZE 12 CACHE STRING "Rough sources per unity group")
+include(${CMAKE_CURRENT_LIST_DIR}/UnityExclusions.cmake)
+
+# synth_enable_unity(<target>)
+function(synth_enable_unity target)
+    if(NOT AGENTSYNTH_UNITY)
+        return()
+    endif()
+    set_target_properties(${target} PROPERTIES UNITY_BUILD ON UNITY_BUILD_MODE GROUP)
+    get_target_property(sources ${target} SOURCES)
+    get_target_property(source_dir ${target} SOURCE_DIR)
+    # First pass counts each folder's sources, which sets how many groups it splits into.
+    set(entries "")
+    foreach(source IN LISTS sources)
+        if(NOT source MATCHES "\\.cpp$")
+            continue()
+        endif()
+        cmake_path(ABSOLUTE_PATH source BASE_DIRECTORY "${source_dir}" NORMALIZE OUTPUT_VARIABLE absolute)
+        cmake_path(RELATIVE_PATH absolute BASE_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE relative)
+        if(relative IN_LIST SYNTH_UNITY_SKIP)
+            continue()
+        endif()
+        cmake_path(GET relative PARENT_PATH folder)
+        string(MAKE_C_IDENTIFIER "${folder}" folder_id)
+        math(EXPR count_${folder_id} "${count_${folder_id}}+1")
+        list(APPEND entries "${source}|${relative}|${folder_id}")
+    endforeach()
+    foreach(entry IN LISTS entries)
+        string(REPLACE "|" ";" parts "${entry}")
+        list(GET parts 0 source)
+        list(GET parts 1 relative)
+        list(GET parts 2 folder_id)
+        math(EXPR groups "${count_${folder_id}}/${AGENTSYNTH_UNITY_GROUP_SIZE}+1")
+        string(MD5 hash "${relative}")
+        string(SUBSTRING "${hash}" 0 4 hash)
+        math(EXPR bucket "0x${hash}%${groups}")
+        set_source_files_properties(${source} TARGET_DIRECTORY ${target} PROPERTIES
+            UNITY_GROUP "${folder_id}_${bucket}")
+    endforeach()
+endfunction()
