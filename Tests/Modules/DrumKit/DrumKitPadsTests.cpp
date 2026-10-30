@@ -97,6 +97,22 @@ TEST(DrumKitPads, ANewKitHasEightPadsOnTheGeneralMidiNotesAndThirtyTwoSlots) {
     EXPECT_EQ(kit.padParameter(0, PadParam::Level)->getName(32), "Pad 1 level");
 }
 
+// Each pad knob reads in its unit; a raw "0.0000" under Tune or Decay told the user nothing.
+TEST(DrumKitPads, PadValuesReadInTheirUnits) {
+    DrumKitModule kit;
+    auto text = [&](PadParam which, float value) {
+        juce::AudioProcessorParameter* p = kit.padParameter(0, which);
+        return p->getText(kit.padParameter(0, which)->convertTo0to1(value), 32);
+    };
+    EXPECT_EQ(text(PadParam::Level, 0.8f), "80 %");
+    EXPECT_EQ(text(PadParam::Tune, -3.0f), "-3.0 st");
+    EXPECT_EQ(text(PadParam::Decay, 0.3f), "300 ms");
+    EXPECT_EQ(text(PadParam::Decay, 1.5f), "1.50 s");
+    auto* decay = kit.padParameter(0, PadParam::Decay);
+    EXPECT_NEAR(decay->convertFrom0to1(static_cast<juce::AudioProcessorParameter*>(decay)->getValueForText("1.5 s")),
+                1.5f, 1e-3f);
+}
+
 TEST(DrumKitPads, TheCountIsFourToThirtyTwoInStepsOfFour) {
     EXPECT_EQ(synth::drums::clampPadCount(0), 4);
     EXPECT_EQ(synth::drums::clampPadCount(3), 4);

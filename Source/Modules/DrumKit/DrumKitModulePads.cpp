@@ -77,6 +77,25 @@ bool DrumKitModule::linkReaches(const GroupLink& link, int sound) const noexcept
 }
 
 // 128 parameters after every older one; each pad starts with its group's defaults so a new kit sounds as it did.
+namespace {
+
+// Each pad knob reads in its own unit: Level and Start as a percent, Tune in semitones, Decay (held in seconds) as a
+// time.
+juce::AudioParameterFloatAttributes padAttributes(DrumKitModule::PadParam which) {
+    using PadParam = DrumKitModule::PadParam;
+    if (which == PadParam::Tune)
+        return synth::semitonesAttributes();
+    if (which == PadParam::Decay)
+        return juce::AudioParameterFloatAttributes()
+            .withLabel("s")
+            .withStringFromValueFunction([](float v, int) { return synth::millisecondsToText(v * 1000.0f); })
+            .withValueFromStringFunction(
+                [](const juce::String& t) { return synth::millisecondsFromText(t) / 1000.0f; });
+    return synth::fractionPercentAttributes();
+}
+
+} // namespace
+
 void DrumKitModule::addPadParameters() {
     for (int i = 0; i < kMaxPads; ++i) {
         const int sound = synth::drums::defaultPad(i).sound;
@@ -88,11 +107,9 @@ void DrumKitModule::addPadParameters() {
                 if (links_[(size_t)l].field == which && linkReaches(links_[(size_t)l], sound))
                     def = links_[(size_t)l].param->get();
             const auto range = padRangeFor(which);
-            const bool unit = which == PadParam::Level || which == PadParam::Start;
             made[f] = new juce::AudioParameterFloat(
                 juce::ParameterID("pad" + juce::String(i + 1) + kPadParamSuffixes[f]),
-                "Pad " + juce::String(i + 1) + " " + kPadParamWords[f], range, def,
-                unit ? synth::fractionPercentAttributes() : juce::AudioParameterFloatAttributes());
+                "Pad " + juce::String(i + 1) + " " + kPadParamWords[f], range, def, padAttributes(which));
             addParameter(made[f]);
         }
         padParams_[(size_t)i] = {made[0], made[1], made[2], made[3]};

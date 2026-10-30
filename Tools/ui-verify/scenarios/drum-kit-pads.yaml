@@ -7,7 +7,8 @@
 #   3. Clicks pad 5 (the open hat): it plays and is picked.
 #   4. Shift+clicks pad 6: it is picked, the open hat stays the last pad played, and the caption says so.
 # The pad centres below are for the 280 px card: pads 61 px wide with 4 px gaps, 44 px tall up to 16 pads.
-# Needs the app to be the active application (the library search field must have keyboard focus).
+# Test mode has no audio device, so "played" is the pad the grid sent to the kit (auditionedPad); the sound itself is
+# covered by DrumKitPadsTests.
 steps:
   - click: {id: New empty project}
   - wait: {}
@@ -29,9 +30,9 @@ steps:
   - expect: {id: "card:Drum Kit > drumPads", padCount: 16, within_ms: 1500}
   - click: {id: "card:Drum Kit > drumPads", x: 30, y: 70}          # pad 5: second row, first column
   - wait: {}
-  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 5, lastPlayedPad: 5, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 5, auditionedPad: 5, within_ms: 1500}
   - click: {id: "card:Drum Kit > drumPads", x: 95, y: 70, mods: [shift]}   # pad 6, quietly
   - wait: {}
-  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 6, lastPlayedPad: 5, within_ms: 1500}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 6, auditionedPad: 5, within_ms: 1500}
   - expect: {id: "card:Drum Kit > drumPadsCaption", contains: {text: "picked (no sound)"}}
   - screenshot: {id: "card:Drum Kit", name: drum-kit-pads-16}

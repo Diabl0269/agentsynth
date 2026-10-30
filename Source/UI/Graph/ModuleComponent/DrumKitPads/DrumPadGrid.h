@@ -80,6 +80,7 @@ private:
     int flashing_ = -1;
     int count_ = 0;
     int picked_ = 0;
+    int auditioned_ = -1;
     juce::Rectangle<float> ringRect_;
     juce::VBlankAnimatorUpdater updater_{this};
     AnimationDriver ringSlide_;

@@ -165,6 +165,7 @@ void DrumPadGrid::pick(int index, bool play) {
     picked_ = index;
     if (play) {
         kit_.auditionPad(index);
+        auditioned_ = index;
         // The flash is feedback that the click sounded; with nothing animating (off screen, Animations Off) the sound
         // is the feedback.
         if (FadeVisibility::canAnimateIn(this)) {
@@ -285,6 +286,9 @@ std::unique_ptr<juce::AccessibilityHandler> DrumPadGrid::createAccessibilityHand
 void DrumPadGrid::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("padCount", count_);
     into.setProperty("pickedPad", picked_ + 1);
+    // auditionedPad is the last pad this grid asked to play; lastPlayedPad is set by the audio thread, so it stays 0
+    // in a test-mode instance, which has no audio device.
+    into.setProperty("auditionedPad", auditioned_ + 1);
     into.setProperty("lastPlayedPad", kit_.lastPlayedPad() + 1);
 }
 
