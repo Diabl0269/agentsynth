@@ -246,12 +246,12 @@ bool MainComponent::performCutSelection() {
     }
     // The graph has no cut verb of its own, so it is composed here from the two that exist --
     // copySelection() fills the clipboard WITHOUT touching the graph or the undo stack, and
-    // deleteSelection() then does the whole removal inside its own single
-    // recordStructuralChange (the same transaction Delete and the canvas menu already use). So
-    // a cut is exactly one graph-undo step, and the copy half survives the undo.
+    // requestDeleteSelection() (a whole macro asks about its track first) then does the whole removal inside its own
+    // single recordStructuralChange (the same transaction Delete and the canvas menu already use). So a cut is exactly
+    // one graph-undo step, and the copy half survives the undo.
     const int cutCount = graphEditor.getSelectionCount();
     if (graphEditor.copySelection()) {
-        graphEditor.deleteSelection();
+        graphEditor.getMacroController().requestDeleteSelection();
         statusBar.showMessage("Cut " + juce::String(cutCount) + " modules");
     } else {
         statusBar.showMessage("Nothing to cut - select one or more modules first");

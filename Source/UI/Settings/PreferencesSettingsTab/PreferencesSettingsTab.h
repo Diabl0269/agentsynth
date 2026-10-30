@@ -603,7 +603,7 @@ private:
     // this one is "make a clip from the locators".
     juce::ToggleButton doubleClickSpansLocatorsToggle{"Timeline: double-click inside the locators spans them"};
     juce::ToggleButton askBeforeRemovingLfoToggle{"Ask before removing an LFO's last destination"};
-    juce::ToggleButton askBeforeDeletingTrackToggle{"Ask before deleting a track with the keyboard"};
+    juce::ToggleButton askBeforeDeletingTrackToggle{"Ask before deleting a track or its macro"};
     juce::ToggleButton recordStartsPlaybackToggle{"Record also starts playback"};
     juce::Label followPointLabel;
     juce::TextEditor followPointEditor;

@@ -550,8 +550,8 @@ private:
     void selectNodeInGraph(const juce::String& uuid) override;
     void deleteTrackAfterConfirm(synth::TrackId track) override;
     void deleteTrack(synth::TrackId track) override;
-    /** Canvas Delete Macro: true when `macroId` is a track's macro, and the track (with it) goes after the question. */
-    bool deleteMacroOfTrack(const juce::String& macroId);
+    /** Every macro delete: true when a track plays a node inside one (it then asks first). */
+    bool deleteMacrosOfTracks(const std::vector<juce::String>& macroIds, bool wholeSelection);
     void askThenDeleteTrack(synth::TrackId track, const synth::ui::DeleteTrackConfirmText& text);
     void duplicateTrack(synth::TrackId track) override;
     // docs/timeline/tracks.md#selecting-several-tracks -- the bulk half of the track-row commands

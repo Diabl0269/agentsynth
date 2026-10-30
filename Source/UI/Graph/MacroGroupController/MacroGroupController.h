@@ -229,10 +229,16 @@ public:
         recordMacroColourHook;
     void setMacroColour(const juce::String& macroId, juce::Colour colour);
     void deleteMacroAndMembers(const juce::String& macroId);
-    /** The canvas menu's Delete Macro: `onDeleteMacroRequested` gets first refusal, else deleteMacroAndMembers. */
+    /** The canvas menu's Delete Macro: `onDeleteMacrosRequested` gets first refusal, else deleteMacroAndMembers. */
     void requestDeleteMacro(const juce::String& macroId);
-    /** Returns true when it took the delete over (a track's macro goes with its track). Unset by default. */
-    std::function<bool(const juce::String& macroId)> onDeleteMacroRequested;
+    /** The user's delete of the selection (Delete / Backspace, Cut, the multi-select menu): when whole macros are in
+     *  the selection `onDeleteMacrosRequested` gets first refusal, else the ordinary deleteSelection. Together with
+     *  requestDeleteMacro, the one decision every route that deletes a macro goes through. */
+    void requestDeleteSelection();
+    /** Called with the macros being deleted (outermost only) and whether they are the whole selection (the Delete
+     *  key) or one macro on its own (the menu). Returns true when it took the delete over (a macro a track plays asks
+     *  about the track, then deletes). Unset by default. */
+    std::function<bool(const std::vector<juce::String>& macroIds, bool wholeSelection)> onDeleteMacrosRequested;
     std::vector<MacroMemberPreview> macroMemberPreviews(const juce::String& macroId) const;
     juce::StringArray macroMemberNames(const juce::String& macroId) const;
 

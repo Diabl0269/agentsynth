@@ -299,7 +299,7 @@ bool GraphEditor::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) {
         if (selection.isEmpty())
             return false;
-        deleteSelection();
+        macroController_.requestDeleteSelection();
         return true;
     }
 

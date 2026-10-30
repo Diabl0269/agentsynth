@@ -10,12 +10,28 @@
 #include "AppUndoManager.h"
 #include "Modules/ModuleBase.h"
 
-// The menu item's entry point. A track's macro cannot be deleted on its own: the app hook turns that into deleting the
-// track, so the macro, the track and the modules only it used go as one step. Any other macro takes the plain path.
+// A macro a track plays is not deleted on its own: the app hook asks whether the track goes too. Any other macro takes
+// the plain path.
 void MacroGroupController::requestDeleteMacro(const juce::String& macroId) {
-    if (onDeleteMacroRequested && onDeleteMacroRequested(macroId))
+    if (onDeleteMacrosRequested && onDeleteMacrosRequested({macroId}, false))
         return;
     deleteMacroAndMembers(macroId);
+}
+
+// The macros the selection holds whole, outermost only: a macro whose members are all selected and whose ancestors are
+// not (an ancestor that is selected whole already covers it).
+void MacroGroupController::requestDeleteSelection() {
+    std::vector<juce::String> macroIds;
+    for (const auto& macro : host_.getMacros().getAll()) {
+        const auto ancestors = host_.getMacros().ancestorChain(macro.id);
+        const bool covered = std::any_of(ancestors.begin(), ancestors.end(),
+                                         [this](const juce::String& id) { return isMacroInSelection(id); });
+        if (isMacroInSelection(macro.id) && !covered)
+            macroIds.push_back(macro.id);
+    }
+    if (!macroIds.empty() && onDeleteMacrosRequested && onDeleteMacrosRequested(macroIds, true))
+        return;
+    host_.deleteSelection();
 }
 
 // Transitive: deleting a macro deletes everything drawn inside it, nested children included.
