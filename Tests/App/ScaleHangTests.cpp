@@ -6,7 +6,7 @@
 //   ./Tests --gtest_also_run_disabled_tests --gtest_filter='ScaleHang.DISABLED_*'
 
 #include "../StubPluginInstance.h"
-#include "../UI/Graph/CardBody/CardBodyTestHelpers.h"
+#include "../UI/Graph/CardBody/CardCanvas.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
@@ -17,6 +17,7 @@
 #include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
 #include <chrono>
 #include <cstdio>
+#include <gtest/gtest.h>
 
 using namespace cardbody_test;
 using synth::HostedPluginModule;
