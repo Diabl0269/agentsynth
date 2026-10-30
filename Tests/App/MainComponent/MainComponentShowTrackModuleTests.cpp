@@ -10,6 +10,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 
+#include "../../TestWait.h"
 #include <chrono>
 
 namespace {
@@ -91,7 +92,7 @@ TEST_F(ShowTrackModuleTest, TheButtonDoesWhatTheKeyDoes) {
     const auto id = addTrack(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
 
     headerOf(id).getShowModuleButton().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // triggerClick posts its click
+    synth::test::waitUntil([&] { return (selected().size()) == (1u); });
 
     ASSERT_EQ(selected().size(), 1u);
     EXPECT_NE(dynamic_cast<OscillatorModule*>(graph().getNodeForId(selected()[0])->getProcessor()), nullptr);

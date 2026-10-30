@@ -2,6 +2,7 @@
 // the host resolves the picked parameter's real range, Cmd+D reaches the lane through the app's own key handler, and
 // each edit is one undo step.
 
+#include "../../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
@@ -143,7 +144,7 @@ TEST_F(LaneMainTest, CmdDOnTheLaneSurfaceOpensThePickerAndAPickMakesTheCopyBelow
     const auto before = s.doc().getTrack(s.track)->lanes.size();
 
     EXPECT_TRUE(s.mc.keyPressed(juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (capture.picker) != (nullptr); });
 
     ASSERT_NE(capture.picker, nullptr) << "Cmd+D opens the picker for the focused lane";
     EXPECT_EQ(s.doc().getTrack(s.track)->lanes.size(), before) << "nothing exists until a parameter is picked";
@@ -171,7 +172,7 @@ TEST_F(LaneMainTest, CmdDWithAPickerDismissedLeavesTheDocUntouched) {
     const auto revision = s.doc().getRevision();
 
     s.mc.keyPressed(juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (capture.picker) != (nullptr); });
     ASSERT_NE(capture.picker, nullptr);
     capture.picker.reset();
 

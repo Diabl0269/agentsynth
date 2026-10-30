@@ -1,6 +1,7 @@
 // RenameKeyTests.cpp -- Option+R (and F2) rename whatever name has focus: the defaults, a focused timeline track
 // header's name editor (Return commits, Escape cancels, a text editor keeps the key), a focused mixer column's header
 // editor (also inside a detached mixer window) and the selected module card.
+#include "../../TestWait.h"
 #include "../Mixer/MixerZonesTestRig.h"
 #include "MainComponent/WindowKeyForward.h"
 #include "ShortcutManager/AppCommands.h"
@@ -170,7 +171,7 @@ TEST(RenameKeyWindowForward, AKeyOnTheWindowRunsTheShortcutTable) {
     ASSERT_NE(dock.getActiveTab(), *second);
     const juce::KeyPress cmd2('2', juce::ModifierKeys::commandModifier, '2');
     EXPECT_TRUE(synth::forwardWindowKeyToMainComponent(&r.mc, cmd2));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (dock.getActiveTab()) == (*second); });
     EXPECT_EQ(dock.getActiveTab(), *second);
     juce::Component notMain;
     EXPECT_FALSE(synth::forwardWindowKeyToMainComponent(&notMain, cmd2));

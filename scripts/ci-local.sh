@@ -32,12 +32,15 @@
 #   5b. scripts/check-comment-provenance.sh against the real tree -- the Lint job's "Check comment
 #      provenance" step: per-file count of comment lines carrying a ticket id or date + strict
 #      ratchet baseline, run directly (not just its unit test).
+#   5c. scripts/check-fixed-waits.sh against the real tree -- the Lint job's "Check fixed-time
+#      waits" step: tests that pump the message loop for a fixed time and then assert, plus a
+#      strict ratchet baseline, run directly (not just its unit test).
 #   6. scripts/check-docs.sh against the real tree -- docs link/anchor/naming integrity: markdown
 #      link targets, docs/... path mentions, section (§) references, and the docs/ filename
 #      convention, run directly (not just its unit test). See that script's own doc comment.
 #   7. Every scripts/tests/*.test.sh -- ci-cache-check, ci-install-linux-deps,
 #      check-nonascii-literals, check-ui-caps, ai-eval-ratchet, utf8-literal-check, check-file-sizes,
-#      check-function-sizes, check-header-comments, check-comment-provenance, check-docs as of this writing, globbed so a
+#      check-function-sizes, check-header-comments, check-comment-provenance, check-fixed-waits, check-docs as of this writing, globbed so a
 #      newly added one is picked up automatically. check-nonascii-literals.test.sh's own last case
 #      scans the real Source/ tree, so this also covers the Lint job's ASCII-literal gate.
 #   8. Configure (-DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON, Release) and build EVERY target the
@@ -186,6 +189,10 @@ bash scripts/check-header-comments.sh || fail "header-comment-placement guard fa
 # --- 5b. Comment-provenance guard, against the real tree ---------------------------------------
 step "scripts/check-comment-provenance.sh (real tree, ticket-id/date comment count + ratchet baseline)"
 bash scripts/check-comment-provenance.sh || fail "comment-provenance guard failed (see above)."
+
+# --- 5c. Fixed-wait guard, against the real tree ------------------------------------------------
+step "scripts/check-fixed-waits.sh (real tree, fixed-time pump then assert + ratchet baseline)"
+bash scripts/check-fixed-waits.sh || fail "fixed-wait guard failed (see above)."
 
 # --- 6. Docs guard, against the real tree -------------------------------------------------------
 step "scripts/check-docs.sh (docs link/anchor/naming integrity)"

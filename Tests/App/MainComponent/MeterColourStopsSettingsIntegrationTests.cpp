@@ -7,6 +7,7 @@
 // AppearanceSettingsTab::applyMeterColourStopsChange() does, pump the message loop for the
 // ChangeBroadcaster's async notification, and assert the SAME AppLookAndFeel instance every meter
 // painter reads (getLookAndFeelForTest()) picked it up.
+#include "../../TestWait.h"
 #include "MainComponentTestFixture.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Theme/BuiltInThemes.h"
@@ -64,7 +65,7 @@ TEST_F(MainComponentTest, WritingTheSettingsKeyPushesTheOverrideIntoTheSharedLoo
     // The write's ChangeBroadcaster notification is async (juce::ChangeBroadcaster::
     // sendChangeMessage) -- pump the message loop for it to actually reach
     // MainComponent::changeListenerCallback.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getLookAndFeelForTest().hasMeterColourStopsOverride(); });
 
     EXPECT_TRUE(mc.getLookAndFeelForTest().hasMeterColourStopsOverride());
     EXPECT_EQ(mc.getLookAndFeelForTest().getMeterColourStops().colourForDb(-30.0f), juce::Colour(0xff102030));
@@ -77,7 +78,7 @@ TEST_F(MainComponentTest, ClearingTheSettingsKeyRevertsTheSharedLookAndFeelToThe
     synth::ui::saveMeterColourStopsOverride(
         *mc.getAppPropertiesForTest().getUserSettings(),
         synth::ui::MeterColourStops({{synth::ui::kMeterMinDb, juce::Colour(0xff102030)}}));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getLookAndFeelForTest().hasMeterColourStopsOverride(); });
     ASSERT_TRUE(mc.getLookAndFeelForTest().hasMeterColourStopsOverride());
 
     synth::ui::clearMeterColourStopsOverride(*mc.getAppPropertiesForTest().getUserSettings());

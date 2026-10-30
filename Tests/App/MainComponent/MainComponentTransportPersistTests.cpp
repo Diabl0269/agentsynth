@@ -1,5 +1,6 @@
 // Concern: the transport (tempo, time signature, loop) is part of the saved project and its edits are
 // debounced undo steps that mark the document unsaved.
+#include "../../TestWait.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
 #include "ProjectBundle.h"
@@ -88,7 +89,7 @@ TEST_F(MainComponentTest, HeldTransportEditMarksTheDocumentUnsavedAndUndoRestore
     ASSERT_TRUE(transport.setBpm(96.0));
     mc.pollTransportEditsForTest(kStart);         // first sight of the new value
     mc.pollTransportEditsForTest(kStart + kHeld); // held long enough
-    settle();
+    synth::test::waitUntil([&] { return mc.isProjectDirty(); });
 
     EXPECT_TRUE(mc.isProjectDirty());
     ASSERT_TRUE(mc.getUndoManager().canUndo());
@@ -139,7 +140,7 @@ TEST_F(MainComponentTest, ContinuouslyChangingTransportRecordsNoStepUntilItSettl
     // Once it stops, the whole drag is one step.
     mc.pollTransportEditsForTest(kStart + 2000);
     mc.pollTransportEditsForTest(kStart + 2000 + kHeld);
-    settle();
+    synth::test::waitUntil([&] { return mc.isProjectDirty(); });
     EXPECT_TRUE(mc.isProjectDirty());
     mc.getUndoManager().undo();
     EXPECT_DOUBLE_EQ(transport.getDocumentState().bpm, 120.0);

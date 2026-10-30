@@ -2,6 +2,7 @@
 // snap, follow, transport, tempo, time signature, song key). Focus stays on the panel root; Up on it raises a ring, the
 // arrows move it, Return and Space press the ringed control. Real focus needs a native peer, so the root's key is
 // handed to handleRootFocusKey and the rest go through the panel's own keyPressed.
+#include "../../TestWait.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -126,7 +127,7 @@ TEST(TimelineTopBarKeysTest, ReturnAndSpacePressTheRingedControl) {
 
     ringTo(f.panel.getToolButton(EditTool::Split));
     EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::spaceKey)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (f.panel.getActiveTool()) == (EditTool::Split); });
     EXPECT_EQ(f.panel.getActiveTool(), EditTool::Split);
 
     ringTo(&f.panel.getTransportBar().getBpmLabel());

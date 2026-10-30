@@ -1,6 +1,7 @@
 // ControlStyleCardTests.cpp -- the cards of a real GraphEditor publish their control style (own, else the
 // type's), the "Control Style..." panel writes both levels, and the card menu offers it.
 
+#include "../../../TestWait.h"
 #include "../CardBody/CardBodyTestHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroSet.h"
@@ -315,10 +316,10 @@ TEST(ControlStylePanel, EveryButtonPressesOnSpaceAndConsumesIt) {
         return button.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey));
     };
     EXPECT_TRUE(pressSpace(rig.panel->getScopeButtonForTest(Scope::Type)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // triggerClick() posts the click
+    synth::test::waitUntil([&] { return (rig.panel->getScope()) == (Scope::Type); });
     EXPECT_EQ(rig.panel->getScope(), Scope::Type);
     EXPECT_TRUE(pressSpace(rig.panel->getScopeButtonForTest(Scope::Module)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return (rig.panel->getScope()) == (Scope::Module); });
     EXPECT_EQ(rig.panel->getScope(), Scope::Module);
 
     EXPECT_TRUE(pressSpace(rig.picker().getStyleButtonForTest((int)KnobStyle::Analog)));

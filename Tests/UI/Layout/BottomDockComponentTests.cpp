@@ -1,5 +1,6 @@
 // BottomDockComponentTests.cpp -- the dock's tab strip, the Toggle Mixer Panel
 // shortcut/command, and active-tab persistence via ApplicationProperties.
+#include "../../TestWait.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "AI/AIProvider.h"
 #include "BottomDockActiveTabResetGuard.h"
@@ -643,7 +644,7 @@ TEST(BottomDockComponentTests, TheWindowBehindThePanesTakesTheThemesPageColourNo
     window2.setContentNonOwned(&themed, true);
     EXPECT_EQ(window2.getBackgroundColour(), lf.getTheme().colors.bg0);
     themes.setActiveTheme("obsidian");
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100); // the broadcast is asynchronous
+    synth::test::waitUntil([&] { return (lf.getTheme().id) == (juce::String("obsidian")); });
     EXPECT_EQ(lf.getTheme().id, juce::String("obsidian"));
     EXPECT_EQ(window2.getBackgroundColour(), lf.getTheme().colors.bg0) << "a switch re-colours the window";
 }

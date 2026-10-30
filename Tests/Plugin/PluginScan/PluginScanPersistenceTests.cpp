@@ -5,6 +5,7 @@
 #include "PluginScanTestHelpers.h"
 #include "UserSettings.h"
 
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 
@@ -221,7 +222,7 @@ TEST_F(PluginScanPersistenceTest, EagerScanPopulatesTheSidebarWithoutItEverBeing
 
     // A later call (e.g. the picker opening after startup already scanned) must not rescan.
     main.maybeStartEagerPluginScan();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return (launcher.launchCountFor(kAlpha)) == (1); });
     EXPECT_EQ(launcher.launchCountFor(kAlpha), 1);
 }
 

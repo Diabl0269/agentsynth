@@ -113,6 +113,35 @@ macro no track plays (Oscillator, Filter and a Hosted Plugin stand-in from `Stub
 things after the load. Extend it there (one more shape in `build`) rather than building a second project; first user:
 `UI/Timeline/TimelineTrackDeleteMacroTests.cpp`.
 
+## Waiting for async work
+
+Never pump the message loop for a fixed time and then assert. `runDispatchLoopUntil(50)` followed by
+an `EXPECT_` passes only when the work happens to land inside those 50 ms: on a loaded runner it
+fails, and on a fast one it wastes the rest. Poll for the condition with `synth::test::waitUntil`
+(`Tests/TestWait.h`) and keep the assertion after it, so a timeout still reports the failing state:
+
+```cpp
+synth::test::waitUntil([&] { return mc.isProjectDirty(); });   // pumps in 10 ms steps, up to 2 s
+EXPECT_TRUE(mc.isProjectDirty());
+```
+
+`waitUntil` always pumps once before the first check, so a message posted just before the call is
+delivered even if the condition already holds. For a "nothing may happen" check there is no
+condition to wait for: keep a fixed pump and list the site in `scripts/fixed-waits-baseline.txt`
+with a one-line reason.
+
+`scripts/check-fixed-waits.sh` enforces this (Lint job, pre-commit hook and `ci-local.sh`;
+`scripts/tests/check-fixed-waits.test.sh` covers the checker). It flags
+`runDispatchLoopUntil(<literal or k-constant>)`, or a one-line wrapper of it such as `pump()` /
+`settle()` (a wrapper in a `Tests/` header applies to the files that include it), in `Tests/` when an
+`EXPECT_`/`ASSERT_` follows within 8 code lines in the same block. A call inside a loop whose
+condition checks state (`for (...; i < 50 && !done; ++i) pump();`, `while (!x)`, `do ... while`) is the
+poll pattern and is not flagged. The baseline is a strict ratchet keyed by path and code line, not
+line number: a new site fails, an entry whose site was converted is stale and fails until
+`bash scripts/check-fixed-waits.sh --update` drops it (it never adds one). `--list` prints every
+site ignoring the baseline. The baseline entries are the remaining sites to convert; convert one by
+replacing the pump with a `waitUntil` on the state the next assertion reads.
+
 ## Known flaky patterns
 
 - **A test Rig whose `RemoteEngine` outlives its `AudioEngine`/graph segfaults at teardown if a MIDI

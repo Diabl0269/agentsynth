@@ -2,6 +2,7 @@
 // menu's Rename group opens the inline editor; Return keeps, Esc cancels, an empty text reverts; each rename is one
 // undo step.
 
+#include "../../../../TestWait.h"
 #include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
 
@@ -51,7 +52,7 @@ TEST(OnCardGroupRename, DoubleClickTypeAndEnterRenamesTheGroupAsOneUndoStep) {
 
     text->setText("Voices", false);
     EXPECT_TRUE(text->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    pump();
+    synth::test::waitUntil([&] { return (osc.shownTitle("unison")) == ("Voices"); });
 
     EXPECT_EQ(osc.shownTitle("unison"), "Voices");
     EXPECT_EQ(osc.editor->getGroupHandleForTest("unison")->getTitle(), "Voices group");
@@ -89,7 +90,7 @@ TEST(OnCardGroupRename, EscapeCancelsAndAnEmptyTextRevertsWithNothingWritten) {
     ASSERT_NE(text, nullptr);
     text->setText("   ", false);
     EXPECT_TRUE(text->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    pump();
+    synth::test::waitUntil([&] { return (osc.shownTitle("unison")) == ("Unison"); });
     EXPECT_EQ(osc.shownTitle("unison"), "Unison") << "an empty name reverts";
     EXPECT_EQ(osc.serial(), serial);
 
@@ -118,7 +119,7 @@ TEST(OnCardGroupRename, ReturnOnAFocusedTitleAndTheMenusRenameGroupOpenTheSameEd
     ASSERT_NE(text, nullptr);
     text->setText("Master", false);
     EXPECT_TRUE(text->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    pump();
+    synth::test::waitUntil([&] { return (osc.shownTitle("output")) == ("Master"); });
     EXPECT_EQ(osc.shownTitle("output"), "Master");
     EXPECT_EQ(osc.editor->getLastAnnouncementForTest(), "Group renamed to Master");
 }

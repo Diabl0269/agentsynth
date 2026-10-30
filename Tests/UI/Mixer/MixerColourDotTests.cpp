@@ -2,6 +2,7 @@
 // track's colour picker -- the same one its Timeline swatch opens -- and a pick recolours the track, its channel macro
 // and every mixer column as one undo step. The dot is a Tab stop with a name and a tooltip. A real off-screen
 // MainComponent; the picker is captured through the panel's test hook instead of opening a CallOutBox.
+#include "../../TestWait.h"
 #include "Mixer/ChannelMacroLookup.h"
 #include "MixerHeaderTestRig.h"
 #include "UI/Chrome/ColourPickerPopup.h"
@@ -84,7 +85,7 @@ TEST(MixerColourDotTest, ReturnOnTheFocusedDotOpensThePickerToo) {
     auto& dot = rig.firstColumn().getHeaderForTest().getColourDotForTest();
 
     EXPECT_TRUE(static_cast<juce::Component&>(dot).keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    HeaderRig::pumpMessages();
+    synth::test::waitUntil([&] { return (captured.opens) == (1); });
     EXPECT_EQ(captured.opens, 1);
     EXPECT_NE(captured.popup, nullptr);
 }

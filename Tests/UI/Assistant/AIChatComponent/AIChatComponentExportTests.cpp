@@ -1,5 +1,6 @@
 // Export chat: the control exists with its name and tooltip, is disabled while there is nothing to export, and the
 // file it writes holds the conversation's turns.
+#include "../../../TestWait.h"
 #include "AIChatComponentTestFixture.h"
 
 namespace {
@@ -118,7 +119,7 @@ TEST_F(AIChatComponentTest, RestoredTurnsExportWithTheirTextOnly) {
                       {"assistant", "restored answer", saved.createdAt}};
     synth::LocalHistoryStore::save(rig.historyDir, saved, synth::LocalHistoryStore::kDefaultRetentionDays);
     rig.chat->simulateRestoreConversationForTesting("restore-me", /*isCloud=*/false);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return rig.chat->getExportButtonForTesting().isEnabled(); });
 
     EXPECT_TRUE(rig.chat->getExportButtonForTesting().isEnabled());
     const auto root = rig.chat->buildChatExportForTesting();

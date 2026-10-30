@@ -1,6 +1,7 @@
 // PortPanelClickTests.cpp: which presses on a jack open the port connections panel, and which do not. The real mouse
 // path (ModuleComponent::mouseDown / mouseUp), with the panel captured headlessly by the controller's launcher.
 
+#include "../../../TestWait.h"
 #include "PortPanelTestFixture.h"
 
 namespace {
@@ -232,7 +233,7 @@ TEST_F(GraphEditorTest, ARealSingleClickOnAOneCableJackOpensThePanelOnceTheTimer
     ASSERT_TRUE(f.editor->getDoubleClickPortDisconnectEnabled());
 
     realClick(*f.editor, *f.oscCard(), f.oscOut());
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(juce::MouseEvent::getDoubleClickTimeout() + 150);
+    synth::test::waitUntil([&] { return (f.launches) == (1); });
 
     EXPECT_EQ(f.launches, 1);
     ASSERT_NE(f.panel(), nullptr);
@@ -243,7 +244,7 @@ TEST_F(GraphEditorTest, ARealClickOnTheInputEndOfAOneCableOpensThePanelOnceTheTi
     PortFixture f(1);
     auto* vca = f.card(f.vcaIds[0]);
     realClick(*f.editor, *vca, vca->getPortCenter(0, true));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(juce::MouseEvent::getDoubleClickTimeout() + 150);
+    synth::test::waitUntil([&] { return (f.launches) == (1); });
     EXPECT_EQ(f.launches, 1);
     EXPECT_NE(f.panel(), nullptr);
 }

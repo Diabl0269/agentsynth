@@ -9,6 +9,7 @@
 //   2. MainComponent's record wiring — MidiRecorder's app-level wiring (the armed-track lookup, the
 //      auto-commit-on-stop poll).
 
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
@@ -454,7 +455,7 @@ TEST_F(TimelineTransportBarAppWiringTest, TheRecordTooltipFollowsThePreference) 
     EXPECT_TRUE(button.getTooltip().contains("press Play")) << button.getTooltip();
 
     setRecordStartsPlayback(mc, true);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(200);
+    synth::test::waitUntil([&] { return button.getTooltip().contains("implies Play"); });
     EXPECT_TRUE(button.getTooltip().contains("implies Play"));
 }
 

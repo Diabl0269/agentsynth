@@ -33,6 +33,8 @@ Fast checks first, so a lint failure does not wait on a full build.
    [`header-comment-guard.md`](header-comment-guard.md).
 5b. `bash scripts/check-comment-provenance.sh` against the real tree — see
    [`comment-provenance-guard.md`](comment-provenance-guard.md).
+5c. `bash scripts/check-fixed-waits.sh` against the real tree — tests that pump the message loop for a
+   fixed time and then assert; see [`testing.md`](testing.md#waiting-for-async-work).
 6. `bash scripts/check-docs.sh` against the real tree — see [`docs-guard.md`](docs-guard.md).
 7. Every `scripts/tests/*.test.sh`, globbed, so a newly added one is picked up automatically without
    editing this script. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree
@@ -97,9 +99,9 @@ Two hooks are registered:
 - **pre-commit** (`scripts/pre-commit-lint.sh`): runs `clang-format --dry-run --Werror` on staged
   `Source/` and `Tests/` C/C++ files (skipped entirely when no C++ is staged), then the
   [file-size](file-size-guard.md), [function-size](function-size-guard.md),
-  [header-comment](header-comment-guard.md), [comment-provenance](comment-provenance-guard.md) and
+  [header-comment](header-comment-guard.md), [comment-provenance](comment-provenance-guard.md), [fixed-wait](testing.md#waiting-for-async-work) and
   [docs](docs-guard.md) guards against the whole tree, unconditionally, for any commit with staged
-  changes. Those five scan the whole tree in about a
+  changes. Those six scan the whole tree in about a
   second each, so there is no benefit to staged-file scoping them the way there is for
   clang-format. Fast; mirrors the CI Lint job. It also warns if the local `clang-format` version
   differs from the pin in `.clang-format-version`.

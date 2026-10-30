@@ -5,6 +5,7 @@
 // reader. What the host does with the request (the whole voice graph, one undo step) is
 // GraphEditorPolyChainTests.cpp's concern.
 
+#include "../../TestWait.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
@@ -99,7 +100,7 @@ TEST(TimelineTrackPolySwitchTest, PressingASideAsksTheHostToSwitchThatTrack) {
 
     sw.getPolyButton().triggerClick();
     sw.getMonoButton().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // triggerClick posts its click
+    synth::test::waitUntil([&] { return (f.host.requests.size()) == (2u); });
 
     ASSERT_EQ(f.host.requests.size(), 2u);
     EXPECT_EQ(f.host.requests[0].first, b);
