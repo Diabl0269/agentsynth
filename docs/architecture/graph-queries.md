@@ -55,6 +55,12 @@ work this way, and so does `applyJSONToGraph`: every add/remove of a node or cab
 macro about 0.3 s. `MacroDragMembership.CmdDragMemberOutAndBackInRebuildsTheRenderSequenceExactlyOncePerGesture` holds
 it as a rebuild count.
 
+Every route that removes a node must unbind its card from the processor before the processor is freed: a card that still
+listens to a freed module is a use-after-free under ASAN. `ModuleDeletePaths` (`Tests/UI/Graph/GraphEditor/ModuleDeletePathsTests.cpp`)
+deletes every type in `moduleFactory()` through `removeNodesNow` (narrow and broad detach), `deleteSelection`, a macro's
+delete (Keep track and Remove track), Cut, undo of an add and redo of a delete, then repaints; a new removal route gets a
+case there.
+
 ## What still grows with the project
 
 The undo step no longer does. `AppUndoManager` captures through `synth::GraphSnapshotCache`, which re-writes only the
