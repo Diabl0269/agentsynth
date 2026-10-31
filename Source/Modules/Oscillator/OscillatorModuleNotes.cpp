@@ -116,11 +116,7 @@ void OscillatorModule::addRestartOffset(int offset, float lead) {
 void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld, float lead) {
     const float startPhase = phaseParam->get() / 360.0f;
     const float randomAmount = randomPhaseParam->get() * 0.01f;
-    voice.shortGapRun =
-        voice.samplesSinceRestart < syncEdgeSamples ? std::min(voice.shortGapRun + 1, kSyncRunLength) : 0;
-    const bool syncing = fadeFromOld && voice.shortGapRun >= kSyncRunLength;
-    voice.samplesSinceRestart = 0;
-    voice.pendingLead = syncing ? lead : 0.0f;
+    const bool syncing = voice.sync.noteRestart(syncEdgeSamples, fadeFromOld, lead);
 
     if (!fadeFromOld) {
         voice.ghosts.count = 0;

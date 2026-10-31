@@ -147,8 +147,10 @@ void WavetableOscillatorModule::renderVoice(const Wavetable& wt, VoiceState& voi
 
         // A note (a MIDI note-on, or a rising Gate edge) restarts the phases at Phase/Rand/Spread on its own
         // sample, before the sync reset and the read; the old sound runs out as a ghost.
-        if (voice.restartFiresAt(s))
-            restartVoice(voice, bs.unisonCount, /*fadeFromOld*/ true);
+        float lead = 0.0f;
+        if (voice.restartFiresAt(s, lead))
+            restartVoice(voice, bs.unisonCount, /*fadeFromOld*/ true, lead);
+        advanceSyncLead(voice, bs, p.dt);
 
         // Hard sync resets every sub-oscillator on the master's rising zero crossing.
         if (bs.syncMode == SyncMode::HardSync && syncResetCache[(size_t)idx]) {

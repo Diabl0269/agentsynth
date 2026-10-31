@@ -353,14 +353,14 @@ private:
         /** Restarts every sub-oscillator at the configured retrigger phase. `spread`
             decorrelates the unison stack, `randomAmount` adds per-note jitter -- without
             either, a unison stack or a poly chord attacks perfectly phase-correlated and
-            comb-filters itself. */
-        void resetPhases(float startPhase, float spread, float randomAmount, int unisonCount, juce::Random& rng) {
+            comb-filters itself. `draws` (0..1, one per unison voice) place that jitter. */
+        void resetPhases(float startPhase, float spread, float randomAmount, int unisonCount, const float* draws) {
             const int count = std::max(1, unisonCount);
             for (int u = 0; u < MAX_UNISON; ++u) {
                 float p = startPhase;
                 if (count > 1)
                     p += spread * (float)u / (float)count;
-                p = synth::unisonRestartPhase(p, randomAmount, rng);
+                p = synth::unisonRestartPhase(p, randomAmount, draws[u]);
                 phase[u] = p;
                 masterPhase[u] = p;
             }
@@ -387,9 +387,11 @@ private:
         std::array<int, kMaxMidiRestarts> midiRestarts{};
         int numMidiRestarts = 0;
         int nextMidiRestart = 0;
+        float restartDraws[MAX_UNISON] = {}; ///< each unison voice's random draw at the last note start, 0..1
+        synth::SyncRestartRun sync;          ///< tells oscillator sync from a note, and holds the sub-sample lead
 
         void addMidiRestart(int offset);
-        bool restartFiresAt(int s);
+        bool restartFiresAt(int s, float& lead);
     };
 
     // -------------------------------------------------------------------------
@@ -817,8 +819,14 @@ private:
     void buildSyncResets(int cacheLen, SyncMode mode);
 
     /** Restarts a voice's oscillators at the configured retrigger phase; with `fadeFromOld` the old sound
-        runs out over kRestartFadeSamples. Phase / Rand / Spread are sampled at the note-on instant. */
-    void restartVoice(VoiceState& voice, int unisonCount, bool fadeFromOld);
+        runs out over kRestartFadeSamples. Phase / Rand / Spread are sampled at the note-on instant. `lead` is how far
+        past the restart the sample being rendered lies (a Gate edge between two samples); only oscillator sync uses it.
+     */
+    void restartVoice(VoiceState& voice, int unisonCount, bool fadeFromOld, float lead = 0.0f);
+
+    /** Counts one rendered sample for the sync detector and, when a sync restart fell between the last sample and this
+        one, runs the stack on by that lead at the pitch `dt` (cycles per sample). */
+    void advanceSyncLead(VoiceState& voice, const BlockSettings& bs, float dt);
 
     /** Tracks the block's MIDI note-ons: the pitch now, the restart at each note-on's own sample. */
     void scanMidi(const juce::MidiBuffer& midi, int numSamples);
@@ -857,6 +865,7 @@ private:
     // -------------------------------------------------------------------------
     VoiceState voices[MAX_VOICES];
     double currentSampleRate = 44100.0;
+    int syncEdgeSamples = 1102; ///< synth::kSyncEdgeSeconds at the current sample rate
     juce::SmoothedValue<float> smoothedPosition;
     juce::SmoothedValue<float> smoothedLevel;
     juce::SmoothedValue<float> smoothedWarp;
