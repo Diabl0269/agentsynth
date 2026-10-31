@@ -1,0 +1,39 @@
+# The Song key picker's Fit project to key button: it is greyed while the song has no key, and once a key is set it moves
+# the notes of every MIDI clip that follows the song key into it, leaves a clip with its own key alone, says what it did
+# in a toast, and one Undo puts every note back.
+#
+# What a user does: opens a project with two clips of off-key notes and one clip with its own key (C# major), opens the
+# Song key picker (the button is greyed), picks C Major, opens the picker again and presses Fit project to key, then
+# presses Cmd+Z. The picker is its own desktop window, so its PNGs capture the picker, not the main window.
+steps:
+  - openProject: {path: "${FIXTURES}/fit-to-key.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineTransportSongKey, showing: true, within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipPitches: "Off A:61,66;Off B:63,68;Own key:61,66", within_ms: 2000}
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - expect: {id: keyPicker, fitProjectShown: true, fitProjectEnabled: false}
+  - screenshot: {id: keyPicker, name: fit-project-greyed}
+  - click: {id: "C Major, C D E F G A B"}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - expect: {id: timelineTransportSongKey, text: C Major, within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipPitches: "Off A:61,66;Off B:63,68;Own key:61,66"}
+  # The key change is recorded as its own undo step after a short pause; wait it out so the fit is the step on top.
+  - wait: {settleMs: 800}
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - expect: {id: keyPicker, fitProjectShown: true, fitProjectEnabled: true}
+  - screenshot: {id: keyPicker, name: fit-project-enabled}
+  - click: {id: keyPickerFitProject}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipPitches: "Off A:60,65;Off B:62,67;Own key:61,66", within_ms: 2000}
+  - expect: {id: "Fitted 2 clips to C Major. Skipped 1 with their own key.", showing: true, within_ms: 2000}
+  - screenshot: {name: fit-project-done}
+  - click: {id: timelineClipLaneArea, x: 700, y: 300}
+  - key: {keys: cmd+z}
+  - expect: {id: timelineClipPitches, clipPitches: "Off A:61,66;Off B:63,68;Own key:61,66", within_ms: 2000}
+  - expect: {id: timelineTransportSongKey, text: C Major}
