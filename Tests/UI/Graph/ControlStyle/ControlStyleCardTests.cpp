@@ -2,7 +2,7 @@
 // type's), the "Control Style..." panel writes both levels, and the card menu offers it.
 
 #include "../../../TestWait.h"
-#include "../CardBody/CardBodyTestHelpers.h"
+#include "../CardBody/CardCanvas.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroSet.h"
 #include "Modules/FilterModule.h"

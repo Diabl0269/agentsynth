@@ -12,7 +12,6 @@
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/FX/LimiterModule.h"
 #include "Modules/FX/PhaserModule.h"
-#include "Modules/FX/ReverbModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/MidiKeyboardModule.h"

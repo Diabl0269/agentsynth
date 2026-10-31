@@ -1,7 +1,7 @@
 // The shape library inside the shape window and on the canvas: Save shape, the Start from menu that lists the library,
 // and a dragged library shape stamped onto a chip or a card in one undo step.
 #include "../../Accessibility/TabOrderHelpers.h"
-#include "../../Graph/CardBody/CardBodyTestHelpers.h"
+#include "../../Graph/CardBody/CardCanvas.h"
 #include "Modules/LFOModule.h"
 #include "ShapeEditorTestHelpers.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"

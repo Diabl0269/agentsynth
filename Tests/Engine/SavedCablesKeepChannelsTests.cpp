@@ -5,6 +5,7 @@
 #include "../Mixer/ChannelFlow/ChannelFlowTestFixture.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
+#include "TestPaths.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <map>

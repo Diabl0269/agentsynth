@@ -1,7 +1,7 @@
 // A Sound dragged from the Sounds view onto the canvas: sized as a Sampler, never read as a module type, and dropped as
 // the same one-undo-step Sampler an OS file drop makes.
 #include "../../../Modules/Sampler/SamplerTestWavs.h"
-#include "../CardBody/CardBodyTestHelpers.h"
+#include "../CardBody/CardCanvas.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"

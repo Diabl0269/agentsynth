@@ -1,7 +1,7 @@
 // A recording dropped on a Sampler card, from the OS or dragged out of the Sounds view: one undoable replace, the
 // faint outline while a sound is dragged, and the waveform's replace motion.
 #include "../../../Modules/Sampler/SamplerTestWavs.h"
-#include "../CardBody/CardBodyTestHelpers.h"
+#include "../CardBody/CardCanvas.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
