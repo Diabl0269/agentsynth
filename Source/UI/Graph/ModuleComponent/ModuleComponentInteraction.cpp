@@ -804,7 +804,8 @@ bool ModuleComponent::computeReparentArmed(const juce::ModifierKeys& mods) const
 }
 
 void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
-    if (getPortForPoint(e.getMouseDownPosition())) {
+    // A cable first: the press point is re-read against the card's current spot, so one a row pushed misses its jack.
+    if (owner.isCableDragFrom(*this) || getPortForPoint(e.getMouseDownPosition())) {
         owner.dragConnection(e.getScreenPosition());
     } else {
         if (!bodyDragActive)
@@ -885,6 +886,10 @@ void ModuleComponent::showRealContextMenu(juce::PopupMenu& menu) {
 void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     // A release heard as a control's listener is in that control's space, never a jack click.
     const auto port = e.eventComponent == this ? getPortForPoint(e.getMouseDownPosition()) : std::nullopt;
+    if (!port && e.eventComponent == this && owner.isCableDragFrom(*this)) {
+        owner.endConnectionDrag(e.getScreenPosition());
+        return;
+    }
     if (port) {
         owner.endConnectionDrag(e.getScreenPosition());
         owner.getPortPanel().jackReleased(*this, *port, e); // a plain click on the jack opens its connections panel

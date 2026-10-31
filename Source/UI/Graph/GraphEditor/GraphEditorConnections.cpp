@@ -178,6 +178,10 @@ namespace {
 juce::Component::SafePointer<juce::Component>& focusBeforeCableDrag();
 }
 
+bool GraphEditor::isCableDragFrom(const ModuleComponent& card) const noexcept {
+    return isDraggingConnection && dragSourceModule == &card;
+}
+
 void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
                                       juce::Point<int> screenPos) {
     isDraggingConnection = true;

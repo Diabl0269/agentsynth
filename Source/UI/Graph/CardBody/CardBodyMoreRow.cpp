@@ -107,11 +107,12 @@ bool CardBody::unfoldForCableDragAt(juce::Point<int> cardLocal) {
 }
 
 // The editor reports where the cable is on every move; the grace timer is the only clock, so a cable that leaves
-// and then stops still folds the row once the grace ends.
+// and then stops still folds the row once the grace ends. While the row opens the card can be shorter than it was
+// (the hidden controls' jacks leave the gutter before the row has grown), so a cable that has not moved is not leaving.
 void CardBody::cableDragMoved(bool inside) {
     if (!moreOpenedByDrag_)
         return;
-    if (inside)
+    if (inside || moreFade_.isFading())
         foldGrace_.stopTimer();
     else if (!foldGrace_.isTimerRunning())
         foldGrace_.startTimer(kCableFoldGraceMs);

@@ -24,10 +24,10 @@ struct Rig {
     ModuleComponent* osc = nullptr;
     synth::CardBody* body = nullptr;
 
-    Rig() {
+    explicit Rig(const juce::StringArray& hidden = {"level"}) {
         OscillatorModule probe;
         lfoId = canvas.add(std::make_unique<LFOModule>(), 0, 0);
-        oscId = canvas.add(std::make_unique<OscillatorModule>(), 600, 0, automaticLayoutHiding(probe, {"level"}));
+        oscId = canvas.add(std::make_unique<OscillatorModule>(), 600, 0, automaticLayoutHiding(probe, hidden));
         canvas.editor.updateComponents();
         lfo = canvas.card(lfoId);
         osc = canvas.card(oscId);
@@ -248,4 +248,49 @@ TEST(CableFold, TheKeyboardGoesBackToWhatHadItWhenTheDragEndsOrIsCancelled) {
     EXPECT_TRUE(rig.escape());
     EXPECT_TRUE(control.hasKeyboardFocus(false)) << "so does Escape";
     rig.canvas.editor.removeFromDesktop();
+}
+
+// Regression test for FRO1188: a row that pushed the card the cable came from left the cable stuck to the screen,
+// because the press point, read against the card's new spot, no longer hit the jack.
+TEST(CableFold, ACableKeepsFollowingAndEndsWhenItsOwnCardGetsPushed) {
+    Rig rig;
+    const auto jack = rig.lfo->getPortCenter(0, false);
+    const auto left = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    rig.lfo->mouseDown(cardbody_test::mouseAt(*rig.lfo, jack.toFloat(), left));
+    ASSERT_TRUE(rig.canvas.editor.isCableDragFrom(*rig.lfo));
+
+    rig.lfo->setTopLeftPosition(rig.lfo->getPosition() + juce::Point<int>(0, 200));
+    const auto pressAfterThePush = (jack - juce::Point<int>(0, 200)).toFloat();
+    const auto heldAt = [&](juce::Point<int> screen) {
+        const auto now = juce::Time::getCurrentTime();
+        const auto local = rig.lfo->getLocalPoint(nullptr, screen).toFloat();
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), local, left, 0.0f, 0.0f, 0.0f, 0.0f,
+                                0.0f, rig.lfo, rig.lfo, now, pressAfterThePush, now, 1, false);
+    };
+
+    rig.lfo->mouseDrag(heldAt(rig.overMoreButton()));
+    EXPECT_TRUE(rig.body->isMoreUnfolded()) << "the cable still follows the mouse";
+
+    rig.lfo->mouseUp(heldAt(rig.offTheCard()));
+    EXPECT_FALSE(rig.canvas.editor.isCableDragFrom(*rig.lfo)) << "and the release ends it";
+    EXPECT_FALSE(rig.body->isMoreUnfolded());
+}
+
+// Regression test for FRO1188: opening the row takes the hidden controls' jacks out of the gutter before the row has
+// grown, so the card was briefly shorter than a cable resting on the button, read that as leaving, and folded again.
+TEST(CableFold, ARowOpeningUnderAStillCableStaysOpenThoughTheCardShrinksFirst) {
+    FadeAnimateGuard guard;
+    Rig rig({"fine", "level", "blend", "width"});
+    const auto onTheButton = rig.overMoreButton();
+    rig.begin();
+    rig.moveTo(onTheButton);
+    ASSERT_TRUE(rig.body->isMoreUnfolded());
+    EXPECT_FALSE(rig.body->cableFoldGraceRunningForTest());
+
+    FadeVisibility::stepAllForTest(1.0f);
+    rig.moveTo(onTheButton);
+    EXPECT_FALSE(rig.body->cableFoldGraceRunningForTest());
+    EXPECT_TRUE(rig.body->isMoreUnfolded());
+    rig.release(rig.offTheCard());
+    EXPECT_FALSE(rig.body->isMoreUnfolded());
 }
