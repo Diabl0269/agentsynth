@@ -216,8 +216,12 @@ void TimelineRoutingPane::applyViewToChildren() {
     applyAudioInputToChildren();
     midiDestinations_.setButtonText(view_.midiDestinationsText);
     midiDestinations_.setTooltip("MIDI destinations: " + view_.midiDestinationsText + ". Click to change.");
-    if (view_.hasChannel) // a chip fading out keeps the name it showed
+    if (view_.hasChannel) { // a chip fading out keeps the name it showed
         channelChip_.setChannelName(view_.channelText);
+        // The chip takes no clicks and is no stop, so the link beside it tells a keyboard or screen-reader user which
+        // channel it finds.
+        showInMixer_.setDescription("Finds this track's channel, " + view_.channelText + ", in the mixer");
+    }
     setTitle("Routing for " + view_.name);
 }
 

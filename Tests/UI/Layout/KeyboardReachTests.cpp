@@ -45,7 +45,6 @@ struct KnownGap {
 
 const std::vector<KnownGap> kKnownGaps = {
     {"mixer / Audio 1 colour", "FRO1206"},
-    {"timelineRouting / timelineChannelChip", "FRO1311"},
     {"mixer / Show Gate on canvas", "FRO1203"},
     {"mixer / Gate bypass, on", "FRO1203"},
     {"mixer / Show Parametric EQ on canvas", "FRO1203"},
@@ -176,6 +175,12 @@ std::string controlName(juce::Component& c) {
 }
 
 bool isOperable(juce::Component& c) {
+    // A control that takes no clicks is read-only (a meter chip beside the link that does the finding): not a stop.
+    bool takesClicks = true;
+    bool childrenTakeClicks = true;
+    c.getInterceptsMouseClicks(takesClicks, childrenTakeClicks);
+    if (!takesClicks)
+        return false;
     // A segmented switch and a lane chip row are each one control: it is the stop, and the arrow keys move between
     // its parts.
     return dynamic_cast<juce::Button*>(&c) != nullptr || dynamic_cast<juce::Slider*>(&c) != nullptr ||

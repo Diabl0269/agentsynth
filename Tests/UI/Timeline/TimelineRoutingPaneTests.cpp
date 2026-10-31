@@ -252,6 +252,18 @@ TEST_F(RoutingPaneAppTest, AMidiTrackShowsItsTrackInItsDestinationsAndItsChannel
     EXPECT_TRUE(pane().getShowInMixerLinkForTest().isVisible());
 }
 
+// The channel chip is read-only and no keyboard stop, so the link beside it names the channel for a screen reader.
+TEST_F(RoutingPaneAppTest, ShowInMixerLinkDescriptionNamesTheChannel) {
+    mc->simulateAddInstrumentTrackClick(TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    ASSERT_EQ(panel().getTrackHeaderCount(), 1);
+    clickRow(panel(), 0);
+    auto& p = pane();
+    ASSERT_TRUE(p.getShowInMixerLinkForTest().isVisible());
+    ASSERT_TRUE(p.getChannelTextForTest().isNotEmpty());
+    EXPECT_EQ(p.getShowInMixerLinkForTest().getDescription(),
+              "Finds this track's channel, " + p.getChannelTextForTest() + ", in the mixer");
+}
+
 TEST_F(RoutingPaneAppTest, AnAudioTrackHasNoMidiDestinationsRow) {
     mc->simulateAddAudioTrackClick();
     ASSERT_EQ(panel().getTrackHeaderCount(), 1);
