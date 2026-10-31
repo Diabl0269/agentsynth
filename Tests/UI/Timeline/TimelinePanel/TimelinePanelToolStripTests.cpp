@@ -419,6 +419,30 @@ TEST(TimelineClipClipboardTest, CopyPasteRoundTripsEveryAudioFieldAndTheMuteFlag
     EXPECT_EQ(f.doc.getTrackForClip(copy->id)->kind, synth::TrackKind::Audio);
 }
 
+// Regression test for FRO1147: a pasted stretched clip must still render a later stretch from the original audio.
+TEST(TimelineClipClipboardTest, CopyPasteCarriesTheStretchOrigin) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    const auto clip = f.doc.addClip(track, 8.0, 6.0, "Loop");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/loop-stretch150.wav", 0.0));
+    const synth::Clip::StretchOrigin origin{"Audio/loop.wav", 0.25, 2.0 / 3.0};
+    ASSERT_TRUE(f.doc.setClipStretchOrigin(clip, origin));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    const auto* copy = f.doc.getClip(pasted[0]);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_NE(copy->id, clip);
+    EXPECT_EQ(copy->assetRef, "Audio/loop-stretch150.wav");
+    ASSERT_TRUE(copy->stretchOrigin.has_value());
+    EXPECT_EQ(*copy->stretchOrigin, origin);
+}
+
 TEST(TimelineClipClipboardTest, CopyPasteCarriesThePianoRollScale) {
     ToolPanelFixture f;
     const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Keys");
