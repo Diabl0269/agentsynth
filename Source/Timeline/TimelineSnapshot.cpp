@@ -1,4 +1,5 @@
 #include "TimelineSnapshot.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>

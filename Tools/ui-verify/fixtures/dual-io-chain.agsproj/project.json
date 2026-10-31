@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Audio Output",
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "params": {
+      },
+      "position": {
+        "x": 1120,
+        "y": 40
+      }
+    },
+    {
+      "id": 2,
+      "type": "Oscillator",
+      "uuid": "00000000-0000-4000-8000-000000000002",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "waveform": "Sine",
+        "octave": 0.0,
+        "coarse": 0.0,
+        "fine": 0.0,
+        "level": 1.0,
+        "poly": false,
+        "unison": 1.0,
+        "detune": 0.0,
+        "pan": 0.0,
+        "pulseWidth": 50.0,
+        "glide": 0.0,
+        "muted": false,
+        "phase": 0.0,
+        "randomPhase": 0.0,
+        "blend": 1.0,
+        "width": 0.0,
+        "glideMode": "Always",
+        "glideCurve": "Linear",
+        "legato": false,
+        "rateMode": "Follow notes",
+        "fixedRate": 49.999977111816406
+      },
+      "position": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "id": 3,
+      "type": "Delay",
+      "uuid": "00000000-0000-4000-8000-000000000003",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "time": 250.0,
+        "feedback": 0.5,
+        "mix": 0.300000011920929,
+        "tempoSync": false,
+        "timeDiv": "1/4",
+        "pingPong": false,
+        "outputLevel": 1.0,
+        "muted": false,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 400,
+        "y": 40
+      }
+    },
+    {
+      "id": 4,
+      "type": "VCA",
+      "uuid": "00000000-0000-4000-8000-000000000004",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "gain": 0.5,
+        "poly": false,
+        "muted": false
+      },
+      "position": {
+        "x": 760,
+        "y": 40
+      }
+    }
+  ],
+  "connections": [
+    {
+      "src": 2,
+      "srcPort": 0,
+      "dst": 3,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 2,
+      "srcPort": 0,
+      "dst": 3,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 3,
+      "srcPort": 0,
+      "dst": 4,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 4,
+      "srcPort": 0,
+      "dst": 1,
+      "dstPort": 0,
+      "isMidi": false
+    }
+  ],
+  "modulations": [],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 2,
+    "nextClipId": 4,
+    "nextLaneId": 1,
+    "nextNoteId": 7,
+    "nextMarkerId": 1,
+    "tracks": [],
+    "markers": []
+  },
+  "macros": [],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": false
+  },
+  "view": {
+    "zoom": 1.0,
+    "panX": 0.0,
+    "panY": 0.0
+  }
+}

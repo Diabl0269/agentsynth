@@ -271,6 +271,13 @@ jumped up to +6 dB. **Render-time only, never a graph edge.**
   only, legs from two different sources) is left alone: the graph has already summed the feeds, so
   one pair cannot be scaled without scaling the rest. Two whole pairs into one jack are each
   averaged.
+- **A silent source does not count.** A feed from a sound source (Oscillator, Wavetable, Noise, Pluck)
+  that is bypassed, muted, or at Level 0 with nothing on its Level jack adds exact zeros, so the scan
+  leaves it out (`synth::findSilentSources`): cabling one next to a pair changes nothing, bit for bit.
+  Its Level leaving 0 makes the channel a hand-built mix, so the pair steps back up to unity at that
+  moment. Silence is a parameter and no graph broadcast reports it, so a 10 Hz message-thread poll
+  (`AudioEngine::timerCallback`, comparing `synth::silentSourcesSignature`) runs `refreshNormalling()`
+  when it changes; a bounce uses the state at its start plus whatever the poll saw.
 - **The gain.** `ModuleBase::processBlock` is `final` and calls `applyInputDownMix` (scale every
   marked channel by `ModuleBase::kStereoDownMixGain`, 0.5) before the module's own
   `processModuleBlock`. So it runs before the bypass/mute branches and before L/Mono normalling: a
@@ -280,7 +287,8 @@ jumped up to +6 dB. **Render-time only, never a graph edge.**
   (`GraphEditor::resolvePolyLink`), so there is no sum to average; widening that to both legs is a
   separate behaviour change. Hosted plugins report no right leg (`rightAudioLegChannel()` is -1), so
   their L/R outputs into one jack still sum.
-- Pinned by `Tests/Engine/StereoDownMixTests.cpp`.
+- Pinned by `Tests/Engine/StereoDownMixTests.cpp`; every processor x source x silent state by
+  `Tests/Engine/AudioRendering/SilentSourceTransparentTests.cpp`.
 
 ### Non-finite sample scrub
 

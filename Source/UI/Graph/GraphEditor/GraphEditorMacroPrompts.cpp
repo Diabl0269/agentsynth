@@ -20,6 +20,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"

@@ -9,6 +9,7 @@
 // track's Filter Cutoff (the modulator that must be captured) and another channel's bare Channel
 // Strip -> this track's Filter Resonance (the modulator that must NOT be).
 
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TrackPresetTestFixture.h"
 
 #include <gtest/gtest.h>

@@ -1,5 +1,6 @@
 // Concern: the audio track Input row's words and menu (pure; see AudioInputMenu.h).
 #include "UI/Timeline/TimelineRoutingPane/AudioInputMenu.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 
 namespace synth::ui {
 

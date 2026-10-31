@@ -8,6 +8,7 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/SamplerModule.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"

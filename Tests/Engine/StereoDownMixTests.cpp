@@ -199,6 +199,70 @@ TEST(StereoDownMixTest, CanvasStyleCableEditIsPickedUpByTheGraphBroadcast) {
     EXPECT_EQ(rig.sinkModule().getInputDownMixMask(), 1u);
 }
 
+// Regression test for FRO1193: a silent source's cable next to a pair dropped the pair's -6 dB, so the patch got
+// louder. Silence is a parameter, which no graph broadcast reports, so these wait for the engine's own poll.
+TEST(StereoDownMixTest, ASilentSourceBesideAPairLeavesItAveragedAndFollowsTheKnob) {
+    Rig rig;
+    auto pair = rig.graph.addNode(std::make_unique<ConstStereoSource>(0.2f, 0.4f));
+    auto extra = rig.graph.addNode(std::make_unique<OscillatorModule>());
+    auto* osc = dynamic_cast<OscillatorModule*>(extra->getProcessor());
+    ASSERT_TRUE(rig.connect(pair, 0));
+    ASSERT_TRUE(rig.connect(pair, 1));
+    ASSERT_TRUE(rig.connect(extra, 0));
+    const auto setLevel = [&](float value) {
+        auto* level = dynamic_cast<juce::RangedAudioParameter*>(osc->getParameters()[0]);
+        for (auto* p : osc->getParameters())
+            if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p);
+                withId && withId->paramID == "level")
+                level = dynamic_cast<juce::RangedAudioParameter*>(p);
+        level->setValueNotifyingHost(level->convertTo0to1(value));
+    };
+    const auto waitForMask = [&](std::uint64_t mask) {
+        for (int i = 0; i < 100 && rig.sinkModule().getInputDownMixMask() != mask; ++i)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+        return rig.sinkModule().getInputDownMixMask();
+    };
+
+    rig.engine.refreshNormalling();
+    EXPECT_EQ(rig.sinkModule().getInputDownMixMask(), 0u) << "an audible third cable is a hand-built mix";
+    setLevel(0.0f);
+    EXPECT_EQ(waitForMask(1u), 1u) << "Level 0";
+    setLevel(1.0f);
+    EXPECT_EQ(waitForMask(0u), 0u) << "back up";
+    osc->setBypassed(true);
+    EXPECT_EQ(waitForMask(1u), 1u) << "bypassed";
+    osc->setBypassed(false);
+    EXPECT_EQ(waitForMask(0u), 0u);
+    osc->setMuted(true);
+    EXPECT_EQ(waitForMask(1u), 1u) << "muted";
+}
+
+// Something cabled to its Level jack can lift a source off Level 0, so it still counts as sound.
+TEST(StereoDownMixTest, ALevelZeroSourceWithALevelCableIsNotSilent) {
+    Rig rig;
+    auto pair = rig.graph.addNode(std::make_unique<ConstStereoSource>(0.2f, 0.4f));
+    auto extra = rig.graph.addNode(std::make_unique<OscillatorModule>());
+    auto cv = rig.graph.addNode(std::make_unique<ConstMonoSource>(0.5f));
+    auto* osc = dynamic_cast<OscillatorModule*>(extra->getProcessor());
+    for (auto* p : osc->getParameters())
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p); withId && withId->paramID == "level")
+            p->setValueNotifyingHost(0.0f);
+    ASSERT_TRUE(rig.connect(pair, 0));
+    ASSERT_TRUE(rig.connect(pair, 1));
+    ASSERT_TRUE(rig.connect(extra, 0));
+    rig.engine.refreshNormalling();
+    ASSERT_EQ(rig.sinkModule().getInputDownMixMask(), 1u);
+
+    int levelChannel = -1;
+    for (const auto& target : osc->getModulationTargets())
+        if (target.paramId == "level")
+            levelChannel = target.channelIndex;
+    ASSERT_GE(levelChannel, 0);
+    ASSERT_TRUE(rig.graph.addConnection({{cv->nodeID, 0}, {extra->nodeID, levelChannel}}));
+    rig.engine.refreshNormalling();
+    EXPECT_EQ(rig.sinkModule().getInputDownMixMask(), 0u);
+}
+
 // The down-mix runs before the module's own processBlock body, so a Dual I/O Left fed by a pair is
 // halved BEFORE L/Mono normalling copies it onto the unpatched Right.
 TEST(StereoDownMixTest, AStereoPairIntoADualLeftIsHalvedBeforeRightBorrowsIt) {

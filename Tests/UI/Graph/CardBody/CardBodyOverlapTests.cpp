@@ -11,6 +11,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"

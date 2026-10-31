@@ -10,6 +10,7 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/MasterModule.h"
 #include "Modules/PolyMidiModule.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/PolyChain/PolyChainController.h"
 #include <bit>
 #include <memory>

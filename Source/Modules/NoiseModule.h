@@ -39,7 +39,13 @@ public:
         if (buffer.getNumChannels() == 0)
             return;
 
-        if (isBypassed() || isMuted()) {
+        // A pure source has no dry path, so bypass clears too; two branches per the bypass/mute contract.
+        if (isBypassed()) {
+            buffer.clear();
+            return;
+        }
+
+        if (isMuted()) {
             buffer.clear();
             return;
         }
