@@ -361,6 +361,8 @@ TEST_F(PopupDismissPaths, ADialogFadesOnEscapeAndStaysOpenOnAClickOutsideOrDeact
     expectFadedOut(stepLeave(*dialog, nullptr, synth::ui::popup_motion::kOutMs), false);
     pumpUntil([&] { return safe == nullptr || !safe->isVisible(); });
     synth::ui::deleteOpenModalDialogs();
+    // A fading dialog has left the modal list, and no frame may have reached it on a machine with no display refresh.
+    delete safe.getComponent();
 }
 
 } // namespace
