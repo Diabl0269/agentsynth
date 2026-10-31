@@ -681,70 +681,8 @@ private:
     // -------------------------------------------------------------------------
     // Waveform generators
     // -------------------------------------------------------------------------
-    /** `pulseWidth` (0..1 duty cycle) shapes the Square only. */
-    float generateSample(int waveform, float phase, float dt, float pulseWidth) const {
-        switch (waveform) {
-        case 0:
-            return generateSine(phase);
-        case 1:
-            return generateSquare(phase, dt, pulseWidth);
-        case 2:
-            return generateSaw(phase, dt);
-        case 3:
-            return generateTriangle(phase, dt);
-        default:
-            return 0.0f;
-        }
-    }
-
-    static float generateSine(float phase) { return std::sin(phase * juce::MathConstants<float>::twoPi); }
-
-    // At pulseWidth 0.5 both edges are exactly where the plain square put them.
-    static float generateSquare(float phase, float dt, float pulseWidth) {
-        float sample = phase < pulseWidth ? 1.0f : -1.0f;
-        sample += polyBlep(phase, dt);
-        sample -= polyBlep(std::fmod(phase + (1.0f - pulseWidth), 1.0f), dt);
-        return sample;
-    }
-
-    static float generateSaw(float phase, float dt) {
-        float sample = 2.0f * phase - 1.0f;
-        sample -= polyBlep(phase, dt);
-        return sample;
-    }
-
-    static float generateTriangle(float phase, float dt) {
-        float sample = 4.0f * std::abs(phase - 0.5f) - 1.0f;
-        // PolyBLAMP: integrated polyBLEP applied at discontinuities (phase=0 and phase=0.5)
-        sample += polyBlamp(phase, dt);
-        sample -= polyBlamp(std::fmod(phase + 0.5f, 1.0f), dt);
-        return sample;
-    }
-
-    static float polyBlamp(float t, float dt) {
-        if (t < dt) {
-            float n = t / dt;
-            // Third-order polynomial: integrated polyBLEP
-            return -dt * (n * n * n / 3.0f - n * n / 2.0f + 1.0f / 6.0f) * 4.0f;
-        }
-        if (t > 1.0f - dt) {
-            float n = (t - 1.0f) / dt;
-            return dt * (n * n * n / 3.0f + n * n / 2.0f + 1.0f / 6.0f) * 4.0f;
-        }
-        return 0.0f;
-    }
-
-    static float polyBlep(float t, float dt) {
-        if (t < dt) {
-            float n = t / dt;
-            return n + n - n * n - 1.0f;
-        }
-        if (t > 1.0f - dt) {
-            float n = (t - 1.0f) / dt;
-            return n * n + n + n + 1.0f;
-        }
-        return 0.0f;
-    }
+    /** `pulseWidth` (0..1 duty cycle) shapes the Square only. Defined in OscillatorModuleWaves.cpp. */
+    float generateSample(int waveform, float phase, float dt, float pulseWidth) const;
 
     // -------------------------------------------------------------------------
     // Member variables
