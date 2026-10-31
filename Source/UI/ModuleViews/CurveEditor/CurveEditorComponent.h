@@ -21,8 +21,8 @@ namespace synth::ui {
  *  handles (both modes) or add/remove points by double-click (`CurveMode::Free` only).
  *
  *  Used by the envelope card (`CurveMode::Fixed`, a fixed origin/attack/hold/decay/release
- *  topology); `CurveMode::Free` (add/remove/reorder points) is the second supported topology
- *  and has no caller yet — see docs/layout/visualizers.md.
+ *  topology) and by the LFO custom-wave editor and the modulation curve box (`CurveMode::Free`,
+ *  add/remove/reorder points) — see docs/layout/visualizers.md.
  *
  *  Mouse handlers are thin wrappers over public primitives (`dragNodeTo`, `dragBendBy`,
  *  `addPointAt`, `removeNode`), mirroring `EQCurveComponent`, so interaction is unit-testable
@@ -157,6 +157,10 @@ public:
     /** Free mode only. Snaps like `dragNodeTo` (same `bypassSnap` meaning). Returns the new
      *  node's index, or -1 outside Free mode or when the curve is at CurveModel::kMaxNodes. */
     int addPointAt(juce::Point<float> point, bool bypassSnap = false);
+
+    /** Free mode only. On: a press on the drawn line adds a point (and a drag moves it, as one gesture), and a
+     *  double-click no longer adds or removes points. Off by default. */
+    void setLineClickEditing(bool enabled);
 
     /** Free mode only. Returns false if refused (pinned node, or would drop below 2 nodes) or
      *  outside Free mode. */
@@ -340,6 +344,11 @@ private:
     std::optional<CurvePlayhead> playhead_;
 
     enum class DragKind { None, Node, Bend };
+    int insertPointAt(juce::Point<float> point, bool bypassSnap);
+    bool isOnCurveLine(juce::Point<float> point) const;
+    static constexpr float kLineClickSlopPx = 6.0f;
+    bool lineClickEditing_ = false;
+
     DragKind dragKind_ = DragKind::None;
     int dragIndex_ = -1;
     juce::Point<float> lastDragPos_;

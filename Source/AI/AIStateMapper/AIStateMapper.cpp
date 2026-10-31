@@ -483,10 +483,10 @@ juce::var AIStateMapper::modulationsToJSON(juce::AudioProcessorGraph& graph, con
                     modEntry->setProperty("amount", amount);
                 }
 
-                if (auto* param = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(attenverter, "bypassed"))) {
+                if (auto* param = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(attenverter, "bypassed")))
                     modEntry->setProperty("bypass", param->get());
-                }
 
+                detail::writeModCurve(*modEntry, *attenverter);
                 modulations.add(juce::var(modEntry.get()));
             }
         }
@@ -934,7 +934,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
 
     // 3. Modulations (AIStateMapperModulations.cpp)
     if (auto* modList = rootObj->getProperty("modulations").getArray())
-        detail::applyModulationEntries(*modList, graph, idMap);
+        detail::applyModulationEntries(*modList, graph, idMap, trusted);
 
     // 4. Auto-connect: in merge mode, connect new unconnected audio nodes to Audio Output.
     //

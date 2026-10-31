@@ -383,7 +383,11 @@ std::optional<juce::AudioProcessorGraph::NodeID> findModulationAttenuverter(cons
 
 // The "modulations" step of applyJSONToGraph: one attenuverter per entry, skipping an existing routing.
 void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::AudioProcessorGraph& graph,
-                            NodeIdMap& idMap);
+                            NodeIdMap& idMap, bool trusted);
+
+// Writes the attenuverter's curve onto a modulation entry; only a bent curve is written, so an unbent route reads as it
+// always did.
+void writeModCurve(juce::DynamicObject& entry, const AttenuverterModule& attenuverter);
 
 } // namespace detail
 } // namespace synth

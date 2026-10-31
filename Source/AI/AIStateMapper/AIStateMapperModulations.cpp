@@ -6,6 +6,7 @@
 // same plan created. The validation side of both stays in AIStateMapperValidation.cpp.
 
 #include "AIStateMapper.h"
+#include "Modules/ModCurve.h"
 
 #include "AIStateMapperInternal.h"
 #include "AudioEngine/ConnectionIndex.h"
@@ -126,8 +127,13 @@ std::optional<juce::AudioProcessorGraph::NodeID> findModulationAttenuverter(cons
     return std::nullopt;
 }
 
+void writeModCurve(juce::DynamicObject& entry, const AttenuverterModule& attenuverter) {
+    if (const auto curve = attenuverter.getCurve(); !curve.isLinear())
+        entry.setProperty("curve", curve.toVar());
+}
+
 void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::AudioProcessorGraph& graph,
-                            NodeIdMap& idMap) {
+                            NodeIdMap& idMap, bool trusted) {
     auto routings = existingRoutings(graph); // kept current as routings are added below
     for (const auto& modVar : modulations) {
         auto* modObj = modVar.getDynamicObject();
@@ -164,6 +170,10 @@ void applyModulationEntries(const juce::Array<juce::var>& modulations, juce::Aud
             if (auto* bp =
                     dynamic_cast<juce::AudioParameterBool*>(findParameterByID(attenNode->getProcessor(), "bypassed")))
                 bp->setValueNotifyingHost(1.0f);
+        // Our own copies and saves only: model output does not author curves.
+        if (trusted && modObj->hasProperty("curve"))
+            if (auto* atten = dynamic_cast<AttenuverterModule*>(attenNode->getProcessor()))
+                atten->setCurve(ModCurve::fromVar(modObj->getProperty("curve")));
 
         const bool in = graph.addConnection({{mappedSource, sourcePort}, {attenNode->nodeID, 0}},
                                             juce::AudioProcessorGraph::UpdateKind::none);

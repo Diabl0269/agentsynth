@@ -274,9 +274,12 @@ It is wired into the ADSR envelope card (`ModuleComponentEnvelopeCard.cpp` — s
 [modules.md](../modules/modules.md#adsr-envelope-module)'s ADSR "Card UI" entry for the two-way sync, undo and playhead details)
 using `CurveMode::Fixed`, the fixed origin / attack-peak / hold-end / sustain / release-end topology
 this component was built for. `CurveMode::Free` (add, remove and reorder points) is the second
-supported topology, and now has a real caller: the LFO card's Custom-waveform section
+supported topology, with two callers: the LFO card's Custom-waveform section
 (`ModuleComponentLfoCard.cpp` — see [lfo.md](../modules/lfo.md)'s "Card UI"
-entry, FRO114).
+entry) and the modulation curve box ([modulation.md](../modules/modulation.md#the-modulation-curve)).
+`setLineClickEditing(true)` is the box's opt-in: a single press on the drawn line adds a point (that press can go on
+into a drag, one gesture) and a right-click on a point removes it; the LFO and envelope cards leave it off and keep
+their double-click.
 
 **Bend is `EnvelopeGenerator::shape`.** A segment's value at `progress` is
 `start + (end - start) * shape(progress, bend)`, using `synth::EnvelopeGenerator::shape` by default;

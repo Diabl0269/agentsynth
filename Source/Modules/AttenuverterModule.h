@@ -1,14 +1,25 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include <memory>
+
+namespace synth {
+struct ModCurve;
+}
 
 class AttenuverterModule : public ModuleBase {
 public:
-    AttenuverterModule()
-        : ModuleBase("Attenuverter", 2, 1) // 1 Audio In + 1 CV In (Amount), 1 Out
-    {
-        addParameter(amountParam = new juce::AudioParameterFloat("amount", "Amount", -1.0f, 1.0f, 0.0f));
-    }
+    AttenuverterModule();
+    ~AttenuverterModule() override;
+
+    /** Message thread only. A linear curve costs the audio thread nothing. */
+    void setCurve(const synth::ModCurve& curve);
+    /** Message thread only. */
+    synth::ModCurve getCurve() const;
+
+    /** A void var while the curve is linear, so untouched attenuverters add no state. */
+    juce::var getExtraState() const override;
+    void setExtraState(const juce::var& state) override;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         prepareOutputStage(sampleRate, samplesPerBlock);
@@ -34,6 +45,7 @@ public:
         }
 
         auto* audioData = buffer.getWritePointer(0);
+        applyCurve(audioData, numSamples);
         const float* cvAmountData = numChannels > 1 ? buffer.getReadPointer(1) : nullptr;
 
         // Whole block: an envelope that idles at 0 and fires mid-block must not be missed.
@@ -77,7 +89,12 @@ public:
     float getLastModValue() const { return lastModValue.load(std::memory_order_relaxed); }
 
 private:
+    /** Audio thread. Maps the signal through the curve before the amount; does nothing while linear. */
+    void applyCurve(float* audioData, int numSamples) noexcept;
+
     juce::AudioParameterFloat* amountParam;
+    struct CurveState;
+    std::unique_ptr<CurveState> curveState_;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedAmount;
     std::atomic<float> lastOutputPeak{0.0f};
     std::atomic<float> lastModValue{0.0f};

@@ -7,6 +7,7 @@
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModDot/ModSourceCatalog.h"
+#include "UI/Graph/ModMatrixCurveColumn.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModMatrixKeyboard.h"
 #include "UI/Graph/ModMatrixLists.h"
@@ -167,6 +168,7 @@ struct ModMatrixComponent::ModRow
     juce::Component::SafePointer<juce::Component> destPicker;
     AmountSlider amountSlider;
     juce::Label amountValueLabel;
+    synth::ui::ModCurveChip curveChip;
     std::unique_ptr<juce::DrawableButton> bypassToggle;
     std::unique_ptr<juce::DrawableButton> deleteButton;
 
@@ -332,6 +334,10 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
                juce::Rectangle<float>(rowNumColW + sourceColW + destColW, (float)headerArea.getY(),
                                       (w - rowNumColW) * 0.25f, 30.0f),
                juce::Justification::centred, true);
+    synth::ui::mod_matrix_curve::drawHeader(
+        g, juce::Rectangle<float>((float)area.getWidth() - 60.0f - (float)synth::ui::mod_matrix_curve::kColumnWidth -
+                                      (float)kGutter * 0.5f,
+                                  (float)headerArea.getY(), (float)synth::ui::mod_matrix_curve::kColumnWidth, 30.0f));
 
     // Footer separator: hairline above the add/flat-toggle controls, matching the header band's
     // painted treatment so the row list reads as visually distinct from the footer chrome.
@@ -481,6 +487,7 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     addAndMakeVisible(destCombo);
     addAndMakeVisible(amountSlider);
     addAndMakeVisible(amountValueLabel);
+    addAndMakeVisible(curveChip);
 
     bypassToggle = std::make_unique<juce::DrawableButton>("Bypass", juce::DrawableButton::ImageFitted);
     deleteButton = std::make_unique<juce::DrawableButton>("Delete", juce::DrawableButton::ImageFitted);
@@ -514,6 +521,8 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     sourceCombo.setComponentID(synth::ui::modmatrix_ids::kSource);
     destCombo.setComponentID(synth::ui::modmatrix_ids::kDest);
     amountSlider.setComponentID(synth::ui::modmatrix_ids::kAmount);
+    curveChip.setComponentID(synth::ui::modmatrix_ids::kCurve);
+    synth::ui::mod_matrix_curve::wireChip(curveChip, owner.graphEditor, attenuverterId);
     sourceCombo.setTooltip("Modulation source. Click to search the modules that can drive this routing.");
     destCombo.setTooltip("Modulation destination. Click to search the parameters this routing can drive.");
     deleteButton->onClick = [this] {
@@ -590,6 +599,7 @@ void ModMatrixComponent::ModRow::resized() {
     destCombo.setBounds(area.removeFromLeft((int)(totalWidth * ModMatrixComponent::kDestColFrac)).reduced(gutter / 2));
     deleteButton->setBounds(area.removeFromRight(30).reduced(gutter / 2));
     bypassToggle->setBounds(area.removeFromRight(30).reduced(gutter / 2));
+    synth::ui::mod_matrix_curve::layoutChip(curveChip, area);
     amountValueLabel.setBounds(area.removeFromRight(36).reduced(gutter / 2));
     amountSlider.setBounds(area.reduced(gutter / 2));
 }
@@ -708,6 +718,7 @@ void ModMatrixComponent::ModRow::applyRowNames(int index) {
     destCombo.setTitle(prefix + "destination");
     amountSlider.setTitle(prefix + "amount");
     bypassToggle->setTitle(prefix + "bypass");
+    synth::ui::mod_matrix_curve::nameChip(curveChip, index);
     deleteButton->setTitle("Remove routing " + juce::String(index + 1));
 }
 
@@ -796,6 +807,7 @@ void ModMatrixComponent::ModRow::refresh(const AudioEngine::ModRoutingInfo& info
     showSelection(sourceCombo, sourceId, sourceLabel);
     const int destId = dest.valid() ? (int)((dest.node.uid << 8) | (uint32_t)dest.channel) : 0;
     showSelection(destCombo, destId, owner.lists_->destinationLabel(destId));
+    curveChip.refresh();
 }
 
 void ModMatrixComponent::ModRow::comboBoxChanged(juce::ComboBox* comboBox) {

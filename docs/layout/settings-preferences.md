@@ -41,7 +41,7 @@ the Settings window is.
 
 | Category | Rows |
 | --- | --- |
-| Graph | smart connections, double-click to disconnect, alignment guides, draw cables on top of modules, Dual I/O default + per-module overrides, macro auto-ports, macro toggles, reconnect the chain on delete |
+| Graph | smart connections, double-click to disconnect, show curves on cables (`showCurvesOnCables`, default off, restored at startup), alignment guides, draw cables on top of modules, Dual I/O default + per-module overrides, macro auto-ports, macro toggles, reconnect the chain on delete |
 | Timeline | Duplicate points (where Cmd+D puts copies of selected points: right after the last point, one point-spacing after, or the next grid line; user setting `duplicatePointsPlacement`; [`automation-points.md`](../timeline/automation-points.md#duplicating)), loop-locator toggles, ask before removing an LFO's last destination, "Record also starts playback", "Follow playhead point", natural scrolling, zoom direction, piano roll key labels, play the scale when browsing keys (`playScaleWhenBrowsingKeys`, default on; [song-key](../timeline/song-key.md#hearing-a-key)) |
 | Files & Autosave | autosave on/interval/backups, patch save location (per project / shared folder / chosen folder + Choose...) |
 | Mixer | auto-create channel on connect, default track presets, mixer placement |

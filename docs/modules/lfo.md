@@ -15,9 +15,8 @@ the module reference is in [`modules.md`](modules.md).
   `renderTable` bakes it into a 1024-entry lookup table (`renderTable`'s `[1024]` duplicates
   `[0]`, a wrap guard so linear interpolation across the phase = 1 seam needs no modulo);
   `processBlock`'s case 5 interpolates linearly between adjacent table entries. The message
-  thread renders a fresh table on every `setCustomWave` and crosses it to the audio thread with a
-  fixed-size array under a `juce::SpinLock` try-lock (`publishCustomTable`/
-  `adoptPendingCustomTable`, mirroring `WavetableOscillatorModule`'s own publish/adopt — see
+  thread renders fresh tables on every `setCustomWave` and crosses them to the audio thread
+  through `LockFreeHandoff` (see the Custom shapes and Morph entry below and
   `Source/Modules/CLAUDE.md`), adopted once per block before the sample loop. Phase and retrig are
   unchanged from every other shape (a shared `phase` in `[0, 1)`, reset to 0 by Retrig). The
   default (and what a freshly-appended Custom shape starts as) is the Triangle preset. Unipolar

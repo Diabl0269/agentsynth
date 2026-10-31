@@ -7,6 +7,8 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "GraphEditorCableCurveChips.h"
+#include "GraphEditorCableMenu.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
 #include "UI/Graph/ModDot/ModDotController.h"
@@ -767,16 +769,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
     if (e.mods.isPopupMenu()) {
         auto canvasPos = content.getLocalPoint(this, e.getPosition()).toFloat();
         if (auto cable = getCableAt(canvasPos)) {
-            const auto captured = *cable;
-            juce::Component::SafePointer<GraphEditor> safeThis(this);
-
-            juce::PopupMenu m;
-            m.addSectionHeader(juce::String(synth::ui::cableSignalLabel(captured.signal)) + " cable");
-            m.addItem("Disconnect Cable", [safeThis, captured] {
-                if (safeThis != nullptr)
-                    safeThis->disconnectCable(captured);
-            });
-            m.showMenuAsync(synth::ui::contextMenuOptionsAtPointer());
+            synth::ui::showCableMenu(*this, *cable);
             return;
         }
 
@@ -870,6 +863,9 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
             beginMacroBodyDrag(macroId);
             return;
         }
+
+        if (synth::ui::cable_curve_chips::press(*this, content, localPos.toFloat()))
+            return; // a curve chip is its own control: never the start of a knob drag
 
         auto attenId = getAttenuverterNodeAt(localPos.toFloat());
         if (attenId.uid != 0) {

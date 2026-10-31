@@ -7,6 +7,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ExitEnterRowSlots.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
 #include <algorithm>
 #include <cmath>
 
@@ -60,6 +61,7 @@ ModDotSourcesPage::ModDotSourcesPage(GraphEditor& editor, ModDotController& cont
 ModDotSourcesPage::~ModDotSourcesPage() { anim_.stop(updater_); }
 
 void ModDotSourcesPage::wireRow(ModDotSourceRow& row) {
+    wireModCurveChip(row.curveChip(), editor_, row.attenuverterId(), row.source().sourceName);
     row.onSelect = [this](ModDotSourceRow& r) { select(r.attenuverterId()); };
     row.onGestureBegin = [this](ModDotSourceRow&) { editor_.beginModAmountGesture(); };
     row.onAmountDragged = [this](ModDotSourceRow& r, float amount) { applyAmount(r, amount); };

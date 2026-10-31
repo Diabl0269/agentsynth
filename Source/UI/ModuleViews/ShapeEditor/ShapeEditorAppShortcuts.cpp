@@ -67,7 +67,9 @@ std::function<bool(const juce::KeyPress&)> makeAppShortcutRelay(juce::Component*
     return [safeAnchor = juce::Component::SafePointer<juce::Component>(anchor)](const juce::KeyPress& key) {
         if (safeAnchor == nullptr)
             return false;
-        auto* canvas = safeAnchor->findParentComponentOfClass<GraphEditor>();
+        auto* canvas = dynamic_cast<GraphEditor*>(safeAnchor.getComponent());
+        if (canvas == nullptr)
+            canvas = safeAnchor->findParentComponentOfClass<GraphEditor>();
         const auto* shortcuts = canvas != nullptr ? canvas->getCardKeyboard().getShortcutManager() : nullptr;
         if (shortcuts == nullptr || !isWindowForwardableShortcut(*shortcuts, key))
             return false;

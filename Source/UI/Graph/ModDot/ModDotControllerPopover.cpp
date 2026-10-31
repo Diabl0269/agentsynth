@@ -12,6 +12,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
+#include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
 
 namespace synth::ui {
 
@@ -84,7 +85,22 @@ ModDotPanelFrame* ModDotController::launchPopoverFrame(std::unique_ptr<juce::Com
             return panel != nullptr && panel->isPicking();
         };
     }
-    return launchInFrame(std::move(content), anchor, anchor.getScreenBounds(), options);
+    auto* frame = launchInFrame(std::move(content), anchor, anchor.getScreenBounds(), options);
+    // A row's curve box sits over this panel and is anchored to a chip in it: Esc takes the box first, wherever the
+    // keyboard focus is, and the box never outlives the panel.
+    frame->keepOpenOnPressAt = [](juce::Point<int> screenPoint) { return modCurvePopoverContains(screenPoint); };
+    frame->escapeGoesElsewhere = [] {
+        if (!isModCurvePopoverOpen())
+            return false;
+        closeModCurvePopover();
+        return true;
+    };
+    frame->onClosed = [closed = frame->onClosed] {
+        closeModCurvePopover();
+        if (closed)
+            closed();
+    };
+    return frame;
 }
 
 ModDotPopover* ModDotController::getPopover() const { return static_cast<ModDotPopover*>(popover_.getComponent()); }
@@ -123,6 +139,7 @@ void ModDotController::dotDoubleClicked(juce::AudioProcessorGraph::NodeID card, 
 void ModDotController::tickPopover() {
     if (auto* open = getPopover())
         open->syncFromGraph();
+    tickModCurvePopover();
 }
 
 void ModDotController::popoverClosed(ModDotPopover* popover) {

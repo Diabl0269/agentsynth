@@ -10,7 +10,7 @@ namespace synth::ui {
 
 class ModDotPage : public juce::Component {
 public:
-    static constexpr int kWidth = 280;
+    static constexpr int kWidth = 312;
 
     /** The height the page wants at its width right now (it changes frame by frame while rows move). */
     virtual int preferredHeight() const = 0;
