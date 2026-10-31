@@ -106,7 +106,7 @@ void SequencerModuleBase::prepareToPlay(double sampleRate, int samplesPerBlock) 
     juce::ignoreUnused(samplesPerBlock);
     sampleRate_ = sampleRate;
     clock_.reset();
-    player_.reset();
+    flushOnNextBlock_ = true; // a note-off is still owed for what the player holds: a hosted synth keeps its voices
     preview_.prepare(sampleRate);
     currentActiveStep = 0;
 }
@@ -132,6 +132,11 @@ void SequencerModuleBase::stopOutput(juce::MidiBuffer& midi) {
 
 void SequencerModuleBase::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     handoff_.adopt();
+    if (flushOnNextBlock_) {
+        flushOnNextBlock_ = false;
+        player_.flush(midiMessages);
+        player_.reset();
+    }
     if (isBypassed()) {
         stopOutput(midiMessages);
         preview_.silence(midiMessages, player_);

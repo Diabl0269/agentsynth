@@ -448,6 +448,9 @@ void HostedPluginModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
     // callback stopped, so re-preparing in place is safe and keeps the published pointer valid.
     if (auto* instance = activeInstance_.load(std::memory_order_acquire)) {
         prepareInstance(*instance);
+        // A plugin may keep its voices through a prepare, and a source that forgot its notes owes it no note-off.
+        restartMidi_.ensureSize(kRestartMidiBytes);
+        voiceResetPending_.store(true, std::memory_order_relaxed);
         // Plain, NOT setLatencyAndNotify — and that is load-bearing, not an oversight.
         // juce::AudioProcessorGraph prepares its nodes from INSIDE its own render-sequence rebuild
         // and reads every node's latency immediately afterwards, so the new value is already picked
@@ -463,6 +466,32 @@ void HostedPluginModule::releaseResources() {
         instance->releaseResources();
 
     reapRetired();
+}
+
+bool HostedPluginModule::midiFitsAfterVoiceReset(const juce::MidiBuffer& midiMessages) const noexcept {
+    // Sixteen channels of two controllers, each a 3-byte message under a 6-byte event header.
+    constexpr int kResetBytes = 16 * 2 * (3 + 6);
+    return midiMessages.data.size() + kResetBytes <= kRestartMidiBytes;
+}
+
+// The first block after a re-prepare. The reset must come before this block's own notes or it would cut the ones a
+// source has just resumed, and a MidiBuffer only appends at equal positions, so the block's events are copied in after
+// it, into storage sized on the message thread. VST3 only passes a controller the plugin maps, so this backs up the
+// sources' own per-note note-offs rather than replacing them.
+void HostedPluginModule::processWithVoiceReset(juce::AudioPluginInstance& instance, juce::AudioBuffer<float>& view,
+                                               juce::MidiBuffer& midiMessages) {
+    voiceResetPending_.store(false, std::memory_order_relaxed);
+    restartMidi_.clear();
+    for (int channel = 1; channel <= 16; ++channel) {
+        restartMidi_.addEvent(juce::MidiMessage::allSoundOff(channel), 0);
+        restartMidi_.addEvent(juce::MidiMessage::allNotesOff(channel), 0);
+    }
+    restartMidi_.addEvents(midiMessages, 0, -1, 0);
+    instance.processBlock(view, restartMidi_);
+
+    // The plugin's own output replaces the input, as it does on every other block. A swap never allocates, and the
+    // next prepare, the only thing that can ask for another reset, sizes restartMidi_ again.
+    midiMessages.swapWith(restartMidi_);
 }
 
 void HostedPluginModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
@@ -514,7 +543,10 @@ void HostedPluginModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
     applyModSlots(*instance, buffer);
 
     instance->setPlayHead(getPlayHead());
-    instance->processBlock(view, midiMessages);
+    if (voiceResetPending_.load(std::memory_order_relaxed) && midiFitsAfterVoiceReset(midiMessages))
+        processWithVoiceReset(*instance, view, midiMessages);
+    else
+        instance->processBlock(view, midiMessages);
 
     // Hidden channels are silenced every block — the other half of the fixed-maximum/visible-count
     // pattern (the Macro rule). Without it, whatever the upstream node put on channel 9 of a stereo
