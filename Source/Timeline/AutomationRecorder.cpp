@@ -1,6 +1,7 @@
 #include "AutomationRecorder.h"
 #include "../AppUndoManager.h"
 #include "../Transport/TransportService.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
 #include <cmath>
 #include <utility>

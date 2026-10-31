@@ -18,6 +18,7 @@
 #include "Modules/FilterModule.h"
 #include "Modules/ModuleBase.h"
 #include "ShortcutManager/AppCommands.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 #include <cmath>
 #include <gtest/gtest.h>

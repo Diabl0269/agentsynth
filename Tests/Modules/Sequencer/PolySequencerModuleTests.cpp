@@ -163,3 +163,18 @@ TEST_F(PolySequencerModuleTest, SlideIsIgnored) {
     ASSERT_EQ(offs.size(), 1u);
     EXPECT_EQ(offs[0].sample, kQuarter / 2);
 }
+
+// Regression test for FRO1222: a re-prepare forgot the held notes, so a hosted synth on this sequencer never got the
+// note-off for them.
+TEST_F(PolySequencerModuleTest, ARestartReleasesWhatTheStepWasHolding) {
+    run(*seq, true);
+    const auto first = render(*seq, 512);
+    const auto ons = onsOnly(first);
+    ASSERT_FALSE(ons.empty());
+
+    seq->prepareToPlay(kRate, 256);
+    const auto after = render(*seq, 256);
+    ASSERT_FALSE(after.empty());
+    EXPECT_TRUE(after.front().isOff) << "the release comes before the pattern starts again";
+    EXPECT_EQ(after.front().note, ons.front().note);
+}

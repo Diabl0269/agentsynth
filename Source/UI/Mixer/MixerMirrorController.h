@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include "UI/Layout/DetachablePanelHost/DockBackButton.h"
 #include <functional>
@@ -8,6 +7,8 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <vector>
+
+class ShortcutManager;
 
 namespace synth::theme {
 class AppLookAndFeel;

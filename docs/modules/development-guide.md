@@ -256,7 +256,7 @@ Legitimate reasons **not** to smooth, each of which belongs in a comment next to
   `juce::dsp::Chorus`/`Phaser` smooth feedback and mix (`DryWetMixer`) but *not* centre delay /
   centre frequency.
 
-**Anti-aliased oscillators.** For waveforms with sharp edges (Square, Saw), use PolyBLEP or
+**Anti-aliased oscillators.** For waveforms with sharp edges (Square, Saw), use `synth::bandlimited` (`Source/Modules/Oscillator/BandLimitedWaves.h`), PolyBLEP or
 band-limited synthesis to prevent aliasing at higher frequencies. `juce::dsp::Oscillator` can handle
 this automatically when configured correctly.
 

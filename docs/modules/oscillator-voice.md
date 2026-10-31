@@ -2,6 +2,28 @@
 
 How each unison voice of the [Oscillator](modules.md#oscillator-module) starts a note and sits in the stack. Code: `Source/Modules/Oscillator/` and `Source/Modules/UnisonVoicing.h`.
 
+## Band-limited waveforms
+
+Saw, Square and Triangle come from `synth::bandlimited` (`Source/Modules/Oscillator/BandLimitedWaves.h`). Each is its plain shape plus a correction around every edge: the difference between an ideal step (or slope change) and that step through an 8-sample-half-width Kaiser-windowed sinc, read from a table filled before `main`. The correction reads only phase and phase increment, so a voice keeps no history: a restart, a pitch jump, FM or a Pulse Width move has nothing to flush, there is no latency, and the audio thread only reads. Square is two steps, so Pulse Width stays continuous.
+
+**Measured at 48 kHz, C4 to C8.** Inharmonic energy below 16 kHz is -92 dB or lower relative to the harmonics (Saw, Square, Triangle; the two-sample polyBLEP it replaced read -35 dB on a C8 Saw and -33 dB on a C8 Triangle), and the 10-20 kHz band is within 0.2 dB of an ideal series, which is what the reference synth measures. Harmonics between Nyquist and 2/3 of the sample rate still pass and fold above 16 kHz, on purpose: removing them would droop the top band. They read -46 dB on a C4 Saw and -32 dB on a C8 Saw.
+
+**Why this and not the others**, measured at 8 voices x 8 unison (share of one core, generators only):
+
+| Method | Alias below 16 kHz, worst | C4 / C8 Saw cost | Alias above 16 kHz, C8 Saw | 10-20 kHz, Saw |
+|---|---|---|---|---|
+| Two-sample polyBLEP (before) | -33 dB | 0.7 % / 0.7 % | -24 dB | -2.5 dB |
+| Half width 4 | -77 dB | 0.7 % / 1.1 % | -27 dB | -0.3 dB |
+| **Half width 8 (this)** | **-92 dB** | **0.7 % / 3.0 %** | **-32 dB** | **-0.1 dB** |
+| Half width 16 | -92 dB | 0.7 % / 2.8 % | -36 dB | 0.0 dB |
+| Half-octave mip tables, cubic | -92 dB | 1.7 % / 1.7 % | -15 dB | 0.0 dB |
+| 4x oversampled polyBLEP | -60 dB | 27 % / 27 % | -66 dB | -0.2 dB |
+| 8x oversampled polyBLEP | -72 dB | 64 % / 64 % | -69 dB | 0.0 dB |
+
+**Level.** RMS is unchanged within 0.1 dB, but a wave flat to the top of the band rings at its edge: a Saw or Square peaks at 1.17 (+1.3 dB) where the polyBLEP stayed near 1. A Saw used as a slow control signal in Fixed rate mode carries that ring too.
+
+**Tests:** `OscillatorAlias` walks the Waveform list over pitch and Pulse Width, and checks vibrato and the top band.
+
 ## Phase and Rand
 
 **Phase and Rand** (`phase` 0-360 degrees, `randomPhase` 0-100 %; Phase starts at 0 and Rand at 100 % on a new module, so a raised Unison stack opens apart like the measured reference instead of pulsing in phase): on every note start each unison voice restarts at `frac(Phase / 360 + Rand x random)`, the random drawn independently per voice from a seeded generator (`phaseRandom`, reseeded in `prepareToPlay`) so a render repeats exactly. They are sampled at the note start, so they have no CV jack. Their card tooltips say so: they set the start of every new note and do not change a note that is already sounding (turning them on a held note is silent by design, since a steady tone's start phase is inaudible; a live shift would click). The Wavetable's Phase and Rand Phase carry the same tooltips. Between notes the oscillator still free-runs. **Mono** is MIDI driven: `scanMidi` records each note-on's sample offset and `processMonoMode` restarts the phases at that exact sample (`OscillatorModuleNotes.cpp`). A restart may land while the previous note still sounds, so the old phases keep running as a "ghost" and are blended out over 64 samples (`CROSSFADE_SAMPLES`) along a raised cosine (`Source/Modules/RestartFade.h`), each ghost running at the pitch the interrupted note had (a new note's pitch never reaches the tail), which has no corner where the hand-over starts or ends (a straight ramp bent the sound there, a short tick on every note). A restart while a hand-over is still running turns the stack it interrupts into one more ghost with the share it holds at that sample, up to five at once, and each ghost leaves along its own curve, so the output never steps however fast restarts come; with no restart the output is byte-identical. Held notes are tracked in `synth::HeldNotes`; an overlapping note-on restarts today, and `shouldRestartOnNoteOn(overlapping)` is the one place a legato mode gates that. **Poly** restarts a voice on every rising edge of its **Restart** (Gate) input (below), on the exact sample, fading out of the old phases. Without a gate it falls back to restarting a voice when its pitch CV goes from silent (below 20 Hz) to sounding, the Wavetable's rule, and voice 0 also on a MIDI note-on (at the block start, fading out of the old phases only if it was already sounding).

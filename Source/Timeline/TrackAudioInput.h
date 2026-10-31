@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AudioEngine/AudioInputLayoutStore.h"
-#include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineTypes.h"
 #include <cstdint>
 #include <vector>
 

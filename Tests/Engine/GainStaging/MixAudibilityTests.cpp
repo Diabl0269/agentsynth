@@ -25,6 +25,7 @@
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "TestPaths.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 
 #include <algorithm>
 #include <cmath>

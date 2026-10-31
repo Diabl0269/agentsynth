@@ -8,6 +8,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorPolyChordTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorGateRestartTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorFixedRateTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/OscillatorAliasTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/WavetableOscillatorModule/WavetableOscillatorModuleGateTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/WavetableOscillatorModule/WavetableOscillatorModuleRestartFadeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/ADSRLegatoTests.cpp

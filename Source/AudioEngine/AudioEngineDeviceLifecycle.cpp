@@ -30,9 +30,11 @@ AudioEngine::AudioEngine(HostMode mode)
     // Every node/connection change broadcasts (asynchronously, coalesced); the key-input
     // publication hangs off it so it holds in the app AND the plugin (changeListenerCallback).
     mainProcessorGraph.addChangeListener(this);
+    startTimerHz(10);
 }
 
 AudioEngine::~AudioEngine() {
+    stopTimer();
     mainProcessorGraph.removeChangeListener(this);
     shutdown();
 }

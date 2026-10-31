@@ -499,6 +499,8 @@ TEST(OscillatorVoiceFeel, AnAutomatedBlendAndWidthGlideInsteadOfStepping) {
 // is checked with decorrelated start phases, where uncorrelated voices must keep the level of one.
 TEST(OscillatorVoiceFeel, SourcePeakStaysUnderRootNAcrossBlendAndWidth) {
     constexpr int kVoices = 8;
+    // A saw flat to the top of the band rings to 1.17 at its edge, so voices in phase stack from there.
+    constexpr float kSawPeak = 1.17f;
     auto render = [](int unison, float blend, float width, float rand, std::vector<float>& left,
                      std::vector<float>& right) {
         Rig rig;
@@ -528,7 +530,7 @@ TEST(OscillatorVoiceFeel, SourcePeakStaysUnderRootNAcrossBlendAndWidth) {
             float peak = 0.0f;
             for (size_t i = (size_t)kBlock; i < left.size(); ++i)
                 peak = std::max({peak, std::abs(left[i]), std::abs(right[i])});
-            EXPECT_LE(peak, std::sqrt((float)kVoices) * 1.05f) << "blend " << blend << " width " << width;
+            EXPECT_LE(peak, std::sqrt((float)kVoices) * kSawPeak) << "blend " << blend << " width " << width;
 
             if (width == 0.0f) {
                 render(kVoices, blend, width, 100.0f, left, right);
@@ -541,7 +543,7 @@ TEST(OscillatorVoiceFeel, SourcePeakStaysUnderRootNAcrossBlendAndWidth) {
     float peak = 0.0f;
     for (size_t i = (size_t)kBlock; i < left.size(); ++i)
         peak = std::max(peak, std::abs(left[i]));
-    EXPECT_LE(peak, std::sqrt(2.0f) * 1.05f);
+    EXPECT_LE(peak, std::sqrt(2.0f) * kSawPeak);
 }
 
 namespace {

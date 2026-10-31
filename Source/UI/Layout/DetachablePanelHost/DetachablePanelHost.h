@@ -3,12 +3,13 @@
 #include "DetachedPanelWindow.h"
 #include "DockBackButton.h"
 #include "DockBackSlot.h"
-#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+
+class ShortcutManager;
 
 namespace synth::ui {
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -19,6 +18,8 @@
 // every top-level window in the process). `MainComponent` owns the one instance that exists today, as
 // a plain member (`focusRegions_`), and wires it to the getters/toggles it already has — this type
 // itself knows nothing about MainComponent.
+class ShortcutManager;
+
 namespace synth::ui {
 
 // One region MainComponent's Tab-cycle and direct-focus shortcuts can land keyboard focus in.
@@ -191,15 +192,6 @@ inline void paintFocusRegionOutline(juce::Component& comp, juce::Graphics& g) {
 // (Shift+Tab)/nullopt if `key` isn't bound to either action right now (a user rebind is honoured
 // automatically, same as the command table). Pure: never touches real focus, so it's exactly as
 // testable as FocusRegionRegistry's own pure helpers above (see docs/mixer/panel.md).
-inline std::optional<bool> resolveFocusCycleKeyPress(const juce::KeyPress& key,
-                                                     const ShortcutManager& shortcutManager) {
-    for (const auto& action : shortcutManager.getActionsForKeyPress(key)) {
-        if (action == "focusNextRegion")
-            return true;
-        if (action == "focusPrevRegion")
-            return false;
-    }
-    return std::nullopt;
-}
+std::optional<bool> resolveFocusCycleKeyPress(const juce::KeyPress& key, const ShortcutManager& shortcutManager);
 
 } // namespace synth::ui

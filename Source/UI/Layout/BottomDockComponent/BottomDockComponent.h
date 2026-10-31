@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/BottomDockComponent/BottomDockTabMotion.h"
 #include "UI/Layout/BottomDockTabModel.h"
@@ -20,6 +19,8 @@
 #include <memory>
 #include <optional>
 #include <vector>
+
+class ShortcutManager;
 
 class AppUndoManager;
 class GraphEditor;

@@ -1,0 +1,29 @@
+# Bug: turning Dual I/O on for a one-jack Delay between an Oscillator and a VCA left the Delay's Right output without a
+# cable into the VCA, so half the stereo was lost.
+#
+# What a user does:
+#   1. Opens a project with Oscillator -> Delay -> VCA -> Audio Output, all one-jack.
+#   2. Clicks the Delay's Dual I/O button: the Delay shows Left and Right jacks, and both outputs have a cable into the VCA.
+#   3. Undoes: the Delay is one-jack again. Redoes, then turns it off by hand: back to the original cable.
+# The raw edges (Delay ch1 -> VCA ch0 added, then removed) are asserted by DualIOToggleMatrix in the unit tests; test mode
+# cannot read graph edges, so the cables are checked in the screenshots.
+steps:
+  - copyFixture: {name: dual-io-chain.agsproj}
+  - openProject: {path: "${SCRATCH}/dual-io-chain.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Delay > Dual I/O", toggleState: false}
+  - screenshot: {name: before}
+  - click: {id: "card:Delay > Dual I/O"}
+  - wait: {}
+  - expect: {id: "card:Delay > Dual I/O", toggleState: true, within_ms: 1500}
+  - screenshot: {name: split}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Delay > Dual I/O", toggleState: false, within_ms: 1500}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {id: "card:Delay > Dual I/O", toggleState: true, within_ms: 1500}
+  - click: {id: "card:Delay > Dual I/O"}
+  - wait: {}
+  - expect: {id: "card:Delay > Dual I/O", toggleState: false, within_ms: 1500}
+  - screenshot: {name: collapsed-again}

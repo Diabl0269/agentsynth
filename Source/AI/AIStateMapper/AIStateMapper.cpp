@@ -12,6 +12,7 @@
 #include "AudioEngine/ConnectionIndex.h"
 #include "AudioEngine/SamplerMidiWiring.h"
 #include "Mixer/MasterSplice.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 
 #include <map>
 #include <optional>

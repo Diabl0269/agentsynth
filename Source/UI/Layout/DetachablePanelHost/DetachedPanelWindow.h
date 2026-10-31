@@ -1,6 +1,5 @@
 #pragma once
 
-#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/KeyboardContextMenu.h"
@@ -8,6 +7,8 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+
+class ShortcutManager;
 
 namespace synth::ui {
 

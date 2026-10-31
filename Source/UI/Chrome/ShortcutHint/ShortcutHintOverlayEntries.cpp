@@ -1,6 +1,7 @@
 #include "ShortcutHintOverlay.h"
 
 #include "ShortcutHintText.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 

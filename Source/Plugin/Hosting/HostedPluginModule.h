@@ -486,6 +486,13 @@ private:
     InstanceListener instanceListener_{*this};
     mutable std::vector<InstanceParameterInfo> instanceParameters_; // message thread
     mutable std::atomic<bool> instanceParametersStale_{true};
+
+    bool midiFitsAfterVoiceReset(const juce::MidiBuffer& midiMessages) const noexcept;
+    void processWithVoiceReset(juce::AudioPluginInstance& instance, juce::AudioBuffer<float>& view,
+                               juce::MidiBuffer& midiMessages);
+    static constexpr int kRestartMidiBytes = 64 * 1024;
+    juce::MidiBuffer restartMidi_;
+    std::atomic<bool> voiceResetPending_{false};
     juce::ListenerList<InstanceObserver> instanceObservers_;
 
     PluginIdentity identity_;

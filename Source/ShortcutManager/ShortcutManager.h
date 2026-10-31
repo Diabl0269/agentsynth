@@ -1,39 +1,20 @@
 #pragma once
 
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <vector>
 
-/** Which part of the app an action belongs to. Two jobs, and it is worth being explicit that they
- *  are the same list for a reason:
- *
- *  1. The Settings tab groups its rows into collapsible sections by category, so a user hunting for
- *     "the piano roll's transpose key" has one place to look instead of a 49-row flat list.
- *  2. Conflict detection is SCOPED to a category (see ShortcutManager::getConflictingAction). The
- *     surfaces never have keyboard focus at the same time, so a bare P meaning "loop the selection"
- *     in the timeline is not in competition with a bare P anywhere else — reporting that as a
- *     collision would force the bare-key DAW conventions (Q/L/P, the tool digits, the arrow keys)
- *     into modifier combinations nobody uses.
- *
- *  General is the residual, and deliberately wide: anything routed by
- *  MainComponent::resolveEditSurface() (copy/paste/cut/duplicate/repeat/select-all, and both zoom
- *  pairs) is General because it means something on EVERY surface — one key, whichever editor has
- *  focus. Graph holds only the verbs that have no meaning anywhere else. */
+/** Which part of the app an action belongs to: its Settings section and its conflict-check scope. */
 enum class ShortcutCategory { General, Graph, Timeline, PianoRoll, DrumMachine, Mixer, LayoutEditor };
 
-// Public juce::ChangeBroadcaster so MULTIPLE surfaces can each react to a rebind independently —
-// TimelinePanelComponent's tool-strip/snap/follow tooltips and (in a future cached-tooltip surface)
-// anyone else, all via addChangeListener(this)/removeChangeListener(this), unsubscribing in their
-// destructors since a ShortcutManager (owned by MainComponent) outlives them. This is DELIBERATELY
-// additive alongside the pre-existing single-slot `onBindingsChanged` callback below (which
-// MainComponent's own ctor already claims for updateCommandShortcuts()) rather than replacing it —
-// a second listener assigning onBindingsChanged would silently clobber MainComponent's own
-// subscription, since a bare std::function has exactly one slot.
+// Broadcasts every binding change, so several surfaces can each react. onBindingsChanged has one slot,
+// which MainComponent holds.
 class ShortcutManager : public juce::ChangeBroadcaster {
 public:
-    /** Which modifier convention the factory defaults follow. Mac: Cmd and Ctrl are two physical keys,
-     *  so a "real Ctrl" chord is free. Other: JUCE folds Cmd onto Ctrl, so a chord that is Ctrl on Mac
-     *  is the SAME chord as the Cmd one and the Cmd action has to move. The host platform picks it;
-     *  setDefaultsPlatform() lets a test build the other platform's table. */
+    /** Which modifier convention the factory defaults follow. Mac: Cmd and Ctrl are two physical keys.
+     *  Other: JUCE folds Cmd onto Ctrl. The host platform picks it; setDefaultsPlatform() lets a test
+     *  build the other platform's table. */
     enum class DefaultsPlatform { Mac, Other };
 
     static constexpr DefaultsPlatform hostDefaultsPlatform() noexcept {
@@ -47,335 +28,42 @@ public:
     DefaultsPlatform getDefaultsPlatform() const noexcept { return defaultsPlatform; }
 
     /** Rebuilds every binding from the defaults of `platform` (and makes migrations follow it). */
-    void setDefaultsPlatform(DefaultsPlatform platform) {
-        defaultsPlatform = platform;
-        resetToDefaults();
-        sendSynchronousChangeMessage();
-    }
+    void setDefaultsPlatform(DefaultsPlatform platform);
 
-    ShortcutManager() {
-        for (const auto& entry : getActionTable())
-            actionIds.add(entry.id);
-        resetToDefaults();
-    }
+    ShortcutManager();
 
-    void loadFromProperties(juce::ApplicationProperties& props) {
-        appProperties = &props;
-        auto* settings = props.getUserSettings();
-        if (settings == nullptr)
-            return;
+    /** Reads saved bindings and runs the one-shot migrations. Persistence is opt-in: without this, or
+     *  with no user-settings file, saveToProperties() only notifies. */
+    void loadFromProperties(juce::ApplicationProperties& props);
 
-        for (auto& actionId : actionIds) {
-            auto key = "shortcut_" + actionId;
-            if (settings->containsKey(key))
-                bindings[actionId] = parseKeyPress(settings->getValue(key));
-        }
-        const auto loaded = bindings;
-        migrateSaveAsChordSwap(*settings);
-        migrateBottomPanelToggleKeys(*settings);
-        migrateBottomPanelCmdJ(*settings);
-        migrateTransportCtrlChords(*settings);
-        migrateDockDigitKeys(*settings);
-        migrateAddTrackCmdT(*settings);
-        persistMigratedBindings(*settings, loaded);
-    }
+    /** Where Repeat and Toggle Mod Matrix live off the Mac. */
+    static juce::ModifierKeys otherPlatformRepeatModifiers() noexcept;
+    static juce::ModifierKeys otherPlatformModMatrixModifiers() noexcept;
 
-    /** A migration's flag lands in the settings file, so its rewritten bindings must land there too.
-     *  They used to change in memory only: the next launch read the flag as "done" and the
-     *  stored (old) keys back, so the Ctrl+R / Ctrl+M defaults were adopted for one run and then
-     *  lost for good -- no key, and no shortcut in the tooltips. Writes only what a migration changed. */
-    void persistMigratedBindings(juce::PropertiesFile& settings, const std::map<juce::String, juce::KeyPress>& before) {
-        bool changed = false;
-        for (const auto& actionId : actionIds) {
-            const auto it = bindings.find(actionId);
-            const auto old = before.find(actionId);
-            if (it == bindings.end() || old == before.end())
-                continue;
-            if (it->second.getKeyCode() == old->second.getKeyCode() &&
-                it->second.getModifiers() == old->second.getModifiers())
-                continue;
-            settings.setValue("shortcut_" + actionId, encodeKeyPress(it->second));
-            changed = true;
-        }
-        if (changed)
-            settings.saveIfNeeded();
-    }
+    /** Persists every binding, then notifies onBindingsChanged and change listeners synchronously. */
+    void saveToProperties();
 
-    /** One-shot: Save Project As and Save Snippet swapped chords (Save As took the standard
-     *  Cmd+Shift+S). saveToProperties() persists every action's key, so an install that ever saved
-     *  its settings still holds the OLD pair and would keep Save As on Cmd+Opt+S with the snippet
-     *  command shadowing the standard chord. Swap only when BOTH still hold the old defaults, so a
-     *  user who rebound either one keeps their choice; the flag stops it re-firing if they later
-     *  rebind back to the old pair on purpose. */
-    void migrateSaveAsChordSwap(juce::PropertiesFile& settings) {
-        constexpr auto flag = "shortcutMigration_saveAsCmdShiftS";
-        if (settings.getBoolValue(flag, false))
-            return;
-        settings.setValue(flag, true);
-        const auto cmdShiftS =
-            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
-        const auto cmdOptS =
-            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
-        if (bindings["saveSnippet"] == cmdShiftS && bindings["saveProjectAs"] == cmdOptS) {
-            bindings["saveSnippet"] = cmdOptS;
-            bindings["saveProjectAs"] = cmdShiftS;
-        }
-    }
+    juce::KeyPress getBinding(const juce::String& actionId) const;
 
-    /** One-shot, same shape as migrateSaveAsChordSwap above. The bottom-dock toggle used to
-     *  be toggleTimelinePanel's own Cmd+T; a saved install still holds "shortcut_toggleTimelinePanel"
-     *  = Cmd+T (saveToProperties() persists every action, not only rebound ones), which would
-     *  otherwise collide with the new toggleBottomPanel action's own Cmd+T default -- both keyed to
-     *  the same chord, resolved arbitrarily by getActionsForKeyPress()'s "first in actionIds order"
-     *  rule. Move Cmd+T onto toggleBottomPanel and give toggleTimelinePanel its own new default
-     *  (Cmd+1) instead, but ONLY when toggleTimelinePanel still holds the OLD default -- a user who
-     *  rebound it keeps their choice, and toggleBottomPanel then just claims Cmd+T fresh (it is
-     *  absent from every saved file, so it already has its own default with no rebind needed). */
-    void migrateBottomPanelToggleKeys(juce::PropertiesFile& settings) {
-        constexpr auto flag = "shortcutMigration_bottomPanelCmdT";
-        if (settings.getBoolValue(flag, false))
-            return;
-        settings.setValue(flag, true);
-        const auto cmdT = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
-        if (bindings["toggleTimelinePanel"] == cmdT) {
-            bindings["toggleBottomPanel"] = cmdT;
-            bindings["toggleTimelinePanel"] = juce::KeyPress('1', juce::ModifierKeys::commandModifier, 0);
-        }
-    }
+    /** Every action bound to `key`, in getActionIds() order. */
+    juce::StringArray getActionsForKeyPress(const juce::KeyPress& key) const;
 
-    /** One-shot: the bottom-panel toggle moved from Cmd+T to Cmd+J (Cmd+T is released). A saved install holds
-     *  the old default for it (saveToProperties() persists every action), so move it across -- but only when it
-     *  still holds exactly Cmd+T and no other action already holds Cmd+J; any other binding is the user's
-     *  choice and stays. Runs after migrateBottomPanelToggleKeys(), so an install that old still ends on Cmd+J.
-     *  The flag stops it re-firing if they later bind Cmd+T on purpose. */
-    void migrateBottomPanelCmdJ(juce::PropertiesFile& settings) {
-        constexpr auto flag = "shortcutMigration_bottomPanelCmdJ";
-        if (settings.getBoolValue(flag, false))
-            return;
-        settings.setValue(flag, true);
-        const auto cmdT = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
-        const auto cmdJ = juce::KeyPress('j', juce::ModifierKeys::commandModifier, 0);
-        if (bindings["toggleBottomPanel"] == cmdT && getConflictingAction("toggleBottomPanel", cmdJ).isEmpty())
-            bindings["toggleBottomPanel"] = cmdJ;
-    }
+    /** The one "did this keystroke fire that binding?" rule. Modifiers match exactly and the key code
+     *  case-insensitively; with Shift held on both sides, a US-layout shifted symbol also matches its
+     *  base key. An invalid binding matches nothing. */
+    static bool keyPressMatches(const juce::KeyPress& binding, const juce::KeyPress& pressed);
 
-    /** One-shot: the digit chords moved from the per-view actions (Cmd+1 Timeline ... Cmd+4 Canvas, Opt+Cmd+1..4
-     *  their swaps) to the positional ones (showDockTab1..3, swapDockTab1..3ToMain), which follow the tab order.
-     *  A saved install still holds the old digits on the per-view actions, so each is cleared where it still holds
-     *  its old default (a user's own rebind stays) and the positional action owns the chord. */
-    void migrateDockDigitKeys(juce::PropertiesFile& settings) {
-        constexpr auto flag = "shortcutMigration_dockDigitKeys";
-        if (settings.getBoolValue(flag, false))
-            return;
-        settings.setValue(flag, true);
-        const char* const views[] = {"toggleTimelinePanel", "toggleMixerPanel", "toggleMidiRemotePanel", "showCanvas"};
-        const char* const swaps[] = {"swapTimelineToMain", "swapMixerToMain", "swapMidiRemoteToMain",
-                                     "swapCanvasToMain"};
-        const auto cmdAlt = juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier;
-        for (int i = 0; i < 4; ++i) {
-            if (bindings[views[i]] == juce::KeyPress('1' + i, juce::ModifierKeys::commandModifier, 0))
-                bindings[views[i]] = juce::KeyPress();
-            if (bindings[swaps[i]] == juce::KeyPress('1' + i, cmdAlt, 0))
-                bindings[swaps[i]] = juce::KeyPress();
-        }
-    }
+    juce::String getActionForKeyPress(const juce::KeyPress& key) const;
 
-    /** One-shot: Record and Metronome gained default chords (Ctrl+R / Ctrl+M) on every platform, but
-     *  saveToProperties() persists every action's key, so an install that ever saved its settings
-     *  holds them as UNBOUND and would never see the new defaults. Adopt the default only where the
-     *  stored key is still unbound -- a user who bound their own chord keeps it -- and the flag stops
-     *  it re-firing if they later unbind on purpose.
-     *
-     *  Off the Mac, Ctrl is also Cmd, so an old install holds Ctrl+M on Toggle Mod Matrix and Ctrl+R
-     *  on Repeat. Those two move to their new chords first (only if still on the old default), and a
-     *  transport chord is adopted only when no other General action holds it, so the migration can
-     *  never create two actions on one chord. */
-    void migrateTransportCtrlChords(juce::PropertiesFile& settings) {
-        // "2": v1 set its flag but never saved the bindings it adopted (see persistMigratedBindings), so
-        // installs that already ran it hold Record / Metronome unbound -- run the adoption once more.
-        constexpr auto flag = "shortcutMigration_transportCtrlChords2";
-        if (settings.getBoolValue(flag, false))
-            return;
-        settings.setValue(flag, true);
-        const juce::KeyPress ctrlR('r', juce::ModifierKeys::ctrlModifier, 0);
-        const juce::KeyPress ctrlM('m', juce::ModifierKeys::ctrlModifier, 0);
-        if (defaultsPlatform == DefaultsPlatform::Other) {
-            // Off the Mac the old Cmd defaults ARE Ctrl+R / Ctrl+M.
-            if (bindings["repeatSelection"] == ctrlR)
-                bindings["repeatSelection"] = juce::KeyPress('r', otherPlatformRepeatModifiers(), 0);
-            if (bindings["toggleModMatrix"] == ctrlM)
-                bindings["toggleModMatrix"] = juce::KeyPress('m', otherPlatformModMatrixModifiers(), 0);
-        }
-        if (!bindings["transportRecord"].isValid() && getConflictingAction("transportRecord", ctrlR).isEmpty())
-            bindings["transportRecord"] = ctrlR;
-        if (!bindings["transportToggleMetronome"].isValid() &&
-            getConflictingAction("transportToggleMetronome", ctrlM).isEmpty())
-            bindings["transportToggleMetronome"] = ctrlM;
-    }
+    /** Changes one binding in memory and notifies change listeners synchronously. */
+    void setBinding(const juce::String& actionId, const juce::KeyPress& key);
 
-    /** One-shot, Mac only: Add Track moved from the physical Ctrl+T to Cmd+T (Ctrl+T now inserts a point in a
-     *  focused point editor). A saved install holds the old default (saveToProperties() persists every action),
-     *  so move it across -- but only when it still holds exactly Ctrl+T and no other action already holds Cmd+T;
-     *  any other binding is the user's choice and stays. Runs after the migrations that release Cmd+T, so an
-     *  install that old ends with Cmd+T free first. The flag stops it re-firing if they later bind Ctrl+T on
-     *  purpose. */
-    void migrateAddTrackCmdT(juce::PropertiesFile& settings) {
-        constexpr auto flag = "shortcutMigration_addTrackCmdT";
-        if (settings.getBoolValue(flag, false))
-            return;
-        settings.setValue(flag, true);
-        if (defaultsPlatform != DefaultsPlatform::Mac)
-            return;
-        const juce::KeyPress ctrlT('t', juce::ModifierKeys::ctrlModifier, 0);
-        const juce::KeyPress cmdT('t', juce::ModifierKeys::commandModifier, 0);
-        if (bindings["openAddTrackMenu"] == ctrlT && getConflictingAction("openAddTrackMenu", cmdT).isEmpty())
-            bindings["openAddTrackMenu"] = cmdT;
-    }
+    /** The action already using `key` in the same category as `actionId`, or an empty string. An unknown
+     *  `actionId` counts as General. */
+    juce::String getConflictingAction(const juce::String& actionId, const juce::KeyPress& key) const;
 
-    /** Where Repeat and Toggle Mod Matrix live off the Mac, once Record and Metronome own Ctrl+R and
-     *  Ctrl+M (which there are also the Cmd chords). Ctrl+Shift+M is Locate Master's, so Mod Matrix
-     *  takes Ctrl+Alt. */
-    static juce::ModifierKeys otherPlatformRepeatModifiers() noexcept {
-        return juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier);
-    }
-    static juce::ModifierKeys otherPlatformModMatrixModifiers() noexcept {
-        return juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier);
-    }
-
-    void saveToProperties() {
-        // Persistence is opt-in (no appProperties/no user-settings file is a legal, permanent
-        // state — see loadFromProperties), but a binding that just changed in memory is real
-        // either way, so the notification below is UNCONDITIONAL: a caller with nothing to persist
-        // to disk still has every live listener told about the change, rather than being silently
-        // skipped alongside the persistence it never asked for.
-        if (appProperties != nullptr) {
-            if (auto* settings = appProperties->getUserSettings()) {
-                for (auto& actionId : actionIds)
-                    settings->setValue("shortcut_" + actionId, encodeKeyPress(bindings.at(actionId)));
-                appProperties->saveIfNeeded();
-            }
-        }
-        if (onBindingsChanged)
-            onBindingsChanged();
-        // Synchronous on purpose: binding edits only ever happen on the message thread (the
-        // Settings tab), and the subscribers rebuild tooltip strings — an async post would leave a
-        // window where a just-rebound key shows its old hint, and makes headless tests
-        // non-deterministic (nothing pumps the queue mid-test).
-        sendSynchronousChangeMessage();
-    }
-
-    juce::KeyPress getBinding(const juce::String& actionId) const {
-        auto it = bindings.find(actionId);
-        return it != bindings.end() ? it->second : juce::KeyPress();
-    }
-
-    /** EVERY action bound to `key`, in getActionIds() order. Plural because one keypress can now
-     *  legitimately name more than one action: a bare Left arrow is the piano roll's nudge AND
-     *  nothing else, but the general shape ("a surface action and a command action could share a
-     *  key across categories") is exactly what category-scoped conflict checking permits. Callers
-     *  that dispatch commands walk this and take the first entry with a real command — see
-     *  MainComponent::keyPressed. */
-    juce::StringArray getActionsForKeyPress(const juce::KeyPress& key) const {
-        juce::StringArray matches;
-        for (const auto& actionId : actionIds)
-            if (keyPressMatches(getBinding(actionId), key))
-                matches.add(actionId);
-        return matches;
-    }
-
-    /** THE one "did this keystroke fire that binding?" rule, shared by this class and by every
-     *  component that resolves a surface action for itself (PianoRollComponent::matchesAction,
-     *  TimelinePanelComponent::matchesAction). True when:
-     *
-     *   - the two are equal — key code compared case-insensitively, modifiers compared EXACTLY,
-     *     which is what keeps Left / Shift+Left / Alt+Left three separate bindings and what keeps
-     *     Ctrl+Shift+1 from ever matching a bare 1; OR
-     *   - BOTH sides carry Shift and their key codes share a US-layout unshifted base — '!' and '1'
-     *     are one physical key, so Ctrl+Shift+'!' fires the binding stored as Ctrl+Shift+'1'.
-     *
-     *  An invalid binding (an action the user cleared, or an id this build has never heard of)
-     *  matches nothing.
-     *
-     *  WHY THE SECOND BRANCH EXISTS — the bug it fixes. On macOS,
-     *  juce_NSViewComponentPeer_mac.mm's getKeyCodeFromEvent() derives a KeyPress's key code from
-     *  `[ev charactersIgnoringModifiers]`, and its own comment concedes: "Unfortunately,
-     *  charactersIgnoringModifiers does not ignore the shift key" — it compensates ONLY by
-     *  upper-casing letters. So a Shift-chorded digit or symbol reaches keyPressed carrying the
-     *  SHIFTED character as its key code: Ctrl+Shift+1 arrives as KeyPress('!', ctrl|shift) and
-     *  never equalled the stored '1'. That killed the entire Ctrl+Shift+digit grid block AND both
-     *  Cmd+Shift zoom keys (Cmd+Shift+'=' arrives as '+') in the real app, while every headless test
-     *  stayed green — a test builds KeyPress('1', mods) directly and never goes through the peer.
-     *
-     *  LIMITATION, stated plainly: the table below is the US ANSI layout. Doing this properly needs
-     *  the platform VIRTUAL key code, which identifies the physical key independently of layout and
-     *  which juce::KeyPress does not carry — the peer has already collapsed the event to a character
-     *  before any of our code sees it. On a layout where Shift+3 is not '#' (UK, French, German…)
-     *  the affected chord falls back to exact match, i.e. exactly the behaviour it had before this
-     *  function existed: nothing gets worse, and the layouts covered are the overwhelming majority.
-     *  Bare (unshifted) keys and every letter are unaffected on every layout. */
-    static bool keyPressMatches(const juce::KeyPress& binding, const juce::KeyPress& pressed) {
-        if (!binding.isValid())
-            return false;
-        // Modifiers are never normalized — only the key CODE is. That is what keeps the bare tool
-        // digits clear of the Ctrl+Shift grid commands they share key codes with.
-        if (binding.getModifiers() != pressed.getModifiers())
-            return false;
-        if (foldKeyCodeCase(binding.getKeyCode()) == foldKeyCodeCase(pressed.getKeyCode()))
-            return true;
-        if (!binding.getModifiers().isShiftDown() || !pressed.getModifiers().isShiftDown())
-            return false;
-        return usLayoutUnshiftedBase(binding.getKeyCode()) == usLayoutUnshiftedBase(pressed.getKeyCode());
-    }
-
-    juce::String getActionForKeyPress(const juce::KeyPress& key) const {
-        const auto matches = getActionsForKeyPress(key);
-        return matches.isEmpty() ? juce::String() : matches[0];
-    }
-
-    // Broadcasts synchronously (see saveToProperties for why sync): the MUTATION is what the
-    // tooltip subscribers care about, and a caller that rebinds without persisting (tests, any
-    // future programmatic rebind) must still refresh them. A Settings-tab rebind therefore fires
-    // listeners twice (here and in saveToProperties) — the refresh is idempotent and cheap.
-    void setBinding(const juce::String& actionId, const juce::KeyPress& key) {
-        bindings[actionId] = key;
-        sendSynchronousChangeMessage();
-    }
-
-    /** The action already using `key` IN THE SAME CATEGORY as `actionId`, or an empty string.
-     *
-     *  Category-scoped on purpose (see ShortcutCategory): two surfaces that can never hold keyboard
-     *  focus simultaneously may share a key, and the bare-key DAW conventions depend on it — the
-     *  timeline's Q/L/P and tool digits, and the piano roll's arrows, would otherwise all read as
-     *  collisions with each other and with any future surface. WITHIN a category the check is as
-     *  strict as it ever was: a second General Cmd+X still reports the first one, which is what the
-     *  Settings tab's auto-swap acts on.
-     *
-     *  An unknown `actionId` is treated as General, so a stray id can never silently claim a key
-     *  that a real General action already owns. */
-    juce::String getConflictingAction(const juce::String& actionId, const juce::KeyPress& key) const {
-        const auto category = getCategory(actionId);
-        for (auto& [otherId, binding] : bindings) {
-            if (otherId == actionId || getCategory(otherId) != category)
-                continue;
-            if (bindingsCollide(binding, key))
-                return otherId;
-        }
-        return {};
-    }
-
-    /** Rebuilds `bindings` from scratch. Split by category (General/Graph/Timeline/Piano roll)
-     *  into the addXDefaultBindings() helpers below purely to keep this function itself under the
-     *  file's function-size cap -- the category split already existed as `// ---- X ----` comments
-     *  in a single function; this promotes it to real structure. */
-    void resetToDefaults() {
-        bindings.clear();
-        addGeneralDefaultBindings();
-        addGraphDefaultBindings();
-        addTimelineDefaultBindings();
-        addPianoRollDefaultBindings();
-        addDrumMachineDefaultBindings();
-        addLayoutEditorDefaultBindings();
-    }
+    /** Rebuilds the bindings from the factory defaults. Does not notify. */
+    void resetToDefaults();
 
     // The per-category default bindings resetToDefaults() assembles (ShortcutManagerDefaults.cpp).
     void addGeneralDefaultBindings();
@@ -385,138 +73,34 @@ public:
     void addDrumMachineDefaultBindings();
     void addLayoutEditorDefaultBindings();
 
-    static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
-        juce::String result;
-        auto mods = key.getModifiers();
-
-#if JUCE_MAC
-        if (mods.isCommandDown())
-            result += "Cmd + ";
-        if (mods.isCtrlDown())
-            result += "Ctrl + ";
-#else
-        if (mods.isCtrlDown())
-            result += "Ctrl + ";
-#endif
-        if (mods.isAltDown())
-            result += "Alt + ";
-        if (mods.isShiftDown())
-            result += "Shift + ";
-
-        auto keyCode = key.getKeyCode();
-        if (keyCode >= 'a' && keyCode <= 'z')
-            result += juce::String::charToString(static_cast<juce::juce_wchar>(keyCode - 32));
-        else if (keyCode >= 'A' && keyCode <= 'Z')
-            result += juce::String::charToString(static_cast<juce::juce_wchar>(keyCode));
-        else if (keyCode == ',')
-            result += ",";
-        else if (keyCode == '.')
-            result += ".";
-        else if (keyCode == '/')
-            result += "/";
-        else if (keyCode == ';')
-            result += ";";
-        else if (keyCode == '\'')
-            result += "'";
-        else if (keyCode == '[')
-            result += "[";
-        else if (keyCode == ']')
-            result += "]";
-        else if (keyCode == '-')
-            result += "-";
-        else if (keyCode == '=')
-            result += "=";
-        else if (keyCode == juce::KeyPress::spaceKey)
-            result += "Space";
-        // The extended keys, which are NOT characters: JUCE encodes them above 0x10000
-        // (extendedKeyModifier), so charToString would render a stray glyph rather than a name. The
-        // arrows earn their place here because six piano-roll actions and both grid-cycle commands
-        // bind to them, and the Settings tab's search matches against this very string.
-        else if (keyCode == juce::KeyPress::leftKey)
-            result += "Left";
-        else if (keyCode == juce::KeyPress::rightKey)
-            result += "Right";
-        else if (keyCode == juce::KeyPress::upKey)
-            result += "Up";
-        else if (keyCode == juce::KeyPress::downKey)
-            result += "Down";
-        else
-            result += juce::String::charToString(static_cast<juce::juce_wchar>(keyCode));
-
-        return result;
-    }
+    static juce::String keyPressToDisplayString(const juce::KeyPress& key);
 
     // Display text for `actionId`'s row in Settings -> Keyboard Shortcuts and the MIDI Remote
-    // action picker (docs/control/midi-remote.md#action-targets). Out-of-line in ShortcutManagerActionNames.cpp,
-    // one `if` per action id, in getActionTable()'s own order -- kept off this header to leave
-    // the 1,000-line file-size cap (scripts/file-size-baseline.txt) headroom for new actions.
+    // action picker (docs/control/midi-remote.md#action-targets).
     static juce::String getActionDescription(const juce::String& actionId);
 
-    /** The category `actionId` belongs to. An id this build has never heard of answers General,
-     *  which is the conservative choice: General is the widest conflict scope, so an unknown id can
-     *  never quietly duplicate a real app-wide binding. */
-    static ShortcutCategory getCategory(const juce::String& actionId) {
-        for (const auto& entry : getActionTable())
-            if (actionId == entry.id)
-                return entry.category;
-        return ShortcutCategory::General;
-    }
+    /** The category `actionId` belongs to; an unknown id answers General. */
+    static ShortcutCategory getCategory(const juce::String& actionId);
 
-    static juce::String getCategoryName(ShortcutCategory category) {
-        switch (category) {
-        case ShortcutCategory::Graph:
-            return "Graph Editor";
-        case ShortcutCategory::Timeline:
-            return "Timeline";
-        case ShortcutCategory::PianoRoll:
-            return "Piano Roll";
-        case ShortcutCategory::DrumMachine:
-            return "Drum Machine";
-        case ShortcutCategory::Mixer:
-            return "Mixer";
-        case ShortcutCategory::LayoutEditor:
-            return "Layout Editor";
-        case ShortcutCategory::General:
-            break;
-        }
-        return "General";
-    }
+    static juce::String getCategoryName(ShortcutCategory category);
 
-    /** Sections are drawn in this order, and getActionIds() is grouped the same way — see
-     *  getActionTable(). */
-    static const std::vector<ShortcutCategory>& getCategoryOrder() {
-        static const std::vector<ShortcutCategory> order{ShortcutCategory::General,     ShortcutCategory::Graph,
-                                                         ShortcutCategory::Timeline,    ShortcutCategory::PianoRoll,
-                                                         ShortcutCategory::DrumMachine, ShortcutCategory::Mixer,
-                                                         ShortcutCategory::LayoutEditor};
-        return order;
-    }
+    /** Settings sections are drawn in this order, and getActionIds() is grouped the same way. */
+    static const std::vector<ShortcutCategory>& getCategoryOrder();
 
-    /** The ids in `category`, in getActionIds() order (stable — it is the table's order). */
-    static juce::StringArray getActionIdsInCategory(ShortcutCategory category) {
-        juce::StringArray ids;
-        for (const auto& entry : getActionTable())
-            if (entry.category == category)
-                ids.add(entry.id);
-        return ids;
-    }
+    /** The ids in `category`, in getActionIds() order. */
+    static juce::StringArray getActionIdsInCategory(ShortcutCategory category);
 
-    static juce::KeyPress parseKeyPress(const juce::String& encoded) {
-        auto parts = juce::StringArray::fromTokens(encoded, ":", "");
-        if (parts.size() == 2)
-            return juce::KeyPress(parts[0].getIntValue(), juce::ModifierKeys(parts[1].getIntValue()), 0);
-        return {};
-    }
-
-    static juce::String encodeKeyPress(const juce::KeyPress& key) {
-        return juce::String(key.getKeyCode()) + ":" + juce::String(key.getModifiers().getRawFlags());
-    }
+    static juce::KeyPress parseKeyPress(const juce::String& encoded);
+    static juce::String encodeKeyPress(const juce::KeyPress& key);
 
     const juce::StringArray& getActionIds() const { return actionIds; }
 
     std::function<void()> onBindingsChanged;
 
 private:
+    // The one-shot binding migrations (ShortcutManagerMigrations.cpp).
+    struct Migrations;
+
     /** One row per rebindable action: the persisted id and the category that decides its Settings
      *  section and conflict scope. The rows live in ShortcutManagerActionTable.cpp: a new action is
      *  one row there plus a default binding, a description and (for a command action) an
@@ -528,64 +112,10 @@ private:
 
     static const std::vector<ActionEntry>& getActionTable();
 
-    /** BINDING-vs-BINDING equality, for conflict detection only — case-insensitive on the key code
-     *  and EXACT on the modifiers. Deliberately NOT keyPressMatches: that function's shifted-symbol
-     *  normalization exists to rescue a real KEYSTROKE from the macOS peer (see its comment), and
-     *  applying it here would merge two different STORED chords — a user who deliberately put one
-     *  action on Cmd+Shift+'=' and another on Cmd+Shift+'+' would be told they collide, and the
-     *  Settings tab's auto-swap would then quietly steal one of them. An invalid binding (an action
-     *  the user cleared) collides with nothing. */
-    static bool bindingsCollide(const juce::KeyPress& binding, const juce::KeyPress& key) {
-        return binding.isValid() && foldKeyCodeCase(binding.getKeyCode()) == foldKeyCodeCase(key.getKeyCode()) &&
-               binding.getModifiers() == key.getModifiers();
-    }
-
-    /** `keyCode` lower-cased when it is a character; an extended key (arrows, F-keys: above 0xFFFF on Windows) comes
-     *  back unchanged. towlower takes a 16-bit wint_t on Windows, so F2 (0x10071) would fold to 'q' (0x71). */
-    static int foldKeyCodeCase(int keyCode) {
-        return keyCode >= 0 && keyCode <= 0xFFFF ? static_cast<int>(towlower(static_cast<wint_t>(keyCode))) : keyCode;
-    }
-
-    /** The US-ANSI unshifted character on the same physical key as `keyCode`: the digit row, plus
-     *  the two punctuation keys the zoom pair uses. Anything else — every letter included, since the
-     *  macOS peer already upper-cases those and key-code comparison is case-insensitive — comes back
-     *  unchanged, and so do the extended keys (arrows and friends live above 0x10000).
-     *
-     *  keyPressMatches folds BOTH of its arguments through this, which is what makes the
-     *  normalization bidirectional: a binding stored WITH the shifted character still matches a
-     *  press that arrives as the base character. That direction is not hypothetical — the Settings
-     *  tab records the juce::KeyPress it is handed, so every chord a user rebound on macOS while
-     *  this bug was live was persisted as the shifted glyph. */
-    static int usLayoutUnshiftedBase(int keyCode) {
-        switch (keyCode) {
-        case '!':
-            return '1';
-        case '@':
-            return '2';
-        case '#':
-            return '3';
-        case '$':
-            return '4';
-        case '%':
-            return '5';
-        case '^':
-            return '6';
-        case '&':
-            return '7';
-        case '*':
-            return '8';
-        case '(':
-            return '9';
-        case ')':
-            return '0';
-        case '+':
-            return '=';
-        case '_':
-            return '-';
-        default:
-            return keyCode;
-        }
-    }
+    // Binding-vs-binding equality, for conflict detection only.
+    static bool bindingsCollide(const juce::KeyPress& binding, const juce::KeyPress& key);
+    static int foldKeyCodeCase(int keyCode);
+    static int usLayoutUnshiftedBase(int keyCode);
 
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
@@ -595,60 +125,17 @@ private:
     juce::StringArray actionIds;
     DefaultsPlatform defaultsPlatform = hostDefaultsPlatform();
 
-    // A ShortcutManager is usually a MainComponent-owned member that outlives every UI
-    // surface holding a raw pointer to it, but a test that declares one as a LOCAL after the
-    // component under test gets the opposite lifetime — the manager destructs first (reverse
-    // declaration order) and a component whose OWN destructor unconditionally dereferences its
-    // `shortcuts_` pointer (TimelinePanelComponent, which removeChangeListener()s itself) is a
-    // heap-use-after-free the moment it destructs afterwards. Weak-referenceable so a holder that
-    // cares (see TimelinePanelComponent::shortcutsWeak_) can guard its teardown against exactly
-    // that instead of trusting every call site to remember an explicit setShortcutManager(nullptr)
-    // before scope exit — the idiom the test files use, but which is a test-authoring convention, not a
-    // compiler-enforced guarantee.
+    // Weak-referenceable so a holder can guard its teardown when a test destroys the manager first.
     JUCE_DECLARE_WEAK_REFERENCEABLE(ShortcutManager)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };
 
-/** Display text for `actionId`'s CURRENT binding — the shared helper every tooltip that names a
- *  rebindable key routes through, so a rebind can never leave a tooltip showing a stale key.
- *
- *  - `manager` non-null: uses its LIVE binding. An unset/cleared binding is a real state (the user
- *    deliberately removed the key) and returns an EMPTY string — a tooltip must not claim a key
- *    that does nothing.
- *  - `manager` null: uses `fallback` — the same "no manager installed -> the component's own
- *    hardcoded default" contract every surface's keyPressed()/matchesAction() already follows.
- *
- *  Formatting reuses ShortcutManager::keyPressToDisplayString (the "Ctrl + X" / "Shift + X" family
- *  this app's tooltips already show everywhere via synth::ui::formatShortcutHint) with ONE
- *  deliberate change: a BARE, unmodified letter renders lowercase ("q", "f", "l", "p") rather than
- *  upper — every one of this app's single-letter DAW-convention keys (Q/L/P/F, the tool digits) is
- *  conventionally shown lowercase, and keyPressToDisplayString's upper-casing exists for the
- *  modifier-chord case, not the bare-letter one. Anything carrying a modifier, or a non-letter key
- *  (an arrow, a digit, space…), is returned exactly as keyPressToDisplayString spells it. */
-inline juce::String shortcutHintFor(const ShortcutManager* manager, const juce::String& actionId,
-                                    const juce::KeyPress& fallback) {
-    const juce::KeyPress key = manager != nullptr ? manager->getBinding(actionId) : fallback;
-    if (!key.isValid())
-        return {};
+/** Display text for `actionId`'s current binding, for any tooltip that names a rebindable key. A
+ *  non-null `manager` uses its live binding, and a cleared binding gives an empty string; a null
+ *  `manager` uses `fallback`. A bare letter is lowercase. */
+juce::String shortcutHintFor(const ShortcutManager* manager, const juce::String& actionId,
+                             const juce::KeyPress& fallback);
 
-    const auto display = ShortcutManager::keyPressToDisplayString(key);
-    const auto code = key.getKeyCode();
-    const bool bareLetter =
-        key.getModifiers() == juce::ModifierKeys() && ((code >= 'a' && code <= 'z') || (code >= 'A' && code <= 'Z'));
-    return bareLetter ? display.toLowerCase() : display;
-}
-
-/** Bare display name for the platform's primary modifier key ("Cmd" on macOS, "Ctrl" everywhere
- *  else) — the same #if JUCE_MAC ShortcutManager::keyPressToDisplayString uses above, pulled out
- *  for copy that names the modifier on its own rather than as part of a rebindable KeyPress (e.g.
- *  "hold Cmd while scrolling to zoom" — a mouse-wheel gesture, not an action in the shortcuts
- *  table, so shortcutHintFor doesn't apply). A hardcoded "Cmd" in a tooltip or label is wrong on
- *  every non-Mac build; route it through this instead. */
-inline juce::String platformCommandKeyName() {
-#if JUCE_MAC
-    return "Cmd";
-#else
-    return "Ctrl";
-#endif
-}
+/** The platform's primary modifier key ("Cmd" on macOS, "Ctrl" elsewhere), for copy that names it alone. */
+juce::String platformCommandKeyName();

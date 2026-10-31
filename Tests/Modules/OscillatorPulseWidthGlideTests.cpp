@@ -1,6 +1,7 @@
 // Oscillator Pulse Width (square duty cycle) and Glide (portamento) -- the default of each leaves
 // today's sound exactly as it was, and each has its own CV jack (ch16/ch17, global params).
 
+#include "Modules/Oscillator/BandLimitedWaves.h"
 #include "Modules/OscillatorModule.h"
 
 #include <cmath>
@@ -69,26 +70,6 @@ struct Rig {
     }
 };
 
-float polyBlep(float t, float dt) {
-    if (t < dt) {
-        const float n = t / dt;
-        return n + n - n * n - 1.0f;
-    }
-    if (t > 1.0f - dt) {
-        const float n = (t - 1.0f) / dt;
-        return n * n + n + n + 1.0f;
-    }
-    return 0.0f;
-}
-
-// The square generator exactly as it was before Pulse Width existed.
-float oldSquare(float phase, float dt) {
-    float s = phase < 0.5f ? 1.0f : -1.0f;
-    s += polyBlep(phase, dt);
-    s -= polyBlep(std::fmod(phase + 0.5f, 1.0f), dt);
-    return s;
-}
-
 float positiveFraction(const std::vector<float>& x, size_t from, size_t to) {
     size_t pos = 0;
     for (size_t i = from; i < to; ++i)
@@ -125,7 +106,7 @@ TEST(OscillatorPulseWidth, ParametersExistWithNeutralDefaults) {
     EXPECT_NEAR(param(osc, "glide")->convertFrom0to1(1.0f), 2000.0f, 1e-3f);
 }
 
-TEST(OscillatorPulseWidth, DefaultSquareMatchesTheOldSquareSampleForSample) {
+TEST(OscillatorPulseWidth, DefaultSquareIsTheEvenDutySquareSampleForSample) {
     Rig rig;
     setActual(rig.osc, "waveform", (float)kSquare);
     const auto out = rig.render(16);
@@ -134,7 +115,7 @@ TEST(OscillatorPulseWidth, DefaultSquareMatchesTheOldSquareSampleForSample) {
     const float dt = (float)(440.0 / kSampleRate);
     for (size_t i = 0; i < out.size(); ++i) {
         if (i >= 64) // the first 64 samples crossfade in from the previous waveform
-            ASSERT_NEAR(out[i], oldSquare(phase, dt), 1e-5f) << "sample " << i;
+            ASSERT_NEAR(out[i], synth::bandlimited::square(phase, dt, 0.5f), 1e-5f) << "sample " << i;
         phase += dt;
         if (phase >= 1.0f)
             phase -= 1.0f;

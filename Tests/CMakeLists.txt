@@ -149,6 +149,7 @@ add_executable(Tests
     Timeline/TimelineMidiSource/TimelineMidiSourceBindingTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceEngineTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceAuditionTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceRestartTests.cpp
     Timeline/MidiClipFileTests.cpp
     Timeline/MidiClipFileArrangementTests.cpp
     Timeline/PeaksFileTests.cpp
@@ -315,6 +316,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOTests.cpp
+    UI/Graph/GraphEditor/GraphEditorDualIOFxRightLegTests.cpp
     UI/Graph/GraphEditor/GraphEditorIntegrationTests.cpp
     UI/Graph/GraphEditor/GraphEditorViewportTests.cpp
     UI/Graph/GraphEditor/GraphEditorMinimapSlideTests.cpp
@@ -507,6 +509,7 @@ add_executable(Tests
     UI/Settings/AccountFlowPanelTests.cpp
     UI/Settings/LeavingSurveyPanelTests.cpp
     Engine/AudioRendering/AudioRenderingBasicTests.cpp
+    Engine/AudioRendering/SilentSourceTransparentTests.cpp
     Engine/AudioRendering/AudioRenderingFXModuleTests.cpp
     Engine/AudioRendering/AudioRenderingModulationTests.cpp
     Engine/AudioRendering/AudioRenderingPresetTests.cpp
@@ -804,6 +807,7 @@ add_executable(Tests
     UI/Chrome/ExportAudioDialogTests.cpp
     Engine/MetronomeTests.cpp
     Engine/DeviceChangeTests.cpp
+    Engine/LiveReconfigureTests.cpp
     Engine/MidiInputReconcileTests.cpp
     Engine/MidiInputDeliveryTests.cpp
     Timeline/TimelineE2ETests.cpp
