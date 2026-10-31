@@ -45,6 +45,9 @@ public:
     std::function<std::vector<PreviewTrack>()> previewTracks;
     /** Plays or ends one audition note on `track`. */
     std::function<void(synth::TrackId track, int pitch, int velocity, bool on)> auditionNote;
+    /** Fits the project's clips that follow the song key to `songKey` (one undo step, with its own message). Unset
+     * hides the picker's Fit project to key button. */
+    std::function<void(const MusicalScale& songKey)> fitProjectToKey;
     /** Launches the picker; unset = a CallOutBox from the field. Tests replace it to keep the picker in hand. */
     std::function<void(std::unique_ptr<juce::Component> picker, juce::Rectangle<int> screenArea)> pickerLauncher;
 

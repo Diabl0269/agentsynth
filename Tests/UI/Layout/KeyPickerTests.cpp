@@ -242,3 +242,44 @@ TEST(KeyPicker, OnClosedRunsOnceFromTheDestructor) {
     }
     EXPECT_EQ(closed, 1);
 }
+
+// Fit project to key: only an owner that asks for the button gets one; a press runs the callback once and leaves the
+// keys alone, and a grey button does nothing.
+TEST(KeyPicker, FitProjectButtonIsShownOnlyWhenAskedForAndGreyWithoutAKey) {
+    Fixture plain(cMajor());
+    EXPECT_FALSE(plain.picker->isFitProjectShown());
+
+    auto options = cMajor();
+    options.showFitProject = true;
+    options.fitProjectEnabled = true;
+    Fixture f(options);
+    int fits = 0;
+    f.picker->onFitProject = [&] { ++fits; };
+    EXPECT_TRUE(f.picker->isFitProjectShown());
+    EXPECT_TRUE(f.picker->isFitProjectEnabled());
+    f.picker->clickFitProject();
+    EXPECT_EQ(fits, 1);
+    EXPECT_TRUE(f.picks.empty()) << "fitting is not picking a key";
+
+    options.fitProjectEnabled = false;
+    Fixture grey(options);
+    grey.picker->onFitProject = [&] { ++fits; };
+    EXPECT_FALSE(grey.picker->isFitProjectEnabled());
+    grey.picker->clickFitProject();
+    EXPECT_EQ(fits, 1);
+}
+
+TEST(KeyPicker, FitProjectButtonSitsAboveTheButtonsAndInsideThePicker) {
+    auto options = cMajor();
+    options.showFitProject = true;
+    options.fitProjectEnabled = true;
+    Fixture f(options);
+    auto* fit = f.picker->findChildWithID("keyPickerFitProject");
+    ASSERT_NE(fit, nullptr);
+    EXPECT_EQ(fit->getTitle(), "Fit project to key");
+    auto* tip = dynamic_cast<juce::TooltipClient*>(fit);
+    ASSERT_NE(tip, nullptr);
+    EXPECT_TRUE(tip->getTooltip().isNotEmpty());
+    EXPECT_TRUE(f.picker->getLocalBounds().contains(fit->getBounds()));
+    EXPECT_TRUE(fit->getWantsKeyboardFocus());
+}

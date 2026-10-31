@@ -67,6 +67,10 @@ void SongKeyField::openPicker() {
             options.previewSelected = (int)i + 1;
     }
 
+    // Enabled only while a song key is set: it fits to that key, not to a key the list is highlighting.
+    options.showFitProject = (bool)fitProjectToKey;
+    options.fitProjectEnabled = getKey().has_value();
+
     juce::Component::SafePointer<SongKeyField> self(this);
     auto picker = std::make_unique<KeyPicker>(std::move(options), [self](std::optional<MusicalScale> key) {
         if (self != nullptr)
@@ -79,6 +83,12 @@ void SongKeyField::openPicker() {
             return detectKey(self->pitchClassWeights());
         };
     }
+    picker->onFitProject = [self] {
+        if (self == nullptr || !self->fitProjectToKey || self->transport_ == nullptr)
+            return;
+        if (const auto key = self->transport_->getDocumentState().songKey)
+            self->fitProjectToKey(*key);
+    };
     auditioner_->wire(*picker);
     picker->onPreviewSoundChanged = [self, tracks = std::move(tracks)](int choice) {
         if (self != nullptr)

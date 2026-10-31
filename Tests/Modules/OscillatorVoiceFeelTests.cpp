@@ -1,5 +1,5 @@
 // Oscillator voice feel: Phase and Rand restart every unison voice on a note, and Blend and Width
-// shape the unison stack. The defaults (Phase 0, Rand 0, Blend 25 %, Width 0) keep the stack mono.
+// shape the unison stack. A new Oscillator starts at Phase 0, Rand 100 %, Detune 35 cents, Blend 75 %, Width 100 %.
 
 #include "../Engine/AudioRendering/ClickDetector.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -55,6 +55,7 @@ struct Rig {
     explicit Rig(bool polyMode = false)
         : poly(polyMode) {
         osc.prepareToPlay(kSampleRate, kBlock);
+        setActual(osc, "randomPhase", 0.0f); // exact start phases; a test that wants Rand sets it
         if (polyMode)
             setActual(osc, "poly", 1.0f);
     }
@@ -101,12 +102,12 @@ double energy(const std::vector<float>& x, size_t from, size_t to) {
 
 // ---- Parameters -----------------------------------------------------------------------------------
 
-TEST(OscillatorVoiceFeel, NewParametersExistWithNeutralDefaults) {
+TEST(OscillatorVoiceFeel, NewParametersExistWithTheirDefaults) {
     OscillatorModule osc;
     EXPECT_NEAR(actualOf(osc, "phase"), 0.0f, 1e-4f);
-    EXPECT_NEAR(actualOf(osc, "randomPhase"), 0.0f, 1e-4f);
-    EXPECT_NEAR(actualOf(osc, "blend"), 0.25f, 1e-4f) << "a new Oscillator starts at Blend 25 %";
-    EXPECT_NEAR(actualOf(osc, "width"), 0.0f, 1e-4f);
+    EXPECT_NEAR(actualOf(osc, "randomPhase"), 100.0f, 1e-4f) << "a new Oscillator starts every voice at a random phase";
+    EXPECT_NEAR(actualOf(osc, "blend"), 0.75f, 1e-4f) << "a new Oscillator starts at Blend 75 %";
+    EXPECT_NEAR(actualOf(osc, "width"), 1.0f, 1e-4f);
     EXPECT_NEAR(param(osc, "phase")->convertFrom0to1(1.0f), 360.0f, 1e-3f);
     EXPECT_NEAR(param(osc, "randomPhase")->convertFrom0to1(1.0f), 100.0f, 1e-3f);
 }
@@ -158,8 +159,8 @@ TEST(OscillatorVoiceFeel, NewParametersSurviveSaveAndLoad) {
     EXPECT_NEAR(actualOf(viaBinary, "detune"), 37.0f, 0.05f);
 }
 
-// Regression test for FRO1077: the default Blend moved from 100 % to 25 %, which must not touch a project (or a
-// preset or generated patch) that never recorded a Blend.
+// Regression test for FRO1077: the default Blend moved from 100 % (then to 25 %, now 75 %), which must not touch a
+// project (or a preset or generated patch) that never recorded a Blend.
 TEST(OscillatorVoiceFeel, ANodeStoredWithoutBlendKeepsBlendAtOneHundredPercent) {
     juce::AudioProcessorGraph source;
     source.addNode(std::make_unique<OscillatorModule>());
@@ -170,7 +171,7 @@ TEST(OscillatorVoiceFeel, ANodeStoredWithoutBlendKeepsBlendAtOneHundredPercent) 
 
     juce::AudioProcessorGraph kept;
     ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, kept, true, /*trusted=*/true));
-    EXPECT_NEAR(actualOf(*kept.getNodes().getFirst()->getProcessor(), "blend"), 0.25f, 1e-4f)
+    EXPECT_NEAR(actualOf(*kept.getNodes().getFirst()->getProcessor(), "blend"), 0.75f, 1e-4f)
         << "a stored value is loaded as it is";
 
     params->removeProperty("blend");
@@ -239,6 +240,7 @@ TEST(UnisonVoicing, CentreVoicesAreTheOnesNearestTheRoot) {
 
 TEST(OscillatorVoiceFeel, TwoIdenticalNotesStartIdenticallyWithoutRand) {
     Rig rig;
+    setActual(rig.osc, "randomPhase", 0.0f);
     setActual(rig.osc, "unison", 3.0f);
     setActual(rig.osc, "detune", 12.0f);
     const std::vector<NoteEvent> notes = {{0, 0, 69, true}, {3, 100, 69, false}, {8, 0, 69, true}};
@@ -357,6 +359,7 @@ TEST(OscillatorVoiceFeel, PolyVoiceRestartsWhenItGoesFromSilentToSounding) {
     Rig rig(/*poly*/ true);
     rig.polyVoice = 1;
     setActual(rig.osc, "phase", 90.0f);
+    setActual(rig.osc, "randomPhase", 0.0f);
     const std::vector<NoteEvent> none;
     rig.renderBlock(0, none, 0.0f); // silent
     rig.renderBlock(1, none, 440.0f);
@@ -402,6 +405,8 @@ TEST(OscillatorVoiceFeel, BlendOneWidthZeroIsTheConstantPowerSum) {
     setActual(rig.osc, "unison", 4.0f);
     setActual(rig.osc, "detune", 30.0f);
     setActual(rig.osc, "blend", 1.0f);
+    setActual(rig.osc, "width", 0.0f);
+    setActual(rig.osc, "randomPhase", 0.0f);
     rig.settle();
     rig.render(4, {{0, 0, 69, true}});
     const auto expected = expectedStack(4, 30.0, 1.0, /*useBlend*/ true, rig.left.size());
@@ -416,6 +421,7 @@ TEST(OscillatorVoiceFeel, BlendZeroLeavesOnlyTheCentreVoices) {
         setActual(rig.osc, "unison", (float)count);
         setActual(rig.osc, "detune", 50.0f);
         setActual(rig.osc, "blend", 0.0f);
+        setActual(rig.osc, "width", 0.0f);
         rig.settle();
         rig.render(4, {{0, 0, 69, true}});
         const auto expected = expectedStack(count, 50.0, 0.0, /*useBlend*/ true, rig.left.size());
@@ -488,7 +494,7 @@ TEST(OscillatorVoiceFeel, AnAutomatedBlendAndWidthGlideInsteadOfStepping) {
     EXPECT_LT(worst, 0.2f);
 }
 
-// A constant-power stack can peak at sqrt(N) when its voices start in phase (the default Rand 0 does exactly
+// A constant-power stack can peak at sqrt(N) when its voices start in phase (Rand 0 does exactly
 // that); the headroom for it is handled downstream, so the source only has to stay within sqrt(N). Its loudness
 // is checked with decorrelated start phases, where uncorrelated voices must keep the level of one.
 TEST(OscillatorVoiceFeel, SourcePeakStaysUnderRootNAcrossBlendAndWidth) {
@@ -756,4 +762,29 @@ TEST(OscillatorPhaseRand, RandSpreadsTheStackPerVoiceAndPerNote) {
         << "Rand 50 sits between";
     EXPECT_LT(half.meanRms(kFade, 1323) / half.meanRms(1323, 4410),
               together.meanRms(kFade, 1323) / together.meanRms(1323, 4410));
+}
+
+// Regression test for FRO1223: Phase and Rand looked dead because they only set where each unison voice starts when a
+// NEW note begins. That is measured here on a detuned five-voice Saw: Phase 180 changes the first 20 ms of the note
+// against Phase 0, Rand 0 repeats the note identically, and Rand 50 makes each repeat start differently.
+TEST(OscillatorPhaseRand, PhaseAndRandSetTheStartOfEachNewNoteOfADetunedUnisonSaw) {
+    constexpr size_t kTwentyMs = 882;
+    // Largest difference between two repeats over the first 20 ms (after the hand-over), against the first one's peak.
+    auto repeatGap = [&](const Repeats& r, size_t a, size_t b) {
+        double diff = 0.0, peak = 1e-9;
+        for (size_t i = kFade; i < kTwentyMs; ++i) {
+            diff = std::max(diff, (double)std::abs(r.notes[a][i] - r.notes[b][i]));
+            peak = std::max(peak, (double)std::abs(r.notes[a][i]));
+        }
+        return diff / peak;
+    };
+    const auto phaseZero = renderRepeats(5, 0.0f, 0.0f, 2);
+    const auto phaseHalf = renderRepeats(5, 180.0f, 0.0f, 2);
+    EXPECT_GT(relativeDifference(phaseZero, phaseHalf, kFade, kTwentyMs), 0.5)
+        << "Phase 180 starts the note differently";
+
+    EXPECT_LT(repeatGap(phaseZero, 1, 2), 1e-3) << "Rand 0 repeats the note identically";
+
+    const auto randHalf = renderRepeats(5, 0.0f, 50.0f, 2);
+    EXPECT_GT(repeatGap(randHalf, 1, 2), 0.3) << "Rand 50 starts each repeat differently";
 }

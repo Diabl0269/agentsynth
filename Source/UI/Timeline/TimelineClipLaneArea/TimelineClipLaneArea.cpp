@@ -47,6 +47,7 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
     : viewState_(viewState)
     , selection_(selection) {
     setComponentID("timelineClipLaneArea");
+    addTestModeProbe();
     setInterceptsMouseClicks(true, false);
     // Load-bearing, and invisible to every headless test: juce::grabKeyboardFocus() is a NO-OP on
     // a component that does not want focus, so without this the mouseDown() call below never moves
