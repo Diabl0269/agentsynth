@@ -16,6 +16,9 @@
 
 namespace referencecompare {
 
+/** Outer-voice spread of the reference synth's default Detune, in cents (norm 0.5), measured per voice. */
+constexpr double kReferenceDefaultDetuneCents = 35.4;
+
 inline juce::String referencePath() {
     return juce::SystemStats::getEnvironmentVariable("AGENTSYNTH_REFERENCE_PLUGIN", {});
 }

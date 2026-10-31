@@ -125,10 +125,10 @@ TEST(ReferenceCompareRender, RenderAB) {
         auto a7 = sawA();
         a7.osc["unison"] = 7;
         add("uni7_default_chord", chord(), total, a7, [=](ReferenceRig& r) { referenceUnison(r, 7); });
-        // The reference synth's default detune reads 0.25 (norm 0.5) and blend 75; AgentSynth detune is cents with norm
-        // 0.5 = 25 cents.
+        // The reference synth's default Detune (norm 0.5) spreads its outer voices +-35.4 cents (measured per voice by
+        // RenderUnisonDetuneMap), and AgentSynth's Detune is those outer cents, so the same spread is 35.4 here.
         auto m = a7;
-        m.osc["detune"] = 25.0;
+        m.osc["detune"] = kReferenceDefaultDetuneCents;
         m.osc["blend"] = 0.75;
         add("uni7_matched_chord", chord(), total, m, [=](ReferenceRig& r) { referenceUnison(r, 7); });
         auto mw = m;
@@ -282,18 +282,25 @@ TEST(ReferenceCompareRender, RenderExtra) {
     // Unison stack shape: one low-partial note, long enough to resolve each voice's frequency.
     {
         const std::vector<NoteSpan> held{{samples(0.5), samples(10.5), 69}};
-        for (int voices : {3, 5, 7}) {
+        for (const auto& [voices, rand] :
+             {std::pair<int, double>{3, 100.0}, {5, 100.0}, {7, 100.0}, {5, 0.0}, {7, 0.0}}) {
             AgentSetup a;
             a.osc["waveform"] = 2;
             a.osc["unison"] = voices;
-            a.osc["detune"] = 25.0;
+            a.osc["detune"] = kReferenceDefaultDetuneCents;
             a.osc["blend"] = 0.75;
             a.osc["width"] = 1.0;
-            cases.push_back({"stack_" + juce::String(voices),
+            a.osc["randomPhase"] = rand;
+            a.osc["phase"] = 180.0;
+            const juce::String name = "stack_" + juce::String(voices) + (rand == 0.0 ? "_r0" : "");
+            cases.push_back({name,
                              held,
                              samples(11.0),
                              a,
-                             [=](ReferenceRig& r) { r.setNumeric("A Unison", voices); },
+                             [=](ReferenceRig& r) {
+                                 r.setNumeric("A Unison", voices);
+                                 r.setNumeric("A RandPhase", rand);
+                             },
                              false,
                              {}});
         }
@@ -336,6 +343,48 @@ TEST(ReferenceCompareRender, RenderExtra) {
     EXPECT_TRUE(settingsFile.replaceWithText(juce::JSON::toString(top)));
 }
 
+namespace {
+
+AgentSetup sawStack(int voices, double detuneCents, double rand) {
+    AgentSetup a;
+    a.osc["waveform"] = 2;
+    a.osc["unison"] = voices;
+    a.osc["detune"] = detuneCents;
+    a.osc["blend"] = 0.75;
+    a.osc["width"] = 1.0;
+    a.osc["randomPhase"] = rand;
+    a.osc["phase"] = 180.0; // the reference synth's default start phase
+    return a;
+}
+
+} // namespace
+
+// One held A4 per Detune setting, long enough for the FFT to resolve each voice: detmap_<n> sets the reference's
+// Detune to normalised position n/1000 with 7 voices. AgentSynth is rendered at 25 cents only to keep the pair.
+TEST(ReferenceCompareRender, RenderUnisonDetuneMap) {
+    const auto dir = outDir();
+    if (dir == juce::File())
+        GTEST_SKIP() << "AGENTSYNTH_REFERENCE_COMPARE_DIR / AGENTSYNTH_REFERENCE_PLUGIN not set";
+    dir.createDirectory();
+    synth::DefaultHostedPluginBackend backend;
+    const std::vector<NoteSpan> held{{samples(0.5), samples(10.5), 69}};
+    for (const int mille : {0, 125, 250, 375, 500, 625, 750, 875, 1000}) {
+        Case c{"detmap_" + juce::String(mille),
+               held,
+               samples(11.0),
+               sawStack(7, 25.0, 0.0),
+               [=](ReferenceRig& r) {
+                   r.setNumeric("A Unison", 7);
+                   r.setNorm("A UniDet", (float)mille / 1000.0f, "normalised position");
+                   r.setNumeric("A RandPhase", 0.0);
+               },
+               false,
+               {}};
+        juce::var entry;
+        ASSERT_TRUE(renderCase(dir, backend, c, entry)) << c.name;
+    }
+}
+
 // Unison settings grid against the reference synth's init unison: which of Detune, Rand and Phase closes the gap.
 TEST(ReferenceCompareRender, RenderUnisonGrid) {
     const auto dir = outDir();
@@ -343,7 +392,7 @@ TEST(ReferenceCompareRender, RenderUnisonGrid) {
         GTEST_SKIP() << "AGENTSYNTH_REFERENCE_COMPARE_DIR / AGENTSYNTH_REFERENCE_PLUGIN not set";
     dir.createDirectory();
     synth::DefaultHostedPluginBackend backend;
-    for (double detune : {25.0, 35.0})
+    for (double detune : {25.0, 35.0, kReferenceDefaultDetuneCents})
         for (double rand : {0.0, 100.0}) {
             AgentSetup a;
             a.osc["waveform"] = 2;
@@ -353,8 +402,19 @@ TEST(ReferenceCompareRender, RenderUnisonGrid) {
             a.osc["width"] = 1.0;
             a.osc["randomPhase"] = rand;
             a.osc["phase"] = 180.0;
-            const juce::String name = "grid_d" + juce::String((int)detune) + "_r" + juce::String((int)rand);
-            Case c{name, chord(), samples(3.5), a, [](ReferenceRig& r) { r.setNumeric("A Unison", 7); }, false, {}};
+            const juce::String name = "grid_d" + juce::String((int)detune) +
+                                      (detune == kReferenceDefaultDetuneCents ? "m" : "") + "_r" +
+                                      juce::String((int)rand);
+            Case c{name,
+                   chord(),
+                   samples(3.5),
+                   a,
+                   [=](ReferenceRig& r) {
+                       r.setNumeric("A Unison", 7);
+                       r.setNumeric("A RandPhase", rand);
+                   },
+                   false,
+                   {}};
             juce::var entry;
             ASSERT_TRUE(renderCase(dir, backend, c, entry)) << c.name;
         }

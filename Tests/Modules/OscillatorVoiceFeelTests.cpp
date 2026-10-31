@@ -236,6 +236,22 @@ TEST(UnisonVoicing, CentreVoicesAreTheOnesNearestTheRoot) {
     EXPECT_FALSE(synth::isUnisonCentreVoice(0, 4));
 }
 
+// Regression test for FRO1366: the voices are spread evenly and symmetrically, and Detune is the outer voices' offset
+// in cents. These are the per-voice offsets measured from a reference synth's stacks at its default Detune.
+TEST(UnisonVoicing, VoicesSitWhereTheReferenceStackPutsThem) {
+    const struct {
+        int count;
+        std::vector<double> cents;
+    } measured[] = {{3, {-35.5, 0.0, 35.4}},
+                    {5, {-35.5, -17.9, 0.0, 17.7, 35.4}},
+                    {7, {-35.5, -23.4, -11.9, 0.0, 11.8, 23.5, 35.4}}};
+    for (const auto& m : measured)
+        for (int u = 0; u < m.count; ++u) {
+            const double cents = 1200.0 * std::log2(synth::unisonDetuneRatio(35.4f, u, m.count));
+            EXPECT_NEAR(cents, m.cents[(size_t)u], 0.5) << m.count << " voices, voice " << u;
+        }
+}
+
 // ---- Mono restart ---------------------------------------------------------------------------------
 
 TEST(OscillatorVoiceFeel, TwoIdenticalNotesStartIdenticallyWithoutRand) {
