@@ -97,6 +97,7 @@ private:
 
     SequencerClock clock_;
     SequencerPlayer player_;
+    bool flushOnNextBlock_ = false; // prepared since the last block: the player still owes its note-offs
     SequencerScaleSnap snap_;
     SequencerPreview preview_;
     double sampleRate_ = 44100.0;

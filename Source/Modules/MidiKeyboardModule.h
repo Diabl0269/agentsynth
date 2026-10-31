@@ -25,7 +25,8 @@ public:
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         juce::ignoreUnused(sampleRate, samplesPerBlock);
-        keyboardState.reset();
+        // Not reset(): that forgets a held key with no note-off, and a hosted synth keeps its voices through a prepare.
+        keyboardState.allNotesOff(0);
     }
 
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
