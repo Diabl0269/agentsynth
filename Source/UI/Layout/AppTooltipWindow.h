@@ -30,6 +30,12 @@ public:
     /** juce's tip for `c`, or empty when it is an info tooltip and the preference is off. */
     juce::String getTipFor(juce::Component& c) override;
 
+    /** While anything has hover tips blocked, getTipFor answers empty, so no tip appears and one showing goes. Counted:
+     *  every block(true) needs its block(false). The mod dot's readout blocks them while it is up, so one gesture
+     *  never shows two readouts. */
+    static void blockHoverTips(bool block) noexcept;
+    static bool hoverTipsBlocked() noexcept;
+
     /** The preference, read now: true when info tooltips are on (the default). */
     bool areInfoTooltipsOn() const;
 

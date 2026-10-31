@@ -13,10 +13,18 @@
 
 void ModuleComponent::paintOverChildren(juce::Graphics& g) { paintModHoverChip(g); }
 
+namespace synth::ui {
+// A mod dot gesture has its own readout of the same number, and the chip would not follow it, so it steps aside.
+bool modHoverChipShows(GraphEditor& editor, juce::AudioProcessorGraph::NodeID card) {
+    const auto& hovered = editor.getHoveredModTarget();
+    return hovered.has_value() && hovered->nodeId == card && !editor.getModDot().getTooltip().isShown();
+}
+} // namespace synth::ui
+
 void ModuleComponent::paintModHoverChip(juce::Graphics& g) {
-    const auto& hovered = owner.getHoveredModTarget();
-    if (!hovered.has_value() || hovered->nodeId != nodeId)
+    if (!synth::ui::modHoverChipShows(owner, nodeId))
         return;
+    const auto& hovered = owner.getHoveredModTarget();
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     auto* mod = dynamic_cast<ModuleBase*>(module);
     if (lf == nullptr || mod == nullptr)

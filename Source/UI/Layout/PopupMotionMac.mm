@@ -45,6 +45,32 @@ bool nativeWindowAnimationIsOff(void* nativeView) {
     return view.window != nil && view.window.animationBehavior == NSWindowAnimationBehaviorNone;
 }
 
+// A child window stays above its parent through anything AppKit does to the parent, and moves with it.
+void keepNativeWindowAbove(void* popupView, void* ownerView) {
+    NSWindow* popup = ((__bridge NSView*)popupView).window;
+    NSWindow* owner = ((__bridge NSView*)ownerView).window;
+    if (popup == nil || owner == nil || popup == owner || popup.parentWindow != nil)
+        return;
+    [owner addChildWindow:popup ordered:NSWindowAbove];
+}
+
+// Front-to-back position in the application's window list: smaller is nearer the viewer. Levels count.
+bool nativeWindowIsAbove(void* upperView, void* lowerView) {
+    NSWindow* upper = ((__bridge NSView*)upperView).window;
+    NSWindow* lower = ((__bridge NSView*)lowerView).window;
+    if (upper == nil || lower == nil)
+        return false;
+    for (NSWindow* parent = upper.parentWindow; parent != nil; parent = parent.parentWindow)
+        if (parent == lower)
+            return true; // a child window is above its parent whatever the list says
+    NSArray<NSWindow*>* ordered = [NSApp orderedWindows];
+    const NSUInteger upperIndex = [ordered indexOfObject:upper];
+    const NSUInteger lowerIndex = [ordered indexOfObject:lower];
+    if (upperIndex == NSNotFound || lowerIndex == NSNotFound)
+        return upper.level > lower.level;
+    return upperIndex < lowerIndex;
+}
+
 } // namespace synth::ui
 
 #endif

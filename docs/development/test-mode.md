@@ -52,6 +52,7 @@ thread is never blocked and timers and animations run in between.
 | `click` | `id`, `x?`, `y?` (local, default centre), `button` (`left`/`right`), `clicks` (1/2), `mods` (one of `cmd`,`shift`,`alt`,`ctrl` as a string, or a list of them; an unknown name is an error naming it) | `{id, point}` |
 | `wheel` | `id`, `x?`, `y?` (local, default centre), `dx?`, `dy?` (JUCE wheel units; 0.25 is about one notch), `mods` | `{id, point}` |
 | `hover` | `id`, `x?`, `y?` (local, default centre) | `{id, point}`; moves the pointer there with no button down |
+| `mouseDown`, `mouseMoveHeld`, `mouseUp` | `id`, `x?`, `y?` (local, default centre), `mods` | `{id, point}`; one step of a drag each, so other commands can read the app while the button is held. A scenario that presses also releases: nothing lets go for it |
 | `drag` | `from`, `to`, `fromX?`, `fromY?`, `toX?`, `toY?`, `steps` (12), `mods` | `{from, to}` |
 | `key` | `keys` (`cmd+z`, `space`, `shift+tab`, `escape`, `up` ...), `target?` | `{handled}` |
 | `getState` | `id` | the `list` fields plus `enabled`, `hasFocus`, and per type: Button `text`/`toggleState`, Label `text`, Slider `value`/`min`/`max`, ComboBox `text`/`selectedId`, TextEditor `text`; a module card adds `selected`, `moduleType`, `title`, `nodeId` |
@@ -72,7 +73,7 @@ type distinct, and a renamed card takes its new title. Add a `setComponentID` on
 do not rename existing ones.
 
 A component with state worth reading implements `synth::testmode::StateSource` (`addTestModeState`), as `ModuleComponent`
-(`selected`, `moduleType`, `nodeId`, `macro`: the name of the macro the module sits in, empty when none, `cabledTargets`: the modulation targets with a cable on them) and
+(`selected`, `moduleType`, `nodeId`, `modHoverChip`: whether the chip under a hovered knob is drawn, `macro`: the name of the macro the module sits in, empty when none, `cabledTargets`: the modulation targets with a cable on them) and
 `MacroCardComponent` (id `macroCard`: `name`, `collapsed`, `members`) and `KeyPicker` (id `keyPicker`: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`; `clipAudio`, every audio clip as `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`) do. `getState` also reports a component's `tooltip`
 when it has one, so a scenario can check the shortcut a button's tooltip names.
 

@@ -6,6 +6,7 @@
 // fade under Reduce Motion). docs/layout/animation.md ("What moves, and how").
 
 #include "UI/Layout/UIAnimation.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 
@@ -35,6 +36,9 @@ public:
     void hide();
 
     void paint(juce::Graphics& g);
+
+    /** Called whenever isShown() changes. */
+    std::function<void()> onShownChanged;
 
     bool isShown() const noexcept { return wanted_; }
     float getOpacity() const noexcept { return opacity_; }

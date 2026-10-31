@@ -12,10 +12,32 @@ using testmode_rig::run;
 
 TEST(TestModeCommands, TheRegistryHasEveryProtocolCommand) {
     const auto names = CommandTable::standard().names();
-    for (const char* name : {"ping", "list", "click", "wheel", "hover", "drag", "key", "getState", "screenshot",
-                             "openProject", "saveProject", "waitForIdle", "quit"})
+    for (const char* name : {"ping", "list", "click", "wheel", "hover", "mouseDown", "mouseMoveHeld", "mouseUp", "drag",
+                             "key", "getState", "screenshot", "openProject", "saveProject", "waitForIdle", "quit"})
         EXPECT_TRUE(names.contains(name)) << name;
     EXPECT_EQ(CommandTable::standard().find("nope"), nullptr);
+}
+
+TEST(TestModeCommands, HeldMouseStepsLeaveTheButtonDownUntilTheRelease) {
+    Rig rig;
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    struct Recorder : juce::MouseListener {
+        int downs = 0, drags = 0, ups = 0;
+        void mouseDown(const juce::MouseEvent&) override { ++downs; }
+        void mouseDrag(const juce::MouseEvent&) override { ++drags; }
+        void mouseUp(const juce::MouseEvent&) override { ++ups; }
+    } recorder;
+    rig.left.addMouseListener(&recorder, false);
+    EXPECT_EQ(run("mouseDown", args({{"id", "left"}, {"x", 5}, {"y", 5}})).state, StepResult::State::done);
+    EXPECT_EQ(recorder.downs, 1);
+    EXPECT_EQ(run("mouseMoveHeld", args({{"id", "left"}, {"x", 25}, {"y", 5}})).state, StepResult::State::done);
+    EXPECT_EQ(recorder.drags, 1);
+    EXPECT_EQ(recorder.ups, 0) << "the button is still down, so a scenario can look";
+    EXPECT_EQ(run("mouseUp", args({{"id", "left"}, {"x", 25}, {"y", 5}})).state, StepResult::State::done);
+    EXPECT_EQ(recorder.ups, 1);
+    rig.left.removeMouseListener(&recorder);
+    EXPECT_EQ(run("mouseDown", args({{"id", "nope"}})).state, StepResult::State::failed);
 }
 
 TEST(TestModeCommands, PingReportsThePid) {

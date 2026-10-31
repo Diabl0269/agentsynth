@@ -173,7 +173,8 @@ public:
      *  `reallyClose` runs at once, before this returns, when the window has no native peer, was
      *  never attached, is not showing or the engine is disabled (every headless run), so a test
      *  sees the final state immediately. A second dismiss while one is running is ignored.
-     *  While the fade runs the window ignores the mouse, so it cannot be acted on twice. */
+     *  While the fade runs the window ignores the mouse, so it cannot be acted on twice, and it is always-on-top: the
+     *  press that closed it (a click outside) also brings the app window forward, which would bury the fade. */
     static void dismiss(juce::Component& window, std::function<void()> reallyClose);
 
     /** dismiss() whose close is `window.exitModalState(0)`, for a modal window launched with
@@ -194,6 +195,10 @@ public:
     /** The leaving pictures on screen right now. For tests. */
     static std::vector<juce::Component*> getLeavingGhostsForTest();
 
+    /** Moves every leaving picture to `ms` after its start, in place of the VBlank frames an off-screen one never gets.
+     *  For tests. */
+    static void stepLeavingGhostsForTest(double ms);
+
     /** The dialogs opened through launchDialog() that are still alive. For tests. */
     static std::vector<juce::DialogWindow*> openDialogsForTest();
 
@@ -208,6 +213,10 @@ public:
      *  its watchdog timer, since no VBlank ever arrives). Default off. */
     static void setAnimateOffScreenForTest(bool animate);
     static bool animatesOffScreenForTest();
+
+    /** True when attached `window` is above `other` on screen right now (the native window order on macOS; elsewhere
+     *  always-on-top). For tests of a fade that must not be buried by the app window. */
+    static bool isAboveForTest(const juce::Component& window, const juce::Component& other);
 
     /** Test seam: moves the tween `window` is running (in or out) to `ms` after its start, in place of the VBlank
      *  frames an off-screen window never gets, so a test can read the in-between frames. */

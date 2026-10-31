@@ -2,6 +2,7 @@
 
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -87,7 +88,24 @@ bool AppTooltipWindow::suppresses(const juce::Component& c) const {
     return !isHelperTooltip(c) && !areInfoTooltipsOn();
 }
 
+namespace {
+int& hoverTipBlocks() {
+    static int count = 0;
+    return count;
+}
+} // namespace
+
+void AppTooltipWindow::blockHoverTips(bool block) noexcept {
+    hoverTipBlocks() = std::max(0, hoverTipBlocks() + (block ? 1 : -1));
+}
+
+bool AppTooltipWindow::hoverTipsBlocked() noexcept { return hoverTipBlocks() > 0; }
+
+// juce hides a tip on a press, but a pointer that moves on over another component during a held drag within half a
+// second of the press gets that component's tip at once; with a gesture's own readout up, that is a second readout.
 juce::String AppTooltipWindow::getTipFor(juce::Component& c) {
+    if (hoverTipsBlocked())
+        return {};
     auto tip = juce::TooltipWindow::getTipFor(c);
     if (tip.isEmpty())
         return tip;

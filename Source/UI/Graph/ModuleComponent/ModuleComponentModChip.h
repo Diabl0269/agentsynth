@@ -6,9 +6,15 @@
 // (Tests/UI/Graph/ModuleComponent/ModuleComponentModChipTests.cpp) -- same pattern as
 // ModuleComponentModBand.h's modDepthBandRange.
 
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
 
+class GraphEditor;
+
 namespace synth::ui {
+
+/** Whether `card` draws the chip now: its routing is hover-correlated and no mod dot readout is up. */
+bool modHoverChipShows(GraphEditor& editor, juce::AudioProcessorGraph::NodeID card);
 
 /** "<sourceName> <middle-dot> <signed percent>%", e.g. "LFO 1 \xC2\xB7 +63%" / "Env 2 \xC2\xB7 -40%".
  *  amount is the attenuverter's "amount" (or 1.0 for a DirectCV/PolyBus routing), real range -1..1.
