@@ -2,6 +2,7 @@
 
 #include "ModDotPalette.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/ModuleViews/ModCurve/ModCurveChip.h"
 
 namespace synth::ui {
 
@@ -52,6 +53,8 @@ ModDotSourceRow::ModDotSourceRow(const KnobModSource& source, const juce::String
     , removeButton_(ModDotGlyph::Trash, {}, {}) {
     addAndMakeVisible(bar_);
     addAndMakeVisible(*amountButton_);
+    curveChip_ = std::make_unique<ModCurveChip>();
+    addAndMakeVisible(*curveChip_);
     addAndMakeVisible(timelineButton_);
     addAndMakeVisible(removeButton_);
     addMouseListener(this, true); // hover over any child lights the row
@@ -116,6 +119,9 @@ void ModDotSourceRow::update(const KnobModSource& source) {
     }
     if (renamed || amountChanged)
         applyNames();
+    if (renamed)
+        curveChip_->setSourceName(source.sourceName);
+    curveChip_->refresh();
     repaint();
 }
 
@@ -149,14 +155,17 @@ void ModDotSourceRow::paint(juce::Graphics& g) {
 void ModDotSourceRow::resized() {
     // Laid out for the full row height whatever height the page has given it: a row growing in or shrinking out
     // is revealed and hidden, never squashed.
-    // Left to right: swatch, name, fader, amount, timeline, remove, each group a theme spacing unit from the next so
-    // the icons never touch the fader or the amount.
+    // Left to right: swatch, name, fader, amount, curve, timeline, remove, each group a theme spacing unit from the
+    // next so the icons never touch the fader or the amount.
     const int gap = modDotPaletteFor(*this).space;
     auto r = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(kPad - 2, 0);
     removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)
                                 .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
     r.removeFromRight(kIconGap);
     timelineButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize));
+    r.removeFromRight(gap);
+    curveChip_->setBounds(
+        r.removeFromRight(ModCurveChip::kWidth).withSizeKeepingCentre(ModCurveChip::kWidth, ModCurveChip::kHeight));
     r.removeFromRight(gap);
     amountButton_->setBounds(r.removeFromRight(kAmountWidth).withSizeKeepingCentre(kAmountWidth, 20));
     r.removeFromRight(gap);

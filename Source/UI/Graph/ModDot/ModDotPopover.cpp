@@ -1,5 +1,6 @@
 #include "ModDotPopover.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
 
 #include "AudioEngine/AudioEngine.h"
 #include "ModDotButton.h"
@@ -283,6 +284,10 @@ void ModDotPopover::dismiss() {
 bool ModDotPopover::keyPressed(const juce::KeyPress& key) {
     if (key != juce::KeyPress::escapeKey)
         return false;
+    if (isModCurvePopoverOpen()) { // a row's curve box takes Esc first, wherever the keyboard focus is
+        closeModCurvePopover();
+        return true;
+    }
     if (picker_ != nullptr) {
         stopPick();
         return true;

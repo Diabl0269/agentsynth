@@ -14,6 +14,8 @@
 
 namespace synth::ui {
 
+class ModCurveChip;
+
 class ModDotSourceRow final : public juce::Component {
 public:
     static constexpr int kHeight = 34;
@@ -45,6 +47,8 @@ public:
     ModDotAmountBar& bar() noexcept { return bar_; }
     juce::Button& amountButton() noexcept;
     juce::Button& timelineButton() noexcept { return timelineButton_; }
+    /** Shows the connection's response curve and opens its editor (wired by the page). */
+    ModCurveChip& curveChip() noexcept { return *curveChip_; }
     juce::Button& removeButton() noexcept { return removeButton_; }
     bool isEditingAmount() const noexcept { return editor_ != nullptr; }
     juce::TextEditor* amountEditor() noexcept { return editor_.get(); }
@@ -69,6 +73,7 @@ private:
     ModDotHoverFade hover_;
     ModDotAmountBar bar_;
     std::unique_ptr<AmountButton> amountButton_;
+    std::unique_ptr<ModCurveChip> curveChip_;
     ModDotGlyphButton timelineButton_;
     ModDotGlyphButton removeButton_;
     std::unique_ptr<NavigationSearchField> editor_;

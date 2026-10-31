@@ -1,0 +1,35 @@
+# The modulation curve box opens from a mod dot's source row, and a bent curve shows as a chip on its cable when the
+# preference is on. The chip on the cable is painted, so the canvas screenshot is the check for it.
+#
+# What a user does:
+#   1. With "Show curves on cables" on, opens a project with an LFO modulating the Filter's Cutoff.
+#   2. Clicks the Cutoff mod dot, then the curve chip on the LFO's row: the curve box opens.
+#   3. Clicks the Exp preset, then presses Esc: the box closes and the mod dot panel is next.
+#   4. Sees the bent curve on the cable, and still sees it after saving, restarting and opening the project again.
+settings:
+  showCurvesOnCables: true
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - screenshot: {id: window, name: cable-chip-linear}
+  - click: {id: "Cutoff modulation, 1 source"}
+  - wait: {}
+  - expect: {id: modDotPopover, exists: true, within_ms: 1500}
+  - click: {id: "LFO curve"}
+  - wait: {}
+  - expect: {id: modCurveBox, showing: true, within_ms: 1500}
+  - screenshot: {id: window, name: dot-row-curve-box}
+  - click: {id: "Exp curve"}
+  - wait: {}
+  - key: {keys: escape, target: modCurveBox}
+  - wait: {}
+  - expect: {id: modCurveBox, exists: false, within_ms: 2000}
+  - key: {keys: escape, target: modDotPopover}
+  - wait: {}
+  - expect: {id: modDotPopover, exists: false, within_ms: 2000}
+  - screenshot: {id: window, name: cable-chip-exp}
+  - saveProject: {path: "${OUT}/saved.agsproj"}
+  - restart: {}
+  - openProject: {path: "${OUT}/saved.agsproj"}
+  - wait: {}
+  - screenshot: {id: window, name: cable-chip-after-reopen}

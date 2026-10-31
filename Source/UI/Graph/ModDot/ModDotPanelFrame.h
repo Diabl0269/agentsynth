@@ -67,6 +67,10 @@ public:
     std::function<void()> onClosed;
     /** Asked on a press outside the panel; true keeps the panel open. */
     std::function<bool()> keepOpenOnOutsideClick;
+    /** Whether a press at this screen point, outside this panel, leaves it open. */
+    std::function<bool(juce::Point<int>)> keepOpenOnPressAt;
+    /** Asked before Esc closes this panel; true means something opened over it took the key instead. */
+    std::function<bool()> escapeGoesElsewhere;
 
     bool hitTest(int x, int y) override;
     void resized() override;

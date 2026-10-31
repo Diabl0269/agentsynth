@@ -152,6 +152,8 @@ void ModDotPanelFrame::mouseDown(const juce::MouseEvent& e) {
         return;
     if (keepOpenOnOutsideClick && keepOpenOnOutsideClick())
         return;
+    if (keepOpenOnPressAt && keepOpenOnPressAt(e.getScreenPosition()))
+        return;
     if (anchorIsRegion_) {
         if (dot_.contains(e.getScreenPosition()))
             return;
@@ -171,7 +173,8 @@ void ModDotPanelFrame::timerCallback() {
 bool ModDotPanelFrame::keyPressed(const juce::KeyPress& key) {
     if (key != juce::KeyPress::escapeKey)
         return false;
-    close();
+    if (!escapeGoesElsewhere || !escapeGoesElsewhere())
+        close();
     return true;
 }
 
