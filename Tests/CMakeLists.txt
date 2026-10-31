@@ -508,6 +508,7 @@ add_executable(Tests
     UI/Settings/AccountFlowPanelTests.cpp
     UI/Settings/LeavingSurveyPanelTests.cpp
     Engine/AudioRendering/AudioRenderingBasicTests.cpp
+    Engine/AudioRendering/SilentSourceTransparentTests.cpp
     Engine/AudioRendering/AudioRenderingFXModuleTests.cpp
     Engine/AudioRendering/AudioRenderingModulationTests.cpp
     Engine/AudioRendering/AudioRenderingPresetTests.cpp

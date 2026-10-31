@@ -19,7 +19,7 @@ in single-jack mode they simply shift one slot down in the visible column.
 
 ### Right borrows Left while unpatched (FRO324)
 
-When Dual I/O is **On** and only Left is patched, Right borrows Left — render-time, sample-exact,
+A silent source's cable on Right does not count as patching it ([audio-engine](../architecture/audio-engine.md#stereo-down-mix-fro326)). When Dual I/O is **On** and only Left is patched, Right borrows Left — render-time, sample-exact,
 and **never a graph edge**: `AudioEngine::refreshNormalling()` (message thread, alongside the mixer
 solo recount) sets a per-module atomic, and `ModuleBase::applyLeftRightNormalling()` copies raw ch0
 onto `rightAudioLegChannel()` at the very top of `processBlock`, before the bypass/mute branches.
