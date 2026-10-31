@@ -5,6 +5,7 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/VCAModule.h"
+#include "SyncMeasure.h"
 
 #include <algorithm>
 #include <cmath>
@@ -411,39 +412,10 @@ std::vector<float> renderSyncedNote(const SyncCase& c, bool patched = true) {
     return out;
 }
 
-// The share of the energy that is not at a multiple of the master's pitch, in dB. A synced wave repeats exactly
-// once per master cycle, so everything else is what the ear hears as grit: restarts landing unevenly, random phases
-// or folded-back overtones. The window is one second, so with a whole number of Hz each harmonic falls on its own bin.
-// The result is relative to `reference`, the energy of the same note left free, or to the wave's own energy if that is
-// larger: a cycle that happens to sit near a slow wave's zero is quiet, and its small remainder is not louder grit.
-double acEnergy(const std::vector<float>& x) {
-    double total = 0.0, mean = 0.0;
-    for (float s : x)
-        mean += (double)s / (double)x.size();
-    for (float s : x)
-        total += ((double)s - mean) * ((double)s - mean);
-    return total;
-}
+double acEnergy(const std::vector<float>& x) { return syncmeasure::acEnergy(x); }
 
 double offHarmonicDb(const std::vector<float>& x, int masterHz, double reference) {
-    const double total = acEnergy(x);
-    double mean = 0.0;
-    for (float s : x)
-        mean += (double)s / (double)x.size();
-    double harmonic = 0.0;
-    const double n = (double)x.size();
-    for (int h = masterHz; h < (int)(kSyncRate / 2.0); h += masterHz) {
-        const double w = 2.0 * std::cos(kTwoPi * (double)h / kSyncRate);
-        double s1 = 0.0, s2 = 0.0;
-        for (float s : x) {
-            const double s0 = (double)s - mean + w * s1 - s2;
-            s2 = s1;
-            s1 = s0;
-        }
-        harmonic += (s1 * s1 + s2 * s2 - w * s1 * s2) * 2.0 / n;
-    }
-    return 10.0 *
-           std::log10(std::max(1e-12, (total - std::min(total, harmonic)) / std::max({1e-12, total, reference})));
+    return syncmeasure::offHarmonicDb(x, masterHz, reference, kSyncRate);
 }
 
 float largestStep(const std::vector<float>& x) {
@@ -453,12 +425,7 @@ float largestStep(const std::vector<float>& x) {
     return worst;
 }
 
-float peakOf(const std::vector<float>& x) {
-    float p = 0.0f;
-    for (float v : x)
-        p = std::max(p, std::abs(v));
-    return p;
-}
+float peakOf(const std::vector<float>& x) { return syncmeasure::peakOf(x); }
 
 } // namespace
 
@@ -470,28 +437,34 @@ float peakOf(const std::vector<float>& x) {
 TEST(OscillatorGateRestart, RestartFromARealOscillator) {
     constexpr double kMaxOffHarmonicDb = -30.0;
     constexpr float kMinLevelOfFree = 0.6f;
+    // Each render is a second of audio, so the grid is a short list of the settings that matter: the closest to the
+    // limit (a slow master with Rand), the ones the unsynced code failed on (Rand above 0, a fast master losing
+    // level, a click at an odd ratio), and every master wave, each in mono and poly with and without unison.
+    struct Probe {
+        int wave, hz;
+        float rand;
+    };
+    constexpr Probe kProbes[] = {{3, 100, 100.0f}, {1, 440, 50.0f}, {2, 440, 0.0f}, {0, 301, 0.0f}};
     for (const bool poly : {false, true})
         for (const int unison : {1, 5}) {
             const auto free = renderSyncedNote({0, 100, unison, 0.0f, poly}, /*patched*/ false);
             float freeClick = 0.0f;
             for (const auto& click : clickdetector::findClicks(free))
                 freeClick = std::max(freeClick, click.size);
-            for (const float rand : {0.0f, 50.0f, 100.0f})
-                for (const int wave : {0, 1, 2, 3})
-                    for (const int hz : {100, 440, 2000, 301}) {
-                        const SyncCase c{wave, hz, unison, rand, poly};
-                        const auto x = renderSyncedNote(c);
-                        const auto clicks = clickdetector::findClicks(x);
-                        float largest = 0.0f;
-                        for (const auto& click : clicks)
-                            largest = std::max(largest, click.size);
-                        const double off = offHarmonicDb(x, hz, acEnergy(free));
-                        EXPECT_LE(off, kMaxOffHarmonicDb) << describeCase(c);
-                        // With Rand, a short cycle of a slow wave can sit near its zero, so only Rand 0 has a floor.
-                        if (rand == 0.0f)
-                            EXPECT_GE(peakOf(x), kMinLevelOfFree * peakOf(free)) << describeCase(c);
-                        EXPECT_LE(largest, std::max(freeClick, 0.1f) * 1.1f) << describeCase(c);
-                    }
+            for (const Probe& probe : kProbes) {
+                const SyncCase c{probe.wave, probe.hz, unison, probe.rand, poly};
+                const auto x = renderSyncedNote(c);
+                const auto clicks = clickdetector::findClicks(x);
+                float largest = 0.0f;
+                for (const auto& click : clicks)
+                    largest = std::max(largest, click.size);
+                const double off = offHarmonicDb(x, c.masterHz, acEnergy(free));
+                EXPECT_LE(off, kMaxOffHarmonicDb) << describeCase(c);
+                // With Rand, a short cycle of a slow wave can sit near its zero, so only Rand 0 has a floor.
+                if (c.rand == 0.0f)
+                    EXPECT_GE(peakOf(x), kMinLevelOfFree * peakOf(free)) << describeCase(c);
+                EXPECT_LE(largest, std::max(freeClick, 0.1f) * 1.1f) << describeCase(c);
+            }
         }
 }
 

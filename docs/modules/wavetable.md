@@ -131,6 +131,19 @@ At Rand Phase 0 with no `Spread`, a unison stack and a poly chord attack perfect
 and comb-filter themselves. All three are sampled **at the note-on instant** — they shape the attack,
 not the sustain — so their CV is read at the block's first sample rather than per-sample.
 
+**Oscillator sync.** An oscillator cabled into Restart syncs the same way as on the Oscillator
+([oscillator-voice.md](oscillator-voice.md#oscillator-sync-an-oscillator-into-restart)): after three restarts in a row
+under 25 ms apart (`synth::SyncRestartRun`), `restartVoice` reuses the note's per-voice random draws (`restartDraws`;
+a new draw per cycle is noise at any Rand Phase above 0), places the phases and the hand-over at the gate's real
+crossing (`GateEdges::firedLead`, applied by `advanceSyncLead`) and hands over in `kSyncFadeSamples` (8) instead of 64.
+Measured with a Fixed-rate Oscillator master, Sine/Square/Saw/Triangle at 100, 440, 2000 and 301 Hz, Unison 1 and 5, Rand
+Phase 0, 0.5 and 1, mono and poly: before, 0 to -4 dB off the master's harmonics at Rand Phase above 0 and as bad as -23
+dB at 0; after, -34 dB or better (to -86 dB). A mono oscillator's audio on a poly Restart fans to all eight voices
+(`resolvePolyLink`, role Gate, as for the Oscillator). Level at Rand Phase 0 is checked against what the table's saw can
+reach: it starts at zero, so a master above twice the note only lets it climb part of the way. Tests:
+`WavetableOscillatorSync.RestartFromARealOscillator`,
+`GraphEditorTest.ResolvePolyLinkFansMonoAudioOntoAPolyWavetableRestart`.
+
 ## Unison, stacking and the sub
 
 - **Unison** (1–8) with **Detune** (0–100 cents) spreads voices symmetrically about the root.

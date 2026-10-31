@@ -19,6 +19,7 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/VCAModule.h"
+#include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "PresetManager.h"
 
 // ---------------------------------------------------------------------------
@@ -868,6 +869,23 @@ TEST_F(GraphEditorTest, ResolvePolyLinkDoesNotBroadcastAudioOrPitchFans) {
     auto gateLink = GraphEditor::resolvePolyLink(&lfo, 0, &polyAdsr, 0);
     EXPECT_EQ(gateLink.voiceCount, 1);
     EXPECT_EQ(gateLink.sourceStride, 1);
+}
+
+// Regression test for FRO1358: a Wavetable's poly Restart fans like the Oscillator's, so one mono oscillator syncs the
+// whole chord.
+TEST_F(GraphEditorTest, ResolvePolyLinkFansMonoAudioOntoAPolyWavetableRestart) {
+    OscillatorModule monoOsc;
+    LFOModule lfo;
+    auto polyWt = std::make_unique<WavetableOscillatorModule>();
+    setPolyParam(*polyWt, true);
+
+    const auto syncLink = GraphEditor::resolvePolyLink(&monoOsc, 0, polyWt.get(), WavetableOscillatorModule::kJackGate);
+    EXPECT_EQ(syncLink.voiceCount, WavetableOscillatorModule::kNumVoices);
+    EXPECT_EQ(syncLink.sourceStride, 0);
+    EXPECT_EQ(syncLink.destChannel(0), WavetableOscillatorModule::kGateBase);
+
+    const auto gateLink = GraphEditor::resolvePolyLink(&lfo, 0, polyWt.get(), WavetableOscillatorModule::kJackGate);
+    EXPECT_EQ(gateLink.voiceCount, 1) << "a mono CV on Restart keeps its one voice";
 }
 
 // ---------------------------------------------------------------------------

@@ -15,9 +15,11 @@ void WavetableOscillatorModule::VoiceState::addMidiRestart(int offset) {
 }
 
 // True once per restart on sample `s`: a Gate edge or a MIDI note-on, both consumed so that two on one sample are
-// one restart. Call with ascending `s` within a block.
-bool WavetableOscillatorModule::VoiceState::restartFiresAt(int s) {
+// one restart. `lead` is where a Gate edge fell between samples (0 for a note-on). Call with ascending `s` within a
+// block.
+bool WavetableOscillatorModule::VoiceState::restartFiresAt(int s, float& lead) {
     bool fires = gateEdges.firesAt(s);
+    lead = fires ? gateEdges.firedLead : 0.0f;
     while (nextMidiRestart < numMidiRestarts && midiRestarts[(size_t)nextMidiRestart] <= s) {
         fires = fires || midiRestarts[(size_t)nextMidiRestart] == s;
         ++nextMidiRestart;
@@ -31,15 +33,46 @@ bool WavetableOscillatorModule::VoiceState::restartFiresAt(int s) {
 // stack as it stood runs on as a ghost and is blended out over kRestartFadeSamples, because a restart while the
 // previous note still sounds would otherwise jump the waveform; a restart inside a hand-over keeps the ghosts
 // that are still leaving, so even an audio-rate gate cannot step the output.
-void WavetableOscillatorModule::restartVoice(VoiceState& voice, int unisonCount, bool fadeFromOld) {
+//
+// A restart after a run of short gaps is oscillator sync, not a new note. Its wave has to repeat exactly once per
+// master cycle or the ear hears noise, so three things change: the unison voices reuse the random draws of the note
+// instead of drawing new ones (a fresh random phase per cycle is white noise at any Rand above 0); the phase and the
+// hand-over are placed between samples at the gate's real crossing (`lead`); and the hand-over shortens to
+// synth::kSyncFadeSamples, because a 64-sample fade covers most of a fast master's cycle and averages the wave down
+// to a quiet, dull remnant.
+void WavetableOscillatorModule::restartVoice(VoiceState& voice, int unisonCount, bool fadeFromOld, float lead) {
+    const bool syncing = voice.sync.noteRestart(syncEdgeSamples, fadeFromOld, lead);
     if (fadeFromOld)
-        voice.ghosts.start(voice.stack);
+        voice.ghosts.start(voice.stack, syncing ? synth::kSyncFadeSamples : synth::kRestartFadeSamples,
+                           syncing ? lead : 0.0f);
     else
         voice.ghosts.count = 0;
     const float startPhase = juce::jlimit(0.0f, 1.0f, phaseParam->get() / 360.0f + cvAt(kJackPhase, 0));
     const float spread = juce::jlimit(0.0f, 1.0f, spreadParam->get() + cvAt(kJackSpread, 0));
     const float randomAmount = juce::jlimit(0.0f, 1.0f, randomPhaseParam->get() + cvAt(kJackRand, 0));
-    voice.stack.resetPhases(startPhase, spread, randomAmount, unisonCount, phaseRandom);
+    if (!syncing && randomAmount > 0.0f)
+        for (float& draw : voice.restartDraws)
+            draw = phaseRandom.nextFloat();
+    voice.stack.resetPhases(startPhase, spread, randomAmount, unisonCount, voice.restartDraws);
+}
+
+void WavetableOscillatorModule::advanceSyncLead(VoiceState& voice, const BlockSettings& bs, float dt) {
+    voice.sync.tick();
+    const float lead = voice.sync.pendingLead;
+    if (lead <= 0.0f)
+        return;
+    // The restart fell between the last sample and this one, so the wave has already run that long.
+    voice.sync.pendingLead = 0.0f;
+    auto advance = [](float& phase, float step) {
+        phase += step;
+        while (phase >= 1.0f)
+            phase -= 1.0f;
+    };
+    for (int u = 0; u < bs.renderCount; ++u) {
+        advance(voice.stack.masterPhase[u], lead * dt * bs.uniRatio[u]);
+        voice.stack.phase[u] = voice.stack.masterPhase[u];
+    }
+    advance(voice.stack.subPhase, lead * dt * bs.subOctaveRatio);
 }
 
 // Notes arrive as MIDI in the fallback pitch of voice 0 (mono, and poly without a pitch CV) and as Gate edges

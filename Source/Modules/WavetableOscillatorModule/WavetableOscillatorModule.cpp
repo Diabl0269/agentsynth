@@ -321,6 +321,7 @@ WavetableOscillatorModule::WavetableOscillatorModule()
 void WavetableOscillatorModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
     juce::ignoreUnused(samplesPerBlock);
     currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
+    syncEdgeSamples = (int)(currentSampleRate * synth::kSyncEdgeSeconds);
 
     const float initFreq = tunedFrequency(frequencyForMidiNote(voices[0].lastMidiNote));
     for (int v = 0; v < MAX_VOICES; ++v) {
@@ -345,6 +346,7 @@ void WavetableOscillatorModule::prepareToPlay(double sampleRate, int samplesPerB
         voices[v].numMidiRestarts = voices[v].nextMidiRestart = 0;
         voices[v].active = false;
         voices[v].gateEdges.reset();
+        voices[v].sync.reset();
     }
     unisonMix.primed = false; // the next block starts the voice gains at their targets
     lastSyncSample = 0.0f;

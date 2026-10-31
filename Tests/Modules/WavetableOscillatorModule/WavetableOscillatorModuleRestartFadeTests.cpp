@@ -12,6 +12,7 @@ using WT = WavetableOscillatorModule;
 constexpr int kFade = 64; // synth::kRestartFadeSamples
 constexpr double kTwoPi = 6.283185307179586;
 constexpr float kRestartStepBound = 0.12f; // see OscillatorGateRestartTests: the wave's own step plus a 64-sample fade
+constexpr float kSyncStepBound = 0.25f;    // audio-rate restarts hand over in 8 samples, as on the Oscillator
 
 void configure(WT& m, bool poly) {
     setFloat(m, "level", 1.0f);
@@ -160,7 +161,7 @@ TEST(WavetableRestartFade, AudioRateGatesNeverStepTheOutputAtARestart) {
                 worst = std::max(worst, std::abs(run.out[i] - run.out[i - 1]));
             for (float v : run.out)
                 peak = std::max(peak, std::abs(v));
-            EXPECT_LE(worst, kRestartStepBound)
+            EXPECT_LE(worst, kSyncStepBound)
                 << (poly ? "poly" : "mono") << " period " << period << ": a step of " << worst;
             EXPECT_LE(peak, 1.0f + 1e-4f) << (poly ? "poly" : "mono") << " period " << period;
         }

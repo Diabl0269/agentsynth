@@ -167,7 +167,7 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         juce::ignoreUnused(samplesPerBlock);
         currentSampleRate = sampleRate;
-        syncEdgeSamples = (int)(sampleRate * kSyncEdgeSeconds);
+        syncEdgeSamples = (int)(sampleRate * synth::kSyncEdgeSeconds);
 
         // A prepared module starts where a new one does: the pitch of the last note played must not become the
         // starting pitch of the next playback.
@@ -194,9 +194,7 @@ public:
             v.active = false;
             v.ghosts.count = 0;
             v.lastBaseDt = 0.0f;
-            v.samplesSinceRestart = std::numeric_limits<int>::max();
-            v.shortGapRun = 0;
-            v.pendingLead = 0.0f;
+            v.sync.reset();
             // Every playback starts from the same phases: the first note's run-out must not depend on where the
             // previous playback (or render) happened to leave the free-running oscillators.
             for (auto& osc : v.unisonOscs)
@@ -450,9 +448,7 @@ private:
     static constexpr int MAX_VOICES = 8;
     static constexpr int MAX_UNISON = 8;
     static constexpr int CROSSFADE_SAMPLES = synth::kRestartFadeSamples;
-    static constexpr int kMaxGhosts = 5;              ///< restarts that can be fading out at once
-    static constexpr double kSyncEdgeSeconds = 0.025; ///< restarts this close together (40 Hz) can be oscillator sync
-    static constexpr int kSyncRunLength = 3;          ///< and are, after this many in a row
+    static constexpr int kMaxGhosts = 5; ///< restarts that can be fading out at once
 
     // -------------------------------------------------------------------------
     // Per-voice state
@@ -478,9 +474,7 @@ private:
         synth::PitchGlide glide;
         GateEdges gateEdges;                 ///< this block's rising Gate edges, each a note that restarts the phases
         float restartDraws[MAX_UNISON] = {}; ///< each unison voice's random draw at the last note start, 0..1
-        int samplesSinceRestart = std::numeric_limits<int>::max(); ///< counts rendered samples, saturating
-        int shortGapRun = 0; ///< restarts in a row each under kSyncEdgeSeconds after the last, up to kSyncRunLength
-        float pendingLead = 0.0f; ///< how far past the restart the next rendered sample lies, in samples
+        synth::SyncRestartRun sync;          ///< tells oscillator sync from a note, and holds the sub-sample lead
         float lastMidiNote = 69.0f;
         int previousWaveform = 0;
         int fadingFromWaveform = 0;
@@ -639,17 +633,16 @@ private:
 
     /** One normalised sample of `voice`'s stack, blending in the run-out phases after a restart. */
     StackSample renderStack(VoiceState& voice, const StackContext& c, int i) const {
-        if (voice.samplesSinceRestart < std::numeric_limits<int>::max())
-            ++voice.samplesSinceRestart;
-        if (voice.pendingLead > 0.0f) {
+        voice.sync.tick();
+        if (voice.sync.pendingLead > 0.0f) {
             // The restart fell between the last sample and this one, so the wave has already run that long.
             for (int u = 0; u < c.count; ++u) {
                 auto& phase = voice.unisonOscs[u].phase;
-                phase += voice.pendingLead * c.baseDt * c.ratio[u];
+                phase += voice.sync.pendingLead * c.baseDt * c.ratio[u];
                 if (phase >= 1.0f)
                     phase -= 1.0f;
             }
-            voice.pendingLead = 0.0f;
+            voice.sync.pendingLead = 0.0f;
         }
         StackSample s = sumStack(voice.unisonOscs, c, i, c.baseDt);
         voice.lastBaseDt = c.baseDt;
