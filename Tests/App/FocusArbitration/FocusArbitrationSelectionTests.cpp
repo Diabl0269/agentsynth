@@ -1,6 +1,7 @@
 // Concern: Cut (one undo step per surface), Select All routing, and Repeat Selection --
 // including the inactive states on the timeline surfaces with an empty selection.
 #include "FocusArbitrationTestFixture.h"
+#include "ShortcutManager/AppCommands.h"
 
 // ============================================================================
 // 9. Cut — per surface, one undo step each

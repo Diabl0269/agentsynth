@@ -11,6 +11,7 @@
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 #include "ShortcutManagerTestFixture.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/UIAnimation.h"

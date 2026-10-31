@@ -2,6 +2,7 @@
 // Select All, Copy, Cut and Paste act on a lane editor's points, Duplicate acts on the lane itself, and Repeat stays
 // inactive there.
 #include "FocusArbitrationTestFixture.h"
+#include "ShortcutManager/AppCommands.h"
 
 namespace {
 struct LaneSurface {

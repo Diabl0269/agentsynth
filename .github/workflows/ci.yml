@@ -835,7 +835,7 @@ jobs:
           fi
         done
 
-        [ "$overall_rc" -eq 0 ] || bash scripts/print-crash-report.sh
+        [ "$overall_rc" -eq 0 ] || bash "$GITHUB_WORKSPACE/scripts/print-crash-report.sh"
         exit "$overall_rc"
 
   build-and-test-windows:

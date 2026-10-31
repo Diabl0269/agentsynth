@@ -2,6 +2,7 @@
 // (MainComponentCommandTable.cpp appends them after the focus and help rows).
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 #include "Transport/MarkerJump.h"
 
 namespace {

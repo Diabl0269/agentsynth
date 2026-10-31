@@ -2,6 +2,7 @@
 // across the Graph, TimelineClips and PianoRoll surfaces -- see MainComponent.h's
 // EditSurface/resolveEditSurface comment and docs/control/shortcuts.md for the production rule this pins.
 #include "FocusArbitrationTestFixture.h"
+#include "ShortcutManager/AppCommands.h"
 
 // ============================================================================
 // 1. Graph surface — unchanged behaviour

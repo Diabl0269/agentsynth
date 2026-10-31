@@ -5,6 +5,7 @@
 #include "Plugin/Hosting/PluginScanService.h"
 #include "Project/ProjectCommandLine.h"
 #include "SettingsMigration.h"
+#include "ShortcutManager/AppCommands.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "TestMode/AutomationHiding.h"
 #include "TestMode/TestModeLaunch.h"

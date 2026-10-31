@@ -19,6 +19,7 @@
 #include "Modules/LFOModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/ReducedMotion.h"

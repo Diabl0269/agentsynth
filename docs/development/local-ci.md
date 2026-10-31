@@ -103,7 +103,8 @@ include the header only in the `.cpp` that uses it.
 
 A ratchet stops growth. It does not shrink anything: the listed headers stay as wide as they are
 until someone cuts their reach. When you do, run `bash scripts/check-header-reach.sh --update` to
-tighten the entries (it never raises one; `--allow-raise` is the reviewed exception). `--list [N]`
+tighten the entries: it lowers what fell, drops what is under the cap and leaves what rose, saying
+how many (`--allow-raise` is the reviewed exception for raising or adding an entry). `--list [N]`
 prints the widest headers. The count is a little higher than the number of object files a build
 recompiles (about 2% on `Source/`), and `scripts/tests/check-header-reach.test.sh` covers the checker.
 

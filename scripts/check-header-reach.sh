@@ -21,9 +21,10 @@
 # reach grow in proportion, so each entry is scaled by total_now / total_baseline first; only growth
 # beyond that is a violation. On top of the scaled entry a header may grow by the slack,
 # max(5 files, 3%), so an ordinary new .cpp does not trip it. A header not in the baseline fails the
-# moment it is over the cap: add the include somewhere narrower instead. --update only lowers
-# entries and drops those that fell under the cap; raising one or adding one needs --allow-raise,
-# the deliberate, reviewed exception.
+# moment it is over the cap: add the include somewhere narrower instead. --update lowers entries
+# that fell, drops those under the cap and leaves entries that rose as they are, saying how many, so
+# growth inside the slack elsewhere never blocks recording a cut. It refuses to add a header. Raising
+# or adding an entry needs --allow-raise, the deliberate, reviewed exception.
 #
 # Usage:
 #   bash scripts/check-header-reach.sh                  # check the tree against cap + baseline
@@ -55,8 +56,9 @@ through other headers, with a strict ratchet baseline (scripts/header-reach-base
 already over the cap. See docs/development/local-ci.md ("Header reach guard").
 
   (no flags)     Check the tree against the cap + baseline. Exit 1 on any violation.
-  --update       Rewrite the baseline from the current tree (headers over the cap only). Refuses to
-                 raise an entry or add a header (exit 1, baseline untouched); pass --allow-raise.
+  --update       Rewrite the baseline from the current tree (headers over the cap only): lowers entries
+                 that fell, drops those under the cap, leaves entries that rose and prints how many.
+                 Refuses to add a header (exit 1, baseline untouched); pass --allow-raise.
   --allow-raise  Only with --update: let a raised or new entry through, with a ::warning:: each.
   --list [N]     Print the N (default 25) widest headers, widest first.
   --root <dir>   Repo root to scan (default: the root of the repo this script is in).
@@ -272,30 +274,42 @@ run_update() {
     [ -f "$BASELINE_FILE" ] && baseline_existed=1
     raise_errors=0
     raise_warnings=0
+    left_risen=0
 
     if [ "$baseline_existed" -eq 1 ]; then
         while IFS=' ' read -r new_count path; do
             [ -n "$path" ] || continue
             old_count="$(awk -v p="$path" '$2 == p { print $1 }' "$workdir/old.txt")"
+            scaled_old=""
+            [ -z "$old_count" ] || scaled_old=$(((old_count * total_now + total_base - 1) / total_base))
             if [ -z "$old_count" ]; then
                 what="is a new over-cap header ($new_count files, cap $CAP)"
-            elif [ "$new_count" -gt $(((old_count * total_now + total_base - 1) / total_base)) ]; then
-                what="would raise the baseline from $old_count to $new_count (more than its $(((old_count * total_now + total_base - 1) / total_base)) scaled for the tree's growth)"
+            elif [ "$new_count" -gt "$scaled_old" ]; then
+                what="would raise the baseline from $old_count to $new_count (more than its $scaled_old scaled for the tree's growth)"
             else
+                echo "$new_count $path" >>"$workdir/kept.txt"
                 continue
             fi
+            if [ -n "$old_count" ] && [ "$ALLOW_RAISE" -eq 0 ]; then
+                # Written scaled: the file records the new total, and the check scales entries from it.
+                echo "$scaled_old $path" >>"$workdir/kept.txt"
+                left_risen=$((left_risen + 1))
+                continue
+            fi
+            echo "$new_count $path" >>"$workdir/kept.txt"
             if [ "$ALLOW_RAISE" -eq 1 ]; then
                 echo "::warning::$path $what -- allowed via --allow-raise (reviewed exception)"
                 raise_warnings=$((raise_warnings + 1))
             else
-                echo "::error::$path $what -- the ratchet only tightens; cut the reach, or pass --allow-raise only for a deliberate, reviewed exception"
+                echo "::error::$path $what -- the baseline never gains a header; cut the reach, or pass --allow-raise only for a deliberate, reviewed exception"
                 raise_errors=$((raise_errors + 1))
             fi
         done <"$workdir/new.txt"
+        sort -k2,2 "$workdir/kept.txt" 2>/dev/null >"$workdir/new.txt"
     fi
 
     if [ "$raise_errors" -gt 0 ]; then
-        echo "check-header-reach --update: refusing to write the baseline -- $raise_errors entr$( [ "$raise_errors" -eq 1 ] && echo y || echo ies ) would raise it or add to it (see errors above)." >&2
+        echo "check-header-reach --update: refusing to write the baseline -- $raise_errors header$( [ "$raise_errors" -eq 1 ] || echo s ) would be added (see errors above)." >&2
         return 1
     fi
 
@@ -314,6 +328,9 @@ run_update() {
     else
         echo "check-header-reach --update: baseline rewritten ($entry_count entries, $raise_warnings raised via --allow-raise). Changes:"
         diff "$workdir/old.txt" "$workdir/new.txt" || true
+    fi
+    if [ "$left_risen" -gt 0 ]; then
+        echo "check-header-reach --update: left $left_risen entries that rose as they are (--allow-raise would raise them)."
     fi
 }
 

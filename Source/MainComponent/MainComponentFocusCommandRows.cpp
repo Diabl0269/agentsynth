@@ -2,6 +2,7 @@
 // MainComponent command table (MainComponentCommandTable.cpp appends them in menu order).
 #include "Branding.h"
 #include "MainComponent.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 
 std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandRows() {

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Tests scripts/check-header-reach.sh on a small fixture tree: it passes unchanged, fails when an
-# include adds reach, fails for a new header over the cap, and --update only lowers.
+# include adds reach, fails for a new header over the cap, and --update lowers what fell and leaves what rose.
 
 set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -80,10 +80,29 @@ for i in $(seq 1 5); do printf '#include "Wide.h"\n' >"$ROOT/Source/C$i.cpp"; do
 guard >/dev/null 2>&1
 check "growth within the slack passes" test $? -eq 0
 out="$(guard --update 2>&1)"
-check "--update refuses to raise an entry" test $? -ne 0
-check "a refused --update leaves the baseline alone" grep -qx '12 Source/Wide.h' "$TMP/baseline.txt"
+check "--update succeeds when an entry rose" test $? -eq 0
+check "--update leaves a risen entry at its count scaled for the tree" grep -qx '13 Source/Wide.h' "$TMP/baseline.txt"
+check "--update says how many it left" grep -q 'left 1 entries that rose' <<<"$out"
 guard --update --allow-raise >/dev/null 2>&1
 check "--allow-raise lets a raise through" grep -qx '17 Source/Wide.h' "$TMP/baseline.txt"
+
+# --- one --update with an entry that rose, one that fell and one that went under the cap ---------
+# Wide.h is at 17. Two new files lift it to 19, past its 18 scaled for the tree. Three B files include
+# Small.h directly and B12 goes, so Small.h falls to 11 and Sub/Mid.h falls under the cap to 8.
+for i in 1 2 3; do printf '#include "Small.h"\n' >"$ROOT/Tests/B$i.cpp"; done
+rm "$ROOT/Tests/B12.cpp"
+for i in 6 7; do printf '#include "Wide.h"\n' >"$ROOT/Source/C$i.cpp"; done
+guard --update >"$TMP/mixed.out" 2>&1
+check "a mixed --update succeeds" test $? -eq 0
+check "mixed: the entry that rose is left" grep -qx '18 Source/Wide.h' "$TMP/baseline.txt"
+check "mixed: the entry that fell is lowered" grep -qx '11 Source/Small.h' "$TMP/baseline.txt"
+check "mixed: the entry under the cap is dropped" test -z "$(grep Mid.h "$TMP/baseline.txt")"
+check "mixed: the count of entries left is printed" grep -q 'left 1 entries that rose' "$TMP/mixed.out"
+guard >/dev/null 2>&1
+check "mixed: the result passes the check" test $? -eq 0
+rm "$ROOT/Source/C6.cpp" "$ROOT/Source/C7.cpp"
+for i in 1 2 3 12; do printf '#include <Sub/Mid.h>\n#include <juce_core/juce_core.h>\n' >"$ROOT/Tests/B$i.cpp"; done
+guard --update --allow-raise >/dev/null 2>&1
 
 # --- a header that is new and over the cap ------------------------------------------------------
 for i in $(seq 1 11); do printf '#include "Extra.h"\n' >"$ROOT/Source/D$i.cpp"; done

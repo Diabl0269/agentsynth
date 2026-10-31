@@ -4,6 +4,7 @@
 #include "FocusArbitrationTestFixture.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
+#include "ShortcutManager/AppCommands.h"
 
 namespace {
 
