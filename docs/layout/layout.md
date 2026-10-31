@@ -333,7 +333,7 @@ component types); `GraphEditorAutoArrange.cpp` flattens the live canvas into tha
 3. **One row per remaining connected component**, ordered by the id of the component's leftmost source (its first
    block with nothing feeding it). A loose module with no cables is a component of one.
 
-Cables between rows are still drawn but never influence placement, except a shared modulator's, which pick its column. Row gap is `kIntraLayerGapY`; a row is as tall as
+Cables between rows are still drawn but never influence placement, with two exceptions: a shared modulator's, which pick its column, and a modulation edge from a block that is a source of its own row (nothing feeds it there, such as an LFO cabled into one track that also modulates another). Columns are shared by every row, so that edge counts like an in-row one: the modulator ends up in a column before the block it modulates in the other row. A block in the middle of a chain that modulates another row stays as it is. The invariant, whatever the topology (track rows with channel macros, free macros in one component, chained, nested, folded or open): **for every modulation edge, the source is in a strictly earlier column than the destination.** The `HierarchicalArrangeColumns` tests in `Tests/UI/Layout/HierarchicalArrangeTests.cpp` assert it over a list of topologies; add a new shape there as one more entry. Row gap is `kIntraLayerGapY`; a row is as tall as
 its tallest column stack.
 
 **Columns.** A block's column is its longest-path depth from the row's sources, over the edges inside the row (signal

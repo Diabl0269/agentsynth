@@ -505,3 +505,192 @@ TEST(HierarchicalArrange, APulledUpSourceHugsTheRightEdgeOfAWideColumn) {
     expectTopLevelClear(in, out);
     EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
 }
+
+// ---- The column invariant over a list of topologies (docs/layout/layout.md#auto-arrange) ----
+//
+// Every modulation edge ends in a strictly later column than it starts, whatever the surroundings (track rows with
+// channel macros, free macros in one component, chained macros, nested and folded macros). One loop over the list, so
+// a new topology is one more entry.
+
+namespace column_topologies {
+using namespace synth::LayoutUtil;
+
+ArrangeBlock module(const juce::String& id, long long order, int rank = 4, int w = 280, int h = 300) {
+    ArrangeBlock b;
+    b.id = id;
+    b.size = {w, h};
+    b.order = order;
+    b.roleRank = rank;
+    return b;
+}
+
+// A folded macro: one card.
+ArrangeBlock folded(const juce::String& id, long long order) {
+    auto b = module(id, order, 4, 280, 90);
+    b.kind = ArrangeKind::CollapsedMacro;
+    return b;
+}
+
+ArrangeBlock open(const juce::String& id, long long order, std::vector<ArrangeBlock> children) {
+    ArrangeBlock b;
+    b.id = id;
+    b.kind = ArrangeKind::OpenMacro;
+    b.order = order;
+    b.children = std::move(children);
+    return b;
+}
+
+ArrangeEdge flow(const juce::String& a, const juce::String& b) { return {a, b, false}; }
+ArrangeEdge mod(const juce::String& a, const juce::String& b) { return {a, b, true}; }
+
+constexpr int kLfoRank = 3;
+
+struct Topology {
+    const char* name;
+    ArrangeInput input;
+};
+
+std::vector<Topology> topologies() {
+    std::vector<Topology> list;
+    auto add = [&](const char* name, std::vector<ArrangeBlock> blocks, std::vector<ArrangeEdge> edges,
+                   std::vector<juce::String> starts = {}) {
+        ArrangeInput in;
+        in.blocks = std::move(blocks);
+        in.edges = std::move(edges);
+        in.trackStarts = std::move(starts);
+        list.push_back({name, std::move(in)});
+    };
+    const auto lfo = [] { return module("lfo", 100, kLfoRank); };
+
+    // Free macros (no track): an LFO feeding two macros of one component, in every variant.
+    add("two folded macros, nothing else", {lfo(), folded("m1", 1), folded("m2", 2)},
+        {mod("lfo", "m1"), mod("lfo", "m2")});
+    add("two open macros, nothing else",
+        {lfo(), open("m1", 1, {module("a", 3), module("b", 4)}), open("m2", 2, {module("c", 5), module("d", 6)})},
+        {flow("a", "b"), flow("c", "d"), mod("lfo", "m1"), mod("lfo", "m2")});
+    add("two macros chained m1 -> m2 by a cable", {lfo(), folded("m1", 1), folded("m2", 2)},
+        {flow("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")});
+    add("two macros chained, LFO feeds only the second", {lfo(), folded("m1", 1), folded("m2", 2)},
+        {flow("m1", "m2"), mod("lfo", "m2")});
+    add("macro 1 modulates macro 2 and the LFO modulates both", {lfo(), folded("m1", 1), folded("m2", 2)},
+        {mod("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")});
+    add("macro 1 modulates macro 2, LFO modulates only macro 2", {lfo(), folded("m1", 1), folded("m2", 2)},
+        {mod("m1", "m2"), mod("lfo", "m2")});
+    add("three macros in a modulation chain with an LFO on each",
+        {lfo(), module("lfo2", 101, kLfoRank), folded("m1", 1), folded("m2", 2), folded("m3", 3)},
+        {mod("m1", "m2"), mod("m2", "m3"), mod("lfo", "m1"), mod("lfo", "m2"), mod("lfo2", "m3")});
+    add("a module feeding macro 1 by cable, LFO on both macros",
+        {module("osc", 0, 0), lfo(), folded("m1", 1), folded("m2", 2)},
+        {flow("osc", "m1"), flow("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")});
+    add("an LFO chain: lfo modulates lfo2 which modulates both macros",
+        {lfo(), module("lfo2", 101, kLfoRank), folded("m1", 1), folded("m2", 2)},
+        {mod("lfo", "lfo2"), mod("lfo2", "m1"), mod("lfo2", "m2"), mod("lfo", "m2")});
+
+    // Track rows: channel macros, one per track, an LFO shared by tracks or private to one.
+    add("three track rows of folded channel macros, shared LFO",
+        {module("in1", 1, 0), folded("ch1", 2), module("in2", 3, 0), folded("ch2", 4), module("in3", 5, 0),
+         folded("ch3", 6), lfo()},
+        {flow("in1", "ch1"), flow("in2", "ch2"), flow("in3", "ch3"), mod("lfo", "ch1"), mod("lfo", "ch2"),
+         mod("lfo", "ch3")},
+        {"in1", "in2", "in3"});
+    add("a track row of two chained macros, LFO on both", {module("in", 1, 0), folded("m1", 2), folded("m2", 3), lfo()},
+        {flow("in", "m1"), flow("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")}, {"in"});
+    add("a track that starts at macro 1, LFO on macros 1 and 2", {folded("m1", 1), folded("m2", 2), lfo()},
+        {flow("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")}, {"m1"});
+    add("two tracks: LFO on macro 1 of track one and macro 2 of track two",
+        {module("in1", 1, 0), folded("m1", 2), module("in2", 3, 0), folded("m2", 4), lfo()},
+        {flow("in1", "m1"), flow("in2", "m2"), mod("lfo", "m1"), mod("lfo", "m2")}, {"in1", "in2"});
+    add("a track where macro 1 modulates macro 2 and an LFO modulates both",
+        {module("in", 1, 0), folded("m1", 2), folded("m2", 3), lfo()},
+        {flow("in", "m1"), flow("in", "m2"), mod("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")}, {"in"});
+
+    // An LFO cabled into one track and modulating another is no pure modulator (it has a signal cable), so no shared
+    // row takes it: the modulation edge crosses rows and still has to flow right. A track whose chain is one folded
+    // macro starts AT that macro, which is then the first column of its row.
+    add("an LFO cabled into track two and modulating track one", {folded("m1", 1), folded("m2", 2), lfo()},
+        {flow("lfo", "m2"), mod("lfo", "m1")}, {"m1", "m2"});
+    add("an LFO cabled into track one and modulating tracks two and three",
+        {folded("m1", 1), folded("m2", 2), folded("m3", 3), lfo()},
+        {flow("lfo", "m1"), mod("lfo", "m2"), mod("lfo", "m3")}, {"m1", "m2", "m3"});
+    add("an LFO cabled into track two and modulating the macros of track one's chain",
+        {module("in1", 1, 0), folded("m1", 2), folded("m1b", 3), folded("m2", 4), lfo()},
+        {flow("in1", "m1"), flow("m1", "m1b"), flow("lfo", "m2"), mod("lfo", "m1"), mod("lfo", "m1b")}, {"in1", "m2"});
+    add("an LFO cabled into a macro of a free component and modulating another component",
+        {lfo(), folded("m1", 1), folded("m2", 2), module("osc", 3, 0), folded("m3", 4)},
+        {flow("lfo", "m1"), flow("osc", "m3"), mod("lfo", "m3"), mod("lfo", "m2")});
+
+    // Nested: an open macro holding macros; the LFO outside or inside.
+    add("an open macro holding two folded macros, LFO outside feeds both",
+        {lfo(), open("outer", 1, {folded("m1", 2), folded("m2", 3)})},
+        {flow("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")});
+    add("an open macro holding an LFO and two macros it feeds",
+        {open("outer", 1, {module("lfo", 100, kLfoRank), folded("m1", 2), folded("m2", 3)})},
+        {mod("lfo", "m1"), mod("lfo", "m2")});
+    add("an open macro holding an LFO and two chained macros it feeds",
+        {open("outer", 1, {module("lfo", 100, kLfoRank), folded("m1", 2), folded("m2", 3)})},
+        {flow("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")});
+    add("nested open macros, LFO in the inner one feeding macros outside it",
+        {open("outer", 1, {open("inner", 2, {module("lfo", 100, kLfoRank), module("x", 5)}), folded("m1", 3)}),
+         folded("m2", 4)},
+        {mod("lfo", "m1"), mod("lfo", "m2"), flow("x", "m1")});
+    add("an open macro and a folded one, LFO feeding both",
+        {lfo(), open("m1", 1, {module("a", 3), module("b", 4)}), folded("m2", 2)},
+        {flow("a", "b"), flow("m1", "m2"), mod("lfo", "m1"), mod("lfo", "m2")});
+    return list;
+}
+
+void collectPaths(const std::vector<ArrangeBlock>& blocks, const juce::StringArray& prefix,
+                  std::map<juce::String, juce::StringArray>& paths, std::map<juce::String, ArrangeBlock>& byId) {
+    for (const auto& b : blocks) {
+        auto here = prefix;
+        here.add(b.id);
+        paths[b.id] = here;
+        byId[b.id] = b;
+        collectPaths(b.children, here, paths, byId);
+    }
+}
+
+juce::Rectangle<int> footprint(const ArrangeOutput& out, const ArrangeBlock& b) {
+    if (auto h = out.hulls.find(b.id); h != out.hulls.end())
+        return h->second;
+    return {out.positions.at(b.id), juce::Point<int>(out.positions.at(b.id)) + b.size};
+}
+
+// Every modulation edge: its source is wholly left of its destination, both seen at the level where their paths split
+// (an edge between a macro and its own member is no edge at that level).
+void expectModulationFlowsRight(const ArrangeInput& in) {
+    const auto out = computeHierarchicalArrange(in);
+    std::map<juce::String, juce::StringArray> paths;
+    std::map<juce::String, ArrangeBlock> byId;
+    collectPaths(in.blocks, {}, paths, byId);
+    for (const auto& e : in.edges) {
+        if (!e.modulation)
+            continue;
+        const auto& from = paths.at(e.from);
+        const auto& to = paths.at(e.to);
+        int split = 0;
+        while (split < from.size() && split < to.size() && from[split] == to[split])
+            ++split;
+        if (split >= from.size() || split >= to.size())
+            continue;
+        const auto a = footprint(out, byId.at(from[split]));
+        const auto b = footprint(out, byId.at(to[split]));
+        EXPECT_LT(a.getRight(), b.getX())
+            << e.from << " -> " << e.to << " (columns at x=" << a.getX() << " and x=" << b.getX() << ")";
+    }
+}
+} // namespace column_topologies
+
+TEST(HierarchicalArrangeColumns, EveryModulationEdgeEndsInALaterColumnThanItStarts) {
+    for (const auto& t : column_topologies::topologies()) {
+        SCOPED_TRACE(t.name);
+        column_topologies::expectModulationFlowsRight(t.input);
+    }
+}
+
+TEST(HierarchicalArrangeColumns, EveryTopologyArrangesTheSameTwice) {
+    for (const auto& t : column_topologies::topologies()) {
+        SCOPED_TRACE(t.name);
+        EXPECT_EQ(computeHierarchicalArrange(t.input).positions, computeHierarchicalArrange(t.input).positions);
+    }
+}
