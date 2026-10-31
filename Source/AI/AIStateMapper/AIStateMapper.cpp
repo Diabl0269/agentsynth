@@ -609,7 +609,8 @@ void AIStateMapper::applyParamsToNewProcessor(juce::AudioProcessor* processor, c
     if (paramsObj != nullptr)
         applyParamsToProcessor(processor, paramsObj, trusted);
     if (auto* module = dynamic_cast<ModuleBase*>(processor))
-        module->applyStoredParamDefaults(paramsObj != nullptr ? paramsObj->getProperties() : juce::NamedValueSet());
+        module->applyStoredParamDefaults(paramsObj != nullptr ? paramsObj->getProperties() : juce::NamedValueSet(),
+                                         trusted);
 }
 
 void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,

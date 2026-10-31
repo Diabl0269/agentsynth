@@ -509,8 +509,11 @@ void WavetableOscillatorModule::setExtraState(const juce::var& state) {
 }
 
 // Applied by AIStateMapper after a node's params: a stored node (project, preset or patch) with no Detune, Blend, Width
-// or Rand keeps the legacy values instead of the new module defaults.
-void WavetableOscillatorModule::applyStoredParamDefaults(const juce::NamedValueSet& storedParams) {
+// or Rand keeps the legacy values instead of the new module defaults. A model-authored node was never stored, so it
+// keeps the current defaults for any of them it leaves out.
+void WavetableOscillatorModule::applyStoredParamDefaults(const juce::NamedValueSet& storedParams, bool trusted) {
+    if (!trusted)
+        return;
     synth::restoreLegacyUnisonDefaults([&](const char* key) { return storedParams.contains(key); }, *detuneParam,
                                        *blendParam, *widthParam, *randomPhaseParam);
 }

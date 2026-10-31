@@ -59,7 +59,8 @@ void SequencerModuleBase::adoptLegacyParams(const juce::NamedValueSet& params) {
 
 // A node saved before the follow switch existed keeps what it played: a scale it had becomes its own key, and one
 // with No scale follows the song key, which an old song does not have, so it still plays every note.
-void SequencerModuleBase::applyStoredParamDefaults(const juce::NamedValueSet& storedParams) {
+void SequencerModuleBase::applyStoredParamDefaults(const juce::NamedValueSet& storedParams, bool trusted) {
+    juce::ignoreUnused(trusted); // the follow rule applies to a model-authored node as well
     if (storedParams.contains(sequencer_ids::kFollowSongKey))
         return;
     *followParam_ = scaleParam_->getIndex() == 0;

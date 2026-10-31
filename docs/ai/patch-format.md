@@ -24,6 +24,7 @@ model, and presets, snippets and undo snapshots all persist it.
   - `id`: a unique integer identifier, meaningful only within one document.
   - `type`: the module's factory type name (`"Oscillator"`, `"Filter"`, `"ADSR"`).
   - `params`: optional key/value pairs for the module's parameters.
+    A param left out takes the module's current default (an Oscillator or Wavetable with only `unison` set gets the default Detune, Blend, Width and Rand).
 - **`connections`** — the signal flow: `src`/`srcPort` to `dst`/`dstPort`, ports by index.
 - **`modulations`** — optional control routings, each created as an attenuverter between source and
   destination: `source`, optional `sourcePort` (default 0), `dest`, optional `amount` (-1 to 1,

@@ -338,7 +338,7 @@ private:
                                        bool trusted = false, bool skipUnchanged = false);
 
     // A node's "params" onto the module just created for it (none: the module keeps its defaults), then
-    // ModuleBase::applyStoredParamDefaults so a stored node keeps the default its module had when it was saved.
+    // ModuleBase::applyStoredParamDefaults: a stored node keeps its saved defaults, a model-authored one the current.
     static void applyParamsToNewProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
                                           bool trusted);
 

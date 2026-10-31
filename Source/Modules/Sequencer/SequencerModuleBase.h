@@ -78,7 +78,7 @@ public:
     void setExtraState(const juce::var& state) override;
     void setUntrustedExtraState(const juce::var& state) override;
     void adoptLegacyParams(const juce::NamedValueSet& params) override;
-    void applyStoredParamDefaults(const juce::NamedValueSet& storedParams) override;
+    void applyStoredParamDefaults(const juce::NamedValueSet& storedParams, bool trusted) override;
     bool isLegacyParamId(const juce::String& id) const override;
 
 protected:

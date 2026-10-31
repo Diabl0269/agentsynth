@@ -155,6 +155,23 @@ TEST(SequencerSongKeyLoad, AStoredNodeWithNoScaleFollows) {
     EXPECT_TRUE(seq->followsSongKey());
 }
 
+// Regression test for FRO1361: the follow rule is not a trusted-only default, so a model-authored node gets it too.
+TEST(SequencerSongKeyLoad, AModelAuthoredNodeWithoutTheSwitchGetsTheSameRule) {
+    auto load = [](juce::AudioProcessorGraph& graph, const juce::String& params) {
+        const auto patch =
+            juce::JSON::parse(R"({"nodes": [{"id": 1, "type": "Sequencer", "params": )" + params + "}]}");
+        EXPECT_TRUE(AIStateMapper::applyJSONToGraph(patch, graph, true, /*trusted=*/false));
+        return firstSequencer(graph);
+    };
+    juce::AudioProcessorGraph withScale, noScale;
+    auto* own = load(withScale, R"({"scaleRoot": 2, "scale": 5})");
+    ASSERT_NE(own, nullptr);
+    EXPECT_FALSE(own->followsSongKey());
+    auto* follows = load(noScale, R"({"run": true})");
+    ASSERT_NE(follows, nullptr);
+    EXPECT_TRUE(follows->followsSongKey());
+}
+
 TEST(SequencerSongKeyLoad, AStoredSwitchWinsOverTheRule) {
     juce::AudioProcessorGraph graph;
     auto* seq = loadOne(graph, R"({"scaleRoot": 2, "scale": 5, "followSongKey": true})");
