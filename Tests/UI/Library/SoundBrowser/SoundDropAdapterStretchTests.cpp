@@ -38,9 +38,6 @@ struct Fixture {
     Fixture() { sound_browser_test::writeSignal(loop, 4.0, 44100.0, 0.5f, 220.0, 2); }
     ~Fixture() {
         SoundDragState::end();
-        juce::File::getSpecialLocation(juce::File::tempDirectory)
-            .getChildFile("Agent Synth Stretched Loops")
-            .deleteRecursively();
         dir.deleteRecursively();
     }
     juce::DragAndDropTarget::SourceDetails details(const juce::File& file) const {
@@ -61,6 +58,8 @@ TEST(SoundDropAdapterStretchTest, ALoopDroppedOnAnAudioTrackArrivesAtTheSongTemp
     EXPECT_NE(offered, f.loop);
     EXPECT_TRUE(offered.hasFileExtension("wav"));
     EXPECT_NEAR(lengthOf(offered), 5.0 * 44100.0, 2.0) << "1.25 times the 4 s original";
+    // Only its own copy: the folder is shared with whichever test shard is rendering into it now.
+    offered.deleteFile();
 }
 
 TEST(SoundDropAdapterStretchTest, ATargetThatDoesNotTakeStretchedLoopsGetsTheOriginal) {
