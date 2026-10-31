@@ -335,14 +335,16 @@ std::vector<float> renderLegatoSteps(int waveform, int interval, float phase, in
 }
 
 // The largest second difference from sample `from` on, relative to the peak, leaving out a Saw's own wraps: the
-// few samples around a fall of a large part of the wave's height, which sound with or without a pitch step.
+// samples around a fall of a large part of the wave's height, where its band-limited edge rings with or without a pitch
+// step.
 float worstKinkOfPeak(const std::vector<float>& x, int from) {
     float peak = 1.0e-6f, worst = 0.0f;
     for (float v : x)
         peak = std::max(peak, std::abs(v));
-    for (int i = std::max(from, 4); i < (int)x.size() - 4; ++i) {
+    constexpr int kEdgeRing = 10;
+    for (int i = std::max(from, kEdgeRing + 1); i < (int)x.size() - kEdgeRing - 1; ++i) {
         bool nearWrap = false;
-        for (int k = i - 3; k <= i + 3; ++k)
+        for (int k = i - kEdgeRing; k <= i + kEdgeRing; ++k)
             nearWrap = nearWrap || x[(size_t)k] - x[(size_t)k + 1] > 0.3f * peak;
         if (!nearWrap)
             worst = std::max(worst, std::abs(x[(size_t)i - 1] - 2.0f * x[(size_t)i] + x[(size_t)i + 1]));
