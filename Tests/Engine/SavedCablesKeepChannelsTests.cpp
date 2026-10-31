@@ -22,9 +22,10 @@ juce::File oldProject() {
     return juce::File(juce::String(UI_VERIFY_FIXTURES_DIR)).getChildFile("pre-level-cv.agsproj");
 }
 
-// Rendered by the app that wrote the fixture. The chain's LFOs run freely, so a tolerance is needed: runs differ by a
-// few parts in ten thousand.
-constexpr float kOldProjectRms = 0.04617f;
+// Rendered by the app that wrote the fixture (0.04617), then raised about 0.5 dB when the Filter's resonance curve was
+// fitted to a measured reference. The chain's LFOs run freely, so a tolerance is needed: runs differ by a few parts in
+// ten thousand.
+constexpr float kOldProjectRms = 0.0488f;
 
 // Each module's cables as the old app wrote them: its highest and its lowest modulation channel, with what they drive.
 struct SavedCables {
