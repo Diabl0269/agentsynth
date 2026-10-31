@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Filter/CustomFilterEngine.h"
-#include "Filter/ResonantLadder.h"
 #include "FrequencyText.h"
 #include "LadderCoefficientSetter.h"
 #include "ModuleBase.h"

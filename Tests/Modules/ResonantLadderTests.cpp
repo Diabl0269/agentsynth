@@ -3,7 +3,7 @@
 // synth::ResonantLadder is juce::dsp::LadderFilter's structure with the Resonance knob's own curve and headroom at
 // Drive 1. At Drive 10 the headroom is 1, so with the feedback matched it must render what the JUCE ladder renders.
 
-#include "Modules/Filter/ResonantLadder.h"
+#include "Modules/LadderCoefficientSetter.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_dsp/juce_dsp.h>

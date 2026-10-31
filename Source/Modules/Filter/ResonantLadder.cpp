@@ -1,4 +1,4 @@
-#include "Modules/Filter/ResonantLadder.h"
+#include "Modules/LadderCoefficientSetter.h"
 #include <cmath>
 
 namespace synth {
