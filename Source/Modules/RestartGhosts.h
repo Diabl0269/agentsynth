@@ -14,19 +14,24 @@ template <typename State, int kMax = 5>
 struct RestartGhosts {
     struct Ghost {
         State state;
-        float weight = 0.0f; ///< share of the output when this ghost began to fade
-        int remaining = 0;   ///< samples of the fade still to run
+        float weight = 0.0f;              ///< share of the output when this ghost began to fade
+        int remaining = 0;                ///< samples of the fade still to run
+        int length = kRestartFadeSamples; ///< samples the whole fade takes
+        float lead = 0.0f;                ///< how far into its first sample the fade had already begun
     };
 
     Ghost items[kMax];
     int count = 0;
 
     /** Share of the output that `g` still holds at this sample. */
-    static float share(const Ghost& g) { return g.weight * (1.0f - restartFadeIn(g.remaining)); }
+    static float share(const Ghost& g) {
+        return g.weight * (1.0f - restartFadeIn((float)g.remaining - g.lead, g.length));
+    }
 
     /** Starts a ghost from `current`, with the share the interrupted state holds now (all of it when nothing was
-        fading). Past `kMax` the quietest ghost is dropped and its share goes to the current state. */
-    void start(const State& current) {
+        fading), leaving over `length` samples. `lead` is how far into this sample the restart really fell. Past
+        `kMax` the quietest ghost is dropped and its share goes to the current state. */
+    void start(const State& current, int length = kRestartFadeSamples, float lead = 0.0f) {
         float total = 0.0f;
         int quietest = 0;
         float quietestShare = 2.0f;
@@ -45,7 +50,9 @@ struct RestartGhosts {
         Ghost& added = items[count++];
         added.state = current;
         added.weight = 1.0f - total;
-        added.remaining = kRestartFadeSamples;
+        added.remaining = length;
+        added.length = length;
+        added.lead = lead;
     }
 
     /** Drops the ghosts whose fade has finished. */

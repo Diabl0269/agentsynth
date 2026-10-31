@@ -78,7 +78,7 @@ void OscillatorModule::addPitchEvent(int offset, float note, bool jumps) {
 // Both the MIDI note-ons and the mono Gate edges land here, so the per-sample restart loop sees one
 // ascending list. A duplicate offset (a chord, or a note-on on the same sample as a gate edge) shares
 // one restart; past the cap further offsets share the last restart.
-void OscillatorModule::addRestartOffset(int offset) {
+void OscillatorModule::addRestartOffset(int offset, float lead) {
     int at = numRestarts;
     while (at > 0 && restartOffsets[(size_t)at - 1] > offset)
         --at;
@@ -86,9 +86,12 @@ void OscillatorModule::addRestartOffset(int offset) {
         return;
     if (numRestarts >= kMaxRestartsPerBlock)
         return;
-    for (int i = numRestarts; i > at; --i)
+    for (int i = numRestarts; i > at; --i) {
         restartOffsets[(size_t)i] = restartOffsets[(size_t)i - 1];
+        restartLeads[(size_t)i] = restartLeads[(size_t)i - 1];
+    }
     restartOffsets[(size_t)at] = offset;
+    restartLeads[(size_t)at] = lead;
     ++numRestarts;
 }
 
@@ -101,9 +104,23 @@ void OscillatorModule::addRestartOffset(int offset) {
 // a fade is continuous too and an audio-rate gate cannot step the output. A ghost keeps the pitch the
 // interrupted note was playing at, so a new note's pitch never reaches the tail it fades out. Past RestartGhosts'
 // capacity (restarts closer than a few samples) the quietest ghost is dropped and its share goes to the current stack.
-void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld) {
+//
+// A restart after a run of short gaps is oscillator sync, not a new note (a short gap or two is a note whose MIDI and
+// gate edge land close together, or a quick pair of notes, which still take the full hand-over). Its wave has to repeat
+// exactly once per master cycle or the ear hears noise, so three things change: the unison voices reuse the random
+// draws of the note instead of drawing new ones (a fresh random phase per cycle is white noise at any Rand above 0);
+// the phase and the hand-over are placed between samples at the gate's real crossing (a master period that is not a
+// whole number of samples would otherwise land unevenly, which is grit); and the hand-over shortens, because a
+// 64-sample fade covers most of a fast master's cycle and averages the wave down to a quiet, dull remnant instead of a
+// sync sound.
+void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld, float lead) {
     const float startPhase = phaseParam->get() / 360.0f;
     const float randomAmount = randomPhaseParam->get() * 0.01f;
+    voice.shortGapRun =
+        voice.samplesSinceRestart < syncEdgeSamples ? std::min(voice.shortGapRun + 1, kSyncRunLength) : 0;
+    const bool syncing = fadeFromOld && voice.shortGapRun >= kSyncRunLength;
+    voice.samplesSinceRestart = 0;
+    voice.pendingLead = syncing ? lead : 0.0f;
 
     if (!fadeFromOld) {
         voice.ghosts.count = 0;
@@ -111,10 +128,13 @@ void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld) {
         UnisonStack current;
         std::copy(std::begin(voice.unisonOscs), std::end(voice.unisonOscs), std::begin(current.oscs));
         current.baseDt = voice.lastBaseDt;
-        voice.ghosts.start(current);
+        voice.ghosts.start(current, syncing ? synth::kSyncFadeSamples : CROSSFADE_SAMPLES, syncing ? lead : 0.0f);
     }
-    for (auto& osc : voice.unisonOscs)
-        osc.phase = synth::unisonRestartPhase(startPhase, randomAmount, phaseRandom);
+    for (int u = 0; u < MAX_UNISON; ++u) {
+        if (!syncing && randomAmount > 0.0f)
+            voice.restartDraws[u] = phaseRandom.nextFloat();
+        voice.unisonOscs[u].phase = synth::unisonRestartPhase(startPhase, randomAmount, voice.restartDraws[u]);
+    }
 }
 
 void OscillatorModule::resetNoteState() {
