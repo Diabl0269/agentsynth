@@ -3,6 +3,7 @@
 // Source and launches it through PopupMotion::launchDialog (or calls the real opener where a test can).
 #include "ThemeSweepSurfaces.h"
 #include "../../Accessibility/AccessibilitySettingsFixture.h"
+#include "../../Graph/ModDot/ModDotTestFixture.h"
 #include "../../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "AI/AIStateMapper/AIStateMapperInternal.h"
 #include "AI/AccountService.h"
@@ -23,6 +24,7 @@
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include "UI/ModuleViews/EQWindow.h"
+#include "UI/ModuleViews/ModCurve/ModCurveWindow.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 #include "UI/Settings/SettingsWindow.h"
 #include <algorithm>
@@ -130,6 +132,13 @@ juce::DialogWindow* openExport(SweepEnvironment& env, bool stems) {
 
 juce::DialogWindow* openMacroPorts(SweepEnvironment& env) {
     return launch(env, new MacroAutoPortPromptDialog(3), "Macro Ports", false, false);
+}
+
+juce::DialogWindow* openModCurve(SweepEnvironment& env) {
+    auto fixture = std::make_shared<Fixture>();
+    env.keepAlive(fixture);
+    return openModCurveWindow(std::make_shared<ModCurveEditTarget>(*fixture->editor, fixture->attenId),
+                              &env.appAnchor());
 }
 
 juce::DialogWindow* openMacroConfig(SweepEnvironment& env) {
@@ -252,6 +261,7 @@ const std::vector<DialogSurface>& dialogSurfaces() {
         {"Shape editor", "Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.cpp", true, openShape, ""},
         {"Sampler map", "Source/UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.cpp", true, openSamplerMap, ""},
         {"EQ window", "Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp", true, openEq, ""},
+        {"Modulation curve", "Source/UI/ModuleViews/ModCurve/ModCurveWindow.cpp", true, openModCurve, ""},
         {"Sign in", "Source/UI/Assistant/SignInDialog.cpp", false, openSignIn, ""},
         {"Macro ports prompt", "Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", false, openMacroPorts, ""},
         {"Macro configure I/O", "Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", false, openMacroConfig, ""},

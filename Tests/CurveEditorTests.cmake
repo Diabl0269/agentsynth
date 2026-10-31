@@ -17,3 +17,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupMotionRegistryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupDismissPathsTests.cpp
 )
+
+# Tests/CMakeLists.txt is at the file-size cap, so the modulation curve tests are pulled in from here.
+include(${CMAKE_CURRENT_SOURCE_DIR}/ModCurveTests.cmake)

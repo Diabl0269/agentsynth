@@ -60,6 +60,7 @@ const std::vector<Registered> kRegistered = {
     {"CardFader", {"exempt: a fader that writes its value live while it drags"}},
     {"CardKnobSlider", {"exempt: a knob that writes its value live while it drags"}},
     {"MixerFaderSlider", {"exempt: a fader that writes its value live while it drags"}},
+    {"ModCurveRangeHandle", {"exempt: the range is written live inside one open gesture, the release only closes it"}},
     {"ModDotAmountBar", {"exempt: the amount is written live inside one open gesture, the release only closes it"}},
     {"ModulatorBand", {"exempt: the amount knob writes live inside one open gesture"}},
     {"EQCurveComponent", {"exempt: a band is written live inside one open gesture"}},

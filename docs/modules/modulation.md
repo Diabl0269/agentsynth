@@ -151,6 +151,41 @@ internals:
   exposed via `getLastOutputPeak()` and `getLastModValue()`.
 - **Bypass behaviour.** When bypassed, `lastOutputPeak` and `lastModValue` are both set to `0.0f`
   and all channels are cleared — no pass-through; an attenuverter in bypass silences its output.
+- **Response curve (`synth::ModCurve`).** `setCurve` / `getCurve` (message thread) give the signal a
+  curve: a `LfoCustomWave` breakpoint shape over an output range, default straight. The audio thread
+  maps channel 0 through a 256-step table **before** the amount and CV code, mirrored around zero
+  (`sign(x) * table(min(|x|, 1))`, NaN gives 0), so the amount still scales the curved signal. A
+  linear curve runs the original path untouched. The curve is extra state: `getExtraState` is void
+  while linear (old projects and linear attenuverters write no `state`), otherwise `ModCurve::toVar`;
+  `setExtraState` reads it back through `fromVar`, which turns anything unusable into linear. It is
+  trusted-path only (no `setUntrustedExtraState`). Handoff: `setCurve` renders the table and copies
+  it into a pending array under a `juce::SpinLock`, then sets an atomic non-linear flag; the audio
+  thread try-locks to adopt it and keeps the previous table when the lock is busy. Anything that
+  rebuilds an attenuverter chain while keeping its amount copies the curve too.
+
+## The modulation curve
+
+Each attenuverter carries a response curve (`synth::ModCurve`: a breakpoint shape plus an output range, default a straight line)
+applied to the signal before the amount. It is saved with the module, copied by snippets, duplicate and the AI state
+mapper, and an untrusted apply resolves a bad one to linear.
+
+Every place edits that one curve through `ModCurveEditTarget` (a node id and the editor, never a processor pointer, so a
+deleted node is a safe no-op and a safe close):
+
+- **The box** (`ModCurveBox`, 244 x 296): the shared `CurveEditorComponent` in Free mode with line-click editing, a draggable
+  middle bend handle, the chips Linear / Exp / Log / S-curve, two range handles on the left edge (min and max output,
+  Up/Down 1 percent, Shift 10), saved presets ("Mine", "Save...") and Enlarge. Enlarge opens a window titled
+  "Curve: <source> to <destination>" with a big editor, the chips, Reset and Done.
+- **Where it opens**: the curve chip (26 x 18, a Tab stop; accent border when bent) in each mod dot row between the amount
+  and the timeline button, the Curve column after Amount in the Mod Matrix (row name "Routing N curve"), and the cable
+  right-click item **Edit curve...**. One box is open at a time.
+- **Cables**: on a mono cable that has no attenuverter yet, Edit curve... splices one in at amount 1 as ONE undo step
+  and one rebuild, so the sound is unchanged while the curve is linear. Poly bus cables get no item.
+- **Undo**: one step per gesture (`beginModAmountGesture` / `commitModAmountGesture`); an open box and chip follow undo and
+  redo, and close when their node goes.
+- **Presets**: `ModCurvePresetStore` lists the four built-ins, then the user's, kept in `mod-curve-presets.json` under the
+  settings directory and read on every list so a second box sees a new preset. A corrupt file lists the built-ins only.
+- **Keyboard**: the chips are the keyboard path (Tab, Return or Space); a cable has no keyboard focus on the canvas.
 
 ## The routing snapshot
 

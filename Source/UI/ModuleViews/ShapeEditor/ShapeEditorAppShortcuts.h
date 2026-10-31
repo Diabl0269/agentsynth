@@ -15,8 +15,8 @@ namespace synth::ui {
  *  rename and replace, next/previous module or track, zoom) or moves focus between the main window's regions. */
 bool isWindowForwardableShortcut(const ShortcutManager& shortcuts, const juce::KeyPress& key);
 
-/** The `onAppShortcut` of a window opened from `anchor` (a card on the canvas): hands a forwardable key to the main
- *  window's command target, one message-loop turn later, and returns true for it; false for any other key and when
+/** The `onAppShortcut` of a window opened from `anchor` (the canvas or a card on it): hands a forwardable key to the
+ * main window's command target, one message-loop turn later, and returns true for it; false for any other key and when
  *  the anchor, its canvas or the target is gone. */
 std::function<bool(const juce::KeyPress&)> makeAppShortcutRelay(juce::Component* anchor);
 
