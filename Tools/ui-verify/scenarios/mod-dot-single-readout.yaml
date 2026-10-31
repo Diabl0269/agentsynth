@@ -7,6 +7,8 @@
 #   1. Opens a project with an LFO modulating the Filter's Cutoff.
 #   2. Tabs to the Cutoff mod dot and presses Up twice: the dot's readout shows.
 #   3. Looks at the Cutoff knob again: its normal tooltip is unchanged.
+#   4. Rests the pointer on the knob (its chip under the knob shows), presses the dot and drags: the chip steps aside
+#      for the readout while the button is held, and comes back on release.
 motion: true
 steps:
   - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
@@ -18,3 +20,11 @@ steps:
   - wait: {}
   - expect: {id: Cutoff, tooltip: Cutoff, within_ms: 2000}
   - screenshot: {id: window, name: mod-dot-readout-after}
+  - hover: {id: Cutoff}
+  - expect: {id: "card:Filter", modHoverChip: true, within_ms: 3000}
+  - mouseDown: {id: "Cutoff modulation, 1 source"}
+  - mouseMoveHeld: {id: "Cutoff modulation, 1 source", x: 3, y: -30}
+  - expect: {id: "card:Filter", modHoverChip: false}
+  - screenshot: {id: window, name: mod-dot-readout-while-dragging}
+  - mouseUp: {id: "Cutoff modulation, 1 source", x: 3, y: -30}
+  - expect: {id: "card:Filter", modHoverChip: true, within_ms: 3000}

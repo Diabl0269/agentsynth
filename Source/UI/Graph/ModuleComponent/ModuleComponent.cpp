@@ -7,6 +7,7 @@
 #include "CardKnobSlider.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
+#include "ModuleComponentModChip.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/LFOModule.h"
@@ -32,6 +33,7 @@ using namespace detail;
 
 void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("selected", owner.isNodeSelected(nodeId));
+    into.setProperty("modHoverChip", synth::ui::modHoverChipShows(owner, nodeId));
     into.setProperty("moduleType", module != nullptr ? module->getName() : juce::String());
     into.setProperty("title", cardTitle());
     into.setProperty("nodeId", static_cast<int>(nodeId.uid));

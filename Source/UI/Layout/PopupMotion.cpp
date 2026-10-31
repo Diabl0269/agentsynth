@@ -107,6 +107,7 @@ juce::Image captureNativeWindowImage(void* nativeView, int& topInset);
 void disableNativeWindowAnimation(void* nativeView);
 bool nativeWindowAnimationIsOff(void* nativeView);
 bool nativeWindowIsAbove(void* upperView, void* lowerView);
+void keepNativeWindowAbove(void* popupView, void* ownerView);
 #endif
 
 // The app animates popups itself; the platform's own window animation must not run on top of it.
@@ -114,6 +115,18 @@ static void disablePlatformAnimation([[maybe_unused]] juce::Component& window) {
 #if JUCE_MAC
     if (auto* peer = window.getPeer())
         disableNativeWindowAnimation(peer->getNativeHandle());
+#endif
+}
+
+// A press outside a popup raises the app window under it before the app hears of the press, so a popup that only
+// rose when its close began was buried for the first frames: it vanished, came back, then faded. It is tied to the
+// window it opened over from the moment it shows.
+static void keepAboveWindowBehind([[maybe_unused]] juce::Component& window) {
+#if JUCE_MAC
+    auto* owner = juce::TopLevelWindow::getActiveTopLevelWindow();
+    if (owner == nullptr || owner == &window || owner->getPeer() == nullptr || window.getPeer() == nullptr)
+        return;
+    keepNativeWindowAbove(window.getPeer()->getNativeHandle(), owner->getPeer()->getNativeHandle());
 #endif
 }
 
@@ -395,6 +408,7 @@ private:
         reduce_ = prefersReducedMotion();
         dir_ = popup_motion::slideDirection(window_->getScreenBounds(), anchorPoint());
         disablePlatformAnimation(*window_);
+        keepAboveWindowBehind(*window_);
         ghosted_ = false;
         cache_ = {};
         animating_ = true;

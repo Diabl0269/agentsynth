@@ -3,6 +3,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "ModDotPopover.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -24,6 +25,13 @@ ModDotController::ModDotController(GraphEditor& editor, juce::Component& canvas)
     : editor_(editor)
     , tooltip_(canvas) {
     keyHideTimer_.fire = [this] { tooltip_.hide(); };
+    // The hover chip under the knob steps aside while the readout is up, so its card repaints when that changes.
+    tooltip_.onShownChanged = [this] {
+        if (const auto& hovered = editor_.getHoveredModTarget(); hovered.has_value())
+            for (auto* card : editor_.getModuleComponents())
+                if (card->getNodeId() == hovered->nodeId)
+                    card->repaint();
+    };
     // A click on the dot of the panel that is already open closes it.
     onModDotClicked = [this](juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor) {
         if (auto* open = getPopover(); open != nullptr && open->card() == card && open->destChannel() == destChannel) {

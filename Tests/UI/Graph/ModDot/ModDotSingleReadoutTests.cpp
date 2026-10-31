@@ -3,6 +3,7 @@
 // as the readout goes. A real AppTooltipWindow decides what a hover would show.
 
 #include "ModDotTestFixture.h"
+#include "UI/Graph/ModuleComponent/ModuleComponentModChip.h"
 #include "UI/Layout/AppTooltipWindow.h"
 
 namespace {
@@ -53,6 +54,30 @@ TEST_F(ModuleComponentTest, DraggingTheDotShowsExactlyOneReadoutAndTheKnobsOwnTi
 
     EXPECT_FALSE(f.editor->getModDot().getTooltip().isShown());
     EXPECT_TRUE(window.getTipFor(*f.gainKnob).isNotEmpty()) << "the knob's normal hover tooltip appears afterwards";
+}
+
+// Regression test for FRO1189: with the pointer on the knob, the hover chip under it stayed up beside the readout and
+// kept the amount from before the drag.
+TEST_F(ModuleComponentTest, TheHoverChipStepsAsideForTheDotsReadoutAndComesBack) {
+    Fixture f;
+    ASSERT_NE(f.gainKnob, nullptr);
+    f.editor->setHoveredModTarget(graph_editor_types::HoveredModTarget{f.vcaId, f.gainChannel});
+    const auto chip = [&f] { return synth::ui::modHoverChipShows(*f.editor, f.vcaId); };
+    EXPECT_TRUE(chip()) << "the chip shows on hover";
+
+    const auto dot = f.dotInKnob();
+    f.gainKnob->mouseDown(makeModuleClickWithMods(*f.gainKnob, dot, kPlain));
+    EXPECT_TRUE(chip()) << "a press alone starts no readout";
+    f.gainKnob->mouseDrag(makeModuleClickWithMods(*f.gainKnob, dot + juce::Point<int>(0, -20), kPlain));
+    EXPECT_TRUE(f.editor->getModDot().getTooltip().isShown());
+    EXPECT_FALSE(chip());
+    f.gainKnob->mouseUp(makeModuleClickWithMods(*f.gainKnob, dot, kPlain));
+    EXPECT_TRUE(chip()) << "the chip is back once the readout goes";
+
+    auto* button = f.vcaCard->getModDotButton(f.gainChannel);
+    ASSERT_NE(button, nullptr);
+    EXPECT_TRUE(button->keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_FALSE(chip()) << "a key step shows the readout too";
 }
 
 TEST_F(ModuleComponentTest, SteppingTheDotWithTheKeyboardShowsExactlyOneReadout) {

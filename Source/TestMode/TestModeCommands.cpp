@@ -152,6 +152,28 @@ StepResult cmdHover(const juce::var& args, Scratch&, int) {
     return StepResult::done(object({{"id", found.component->getComponentID()}, {"point", pointToVar(point)}}));
 }
 
+// One held-button step apart from the others, so a scenario can read the app with the button still down. `press`
+// arrives first and then presses, as a hand does; a release is sent where the pointer ends up.
+StepResult sendHeldMouse(const juce::var& args, bool buttonDown, bool arriveFirst) {
+    const auto found = lookupArg(args, "id");
+    if (found.component == nullptr)
+        return StepResult::failed(found.error);
+    juce::String error;
+    const auto keys = modifiersArg(args, error);
+    if (error.isNotEmpty())
+        return StepResult::failed(error);
+    const auto point = localPointArg(args, *found.component, "x", "y");
+    if (arriveFirst && !sendMouse({found.component, point, keys, false, Button::left}, error))
+        return StepResult::failed(error);
+    if (!sendMouse({found.component, point, keys, buttonDown, Button::left}, error))
+        return StepResult::failed(error);
+    return StepResult::done(object({{"id", found.component->getComponentID()}, {"point", pointToVar(point)}}));
+}
+
+StepResult cmdMouseDown(const juce::var& args, Scratch&, int) { return sendHeldMouse(args, true, true); }
+StepResult cmdMouseMoveHeld(const juce::var& args, Scratch&, int) { return sendHeldMouse(args, true, false); }
+StepResult cmdMouseUp(const juce::var& args, Scratch&, int) { return sendHeldMouse(args, false, false); }
+
 // A drag is one hop per mouse event, so timers and async repaints run between the moves (JUCE's drag threshold and
 // auto-scroll both depend on that).
 StepResult cmdDrag(const juce::var& args, Scratch& s, int attempt) {
@@ -323,6 +345,9 @@ CommandTable CommandTable::standard() {
     table.add("click", {cmdClick});
     table.add("wheel", {cmdWheel});
     table.add("hover", {cmdHover});
+    table.add("mouseDown", {cmdMouseDown});
+    table.add("mouseMoveHeld", {cmdMouseMoveHeld});
+    table.add("mouseUp", {cmdMouseUp});
     table.add("drag", {cmdDrag});
     table.add("key", {cmdKey});
     table.add("getState", {cmdGetState});

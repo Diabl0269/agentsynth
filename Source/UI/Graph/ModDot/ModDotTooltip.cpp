@@ -83,6 +83,8 @@ void ModDotTooltip::show(juce::Component& knob, const juce::String& name, float 
     } else {
         canvas_.repaint((before.getUnion(getBounds())).getSmallestIntegerContainer().expanded(2));
     }
+    if (appeared && onShownChanged)
+        onShownChanged();
 }
 
 void ModDotTooltip::hide() {
@@ -91,6 +93,8 @@ void ModDotTooltip::hide() {
     wanted_ = false;
     AppTooltipWindow::blockHoverTips(false);
     fadeTo(0.0f, kFadeOutMs, easeInCubic);
+    if (onShownChanged)
+        onShownChanged();
 }
 
 // Headless or hidden there is nothing to animate: it lands at once. Under Reduce Motion it is a plain,
