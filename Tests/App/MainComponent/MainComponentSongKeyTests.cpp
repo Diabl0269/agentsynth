@@ -61,6 +61,7 @@ TEST_F(MainComponentTest, ChangingTheSongKeyIsOneUndoStepAndUndoPutsItBack) {
     mc.pollTransportEditsForTest(kStart + kHeld);
     synth::test::waitUntil([&] { return mc.getUndoManager().canUndo(); });
     ASSERT_TRUE(mc.getUndoManager().canUndo());
+    synth::test::waitUntil([&] { return mc.isProjectDirty(); });
     EXPECT_TRUE(mc.isProjectDirty());
 
     mc.getUndoManager().undo();
