@@ -239,16 +239,16 @@ TEST(UnisonDefaults, BinaryStateMissingTheKeysKeepsTheOldDefaults) {
     }
 }
 
-// A generated patch that leaves the keys out is loaded through the same path as a project: it gets the old defaults
-// (a mono, centred stack), validation is untouched, and the keys it does carry apply as written.
-TEST(UnisonDefaults, AGeneratedPatchThatOmitsTheKeysGetsTheOldDefaultsAndOneThatSetsThemKeepsThem) {
+// A trusted patch (a stored project's own JSON) that leaves the keys out is loaded like a project: it gets the old
+// defaults (a mono, centred stack), validation is untouched, and the keys it does carry apply as written.
+TEST(UnisonDefaults, ATrustedPatchThatOmitsTheKeysGetsTheOldDefaultsAndOneThatSetsThemKeepsThem) {
     auto parse = [](const char* params) {
         return juce::JSON::parse(juce::String("{\"nodes\":[{\"id\":1,\"type\":\"Oscillator\",\"params\":") + params +
                                  "}],\"connections\":[]}");
     };
     juce::AudioProcessorGraph omitted;
     ASSERT_TRUE(
-        synth::AIStateMapper::applyJSONToGraph(parse("{\"waveform\":\"Saw\",\"unison\":5}"), omitted, true, false));
+        synth::AIStateMapper::applyJSONToGraph(parse("{\"waveform\":\"Saw\",\"unison\":5}"), omitted, true, true));
     auto& a = firstNode(omitted);
     EXPECT_NEAR(unisonDefaultsActual(a, "detune"), 0.0f, 1e-3f);
     EXPECT_NEAR(unisonDefaultsActual(a, "blend"), 1.0f, 1e-4f);
@@ -257,10 +257,64 @@ TEST(UnisonDefaults, AGeneratedPatchThatOmitsTheKeysGetsTheOldDefaultsAndOneThat
 
     juce::AudioProcessorGraph written;
     ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(
-        parse("{\"unison\":5,\"detune\":35,\"blend\":0.75,\"width\":1.0,\"randomPhase\":100}"), written, true, false));
+        parse("{\"unison\":5,\"detune\":35,\"blend\":0.75,\"width\":1.0,\"randomPhase\":100}"), written, true, true));
     auto& b = firstNode(written);
     EXPECT_NEAR(unisonDefaultsActual(b, "detune"), 35.0f, 0.5f);
     EXPECT_NEAR(unisonDefaultsActual(b, "blend"), 0.75f, 0.01f);
     EXPECT_NEAR(unisonDefaultsActual(b, "width"), 1.0f, 0.01f);
     EXPECT_NEAR(unisonDefaultsActual(b, "randomPhase"), 100.0f, 0.5f);
+}
+
+namespace {
+
+juce::var unisonPatch(const char* type, const char* params) {
+    return juce::JSON::parse(juce::String("{\"nodes\":[{\"id\":1,\"type\":\"") + type + "\",\"params\":" + params +
+                             "}],\"connections\":[]}");
+}
+
+std::unique_ptr<juce::AudioProcessorGraph> loadPatch(const juce::var& json, bool trusted) {
+    auto graph = std::make_unique<juce::AudioProcessorGraph>();
+    EXPECT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, *graph, /*clearExisting=*/true, trusted));
+    return graph;
+}
+
+} // namespace
+
+// Regression test for FRO1361: a model-authored node never recorded Blend, Width or Rand, so it takes the module's
+// current defaults for them (a wide stack); a trusted node keeps the legacy values. Detune 40 is kept either way.
+TEST(UnisonDefaults, AModelAuthoredNodeTakesTheCurrentDefaultsForTheKeysItOmits) {
+    for (const char* type : {"Oscillator", "Wavetable"}) {
+        const auto patch = unisonPatch(type, "{\"unison\":7,\"detune\":40}");
+        const bool osc = juce::String(type) == "Oscillator";
+        const float freshRand = osc ? 100.0f : 1.0f;
+
+        const auto untrusted = loadPatch(patch, /*trusted=*/false);
+        auto& u = firstNode(*untrusted);
+        EXPECT_NEAR(unisonDefaultsActual(u, "unison"), 7.0f, 1e-4f) << type;
+        EXPECT_NEAR(unisonDefaultsActual(u, "detune"), 40.0f, 0.05f) << type;
+        EXPECT_NEAR(unisonDefaultsActual(u, "blend"), 0.75f, 1e-4f) << type;
+        EXPECT_NEAR(unisonDefaultsActual(u, "width"), 1.0f, 1e-4f) << type;
+        EXPECT_NEAR(unisonDefaultsActual(u, "randomPhase"), freshRand, 1e-3f) << type;
+
+        const auto trusted = loadPatch(patch, /*trusted=*/true);
+        auto& t = firstNode(*trusted);
+        EXPECT_NEAR(unisonDefaultsActual(t, "detune"), 40.0f, 0.05f) << type;
+        EXPECT_NEAR(unisonDefaultsActual(t, "blend"), 1.0f, 1e-4f) << type;
+        EXPECT_NEAR(unisonDefaultsActual(t, "width"), 0.0f, 1e-4f) << type;
+        EXPECT_NEAR(unisonDefaultsActual(t, "randomPhase"), 0.0f, 1e-4f) << type;
+    }
+}
+
+// Rendered, not heard: the same Unison 7 patch is clearly less correlated left to right when a model wrote it.
+TEST(UnisonDefaults, AModelAuthoredUnisonSevenRendersWiderThanATrustedOne) {
+    const auto patch = unisonPatch("Oscillator", "{\"waveform\":\"Saw\",\"unison\":7,\"detune\":40}");
+    const auto untrusted = loadPatch(patch, false);
+    const auto trusted = loadPatch(patch, true);
+    const auto wide =
+        measureUnisonDefaults(firstNode(*untrusted), OscillatorModule::kNumOutputs, OscillatorModule::kRightBase);
+    const auto narrow =
+        measureUnisonDefaults(firstNode(*trusted), OscillatorModule::kNumOutputs, OscillatorModule::kRightBase);
+    EXPECT_LT(wide.correlation, 0.3);
+    EXPECT_GT(narrow.correlation, 0.95) << "Width 0 keeps the legacy stack centred";
+    EXPECT_LT(wide.correlation, narrow.correlation - 0.5);
 }

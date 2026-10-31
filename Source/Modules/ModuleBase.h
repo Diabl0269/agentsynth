@@ -910,10 +910,10 @@ public:
     // file or the model: clamp every one. A params object without the old keys must change nothing.
     virtual void adoptLegacyParams(const juce::NamedValueSet& params) { juce::ignoreUnused(params); }
     // Called on a module created from a stored node (a project, preset, snapshot or generated patch), after its
-    // params are applied; `storedParams` is empty when the node has none. A module whose default moved reads the
-    // keys here and puts the old default back for a node that never recorded it, so a saved sound does not
-    // change. Not called for a module that already exists (a patch tweaking it) or for a freshly dropped one.
-    virtual void applyStoredParamDefaults(const juce::NamedValueSet& storedParams) { juce::ignoreUnused(storedParams); }
+    // params are applied; `storedParams` is empty when the node has none. A module whose default moved puts the
+    // old default back for a key a trusted node never recorded; a model-authored node (`trusted` false) keeps
+    // the current defaults. Not called for a module that already exists or for a freshly dropped one.
+    virtual void applyStoredParamDefaults(const juce::NamedValueSet&, bool trusted) { juce::ignoreUnused(trusted); }
     // Whether `id` is a parameter this module no longer has but adoptLegacyParams still reads, so the patch
     // validator lets it through instead of rejecting it as an unknown key.
     virtual bool isLegacyParamId(const juce::String& id) const {
