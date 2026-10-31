@@ -25,8 +25,8 @@ namespace synth {
  * or deleted.
  *
  * `collectUnusedAssets`/`cleanUnusedAssets` walk `<bundleRoot>/Audio/` for files no clip
- * references, alongside each one's `<bundleRoot>/Peaks/<stem>.agpk` sidecar. A clip whose assetRef
- * names a file that isn't actually there is simply skipped (nothing to enumerate), and the scan
+ * references (as its assetRef or as its stretch origin), alongside each one's `<bundleRoot>/Peaks/<stem>.agpk` sidecar.
+ * A clip whose assetRef names a file that isn't actually there is simply skipped (nothing to enumerate), and the scan
  * never reaches outside `bundleRoot`.
  *
  * `adoptRecordingsAssets` imports every clip whose assetRef carries the reserved `Recordings/`

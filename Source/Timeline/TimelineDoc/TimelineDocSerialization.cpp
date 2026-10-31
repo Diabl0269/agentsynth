@@ -461,6 +461,7 @@ juce::var TimelineDoc::toVar() const {
             c->setProperty("sourceStartSeconds", clip.sourceStartSeconds);
             writeClipDrumFields(*c, clip);
             writeClipScaleFields(*c, clip);
+            writeClipStretchOrigin(*c, clip);
 
             juce::Array<juce::var> noteVars;
             for (const auto& note : clip.notes) {

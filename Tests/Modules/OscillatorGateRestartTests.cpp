@@ -2,11 +2,16 @@
 // in poly (one gate channel per voice) and in mono (one channel), without any MIDI note-on.
 
 #include "../Engine/AudioRendering/ClickDetector.h"
+#include "Modules/ADSRModule.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/VCAModule.h"
 
+#include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
+#include <iostream>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <memory>
 #include <vector>
 
 namespace {
@@ -250,6 +255,10 @@ float worstStepAround(const std::vector<float>& x, int edge) {
 // and still catches a step.
 constexpr float kRestartStepBound = 0.12f;
 
+// Audio-rate restarts hand over in 8 samples; for this test's sine the difference at an edge is at most about 1, a
+// slope of pi / 2 / 8 = 0.2 at the fade's middle, so 0.25 leaves room for the wave's slope and still catches a step.
+constexpr float kSyncStepBound = 0.25f;
+
 } // namespace
 
 // Regression test for FRO1082: every restart from a pulse left a corner at the start and the end of its hand-over.
@@ -279,7 +288,7 @@ TEST(OscillatorGateRestart, AudioRateGatesNeverStepTheOutputAtARestart) {
         float worst = 0.0f;
         for (size_t i = 4096; i < run.out.size(); ++i)
             worst = std::max(worst, std::abs(run.out[i] - run.out[i - 1]));
-        EXPECT_LE(worst, kRestartStepBound) << "period " << period << ": a step of " << worst;
+        EXPECT_LE(worst, kSyncStepBound) << "period " << period << ": a step of " << worst;
         float peak = 0.0f;
         for (float v : run.out)
             peak = std::max(peak, std::abs(v));
@@ -314,4 +323,184 @@ TEST(OscillatorGateRestart, EdgesCloserThanTheSpacingRestartOnlyOnceAcrossBlocks
     ASSERT_GE(kept.size(), 8u);
     for (size_t i = 1; i < kept.size(); ++i)
         EXPECT_GE(kept[i] - kept[i - 1], GateEdges::kMinSpacing) << "edges " << kept[i - 1] << " and " << kept[i];
+}
+
+namespace {
+
+constexpr double kSyncRate = 48000.0;
+constexpr int kSyncBlock = 512;
+constexpr int kSyncSkip = 9600; // past the first note's attack and decay
+constexpr int kSyncSeconds = 48000;
+
+struct SyncCase {
+    int masterWave; // 0 Sine, 1 Square, 2 Saw, 3 Triangle
+    int masterHz;
+    int unison;
+    float rand;
+    bool poly;
+    int targetWave = 2; // Saw
+    int note = 57;      // 220 Hz, so 301 Hz is a ratio with no small fraction
+};
+
+juce::String describeCase(const SyncCase& c) {
+    static const char* waves[] = {"Sine", "Square", "Saw", "Triangle"};
+    return juce::String(waves[c.masterWave]) + " " + juce::String(c.masterHz) + " Hz, unison " +
+           juce::String(c.unison) + ", rand " + juce::String((int)c.rand) + (c.poly ? ", poly" : ", mono");
+}
+
+// A real Oscillator on a Fixed rate, its Audio L cabled into the Restart jack of a target Oscillator that holds a
+// note (in poly, a three-note chord with each voice restarted by the master's matching voice). The target's output
+// passes an ADSR and a VCA at full sustain. Returns one second of the result, past the first note's attack.
+std::vector<float> renderSyncedNote(const SyncCase& c, bool patched = true) {
+    auto master = std::make_unique<OscillatorModule>();
+    auto target = std::make_unique<OscillatorModule>();
+    auto adsr = std::make_unique<ADSRModule>();
+    auto vca = std::make_unique<VCAModule>();
+    setActual(*master, "waveform", (float)c.masterWave);
+    setActual(*master, "rateMode", 1.0f);
+    setActual(*master, "fixedRate", (float)c.masterHz);
+    setActual(*target, "waveform", (float)c.targetWave);
+    setActual(*target, "unison", (float)c.unison);
+    setActual(*target, "detune", c.unison > 1 ? 20.0f : 0.0f);
+    setActual(*target, "randomPhase", c.rand);
+    if (c.poly) {
+        setActual(*master, "poly", 1.0f);
+        setActual(*target, "poly", 1.0f);
+    }
+    setActual(*adsr, "attack", 0.001f);
+    setActual(*adsr, "sustain", 1.0f);
+    for (juce::AudioProcessor* p :
+         {static_cast<juce::AudioProcessor*>(master.get()), static_cast<juce::AudioProcessor*>(target.get()),
+          static_cast<juce::AudioProcessor*>(adsr.get()), static_cast<juce::AudioProcessor*>(vca.get())})
+        p->prepareToPlay(kSyncRate, kSyncBlock);
+
+    const float chordHz[] = {220.0f, 277.18f, 329.63f};
+    const int voices = c.poly ? 3 : 1;
+    std::vector<float> out;
+    for (int pos = 0; pos < kSyncSkip + kSyncSeconds; pos += kSyncBlock) {
+        juce::AudioBuffer<float> m(OscillatorModule::kNumOutputs, kSyncBlock),
+            t(OscillatorModule::kNumOutputs, kSyncBlock);
+        juce::AudioBuffer<float> a(16, kSyncBlock), v(16, kSyncBlock);
+        m.clear();
+        t.clear();
+        a.clear();
+        v.clear();
+        juce::MidiBuffer note, noteForTarget, noteForAdsr, none;
+        if (pos == 0)
+            note.addEvent(juce::MidiMessage::noteOn(1, c.note, 0.8f), 0);
+        noteForTarget = note;
+        noteForAdsr = note;
+        for (int i = 0; i < voices && c.poly; ++i) {
+            juce::FloatVectorOperations::fill(m.getWritePointer(i), chordHz[i], kSyncBlock);
+            juce::FloatVectorOperations::fill(t.getWritePointer(i), chordHz[i], kSyncBlock);
+        }
+        master->processBlock(m, none);
+        if (patched)
+            for (int i = 0; i < voices; ++i)
+                t.copyFrom(OscillatorModule::kGateBase + i, 0, m, i, 0, kSyncBlock);
+        target->processBlock(t, noteForTarget);
+        adsr->processBlock(a, noteForAdsr);
+        for (int i = 0; i < voices; ++i)
+            v.addFrom(0, 0, t, i, 0, kSyncBlock, 1.0f / (float)voices);
+        v.copyFrom(1, 0, a, 0, 0, kSyncBlock);
+        vca->processBlock(v, none);
+        if (pos >= kSyncSkip)
+            out.insert(out.end(), v.getReadPointer(0), v.getReadPointer(0) + kSyncBlock);
+    }
+    out.resize((size_t)kSyncSeconds);
+    return out;
+}
+
+// The share of the energy that is not at a multiple of the master's pitch, in dB. A synced wave repeats exactly
+// once per master cycle, so everything else is what the ear hears as grit: restarts landing unevenly, random phases
+// or folded-back overtones. The window is one second, so with a whole number of Hz each harmonic falls on its own bin.
+// The result is relative to `reference`, the energy of the same note left free, or to the wave's own energy if that is
+// larger: a cycle that happens to sit near a slow wave's zero is quiet, and its small remainder is not louder grit.
+double acEnergy(const std::vector<float>& x) {
+    double total = 0.0, mean = 0.0;
+    for (float s : x)
+        mean += (double)s / (double)x.size();
+    for (float s : x)
+        total += ((double)s - mean) * ((double)s - mean);
+    return total;
+}
+
+double offHarmonicDb(const std::vector<float>& x, int masterHz, double reference) {
+    const double total = acEnergy(x);
+    double mean = 0.0;
+    for (float s : x)
+        mean += (double)s / (double)x.size();
+    double harmonic = 0.0;
+    const double n = (double)x.size();
+    for (int h = masterHz; h < (int)(kSyncRate / 2.0); h += masterHz) {
+        const double w = 2.0 * std::cos(kTwoPi * (double)h / kSyncRate);
+        double s1 = 0.0, s2 = 0.0;
+        for (float s : x) {
+            const double s0 = (double)s - mean + w * s1 - s2;
+            s2 = s1;
+            s1 = s0;
+        }
+        harmonic += (s1 * s1 + s2 * s2 - w * s1 * s2) * 2.0 / n;
+    }
+    return 10.0 *
+           std::log10(std::max(1e-12, (total - std::min(total, harmonic)) / std::max({1e-12, total, reference})));
+}
+
+float largestStep(const std::vector<float>& x) {
+    float worst = 0.0f;
+    for (size_t i = 1; i < x.size(); ++i)
+        worst = std::max(worst, std::abs(x[i] - x[i - 1]));
+    return worst;
+}
+
+float peakOf(const std::vector<float>& x) {
+    float p = 0.0f;
+    for (float v : x)
+        p = std::max(p, std::abs(v));
+    return p;
+}
+
+} // namespace
+
+// Regression test for FRO1224: a real Oscillator cabled into Restart crackled. Rand above 0 drew a new random phase at
+// every edge (98 % or more of the energy off the master's harmonics), and at Rand 0 the 64-sample hand-over averaged a
+// fast master's wave down to under half its level. A synced wave must repeat once per master cycle and keep its level.
+// A click is not counted as a failure by itself: a saw flags at each of its own wraps and a synced saw at each restart.
+// Those repeat with the wave, so the limit is on their size, never above the free-running wave's own wrap.
+TEST(OscillatorGateRestart, RestartFromARealOscillator) {
+    constexpr double kMaxOffHarmonicDb = -30.0;
+    constexpr float kMinLevelOfFree = 0.6f;
+    for (const bool poly : {false, true})
+        for (const int unison : {1, 5}) {
+            const auto free = renderSyncedNote({0, 100, unison, 0.0f, poly}, /*patched*/ false);
+            float freeClick = 0.0f;
+            for (const auto& click : clickdetector::findClicks(free))
+                freeClick = std::max(freeClick, click.size);
+            for (const float rand : {0.0f, 50.0f, 100.0f})
+                for (const int wave : {0, 1, 2, 3})
+                    for (const int hz : {100, 440, 2000, 301}) {
+                        const SyncCase c{wave, hz, unison, rand, poly};
+                        const auto x = renderSyncedNote(c);
+                        const auto clicks = clickdetector::findClicks(x);
+                        float largest = 0.0f;
+                        for (const auto& click : clicks)
+                            largest = std::max(largest, click.size);
+                        const double off = offHarmonicDb(x, hz, acEnergy(free));
+                        EXPECT_LE(off, kMaxOffHarmonicDb) << describeCase(c);
+                        // With Rand, a short cycle of a slow wave can sit near its zero, so only Rand 0 has a floor.
+                        if (rand == 0.0f)
+                            EXPECT_GE(peakOf(x), kMinLevelOfFree * peakOf(free)) << describeCase(c);
+                        EXPECT_LE(largest, std::max(freeClick, 0.1f) * 1.1f) << describeCase(c);
+                    }
+        }
+}
+
+// Regression test for FRO1224: a master whose period is not a whole number of samples must not restart unevenly.
+TEST(OscillatorGateRestart, GateEdgesPlaceARealWaveBetweenSamples) {
+    GateEdges edges;
+    const std::vector<float> ramp = {-0.5f, -0.1f, 0.3f, 0.7f};
+    edges.scan(ramp.data(), (int)ramp.size());
+    ASSERT_EQ(edges.count, 1);
+    EXPECT_EQ(edges.offsets[0], 2);
+    EXPECT_NEAR(edges.leads[0], 0.5f, 1e-5f) << "the ramp crosses 0.1 half a sample before sample 2";
 }

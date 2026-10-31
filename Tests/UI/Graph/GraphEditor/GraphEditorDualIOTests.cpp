@@ -857,6 +857,11 @@ TEST_F(GraphEditorTest, ResolvePolyLinkDoesNotBroadcastAudioOrPitchFans) {
     EXPECT_EQ(pitchLink.voiceCount, 1);
     EXPECT_EQ(pitchLink.sourceStride, 1);
 
+    // A mono oscillator's audio syncs every voice of a poly Restart jack; a mono gate there keeps its one voice.
+    auto syncLink = GraphEditor::resolvePolyLink(&monoOsc, 0, &polyOsc, OscillatorModule::kJackGate);
+    EXPECT_EQ(syncLink.voiceCount, OscillatorModule::kNumVoices);
+    EXPECT_EQ(syncLink.sourceStride, 0);
+
     ADSRModule polyAdsr;
     setPolyParam(polyAdsr, true);
 

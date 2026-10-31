@@ -122,25 +122,49 @@ double glidedNoteX(ClipNoteGlide glide, double restingX, double restLeft, double
 
 // The window is the audio the clip plays now: from its source offset for its length in seconds at today's tempo. A
 // ratio above 1 is a shorter clip, as in soundbrowser::LoopTarget.
-std::optional<AudioStretchWindow> audioStretchWindow(const Clip& clip, double newLengthBeats, double secondsPerBeat) {
+// With an origin the same window is read back through it: time t in the clip's asset is offset + t * ratio in the
+// original, so the window, its length and the ratio all convert and the render is one pass over the original.
+std::optional<AudioStretchWindow> audioStretchWindow(const Clip& clip, double newLengthBeats, double secondsPerBeat,
+                                                     bool useOrigin) {
     if (clip.assetRef.isEmpty() || !std::isfinite(newLengthBeats) || !(newLengthBeats > 0.0) ||
         !std::isfinite(secondsPerBeat) || !(secondsPerBeat > 0.0) || !(clip.lengthBeats > 0.0))
         return std::nullopt;
-    return AudioStretchWindow{clip.sourceStartSeconds, clip.lengthBeats * secondsPerBeat,
-                              clip.lengthBeats / newLengthBeats};
+    const double lengthSeconds = clip.lengthBeats * secondsPerBeat;
+    const double ratio = clip.lengthBeats / newLengthBeats;
+
+    AudioStretchWindow window;
+    if (useOrigin && clip.stretchOrigin) {
+        const auto& o = *clip.stretchOrigin;
+        window.sourceRef = o.assetRef;
+        window.startSeconds = o.offsetSeconds + clip.sourceStartSeconds * o.ratio;
+        window.lengthSeconds = lengthSeconds * o.ratio;
+        window.tempoRatio = o.ratio * ratio;
+    } else {
+        window.sourceRef = clip.assetRef;
+        window.startSeconds = clip.sourceStartSeconds;
+        window.lengthSeconds = lengthSeconds;
+        window.tempoRatio = ratio;
+    }
+    window.backToOriginal = std::abs(window.tempoRatio - 1.0) < 1e-6;
+    if (!window.backToOriginal)
+        window.origin = Clip::StretchOrigin{window.sourceRef, window.startSeconds, window.tempoRatio};
+    return window;
 }
 
 // Built from the public mutators rather than one new TimelineDoc member: the caller's recorded change makes them one
 // undo step, as importAudioFileToClip does with addClip and setClipAsset. The fades scale with the audio they cover.
 bool applyAudioClipStretch(TimelineDoc& doc, ClipId id, double newStartBeat, double newLengthBeats,
-                           const juce::String& stretchedRef) {
+                           const juce::String& assetRef, double sourceStartSeconds,
+                           const std::optional<Clip::StretchOrigin>& origin) {
     const auto* clip = doc.getClip(id);
-    if (clip == nullptr || clip->assetRef.isEmpty() || stretchedRef.isEmpty() || !(clip->lengthBeats > 0.0))
+    if (clip == nullptr || clip->assetRef.isEmpty() || assetRef.isEmpty() || !(clip->lengthBeats > 0.0))
         return false;
     const double factor = newLengthBeats / clip->lengthBeats;
     const double fadeIn = clip->fadeInBeats * factor;
     const double fadeOut = clip->fadeOutBeats * factor;
-    bool ok = doc.setClipAsset(id, stretchedRef, 0.0);
+    // setClipAsset forgets any origin when the asset changes; the new one is recorded after it.
+    bool ok = doc.setClipAsset(id, assetRef, sourceStartSeconds);
+    ok = ok && doc.setClipStretchOrigin(id, origin);
     ok = ok && doc.moveClip(id, newStartBeat);
     ok = ok && doc.resizeClip(id, newLengthBeats);
     return ok && doc.setClipFades(id, fadeIn, fadeOut);

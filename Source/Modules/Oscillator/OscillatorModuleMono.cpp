@@ -76,7 +76,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     // MIDI note-on, through the same per-sample restart list.
     voices[0].gateEdges.scan(kGateBase < numCh ? buffer.getReadPointer(kGateBase) : nullptr, numSamples);
     for (int i = 0; i < voices[0].gateEdges.count; ++i)
-        addRestartOffset(voices[0].gateEdges.offsets[(size_t)i]);
+        addRestartOffset(voices[0].gateEdges.offsets[(size_t)i], voices[0].gateEdges.leads[(size_t)i]);
 
     // Clear every output channel except the mod-CV inputs still to be read (cleared at the end).
     // Clearing a shared input channel only ever zeroes this node's private copy: the module declares
@@ -126,7 +126,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     for (int i = 0; i < numSamples; ++i) {
         // A note-on restarts the phases at its own sample.
         while (nextRestart < numRestarts && restartOffsets[(size_t)nextRestart] <= i) {
-            restartVoice(voices[0], /*fadeFromOld*/ true);
+            restartVoice(voices[0], /*fadeFromOld*/ true, restartLeads[(size_t)nextRestart]);
             ++nextRestart;
         }
 

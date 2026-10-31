@@ -22,7 +22,9 @@ instance's settings file before it first starts) and `motion: true` (start with 
     - expect: {id: "card:LFO 1", exists: false}
     - expect: {count: {prefix: "card:", equals: 3}}     # list ids (or field: title) starting with the prefix
 
-`${FIXTURES}` and `${OUT}` are replaced in every string. An `expect` is retried for `within_ms` (default 500) so a
+`${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string.
+`- copyFixture: {name: x.agsproj}` copies `${FIXTURES}/x.agsproj` into `${SCRATCH}/x.agsproj` for a scenario that
+changes its project and must not change the committed copy. An `expect` is retried for `within_ms` (default 500) so a
 repaint that is still settling is not a failure; one that never arrives still is.
 """
 
@@ -30,7 +32,9 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -42,7 +46,7 @@ FIXTURES = os.path.join(HERE, "fixtures")
 DEFAULT_OUT = os.path.join(HERE, "out")
 SETTINGS_FILE = "Agent Synth.settings"
 EXPECT_KEYS = {"id", "contains", "exists", "count", "within_ms"}
-RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart"}
+RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture"}
 
 
 class ScenarioError(ValueError):
@@ -242,6 +246,10 @@ class Runner:
             for char in str(args.get("text", "")):
                 app.call("key", keys="space" if char == " " else char)  # the key parser splits on spaces
             reply = {"typed": len(str(args.get("text", "")))}
+        elif command == "copyFixture":
+            destination = os.path.join(self.settings_dir, args["name"])
+            shutil.copytree(os.path.join(FIXTURES, args["name"]), destination)
+            reply = {"copied": destination}
         elif command == "restart":
             app.stop()  # the settings directory is the runner's own, so it stays
             self._launch()
@@ -261,11 +269,9 @@ class Runner:
 
     def run(self):
         """Returns (passed, message). The run log is in self.log."""
-        import shutil
-        import tempfile
-
         os.makedirs(self.out_dir, exist_ok=True)
         self.settings_dir = tempfile.mkdtemp(prefix="agentsynth-scenario-")
+        self.variables["SCRATCH"] = self.settings_dir
         if self.scenario.settings:
             with open(os.path.join(self.settings_dir, SETTINGS_FILE), "w", encoding="utf-8") as handle:
                 handle.write(settings_xml(_substitute(self.scenario.settings, self.variables)))

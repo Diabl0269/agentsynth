@@ -17,6 +17,7 @@
 #include "Modules/VCAModule.h"
 #include <algorithm>
 #include <iostream>
+#include <memory>
 #include <set>
 
 namespace {
@@ -300,4 +301,70 @@ TEST(SourceClickGuard, PolyOscillatorFirstChordStartsOnItsOwnSample) {
         EXPECT_GT(peak, 0.2) << "block " << block << " played nothing";
         EXPECT_LT(step, 0.07) << "block " << block;
     }
+}
+
+namespace {
+
+// One mono Oscillator at Glide 0 with Legato on: a held note, an overlapping `interval` above it (no restart), then
+// letting go of the top note, which returns to the held one. Each change lands `lead` samples into a block.
+std::vector<float> renderLegatoSteps(int waveform, int interval, float phase, int lead, bool overlap) {
+    auto osc = std::make_unique<OscillatorModule>();
+    setParamValue(osc.get(), "waveform", (float)waveform);
+    setParamValue(osc.get(), "legato", 1.0f);
+    setParamValue(osc.get(), "phase", phase);
+    osc->prepareToPlay(kRate, kBlock);
+    const int noteOn = 4 * kBlock + lead, noteOff = 8 * kBlock + lead;
+    constexpr int kLow = 57;
+    std::vector<float> out;
+    for (int pos = 0; pos < 12 * kBlock; pos += kBlock) {
+        juce::MidiBuffer midi;
+        if (pos == 0)
+            midi.addEvent(juce::MidiMessage::noteOn(1, kLow, 0.8f), 0);
+        if (!overlap && noteOn >= pos && noteOn < pos + kBlock)
+            midi.addEvent(juce::MidiMessage::noteOff(1, kLow, 0.0f), noteOn - pos);
+        if (noteOn >= pos && noteOn < pos + kBlock)
+            midi.addEvent(juce::MidiMessage::noteOn(1, kLow + interval, 0.8f), noteOn - pos);
+        if (overlap && noteOff >= pos && noteOff < pos + kBlock)
+            midi.addEvent(juce::MidiMessage::noteOff(1, kLow + interval, 0.0f), noteOff - pos);
+        juce::AudioBuffer<float> buf(OscillatorModule::kNumOutputs, kBlock);
+        buf.clear();
+        osc->processBlock(buf, midi);
+        out.insert(out.end(), buf.getReadPointer(0), buf.getReadPointer(0) + kBlock);
+    }
+    return out;
+}
+
+// The largest second difference from sample `from` on, relative to the peak, leaving out a Saw's own wraps: the
+// few samples around a fall of a large part of the wave's height, which sound with or without a pitch step.
+float worstKinkOfPeak(const std::vector<float>& x, int from) {
+    float peak = 1.0e-6f, worst = 0.0f;
+    for (float v : x)
+        peak = std::max(peak, std::abs(v));
+    for (int i = std::max(from, 4); i < (int)x.size() - 4; ++i) {
+        bool nearWrap = false;
+        for (int k = i - 3; k <= i + 3; ++k)
+            nearWrap = nearWrap || x[(size_t)k] - x[(size_t)k + 1] > 0.3f * peak;
+        if (!nearWrap)
+            worst = std::max(worst, std::abs(x[(size_t)i - 1] - 2.0f * x[(size_t)i] + x[(size_t)i + 1]));
+    }
+    return worst / peak;
+}
+
+} // namespace
+
+// Regression test for FRO1356: a Legato pitch step must not tick. The limit is the note-attack guard's, 0.015 of the
+// peak, for a step up and the return down, overlapping (no restart) and touching (a jump), at any phase of the wave.
+TEST(SourceClickGuard, LegatoPitchStepsStayUnderTheAttackLimit) {
+    constexpr float kLimit = 0.015f;
+    for (const int waveform : {0, 2})
+        for (const int interval : {2, 5, 12})
+            for (const bool overlap : {true, false})
+                for (const float phase : {0.0f, 90.0f, 250.0f})
+                    for (const int lead : {0, 37, 91, 160, 311}) {
+                        const auto x = renderLegatoSteps(waveform, interval, phase, lead, overlap);
+                        // Starts past the first note's start, which has no envelope in this rig.
+                        const float worst = worstKinkOfPeak(x, 2 * kBlock);
+                        EXPECT_LE(worst, kLimit) << "wave " << waveform << " interval " << interval << " overlap "
+                                                 << overlap << " phase " << phase << " lead " << lead;
+                    }
 }

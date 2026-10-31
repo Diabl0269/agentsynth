@@ -152,6 +152,14 @@ inline AutomationLane::Breakpoint makeBreakpoint(const AutomationLane::RangeSnap
     return point;
 }
 
+// -- clip stretch origin (TimelineDocStretchOriginSerialization.cpp) -------------
+// A stretch origin the format accepts: a non-empty bundle-relative ref (the same rule as Clip::assetRef), a finite
+// offset >= 0 and a finite ratio > 0.
+bool isValidStretchOrigin(const Clip::StretchOrigin& origin);
+// Writes "stretchOrigin" only when set. The reader is tolerant like the scale's: a malformed value loads as none.
+void writeClipStretchOrigin(juce::DynamicObject& obj, const Clip& clip);
+void readClipStretchOrigin(const juce::DynamicObject& obj, Clip& clip);
+
 // -- clip scale fields (TimelineDocScaleSerialization.cpp) ----------------------
 // Writes "scale"/"scaleVisible" only when set. The reader is tolerant: a missing or malformed scale
 // loads as none and never fails the load, so it always returns true (a bool only so it chains into the

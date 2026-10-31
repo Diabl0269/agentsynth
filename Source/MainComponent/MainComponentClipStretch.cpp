@@ -1,6 +1,8 @@
 // MainComponentClipStretch.cpp -- a Stretch edge drag of an audio clip (docs/timeline/clips.md#edge-sizing): the clip's
 // audio is rendered at the new length by the loop stretcher, imported like any audio file, and the clip points at the
-// copy in one undo step. The original file stays in the project, so undo plays it again.
+// copy in one undo step. The clip remembers the original asset and the cumulative ratio, so a second stretch renders
+// from the original, and a return to 100% plays the original window again without a render. Older assets stay in the
+// project, so undo plays them again.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
@@ -34,6 +36,17 @@ void writePeaksFor(MainComponent& mc, const juce::String& stretchedRef) {
     synth::PeaksFile::writeForAudioFile(audioFile, peaksFile, synth::TakeCaptureWriter::kPeakBucketSize);
 }
 
+// The window to stretch, read through the clip's origin when that original file is still there; without it the clip's
+// current asset is the best source left, and the new stretch starts a fresh origin from it.
+std::optional<synth::AudioStretchWindow> windowFor(MainComponent& mc, const synth::Clip& clip, double newLength,
+                                                   double secondsPerBeat) {
+    bool useOrigin = clip.stretchOrigin.has_value();
+    if (useOrigin)
+        useOrigin =
+            mc.getAudioEngine().getAudioClipStreamer().resolveAssetRef(clip.stretchOrigin->assetRef).existsAsFile();
+    return synth::audioStretchWindow(clip, newLength, secondsPerBeat, useOrigin);
+}
+
 } // namespace
 
 // The render blocks the message thread (about a second per minute of audio), which kMaxStretchWindowSeconds bounds. The
@@ -45,20 +58,22 @@ void MainComponentAudioImport::stretchAudioClip(MainComponent& mc, synth::ClipId
         return;
     const auto snap = mc.audioEngine.getTransport().getPositionSnapshot();
     const double bpm = snap.bpm > 0.0 ? snap.bpm : kFallbackBpm;
-    const auto window = synth::audioStretchWindow(*clip, newLengthBeats, 60.0 / bpm);
-    const auto source = mc.audioEngine.getAudioClipStreamer().resolveAssetRef(clip->assetRef);
-    const int percent = juce::roundToInt(newLengthBeats / clip->lengthBeats * 100.0);
+    const auto window = windowFor(mc, *clip, newLengthBeats, 60.0 / bpm);
+    const juce::File source =
+        window ? mc.audioEngine.getAudioClipStreamer().resolveAssetRef(window->sourceRef) : juce::File();
+    const int percent = window ? juce::roundToInt(100.0 / window->tempoRatio) : 100;
     const juce::String name = clip->name;
 
     juce::String failure;
     if (!window)
         failure = "Could not stretch this clip";
-    else if (window->lengthSeconds > synth::soundbrowser::kMaxStretchWindowSeconds)
-        failure = "Clips over a minute do not stretch yet";
     else if (!source.existsAsFile())
         failure = "The clip's audio file is missing";
-    juce::String stretchedRef;
-    if (failure.isEmpty()) {
+    else if (!window->backToOriginal && window->lengthSeconds > synth::soundbrowser::kMaxStretchWindowSeconds)
+        failure = "Clips over a minute do not stretch yet";
+    // Back at 100% the original's own window is the answer: no render, so no copy and no loss.
+    juce::String stretchedRef = failure.isEmpty() && window->backToOriginal ? window->sourceRef : juce::String();
+    if (failure.isEmpty() && !window->backToOriginal) {
         const auto rendered =
             synth::soundbrowser::stretchedLoopCacheFolder()
                 .getChildFile("Clips")
@@ -77,9 +92,12 @@ void MainComponentAudioImport::stretchAudioClip(MainComponent& mc, synth::ClipId
         return;
     }
 
-    writePeaksFor(mc, stretchedRef);
+    if (!window->backToOriginal)
+        writePeaksFor(mc, stretchedRef);
+    const double sourceStart = window->backToOriginal ? window->startSeconds : 0.0;
     mc.undoManager.recordTimelineChange(mc.timelineDoc, [&] {
-        synth::applyAudioClipStretch(mc.timelineDoc, id, newStartBeat, newLengthBeats, stretchedRef);
+        synth::applyAudioClipStretch(mc.timelineDoc, id, newStartBeat, newLengthBeats, stretchedRef, sourceStart,
+                                     window->origin);
     });
     mc.statusBar.showMessage("Stretched " + name + " to " + juce::String(percent) + "%");
 }
