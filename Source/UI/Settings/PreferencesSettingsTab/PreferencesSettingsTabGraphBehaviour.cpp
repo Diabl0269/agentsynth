@@ -166,6 +166,13 @@ void PreferencesSettingsTab::setSmartConnectionMode(GraphEditor::SmartConnection
     persistSmartConnectionMode(mode);
 }
 
+bool PreferencesSettingsTab::isShowCurvesOnCablesEnabled() const { return showCurvesOnCablesToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setShowCurvesOnCablesEnabled(bool enabled) {
+    showCurvesOnCablesToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistShowCurvesOnCables(enabled);
+}
+
 bool PreferencesSettingsTab::isCablesOnTopEnabled() const { return cablesOnTopToggle.getToggleState(); }
 
 void PreferencesSettingsTab::setCablesOnTopEnabled(bool enabled) {
@@ -358,6 +365,14 @@ void PreferencesSettingsTab::persistReconnectChainOnDelete(bool enabled) {
 
 // The two toggles for what the canvas draws, in tab order.
 void PreferencesSettingsTab::setupCanvasDisplayToggles() {
+    contentHost.addAndMakeVisible(showCurvesOnCablesToggle);
+    showCurvesOnCablesToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("showCurvesOnCables", false),
+                                            juce::dontSendNotification);
+    showCurvesOnCablesToggle.setTooltip(
+        "When on, a small curve button sits beside the amount knob of each modulation cable; click it to edit that "
+        "modulation's response curve.");
+    showCurvesOnCablesToggle.onClick = [this] { persistShowCurvesOnCables(showCurvesOnCablesToggle.getToggleState()); };
+
     contentHost.addAndMakeVisible(alignmentGuideToggle);
     alignmentGuideToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true),
                                         juce::dontSendNotification);
@@ -370,6 +385,15 @@ void PreferencesSettingsTab::setupCanvasDisplayToggles() {
     cablesOnTopToggle.setTooltip("When on, connected cables are drawn in front of the module cards. When off (the "
                                  "default) they pass behind the cards. A cable you are dragging is always in front.");
     cablesOnTopToggle.onClick = [this] { persistCablesOnTop(cablesOnTopToggle.getToggleState()); };
+}
+
+void PreferencesSettingsTab::persistShowCurvesOnCables(bool enabled) {
+    appProperties.getUserSettings()->setValue("showCurvesOnCables", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor) {
+        graphEditor->showCurvesOnCables = enabled;
+        graphEditor->notifyModuleContentChanged(); // the chips appear or vanish on the next paint
+    }
 }
 
 void PreferencesSettingsTab::persistCablesOnTop(bool enabled) {
@@ -712,6 +736,18 @@ void PreferencesSettingsTab::layoutGraphGroups(int& y, int contentWidth, bool& p
         beginGroup(visible);
         if (visible) {
             doubleClickDisconnectToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 2b: curve buttons on cables
+    {
+        const bool visible = groupMatches({&showCurvesOnCablesToggle});
+        setGroupVisible({&showCurvesOnCablesToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            showCurvesOnCablesToggle.setBounds({0, y, contentWidth, 24});
             y += 24;
         }
         pendingDivider = pendingDivider || visible;

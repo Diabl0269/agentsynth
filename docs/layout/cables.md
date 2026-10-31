@@ -301,7 +301,7 @@ Code: `Source/UI/Graph/PortPanel/` (`PortPanelController`, `PortConnectionsPanel
 
 ## Right-click menu
 
-Right-clicking a cable opens a menu with **Disconnect Cable**. Before this the only way to remove a
+Right-clicking a cable opens a menu with **Disconnect Cable** and, on a mono modulation cable, **Edit curve...** (see [the modulation curve](../modules/modulation.md#the-modulation-curve); built by `GraphEditorCableMenu.cpp`, poly bus cables get no item). With the preference Show curves on cables on, a 26 x 18 chip sits beside each attenuverter cable's midpoint knob (`GraphEditorCableCurveChips.cpp`); a press on it opens the box and never starts a knob drag. It is mouse only. Before this the only way to remove a
 connection was to right-click one of its *ports*, which is not where users aim.
 
 `GraphEditor::disconnectCable()` removes every graph edge behind the cable as **one** undoable

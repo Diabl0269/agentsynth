@@ -482,6 +482,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->setReconnectChainOnDeleteEnabled(reconnectChainOnDeleteToggle.getToggleState());
     graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
     graphEditor->cablesOnTop = cablesOnTopToggle.getToggleState();
+    graphEditor->showCurvesOnCables = showCurvesOnCablesToggle.getToggleState();
     graphEditor->setDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState());
     graphEditor->setDualIOPerModuleOverrides(dualIOPerModuleOverrides);
     graphEditor->setMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));

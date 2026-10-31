@@ -8,6 +8,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditor.h"
+#include "GraphEditorCableCurveChips.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
 #include "UI/Graph/CardOutline.h"
@@ -801,6 +802,7 @@ void GraphEditor::GraphContentComponent::paintCables(juce::Graphics& g) {
             float dx = std::sin(angle) * 8.0f;
             float dy = -std::cos(angle) * 8.0f;
             g.drawLine(mid.x, mid.y, mid.x + dx, mid.y + dy, 2.0f);
+            synth::ui::cable_curve_chips::paint(g, editor, cable);
         }
 
         // Poly buses label the midpoint with "xN" so the bundle size is visible.

@@ -994,7 +994,7 @@ private:
 public:
     const std::vector<ModulationDisplayInfo>& getCachedModDisplayInfo() const { return cachedModDisplayInfo; }
     const std::vector<ModulationRouting>& getCachedModRoutings() const { return cachedModRoutings; }
-    bool cablesOnTop = false;                     // cables paint over the cards (docs/layout/cables.md#cable-layer)
-    synth::ui::FadeAmount emptyCanvasHint{*this}; // the first-run hint's fade, steered by updateComponents()
+    bool cablesOnTop = false, showCurvesOnCables = false; // docs/layout/cables.md#cable-layer, #right-click-menu
+    synth::ui::FadeAmount emptyCanvasHint{*this};         // the first-run hint's fade, steered by updateComponents()
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphEditor)
 };

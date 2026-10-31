@@ -61,6 +61,8 @@ public:
     void setSideBySideMode(SmartConnectionEngine::SideBySideMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
+    bool isShowCurvesOnCablesEnabled() const;
+    void setShowCurvesOnCablesEnabled(bool enabled);
     bool isCablesOnTopEnabled() const;
     void setCablesOnTopEnabled(bool enabled);
     // Plain on/off, ON by default
@@ -347,6 +349,7 @@ private:
     void setupSmartConnectionControls();
     void persistSideBySideMode(SmartConnectionEngine::SideBySideMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
+    void persistShowCurvesOnCables(bool enabled);
     void persistCablesOnTop(bool enabled);
     void setupCanvasDisplayToggles();
     void persistReconnectChainOnDelete(bool enabled);
@@ -566,6 +569,7 @@ private:
     // Moved here from AppearanceSettingsTab: this is canvas-editing behaviour (whether the graph
     // shows snap guides while dragging), the same family as the two toggles above it, not an
     // appearance/theme setting. Persistence key ("alignmentGuidesEnabled") is unchanged.
+    juce::ToggleButton showCurvesOnCablesToggle{"Show curves on cables"};
     juce::ToggleButton alignmentGuideToggle{"Show Alignment Guides"};
     juce::ToggleButton cablesOnTopToggle{"Draw cables on top of modules"};
     // One line, one control: the old label + two-item ComboBox said the same thing in two widgets
