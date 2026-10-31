@@ -9,6 +9,8 @@
 
 #include "SmartConnectionEngine.h"
 
+#include "MacroOwnerIndex.h"
+
 #include "Modules/AttenuverterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
@@ -20,19 +22,7 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
     const auto previous = smartSuggestions_;
     smartSuggestions_.clear();
 
-    if (!drag.active || drag.ghost.isEmpty() || !shouldOfferSmartConnections(drag)) {
-        if (previous != smartSuggestions_)
-            host_.repaintCanvas();
-        return;
-    }
-
-    juce::AudioProcessor* ghostProc = nullptr;
-    if (drag.selfId.uid != 0) {
-        if (auto* mc = host_.moduleComponentFor(drag.selfId))
-            ghostProc = mc->getModule();
-    } else {
-        ghostProc = drag.probe;
-    }
+    auto* ghostProc = ghostProcessorFor(drag);
     if (ghostProc == nullptr) {
         if (previous != smartSuggestions_)
             host_.repaintCanvas();
@@ -71,6 +61,9 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
     const bool ghostAcceptsMidi = ghostProc->acceptsMidi();
     const bool ghostProducesMidi = ghostProc->producesMidi();
 
+    const synth::MacroOwnerIndex owners(host_.getMacros()); // only cards facing `target` (sidesFacing) are wired
+    const auto target = dropContainer(drag);
+
     for (auto* neighbor : host_.modules()) {
         if (neighbor == nullptr || neighbor->getModule() == nullptr)
             continue;
@@ -78,6 +71,9 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
             continue;
         // Hidden attenuverter nodes are never smart-wired.
         if (dynamic_cast<AttenuverterModule*>(neighbor->getModule()) != nullptr)
+            continue;
+        const auto sides = sidesFacing(owners, target, *neighbor);
+        if (!sides.inputs && !sides.outputs)
             continue;
 
         const auto neighborBounds = neighbor->getBounds();
@@ -134,6 +130,8 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
         auto pushAudioGroup = [&](bool ghostIsSource, juce::AudioProcessor* srcProc, juce::AudioProcessor* dstProc,
                                   juce::AudioProcessorGraph::NodeID srcNodeIdForFreeCheck,
                                   juce::AudioProcessorGraph::NodeID dstNodeIdForFreeCheck, bool checkDstFree) {
+            if (!(ghostIsSource ? sides.inputs : sides.outputs))
+                return;
             const auto srcLegs = collectSmartAudioLegs(srcProc, false);
             const auto dstLegs = collectSmartAudioLegs(dstProc, true);
             auto pairs = expandAudioJackPairs(srcLegs, dstLegs);
@@ -251,6 +249,8 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
                     auto* upstreamComp = upstreamNode.has_value() ? componentForNode(*upstreamNode) : nullptr;
                     if (upstreamComp == nullptr || upstreamComp->getModule() == ghostProc)
                         return;
+                    if (containerFacing(owners, *upstreamNode, /*throughInput=*/false) != target)
+                        return; // the cable comes from another container: rerouting it rewires another track
                     auto upstreamCategory = synth::ui::ModuleCategory::Utility;
                     if (auto* umb = dynamic_cast<ModuleBase*>(upstreamComp->getModule()))
                         upstreamCategory = synth::ui::categoryFor(umb->getModuleType());
@@ -438,6 +438,8 @@ void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag
 
         // MIDI
         auto considerMidi = [&](bool ghostIsSource) {
+            if (!(ghostIsSource ? sides.inputs : sides.outputs))
+                return;
             const juce::String ghostName = ghostProc->getName();
             const juce::String neighborName = neighborProc->getName();
             if (ghostIsSource) {

@@ -229,9 +229,9 @@ public:
 
     // ---- Cmd-drag macro reparent (docs/macros/menu-and-membership.md) ----
     /** The macro a live reparent drag would leave if released now, empty for none. */
-    juce::String getMacroDragLeaveId() const noexcept { return macroDragLeaveId_; }
+    juce::String getMacroDragLeaveId() const noexcept override { return macroDragLeaveId_; }
     /** The macro a live reparent drag (or a library drag, see setMacroDropCandidate) would join. */
-    juce::String getMacroDragJoinId() const noexcept { return macroDragJoinId_; }
+    juce::String getMacroDragJoinId() const noexcept override { return macroDragJoinId_; }
     /** A live reparent drag has a leave or join candidate, or has already moved its module across a border. */
     bool hasMacroDragCandidate() const;
     /** The macro a live drag has moved its module into as it crossed, empty when it is back where it started. */

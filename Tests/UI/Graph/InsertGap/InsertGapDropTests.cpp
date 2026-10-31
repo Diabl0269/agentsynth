@@ -7,6 +7,8 @@
 
 #include "InsertGapTestFixture.h"
 
+#include "Modules/VCAModule.h"
+
 #include "UI/Graph/InsertGap/InsertGapKeyboard.h"
 
 using namespace insert_gap_test;

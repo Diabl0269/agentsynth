@@ -1,0 +1,35 @@
+# Bug: a Delay dropped between the Filter and the VCA of an open track wired itself to the other track, whose macro
+# was folded: the folded track's cards stay on the canvas, hidden, right above the open track's row, and were taken
+# as neighbours. A module wires only into the container it lands in (docs/layout/smart-connections.md).
+#
+# What a user does:
+#   1. Opens a project with two tracks: the first folded, the second open, its Filter feeding its VCA.
+#   2. Drags the second track's Delay up between the Filter and the VCA and lets go.
+#   3. The Filter now feeds the Delay and the Delay the VCA; nothing else changed (the saved project shows every other
+#      cable as it was).
+#   4. Presses Cmd+Z: the Delay is unwired again and the Filter feeds the VCA.
+steps:
+  - copyFixture: {name: two-tracks-folded.agsproj}
+  - openProject: {path: "${SCRATCH}/two-tracks-folded.agsproj"}
+  - wait: {}
+  - expect: {id: "card:Delay", audioFrom: "", macro: Oscillator 2}
+  - expect: {id: "card:VCA", contains: {audioFrom: Filter}}
+  - screenshot: {name: before-drag}
+  # The Delay's title bar, then the gap between the Filter (right edge 767) and the VCA (left edge 960), window points.
+  - mouseDown: {id: "card:Delay", x: 60, y: 12}
+  - mouseMoveHeld: {id: window, x: 840, y: 330}
+  - mouseMoveHeld: {id: window, x: 850, y: 270}
+  - mouseMoveHeld: {id: window, x: 852, y: 244}
+  - wait: {}
+  - screenshot: {name: mid-drag}
+  - mouseUp: {id: window, x: 852, y: 244}
+  - wait: {}
+  - screenshot: {name: after-drop}
+  - expect: {id: "card:Delay", audioFrom: Filter, macro: Oscillator 2, within_ms: 1500}
+  - expect: {id: "card:VCA", contains: {audioFrom: Delay}}
+  - saveProject: {path: "${OUT}/after-drop.agsproj"}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Delay", audioFrom: "", within_ms: 1500}
+  - expect: {id: "card:VCA", contains: {audioFrom: Filter}}
+  - screenshot: {name: after-undo}

@@ -61,6 +61,15 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
                     connection.destination.channelIndex == target.channelIndex)
                     cabledTargets.addIfNotAlreadyThere(target.name);
     into.setProperty("cabledTargets", cabledTargets.joinIntoString(", "));
+    // The cards whose audio reaches this one's inputs, so a scenario can tell what a drop wired and what it left alone.
+    juce::StringArray audioFrom;
+    auto& graph = owner.getAudioEngine().getGraph();
+    for (const auto& connection : graph.getConnections())
+        if (connection.destination.nodeID == nodeId && !connection.destination.isMIDI())
+            if (auto* source = graph.getNodeForId(connection.source.nodeID))
+                audioFrom.addIfNotAlreadyThere(owner.getModuleTitle(source->nodeID, source->getProcessor()));
+    audioFrom.sort(true);
+    into.setProperty("audioFrom", audioFrom.joinIntoString(", "));
 }
 
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {
