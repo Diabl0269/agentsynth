@@ -15,6 +15,7 @@
 // floors at a real audio rate, where they land on unambiguous multi-sample counts instead.
 
 #include "Modules/Envelope/EnvelopeGenerator.h"
+#include <cmath>
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -291,6 +292,86 @@ TEST(EnvelopeGeneratorTest, ShapeEndpointsAreExactAndCurveIsMonotonic) {
             previous = value;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// fadeShape(): the decay/release curve, an exponential fall that matches a reference synth's measured tail.
+// ---------------------------------------------------------------------------
+
+TEST(EnvelopeGeneratorTest, FadeShapeEndpointsAreExactAndCurveIsMonotonic) {
+    for (const float c : {-1.0f, -0.65f, -0.3f, -0.001f, 0.0f, 0.001f, 0.3f, 0.65f, 1.0f}) {
+        EXPECT_FLOAT_EQ(EnvelopeGenerator::fadeShape(0.0f, c), 0.0f) << "c = " << c;
+        EXPECT_FLOAT_EQ(EnvelopeGenerator::fadeShape(1.0f, c), 1.0f) << "c = " << c;
+        float previous = -1.0f;
+        for (int i = 0; i <= 40; ++i) {
+            const float value = EnvelopeGenerator::fadeShape(static_cast<float>(i) / 40.0f, c);
+            EXPECT_GE(value, previous - 1e-6f) << "c = " << c << " step " << i;
+            previous = value;
+        }
+    }
+}
+
+TEST(EnvelopeGeneratorTest, FadeShapeNegativeCurveMirrorsThePositiveOne) {
+    for (const float c : {0.2f, 0.65f, 1.0f})
+        for (const float p : {0.1f, 0.4f, 0.8f})
+            EXPECT_NEAR(EnvelopeGenerator::fadeShape(p, -c), 1.0f - EnvelopeGenerator::fadeShape(1.0f - p, c), 1e-6f);
+}
+
+TEST(EnvelopeGeneratorTest, FadeShapeBendsContinuouslyFromLinearAndStaysUsableAtTheEnds) {
+    EXPECT_NEAR(EnvelopeGenerator::fadeShape(0.5f, 0.001f), 0.5f, 1e-3f);
+    // Fast-first by default; the full curve amount falls faster still, and a negative one falls late.
+    EXPECT_GT(EnvelopeGenerator::fadeShape(0.2f, 1.0f), EnvelopeGenerator::fadeShape(0.2f, 0.65f));
+    EXPECT_GT(EnvelopeGenerator::fadeShape(0.2f, 0.65f), 0.2f);
+    EXPECT_LT(EnvelopeGenerator::fadeShape(0.2f, -0.65f), 0.2f);
+    // The steepest setting still leaves a tail rather than a cliff: a tenth of the level remains past a third of the
+    // time.
+    EXPECT_GT(1.0f - EnvelopeGenerator::fadeShape(0.35f, 1.0f), 0.1f);
+}
+
+// Regression test for FRO1370: the default release fell as (1 - f)^3.6 and reached a twentieth of its level at about
+// 0.55 of the time; a reference synth's tail (exp(-3.48 f) - exp(-3.48)) / (1 - exp(-3.48)) holds 15% at the half.
+TEST(EnvelopeGeneratorTest, DefaultReleaseTailFollowsTheReferenceCurve) {
+    auto env = makeGenerator();
+    EnvelopeParameters p;
+    p.attack = 0.0f;
+    p.hold = 0.0f;
+    p.decay = 0.0f;
+    p.sustain = 1.0f;
+    p.release = 1.0f; // 1000 samples
+    env.noteOn();
+    for (int i = 0; i < 5; ++i)
+        env.getNextSample(p);
+    ASSERT_EQ(env.getStage(), EnvelopeStage::Sustain);
+    env.noteOff();
+    std::vector<float> tail;
+    for (int i = 0; i < 1000; ++i)
+        tail.push_back(env.getNextSample(p));
+    const auto reference = [](float f) {
+        return (std::exp(-3.48f * f) - std::exp(-3.48f)) / (1.0f - std::exp(-3.48f));
+    };
+    for (const float f : {0.1f, 0.25f, 0.5f, 0.75f, 0.9f})
+        EXPECT_NEAR(tail[static_cast<size_t>(f * 1000.0f) - 1], reference(f), 0.004f) << "f = " << f;
+}
+
+// Regression test for FRO1370: the default decay fell on the same too-fast curve as the release.
+TEST(EnvelopeGeneratorTest, DefaultDecayFollowsTheReferenceCurveToTheSustainLevel) {
+    auto env = makeGenerator();
+    EnvelopeParameters p;
+    p.attack = 0.0f;
+    p.hold = 0.0f;
+    p.decay = 1.0f;
+    p.sustain = 0.4f;
+    env.noteOn();
+    std::vector<float> fall;
+    for (int i = 0; i < 1005; ++i)
+        fall.push_back(env.getNextSample(p));
+    const auto reference = [&](float f) {
+        const float remaining = (std::exp(-3.48f * f) - std::exp(-3.48f)) / (1.0f - std::exp(-3.48f));
+        return p.sustain + (1.0f - p.sustain) * remaining;
+    };
+    for (const float f : {0.1f, 0.25f, 0.5f, 0.75f, 0.9f})
+        EXPECT_NEAR(fall[static_cast<size_t>(f * 1000.0f)], reference(f), 0.004f) << "f = " << f;
+    EXPECT_FLOAT_EQ(fall.back(), 0.4f);
 }
 
 // ---------------------------------------------------------------------------

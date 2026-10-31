@@ -91,7 +91,12 @@ CurveModel buildEnvelopeCurveModel(juce::AudioProcessor& processor) {
     nodes[3] = {attack + hold + decay, sustain, true, true, 0.0, kMaxStageSeconds, 0.0f, 1.0f};
     nodes[4] = {attack + hold + decay + release, 0.0f, true, false, 0.0, kMaxStageSeconds, 0.0f, 0.0f};
 
-    CurveModel model(CurveMode::Fixed);
+    // Segments 2 and 3 are the decay and release, which fade on EnvelopeGenerator::fadeShape; the attack and hold
+    // keep the plain shape.
+    CurveModel model(CurveMode::Fixed, [](float progress, float bend, int segment) {
+        return segment >= 2 ? synth::EnvelopeGenerator::fadeShape(progress, bend)
+                            : synth::EnvelopeGenerator::shape(progress, bend);
+    });
     model.setNodes(std::move(nodes));
     model.setBend(0, floatParam("attackCurve"));
     model.setBend(2, floatParam("decayCurve"));

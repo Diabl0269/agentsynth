@@ -122,6 +122,22 @@ TEST_F(ModuleComponentTest, AdsrEnvelopeCurveModelMatchesDefaultParams) {
     EXPECT_FALSE(model.isBendable(1)) << "the hold plateau (level 1 -> 1) has no curve param behind it";
 }
 
+// The graph draws the decay and release on the curve the generator plays them on, and the attack on its own.
+TEST_F(ModuleComponentTest, AdsrEnvelopeGraphDrawsDecayAndReleaseOnTheFadeCurve) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    auto* curve = findEnvelopeCurveEditor(moduleComponent);
+    ASSERT_NE(curve, nullptr);
+    const auto& model = curve->getModel();
+    const float releaseMiddle = model.valueAt(3, 0.5f);
+    EXPECT_NEAR(releaseMiddle, 1.0f - synth::EnvelopeGenerator::fadeShape(0.5f, 0.65f), 1e-6f);
+    EXPECT_NE(releaseMiddle, 1.0f - synth::EnvelopeGenerator::shape(0.5f, 0.65f));
+    EXPECT_NEAR(model.valueAt(0, 0.5f), 0.5f, 1e-6f) << "the linear attack";
+}
+
 // The three curve params are edited ONLY through the graph's bend handles -- they are not in
 // the generic auto-slider UI entirely.
 TEST_F(ModuleComponentTest, AdsrCurveParamsAreNotExposedAsSliders) {
