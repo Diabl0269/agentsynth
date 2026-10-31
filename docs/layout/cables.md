@@ -190,6 +190,13 @@ the perpendicular distance is `pos.getDistanceFrom(nearestPoint)`.
 
 Ties go to the later cable, matching paint order: mod wires draw over audio wires.
 
+## A refused drop says why
+
+A cable released on a jack that cannot take it (an output on an output, or a MIDI jack against an audio or CV jack:
+Poly MIDI's Poly Out carries CV, so the Oscillator's MIDI input refuses it) makes no cable, and `GraphEditor::endConnectionDrag`
+reports the reason through the status bar (`reportStatusMessage`). Nothing is said when the cable lands somewhere else
+on the same release (a collapsed macro's card, a plugin's knob picker).
+
 ## Hover
 
 `mouseMove` resolves the cable under the cursor and stores only its `CableId`. The canvas repaints

@@ -73,7 +73,7 @@ type distinct, and a renamed card takes its new title. Add a `setComponentID` on
 do not rename existing ones.
 
 A component with state worth reading implements `synth::testmode::StateSource` (`addTestModeState`), as `ModuleComponent`
-(`selected`, `moduleType`, `nodeId`, `modHoverChip`: whether the chip under a hovered knob is drawn, `macro`: the name of the macro the module sits in, empty when none, `cabledTargets`: the modulation targets with a cable on them) and
+(`selected`, `moduleType`, `nodeId`, `modHoverChip`: whether the chip under a hovered knob is drawn, `macro`: the name of the macro the module sits in, empty when none, `cabledTargets`: the modulation targets with a cable on them, `cabledInputs`: every input jack with a cable, by its label) and
 `MacroCardComponent` (id `macroCard`: `name`, `collapsed`, `members`) and `KeyPicker` (id `keyPicker`: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`; `clipAudio`, every audio clip as `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`) do. `getState` also reports a component's `tooltip`
 when it has one, so a scenario can check the shortcut a button's tooltip names.
 
