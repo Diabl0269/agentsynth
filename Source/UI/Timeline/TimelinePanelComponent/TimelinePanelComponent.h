@@ -27,7 +27,6 @@
 #include "UI/Timeline/FollowPlayheadButton.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelineClipboardClip.h"
-#include "UI/Timeline/TimelinePanelComponent/TimelineTopBarKeys.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
 #include "UI/Timeline/TimelineRowLayout.h"
@@ -53,6 +52,7 @@ class TransportService;
 class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 namespace ui {
 class DrumMachineComponent;
+class KeyRing; // Forward declaration (Source/UI/Layout/KeyRing.h): kept out of this widely included header
 struct DrumMachineHost;
 class ModMatrixPicker; // Forward declaration (Source/UI/Graph/ModMatrixPicker.h): the add-automation picker
 } // namespace ui
@@ -99,8 +99,9 @@ public:
     // Focus-region outline, drawn OVER children (see its definition in TimelinePanelLayout.cpp).
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
-    void focusLost(FocusChangeType) override { topBarKeys_.leave(); }
-    TimelineTopBarKeys& getTopBarKeysForTest() noexcept { return topBarKeys_; }
+    void focusLost(FocusChangeType) override;
+    KeyRing& getTopBarKeysForTest() noexcept { return *topBarKeys_; }
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     // Wheel = horizontal scroll; Cmd+wheel (Ctrl on platforms without a Cmd key) = zoom around the
     // cursor. See mouseWheelMove()'s definition in TimelinePanelLayout.cpp for the full modifier
@@ -985,7 +986,7 @@ private:
     juce::Rectangle<int> gridLanesBounds_; // lanesBounds_ minus the ruler strip at its top
 
     std::vector<juce::Component*> topBarStops();
-    TimelineTopBarKeys topBarKeys_{*this, [this] { return topBarStops(); }};
+    std::unique_ptr<KeyRing> topBarKeys_; // the top bar's key ring, built in the constructor
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelinePanelComponent)
 };

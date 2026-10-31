@@ -7,6 +7,7 @@
 // TimelineClipLaneArea (TimelineClipLaneKeyboard.cpp).
 
 #include "TimelinePanelComponent.h"
+#include "UI/Layout/KeyRing.h"
 
 #include "Transport/TransportService.h"
 #include "UI/Timeline/ClipKeyboardNav.h"
@@ -27,7 +28,7 @@ void TimelinePanelComponent::wireClipLaneCallbacks() {
 bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
     // Up from the panel root climbs to the top bar (tools, snap, follow, transport); Down from the bar comes back.
     if (key == juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0))
-        return topBarKeys_.enter();
+        return topBarKeys_->enter();
     if (key.isKeyCode(juce::KeyPress::downKey)) {
         addTrackFromTop_ = true;
         focusAddTrackButton();

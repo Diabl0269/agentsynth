@@ -13,6 +13,7 @@
 #include "Timeline/SongKeyNotes.h"
 #include "Transport/TransportService.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
+#include "UI/Layout/KeyRing.h"
 #include <algorithm>
 #include <cmath>
 
@@ -43,7 +44,8 @@ void TimelinePanelComponent::wirePianoRollLoopRequest() {
     };
 }
 
-TimelinePanelComponent::TimelinePanelComponent() {
+TimelinePanelComponent::TimelinePanelComponent()
+    : topBarKeys_(std::make_unique<KeyRing>(*this, [this] { return topBarStops(); })) {
     // Makes grabKeyboardFocus() on THIS component (the "timeline" focus region's root)
     // succeed deterministically, rather than depending on JUCE's position-ordered descent into
     // children finding a focus-wanting one. This is deliberately separate from the clip-lane-area

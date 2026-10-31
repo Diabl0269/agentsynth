@@ -1,4 +1,4 @@
-// TimelineTopBarKeysTests.cpp: a keyboard-only user reaches every control of the Timeline's top bar (tools, Sizing,
+// TimelineTopBarRingTests.cpp: a keyboard-only user reaches every control of the Timeline's top bar (tools, Sizing,
 // snap, follow, transport, tempo, time signature, song key). Focus stays on the panel root; Up on it raises a ring, the
 // arrows move it, Return and Space press the ringed control. Real focus needs a native peer, so the root's key is
 // handed to handleRootFocusKey and the rest go through the panel's own keyPressed.
@@ -6,6 +6,7 @@
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/KeyRing.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>
@@ -52,7 +53,7 @@ struct TopBarFixture {
 } // namespace
 
 // Regression test for FRO1114: tempo, time signature, the transport buttons and the tool strip had no keyboard path.
-TEST(TimelineTopBarKeysTest, UpFromTheRootThenRightReachesEveryControlLeftToRight) {
+TEST(TimelineTopBarRingTest, UpFromTheRootThenRightReachesEveryControlLeftToRight) {
     TopBarFixture f;
     auto expected = f.everyControlOfTheBar();
     const auto stops = f.keys().getStops();
@@ -81,7 +82,7 @@ TEST(TimelineTopBarKeysTest, UpFromTheRootThenRightReachesEveryControlLeftToRigh
     EXPECT_EQ(f.keys().getRingedStop(), stops.front());
 }
 
-TEST(TimelineTopBarKeysTest, TheStopsAreInOnScreenOrder) {
+TEST(TimelineTopBarRingTest, TheStopsAreInOnScreenOrder) {
     TopBarFixture f;
     const auto stops = f.keys().getStops();
     int previousX = -1;
@@ -92,7 +93,7 @@ TEST(TimelineTopBarKeysTest, TheStopsAreInOnScreenOrder) {
     }
 }
 
-TEST(TimelineTopBarKeysTest, DownAndEscapeLeaveTheBarAndOtherKeysStillReachThePanel) {
+TEST(TimelineTopBarRingTest, DownAndEscapeLeaveTheBarAndOtherKeysStillReachThePanel) {
     TopBarFixture f;
     ASSERT_TRUE(f.panel.handleRootFocusKey(key(juce::KeyPress::upKey)));
     EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::downKey)));
@@ -108,7 +109,7 @@ TEST(TimelineTopBarKeysTest, DownAndEscapeLeaveTheBarAndOtherKeysStillReachThePa
     EXPECT_FALSE(f.keys().handleKey(key(juce::KeyPress::rightKey))) << "nothing is ringed once it has left";
 }
 
-TEST(TimelineTopBarKeysTest, ReturnAndSpacePressTheRingedControl) {
+TEST(TimelineTopBarRingTest, ReturnAndSpacePressTheRingedControl) {
     TopBarFixture f;
     ASSERT_TRUE(f.panel.handleRootFocusKey(key(juce::KeyPress::upKey)));
     const auto stops = f.keys().getStops();
@@ -133,4 +134,32 @@ TEST(TimelineTopBarKeysTest, ReturnAndSpacePressTheRingedControl) {
     ringTo(&f.panel.getTransportBar().getBpmLabel());
     EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::returnKey)));
     EXPECT_TRUE(f.panel.getTransportBar().getBpmLabel().isBeingEdited()) << "Return starts typing the tempo";
+}
+
+// Regression test for FRO1291: the ring moved a painted box while the panel kept focus, so a screen reader heard
+// nothing. The panel's handler value is the ringed control's name, and it changes on every move.
+TEST(TimelineTopBarRingTest, TheScreenReaderValueNamesTheRingedControlAndChangesWithEveryMove) {
+    TopBarFixture f;
+    auto handler = f.keys().createAccessibilityHandler();
+    ASSERT_NE(handler, nullptr);
+    EXPECT_EQ(handler->getRole(), juce::AccessibilityRole::group);
+    ASSERT_NE(handler->getValueInterface(), nullptr);
+    const auto value = [&] { return handler->getValueInterface()->getCurrentValueAsString(); };
+    const auto nameOf = [](juce::Component* c) {
+        auto* b = dynamic_cast<juce::Button*>(c);
+        return c->getTitle().isNotEmpty() ? c->getTitle() : b != nullptr ? b->getButtonText() : c->getName();
+    };
+
+    EXPECT_TRUE(value().isEmpty()) << "no ring, no value";
+    ASSERT_TRUE(f.panel.handleRootFocusKey(key(juce::KeyPress::upKey)));
+    const auto stops = f.keys().getStops();
+    EXPECT_EQ(value(), nameOf(stops[0]));
+    EXPECT_TRUE(value().isNotEmpty());
+    ASSERT_TRUE(f.panel.keyPressed(key(juce::KeyPress::rightKey)));
+    EXPECT_EQ(value(), nameOf(stops[1]));
+    ASSERT_TRUE(f.panel.keyPressed(key(juce::KeyPress::endKey)));
+    EXPECT_EQ(value(), nameOf(stops.back()));
+    EXPECT_NE(value(), nameOf(stops[0]));
+    ASSERT_TRUE(f.panel.keyPressed(key(juce::KeyPress::downKey)));
+    EXPECT_TRUE(value().isEmpty()) << "back on the panel";
 }

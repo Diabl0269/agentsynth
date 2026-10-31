@@ -19,8 +19,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeight.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelSidePane.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelineTopBarKeys.h
-    Source/UI/Timeline/TimelinePanelComponent/TimelineTopBarKeys.cpp
+    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTopBarKeys.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAutomation.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAddAutomation.cpp
     Source/UI/Timeline/TimelinePanelComponent/AddTrackPicker.cpp

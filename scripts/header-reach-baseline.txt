@@ -291,7 +291,6 @@
 364 Source/UI/Timeline/FollowPlayheadButton.h
 364 Source/UI/Timeline/TimelinePanelComponent/TimelineClipboardClip.h
 364 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
-364 Source/UI/Timeline/TimelinePanelComponent/TimelineTopBarKeys.h
 364 Source/UI/Timeline/TrackSelectionModel.h
 359 Source/Branding.h
 357 Source/UI/Library/ModuleLibraryHelpPopup.h
