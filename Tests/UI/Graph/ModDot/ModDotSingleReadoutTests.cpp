@@ -9,6 +9,14 @@ namespace {
 
 using synth::ui::AppTooltipWindow;
 
+// juce gives no hover tip outside the foreground app, and a headless Linux test process never is. A hidden automation
+// process counts as foreground, so this lets the real tip path run on every platform.
+struct CountsAsForeground {
+    CountsAsForeground() { juce::ComponentPeer::hideWindowsForAutomation = true; }
+    ~CountsAsForeground() { juce::ComponentPeer::hideWindowsForAutomation = previous; }
+    const bool previous = juce::ComponentPeer::hideWindowsForAutomation;
+};
+
 // How many readouts the user sees now: the mod dot's own, plus every hover tip the tooltip window would show for the
 // components the pointer is over or passes over during the gesture (the knob the dot sits on, the dot's Tab-stop
 // button, and the card around them).
@@ -28,6 +36,7 @@ int visibleReadouts(Fixture& f, AppTooltipWindow& window) {
 // Regression test for FRO1189: a second tooltip (the knob's hover tip) showed under the knob next to the mod dot's
 // readout while the dot was dragged.
 TEST_F(ModuleComponentTest, DraggingTheDotShowsExactlyOneReadoutAndTheKnobsOwnTipComesBack) {
+    CountsAsForeground foreground;
     Fixture f;
     ASSERT_NE(f.gainKnob, nullptr);
     AppTooltipWindow window(f.editor.get());
@@ -47,6 +56,7 @@ TEST_F(ModuleComponentTest, DraggingTheDotShowsExactlyOneReadoutAndTheKnobsOwnTi
 }
 
 TEST_F(ModuleComponentTest, SteppingTheDotWithTheKeyboardShowsExactlyOneReadout) {
+    CountsAsForeground foreground;
     Fixture f;
     auto* button = f.vcaCard->getModDotButton(f.gainChannel);
     ASSERT_NE(button, nullptr);
