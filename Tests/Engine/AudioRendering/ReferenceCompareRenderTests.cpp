@@ -464,3 +464,38 @@ TEST(ReferenceCompareRender, RenderFilterPeakGrid) {
             ASSERT_TRUE(renderCase(dir, backend, c, entry)) << c.name;
         }
 }
+
+// Filter resonance peak position: the same LP24 settings as the grid above, but a saw held at sixteen pitches in turn
+// (C2 up to D#3), so the harmonics of the notes together sample the spectrum finely enough to place the peak to a few
+// Hz, and there is no hole in the probe to hide it in.
+TEST(ReferenceCompareRender, RenderFilterPeakPitches) {
+    const auto dir = outDir();
+    if (dir == juce::File())
+        GTEST_SKIP() << "AGENTSYNTH_REFERENCE_COMPARE_DIR / AGENTSYNTH_REFERENCE_PLUGIN not set";
+    dir.createDirectory();
+    synth::DefaultHostedPluginBackend backend;
+    std::vector<NoteSpan> notes;
+    for (int i = 0; i < 16; ++i)
+        notes.push_back({samples(0.3 + i * 1.0), samples(1.0 + i * 1.0), 36 + i});
+    for (const int cutoff : {3000, 4000, 6000, 8000, 10000, 12000})
+        for (const int res : {70, 90, 100}) {
+            AgentSetup a;
+            a.osc["waveform"] = 2;
+            a.useFilter = true;
+            a.filter = {{"filterType", 0}, {"cutoff", (double)cutoff}, {"resonance", res / 100.0}};
+            Case c{"fpitch_c" + juce::String(cutoff) + "_r" + juce::String(res),
+                   notes,
+                   samples(17.0),
+                   a,
+                   [=](ReferenceRig& r) {
+                       r.setNorm("Filter On", 1.0f);
+                       r.setText("Fil Type", "MG Low 24");
+                       r.setNumeric("Fil Cutoff", cutoff);
+                       r.setNumeric("Fil Reso", res);
+                   },
+                   false,
+                   {}};
+            juce::var entry;
+            ASSERT_TRUE(renderCase(dir, backend, c, entry)) << c.name;
+        }
+}

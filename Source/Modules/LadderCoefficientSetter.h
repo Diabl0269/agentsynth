@@ -10,9 +10,13 @@ namespace synth {
 /** Feedback gain of the ladder (0 = none, 1 = on the edge of self-oscillation) for a Resonance knob value in 0..1. */
 float ladderFeedbackForResonance(float resonanceKnob) noexcept;
 
-/** Feedback for a knob feedback at a cutoff of `cutoffOverSampleRate`: unchanged up to a ratio of 0.06, then raised so
-   the resonant peak holds its height as the one-sample feedback delay weakens the loop (0 stays 0). */
+/** Feedback for a knob feedback at a cutoff of `cutoffOverSampleRate`: unchanged up to a ratio of 0.0625, then lowered
+   so the resonant peak keeps the reference's height once the cutoff is raised (0 stays 0). */
 float ladderFeedbackForCutoff(float feedback, float cutoffOverSampleRate) noexcept;
+
+/** The cutoff the ladder's coefficient is set from: unchanged up to a ratio of 0.0625 of the sample rate, then raised
+   so the one-sample feedback delay no longer pulls the resonant peak below the cutoff. */
+float ladderCutoffForCutoff(float cutoffHz, float sampleRate) noexcept;
 
 /** Highest feedback that still decays, for a cutoff of `cutoffOverSampleRate` (cutoff Hz / sample rate): the one-sample
     delay in the feedback path pulls the stability limit below 1 for cutoffs above about an eighth of the sample rate.
