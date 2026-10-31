@@ -57,8 +57,8 @@ public:
         addParameter(holdParam = new juce::AudioParameterFloat(
                          "hold", "Hold", juce::NormalisableRange<float>(0.0f, 5.0f), 0.0f, adsrTimeAttributes()));
         addParameter(attackCurveParam = new juce::AudioParameterFloat("attackCurve", "Attack Curve",
-                                                                      juce::NormalisableRange<float>(-1.0f, 1.0f),
-                                                                      -0.3f, adsrCurveAttributes()));
+                                                                      juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f,
+                                                                      adsrCurveAttributes()));
         addParameter(decayCurveParam = new juce::AudioParameterFloat("decayCurve", "Decay Curve",
                                                                      juce::NormalisableRange<float>(-1.0f, 1.0f), 0.65f,
                                                                      adsrCurveAttributes()));

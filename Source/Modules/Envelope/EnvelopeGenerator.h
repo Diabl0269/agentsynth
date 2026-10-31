@@ -20,7 +20,7 @@ struct EnvelopeParameters {
     float decay = 1.0f;
     float sustain = 1.0f; // level, 0..1
     float release = 0.015f;
-    float attackCurve = -0.3f; // -1..+1
+    float attackCurve = 0.0f; // -1..+1; linear, as a measured reference attack ramp is
     float decayCurve = 0.65f;
     float releaseCurve = 0.65f;
 };
@@ -149,7 +149,10 @@ public:
      *  The landing covers the last ~6% of level, or the last 1.5 ms when that is shorter in time,
      *  and never more than the second half of the stage; it joins the curve with the same level
      *  and slope, so the stage's duration and the curve before the landing are unchanged. A
-     *  curve with `c > 0` already ends flat and is returned as is. `attackShape(0) == 0` and
+     *  curve with `c > 0` already ends flat and is returned as is. A linear attack (`c == 0`) is a
+     *  straight ramp that starts on a parabola instead of a corner (a straight ramp from silence
+     *  ticks at the note's first sample): it behaves as the line delayed by half the start's span,
+     *  at a slightly steeper slope so it still arrives on time. `attackShape(0) == 0` and
      *  `attackShape(1) == 1` exactly.
      */
     static float attackShape(float p, float c, float stageSeconds) noexcept {
@@ -157,16 +160,22 @@ public:
             return shape(p, c);
         const float n = 1.0f + 4.0f * std::abs(c);
         const float landingFraction = std::min(0.5f, kAttackLandingSeconds / std::max(stageSeconds, 1.0e-6f));
-        const float levelStart = std::exp(std::log(1.0f - kAttackLandingLevel) / n); // shape(levelStart) = 0.94
+        const float launch = c == 0.0f ? launchFraction(stageSeconds) : 0.0f;
+        const float slope = 1.0f / (1.0f - 0.5f * launch); // the line's slope once the start has eased in
+        // Where the base curve reaches 0.94.
+        const float levelStart =
+            c == 0.0f ? 0.94f / slope + 0.5f * launch : std::exp(std::log(1.0f - kAttackLandingLevel) / n);
         const float start = std::min(levelStart, 1.0f - landingFraction);
         if (p <= start)
-            return shape(p, c);
+            return c == 0.0f ? linearAttack(p, launch, slope) : shape(p, c);
 
         const float h = 1.0f - start;
-        const float y0 = std::pow(start, n);
+        const float y0 = c == 0.0f ? linearAttack(start, launch, slope) : std::pow(start, n);
         const float rise = 1.0f - y0;
         // Entry slope of the curve per unit progress, capped so the landing never overshoots 1.
-        const float m0h = std::min(n * std::pow(start, n - 1.0f) * h, 3.0f * rise);
+        const float entrySlope =
+            c == 0.0f ? (start < launch ? slope * start / launch : slope) : n * std::pow(start, n - 1.0f);
+        const float m0h = std::min(entrySlope * h, 3.0f * rise);
         const float t = (p - start) / h;
         const float t2 = t * t;
         const float t3 = t2 * t;
@@ -176,6 +185,16 @@ public:
 private:
     static constexpr float kAttackLandingLevel = 0.06f;
     static constexpr float kAttackLandingSeconds = 0.0015f;
+    static constexpr float kAttackLaunchSeconds = 0.0003f;
+
+    static float linearAttack(float p, float launch, float slope) noexcept {
+        return p < launch ? slope * p * p / (2.0f * launch) : slope * (p - 0.5f * launch);
+    }
+
+    /** Share of a linear attack (curve 0) spent starting on a parabola: 0.3 ms, never more than the first half. */
+    static float launchFraction(float stageSeconds) noexcept {
+        return std::min(0.5f, kAttackLaunchSeconds / std::max(stageSeconds, 1.0e-6f));
+    }
 
     static EnvelopeStage nextStage(EnvelopeStage current) noexcept {
         switch (current) {

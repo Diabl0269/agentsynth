@@ -32,6 +32,22 @@ constexpr float kStabilityLinear = -0.45276f;
 constexpr float kStabilityQuadratic = 0.41869f;
 constexpr float kStabilityMargin = 0.01f;
 
+// Resonant peak at high cutoffs. The one-sample feedback delay pulls the ladder's peak flat as the cutoff nears the
+// sample rate (at 48 kHz, knob 90 %: 3 kHz peak at 0.97 of the cutoff, 6 kHz at 0.92, 8 kHz at 0.89, 12 kHz at 0.81,
+// the reference holding 0.97 throughout), and lets it grow higher than the reference's. Fitted to the peak of a C2 to
+// D#3 saw swept in 16 pitches (so the peak is placed to a few Hz) through the reference at cutoffs 3 to 12
+// kHz, knob 70, 90 and 100 %, 48 kHz, minimising the cents error over 25 and the dB error over 1.5 together. Above a
+// cutoff / sample rate ratio of 0.0625 (3 kHz at 48 kHz), where every cutoff below is left as it was, the cutoff
+// is raised by 1 + 12.887 d^2 and the feedback lowered by 0.366 d, d being the ratio past 0.0625 (to 0.25, the highest
+// ratio measured). The peak then lands within 40 cents of the reference and within 2 dB of its height, bar the knob's
+// end stop at 4 and 6 kHz where it is 4 to 5 dB low.
+constexpr float kHighCutoffRatioStart = 0.0625f;
+constexpr float kHighCutoffRatioEnd = 0.25f;
+constexpr float kHighCutoffRaise = 12.887f;
+// The raised cutoff stays within the ratios the stability ceiling was measured over.
+constexpr float kHighCutoffRaisedRatioCeiling = 0.45f;
+constexpr float kHighCutoffFeedbackDrop = 0.366f;
+
 constexpr float kOutputGain = 1.2f;
 
 const juce::dsp::LookupTableTransform<float>& tanhTable() {
@@ -46,6 +62,21 @@ float ladderFeedbackForResonance(float resonanceKnob) noexcept {
     if (!(resonanceKnob > 0.0f))
         return 0.0f;
     return juce::jmax(0.0f, kFeedbackSlope * juce::jmin(resonanceKnob, 1.0f) + kFeedbackOffset);
+}
+
+float ladderFeedbackForCutoff(float feedback, float cutoffOverSampleRate) noexcept {
+    if (!(feedback > 0.0f))
+        return 0.0f;
+    const float past =
+        juce::jlimit(0.0f, kHighCutoffRatioEnd - kHighCutoffRatioStart, cutoffOverSampleRate - kHighCutoffRatioStart);
+    return feedback * (1.0f - kHighCutoffFeedbackDrop * past);
+}
+
+float ladderCutoffForCutoff(float cutoffHz, float sampleRate) noexcept {
+    const float past =
+        juce::jlimit(0.0f, kHighCutoffRatioEnd - kHighCutoffRatioStart, cutoffHz / sampleRate - kHighCutoffRatioStart);
+    return juce::jmax(cutoffHz, juce::jmin(cutoffHz * (1.0f + kHighCutoffRaise * past * past),
+                                           kHighCutoffRaisedRatioCeiling * sampleRate));
 }
 
 float ladderFeedbackCeiling(float x) noexcept {
@@ -180,9 +211,14 @@ void ResonantLadder::setSampleRate(float sampleRate) noexcept {
 }
 
 void ResonantLadder::updateFeedback() noexcept {
-    feedbackSmoother_.setTargetValue(juce::jmin(knobFeedback_, ladderFeedbackCeiling(cutoffHz_ / sampleRate_)));
+    const float x = cutoffHz_ / sampleRate_;
+    const float effectiveX = ladderCutoffForCutoff(cutoffHz_, sampleRate_) / sampleRate_;
+    feedbackSmoother_.setTargetValue(
+        juce::jmin(ladderFeedbackForCutoff(knobFeedback_, x), ladderFeedbackCeiling(effectiveX)));
 }
 
-void ResonantLadder::updateCutoff() noexcept { cutoffSmoother_.setTargetValue(std::exp(cutoffHz_ * cutoffScaler_)); }
+void ResonantLadder::updateCutoff() noexcept {
+    cutoffSmoother_.setTargetValue(std::exp(ladderCutoffForCutoff(cutoffHz_, sampleRate_) * cutoffScaler_));
+}
 
 } // namespace synth
