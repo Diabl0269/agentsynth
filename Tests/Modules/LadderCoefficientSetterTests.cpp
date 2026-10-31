@@ -7,6 +7,7 @@
 #include "Modules/LadderCoefficientSetter.h"
 #include <cmath>
 #include <gtest/gtest.h>
+#include <juce_dsp/juce_dsp.h>
 #include <vector>
 
 namespace {

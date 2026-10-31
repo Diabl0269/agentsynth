@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Filter/CustomFilterEngine.h"
+#include "Filter/ResonantLadder.h"
 #include "FrequencyText.h"
 #include "LadderCoefficientSetter.h"
 #include "ModuleBase.h"
@@ -727,7 +728,7 @@ private:
 
     // One independent ladder (and notch SVF) per audio leg per voice: a stereo filter has to keep
     // L and R separate all the way through, or the image collapses at the VCF.
-    juce::dsp::LadderFilter<float> ladders[kLegCount][MAX_VOICES];
+    synth::ResonantLadder ladders[kLegCount][MAX_VOICES];
     synth::LadderCoefficientSetter ladderSetters[kLegCount][MAX_VOICES];
     juce::dsp::StateVariableTPTFilter<float> svfsForNotch[kLegCount][MAX_VOICES];
     bool isNotchMode = false;

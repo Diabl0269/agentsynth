@@ -33,6 +33,8 @@ add_executable(Tests
     Modules/CardLayoutTests.cpp
     Modules/FilterTests.cpp
     Modules/LadderCoefficientSetterTests.cpp
+    Modules/FilterResonanceFitTests.cpp
+    Modules/ResonantLadderTests.cpp
     Modules/FilterKeyTrackTests.cpp
     Modules/CardViewStateTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModulePanLawTests.cpp
