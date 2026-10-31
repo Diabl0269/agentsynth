@@ -10,7 +10,7 @@ REF = sys.argv[2] if len(sys.argv) > 2 else "reference"
 SR = 48000
 LEVELS = (0.1, 0.25, 0.5, 0.75, 0.9, 0.99)
 # case prefix -> (note on s, note off s); the number is the swept time in tenths of a millisecond
-SPANS = {"envatk": (0.3, 1.3), "envrel": (0.3, 1.0), "envdec": (0.3, 2.3)}
+SPANS = {"envatk": (0.3, 1.3), "envrel": (0.3, 1.0), "envdec": (0.3, 2.3), "envdsl": (0.3, 2.3)}
 
 
 def load(path):
@@ -55,11 +55,11 @@ def report(name):
     fmt = lambda v: " ".join(f"{t:8.2f}" for t in v)
     print(f"{name}  (ms to reach {', '.join(str(int(l * 100)) for l in LEVELS)} % of the stage's travel)")
     for who, (lat, times, top) in out.items():
-        extra = f"sustain/peak {top:.3f}" if kind == "envdec" else f"level {top:.0f}"
+        extra = f"sustain/peak {top:.3f}" if kind in ("envdec", "envdsl") else f"level {top:.0f}"
         print(f"   {who:11s} onset+{lat:6.2f} ms  {fmt(times)}   {extra}")
 
 
 names = sorted({os.path.basename(f)[11:-4] for f in os.listdir(D) if f.startswith("agentsynth_env") and f[11:17] in SPANS})
-order = {"envatk": 0, "envrel": 1, "envdec": 2}
+order = {"envatk": 0, "envrel": 1, "envdec": 2, "envdsl": 3}
 for n in sorted(names, key=lambda n: (order[n[:6]], int(n.split("_")[1]))):
     report(n)

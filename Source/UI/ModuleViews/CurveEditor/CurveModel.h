@@ -62,12 +62,12 @@ inline bool operator==(const CurvePlayhead& a, const CurvePlayhead& b) {
  *
  *  Bend shaping defaults to `synth::EnvelopeGenerator::shape` — the exact function the DSP
  *  evaluates — so a curve drawn from this model is what actually plays, never a re-derived
- *  approximation. A caller may substitute a different shape function (e.g. a future LFO-specific
- *  shape) via the constructor.
+ *  approximation. A caller may substitute a different shape function (e.g. the envelope card's, which
+ *  shapes its decay and release on their own curve) via the constructor; it is told which segment it shapes.
  */
 class CurveModel {
 public:
-    using ShapeFn = std::function<float(float progress, float bend)>;
+    using ShapeFn = std::function<float(float progress, float bend, int segment)>;
 
     explicit CurveModel(CurveMode mode = CurveMode::Fixed, ShapeFn shapeFn = defaultShape());
 

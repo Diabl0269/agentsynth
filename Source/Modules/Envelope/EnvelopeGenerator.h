@@ -104,7 +104,7 @@ public:
 
                 const float target = stageTarget(params);
                 const float shaped = stage_ == EnvelopeStage::Attack ? attackShape(progress_, params.attackCurve, time)
-                                                                     : shape(progress_, stageCurve(params));
+                                                                     : fadeShape(progress_, stageCurve(params));
                 currentLevel_ = stageStart_ + (target - stageStart_) * shaped;
 
                 if (progress_ >= 1.0f) {
@@ -142,6 +142,21 @@ public:
         if (c > 0.0f)
             return 1.0f - std::pow(1.0f - p, n);
         return std::pow(p, n);
+    }
+
+    /** The shape of a decay or release: `shape`'s contract (`0` and `1` exact, `c == 0` linear, `c > 0`
+     * fast-first/slow-tail, `c < 0` its mirror) on an exponential fall, `(1 - e^(-k p)) / (1 - e^(-k))`, which is how a
+     * reference synth's decay and release measure (fitted from rendered tails, within about 1% of its level at any set
+     * time and travel). The rate `k` grows in step with the curve amount and is `kFadeRate` at the default 0.65; a
+     * larger `c` falls faster at the start, and `c -> 0` is the straight line it meets from both sides.
+     */
+    static float fadeShape(float p, float c) noexcept {
+        if (c == 0.0f)
+            return p;
+        if (c < 0.0f)
+            return 1.0f - fadeShape(1.0f - p, -c);
+        const float k = kFadeRate * c / kDefaultFadeCurve;
+        return std::expm1(-k * p) / std::expm1(-k);
     }
 
     /** The attack's shape: `shape(p, c)` with its top rounded off, so the attack lands on 1 with a
@@ -183,6 +198,8 @@ public:
     }
 
 private:
+    static constexpr float kFadeRate = 3.48f;         // decay/release exponent at the default curve amount
+    static constexpr float kDefaultFadeCurve = 0.65f; // the decayCurve/releaseCurve default
     static constexpr float kAttackLandingLevel = 0.06f;
     static constexpr float kAttackLandingSeconds = 0.0015f;
     static constexpr float kAttackLaunchSeconds = 0.0003f;

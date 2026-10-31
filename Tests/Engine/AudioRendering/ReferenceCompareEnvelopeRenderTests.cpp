@@ -63,9 +63,11 @@ TEST(ReferenceCompareRender, RenderEnvelopeShapes) {
     };
     for (const double ms : {0.5, 1.0, 2.0, 4.0, 10.0, 50.0, 200.0})
         run("envatk_" + juce::String(juce::roundToInt(ms * 10.0)), 0.3, 1.3, 1.7, ms / 1000.0, 0.0, 1.0, 0.015);
-    for (const double ms : {5.0, 15.0, 50.0, 200.0, 800.0})
+    for (const double ms : {5.0, 15.0, 50.0, 200.0, 800.0, 2000.0, 5000.0})
         run("envrel_" + juce::String(juce::roundToInt(ms * 10.0)), 0.3, 1.0, 1.0 + ms / 1000.0 + 0.4, 0.002, 0.0, 1.0,
             ms / 1000.0);
-    for (const double ms : {50.0, 200.0, 800.0})
+    for (const double ms : {20.0, 50.0, 100.0, 200.0, 400.0, 800.0, 1600.0})
         run("envdec_" + juce::String(juce::roundToInt(ms * 10.0)), 0.3, 2.3, 2.7, 0.002, ms / 1000.0, 0.5, 0.015);
+    // The same 200 ms decay to a lower sustain, to see whether the fade shape depends on how far it travels.
+    run("envdsl_2000", 0.3, 2.3, 2.7, 0.002, 0.2, 0.1, 0.015);
 }
