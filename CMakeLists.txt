@@ -362,6 +362,7 @@ add_library(Core STATIC
     Source/Timeline/TimelineDoc/TimelineDocRanges.cpp
     Source/Timeline/TimelineDoc/TimelineDocScaleSerialization.cpp
     Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp
+    Source/Timeline/TimelineDoc/TimelineDocStretchOriginSerialization.cpp
     Source/Timeline/TimelineDoc/TimelineDocTracks.cpp
     Source/Timeline/TimelineReconciler.cpp
     Source/Timeline/TimelineReconciler.h

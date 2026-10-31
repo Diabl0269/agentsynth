@@ -4,6 +4,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginCardLayoutStore.h"
 #include "UI/Graph/CardLayoutEditor/CardLayoutEditorSource.h"
+#include <unordered_map>
 
 namespace synth::ui {
 
@@ -43,8 +44,11 @@ public:
     HostedPluginModule* getModule() const { return module_.get(); }
 
     enum class ParameterState { Unknown, OnCard, Available };
-    /** Where `paramId` stands against the card layout this source reads. */
+    /** Where `paramId` stands against the card layout this source reads. Reads the layout: for many parameters use
+     *  parameterStates(). */
     ParameterState parameterState(const juce::String& paramId) const;
+    /** Where every parameter stands (a parameter this source does not list is absent), from one read of the layout. */
+    std::unordered_map<juce::String, ParameterState> parameterStates() const;
     /** Ticks `paramId` exactly as ticking its row in the picker does (scope "This instance"): one write,
      *  one undo step. False, and nothing written, when it is unknown or already on the card. */
     bool showParameter(const juce::String& paramId);

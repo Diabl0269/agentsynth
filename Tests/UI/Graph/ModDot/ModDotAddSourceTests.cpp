@@ -306,12 +306,9 @@ TEST_F(ModuleComponentTest, TheAddSourceListIsTheModMatrixsSourceList) {
     matrix.setSize(600, 400);
     f.engine.addEmptyModRouting();
     matrix.updateRowsFromGraph();
-    auto* combo = matrix.getRowSourceComboForTest(0);
-    ASSERT_NE(combo, nullptr);
 
-    std::vector<std::pair<int, juce::String>> matrixItems, catalogItems;
-    for (int i = 0; i < combo->getNumItems(); ++i)
-        matrixItems.emplace_back(combo->getItemId(i), combo->getItemText(i));
+    const auto matrixItems = matrix.getSourceListForTest();
+    std::vector<std::pair<int, juce::String>> catalogItems;
     for (const auto& item : synth::ui::enumerateModSources(graph))
         catalogItems.emplace_back(item.itemId(), item.label());
     ASSERT_FALSE(catalogItems.empty());

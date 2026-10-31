@@ -12,6 +12,7 @@
 #include "UnisonVoicing.h"
 #include <array>
 #include <cmath>
+#include <limits>
 
 class OscillatorModule : public ModuleBase {
 public:
@@ -102,8 +103,8 @@ public:
         // Detune is stored in cents; the skew only gives the small, musical amounts more knob travel.
         juce::NormalisableRange<float> detuneRange(0.0f, 100.0f);
         detuneRange.setSkewForCentre(25.0f);
-        addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", detuneRange, 0.0f,
-                                                                 synth::centsAttributes()));
+        addParameter(detuneParam = new juce::AudioParameterFloat(
+                         "detune", "Detune", detuneRange, synth::kDefaultUnisonDetuneCents, synth::centsAttributes()));
         addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
         // Pulse Width is the Square's duty cycle in percent (50 = today's square); Glide is the
         // portamento time in ms (0 = off, today's behaviour).
@@ -122,15 +123,15 @@ public:
         addParameter(phaseParam =
                          new juce::AudioParameterFloat("phase", "Phase", juce::NormalisableRange<float>(0.0f, 360.0f),
                                                        0.0f, synth::degreesAttributes()));
-        addParameter(randomPhaseParam = new juce::AudioParameterFloat("randomPhase", "Rand",
-                                                                      juce::NormalisableRange<float>(0.0f, 100.0f),
-                                                                      0.0f, synth::percentAttributes()));
+        addParameter(randomPhaseParam = new juce::AudioParameterFloat(
+                         "randomPhase", "Rand", juce::NormalisableRange<float>(0.0f, 100.0f),
+                         synth::kDefaultUnisonRand * 100.0f, synth::percentAttributes()));
         addParameter(blendParam =
                          new juce::AudioParameterFloat("blend", "Blend", juce::NormalisableRange<float>(0.0f, 1.0f),
-                                                       0.25f, synth::fractionPercentAttributes()));
+                                                       synth::kDefaultUnisonBlend, synth::fractionPercentAttributes()));
         addParameter(widthParam =
                          new juce::AudioParameterFloat("width", "Width", juce::NormalisableRange<float>(0.0f, 1.0f),
-                                                       0.0f, synth::fractionPercentAttributes()));
+                                                       synth::kDefaultUnisonWidth, synth::fractionPercentAttributes()));
         // Mono voice feel. Glide Mode "Scaled" makes Glide the time per octave; Glide Curve "Exponential" is
         // fast at the start and slow at the end; Legato (mono only) glides and keeps the phase only for
         // overlapping notes.
@@ -149,22 +150,24 @@ public:
         enableVisualBuffer(true);
     }
 
-    /** A stored Oscillator node with no Blend predates the 25 % default: it keeps Blend at 100 %. */
+    /** A stored Oscillator node with no Detune, Blend, Width or Rand predates the current defaults: it keeps the
+        sound it had (Detune 0, Blend 100 %, Width 0, Rand 0). */
     void applyStoredParamDefaults(const juce::NamedValueSet& storedParams) override {
-        if (!storedParams.contains("blend"))
-            blendParam->setValueNotifyingHost(blendParam->convertTo0to1(1.0f));
+        synth::restoreLegacyUnisonDefaults([&](const char* key) { return storedParams.contains(key); }, *detuneParam,
+                                           *blendParam, *widthParam, *randomPhaseParam);
     }
-    /** The binary state of a module saved before Blend existed has no Blend key: it keeps Blend at 100 %. */
+    /** The binary state of a module saved before these defaults has no key for them: it keeps the legacy values. */
     void setStateInformation(const void* data, int sizeInBytes) override {
         ModuleBase::setStateInformation(data, sizeInBytes);
-        if (auto xml = getXmlFromBinary(data, sizeInBytes);
-            xml != nullptr && xml->hasTagName("ModuleState") && !xml->hasAttribute("blend"))
-            blendParam->setValueNotifyingHost(blendParam->convertTo0to1(1.0f));
+        if (auto xml = getXmlFromBinary(data, sizeInBytes); xml != nullptr && xml->hasTagName("ModuleState"))
+            synth::restoreLegacyUnisonDefaults([&](const char* key) { return xml->hasAttribute(key); }, *detuneParam,
+                                               *blendParam, *widthParam, *randomPhaseParam);
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         juce::ignoreUnused(samplesPerBlock);
         currentSampleRate = sampleRate;
+        syncEdgeSamples = (int)(sampleRate * kSyncEdgeSeconds);
 
         // A prepared module starts where a new one does: the pitch of the last note played must not become the
         // starting pitch of the next playback.
@@ -191,6 +194,9 @@ public:
             v.active = false;
             v.ghosts.count = 0;
             v.lastBaseDt = 0.0f;
+            v.samplesSinceRestart = std::numeric_limits<int>::max();
+            v.shortGapRun = 0;
+            v.pendingLead = 0.0f;
             // Every playback starts from the same phases: the first note's run-out must not depend on where the
             // previous playback (or render) happened to leave the free-running oscillators.
             for (auto& osc : v.unisonOscs)
@@ -444,7 +450,9 @@ private:
     static constexpr int MAX_VOICES = 8;
     static constexpr int MAX_UNISON = 8;
     static constexpr int CROSSFADE_SAMPLES = synth::kRestartFadeSamples;
-    static constexpr int kMaxGhosts = 5; ///< restarts that can be fading out at once
+    static constexpr int kMaxGhosts = 5;              ///< restarts that can be fading out at once
+    static constexpr double kSyncEdgeSeconds = 0.025; ///< restarts this close together (40 Hz) can be oscillator sync
+    static constexpr int kSyncRunLength = 3;          ///< and are, after this many in a row
 
     // -------------------------------------------------------------------------
     // Per-voice state
@@ -468,7 +476,11 @@ private:
         bool active = false;     ///< poly: was this voice sounding last block?
         juce::SmoothedValue<float> smoothedFreq;
         synth::PitchGlide glide;
-        GateEdges gateEdges; ///< this block's rising Gate edges, each a note that restarts the phases
+        GateEdges gateEdges;                 ///< this block's rising Gate edges, each a note that restarts the phases
+        float restartDraws[MAX_UNISON] = {}; ///< each unison voice's random draw at the last note start, 0..1
+        int samplesSinceRestart = std::numeric_limits<int>::max(); ///< counts rendered samples, saturating
+        int shortGapRun = 0; ///< restarts in a row each under kSyncEdgeSeconds after the last, up to kSyncRunLength
+        float pendingLead = 0.0f; ///< how far past the restart the next rendered sample lies, in samples
         float lastMidiNote = 69.0f;
         int previousWaveform = 0;
         int fadingFromWaveform = 0;
@@ -543,8 +555,9 @@ private:
     void addPitchEvent(int offset, float note, bool jumps);
     void applyPitchEvent(const PitchEvent& event, float glideSeconds);
     /** Restarts every unison oscillator of `voice`; with `fadeFromOld` the previous phases run out over
-     * CROSSFADE_SAMPLES. A restart during a fade starts from the output as it is at that sample. */
-    void restartVoice(VoiceState& voice, bool fadeFromOld);
+     * CROSSFADE_SAMPLES. A restart during a fade starts from the output as it is at that sample. `lead` is how long
+     * before this sample a gate edge really fell, in samples. */
+    void restartVoice(VoiceState& voice, bool fadeFromOld, float lead = 0.0f);
     void resetNoteState();
     synth::GlideTime glideTime() const {
         return glideModeParam->getIndex() == 1 ? synth::GlideTime::Scaled : synth::GlideTime::Always;
@@ -554,8 +567,8 @@ private:
     }
     void clearPendingRestarts();
     /** Adds a restart at sample `offset`, keeping `restartOffsets` sorted and free of duplicates; past
-        kMaxRestartsPerBlock a further offset is dropped. */
-    void addRestartOffset(int offset);
+        kMaxRestartsPerBlock a further offset is dropped. `lead` is restartVoice's, for a gate edge. */
+    void addRestartOffset(int offset, float lead = 0.0f);
 
     void processMonoMode(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
     void processPolyMode(juce::AudioBuffer<float>& buffer, int numSamples);
@@ -626,6 +639,18 @@ private:
 
     /** One normalised sample of `voice`'s stack, blending in the run-out phases after a restart. */
     StackSample renderStack(VoiceState& voice, const StackContext& c, int i) const {
+        if (voice.samplesSinceRestart < std::numeric_limits<int>::max())
+            ++voice.samplesSinceRestart;
+        if (voice.pendingLead > 0.0f) {
+            // The restart fell between the last sample and this one, so the wave has already run that long.
+            for (int u = 0; u < c.count; ++u) {
+                auto& phase = voice.unisonOscs[u].phase;
+                phase += voice.pendingLead * c.baseDt * c.ratio[u];
+                if (phase >= 1.0f)
+                    phase -= 1.0f;
+            }
+            voice.pendingLead = 0.0f;
+        }
         StackSample s = sumStack(voice.unisonOscs, c, i, c.baseDt);
         voice.lastBaseDt = c.baseDt;
         if (voice.ghosts.count > 0) {
@@ -746,6 +771,8 @@ private:
     static constexpr int kMaxRestartsPerBlock = 256;
     synth::HeldNotes heldNotes;
     std::array<int, kMaxRestartsPerBlock> restartOffsets{}; ///< sample offsets of this block's restarting note-ons
+    std::array<float, kMaxRestartsPerBlock> restartLeads{}; ///< restartVoice's `lead` for each of restartOffsets
+    int syncEdgeSamples = 1102;                             ///< kSyncEdgeSeconds at the current sample rate
     int numRestarts = 0;
     static constexpr int kMaxPitchEvents = 64;
     std::array<PitchEvent, kMaxPitchEvents> pitchEvents{};

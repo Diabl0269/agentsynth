@@ -86,7 +86,11 @@ public:
         ++setValueCalls;
     }
     float getDefaultValue() const override { return defaultValue_; }
-    juce::String getName(int) const override { return name_; }
+    juce::String getName(int) const override {
+        ++nameReads;
+        return name_;
+    }
+    void setNameForTest(const juce::String& name) { name_ = name; }
     juce::String getLabel() const override { return {}; }
     float getValueForText(const juce::String& text) const override {
         const int index = traits_.choices.indexOf(text);
@@ -97,6 +101,8 @@ public:
 
     /** How many times setValue() ran: a widget-driven write must cost exactly one, never an echo. */
     std::atomic<int> setValueCalls{0};
+    /** How many times getName() ran: crossing a real plugin's wrapper is what a long list must not repeat. */
+    mutable int nameReads = 0;
 
 private:
     juce::String paramId_;

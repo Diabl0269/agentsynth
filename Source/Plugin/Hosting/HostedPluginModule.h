@@ -218,8 +218,9 @@ public:
 
     /** Every live instance parameter. Empty when there is no live instance (still loading, refused,
      *  or the plugin is not installed) — callers treat that exactly like "nothing to offer yet", the
-     *  same transient state HostedPluginModule already models elsewhere. */
-    std::vector<InstanceParameterInfo> getInstanceParameters() const;
+     *  same transient state HostedPluginModule already models elsewhere. Message thread only. Valid until the
+     *  instance or its parameter names change; copy it to keep it past a call that could reload the plugin. */
+    const std::vector<InstanceParameterInfo>& getInstanceParameters() const;
 
     /** The per-instance layout as raw JSON (a CardLayout::toVar object), void when there is none. */
     const juce::var& getCardLayoutOverride() const noexcept { return cardLayoutOverride_; }
@@ -272,6 +273,8 @@ public:
 
     /** The parameter id bound to `rawChannel`, or empty. */
     juce::String modSlotParamId(int rawChannel) const;
+    /** The display name of the parameter on `rawChannel`'s slot, from the cached list; empty when there is none. */
+    juce::String modSlotParamName(int rawChannel) const;
 
     /** The resting value (0..1) of `paramId` while it is modulated: what the card knob shows and
      *  the ring starts from. Empty when `paramId` has no slot or its base is not known yet. */
@@ -427,6 +430,8 @@ private:
 
         /** ANY thread. */
         void audioProcessorChanged(juce::AudioProcessor*, const ChangeDetails& details) override {
+            if (details.parameterInfoChanged)
+                owner_.instanceParametersStale_.store(true, std::memory_order_relaxed);
             if (details.latencyChanged)
                 triggerAsyncUpdate();
         }
@@ -479,6 +484,8 @@ private:
     // One listener for the module's whole life, moved from instance to instance — so a queued
     // update can never outlive the object that would deliver it.
     InstanceListener instanceListener_{*this};
+    mutable std::vector<InstanceParameterInfo> instanceParameters_; // message thread
+    mutable std::atomic<bool> instanceParametersStale_{true};
     juce::ListenerList<InstanceObserver> instanceObservers_;
 
     PluginIdentity identity_;

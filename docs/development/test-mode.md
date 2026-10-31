@@ -50,6 +50,7 @@ thread is never blocked and timers and animations run in between.
 | `ping` | | `{pid, version}` |
 | `list` | `root?`, `depth` (6), `all` (false) | tree of `{id,name,title,type,bounds,visible,showing,children}`; bounds are relative to the main window; without `root`, every showing top-level |
 | `click` | `id`, `x?`, `y?` (local, default centre), `button` (`left`/`right`), `clicks` (1/2), `mods` (one of `cmd`,`shift`,`alt`,`ctrl` as a string, or a list of them; an unknown name is an error naming it) | `{id, point}` |
+| `wheel` | `id`, `x?`, `y?` (local, default centre), `dx?`, `dy?` (JUCE wheel units; 0.25 is about one notch), `mods` | `{id, point}` |
 | `hover` | `id`, `x?`, `y?` (local, default centre) | `{id, point}`; moves the pointer there with no button down |
 | `drag` | `from`, `to`, `fromX?`, `fromY?`, `toX?`, `toY?`, `steps` (12), `mods` | `{from, to}` |
 | `key` | `keys` (`cmd+z`, `space`, `shift+tab`, `escape`, `up` ...), `target?` | `{handled}` |
@@ -71,7 +72,7 @@ do not rename existing ones.
 
 A component with state worth reading implements `synth::testmode::StateSource` (`addTestModeState`), as `ModuleComponent`
 (`selected`, `moduleType`, `nodeId`, `macro`: the name of the macro the module sits in, empty when none) and
-`MacroCardComponent` (id `macroCard`: `name`, `collapsed`, `members`) and `KeyPicker` (id `keyPicker`: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`) do. `getState` also reports a component's `tooltip`
+`MacroCardComponent` (id `macroCard`: `name`, `collapsed`, `members`) and `KeyPicker` (id `keyPicker`: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`; `clipAudio`, every audio clip as `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`) do. `getState` also reports a component's `tooltip`
 when it has one, so a scenario can check the shortcut a button's tooltip names.
 
 ## Input
@@ -153,13 +154,14 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `type: {text}` | one `key` per character |
 | `wait: {}` | `waitForIdle` |
 | `restart: {}` | quit and start again on the same settings directory |
+| `copyFixture: {name}` | copies `${FIXTURES}/<name>` into `${SCRATCH}/<name>`, so a scenario can change a fixture without touching the committed copy |
 | `screenshot: {id?, name}` | saves `<name>.png` in the output folder (default id `window`) |
 | `expect: {id, field: value, ...}` | equality on `getState` fields |
 | `expect: {id, contains: {field: text}}` | case-insensitive substring |
 | `expect: {id, exists: false}` | the component is not there |
 | `expect: {count: {prefix, field?, equals}}` | how many ids (or `title`s) in `list` start with the prefix |
 
-`${FIXTURES}` and `${OUT}` are replaced in every string. An `expect` is retried for `within_ms` (default 500), so a repaint
+`${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string. An `expect` is retried for `within_ms` (default 500), so a repaint
 that is still settling is not a failure and one that never arrives still is.
 
 To add one: copy the closest file, start the file with a comment naming the bug and the steps a user takes, and give each

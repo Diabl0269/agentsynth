@@ -1,5 +1,8 @@
 // TimelinePanelComponent: the hooks of the two key pickers the panel hosts, the transport bar's Song key and the piano
 // roll's Scale assist Key. Both play the scale of a hovered key (KeyAuditioner); this unit says where.
+#include "AppUndoManager.h"
+#include "Music/SongKey.h"
+#include "Timeline/FitClipsToKey.h"
 #include "Timeline/SongKeyNotes.h"
 #include "TimelinePanelComponent.h"
 #include "UI/Layout/KeyPicker/KeyAuditioner.h"
@@ -30,6 +33,7 @@ void TimelinePanelComponent::initSongKeyField() {
             return trackHeaderHost_ != nullptr && trackHeaderHost_->isDrumKitTrack(track.id);
         });
     };
+    songKeyField.fitProjectToKey = [this](const MusicalScale& key) { fitProjectToSongKey(key); };
     songKeyField.previewTracks = [this] {
         std::vector<SongKeyField::PreviewTrack> tracks;
         if (doc_ != nullptr)
@@ -51,6 +55,25 @@ void TimelinePanelComponent::initSongKeyField() {
             auditionClipNote(clip, pitch, (float)velocity / 127.0f, on);
         }};
     };
+}
+
+// Fit project to key: every MIDI clip that follows the song key, drum kits left out, as one undo step (none when
+// nothing moved). The result is read from inside the mutation, which runs exactly once.
+void TimelinePanelComponent::fitProjectToSongKey(const MusicalScale& key) {
+    if (doc_ == nullptr)
+        return;
+    synth::FitProjectResult result;
+    auto mutate = [this, &result, &key] {
+        result = synth::fitProjectToSongKey(*doc_, key, [this](const synth::Track& track) {
+            return trackHeaderHost_ != nullptr && trackHeaderHost_->isDrumKitTrack(track.id);
+        });
+    };
+    if (undoManager_ != nullptr)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+    if (onShowMessage)
+        onShowMessage(synth::describeProjectFit(result, keyDisplayName(key)));
 }
 
 } // namespace synth::ui

@@ -50,7 +50,8 @@ void writeClipScaleFields(juce::DynamicObject& obj, const Clip& clip) {
     }
 }
 
-// A scale is a convenience, never a reason to refuse a project: anything unreadable loads as none.
+// A scale is a convenience, never a reason to refuse a project: anything unreadable loads as none. The stretch
+// origin is read here too (after the audio fields), because fromVar's clip validation is at its size ratchet.
 bool readClipScaleFields(const juce::DynamicObject& obj, Clip& clip) {
     clip.scale = std::nullopt;
     clip.scaleVisible = false;
@@ -76,6 +77,7 @@ bool readClipScaleFields(const juce::DynamicObject& obj, Clip& clip) {
         if (readWholeNumber(r->getProperty("low"), low) && readWholeNumber(r->getProperty("high"), high))
             clip.noteRange = normaliseNoteRange(std::make_pair(low, high));
     }
+    readClipStretchOrigin(obj, clip);
     return true;
 }
 

@@ -94,6 +94,7 @@ bool TimelinePanelComponent::copySelectedClips() {
         entry.scale = clip->scale;
         entry.scaleVisible = clip->scaleVisible;
         entry.noteRange = clip->noteRange;
+        entry.stretchOrigin = clip->stretchOrigin;
         captured.push_back(std::move(entry));
     }
     if (captured.empty())
@@ -173,6 +174,8 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
                 doc_->setClipScale(newId, entry.scale, entry.scaleVisible);
             if (entry.noteRange.has_value())
                 doc_->setClipNoteRange(newId, entry.noteRange);
+            if (entry.stretchOrigin.has_value())
+                doc_->setClipStretchOrigin(newId, entry.stretchOrigin);
             newIds.push_back(newId);
         }
     };
@@ -354,6 +357,7 @@ bool TimelinePanelComponent::copyRange() {
             entry.scale = fragment->scale;
             entry.scaleVisible = fragment->scaleVisible;
             entry.noteRange = fragment->noteRange;
+            entry.stretchOrigin = fragment->stretchOrigin;
             captured.push_back(std::move(entry));
         }
     }

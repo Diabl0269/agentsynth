@@ -118,6 +118,7 @@ add_executable(Tests
     Timeline/TimelineDoc/TimelineDocSerializationTests.cpp
     Timeline/TimelineDoc/TimelineDocMarkersTests.cpp
     Timeline/TimelineDoc/TimelineDocRangesTests.cpp
+    Timeline/TimelineDoc/ClipStretchOriginTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingNotesTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingQuantiseTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingSplitJoinTests.cpp
@@ -272,6 +273,7 @@ add_executable(Tests
     App/ManyTracksProfileTests.cpp
     App/MacroEditProfileTests.cpp
     App/EditRefreshWorkTests.cpp
+    App/ScaleHangTests.cpp
     App/ModuleCpuProfileTests.cpp
     App/MainComponent/MainComponentStartupPanelsTests.cpp
     App/MainComponent/MainComponentLayoutTests.cpp

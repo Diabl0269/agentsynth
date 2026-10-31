@@ -2,7 +2,6 @@
 
 #include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/FadeVisibility.h"
-#include "UI/Layout/FilteredRowFades.h"
 #include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/SearchMatch.h"
 #include <functional>
@@ -20,8 +19,9 @@ namespace synth::ui {
  *  Typing filters case-insensitively by the row text (module title plus output or target label) and its
  *  `searchText`, word by word: each space-separated word must appear somewhere in them (synth::ui::searchMatches), and
  *  highlights the matched letters in the row text and its detail line; a
- *  category header shows only while one of its rows does. A row the filter takes out fades while its slot closes up
- *  (FilteredRowFades); the highlight and a pick only ever land on rows that are still shown. The
+ *  category header shows only while one of its rows does. A row the filter takes out fades while its slot closes up;
+ *  the highlight and a pick only ever land on rows that are still shown. Only the rows in view (plus a few) exist as
+ *  components, so a list of thousands opens and filters at once. The
  *  highlighted row on a query is the best match (synth::ui::searchScore), the first among equals. The popup's height is
  * fixed by the full list, so it never resizes under the cursor while filtering. Up/Down move the highlight, Return
  *  picks it (the first match until moved), Escape closes.
@@ -111,23 +111,56 @@ public:
     juce::TextEditor& getSearchEditorForTest() noexcept;
     /** The column the rows live in, and whether any row is still fading in or out of the filter. */
     juce::Component& getRowColumnForTest() noexcept { return rowColumn_; }
-    bool isFilterFadingForTest() const noexcept { return fades_.anyFading(); }
+    bool isFilterFadingForTest() const;
+    /** How many row components exist: the rows in view plus a few, however long the list. */
+    int getRowComponentCountForTest() const noexcept { return (int)pool_.size(); }
+    /** How many row components the filter passes have steered: the on-screen ones, never the whole list. */
+    int getRowsSteeredForTest() const noexcept { return rowsSteered_; }
+    /** The viewport's top edge, and whether the highlighted row is inside the view. */
+    int getViewTopForTest() const noexcept { return viewport_.getViewPositionY(); }
+    bool isHighlightInViewForTest() const;
 
 private:
     CalloutReveal reveal_{*this};
     class Row;
 
+    /** One line of the list, header or item, whether or not it has a row component right now. */
+    struct Entry {
+        bool header = false;
+        int item = 0; // into items_; for a header, the first item under it
+        int height = 0;
+        juce::String haystack; // what the search reads (items only)
+        bool shown = true;     // what the filter says, at once; the row's fade follows
+        bool wasShown = true;
+        int y = 0;
+        Row* row = nullptr; // the component showing it, while it is in view or fading
+    };
+    struct RowViewport : juce::Viewport {
+        std::function<void()> onViewMoved;
+        void visibleAreaChanged(const juce::Rectangle<int>&) override {
+            if (onViewMoved)
+                onViewMoved();
+        }
+    };
+
     void rebuildRows();
     void applyFilter();
-    void layoutRowColumn();
+    void steerRows();
+    void layoutEntries();
+    void syncRows();
+    Row& acquireRow(int entryIndex);
+    void releaseRow(Entry& entry);
+    void onRowFadeFrame();
+    bool anyRowFading() const;
     void moveHighlight(int delta);
     int nextPickable(int from, int step) const;
     void setHighlight(int visibleItemIndex);
-    void chooseRow(const Row& row);
+    void hoverEntry(int entryIndex);
+    void chooseEntry(int entryIndex);
     void chooseHighlighted();
     void applyColours();
     int preferredHeight() const;
-    std::vector<Row*> visibleItemRows() const;
+    const Item& itemAtVisible(int visibleIndex) const;
 
     juce::String what_;
     juce::String placeholder_;
@@ -136,14 +169,21 @@ private:
     std::function<void(int)> onChoose_;
 
     std::unique_ptr<NavigationSearchField> searchEditor_;
-    juce::Viewport viewport_;
+    RowViewport viewport_;
     juce::Component rowColumn_;
     FadeVisibility listFade_{&rowColumn_};
     std::unique_ptr<juce::Component> footer_;
     int footerHeight_ = 0;
-    std::vector<std::unique_ptr<Row>> rows_;
-    FilteredRowFades fades_; // index-aligned with rows_, declared after it so it goes first
-    int highlighted_ = 0;    // index among the visible item rows
+    std::vector<std::unique_ptr<Row>> pool_; // bound and free row components; each owns its fade
+    std::vector<Row*> freeRows_;
+    std::vector<Entry> entries_;
+    std::vector<int> visibleItems_; // entries_ indices of the items the filter keeps, in order
+    juce::String query_;
+    int highlighted_ = 0; // index into visibleItems_
+    bool laidOut_ = false;
+    bool markGutter_ = false; // some row carries a tick or a new mark, so every row leaves room for one
+    bool syncing_ = false;
+    int rowsSteered_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModMatrixPicker)
 };

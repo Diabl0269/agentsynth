@@ -1,0 +1,36 @@
+# A mod cable released on a plugin card's body opens the parameter list at once; typing narrows it, a pick adds the
+# knob and lands the cable, and one Cmd+Z takes back both.
+#
+# What a user does:
+#   1. Opens a project with an LFO and a plugin (fixture hosted-plugin-mod.agsproj; Apple's AUDelay, on every Mac, listed
+#      through the seeded scan list because test mode does not scan).
+#   2. Drags the LFO's output onto the plugin card's header: the list opens.
+#   3. Types "feed", presses Return: a Feedback knob appears with the cable on it.
+#   4. Presses Cmd+Z once: knob and cable are gone.
+settings:
+  pluginScanList: '<KNOWNPLUGINS><PLUGIN name="AUDelay" descriptiveName="AUDelay" format="AudioUnit" category="Effect" manufacturer="Apple" version="1" file="AudioUnit:Effects/aufx,dely,appl" uniqueId="0" isInstrument="0" numInputs="2" numOutputs="2" isShell="0" hasARA="0" uid="0"/></KNOWNPLUGINS>'
+steps:
+  - openProject: {path: "${FIXTURES}/hosted-plugin-mod.agsproj"}
+  - wait: {}
+  - expect: {id: "card:AUDelay", showing: true, within_ms: 10000}
+  - screenshot: {name: before}
+  - expect: {count: {prefix: "hostedKnob:", equals: 3}}
+  - drag: {from: "card:LFO > CV output", to: "card:AUDelay", toX: 120, toY: 10}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: modMatrixPicker, name: list-open}
+  - type: {text: delay time}
+  - wait: {}
+  - screenshot: {id: modMatrixPicker, name: list-filtered}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {count: {prefix: "hostedKnob:", equals: 4}, within_ms: 2000}
+  - screenshot: {name: picked}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {count: {prefix: "hostedKnob:", equals: 3}, within_ms: 2000}
+  - screenshot: {name: after-one-undo}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {count: {prefix: "hostedKnob:", equals: 4}, within_ms: 2000}

@@ -413,6 +413,7 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClipImpl(ClipId id, double atBeat, d
         right.scale = clip->scale;
         right.scaleVisible = clip->scaleVisible;
         right.noteRange = clip->noteRange;
+        right.stretchOrigin = clip->stretchOrigin;
         clip->fadeOutBeats = 0.0;
 
         // `clip` (and therefore `id`, the original/left id) stays valid; only insert may
@@ -517,6 +518,7 @@ ClipId TimelineDoc::duplicateClipImpl(ClipId id, bool linked) {
         dup.scale = clip->scale;
         dup.scaleVisible = clip->scaleVisible;
         dup.noteRange = clip->noteRange;
+        dup.stretchOrigin = clip->stretchOrigin;
         dup.notes.reserve(clip->notes.size());
         for (const auto& note : clip->notes) {
             MidiNote copy = note;
@@ -544,8 +546,25 @@ bool TimelineDoc::setClipAsset(ClipId id, const juce::String& assetRef, double s
         return true; // already there: no revision bump, no notification
 
     return applyMutation([&] {
+        // A clip pointed at another asset no longer plays what the origin was stretched into.
+        if (clip->assetRef != assetRef)
+            clip->stretchOrigin = std::nullopt;
         clip->assetRef = assetRef;
         clip->sourceStartSeconds = sourceStartSeconds;
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipStretchOrigin(ClipId id, const std::optional<Clip::StretchOrigin>& origin) {
+    if (origin && !detail::isValidStretchOrigin(*origin))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->stretchOrigin == origin)
+        return true;
+    return applyMutation([&] {
+        clip->stretchOrigin = origin;
         return true;
     });
 }

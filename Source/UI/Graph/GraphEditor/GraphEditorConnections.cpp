@@ -101,6 +101,13 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
                 sourceStride = 0;
             }
 
+            // One mono oscillator's audio on a poly Restart jack syncs every voice: it carries no note, so nothing
+            // about the chord changes, and syncing only the first voice would leave the others free-running.
+            if (s.voiceSpan == 1 && d.voiceSpan > 1 && d.role == PortRole::Gate && s.role == PortRole::Audio) {
+                voiceCount = d.voiceSpan;
+                sourceStride = 0;
+            }
+
             // Mono audio into a collapsed stereo pair (voiceSpan == 2, PortRole::Audio) duplicates
             // onto L and R — the usual mono→FX insert. Distinct from poly-voice broadcast above.
             // A collapsed Key jack (PortRole::Sidechain) is the same stereo pair shape.

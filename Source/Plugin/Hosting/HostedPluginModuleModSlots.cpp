@@ -122,6 +122,16 @@ std::optional<float> HostedPluginModule::modSlotBase(const juce::String& paramId
     return base;
 }
 
+juce::String HostedPluginModule::modSlotParamName(int rawChannel) const {
+    const auto paramId = modSlotParamId(rawChannel);
+    if (paramId.isEmpty())
+        return {};
+    for (const auto& param : getInstanceParameters())
+        if (param.paramId == paramId)
+            return param.displayName;
+    return {};
+}
+
 std::vector<ModulationTarget> HostedPluginModule::getModulationTargets() const {
     std::vector<ModulationTarget> targets;
     auto* instance = activeInstance_.load(std::memory_order_acquire);

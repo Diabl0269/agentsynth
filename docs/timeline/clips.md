@@ -89,7 +89,7 @@ marquees or double-click-authors. Switching away from Select disables all of it;
 | Drag within 6 px of the right edge | Resizes the clip's length, Snap-quantised, floored at 1/16 beat; what happens to a MIDI clip's notes is the **Sizing** mode (see **Edge sizing**) |
 | Drag within 6 px of the left edge | Moves the start and shrinks or grows the length so the **end** stays fixed; the notes follow the **Sizing** mode (see **Edge sizing**). One undo step restores geometry and notes |
 | **Option** + drag an edge | Stretches that one drag whatever the Sizing mode says (Logic, Reaper and Bitwig's key). Option is re-read on every drag event and on a bare modifier change, so pressing or releasing it mid-drag switches the drag in place |
-| Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Glue with next** (enabled only when a legal join target exists — greyed out, not hidden, so the menu's items never move around), **Duplicate**, **Duplicate linked** (greyed for an audio clip) and, on a linked clip only, **Make unique** ([linked clips](linked-clips.md)), **Fit to key** (a MIDI clip with notes and a key; moves every note to the nearest note of the clip's key as one undo step; greyed otherwise), **Mute**/**Unmute** (one toggling item, labelled for what the click will do), **Rename…**, **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…**, then, below another separator, **Render to audio track** ([render to audio track](render-to-audio.md); greyed with "(no mixer channel)" when the clip's track reaches no channel). It preserves the existing selection, the same rule `GraphEditor`'s cable and canvas menus follow |
+| Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Glue with next** (enabled only when a legal join target exists — greyed out, not hidden, so the menu's items never move around), **Duplicate**, **Duplicate linked** (greyed for an audio clip) and, on a linked clip only, **Make unique** ([linked clips](linked-clips.md)), **Fit to key** (a MIDI clip with notes and a key; moves every note to the nearest note of the clip's key as one undo step; greyed otherwise), **Fit all clips to key** (only when the clicked clip is one of two or more selected clips: fits each selected MIDI clip to its own key, the song key when it has none, as one undo step; audio clips and clips with no key are skipped; greyed when none can be fitted; `synth::fitClipsToTheirKeys`), **Mute**/**Unmute** (one toggling item, labelled for what the click will do), **Rename…**, **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…**, then, below another separator, **Render to audio track** ([render to audio track](render-to-audio.md); greyed with "(no mixer channel)" when the clip's track reaches no channel). It preserves the existing selection, the same rule `GraphEditor`'s cable and canvas menus follow |
 | Double-click a clip | Opens the piano roll on it (`onClipDoubleClicked` → `TimelinePanelComponent::openPianoRoll`) |
 | Double-click empty lane space | Authors content on the row under the pointer — see **Adding content** |
 | Drop audio files from the OS | Imports the first readable one onto the audio row under the cursor — see **Adding content** |
@@ -123,9 +123,21 @@ the same pitch, with the Signalsmith engine the Sounds view uses for loops: on t
 (`synth::audioStretchWindow`: from its source offset for its length at the current tempo) with
 `soundbrowser::renderStretchedWindow`, imports the copy like a dropped file (`<name>-stretch<percent>.wav` in the
 bundle's `Audio/`, or `Recordings/` before the first save) and points the clip at it from 0 s, fades scaled, as one undo
-step (`synth::applyAudioClipStretch`). Undo plays the original file again; both files stay in the project. The render
+step (`synth::applyAudioClipStretch`). Undo plays the previous file again; every file stays in the project. The render
 blocks for about a second per minute of audio, so a clip over a minute (`kMaxStretchWindowSeconds`), or one whose file
-is missing, resizes instead and the status bar says why. The drag previews the stretch already: an audio clip's
+is missing, resizes instead and the status bar says why.
+
+**Stretching again starts from the original audio.** The clip saves `Clip::stretchOrigin` (original `assetRef`,
+`offsetSeconds`, `ratio`): time t in the clip's asset is `offsetSeconds + t * ratio` in the original. The next stretch
+maps the clip's window through it (so a trim or split after a stretch keeps just the part shown) and renders the
+original with the cumulative ratio, so 150% and back to 100% never stacks artifacts. At a cumulative ratio of exactly 1
+nothing is rendered: the clip points at the original and its window again, and the origin is cleared. The status bar
+percentage is the cumulative one. If the original file is gone the current asset is the source and starts a new
+origin. `setClipAsset` to a different asset (relink, a destructive edit) clears the origin, so the next stretch starts
+from the audio the clip then plays. Split, duplicate and copy/paste carry it; the unused-asset cleanup and the
+`Recordings/` adoption on save treat the origin ref like `assetRef`. It is saved as an optional `"stretchOrigin":
+{"assetRef", "offsetSeconds", "ratio"}` on the clip (written only when set; a project without it, or with an unreadable
+one, loads as none), and untrusted timeline input may not carry it. The drag previews the stretch already: an audio clip's
 waveform is always drawn from its stored span into the dragged rectangle.
 
 ## Cross-track drag

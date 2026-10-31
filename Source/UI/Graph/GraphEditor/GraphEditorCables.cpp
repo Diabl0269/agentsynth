@@ -11,6 +11,7 @@
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
 #include "UI/Graph/CardOutline.h"
+#include "UI/Graph/GraphEditor/CableEndName.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
 #include "UI/Graph/ModDot/ModDotController.h"
@@ -853,6 +854,12 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         g.fillEllipse(cable.p2.x - ModuleComponent::kKnobLandingDotDiameter * 0.5f,
                       cable.p2.y - ModuleComponent::kKnobLandingDotDiameter * 0.5f,
                       ModuleComponent::kKnobLandingDotDiameter, ModuleComponent::kKnobLandingDotDiameter);
+        if (const auto name =
+                synth::ui::cableEndName(editor.getAudioEngine().getGraph(),
+                                        juce::AudioProcessorGraph::NodeID{cable.destNodeId}, cable.destChannel);
+            name.isNotEmpty())
+            synth::ui::paintCableEndName(g, cable.p2, name, synth::theme::themeOf(*this),
+                                         dimmed ? synth::ui::kPortPanelDimAlpha : 1.0f);
     }
 
     // The wire being dragged out of a jack is in front of every card, whatever the preference.

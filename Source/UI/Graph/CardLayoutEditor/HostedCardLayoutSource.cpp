@@ -5,6 +5,7 @@
 #include "CardLayoutEditorModel.h"
 #include "Modules/CardLayoutJson.h"
 #include "Plugin/Hosting/HostedPluginCardLayout.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 
 namespace synth::ui {
 
@@ -96,6 +97,7 @@ CardLayout HostedCardLayoutSource::reset(bool allOfType) {
 
 namespace {
 CardLayoutEditorModel loadedModel(const HostedCardLayoutSource& source) {
+    ++graph_editor_paint::workCounters().cardLayoutModelBuilds;
     CardLayoutEditorModel model(source.parameters(), source.hiddenRows(), source.supportsGroups());
     model.load(source.currentLayout());
     return model;
@@ -107,6 +109,16 @@ HostedCardLayoutSource::ParameterState HostedCardLayoutSource::parameterState(co
     if (model.findParam(paramId) == nullptr)
         return ParameterState::Unknown;
     return model.isShown(paramId) ? ParameterState::OnCard : ParameterState::Available;
+}
+
+std::unordered_map<juce::String, HostedCardLayoutSource::ParameterState>
+HostedCardLayoutSource::parameterStates() const {
+    const auto model = loadedModel(*this);
+    std::unordered_map<juce::String, ParameterState> states;
+    states.reserve(params_.size());
+    for (const auto& param : params_)
+        states[param.paramId] = model.isShown(param.paramId) ? ParameterState::OnCard : ParameterState::Available;
+    return states;
 }
 
 // The same model edit and write the picker's tick makes (CardLayoutEditorComponent::setChecked ->

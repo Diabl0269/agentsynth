@@ -183,7 +183,7 @@ void OscillatorModule::renderPolyVoiceSteady(int v, float* output, float* output
 
     for (int s = set.firstSample; s < numSamples; ++s) {
         if (voices[v].gateEdges.firesAt(s))
-            restartVoice(voices[v], /*fadeFromOld*/ true);
+            restartVoice(voices[v], /*fadeFromOld*/ true, voices[v].gateEdges.firedLead);
         const int idx = std::min(s, ns - 1);
         const int wfS = hasWaveCV ? juce::jlimit(0, 3, wf + (int)std::round(waveformCVCache[idx] * 3.0f)) : wf;
         const float pulseWidth = pulseWidthRamp[(size_t)idx];
@@ -230,7 +230,7 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* out
 
     for (int s = set.firstSample; s < numSamples; ++s) {
         if (voices[v].gateEdges.firesAt(s))
-            restartVoice(voices[v], /*fadeFromOld*/ true);
+            restartVoice(voices[v], /*fadeFromOld*/ true, voices[v].gateEdges.firedLead);
         const int idx = std::min(s, ns - 1);
 
         float extraPitchShift = 0.0f;

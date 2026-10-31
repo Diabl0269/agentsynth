@@ -109,6 +109,25 @@ bool sendMouse(const MouseStep& step, juce::String& error) {
     return true;
 }
 
+bool wheel(juce::Component& target, juce::Point<int> local, float dx, float dy, juce::ModifierKeys keys,
+           juce::String& error) {
+    if (!sendMouse({&target, local, keys, false, Button::left}, error))
+        return false; // also puts the pointer over `local`, which is where the wheel event lands
+    juce::MouseWheelDetails details;
+    details.deltaX = dx;
+    details.deltaY = dy;
+    details.isReversed = false;
+    details.isSmooth = false;
+    details.isInertial = false;
+    const auto previous = juce::ModifierKeys::currentModifiers;
+    juce::ModifierKeys::currentModifiers = keys.withoutMouseButtons();
+    target.getPeer()->handleMouseWheel(juce::MouseInputSource::InputSourceType::mouse,
+                                       target.getPeer()->getComponent().getLocalPoint(&target, local).toFloat(),
+                                       juce::Time::currentTimeMillis(), details);
+    juce::ModifierKeys::currentModifiers = previous;
+    return true;
+}
+
 bool click(juce::Component& target, juce::Point<int> local, Button button, int clicks, juce::ModifierKeys keys,
            juce::String& error) {
     MouseStep step{&target, local, keys, false, button};

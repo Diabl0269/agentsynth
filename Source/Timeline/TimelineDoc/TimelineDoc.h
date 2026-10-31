@@ -111,6 +111,18 @@ struct Clip {
     bool scaleVisible = false;
     // The note range the piano roll's scale panel shows (lowest, highest; 0..127, low <= high); nullopt = never moved.
     std::optional<std::pair<int, int>> noteRange;
+
+    // Where a stretched audio clip's sound came from: the original asset, and how `assetRef` relates to it.
+    // Time t seconds into `assetRef` is `offsetSeconds + t * ratio` seconds into the original (ratio > 1: the
+    // original was sped up to make the copy). A new stretch renders from here, never from the stretched copy.
+    // Saved only when set; cleared whenever the clip points at another asset.
+    struct StretchOrigin {
+        juce::String assetRef;
+        double offsetSeconds = 0.0;
+        double ratio = 1.0;
+        bool operator==(const StretchOrigin&) const = default;
+    };
+    std::optional<StretchOrigin> stretchOrigin;
 };
 
 // One automated parameter. Identity is the (nodeUuid, paramId) pair, doc-wide: there is at
@@ -418,6 +430,9 @@ public:
     // default); `sourceStartSeconds` must be finite and >= 0. Setting exactly what the clip
     // already has is a no-op, like every other setter here.
     bool setClipAsset(ClipId id, const juce::String& assetRef, double sourceStartSeconds);
+    // Records (or, with nullopt, forgets) the original a stretched clip's asset came from. Rejects a non-bundle-
+    // relative or empty ref, a negative or non-finite offset and a non-finite or non-positive ratio.
+    bool setClipStretchOrigin(ClipId id, const std::optional<Clip::StretchOrigin>& origin);
     // Playback gain in dB. Rejects a non-finite value; otherwise unbounded (see Clip::gainDb).
     bool setClipGainDb(ClipId id, double gainDb);
     // Fade lengths in beats from the clip's start / end. Both must be finite and >= 0; they are

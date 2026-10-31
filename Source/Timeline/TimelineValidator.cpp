@@ -234,6 +234,10 @@ TimelineValidationResult validateClip(const juce::var& clipVar, const juce::Stri
                                                 "\". Audio assets and the clips that reference them are created by "
                                                 "the app (recording, import), never supplied here - send a MIDI clip "
                                                 "with an empty \"assetRef\" instead.");
+    if (cObj->hasProperty("stretchOrigin"))
+        return fail(Error::AssetNotAllowed, clipText + " has a \"stretchOrigin\", which names an audio asset. It is "
+                                                       "written by the app when it stretches a clip, never supplied "
+                                                       "here.");
 
     double gainDb = 0.0;
     double fadeInBeats = 0.0;

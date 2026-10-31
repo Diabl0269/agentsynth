@@ -8,6 +8,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/PortPanel/PortConnector.h"
+#include <unordered_map>
 
 namespace synth::ui {
 
@@ -24,6 +25,7 @@ std::vector<ModMatrixPicker::Item> hostedModTargetItems(HostedPluginModule& modu
                                                         juce::AudioProcessorGraph::NodeID nodeId) {
     const HostedCardLayoutSource source(module, editor.getPluginCardLayoutStore(), editor.getAudioEngine().getGraph(),
                                         nodeId, editor.getUndoManager());
+    const auto states = source.parameterStates();
     std::vector<ModMatrixPicker::Item> onCard, rest;
     for (const auto& param : module.getInstanceParameters()) {
         ModMatrixPicker::Item item;
@@ -31,7 +33,8 @@ std::vector<ModMatrixPicker::Item> hostedModTargetItems(HostedPluginModule& modu
         item.text = param.displayName;
         if (module.modChannelForParam(param.paramId) >= 0)
             item.detail = "Modulated";
-        const bool shown = source.parameterState(param.paramId) == HostedCardLayoutSource::ParameterState::OnCard;
+        const auto state = states.find(param.paramId);
+        const bool shown = state != states.end() && state->second == HostedCardLayoutSource::ParameterState::OnCard;
         item.category = shown ? "On the card" : "All parameters";
         (shown ? onCard : rest).push_back(std::move(item));
     }
@@ -46,15 +49,17 @@ void showHostedModTargetPicker(GraphEditor& editor, ModuleComponent& card, juce:
     if (module == nullptr || !module->hasInstance())
         return;
     juce::Component::SafePointer<GraphEditor> safeEditor(&editor);
+    // Ids as they were when the list opened: a plugin swapped underneath the open list refuses the pick by id (no such
+    // parameter) rather than taking whichever parameter now has that index.
+    std::unordered_map<int, juce::String> paramIdByItem;
+    for (const auto& param : module->getInstanceParameters())
+        paramIdByItem[param.index + 1] = param.paramId;
     auto picker = std::make_unique<ModMatrixPicker>(
         "parameter", hostedModTargetItems(*module, editor, nodeId), 0,
-        [safeEditor, nodeId, sourceId, sourceJack](int id) {
-            auto* live = safeEditor != nullptr ? hostedAt(*safeEditor, nodeId) : nullptr;
-            if (live == nullptr)
-                return;
-            for (const auto& param : live->getInstanceParameters())
-                if (param.index == id - 1)
-                    applyHostedModTarget(*safeEditor, nodeId, sourceId, sourceJack, param.paramId);
+        [safeEditor, nodeId, sourceId, sourceJack, paramIdByItem = std::move(paramIdByItem)](int id) {
+            const auto paramId = paramIdByItem.find(id);
+            if (safeEditor != nullptr && paramId != paramIdByItem.end())
+                applyHostedModTarget(*safeEditor, nodeId, sourceId, sourceJack, paramId->second);
         });
     const auto title = "Modulate a " + card.cardTitle() + " parameter";
     picker->setAccessibleNames(title, "Search " + card.cardTitle() + " parameters to modulate");
@@ -67,31 +72,58 @@ void showHostedModTargetPicker(GraphEditor& editor, ModuleComponent& card, juce:
                                            nullptr);
 }
 
-// The knob is added first, as its own undo step (the "Add to card" write): undoing the cable then leaves the knob,
-// which the person asked for, and its slot is freed by the next rebuild's sweep.
+namespace {
+int bindHostedModTarget(GraphEditor& editor, HostedPluginModule& module, HostedCardLayoutSource& source,
+                        const juce::String& paramId) {
+    if (source.parameterState(paramId) == HostedCardLayoutSource::ParameterState::Available)
+        source.showParameter(paramId);
+    const int channel = module.bindModSlot(paramId);
+    if (channel < 0 && editor.onStatusMessage)
+        editor.onStatusMessage("This plugin already has " + juce::String(HostedPluginModule::kMaxModSlots) +
+                               " modulated parameters");
+    return channel;
+}
+} // namespace
+
+int bindHostedModTarget(GraphEditor& editor, juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+    auto* module = hostedAt(editor, nodeId);
+    if (module == nullptr || !module->hasInstance())
+        return -1;
+    HostedCardLayoutSource source(*module, editor.getPluginCardLayoutStore(), editor.getAudioEngine().getGraph(),
+                                  nodeId,
+                                  /*undoManager=*/nullptr);
+    if (source.parameterState(paramId) == HostedCardLayoutSource::ParameterState::Unknown)
+        return -1;
+    return bindHostedModTarget(editor, *module, source, paramId);
+}
+
+// The knob, its slot and the cable are one gesture and so one undo step: the source writes with no undo manager of
+// its own, and the connection does not record either, so the outer snapshot holds all three.
 bool applyHostedModTarget(GraphEditor& editor, juce::AudioProcessorGraph::NodeID nodeId,
                           juce::AudioProcessorGraph::NodeID sourceId, int sourceJack, const juce::String& paramId) {
     auto* module = hostedAt(editor, nodeId);
     if (module == nullptr || !module->hasInstance())
         return false;
-    HostedCardLayoutSource source(*module, editor.getPluginCardLayoutStore(), editor.getAudioEngine().getGraph(),
-                                  nodeId, editor.getUndoManager());
+    auto& graph = editor.getAudioEngine().getGraph();
+    HostedCardLayoutSource source(*module, editor.getPluginCardLayoutStore(), graph, nodeId, /*undoManager=*/nullptr);
     if (source.parameterState(paramId) == HostedCardLayoutSource::ParameterState::Unknown)
         return false;
-    if (source.parameterState(paramId) == HostedCardLayoutSource::ParameterState::Available)
-        source.showParameter(paramId);
 
-    const int channel = module->bindModSlot(paramId);
-    if (channel < 0) {
-        if (editor.onStatusMessage)
-            editor.onStatusMessage("This plugin already has " + juce::String(HostedPluginModule::kMaxModSlots) +
-                                   " modulated parameters");
-        return false;
-    }
-    return PortConnector::connectJacks(editor, sourceId, sourceJack, nodeId,
-                                       module->mapInputChannel(channel).visibleJackIndex, /*isMidi=*/false,
-                                       /*recordUndo=*/true)
-        .connected;
+    bool connected = false;
+    const auto gesture = [&] {
+        const int channel = bindHostedModTarget(editor, *module, source, paramId);
+        if (channel < 0)
+            return;
+        connected = PortConnector::connectJacks(editor, sourceId, sourceJack, nodeId,
+                                                module->mapInputChannel(channel).visibleJackIndex, /*isMidi=*/false,
+                                                /*recordUndo=*/false)
+                        .connected;
+    };
+    if (auto* undo = editor.getUndoManager())
+        undo->recordGraphAndMacroChange(graph, editor.getMacros(), gesture);
+    else
+        gesture();
+    return connected;
 }
 
 namespace test_hooks {

@@ -11,6 +11,7 @@
 #include "AppUndoManager.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/ClipKey.h"
+#include "Timeline/FitClipsToKey.h"
 #include "Timeline/FitToKey.h"
 #include "Transport/TransportService.h"
 #include "UI/Layout/DragCursor.h"
@@ -411,6 +412,13 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
     menu.showMenuAsync(options);
 }
 
+std::vector<synth::ClipId> TimelineClipLaneArea::clipsForMenuAction(synth::ClipId clicked) const {
+    auto ids = selection_.getSelected();
+    if (ids.size() < 2 || std::find(ids.begin(), ids.end(), clicked) == ids.end())
+        return {clicked};
+    return ids;
+}
+
 std::optional<synth::MusicalScale> TimelineClipLaneArea::resolvedKeyFor(const synth::Clip& clip) const {
     const auto songKey = transport_ != nullptr ? transport_->getDocumentState().songKey : std::nullopt;
     return synth::resolveClipKey(clip, songKey).key;
@@ -464,6 +472,19 @@ juce::PopupMenu TimelineClipLaneArea::buildClipContextMenu(synth::ClipId id, juc
     fitToKey.setEnabled(clip->assetRef.isEmpty() && !clip->notes.empty() && resolvedKeyFor(*clip).has_value());
     fitToKey.action = [this, id] { applyClipContextChoice(id, ClipContextChoice::FitToKey, 0.0); };
     menu.addItem(fitToKey);
+    // Beside it when the right-clicked clip is one of several selected: each clip fits to its own key. Greyed unless
+    // one of them is a MIDI clip with notes and a key; audio clips and clips with no key are left alone.
+    const auto selected = clipsForMenuAction(id);
+    if (selected.size() > 1) {
+        const bool anyFittable = std::any_of(selected.begin(), selected.end(), [this](synth::ClipId clipId) {
+            const auto* c = doc_->getClip(clipId);
+            return c != nullptr && c->assetRef.isEmpty() && !c->notes.empty() && resolvedKeyFor(*c).has_value();
+        });
+        juce::PopupMenu::Item fitAll("Fit all clips to key");
+        fitAll.setEnabled(anyFittable);
+        fitAll.action = [this, id] { applyClipContextChoice(id, ClipContextChoice::FitSelectionToKey, 0.0); };
+        menu.addItem(fitAll);
+    }
     // One toggling item rather than two, labelled for what the click will DO.
     menu.addItem(clip->muted ? "Unmute" : "Mute",
                  [this, id] { applyClipContextChoice(id, ClipContextChoice::ToggleMute, 0.0); });
@@ -607,6 +628,17 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
         const auto ids = synth::fitToKeyTargets(*clip, {});
         auto mutate = [this, ids, scale = *key] { synth::fitNotesToKey(*doc_, ids, scale); };
         // recordTimelineChange pushes no undo step when nothing moved.
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+        break;
+    }
+    case ClipContextChoice::FitSelectionToKey: {
+        const auto ids = clipsForMenuAction(id);
+        const auto songKey = transport_ != nullptr ? transport_->getDocumentState().songKey : std::nullopt;
+        auto mutate = [this, ids, songKey] { synth::fitClipsToTheirKeys(*doc_, ids, songKey); };
+        // One step for the whole selection; recordTimelineChange pushes none when nothing moved.
         if (undoManager_)
             undoManager_->recordTimelineChange(*doc_, mutate);
         else

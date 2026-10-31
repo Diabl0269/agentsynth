@@ -27,6 +27,8 @@ the same picker from anywhere.
 - **Detect from notes** suggests the major or natural minor key that best fits every unmuted note on the MIDI tracks
   (drum kits left out), by note length (`synth::songPitchClassWeights`, `synth::detectKey`, Krumhansl-Kessler
   profiles). It highlights the suggestion; Return picks it.
+- **Fit project to key** (Song key picker only, above the buttons) moves every MIDI clip that follows the song key into
+  it; [below](#fit-project-to-key).
 - **No key** turns the song key off.
 
 ## Hearing a key
@@ -69,6 +71,23 @@ Follow song key row on top (ticked while following, the song key at its right). 
 under it (a new song key, an undo), the field glows once for 300 ms; picking or following is the user's own change
 and does not glow, and reduced motion only changes the text. Built for the Sequencer and Poly Sequencer
 ([sequencer-design.md](../modules/sequencer-design.md#key)).
+
+## Fit project to key
+
+The Song key picker's **Fit project to key** button (greyed while there is no song key) fits the song key that is set
+now, not the key the list is highlighting, and closes the picker. It moves every note of every MIDI clip that **follows**
+the song key to the nearest note of the key, ties going down (`synth::fitProjectToSongKey`,
+`Source/Timeline/FitClipsToKey.h`, over `fitToKeyTargets` and `fitNotesToKey`), as one undo step; nothing moved pushes none.
+
+- **Left alone.** Audio clips, clips on a Drum Kit track (as Detect from notes), and a clip with its own key
+  (`Clip::scale`). Linked clips share their notes, so a linked group containing a clip with its own key (or one on a drum
+  kit) is left whole, and a group that all follows is fitted once and stays shared.
+- **The message** (a toast, through the timeline's `onShowMessage`): "Fitted 5 clips to D Dorian. Skipped 2 with their
+  own key. Audio clips were left alone." A clause is left out when its count is zero; a project already in key says
+  "Nothing moved: ..." (`synth::describeProjectFit`). "Fitted" counts the clips in which a note moved; "Skipped" counts
+  clips with notes, including those held back by a linked clip with its own key.
+- **Clips fit one by one.** Right-click one of several selected clips and choose **Fit all clips to key**
+  ([clips](clips.md)) to fit just those, each to its own key.
 
 ## Piano roll clips
 

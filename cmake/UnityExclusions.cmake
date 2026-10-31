@@ -41,6 +41,7 @@ set(SYNTH_UNITY_SKIP
     Tests/AI/FilterCustomShapesTrustTests.cpp
     Tests/App/MainComponent/MainComponentFreshUndoTests.cpp
     Tests/App/MainComponent/MainComponentUnsavedGuardTests.cpp
+    Tests/App/ScaleHangTests.cpp
     Tests/App/ShortcutManager/ShortcutManagerBottomPanelMigrationTests.cpp
     Tests/App/ShortcutManager/ShortcutManagerMarkerActionsTests.cpp
     Tests/App/ShortcutManager/ShortcutManagerTransportChordsTests.cpp

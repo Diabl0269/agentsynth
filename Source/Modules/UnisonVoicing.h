@@ -14,6 +14,31 @@ namespace synth {
 
 constexpr int kMaxUnisonVoices = 8;
 
+/** What a new Oscillator or Wavetable starts with, so raising Unison is heard at once: a +/-35 cent spread with the
+    outer voices at 78 % of the centre and fully panned. They match the measured reference stack at its own defaults. */
+constexpr float kDefaultUnisonDetuneCents = 35.0f;
+constexpr float kDefaultUnisonBlend = 0.75f;
+constexpr float kDefaultUnisonWidth = 1.0f;
+/** Rand as a 0..1 fraction: every unison voice starts each note at a random phase, as the measured reference does. */
+constexpr float kDefaultUnisonRand = 1.0f;
+
+/** A stored module that has no Detune, Blend, Width or Rand key was saved before those defaults: give it the values it
+    sounded with then (Detune 0, Blend 100 %, Width 0, Rand 0). `stores(key)` says whether the saved data holds that
+   key. */
+template <typename StoresKey>
+void restoreLegacyUnisonDefaults(const StoresKey& stores, juce::AudioParameterFloat& detune,
+                                 juce::AudioParameterFloat& blend, juce::AudioParameterFloat& width,
+                                 juce::AudioParameterFloat& rand) {
+    if (!stores("detune"))
+        detune.setValueNotifyingHost(detune.convertTo0to1(0.0f));
+    if (!stores("blend"))
+        blend.setValueNotifyingHost(blend.convertTo0to1(1.0f));
+    if (!stores("width"))
+        width.setValueNotifyingHost(width.convertTo0to1(0.0f));
+    if (!stores("randomPhase"))
+        rand.setValueNotifyingHost(0.0f);
+}
+
 /** Position of unison voice `u` of `count` in the detune spread: -1 (lowest) .. +1 (highest), 0 for a
     single voice. Detune cents are multiplied by this. */
 inline float unisonOffsetFraction(int u, int count) { return (count > 1) ? (2.0f * u / (count - 1) - 1.0f) : 0.0f; }
@@ -68,13 +93,16 @@ inline float unisonBlendGain(int u, int count, float blend) {
     all voices: uncorrelated voices then keep the loudness of one voice at any Unison, Blend and Width. */
 inline float unisonLegPower(float gainL, float gainR) { return 0.5f * (gainL * gainL + gainR * gainR); }
 
-/** Start phase (0..1) of a voice restarting on a note: `startPhase` plus up to `randomAmount` of a
-    cycle drawn from `rng`. No random draw is made at 0, so the stream only advances when it is used. */
-inline float unisonRestartPhase(float startPhase, float randomAmount, juce::Random& rng) {
-    float p = startPhase;
-    if (randomAmount > 0.0f)
-        p += randomAmount * rng.nextFloat();
+/** Start phase (0..1) of a voice restarting on a note: `startPhase` plus `randomAmount` of a cycle times `draw` (0..1).
+ */
+inline float unisonRestartPhase(float startPhase, float randomAmount, float draw) {
+    const float p = startPhase + randomAmount * draw;
     return p - std::floor(p);
+}
+
+/** The same with a new draw from `rng`. No draw is made at 0, so the stream only advances when it is used. */
+inline float unisonRestartPhase(float startPhase, float randomAmount, juce::Random& rng) {
+    return unisonRestartPhase(startPhase, randomAmount, randomAmount > 0.0f ? rng.nextFloat() : 0.0f);
 }
 
 } // namespace synth

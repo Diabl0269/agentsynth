@@ -3,6 +3,8 @@
 # file-size cap).
 target_sources(Core PRIVATE
     Source/Timeline/ClipKey.h
+    Source/Timeline/FitClipsToKey.cpp
+    Source/Timeline/FitClipsToKey.h
     Source/Timeline/FitToKey.h
     Source/Timeline/SongKeyNotes.cpp
     Source/Timeline/SongKeyNotes.h
@@ -22,6 +24,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/PianoRoll/ScaleAssistPanel.cpp
     Source/UI/PianoRoll/ScaleAssistPanel.h
     Source/UI/Timeline/SongKeyField.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneTestState.cpp
     Source/UI/Timeline/SongKeyField.h
 )
 include(cmake/SequencerKeySources.cmake)
