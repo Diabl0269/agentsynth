@@ -116,6 +116,18 @@ else
     echo "SKIP: no JUCE checkout on disk (set JUCE_SRC or build once); real patch not checked here"
 fi
 
+# --- cmake/CheckJuceSourceDir.cmake: a source dir must already carry every patch -----------------
+source_dir_check() { cmake -DJUCE_SRC="$1" -DPATCH_DIR="$2" -P "$ROOT/cmake/CheckJuceSourceDir.cmake" 2>&1; }
+mkdir -p "$WORK/patches" "$WORK/src-old" "$WORK/src-new"
+cp "$WORK/p.patch" "$WORK/patches/"
+echo "unpatched" >"$WORK/src-old/f.txt"
+echo "patched" >"$WORK/src-new/f.txt"
+out="$(source_dir_check "$WORK/src-old" "$WORK/patches")"
+check "a source dir without the patch fails the check" [ $? -ne 0 ]
+check "the failure names the missing patch" grep -q "p.patch" <<<"$out"
+source_dir_check "$WORK/src-new" "$WORK/patches" >/dev/null
+check "a source dir with the patch passes the check" [ $? -eq 0 ]
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

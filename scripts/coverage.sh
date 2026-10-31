@@ -32,7 +32,7 @@ else
     COV="llvm-cov"
 fi
 
-$PROFDATA merge -sparse default.profraw -o default.profdata
+$PROFDATA merge -sparse default*.profraw -o default.profdata # CI writes one profile per shard
 
 echo "Generating coverage report..."
 # Capture the report output.

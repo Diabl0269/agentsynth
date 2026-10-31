@@ -20,8 +20,9 @@
 # files at that time (the "# total-cpp:" line). A tree that gains .cpp files makes every header's
 # reach grow in proportion, so each entry is scaled by total_now / total_baseline first; only growth
 # beyond that is a violation. On top of the scaled entry a header may grow by the slack,
-# max(5 files, 3%), so an ordinary new .cpp does not trip it. A header not in the baseline fails the
-# moment it is over the cap: add the include somewhere narrower instead. --update lowers entries
+# max(5 files, 3%), so an ordinary new .cpp does not trip it. A header not in the baseline gets the same
+# slack over the cap, so another PR's .cpp can't turn a header at the cap into a failure on every PR;
+# past that it fails: add the include somewhere narrower instead. --update lowers entries
 # that fell, drops those under the cap and leaves entries that rose as they are, saying how many, so
 # growth inside the slack elsewhere never blocks recording a cut. It refuses to add a header. Raising
 # or adding an entry needs --allow-raise, the deliberate, reviewed exception.
@@ -201,7 +202,7 @@ run_check() {
                     } else if (count[p] < scaled - slack) {
                         printf "WARN %s fell from %d (scaled %d) to %d -- run --update to tighten the baseline\n", p, entry[p], scaled, count[p]
                     }
-                } else if (count[p] > cap) {
+                } else if (count[p] > cap + (int(cap * 0.03) < 5 ? 5 : int(cap * 0.03))) {
                     printf "ERR %s reaches %d .cpp files (cap %d) and is not in the baseline -- the baseline never grows by adding headers; include it only where used, or split it so most files need only a small part\n", p, count[p], cap
                     printf "EXPLAIN %s\n", p
                     errors++
@@ -282,7 +283,9 @@ run_update() {
             old_count="$(awk -v p="$path" '$2 == p { print $1 }' "$workdir/old.txt")"
             scaled_old=""
             [ -z "$old_count" ] || scaled_old=$(((old_count * total_now + total_base - 1) / total_base))
-            if [ -z "$old_count" ]; then
+            if [ -z "$old_count" ] && [ "$new_count" -le "$((CAP + (CAP * 3 / 100 < 5 ? 5 : CAP * 3 / 100)))" ]; then
+                continue
+            elif [ -z "$old_count" ]; then
                 what="is a new over-cap header ($new_count files, cap $CAP)"
             elif [ "$new_count" -gt "$scaled_old" ]; then
                 what="would raise the baseline from $old_count to $new_count (more than its $scaled_old scaled for the tree's growth)"

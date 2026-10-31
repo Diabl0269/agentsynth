@@ -106,13 +106,19 @@ guard --update --allow-raise >/dev/null 2>&1
 
 # --- a header that is new and over the cap ------------------------------------------------------
 for i in $(seq 1 11); do printf '#include "Extra.h"\n' >"$ROOT/Source/D$i.cpp"; done
+guard >/dev/null 2>&1
+check "a new header just over the cap passes inside the slack" test $? -eq 0
+guard --update >/dev/null 2>&1
+check "--update leaves a header inside the slack out, and succeeds" test $? -eq 0
+check "the baseline did not gain the header inside the slack" test -z "$(grep Extra.h "$TMP/baseline.txt")"
+for i in $(seq 12 16); do printf '#include "Extra.h"\n' >"$ROOT/Source/D$i.cpp"; done
 out="$(guard 2>&1)"
-check "a new header over the cap fails" test $? -ne 0
-check "the failure says it is not in the baseline" grep -q 'Source/Extra.h reaches 11 .cpp files (cap 10) and is not in the baseline' <<<"$out"
+check "a new header past the slack fails" test $? -ne 0
+check "the failure says it is not in the baseline" grep -q 'Source/Extra.h reaches 16 .cpp files (cap 10) and is not in the baseline' <<<"$out"
 guard --update >/dev/null 2>&1
 check "--update does not add a header" test $? -ne 0
 check "the baseline did not gain it" test -z "$(grep Extra.h "$TMP/baseline.txt")"
-for i in $(seq 1 11); do rm "$ROOT/Source/D$i.cpp"; done
+for i in $(seq 1 16); do rm "$ROOT/Source/D$i.cpp"; done
 
 # --- --update lowers -----------------------------------------------------------------------------
 for i in $(seq 1 5); do rm "$ROOT/Source/C$i.cpp"; done

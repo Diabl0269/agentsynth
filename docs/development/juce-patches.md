@@ -35,7 +35,9 @@ Two things bypass the patch step and must be kept in mind:
   disjoint files; keep it that way).
 - **`FETCHCONTENT_SOURCE_DIR_JUCE`.** A source dir given on the command line skips the patch step.
   `scripts/ci-local.sh`'s worktree reuse therefore reuses the main checkout's JUCE only when it already carries
-  the worktree's patches ([`local-ci.md`](local-ci.md)).
+  the worktree's patches ([`local-ci.md`](local-ci.md)). Every configure also runs
+  `cmake/CheckJuceSourceDir.cmake`, which fails when a source dir lacks a patch, including a path cached before
+  the patch was merged.
 
 ## Refreshing a patch (new JUCE tag, or a change to the hook)
 

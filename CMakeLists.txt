@@ -28,6 +28,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Dependency pins live in one file so CI can key its build/_deps cache on that file alone, and adding a
 # source file below does not invalidate a ~350 MB cache. Rationale: cmake/DependencyVersions.cmake.
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/DependencyVersions.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/CheckJuceSourceDir.cmake)
 
 # Fetch JUCE. GIT_SHALLOW TRUE (FRO341): JUCE's own .git history measured ~294 MB of every ~376 MB
 # build/_deps entry it contributes (a full clone carries the whole upstream history; a build never
