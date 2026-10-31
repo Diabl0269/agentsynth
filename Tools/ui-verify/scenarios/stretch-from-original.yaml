@@ -6,8 +6,10 @@
 # beats (150%), Option-drags it on to 8 beats (200%), then Option-drags it back to 4 beats. The probe `clipAudio` reads
 # `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`. The lane shows 24 px per beat from its left edge at the
 # default zoom (the status bar's "Stretched Tone to 150%" message is only in the PNGs), so x 96 is exactly beat 4; the grid snap (1/4 = one beat) lets the mouse land on it. Then Cmd+Z three times.
+# Stretching writes files beside the project, so it runs on a copy.
 steps:
-  - openProject: {path: "${FIXTURES}/stretch-from-original.agsproj"}
+  - copyFixture: {name: stretch-from-original.agsproj}
+  - openProject: {path: "${SCRATCH}/stretch-from-original.agsproj"}
   - wait: {}
   - key: {keys: cmd+j}
   - wait: {}

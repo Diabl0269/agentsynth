@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
@@ -208,6 +209,31 @@ class RunnerTests(unittest.TestCase):
         (ok, _), _ = self.run_steps("- restart: {}\n- wait: {}\n", app)
         self.assertTrue(ok)
         self.assertEqual(len(starts), 2)  # the launch and the restart
+
+    def test_copy_fixture_copies_a_fixture_and_scratch_resolves_to_it(self):
+        with tempfile.TemporaryDirectory() as fixtures:
+            project = os.path.join(fixtures, "demo.agsproj")
+            os.makedirs(os.path.join(project, "Audio"))
+            with open(os.path.join(project, "Audio", "tone.wav"), "w") as f:
+                f.write("wav")
+            seen = {}
+
+            class Checking(FakeApp):
+                def call(self, cmd, timeout_ms=None, **args):
+                    if cmd == "openProject":
+                        seen["path"] = args["path"]
+                        seen["copied"] = os.path.isfile(os.path.join(args["path"], "Audio", "tone.wav"))
+                    return super().call(cmd, timeout_ms=timeout_ms, **args)
+
+            with mock.patch.object(run, "FIXTURES", fixtures):
+                (ok, _), log = self.run_steps('- copyFixture: {name: demo.agsproj}\n'
+                                              '- openProject: {path: "${SCRATCH}/demo.agsproj"}\n', Checking())
+            self.assertTrue(ok)
+            self.assertTrue(seen["copied"])
+            self.assertEqual(os.path.basename(seen["path"]), "demo.agsproj")
+            self.assertNotEqual(os.path.dirname(seen["path"]), fixtures)
+            self.assertTrue(os.path.isfile(os.path.join(project, "Audio", "tone.wav")))  # the original is untouched
+            self.assertEqual([e["cmd"] for e in log], ["copyFixture", "openProject"])
 
 
 if __name__ == "__main__":

@@ -153,13 +153,14 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `type: {text}` | one `key` per character |
 | `wait: {}` | `waitForIdle` |
 | `restart: {}` | quit and start again on the same settings directory |
+| `copyFixture: {name}` | copies `${FIXTURES}/<name>` into `${SCRATCH}/<name>`, so a scenario can change a fixture without touching the committed copy |
 | `screenshot: {id?, name}` | saves `<name>.png` in the output folder (default id `window`) |
 | `expect: {id, field: value, ...}` | equality on `getState` fields |
 | `expect: {id, contains: {field: text}}` | case-insensitive substring |
 | `expect: {id, exists: false}` | the component is not there |
 | `expect: {count: {prefix, field?, equals}}` | how many ids (or `title`s) in `list` start with the prefix |
 
-`${FIXTURES}` and `${OUT}` are replaced in every string. An `expect` is retried for `within_ms` (default 500), so a repaint
+`${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string. An `expect` is retried for `within_ms` (default 500), so a repaint
 that is still settling is not a failure and one that never arrives still is.
 
 To add one: copy the closest file, start the file with a comment naming the bug and the steps a user takes, and give each
