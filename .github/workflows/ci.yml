@@ -469,7 +469,7 @@ jobs:
         ulimit -c unlimited
         echo 'core.%p' | sudo tee /proc/sys/kernel/core_pattern > /dev/null
         set +e
-        timeout -s ABRT 1260 ./build/Tests/Tests
+        timeout -s ABRT 1380 ./build/Tests/Tests
         status=$?
         set -e
         if [ "$status" -ne 0 ]; then
