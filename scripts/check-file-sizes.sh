@@ -180,6 +180,9 @@ fi
 
 CAP="${FILE_SIZE_CAP:-1000}"
 BASELINE_FILE="${FILE_SIZE_BASELINE:-$ROOT/scripts/file-size-baseline.txt}"
+# Per-file line counts are cached by content (scripts/lib/guard-cache.sh); the cap and baseline are applied fresh every run.
+# shellcheck source=scripts/lib/guard-cache.sh
+source "$SCRIPT_DIR/lib/guard-cache.sh"
 
 # list_scanned_paths -- every git-tracked path under $ROOT matching EXTENSIONS (or literally named
 # CMakeLists.txt) and not excluded, one per line.
@@ -226,15 +229,31 @@ list_scanned_paths() {
 
 # build_current_data -- "<lines> <path>" for every scanned path, unsorted.
 build_current_data() {
+    local existing
+    existing="$(mktemp)"
+    # A tracked path that is not on disk reads as 0 lines; the rest are counted (or taken from the cache).
     list_scanned_paths | while IFS= read -r path; do
-        full="$ROOT/$path"
-        if [ -f "$full" ]; then
-            n="$(wc -l <"$full" | tr -d '[:space:]')"
+        if [ -f "$ROOT/$path" ]; then
+            printf '%s\n' "$path" >&3
         else
-            n=0
+            printf '0 %s\n' "$path"
         fi
-        printf '%s %s\n' "$n" "$path"
-    done
+    done 3>"$existing"
+    if [ -s "$existing" ]; then
+        gc_init file-sizes "" "${BASH_SOURCE[0]}"
+        gc_scan_files 'p = $0; sub(/^[0-9]+ /, "", p)' "$existing" scan_line_counts
+    fi
+    rm -f "$existing"
+}
+
+# scan_line_counts -- "<lines> <path>" for each repo-relative path on stdin, in batches rather than one wc per file.
+scan_line_counts() {
+    (cd "$ROOT" && tr '\n' '\0' | xargs -0 wc -l) | awk '{
+        line = $0; sub(/^ +/, "", line)
+        n = line; sub(/ .*/, "", n)
+        p = line; sub(/^[0-9]+ /, "", p)
+        if (p != "total") print n " " p
+    }'
 }
 
 # baseline_data -- the baseline file's data lines ("<lines> <path>"), comments and blanks

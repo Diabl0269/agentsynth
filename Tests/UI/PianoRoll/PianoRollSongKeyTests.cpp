@@ -1,5 +1,6 @@
 // Concern: the piano roll's clip key: a clip with no key of its own follows the song key (highlighting, Generate, the
 // range picker, new-note snapping), an own key stays put, and the panel's Key field and Follow row show and change it.
+#include "PianoRollKeyPickerHelpers.h"
 #include "PianoRollTestHelpers.h"
 
 #include "Music/SongKey.h"

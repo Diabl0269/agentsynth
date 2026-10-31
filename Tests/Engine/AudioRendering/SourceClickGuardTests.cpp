@@ -105,7 +105,15 @@ synth::test::StubBackend& hostedBackend() {
     return backend;
 }
 
-std::unique_ptr<juce::AudioProcessor> makeSource(const juce::String& name, bool stereo) {
+// Phases a note may start at: the zero crossing, a quarter wave in, and the two mid-wave values real projects use.
+const std::vector<float> kPhases = {0.0f, 90.0f, 250.0f, 274.0f};
+
+// Only the oscillators have a Phase; the other sources are played once.
+std::vector<float> phasesFor(const juce::String& name) {
+    return name == "Oscillator" || name == "Wavetable" ? kPhases : std::vector<float>{0.0f};
+}
+
+std::unique_ptr<juce::AudioProcessor> makeSource(const juce::String& name, bool stereo, float phase) {
     if (name == "Hosted Plugin")
         return clickrig::makeHostedSine(kRate, kBlock, hostedBackend());
     auto source = synth::AIStateMapper::createModule(name);
@@ -113,6 +121,7 @@ std::unique_ptr<juce::AudioProcessor> makeSource(const juce::String& name, bool 
         return source;
     if (name == "Wavetable")
         setParamValue(source.get(), "position", 0.0f); // the first frame of Basic Shapes is a sine
+    setParamValue(source.get(), "phase", phase);
     if (stereo && (name == "Oscillator" || name == "Wavetable")) {
         setParamValue(source.get(), "unison", 3.0f);
         setParamValue(source.get(), "detune", 30.0f);
@@ -162,44 +171,47 @@ TEST_P(SourceClickGuard, NoteStartsAndEndsHaveNoClick) {
     for (const bool stereo : {false, true}) {
         for (const bool staccato : {false, true}) {
             for (const int step : {6000, 11 * kBlock}) { // mid-block starts, then starts on a block boundary
-                const juce::String label = juce::String(param.name) + (stereo ? " stereo" : " mono") +
-                                           (staccato ? " staccato" : " touching") + " step " + juce::String(step);
-                auto source = makeSource(param.name, stereo);
-                ASSERT_NE(source, nullptr) << param.name;
-                const auto notes = clickrig::notesEvery(kPitches, step, staccato);
-                clickrig::Envelope env;
-                env.sustain = staccato ? 0.0f : 1.0f;
-                const int total = step * (int)kPitches.size() + 14400;
-                const auto r = clickrig::renderThroughEnvelope(*source, notes, total, env, kRate, kBlock);
+                for (const float phase : phasesFor(param.name)) {
+                    const juce::String label = juce::String(param.name) + (stereo ? " stereo" : " mono") +
+                                               (staccato ? " staccato" : " touching") + " step " + juce::String(step) +
+                                               " phase " + juce::String((int)phase);
+                    auto source = makeSource(param.name, stereo, phase);
+                    ASSERT_NE(source, nullptr) << param.name;
+                    const auto notes = clickrig::notesEvery(kPitches, step, staccato);
+                    clickrig::Envelope env;
+                    env.sustain = staccato ? 0.0f : 1.0f;
+                    const int total = step * (int)kPitches.size() + 14400;
+                    const auto r = clickrig::renderThroughEnvelope(*source, notes, total, env, kRate, kBlock);
 
-                float peak = 0.0f;
-                for (float v : r.out)
-                    peak = std::max(peak, std::abs(v));
-                ASSERT_GT(peak, 0.05f) << label << " produced no signal";
+                    float peak = 0.0f;
+                    for (float v : r.out)
+                        peak = std::max(peak, std::abs(v));
+                    ASSERT_GT(peak, 0.05f) << label << " produced no signal";
 
-                // The envelope's own corners, where its attack, decay and release end and where the last note
-                // starts to release, are the only places the post-VCA signal may bend.
-                std::vector<int> corners = {notes.back().off - 4};
-                for (const auto& n : notes) {
-                    corners.push_back(n.on + (int)std::lround(env.attack * kRate) - 4);
-                    corners.push_back(n.off + (int)std::lround(env.release * kRate) - 4);
-                    corners.push_back(n.on + (int)std::lround((env.attack + env.decay) * kRate) - 4);
+                    // The envelope's own corners, where its attack, decay and release end and where the last note
+                    // starts to release, are the only places the post-VCA signal may bend.
+                    std::vector<int> corners = {notes.back().off - 4};
+                    for (const auto& n : notes) {
+                        corners.push_back(n.on + (int)std::lround(env.attack * kRate) - 4);
+                        corners.push_back(n.off + (int)std::lround(env.release * kRate) - 4);
+                        corners.push_back(n.on + (int)std::lround((env.attack + env.decay) * kRate) - 4);
+                    }
+
+                    const auto check = [&](const char* stage, const std::vector<float>& x, bool afterEnvelope) {
+                        if (x.empty())
+                            return;
+                        auto found = clickdetector::findClicks(x);
+                        if (afterEnvelope)
+                            found = clickdetector::clicksOutside(found, corners, 9);
+                        if (!found.empty())
+                            problems.push_back(label + " " + stage + ": " + juce::String((int)found.size()) +
+                                               " clicks:" + describe(found));
+                    };
+                    check("source left", r.source, false);
+                    check("source right", r.sourceRight, false);
+                    check("output left", r.out, true);
+                    check("output right", r.outRight, true);
                 }
-
-                const auto check = [&](const char* stage, const std::vector<float>& x, bool afterEnvelope) {
-                    if (x.empty())
-                        return;
-                    auto found = clickdetector::findClicks(x);
-                    if (afterEnvelope)
-                        found = clickdetector::clicksOutside(found, corners, 9);
-                    if (!found.empty())
-                        problems.push_back(label + " " + stage + ": " + juce::String((int)found.size()) +
-                                           " clicks:" + describe(found));
-                };
-                check("source left", r.source, false);
-                check("source right", r.sourceRight, false);
-                check("output left", r.out, true);
-                check("output right", r.outRight, true);
             }
         }
     }

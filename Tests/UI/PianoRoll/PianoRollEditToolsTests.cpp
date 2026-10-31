@@ -3,6 +3,7 @@
 // Select-tool drag, and the QUANTIZE verb (its header chip and both Option+Q shortcuts).
 // Shared PianoRollFixture and mouse-gesture helpers live in PianoRollTestHelpers.h.
 
+#include "PianoRollKeyPickerHelpers.h"
 #include "PianoRollTestHelpers.h"
 
 #include "UI/Timeline/EditTool.h"

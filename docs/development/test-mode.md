@@ -50,6 +50,7 @@ thread is never blocked and timers and animations run in between.
 | `ping` | | `{pid, version}` |
 | `list` | `root?`, `depth` (6), `all` (false) | tree of `{id,name,title,type,bounds,visible,showing,children}`; bounds are relative to the main window; without `root`, every showing top-level |
 | `click` | `id`, `x?`, `y?` (local, default centre), `button` (`left`/`right`), `clicks` (1/2), `mods` (one of `cmd`,`shift`,`alt`,`ctrl` as a string, or a list of them; an unknown name is an error naming it) | `{id, point}` |
+| `hover` | `id`, `x?`, `y?` (local, default centre) | `{id, point}`; moves the pointer there with no button down |
 | `drag` | `from`, `to`, `fromX?`, `fromY?`, `toX?`, `toY?`, `steps` (12), `mods` | `{from, to}` |
 | `key` | `keys` (`cmd+z`, `space`, `shift+tab`, `escape`, `up` ...), `target?` | `{handled}` |
 | `getState` | `id` | the `list` fields plus `enabled`, `hasFocus`, and per type: Button `text`/`toggleState`, Label `text`, Slider `value`/`min`/`max`, ComboBox `text`/`selectedId`, TextEditor `text`; a module card adds `selected`, `moduleType`, `title`, `nodeId` |
@@ -70,7 +71,7 @@ do not rename existing ones.
 
 A component with state worth reading implements `synth::testmode::StateSource` (`addTestModeState`), as `ModuleComponent`
 (`selected`, `moduleType`, `nodeId`, `macro`: the name of the macro the module sits in, empty when none) and
-`MacroCardComponent` (id `macroCard`: `name`, `collapsed`, `members`) do. `getState` also reports a component's `tooltip`
+`MacroCardComponent` (id `macroCard`: `name`, `collapsed`, `members`) and `KeyPicker` (id `keyPicker`: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`) do. `getState` also reports a component's `tooltip`
 when it has one, so a scenario can check the shortcut a button's tooltip names.
 
 ## Input

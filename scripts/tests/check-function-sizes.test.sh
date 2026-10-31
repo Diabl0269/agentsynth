@@ -521,6 +521,7 @@ commit_all
 mkdir -p "$REPO/scripts"
 cp "$CHECK" "$REPO/scripts/check-function-sizes.sh"
 cp "$SCRIPT_DIR/scripts/function-size-scan.awk" "$REPO/scripts/function-size-scan.awk"
+mkdir -p "$REPO/scripts/lib" && cp "$SCRIPT_DIR/scripts/lib/guard-cache.sh" "$REPO/scripts/lib/guard-cache.sh"
 set_baseline "8 Source/Big.cpp::bigFunc"
 hook_output="$(cd "$REPO" && FUNCTION_SIZE_CAP="$FUNCTION_SIZE_CAP" FUNCTION_SIZE_BASELINE="$BASELINE" GIT_DIR=.git bash scripts/check-function-sizes.sh 2>&1)"
 hook_status=$?

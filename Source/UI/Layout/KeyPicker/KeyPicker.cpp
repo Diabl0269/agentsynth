@@ -18,6 +18,8 @@ constexpr int kSearchHeight = 26;
 constexpr int kKeyboardHeight = 44;
 constexpr int kListHeight = 190;
 constexpr int kStatusHeight = 16;
+constexpr int kPreviewHeight = 24;
+constexpr int kPreviewLabelWidth = 92;
 constexpr int kButtonHeight = 26;
 constexpr int kDetectWidth = 112;
 constexpr int kNoKeyWidth = 64;
@@ -25,10 +27,11 @@ constexpr float kFontSize = 13.0f;
 constexpr float kSmallFontSize = 11.0f;
 } // namespace
 
-int KeyPicker::preferredHeight(bool followRow) {
+int KeyPicker::preferredHeight(bool followRow, bool previewRow) {
     const int follow = followRow ? kFollowHeight + kGap : 0;
-    return kPad + follow + kSearchHeight + kGap + kKeyboardHeight + kGap + kListHeight + kGap + kStatusHeight + kGap +
-           kButtonHeight + kPad;
+    const int preview = previewRow ? kPreviewHeight + kGap : 0;
+    return kPad + follow + preview + kSearchHeight + kGap + kKeyboardHeight + kGap + kListHeight + kGap +
+           kStatusHeight + kGap + kButtonHeight + kPad;
 }
 
 KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalScale>)> onPickCallback)
@@ -88,25 +91,28 @@ KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalSc
     addAndMakeVisible(status_);
 
     relative_ = std::make_unique<KeyPickerButton>("Relative key", "Switch to the relative major or minor key");
-    relative_->setExplicitFocusOrder(3);
+    relative_->setExplicitFocusOrder(4);
     relative_->onClick = [this] { clickRelative(); };
     addAndMakeVisible(*relative_);
 
     detectButton_ = std::make_unique<KeyPickerButton>("Detect from notes",
                                                       "Suggest the key that fits the notes in your MIDI clips");
-    detectButton_->setExplicitFocusOrder(4);
+    detectButton_->setExplicitFocusOrder(5);
     detectButton_->onClick = [this] { clickDetect(); };
     addChildComponent(*detectButton_);
 
     noKey_ = std::make_unique<KeyPickerButton>("No key", "Turn the song key off");
-    noKey_->setExplicitFocusOrder(5);
+    noKey_->setExplicitFocusOrder(6);
     noKey_->onClick = [this] { clickNoKey(); };
     addChildComponent(*noKey_);
     noKey_->setVisible(options_.showNoKey);
 
+    if (options_.showPreviewSound)
+        buildPreviewSound();
+
     buildRows();
     applyColours();
-    setSize(kWidth, preferredHeight(options_.showFollowRow));
+    setSize(kWidth, preferredHeight(options_.showFollowRow, options_.showPreviewSound));
     ready_ = true;
 }
 
@@ -116,6 +122,48 @@ KeyPicker::~KeyPicker() {
     endAudition();
     if (onClosed)
         onClosed();
+}
+
+// The Preview sound row: Default sound first, then one entry per instrument track the owner listed. Item ids are the
+// choice plus one (a ComboBox id of 0 means nothing selected).
+void KeyPicker::buildPreviewSound() {
+    previewLabel_.setText("Preview sound", juce::dontSendNotification);
+    previewLabel_.setFont(juce::Font(juce::FontOptions(kSmallFontSize)));
+    previewLabel_.setJustificationType(juce::Justification::centredLeft);
+    previewLabel_.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(previewLabel_);
+
+    previewCombo_.setComponentID("keyPickerPreviewSound");
+    previewCombo_.setTitle("Preview sound");
+    previewCombo_.setTooltip("The sound the scale plays with while you browse keys: the built-in default sound, or an "
+                             "instrument track of this project.");
+    previewCombo_.addItem("Default sound", 1);
+    for (size_t i = 0; i < options_.previewTracks.size(); ++i)
+        previewCombo_.addItem(options_.previewTracks[i], (int)i + 2);
+    previewCombo_.setSelectedId(juce::jlimit(0, (int)options_.previewTracks.size(), options_.previewSelected) + 1,
+                                juce::dontSendNotification);
+    previewCombo_.setExplicitFocusOrder(3);
+    previewCombo_.onChange = [this] {
+        if (onPreviewSoundChanged)
+            onPreviewSoundChanged(getPreviewSoundChoice());
+    };
+    addAndMakeVisible(previewCombo_);
+}
+
+bool KeyPicker::isPreviewSoundShown() const { return previewCombo_.getParentComponent() != nullptr; }
+
+juce::StringArray KeyPicker::getPreviewSoundItems() const {
+    juce::StringArray items;
+    for (int i = 0; i < previewCombo_.getNumItems(); ++i)
+        items.add(previewCombo_.getItemText(i));
+    return items;
+}
+
+int KeyPicker::getPreviewSoundChoice() const { return juce::jmax(0, previewCombo_.getSelectedId() - 1); }
+
+void KeyPicker::choosePreviewSound(int choice) {
+    previewCombo_.setSelectedId(juce::jlimit(0, juce::jmax(0, previewCombo_.getNumItems() - 1), choice) + 1,
+                                juce::sendNotificationSync);
 }
 
 void KeyPicker::buildRows() {
@@ -261,6 +309,12 @@ void KeyPicker::resized() {
 
     auto buttons = bounds.removeFromBottom(kButtonHeight);
     bounds.removeFromBottom(kGap);
+    if (options_.showPreviewSound) {
+        auto preview = bounds.removeFromBottom(kPreviewHeight);
+        bounds.removeFromBottom(kGap);
+        previewLabel_.setBounds(preview.removeFromLeft(kPreviewLabelWidth));
+        previewCombo_.setBounds(preview);
+    }
     status_.setBounds(bounds.removeFromBottom(kStatusHeight));
     bounds.removeFromBottom(kGap);
     viewport_.setBounds(bounds);
@@ -298,6 +352,11 @@ void KeyPicker::applyColours() {
     search_->setColour(juce::TextEditor::focusedOutlineColourId, p.accent);
     search_->setTextToShowWhenEmpty("Search keys, e.g. d dor", p.muted);
     status_.setColour(juce::Label::textColourId, p.muted);
+    previewLabel_.setColour(juce::Label::textColourId, p.muted);
+    previewCombo_.setColour(juce::ComboBox::backgroundColourId, p.field);
+    previewCombo_.setColour(juce::ComboBox::textColourId, p.text);
+    previewCombo_.setColour(juce::ComboBox::outlineColourId, p.border);
+    previewCombo_.setColour(juce::ComboBox::arrowColourId, p.muted);
     keyboard_->setPalette(p);
     relative_->setPalette(p);
     detectButton_->setPalette(p);
@@ -472,6 +531,15 @@ bool KeyPicker::sendKey(const juce::KeyPress& key) {
         return true;
     }
     return false;
+}
+
+// Test-mode state: whether a hovered key is being auditioned, which key, and the Preview sound the picker shows.
+void KeyPicker::addTestModeState(juce::DynamicObject& into) const {
+    into.setProperty("auditioning", auditioning_);
+    into.setProperty("auditionKey",
+                     auditioning_ && lastHighlight_.has_value() ? keyDisplayName(*lastHighlight_) : juce::String());
+    into.setProperty("previewSoundShown", isPreviewSoundShown());
+    into.setProperty("previewSound", isPreviewSoundShown() ? previewCombo_.getText() : juce::String());
 }
 
 // ---- Test seams ----
