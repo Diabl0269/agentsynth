@@ -41,7 +41,8 @@ class RemoteMessageSink; // Forward declaration (Source/MidiRemote/RemoteEngine/
 class AudioEngine
     : public juce::AudioIODeviceCallback
     , public juce::MidiInputCallback
-    , public juce::ChangeListener {
+    , public juce::ChangeListener
+    , private juce::Timer {
 public:
     // How the graph is driven.
     //   Standalone — AudioEngine owns an AudioDeviceManager, opens the default output device and
@@ -595,6 +596,10 @@ private:
     // Soloed ChannelStrip count. Message-thread writes (refreshSoloGate / setChannelStripSoloed),
     // audio-thread reads (renderPass). See refreshSoloGate().
     std::atomic<int> soloedStripCount_{0};
+
+    void timerCallback() override;
+    // What refreshNormalling last saw of the sources' silence. Message thread only.
+    std::uint64_t silentSourcesSignature_ = 0;
 
     // Whether Audio Output's Right currently borrows Left. Message-thread writes
     // (refreshNormalling), audio-thread reads (renderNextBlock, right after the render pass). See

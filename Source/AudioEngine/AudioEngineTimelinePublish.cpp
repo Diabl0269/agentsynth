@@ -190,8 +190,10 @@ void AudioEngine::refreshMidiWiring() { synth::publishSamplerMidiWiring(mainProc
 namespace {
 // True iff `nodeId`'s raw ch0 has an incoming connection and `rightChannel` does not. Shared by
 // the Audio Output check and the per-module Dual I/O check below -- same "Left patched, Right
-// not" test, just against a different node and a different right-channel index.
-bool leftPatchedRightNot(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId, int rightChannel) {
+// not" test, just against a different node and a different right-channel index. A silent source
+// on Right does not count as patching it, or its zeros would replace the Left that Right borrows.
+bool leftPatchedRightNot(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId, int rightChannel,
+                         const std::set<juce::AudioProcessorGraph::NodeID>& silentSources) {
     bool leftConnected = false;
     bool rightConnected = false;
     for (const auto& connection : graph.getConnections()) {
@@ -199,7 +201,8 @@ bool leftPatchedRightNot(juce::AudioProcessorGraph& graph, juce::AudioProcessorG
             continue;
         if (connection.destination.channelIndex == 0)
             leftConnected = true;
-        else if (connection.destination.channelIndex == rightChannel)
+        else if (connection.destination.channelIndex == rightChannel &&
+                 silentSources.count(connection.source.nodeID) == 0)
             rightConnected = true;
     }
     return leftConnected && !rightConnected;
@@ -226,6 +229,7 @@ bool leftPatchedRightNot(juce::AudioProcessorGraph& graph, juce::AudioProcessorG
 //     fans one cable onto both raw legs, so there is nothing to borrow.
 void AudioEngine::refreshNormalling() {
     using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    const auto silentSources = synth::findSilentSources(mainProcessorGraph);
 
     bool outputNormalled = false;
     if (mainProcessorGraph.getTotalNumOutputChannels() >= 2) {
@@ -235,7 +239,7 @@ void AudioEngine::refreshNormalling() {
             auto* io = dynamic_cast<IOProcessor*>(node->getProcessor());
             if (io == nullptr || io->getType() != IOProcessor::audioOutputNode)
                 continue;
-            outputNormalled = leftPatchedRightNot(mainProcessorGraph, node->nodeID, 1);
+            outputNormalled = leftPatchedRightNot(mainProcessorGraph, node->nodeID, 1, silentSources);
             break; // Audio Output is a singleton -- see GraphEditorDragDrop.cpp's own note.
         }
     }
@@ -251,13 +255,22 @@ void AudioEngine::refreshNormalling() {
             continue;
         }
         const int right = mb->rightAudioLegChannel();
-        mb->setNormalLeftToRight(right > 0 && leftPatchedRightNot(mainProcessorGraph, node->nodeID, right));
+        mb->setNormalLeftToRight(right > 0 &&
+                                 leftPatchedRightNot(mainProcessorGraph, node->nodeID, right, silentSources));
     }
 
     // Stereo pair into a mono input averages at -6 dB (docs/architecture/audio-engine.md#stereo-down-mix-fro326).
     // Rides this function so it gets the same three triggers; it runs before the module's own
     // processBlock body, so a Dual I/O Left fed by a pair is halved before Right borrows it.
     synth::publishStereoDownMix(mainProcessorGraph);
+    silentSourcesSignature_ = synth::silentSourcesSignature(mainProcessorGraph);
+}
+
+// A knob or bypass click on a source is a parameter write, which no graph broadcast reports, so the
+// silence the two scans above depend on is polled. The signature never reads the connection list.
+void AudioEngine::timerCallback() {
+    if (synth::silentSourcesSignature(mainProcessorGraph) != silentSourcesSignature_)
+        refreshNormalling();
 }
 
 // The one call a UI should make: it flips the strip's own flag and recounts, ordered so no render
