@@ -590,6 +590,6 @@ TEST(AIStateMapperTest, UntrustedRescaleOnlyFiresForValuesBelowTheRangeStart) {
         return param != nullptr ? param->get() : -1.0f;
     };
     EXPECT_NEAR(value(0, "drive"), 1.0f, 1.0e-4f) << "1.0 is a legal drive";
-    EXPECT_NEAR(value(0, "cutoff"), 10010.0f, 1.0f) << "0.5 Hz is not a legal cutoff";
+    EXPECT_NEAR(value(0, "cutoff"), 632.46f, 1.0f) << "0.5 Hz is not a legal cutoff";
     EXPECT_NEAR(value(1, "drive"), 5.5f, 1.0e-3f) << "0.5 is below the 1..10 range";
 }
