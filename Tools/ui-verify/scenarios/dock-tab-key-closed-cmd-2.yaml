@@ -1,0 +1,13 @@
+# Audit of the panel-slide anchoring fix (Add Track and the song key wait for the Timeline's slide): Cmd+2 (Show Mixer Tab)
+# lands where it should once the panel has slid in, not where the panel was when the key was pressed.
+#
+# What a user does: with the bottom panel closed, presses Cmd+2. The panel slides open (hence `motion: true`) and keyboard focus lands on the panel's tab strip, level with the tab.
+# The PNG is taken after the slide landed.
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+2}
+  - expect: {id: Mixer, bounds: {x: 533, y: 491, w: 533, h: 19}, within_ms: 1500}
+  - expect: {id: Panel tabs, hasFocus: true}
+  - screenshot: {name: cmd-2-closed-window}
