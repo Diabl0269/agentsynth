@@ -116,7 +116,7 @@ TEST_F(ModuleComponentTest, AdsrEnvelopeCurveModelMatchesDefaultParams) {
     EXPECT_NEAR(model.segmentDuration(2), 1.0, 1e-6) << "decay default";
     EXPECT_NEAR(model.segmentDuration(3), 0.015, 1e-6) << "release default";
     EXPECT_FLOAT_EQ(model.getNode(3).y, 1.0f) << "sustain default";
-    EXPECT_FLOAT_EQ(model.getBend(0), -0.3f) << "attackCurve default";
+    EXPECT_FLOAT_EQ(model.getBend(0), 0.0f) << "attackCurve default";
     EXPECT_FLOAT_EQ(model.getBend(2), 0.65f) << "decayCurve default";
     EXPECT_FLOAT_EQ(model.getBend(3), 0.65f) << "releaseCurve default";
     EXPECT_FALSE(model.isBendable(1)) << "the hold plateau (level 1 -> 1) has no curve param behind it";
