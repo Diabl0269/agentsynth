@@ -18,8 +18,9 @@
 set(SYNTH_JUCE_GIT_REPOSITORY "https://github.com/juce-framework/JUCE.git"
     CACHE STRING "JUCE upstream fetched via FetchContent")
 
-set(SYNTH_JUCE_GIT_TAG "9.0.3"
-    CACHE STRING "JUCE release tag fetched via FetchContent (a specific tag, for stability)")
+# A plain variable, not CACHE: a cached pin keeps the value of the build dir's first configure, so after a
+# JUCE bump an old build dir still fetched the old tag and failed to apply the new patches.
+set(SYNTH_JUCE_GIT_TAG "9.0.3")
 
 # FetchContent's PATCH_COMMAND for JUCE (cmake/patches/*.patch, docs/development/juce-patches.md). A patch
 # changes build/_deps, so the workflows' deps cache keys hash the patch files too; a source dir given with
