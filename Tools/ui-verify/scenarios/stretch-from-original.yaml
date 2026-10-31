@@ -1,0 +1,38 @@
+# Bug: stretching an audio clip a second time rendered from the first stretched copy, so every stretch lost quality, and
+# dragging back to the original length played a re-rendered copy instead of the original file. A stretched clip now
+# remembers its original asset, and a second stretch renders from that; back at 100% it plays the original file again.
+#
+# What a user does: opens a project with one 4-beat audio clip (a 2 s tone), Option-drags the clip's right edge to 6
+# beats (150%), Option-drags it on to 8 beats (200%), then Option-drags it back to 4 beats. The probe `clipAudio` reads
+# `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`. The lane shows 24 px per beat from its left edge at the
+# default zoom (the status bar's "Stretched Tone to 150%" message is only in the PNGs), so x 96 is exactly beat 4; the grid snap (1/4 = one beat) lets the mouse land on it. Then Cmd+Z three times.
+steps:
+  - openProject: {path: "${FIXTURES}/stretch-from-original.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipAudio: "Tone:Audio/tone.wav,0.000,4.000,-", within_ms: 2000}
+  - screenshot: {name: 1-original}
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 95, fromY: 28, toX: 144, toY: 28, mods: alt}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipAudio: "Tone:Audio/tone-stretch150.wav,0.000,6.000,Audio/tone.wav@0.000*0.667", within_ms: 5000}
+  - screenshot: {name: 2-stretched-150}
+  # A second stretch starts from the original file, not from the 150% copy: the origin stays tone.wav.
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 143, fromY: 28, toX: 192, toY: 28, mods: alt}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipAudio: "Tone:Audio/tone-stretch200.wav,0.000,8.000,Audio/tone.wav@0.000*0.500", within_ms: 5000}
+  - screenshot: {name: 3-stretched-200}
+  # Back to the original length: the clip plays the original file again, with no origin left.
+  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 191, fromY: 28, toX: 96, toY: 28, mods: alt}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipAudio: "Tone:Audio/tone.wav,0.000,4.000,-", within_ms: 5000}
+  - screenshot: {name: 4-back-to-original}
+  - key: {keys: cmd+z}
+  - expect: {id: timelineClipPitches, clipAudio: "Tone:Audio/tone-stretch200.wav,0.000,8.000,Audio/tone.wav@0.000*0.500", within_ms: 3000}
+  - key: {keys: cmd+z}
+  - expect: {id: timelineClipPitches, clipAudio: "Tone:Audio/tone-stretch150.wav,0.000,6.000,Audio/tone.wav@0.000*0.667", within_ms: 3000}
+  - key: {keys: cmd+z}
+  - expect: {id: timelineClipPitches, clipAudio: "Tone:Audio/tone.wav,0.000,4.000,-", within_ms: 3000}
+  - screenshot: {name: 5-undone}

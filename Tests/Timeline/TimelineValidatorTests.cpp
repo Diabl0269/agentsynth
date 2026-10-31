@@ -192,6 +192,16 @@ std::vector<Case> makeCases() {
         {TimelineValidationError::AssetNotAllowed, "a clip carries an audio assetRef",
          [](juce::var& root) { clipObj(root).setProperty("assetRef", "Audio/take-1.wav"); }},
 
+        // Regression test for FRO1147: a stretch origin names an audio asset, so it is app-written only.
+        {TimelineValidationError::AssetNotAllowed, "a clip carries a stretchOrigin",
+         [](juce::var& root) {
+             auto* origin = new juce::DynamicObject();
+             origin->setProperty("assetRef", "Audio/loop.wav");
+             origin->setProperty("offsetSeconds", 0.0);
+             origin->setProperty("ratio", 1.5);
+             clipObj(root).setProperty("stretchOrigin", juce::var(origin));
+         }},
+
         {TimelineValidationError::RecordModeNotAllowed, "a lane asks for Touch",
          [](juce::var& root) {
              laneObj(root).setProperty("recordMode", static_cast<int>(synth::LaneRecordMode::Touch));
