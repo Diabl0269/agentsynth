@@ -6,6 +6,7 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace synth::ui {
 
@@ -22,6 +23,7 @@ constexpr float kRowFontSize = 13.0f;
 constexpr float kHeaderFontSize = 11.0f;
 constexpr int kGlyphGutter = 16; // before the text of every row when any row has a tick or a plus
 constexpr float kTagFontSize = 9.0f;
+constexpr int kOverscan = 4 * kRowHeight; // rows kept past each edge of the view, so a scroll never shows a gap
 
 struct Palette {
     juce::Colour panel = juce::Colours::darkgrey.darker(0.4f);
@@ -54,63 +56,51 @@ Palette paletteFor(juce::Component& comp) {
 
 } // namespace
 
-// One header or item line. Items report a click and their own hover so the picker keeps the
-// highlight; headers are inert.
+// One header or item line in view: a recycled component bound to an entry of the list. It keeps the fade the filter
+// steers, and reports a click and its own hover by entry so the picker keeps the highlight.
 class ModMatrixPicker::Row
     : public juce::Component
     , public juce::SettableTooltipClient {
 public:
-    enum class Kind { Header, Item };
-
-    Row(Kind kind, int id, juce::String text, bool isCurrent, std::function<void(Row&)> onClick,
-        std::function<void(Row&)> onHover)
-        : kind_(kind)
-        , id_(id)
-        , text_(std::move(text))
-        , isCurrent_(isCurrent)
-        , onClick_(std::move(onClick))
-        , onHover_(std::move(onHover)) {
-        setTitle(text_);
-        if (kind_ == Kind::Header) {
-            setInterceptsMouseClicks(false, false);
-        } else {
-            setTooltip(text_);
-            setMouseCursor(juce::MouseCursor::PointingHandCursor);
-        }
+    explicit Row(ModMatrixPicker& owner)
+        : owner_(owner) {
+        fade.onFrame = [this] { owner_.onRowFadeFrame(); };
     }
 
-    Kind kind() const noexcept { return kind_; }
-    int id() const noexcept { return id_; }
-    const juce::String& text() const noexcept { return text_; }
-    const juce::String& searchText() const noexcept { return searchText_; }
-    void setSearchText(juce::String text) { searchText_ = std::move(text); }
-    const juce::String& detail() const noexcept { return detail_; }
-    // A muted second line under the text (what an LFO row says it already moves). A disabled row is
-    // announced as unavailable and takes no pick; its detail says why.
-    void setDetail(juce::String detail) {
-        detail_ = std::move(detail);
-        if (detail_.isNotEmpty()) {
-            setTitle(text_ + ", " + detail_);
-            setTooltip(text_ + ", " + detail_);
-        }
+    FadeVisibility fade{this};
+
+    int entry() const noexcept { return entry_; }
+    void unbind() noexcept { entry_ = -1; }
+    void bindHeader(int entry, const juce::String& text) {
+        entry_ = entry;
+        header_ = true;
+        text_ = text;
+        detail_ = {};
+        isCurrent_ = ticked_ = isNew_ = gutter_ = false;
+        setTitle(text);
+        setTooltip({});
+        setEnabled(true);
+        setInterceptsMouseClicks(false, false);
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+        repaint();
     }
-    // A tick (the current item) or a plus and a "New" tag (a row that creates); `gutter` reserves the room for the
-    // glyph on every row of a list that has any, so the texts stay aligned.
-    void setMarks(bool ticked, bool isNew, bool gutter) {
-        ticked_ = ticked;
-        isNew_ = isNew;
+    // A disabled row is announced as unavailable and takes no pick; its detail says why.
+    void bindItem(int entry, const Item& item, bool isCurrent, bool gutter) {
+        entry_ = entry;
+        header_ = false;
+        text_ = item.text;
+        detail_ = item.detail;
+        isCurrent_ = isCurrent;
+        ticked_ = item.ticked;
+        isNew_ = item.isNew;
         gutter_ = gutter;
-    }
-    bool isNewRow() const noexcept { return isNew_; }
-    bool isTicked() const noexcept { return ticked_; }
-    void setPickable(bool pickable) {
-        setEnabled(pickable);
-        setMouseCursor(pickable ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
-    }
-    int preferredHeight() const noexcept {
-        if (kind_ == Kind::Header)
-            return kHeaderHeight;
-        return detail_.isNotEmpty() ? kDetailRowHeight : kRowHeight;
+        const auto spoken = detail_.isNotEmpty() ? text_ + ", " + detail_ : text_;
+        setTitle(item.accessibleName.isNotEmpty() ? item.accessibleName : spoken);
+        setTooltip(spoken);
+        setEnabled(item.enabled);
+        setInterceptsMouseClicks(true, true);
+        setMouseCursor(item.enabled ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+        repaint();
     }
 
     void setHighlighted(bool on) {
@@ -130,11 +120,10 @@ public:
             repaint();
         }
     }
-    const juce::String& query() const noexcept { return query_; }
 
     void paint(juce::Graphics& g) override {
         auto bounds = getLocalBounds();
-        if (kind_ == Kind::Header) {
+        if (header_) {
             g.setColour(palette_.muted);
             g.setFont(juce::Font(juce::FontOptions(kHeaderFontSize, juce::Font::bold)));
             g.drawText(text_, bounds.reduced(6, 0), juce::Justification::centredLeft, true);
@@ -197,31 +186,29 @@ public:
     }
 
     void mouseEnter(const juce::MouseEvent&) override {
-        if (onHover_)
-            onHover_(*this);
+        if (entry_ >= 0 && !header_)
+            owner_.hoverEntry(entry_);
     }
     void mouseMove(const juce::MouseEvent&) override {
-        if (onHover_ && !highlighted_)
-            onHover_(*this);
+        if (entry_ >= 0 && !header_ && !highlighted_)
+            owner_.hoverEntry(entry_);
     }
     void mouseUp(const juce::MouseEvent& e) override {
-        if (kind_ == Kind::Item && isEnabled() && onClick_ && getLocalBounds().contains(e.getPosition()))
-            onClick_(*this);
+        if (entry_ >= 0 && !header_ && isEnabled() && getLocalBounds().contains(e.getPosition()))
+            owner_.chooseEntry(entry_);
     }
 
 private:
-    Kind kind_;
-    int id_;
+    ModMatrixPicker& owner_;
+    int entry_ = -1;
+    bool header_ = false;
     juce::String text_;
-    juce::String searchText_;
     juce::String detail_;
     juce::String query_;
-    bool isCurrent_;
+    bool isCurrent_ = false;
     bool ticked_ = false;
     bool isNew_ = false;
     bool gutter_ = false;
-    std::function<void(Row&)> onClick_;
-    std::function<void(Row&)> onHover_;
     Palette palette_;
     bool highlighted_ = false;
 };
@@ -273,6 +260,7 @@ ModMatrixPicker::ModMatrixPicker(juce::String what, std::vector<Item> items, int
     viewport_.setViewedComponent(&rowColumn_, false);
     viewport_.setScrollBarsShown(true, false);
     viewport_.setWantsKeyboardFocus(false); // the search field keeps focus; Up/Down scroll the highlight
+    viewport_.onViewMoved = [this] { syncRows(); };
 
     rebuildRows();
     applyColours();
@@ -285,124 +273,210 @@ ModMatrixPicker::~ModMatrixPicker() {
 }
 
 void ModMatrixPicker::rebuildRows() {
-    fades_.clear();
-    rowColumn_.removeAllChildren();
-    rows_.clear();
+    for (auto& entry : entries_)
+        if (entry.row != nullptr)
+            releaseRow(entry);
+    entries_.clear();
+    entries_.reserve(items_.size());
+    laidOut_ = false;
+    markGutter_ = std::any_of(items_.begin(), items_.end(), [](const Item& i) { return i.ticked || i.isNew; });
 
     juce::String currentCategory;
     bool first = true;
-    const bool gutter = std::any_of(items_.begin(), items_.end(), [](const Item& i) { return i.ticked || i.isNew; });
-    for (const auto& item : items_) {
+    for (size_t i = 0; i < items_.size(); ++i) {
+        const auto& item = items_[i];
         if (item.category.isNotEmpty() && (first || item.category != currentCategory)) {
-            rows_.push_back(std::make_unique<Row>(Row::Kind::Header, 0, item.category, false, nullptr, nullptr));
-            rowColumn_.addAndMakeVisible(*rows_.back());
+            Entry header;
+            header.header = true;
+            header.item = (int)i;
+            header.height = kHeaderHeight;
+            entries_.push_back(std::move(header));
         }
         first = false;
         currentCategory = item.category;
-        rows_.push_back(std::make_unique<Row>(
-            Row::Kind::Item, item.id, item.text, item.id == selectedId_, [this](Row& r) { chooseRow(r); },
-            [this](Row& r) {
-                if (!r.isEnabled())
-                    return;
-                const auto visible = visibleItemRows();
-                const auto it = std::find(visible.begin(), visible.end(), &r);
-                if (it != visible.end())
-                    setHighlight((int)(it - visible.begin()));
-            }));
-        rows_.back()->setSearchText(item.searchText);
-        rows_.back()->setDetail(item.detail);
-        if (item.accessibleName.isNotEmpty())
-            rows_.back()->setTitle(item.accessibleName);
-        rows_.back()->setPickable(item.enabled);
-        rows_.back()->setMarks(item.ticked, item.isNew, gutter);
-        rowColumn_.addAndMakeVisible(*rows_.back());
+        Entry entry;
+        entry.item = (int)i;
+        entry.height = item.detail.isNotEmpty() ? kDetailRowHeight : kRowHeight;
+        entry.haystack = item.text + " " + item.detail + " " + item.searchText;
+        entries_.push_back(std::move(entry));
     }
-    std::vector<juce::Component*> components;
-    for (const auto& row : rows_)
-        components.push_back(row.get());
-    fades_.reset(components);
-    fades_.onFrame = [this] {
-        layoutRowColumn();
-        if (!fades_.anyFading())
-            setHighlight(highlighted_); // the rows have settled: keep the highlighted one in view
-    };
     applyFilter();
 }
 
-// The rows a pick can land on: the item rows the filter keeps (a row that is fading out is not one of them).
-std::vector<ModMatrixPicker::Row*> ModMatrixPicker::visibleItemRows() const {
-    std::vector<Row*> out;
-    for (size_t i = 0; i < rows_.size(); ++i)
-        if (rows_[i]->kind() == Row::Kind::Item && fades_.isShown(i))
-            out.push_back(rows_[i].get());
-    return out;
+// Takes a free component (or makes one) for the entry. Its fade is left landed on hidden; the caller decides.
+ModMatrixPicker::Row& ModMatrixPicker::acquireRow(int entryIndex) {
+    if (freeRows_.empty()) {
+        pool_.push_back(std::make_unique<Row>(*this));
+        rowColumn_.addChildComponent(*pool_.back());
+        freeRows_.push_back(pool_.back().get());
+    }
+    auto* row = freeRows_.back();
+    freeRows_.pop_back();
+    auto& entry = entries_[(size_t)entryIndex];
+    entry.row = row;
+    if (entry.header) {
+        row->bindHeader(entryIndex, items_[(size_t)entry.item].category);
+    } else {
+        const auto& item = items_[(size_t)entry.item];
+        row->bindItem(entryIndex, item, item.id == selectedId_, markGutter_);
+    }
+    row->setPalette(paletteFor(*this));
+    row->setQuery(query_);
+    row->setHighlighted(!entry.header && !visibleItems_.empty() &&
+                        visibleItems_[(size_t)juce::jlimit(0, (int)visibleItems_.size() - 1, highlighted_)] ==
+                            entryIndex);
+    return *row;
+}
+
+void ModMatrixPicker::releaseRow(Entry& entry) {
+    entry.row->fade.snapTo(false);
+    entry.row->unbind();
+    freeRows_.push_back(entry.row);
+    entry.row = nullptr;
 }
 
 // A header shows only while some row under it matches; the height is deliberately not recomputed
 // here (see preferredHeight), so the popup keeps its size while the list shrinks.
 void ModMatrixPicker::applyFilter() {
-    const auto query = searchEditor_->getText().trim();
-    int pendingHeader = -1;
+    query_ = searchEditor_->getText().trim();
+    const auto words = searchQueryWords(query_);
+    visibleItems_.clear();
+    Entry* pendingHeader = nullptr;
     bool headerHasMatch = false;
     // Word by word, in any order, ignoring case: "osc 8" finds "Oscillator 8" (synth::ui::searchMatches).
     int bestIndex = -1;
     int bestScore = 0;
-    int visibleIndex = 0;
-    for (size_t i = 0; i < rows_.size(); ++i) {
-        const auto& row = rows_[i];
-        if (row->kind() == Row::Kind::Header) {
-            if (pendingHeader >= 0)
-                fades_.steer((size_t)pendingHeader, headerHasMatch);
-            pendingHeader = (int)i;
+    for (size_t i = 0; i < entries_.size(); ++i) {
+        auto& entry = entries_[i];
+        entry.wasShown = entry.shown;
+        if (entry.header) {
+            if (pendingHeader != nullptr)
+                pendingHeader->shown = headerHasMatch;
+            pendingHeader = &entry;
             headerHasMatch = false;
             continue;
         }
-        const auto haystack = row->text() + " " + row->detail() + " " + row->searchText();
-        const bool found = searchMatches(haystack, query);
-        const bool matches = found || row->isNewRow(); // a row that creates stays, however little the query finds
-        fades_.steer(i, matches);
-        row->setQuery(query);
-        headerHasMatch = headerHasMatch || matches;
-        if (matches) {
-            const int score = found ? searchScore(haystack, query) : 0;
-            if (found && row->isEnabled() && (bestIndex < 0 || score < bestScore)) {
-                bestIndex = visibleIndex;
+        const auto& item = items_[(size_t)entry.item];
+        const bool found = searchWordsMatch(entry.haystack, words);
+        entry.shown = found || item.isNew; // a row that creates stays, however little the query finds
+        headerHasMatch = headerHasMatch || entry.shown;
+        if (!entry.shown)
+            continue;
+        if (found && item.enabled) {
+            const int score = searchWordsScore(entry.haystack, words);
+            if (bestIndex < 0 || score < bestScore) {
+                bestIndex = (int)visibleItems_.size();
                 bestScore = score;
             }
-            ++visibleIndex;
         }
+        visibleItems_.push_back((int)i);
     }
-    if (pendingHeader >= 0)
-        fades_.steer((size_t)pendingHeader, headerHasMatch);
-    fades_.markLaidOut();
+    if (pendingHeader != nullptr)
+        pendingHeader->shown = headerHasMatch;
 
-    layoutRowColumn();
+    steerRows();
+    laidOut_ = true;
     // The best match leads on a query (the first among equals); with none pickable the highlight stays on the first
-    // row.
-    setHighlight(query.isNotEmpty() && bestIndex >= 0 ? bestIndex : nextPickable(-1, 1));
-    viewport_.setViewPosition(0, 0);
+    // row. After the jump to the top, so a best match further down stays scrolled into view.
+    setHighlight(query_.isNotEmpty() && bestIndex >= 0 ? bestIndex : nextPickable(-1, 1));
 }
 
-void ModMatrixPicker::layoutRowColumn() {
+// A filter pass restarts the list at the top. Only what lands in that first screenful is animated: a row with a
+// component follows the filter from its current opacity, a row newly shown there fades in, and everything further down
+// just takes its new state. Nothing here costs more than the screenful, whatever the list's length.
+void ModMatrixPicker::steerRows() {
+    syncing_ = true;
+    viewport_.setViewPosition(0, 0);
+    const int bottom = viewport_.getViewHeight() + kOverscan;
+    int targetY = 0;
+    for (size_t i = 0; i < entries_.size(); ++i) {
+        auto& entry = entries_[i];
+        const bool inWindow = targetY < bottom;
+        if (entry.row != nullptr) {
+            ++rowsSteered_;
+            entry.row->setQuery(query_);
+            if (inWindow && laidOut_)
+                entry.row->fade.setShown(entry.shown);
+            else
+                entry.row->fade.snapTo(entry.shown);
+        } else if (entry.shown && inWindow) {
+            ++rowsSteered_;
+            auto& row = acquireRow((int)i);
+            if (laidOut_ && !entry.wasShown)
+                row.fade.setShown(true);
+            else
+                row.fade.snapTo(true);
+        }
+        targetY += entry.shown ? entry.height : 0;
+    }
+    layoutEntries();
+    syncing_ = false;
+    syncRows();
+}
+
+// A row the filter is taking out keeps a slot squeezed to its fade's progress, so the rows below slide up while it goes
+// and one that comes back opens its slot the same way. Plain arithmetic over the list: only bound rows are components.
+void ModMatrixPicker::layoutEntries() {
     const int width = juce::jmax(0, viewport_.getMaximumVisibleWidth());
-    // A row the filter is taking out keeps a slot squeezed to its fade's progress(), so the rows below slide up while
-    // it goes and one that comes back opens its slot the same way.
     int y = 0;
-    for (size_t i = 0; i < rows_.size(); ++i) {
-        if (!fades_.occupies(i))
-            continue;
-        const int slot = fades_.slot(i, rows_[i]->preferredHeight());
-        rows_[i]->setBounds(0, y, width, slot);
+    for (auto& entry : entries_) {
+        const bool fading = entry.row != nullptr && entry.row->fade.isFading();
+        const int slot = fading        ? juce::roundToInt((float)entry.height * entry.row->fade.progress())
+                         : entry.shown ? entry.height
+                                       : 0;
+        entry.y = y;
+        if (entry.row != nullptr)
+            entry.row->setBounds(0, y, width, slot);
         y += slot;
     }
+    const bool wasSyncing = std::exchange(syncing_, true); // a shrinking column moves the view: one sync, by the caller
     rowColumn_.setSize(width, juce::jmax(y, 1));
+    syncing_ = wasSyncing;
 }
+
+// Gives the rows in the view (and a few past it) a component and takes it back from the rest. A row that is still
+// fading keeps its component until the fade has landed: its driver must not be stopped from inside its own frame.
+void ModMatrixPicker::syncRows() {
+    if (syncing_)
+        return;
+    syncing_ = true;
+    const auto view = viewport_.getViewArea();
+    const int top = view.getY() - kOverscan;
+    const int bottom = view.getBottom() + kOverscan;
+    const int width = juce::jmax(0, viewport_.getMaximumVisibleWidth());
+    for (size_t i = 0; i < entries_.size(); ++i) {
+        auto& entry = entries_[i];
+        const bool inWindow = entry.shown && entry.y + entry.height > top && entry.y < bottom;
+        if (entry.row != nullptr) {
+            if (!inWindow && !entry.row->fade.isFading())
+                releaseRow(entry);
+        } else if (inWindow) {
+            auto& row = acquireRow((int)i);
+            row.setBounds(0, entry.y, width, entry.height);
+            row.fade.snapTo(true);
+        }
+    }
+    syncing_ = false;
+}
+
+void ModMatrixPicker::onRowFadeFrame() {
+    layoutEntries();
+    syncRows();
+    if (!anyRowFading())
+        setHighlight(highlighted_); // the rows have settled: keep the highlighted one in view
+}
+
+bool ModMatrixPicker::anyRowFading() const {
+    return std::any_of(pool_.begin(), pool_.end(), [](const auto& row) { return row->fade.isFading(); });
+}
+
+bool ModMatrixPicker::isFilterFadingForTest() const { return anyRowFading(); }
 
 // The whole unfiltered list decides the height (capped), so typing never resizes the popup.
 int ModMatrixPicker::preferredHeight() const {
     int rowsHeight = 0;
-    for (const auto& row : rows_)
-        rowsHeight += row->preferredHeight();
+    for (const auto& entry : entries_)
+        rowsHeight += entry.height;
     const int footer = footerHeight_ > 0 ? footerHeight_ + 4 : 0;
     const int content = kOuterPadding + kSearchHeight + 4 + juce::jmax(rowsHeight, kRowHeight) + footer + kOuterPadding;
     return juce::jlimit(kSearchHeight + kRowHeight + 2 * kOuterPadding + 4 + footer, kMaxHeight + footer, content);
@@ -417,7 +491,8 @@ void ModMatrixPicker::resized() {
         bounds.removeFromBottom(4);
     }
     viewport_.setBounds(bounds);
-    layoutRowColumn();
+    layoutEntries();
+    syncRows();
 }
 
 void ModMatrixPicker::setItems(std::vector<Item> items) {
@@ -461,7 +536,7 @@ void ModMatrixPicker::applyColours() {
     searchEditor_->setColour(juce::TextEditor::focusedOutlineColourId, p.accent);
     searchEditor_->setTextToShowWhenEmpty(placeholder_.isNotEmpty() ? placeholder_ : "Search " + what_ + "s...",
                                           p.muted);
-    for (const auto& row : rows_)
+    for (const auto& row : pool_)
         row->setPalette(p);
     repaint();
 }
@@ -477,49 +552,67 @@ void ModMatrixPicker::parentHierarchyChanged() {
         searchEditor_->grabKeyboardFocus();
 }
 
+const ModMatrixPicker::Item& ModMatrixPicker::itemAtVisible(int visibleIndex) const {
+    return items_[(size_t)entries_[(size_t)visibleItems_[(size_t)visibleIndex]].item];
+}
+
 void ModMatrixPicker::setHighlight(int visibleItemIndex) {
-    const auto visible = visibleItemRows();
-    if (visible.empty()) {
+    if (visibleItems_.empty()) {
         highlighted_ = 0;
         return;
     }
-    highlighted_ = juce::jlimit(0, (int)visible.size() - 1, visibleItemIndex);
-    for (int i = 0; i < (int)visible.size(); ++i)
-        visible[(size_t)i]->setHighlighted(i == highlighted_);
+    highlighted_ = juce::jlimit(0, (int)visibleItems_.size() - 1, visibleItemIndex);
+    const int target = visibleItems_[(size_t)highlighted_];
+    for (const auto& row : pool_)
+        row->setHighlighted(row->entry() == target);
 
-    // Keep the highlighted row inside the viewport.
-    const auto rowBounds = visible[(size_t)highlighted_]->getBounds();
+    // Keep the highlighted row inside the viewport; the move gives it a component if it had none.
+    const auto& entry = entries_[(size_t)target];
     const auto view = viewport_.getViewArea();
-    if (rowBounds.getY() < view.getY())
-        viewport_.setViewPosition(0, rowBounds.getY());
-    else if (rowBounds.getBottom() > view.getBottom())
-        viewport_.setViewPosition(0, rowBounds.getBottom() - view.getHeight());
+    if (entry.y < view.getY())
+        viewport_.setViewPosition(0, entry.y);
+    else if (entry.y + entry.height > view.getBottom())
+        viewport_.setViewPosition(0, entry.y + entry.height - view.getHeight());
 }
 
 // The next pickable visible item after `from` in direction `step`; `from` itself when there is none that way
 // (a list of disabled rows leaves the highlight where it is, and a pick on it does nothing).
 int ModMatrixPicker::nextPickable(int from, int step) const {
-    const auto visible = visibleItemRows();
-    for (int i = from + step; i >= 0 && i < (int)visible.size(); i += step)
-        if (visible[(size_t)i]->isEnabled())
+    for (int i = from + step; i >= 0 && i < (int)visibleItems_.size(); i += step)
+        if (itemAtVisible(i).enabled)
             return i;
     return juce::jmax(from, 0);
 }
 
-void ModMatrixPicker::moveHighlight(int delta) { setHighlight(nextPickable(highlighted_, delta < 0 ? -1 : 1)); }
+// Keyboard focus stays in the search field and most rows have no component to read, so the move is spoken.
+void ModMatrixPicker::moveHighlight(int delta) {
+    const int before = highlighted_;
+    setHighlight(nextPickable(highlighted_, delta < 0 ? -1 : 1));
+    if (highlighted_ != before && !visibleItems_.empty())
+        juce::AccessibilityHandler::postAnnouncement(itemAtVisible(highlighted_).text,
+                                                     juce::AccessibilityHandler::AnnouncementPriority::low);
+}
+
+void ModMatrixPicker::hoverEntry(int entryIndex) {
+    if (!items_[(size_t)entries_[(size_t)entryIndex].item].enabled)
+        return;
+    const auto it = std::lower_bound(visibleItems_.begin(), visibleItems_.end(), entryIndex);
+    if (it != visibleItems_.end() && *it == entryIndex)
+        setHighlight((int)(it - visibleItems_.begin()));
+}
 
 void ModMatrixPicker::chooseHighlighted() {
-    const auto visible = visibleItemRows();
-    if (!visible.empty())
-        chooseRow(*visible[(size_t)juce::jlimit(0, (int)visible.size() - 1, highlighted_)]);
+    if (!visibleItems_.empty())
+        chooseEntry(visibleItems_[(size_t)juce::jlimit(0, (int)visibleItems_.size() - 1, highlighted_)]);
 }
 
 // Reports the pick, then closes. The callback is copied first: closing is asynchronous, but nothing
 // here may depend on that.
-void ModMatrixPicker::chooseRow(const Row& row) {
-    if (!row.isEnabled())
+void ModMatrixPicker::chooseEntry(int entryIndex) {
+    const auto& item = items_[(size_t)entries_[(size_t)entryIndex].item];
+    if (!item.enabled)
         return;
-    const int id = row.id();
+    const int id = item.id;
     auto callback = onChoose_;
     dismiss();
     if (callback)
@@ -552,54 +645,57 @@ juce::String ModMatrixPicker::getSearchTextForTest() const { return searchEditor
 
 std::vector<juce::String> ModMatrixPicker::getVisibleRowNamesForTest() const {
     std::vector<juce::String> names;
-    for (size_t i = 0; i < rows_.size(); ++i)
-        if (fades_.isShown(i))
-            names.push_back(rows_[i]->text());
+    for (const auto& entry : entries_)
+        if (entry.shown)
+            names.push_back(entry.header ? items_[(size_t)entry.item].category : items_[(size_t)entry.item].text);
     return names;
 }
 
 std::vector<juce::String> ModMatrixPicker::getVisibleItemTextsForTest() const {
     std::vector<juce::String> names;
-    for (auto* row : visibleItemRows())
-        names.push_back(row->text());
+    for (int i = 0; i < (int)visibleItems_.size(); ++i)
+        names.push_back(itemAtVisible(i).text);
     return names;
 }
 
 std::vector<juce::String> ModMatrixPicker::getVisibleItemDetailsForTest() const {
     std::vector<juce::String> details;
-    for (auto* row : visibleItemRows())
-        details.push_back(row->detail());
+    for (int i = 0; i < (int)visibleItems_.size(); ++i)
+        details.push_back(itemAtVisible(i).detail);
     return details;
 }
 
 std::vector<std::vector<SearchSpan>> ModMatrixPicker::getVisibleItemHighlightSpansForTest() const {
     std::vector<std::vector<SearchSpan>> spans;
-    for (auto* row : visibleItemRows())
-        spans.push_back(searchHighlightSpans(row->text(), row->query()));
+    for (int i = 0; i < (int)visibleItems_.size(); ++i)
+        spans.push_back(searchHighlightSpans(itemAtVisible(i).text, query_));
     return spans;
 }
 
 bool ModMatrixPicker::isVisibleItemTickedForTest(int index) const {
-    const auto visible = visibleItemRows();
-    return index >= 0 && index < (int)visible.size() && visible[(size_t)index]->isTicked();
+    return index >= 0 && index < (int)visibleItems_.size() && itemAtVisible(index).ticked;
 }
 
 bool ModMatrixPicker::isVisibleItemNewForTest(int index) const {
-    const auto visible = visibleItemRows();
-    return index >= 0 && index < (int)visible.size() && visible[(size_t)index]->isNewRow();
+    return index >= 0 && index < (int)visibleItems_.size() && itemAtVisible(index).isNew;
+}
+
+bool ModMatrixPicker::isHighlightInViewForTest() const {
+    if (visibleItems_.empty())
+        return false;
+    const auto& entry = entries_[(size_t)visibleItems_[(size_t)highlighted_]];
+    return entry.row != nullptr && viewport_.getViewArea().contains(entry.row->getBounds());
 }
 
 juce::String ModMatrixPicker::getSearchPlaceholderForTest() const { return searchEditor_->getTextToShowWhenEmpty(); }
 
 bool ModMatrixPicker::isVisibleItemPickableForTest(int index) const {
-    const auto visible = visibleItemRows();
-    return index >= 0 && index < (int)visible.size() && visible[(size_t)index]->isEnabled();
+    return index >= 0 && index < (int)visibleItems_.size() && itemAtVisible(index).enabled;
 }
 
 void ModMatrixPicker::chooseVisibleItemForTest(int index) {
-    const auto visible = visibleItemRows();
-    if (index >= 0 && index < (int)visible.size())
-        chooseRow(*visible[(size_t)index]);
+    if (index >= 0 && index < (int)visibleItems_.size())
+        chooseEntry(visibleItems_[(size_t)index]);
 }
 
 bool ModMatrixPicker::sendKeyForTest(const juce::KeyPress& key) { return searchEditor_->keyPressed(key); }

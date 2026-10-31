@@ -48,16 +48,26 @@ juce::String moduleSearchAliases(const juce::String& moduleName) {
     return {};
 }
 
+juce::StringArray searchQueryWords(const juce::String& query) { return queryWords(query); }
+
 bool searchMatches(const juce::String& text, const juce::String& query) {
-    for (const auto& word : queryWords(query))
+    return searchWordsMatch(text, queryWords(query));
+}
+
+bool searchWordsMatch(const juce::String& text, const juce::StringArray& words) {
+    for (const auto& word : words)
         if (!text.containsIgnoreCase(word))
             return false;
     return true;
 }
 
 int searchScore(const juce::String& text, const juce::String& query) {
+    return searchWordsScore(text, queryWords(query));
+}
+
+int searchWordsScore(const juce::String& text, const juce::StringArray& words) {
     int worst = 0;
-    for (const auto& word : queryWords(query)) {
+    for (const auto& word : words) {
         const int rank = wordRank(text, word);
         if (rank < 0)
             return -1;

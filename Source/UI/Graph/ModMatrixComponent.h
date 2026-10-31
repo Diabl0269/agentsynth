@@ -6,9 +6,14 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
+#include <utility>
+#include <vector>
 
 class AudioEngine;
 class GraphEditor;
+namespace synth::ui {
+class ModMatrixLists;
+}
 
 class ModMatrixComponent
     : public juce::Component
@@ -67,6 +72,7 @@ public:
      *  selecting an id (see encodeComboId). Null when the row does not exist. */
     juce::ComboBox* getRowSourceComboForTest(int rowIndex);
     juce::ComboBox* getRowDestComboForTest(int rowIndex);
+    std::vector<std::pair<int, juce::String>> getSourceListForTest();
     int getNumRowsForTest() const noexcept { return (int)rows.size(); }
 
     /** Where a row's searchable picker opens. The default is a juce::CallOutBox anchored on the combo; a
@@ -103,11 +109,12 @@ private:
 public:
     void updateRowsFromGraph();
     /** updateRowsFromGraph when the matrix is open; otherwise just remembers to on the next open. Every row
-     *  rebuild is work per routing (and every routing's combos list every module), so the closed matrix's 10 Hz
+     *  rebuild is work per routing, so the closed matrix's 10 Hz
      *  tick and the graph-change refresh must not pay it (docs/layout/rendering.md). */
     void updateRowsIfOpen();
 
 private:
+    std::unique_ptr<synth::ui::ModMatrixLists> lists_; // what every row's pickers list
     int lastNodeCount = 0;
     int routingChangeDepth = 0; // > 0 while a row's routing change runs: rows are not rebuilt or freed under it
     bool clearPending = false;

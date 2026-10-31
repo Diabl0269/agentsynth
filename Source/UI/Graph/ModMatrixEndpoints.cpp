@@ -72,8 +72,8 @@ std::vector<ModulationTarget> modDestinationCandidates(ModuleBase* module) {
 }
 
 // A plugin parameter has no CV input until a cable claims one, so it cannot be one of a module's modulation targets
-// yet; the destination picker lists them anyway (a plugin can have hundreds, so never the flat combo) and a pick
-// claims the slot first. Built when the picker opens, from the live instances.
+// yet; the destination picker lists them anyway, modulated or not (a plugin can have hundreds, so picker only) and a
+// pick claims the slot first. Built when the picker opens, from the live instances.
 std::map<int, HostedDestination> hostedDestinations(juce::AudioProcessorGraph& graph) {
     std::map<int, HostedDestination> out;
     int nextId = kHostedDestinationIdBase;
@@ -83,10 +83,22 @@ std::map<int, HostedDestination> hostedDestinations(juce::AudioProcessorGraph& g
             continue;
         const auto title = synth::moduleTitle(*node);
         for (const auto& param : hosted->getInstanceParameters())
-            if (hosted->modChannelForParam(param.paramId) < 0)
-                out[nextId++] = {node->nodeID, param.paramId, title + " - " + param.displayName};
+            out[nextId++] = {node->nodeID, param.paramId, title + " - " + param.displayName,
+                             hosted->modChannelForParam(param.paramId)};
+        // A plugin that did not load keeps its routings: their slots stay listed, by the parameter id they saved.
+        if (!hosted->hasInstance())
+            for (const auto& target : hosted->getModulationTargets())
+                out[nextId++] = {node->nodeID, {}, title + " - " + target.name, target.channelIndex};
     }
     return out;
+}
+
+bool canClaimHostedDestination(juce::AudioProcessorGraph& graph, const HostedDestination& dest) {
+    if (dest.paramId.isEmpty())
+        return dest.boundChannel >= 0;
+    auto* node = graph.getNodeForId(dest.node);
+    auto* hosted = node != nullptr ? dynamic_cast<HostedPluginModule*>(node->getProcessor()) : nullptr;
+    return hosted != nullptr && hosted->canModulateParam(dest.paramId);
 }
 
 int claimHostedDestination(juce::AudioProcessorGraph& graph, const HostedDestination& dest) {

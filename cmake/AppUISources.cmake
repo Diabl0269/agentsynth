@@ -1,7 +1,5 @@
-# AppUI's source list, split out of the root CMakeLists.txt (FRO62) purely to keep that file
-# under the repo's 1,000-line file-size cap (scripts/check-file-sizes.sh) -- registering the
-# GraphEditor split's new per-concern units pushed it over. No behavior change: paths stay
-# relative to the repo root, exactly as when they sat inline in add_library(AppUI STATIC ...).
+# AppUI's source list, split out of the root CMakeLists.txt to keep that file under the line cap.
+# Paths are relative to the repo root.
 set(APPUI_SOURCES
     Source/MainComponent/MainComponent.cpp
     Source/MainComponent/MainComponent.h
@@ -448,6 +446,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditor.cpp
     Source/UI/Graph/GraphEditor/GraphEditor.h
     Source/UI/Graph/GraphEditor/GraphEditorTypes.h
+    Source/UI/Graph/GraphEditor/CableEndName.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
     Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
     Source/UI/Graph/GraphEditor/GraphEditorModAmount.cpp
@@ -792,6 +791,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModMatrixComponent.cpp
     Source/UI/Graph/ModMatrixComponent.h
     Source/UI/Graph/ModMatrixEndpoints.cpp
+    Source/UI/Graph/ModMatrixLists.cpp
     Source/UI/Graph/ModMatrixEndpoints.h
     Source/UI/Graph/ModMatrixKeyboard.cpp
     Source/UI/Graph/ModMatrixKeyboard.h

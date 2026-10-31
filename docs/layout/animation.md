@@ -750,13 +750,13 @@ ADSR strip's Controls switch (the "+ Add control" button slides over as it fades
 popover: a section's body fades while its height tweens, so the sections below slide and the call-out resizes each
 frame. A docked panel's header strip (`DetachablePanelHost`) when its header moves into the tab strip: the panel slides
 up as the strip fades; detaching or re-docking mid-fade lands it first (`snapTo`), since the window borrows the
-strip's components. The Mod Matrix and MIDI destination pickers fade the rows their search filter takes out or brings
+strip's components. The MIDI destination and key pickers fade the rows their search filter takes out or brings
 back, and the list closes up (`FilteredRowFades`, `Source/UI/Layout/FilteredRowFades.h`: one `FadeVisibility` per row
 and header, each leaving row keeping a slot squeezed to `progress()` so the rows below slide, and the highlight, Return
 and a click only ever land on rows still logically shown). The next keystroke retargets every fade from its current
-opacity, so typing never waits on a fade. The help popover's own close fades: the call-out through
-`PopupMotion::dismiss`, the pinned panel through a `FadeVisibility` (opening it again mid-fade turns back from the
-current opacity).
+opacity, so typing never waits on a fade. The Mod Matrix picker applies the same rules itself over its on-screen
+rows. The help popover's own close fades: the call-out through `PopupMotion::dismiss`, the pinned panel through a
+`FadeVisibility` (opening it again mid-fade turns back from the current opacity).
 
 **Painted things.** Something its owner paints, with no component to fade, uses `synth::ui::FadeAmount`
 (`Source/UI/Layout/FadeAmount.h`): the same numbers (160 ms in, 110 ms out, linear, 80 ms under Reduce Motion, none under

@@ -9,10 +9,13 @@
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CardLayoutEditor/HostedCardLayoutSource.h"
+#include "UI/Graph/GraphEditor/CableEndName.h"
 #include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModMatrixComponent.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
+#include "UI/Graph/PluginKnobPicker/PluginTouchToAdd.h"
 #include <chrono>
 
 using namespace cardbody_test;
@@ -160,6 +163,47 @@ TEST(HostedPluginCardModTest, ACableDroppedOnTheCardBodyOffersEveryParameterAndT
     canvas.knobPoint("p9"); // the parameter is on the card now
 }
 
+// Regression test for FRO1157: the knob was its own undo step, so one Cmd+Z took the cable and left the knob.
+TEST(HostedPluginCardModTest, OneUndoTakesBackThePicksKnobAndCableAndOneRedoBringsThemBack) {
+    PluginCanvas canvas;
+    std::unique_ptr<synth::ui::ModMatrixPicker> picker;
+    synth::ui::test_hooks::hostedModTargetPickerHookForTest() = [&picker](auto p) { picker = std::move(p); };
+    auto* plugin = canvas.card(canvas.pluginId);
+    canvas.dropCableAt(plugin->getPosition() +
+                       juce::Point<int>(plugin->getWidth() / 2, ModuleComponent::kHeaderHeight / 2));
+    synth::ui::test_hooks::hostedModTargetPickerHookForTest() = nullptr;
+    ASSERT_NE(picker, nullptr);
+    picker->setSearchTextForTest("param 9");
+    const auto knobs = [&canvas] {
+        return synth::ui::HostedCardLayoutSource(*canvas.hosted, nullptr, canvas.engine.getGraph(), canvas.pluginId,
+                                                 nullptr)
+            .parameterState("p9");
+    };
+    using State = synth::ui::HostedCardLayoutSource::ParameterState;
+    ASSERT_EQ(knobs(), State::Available);
+    const int loads = canvas.backend.createCount;
+
+    picker->chooseVisibleItemForTest(0);
+    canvas.editor.updateComponents();
+    const int channel = canvas.hosted->modChannelForParam("p9");
+    ASSERT_GE(channel, 0);
+    ASSERT_TRUE(canvas.routedTo(channel));
+    ASSERT_EQ(knobs(), State::OnCard);
+
+    canvas.undo.undo();
+    canvas.editor.updateComponents();
+    EXPECT_EQ(knobs(), State::Available) << "the knob goes with the cable";
+    EXPECT_EQ(canvas.hosted->modChannelForParam("p9"), -1);
+    EXPECT_FALSE(canvas.routedTo(channel));
+    EXPECT_EQ(canvas.backend.createCount, loads) << "undo restores in place, it never reloads the plugin";
+
+    canvas.undo.redo();
+    canvas.editor.updateComponents();
+    EXPECT_EQ(knobs(), State::OnCard);
+    EXPECT_GE(canvas.hosted->modChannelForParam("p9"), 0);
+    EXPECT_TRUE(canvas.routedTo(canvas.hosted->modChannelForParam("p9")));
+}
+
 namespace {
 HostedPluginModule* hostedIn(CardCanvas& canvas) {
     for (auto* node : canvas.engine.getGraph().getNodes())
@@ -252,6 +296,159 @@ TEST(HostedPluginCardModTest, TheModMatrixCanPointARoutingAtAnyPluginParameter) 
     ASSERT_GE(channel, 0);
     EXPECT_TRUE(canvas.routedTo(channel));
     EXPECT_EQ(canvas.hosted->modChannelForParam("p2"), -1) << "the routing moved; the old slot is freed";
+}
+
+namespace {
+// What a person finds searching a parameter in a matrix row's destination list.
+struct ListedDestination {
+    std::vector<juce::String> rows;
+    std::vector<juce::String> details;
+    bool operator==(const ListedDestination& o) const { return rows == o.rows && details == o.details; }
+};
+
+std::unique_ptr<juce::Component> openDestinationList(PluginCanvas& canvas) {
+    auto& matrix = canvas.editor.getModMatrix();
+    matrix.updateRowsFromGraph();
+    std::unique_ptr<juce::Component> captured;
+    matrix.setPickerLauncherForTest(
+        [&captured](std::unique_ptr<juce::Component> p, juce::Rectangle<int>) { captured = std::move(p); });
+    if (matrix.getNumRowsForTest() > 0)
+        matrix.getRowDestComboForTest(0)->showPopup();
+    return captured;
+}
+
+ListedDestination listed(PluginCanvas& canvas, const juce::String& search) {
+    auto captured = openDestinationList(canvas);
+    auto* picker = dynamic_cast<synth::ui::ModMatrixPicker*>(captured.get());
+    if (picker == nullptr)
+        return {};
+    picker->setSearchTextForTest(search);
+    return {picker->getVisibleRowNamesForTest(), picker->getVisibleItemDetailsForTest()};
+}
+
+void pickInMatrix(PluginCanvas& canvas, const juce::String& search) {
+    auto captured = openDestinationList(canvas);
+    auto* picker = dynamic_cast<synth::ui::ModMatrixPicker*>(captured.get());
+    ASSERT_NE(picker, nullptr);
+    picker->setSearchTextForTest(search);
+    ASSERT_EQ(picker->getVisibleItemTextsForTest().size(), 1u);
+    picker->chooseVisibleItemForTest(0);
+    canvas.editor.updateComponents();
+}
+
+bool hasKnob(PluginCanvas& canvas, const juce::String& paramId) {
+    for (auto* child : canvas.card(canvas.pluginId)->getChildren())
+        if (child->getComponentID() == "hostedKnob:" + paramId)
+            return true;
+    return false;
+}
+
+// A routing from the LFO with no destination yet, the row a person opens in the matrix.
+void addSourcedRow(PluginCanvas& canvas) {
+    canvas.engine.addEmptyModRouting();
+    auto& matrix = canvas.editor.getModMatrix();
+    matrix.updateRowsFromGraph();
+    ASSERT_EQ(matrix.getNumRowsForTest(), 1);
+    const auto sources = matrix.getSourceListForTest();
+    ASSERT_FALSE(sources.empty());
+    matrix.getRowSourceComboForTest(0)->setSelectedId(sources.front().first, juce::sendNotificationSync);
+    canvas.editor.updateComponents();
+}
+} // namespace
+
+// Regression test for FRO1158: a parameter sat under Effects once modulated and under Plugins once free.
+TEST(HostedPluginCardModTest, APluginParameterStaysUnderPluginsModulatedOrNot) {
+    PluginCanvas canvas;
+    canvas.dropCableAt(canvas.knobPoint("p2"));
+    const auto bound = listed(canvas, "param 2");
+    ASSERT_EQ(bound.rows.size(), 2u);
+    EXPECT_EQ(bound.rows[0], "Plugins");
+    ASSERT_EQ(bound.details.size(), 1u);
+    EXPECT_EQ(bound.details[0], "Modulated");
+
+    pickInMatrix(canvas, "param 7"); // the routing moves off p2
+    const auto freed = listed(canvas, "param 2");
+    EXPECT_EQ(freed.rows, bound.rows);
+    EXPECT_EQ(freed.details, std::vector<juce::String>{""});
+}
+
+// Regression test for FRO1158: a matrix pick claimed the slot and left the cable ending on no knob, outside the undo.
+TEST(HostedPluginCardModTest, AMatrixPickShowsTheKnobAndOneUndoTakesItAllBack) {
+    PluginCanvas canvas;
+    addSourcedRow(canvas);
+    ASSERT_FALSE(hasKnob(canvas, "p9"));
+    pickInMatrix(canvas, "param 9");
+    const int channel = canvas.hosted->modChannelForParam("p9");
+    ASSERT_GE(channel, 0);
+    EXPECT_TRUE(hasKnob(canvas, "p9"));
+    EXPECT_TRUE(canvas.routedTo(channel));
+
+    ASSERT_TRUE(canvas.editor.getUndoManager()->undo());
+    canvas.editor.updateComponents();
+    EXPECT_EQ(canvas.hosted->modChannelForParam("p9"), -1);
+    EXPECT_FALSE(hasKnob(canvas, "p9"));
+    EXPECT_FALSE(canvas.routedTo(channel));
+
+    ASSERT_TRUE(canvas.editor.getUndoManager()->redo());
+    canvas.editor.updateComponents();
+    EXPECT_GE(canvas.hosted->modChannelForParam("p9"), 0);
+    EXPECT_TRUE(hasKnob(canvas, "p9"));
+    EXPECT_TRUE(canvas.routedTo(canvas.hosted->modChannelForParam("p9")));
+}
+
+// The guard for this family: however a parameter gets bound, it ends the same.
+TEST(HostedPluginCardModTest, CardDropMatrixPickAndTouchToAddAllEndTheSame) {
+    struct EndState {
+        bool knob = false;
+        size_t slots = 0;
+        bool routed = false;
+        ListedDestination list;
+    };
+    const auto endState = [](PluginCanvas& canvas) {
+        const int channel = canvas.hosted->modChannelForParam("p9");
+        return EndState{hasKnob(canvas, "p9"), canvas.hosted->getModulationTargets().size(),
+                        channel >= 0 && canvas.routedTo(channel), listed(canvas, "param 9")};
+    };
+
+    PluginCanvas viaDrop;
+    ASSERT_TRUE(synth::ui::applyHostedModTarget(viaDrop.editor, viaDrop.pluginId, viaDrop.lfoId, 0, "p9"));
+    viaDrop.editor.updateComponents();
+
+    PluginCanvas viaMatrix;
+    addSourcedRow(viaMatrix);
+    pickInMatrix(viaMatrix, "param 9");
+
+    PluginCanvas viaTouch;
+    synth::ui::PluginTouchToAdd touch(*viaTouch.hosted, viaTouch.editor.getPluginCardLayoutStore(),
+                                      viaTouch.engine.getGraph(), viaTouch.pluginId, viaTouch.editor.getUndoManager());
+    touch.start();
+    touch.simulateTouchGestureForTest(9);
+    viaTouch.editor.updateComponents();
+    ASSERT_TRUE(pumpUntil([&] { return hasKnob(viaTouch, "p9"); }));
+    viaTouch.dropCableAt(viaTouch.knobPoint("p9"));
+
+    const auto drop = endState(viaDrop);
+    EXPECT_TRUE(drop.knob);
+    EXPECT_EQ(drop.slots, 1u);
+    EXPECT_TRUE(drop.routed);
+    ASSERT_EQ(drop.list.rows.size(), 2u);
+    EXPECT_EQ(drop.list.rows[0], "Plugins");
+    for (auto* other : {&viaMatrix, &viaTouch}) {
+        const auto state = endState(*other);
+        EXPECT_EQ(state.knob, drop.knob);
+        EXPECT_EQ(state.slots, drop.slots);
+        EXPECT_EQ(state.routed, drop.routed);
+        EXPECT_TRUE(state.list == drop.list);
+    }
+}
+
+// Regression test for FRO1158: a cable on a plugin parameter did not say which control it drives.
+TEST(HostedPluginCardModTest, ACableOnAPluginParameterIsNamedWithoutThePlugin) {
+    PluginCanvas canvas;
+    canvas.dropCableAt(canvas.knobPoint("p2"));
+    auto& graph = canvas.engine.getGraph();
+    EXPECT_EQ(synth::ui::cableEndName(graph, canvas.pluginId, canvas.hosted->modChannelForParam("p2")), "Param 2");
+    EXPECT_TRUE(synth::ui::cableEndName(graph, canvas.lfoId, 1).isEmpty());
 }
 
 // A modulated plugin knob's mod dot sits exactly where a built-in knob's does: the same offset from its knob, from

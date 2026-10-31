@@ -99,6 +99,8 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   The mod dots go further: the tick counts the sources on every knob once when the routing set changes
   (`ModDotController::recountIfRoutingsChanged`) and each card's `syncModDotButtons` only looks its knobs up. Each card
   resolving every routing on its own made one duplicated track freeze the app for seconds at 20 tracks.
+- **An open Mod Matrix tick does not grow per row pair.** One cable index per tick, one refresh per row, rows found by
+  attenuverter id, and combos that hold one row (`ModMatrixLists`, [chrome](chrome.md)); `ScaleHangTests` holds it.
 - **A closed panel does no work.** The Mod Matrix's 10 Hz tick and its graph-change refresh skip a closed matrix
   (`ModMatrixComponent::updateRowsIfOpen`); opening it catches up. The docked mixer works the same way: while its tab
   is not showing, `MixerPanelComponent::rebuildIfStale` and `rebuildWhenShown` only note that a check or a rebuild is
