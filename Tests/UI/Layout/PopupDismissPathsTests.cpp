@@ -51,10 +51,11 @@ struct Frame {
     float scale;
 };
 
-// The app being in front or not, restored on every exit.
+// The app leaving the front, restored on every exit. The fixture holds it in front otherwise: a CI runner's test
+// process can lose the foreground at any moment, and a panel would close itself before the path under test ran.
 struct AppDeactivated {
     AppDeactivated() { synth::testmode::setAppInFrontForTest(false); }
-    ~AppDeactivated() { synth::testmode::setAppInFrontForTest(std::nullopt); }
+    ~AppDeactivated() { synth::testmode::setAppInFrontForTest(true); }
 };
 
 // Steps a live window's leaving tween and reads each frame. `total` is the tween's length in ms.
@@ -110,11 +111,15 @@ protected:
             GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
         juce::MessageManager::getInstance();
         synth::ui::setReducedMotionForTest(false);
+        synth::testmode::setAppInFrontForTest(true);
         app.setBounds(0, 0, 600, 400);
         app.addToDesktop(0);
         app.setVisible(true);
     }
-    void TearDown() override { synth::ui::setReducedMotionForTest(std::nullopt); }
+    void TearDown() override {
+        synth::testmode::setAppInFrontForTest(std::nullopt);
+        synth::ui::setReducedMotionForTest(std::nullopt);
+    }
 
     juce::Component app; // stands for the main window: a normal top-level window
 };
