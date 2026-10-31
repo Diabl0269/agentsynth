@@ -45,10 +45,11 @@ TEST(ModMatrixKeyboard, FromThePanelAnyArrowEntersAtTheFirstControl) {
 
 TEST(ModMatrixKeyboard, LeftAndRightWalkEveryControlInReadingOrder) {
     TwoRows t;
-    const std::vector<juce::Component*> order{
-        t.header(ids::kAdd),     t.header(ids::kFlat),    t.cell(0, ids::kSource), t.cell(0, ids::kDest),
-        t.cell(0, ids::kAmount), t.cell(0, ids::kBypass), t.cell(0, ids::kDelete), t.cell(1, ids::kSource),
-        t.cell(1, ids::kDest),   t.cell(1, ids::kAmount), t.cell(1, ids::kBypass), t.cell(1, ids::kDelete)};
+    const std::vector<juce::Component*> order{t.header(ids::kAdd),     t.header(ids::kFlat),    t.cell(0, ids::kSource),
+                                              t.cell(0, ids::kDest),   t.cell(0, ids::kAmount), t.cell(0, ids::kCurve),
+                                              t.cell(0, ids::kBypass), t.cell(0, ids::kDelete), t.cell(1, ids::kSource),
+                                              t.cell(1, ids::kDest),   t.cell(1, ids::kAmount), t.cell(1, ids::kCurve),
+                                              t.cell(1, ids::kBypass), t.cell(1, ids::kDelete)};
     for (auto* c : order)
         ASSERT_NE(c, nullptr);
 

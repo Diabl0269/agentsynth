@@ -31,6 +31,7 @@ inline constexpr const char* kFlat = "flatSources";
 inline constexpr const char* kSource = "modSource";
 inline constexpr const char* kDest = "modDest";
 inline constexpr const char* kAmount = "modAmount";
+inline constexpr const char* kCurve = "modCurve";
 inline constexpr const char* kBypass = "modBypass";
 inline constexpr const char* kDelete = "modDelete";
 } // namespace modmatrix_ids

@@ -19,7 +19,7 @@ void collectRowLines(juce::Component& node, std::vector<Line>& lines) {
             auto& row = node;
             Line line;
             for (const auto* id : {modmatrix_ids::kSource, modmatrix_ids::kDest, modmatrix_ids::kAmount,
-                                   modmatrix_ids::kBypass, modmatrix_ids::kDelete})
+                                   modmatrix_ids::kCurve, modmatrix_ids::kBypass, modmatrix_ids::kDelete})
                 if (auto* c = row.findChildWithID(id); isUsable(c))
                     line.push_back(c);
             if (!line.empty())

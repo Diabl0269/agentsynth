@@ -1,0 +1,35 @@
+# The modulation curve box opens from the Mod Matrix's Curve column, a preset chip bends the curve, and the chip shows it.
+#
+# What a user does:
+#   1. Opens a project with an LFO modulating the Filter's Cutoff and shows the Mod Matrix.
+#   2. Clicks the Curve chip on the routing's row: the curve box opens beside it.
+#   3. Clicks the Exp preset: the editor redraws and the chip on the row gets its accent border.
+#   4. Presses Esc: the box closes.
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - expect: {id: modMatrix, showing: true, within_ms: 2000}
+  - expect: {id: modCurve, showing: true, within_ms: 2000}
+  - click: {id: modCurve}
+  - wait: {}
+  - expect: {id: modCurveBox, showing: true, within_ms: 1500}
+  - screenshot: {id: modCurveBox, name: curve-box-linear}
+  - click: {id: "Exp curve"}
+  - wait: {}
+  - screenshot: {id: modCurveBox, name: curve-box-exp}
+  - screenshot: {id: modMatrix, name: matrix-with-bent-chip}
+  - click: {id: "Enlarge curve editor"}
+  - wait: {}
+  - expect: {id: modCurveWindow, showing: true, within_ms: 2000}
+  - screenshot: {id: modCurveWindow, name: curve-window}
+  - key: {keys: "cmd+z", target: modCurveWindow}
+  - wait: {}
+  - screenshot: {id: modCurveWindow, name: curve-window-after-undo}
+  - key: {keys: escape, target: modCurveWindow}
+  - wait: {}
+  - expect: {id: modCurveWindow, exists: false, within_ms: 2000}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: modCurveBox, exists: false, within_ms: 2000}
