@@ -8,6 +8,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/AudioRendering/SourceClickGuardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/AudioRendering/TimelineClickGuardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/AudioRendering/ReferenceCompareRenderTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Engine/AudioRendering/ReferenceCompareEnvelopeRenderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/ModuleMixPanTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/ModulePanAudibleTests.cpp
 )

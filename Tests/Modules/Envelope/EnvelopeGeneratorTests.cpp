@@ -16,6 +16,7 @@
 
 #include "Modules/Envelope/EnvelopeGenerator.h"
 #include <gtest/gtest.h>
+#include <vector>
 
 using synth::EnvelopeGenerator;
 using synth::EnvelopeParameters;
@@ -500,4 +501,23 @@ TEST(EnvelopeGeneratorTest, GaplessNoteSequenceAtSustainZeroKeepsProducingSoundO
             peak = std::max(peak, env.getNextSample(p));
         EXPECT_GT(peak, 0.9f) << "note " << note << " did not re-attack audibly at sustain 0";
     }
+}
+
+// Regression test for FRO1365: a new envelope's attack bent in over its first half (level 0.05 at a quarter of a 50 ms
+// attack) where a measured reference synth's attack is a straight amplitude ramp (0.25, 0.50, 0.75 at a quarter, half
+// and three quarters of the time), so the first milliseconds of every note had a different spectrum.
+TEST(EnvelopeGeneratorDefaults, AttackIsALinearRampUntilItsRoundedTop) {
+    EnvelopeGenerator env;
+    env.setSampleRate(48000.0);
+    env.reset();
+    EnvelopeParameters p; // defaults only
+    p.attack = 0.05f;
+    env.noteOn();
+    const int total = 2400; // 50 ms
+    std::vector<float> level;
+    for (int i = 0; i < total; ++i)
+        level.push_back(env.getNextSample(p));
+    for (const double fraction : {0.1, 0.25, 0.5, 0.75})
+        EXPECT_NEAR(level[(size_t)(fraction * total) - 1], fraction, 0.02) << "at " << fraction << " of the attack";
+    EXPECT_NEAR(level.back(), 1.0f, 1.0e-3f);
 }
