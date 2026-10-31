@@ -361,13 +361,35 @@ std::vector<bool> feedbackEdges(const Graph& g, const std::vector<int>& rowOf) {
     return ignored;
 }
 
-// Longest path from a row's sources, over the edges inside the row; a cycle is broken by ignoring back-edges.
-std::vector<int> computeDepths(const Graph& g, const std::vector<int>& rowOf, const std::vector<bool>& ignored) {
+// The edges that set columns: every in-row edge except the feedback ones, plus a modulation edge that crosses rows
+// when its source is a source of its own row (nothing feeds it there: an LFO cabled into one track, say) and not a
+// shared modulator (those pick their own column in placeSharedModulators). Columns are shared by every row, so such
+// an edge is a real left-to-right constraint: that LFO sits over its row's first column and must still end up before
+// the macro it modulates in another row. A block in the middle of a chain that modulates another row is left alone:
+// its cable is drawn but never moves anything.
+std::vector<bool> columnEdges(const Graph& g, const Rows& rows, const std::vector<bool>& ignored) {
+    std::vector<bool> active(g.edges.size(), false);
+    std::vector<bool> fedInRow(g.n, false);
+    for (size_t i = 0; i < g.edges.size(); ++i) {
+        const auto& e = g.edges[i];
+        active[i] = !ignored[i] && rows.rowOf[e.a] == rows.rowOf[e.b];
+        fedInRow[e.b] = fedInRow[e.b] || active[i];
+    }
+    for (size_t i = 0; i < g.edges.size(); ++i) {
+        const auto& e = g.edges[i];
+        if (e.mod && !ignored[i] && rows.rowOf[e.a] != rows.rowOf[e.b] && !rows.shared[e.a] && !fedInRow[e.a])
+            active[i] = true;
+    }
+    return active;
+}
+
+// Longest path from a row's sources, over the column edges; a cycle is broken by ignoring back-edges.
+std::vector<int> computeDepths(const Graph& g, const std::vector<bool>& active) {
     std::vector<int> depth(g.n, 0);
     std::vector<std::vector<int>> out(g.n);
     std::vector<int> indegree(g.n, 0);
     for (size_t i = 0; i < g.edges.size(); ++i)
-        if (const auto& e = g.edges[i]; rowOf[e.a] == rowOf[e.b] && !ignored[i]) {
+        if (const auto& e = g.edges[i]; active[i]) {
             out[e.a].push_back(e.b);
             ++indegree[e.b];
         }
@@ -395,16 +417,16 @@ std::vector<int> computeDepths(const Graph& g, const std::vector<int>& rowOf, co
 // consumer: depth = (smallest consumer depth) - 1. Without this every such block sits over column 0, far from what it
 // feeds. A consumer has an incoming edge, so it is never a source itself and its depth never changes here.
 // `consumerOf[i]` is the consumer a moved block follows (-1 for every block that stayed put).
-std::vector<int> placeSourcesAsLateAsPossible(const Graph& g, const Rows& rows, const std::vector<bool>& ignored,
+std::vector<int> placeSourcesAsLateAsPossible(const Graph& g, const Rows& rows, const std::vector<bool>& active,
                                               std::vector<int>& depth) {
     std::vector<bool> hasInput(g.n, false);
     std::vector<int> consumerOf(g.n, -1);
     for (size_t i = 0; i < g.edges.size(); ++i)
-        if (const auto& e = g.edges[i]; rows.rowOf[e.a] == rows.rowOf[e.b] && !ignored[i])
+        if (const auto& e = g.edges[i]; active[i])
             hasInput[e.b] = true;
     for (size_t i = 0; i < g.edges.size(); ++i)
         if (const auto& e = g.edges[i];
-            rows.rowOf[e.a] == rows.rowOf[e.b] && !ignored[i] &&
+            active[i] &&
             (consumerOf[e.a] < 0 || std::tie(depth[e.b], e.b) < std::tie(depth[consumerOf[e.a]], consumerOf[e.a])))
             consumerOf[e.a] = e.b;
     for (int i = 0; i < g.n; ++i) {
@@ -504,8 +526,9 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
     const Graph g = buildGraph(ctx, levelIndex, n);
     const Rows rows = assignRows(ctx, g, levelIndex, starts);
     const auto ignored = feedbackEdges(g, rows.rowOf);
-    auto depth = computeDepths(g, rows.rowOf, ignored);
-    const auto consumerOf = placeSourcesAsLateAsPossible(g, rows, ignored, depth);
+    const auto active = columnEdges(g, rows, ignored);
+    auto depth = computeDepths(g, active);
+    const auto consumerOf = placeSourcesAsLateAsPossible(g, rows, active, depth);
     const auto sharedPlaced = placeSharedModulators(g, rows, depth);
 
     int maxDepth = 0;

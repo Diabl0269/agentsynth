@@ -1,0 +1,37 @@
+# Bug: Auto Arrange put an LFO in the same column as the first macro it modulates (and a column before the second)
+# when the LFO is cabled into one track and modulates another. A modulator belongs in a column of its own before every
+# macro it feeds.
+#
+# What a user does:
+#   1. Opens a project with two tracks (each an open macro) and an LFO cabled into the second track and modulating the
+#      first, then presses Auto Arrange (Cmd+L).
+#   2. The LFO is to the left of both macros, with a column gap.
+#   3. Pressing Auto Arrange again changes nothing; Undo restores the earlier layout.
+# The positions are read from getState in run.log and checked by the layout unit tests; the PNGs show the result.
+steps:
+  - openProject: {path: "${FIXTURES}/lfo-two-macros.agsproj"}
+  - wait: {}
+  - expect: {id: "card:LFO", exists: true, within_ms: 3000}
+  - screenshot: {id: window, name: arrange-lfo-two-macros-before}
+  - getState: {id: "card:LFO"}
+  - getState: {id: "card:Track In 1"}
+  - getState: {id: "card:Track In 2"}
+  - click: {id: Auto Arrange}
+  - wait: {}
+  - getState: {id: "card:LFO"}
+  - getState: {id: "card:Track In 1"}
+  - getState: {id: "card:Track In 2"}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - wait: {}
+  - screenshot: {id: window, name: arrange-lfo-two-macros-after}
+  - click: {id: Auto Arrange}
+  - wait: {}
+  - getState: {id: "card:LFO"}
+  - getState: {id: "card:Track In 1"}
+  - getState: {id: "card:Track In 2"}
+  - screenshot: {id: window, name: arrange-lfo-two-macros-after-twice}

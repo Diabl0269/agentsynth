@@ -14,6 +14,7 @@
 #include "Modules/LFOModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/TimelineMidiSourceModule.h"
 #include "UI/Layout/HierarchicalArrange.h"
 #include <gtest/gtest.h>
 
@@ -379,5 +380,44 @@ TEST(AutoArrangeMacros, AModulatorFeedingTwoMacrosSitsInAColumnBeforeBothAsOneUn
         ASSERT_TRUE(c.undo.undo());
         EXPECT_TRUE(before == c.snap()) << label;
         EXPECT_FALSE(c.undo.canUndo()) << label << ": the arrange is one step";
+    }
+}
+
+// The shape of a saved project: two track rows, each a macro; an LFO is cabled into the second track's chain (so it is
+// no pure modulator) and also modulates the first track's macro. Whatever the rows, a modulator is a column before
+// every macro it feeds, folded or open.
+TEST(AutoArrangeMacros, ALfoCabledIntoOneTrackAndModulatingAnotherSitsBeforeBothMacros) {
+    for (const bool open : {false, true}) {
+        Canvas c;
+        std::vector<juce::String> macroIds;
+        std::vector<NodeID> filters;
+        for (int track = 0; track < 2; ++track) {
+            const auto in =
+                addModuleAt(c.editor, c.engine, std::make_unique<TimelineMidiSourceModule>(), 200, 300 + track * 700);
+            const auto osc = c.osc(700, 300 + track * 700);
+            const auto filter = c.filter(1100, 300 + track * 700);
+            c.engine.getGraph().addConnection({{in, juce::AudioProcessorGraph::midiChannelIndex},
+                                               {osc, juce::AudioProcessorGraph::midiChannelIndex}});
+            c.connect(osc, filter);
+            macroIds.push_back(c.group({in, osc, filter}));
+            ASSERT_FALSE(macroIds.back().isEmpty());
+            filters.push_back(filter);
+        }
+        const auto lfo = c.lfo(2200, 600);
+        c.connect(lfo, filters[1]);
+        c.modulate(lfo, filters[0]);
+        if (open)
+            for (const auto& id : macroIds)
+                c.ctl().setMacroCollapsed(id, false);
+
+        c.editor.autoArrange();
+
+        const auto label = open ? "open macros" : "folded macros";
+        for (const auto& id : macroIds)
+            EXPECT_LE(c.rect(lfo).getRight() + synth::LayoutUtil::kLayerGapX, c.footprint(id).getX()) << label;
+        autoarrange_test::expectNoOverlaps(c.editor);
+        const auto first = c.snap();
+        c.editor.autoArrange();
+        EXPECT_TRUE(first == c.snap()) << label << ": arranging twice changes nothing";
     }
 }

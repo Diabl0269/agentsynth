@@ -117,3 +117,29 @@ TEST_F(UiVerifyFixture, TheCommittedMacrosProjectHoldsAnOpenACollapsedAndANested
         types.insert(n["type"].toString());
     EXPECT_TRUE(types.count("LFO") && types.count("ADSR") && types.count("Oscillator"));
 }
+
+// Tools/ui-verify/fixtures/lfo-two-macros.agsproj (the arrange-lfo-two-macros scenario): two tracks, each an open
+// macro, and an LFO cabled into the second and modulating the first.
+TEST_F(UiVerifyFixture, TheCommittedLfoTwoMacrosProjectHoldsTwoTrackMacrosAndAnLfoFeedingBoth) {
+    const auto bundle = juce::File(juce::String(UI_VERIFY_FIXTURES_DIR)).getChildFile("lfo-two-macros.agsproj");
+    ASSERT_TRUE(synth::ProjectBundle::isBundle(bundle)) << bundle.getFullPathName();
+
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor{engine, &undo};
+    synth::TimelineDoc timeline;
+    synth::MidiRemoteProjectDoc midiRemote;
+    const auto result = synth::ProjectBundle::load(bundle, engine.getGraph(), timeline, editor.getPatchDocument(),
+                                                   editor.getMacros(), midiRemote, nullptr, nullptr, nullptr, nullptr);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    int topLevelMacros = 0;
+    for (const auto& m : editor.getMacros().getAll())
+        topLevelMacros += m.parentId.isEmpty() ? 1 : 0;
+    EXPECT_EQ(topLevelMacros, 2);
+    const auto json = synth::AIStateMapper::graphToJSON(engine.getGraph());
+    int lfos = 0;
+    for (const auto& n : *json.getProperty("nodes", {}).getArray())
+        lfos += n["type"].toString() == "LFO" ? 1 : 0;
+    EXPECT_EQ(lfos, 1);
+}
