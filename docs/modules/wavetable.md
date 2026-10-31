@@ -124,10 +124,10 @@ from and starts at once. Guarded by `SourceClickGuard` (the Wavetable is measure
 `WavetableRestartFade`. The restart point:
 
 - **Phase** (0–360°) — where in the cycle the wave restarts.
-- **Rand Phase** (0–1) — per-note jitter added on top.
+- **Rand Phase** (0–1, default 1 on a new module; a stored module with no key keeps 0) — per-note jitter added on top.
 - **Spread** (0–1) — walks the unison voices' start phases around the cycle.
 
-Without `Spread` or `Rand Phase`, a unison stack and a poly chord attack perfectly phase-correlated
+At Rand Phase 0 with no `Spread`, a unison stack and a poly chord attack perfectly phase-correlated
 and comb-filter themselves. All three are sampled **at the note-on instant** — they shape the attack,
 not the sustain — so their CV is read at the block's first sample rather than per-sample.
 
@@ -138,8 +138,8 @@ not the sustain — so their CV is read at the block's first sample rather than 
   `Major`, `Minor`. Voice 0 always stays at the root pitch. The stack is constant power: it is divided by the
   root of the summed mean leg power of the voices, so its loudness stays that of one voice (the sub is added
   after this).
-- **Detune** is a skewed knob (centre at 25 cents) that stores cents. The stacking, Blend gain (`unisonBlendGain`), pan law (`unisonPanGains`) and restart-phase helpers live in `Source/Modules/UnisonVoicing.h`, shared with the Oscillator.
-- **Blend** (0–1) fades the voices away from the centre (the middle voice, or the middle two for an
+- **Detune** (default 35 cents) is a skewed knob (centre at 25 cents) that stores cents. A new Wavetable starts at Detune 35 cents, Blend 75 %, Width 100 %, Rand Phase 100 % like the Oscillator, so raising Unison is heard at once; a stored module with none of those keys keeps Detune 0, Blend 100 %, Width 0, Rand Phase 0 (`applyStoredParamDefaults`). The stacking, Blend gain (`unisonBlendGain`), pan law (`unisonPanGains`) and restart-phase helpers live in `Source/Modules/UnisonVoicing.h`, shared with the Oscillator.
+- **Blend** (0–1, default 0.75) fades the voices away from the centre (the middle voice, or the middle two for an
   even count, stay at full level; in a Stack mode it is voice 0, the root pitch) and runs to outer voices louder than the
   centre at 100 % (curve and Width pan in [oscillator-voice.md](oscillator-voice.md#blend-width-and-detune)). Every voice
   gain moves no faster than 1.0 per 10 ms (`UnisonMix.h`, ramped inside the block): Blend, Width and the voice
@@ -152,7 +152,7 @@ not the sustain — so their CV is read at the block's first sample rather than 
 
 ## Stereo output
 
-The module has two output jacks. `Width` pans the unison voices across the stereo field; `Pan` places
+The module has two output jacks. `Width` (default 1; a single voice stays centred) pans the unison voices across the stereo field; `Pan` places
 the whole voice.
 
 - **Mono**: `Audio L` on ch0, `Audio R` on `kRightBase` (ch23).
@@ -164,7 +164,7 @@ and putting the right leg there would have made the module's flagship parameter 
 
 The pan law is **balance, not equal-power**: centre leaves both legs at unity and panning only
 attenuates the leg you move away from. An equal-power centre sits at 1/√2, which would have quietened
-every existing mono patch by 3 dB the moment the module grew a second jack. At `Width` 0 / `Pan` 0,
+every existing mono patch by 3 dB the moment the module grew a second jack. At `Width` 0 / `Pan` 0 (or at any Width with Unison 1),
 `Audio L` carries bit-for-bit what a mono build carried (`DefaultsKeepAudioLIdenticalToAudioR`).
 
 ## Sync input

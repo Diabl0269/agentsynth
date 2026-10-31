@@ -197,7 +197,7 @@ definition, not twelve degrees.
 
 Reached from the roll's **Fit notes to key** chip or `Option+Shift+Q`, and from the clip's right-click menu in the
 timeline (**Fit to key**, every note of the clip, greyed with no key or no notes). Both share the helpers in
-`Source/Timeline/FitToKey.h`. The roll's chip is the only door in the roll, so nothing can disagree about its own
+`Source/Timeline/FitToKey.h`. Several clips at once (**Fit all clips to key** in the menu, the Song key picker's **Fit project to key**) go through `Source/Timeline/FitClipsToKey.h`; see [song key](song-key.md#fit-project-to-key). The roll's chip is the only door in the roll, so nothing can disagree about its own
 enabled state.
 
 Both entry points go through `quantisePitchesToActiveScale()`, which resolves the clip's scale via

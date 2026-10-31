@@ -27,10 +27,11 @@ constexpr float kFontSize = 13.0f;
 constexpr float kSmallFontSize = 11.0f;
 } // namespace
 
-int KeyPicker::preferredHeight(bool followRow, bool previewRow) {
+int KeyPicker::preferredHeight(bool followRow, bool previewRow, bool fitRow) {
     const int follow = followRow ? kFollowHeight + kGap : 0;
     const int preview = previewRow ? kPreviewHeight + kGap : 0;
-    return kPad + follow + preview + kSearchHeight + kGap + kKeyboardHeight + kGap + kListHeight + kGap +
+    const int fit = fitRow ? kButtonHeight + kGap : 0;
+    return kPad + follow + preview + fit + kSearchHeight + kGap + kKeyboardHeight + kGap + kListHeight + kGap +
            kStatusHeight + kGap + kButtonHeight + kPad;
 }
 
@@ -91,28 +92,30 @@ KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalSc
     addAndMakeVisible(status_);
 
     relative_ = std::make_unique<KeyPickerButton>("Relative key", "Switch to the relative major or minor key");
-    relative_->setExplicitFocusOrder(4);
+    relative_->setExplicitFocusOrder(5);
     relative_->onClick = [this] { clickRelative(); };
     addAndMakeVisible(*relative_);
 
     detectButton_ = std::make_unique<KeyPickerButton>("Detect from notes",
                                                       "Suggest the key that fits the notes in your MIDI clips");
-    detectButton_->setExplicitFocusOrder(5);
+    detectButton_->setExplicitFocusOrder(6);
     detectButton_->onClick = [this] { clickDetect(); };
     addChildComponent(*detectButton_);
 
     noKey_ = std::make_unique<KeyPickerButton>("No key", "Turn the song key off");
-    noKey_->setExplicitFocusOrder(6);
+    noKey_->setExplicitFocusOrder(7);
     noKey_->onClick = [this] { clickNoKey(); };
     addChildComponent(*noKey_);
     noKey_->setVisible(options_.showNoKey);
 
     if (options_.showPreviewSound)
         buildPreviewSound();
+    if (options_.showFitProject)
+        buildFitProject();
 
     buildRows();
     applyColours();
-    setSize(kWidth, preferredHeight(options_.showFollowRow, options_.showPreviewSound));
+    setSize(kWidth, preferredHeight(options_.showFollowRow, options_.showPreviewSound, options_.showFitProject));
     ready_ = true;
 }
 
@@ -149,6 +152,33 @@ void KeyPicker::buildPreviewSound() {
     };
     addAndMakeVisible(previewCombo_);
 }
+
+// The Fit project to key row: one button across the picker, closing it before the owner's callback runs (the fit and
+// its message are the owner's). Greyed while the owner has no key to fit to.
+void KeyPicker::buildFitProject() {
+    fitProject_ = std::make_unique<KeyPickerButton>(
+        "Fit project to key",
+        "Move the notes of every MIDI clip that follows the song key into the song key. Clips with "
+        "their own key and audio clips are left alone. One undo step.");
+    fitProject_->setComponentID("keyPickerFitProject");
+    fitProject_->setExplicitFocusOrder(4);
+    fitProject_->setEnabled(options_.fitProjectEnabled);
+    fitProject_->onClick = [this] { clickFitProject(); };
+    addAndMakeVisible(*fitProject_);
+}
+
+void KeyPicker::clickFitProject() {
+    if (fitProject_ == nullptr || !fitProject_->isEnabled())
+        return;
+    auto callback = onFitProject;
+    endAudition();
+    dismiss();
+    if (callback)
+        callback();
+}
+
+bool KeyPicker::isFitProjectShown() const { return fitProject_ != nullptr; }
+bool KeyPicker::isFitProjectEnabled() const { return fitProject_ != nullptr && fitProject_->isEnabled(); }
 
 bool KeyPicker::isPreviewSoundShown() const { return previewCombo_.getParentComponent() != nullptr; }
 
@@ -309,6 +339,10 @@ void KeyPicker::resized() {
 
     auto buttons = bounds.removeFromBottom(kButtonHeight);
     bounds.removeFromBottom(kGap);
+    if (fitProject_ != nullptr) {
+        fitProject_->setBounds(bounds.removeFromBottom(kButtonHeight));
+        bounds.removeFromBottom(kGap);
+    }
     if (options_.showPreviewSound) {
         auto preview = bounds.removeFromBottom(kPreviewHeight);
         bounds.removeFromBottom(kGap);
@@ -361,6 +395,8 @@ void KeyPicker::applyColours() {
     relative_->setPalette(p);
     detectButton_->setPalette(p);
     noKey_->setPalette(p);
+    if (fitProject_ != nullptr)
+        fitProject_->setPalette(p);
     if (follow_ != nullptr)
         follow_->setPalette(p);
     for (const auto& row : rows_)
@@ -539,6 +575,8 @@ void KeyPicker::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("auditionKey",
                      auditioning_ && lastHighlight_.has_value() ? keyDisplayName(*lastHighlight_) : juce::String());
     into.setProperty("previewSoundShown", isPreviewSoundShown());
+    into.setProperty("fitProjectShown", isFitProjectShown());
+    into.setProperty("fitProjectEnabled", isFitProjectEnabled());
     into.setProperty("previewSound", isPreviewSoundShown() ? previewCombo_.getText() : juce::String());
 }
 

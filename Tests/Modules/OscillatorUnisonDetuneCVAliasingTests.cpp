@@ -102,6 +102,10 @@ AliasingResult runUnisonDetuneCVAliasingScenario(bool poly) {
             return {};
         polyParam->setValueNotifyingHost(poly ? 1.0f : 0.0f);
         panParam->setValueNotifyingHost(panParam->convertTo0to1(0.0f)); // centred: R must equal L exactly
+        auto* widthParam = findParameterByID(oscNode->getProcessor(), "width");
+        EXPECT_NE(widthParam, nullptr);
+        if (widthParam != nullptr)
+            widthParam->setValueNotifyingHost(0.0f); // a new Oscillator's stack is wide; L == R needs a centred one
     }
 
     const int MIDI = juce::AudioProcessorGraph::midiChannelIndex;
