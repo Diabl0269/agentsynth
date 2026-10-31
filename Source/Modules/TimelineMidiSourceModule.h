@@ -65,6 +65,13 @@
  * every held note as note-offs at sample 0 first. Always PER-NOTE, never a blanket CC 123 — a MIDI
  * cable can carry several sources downstream.
  *
+ * Restart: prepareToPlay (a device restart, or a host re-preparing the plugin, while the song plays) keeps the held
+ * table, the pass counter and the "was playing" state, because the note-offs are still owed: a hosted synth keeps its
+ * voices through a prepare, and forgetting them here stacks every held note on the next pass. The first block after it
+ * releases every held note at sample 0, then starts again the timeline notes the position is still inside, so a
+ * restart is one pause and one resume whatever the downstream modules did with their own voices. Previews do not
+ * resume.
+ *
  * Loop wrap: a block crossing the loop end is TWO beat ranges (see BlockTimeInfo); every held note
  * is released exactly at the wrap, then the wrapped range starts fresh, so a note can legitimately
  * end and restart in the same block. A loop end landing exactly on the end of a block is one range
@@ -100,11 +107,11 @@ public:
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         juce::ignoreUnused(sampleRate, samplesPerBlock);
-        numActive_ = 0;
-        haveLastBlock_ = false;
+        // Held notes, wasPlaying_ and transportPass_ survive on purpose: see Restart in the class comment.
+        restartPending_ = true;
+        haveLastBlock_ = false; // the sample mirror of the position may have moved with the rate
         lastBlockFolded_ = false;
         wasBypassed_ = false;
-        wasPlaying_ = false;
         wasSuppressed_ = false;
         dropClipPreview(); // a device restart cancels a running preview rather than resuming it
     }
@@ -184,7 +191,8 @@ public:
             // would be a note nobody asked for. The flush above already released whatever was held.
             discardAuditionEvents();
             dropClipPreview();
-            haveLastBlock_ = false; // resuming is a discontinuity, not a continuation
+            restartPending_ = false; // the flush above released everything there was to resume
+            haveLastBlock_ = false;  // resuming is a discontinuity, not a continuation
             wasPlaying_ = false;
             buffer.clear();
             pushActivity(numSamples);
@@ -201,6 +209,7 @@ public:
             flushActiveNotes(midiMessages);
             discardAuditionEvents();
             dropClipPreview();
+            restartPending_ = false;
             haveLastBlock_ = false;
             wasPlaying_ = false;
             pushActivity(numSamples);
@@ -253,6 +262,16 @@ public:
         if (auditionPanic_.exchange(false, std::memory_order_acq_rel))
             releaseAllAuditionNotes(midiMessages);
 
+        // The first real block after a restart. Waits out a zero-length block or a playing transport with no snapshot
+        // yet, because it needs the position and the track. Only timeline notes of a playing song come back.
+        const bool restarted = restartPending_ && numSamples > 0 && (snapshot != nullptr || !info.playing);
+        if (restarted) {
+            restartPending_ = false;
+            releaseAllAuditionNotes(midiMessages);
+            if (!info.playing)
+                flushTimelineNotes(midiMessages); // what a cancelled clip preview was still holding
+        }
+
         drainAuditionEvents(midiMessages);
         runClipPreview(info, snapshot, numSamples, midiMessages);
 
@@ -280,6 +299,8 @@ public:
         }
         wasSuppressed_ = false;
 
+        if (restarted)
+            resumeHeldNotes(midiMessages, info.startPpq);
         if (afterFold)
             releaseNotesPastLoopEnd(midiMessages, info.loopEndPpq);
         emitBlock(*snapshot, *track, info, midiMessages, nextBlockStart);
@@ -300,6 +321,8 @@ private:
         int pitch = 0;
         int channel = 1;
         double endBeat = 0.0;
+        double startBeat = 0.0;
+        int velocity = 100;
     };
 
     // The snapshot track bound to THIS node: a MIDI track whose bindingUuid equals our node uuid.
@@ -410,7 +433,7 @@ private:
             const int pitch = juce::jlimit(0, 127, note.pitch);
             const int velocity = juce::jlimit(1, 127, note.velocity);
 
-            if (!pushActive({pitch, channel, note.endBeat}))
+            if (!pushActive({pitch, channel, note.endBeat, note.startBeat, velocity}))
                 continue; // overflow: drop the note-on so we never owe an off we can't track
 
             midiMessages.addEvent(juce::MidiMessage::noteOn(channel, pitch, (juce::uint8)velocity), offset);
@@ -434,6 +457,22 @@ private:
                 continue;
             midiMessages.addEvent(juce::MidiMessage::noteOff(active_[i].channel, active_[i].pitch), 0);
             removeActiveAt(i);
+        }
+    }
+
+    // The first block after a restart: all offs first, then one note-on per note the position is still inside. A note
+    // starting at the position or later is left to emitRange, and one the position has left (the transport moved
+    // while the stream was down) stays released. Offs before ons keeps Poly MIDI's same-pitch retrigger contract.
+    void resumeHeldNotes(juce::MidiBuffer& midiMessages, double position) {
+        for (int i = 0; i < numActive_; ++i)
+            midiMessages.addEvent(juce::MidiMessage::noteOff(active_[i].channel, active_[i].pitch), 0);
+        for (int i = numActive_ - 1; i >= 0; --i) {
+            const ActiveNote& note = active_[i];
+            if (note.startBeat < position && position < note.endBeat)
+                midiMessages.addEvent(juce::MidiMessage::noteOn(note.channel, note.pitch, (juce::uint8)note.velocity),
+                                      0);
+            else
+                removeActiveAt(i);
         }
     }
 
@@ -628,6 +667,7 @@ private:
     }
 
     ActiveNote active_[kMaxActiveNotes];
+    bool restartPending_ = false; // prepared since the last real block: see Restart in the class comment
     int numActive_ = 0;
 
     // Message thread -> audio thread, single producer / single consumer. Same shape as

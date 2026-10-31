@@ -149,6 +149,7 @@ add_executable(Tests
     Timeline/TimelineMidiSource/TimelineMidiSourceBindingTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceEngineTests.cpp
     Timeline/TimelineMidiSource/TimelineMidiSourceAuditionTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceRestartTests.cpp
     Timeline/MidiClipFileTests.cpp
     Timeline/MidiClipFileArrangementTests.cpp
     Timeline/PeaksFileTests.cpp
@@ -806,6 +807,7 @@ add_executable(Tests
     UI/Chrome/ExportAudioDialogTests.cpp
     Engine/MetronomeTests.cpp
     Engine/DeviceChangeTests.cpp
+    Engine/LiveReconfigureTests.cpp
     Engine/MidiInputReconcileTests.cpp
     Engine/MidiInputDeliveryTests.cpp
     Timeline/TimelineE2ETests.cpp
