@@ -13,6 +13,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/ModCurve.h"
 #include "SnippetManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/ModDot/ModDotController.h"
@@ -625,6 +626,7 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
         bool ownIsSource = false;
         juce::AudioProcessorGraph::NodeID attenuverterNodeId; // invalid when the cable is direct
         float attenuverterAmount = 1.0f;
+        synth::ModCurve attenuverterCurve;
         std::vector<juce::AudioProcessorGraph::Connection> rawEdges;
     };
     std::vector<Wire> wires;
@@ -647,12 +649,14 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
         int farChannel = farRaw;
         juce::AudioProcessorGraph::NodeID attenuverterNodeId;
         float attenuverterAmount = 1.0f;
+        synth::ModCurve attenuverterCurve;
 
         // An attenuverter is an implementation detail of one mod cable — step over it to the module
         // the user actually patched, and remember its amount so a rebuild can restore it.
         if (auto* attenNode = graph.getNodeForId(farNodeId)) {
-            if (dynamic_cast<AttenuverterModule*>(attenNode->getProcessor()) != nullptr) {
+            if (auto* attenModule = dynamic_cast<AttenuverterModule*>(attenNode->getProcessor())) {
                 attenuverterNodeId = farNodeId;
+                attenuverterCurve = attenModule->getCurve();
                 const auto& attenParams = attenNode->getProcessor()->getParameters();
                 if (attenParams.size() > 1)
                     if (auto* amount = dynamic_cast<juce::AudioParameterFloat*>(attenParams[1]))
@@ -704,6 +708,7 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
             w.ownIsSource = ownIsSource;
             w.attenuverterNodeId = attenuverterNodeId;
             w.attenuverterAmount = attenuverterAmount;
+            w.attenuverterCurve = attenuverterCurve;
             w.rawEdges.push_back(c);
             wires.push_back(std::move(w));
         } else {
@@ -755,6 +760,8 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
                     if (attenParams.size() > 1)
                         if (auto* amount = dynamic_cast<juce::AudioParameterFloat*>(attenParams[1]))
                             amount->setValueNotifyingHost(amount->convertTo0to1(w.attenuverterAmount));
+                    if (auto* newAtten = dynamic_cast<AttenuverterModule*>(newAttenNode->getProcessor()))
+                        newAtten->setCurve(w.attenuverterCurve);
                 }
             }
         } else {

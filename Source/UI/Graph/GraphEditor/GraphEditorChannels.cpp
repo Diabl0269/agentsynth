@@ -21,6 +21,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
+#include "Modules/ModCurve.h"
 #include "SnippetManager.h"
 
 using namespace detail;
@@ -475,6 +476,10 @@ bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId,
                 auto* toAmount = findAmount(to->getProcessor());
                 if (fromAmount != nullptr && toAmount != nullptr)
                     toAmount->setValueNotifyingHost(fromAmount->getValue());
+                auto* fromAtten = dynamic_cast<AttenuverterModule*>(from->getProcessor());
+                auto* toAtten = dynamic_cast<AttenuverterModule*>(to->getProcessor());
+                if (fromAtten != nullptr && toAtten != nullptr)
+                    toAtten->setCurve(fromAtten->getCurve());
             }
         }
     }

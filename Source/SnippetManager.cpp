@@ -447,6 +447,8 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
                 m->setProperty("amount", mObj->getProperty("amount"));
             if (mObj->hasProperty("bypass"))
                 m->setProperty("bypass", mObj->getProperty("bypass"));
+            if (mObj->hasProperty("curve"))
+                m->setProperty("curve", mObj->getProperty("curve"));
             modulations.add(juce::var(m.get()));
         }
     }
@@ -557,6 +559,8 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
                 m->setProperty("amount", mObj->getProperty("amount"));
             if (mObj->hasProperty("bypass"))
                 m->setProperty("bypass", mObj->getProperty("bypass"));
+            if (mObj->hasProperty("curve"))
+                m->setProperty("curve", mObj->getProperty("curve"));
             modulations.add(juce::var(m.get()));
         }
     }

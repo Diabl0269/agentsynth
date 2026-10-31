@@ -12,6 +12,7 @@
 #include "MainComponentInternal.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MasterModule.h"
+#include "Modules/ModCurve.h"
 #include "SnippetManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModMatrixEndpoints.h"
@@ -185,6 +186,12 @@ void rewireBoundary(AudioEngine& engine, const std::map<int, NodeID>& copies,
             auto* toAmount = amountParameter(graph.getNodeForId(atten));
             if (fromAmount != nullptr && toAmount != nullptr)
                 toAmount->setValueNotifyingHost(fromAmount->getValue());
+            auto* fromAtten = graph.getNodeForId(into.source.nodeID);
+            auto* toAtten = graph.getNodeForId(atten);
+            if (fromAtten != nullptr && toAtten != nullptr)
+                if (auto* a = dynamic_cast<AttenuverterModule*>(fromAtten->getProcessor()))
+                    if (auto* b = dynamic_cast<AttenuverterModule*>(toAtten->getProcessor()))
+                        b->setCurve(a->getCurve());
             mapAmountLane(graph, into.source.nodeID, atten, uuidRemap);
         }
     }
