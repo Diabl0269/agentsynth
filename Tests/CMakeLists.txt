@@ -315,6 +315,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorPolyLinkTests.cpp
     UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp
     UI/Graph/GraphEditor/GraphEditorDualIOTests.cpp
+    UI/Graph/GraphEditor/GraphEditorDualIOFxRightLegTests.cpp
     UI/Graph/GraphEditor/GraphEditorIntegrationTests.cpp
     UI/Graph/GraphEditor/GraphEditorViewportTests.cpp
     UI/Graph/GraphEditor/GraphEditorMinimapSlideTests.cpp

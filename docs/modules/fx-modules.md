@@ -118,7 +118,7 @@ split has to arrive with **both legs wired**:
 | Side | Peer has a right leg | Peer is mono-only |
 |---|---|---|
 | **Input** (`Audio R` in) | wire it: collapsed FX pair → its raw1, dual peer → its own `kRightBase` (never ch1) | **broadcast** — copy the channel that already feeds `Audio L` onto `Audio R` |
-| **Output** (`Audio R` out) | wire it, and drop the left leg's stand-in copy | **sum** — a second cable into the same mono jack `Audio L` feeds |
+| **Output** (`Audio R` out) | wire it, and drop the left leg's stand-in copy | **sum** — a second cable into the same mono jack `Audio L` feeds; this applies to an FX source (Delay, Reverb...) feeding a collapsed Filter or VCA as much as to a split-block source |
 
 "Mono-only" on the output side covers two shapes: a collapsed split-block peer (one `"Audio"` jack
 that is its left leg alone) and a **dedicated mono audio input that is nobody's pair** — the Ring
@@ -168,10 +168,15 @@ and the stand-in copy is removed. That single rule is what reconciles this with
 `SplittingAMidChainVoiceModulePrefersRealRightLegsOverABroadcast`. Dual→dual is untouched by any of
 it: both ends have real legs, so it is a plain `L→L` / `R→R` pair.
 
-Both stand-ins are confined to **split-block** toggled modules, which is what makes the on/off
-round-trip exact: their right leg is hidden again on collapse, so `dropHiddenRightLegConnections`
-removes the broadcast and the summed cable for free. An FX's raw1 stays part of its collapsed jack,
-so the same cable would survive a collapse and be indistinguishable from a hand-drawn one.
+The two stand-ins undo differently, and both round-trip exactly. The input broadcast is confined to
+**split-block** toggled modules: their right leg is hidden again on collapse, so
+`dropHiddenRightLegConnections` removes it for free. The output sum is also added for a
+contiguous-pair FX source, but only into a **collapsed split-block peer**, and only because collapse
+removes it again: an FX's raw1 stays part of its collapsed jack, so on collapse
+`removeSummedRightLegIntoCollapsedPeers` drops the FX's raw1 cable into the peer's one jack when raw0
+already feeds the same channel. Collapsed, a Delay wired to a VCA carries only raw0 (a drawn cable never
+puts raw1 on a mono jack), so the sum is always the toggle's own. The toggle matrix is
+`DualIOToggleMatrix` in `GraphEditorDualIOFxRightLegTests.cpp`.
 
 Confined to the toggle handler on purpose: flipping Dual I/O is an explicit action on one module,
 whereas `resolvePolyLink` governs manual cable drags and smart-connect, where a split-block pair
