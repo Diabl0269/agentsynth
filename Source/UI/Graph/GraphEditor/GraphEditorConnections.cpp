@@ -564,6 +564,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             // nothing behind it yet), so there is nothing for findUnchanneledOutputFeeds to find.
             macroController_.createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi,
                                                              srcNode->nodeID, dragSourceChannel);
+            connectedToAModule = true; // the card took the cable: a jack passed over on the way is not a refusal
             break;
         }
     }
