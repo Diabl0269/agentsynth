@@ -3,6 +3,7 @@
 // at the rising edge on a Gate CV (which is the velocity when Poly MIDI's "Velocity sets gate" is on).
 
 #include "ADSRTestFixture.h"
+#include "Modules/PolyMidiModule.h"
 
 namespace {
 
@@ -154,4 +155,103 @@ TEST_F(ADSRTest, VelocityJackIsDeclaredAndBound) {
         }
     }
     EXPECT_TRUE(found);
+}
+
+// Fed by Poly MIDI: the output must scale with the note's real velocity, whatever the Threshold, block size or
+// retrigger. Poly MIDI's gate rises over 5 ms, so its level where it crosses the Threshold is not the velocity.
+
+namespace {
+
+constexpr double kRate = 44100.0;
+
+struct Ev {
+    int at, note, vel; // absolute sample; vel 0 is a note-off
+};
+
+struct Rig {
+    PolyMidiModule midi;
+    ADSRModule adsr;
+    int block;
+
+    Rig(int blockSize, float threshold, bool velToGate, float velocityAmount)
+        : block(blockSize) {
+        midi.prepareToPlay(kRate, blockSize);
+        adsr.prepareToPlay(kRate, blockSize);
+        setPoly(adsr, true);
+        setFloat(adsr, "attack", 0.0f);
+        setFloat(adsr, "decay", 0.05f);
+        setFloat(adsr, "sustain", 1.0f);
+        setFloat(adsr, "gateThreshold", threshold);
+        setFloat(adsr, "velocity", velocityAmount);
+        auto* p = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&midi, "velToGate"));
+        p->setValueNotifyingHost(velToGate ? 1.0f : 0.0f);
+    }
+
+    // Returns voice 0's envelope output over `samples` samples.
+    std::vector<float> run(int samples, const std::vector<Ev>& events) {
+        std::vector<float> out;
+        juce::AudioBuffer<float> buf(16, block);
+        for (int start = 0; start < samples; start += block) {
+            buf.clear();
+            juce::MidiBuffer m;
+            for (const auto& e : events)
+                if (e.at >= start && e.at < start + block)
+                    m.addEvent(e.vel > 0 ? juce::MidiMessage::noteOn(1, e.note, (juce::uint8)e.vel)
+                                         : juce::MidiMessage::noteOff(1, e.note),
+                               e.at - start);
+            midi.processBlock(buf, m);
+            juce::AudioBuffer<float> adsrBuf(14, block);
+            adsrBuf.clear();
+            for (int v = 0; v < 8; ++v)
+                adsrBuf.copyFrom(v, 0, buf, v + 8, 0, block);
+            juce::MidiBuffer none;
+            adsr.processBlock(adsrBuf, none);
+            out.insert(out.end(), adsrBuf.getReadPointer(0), adsrBuf.getReadPointer(0) + block);
+        }
+        return out;
+    }
+};
+
+float peakBetween(const std::vector<float>& v, int from, int to) {
+    float p = 0.0f;
+    for (int i = from; i < to && i < (int)v.size(); ++i)
+        p = std::max(p, std::abs(v[(size_t)i]));
+    return p;
+}
+
+} // namespace
+
+// Regression test for FRO1373: the velocity scale was read from the gate's level where it crossed the Threshold.
+TEST(ADSRPolyMidiVelocity, FullVelocityAmountScalesByTheNoteVelocityAtEveryThresholdAndBlockSize) {
+    for (const int block : {64, 512})
+        for (const float threshold : {0.1f, 0.5f, 0.9f})
+            for (const int vel : {20, 64, 127}) {
+                // The gate's height is the velocity, so a note not above the Threshold never opens it.
+                if ((float)vel / 127.0f <= threshold + 0.06f)
+                    continue;
+                Rig rig(block, threshold, true, 100.0f);
+                const auto out = rig.run(8192, {{512, 60, vel}});
+                EXPECT_NEAR(peakBetween(out, 4096, 8192), (float)vel / 127.0f, 0.02f)
+                    << "block " << block << " threshold " << threshold << " velocity " << vel;
+            }
+}
+
+TEST(ADSRPolyMidiVelocity, FullGateIsUnityAtEveryThresholdWhenVelocityDoesNotSetTheGate) {
+    for (const int block : {64, 512})
+        for (const float threshold : {0.1f, 0.5f, 0.9f}) {
+            Rig rig(block, threshold, false, 100.0f);
+            const auto out = rig.run(8192, {{512, 60, 20}});
+            EXPECT_NEAR(peakBetween(out, 4096, 8192), 1.0f, 0.02f) << "block " << block << " threshold " << threshold;
+        }
+}
+
+TEST(ADSRPolyMidiVelocity, RetriggerOfAHeldNoteScalesByTheNewVelocity) {
+    for (const int block : {64, 512})
+        for (const float threshold : {0.1f, 0.5f}) {
+            Rig rig(block, threshold, true, 100.0f);
+            const auto out = rig.run(16384, {{512, 60, 127}, {8192, 60, 64}});
+            EXPECT_NEAR(peakBetween(out, 4096, 8000), 1.0f, 0.02f) << "block " << block << " threshold " << threshold;
+            EXPECT_NEAR(peakBetween(out, 12288, 16384), 64.0f / 127.0f, 0.02f)
+                << "block " << block << " threshold " << threshold;
+        }
 }
