@@ -88,4 +88,17 @@ inline juce::String ownershipKey(const juce::AudioProcessorGraph::Node& node) {
     return uuid.isNotEmpty() ? uuid : "node#" + juce::String(static_cast<int>(node.nodeID.uid));
 }
 
+// Scrolls a lane's row into view once the Timeline has its settled size: a dock opened just now is still sliding, and
+// the scroll aims at the view's height. A dock closed again before the slide lands leaves nothing to scroll.
+// `owner` guards the captured references.
+template <class Slide, class Panel>
+void showLaneWhenSettled(Slide& slide, Panel& panel, const bool& dockVisible, synth::LaneId lane,
+                         juce::Component& owner) {
+    slide.whenSettled([safe = juce::Component::SafePointer<juce::Component>(&owner), &panel, &dockVisible, lane,
+                       sliding = slide.isMoving()] {
+        if (safe != nullptr && (!sliding || dockVisible))
+            panel.showAutomationLane(lane);
+    });
+}
+
 } // namespace detail
