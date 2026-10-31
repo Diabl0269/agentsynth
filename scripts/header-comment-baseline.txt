@@ -27,11 +27,11 @@
 118 Source/Timeline/AudioClipStreamer.h
 52 Source/Timeline/AutomationApplier.h
 44 Source/Timeline/AutomationBinding.h
-12 Source/Timeline/AutomationRecorder.h
+11 Source/Timeline/AutomationRecorder.h
 32 Source/Timeline/MidiClipFile.h
 14 Source/Timeline/MidiRecorder.h
 32 Source/Timeline/PeaksFile.h
-53 Source/Timeline/TimelineDoc/TimelineDoc.h
+34 Source/Timeline/TimelineDoc/TimelineDoc.h
 12 Source/Timeline/TimelineOps.h
 49 Source/Timeline/TimelineValidator.h
 26 Source/Transport/BounceExporter.h

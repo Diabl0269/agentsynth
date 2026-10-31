@@ -2,6 +2,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "StemSession.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <limits>
 
 namespace synth {

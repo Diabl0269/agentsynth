@@ -11,6 +11,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotButton.h"

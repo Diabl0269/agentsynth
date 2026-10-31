@@ -1,10 +1,15 @@
 #pragma once
 #include "MainComponent/MainComponentAudioSettingsSource.h" // the Settings Audio tab's view of the engine, owned beside this one
 
+#include "Timeline/TimelineDoc/TimelineTypes.h"
 #include "UI/Timeline/TrackAudioInputSurface.h"
 #include <functional>
 
 class AudioEngine;
+
+namespace synth {
+class TimelineDoc;
+}
 
 namespace synth::maincomponent {
 

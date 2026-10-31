@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Timeline/TimelineDoc/TimelineTypes.h"
 #include "Timeline/TrackAudioInput.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -7,6 +8,10 @@
 
 // AudioInputMenu.h (docs/timeline/tracks.md#the-input-row): the audio track Input row's words and menu, as pure
 // functions of the track's choice and the inputs on offer, so a test reads exactly what the pane shows.
+namespace synth {
+class TimelineDoc;
+}
+
 namespace synth::ui {
 
 struct AudioInputMenuIds {
