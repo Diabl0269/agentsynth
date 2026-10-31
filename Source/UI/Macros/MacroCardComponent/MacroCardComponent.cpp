@@ -264,6 +264,15 @@ void MacroCardComponent::mouseUp(const juce::MouseEvent& e) {
     portReleased(e); // a press that became a drag is the controller's to ignore: the card was dragged as before
 }
 
+// The rest of the gesture's mouseDrag/mouseUp then find no armed drag and do nothing.
+void MacroCardComponent::abandonBodyDrag() {
+    if (!bodyDragActive)
+        return;
+    bodyDragActive = false;
+    setTopLeftPosition(dragStartPosition);
+    synth::ui::endDragCursor(*this);
+}
+
 void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     // Double-click on the title row renames in place — the same affordance ModuleComponent gives
     // its own title. Anywhere else on the card still expands, as before.

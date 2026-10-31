@@ -118,10 +118,11 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // / getMacroDragJoinId) is THIS macro gets the SAME dashed hull, just emphasized — heavier,
         // fully opaque, and topped with a solid stroke — rather than a second visual language for
         // "about to change" (docs/macros/menu-and-membership.md). A transfer emphasises both, and a macro
-        // the drag has already moved its module into stays emphasised until the drop.
-        const bool isDragCandidate = macro.id == editor.getMacroDragLeaveId() ||
-                                     macro.id == editor.getMacroDragJoinId() ||
-                                     macro.id == editor.getMacroDragLiveOwnerId();
+        // the drag has already moved its module into stays emphasised until the drop. A whole macro's drag names the
+        // parent it would leave on MacroGroupController (its join goes through the same join id).
+        const bool isDragCandidate =
+            macro.id == editor.getMacroDragLeaveId() || macro.id == editor.getMacroController().macroLeaveCandidate() ||
+            macro.id == editor.getMacroDragJoinId() || macro.id == editor.getMacroDragLiveOwnerId();
 
         MacroFoldAnimator::paintDashedBorder(g, hull.toFloat(), macro.colour, isDragCandidate);
 

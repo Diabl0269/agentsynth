@@ -599,36 +599,58 @@ ambiguity. With nested macros the innermost open macro under the pointer wins; a
 - **Live highlight.** While a library drag hovers such a hull, `GraphEditor::setMacroDropCandidate`
   puts that macro in the same join-id emphasis a canvas drag uses; it clears on drag exit and drop.
 
-## Dropping a macro into another
+## Dropping a macro into another, or out of its parent
 
-Drag a whole macro onto an open macro and release: it nests there, the way a module dropped into a hull joins it. Both
-ways of dragging a macro do it: a folded card dragged by its body, and an open macro dragged by its name chip (or by
-its empty space, with the "move macro on hull drag" preference).
+A whole macro dragged across a border changes its parent the way a module does across a hull border
+([Cmd drag across a hull border](#cmd-drag-across-a-hull-border)): released on an open macro it nests there (join),
+dragged out past its parent's border it leaves the parent (leave), and dragged out of one onto another it moves across
+(transfer). Both ways of dragging a macro do all three: a folded card dragged by its body, and an open macro dragged by
+its name chip (or by its empty space, with the "move macro on hull drag" preference).
 
-- **Target.** The innermost open border under the card's centre (folded card) or under the pointer (name chip), from
-  `MacroGroupController::macroNestTargetAt`. A folded macro is never a target (its inside is hidden). Left out: the
-  dragged macro itself and every macro inside it, so a macro can never be dropped into itself or its own descendant
-  (`MacroSet::setParent` would refuse the cycle anyway); its own parent, which is no change; and any macro outside its
-  parent, which would mean taking it out of its parent first (dragging a nested macro out is not a drop gesture; use
-  Ungroup on the parent).
-- **Live outline.** While the drag hovers a target, `updateMacroNestCandidate` hands it to
-  `GraphEditor::setMacroDropCandidate`, so it gets the same heavier outline a module drag's join target gets. It
-  clears on drop, on a press that never moved, and in `cancelLiveDragGestures`.
+- **Where the drag point is.** The card's centre (folded card) or the pointer (name chip).
+- **Leave.** `MacroGroupController::macroUnitDragTargets` arms a leave when the drag point is outside the parent's
+  border. That border is the one frozen at the press (`beginMacroUnitDrag` freezes the hull of every ancestor), so the
+  parent does not follow the macro as it is dragged away: the live hull is a union that includes the dragged child,
+  and reading it would never let the child out. A parent with nothing else inside (no other member, no other child) is
+  carried rather than left, as a module's sole-member hull is.
+- **Join target.** The innermost open border under the drag point, from `macroNestTargetAt` (no leave) or a
+  `deepestMacroAt` search that reads ancestors through their frozen borders (leave). A folded macro is never a target
+  (its inside is hidden). Left out: the dragged macro itself and every macro inside it, so a macro can never be dropped
+  into itself or its own descendant (`MacroSet::setParent` would refuse the cycle anyway), and its own parent, which
+  is no change.
+- **Live outline and frozen border.** While the drag arms a target, `updateMacroNestCandidate` hands the join target
+  to `GraphEditor::setMacroDropCandidate` and keeps the leave target in `macroLeaveCandidate()`; both get the heavier
+  outline a module drag's targets get. Every ancestor's painted border stays at its press size for the whole drag
+  (`GraphEditor::macroHullTargetBounds` returns the frozen hull while `draggedMacroUnit()` is set) and glides to its
+  new size on the drop ([Macro borders glide](#macro-borders-glide)). The candidates clear on drop, on a press that
+  never moved, on Esc and in `cancelLiveDragGestures`.
+- **Walking out of several levels.** A drop outside the grandparent too leaves both, one level at a time
+  (`moveMacroOutOfParent`), until the macro reaches the container that holds the join target, or the top level. A drop
+  in the grandparent's own space leaves only the parent.
+- **Ports splice.** Each level the macro leaves runs the same plan a module leaving runs
+  (`buildMacroPortCrossingPlanForRemovedMembers`, then `spliceMacroPorts` and `spliceOutMacroPort` for ports that
+  now have nothing inside), with the macro's whole subtree as the leaving members: a cable from a member that stays to
+  one inside the macro gets a port on the parent's border, and a port the macro no longer needs is spliced out. A join
+  then calls `addSelectionToMacro(..., recordUndo=false)` per level, each step planning its own ports.
 - **Where it lands.** The target's border (and its ancestors') is left out of the placement blockers
   (`placementBlockers(..., macroNestCandidate())`, in `finalizeMacroCardDrag` and `finalizeSelectionDrag`), so the
-  card or the open macro lands where it was released, inside the border, clear of the members there.
+  card or the open macro lands where it was released, then `makeRoomFor` pushes what the macro covers. A parent the
+  macro left gives back the room it took (`returnDisplacedNeighbours`).
 - **One undo step.** The drop's own record (`finalizeMacroCardDrag`, or the chip `mouseUp`, both consuming the
-  mousedown graph capture) runs `nestDraggedMacroIntoCandidate` after the positions are final. It calls
-  `addSelectionToMacro(..., recordUndo=false)` with the dragged macro's whole subtree, which nests a whole macro that
-  sits beside the target and splices that level's ports. A target deeper down is reached one level at a time from the
-  dragged macro's container, each step planning its own ports, then `makeRoomFor` pushes what the macro covers. One
-  Cmd+Z puts back the position, the parent and every port. The borders that changed glide
-  ([Macro borders glide](#macro-borders-glide)).
+  mousedown graph capture) runs `moveDraggedMacroToCandidate` after the positions are final. One Cmd+Z puts back the
+  position, the parent and every port.
+- **Esc.** Esc while a whole macro is dragged (`GraphEditor::cancelMacroUnitDrag`) puts the macro and everything that
+  moved with it back, drops the candidates and the mousedown capture, and records nothing. A module drag has no Esc
+  cancel.
 - **Folding.** The nested macro is an ordinary child: folding the new parent flies it in as one box and opening it
   brings it back open or folded as it was ([Macro fold](../layout/animation.md#macro-fold)).
 - A channel macro nests like any other, as it does with Cmd+G.
 
-Tests: `Tests/Macros/MacroContainer/MacroDropIntoMacroTests.cpp`, through the real card and canvas mouse events.
+Tests, through the real card and canvas mouse events: `Tests/Macros/MacroContainer/MacroDropIntoMacroTests.cpp`
+(join), `MacroLeaveDragTests.cpp` (leave one and two levels, transfer, port splicing, Esc, the carried parent) and
+`MacroDragMatrixTests.cpp`, the drag matrix: module, folded card and open chip, each made to join, leave, transfer and
+stay, each one undo step. A membership gesture added for one of these units and missing on another fails a row there.
+The in-app check is `Tools/ui-verify/scenarios/macro-leave-drag.yaml`.
 
 ## The expanded hull's collapse button
 
