@@ -84,6 +84,9 @@ MixerPanelComponent::MixerPanelComponent() {
     emptyHint_.setText(kEmptyHintText, juce::dontSendNotification);
     emptyHint_.setTitle(kEmptyHintText); // accessibility: name equals the visible text
     setTitle("Mixer");
+    setComponentID("mixerPanel");
+    topBarRingProbe_ = makeTopBarRingProbe(topBarRing_);
+    addChildComponent(*topBarRingProbe_);
 }
 
 MixerPanelComponent::~MixerPanelComponent() = default;

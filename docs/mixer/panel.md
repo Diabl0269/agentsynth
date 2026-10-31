@@ -804,9 +804,7 @@ the bottom dock with `"timeline"`. `MixerPanelComponent` is the region's focusab
 pan, M and S) — the same focus-trap avoidance `TimelineTrackHeaderComponent` uses, one level higher, since a column hosts
 several controls. The deliberate exceptions are small icon buttons that take no key beyond Return and Space, so every
 other key still bubbles to the panel: the toolbar's buttons, the header's colour dot and sources badge, and the
-bypass button on every insert and send row (each a Tab stop with a name, a tooltip and the accent focus ring). The one
-other focusable element is the side pane's channel list, which has keys of its own
-([side pane](#side-pane-zones-and-visibility)) and passes every other key up to the panel.
+bypass button on every insert and send row (each a Tab stop with a name, a tooltip and the accent focus ring). The one other focusable element is the side pane's channel list, which has keys of its own ([side pane](#side-pane-zones-and-visibility)) and passes every other key up to the panel.
 
 `MixerPanelKeyboard.cpp` (`Source/UI/Mixer/MixerPanelComponent/`) owns `keyPressed()`:
 
@@ -826,6 +824,7 @@ other focusable element is the side pane's channel list, which has keys of its o
 - **Tab** (`mixerEnterRows`, rebindable, Mixer category) moves into the focused column's rows --
   [below](#keyboard-walk-through-the-send-and-insert-rows). With no column focused, or no rows to
   enter, `keyPressed()` returns false so the app-wide Tab region cycle still gets the key.
+- **Cmd+Up** (`mixerFocusTopBar`, rebindable) puts a key ring on the top bar: [top bar keys](top-bar-keys.md).
 - **E** (`mixerOpenEq`, rebindable) opens the focused strip's EQ window while the EQ section is shown. It
   is E rather than Return because Return already selects the focused column on the canvas. The window is the
   card's own pop-out editor (`ModuleComponent::openEqWindow()`), reached through

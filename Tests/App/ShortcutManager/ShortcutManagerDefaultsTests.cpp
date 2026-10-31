@@ -53,6 +53,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "mixerToggleRowBypass",
         "mixerMoveRowUp",
         "mixerMoveRowDown",
+        "mixerFocusTopBar",
         // CardLayoutEditorComponent's row keys (CardLayoutEditorComponentKeyboard.cpp) and the on-card nudge keys
         "layoutEditorToggleShown",
         "layoutEditorMoveUp",

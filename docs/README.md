@@ -73,6 +73,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/mixer/fader.md`](mixer/fader.md) — the mixer fader's own Cubase-like taper (FRO150): UI-only position mapping vs. the linear-dB parameter, Shift fine-drag, Cmd-click/double-click reset
 - [`docs/mixer/meters.md`](mixer/meters.md) — the per-reader peak latch, dB scale and taper, ballistics, colour zones, user-editable meter colours, the clip readout, the track header chip
 - [`docs/mixer/panel.md`](mixer/panel.md) — what the mixer panel shows, placement and detachable windows, unbinding before a graph change, the EQ curve thumbnail, keyboard navigation and accessibility
+- [`docs/mixer/top-bar-keys.md`](mixer/top-bar-keys.md) — Cmd+Up puts a key ring on the mixer top bar (toolbar, zones filter and chips, pan law): stops, keys, screen-reader value
 - [`docs/mixer/edit-on-canvas.md`](mixer/edit-on-canvas.md) — the Edit on canvas button on every mixer column header: always shown, selects the channel and brings it into view
 - [`docs/mixer/row-motion.md`](mixer/row-motion.md) — how an added or removed insert or send row opens or closes, and what lands at once
 - [`docs/mixer/sends-and-buses.md`](mixer/sends-and-buses.md) — a bus is a Channel Strip, a send is an output leg, channel layout, parameter vs. state, pre/post and mute/bypass, the per-leg audible-solo mask, the send/bus UI, stems

@@ -1,0 +1,37 @@
+# Gap: the mixer's top bar (side-pane button, Inserts / Sends / EQ, Reset Meters, Add Bus, the side pane's filter and
+# chips, the master pan law) had no key path, because plain Up and Down nudge the focused fader.
+#
+# What a keyboard user does:
+#   1. Starts a new project, adds an Oscillator track and opens the Mixer tab.
+#   2. Presses Cmd+Up on the mixer: a ring appears on the first control of the top bar.
+#   3. Presses Right to walk the ring (Inserts, Sends, EQ, Reset Meters, Add Bus), Return on Add Bus adds a bus.
+#   4. Presses Down: the ring leaves and the arrows are the fader's again.
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - wait: {}
+  - click: {id: Mixer}                                       # the Mixer tab
+  - wait: {}
+  - expect: {id: mixerTopBarRing, topBarRing: ""}
+  - key: {keys: cmd+up, target: mixerPanel}
+  - wait: {}
+  - expect: {id: mixerTopBarRing, topBarRing: "Side pane"}
+  - key: {keys: right, target: mixerPanel}
+  - expect: {id: mixerTopBarRing, topBarRing: "Inserts"}
+  - key: {keys: right, target: mixerPanel}
+  - key: {keys: right, target: mixerPanel}
+  - key: {keys: right, target: mixerPanel}
+  - expect: {id: mixerTopBarRing, topBarRing: "Reset Meters"}
+  - key: {keys: right, target: mixerPanel}
+  - expect: {id: mixerTopBarRing, topBarRing: "Add Bus"}
+  - screenshot: {name: mixer-top-bar-ring}
+  - key: {keys: return, target: mixerPanel}
+  - wait: {}
+  - expect: {id: mixerTopBarRing, topBarRing: "Add Bus"}          # the ring stays where it was
+  - screenshot: {name: mixer-top-bar-bus-added}
+  - key: {keys: down, target: mixerPanel}
+  - expect: {id: mixerTopBarRing, topBarRing: ""}

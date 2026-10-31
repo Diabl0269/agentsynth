@@ -281,7 +281,10 @@ void MixerPanelComponent::reconcileRowFocus() {
     setRowFocus(wanted);
 }
 
-void MixerPanelComponent::focusLost(FocusChangeType) { exitRows(); }
+void MixerPanelComponent::focusLost(FocusChangeType) {
+    topBarRing_.leave();
+    exitRows();
+}
 
 // Only the focused column's lists carry a focused row; every other list is cleared.
 void MixerPanelComponent::syncRowVisuals() {

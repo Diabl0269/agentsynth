@@ -6,6 +6,7 @@
 #include "MixerPanelComponent.h"
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/RenameKey.h"
 #include "UI/Mixer/MixerColumnComponent.h"
@@ -20,6 +21,16 @@ bool MixerPanelComponent::matchesAction(const juce::KeyPress& key, const juce::S
 }
 
 bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
+    if (topBarRing_.handleKey(key))
+        return true;
+    // Before the arrows and the row keys: the default chord shares Up's key code, and it works from row mode too.
+    if (matchesAction(key, "mixerFocusTopBar",
+                      juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0))) {
+        if (!topBarRing_.enter())
+            return false;
+        exitRows();
+        return true;
+    }
     if (rowFocus_.has_value() && handleRowKey(key))
         return true;
     if (key.isKeyCode(juce::KeyPress::leftKey))
@@ -286,7 +297,46 @@ void MixerPanelComponent::paintOverChildren(juce::Graphics& g) {
     // co-paint, same as a region root and a focused row elsewhere in this app.
     synth::ui::paintFocusRegionOutline(*this, g);
     paintRowFocusRing(g);
+    topBarRing_.paintRing(g);
     paintDragBubble(g);
+}
+
+namespace {
+// A hidden child of the panel (id "mixerTopBarRing") that test mode reads: the name of the ringed control, "" when off.
+class TopBarRingProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit TopBarRingProbe(const KeyRing& ring)
+        : ring_(ring) {
+        setComponentID("mixerTopBarRing");
+        setInterceptsMouseClicks(false, false);
+        setWantsKeyboardFocus(false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override {
+        into.setProperty("topBarRing", ring_.getValueText());
+    }
+
+private:
+    const KeyRing& ring_;
+};
+} // namespace
+
+std::unique_ptr<juce::Component> MixerPanelComponent::makeTopBarRingProbe(const KeyRing& ring) {
+    return std::make_unique<TopBarRingProbe>(ring);
+}
+
+// Reading order: the toolbar (side pane, Inserts, Sends, EQ, Reset Meters, Add Bus, dock back), then the zones pane's
+// filter and chips (hidden with the pane), then the master column's pan law. The ring skips what is not showing.
+std::vector<juce::Component*> MixerPanelComponent::topBarStops() {
+    auto stops = toolbar_.getKeyStops();
+    stops.push_back(&zonesPane_.getFilterField());
+    for (auto chip : {MixerZonesPane::Chip::All, MixerZonesPane::Chip::Tracks, MixerZonesPane::Chip::Buses})
+        stops.push_back(&zonesPane_.getChip(chip));
+    if (masterColumn_ != nullptr)
+        stops.push_back(&masterColumn_->getPanLawButton());
+    return stops;
 }
 
 } // namespace synth::ui
