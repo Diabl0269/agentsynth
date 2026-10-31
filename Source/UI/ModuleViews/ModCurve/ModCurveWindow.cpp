@@ -9,8 +9,8 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kPad = 12;
-constexpr int kRowH = 26;
+constexpr int kWindowPad = 12;
+constexpr int kWindowRowH = 26;
 constexpr int kHintH = 18;
 constexpr float kInStartScale = 0.82f;
 constexpr float kOutEndScale = 0.9f;
@@ -100,15 +100,15 @@ void ModCurveWindowContent::paint(juce::Graphics& g) {
     g.fillAll(p.panel);
     g.setColour(p.muted);
     g.setFont(p.mono(12.0f));
-    g.drawText(hintText(), kPad, getHeight() - kPad - kRowH - 6 - kHintH, getWidth() - 2 * kPad, kHintH,
-               juce::Justification::centredLeft, true);
+    g.drawText(hintText(), kWindowPad, getHeight() - kWindowPad - kWindowRowH - 6 - kHintH, getWidth() - 2 * kWindowPad,
+               kHintH, juce::Justification::centredLeft, true);
 }
 
 void ModCurveWindowContent::resized() {
-    auto area = getLocalBounds().reduced(kPad);
-    auto bottom = area.removeFromBottom(kRowH);
+    auto area = getLocalBounds().reduced(kWindowPad);
+    auto bottom = area.removeFromBottom(kWindowRowH);
     area.removeFromBottom(6 + kHintH);
-    auto top = area.removeFromTop(kRowH);
+    auto top = area.removeFromTop(kWindowRowH);
     area.removeFromTop(8);
     view_.setBounds(area);
     const int chipW = 80;
