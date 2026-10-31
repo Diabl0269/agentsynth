@@ -9,7 +9,7 @@ namespace {
 
 constexpr double kRate = 44100.0;
 constexpr int kBlock = 512;
-constexpr int kChannels = 10; // 2 audio + 5 CV + Key L/R + Knee CV
+constexpr int kChannels = 12; // 2 audio + 5 CV + Key L/R + Knee, Mix and Pan CV
 
 juce::RangedAudioParameter* param(CompressorModule& module, const juce::String& id) {
     return dynamic_cast<juce::RangedAudioParameter*>(findParameterByID(&module, id));
@@ -119,12 +119,12 @@ TEST(CompressorKnee, ParameterAndCvJackExistWithAHardKneeDefault) {
               "Knee");
     EXPECT_EQ(module->mapInputChannel(CompressorModule::kKneeCvChannel).role, PortRole::ModCV);
     EXPECT_EQ(module->getVisibleInputPortCount(),
-              module->mapInputChannel(CompressorModule::kKneeCvChannel).visibleJackIndex + 1);
+              module->mapInputChannel(CompressorModule::kKneeCvChannel).visibleJackIndex + 3);
 
     const auto targets = module->getModulationTargets();
-    ASSERT_EQ(targets.size(), 6u);
-    EXPECT_EQ(targets.back().channelIndex, CompressorModule::kKneeCvChannel);
-    EXPECT_EQ(targets.back().paramId, "knee");
+    ASSERT_EQ(targets.size(), 8u);
+    EXPECT_EQ(targets[5].channelIndex, CompressorModule::kKneeCvChannel);
+    EXPECT_EQ(targets[5].paramId, "knee");
     // The key pair keeps the channels saved patches already route to.
     EXPECT_EQ(CompressorModule::kKeyBase, 7);
 }

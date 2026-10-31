@@ -168,7 +168,7 @@ TEST(OscillatorPulseWidth, CVJackMovesTheDutyInMonoAndPoly) {
 
 TEST(OscillatorPulseWidth, JacksAreDeclaredAndBoundToTheirKnobs) {
     OscillatorModule osc;
-    EXPECT_EQ(OscillatorModule::kNumInputs, 28);
+    EXPECT_EQ(OscillatorModule::kNumInputs, 29);
     int found = 0;
     for (const auto& poly : {false, true}) {
         setPoly(osc, poly);

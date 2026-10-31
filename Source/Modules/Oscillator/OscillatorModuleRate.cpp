@@ -16,7 +16,7 @@ float OscillatorModule::baseFrequencyHz(float midiNote) const {
     if (!isFixedRate())
         return getTargetFrequency(midiNote);
     const float semitones = (octaveParam->get() * 12.0f) + (float)coarseParam->get() + (fineParam->get() / 100.0f);
-    return fixedRateParam->get() * std::pow(2.0f, semitones / 12.0f);
+    return modulateNormalised(*fixedRateParam, fixedRateParam->get(), fixedRateCv_) * std::pow(2.0f, semitones / 12.0f);
 }
 
 // Follow notes keeps the audible floor of 20 Hz; a Fixed rate may be a sub-audio modulation rate.

@@ -139,7 +139,10 @@ struct Wired {
         : c(mode) {
         row = c.filterRow(n, 400, 400, 120);
         for (int i = 0; i + 1 < n; ++i) {
-            const int jacks = singleJack ? 1 : c.card(row[(size_t)i])->getModule()->getTotalNumOutputChannels();
+            const int jacks =
+                singleJack
+                    ? 1
+                    : dynamic_cast<ModuleBase*>(c.card(row[(size_t)i])->getModule())->getVisibleOutputPortCount();
             for (int j = 0; j < jacks; ++j)
                 c.editor.connectPorts(row[(size_t)i], j, row[(size_t)i + 1], j, false, false);
         }

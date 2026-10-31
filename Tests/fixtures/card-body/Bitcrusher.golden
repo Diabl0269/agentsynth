@@ -25,4 +25,6 @@ type Bitcrusher size 280x255
   in 2 37, 128
   in 3 207, 128
   in 4 54, 178
+  in 5 182, 178
+  in 6 10, 229
   out 0 270, 58

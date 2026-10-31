@@ -29,9 +29,9 @@ TEST(ParametricEQModuleTest, NameTypeAndCategory) {
 
 TEST(ParametricEQModuleTest, ChannelLayoutIsStereoPlusThirteenCV) {
     ParametricEQModule eq;
-    EXPECT_EQ(eq.getTotalNumInputChannels(), 15);
+    EXPECT_EQ(eq.getTotalNumInputChannels(), 17);
     EXPECT_EQ(eq.getTotalNumOutputChannels(), 2);
-    EXPECT_EQ(eq.getVisibleInputPortCount(), 14);
+    EXPECT_EQ(eq.getVisibleInputPortCount(), 16);
     EXPECT_EQ(eq.getVisibleOutputPortCount(), 1);
 }
 
@@ -57,7 +57,7 @@ TEST(ParametricEQModuleTest, PortLabelsNameAllFifteenInputs) {
 TEST(ParametricEQModuleTest, ModulationTargetsCoverEveryContinuousParameter) {
     ParametricEQModule eq;
     const auto targets = eq.getModulationTargets();
-    ASSERT_EQ(targets.size(), 13u);
+    ASSERT_EQ(targets.size(), 15u);
     for (int i = 0; i < 13; ++i) {
         EXPECT_EQ(targets[(size_t)i].channelIndex, 2 + i);
         EXPECT_TRUE(eq.isAutoPromotableModTarget(targets[(size_t)i].channelIndex));

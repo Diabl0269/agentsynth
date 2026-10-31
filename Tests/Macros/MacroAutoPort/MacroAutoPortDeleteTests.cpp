@@ -13,7 +13,6 @@
 #include "AppUndoManager.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/FX/DelayModule.h"
-#include "Modules/FX/ReverbModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroMidiInletModule.h"

@@ -1,0 +1,357 @@
+# The Level control of every effect (and the Filter) takes a modulation cable, and so do a card's Pan and shared Mix.
+#
+# What a user does: adds an effect and an LFO from the library (Cmd+F), drags the LFO output onto the effect's Level
+# (Pan and Mix sit in the card's More row), and the card lists the cable. The app restarts between effects so each card has the canvas to itself.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "reverb"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Reverb > Level"}
+  - wait: {}
+  - expect: {id: "card:Reverb", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Reverb", name: "Reverb-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "chorus"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Chorus > Level"}
+  - wait: {}
+  - expect: {id: "card:Chorus", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Chorus", name: "Chorus-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "phaser"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Phaser > Level"}
+  - wait: {}
+  - expect: {id: "card:Phaser", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Phaser", name: "Phaser-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "flanger"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Flanger > Level"}
+  - wait: {}
+  - expect: {id: "card:Flanger", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Flanger", name: "Flanger-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "distortion"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Distortion > Level"}
+  - wait: {}
+  - expect: {id: "card:Distortion", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Distortion", name: "Distortion-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "bitcrusher"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Bitcrusher > Level"}
+  - wait: {}
+  - expect: {id: "card:Bitcrusher", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Bitcrusher", name: "Bitcrusher-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "pitch shifter"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Pitch Shifter > Level"}
+  - wait: {}
+  - expect: {id: "card:Pitch Shifter", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Pitch Shifter", name: "Pitch-Shifter-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "ring modulator"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Ring Modulator > Level"}
+  - wait: {}
+  - expect: {id: "card:Ring Modulator", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Ring Modulator", name: "Ring-Modulator-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "gate"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Gate > Level"}
+  - wait: {}
+  - expect: {id: "card:Gate", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Gate", name: "Gate-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "filter"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Filter > Level"}
+  - wait: {}
+  - expect: {id: "card:Filter", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Filter", name: "Filter-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "gate"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: "card:Gate > cardMoreRow"}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Gate > Pan"}
+  - wait: {}
+  - expect: {id: "card:Gate", contains: {cabledTargets: Pan}, within_ms: 3000}
+  - screenshot: {id: "card:Gate", name: "Gate-Pan"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "gate"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: "card:Gate > cardMoreRow"}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Gate > Mix"}
+  - wait: {}
+  - expect: {id: "card:Gate", contains: {cabledTargets: Mix}, within_ms: 3000}
+  - screenshot: {id: "card:Gate", name: "Gate-Mix"}

@@ -5,8 +5,11 @@
 
 class BitcrusherModule : public ModuleBase {
 public:
+    static constexpr int kLevelCvChannel = 6;
+    static constexpr int kPanCvChannel = 7;
+
     BitcrusherModule()
-        : ModuleBase("Bitcrusher", 6, 2) // 2 Audio + 4 CV (Rate, Depth, Mix, Dither)
+        : ModuleBase("Bitcrusher", 8, 2) // 2 Audio + 6 CV (Rate, Depth, Mix, Dither, Level, Pan)
     {
         addParameter(rateParam = new juce::AudioParameterFloat("rate", "Rate Reduction", 1.0f, 50.0f, 1.0f));
         addParameter(depthParam = new juce::AudioParameterFloat("depth", "Bit Depth", 1.0f, 24.0f, 24.0f));
@@ -15,9 +18,9 @@ public:
         addParameter(ditherParam =
                          new juce::AudioParameterFloat("dither", "Dither", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        0.0f, synth::fractionPercentAttributes()));
-        addOutputLevelParameter();
+        addOutputLevelParameter(1.0f, kLevelCvChannel);
         addMuteParameter();
-        addPanParameter(); // shared output stage: this module keeps its own Mix
+        addPanParameter(kPanCvChannel); // shared output stage: this module keeps its own Mix
         enableVisualBuffer(true);
     }
 
@@ -144,20 +147,25 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String cv[] = {"Rate", "Depth", "Mix", "Dither"};
-        return stereoInputLabel(i, 4, cv);
+        const juce::String cv[] = {"Rate", "Depth", "Mix", "Dither", "Level", "Pan"};
+        return stereoInputLabel(i, 6, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(4); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(6); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 4); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 6); }
     // This module reads its audio input through mapStereoPairInput/mapStereoKeyInput
     // above -- a genuine stereo pair, eligible for render-time L->R normalling.
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Rate", 2, "rate"}, {"Depth", 3, "depth"}, {"Mix", 4, "mix"}, {"Dither", 5, "dither"}};
+        return {{"Rate", 2, "rate"},
+                {"Depth", 3, "depth"},
+                {"Mix", 4, "mix"},
+                {"Dither", 5, "dither"},
+                {"Level", kLevelCvChannel, "outputLevel", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
 
     // Pure audio FX — processBlock never touches the MIDI buffer.

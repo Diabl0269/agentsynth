@@ -3,7 +3,7 @@
 // them and offers Show all, H flips the picked pad, every change is one undo step, a hidden pad still plays, hiding a
 // drum that has hits asks first, and the pads slide.
 
-#include "../CardBody/CardBodyTestHelpers.h"
+#include "../CardBody/CardCanvas.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"

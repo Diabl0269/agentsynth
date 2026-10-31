@@ -2,7 +2,7 @@
 // downloads in place with progress, fills the list when done and goes away. The installer is the app's shared one,
 // faked at the network.
 #include "../../../SoundPacks/SoundPackTestKit.h"
-#include "../CardBody/CardBodyTestHelpers.h"
+#include "../CardBody/CardCanvas.h"
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/ModMatrixPicker.h"

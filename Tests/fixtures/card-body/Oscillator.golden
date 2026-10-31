@@ -67,5 +67,6 @@ type Oscillator size 280x593
   in 11 154, 328
   in 12 218, 328
   in 13 10, 98
+  in 14 218, 234
   out 0 270, 58
   out 1 270, 78

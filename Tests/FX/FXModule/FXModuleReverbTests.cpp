@@ -257,10 +257,10 @@ TEST(ReverbPreDelay, TheDrySignalIsNeverDelayed) {
 
 TEST(ReverbPreDelay, ThePreDelayJackIsKnobBoundAndShiftsTheOnset) {
     ReverbModule m;
-    EXPECT_EQ(m.getTotalNumInputChannels(), 8);
+    EXPECT_EQ(m.getTotalNumInputChannels(), 10);
     EXPECT_EQ(m.getInputPortLabel(6), "Pre-Delay") << "jack 6 of Audio + six CVs, raw ch7";
     const auto targets = m.getModulationTargets();
-    ASSERT_EQ(targets.size(), 6u);
+    ASSERT_EQ(targets.size(), 8u);
     EXPECT_EQ(targets[5].name, "Pre-Delay");
     EXPECT_EQ(targets[5].channelIndex, 7);
     ASSERT_NE(m.parameterForModTarget(targets[5]), nullptr);

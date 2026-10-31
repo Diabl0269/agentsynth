@@ -608,6 +608,24 @@ int ModuleComponent::shownRingSliderIndex(int si) const {
     return cardBody_ != nullptr && cardBody_->isSwappedOut(*sliders[si]) ? si : -1;
 }
 
+// A knob-only target draws no jack, so while its knob is folded into the More row a cable has no row to end on: the
+// gutter slot its rank would give it belongs to the next real jack (the Key input, a second Audio row).
+const juce::Component* ModuleComponent::moreRowButtonForKnobOnlyJack(int index) const {
+    auto* mb = dynamic_cast<ModuleBase*>(module);
+    if (mb == nullptr)
+        return nullptr;
+    for (const auto& target : mb->getModulationTargets()) {
+        if (!target.knobOnly || mb->mapInputChannel(target.channelIndex).visibleJackIndex != index)
+            continue;
+        const int si = sliderIndexForModTarget(target);
+        if (si >= 0 && sliders[si]->isVisible())
+            return nullptr;
+        auto* button = findChildWithID("cardMoreRow");
+        return button != nullptr && button->isVisible() ? button : nullptr;
+    }
+    return nullptr;
+}
+
 juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
     if (module == nullptr)
         return {0, 0};
@@ -667,6 +685,12 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         // it for free without knowing knob-hiding exists.
         if (auto anchor = knobAnchorForVisibleInputJack(clamped))
             return anchor->roundToInt();
+
+        // A knob-only target (no jack of its own) whose knob is out of view, e.g. folded into the More row: the cable
+        // ends at the left edge of the More button, which is where the knob will appear, rather than at a gutter row
+        // that belongs to a real jack.
+        if (const auto* hiddenKnob = moreRowButtonForKnobOnlyJack(clamped))
+            return {10, hiddenKnob->getBounds().getCentreY()};
 
         // Not knob-bound: its drawn ROW is its rank among the other non-knob-bound jacks, not its
         // raw visible index -- a knob-bound jack ahead of it in the index order takes no row, so

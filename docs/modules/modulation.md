@@ -472,7 +472,7 @@ sliderIndexForModTarget()` turns into a knob index:
 2. Otherwise → the parameter whose display name equals the jack label `name`.
 3. Neither → no knob (Oscillator's Pitch CV; Wavetable's Sync input).
 
-The reverse also holds: a knob can have no jack. The Oscillator's Fixed rate (and Rate mode) has none, like Phase and Rand, so the channel layout stays as it is; automate the knob instead.
+The reverse also holds: a knob can have no jack. The Oscillator's Phase and Rand have none, because they are read once when a note starts; its Fixed rate takes a cable on the knob (ch28, no gutter jack).
 
 A module sets `paramId` whenever its jack label is not the knob's name — the jack is "Rate", the
 knob "Rate (Hz)"; the VCA's jack is "CV", its knob "Gain"; Wavetable's "Warp" jack drives
@@ -666,7 +666,7 @@ layout's tab section never binds its jack, selected or not, so a tab switch neve
 
 - draws no gutter dot or label at all (`ModuleComponent::paint`'s input loop iterates
   `drawnInputJackIndices()`, not every visible index);
-- a target flagged `ModulationTarget::knobOnly` (the Filter's Custom CV and the LFO's Morph X/Y) is left out of that list even
+- a target flagged `ModulationTarget::knobOnly` (the Filter's Custom CV, the LFO's Morph X/Y, the shared Level, Mix and Pan, the Voice Mixer's Level and the Oscillator's Fixed rate) is left out of that list even
   while its knob is hidden, so a mode that hides the knob never brings its jack back into the gutter;
 - is never hit-tested by `getPortForPoint` (same list), so a mouse-down there falls through to the
   knob's own gesture handling instead of starting a jack drag;
@@ -727,8 +727,8 @@ A hosted plugin's parameters are targets too, through modulation slots claimed o
 
 The rule for a module's CV jacks: **every continuous (`AudioParameterFloat`/`Int`) parameter that
 shapes the sound gets a CV jack and a `ModulationTarget`.** Choice and toggle parameters do not
-(there is no meaningful "half a waveform"), nor does the shared output Level stage (see
-[`fx-modules.md`](fx-modules.md#output-level-shared-stage) for why). A user who can turn a knob
+(there is no meaningful "half a waveform"). The shared output stage's Level, Mix and Pan take a
+cable on the knob, with no gutter jack ([`fx-modules.md`](fx-modules.md#output-level-shared-stage)). A user who can turn a knob
 expects to be able to drop a cable on it — a knob with no jack reads as a bug, not a design choice.
 
 New jacks are **appended** after the module's existing channels, never inserted: connections
@@ -747,9 +747,10 @@ ch8; a tempo-synced stage ignores its time CV), the Oscillator's Pulse Width ch1
 ch6-14), the Filter's Key Track ch27 (after its Pitch block, ch19-26) and the Reverb's Pre-Delay ch7 (the
 Delay's tempo sync and ping-pong are switches and have no jack) — see [`lfo.md`](lfo.md),
 [`modules.md#adsr-envelope-module`](modules.md#adsr-envelope-module) and
-[`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). Not yet covered: the
-mixer modules (Channel Strip, Voice Mixer, Master), whose gain is driven by the mixer panel rather
-than by CV — deliberately out of scope for FRO314's sweep below, since Channel Strip's channel
+[`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). A knob that takes no cable is listed with its reason in the test that sweeps every card
+(`ModuleComponentModDotEveryControlTests`): settings read once at note start or per sequencer step,
+modules with no inputs (Pluck, Mallet, Drum Kit), macro knobs, and the mixer modules (Channel Strip,
+Master), whose gain is driven by the mixer panel rather than by CV — deliberately out of scope for FRO314's sweep below, since Channel Strip's channel
 layout is frozen-once-set with fixed send legs (`Source/Modules/CLAUDE.md`).
 
 The dynamics and Sampler controls follow the same rule: Compressor Knee on ch9 (after the Key pair

@@ -10,7 +10,7 @@ namespace {
 
 constexpr double kRate = 44100.0;
 constexpr int kBlock = 512;
-constexpr int kChannels = 6; // 2 audio + Threshold, Release, Input Gain, Ceiling CV
+constexpr int kChannels = 7; // 2 audio + Threshold, Release, Input Gain, Ceiling, Pan CV
 
 juce::RangedAudioParameter* param(LimiterModule& module, const juce::String& id) {
     return dynamic_cast<juce::RangedAudioParameter*>(findParameterByID(&module, id));
@@ -99,9 +99,9 @@ TEST(LimiterCeiling, ParameterAndCvJackExistAndDefaultToTheUntouchedSetting) {
     EXPECT_EQ(module->getInputPortLabel(module->mapInputChannel(LimiterModule::kCeilingCvChannel).visibleJackIndex),
               "Ceiling");
     const auto targets = module->getModulationTargets();
-    ASSERT_EQ(targets.size(), 4u);
-    EXPECT_EQ(targets.back().channelIndex, LimiterModule::kCeilingCvChannel);
-    EXPECT_EQ(targets.back().paramId, "ceiling");
+    ASSERT_EQ(targets.size(), 5u);
+    EXPECT_EQ(targets[3].channelIndex, LimiterModule::kCeilingCvChannel);
+    EXPECT_EQ(targets[3].paramId, "ceiling");
 }
 
 TEST(LimiterCeiling, DefaultRendersExactlyWhatJuceLimiterDidEvenAboveFullScale) {

@@ -85,6 +85,6 @@ The ADSR has a matching Legato switch (see `modules.md`). Code: `Oscillator/Pitc
 - **Phase restarts on notes** (note-on, Gate edge, a poly voice going live) exactly as in Follow notes, so a fixed-rate modulator keeps its pulses aligned to each call.
 - **Glide has no effect** in Fixed mode: the target does not move with notes.
 - **On the card**: Rate waits in the More row, so the card keeps its size; the Fixed rate knob takes Glide's cell while Rate is Fixed (no notes to glide between).
-- **No jack for Fixed rate** (to keep the channel layout); automate the knob instead.
+- **Fixed rate takes a cable on its knob**, CV on ch28 in both voice modes, appended so no saved cable moves; no gutter jack.
 
 The shared logic is `OscillatorModule::baseFrequencyHz()` and `minRenderHz()` in `Source/Modules/Oscillator/OscillatorModuleRate.cpp`; tests: `Tests/Modules/OscillatorFixedRateTests.cpp`.

@@ -33,4 +33,6 @@ type Pitch Shifter size 280x445
   in 4 122, 350
   in 5 37, 274
   in 6 37, 350
+  in 7 50, 400
+  in 8 10, 419
   out 0 270, 58

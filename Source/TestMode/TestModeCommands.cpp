@@ -272,6 +272,17 @@ StepResult cmdOpenProject(const juce::var& args, Scratch& s, int attempt) {
                                                  : StepResult::pending();
 }
 
+StepResult cmdSaveProject(const juce::var& args, Scratch&, int) {
+    const juce::File bundle(args.getProperty("path", {}).toString());
+    auto* mc = mainComponent();
+    if (mc == nullptr)
+        return StepResult::failed("no main window");
+    if (!bundle.hasFileExtension(".agsproj"))
+        return StepResult::failed("not a project bundle path: " + bundle.getFullPathName());
+    return mc->saveProjectForTest(bundle) ? StepResult::done(object({{"path", bundle.getFullPathName()}}))
+                                          : StepResult::failed("could not save " + bundle.getFullPathName());
+}
+
 StepResult cmdWaitForIdle(const juce::var& args, Scratch& s, int attempt) {
     const double timeoutMs = args.hasProperty("timeoutMs") ? static_cast<double>(args["timeoutMs"]) : 5000.0;
     const double settleMs = args.hasProperty("settleMs") ? static_cast<double>(args["settleMs"]) : 100.0;
@@ -317,6 +328,7 @@ CommandTable CommandTable::standard() {
     table.add("getState", {cmdGetState});
     table.add("screenshot", {cmdScreenshot});
     table.add("openProject", {cmdOpenProject});
+    table.add("saveProject", {cmdSaveProject});
     table.add("waitForIdle", {cmdWaitForIdle});
     table.add("quit", {cmdQuit});
     return table;

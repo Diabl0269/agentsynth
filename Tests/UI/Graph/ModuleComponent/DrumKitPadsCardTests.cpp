@@ -4,7 +4,7 @@
 // 16 and 32 pads under every theme, and the one-step undo of a count change.
 
 #include "../../../Modules/Sampler/SamplerTestWavs.h"
-#include "../CardBody/CardBodyTestHelpers.h"
+#include "../CardBody/CardCanvas.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"

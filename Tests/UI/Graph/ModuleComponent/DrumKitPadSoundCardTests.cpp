@@ -4,7 +4,7 @@
 // and a sound from the Sounds view dropped onto the pad under the pointer only.
 
 #include "../../../Modules/Sampler/SamplerTestWavs.h"
-#include "../CardBody/CardBodyTestHelpers.h"
+#include "../CardBody/CardCanvas.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/Pluck/PluckModule.h"

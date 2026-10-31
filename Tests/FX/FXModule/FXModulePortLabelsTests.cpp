@@ -95,34 +95,37 @@ static void setDualIO(juce::AudioProcessor& proc, bool dual) {
 // `trailingCv`: one more CV jack appended after everything else (Compressor Knee, after the Key
 // pair), a modulation target on `trailingChannel`.
 static void expectStereoCvJacks(ModuleBase& module, const std::vector<juce::String>& cvLabels, bool hasKeyPair = false,
-                                const juce::String& trailingCv = {}, int trailingChannel = -1) {
+                                const juce::String& trailingCv = {}, int trailingChannel = -1,
+                                int appendedAfterTrailing = 0) {
     const int keyJacks = hasKeyPair ? 1 : 0;
     const int trailing = trailingCv.isEmpty() ? 0 : 1;
-    ASSERT_EQ(module.getVisibleInputPortCount(), 1 + (int)cvLabels.size() + keyJacks + trailing);
+    const int appended = trailing + appendedAfterTrailing;
+    ASSERT_EQ(module.getVisibleInputPortCount(), 1 + (int)cvLabels.size() + keyJacks + appended);
     EXPECT_EQ(module.getInputPortLabel(0), "Audio");
     for (size_t i = 0; i < cvLabels.size(); ++i)
         EXPECT_EQ(module.getInputPortLabel(1 + (int)i), cvLabels[i]);
 
     const auto targets = module.getModulationTargets();
-    ASSERT_EQ(targets.size(), cvLabels.size() + (size_t)trailing);
+    ASSERT_EQ(targets.size(), cvLabels.size() + (size_t)appended);
     for (size_t i = 0; i < cvLabels.size(); ++i) {
         EXPECT_EQ(targets[i].name, cvLabels[i]);
         EXPECT_EQ(targets[i].channelIndex, 2 + (int)i);
         EXPECT_NE(module.parameterForModTarget(targets[i]), nullptr) << cvLabels[i] << " binds to no knob";
     }
     if (trailing != 0) {
-        EXPECT_EQ(targets.back().name, trailingCv);
-        EXPECT_EQ(targets.back().channelIndex, trailingChannel);
-        EXPECT_NE(module.parameterForModTarget(targets.back()), nullptr) << trailingCv << " binds to no knob";
+        const auto& trailingTarget = targets[cvLabels.size()];
+        EXPECT_EQ(trailingTarget.name, trailingCv);
+        EXPECT_EQ(trailingTarget.channelIndex, trailingChannel);
+        EXPECT_NE(module.parameterForModTarget(trailingTarget), nullptr) << trailingCv << " binds to no knob";
     }
-    EXPECT_EQ(module.getTotalNumInputChannels(), 2 + (int)cvLabels.size() + 2 * keyJacks + trailing);
+    EXPECT_EQ(module.getTotalNumInputChannels(), 2 + (int)cvLabels.size() + 2 * keyJacks + appended);
     if (hasKeyPair)
         EXPECT_EQ(module.getInputPortLabel(1 + (int)cvLabels.size()), "Key");
     if (trailing != 0)
         EXPECT_EQ(module.getInputPortLabel(1 + (int)cvLabels.size() + keyJacks), trailingCv);
 
     setDualIO(module, true);
-    ASSERT_EQ(module.getVisibleInputPortCount(), 2 + (int)cvLabels.size() + 2 * keyJacks + trailing);
+    ASSERT_EQ(module.getVisibleInputPortCount(), 2 + (int)cvLabels.size() + 2 * keyJacks + appended);
     EXPECT_EQ(module.getInputPortLabel(0), "Left");
     EXPECT_EQ(module.getInputPortLabel(1), "Right");
     for (size_t i = 0; i < cvLabels.size(); ++i)
@@ -136,7 +139,7 @@ TEST(PortLabelTests, DelayPortLabelsDefaultToSingleAudioJack) {
     EXPECT_EQ(delay.getOutputPortLabel(0), "Audio");
     // Time/Feedback/Mix were declared as targets on ch2-4 while the module declared only two
     // inputs, so those jacks never existed; expectStereoCvJacks pins that they do now.
-    expectStereoCvJacks(delay, {"Time", "Feedback", "Mix"});
+    expectStereoCvJacks(delay, {"Time", "Feedback", "Mix", "Level", "Pan"});
     EXPECT_EQ(delay.getVisibleOutputPortCount(), 2);
     EXPECT_EQ(delay.getOutputPortLabel(0), "Left");
     EXPECT_EQ(delay.getOutputPortLabel(1), "Right");
@@ -144,14 +147,14 @@ TEST(PortLabelTests, DelayPortLabelsDefaultToSingleAudioJack) {
 
 TEST(PortLabelTests, DistortionPortLabelsCollapseCvJacksInSingleMode) {
     DistortionModule dist;
-    EXPECT_EQ(dist.getVisibleInputPortCount(), 3);
+    EXPECT_EQ(dist.getVisibleInputPortCount(), 5);
     EXPECT_EQ(dist.getInputPortLabel(0), "Audio");
     EXPECT_EQ(dist.getInputPortLabel(1), "Drive");
     EXPECT_EQ(dist.getInputPortLabel(2), "Mix");
     EXPECT_EQ(dist.getOutputPortLabel(0), "Audio");
 
     setDualIO(dist, true);
-    EXPECT_EQ(dist.getVisibleInputPortCount(), 4);
+    EXPECT_EQ(dist.getVisibleInputPortCount(), 6);
     EXPECT_EQ(dist.getInputPortLabel(0), "Left");
     EXPECT_EQ(dist.getInputPortLabel(1), "Right");
     EXPECT_EQ(dist.getInputPortLabel(2), "Drive");
@@ -164,39 +167,39 @@ TEST(PortLabelTests, ReverbPortLabels) {
     ReverbModule reverb;
     EXPECT_EQ(reverb.getOutputPortLabel(0), "Audio");
     // Same history as Delay: five targets on ch2-6 and only two declared inputs, until now.
-    expectStereoCvJacks(reverb, {"Size", "Damping", "Wet", "Dry", "Width", "Pre-Delay"});
+    expectStereoCvJacks(reverb, {"Size", "Damping", "Wet", "Dry", "Width", "Pre-Delay", "Level", "Pan"});
     EXPECT_EQ(reverb.getOutputPortLabel(0), "Left");
     EXPECT_EQ(reverb.getOutputPortLabel(1), "Right");
 }
 
 TEST(PortLabelTests, ChorusPortLabels) {
     ChorusModule chorus;
-    expectStereoCvJacks(chorus, {"Rate", "Depth", "Centre Delay", "Feedback", "Mix"});
+    expectStereoCvJacks(chorus, {"Rate", "Depth", "Centre Delay", "Feedback", "Mix", "Level", "Pan"});
 }
 
 TEST(PortLabelTests, PhaserPortLabels) {
     PhaserModule phaser;
-    expectStereoCvJacks(phaser, {"Rate", "Depth", "Centre Freq", "Feedback", "Mix"});
+    expectStereoCvJacks(phaser, {"Rate", "Depth", "Centre Freq", "Feedback", "Mix", "Level", "Pan"});
 }
 
 TEST(PortLabelTests, CompressorPortLabels) {
     CompressorModule comp;
     expectStereoCvJacks(comp, {"Threshold", "Ratio", "Attack", "Release", "Makeup"}, /*hasKeyPair=*/true, "Knee",
-                        CompressorModule::kKneeCvChannel);
+                        CompressorModule::kKneeCvChannel, /*appendedAfterTrailing=*/2);
 }
 
 TEST(PortLabelTests, FlangerPortLabels) {
     FlangerModule flanger;
-    expectStereoCvJacks(flanger, {"Rate", "Depth", "Centre Delay", "Feedback", "Mix"});
+    expectStereoCvJacks(flanger, {"Rate", "Depth", "Centre Delay", "Feedback", "Mix", "Level", "Pan"});
 }
 
 TEST(PortLabelTests, LimiterPortLabels) {
     LimiterModule limiter;
-    expectStereoCvJacks(limiter, {"Threshold", "Release", "Input Gain", "Ceiling"});
+    expectStereoCvJacks(limiter, {"Threshold", "Release", "Input Gain", "Ceiling", "Pan"});
 }
 
 TEST(PortLabelTests, PitchShifterPortLabels) {
     PitchShifterModule shifter;
     // Fine/Window came after the original four, so they sit LAST — saved patches keep ch2-5.
-    expectStereoCvJacks(shifter, {"Pitch", "Shift", "Mix", "Feedback", "Fine", "Window"});
+    expectStereoCvJacks(shifter, {"Pitch", "Shift", "Mix", "Feedback", "Fine", "Window", "Level", "Pan"});
 }

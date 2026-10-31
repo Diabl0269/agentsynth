@@ -63,16 +63,32 @@ void ModuleOutputStage::prepare(double sampleRate, int maxBlock, int legs) {
     rampPos_ = 0;
 }
 
-void ModuleOutputStage::addMix(juce::AudioProcessor& owner) {
+void ModuleOutputStage::addMix(juce::AudioProcessor& owner, int cvChannel) {
+    mixCvChannel_ = cvChannel;
     if (mix_ == nullptr)
         owner.addParameter(mix_ =
                                new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                              1.0f, synth::fractionPercentAttributes()));
 }
 
-void ModuleOutputStage::addPan(juce::AudioProcessor& owner) {
+void ModuleOutputStage::addPan(juce::AudioProcessor& owner, int cvChannel) {
+    panCvChannel_ = cvChannel;
     if (pan_ == nullptr)
         owner.addParameter(pan_ = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
+}
+
+void ModuleOutputStage::latchCv(const juce::AudioBuffer<float>& buffer) noexcept {
+    mixCv_ = ModuleBase::blockCV(buffer, mixCvChannel_);
+    panCv_ = ModuleBase::blockCV(buffer, panCvChannel_);
+}
+
+// With nothing on the jack this is the parameter itself, so an uncabled module stays bit-identical and idle.
+float ModuleOutputStage::mixTarget() const noexcept {
+    return mix_ != nullptr ? ModuleBase::modulateNormalised(*mix_, mix_->get(), mixCv_) : 1.0f;
+}
+
+float ModuleOutputStage::panTarget() const noexcept {
+    return pan_ != nullptr ? ModuleBase::modulateNormalised(*pan_, pan_->get(), panCv_) : 0.0f;
 }
 
 void ModuleOutputStage::setRate(double sampleRate) noexcept {
@@ -137,7 +153,7 @@ bool ModuleOutputStage::needsDry(const OutputLegs& legs) const noexcept {
         return true;
     const bool resting = fade_ == Fade::None && (effBypass_ || effMute_);
     return !resting && mix_ != nullptr &&
-           (mixSm_.isSmoothing() || mix_->get() != 1.0f || mixSm_.getCurrentValue() != 1.0f);
+           (mixSm_.isSmoothing() || mixTarget() != 1.0f || mixSm_.getCurrentValue() != 1.0f);
 }
 
 void ModuleOutputStage::captureDry(const juce::AudioBuffer<float>& buffer, const OutputLegs& legs) noexcept {
@@ -170,9 +186,9 @@ void ModuleOutputStage::endRender(bool paramBypass, bool paramMute) noexcept {
 
 void ModuleOutputStage::syncTargets() noexcept {
     if (mix_ != nullptr)
-        mixSm_.setTargetValue(mix_->get());
+        mixSm_.setTargetValue(mixTarget());
     if (pan_ != nullptr)
-        panSm_.setTargetValue(pan_->get());
+        panSm_.setTargetValue(panTarget());
 }
 
 void ModuleOutputStage::skipMixPan(int numSamples) noexcept {
@@ -187,7 +203,7 @@ void ModuleOutputStage::skipMixPan(int numSamples) noexcept {
 // moves (no step when it leaves centre), and full pan lands the whole signal on one side. `span` is
 // the voice count of a poly split-block module; voice v's right leg borrows voice v's left.
 void ModuleOutputStage::fillRightForPan(juce::AudioBuffer<float>& buffer, int rightBase, int span) noexcept {
-    const float target = pan_ != nullptr ? std::min(1.0f, std::abs(pan_->get())) : 0.0f;
+    const float target = pan_ != nullptr ? std::min(1.0f, std::abs(panTarget())) : 0.0f;
     const float from = panFill_;
     panFill_ = 0.0f;
     if (target == 0.0f && from == 0.0f)
@@ -369,6 +385,16 @@ void ModuleBase::prepareOutputStage(double sampleRate, int samplesPerBlock) {
     outputStage_.prepare(sampleRate, std::max(samplesPerBlock, getBlockSize()), legs);
 }
 
+// Taken before the module renders: every module clears its CV channels, some before its output stage.
+void ModuleBase::latchOutputStageCv(const juce::AudioBuffer<float>& buffer) noexcept {
+    outputLevelCv_ = blockCV(buffer, outputLevelCvChannel_);
+    outputStage_.latchCv(buffer);
+}
+
+float ModuleBase::outputLevelTarget() const noexcept {
+    return modulateNormalised(*outputLevelParam, outputLevelParam->get(), outputLevelCv_);
+}
+
 void ModuleBase::prepareOutputLevel(double sampleRate) {
     smoothedOutputLevel.reset(sampleRate, 0.01); // 10 ms ramp: anti-click on knob moves
     smoothedOutputLevel.setCurrentAndTargetValue(getOutputLevel());
@@ -384,7 +410,7 @@ void ModuleBase::applyOutputLevel(juce::AudioBuffer<float>& buffer, int numAudio
     if (numSamples == 0 || numChannels <= 0)
         return;
 
-    smoothedOutputLevel.setTargetValue(outputLevelParam->get());
+    smoothedOutputLevel.setTargetValue(outputLevelTarget());
 
     if (!smoothedOutputLevel.isSmoothing()) {
         const float gain = smoothedOutputLevel.getCurrentValue();
@@ -417,7 +443,7 @@ void ModuleBase::applyOutputLevelSplit(juce::AudioBuffer<float>& buffer, int spa
 
     const int rightCount = juce::jlimit(0, span, bufChannels - rightBase);
 
-    smoothedOutputLevel.setTargetValue(outputLevelParam->get());
+    smoothedOutputLevel.setTargetValue(outputLevelTarget());
 
     if (!smoothedOutputLevel.isSmoothing()) {
         const float gain = smoothedOutputLevel.getCurrentValue();

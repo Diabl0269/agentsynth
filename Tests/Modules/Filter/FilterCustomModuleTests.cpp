@@ -15,7 +15,7 @@ using namespace synth::test;
 namespace {
 
 constexpr int kBlock = 512;
-constexpr int kChannels = 32;
+constexpr int kChannels = 35;
 constexpr int kMorphXCh = 28;
 constexpr int kMorphYCh = 29;
 

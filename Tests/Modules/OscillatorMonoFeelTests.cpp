@@ -260,7 +260,7 @@ float maxDifference(const std::vector<float>& a, const std::vector<float>& b, si
 
 TEST(OscillatorBlendWidthCV, JacksAreDeclaredOnChannels18And19InBothModes) {
     OscillatorModule osc;
-    EXPECT_EQ(OscillatorModule::kNumInputs, 28);
+    EXPECT_EQ(OscillatorModule::kNumInputs, 29);
     for (const bool poly : {false, true}) {
         setActual(osc, "poly", poly ? 1.0f : 0.0f);
         int blend = -1, width = -1;

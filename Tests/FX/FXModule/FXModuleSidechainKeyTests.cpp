@@ -60,10 +60,10 @@ float lastBlockGain(Module& module, float ownLevel, float keyLevel, int blocks =
 // Jacks
 // ---------------------------------------------------------------------------
 
-// `trailingJack`: a CV jack appended after the key pair (the Compressor's Knee), empty for none.
+// `trailingJack`: the first of three CV jacks appended after the key pair (the Compressor's Knee, the Gate's Level).
 template <typename Module>
 void expectKeyJacks(const juce::String& firstCv, const juce::String& lastCv, const juce::String& trailingJack = {}) {
-    const int extra = trailingJack.isEmpty() ? 0 : 1;
+    const int extra = 3; // Compressor: Knee, Mix, Pan. Gate: Level, Mix, Pan.
     Module module;
     ASSERT_EQ(module.getTotalNumInputChannels(), 9 + extra);
     ASSERT_EQ(module.getTotalNumOutputChannels(), 2) << "output shape stays a pair, so Dual I/O still inherits";
@@ -119,7 +119,7 @@ void expectKeyJacks(const juce::String& firstCv, const juce::String& lastCv, con
 
 TEST(SidechainKey, CompressorAppendsAStereoKeyPair) { expectKeyJacks<CompressorModule>("Threshold", "Makeup", "Knee"); }
 
-TEST(SidechainKey, GateAppendsAStereoKeyPair) { expectKeyJacks<GateModule>("Threshold", "Range"); }
+TEST(SidechainKey, GateAppendsAStereoKeyPair) { expectKeyJacks<GateModule>("Threshold", "Range", "Level"); }
 
 TEST(SidechainKey, KeyIsNotAModulationTarget) {
     CompressorModule comp;

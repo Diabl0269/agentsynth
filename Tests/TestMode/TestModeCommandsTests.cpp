@@ -13,7 +13,7 @@ using testmode_rig::run;
 TEST(TestModeCommands, TheRegistryHasEveryProtocolCommand) {
     const auto names = CommandTable::standard().names();
     for (const char* name : {"ping", "list", "click", "wheel", "hover", "drag", "key", "getState", "screenshot",
-                             "openProject", "waitForIdle", "quit"})
+                             "openProject", "saveProject", "waitForIdle", "quit"})
         EXPECT_TRUE(names.contains(name)) << name;
     EXPECT_EQ(CommandTable::standard().find("nope"), nullptr);
 }
@@ -189,6 +189,7 @@ TEST(TestModeCommands, OpenProjectNeedsAMainWindowAndABundle) {
     if (!rig.show())
         GTEST_SKIP() << "no native window in this environment";
     EXPECT_EQ(run("openProject", args({{"path", "/nonexistent.agsproj"}})).state, StepResult::State::failed);
+    EXPECT_EQ(run("saveProject", args({{"path", "/nonexistent/not-a-bundle.json"}})).state, StepResult::State::failed);
 }
 
 TEST(TestModeCommands, WaitForIdleReturnsOnceNothingAnimates) {

@@ -53,8 +53,11 @@ public:
         float q = kDefaultQ;
     };
 
+    static constexpr int kMixCvChannel = 15;
+    static constexpr int kPanCvChannel = 16;
+
     ParametricEQModule()
-        : ModuleBase("Parametric EQ", 15, 2) { // 0-1 audio, 2-14 CV: B2/B3 Freq+Gain (2-5, bespoke
+        : ModuleBase("Parametric EQ", 17, 2) { // 0-1 audio, 2-14 CV: B2/B3 Freq+Gain (2-5, bespoke
                                                // exponential/linear curves), then B1/B4 Freq+Gain,
                                                // every band's Q, and Output (6-14, normalised CV)
         // Parameters are grouped band-by-band so the custom module layout can walk them in rows.
@@ -76,8 +79,8 @@ public:
         addParameter(outputGainParam =
                          new juce::AudioParameterFloat("outputGain", "Output", gainRange(), 0.0f, dbAttributes()));
         addMuteParameter();
-        addMixParameter(); // shared output stage: added after Mute so no existing index moves
-        addPanParameter();
+        addMixParameter(kMixCvChannel); // shared output stage: added after Mute so no existing index moves
+        addPanParameter(kPanCvChannel);
         enableVisualBuffer(true);
     }
 
@@ -237,8 +240,9 @@ public:
     juce::String getInputPortLabel(int i) const override {
         // Appended after the original four (ch2-5) so saved patches that modulate B2/B3 keep
         // working; see docs/modules/modulation.md#every-continuous-parameter-is-a-target.
-        const juce::String cv[] = {"B2 Freq", "B2 Gain", "B3 Freq", "B3 Gain", "B1 Freq", "B1 Gain", "B4 Freq",
-                                   "B4 Gain", "B1 Q",    "B2 Q",    "B3 Q",    "B4 Q",    "Output"};
+        const juce::String cv[] = {"B2 Freq", "B2 Gain", "B3 Freq", "B3 Gain", "B1 Freq",
+                                   "B1 Gain", "B4 Freq", "B4 Gain", "B1 Q",    "B2 Q",
+                                   "B3 Q",    "B4 Q",    "Output",  "Mix",     "Pan"};
         return stereoInputLabel(i, kNumCvInputs, cv);
     }
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
@@ -251,11 +255,21 @@ public:
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"B2 Freq", 2, "band2Freq"}, {"B2 Gain", 3, "band2Gain"}, {"B3 Freq", 4, "band3Freq"},
-                {"B3 Gain", 5, "band3Gain"}, {"B1 Freq", 6, "band1Freq"}, {"B1 Gain", 7, "band1Gain"},
-                {"B4 Freq", 8, "band4Freq"}, {"B4 Gain", 9, "band4Gain"}, {"B1 Q", 10, "band1Q"},
-                {"B2 Q", 11, "band2Q"},      {"B3 Q", 12, "band3Q"},      {"B4 Q", 13, "band4Q"},
-                {"Output", 14, "outputGain"}};
+        return {{"B2 Freq", 2, "band2Freq"},
+                {"B2 Gain", 3, "band2Gain"},
+                {"B3 Freq", 4, "band3Freq"},
+                {"B3 Gain", 5, "band3Gain"},
+                {"B1 Freq", 6, "band1Freq"},
+                {"B1 Gain", 7, "band1Gain"},
+                {"B4 Freq", 8, "band4Freq"},
+                {"B4 Gain", 9, "band4Gain"},
+                {"B1 Q", 10, "band1Q"},
+                {"B2 Q", 11, "band2Q"},
+                {"B3 Q", 12, "band3Q"},
+                {"B4 Q", 13, "band4Q"},
+                {"Output", 14, "outputGain"},
+                {"Mix", kMixCvChannel, "mix", true},
+                {"Pan", kPanCvChannel, "pan", true}};
     }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }
@@ -513,8 +527,9 @@ public:
 
 private:
     static constexpr int kNumAudioChannels = 2;
-    /** Every band's Freq/Gain/Q plus Output — ch2-14. See getInputPortLabel for the CV order. */
-    static constexpr int kNumCvInputs = 13;
+    /** Every band's Freq/Gain/Q plus Output, then the shared Mix and Pan — ch2-16. See getInputPortLabel for the CV
+     * order. */
+    static constexpr int kNumCvInputs = 15;
     /** The two Peak slots are the CV-modulated ones — the musically useful sweep targets. */
     static constexpr int kNumBellBands = 2;
     static constexpr int kBellBandIndex[kNumBellBands] = {1, 2};
