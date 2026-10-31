@@ -93,13 +93,16 @@ inline float unisonBlendGain(int u, int count, float blend) {
     all voices: uncorrelated voices then keep the loudness of one voice at any Unison, Blend and Width. */
 inline float unisonLegPower(float gainL, float gainR) { return 0.5f * (gainL * gainL + gainR * gainR); }
 
-/** Start phase (0..1) of a voice restarting on a note: `startPhase` plus up to `randomAmount` of a
-    cycle drawn from `rng`. No random draw is made at 0, so the stream only advances when it is used. */
-inline float unisonRestartPhase(float startPhase, float randomAmount, juce::Random& rng) {
-    float p = startPhase;
-    if (randomAmount > 0.0f)
-        p += randomAmount * rng.nextFloat();
+/** Start phase (0..1) of a voice restarting on a note: `startPhase` plus `randomAmount` of a cycle times `draw` (0..1).
+ */
+inline float unisonRestartPhase(float startPhase, float randomAmount, float draw) {
+    const float p = startPhase + randomAmount * draw;
     return p - std::floor(p);
+}
+
+/** The same with a new draw from `rng`. No draw is made at 0, so the stream only advances when it is used. */
+inline float unisonRestartPhase(float startPhase, float randomAmount, juce::Random& rng) {
+    return unisonRestartPhase(startPhase, randomAmount, randomAmount > 0.0f ? rng.nextFloat() : 0.0f);
 }
 
 } // namespace synth
