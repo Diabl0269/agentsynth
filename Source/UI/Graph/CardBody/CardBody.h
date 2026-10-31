@@ -139,8 +139,22 @@ public:
     void setMoreUnfolded(bool unfolded);
     /** Null without a More row. */
     juce::Button* getMoreButton() const;
-    /** Unfolds the More row when a cable dragged over the card is at `cardLocal`; true if it did. */
+    /** Unfolds the More row when a cable dragged over the card is at `cardLocal`; true if it did. Only a row this
+     *  opens is the cable's to fold again; a row the person opened by hand never is. */
     bool unfoldForCableDragAt(juce::Point<int> cardLocal);
+    /** True while the More row is open only because a cable drag opened it. */
+    bool isMoreOpenedByCableDrag() const noexcept { return moreOpenedByDrag_; }
+    /** The cable is at `inside` this card or not: leaving a cable-opened row starts a short grace, then folds it;
+     *  coming back cancels the fold. */
+    void cableDragMoved(bool inside);
+    /** The drag ended (or was cancelled). A row it opened folds, unless `keepOpen`: then it stays and from now on
+     *  behaves as one the person opened. */
+    void cableDragEnded(bool keepOpen);
+    /** True when a widget of the More row is at `cardLocal`. */
+    bool moreRowWidgetAt(juce::Point<int> cardLocal) const;
+    /** Test seams: the grace running, and its end run at once. */
+    bool cableFoldGraceRunningForTest() const noexcept { return foldGrace_.isTimerRunning(); }
+    void endCableFoldGraceForTest() { foldGrace_.expire(); }
 
     // ---- Teardown (the card's detachFromProcessor) -------------------------------------------------
     /** Destroys the views; they time against the module. */
@@ -205,6 +219,17 @@ private:
     juce::WeakReference<ModuleCardLayoutStore> store_;
     int builtFromRevision_ = 0;
     bool moreUnfolded_ = false;
+    bool moreOpenedByDrag_ = false; ///< Set while a cable drag, not the person, holds the row open.
+    /** The pause between a cable leaving the card and the row folding, so crossing the edge does not flicker. */
+    struct FoldGrace : juce::Timer {
+        std::function<void()> onExpire;
+        void expire() {
+            stopTimer();
+            if (onExpire)
+                onExpire();
+        }
+        void timerCallback() override { expire(); }
+    } foldGrace_;
     bool dimHintsReady_ = false;
     bool forceAnimateForTest_ = false;
     std::unique_ptr<SwapMotion> swap_;

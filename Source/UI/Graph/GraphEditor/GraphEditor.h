@@ -659,6 +659,7 @@ public:
     // direction, cable -> knob or knob -> cable (docs/modules/modulation.md#modulation-rings-on-knobs).
     using HoveredModTarget = graph_editor_types::HoveredModTarget;
     const std::optional<HoveredModTarget>& getHoveredModTarget() const noexcept { return hoveredModTarget_; }
+    bool isCableDragFrom(const ModuleComponent& card) const noexcept;
     /** Set/cleared by a card knob's hover; repaints only the affected card(s), and only on change. */
     void setHoveredModTarget(std::optional<HoveredModTarget> target);
     /** True when the cable itself is under the mouse, or it lands on a knob whose ring is hovered on
