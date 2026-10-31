@@ -853,6 +853,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
             if (undoManager)
                 undoManager->captureBeforeState(audioEngine.getGraph());
             beginSelectionDrag();
+            macroController_.beginMacroUnitDrag(macroId); // holds the parent's border still while it drags
             macroChipDragId = macroId;
             macroChipDragStartCanvasPos = localPos.roundToInt();
             pendingEmptyCanvasClick = false;
@@ -909,6 +910,8 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
     }
 
     if (macroChipDragId.isNotEmpty()) {
+        if (!isSelectionDragActive())
+            return; // nothing moves (a lone member never arms), or Esc cancelled it: the pointer no longer pans
         // The delta MUST be in CANVAS space (content.getLocalPoint), not GraphEditor-local like the pan below:
         // `content` carries the zoom, so a raw e.getPosition() delta would drift at any zoom other than 1.0.
         auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
@@ -952,7 +955,7 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
             const auto hullsBefore = snapshotPaintedHulls();
             auto doFinalize = [this, id = macroChipDragId] {
                 finalizeSelectionDrag(); // snaps + de-overlaps as one rigid body
-                macroController_.nestDraggedMacroIntoCandidate(id);
+                macroController_.moveDraggedMacroToCandidate(id);
             };
             if (undoManager)
                 undoManager->recordGraphAndMacroChange(audioEngine.getGraph(), macros, doFinalize,

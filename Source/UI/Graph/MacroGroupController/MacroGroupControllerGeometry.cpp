@@ -168,8 +168,9 @@ juce::Rectangle<int> memberUnionIn(GraphCanvasHost& host, const CompByNodeUid& c
     }
     const auto& macros = host.getMacros();
     for (const auto& childId : macros.childrenOf(macro.id))
-        if (const auto* child = macros.find(childId))
-            add(childFootprintIn(host, compByNodeUid, *child, extraExcludedUuid));
+        if (const auto* child = macros.find(childId); child != nullptr && childId != extraExcludedUuid)
+            add(childFootprintIn(host, compByNodeUid, *child, extraExcludedUuid)); // a macro id excludes that child
+
     return hull;
 }
 
@@ -281,6 +282,7 @@ void MacroGroupController::freezeHullsForDrag(juce::AudioProcessorGraph::NodeID 
 void MacroGroupController::clearFrozenDragHulls() {
     frozenDragHulls_.clear();
     frozenDragNode_ = {};
+    draggedMacroUnit_.clear();
 }
 
 bool MacroGroupController::hasFrozenDragHulls() const { return !frozenDragHulls_.empty(); }
@@ -430,6 +432,53 @@ juce::String MacroGroupController::macroNestTargetAt(const juce::String& dragged
             return {};
     }
     return target;
+}
+
+// The macro-unit twin of macroDragJoinOrLeaveTarget, with the same live-union trap: the parent's border is a union
+// that includes the dragged macro's own footprint, so it follows the drag and the macro could never test as outside
+// it. The parent and its ancestors are therefore tested against their borders held at press (beginMacroUnitDrag), or,
+// with no press behind the query, against the border without the dragged macro. A parent with nothing else inside it
+// (no other member, no other child) has no body to leave: the gesture is a plain move, as for a module.
+// Still inside the parent: only a nest further down counts (macroNestTargetAt). Outside it: `leave` is the parent and
+// `join` the deepest open border under the point, its ancestors read the same held way, so out of the parent into the
+// grandparent's space is {leave P, join G}, out of every macro {leave P, join none}, and onto a sibling or an unrelated
+// macro a transfer. The drop walks out through every level in that one gesture (moveDraggedMacroToCandidate).
+MacroGroupController::MacroDragTargets MacroGroupController::macroUnitDragTargets(const juce::String& draggedMacroId,
+                                                                                  juce::Point<int> canvasPoint) const {
+    const auto& macros = host_.getMacros();
+    const auto* dragged = macros.find(draggedMacroId);
+    if (dragged == nullptr)
+        return {};
+    const auto parentId = dragged->parentId;
+    const auto* parent = macros.find(parentId);
+    if (parent == nullptr)
+        return {{}, macroNestTargetAt(draggedMacroId, canvasPoint)};
+
+    const bool held = draggedMacroUnit_ == draggedMacroId;
+    const auto borderOf = [&](const juce::String& id) {
+        if (held)
+            if (const auto frozen = frozenDragHull(id); !frozen.isEmpty())
+                return frozen;
+        return macroHullBoundsExcluding(id, draggedMacroId);
+    };
+    const auto children = macros.childrenOf(parentId);
+    const bool parentHasOtherContent =
+        children.size() > 1 || std::any_of(parent->members.begin(), parent->members.end(),
+                                           [parent](const juce::String& uuid) { return !parent->memberIsPort(uuid); });
+    if (!parentHasOtherContent || borderOf(parentId).contains(canvasPoint))
+        return {{}, macroNestTargetAt(draggedMacroId, canvasPoint)};
+
+    const auto ancestors = macros.ancestorChain(draggedMacroId);
+    const auto contains = [](const std::vector<juce::String>& ids, const juce::String& id) {
+        return std::find(ids.begin(), ids.end(), id) != ids.end();
+    };
+    const auto join = deepestMacroAt(macros, canvasPoint, [&](const synth::Macro& macro) {
+        if (macro.id == draggedMacroId || macro.id == parentId ||
+            contains(macros.ancestorChain(macro.id), draggedMacroId))
+            return juce::Rectangle<int>();
+        return contains(ancestors, macro.id) ? borderOf(macro.id) : paintedHullBounds(macro.id);
+    });
+    return {parentId, join};
 }
 
 juce::Rectangle<int> MacroGroupController::macroChipBounds(const juce::String& macroId) const {

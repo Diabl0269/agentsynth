@@ -232,8 +232,7 @@ public:
     juce::String getMacroDragLeaveId() const noexcept { return macroDragLeaveId_; }
     /** The macro a live reparent drag (or a library drag, see setMacroDropCandidate) would join. */
     juce::String getMacroDragJoinId() const noexcept { return macroDragJoinId_; }
-    /** Whether a live reparent drag has a leave or join candidate, or has already moved its module into or
-     *  out of a macro as it crossed. */
+    /** A live reparent drag has a leave or join candidate, or has already moved its module across a border. */
     bool hasMacroDragCandidate() const;
     /** The macro a live drag has moved its module into as it crossed, empty when it is back where it started. */
     juce::String getMacroDragLiveOwnerId() const;
@@ -328,6 +327,7 @@ public:
     void dragMacroCardBy(const juce::String& macroId, juce::Point<int> delta);
     void finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft);
     void cancelMacroCardDrag(const juce::String& macroId);
+    bool cancelMacroUnitDrag(); // Esc mid-drag of a whole macro (card or chip): all goes back; false when none runs
 
     // ---- Macro I/O: the "Configure I/O" modal (docs/macros/configure-io.md); each edit is one undo step ----
 

@@ -514,6 +514,7 @@ void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {
     if (undoManager)
         undoManager->captureBeforeState(audioEngine.getGraph());
     beginSelectionDrag();
+    macroController_.beginMacroUnitDrag(macroId); // holds the parent's border still while it drags
 }
 
 void GraphEditor::dragMacroCardBy(const juce::String& macroId, juce::Point<int> delta) {
@@ -554,7 +555,7 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
             finalizeSelectionDrag();
             if (m != nullptr)
                 m->bounds.setPosition(synth::LayoutUtil::snap(newCardTopLeft));
-            macroController_.nestDraggedMacroIntoCandidate(macroId);
+            macroController_.moveDraggedMacroToCandidate(macroId);
             reflowOutputDock();
             return;
         }
@@ -589,7 +590,7 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
         detail::applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
         selectionDragActive = false;
         selectionDragStartPositions.clear();
-        macroController_.nestDraggedMacroIntoCandidate(macroId);
+        macroController_.moveDraggedMacroToCandidate(macroId);
         reflowOutputDock(); // a collapsed card dropped right of the dock pushes the dock along
     };
 
@@ -600,6 +601,25 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
 
     glideHullsFrom(hullsBefore);
     repaintCanvas();
+}
+
+// Esc while a whole macro is dragged by its card or chip: the members, the card and every carried card go back to
+// where they were at press, nothing joins or leaves, and no undo step is recorded. The card stops following the
+// pointer, and the chip's mouseDrag stops (the selection drag is no longer active), until the release.
+bool GraphEditor::cancelMacroUnitDrag() {
+    if (macroController_.draggedMacroUnit().isEmpty() || !selectionDragActive)
+        return false;
+    dragSelectionBy({}, nullptr);
+    for (auto* card : content.getMacroCards())
+        if (card != nullptr && card->isBodyDragActive())
+            card->abandonBodyDrag();
+    macroController_.clearMacroNestCandidate();
+    if (undoManager)
+        undoManager->takeCapturedGraphBeforeState(); // discard the unused "before" capture
+    edgeScroll_->end();
+    cancelSelectionDrag();
+    repaintCanvas();
+    return true;
 }
 
 // A press that never moved — mirrors cancelSelectionDrag, no re-resolve.
