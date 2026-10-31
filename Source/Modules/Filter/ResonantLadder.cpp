@@ -32,6 +32,14 @@ constexpr float kStabilityLinear = -0.45276f;
 constexpr float kStabilityQuadratic = 0.41869f;
 constexpr float kStabilityMargin = 0.01f;
 
+// Resonant peak at high cutoffs. The one-sample feedback delay lowers the ladder's loop gain as the cutoff nears the
+// sample rate, so at the same knob step the peak fell from the reference's +6 dB (knob 70 %, 3 to 8 kHz at 48 kHz) to
+// +2 dB at 8 kHz, and 90 % from +13 dB to +11 dB. The headroom below 1 (1 - feedback) shrinks by a factor falling
+// linearly with the cutoff / sample rate ratio above 0.06 (2.9 kHz at 48 kHz); 3 closed the 70 % and 90 % peaks to
+// within 0.7 dB of the reference from 4 to 8 kHz, and leaves every cutoff up to 0.06 exactly as fitted.
+constexpr float kHighCutoffRatioStart = 0.06f;
+constexpr float kHighCutoffHeadroomSlope = 3.0f;
+
 constexpr float kOutputGain = 1.2f;
 
 const juce::dsp::LookupTableTransform<float>& tanhTable() {
@@ -46,6 +54,14 @@ float ladderFeedbackForResonance(float resonanceKnob) noexcept {
     if (!(resonanceKnob > 0.0f))
         return 0.0f;
     return juce::jmax(0.0f, kFeedbackSlope * juce::jmin(resonanceKnob, 1.0f) + kFeedbackOffset);
+}
+
+float ladderFeedbackForCutoff(float feedback, float cutoffOverSampleRate) noexcept {
+    if (!(feedback > 0.0f))
+        return 0.0f;
+    const float shrink =
+        1.0f - kHighCutoffHeadroomSlope * juce::jmax(0.0f, cutoffOverSampleRate - kHighCutoffRatioStart);
+    return 1.0f - (1.0f - feedback) * juce::jmax(0.0f, shrink);
 }
 
 float ladderFeedbackCeiling(float x) noexcept {
@@ -180,7 +196,8 @@ void ResonantLadder::setSampleRate(float sampleRate) noexcept {
 }
 
 void ResonantLadder::updateFeedback() noexcept {
-    feedbackSmoother_.setTargetValue(juce::jmin(knobFeedback_, ladderFeedbackCeiling(cutoffHz_ / sampleRate_)));
+    const float x = cutoffHz_ / sampleRate_;
+    feedbackSmoother_.setTargetValue(juce::jmin(ladderFeedbackForCutoff(knobFeedback_, x), ladderFeedbackCeiling(x)));
 }
 
 void ResonantLadder::updateCutoff() noexcept { cutoffSmoother_.setTargetValue(std::exp(cutoffHz_ * cutoffScaler_)); }

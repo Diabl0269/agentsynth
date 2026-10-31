@@ -176,6 +176,20 @@ TEST(ReferenceCompareRender, RenderAB) {
             r.setNumeric("Fil Reso", res);
         });
     }
+    // Full resonance at a 4 kHz cutoff: the resonant peak's height at a cutoff well above the 1 kHz the Filter was
+    // fitted at.
+    for (int cutoff : {2000, 4000}) {
+        AgentSetup a = sawA();
+        a.useFilter = true;
+        a.filter = {{"filterType", 0}, {"cutoff", (double)cutoff}, {"resonance", 1.0}};
+        add("filter_lp24_c" + juce::String(cutoff) + "_r100", single(36), total, a, [=](ReferenceRig& r) {
+            referenceSaw(r);
+            r.setNorm("Filter On", 1.0f);
+            r.setText("Fil Type", "MG Low 24");
+            r.setNumeric("Fil Cutoff", cutoff);
+            r.setNumeric("Fil Reso", 100);
+        });
+    }
     add("noise_floor", {}, samples(3.0), sawA(), [](ReferenceRig&) {});
 
     auto* settingsAll = new juce::DynamicObject();
@@ -412,6 +426,37 @@ TEST(ReferenceCompareRender, RenderUnisonGrid) {
                    [=](ReferenceRig& r) {
                        r.setNumeric("A Unison", 7);
                        r.setNumeric("A RandPhase", rand);
+                   },
+                   false,
+                   {}};
+            juce::var entry;
+            ASSERT_TRUE(renderCase(dir, backend, c, entry)) << c.name;
+        }
+}
+
+// Filter resonance peak against cutoff: the LP24 at the top of the knob and at 90 %, from a low cutoff to a high one,
+// to see where the resonant peak's height leaves the reference's.
+TEST(ReferenceCompareRender, RenderFilterPeakGrid) {
+    const auto dir = outDir();
+    if (dir == juce::File())
+        GTEST_SKIP() << "AGENTSYNTH_REFERENCE_COMPARE_DIR / AGENTSYNTH_REFERENCE_PLUGIN not set";
+    dir.createDirectory();
+    synth::DefaultHostedPluginBackend backend;
+    for (const int cutoff : {500, 1000, 2000, 3000, 4000, 6000, 8000})
+        for (const int res : {70, 90, 100}) {
+            AgentSetup a;
+            a.osc["waveform"] = 2;
+            a.useFilter = true;
+            a.filter = {{"filterType", 0}, {"cutoff", (double)cutoff}, {"resonance", res / 100.0}};
+            Case c{"fpeak_c" + juce::String(cutoff) + "_r" + juce::String(res),
+                   {{samples(0.5), samples(2.5), 36}},
+                   samples(3.0),
+                   a,
+                   [=](ReferenceRig& r) {
+                       r.setNorm("Filter On", 1.0f);
+                       r.setText("Fil Type", "MG Low 24");
+                       r.setNumeric("Fil Cutoff", cutoff);
+                       r.setNumeric("Fil Reso", res);
                    },
                    false,
                    {}};

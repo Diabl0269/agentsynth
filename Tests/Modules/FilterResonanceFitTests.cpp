@@ -117,6 +117,25 @@ TEST(FilterResonanceFit, OctaveBandsMatchTheReferenceOnceLevelsAreMatched) {
     }
 }
 
+// Regression test for FRO1367: the peak fell away at high cutoffs (knob 70 % at 8 kHz read +2.2 dB where the reference
+// reads +6.0, knob 90 % +10.8 against +12.8). Peaks are the cutoff band (0.8-1.25x) over the band below (0.7-0.8x),
+// measured from the reference at 48 kHz with the same C2 saw.
+TEST(FilterResonanceFit, PeakHoldsItsHeightAtHighCutoffs) {
+    constexpr double sr = 48000.0;
+    const struct {
+        float cutoff;
+        float resonance;
+        double peakDb;
+    } measured[] = {{4000.0f, 0.7f, 6.3},  {4000.0f, 0.9f, 13.2}, {6000.0f, 0.7f, 5.9},
+                    {6000.0f, 0.9f, 12.8}, {8000.0f, 0.7f, 6.0},  {8000.0f, 0.9f, 12.8}};
+    for (const auto& m : measured) {
+        const auto y = renderThroughFilter(sr, m.cutoff, m.resonance);
+        const double peak =
+            bandPowerDb(y, sr, 0.8 * m.cutoff, 1.25 * m.cutoff) - bandPowerDb(y, sr, 0.7 * m.cutoff, 0.8 * m.cutoff);
+        EXPECT_NEAR(peak, m.peakDb, 1.5) << "cutoff " << m.cutoff << " resonance " << m.resonance;
+    }
+}
+
 // The knob end stop: every ladder type, three sample rates, no NaN, bounded, and silent again once the input stops
 // (the ladder rings but never sustains on its own).
 TEST(FilterResonanceFit, TopOfTheKnobIsStableAndDoesNotSelfSustain) {
