@@ -1,4 +1,5 @@
 #include "PreferencesSettingsTabTestFixture.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/KeyPicker/KeyAuditioner.h"
 
 // Topic: timeline/piano-roll editing preferences — loop-selection-arms, double-click-spans-

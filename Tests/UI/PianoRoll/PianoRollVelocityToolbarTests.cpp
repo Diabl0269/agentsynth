@@ -4,6 +4,7 @@
 // shortcut toggling the strip, and the strip's visibility persisting through a PropertiesFile.
 
 #include "PianoRollVelocityTestHelpers.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 namespace {
 juce::KeyPress returnKey() { return juce::KeyPress(juce::KeyPress::returnKey); }

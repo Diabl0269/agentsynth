@@ -6,6 +6,7 @@
 #include "../UI/MidiRemote/MidiRemotePanelTestFixture.h"
 
 #include "ShortcutManager/AppCommands.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 using synth::midi::AssignStatus;
 using synth::midi::PickTarget;

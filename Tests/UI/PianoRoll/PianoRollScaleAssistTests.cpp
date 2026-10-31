@@ -9,6 +9,7 @@
 #include "PianoRollTestHelpers.h"
 
 #include "Music/MusicalScale.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 // ============================================================================
 // 17. Scale assist — the header button + gutter shift, quantisePitchesToScale,

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Plugin/Hosting/HostedPluginBackend.h"
-#include "ShortcutManager/ShortcutManager.h"
 #include "SnippetManager.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FocusRegion.h"
@@ -17,6 +16,8 @@
 #include <optional>
 #include <set>
 #include <vector>
+
+class ShortcutManager;
 
 class ModuleLibraryComponent
     : public juce::Component
