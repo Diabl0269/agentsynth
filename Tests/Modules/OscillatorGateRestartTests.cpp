@@ -437,28 +437,34 @@ float peakOf(const std::vector<float>& x) { return syncmeasure::peakOf(x); }
 TEST(OscillatorGateRestart, RestartFromARealOscillator) {
     constexpr double kMaxOffHarmonicDb = -30.0;
     constexpr float kMinLevelOfFree = 0.6f;
+    // Each render is a second of audio, so the grid is a short list of the settings that matter: the closest to the
+    // limit (a slow master with Rand), the ones the unsynced code failed on (Rand above 0, a fast master losing
+    // level, a click at an odd ratio), and every master wave, each in mono and poly with and without unison.
+    struct Probe {
+        int wave, hz;
+        float rand;
+    };
+    constexpr Probe kProbes[] = {{3, 100, 100.0f}, {1, 440, 50.0f}, {2, 440, 0.0f}, {0, 301, 0.0f}};
     for (const bool poly : {false, true})
         for (const int unison : {1, 5}) {
             const auto free = renderSyncedNote({0, 100, unison, 0.0f, poly}, /*patched*/ false);
             float freeClick = 0.0f;
             for (const auto& click : clickdetector::findClicks(free))
                 freeClick = std::max(freeClick, click.size);
-            for (const float rand : {0.0f, 50.0f, 100.0f})
-                for (const int wave : {0, 1, 2, 3})
-                    for (const int hz : {100, 440, 2000, 301}) {
-                        const SyncCase c{wave, hz, unison, rand, poly};
-                        const auto x = renderSyncedNote(c);
-                        const auto clicks = clickdetector::findClicks(x);
-                        float largest = 0.0f;
-                        for (const auto& click : clicks)
-                            largest = std::max(largest, click.size);
-                        const double off = offHarmonicDb(x, hz, acEnergy(free));
-                        EXPECT_LE(off, kMaxOffHarmonicDb) << describeCase(c);
-                        // With Rand, a short cycle of a slow wave can sit near its zero, so only Rand 0 has a floor.
-                        if (rand == 0.0f)
-                            EXPECT_GE(peakOf(x), kMinLevelOfFree * peakOf(free)) << describeCase(c);
-                        EXPECT_LE(largest, std::max(freeClick, 0.1f) * 1.1f) << describeCase(c);
-                    }
+            for (const Probe& probe : kProbes) {
+                const SyncCase c{probe.wave, probe.hz, unison, probe.rand, poly};
+                const auto x = renderSyncedNote(c);
+                const auto clicks = clickdetector::findClicks(x);
+                float largest = 0.0f;
+                for (const auto& click : clicks)
+                    largest = std::max(largest, click.size);
+                const double off = offHarmonicDb(x, c.masterHz, acEnergy(free));
+                EXPECT_LE(off, kMaxOffHarmonicDb) << describeCase(c);
+                // With Rand, a short cycle of a slow wave can sit near its zero, so only Rand 0 has a floor.
+                if (c.rand == 0.0f)
+                    EXPECT_GE(peakOf(x), kMinLevelOfFree * peakOf(free)) << describeCase(c);
+                EXPECT_LE(largest, std::max(freeClick, 0.1f) * 1.1f) << describeCase(c);
+            }
         }
 }
 

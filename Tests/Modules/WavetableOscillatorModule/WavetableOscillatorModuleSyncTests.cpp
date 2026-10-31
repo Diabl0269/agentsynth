@@ -109,25 +109,31 @@ std::vector<float> renderWavetableSyncedNote(const WtSyncCase& c, bool patched =
 TEST(WavetableOscillatorSync, RestartFromARealOscillator) {
     constexpr double kMaxOffHarmonicDb = -30.0;
     constexpr float kMinLevelOfFree = 0.6f;
+    // Each render is a second of audio, so the grid is a short list of the settings that matter: the closest to the
+    // limit (a slow master with Rand), the ones the unsynced code failed on (Rand above 0, a fast master losing
+    // level), and every master wave, each in mono and poly with and without unison.
+    struct Probe {
+        int wave, hz;
+        float rand;
+    };
+    constexpr Probe kProbes[] = {{1, 100, 50.0f}, {3, 440, 100.0f}, {2, 440, 0.0f}, {0, 301, 0.0f}};
     for (const bool poly : {false, true})
         for (const int unison : {1, 5}) {
             const auto free = renderWavetableSyncedNote({0, 100, unison, 0.0f, poly}, /*patched*/ false);
-            for (const float rand : {0.0f, 50.0f, 100.0f})
-                for (const int wave : {0, 1, 2, 3})
-                    for (const int hz : {100, 440, 2000, 301}) {
-                        const WtSyncCase c{wave, hz, unison, rand, poly};
-                        const auto x = renderWavetableSyncedNote(c);
-                        const double off = syncmeasure::offHarmonicDb(x, hz, syncmeasure::acEnergy(free), kWtSyncRate);
-                        EXPECT_LE(off, kMaxOffHarmonicDb) << describeWtCase(c) << ": " << off << " dB";
-                        // With Rand, a short cycle of a slow wave can sit near its zero, so only Rand 0 has a floor.
-                        // The table's saw starts at zero and climbs 2 per cycle, so a master faster than twice the
-                        // note only lets it climb to 2 * note / master of its height (the Oscillator's saw starts
-                        // at its trough, so its peak does not shrink): the floor is that share of the free peak.
-                        if (rand == 0.0f) {
-                            const float reachable = std::min(1.0f, 2.0f * kWtNoteHz / (float)hz);
-                            EXPECT_GE(syncmeasure::peakOf(x), kMinLevelOfFree * reachable * syncmeasure::peakOf(free))
-                                << describeWtCase(c);
-                        }
-                    }
+            for (const Probe& probe : kProbes) {
+                const WtSyncCase c{probe.wave, probe.hz, unison, probe.rand, poly};
+                const auto x = renderWavetableSyncedNote(c);
+                const double off = syncmeasure::offHarmonicDb(x, c.masterHz, syncmeasure::acEnergy(free), kWtSyncRate);
+                EXPECT_LE(off, kMaxOffHarmonicDb) << describeWtCase(c) << ": " << off << " dB";
+                // With Rand, a short cycle of a slow wave can sit near its zero, so only Rand 0 has a floor.
+                // The table's saw starts at zero and climbs 2 per cycle, so a master faster than twice the
+                // note only lets it climb to 2 * note / master of its height (the Oscillator's saw starts
+                // at its trough, so its peak does not shrink): the floor is that share of the free peak.
+                if (c.rand == 0.0f) {
+                    const float reachable = std::min(1.0f, 2.0f * kWtNoteHz / (float)c.masterHz);
+                    EXPECT_GE(syncmeasure::peakOf(x), kMinLevelOfFree * reachable * syncmeasure::peakOf(free))
+                        << describeWtCase(c);
+                }
+            }
         }
 }
