@@ -45,4 +45,7 @@ bool systemPrefersReducedMotion();
 } // namespace detail
 
 } // namespace synth::ui
-// throwaway unity measurement edit
+
+namespace synth::ui {
+inline constexpr int kThrowawayUnityMeasurement = 1;
+} // namespace synth::ui
