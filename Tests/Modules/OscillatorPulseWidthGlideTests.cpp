@@ -207,7 +207,8 @@ TEST(OscillatorPulseWidth, JacksAreDeclaredAndBoundToTheirKnobs) {
 
 TEST(OscillatorGlide, ZeroKeepsTheOldFiveMillisecondFrequencySmoothing) {
     Rig rig;
-    const auto out = rig.render(2, 81); // A5 on the first block, from the A4 start pitch
+    setActual(rig.osc, "randomPhase", 0.0f); // the sine is compared from phase 0
+    const auto out = rig.render(2, 81);      // A5 on the first block, from the A4 start pitch
 
     juce::SmoothedValue<float> sm;
     sm.reset(kSampleRate, 0.005);
