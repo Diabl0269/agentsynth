@@ -56,19 +56,29 @@ ClipNoteGlide classifyClipNoteGlide(double oldLength, double newLength, const st
 double glidedNoteX(ClipNoteGlide glide, double restingX, double restLeft, double restWidth, double drawnLeft,
                    double drawnWidth);
 
-// What a Stretch edge drag of an audio clip to `newLengthBeats` reads from its asset: the clip's own window, and how
-// many times faster to play it. nullopt for a MIDI clip, or a length or tempo that is not finite and positive.
+// What a Stretch edge drag of an audio clip to `newLengthBeats` reads and renders: the asset `sourceRef`, the window of
+// it the clip shows, and how many times faster to play that window to fill the new length. With `useOrigin` and a
+// stretch origin on the clip, the source is the original asset and the ratio is cumulative, so stretching again never
+// starts from a stretched copy. `backToOriginal` is a cumulative ratio of exactly 1: the window of the original is the
+// answer and nothing needs rendering. nullopt for a MIDI clip, or a length or tempo that is not finite and positive.
 struct AudioStretchWindow {
+    juce::String sourceRef;
     double startSeconds = 0.0;
     double lengthSeconds = 0.0;
     double tempoRatio = 1.0;
+    bool backToOriginal = false;
+    // What the clip records as its origin once it points at the render of this window; nullopt when backToOriginal.
+    std::optional<Clip::StretchOrigin> origin;
 };
-std::optional<AudioStretchWindow> audioStretchWindow(const Clip& clip, double newLengthBeats, double secondsPerBeat);
+std::optional<AudioStretchWindow> audioStretchWindow(const Clip& clip, double newLengthBeats, double secondsPerBeat,
+                                                     bool useOrigin = true);
 
-// Points audio clip `id` at its stretched copy `stretchedRef` (read from 0 s) over [newStartBeat, + newLengthBeats),
-// fades scaled alike. Call inside one recorded change; false (possibly part-applied) when a mutator refuses.
+// Points audio clip `id` at `assetRef` (read from `sourceStartSeconds`) over [newStartBeat, + newLengthBeats), fades
+// scaled alike, and records `origin` (nullopt clears it). The stretched copy is read from 0 s. Call inside one
+// recorded change; false (possibly part-applied) when a mutator refuses.
 bool applyAudioClipStretch(TimelineDoc& doc, ClipId id, double newStartBeat, double newLengthBeats,
-                           const juce::String& stretchedRef);
+                           const juce::String& assetRef, double sourceStartSeconds = 0.0,
+                           const std::optional<Clip::StretchOrigin>& origin = std::nullopt);
 
 const char* clipSizingModeName(ClipSizingMode mode) noexcept;
 const char* clipSizingModeDescription(ClipSizingMode mode) noexcept;
