@@ -251,3 +251,104 @@ TEST(TimelineClipLaneInteractionTest, FitAllClipsToKeyIsGreyedWhenNoSelectedClip
     EXPECT_TRUE(f.fitAllItem(f.clip, true).second);
     EXPECT_FALSE(f.undo.canUndo());
 }
+
+namespace {
+
+// A lane that builds the menu a right-click asks for instead of showing it (a real juce::PopupMenu needs a display),
+// with two MIDI clips on two tracks, each holding an off-key C#, under a song key of C major.
+class FitMenuLane : public TimelineClipLaneArea {
+public:
+    using TimelineClipLaneArea::TimelineClipLaneArea;
+    std::vector<juce::PopupMenu::Item> clipMenu;
+
+protected:
+    void showClipContextMenu(synth::ClipId id, juce::Point<int> pos) override {
+        clipMenu.clear();
+        auto menu = buildClipContextMenu(id, pos);
+        juce::PopupMenu::MenuItemIterator it(menu);
+        while (it.next())
+            clipMenu.push_back(it.getItem());
+    }
+};
+
+struct RealRightClickFixture {
+    TimelineDoc doc;
+    TimelineViewState state;
+    ClipSelectionModel selection;
+    AppUndoManager undo;
+    synth::TransportService transport;
+    FitMenuLane lane{state, selection};
+    ClipId first, second;
+
+    RealRightClickFixture() {
+        state.pixelsPerBeat = 40.0;
+        state.firstVisibleBeat = 0.0;
+        lane.setTimelineDoc(&doc);
+        lane.setUndoManager(&undo);
+        lane.setTransport(&transport);
+        lane.setSize(1200, 400);
+        transport.setSongKey(synth::makeScale(0, synth::scalePresetIndex("Major")));
+        first = addClip("Track 1", "First");
+        second = addClip("Track 2", "Second");
+    }
+
+    ClipId addClip(const char* trackName, const char* clipName) {
+        const auto clip = doc.addClip(doc.addTrack(TrackKind::Midi, trackName), 0.0, 8.0, clipName);
+        doc.addNote(clip, makeNote(0.0, 61));
+        return clip;
+    }
+
+    juce::Point<float> centre(ClipId id) { return centreOf(lane.getClipRect(id)); }
+
+    void click(ClipId id, int extraFlags = 0) {
+        const auto event = leftClick(lane, centre(id), extraFlags);
+        lane.mouseDown(event);
+        lane.mouseUp(event);
+    }
+
+    const juce::PopupMenu::Item* fitAllItem() const {
+        for (const auto& item : lane.clipMenu)
+            if (item.text == "Fit all clips to key")
+                return &item;
+        return nullptr;
+    }
+
+    int pitch(ClipId id) const { return doc.getClip(id)->notes.front().pitch; }
+};
+
+} // namespace
+
+// Regression test for FRO1236: the item must be reachable by a real right-click.
+TEST(TimelineClipLaneInteractionTest, FitAllClipsToKeyIsReachableByARealRightClickOnASelectedClip) {
+    RealRightClickFixture f;
+    f.click(f.first);
+    f.click(f.second, juce::ModifierKeys::commandModifier);
+    ASSERT_EQ(f.selection.size(), 2);
+
+    f.lane.mouseDown(rightClick(f.lane, f.centre(f.second)));
+    EXPECT_EQ(f.selection.size(), 2) << "a right-click inside the selection keeps it";
+    const auto* item = f.fitAllItem();
+    ASSERT_NE(item, nullptr);
+    EXPECT_TRUE(item->isEnabled);
+
+    item->action();
+    EXPECT_EQ(f.pitch(f.first), 60);
+    EXPECT_EQ(f.pitch(f.second), 60);
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.pitch(f.first), 61);
+    EXPECT_EQ(f.pitch(f.second), 61);
+}
+
+TEST(TimelineClipLaneInteractionTest, RealRightClickOnAnUnselectedClipSelectsItAndOffersNoFitAll) {
+    RealRightClickFixture f;
+    const auto third = f.addClip("Track 3", "Third");
+    f.click(f.first);
+    f.click(f.second, juce::ModifierKeys::commandModifier);
+
+    f.lane.mouseDown(rightClick(f.lane, f.centre(third)));
+    ASSERT_EQ(f.selection.size(), 1);
+    EXPECT_TRUE(f.selection.contains(third));
+    EXPECT_EQ(f.fitAllItem(), nullptr);
+}
