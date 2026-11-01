@@ -8,7 +8,8 @@ screenshots it takes, writes a JSON-lines run log and prints a summary. The exit
 failed. The format is described in docs/development/test-mode.md (Scenarios).
 
 A scenario file is either a list of steps or a mapping with `steps:` and optional `settings:` (values, with ${FIXTURES} and ${OUT} filled in, written to the
-instance's settings file before it first starts) and `motion: true` (start with --automation-motion). One mapping per step, `- <command>: {args}`:
+instance's settings file before it first starts), `motion: true` (start with --automation-motion), `record: true` (<out>/<scenario>.mp4, no sound) and
+`save_project: <name>` (<out>/<name>.agsproj, saved after the last step). One mapping per step, `- <command>: {args}`:
 
     - openProject: {path: ${FIXTURES}/macros.agsproj}   # any protocol command (click, drag, key, getState, ...)
     - click: {id: "card:LFO 1", x: 40, y: 12}
@@ -41,12 +42,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from agentsynth_testmode import TestModeApp, TestModeError  # noqa: E402
+from recording import DRAG_HOLD_SECONDS, Recorder  # noqa: E402
 
 FIXTURES = os.path.join(HERE, "fixtures")
 DEFAULT_OUT = os.path.join(HERE, "out")
 SETTINGS_FILE = "Agent Synth.settings"
 EXPECT_KEYS = {"id", "contains", "exists", "count", "within_ms"}
 RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture"}
+UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture"}  # no video frame after these
 
 
 class ScenarioError(ValueError):
@@ -54,12 +57,14 @@ class ScenarioError(ValueError):
 
 
 class Scenario:
-    def __init__(self, name, steps, settings, path=None, motion=False):
+    def __init__(self, name, steps, settings, path=None, motion=False, record=False, save_project=None):
         self.name = name
         self.steps = steps  # [(command, args dict)]
         self.settings = settings  # {name: value}
         self.path = path
         self.motion = motion  # start with --automation-motion, for a check that needs a slide or fade to run
+        self.record = record  # write <out>/<name>.mp4
+        self.save_project = save_project  # write <out>/<save_project>.agsproj after the last step
 
 
 def _substitute(value, variables):
@@ -72,6 +77,16 @@ def _substitute(value, variables):
     return value
 
 
+def _project_name(value, name):
+    """The bundle's name without its extension. It stays inside the output folder, so it cannot hold a path."""
+    text = str(value)
+    if text.endswith(".agsproj"):
+        text = text[: -len(".agsproj")]
+    if not text or text.startswith(".") or "/" in text or "\\" in text:
+        raise ScenarioError("%s: `save_project` must be a plain name, got %r" % (name, value))
+    return text
+
+
 def parse_scenario(text, name="scenario", path=None):
     """Parses scenario YAML. A step is a mapping with exactly one key (the command); its value is the args mapping."""
     import yaml
@@ -81,9 +96,13 @@ def parse_scenario(text, name="scenario", path=None):
     except yaml.YAMLError as error:
         raise ScenarioError("%s: not valid YAML: %s" % (name, error))
     settings = {}
-    motion = False
+    motion = record = False
+    save_project = None
     if isinstance(document, dict):
         motion = bool(document.get("motion"))
+        record = bool(document.get("record"))
+        if document.get("save_project") is not None:
+            save_project = _project_name(document["save_project"], name)
         settings = document.get("settings") or {}
         document = document.get("steps")
         if not isinstance(settings, dict):
@@ -100,7 +119,7 @@ def parse_scenario(text, name="scenario", path=None):
         if not isinstance(args, dict):
             raise ScenarioError("%s: step %d (%s) takes a mapping of arguments, got %r" % (name, index, command, args))
         steps.append((str(command), args))
-    return Scenario(name, steps, settings, path, motion)
+    return Scenario(name, steps, settings, path, motion, record, save_project)
 
 
 def load_scenarios(target):
@@ -217,6 +236,7 @@ class Runner:
         self.log = []
         self.app = None
         self.settings_dir = None
+        self.recorder = None
         self.variables = {"FIXTURES": FIXTURES, "OUT": out_dir}
 
     def _launch(self):
@@ -232,6 +252,33 @@ class Runner:
             entry["error"] = error
         self.log.append(entry)
         return entry
+
+    def _point(self, component, x, y):
+        """A point local to `component` (default its centre) in window coordinates, or None outside the main window."""
+        bounds = self.app.call("getState", id=component)["bounds"]
+        window = self.app.call("getState", id="window")["bounds"]
+        px = bounds["x"] + (x if x is not None else bounds["w"] // 2)
+        py = bounds["y"] + (y if y is not None else bounds["h"] // 2)
+        return (px, py) if 0 <= px < window["w"] and 0 <= py < window["h"] else None
+
+    def _recorded_drag(self, args):
+        """The `drag` command's own press, moves and release, one command each so a frame fits between them. A drag
+        with an end outside the main window (a popup) stays one command and shows only its result."""
+        start = self._point(args["from"], args.get("fromX"), args.get("fromY"))
+        end = self._point(args["to"], args.get("toX"), args.get("toY"))
+        if start is None or end is None:
+            return self.app.call("drag", **args)
+        steps = max(2, args.get("steps", 12))
+        mods = {"mods": args["mods"]} if "mods" in args else {}
+        self.app.call("mouseDown", id="window", x=start[0], y=start[1], **mods)
+        self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
+        for index in range(1, steps + 1):
+            x = round(start[0] + (end[0] - start[0]) * index / steps)
+            y = round(start[1] + (end[1] - start[1]) * index / steps)
+            self.app.call("mouseMoveHeld", id="window", x=x, y=y, **mods)
+            self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
+        self.app.call("mouseUp", id="window", x=end[0], y=end[1], **mods)
+        return {"from": args["from"], "to": args["to"]}
 
     def _step(self, index, command, args):
         """Runs one step. Returns (ok, error message)."""
@@ -260,11 +307,49 @@ class Runner:
             args.setdefault("id", "window")
             args["path"] = os.path.join(self.out_dir, name + ".png")
             reply = app.call("screenshot", **args)
+        elif command == "drag" and self.recorder is not None:
+            reply = self._recorded_drag(args)
         else:
             args = dict(args)
             timeout = args.pop("timeoutMs", None)
             reply = app.call(command, timeout_ms=timeout, **args) if timeout else app.call(command, **args)
         self._record(index, command, args, reply, True)
+        if self.recorder is not None and command not in UNCHANGED_BY:
+            self.recorder.frame(self.app)
+        return True, ""
+
+    def _save_project(self):
+        """Saves over an earlier run's bundle. Returns an error message, or "" when it worked."""
+        path = os.path.join(self.out_dir, self.scenario.save_project + ".agsproj")
+        shutil.rmtree(path, ignore_errors=True)
+        try:
+            reply = self.app.call("saveProject", path=path)
+        except TestModeError as error:
+            self._record(0, "saveProject", {"path": path}, None, False, str(error))
+            return str(error)
+        self._record(0, "saveProject", {"path": path}, reply, True)
+        return ""
+
+    def _write_video(self):
+        video = os.path.join(self.out_dir, self.scenario.name + ".mp4")
+        ok, message = self.recorder.write_video(video)
+        self._record(0, "record", {"path": video}, {"frames": len(self.recorder.frames)}, ok, None if ok else message)
+        if not ok:
+            print("ui-verify: %s: no video: %s" % (self.scenario.name, message), file=sys.stderr)
+
+    def _run_steps(self):
+        self._launch()
+        if self.recorder is not None:
+            self.recorder.frame(self.app)
+        for index, (command, raw_args) in enumerate(self.scenario.steps, 1):
+            args = _substitute(raw_args, self.variables)
+            try:
+                ok, message = self._step(index, command, args)
+            except TestModeError as error:
+                self._record(index, command, args, None, False, str(error))
+                return False, "step %d (%s): %s" % (index, command, error)
+            if not ok:
+                return False, "step %d: %s" % (index, message)
         return True, ""
 
     def run(self):
@@ -275,21 +360,23 @@ class Runner:
         if self.scenario.settings:
             with open(os.path.join(self.settings_dir, SETTINGS_FILE), "w", encoding="utf-8") as handle:
                 handle.write(settings_xml(_substitute(self.scenario.settings, self.variables)))
+        if self.scenario.record:
+            frames_dir = os.path.join(self.settings_dir, "video-frames")
+            os.makedirs(frames_dir)
+            self.recorder = Recorder(frames_dir)
         try:
-            self._launch()
-            for index, (command, raw_args) in enumerate(self.scenario.steps, 1):
-                args = _substitute(raw_args, self.variables)
-                try:
-                    ok, message = self._step(index, command, args)
-                except TestModeError as error:
-                    self._record(index, command, args, None, False, str(error))
-                    return False, "step %d (%s): %s" % (index, command, error)
-                if not ok:
-                    return False, "step %d: %s" % (index, message)
-            return True, ""
+            passed, message = self._run_steps()
+            # A failed run saves too: the project and the video are how someone looks at what went wrong.
+            if self.scenario.save_project and self.app is not None:
+                save_error = self._save_project()
+                if save_error and passed:
+                    return False, "save_project: %s" % save_error
+            return passed, message
         finally:
             if self.app is not None:
                 self.app.stop()
+            if self.recorder is not None:
+                self._write_video()
             shutil.rmtree(self.settings_dir, ignore_errors=True)
             with open(os.path.join(self.out_dir, "run.log"), "w", encoding="utf-8") as handle:
                 for entry in self.log:

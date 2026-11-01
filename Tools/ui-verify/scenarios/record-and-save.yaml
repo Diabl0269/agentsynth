@@ -1,0 +1,12 @@
+# The video and saved project a check carries: a saved project with macros, a card selected and the canvas panned by a
+# recorded drag. Afterwards record-and-save.mp4 plays the pan and end.agsproj opens on the same project.
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "card:Oscillator 2", x: 40, y: 12}
+  - expect: {id: "card:Oscillator 2", selected: true}
+  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 1200, fromY: 300, toX: 1200, toY: 500}
+  - wait: {}
+  - expect: {id: "card:Oscillator 2", bounds: {x: 760, y: 562, w: 280, h: 593}}

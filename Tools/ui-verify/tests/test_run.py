@@ -2,15 +2,29 @@
 
 import json
 import os
+import struct
+import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
+import recording  # noqa: E402
 import run  # noqa: E402
 from agentsynth_testmode import TestModeError  # noqa: E402
+
+
+def write_png(path, width=4, height=4):
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
+
+    rows = b"".join(b"\0" + b"\x80\x20\x20" * width for _ in range(height))
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+                + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
 class FakeApp:
@@ -40,6 +54,153 @@ class FakeApp:
         if cmd == "screenshot":
             return {"path": args["path"], "width": 1, "height": 1}
         return {}
+
+
+class DrawingApp(FakeApp):
+    """Screenshots write real PNGs, and saveProject a bundle, as the app does."""
+
+    def call(self, cmd, timeout_ms=None, **args):
+        if cmd == "screenshot":
+            write_png(args["path"])
+            return {"path": args["path"], "width": 4, "height": 4}
+        if cmd == "saveProject":
+            os.makedirs(args["path"])
+            self.calls.append((cmd, args))
+            return {"path": args["path"]}
+        return super().call(cmd, timeout_ms=timeout_ms, **args)
+
+
+class RecordingTests(unittest.TestCase):
+    STATES = {"window": {"bounds": {"x": 0, "y": 0, "w": 800, "h": 600}},
+              "a": {"bounds": {"x": 10, "y": 20, "w": 100, "h": 40}},
+              "b": {"bounds": {"x": 300, "y": 400, "w": 50, "h": 50}},
+              "popup": {"bounds": {"x": 900, "y": 20, "w": 50, "h": 50}}}
+
+    def run_scenario(self, text, app, out):
+        runner = run.Runner(None, out, run.parse_scenario(text, "demo"), app_factory=lambda *a, **k: app)
+        encoded = []
+
+        def write_video(recorder, path, ffmpeg=None):
+            encoded.append(len(recorder.frames))
+            return True, path
+
+        with mock.patch.object(recording.Recorder, "write_video", write_video):
+            return runner.run(), encoded
+
+    def frames(self, app):
+        return [c for c in app.calls if c[0] == "screenshot"]
+
+    def test_options_parse_and_a_project_name_cannot_leave_the_output_folder(self):
+        s = run.parse_scenario("record: true\nsave_project: end.agsproj\nsteps:\n  - wait: {}\n", "x")
+        self.assertTrue(s.record)
+        self.assertEqual(s.save_project, "end")
+        self.assertFalse(run.parse_scenario("- wait: {}\n", "x").record)
+        for bad in ["../up", "a/b", ".hidden", "''"]:
+            with self.assertRaises(run.ScenarioError, msg=bad):
+                run.parse_scenario("save_project: %s\nsteps:\n  - wait: {}\n" % bad, "x")
+
+    def test_without_the_options_nothing_extra_is_sent(self):
+        app = DrawingApp(self.STATES)
+        with tempfile.TemporaryDirectory() as out:
+            (ok, _), encoded = self.run_scenario("- drag: {from: a, to: b}\n", app, out)
+        self.assertTrue(ok)
+        self.assertEqual(encoded, [])
+        self.assertEqual([c[0] for c in app.calls], ["drag"])
+
+    def test_a_frame_follows_each_step_that_can_change_the_window(self):
+        app = DrawingApp(self.STATES)
+        text = "record: true\nsteps:\n  - click: {id: a}\n  - expect: {id: a, exists: true}\n  - getState: {id: a}\n  - wait: {}\n"
+        with tempfile.TemporaryDirectory() as out:
+            (ok, _), encoded = self.run_scenario(text, app, out)
+        self.assertTrue(ok)
+        self.assertEqual(encoded, [3])  # the launch, the click, the wait
+
+    def test_a_recorded_drag_sends_the_same_gesture_with_a_frame_at_each_move(self):
+        app = DrawingApp(self.STATES)
+        text = "record: true\nsteps:\n  - drag: {from: a, to: b, fromX: 5, fromY: 6, steps: 4, mods: shift}\n"
+        with tempfile.TemporaryDirectory() as out:
+            (ok, _), encoded = self.run_scenario(text, app, out)
+        self.assertTrue(ok)
+        mouse = [c for c in app.calls if c[0].startswith("mouse")]
+        self.assertEqual([c[0] for c in mouse], ["mouseDown"] + ["mouseMoveHeld"] * 4 + ["mouseUp"])
+        self.assertEqual((mouse[0][1]["x"], mouse[0][1]["y"]), (15, 26))  # a's origin + fromX, fromY
+        self.assertEqual((mouse[-1][1]["x"], mouse[-1][1]["y"]), (325, 425))  # b's centre
+        self.assertEqual(mouse[-2][1]["x"], 325)  # the last move arrives before the release
+        self.assertTrue(all(c[1]["id"] == "window" and c[1]["mods"] == "shift" for c in mouse))
+        self.assertEqual(encoded, [7])  # the launch, the press, four moves, the end of the step
+
+    def test_a_drag_leaving_the_main_window_stays_one_command(self):
+        app = DrawingApp(self.STATES)
+        with tempfile.TemporaryDirectory() as out:
+            (ok, _), _ = self.run_scenario("record: true\nsteps:\n  - drag: {from: a, to: popup}\n", app, out)
+        self.assertTrue(ok)
+        self.assertEqual(len([c for c in app.calls if c[0] == "drag"]), 1)
+        self.assertEqual([c for c in app.calls if c[0].startswith("mouse")], [])
+
+    def test_save_project_writes_beside_the_screenshots_over_an_earlier_run(self):
+        app = DrawingApp(self.STATES)
+        with tempfile.TemporaryDirectory() as out:
+            os.makedirs(os.path.join(out, "end.agsproj", "old"))
+            (ok, _), _ = self.run_scenario("save_project: end\nsteps:\n  - click: {id: a}\n", app, out)
+            self.assertTrue(ok)
+            self.assertEqual(os.listdir(os.path.join(out, "end.agsproj")), [])
+        self.assertEqual(app.calls[-1][0], "saveProject")
+
+    def test_a_failed_scenario_still_leaves_its_video_and_project(self):
+        app = DrawingApp(self.STATES)
+        text = "record: true\nsave_project: end\nsteps:\n  - click: {id: a}\n  - expect: {id: a, exists: false, within_ms: 0}\n"
+        with tempfile.TemporaryDirectory() as out:
+            (ok, message), encoded = self.run_scenario(text, app, out)
+            self.assertTrue(os.path.isdir(os.path.join(out, "end.agsproj")))
+        self.assertFalse(ok)
+        self.assertIn("step 2", message)
+        self.assertEqual(encoded, [2])
+
+    def test_a_save_that_fails_fails_a_passing_scenario(self):
+        class NoSave(DrawingApp):
+            def call(self, cmd, timeout_ms=None, **args):
+                if cmd == "saveProject":
+                    raise run.TestModeError("saveProject failed: could not save")
+                return super().call(cmd, timeout_ms=timeout_ms, **args)
+
+        with tempfile.TemporaryDirectory() as out:
+            (ok, message), _ = self.run_scenario("save_project: end\nsteps:\n  - wait: {}\n", NoSave(self.STATES), out)
+        self.assertFalse(ok)
+        self.assertIn("save_project", message)
+
+    def test_no_ffmpeg_means_no_video_and_says_so_without_failing_the_scenario(self):
+        app = DrawingApp(self.STATES)
+        with tempfile.TemporaryDirectory() as out, mock.patch.object(recording, "find_ffmpeg", lambda: None), \
+                mock.patch("sys.stderr") as stderr:
+            runner = run.Runner(None, out, run.parse_scenario("record: true\nsteps:\n  - wait: {}\n", "demo"),
+                                app_factory=lambda *a, **k: app)
+            ok, _ = runner.run()
+            self.assertFalse(os.path.exists(os.path.join(out, "demo.mp4")))
+        self.assertTrue(ok)
+        self.assertIn("ffmpeg not found", "".join(str(c) for c in stderr.write.call_args_list))
+
+    @unittest.skipUnless(recording.find_ffmpeg(), "needs ffmpeg")
+    def test_ffmpeg_joins_frames_of_odd_and_changing_sizes_into_a_video(self):
+        with tempfile.TemporaryDirectory() as d:
+            recorder = recording.Recorder(d)
+
+            class Sized:
+                sizes = iter([(5, 7), (8, 8)])
+
+                def call(self, cmd, **args):
+                    width, height = next(self.sizes)
+                    write_png(args["path"], width, height)
+                    return {"width": width, "height": height}
+
+            recorder.frame(Sized())
+            recorder.frame(Sized())
+            video = os.path.join(d, "out.mp4")
+            ok, message = recorder.write_video(video)
+            self.assertTrue(ok, message)
+            probe = subprocess.run([recording.find_ffmpeg(), "-hide_banner", "-i", video], capture_output=True, text=True)
+            self.assertIn("h264", probe.stderr)
+            self.assertIn("yuv420p", probe.stderr)
+            self.assertIn("6x8", probe.stderr)  # the first frame's size, made even
 
 
 class ParseTests(unittest.TestCase):
