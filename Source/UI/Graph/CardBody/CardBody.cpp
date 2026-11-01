@@ -87,8 +87,9 @@ void applyAdsrTimeSkew(juce::Slider& slider, const juce::RangedAudioParameter& p
 
 // Narrows a slider to the layout's range within the parameter's own. Like applyAdsrTimeSkew it MUST run
 // after the SliderParameterAttachment (and after that skew), which would otherwise replace the range; it
-// keeps the slider's current skew so the ADSR times stay skewed. A range that misses the parameter's
-// leaves the full one. The slider only clamps its display: the parameter keeps any value it is given.
+// keeps the slider's current skew so the ADSR times stay skewed, and otherwise the parameter's own curve
+// across the narrowed part of its travel. A range that misses the parameter's leaves the full one. The
+// slider only clamps its display: the parameter keeps any value it is given.
 void applyLayoutRange(juce::Slider& slider, const juce::RangedAudioParameter& param,
                       const std::optional<juce::Range<double>>& range) {
     if (!range.has_value() || dynamic_cast<const juce::AudioParameterFloat*>(&param) == nullptr)
@@ -97,8 +98,27 @@ void applyLayoutRange(juce::Slider& slider, const juce::RangedAudioParameter& pa
     const auto narrowed = range->getIntersectionWith(juce::Range<double>((double)full.start, (double)full.end));
     if (narrowed.isEmpty())
         return;
-    slider.setNormalisableRange(juce::NormalisableRange<double>(
-        narrowed.getStart(), narrowed.getEnd(), (double)full.interval, slider.getNormalisableRange().skew));
+    const double sliderSkew = slider.getNormalisableRange().skew;
+    if (sliderSkew != 1.0) {
+        slider.setNormalisableRange(
+            juce::NormalisableRange<double>(narrowed.getStart(), narrowed.getEnd(), (double)full.interval, sliderSkew));
+        return;
+    }
+    const double startPos = full.convertTo0to1((float)narrowed.getStart());
+    const double endPos = full.convertTo0to1((float)narrowed.getEnd());
+    juce::NormalisableRange<double> curved(
+        narrowed.getStart(), narrowed.getEnd(),
+        [full, startPos, endPos](double, double, double position) {
+            return (double)full.convertFrom0to1((float)(startPos + position * (endPos - startPos)));
+        },
+        [full, startPos, endPos](double, double, double value) {
+            return ((double)full.convertTo0to1((float)value) - startPos) / (endPos - startPos);
+        },
+        [full](double start, double end, double value) {
+            return juce::jlimit(start, end, (double)full.snapToLegalValue((float)value));
+        });
+    curved.interval = (double)full.interval;
+    slider.setNormalisableRange(curved);
 }
 
 // The Oscillator waveform choice {"Sine", "Square", "Saw", "Triangle"} (in that order) gets a glyph per
