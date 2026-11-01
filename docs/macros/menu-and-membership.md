@@ -645,12 +645,19 @@ its name chip (or by its empty space, with the "move macro on hull drag" prefere
 - **Folding.** The nested macro is an ordinary child: folding the new parent flies it in as one box and opening it
   brings it back open or folded as it was ([Macro fold](../layout/animation.md#macro-fold)).
 - A channel macro nests like any other, as it does with Cmd+G.
+- **Several macros selected.** Pressing the card or chip of a macro that is selected together with other macros or
+  modules keeps the selection (`MacroGroupController::selectMacroForDrag`), so the drag moves all of it, every folded
+  card included, as one undo step. Like a module group drag it never joins or leaves: `beginMacroUnitDrag` arms nothing
+  (no held borders, no outlined target), the drop is `finalizeSelectionDrag`, and Esc does not cancel it. A click that
+  never moved selects just that macro. Moving a whole selection into or out of a macro is not offered.
 
 Tests, through the real card and canvas mouse events: `Tests/Macros/MacroContainer/MacroDropIntoMacroTests.cpp`
 (join), `MacroLeaveDragTests.cpp` (leave one and two levels, transfer, port splicing, Esc, the carried parent) and
 `MacroDragMatrixTests.cpp`, the drag matrix: module, folded card and open chip, each made to join, leave, transfer and
-stay, each one undo step. A membership gesture added for one of these units and missing on another fails a row there.
-The in-app check is `Tools/ui-verify/scenarios/macro-leave-drag.yaml`.
+stay, each one undo step, plus the multi-macro row (each unit dragged with a second macro, folded or open, selected:
+both move by the same delta in one step). A membership gesture added for one of these units and missing on another
+fails a row there.
+The in-app checks are `Tools/ui-verify/scenarios/macro-leave-drag.yaml` and `multi-macro-drag.yaml`.
 
 ## The expanded hull's collapse button
 

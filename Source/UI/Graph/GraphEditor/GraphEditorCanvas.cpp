@@ -849,7 +849,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // The chip's rigid-body drag start, shared with the hull-drag preference below so both
         // gestures run the ONE beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag path.
         const auto beginMacroBodyDrag = [this, &localPos](const juce::String& macroId) {
-            macroController_.selectMacro(macroId, false);
+            macroController_.selectMacroForDrag(macroId); // kept when it is selected with others: they all move
             if (undoManager)
                 undoManager->captureBeforeState(audioEngine.getGraph());
             beginSelectionDrag();
@@ -964,7 +964,7 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
                 doFinalize();
             glideHullsFrom(hullsBefore);
         } else {
-            cancelSelectionDrag();
+            cancelMacroCardDrag(macroChipDragId); // a click: selects just this macro
         }
         macroController_.clearMacroNestCandidate();
         macroChipDragId.clear();

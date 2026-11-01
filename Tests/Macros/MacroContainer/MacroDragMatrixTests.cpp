@@ -152,3 +152,115 @@ TEST(MacroDragMatrix, EveryDragUnitJoinsLeavesTransfersAndStays) {
             EXPECT_FALSE(f.undo.canUndo()) << "the whole drag was one step";
         }
 }
+
+namespace {
+
+const juce::ModifierKeys kShiftClick(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier);
+
+// A real Shift-click on the canvas (an open macro's chip or its empty space): the editor's own mouseDown and mouseUp.
+void shiftClickCanvas(GraphEditor& editor, juce::Point<int> point) {
+    editor.mouseDown(realMouseEvent(editor, point, point, kShiftClick));
+    editor.mouseUp(realMouseEvent(editor, point, point, kShiftClick));
+}
+
+// Shift-clicks a macro the way a user adds it to the selection: its folded card's body, or its open name chip.
+void shiftClickMacro(MatrixFixture& f, const juce::String& macroId) {
+    if (auto* card = f.ctl().getMacroCardForTest(macroId); card != nullptr && card->isVisible()) {
+        const juce::Point<int> body(140, 60);
+        card->mouseDown(realMouseEvent(*card, body, body, kShiftClick));
+        card->mouseUp(realMouseEvent(*card, body, body, kShiftClick));
+        return;
+    }
+    shiftClickCanvas(f.editor, f.ctl().macroChipBounds(macroId).getCentre());
+}
+
+// Where a macro sits: a folded one's stored card position, an open one's border.
+juce::Point<int> macroPos(MatrixFixture& f, const juce::String& macroId) {
+    const auto* macro = f.editor.getMacros().find(macroId);
+    return macro->collapsed ? macro->bounds.getPosition() : f.ctl().macroHullBounds(macroId).getPosition();
+}
+
+juce::Point<int> loosePos(MatrixFixture& f) {
+    return f.unit == Unit::module ? findComponent(f.editor, f.looseModule)->getPosition() : macroPos(f, f.looseMacro);
+}
+
+} // namespace
+
+// Regression test for FRO1150: with several macros selected, pressing one macro's card or chip collapsed the selection
+// to that macro, so only it moved. The multi-macro row: every drag unit, with a second macro (folded or open) also
+// selected, carries that macro by the same delta, keeps the selection and changes no membership, in one undo step.
+TEST(MacroDragMatrix, EveryDragUnitCarriesTheOtherSelectedMacrosAsOneUndoStep) {
+    for (const auto unit : {Unit::module, Unit::foldedCard, Unit::openChip})
+        for (const bool otherFolded : {true, false}) {
+            SCOPED_TRACE(juce::String(nameOf(unit)) + (otherFolded ? " + folded macro" : " + open macro"));
+            MatrixFixture f(unit);
+            if (otherFolded) {
+                f.ctl().setMacroCollapsed(f.bId, true);
+                f.editor.finishCardGlideForTest();
+                f.undo.clearUndoHistory();
+            }
+            if (unit == Unit::module) {
+                auto* comp = findComponent(f.editor, f.looseModule);
+                const juce::Point<int> body(comp->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+                comp->mouseDown(realMouseEvent(*comp, body, body, kShiftClick));
+                comp->mouseUp(realMouseEvent(*comp, body, body, kShiftClick));
+            } else {
+                shiftClickMacro(f, f.looseMacro);
+            }
+            shiftClickMacro(f, f.bId);
+            ASSERT_TRUE(f.ctl().isMacroInSelection(f.bId));
+            if (unit != Unit::module)
+                ASSERT_TRUE(f.ctl().isMacroInSelection(f.looseMacro));
+
+            const auto looseStart = loosePos(f);
+            const auto bStart = macroPos(f, f.bId);
+            const juce::Point<int> delta(0, 400);
+            if (unit == Unit::module)
+                dragBodyBy(*findComponent(f.editor, f.looseModule), delta, kPlainClick);
+            else
+                f.drag(/*loose=*/true, f.grabPoint(true) + delta);
+
+            const auto moved = loosePos(f) - looseStart;
+            EXPECT_NE(moved, juce::Point<int>()) << "the dragged unit moved";
+            EXPECT_EQ(macroPos(f, f.bId) - bStart, moved)
+                << "the other selected macro moved with it, by the same delta";
+            if (otherFolded)
+                EXPECT_EQ(f.ctl().getMacroCardForTest(f.bId)->getPosition(), macroPos(f, f.bId)) << "its card too";
+            EXPECT_TRUE(f.ctl().isMacroInSelection(f.bId)) << "the selection was kept";
+            EXPECT_TRUE(f.ownerOf(true).isEmpty()) << "a group drag changes no membership";
+            EXPECT_TRUE(f.editor.getMacros().parentOf(f.bId).isEmpty());
+            EXPECT_TRUE(f.ctl().draggedMacroUnit().isEmpty());
+
+            ASSERT_TRUE(f.undo.undo());
+            EXPECT_EQ(loosePos(f), looseStart);
+            EXPECT_EQ(macroPos(f, f.bId), bStart) << "one Cmd+Z puts both back";
+            EXPECT_FALSE(f.undo.canUndo()) << "the whole drag was one step";
+        }
+}
+
+// Regression test for FRO1152: Shift-click on an open macro's empty space started a selection box and dropped the
+// selection. It now adds that macro to the selection (and a second Shift-click takes it out), like its name chip.
+TEST(MacroDragMatrix, ShiftClickOnAnOpenMacrosEmptySpaceTogglesItInTheSelection) {
+    MatrixFixture f(Unit::module);
+    f.editor.setSelectedNodes({f.looseModule});
+    const auto bHull = f.ctl().macroHullBounds(f.bId);
+    const auto gap = f.gapInB();
+    ASSERT_EQ(f.ctl().macroHullAt(gap), f.bId);
+    ASSERT_TRUE(f.ctl().macroChipAt(gap).isEmpty());
+
+    shiftClickCanvas(f.editor, gap);
+    EXPECT_TRUE(f.ctl().isMacroInSelection(f.bId)) << "the open macro joined the selection";
+    EXPECT_TRUE(f.editor.isNodeSelected(f.looseModule)) << "what was selected stays selected";
+
+    shiftClickCanvas(f.editor, gap);
+    EXPECT_FALSE(f.ctl().isMacroInSelection(f.bId)) << "a second Shift-click takes it out";
+    EXPECT_TRUE(f.editor.isNodeSelected(f.looseModule));
+
+    // A Shift-drag from there is still a selection box (replacing, as anywhere on the canvas): it does not toggle.
+    const auto from = gap;
+    const juce::Point<int> to(bHull.getRight() - 10, bHull.getBottom() - 10);
+    f.editor.mouseDown(realMouseEvent(f.editor, from, from, kShiftClick));
+    f.editor.mouseDrag(realMouseEvent(f.editor, to, from, kShiftClick, true));
+    f.editor.mouseUp(realMouseEvent(f.editor, to, from, kShiftClick, true));
+    EXPECT_FALSE(f.editor.isNodeSelected(f.looseModule)) << "a box drag replaces the selection";
+}

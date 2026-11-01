@@ -225,8 +225,7 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    if (!owner.getMacroController().isMacroSelected(macroId))
-        owner.getMacroController().selectMacro(macroId, false);
+    owner.getMacroController().selectMacroForDrag(macroId); // kept when it is selected with others: they all move
 
     dragStartPosition = getPosition();
     bodyDragActive = true;

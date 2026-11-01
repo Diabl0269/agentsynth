@@ -15,13 +15,24 @@
 #include <algorithm>
 #include <utility>
 
+// A press on a macro that is already selected together with other macros or modules keeps that selection, so the drag
+// moves all of it, the way a press on one module of a multi-selection does; any other press selects just this macro.
+void MacroGroupController::selectMacroForDrag(const juce::String& macroId) {
+    if (!isMacroInSelection(macroId))
+        selectMacro(macroId, false);
+}
+
 // The parent's border is a live union that includes the dragged macro, so without a snapshot it would follow the drag
 // (it looked as if the parent's border was being dragged) and the macro could never leave it. Every ancestor is held
 // at its press-time border until the drop; the drop's glide then takes each to where the new membership puts it.
+// A group drag (more than this macro selected) is no unit drag: like a module group drag it never joins or leaves, so
+// nothing is held and no target is outlined.
 void MacroGroupController::beginMacroUnitDrag(const juce::String& draggedMacroId) {
     clearMacroNestCandidate();
     frozenDragHulls_.clear();
     frozenDragNode_ = {};
+    if (!isMacroSelected(draggedMacroId))
+        return;
     draggedMacroUnit_ = draggedMacroId;
     for (const auto& id : host_.getMacros().ancestorChain(draggedMacroId))
         if (const auto hull = macroHullBounds(id); !hull.isEmpty())
@@ -31,6 +42,8 @@ void MacroGroupController::beginMacroUnitDrag(const juce::String& draggedMacroId
 // The live targets are shown exactly like a module drag's: GraphEditor paints the macro named by the join id, and the
 // one named by macroLeaveCandidate, with the heavier outline, so dragging a macro and dragging a module look the same.
 void MacroGroupController::updateMacroNestCandidate(const juce::String& draggedMacroId, juce::Point<int> canvasPoint) {
+    if (draggedMacroUnit_ != draggedMacroId)
+        return; // a group drag, or no press behind it: nothing to join or leave
     const auto targets = macroUnitDragTargets(draggedMacroId, canvasPoint);
     if (targets.join == macroNestCandidate_ && targets.leave == macroLeaveCandidate_)
         return;

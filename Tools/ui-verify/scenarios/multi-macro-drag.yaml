@@ -1,0 +1,48 @@
+# Bug: with several macros selected, dragging one macro's card moved only that macro and the selection shrank to it;
+# and Shift-click on an open macro's empty space started a selection box that dropped the selection instead of adding
+# the macro to it.
+#
+# What a user does (macros fixture, zoomed out so both macros are in the window):
+#   1. Shift-clicks the folded "Collapsed macro" card: it is selected.
+#   2. Shift-clicks empty space inside the open "Open macro" (below LFO 1): that macro joins the selection, and the
+#      folded one stays selected.
+#   3. Drags the folded card to the right, past "Nested macro": the open macro moves with it, by the same distance.
+#   4. Presses Cmd+Z once: both are back where they were.
+# Every drag unit (module, folded card, open chip) with a second folded or open macro selected is covered by
+# MacroDragMatrixTests (Tests/Macros/MacroContainer/), which drives the same mouse callbacks.
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - expect: {id: "macroCard", bounds: {x: 566, y: 424, w: 144, h: 47}}
+  - expect: {id: "card:LFO 1", bounds: {x: 353, y: 105, w: 144, h: 201}}
+  - click: {id: "macroCard", x: 72, y: 30, mods: shift}
+  - wait: {}
+  - expect: {id: "card:LFO 2", selected: true}               # a hidden member of the folded macro
+  - expect: {id: "card:LFO 1", selected: false}
+  - click: {id: window, x: 420, y: 360, mods: shift}          # empty space inside "Open macro", below LFO 1
+  - wait: {}
+  - expect: {id: "card:LFO 1", selected: true}
+  - expect: {id: "card:ADSR 1", selected: true}
+  - expect: {id: "card:LFO 2", selected: true}               # the folded macro stayed selected
+  - screenshot: {name: 1-both-macros-selected}
+  - mouseDown: {id: "macroCard", x: 72, y: 30}
+  - mouseMoveHeld: {id: window, x: 900, y: 454}
+  - mouseMoveHeld: {id: window, x: 1300, y: 454}
+  - mouseMoveHeld: {id: window, x: 1588, y: 454}
+  - screenshot: {name: 2-mid-drag-both-follow}
+  - mouseUp: {id: window, x: 1588, y: 454}
+  - wait: {}
+  - expect: {id: "macroCard", bounds: {x: 1553, y: 436, w: 144, h: 48}}
+  - expect: {id: "card:LFO 1", bounds: {x: 1340, y: 117, w: 144, h: 201}}   # +987, +12: the card's own move
+  - expect: {id: "card:LFO 1", selected: true}
+  - expect: {id: "card:LFO 1", macroPath: "Open macro"}
+  - screenshot: {name: 3-after-drop-both-moved}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "macroCard", bounds: {x: 566, y: 424, w: 144, h: 47}, within_ms: 1500}
+  - expect: {id: "card:LFO 1", bounds: {x: 353, y: 105, w: 144, h: 201}}
+  - screenshot: {name: 4-after-undo-both-back}
