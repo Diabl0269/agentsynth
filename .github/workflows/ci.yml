@@ -880,7 +880,6 @@ jobs:
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
-          "-DCMAKE_CXX_FLAGS=-DWIN32 -D_WINDOWS -EHsc -Z7" "-DCMAKE_C_FLAGS=-DWIN32 -D_WINDOWS -Z7" "-DCMAKE_EXE_LINKER_FLAGS=-DEBUG:FULL" \
           -DAGENTSYNTH_PCH=ON \
           -DAGENTSYNTH_UNITY=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -888,18 +887,6 @@ jobs:
 
     - name: Build
       run: cmake --build build --config Release
-
-    - name: Diagnose popup crash
-      if: github.event_name == 'pull_request'
-      continue-on-error: true
-      timeout-minutes: 40
-      shell: pwsh
-      run: |
-        $exe = (Get-ChildItem build -Recurse -Filter Tests.exe | Select-Object -First 1).FullName
-        $cdb = "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
-        Write-Host "exe=$exe cdb=$(Test-Path $cdb)"
-        $cmds = 'sxe -c ".echo CRASH-FIRST; r; .ecxr; kn 60; q" -c2 ".echo CRASH-SECOND; kn 60; q" av; g; q'
-        & $cdb -G -lines -y (Split-Path $exe) -c $cmds $exe "--gtest_filter=PopupDismissPaths.*" "--gtest_repeat=80" "--gtest_catch_exceptions=0" 2>&1 | Select-String -Pattern 'CRASH-|^\s*[0-9a-f]{2} [0-9a-f`]+ |^[a-z]+=|Access violation|Tests!|\[  FAILED|Repeating all' | Select-Object -Last 150
 
     - name: Check Cache Health
       if: always()
