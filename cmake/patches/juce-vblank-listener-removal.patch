@@ -1,0 +1,65 @@
+JUCE patch: do not crash when a VBlank callback removes a listener on Windows.
+
+Why: VBlankThread::handleAsyncUpdate range-for'd over `listeners` and called each one's onVBlank().
+A callback can reach VBlankDispatcher::updateDisplay or removeListener (a window moved or hidden by an
+animation, or a peer destroyed), which erases from that vector. The loop then read past the shortened
+vector into a stale slot holding the removed peer, and called through a freed object: an access violation.
+Emptying the vector also made the dispatcher delete the VBlankThread still running this function.
+
+With this patch the loop goes by index, so it stays in bounds whatever changes, and the dispatcher keeps a
+thread that is mid-dispatch. A shift can make one listener miss one frame, which is harmless.
+
+Touches only juce_VBlank_windows.cpp (Windows).
+
+diff --git a/modules/juce_gui_basics/native/juce_VBlank_windows.cpp b/modules/juce_gui_basics/native/juce_VBlank_windows.cpp
+index d92288b..66fba45 100644
+--- a/modules/juce_gui_basics/native/juce_VBlank_windows.cpp
++++ b/modules/juce_gui_basics/native/juce_VBlank_windows.cpp
+@@ -98,6 +98,11 @@ public:
+         return listeners.empty();
+     }
+ 
++    bool isDispatching() const noexcept
++    {
++        return dispatching;
++    }
++
+     bool hasListener (const VBlankListener& listener) const noexcept
+     {
+         return std::any_of (listeners.cbegin(),
+@@ -145,8 +150,14 @@ private:
+ 
+     void handleAsyncUpdate() override
+     {
+-        for (auto& listener : listeners)
+-            listener.get().onVBlank();
++        // A listener's callback can add or remove listeners, or destroy another peer, so
++        // this can't hold iterators across the calls.
++        dispatching = true;
++
++        for (size_t i = 0; i < listeners.size(); ++i)
++            listeners[i].get().onVBlank();
++
++        dispatching = false;
+ 
+         {
+             const std::scoped_lock lock { mutex };
+@@ -170,6 +181,7 @@ private:
+         exit,
+     };
+ 
++    bool dispatching = false;
+     double lastVBlankEvent = 0.0;
+     ThreadState threadState = ThreadState::paint;
+     std::condition_variable condvar;
+@@ -288,7 +300,9 @@ private:
+     {
+         if ((*it)->removeListener (listener))
+         {
+-            if ((*it)->hasNoListeners())
++            // A thread that's still calling its listeners can't be deleted here. It stays
++            // idle until a listener joins it, or a later removal finds it empty.
++            if ((*it)->hasNoListeners() && ! (*it)->isDispatching())
+                 threads.erase (it);
+ 
+             return true;
