@@ -25,6 +25,13 @@ std::vector<double> beatsOf(const std::vector<LaneBreakpoint>& points) {
 }
 } // namespace
 
+std::optional<std::pair<double, double>> AutomationLaneEditor::pointSelectionSpan() const {
+    if (selection_.size() < 2)
+        return std::nullopt;
+    const auto beats = selection_.getSelected(); // ascending
+    return std::make_pair(beats.front(), beats.back());
+}
+
 const std::vector<LaneBreakpoint>* AutomationLaneEditor::lanePoints() const {
     const auto* lane = doc_ != nullptr && laneId_.isValid() ? doc_->getLane(laneId_) : nullptr;
     return lane != nullptr ? &lane->points : nullptr;

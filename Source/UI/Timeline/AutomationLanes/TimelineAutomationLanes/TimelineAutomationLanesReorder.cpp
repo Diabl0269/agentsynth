@@ -38,6 +38,9 @@ void TimelineAutomationLanes::wireHeader(AutomationLaneHeaderComponent& header, 
     header.laneRangeProvider = [this, id]() -> std::optional<std::pair<double, double>> {
         if (hasLaneRange() && laneRange_.getLane() == id)
             return std::make_pair(laneRange_.getStartBeat(), laneRange_.getEndBeat());
+        // No Range selection here: the stretch of the points selected with the Select tool.
+        if (const auto* editor = editorFor(id))
+            return editor->pointSelectionSpan();
         return std::nullopt;
     };
     header.onCreateCustomLfo = [this, id](double startBeat, double endBeat) {

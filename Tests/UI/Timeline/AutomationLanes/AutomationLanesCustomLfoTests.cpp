@@ -40,6 +40,7 @@ struct CustomLfoScene : Scene {
 
     double normalised(double v) const { return (double)cutoff->convertTo0to1((float)v); }
     synth::LaneId laneId() const { return lane; }
+    int laneEditorSelectionSize() { return panel().laneEditorForTest(lane)->getPointSelection().size(); }
     const synth::AutomationLane& laneNow() { return *doc().getLane(lane); }
     synth::ui::LaneRangeSelection& range() { return panel().getAutomationLanes().getLaneRange(); }
     AutomationLaneHeaderComponent& header() { return *panel().laneHeaderForTest(lane); }
@@ -47,6 +48,10 @@ struct CustomLfoScene : Scene {
     void selectRange(double start, double end) {
         range().begin(lane, start);
         range().extendTo(end);
+    }
+    // Selects the lane's points at these beats with the Select tool, the way a click or a box does.
+    void selectPoints(const std::vector<double>& beats) {
+        panel().laneEditorForTest(lane)->getPointSelection().setSelection(beats);
     }
     void pick() { header().applyMenuChoice(AutomationLaneHeaderComponent::kCreateCustomLfoMenuId); }
 
@@ -423,4 +428,107 @@ TEST_F(TimelinePanelIntegrationTest, RightClickOnAHandleInsideTheRangeKeepsItsMe
     ASSERT_EQ(texts.size(), 2) << texts.joinIntoString(" | ");
     EXPECT_EQ(texts[0], "Delete point");
     EXPECT_EQ(texts[1], "Create custom LFO");
+}
+
+// A normal (Select tool) selection of points is enough: the stretch runs from the first to the last selected one.
+
+TEST_F(TimelinePanelIntegrationTest, TwoSelectedPointsMakeTheItemAvailableAndSingleOrNoneStillAskForARange) {
+    CustomLfoScene s;
+    EXPECT_EQ(s.firstItem().first, "Create custom LFO (select a range first)") << "no selection";
+    s.selectPoints({2.0});
+    EXPECT_EQ(s.firstItem(), (std::pair<juce::String, bool>{"Create custom LFO (select a range first)", false}))
+        << "one point is no stretch";
+    s.selectPoints({0.0, 2.0, 4.0});
+    EXPECT_EQ(s.firstItem(), (std::pair<juce::String, bool>{"Create custom LFO", true}));
+    s.selectPoints({4.0, 8.0}); // the level stretch
+    EXPECT_EQ(s.firstItem(), (std::pair<juce::String, bool>{"Create custom LFO (range is flat)", false}))
+        << "the blockers are the range version's";
+    s.selectPoints({});
+    EXPECT_EQ(s.firstItem().first, "Create custom LFO (select a range first)");
+}
+
+TEST_F(TimelinePanelIntegrationTest, AnLfoFromSelectedPointsEqualsTheOneFromTheSameRange) {
+    juce::String viaRange, viaPoints;
+    float rangeLevel = 0, pointsLevel = 0, rangePhase = 0, pointsPhase = 0;
+    juce::AudioBuffer<float> rangeWave, pointsWave;
+    {
+        CustomLfoScene s;
+        s.selectRange(0.0, 4.0);
+        s.pick();
+        ASSERT_NE(s.onlyLfo(), nullptr);
+        viaRange = s.onlyLfoUuid();
+        rangeLevel = s.parameter(viaRange, "level");
+        rangePhase = s.parameter(viaRange, "phase");
+        rangeWave.setSize(1, 64);
+        for (int i = 0; i < 64; ++i)
+            rangeWave.setSample(0, i, s.onlyLfo()->getCustomWave().evaluate((float)i / 64.0f));
+    }
+    CustomLfoScene s;
+    s.selectPoints({4.0, 0.0, 2.0}); // any order: the stretch is first to last by beat
+    s.pick();
+    ASSERT_NE(s.onlyLfo(), nullptr);
+    viaPoints = s.onlyLfoUuid();
+    pointsLevel = s.parameter(viaPoints, "level");
+    pointsPhase = s.parameter(viaPoints, "phase");
+    pointsWave.setSize(1, 64);
+    for (int i = 0; i < 64; ++i)
+        pointsWave.setSample(0, i, s.onlyLfo()->getCustomWave().evaluate((float)i / 64.0f));
+    EXPECT_FLOAT_EQ(pointsLevel, rangeLevel);
+    EXPECT_FLOAT_EQ(pointsPhase, rangePhase);
+    for (int i = 0; i < 64; ++i)
+        EXPECT_FLOAT_EQ(pointsWave.getSample(0, i), rangeWave.getSample(0, i)) << i;
+    EXPECT_FALSE(s.range().isActive());
+}
+
+TEST_F(TimelinePanelIntegrationTest, CreatingFromSelectedPointsIsOneUndoStep) {
+    CustomLfoScene s;
+    const auto originalPoints = pointsOf(s.laneNow());
+    s.selectPoints({2.0, 4.0});
+    s.pick();
+    ASSERT_NE(s.onlyLfo(), nullptr);
+    ASSERT_TRUE(s.undo().undo());
+    EXPECT_TRUE(s.nodesOf<LFOModule>().empty());
+    expectSamePoints(pointsOf(s.laneNow()), originalPoints);
+}
+
+TEST_F(TimelinePanelIntegrationTest, ARangeSelectionOnTheLaneWinsOverSelectedPoints) {
+    CustomLfoScene s;
+    s.selectPoints({0.0, 2.0});
+    s.selectRange(5.0, 7.0); // flat
+    EXPECT_EQ(s.firstItem().first, "Create custom LFO (range is flat)");
+}
+
+TEST_F(TimelinePanelIntegrationTest, RightClickInsideTheSelectedPointsStretchOffersTheItemOnTheRealMousePath) {
+    CustomLfoScene s;
+    s.selectPoints({0.0, 4.0});
+    lane_menu_test::MenuCapture capture;
+
+    rightClickEditor(s, emptySpotAt(s, 3.0)); // empty space, between the points
+
+    ASSERT_EQ(capture.count, 1);
+    ASSERT_EQ(capture.itemTexts().size(), 1) << "the item alone, as in a Range selection";
+    EXPECT_EQ(capture.itemTexts()[0], "Create custom LFO");
+    EXPECT_TRUE(itemNamed(capture.menu, "Create custom LFO")->isEnabled);
+    EXPECT_EQ(s.laneEditorSelectionSize(), 2) << "the right-click kept the selection";
+    const auto* item = itemNamed(capture.menu, "Create custom LFO");
+    item->action();
+    ASSERT_NE(s.onlyLfo(), nullptr);
+    ASSERT_TRUE(s.undo().undo());
+    EXPECT_TRUE(s.nodesOf<LFOModule>().empty());
+}
+
+TEST_F(TimelinePanelIntegrationTest, RightClickOutsideTheSelectedPointsStretchOrWithOnePointKeepsTheLaneMenu) {
+    CustomLfoScene s;
+    s.selectPoints({0.0, 2.0});
+    {
+        lane_menu_test::MenuCapture capture;
+        rightClickEditor(s, emptySpotAt(s, 6.0));
+        ASSERT_EQ(capture.count, 1);
+        EXPECT_NE(itemNamed(capture.menu, "Delete lane"), nullptr) << "outside the stretch";
+    }
+    s.selectPoints({2.0});
+    lane_menu_test::MenuCapture capture;
+    rightClickEditor(s, emptySpotAt(s, 3.0));
+    ASSERT_EQ(capture.count, 1);
+    EXPECT_NE(itemNamed(capture.menu, "Delete lane"), nullptr) << "one point is no stretch";
 }

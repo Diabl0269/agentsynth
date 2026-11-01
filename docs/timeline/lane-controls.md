@@ -72,7 +72,8 @@ folded modulator rows keep their own fixed height and do not scale.
 
 ## Create custom LFO from the range
 
-A right-click inside the selected range on the lane's curve editor shows **Create custom
+A right-click inside the selected range on the lane's curve editor (the Range tool's range, or the stretch from the
+first to the last of two or more points selected with the Select tool) shows **Create custom
 LFO** as the whole menu when it lands on empty space (the lane menu stays on the header, its "..." button and a
 right-click outside the range), and as the last item, after a separator, of the handle menu ("Delete point") or the
 segment menu ("Hold" / "Linear") when it lands on a point or a segment. The item is the header's own, built by
