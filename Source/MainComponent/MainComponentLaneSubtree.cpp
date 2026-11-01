@@ -150,6 +150,7 @@ bool MainComponent::retargetLaneWithAttachments(synth::LaneId lane, const synth:
         std::map<juce::String, juce::String> newKeys;
         carryLaneAttachments(from, to, track, CarryMode::Move, &newKeys);
         remapModulatorOrder(timelineDoc, lane, std::move(order), newKeys);
+        timelineDoc.rekeyModulatorHeights(lane, newKeys); // each row keeps its own height
     });
     return retargeted;
 }
@@ -172,6 +173,7 @@ synth::LaneId MainComponent::duplicateLaneWithAttachments(synth::LaneId lane, co
         std::map<juce::String, juce::String> newKeys;
         carryLaneAttachments(from, to, owner->id, CarryMode::Copy, &newKeys);
         remapModulatorOrder(timelineDoc, created, std::move(order), newKeys);
+        timelineDoc.rekeyModulatorHeights(created, newKeys); // the copy's rows take the originals' heights
     });
     return created;
 }
@@ -193,7 +195,8 @@ bool MainComponent::canMoveModulatorToLane(const synth::ui::ModulatorInfo& modul
 
 // The row's drop on another lane: the routing moves to that lane's parameter (moveModulatorRouting: the amount lane
 // keeps its id and points), the destination lane's order gets the moved routing's new key at `destIndex`, and the old
-// key leaves the order of every lane on the old jack -- ONE graph + timeline undo step.
+// key leaves the order of every lane on the old jack; the row's own height goes with it -- ONE graph + timeline undo
+// step.
 bool MainComponent::moveModulatorToLane(const synth::ui::ModulatorInfo& modulator, synth::LaneId destLane,
                                         int destIndex) {
     if (!canMoveModulatorToLane(modulator, destLane))
@@ -220,6 +223,16 @@ bool MainComponent::moveModulatorToLane(const synth::ui::ModulatorInfo& modulato
         timelineDoc.setModulatorOrder(destLane, order);
         for (const auto lane : oldLanes) {
             const auto* current = timelineDoc.getLane(lane);
+            if (current == nullptr)
+                continue;
+            if (const auto h = current->modulatorHeightScales.find(oldKey); h != current->modulatorHeightScales.end()) {
+                const double scale = h->second;
+                auto heights = current->modulatorHeightScales;
+                heights.erase(oldKey);
+                timelineDoc.setModulatorHeightScales(lane, std::move(heights));
+                timelineDoc.setModulatorHeightScale(destLane, newKey, scale);
+                current = timelineDoc.getLane(lane);
+            }
             if (current == nullptr || current->modulatorOrder.empty())
                 continue;
             auto kept = current->modulatorOrder;

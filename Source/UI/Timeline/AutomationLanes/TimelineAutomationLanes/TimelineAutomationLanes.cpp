@@ -243,7 +243,7 @@ void TimelineAutomationLanes::syncPools() {
         it = wanted.count(it->first) == 0 ? headers_.erase(it) : std::next(it);
 
     for (auto it = heightHandles_.begin(); it != heightHandles_.end();)
-        it = wanted.count(it->first) == 0 ? heightHandles_.erase(it) : std::next(it);
+        it = wanted.count(it->first.first) == 0 ? heightHandles_.erase(it) : std::next(it);
     for (auto it = placedBlockHeights_.begin(); it != placedBlockHeights_.end();)
         it = wanted.count(it->first) == 0 ? placedBlockHeights_.erase(it) : std::next(it);
     syncAddRows();

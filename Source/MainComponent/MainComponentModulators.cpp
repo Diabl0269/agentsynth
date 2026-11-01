@@ -333,6 +333,7 @@ bool MainComponent::repointModulator(const synth::ui::ModulatorInfo& modulator,
         for (auto& [lane, order] : orders) {
             std::replace(order.begin(), order.end(), oldKey, newAtten);
             timelineDoc.setModulatorOrder(lane, std::move(order));
+            timelineDoc.rekeyModulatorHeights(lane, {{oldKey, newAtten}}); // the row keeps its own height
         }
         graphEditor.removeModulator(oldRouting, /*removeLonelySource=*/false, /*recordUndo=*/false);
         changed = true;

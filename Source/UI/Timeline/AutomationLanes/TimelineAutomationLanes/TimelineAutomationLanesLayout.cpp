@@ -96,6 +96,12 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
     int staticY = firstRowY;
     int lastLaneY = -1;
     int lastRowHeight = 0;
+    // The track's own resize strip sits on the bottom edge of its last lane block (the Automation track has none).
+    synth::LaneId lastShown;
+    if (t->kind != synth::TrackKind::Automation)
+        for (const auto& lane : t->lanes)
+            if (!isAmountLane(lane.id))
+                lastShown = lane.id;
     for (const auto& block : blocksOf(*t)) {
         if (block.leaving != nullptr) {
             placeLeavingLaneHeader(*block.leaving, staticY, width);
@@ -104,7 +110,6 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
         }
         const auto& lane = *block.lane;
         const int rowHeight = laneRowHeight(lane.id);
-        const int modHeight = modulatorRowHeight(lane.id);
         int y = staticY;
         float lift = 0.0f;
         const auto found = std::find(dragLaneIds_.begin(), dragLaneIds_.end(), lane.id);
@@ -127,14 +132,13 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
             lastLaneY = staticY;
             lastRowHeight = rowHeight;
             placedBlockHeights_[lane.id] = block.height;
-            placeHeightHandle(lane.id, *t, blockBottom, width);
         }
         int modY = y + rowHeight + trayExtentOf(lane.id);
         for (int i = 0; i < modulatorCount(lane.id); ++i) {
             modY += placeLeavingRows(lane.id, i, modY, width);
             auto* row = modulatorRowFor(lane.id, i);
             const int height = modulatorRowHeightFor(lane.id, i);
-            row->setTitleLineHeight(modHeight / 3);
+            row->setTitleLineHeight(modulatorRowHeight(lane.id, i) / 3);
             const auto pose = modulatorDragPose(lane.id, i, modY);
             const int rowY = modY + modulatorGlideOffset(row->getInfo().key()) + pose.shift;
             row->setBounds(0, rowY, width, fit(rowY, height));
@@ -144,6 +148,9 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
             modY += height + trayExtentOf(lane.id, i);
         }
         placeLeavingRows(lane.id, modulatorCount(lane.id), modY, width);
+        if (headerFor(lane.id) != nullptr)
+            placeLaneHeightHandles(lane, y, lane.id == lastShown,
+                                   !laneDrag_.isReordering() && !growing && !modDrag_.isReordering(), width);
         if (lift > 0.0f) {
             if (auto* header = headerFor(lane.id))
                 header->toFront(false);

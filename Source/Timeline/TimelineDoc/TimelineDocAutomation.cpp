@@ -229,6 +229,59 @@ bool TimelineDoc::setLaneHeightScale(LaneId id, double scale) {
     });
 }
 
+// One modulator row's height, stored under its modulatorOrder key (the Attenuverter's uuid), like modulatorOrder; the
+// keys move with the routings through rekeyModulatorHeights. Clamped like the lane's own. False for an unknown lane, an
+// empty key or a non-finite scale; true without a revision bump when the row already has that height. A user gesture:
+// wrap in AppUndoManager::recordTimelineChange.
+bool TimelineDoc::setModulatorHeightScale(LaneId id, const juce::String& key, double scale) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || key.isEmpty() || !std::isfinite(scale))
+        return false;
+    const double clamped = std::clamp(scale, AutomationLane::kMinHeightScale, AutomationLane::kMaxHeightScale);
+    if (lane->modulatorRowScale(key) == clamped)
+        return true;
+    return applyMutation([&] {
+        lane->modulatorHeightScales[key] = clamped;
+        return true;
+    });
+}
+
+// Every value is clamped and a non-finite one is dropped (the row falls back to the lane's modulatorHeightScale). False
+// for an unknown lane or the heights it already has.
+bool TimelineDoc::setModulatorHeightScales(LaneId id, std::map<juce::String, double> scales) {
+    auto* lane = findLane(id);
+    if (lane == nullptr)
+        return false;
+    for (auto it = scales.begin(); it != scales.end();) {
+        if (!std::isfinite(it->second) || it->first.isEmpty()) {
+            it = scales.erase(it);
+            continue;
+        }
+        it->second = std::clamp(it->second, AutomationLane::kMinHeightScale, AutomationLane::kMaxHeightScale);
+        ++it;
+    }
+    if (lane->modulatorHeightScales == scales)
+        return false;
+    return applyMutation([&] {
+        lane->modulatorHeightScales = std::move(scales);
+        return true;
+    });
+}
+
+// A carry (Change source, Change parameter, Duplicate) replaces a routing's Attenuverter, so the row's height follows
+// it to the new key, exactly as remapping modulatorOrder does. Keys not in `newKeys` stay as they are.
+bool TimelineDoc::rekeyModulatorHeights(LaneId id, const std::map<juce::String, juce::String>& newKeys) {
+    const auto* lane = getLane(id);
+    if (lane == nullptr || newKeys.empty())
+        return false;
+    std::map<juce::String, double> moved;
+    for (const auto& [key, scale] : lane->modulatorHeightScales) {
+        const auto to = newKeys.find(key);
+        moved[to != newKeys.end() ? to->second : key] = scale;
+    }
+    return setModulatorHeightScales(id, std::move(moved));
+}
+
 // Routing keys are ModulatorInfo's Attenuverter uuid, else its key(). A routing not listed shows after the listed ones
 // in graph order and a stale key is ignored, never pruned. False for an unknown lane or the order it already has (no
 // revision bump, no notification). A user gesture: wrap in AppUndoManager::recordTimelineChange.
@@ -392,6 +445,8 @@ LaneId TimelineDoc::duplicateLane(LaneId source, const juce::String& nodeUuid, c
         copy.recordMode = original->recordMode;
         copy.modulatorOrder = original->modulatorOrder;
         copy.heightScale = original->heightScale;
+        copy.modulatorHeightScale = original->modulatorHeightScale;
+        copy.modulatorHeightScales = original->modulatorHeightScales;
         copy.points = rescalePoints(original->points, original->range, range);
         const auto id = copy.id;
         const auto position = (original - owner->lanes.data()) + 1;

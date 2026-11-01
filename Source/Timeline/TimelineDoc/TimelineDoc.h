@@ -165,10 +165,18 @@ struct AutomationLane {
     // Routing keys of the lane's modulator rows, in display order (saved; empty = graph order).
     std::vector<juce::String> modulatorOrder;
 
-    // The lane's own height on top of the shared zoom (modulator rows scale with it); saved, omitted at 1.0.
+    // The lane's own row height on top of the shared zoom (its modulator rows have their own); saved, omitted at 1.0.
     static constexpr double kMinHeightScale = 0.5;
     static constexpr double kMaxHeightScale = 4.0;
     double heightScale = 1.0;
+    // Each modulator row's own height, by modulatorOrder key, within [kMinHeightScale, kMaxHeightScale]; saved.
+    std::map<juce::String, double> modulatorHeightScales;
+    // The height of a modulator row with no entry above; a file without it loads it as heightScale.
+    double modulatorHeightScale = 1.0;
+    double modulatorRowScale(const juce::String& key) const {
+        const auto it = modulatorHeightScales.find(key);
+        return it != modulatorHeightScales.end() ? it->second : modulatorHeightScale;
+    }
 
     // Runtime only: nodeUuid is set but resolves to no live node. Only TimelineDoc::reconcileBindings writes it;
     // it is never saved, and an orphaned lane is kept for re-binding.
@@ -544,6 +552,12 @@ public:
 
     // Sets the lane's height scale (clamped); a user edit (see the .cpp).
     bool setLaneHeightScale(LaneId id, double scale);
+    // Sets one modulator row's height scale (clamped), by modulatorOrder key; a user edit (see the .cpp).
+    bool setModulatorHeightScale(LaneId id, const juce::String& key, double scale);
+    // Replaces every modulator row's own height scale; false when unchanged (see the .cpp).
+    bool setModulatorHeightScales(LaneId id, std::map<juce::String, double> scales);
+    // Moves each row height stored under an old key of `newKeys` to its new key; false when nothing moved.
+    bool rekeyModulatorHeights(LaneId id, const std::map<juce::String, juce::String>& newKeys);
 
     // The value an automation lane holds while it has no breakpoints; a user edit (see the .cpp).
     bool setLaneConstantValue(LaneId id, double value);
