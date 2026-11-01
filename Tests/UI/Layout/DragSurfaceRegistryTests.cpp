@@ -72,6 +72,8 @@ const std::vector<Registered> kRegistered = {
     {"GrabEdge", {"exempt: resizes the side pane live, the release only stores the width already shown"}},
     {"MixerSectionDivider", {"exempt: resizes the sections live, the release only stores the heights shown"}},
     {"MinimapComponent", {"exempt: scrolls the view, nothing to commit"}},
+    {"CanvasEdgeScrollDriver",
+     {"exempt: only listens to where the pointer is while another drag runs, it has none of its own"}},
     {"ControllerSurfaceComponent", {"exempt: a selection marquee, nothing to commit"}},
     {"TopBar", {"exempt: moves the help window, nothing to commit"}},
     {"ModuleLibraryComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},

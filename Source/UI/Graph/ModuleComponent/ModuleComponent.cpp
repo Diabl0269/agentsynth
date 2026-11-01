@@ -15,6 +15,7 @@
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
@@ -825,6 +826,7 @@ void ModuleComponent::handleCablePickupGesture(juce::RangedAudioParameter* param
         return;
     }
     if (phase == 1) {
+        owner.getEdgeScroll().notePointer(e);
         owner.dragConnection(e.getScreenPosition());
         return;
     }

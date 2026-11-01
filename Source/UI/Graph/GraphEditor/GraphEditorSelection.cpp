@@ -294,6 +294,7 @@ void GraphEditor::beginMarquee(juce::Point<int> canvasAnchor, bool additive) {
     // press may still be a click that adds the macro, so the selection is only replaced once the box is drawn.
     if (!additive && shiftClickedHull(macroController_, canvasAnchor).isEmpty())
         applySelectionChange({});
+    edgeScroll_->beginCanvasDrag(); // held at the edge of the view, the canvas scrolls and the box grows with it
 }
 
 void GraphEditor::updateMarquee(juce::Point<int> canvasCurrent) {
@@ -323,6 +324,7 @@ void GraphEditor::endMarquee() {
         applySelectionChange(marqueeBaseSelection);
         macroController_.toggleMacroInSelection(hullId);
     }
+    edgeScroll_->end();
     marqueeActive = false;
     marqueeAdditive = false;
     marqueeRect = {};
@@ -420,6 +422,7 @@ void GraphEditor::dragSelectionBy(juce::Point<int> delta, ModuleComponent* initi
 }
 
 void GraphEditor::finalizeSelectionDrag() {
+    edgeScroll_->end();
     // Every exit path: a drop can both grow and shrink the canvas frame.
     const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};
     if (!selectionDragActive) {
@@ -498,6 +501,7 @@ void GraphEditor::finalizeSelectionDrag() {
 // never moved (positions loaded from a preset are not necessarily grid-aligned, so a
 // finalize on a zero-delta drag would visibly nudge the group).
 void GraphEditor::cancelSelectionDrag() {
+    edgeScroll_->end();
     edgeDrag_.reset();
     selectionDragActive = false;
     selectionDragStartPositions.clear();

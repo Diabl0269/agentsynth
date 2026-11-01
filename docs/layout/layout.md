@@ -78,21 +78,39 @@ is the theme `bg0`; inside is `bg1` with the dot grid, a 10 px rounded corner an
 
 ## Edge scroll while dragging
 
-Dragging a card to the edge of the canvas view pans the canvas (`CanvasEdgeScrollDriver`, `CanvasEdgeScroller`,
-`Source/UI/Graph/CanvasEdgeScroll/`). It covers a module or folded macro card moved on the canvas and a card dragged in
-from the module library or the sound browser; a marquee and a cable drag do not scroll.
+Holding a drag at the edge of the canvas view pans the canvas (`CanvasEdgeScrollDriver`, `CanvasEdgeScroller`,
+`Source/UI/Graph/CanvasEdgeScroll/`). Every drag that carries something across the canvas does it:
+
+| Drag | Armed by | Re-aimed after each pan by |
+| --- | --- | --- |
+| module card body (plain, Ctrl, Cmd) | `ModuleComponent::mouseDown` (`beginCardDrag`) | a synthetic `mouseDrag` on the card |
+| folded macro card body | `MacroCardComponent::mouseDown` (`beginCardDrag`) | a synthetic `mouseDrag` on the card |
+| cable from a jack or an input knob's landing dot | `GraphEditor::beginConnectionDrag` (`beginCableDrag`) | `GraphEditor::dragConnection` at the pointer |
+| selection box (Shift-drag) | `GraphEditor::beginMarquee` (`beginCanvasDrag`) | a synthetic `GraphEditor::mouseDrag` |
+| expanded macro's name chip (and the hull-drag preference) | `GraphEditor::mouseDown` (`beginCanvasDrag`) | a synthetic `GraphEditor::mouseDrag` |
+| card from the module library or sound browser | `GraphEditor::itemDragEnter` (`beginLibraryDrag`) | a synthetic `itemDragMove` |
+
+Not scrolled on purpose: the empty-canvas pan (it is the scroll), the mod-amount ring and the card knob, fader and curve
+drags (they edit a value), and the minimap drag (it moves the view itself). A new drag that moves something across the
+canvas gets a row here and a gesture in `CanvasEdgeScrollGestureTests.cpp`, which presses, drags, holds and releases
+each one through its real mouse handlers.
 
 - **Speed.** `canvasEdgePanDelta` (`CanvasEdgeScroll.h`, pure) gives zero in the middle of the view and a speed that
   grows linearly over the outer 48 px (a third of a small view at most) up to 22 screen px per tick at the edge or past
   it, one axis at a time, on the timeline's `edgeScrollVelocity` curve. The tick is a gated 30 Hz timer that runs only
-  for the length of a drag; moving the pointer back inward stops the pan on the next tick, and a release, drop, exit or
-  `cancelLiveDragGestures` stops the timer.
+  for the length of a drag; moving the pointer back inward stops the pan on the next tick, and a release, drop, exit,
+  Esc (a cable, a macro) or `cancelLiveDragGestures` stops the timer.
 - **The card keeps tracking.** The pointer does not move while the canvas does, so no mouse event arrives. Each tick
   that panned sends the card a synthetic `mouseDrag` at the pointer (its own press point and `ComponentDragger` keep the
   grab offset), so it takes the real drag path: group drag, canvas frame growth, landing ghost, macro join highlight. A
-  library drag gets a synthetic `itemDragMove` at the pointer.
+  library drag gets a synthetic `itemDragMove` at the pointer. A cable keeps the endpoint under the pointer, and the box
+  grows over what scrolls in.
+- **The pointer.** The last position a drag handler reported (`notePointer`, and a global listener for events on the
+  canvas itself), not the OS cursor: they are the same for a real mouse, and test mode injects its events into the
+  window's peer, which the cursor never sees. A library drag is the OS drag-and-drop's, so it reads the cursor.
 - **Limits.** The pan never goes past the origin (nothing exists left of or above it) and never further right or down
-  than the content extends; a card drag grows the content ahead of itself, so it can keep going.
+  than the content extends; a card or macro drag grows the content ahead of itself, so it can keep going, while a cable
+  or a selection box stops at the end of the content.
 - **Keyboard.** There is no pointer to park, so the keyboard move (arrow keys on a focused card) already pans the card
   into view instead.
 
