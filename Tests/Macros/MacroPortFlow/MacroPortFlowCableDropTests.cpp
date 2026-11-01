@@ -109,6 +109,19 @@ bool anyEdgeBetween(AudioEngine& engine, NodeID a, NodeID b, bool midi) {
     return false;
 }
 
+// Runs the message queue until everything already posted has been handled. Every rig leaves deferred canvas
+// updates behind that each cost a message-loop pass even once the rig is gone; a sweep builds hundreds of rigs, so
+// the leftover backlog takes a few hundred milliseconds to work through and would otherwise delay the next test's
+// own posted messages by that long (a test that waits a fixed 50 ms for one then fails, order-dependently).
+struct DrainMessageQueueOnExit {
+    ~DrainMessageQueueOnExit() {
+        bool reached = false;
+        juce::MessageManager::callAsync([&reached] { reached = true; });
+        while (!reached)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(1);
+    }
+};
+
 struct Rig {
     AudioEngine engine;
     GraphEditor editor{engine};
@@ -166,6 +179,7 @@ struct Rig {
 } // namespace
 
 static void sweepOutputs(bool inside, bool flip) {
+    DrainMessageQueueOnExit drainOnExit;
     for (const auto& type : synth::AIStateMapper::moduleFactoryTypeNames()) {
         if (isMacroPlumbing(type))
             continue;
@@ -194,6 +208,7 @@ static void sweepOutputs(bool inside, bool flip) {
 }
 
 static void sweepInputs(bool inside, bool flip) {
+    DrainMessageQueueOnExit drainOnExit;
     for (const auto& type : synth::AIStateMapper::moduleFactoryTypeNames()) {
         if (isMacroPlumbing(type))
             continue;
