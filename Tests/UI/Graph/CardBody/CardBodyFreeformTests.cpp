@@ -136,6 +136,40 @@ TEST(CardBodyFreeform, ALayoutRangeNarrowsTheKnobButNotTheParameter) {
     EXPECT_DOUBLE_EQ(knob->getValue(), 2000.0) << "the knob only clamps what it shows";
 }
 
+TEST(CardBodyFreeform, ANarrowedCutoffKnobKeepsItsOctaveCurve) {
+    FilterModule probe;
+    auto layout = automaticLayoutWith(probe, {});
+    for (auto& item : layout.sections.front().items)
+        if (auto* param = std::get_if<synth::CardParamItem>(&item); param != nullptr && param->paramId == "cutoff")
+            param->range = juce::Range<double>(200.0, 2000.0);
+    Built built(layout);
+    ASSERT_NE(built.card, nullptr);
+    auto* knob = dynamic_cast<juce::Slider*>(built.card->getCardBody()->findWidget("cutoff"));
+    ASSERT_NE(knob, nullptr);
+    EXPECT_NEAR(knob->proportionOfLengthToValue(0.5), std::sqrt(200.0 * 2000.0), 0.5);
+    EXPECT_NEAR(knob->valueToProportionOfLength(200.0), 0.0, 1.0e-4);
+    EXPECT_NEAR(knob->valueToProportionOfLength(2000.0), 1.0, 1.0e-4);
+}
+
+TEST(CardBodyFreeform, TheCutoffKnobHalfwayIsTheOctaveMiddleAndAProjectKeepsItsHertz) {
+    const auto json =
+        juce::JSON::parse(R"({"nodes":[{"id":1,"type":"Filter","x":0,"y":0,"params":{"cutoff":1234.0}}]})");
+    CardCanvas canvas;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, canvas.engine.getGraph(), /*clearExisting=*/true,
+                                                       /*trusted=*/true));
+    canvas.editor.updateComponents();
+    auto* processor = canvas.engine.getGraph().getNodes().getFirst()->getProcessor();
+    auto* cutoff = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(processor, "cutoff"));
+    ASSERT_NE(cutoff, nullptr);
+    EXPECT_NEAR(cutoff->get(), 1234.0f, 0.02f);
+    auto* card = canvas.card(canvas.engine.getGraph().getNodes().getFirst()->nodeID);
+    ASSERT_NE(card, nullptr);
+    auto* knob = dynamic_cast<juce::Slider*>(card->getCardBody()->findWidget("cutoff"));
+    ASSERT_NE(knob, nullptr);
+    EXPECT_NEAR(knob->getValue(), 1234.0, 0.02);
+    EXPECT_NEAR(knob->proportionOfLengthToValue(0.5), std::sqrt(20.0 * 20000.0), 0.5);
+}
+
 TEST(CardBodyFreeform, AStoredLayoutWithPositionsOpensWithTheKnobAtThatPosition) {
     const auto json = juce::JSON::parse(R"({"nodes":[{"id":1,"type":"Filter","x":300,"y":200,"cardLayout":
         {"version":2,"sections":[{"id":"main","items":[

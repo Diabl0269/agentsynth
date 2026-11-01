@@ -9,6 +9,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
+#include "Modules/ChannelStripModule.h"
 #include "PatchDocument.h"
 #include "ProjectBundle.h"
 #include "TestPaths.h"
@@ -142,4 +143,68 @@ TEST_F(UiVerifyFixture, TheCommittedLfoTwoMacrosProjectHoldsTwoTrackMacrosAndAnL
     for (const auto& n : *json.getProperty("nodes", {}).getArray())
         lfos += n["type"].toString() == "LFO" ? 1 : 0;
     EXPECT_EQ(lfos, 1);
+}
+
+// Tools/ui-verify/fixtures/channel-strip-macro.agsproj: an Oscillator track with its channel (the Channel Strip sits in
+// the open channel macro, cabled to the channel's own output port) and, beside the strip, a collapsed macro with no
+// ports. Regenerate with --gtest_filter=UiVerifyFixture.DISABLED_WritesChannelStripMacroProject.
+TEST_F(UiVerifyFixture, DISABLED_WritesChannelStripMacroProject) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    auto& editor = mc.getGraphEditor();
+
+    const auto osc = addModule(mc, "Oscillator", {100, 300});
+    juce::AudioProcessorGraph::NodeID output;
+    for (auto* n : mc.getAudioEngine().getGraph().getNodes())
+        if (synth::AIStateMapper::getFactoryTypeName(n->getProcessor()) == "Audio Output")
+            output = n->nodeID;
+    ASSERT_NE(output.uid, 0u);
+    editor.connectPorts(osc, 0, output, 0, false, false);
+    ASSERT_TRUE(editor.makeChannelFromNode(osc, "Lead"));
+
+    for (const auto& m : editor.getMacros().getAll())
+        editor.getMacroController().setMacroCollapsed(m.id, false);
+    for (auto* n : mc.getAudioEngine().getGraph().getNodes())
+        if (dynamic_cast<ChannelStripModule*>(n->getProcessor()) != nullptr) {
+            n->properties.set("x", 300);
+            n->properties.set("y", 300);
+        }
+    editor.updateComponents();
+
+    const auto f1 = addModule(mc, "Filter", {900, 300});
+    const auto f2 = addModule(mc, "Filter", {900, 700});
+    ASSERT_FALSE(group(mc, {f1, f2}, "Empty macro", true).isEmpty());
+
+    const auto bundle = juce::File(juce::String(UI_VERIFY_FIXTURES_DIR)).getChildFile("channel-strip-macro.agsproj");
+    bundle.deleteRecursively();
+    ASSERT_TRUE(mc.saveProjectForTest(bundle));
+}
+
+TEST_F(UiVerifyFixture, TheCommittedChannelStripMacroProjectHoldsAStripInAnOpenChannelAndAFoldedEmptyMacro) {
+    const auto bundle = juce::File(juce::String(UI_VERIFY_FIXTURES_DIR)).getChildFile("channel-strip-macro.agsproj");
+    ASSERT_TRUE(synth::ProjectBundle::isBundle(bundle)) << bundle.getFullPathName();
+
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor{engine, &undo};
+    synth::TimelineDoc timeline;
+    synth::MidiRemoteProjectDoc midiRemote;
+    const auto result = synth::ProjectBundle::load(bundle, engine.getGraph(), timeline, editor.getPatchDocument(),
+                                                   editor.getMacros(), midiRemote, nullptr, nullptr, nullptr, nullptr);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    bool hasStrip = false;
+    for (auto* n : engine.getGraph().getNodes())
+        hasStrip = hasStrip || dynamic_cast<ChannelStripModule*>(n->getProcessor()) != nullptr;
+    EXPECT_TRUE(hasStrip);
+    int folded = 0, open = 0;
+    for (const auto& m : editor.getMacros().getAll()) {
+        (m.collapsed ? folded : open)++;
+        if (m.collapsed)
+            EXPECT_TRUE(m.ports.empty());
+    }
+    EXPECT_EQ(folded, 1);
+    EXPECT_EQ(open, 1);
 }

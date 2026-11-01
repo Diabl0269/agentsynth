@@ -10,6 +10,9 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapMacroTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/InsertGap/InsertGapMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CableChainMotionTests.cpp
+    # A module placed in a macro wires only that macro's cards (docs/layout/smart-connections.md).
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/SmartConnectionEngine/SmartConnectionMacroScopeTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/SmartConnectionEngine/SmartConnectionSavedProjectTests.cpp
 )
 # The song key's tests ride along here for the same reason.
 include(${CMAKE_CURRENT_SOURCE_DIR}/SongKeyTests.cmake)

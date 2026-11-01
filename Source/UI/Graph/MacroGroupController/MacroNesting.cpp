@@ -47,20 +47,17 @@ bool allMoved(const std::set<juce::String>& uuids, const std::set<juce::String>&
 
 // A collapsed macro's card is its own component, so a selection drag that moves its (hidden)
 // members leaves the card and its persisted `bounds` behind; this names the ones that must follow.
-// Carried = collapsed, every descendant member moved, AND its parent's every descendant member moved
-// too — i.e. it rides inside a container that is moving as a whole. The parent condition is what
-// keeps flat behaviour identical: a top-level card being dragged has no parent (its own drag writes
-// its bounds), and a nested child card dragged on its own selects only its members, not its parent's.
+// Carried = collapsed and every descendant member moved, wherever it nests: a folded card riding
+// inside a moving container, a second folded macro selected beside the one being dragged, or the
+// dragged card itself (its own drag lands on the same position, so carrying it changes nothing).
 std::vector<juce::String> collapsedMacrosCarriedBy(const synth::MacroSet& macros,
                                                    const std::set<juce::String>& movedUuids) {
     std::vector<juce::String> out;
-    for (const auto& macro : macros.getAll()) {
-        if (!macro.collapsed || macro.parentId.isEmpty())
-            continue;
-        if (allMoved(macros.descendantMembers(macro.parentId), movedUuids) &&
-            allMoved(macros.descendantMembers(macro.id), movedUuids))
+    if (movedUuids.empty())
+        return out;
+    for (const auto& macro : macros.getAll())
+        if (macro.collapsed && allMoved(macros.descendantMembers(macro.id), movedUuids))
             out.push_back(macro.id);
-    }
     return out;
 }
 

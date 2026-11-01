@@ -296,6 +296,8 @@ bool GraphEditor::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey) {
         if (macroController_.insertGap().cancel()) // a drag's gap between cards closes first; the drag goes on
             return true;
+        if (cancelMacroUnitDrag()) // a whole macro being dragged goes back where it was
+            return true;
         if (selection.isEmpty())
             return false;
         clearSelection();

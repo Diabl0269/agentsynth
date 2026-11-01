@@ -49,6 +49,8 @@ public:
      *  vanishes mid-drag cancels the drag rather than leaving it stuck with no mouseUp ever
      *  coming. */
     bool isBodyDragActive() const noexcept { return bodyDragActive; }
+    /** Drops an armed body drag without a drop (GraphEditor::cancelMacroUnitDrag): back at its press position. */
+    void abandonBodyDrag();
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;

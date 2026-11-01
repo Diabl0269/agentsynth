@@ -238,6 +238,11 @@ public:
     /** Emphasises `macroId`'s hull as the live drop target (empty clears it). */
     virtual void setMacroDropCandidate(const juce::String& macroId) = 0;
 
+    /** The macro the live drag would join if released now (a library drag's drop candidate included), empty for
+     *  none; and the macro a reparent drag would leave. GraphEditor's own getters, simply gaining `override`. */
+    virtual juce::String getMacroDragJoinId() const noexcept = 0;
+    virtual juce::String getMacroDragLeaveId() const noexcept = 0;
+
     /** The canvas's active LookAndFeel — plain `Component::getLookAndFeel()`, exposed because
      *  updateDragPreview's grid-metric lookup needs the theme's `AppLookAndFeel` (via dynamic_cast)
      *  and GraphDragDropController is not itself a Component. */

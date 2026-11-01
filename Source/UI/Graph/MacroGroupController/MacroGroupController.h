@@ -337,7 +337,7 @@ public:
     std::vector<synth::LayoutUtil::Box>
     placementBlockers(const std::vector<juce::AudioProcessorGraph::NodeID>& excludeNodes,
                       const juce::String& joinMacroId = {}) const;
-    /** `macroHullBounds` above, but with `excludedMemberUuid` left out of the union too —
+    /** `macroHullBounds` above, but with `excludedMemberUuid` (or a child macro's id: its footprint) left out too —
      *  the LEAVE half of a Cmd-drag needs this because the plain hull is a LIVE union of
      *  member bounds, so the member being dragged OUT keeps inflating its own hull and could never
      *  cross back out of it (see macroDragJoinOrLeaveTarget's own comment in the .cpp). Empty under the same
@@ -346,20 +346,7 @@ public:
                                                   const juce::String& excludedMemberUuid) const;
     juce::String macroHullAt(juce::Point<int> canvasPos) const;
 
-    // ---- Dropping a whole macro into an open one (docs/macros/menu-and-membership.md#dropping-a-macro-into-another)
-    /** The open macro `draggedMacroId` nests into if dropped at `canvasPoint`, empty for none: never itself or a macro
-     *  inside it, never its own parent, and never one it would have to leave its parent to reach. */
-    juce::String macroNestTargetAt(const juce::String& draggedMacroId, juce::Point<int> canvasPoint) const;
-    /** Each tick of a macro body drag (card or name chip): recomputes the target and shows it with the join outline. */
-    void updateMacroNestCandidate(const juce::String& draggedMacroId, juce::Point<int> canvasPoint);
-    /** The target the macro drag in progress would nest into, empty between gestures. */
-    const juce::String& macroNestCandidate() const noexcept { return macroNestCandidate_; }
-    /** Call inside the drop's undo record, after the drag's positions are final. Nests the macro into the candidate
-     *  (one level at a time, ports spliced at each) and clears it; a no-op without a candidate. */
-    void nestDraggedMacroIntoCandidate(const juce::String& draggedMacroId);
-    void clearMacroNestCandidate();
-
-    /** The macro membership change a live module drag would make if released now: `leave` is the
+    /** The macro membership change a live module or macro drag would make if released now: `leave` is the
      *  macro the dragged node is a member of and would exit, `join` the expanded macro it would
      *  enter, each empty for "none". Both set is a one-gesture transfer. */
     struct MacroDragTargets {
@@ -367,6 +354,37 @@ public:
         juce::String join;
         bool isEmpty() const noexcept { return leave.isEmpty() && join.isEmpty(); }
     };
+
+    // ---- Dragging a whole macro into, out of or between open ones
+    // (docs/macros/menu-and-membership.md#dropping-a-macro-into-another-or-out-of-its-parent)
+    /** The open macro `draggedMacroId` nests into if dropped at `canvasPoint`, empty for none: never itself or a macro
+     *  inside it, never its own parent, and never one it would have to leave its parent to reach. */
+    juce::String macroNestTargetAt(const juce::String& draggedMacroId, juce::Point<int> canvasPoint) const;
+    /** Press on a macro's card or chip: keeps a selection the macro is already part of, else selects just it. */
+    void selectMacroForDrag(const juce::String& macroId);
+    /** Call at the press of a macro body drag (card or name chip), after the selection is set: holds its parent and
+     *  ancestors' borders still. With more than this macro selected it is a group drag and arms nothing. */
+    void beginMacroUnitDrag(const juce::String& draggedMacroId);
+    /** The macro being dragged as a unit, empty between gestures. */
+    const juce::String& draggedMacroUnit() const noexcept { return draggedMacroUnit_; }
+    /** What dropping the dragged macro at `canvasPoint` would do: `leave` is its parent when the point is outside the
+     *  parent's border held at press, `join` the open macro it would end up in (empty: the top level when leaving). */
+    MacroDragTargets macroUnitDragTargets(const juce::String& draggedMacroId, juce::Point<int> canvasPoint) const;
+    /** Each tick of a macro body drag: recomputes leave and join and shows them with the reparent-drag outlines. */
+    void updateMacroNestCandidate(const juce::String& draggedMacroId, juce::Point<int> canvasPoint);
+    /** The target the macro drag in progress would nest into, empty between gestures. */
+    const juce::String& macroNestCandidate() const noexcept { return macroNestCandidate_; }
+    /** The parent the macro drag in progress would leave, empty between gestures. */
+    const juce::String& macroLeaveCandidate() const noexcept { return macroLeaveCandidate_; }
+    /** Call inside the drop's undo record, after the drag's positions are final. Walks the macro out of its parent
+     *  (level by level) when leaving, then into the join target, ports spliced at each level. Always ends the drag. */
+    void moveDraggedMacroToCandidate(const juce::String& draggedMacroId);
+    /** Takes `childMacroId` one level up, out of its parent, with that level's ports spliced. False when it has none.
+     *  Records no undo step: call inside the caller's record. */
+    bool moveMacroOutOfParent(const juce::String& childMacroId);
+    /** Ends a macro unit drag with no change: clears the outlines and the held borders. */
+    void clearMacroNestCandidate();
+
     /** The ONE query behind the Cmd-drag-across-a-hull gesture (docs/macros/menu-and-membership.md).
      *  `canvasCentre` is the dragged module's own centre, not its top-left. No resolvable uuid:
      *  empty. Not a member of any macro: `join` only, the smallest expanded hull under the centre.
@@ -565,6 +583,8 @@ private:
     bool makeRoomDeferred_ = false;
     std::vector<juce::String> deferredMakeRoom_;
     juce::String macroNestCandidate_;
+    juce::String macroLeaveCandidate_;
+    juce::String draggedMacroUnit_;
 
     // The shared return walk behind returnDisplacedNeighbours and reflowForResizedModule: offers each record (newest
     // first, repeated until a pass returns nothing) its way back and answers the ones that could not go, in push

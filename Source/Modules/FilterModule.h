@@ -67,9 +67,11 @@ public:
         // StereoAudio::Declared: 35 outputs, so the Auto shape test cannot see this module's stereo
         // pair — its right leg is the kRightBase block, and it ships SPLIT.
         : ModuleBase("Filter", kNumChannels, kNumChannels, StereoAudio::Declared) {
-        addParameter(cutoffParam = new juce::AudioParameterFloat("cutoff", "Cutoff",
-                                                                 juce::NormalisableRange<float>(20.0f, 20000.0f, 0.01f),
-                                                                 440.0f, synth::frequencyAttributes()));
+        // Equal knob travel moves equal octaves. Projects, automation and the Cutoff CV all work in hertz, so
+        // this curve changes how the knob feels and never what a saved cutoff sounds like.
+        addParameter(cutoffParam =
+                         new juce::AudioParameterFloat("cutoff", "Cutoff", synth::logFrequencyRange(20.0f, 20000.0f),
+                                                       440.0f, synth::frequencyAttributes()));
         addParameter(resonanceParam = new juce::AudioParameterFloat("resonance", "Resonance",
                                                                     juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f,
                                                                     synth::fractionPercentAttributes()));

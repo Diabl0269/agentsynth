@@ -25,6 +25,7 @@
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <cmath>
@@ -39,11 +40,19 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("nodeId", static_cast<int>(nodeId.uid));
     // The macro the module is a member of ("" when it is in none), so a scenario can tell "inside the macro" from
     // "next to it" without reading the canvas geometry.
+    // `macroPath` names every macro around it, outermost first ("Outer > Inner"), so a nested macro moving out of its
+    // parent shows on the modules it holds.
     juce::String macroName;
+    juce::StringArray macroPath;
     if (auto* node = owner.getAudioEngine().getGraph().getNodeForId(nodeId))
-        if (const auto* macro = owner.getMacros().findByMember(node->properties["uuid"].toString()))
+        if (const auto* macro = owner.getMacros().findByMember(node->properties["uuid"].toString())) {
             macroName = macro->name;
+            for (auto id = macro->id; id.isNotEmpty(); id = owner.getMacros().parentOf(id))
+                if (const auto* level = owner.getMacros().find(id))
+                    macroPath.insert(0, level->name);
+        }
     into.setProperty("macro", macroName);
+    into.setProperty("macroPath", macroPath.joinIntoString(" > "));
     // The targets with a cable on them, so a scenario can tell a cable landed and a reopened project kept it.
     juce::StringArray cabledTargets;
     if (auto* base = dynamic_cast<ModuleBase*>(module))
@@ -53,6 +62,15 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
                     connection.destination.channelIndex == target.channelIndex)
                     cabledTargets.addIfNotAlreadyThere(target.name);
     into.setProperty("cabledTargets", cabledTargets.joinIntoString(", "));
+    // The cards whose audio reaches this one's inputs, so a scenario can tell what a drop wired and what it left alone.
+    juce::StringArray audioFrom;
+    auto& graph = owner.getAudioEngine().getGraph();
+    for (const auto& connection : graph.getConnections())
+        if (connection.destination.nodeID == nodeId && !connection.destination.isMIDI())
+            if (auto* source = graph.getNodeForId(connection.source.nodeID))
+                audioFrom.addIfNotAlreadyThere(owner.getModuleTitle(source->nodeID, source->getProcessor()));
+    audioFrom.sort(true);
+    into.setProperty("audioFrom", audioFrom.joinIntoString(", "));
     // The input jacks with a cable, by the label the card shows (a Pitch jack has no modulation target to list above).
     juce::StringArray cabledInputs;
     if (auto* base = dynamic_cast<ModuleBase*>(module))
