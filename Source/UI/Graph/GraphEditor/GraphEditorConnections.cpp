@@ -12,7 +12,6 @@
 #include "Modules/MacroOutletModule.h"
 #include "Modules/ModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
-#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
@@ -191,7 +190,6 @@ void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channel
     dragSourceIsInput = isInput;
     dragSourceIsMidi = isMidi;
     dragCurrentPos = screenPos;
-    edgeScroll_->beginCableDrag(screenPos); // held at the edge of the view, the canvas scrolls under the cable
     // Escape has to reach GraphEditor::keyPressed even when a card's control held the focus; the drag ends by giving it
     // back.
     focusBeforeCableDrag() = juce::Component::getCurrentlyFocusedComponent();
@@ -389,11 +387,11 @@ void GraphEditor::connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJ
 void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
     if (!isDraggingConnection)
         return;
-    edgeScroll_->end();
 
     const auto openedRows = cableOpenedRows(content.getModules(), screenPos);
     const ModuleComponent* landedOn = nullptr; // the card whose jack or knob took the cable
     bool connectedToAModule = false;           // gates the macro-card fallback below — unchanged loop otherwise
+    juce::String refusal; // why a jack under the cursor was passed over, said when nothing connects
 
     // A connection can rebuild the cards (a macro port minted by the drop, a Dual I/O change, a Track In's auto
     // channel all reach updateComponents), which frees and reallocates the very array a walk over
@@ -438,10 +436,14 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         if (port) {
             if (comp == dragSourceModule)
                 continue;
-            if (port->isInput == dragSourceIsInput)
+            if (port->isInput == dragSourceIsInput) {
+                refusal = "Connect an output to an input";
                 continue;
-            if (port->isMidi != dragSourceIsMidi)
+            }
+            if (port->isMidi != dragSourceIsMidi) {
+                refusal = "MIDI jacks connect only to MIDI jacks; audio and CV jacks to audio and CV jacks";
                 continue;
+            }
 
             auto& graph = audioEngine.getGraph();
             juce::AudioProcessorGraph::Node* srcNode = nullptr;
@@ -562,9 +564,14 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             // nothing behind it yet), so there is nothing for findUnchanneledOutputFeeds to find.
             macroController_.createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi,
                                                              srcNode->nodeID, dragSourceChannel);
+            connectedToAModule = true; // the card took the cable: a jack passed over on the way is not a refusal
             break;
         }
     }
+
+    // A drop on a jack that cannot take this cable is not silent: the status bar says why.
+    if (!connectedToAModule && refusal.isNotEmpty())
+        reportStatusMessage(refusal);
 
     settleCableOpenedRows(openedRows, landedOn);
     restoreFocusAfterCableDrag(*this);

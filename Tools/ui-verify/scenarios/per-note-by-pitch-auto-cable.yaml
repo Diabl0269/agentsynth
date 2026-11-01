@@ -1,0 +1,90 @@
+# Bug: a mono Filter's By pitch / By hand modes need a Pitch cable, and picking one is meant to make it from the Pitch
+# source of the voice chain feeding the Filter. This covers the chain Poly MIDI -> mono Oscillator -> mono Filter, where
+# the only Pitch cable upstream is Poly Out on the Oscillator's Pitch jack (a plain CV input on a mono Oscillator).
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator, a Filter and a Poly MIDI from the library (Cmd+F), cables Osc -> Filter
+#      (so the Oscillator stays mono), then drags Poly MIDI's Poly Out onto the Oscillator's Pitch input.
+#   2. Sets the Filter's type to Custom and presses Edit shapes: the Filter has no Pitch cable yet.
+#   3. Picks By pitch: the Filter's Pitch input is cabled at once, with no hint left.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: oscill}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: poly}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - expect: {count: {prefix: "card:Oscillator", equals: 1}, within_ms: 1500}
+  - click: {id: Auto Arrange}
+  - wait: {}
+  - key: {keys: cmd+-}                                       # zoom out (5x) so both cards fit above the bottom panel
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - wait: {}
+  - drag: {from: Patch canvas, to: Patch canvas, fromX: 1200, fromY: 300, toX: 1200, toY: 400}   # pan the ports off the toolbar
+  - wait: {}
+  - drag: {from: "card:Oscillator > Audio output", to: "card:Filter > Audio input"}
+  - wait: {}
+  - drag: {from: "card:Poly MIDI > Poly Out output", to: "card:Oscillator > Pitch input"}
+  - wait: {}
+  - expect: {id: "card:Oscillator", contains: {cabledInputs: Pitch}, within_ms: 1500}   # Poly Out landed on the Pitch jack
+  - expect: {id: "card:Filter > Poly", toggleState: false}
+  - screenshot: {id: window, name: per-note-by-pitch-oscillator-cable}
+  - click: {id: window, x: 676, y: 413}                      # the Filter Type combo at this zoom (its label has the same title)
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: Edit shapes, exists: true, within_ms: 3000}  # the Custom layout has settled
+  - wait: {}
+  - wait: {}
+  - click: {id: Edit shapes}
+  - wait: {}
+  - expect: {id: Notes move the cursor, exists: true, within_ms: 5000}
+  - expect: {id: Notes move the cursor, contains: {tooltip: "by hand, by pitch or at random"}}
+  - expect: {id: "card:Filter", cabledInputs: Audio}                                  # no Pitch cable yet
+  - screenshot: {id: window, name: per-note-by-pitch-before}
+  - click: {id: By pitch}
+  - wait: {}
+  - expect: {id: "card:Filter", contains: {cabledInputs: Pitch}, within_ms: 1500}      # By pitch cabled the Pitch input
+  - expect: {id: By pitch, toggleState: true, within_ms: 1500}
+  - expect: {count: {prefix: "Per-note works in Poly", equals: 0}}
+  - expect: {count: {prefix: "Needs a Pitch cable", equals: 0}}
+  - screenshot: {id: Per-note settings, name: per-note-by-pitch-bar}

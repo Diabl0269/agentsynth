@@ -688,5 +688,5 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
     // Switch the dock to the Timeline tab (a Timeline in its own window is brought forward
     // instead) so a mixer-column or canvas-knob Automate visibly lands on the new lane.
     showBottomDockTab(synth::ui::BottomDockComponent::Tab::Timeline);
-    timelinePanel.showAutomationLane(laneId);
+    detail::showLaneWhenSettled(timelineSlide_, timelinePanel, isBottomDockVisible, laneId, *this);
 }

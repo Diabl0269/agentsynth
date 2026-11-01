@@ -804,7 +804,6 @@ bool ModuleComponent::computeReparentArmed(const juce::ModifierKeys& mods) const
 }
 
 void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
-    owner.getEdgeScroll().notePointer(e); // before the card moves under the event
     // A cable first: the press point is re-read against the card's current spot, so one a row pushed misses its jack.
     if (owner.isCableDragFrom(*this) || getPortForPoint(e.getMouseDownPosition())) {
         owner.dragConnection(e.getScreenPosition());
@@ -825,6 +824,7 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
             synth::ui::showDragCursor(*this); // the move has really started
         // Carry every other selected module by the same delta from its own recorded origin.
         owner.dragSelectionBy(getPosition() - dragStartPosition, this);
+        // Update the landing ghost to follow the live drag position.
         owner.getDragDropController().updateDragPreview(getPosition());
         owner.refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // the frame steps out ahead of the card
 

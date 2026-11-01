@@ -1,0 +1,13 @@
+# Audit of the panel-slide anchoring fix (Add Track and the song key wait for the Timeline's slide): Focus Timeline (Cmd+Shift+T)
+# lands where it should once the panel has slid in, not where the panel was when the key was pressed.
+#
+# What a user does: with the bottom panel closed, presses Cmd+Shift+T. The panel slides open (hence `motion: true`) and the Timeline is the focused panel, with its Add Track button at its settled place.
+# The PNG is taken after the slide landed.
+motion: true
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+shift+t}
+  - expect: {id: Timeline, bounds: {x: 0, y: 661, w: 533, h: 19}, within_ms: 1500}
+  - expect: {id: timelineAddTrackButton, bounds: {x: 2, y: 716, w: 196, h: 26}}
+  - screenshot: {name: focus-timeline-closed-window}

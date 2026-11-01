@@ -270,7 +270,7 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
         return {};
 
     ensureDockOpenFor(synth::ui::BottomDockComponent::Tab::Timeline);
-    timelinePanel.showAutomationLane(laneId);
+    detail::showLaneWhenSettled(timelineSlide_, timelinePanel, isBottomDockVisible, laneId, *this);
     return laneId;
 }
 

@@ -7,7 +7,7 @@
 #      then Poly MIDI's Poly Out -> the Filter's Pitch input (the Filter stays mono because it already had a cable).
 #   2. Sets the Filter's type to Custom and presses Edit shapes.
 #   3. Picks By pitch in "Notes move the cursor": the bar offers the modes, never says "Poly", and (Pitch cabled) shows no hint.
-# Not covered: the Poly MIDI -> Oscillator -> Filter chain where By pitch auto-cables the Pitch input.
+# The Poly MIDI -> Oscillator -> Filter chain, where By pitch cables the Pitch input itself, is per-note-by-pitch-auto-cable.yaml.
 # Needs the app to be the active application (the library search field must have keyboard focus).
 steps:
   - click: {id: New empty project}
