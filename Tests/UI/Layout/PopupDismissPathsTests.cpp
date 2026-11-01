@@ -32,6 +32,18 @@ bool pumpUntil(const std::function<bool()>& done) {
     return done();
 }
 
+// Runs the message queue until everything already posted has been handled, a few passes deep because a handler can post
+// the next step (a fade's end posts the close, the close posts the settle). Earlier tests in the binary leave deferred
+// work behind (canvas updates, leaving pictures); without this it runs inside this test's own waits.
+void drainMessageQueue() {
+    for (int pass = 0; pass < 3; ++pass) {
+        bool reached = false;
+        juce::MessageManager::callAsync([&reached] { reached = true; });
+        while (!reached)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(1);
+    }
+}
+
 juce::KeyPress escape() { return juce::KeyPress(juce::KeyPress::escapeKey, juce::ModifierKeys(), 0); }
 
 // A press on `target`, as the global mouse listener of a popup sees it.
@@ -110,6 +122,7 @@ protected:
         if (nativeWindowsAbortHere())
             GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
         juce::MessageManager::getInstance();
+        drainMessageQueue();
         synth::ui::setReducedMotionForTest(false);
         synth::testmode::setAppInFrontForTest(true);
         app.setBounds(0, 0, 600, 400);
@@ -117,6 +130,7 @@ protected:
         app.setVisible(true);
     }
     void TearDown() override {
+        drainMessageQueue(); // a leaving picture or a deferred close still queued must run while the rig's owners exist
         synth::testmode::setAppInFrontForTest(std::nullopt);
         synth::ui::setReducedMotionForTest(std::nullopt);
     }
@@ -307,30 +321,51 @@ struct KeyAlert : juce::AlertWindow {
 
 // ---- alert prompts and dialogs ------------------------------------------------------------------------------------
 
+// Owns a modal alert for the length of a test. The alert deletes itself in its modal callback (the library's pattern),
+// so the test holds only a SafePointer and a flag the callback shares with it, never a raw pointer or a reference to a
+// local: a failed ASSERT that returns early cannot leave either dangling, and the guard closes and deletes an alert
+// that is still up before the queue is drained.
+struct ModalAlertRig {
+    std::shared_ptr<bool> answered = std::make_shared<bool>(false);
+    juce::Component::SafePointer<KeyAlert> alert;
+    ModalAlertRig() {
+        auto* raw = new KeyAlert("Prompt", "Name:", juce::AlertWindow::NoIcon);
+        alert = raw;
+        raw->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+        raw->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+        PopupMotion::attach(*raw);
+        raw->enterModalState(true, juce::ModalCallbackFunction::create([flag = answered, safe = alert](int) {
+                                 std::unique_ptr<juce::AlertWindow> owned(safe.getComponent());
+                                 *flag = true;
+                             }));
+    }
+    ~ModalAlertRig() {
+        if (alert != nullptr)
+            alert->exitModalState(0); // its callback, queued by this, deletes the alert
+        drainMessageQueue();
+        if (alert != nullptr) // never reached its callback: delete it here rather than leak a window
+            delete alert.getComponent();
+    }
+};
+
 TEST_F(PopupDismissPaths, AnAlertPromptFadesOnEscapeAndStaysOpenOnAClickOutsideOrDeactivation) {
-    bool answered = false;
-    auto* alert = new KeyAlert("Prompt", "Name:", juce::AlertWindow::NoIcon);
-    alert->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    alert->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    PopupMotion::attach(*alert);
-    alert->enterModalState(true, juce::ModalCallbackFunction::create([&answered, alert](int) {
-                               std::unique_ptr<juce::AlertWindow> owned(alert);
-                               answered = true;
-                           }));
-    ASSERT_TRUE(pumpUntil([&] { return alert->getAlpha() >= 0.999f; }));
+    ModalAlertRig rig;
+    ASSERT_TRUE(pumpUntil([&] { return rig.alert != nullptr && rig.alert->getAlpha() >= 0.999f; }));
 
     {
         const AppDeactivated deactivated;
         app.toFront(true);
-        alert->inputAttemptWhenModal(); // a press outside a modal prompt, or the app resigning key
-        pumpUntil([&] { return answered; });
-        EXPECT_FALSE(answered) << "a modal prompt does not close on a click outside or on deactivation";
-        EXPECT_TRUE(alert->isVisible());
+        rig.alert->inputAttemptWhenModal(); // a press outside a modal prompt, or the app resigning key
+        // Nothing to wait for: the prompt must not react. Give the queue a few turns to show it did not.
+        drainMessageQueue();
+        EXPECT_FALSE(*rig.answered) << "a modal prompt does not close on a click outside or on deactivation";
+        ASSERT_NE(rig.alert.getComponent(), nullptr);
+        EXPECT_TRUE(rig.alert->isVisible());
     }
 
-    alert->keyPressed(escape());
+    rig.alert->keyPressed(escape());
     expectGhostFades();
-    EXPECT_TRUE(pumpUntil([&] { return answered; }));
+    EXPECT_TRUE(pumpUntil([&] { return *rig.answered; }));
 }
 
 TEST_F(PopupDismissPaths, ADialogFadesOnEscapeAndStaysOpenOnAClickOutsideOrDeactivation) {
