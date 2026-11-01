@@ -1,0 +1,43 @@
+# Check: a cable dragged from a track's Channel Strip onto a folded macro's card makes a port on that macro and
+# connects to it, in both directions, and Cmd+Z takes the port and the cable away in one step.
+#
+# What a user does:
+#   1. Opens a project with a track's channel (the Channel Strip sits in the open channel macro) and, beside it, a
+#      folded macro with no ports ("Empty macro", two modules). Zooms out and pans so both are on screen.
+#   2. Drags a cable from the Channel Strip's left output jack and lets go on the folded card (not on a jack).
+#   3. The card now reads "2 modules, 1 port" (the macro holds 3 members: its two modules and the new input port).
+#   4. Presses Cmd+Z: the card is back to 2 members.
+#   5. Drags a cable from the Channel Strip's input jack onto the card: an output port is made the same way, and
+#      Cmd+Z takes it away.
+steps:
+  - copyFixture: {name: channel-strip-macro.agsproj}
+  - openProject: {path: "${SCRATCH}/channel-strip-macro.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 500, dy: 1.6, dx: 1.5}
+  - wait: {}
+  - expect: {id: macroCard, collapsed: true, members: 2}
+  - screenshot: {name: 1-before}
+
+  - drag: {from: "card:Channel Strip", to: macroCard, fromX: 269, fromY: 58, steps: 40}
+  - wait: {}
+  - expect: {id: macroCard, members: 3, within_ms: 1500}
+  - screenshot: {name: 2-output-dropped}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: macroCard, members: 2, within_ms: 1500}
+  - screenshot: {name: 3-output-undone}
+
+  - drag: {from: "card:Channel Strip", to: macroCard, fromX: 11, fromY: 58, steps: 40}
+  - wait: {}
+  - expect: {id: macroCard, members: 3, within_ms: 1500}
+  - screenshot: {name: 4-input-dropped}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: macroCard, members: 2, within_ms: 1500}

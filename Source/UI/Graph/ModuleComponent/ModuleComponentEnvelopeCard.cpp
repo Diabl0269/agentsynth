@@ -14,6 +14,7 @@
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include <cmath>
 #include <limits>
 

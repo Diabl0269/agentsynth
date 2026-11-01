@@ -225,8 +225,7 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    if (!owner.getMacroController().isMacroSelected(macroId))
-        owner.getMacroController().selectMacro(macroId, false);
+    owner.getMacroController().selectMacroForDrag(macroId); // kept when it is selected with others: they all move
 
     dragStartPosition = getPosition();
     bodyDragActive = true;
@@ -262,6 +261,15 @@ void MacroCardComponent::mouseUp(const juce::MouseEvent& e) {
     else
         owner.cancelMacroCardDrag(macroId);
     portReleased(e); // a press that became a drag is the controller's to ignore: the card was dragged as before
+}
+
+// The rest of the gesture's mouseDrag/mouseUp then find no armed drag and do nothing.
+void MacroCardComponent::abandonBodyDrag() {
+    if (!bodyDragActive)
+        return;
+    bodyDragActive = false;
+    setTopLeftPosition(dragStartPosition);
+    synth::ui::endDragCursor(*this);
 }
 
 void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {

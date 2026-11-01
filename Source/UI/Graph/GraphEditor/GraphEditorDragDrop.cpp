@@ -685,6 +685,11 @@ juce::Rectangle<int> GraphEditor::macroHullTargetBounds(const juce::String& macr
             return macroController_.macroHullBoundsExcluding(macroId, uuid);
         }
     }
+    // A whole macro dragged by its card or chip: its parent and ancestors stay where they were at press until the drop
+    // (leaving or not), so the border never follows the macro out; the drop glides them to their new bounds.
+    if (const auto& unit = macroController_.draggedMacroUnit(); unit.isNotEmpty())
+        if (const auto frozen = macroController_.frozenDragHull(macroId); !frozen.isEmpty())
+            return frozen;
     if (const auto stored = canvasMemo_->hull(macroId))
         return *stored;
     ++graph_editor_paint::workCounters().hullComputations;
