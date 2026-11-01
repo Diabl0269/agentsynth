@@ -74,15 +74,17 @@ void MainComponentAudioImport::stretchAudioClip(MainComponent& mc, synth::ClipId
     // Back at 100% the original's own window is the answer: no render, so no copy and no loss.
     juce::String stretchedRef = failure.isEmpty() && window->backToOriginal ? window->sourceRef : juce::String();
     if (failure.isEmpty() && !window->backToOriginal) {
-        const auto rendered =
-            synth::soundbrowser::stretchedLoopCacheFolder()
-                .getChildFile("Clips")
-                .getChildFile(source.getFileNameWithoutExtension() + "-stretch" + juce::String(percent) + ".wav")
-                .getNonexistentSibling();
+        // A folder of its own per render: the cache folder is shared by every process on the machine (parallel test
+        // shards, a second instance), and two renders of the same loop at the same percent would otherwise write,
+        // rename and delete each other's file.
+        const auto renderFolder = synth::soundbrowser::stretchedLoopCacheFolder().getChildFile("Clips").getChildFile(
+            juce::Uuid().toDashedString());
+        const auto rendered = renderFolder.getChildFile(source.getFileNameWithoutExtension() + "-stretch" +
+                                                        juce::String(percent) + ".wav");
         if (synth::soundbrowser::renderStretchedWindow(source, window->startSeconds, window->lengthSeconds,
                                                        window->tempoRatio, rendered))
             stretchedRef = importAudioAsset(mc, rendered);
-        rendered.deleteFile();
+        renderFolder.deleteRecursively();
         if (stretchedRef.isEmpty())
             failure = "Could not stretch the audio";
     }
