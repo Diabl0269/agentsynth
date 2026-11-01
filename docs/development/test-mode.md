@@ -148,7 +148,7 @@ JSON-lines `run.log` under `<out>` (one folder per scenario when a directory run
 is non-zero when any step failed. A failed `expect` names the field that differed.
 
 A file is a list of steps, or a mapping with `steps:` and optional `settings:` (values written to the instance's settings
-file before it first starts, for an install that has to look old), and `motion: true` to start with `--automation-motion`, for a check that needs a slide or fade to run). A step is one mapping, `- <command>: {args}`: any
+file before it first starts, for an install that has to look old), and `motion: true` to start with `--automation-motion`, for a check that needs a slide or fade to run; see also [Video and saved project](#video-and-saved-project)). A step is one mapping, `- <command>: {args}`: any
 protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) with its arguments, plus:
 
 | Step | Meaning |
@@ -165,6 +165,24 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 
 `${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string. An `expect` is retried for `within_ms` (default 500), so a repaint
 that is still settling is not a failure and one that never arrives still is.
+
+### Video and saved project
+
+Two more scenario options leave what someone needs to look at a run in seconds, beside its screenshots:
+
+```yaml
+record: true          # <out>/<scenario>.mp4
+save_project: end     # <out>/end.agsproj, saved after the last step
+steps: ...
+```
+
+`record` takes a window `screenshot` after each step that can change the window, joined by ffmpeg, so it needs no Screen
+Recording permission and works on hidden windows. It has no sound: for an audio check, attach an offline render's WAV.
+Each frame holds 0.8 s. The protocol answers one command at a time, so a recorded `drag` is sent as `mouseDown`,
+`mouseMoveHeld` per step and `mouseUp` with a frame after each (0.1 s each, ten a second): the same gesture, only slower
+in real time. A drag with an end outside the main window stays one command and shows only its result. Without ffmpeg
+the run prints a warning and still passes. A failed scenario keeps both: they show what went wrong. `save_project` is a plain
+name (it cannot leave `<out>`), overwrites the last run's bundle and fails the scenario if the save fails.
 
 To add one: copy the closest file, start the file with a comment naming the bug and the steps a user takes, and give each
 check an id from `list` (add a `setComponentID` or a `StateSource` field where the component has none, never rename an

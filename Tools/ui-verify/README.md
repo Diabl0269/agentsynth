@@ -38,7 +38,8 @@ python3 Tools/ui-verify/run.py Tools/ui-verify/scenarios            # every scen
 python3 Tools/ui-verify/run.py Tools/ui-verify/scenarios/poly-switch-chain.yaml --out out/poly
 ```
 
-Screenshots and a `run.log` land in the output folder (one per scenario when a directory runs). The step format and how to add a scenario are in
+Screenshots and a `run.log` land in the output folder (one per scenario when a directory runs), plus an MP4 with
+`record: true` and a saved project with `save_project: <name>`. The step format and how to add a scenario are in
 [`docs/development/test-mode.md`](../../docs/development/test-mode.md#scenarios). `bash scripts/tests/ui-verify-run.test.sh`
 tests the runner without an app.
 
