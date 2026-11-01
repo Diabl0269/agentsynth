@@ -21,8 +21,8 @@ public:
         addParameter(depthParam =
                          new juce::AudioParameterFloat("depth", "Depth", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                        0.5f, synth::fractionPercentAttributes()));
-        addParameter(centreFreqParam =
-                         new juce::AudioParameterFloat("centreFreq", "Centre Freq (Hz)", 200.0f, 10000.0f, 1300.0f));
+        addParameter(centreFreqParam = new juce::AudioParameterFloat(
+                         "centreFreq", "Centre Freq (Hz)", synth::logFrequencyRange(200.0f, 10000.0f), 1300.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", -1.0f, 1.0f, 0.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f),
                                                               0.5f, synth::fractionPercentAttributes()));

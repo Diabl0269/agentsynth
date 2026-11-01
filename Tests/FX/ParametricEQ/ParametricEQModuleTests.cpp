@@ -724,3 +724,24 @@ TEST(ParametricEQEdgeCases, EveryBandExposesTheFullParameterSet) {
     }
     EXPECT_NE(floatParamById(eq, "outputGain"), nullptr);
 }
+
+TEST(ParametricEQModuleTest, EveryBandFreqKnobMovesEqualOctavesPerEqualTravel) {
+    ParametricEQModule eq;
+    for (int band = 1; band <= 4; ++band) {
+        const auto id = "band" + juce::String(band) + "Freq";
+        juce::AudioParameterFloat* freq = nullptr;
+        for (auto* p : eq.getParameters())
+            if (auto* f = dynamic_cast<juce::AudioParameterFloat*>(p); f != nullptr && f->getParameterID() == id)
+                freq = f;
+        ASSERT_NE(freq, nullptr) << id;
+        EXPECT_FLOAT_EQ(freq->convertFrom0to1(0.0f), 20.0f);
+        EXPECT_FLOAT_EQ(freq->convertFrom0to1(1.0f), 20000.0f);
+        for (int step = 0; step < 10; ++step) {
+            const double low = freq->convertFrom0to1((float)step / 10.0f);
+            const double high = freq->convertFrom0to1((float)(step + 1) / 10.0f);
+            EXPECT_NEAR(std::log2(high / low), std::log2(1000.0) / 10.0, 0.01) << id << " step " << step;
+        }
+        freq->setValueNotifyingHost(freq->convertTo0to1(1234.0f));
+        EXPECT_NEAR(freq->get(), 1234.0f, 0.01f) << "a saved hertz value keeps its hertz";
+    }
+}

@@ -551,11 +551,7 @@ private:
             param->setValueNotifyingHost(param->convertTo0to1(value));
     }
 
-    static juce::NormalisableRange<float> freqRange() {
-        juce::NormalisableRange<float> range(kMinFreq, kMaxFreq);
-        range.setSkewForCentre(1000.0f);
-        return range;
-    }
+    static juce::NormalisableRange<float> freqRange() { return synth::logFrequencyRange(kMinFreq, kMaxFreq); }
 
     static juce::NormalisableRange<float> gainRange() { return {-kMaxGainDb, kMaxGainDb}; }
 
