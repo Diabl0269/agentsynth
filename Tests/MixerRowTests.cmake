@@ -6,4 +6,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerInsertListDryPathTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerInsertListReorderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerRowMoveAndRevealTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerTopBarRingTests.cpp
 )

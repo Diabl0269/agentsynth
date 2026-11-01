@@ -8,6 +8,7 @@
 #include <array>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 // MixerPanelToolbar.h (docs/mixer/panel.md#the-toolbar): the slim row along the top of the mixer
 // panel -- the side-pane button at the very left, then the Inserts / Sends / EQ show-hide toggles, "Reset Meters" and
@@ -42,6 +43,11 @@ public:
         resized();
     }
 
+    /** Every button in reading order (side pane, Inserts, Sends, EQ, Reset Meters, Add Bus, dock back); the last is
+     *  null when the panel is docked. */
+    std::vector<juce::Component*> getKeyStops() noexcept {
+        return {&paneButton_, &toggles_[0], &toggles_[1], &toggles_[2], &resetMetersButton_, &addBusButton_, dockBack_};
+    }
     juce::Button& getSectionToggle(MixerSection section) noexcept { return toggles_[(size_t)section]; }
     juce::Button& getSectionToggleForTest(MixerSection section) noexcept { return getSectionToggle(section); }
     ToolbarButton& getAddBusButtonForTest() noexcept { return addBusButton_; }

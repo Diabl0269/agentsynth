@@ -600,7 +600,7 @@ and re-reads when it opens. Rows, top to bottom:
 - **Mixer channel:** read-only. "Channel · <name>" with the [channel chip](#the-channel-chip)'s
   gated level meter (ticked by the panel's existing 15 Hz timer), or "No mixer channel" (muted). A
   **Show in mixer** link calls `TrackChannelLinkSurface::revealChannelForTrack`, which opens the Mixer
-  tab on that column. The channel comes from the graph's cables; nothing here chooses it.
+  tab on that column. The channel comes from the graph's cables; nothing here chooses it. The chip takes no clicks and is no keyboard stop, so the link's description names the channel ("Finds this track's channel, <name>, in the mixer") for a keyboard or screen-reader user.
 
 An automation track, or no selection, shows one muted line instead: "Nothing to route on an
 automation track." / "Select a MIDI or audio track to see its routing." Every control opts out of

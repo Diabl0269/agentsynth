@@ -49,8 +49,12 @@ public:
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
 
-    // ---- Test seams ----
     enum class Chip { All, Tracks, Buses };
+    /** The filter field and the All / Tracks / Buses chips: the panel's top-bar key ring stops here. */
+    juce::TextEditor& getFilterField() noexcept { return filter_; }
+    juce::Button& getChip(Chip chip) noexcept { return chips_[static_cast<size_t>(chip)]; }
+
+    // ---- Test seams ----
     juce::TextEditor& getFilterForTest() noexcept { return filter_; }
     juce::Button& getChipForTest(Chip chip) noexcept { return chips_[static_cast<size_t>(chip)]; }
     juce::Button& getShowAllForTest() noexcept { return showAll_; }

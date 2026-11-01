@@ -111,10 +111,12 @@ below for the Mixer region's own keyboard behaviour.
   `Source/UI/Layout/FocusStepWithin.h` (`PaneKeys`).
 - **The Timeline's top bar** (side-pane toggle, tool strip, Sizing, Snap, Follow, the transport buttons, count-in,
   tempo, time signature, song Key) — focus stays on the Timeline root. Up on the root raises a ring on the first
-  control (`TimelineTopBarKeys`); Left/Right/Home/End move it across the visible, enabled controls in on-screen order
+  control (`synth::ui::KeyRing`); Left/Right/Home/End move it across the visible, enabled controls in on-screen order
   (no wrap), Return or Space presses the ringed one (a menu opens, tempo and time signature start typing), Down or
   Escape drops back to the root, and a chord or a tool digit still reaches the panel. The main Toolbar and the Canvas
-  toolbar already have the same ring; the Mixer's toolbar does not (Up/Down there nudge the fader). The track list's own Up/Down walk, lanes included, is
+  toolbar already have the same ring, and the Mixer's top bar has it too (entered with Cmd+Up, since plain Up/Down there
+  nudge the fader; [top bar keys](../mixer/top-bar-keys.md)). The Timeline's and the Mixer's rings are one
+  class, `KeyRing`, and report the ringed control's name as the panel's screen-reader value. The track list's own Up/Down walk, lanes included, is
   in [`timeline/automation.md`](../timeline/automation.md#keyboard-order).
 - **Arrow keys on the Canvas** — the canvas region moves between module cards with the arrows, moves the
   selected cards with Alt+arrows and steps into a card with Return. Unlike the Toolbar and the dock tabs these

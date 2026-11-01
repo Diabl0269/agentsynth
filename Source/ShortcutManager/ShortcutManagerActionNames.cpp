@@ -106,6 +106,8 @@ juce::String mixerActionName(const juce::String& actionId) {
         return "Move Mixer Send or Insert Up";
     if (actionId == "mixerMoveRowDown")
         return "Move Mixer Send or Insert Down";
+    if (actionId == "mixerFocusTopBar")
+        return "Focus the Mixer Top Bar";
     return {};
 }
 

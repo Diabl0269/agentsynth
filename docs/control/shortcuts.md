@@ -567,9 +567,7 @@ thickness the same way a track-header row does.
 
 M/S/R resolve the exact same rebindable Timeline-category action ids the track-header row above
 already binds — deliberately, so a user's rebind applies to whichever of the two surfaces has
-focus, and a new id would not have inherited an existing rebind. Falls back to hardcoded bare
-letters with no `ShortcutManager` installed, the same "no manager installed" contract every other
-surface action in this app follows.
+focus, and a new id would not have inherited an existing rebind. Falls back to hardcoded bare letters with no `ShortcutManager` installed, the same "no manager installed" contract every other surface action in this app follows.
 
 Accessibility (JUCE `AccessibilityHandler`, this ticket's other half): the fader and pan sliders
 report their value as spoken text (`"-3.0 dB"`, `"50% left"`) via `textFromValueFunction`; the
@@ -792,6 +790,7 @@ name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind. The other
 | E | E | Open Mixer EQ (`mixerOpenEq`) |
 | B | B | Bypass Mixer Send or Insert (`mixerToggleRowBypass`) |
 | Alt+Up / Alt+Down | Alt+Up / Alt+Down | Move Mixer Row Up / Down (`mixerMoveRowUp`, `mixerMoveRowDown`) |
+| Cmd+Up | Ctrl+Up | Focus the Mixer Top Bar (`mixerFocusTopBar`): a key ring over the toolbar buttons, the side pane's filter and chips and the master pan law ([top bar keys](../mixer/top-bar-keys.md)) |
 
 **Real Control on macOS, Ctrl+Alt elsewhere.** Cmd+S is Save and Cmd+I / Cmd+E are taken, so macOS uses
 the physical Control key, as `pianoRollToggleScalePanel` does. On Windows and Linux JUCE's Cmd *is* Ctrl,

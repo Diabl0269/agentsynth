@@ -7,6 +7,7 @@
 
 #include "TimelinePanelComponent.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
+#include "UI/Layout/KeyRing.h"
 
 #include "ShortcutManager/ShortcutManager.h"
 
@@ -77,7 +78,7 @@ bool TimelinePanelComponent::matchesAction(const juce::KeyPress& key, const juce
 }
 
 bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
-    if (topBarKeys_.handleKey(key))
+    if (topBarKeys_->handleKey(key))
         return true;
     if (handleAddTrackButtonKey(key))
         return true;

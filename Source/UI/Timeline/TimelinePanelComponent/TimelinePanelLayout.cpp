@@ -7,6 +7,7 @@
 
 #include "TimelinePanelComponent.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
+#include "UI/Layout/KeyRing.h"
 
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -800,7 +801,7 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
 void TimelinePanelComponent::paintOverChildren(juce::Graphics& g) {
     if (!routingPane_.hasKeyboardFocus(true) && !pianoRoll_.getScaleAssistPanel().hasKeyboardFocus(true))
         synth::ui::paintFocusRegionOutline(*this, g);
-    topBarKeys_.paintRing(g);
+    topBarKeys_->paintRing(g);
 }
 
 } // namespace synth::ui

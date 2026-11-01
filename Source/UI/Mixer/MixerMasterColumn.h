@@ -145,6 +145,7 @@ public:
 
     /** The project's pan-law control, next to the mute button -- the mixer has no other
      *  project-settings surface (see docs/mixer/mixer.md#pan-law). */
+    juce::TextButton& getPanLawButton() noexcept { return panLawButton_; }
     juce::TextButton& getPanLawButtonForTest() noexcept { return panLawButton_; }
     /** Same test-seam idiom as setShowContextMenuHookForTest, for the pan-law button's own menu. */
     void setShowPanLawMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {

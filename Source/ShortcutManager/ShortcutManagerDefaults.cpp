@@ -548,6 +548,9 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     // different focus region, so the two never meet).
     bindings["mixerMoveRowUp"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::altModifier, 0);
     bindings["mixerMoveRowDown"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::altModifier, 0);
+    // Cmd+Up (Ctrl+Up off the Mac, where Cmd is Ctrl) climbs from the focused column to the top bar's key ring; plain
+    // Up and Down stay on the fader.
+    bindings["mixerFocusTopBar"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0);
 }
 
 // The card layout editor's list keys: Space shows or hides the focused control, Cmd+Up/Down moves it

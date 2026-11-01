@@ -7,6 +7,7 @@
 #include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/KeyRing.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/ReorderDrag/ReorderCancelKey.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
@@ -384,7 +385,12 @@ public:
     juce::Rectangle<int> getFocusedRowBoundsForTest() const { return focusedRowBounds(); }
 
     bool keyPressed(const juce::KeyPress& key) override;
-    /** Leaving the panel (another control or region takes focus) ends row mode. */
+    /** The top bar's key ring (docs/mixer/top-bar-keys.md). */
+    KeyRing& getTopBarRingForTest() noexcept { return topBarRing_; }
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override {
+        return topBarRing_.createAccessibilityHandler();
+    }
+    /** Leaving the panel (another control or region takes focus) ends row mode and the top-bar ring. */
     void focusLost(FocusChangeType cause) override;
     /** Opens the focused column's header right-click menu, anchored at that column. False with no column focused. */
     bool showContextMenuForKeyboardFocus() override;
@@ -607,6 +613,10 @@ private:
     SidePane sidePane_;
     MixerPanelToolbar toolbar_;
     MixerZonesPane zonesPane_;
+    std::vector<juce::Component*> topBarStops();
+    static std::unique_ptr<juce::Component> makeTopBarRingProbe(const KeyRing& ring);
+    std::unique_ptr<juce::Component> topBarRingProbe_; // hidden; reports the ring to test mode
+    KeyRing topBarRing_{*this, [this] { return topBarStops(); }, KeyRing::Order::given};
     Zone leftZone_;
     Zone rightZone_;
     synth::MixerViewDoc ownedViewDoc_ = synth::MixerViewDoc::forNewProject();
