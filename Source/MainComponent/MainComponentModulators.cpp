@@ -191,36 +191,23 @@ bool MainComponent::canModulate(const juce::String& nodeUuid, const juce::String
     return graphEditor.modulationChannelFor(target->nodeID, paramId) >= 0;
 }
 
-juce::String MainComponent::addLfoModulator(const juce::String& nodeUuid, const juce::String& paramId) {
+// A new LFO or envelope beside the target card, cabled in: create, cable, hidden attenuverter and macro join are one
+// undo step. Only an LFO or an envelope can be added from a lane.
+juce::String MainComponent::addNewModulator(const juce::String& nodeUuid, const juce::String& paramId,
+                                            const juce::String& typeName, int sourceChannel) {
     auto* target = findNodeByUuid(nodeUuid);
-    if (target == nullptr)
+    if (target == nullptr || typeName.isEmpty())
         return {};
-    const auto lfoId = graphEditor.addLfoModulator(target->nodeID, paramId);
-    return uuidOf(audioEngine.getGraph().getNodeForId(lfoId));
+    if (typeName != "LFO" && typeName != "ADSR")
+        return {};
+    const auto source = graphEditor.addNewModulatorTo(typeName, sourceChannel, target->nodeID, paramId);
+    return source.uid == 0 ? juce::String() : uuidOf(audioEngine.getGraph().getNodeForId(source));
 }
 
-// Every LFO in the project for the "Add modulator..." picker, in graph order: where it lives (the innermost macro
-// it sits in), what it already moves (each routing's real destination, macro ports looked through) and whether it
-// already moves (`nodeUuid`, `paramId`) itself. Names and uuids are read from the live graph, never cached.
-std::vector<synth::ui::TrackHeaderHost::LfoChoice> MainComponent::getLfoChoices(const juce::String& nodeUuid,
-                                                                                const juce::String& paramId) {
-    std::vector<synth::ui::TrackHeaderHost::LfoChoice> result;
-    auto& graph = audioEngine.getGraph();
-    auto* target = findNodeByUuid(nodeUuid);
-    const int raw = target != nullptr ? graphEditor.modulationChannelFor(target->nodeID, paramId) : -1;
-    const synth::ui::ConnectionIndex cables(graph);
-    const PortNodes ports(graph, graphEditor.getMacros());
-    for (auto* node : graph.getNodes()) {
-        if (dynamic_cast<LFOModule*>(node->getProcessor()) == nullptr)
-            continue;
-        result.push_back(
-            describeSource(audioEngine, graphEditor.getMacros(), cables, ports, node, /*channel=*/-1, target, raw));
-    }
-    return result;
-}
-
-// Every LFO and envelope output in the project for the "Change source..." picker, in the source catalogue's order,
-// described as getLfoChoices does; a macro's port nodes are skipped (they are plumbing, not sources).
+// Every LFO and envelope output in the project for the "Add modulator..." and "Change source..." pickers, in the source
+// catalogue's order, each described with where it lives (the innermost macro it sits in), what it already moves (each
+// routing's real destination, macro ports looked through) and whether it already moves (`nodeUuid`, `paramId`) itself;
+// a macro's port nodes are skipped (they are plumbing, not sources).
 std::vector<synth::ui::TrackHeaderHost::LfoChoice> MainComponent::getChangeSourceChoices(const juce::String& nodeUuid,
                                                                                          const juce::String& paramId) {
     std::vector<synth::ui::TrackHeaderHost::LfoChoice> result;
@@ -245,12 +232,14 @@ std::vector<synth::ui::TrackHeaderHost::LfoChoice> MainComponent::getChangeSourc
 }
 
 // Both nodes are found again by uuid; the host call is one undo step and adds no card.
-bool MainComponent::connectModulator(const juce::String& lfoUuid, const juce::String& nodeUuid,
+// Only an LFO or an envelope output can be taken (the same set the picker lists).
+bool MainComponent::connectModulator(const juce::String& sourceUuid, int sourceChannel, const juce::String& nodeUuid,
                                      const juce::String& paramId) {
-    auto* lfo = findNodeByUuid(lfoUuid);
+    auto* source = findNodeByUuid(sourceUuid);
     auto* target = findNodeByUuid(nodeUuid);
-    return lfo != nullptr && target != nullptr &&
-           graphEditor.connectExistingLfoModulator(lfo->nodeID, target->nodeID, paramId);
+    return source != nullptr && target != nullptr &&
+           isLaneModulatorSource(audioEngine.getGraph(), source->nodeID, sourceChannel) &&
+           graphEditor.connectExistingModulator(source->nodeID, sourceChannel, target->nodeID, paramId);
 }
 
 // Only an LFO or an envelope routed through an Attenuverter can be re-pointed: that Attenuverter is what the amount

@@ -680,7 +680,7 @@ namespace {
 // Offers one parameter so the "+ Add automation..." picker has a row to audit, and two modulators on every lane.
 struct OneParameterHost : synth::ui::TrackHeaderHost {
     bool canModulate(const juce::String&, const juce::String&) override { return true; }
-    std::vector<LfoChoice> getLfoChoices(const juce::String&, const juce::String&) override {
+    std::vector<LfoChoice> getChangeSourceChoices(const juce::String&, const juce::String&) override {
         LfoChoice moving;
         moving.uuid = "lfo";
         moving.name = "LFO 1";
@@ -779,7 +779,7 @@ TEST(AccessibilityCoverageTest, AutomationLanes) {
     EXPECT_NE(modulatorPicker, nullptr);
     if (modulatorPicker != nullptr) {
         modulatorPicker->setSize(300, 200);
-        EXPECT_FALSE(modulatorPicker->isVisibleItemPickableForTest(1)) << "the LFO that already moves Cutoff";
+        EXPECT_FALSE(modulatorPicker->isVisibleItemPickableForTest(2)) << "the LFO that already moves Cutoff";
         for (auto gap : auditAccessibility(*modulatorPicker)) {
             gap.path = "[add modulator picker] " + gap.path;
             gaps.push_back(gap);

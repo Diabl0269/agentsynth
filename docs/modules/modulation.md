@@ -631,7 +631,7 @@ the arrows keep working.
   the cable through the macro-port seam, its depth, and joining the card's macro when it is in one). Return prefers an
   existing match to a new module.
 * **Picking a source** from the list connects it through the same programmatic routing seam as the Mod Matrix and the
-  timeline's "Add modulator" (`GraphEditor::connectModulationSource`, which `connectExistingLfoModulator` wraps), so
+  timeline's "Add modulator" (`GraphEditor::connectModulationSource`, which `connectExistingModulator` wraps), so
   macro ports are minted where a macro boundary is crossed. The new routing starts at +25 percent
   (`kModDotNewSourceDepth`); the cable, its depth and any ports are ONE undo step. The list folds and the new row grows
   in selected (and chosen for a later dot drag).

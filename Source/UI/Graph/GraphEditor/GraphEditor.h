@@ -527,20 +527,20 @@ public:
     // ---- Modulators added from a timeline lane (GraphEditorModulators.cpp) ----
     /** The raw CV channel that drives `paramId` on `nodeId`'s module; -1 when it has none. */
     int modulationChannelFor(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) const;
-    /** An LFO beside `targetId`, cabled into `paramId`'s CV jack at `depth`, as ONE undo step (none with `recordUndo`
-     *  false); invalid id when it can't. `attenOut` gets the routing's hidden attenuverter. */
+    /** An LFO beside `targetId`, cabled into `paramId`'s CV jack at `depth` as ONE undo step (none with `recordUndo`
+     *  false); invalid if it can't. `attenOut` gets the hidden attenuverter. */
     juce::AudioProcessorGraph::NodeID addLfoModulator(juce::AudioProcessorGraph::NodeID targetId,
                                                       const juce::String& paramId, bool recordUndo = true,
                                                       float depth = 0.5f,
                                                       juce::AudioProcessorGraph::NodeID* attenOut = nullptr);
-    /** Cables the EXISTING LFO `lfoId` into `paramId`'s CV jack on `targetId` at the default depth, as ONE undo step
-     *  (no new card; macro ports minted or reused). False (nothing changed) when a node, the jack or the LFO is
-     * missing. */
-    bool connectExistingLfoModulator(juce::AudioProcessorGraph::NodeID lfoId,
-                                     juce::AudioProcessorGraph::NodeID targetId, const juce::String& paramId);
-    /** A new module of factory type `typeName` beside `targetId`, cabled from its output `sourceChannel` into raw CV
-     *  channel `destChannel` at `depth`, as ONE undo step (none with `recordUndo` false). Returns the new routing's
-     *  hidden attenuverter; invalid (nothing changed) when it can't. */
+    /** Cable an existing LFO/envelope output, or a new one, into `paramId`'s CV jack as ONE undo step. */
+    bool connectExistingModulator(juce::AudioProcessorGraph::NodeID sourceId, int sourceChannel,
+                                  juce::AudioProcessorGraph::NodeID targetId, const juce::String& paramId);
+    juce::AudioProcessorGraph::NodeID addNewModulatorTo(const juce::String& typeName, int sourceChannel,
+                                                        juce::AudioProcessorGraph::NodeID targetId,
+                                                        const juce::String& paramId);
+    /** A new `typeName` module beside `targetId`, cabled from `sourceChannel` into raw CV channel `destChannel` at
+     * `depth` as ONE undo step (none with `recordUndo` false); returns its hidden attenuverter, invalid if it can't. */
     juce::AudioProcessorGraph::NodeID addModulationSourceModule(const juce::String& typeName, int sourceChannel,
                                                                 juce::AudioProcessorGraph::NodeID targetId,
                                                                 int destChannel, float depth, bool recordUndo = true);

@@ -1,0 +1,75 @@
+# The lane's "Add modulator..." offers a new envelope (and the project's envelopes), not only a new LFO, like Change source.
+#
+# What a user does:
+#   1. Opens the default project and the timeline, adds an Oscillator track, unfolds its automation and adds a Pan lane.
+#   2. Opens the lane's menu (right-click) and picks Add modulator...: the picker lists the New group (New LFO, New
+#      envelope), then the LFOs and the project's envelopes; typing "adsr" finds the envelope.
+#   3. Picks New envelope: an envelope card appears, cabled to Pan, and a mod row shows under the lane.
+#   4. Cmd+Z removes the card, cable and row in one step; Cmd+Shift+Z brings them back.
+#   5. Opens the picker again and picks an existing envelope: no new card, just a cable and a row.
+record: true
+save_project: end
+steps:
+  - click: {id: "Open our default project"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: timelinePanel, showing: true, within_ms: 3000}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - type: {text: osc}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: trackAutomationFoldArrow}
+  - wait: {}
+  - click: {id: addAutomationRow}
+  - wait: {}
+  - type: {text: pan}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: automationLaneHeader, showing: true, within_ms: 3000}
+  - expect: {count: {prefix: modulatorRow, equals: 0}}
+  - click: {id: automationLaneHeader, button: right}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - screenshot: {id: modMatrixPicker, name: picker-list}
+  - type: {text: adsr}
+  - wait: {}
+  - screenshot: {id: modMatrixPicker, name: picker-adsr}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  # New envelope: the card, the cable and one mod row under the lane, as one undo step.
+  - click: {id: automationLaneHeader, button: right}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: modulatorRow, equals: 1}}
+  - screenshot: {name: new-envelope-added}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {count: {prefix: modulatorRow, equals: 0}}
+  - screenshot: {name: new-envelope-undone}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {count: {prefix: modulatorRow, equals: 1}}
+  # An existing envelope: no new card, only the cable and a second row.
+  - click: {id: automationLaneHeader, button: right}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: adsr}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: modulatorRow, equals: 2}}
+  - screenshot: {name: existing-envelope-added}

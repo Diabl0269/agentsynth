@@ -87,8 +87,8 @@ void AutomationLaneHeaderComponent::addCreateCustomLfoItem(juce::PopupMenu& menu
     });
 }
 
-// The picker's pick comes back after the call-out closes. A new LFO and an existing one are each ONE undo step
-// in the host. A stale menu cannot add a modulator to a parameter with no CV jack.
+// The picker's pick comes back after the call-out closes. A new LFO or envelope and an existing one are each ONE undo
+// step in the host. A stale menu cannot add a modulator to a parameter with no CV jack.
 void AutomationLaneHeaderComponent::openAddModulatorPicker() {
     const auto* lane = doc_.getLane(laneId_);
     if (lane == nullptr || host_ == nullptr || !host_->canModulate(lane->nodeUuid, lane->paramId))
@@ -97,12 +97,12 @@ void AutomationLaneHeaderComponent::openAddModulatorPicker() {
     const auto paramId = lane->paramId;
     auto* host = host_;
     const auto name = parameterName_.isNotEmpty() ? parameterName_ : paramId;
-    const auto choices = collectAddModulatorChoices(host->getLfoChoices(nodeUuid, paramId), name);
+    const auto choices = collectAddModulatorChoices(host->getChangeSourceChoices(nodeUuid, paramId), name);
     auto picker = buildAddModulatorPicker(choices, name, [host, nodeUuid, paramId](const AddModulatorPick& pick) {
         if (pick.isNew)
-            host->addLfoModulator(nodeUuid, paramId);
+            host->addNewModulator(nodeUuid, paramId, pick.newTypeName, pick.sourceChannel);
         else
-            host->connectModulator(pick.lfoUuid, nodeUuid, paramId);
+            host->connectModulator(pick.lfoUuid, pick.sourceChannel, nodeUuid, paramId);
     });
     if (auto& hook = test_hooks::addModulatorPickerHookForTest()) {
         hook(std::move(picker));
