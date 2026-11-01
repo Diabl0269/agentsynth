@@ -360,7 +360,10 @@ public:
     /** The open macro `draggedMacroId` nests into if dropped at `canvasPoint`, empty for none: never itself or a macro
      *  inside it, never its own parent, and never one it would have to leave its parent to reach. */
     juce::String macroNestTargetAt(const juce::String& draggedMacroId, juce::Point<int> canvasPoint) const;
-    /** Call at the press of a macro body drag (card or name chip): holds its parent and ancestors' borders still. */
+    /** Press on a macro's card or chip: keeps a selection the macro is already part of, else selects just it. */
+    void selectMacroForDrag(const juce::String& macroId);
+    /** Call at the press of a macro body drag (card or name chip), after the selection is set: holds its parent and
+     *  ancestors' borders still. With more than this macro selected it is a group drag and arms nothing. */
     void beginMacroUnitDrag(const juce::String& draggedMacroId);
     /** The macro being dragged as a unit, empty between gestures. */
     const juce::String& draggedMacroUnit() const noexcept { return draggedMacroUnit_; }

@@ -19,7 +19,7 @@ std::vector<const synth::Macro*> macrosParentsFirst(const synth::MacroSet& macro
 /** `macroId`'s direct members in stored order, then each child's (recursively, in childrenOf order). */
 std::vector<juce::String> orderedDescendantMembers(const synth::MacroSet& macros, const juce::String& macroId);
 
-/** Ids of the collapsed macros a drag of `movedUuids` carries along: see the .cpp. */
+/** Ids of the collapsed macros a drag of `movedUuids` carries along (every member moved): see the .cpp. */
 std::vector<juce::String> collapsedMacrosCarriedBy(const synth::MacroSet& macros,
                                                    const std::set<juce::String>& movedUuids);
 
