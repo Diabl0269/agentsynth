@@ -75,3 +75,22 @@ TEST_F(PhaserModuleTest, ModuleTypeAndCategoryAreCorrect) {
     EXPECT_EQ(module->getModuleType(), ModuleType::Phaser);
     EXPECT_EQ(module->getModulationCategory(), ModulationCategory::FX);
 }
+
+TEST(PhaserCentreFreqKnob, MovesEqualOctavesPerEqualTravelAndKeepsItsHertz) {
+    PhaserModule phaser;
+    juce::AudioParameterFloat* centre = nullptr;
+    for (auto* p : phaser.getParameters())
+        if (auto* f = dynamic_cast<juce::AudioParameterFloat*>(p); f != nullptr && f->getParameterID() == "centreFreq")
+            centre = f;
+    ASSERT_NE(centre, nullptr);
+    EXPECT_FLOAT_EQ(centre->get(), 1300.0f) << "the default sound does not move";
+    EXPECT_FLOAT_EQ(centre->convertFrom0to1(0.0f), 200.0f);
+    EXPECT_FLOAT_EQ(centre->convertFrom0to1(1.0f), 10000.0f);
+    for (int step = 0; step < 10; ++step) {
+        const double low = centre->convertFrom0to1((float)step / 10.0f);
+        const double high = centre->convertFrom0to1((float)(step + 1) / 10.0f);
+        EXPECT_NEAR(std::log2(high / low), std::log2(50.0) / 10.0, 0.01) << "step " << step;
+    }
+    centre->setValueNotifyingHost(centre->convertTo0to1(1234.0f));
+    EXPECT_NEAR(centre->get(), 1234.0f, 0.01f);
+}
