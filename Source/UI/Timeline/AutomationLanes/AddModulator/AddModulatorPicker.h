@@ -10,23 +10,23 @@ namespace synth::ui {
 
 // What an automation lane's "Add modulator..." picker offers for one parameter, and the picker built from it.
 // Like the "Add automation..." picker it is the Mod Matrix's searchable list (ModMatrixPicker), reused as it
-// is: "New LFO" first, then every LFO in the project with where it lives and what it already moves. An LFO
-// that already moves this parameter is listed greyed out, with that as its reason.
+// is: a "New" group ("New LFO", "New envelope") first, then every LFO and every envelope in the project with where
+// it lives and what it already moves. A source that already moves this parameter is listed greyed out, with that as
+// its reason. It offers the same source types as the modulator row's "Change source" picker (one shared builder).
 
 struct AddModulatorPick {
-    bool isNew = true;     // "New LFO" (or, in the change-source picker, "New LFO" / "New envelope")
+    bool isNew = true;     // "New LFO" / "New envelope"
     juce::String lfoUuid;  // the chosen existing LFO (or envelope) when !isNew
     int sourceChannel = 0; // its output channel; for a new module, the output it is read from
-    // For a new module from the change-source picker, the factory type to create ("LFO", "ADSR"); empty for the
-    // add-modulator picker's "New LFO", which the host makes itself.
+    // For a new module, the factory type to create ("LFO", "ADSR").
     juce::String newTypeName;
 };
 
 struct AddModulatorChoices {
     std::vector<TrackHeaderHost::LfoChoice> lfos;
-    // Item id 1 = New LFO; item id n + 2 = lfos[n].
+    // Item id 1 = New LFO; item id n + 2 = lfos[n]; the "New" rows are in newSources.
     std::vector<ModMatrixPicker::Item> items;
-    // The change-source picker's "New" rows: item id, factory type and output channel to read from.
+    // The "New" rows: item id, factory type and output channel to read from.
     struct NewSource {
         int id = 0;
         juce::String typeName;
@@ -35,7 +35,8 @@ struct AddModulatorChoices {
     std::vector<NewSource> newSources;
 };
 
-/** The picker's rows for `lfos`, as the host described them for `parameterName`. */
+/** The picker's rows for `sources` (LFOs and envelopes, as the host described them for `parameterName`): the "New"
+ *  group first, then "LFOs", then "Envelopes". `choices.lfos[n]` is item id n + 2. */
 AddModulatorChoices collectAddModulatorChoices(std::vector<TrackHeaderHost::LfoChoice> lfos,
                                                const juce::String& parameterName);
 

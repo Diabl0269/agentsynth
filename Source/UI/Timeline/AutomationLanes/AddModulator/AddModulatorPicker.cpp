@@ -50,26 +50,21 @@ void addNewRow(AddModulatorChoices& choices, int id, const juce::String& typeNam
 }
 } // namespace
 
-AddModulatorChoices collectAddModulatorChoices(std::vector<TrackHeaderHost::LfoChoice> lfos,
-                                               const juce::String& parameterName) {
+namespace {
+// The one row builder behind both pickers: "New LFO" / "New envelope" (the "New" group), and every LFO and envelope
+// output under "LFOs" and "Envelopes", the current source (when there is one) ticked and disabled. Add modulator
+// has no current source and lists "New" first; Change source lists it last.
+AddModulatorChoices collectSourceChoices(std::vector<TrackHeaderHost::LfoChoice> lfos,
+                                         const juce::String& currentSourceUuid, int currentSourceChannel,
+                                         const juce::String& parameterName, bool newFirst) {
     AddModulatorChoices choices;
     choices.lfos = std::move(lfos);
-    ModMatrixPicker::Item fresh;
-    fresh.id = kNewLfoItemId;
-    fresh.text = "New LFO";
-    fresh.detail = "adds one beside " + parameterName;
-    fresh.searchText = "new add modulator";
-    choices.items.push_back(fresh);
-    for (size_t i = 0; i < choices.lfos.size(); ++i)
-        choices.items.push_back(itemFor(choices.lfos[i], (int)i + 2, parameterName));
-    return choices;
-}
-
-AddModulatorChoices collectChangeSourceChoices(std::vector<TrackHeaderHost::LfoChoice> lfos,
-                                               const juce::String& currentSourceUuid, int currentSourceChannel,
-                                               const juce::String& parameterName) {
-    AddModulatorChoices choices;
-    choices.lfos = std::move(lfos);
+    const auto addNewRows = [&choices] {
+        addNewRow(choices, kNewLfoItemId, "LFO", "New LFO", "new add lfo");
+        addNewRow(choices, kNewEnvelopeItemId, "ADSR", "New envelope", "new add env envelope adsr");
+    };
+    if (newFirst)
+        addNewRows();
     for (const bool envelopes : {false, true}) {
         for (size_t i = 0; i < choices.lfos.size(); ++i) {
             const auto& source = choices.lfos[i];
@@ -77,16 +72,30 @@ AddModulatorChoices collectChangeSourceChoices(std::vector<TrackHeaderHost::LfoC
                 continue;
             auto item = itemFor(source, (int)i + 2, parameterName);
             item.category = envelopes ? "Envelopes" : "LFOs";
-            if (source.uuid == currentSourceUuid && source.sourceChannel == currentSourceChannel) {
+            if (currentSourceUuid.isNotEmpty() && source.uuid == currentSourceUuid &&
+                source.sourceChannel == currentSourceChannel) {
                 item.ticked = true;
                 item.enabled = false;
             }
             choices.items.push_back(std::move(item));
         }
     }
-    addNewRow(choices, kNewLfoItemId, "LFO", "New LFO", "new add lfo");
-    addNewRow(choices, kNewEnvelopeItemId, "ADSR", "New envelope", "new add env envelope adsr");
+    if (!newFirst)
+        addNewRows();
     return choices;
+}
+} // namespace
+
+AddModulatorChoices collectAddModulatorChoices(std::vector<TrackHeaderHost::LfoChoice> lfos,
+                                               const juce::String& parameterName) {
+    return collectSourceChoices(std::move(lfos), {}, 0, parameterName, /*newFirst=*/true);
+}
+
+AddModulatorChoices collectChangeSourceChoices(std::vector<TrackHeaderHost::LfoChoice> lfos,
+                                               const juce::String& currentSourceUuid, int currentSourceChannel,
+                                               const juce::String& parameterName) {
+    return collectSourceChoices(std::move(lfos), currentSourceUuid, currentSourceChannel, parameterName,
+                                /*newFirst=*/false);
 }
 
 std::unique_ptr<ModMatrixPicker> buildAddModulatorPicker(const AddModulatorChoices& choices,
@@ -102,8 +111,6 @@ std::unique_ptr<ModMatrixPicker> buildAddModulatorPicker(const AddModulatorChoic
                                             [id](const AddModulatorChoices::NewSource& s) { return s.id == id; });
             if (fresh != newSources.end())
                 onPick({true, {}, fresh->channel, fresh->typeName});
-            else if (id == kNewLfoItemId)
-                onPick({true, {}, 0, {}});
             else if (id >= 2 && id - 2 < (int)lfos.size())
                 onPick({false, lfos[(size_t)(id - 2)].uuid, lfos[(size_t)(id - 2)].sourceChannel, {}});
         });

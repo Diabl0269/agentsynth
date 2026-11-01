@@ -307,10 +307,6 @@ struct TrackHeaderHost {
     }
     /** True when the parameter has a CV jack an LFO can be cabled into. */
     virtual bool canModulate(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) { return false; }
-    /** Adds an LFO cabled into the parameter as ONE undo step; returns its uuid, empty when it could not. */
-    virtual juce::String addLfoModulator(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) {
-        return {};
-    }
     /** `value` (in the parameter's own units) as a position in the parameter's normalised 0..1 range, skew included;
      *  nullopt when the parameter does not resolve. */
     virtual std::optional<double> normaliseParameterValue(const juce::String& /*nodeUuid*/,
@@ -323,7 +319,8 @@ struct TrackHeaderHost {
     virtual bool createCustomLfoFromRange(synth::LaneId /*lane*/, double /*startBeat*/, double /*endBeat*/) {
         return false;
     }
-    /** One LFO the "Add modulator..." picker can offer for a parameter: where it lives and what it moves. */
+    /** One LFO or envelope output the "Add modulator..." and "Change source..." pickers can offer for a parameter:
+     *  where it lives and what it moves. */
     struct LfoChoice {
         juce::String uuid;
         juce::String name;                 // its card title ("LFO 2")
@@ -331,22 +328,24 @@ struct TrackHeaderHost {
         std::vector<juce::String> targets; // what it already moves, "<module> <parameter>" each, graph order
         bool movesThisParameter = false;   // already cabled into the parameter being asked about
         int sourceChannel = 0;             // the output a routing reads (an envelope has several)
-        bool isEnvelope = false;           // an envelope output rather than an LFO (change-source picker only)
+        bool isEnvelope = false;           // an envelope output rather than an LFO
     };
-    /** Every LFO in the project, in graph order, described for the picker of (`nodeUuid`, `paramId`). */
-    virtual std::vector<LfoChoice> getLfoChoices(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) {
+    /** Adds a new module of factory type `typeName` ("LFO", "ADSR") beside the parameter's card, read from its output
+     *  `sourceChannel` and cabled into the parameter, as ONE undo step; returns its uuid, empty when it could not. */
+    virtual juce::String addNewModulator(const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/,
+                                         const juce::String& /*typeName*/, int /*sourceChannel*/) {
         return {};
     }
-    /** Every LFO and envelope output in the project, described for the "Change source..." picker of (`nodeUuid`,
-     *  `paramId`); the "Add modulator..." picker stays on getLfoChoices. */
+    /** Every LFO and envelope output in the project, in the source catalogue's order, described for the "Add
+     *  modulator..." and "Change source..." pickers of (`nodeUuid`, `paramId`). */
     virtual std::vector<LfoChoice> getChangeSourceChoices(const juce::String& /*nodeUuid*/,
                                                           const juce::String& /*paramId*/) {
         return {};
     }
-    /** Cables the existing LFO `lfoUuid` into the parameter as ONE undo step (no new card; through macro ports
-     *  when they sit in different macros). False when nothing changed. */
-    virtual bool connectModulator(const juce::String& /*lfoUuid*/, const juce::String& /*nodeUuid*/,
-                                  const juce::String& /*paramId*/) {
+    /** Cables output `sourceChannel` of the existing LFO or envelope `sourceUuid` into the parameter as ONE undo step
+     *  (no new card; through macro ports when they sit in different macros). False when nothing changed. */
+    virtual bool connectModulator(const juce::String& /*sourceUuid*/, int /*sourceChannel*/,
+                                  const juce::String& /*nodeUuid*/, const juce::String& /*paramId*/) {
         return false;
     }
     /** True when `modulator` can be re-pointed at another source with changeModulatorSource(); the lane's
