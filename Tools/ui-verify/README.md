@@ -51,5 +51,9 @@ free oscillator. It is written by a disabled test through the app's real save pa
 build-ci-local/Tests/Tests --gtest_also_run_disabled_tests --gtest_filter=UiVerifyFixture.DISABLED_WritesMacrosProject
 ```
 
+`fixtures/channel-strip-macro.agsproj` holds an Oscillator track's open channel macro (its Channel Strip cabled to the
+channel's output port) and a folded macro with no ports; `UiVerifyFixture.DISABLED_WritesChannelStripMacroProject`
+regenerates it and `scenarios/channel-strip-cable-on-folded-macro.yaml` drives it.
+
 `UiVerifyFixture.TheCommittedMacrosProjectHoldsAnOpenACollapsedAndANestedMacro` fails if the committed copy stops
 loading or loses a macro.

@@ -129,6 +129,15 @@ Shape is therefore an **input to port creation**, supplied one of these ways:
   path never wires anything on the macro's INTERIOR side: the macro is collapsed, so there is no
   visible member to pick a target from. Only the dialog, or a manual cable drawn after expanding the
   macro, connects a port to a specific member.
+  **It works the same for every module type, in both directions.** The drop looks only at the dragged card's
+  jack (visible index) and kind, never at the module's type, so a Channel Strip (stereo or mono, Dual I/O on or
+  off, sends, a member of an open channel macro) behaves like an Oscillator. `Tests/Macros/MacroPortFlow/MacroPortFlowCableDropTests.cpp`
+  (the `EveryModuleType*` and `ATracksChannelStrip*` tests) drops a cable from every output jack, and onto every input
+  jack, of every factory module type, bare, inside an open macro and with the other Dual I/O layout, and from a real
+  track's strip, asserting a port was minted and a cable path exists. A new module type needs
+  no entry: the sweep picks it up from the factory. A cable is never *started* from a collapsed card's port jack
+  (that press opens the port connections panel), so the reverse direction is a drag from the other module's
+  jack onto the card (or onto the existing port's jack, which reuses that port).
 - **From a cable dragged across an expanded macro's hull** — same inference (Mono/`StereoCollapsed`/
   `Poly`, never the two-jack `Stereo`), and it wires both sides. See
   [`docs/macros/auto-ports.md`](auto-ports.md#ports-on-a-cable-drag).
