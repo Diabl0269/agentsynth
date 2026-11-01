@@ -22,8 +22,8 @@
 #     alarm (scripts/ci-cache-check.sh's caller in the workflows, >8.5 GB actual usage) covers
 #     instead of a static sum.
 #   - every literal `ccache_max_size: <N><M|G>` in build-artifacts.yml's release build matrix.
-#   - a fixed DEPS_ALLOWANCE_MB for the build/_deps entries in both workflows (ci.yml's deps6,
-#     build-artifacts.yml's release-deps-ninja6, one entry per OS each) -- NOT capped by ccache, so
+#   - a fixed DEPS_ALLOWANCE_MB for the build/_deps entries in both workflows (ci.yml's deps7,
+#     build-artifacts.yml's release-deps-ninja7, one entry per OS each) -- NOT capped by ccache, so
 #     it can't be read off a config value; see the constant's own comment below for how it's
 #     derived.
 #
@@ -72,8 +72,8 @@ done
 CI_YML="${CI_YML:-$ROOT/.github/workflows/ci.yml}"
 BUILD_ARTIFACTS_YML="${BUILD_ARTIFACTS_YML:-$ROOT/.github/workflows/build-artifacts.yml}"
 EXCLUDED_CI_JOBS="${EXCLUDED_CI_JOBS:-build-and-test-asan}"
-# Measured from the Actions cache listing on 2026-10-30: ci.yml's deps6 entries 192 + 185 + 142 MB,
-# build-artifacts.yml's release-deps-ninja6 entries 188 + 182 + 139 MB, 1028 MB for one generation.
+# Measured from the Actions cache listing on 2026-10-30: ci.yml's deps7 entries 192 + 185 + 142 MB,
+# build-artifacts.yml's release-deps-ninja7 entries 188 + 182 + 139 MB, 1028 MB for one generation.
 # The allowance leaves about a quarter of margin for a dependency that grows.
 DEPS_ALLOWANCE_MB="${DEPS_ALLOWANCE_MB:-1280}"
 BUDGET_CAP_MB="${BUDGET_CAP_MB:-8192}"
@@ -164,7 +164,7 @@ if [ -n "$ba_matches" ]; then
 fi
 
 total_mb=$((total_mb + DEPS_ALLOWANCE_MB))
-contributors+=("deps allowance (ci.yml deps6 + build-artifacts.yml release-deps-ninja6, all OSes) -> ${DEPS_ALLOWANCE_MB} MB")
+contributors+=("deps allowance (ci.yml deps7 + build-artifacts.yml release-deps-ninja7, all OSes) -> ${DEPS_ALLOWANCE_MB} MB")
 
 if [ "$LIST" -eq 1 ]; then
     printf '%s\n' "${contributors[@]}"

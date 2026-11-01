@@ -280,9 +280,9 @@ jobs:
         # this did until Aug 2026) minted a fresh ~350 MB entry per platform per workflow on every
         # module PR — 10 CMakeLists edits in nine days, ~2.1 GB apiece, which blew past GitHub's
         # 10 GB per-repo budget and LRU-evicted every ccache entry with it.
-        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        key: ${{ runner.os }}-deps7-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps6-
+          ${{ runner.os }}-deps7-
 
     - name: Restore ccache
       id: ccache-cache
@@ -508,9 +508,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        key: ${{ runner.os }}-deps7-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps6-
+          ${{ runner.os }}-deps7-
 
     # The ONE exception to rule 6 of docs/development/ci-caching.md ("PR runs restore only"). This
     # job never runs on push:main, so nothing can seed a main-scoped cache for it, and until
@@ -627,9 +627,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        key: ${{ runner.os }}-deps7-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps6-
+          ${{ runner.os }}-deps7-
 
     - name: Restore ccache
       id: ccache-cache
@@ -843,9 +843,9 @@ jobs:
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
-        key: ${{ runner.os }}-deps6-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
+        key: ${{ runner.os }}-deps7-${{ hashFiles('cmake/DependencyVersions.cmake', 'cmake/ApplyJucePatch.cmake', 'cmake/patches/*.patch') }}
         restore-keys: |
-          ${{ runner.os }}-deps6-
+          ${{ runner.os }}-deps7-
 
     - name: Restore ccache
       id: ccache-cache

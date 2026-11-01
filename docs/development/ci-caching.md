@@ -25,7 +25,8 @@ break in ways that look exactly like a healthy build, just slower — which is w
   `release-deps-ninja5`), because the `restore-keys` prefix fallback would otherwise restore an unpatched
   `juce-src` that nothing re-patches. The JUCE 9.0.3 upgrade bumped it again (`deps5` → `deps6`, `release-deps-ninja5` →
   `release-deps-ninja6`) for the same reason: the fallback would restore a JUCE 8 `juce-src` that FetchContent
-  would not move to the new tag.
+  would not move to the new tag. The fourth JUCE patch bumped it once more (`deps6` → `deps7`,
+  `release-deps-ninja6` → `release-deps-ninja7`): a restored older tree made the new patch fail at configure.
 
 ## Six rules, each learned from an outage
 
