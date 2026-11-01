@@ -10,6 +10,7 @@ privacy prompt. The protocol and its limits are in [`docs/development/test-mode.
 bash scripts/ci-local.sh                          # builds build-ci-local/.../Agent Synth.app (dev builds only)
 python3 Tools/ui-verify/examples/select_card.py   # opens fixtures/macros.agsproj, selects a card, writes out/select_card.png
 python3 Tools/ui-verify/examples/parallel.py      # two instances at once, each with its own settings directory
+python3 Tools/ui-verify/examples/edge_scroll_drags.py  # each canvas drag held at the window edge: the canvas scrolls, then stops
 ```
 
 Both take `--app <path to Agent Synth.app>`, `--out <dir>` and `--visible`. Each run starts its own app with `--automation 0`

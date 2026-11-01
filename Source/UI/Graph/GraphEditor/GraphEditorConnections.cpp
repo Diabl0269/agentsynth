@@ -12,6 +12,7 @@
 #include "Modules/MacroOutletModule.h"
 #include "Modules/ModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
@@ -190,6 +191,7 @@ void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channel
     dragSourceIsInput = isInput;
     dragSourceIsMidi = isMidi;
     dragCurrentPos = screenPos;
+    edgeScroll_->beginCableDrag(screenPos); // held at the edge of the view, the canvas scrolls under the cable
     // Escape has to reach GraphEditor::keyPressed even when a card's control held the focus; the drag ends by giving it
     // back.
     focusBeforeCableDrag() = juce::Component::getCurrentlyFocusedComponent();
@@ -387,6 +389,7 @@ void GraphEditor::connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJ
 void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
     if (!isDraggingConnection)
         return;
+    edgeScroll_->end();
 
     const auto openedRows = cableOpenedRows(content.getModules(), screenPos);
     const ModuleComponent* landedOn = nullptr; // the card whose jack or knob took the cable

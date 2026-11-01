@@ -11,7 +11,7 @@
 #include "GraphEditorCableMenu.h"
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
-#include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 
 #include "CanvasAccessibilityClip.h"
@@ -857,6 +857,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
             macroChipDragId = macroId;
             macroChipDragStartCanvasPos = localPos.roundToInt();
             pendingEmptyCanvasClick = false;
+            edgeScroll_->beginCanvasDrag(); // a lone member never arms the move, so nothing scrolls for it
         };
 
         if (auto macroId = macroController_.macroChipAt(localPos.roundToInt());
