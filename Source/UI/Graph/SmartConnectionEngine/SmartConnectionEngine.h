@@ -19,6 +19,10 @@
 #include <optional>
 #include <vector>
 
+namespace synth {
+class MacroOwnerIndex;
+}
+
 class SmartConnectionEngine {
 public:
     // Proximity-based cable suggestions while placing a module. One setting covers Off /
@@ -196,7 +200,23 @@ public:
      *  also re-checks it before applying, exactly as it did when this lived on GraphEditor. */
     bool shouldOfferSmartConnections(const DragPreviewState& drag) const;
 
+    /** The macro the dragged module sits in once dropped, empty for the open canvas. Only cards whose jacks face that
+     *  container are ever suggested or rerouted. */
+    juce::String dropContainer(const DragPreviewState& drag) const;
+
 private:
+    /** The container `nodeId`'s inputs (`throughInput`) or outputs face. */
+    juce::String containerFacing(const synth::MacroOwnerIndex& owners, juce::AudioProcessorGraph::NodeID nodeId,
+                                 bool throughInput) const;
+    /** Which jack sides of `neighbor` may be wired from `target`; neither for a hidden card. */
+    struct ScopeSides {
+        bool inputs = false, outputs = false;
+    };
+    ScopeSides sidesFacing(const synth::MacroOwnerIndex& owners, const juce::String& target,
+                           const ModuleComponent& neighbor) const;
+    /** The processor of the module being dragged (the probe for a library drag); null when nothing is offered. */
+    juce::AudioProcessor* ghostProcessorFor(const DragPreviewState& drag) const;
+
     GraphCanvasHost& host_;
 
     SmartConnectionMode smartConnectionMode_ = SmartConnectionMode::NewAndUnwired;

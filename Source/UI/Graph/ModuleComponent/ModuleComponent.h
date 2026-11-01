@@ -14,7 +14,6 @@
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/SplitButton.h"
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
-#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
@@ -33,10 +32,11 @@
 class AudioEngine;
 class GraphEditor;        // Forward declaration
 class ExternalMidiModule; // Forward declaration — see Modules/ExternalMidiModule.h
-
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h
+struct CurveHitResult;       // Forward declaration — see UI/ModuleViews/CurveEditor/CurveEditorGeometry.h
+class CurveEditorComponent;  // Forward declaration — see UI/ModuleViews/CurveEditor/CurveEditorComponent.h
 class CardStepper;           // Forward declaration — see UI/Graph/CardWidgets/CardStepper.h
 class MorphShapesCard;       // Forward declaration — see MorphShapesCard/MorphShapesCard.h
 class NoteLengthBox;         // Forward declaration — see UI/Layout/NoteLengthMenu/NoteLengthBox.h

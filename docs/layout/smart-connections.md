@@ -38,7 +38,9 @@ an accessible title, a tooltip, and the usual focus ring and keyboard reach.
 
 ## How a suggestion is found
 
-1. During `updateDragPreview()`, when the mode allows it, neighbours whose **module** rects are more
+1. Only cards in the dragged module's own container are neighbours, and never a hidden one
+   ([below](#one-container-at-a-time)).
+   During `updateDragPreview()`, when the mode allows it, neighbours whose **module** rects are more
    than **96 px** away edge-to-edge are culled, then **jack-to-jack** distance is scored under the
    same 96 px cap. A pair is rejected when the source jack sits to the right of the dest jack, which
    is what stops wrap-around cables from a neighbour on the right into the dragged module's left
@@ -61,6 +63,30 @@ an accessible title, a tooltip, and the usual focus ring and keyboard reach.
 
 Library drags cache a short-lived `AIStateMapper::createModule` probe for jack metadata before a
 real `ModuleComponent` exists.
+
+## One container at a time
+
+A module wires only to cards in the container it ends up in: the macro it is dropped into, or the open canvas.
+Distance alone is not enough, because two tracks' macros often sit a few pixels apart, and a folded macro keeps its
+cards on the canvas, hidden, at their old places, often right over another track ("ghost modules"). Wiring across
+would join two tracks' sounds, and an insert would reroute the other track's cable.
+
+- **The container.** `SmartConnectionEngine::dropContainer`: a library module joins the open macro under the pointer
+  (the drop candidate, `getMacroDragJoinId`; none over the open canvas); a card being moved joins its pending join
+  target, goes to the top level on a pending leave with no join, and otherwise stays in the macro it is in, which
+  already includes a border crossing applied live.
+- **Its cards.** A card counts when the macro listing it directly is that container (none for the open canvas). A
+  macro port sits on the border, so each side faces a different container: an inlet's input and an outlet's output
+  face the macro's own container, the other side faces the macro. A module inside a macro can therefore feed its
+  outlet or take from its inlet, and one outside can do the same from the outside, but neither reaches through.
+- **Hidden cards** (members of a folded macro) are never neighbours.
+- **Inserts.** The cable an insert reroutes must come from a card facing the same container, so an insert never
+  rewires a cable of another track, even one wired straight across a border.
+
+Ctrl does not widen any of this. `SmartConnectionMacroScope` (`Tests/UI/Graph/SmartConnectionEngine/`) drops a Delay
+between a track's Filter and VCA with another track 40 px away, open or folded over it, and checks that every
+suggestion stays in the track and every other cable is the same one after the drop; `SmartConnectionSavedProject`
+does it in a saved and reopened multi-track project.
 
 ## Occupied destinations
 
