@@ -12,10 +12,10 @@ thread that is mid-dispatch. A shift can make one listener miss one frame, which
 Touches only juce_VBlank_windows.cpp (Windows).
 
 diff --git a/modules/juce_gui_basics/native/juce_VBlank_windows.cpp b/modules/juce_gui_basics/native/juce_VBlank_windows.cpp
-index d92288b..66fba45 100644
+index afc69c7..05938c2 100644
 --- a/modules/juce_gui_basics/native/juce_VBlank_windows.cpp
 +++ b/modules/juce_gui_basics/native/juce_VBlank_windows.cpp
-@@ -98,6 +98,11 @@ public:
+@@ -93,6 +93,11 @@ public:
          return listeners.empty();
      }
  
@@ -28,31 +28,31 @@ index d92288b..66fba45 100644
      {
          return std::any_of (listeners.cbegin(),
 @@ -145,8 +150,14 @@ private:
- 
-     void handleAsyncUpdate() override
      {
+         const auto timestampSec = lastVBlankEvent / 1000.0;
+ 
 -        for (auto& listener : listeners)
--            listener.get().onVBlank();
+-            listener.get().onVBlank (timestampSec);
 +        // A listener's callback can add or remove listeners, or destroy another peer, so
 +        // this can't hold iterators across the calls.
 +        dispatching = true;
 +
 +        for (size_t i = 0; i < listeners.size(); ++i)
-+            listeners[i].get().onVBlank();
++            listeners[i].get().onVBlank (timestampSec);
 +
 +        dispatching = false;
  
-         {
-             const std::scoped_lock lock { mutex };
-@@ -170,6 +181,7 @@ private:
-         exit,
-     };
- 
+         state &= ~flagPaintPending;
+     }
+@@ -161,6 +172,7 @@ private:
+     ComSmartPtr<IDXGIOutput> output;
+     HMONITOR monitor = nullptr;
+     std::vector<std::reference_wrapper<VBlankListener>> listeners;
 +    bool dispatching = false;
-     double lastVBlankEvent = 0.0;
-     ThreadState threadState = ThreadState::paint;
-     std::condition_variable condvar;
-@@ -288,7 +300,9 @@ private:
+ 
+     std::atomic<double> lastVBlankEvent{};
+     std::atomic<int> state{};
+@@ -280,7 +292,9 @@ private:
      {
          if ((*it)->removeListener (listener))
          {
