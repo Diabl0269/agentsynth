@@ -7,6 +7,7 @@
 # left alone; in a git tree, an older revision of the same patch is replaced (its files reset to the
 # pinned tag, then patched); anything else (a new JUCE tag moved the code) is a hard error naming the patch.
 # --ignore-whitespace tolerates a checkout that rewrote JUCE's CRLF line endings.
+# core.autocrlf=false keeps git apply from converting the file before matching (Git for Windows defaults it on).
 # Mechanism and how to refresh a patch: docs/development/juce-patches.md.
 
 if(NOT PATCH_FILE OR NOT EXISTS "${PATCH_FILE}")
@@ -16,12 +17,12 @@ endif()
 find_program(GIT_EXECUTABLE git REQUIRED)
 
 execute_process(
-    COMMAND "${GIT_EXECUTABLE}" apply --check --ignore-whitespace "${PATCH_FILE}"
+    COMMAND "${GIT_EXECUTABLE}" -c core.autocrlf=false apply --check --ignore-whitespace "${PATCH_FILE}"
     RESULT_VARIABLE forward_result
     OUTPUT_QUIET ERROR_VARIABLE forward_error)
 if(forward_result EQUAL 0)
     execute_process(
-        COMMAND "${GIT_EXECUTABLE}" apply --ignore-whitespace "${PATCH_FILE}"
+        COMMAND "${GIT_EXECUTABLE}" -c core.autocrlf=false apply --ignore-whitespace "${PATCH_FILE}"
         RESULT_VARIABLE apply_result)
     if(NOT apply_result EQUAL 0)
         message(FATAL_ERROR "ApplyJucePatch: applying ${PATCH_FILE} failed")
@@ -31,7 +32,7 @@ if(forward_result EQUAL 0)
 endif()
 
 execute_process(
-    COMMAND "${GIT_EXECUTABLE}" apply --check --reverse --ignore-whitespace "${PATCH_FILE}"
+    COMMAND "${GIT_EXECUTABLE}" -c core.autocrlf=false apply --check --reverse --ignore-whitespace "${PATCH_FILE}"
     RESULT_VARIABLE reverse_result
     OUTPUT_QUIET ERROR_QUIET)
 if(reverse_result EQUAL 0)
@@ -60,7 +61,7 @@ if(git_tree_result EQUAL 0)
         OUTPUT_QUIET ERROR_QUIET)
     if(reset_result EQUAL 0)
         execute_process(
-            COMMAND "${GIT_EXECUTABLE}" apply --ignore-whitespace "${PATCH_FILE}"
+            COMMAND "${GIT_EXECUTABLE}" -c core.autocrlf=false apply --ignore-whitespace "${PATCH_FILE}"
             RESULT_VARIABLE reapply_result
             OUTPUT_QUIET ERROR_QUIET)
         if(reapply_result EQUAL 0)
