@@ -18,7 +18,7 @@ find_program(GIT_EXECUTABLE git REQUIRED)
 execute_process(
     COMMAND "${GIT_EXECUTABLE}" apply --check --ignore-whitespace "${PATCH_FILE}"
     RESULT_VARIABLE forward_result
-    OUTPUT_QUIET ERROR_QUIET)
+    OUTPUT_QUIET ERROR_VARIABLE forward_error)
 if(forward_result EQUAL 0)
     execute_process(
         COMMAND "${GIT_EXECUTABLE}" apply --ignore-whitespace "${PATCH_FILE}"
@@ -73,4 +73,4 @@ endif()
 message(FATAL_ERROR
     "ApplyJucePatch: ${PATCH_FILE} neither applies to nor is already part of the JUCE tree in "
     "${CMAKE_CURRENT_SOURCE_DIR}. Regenerate it for the pinned JUCE tag "
-    "(docs/development/juce-patches.md).")
+    "(docs/development/juce-patches.md). git apply said: ${forward_error}")
