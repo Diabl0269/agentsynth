@@ -71,6 +71,15 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
                 audioFrom.addIfNotAlreadyThere(owner.getModuleTitle(source->nodeID, source->getProcessor()));
     audioFrom.sort(true);
     into.setProperty("audioFrom", audioFrom.joinIntoString(", "));
+    // The input jacks with a cable, by the label the card shows (a Pitch jack has no modulation target to list above).
+    juce::StringArray cabledInputs;
+    if (auto* base = dynamic_cast<ModuleBase*>(module))
+        for (const auto& connection : owner.getAudioEngine().getGraph().getConnections())
+            if (connection.destination.nodeID == nodeId &&
+                connection.destination.channelIndex != juce::AudioProcessorGraph::midiChannelIndex)
+                cabledInputs.addIfNotAlreadyThere(base->getInputPortLabel(
+                    base->mapInputChannel(connection.destination.channelIndex).visibleJackIndex));
+    into.setProperty("cabledInputs", cabledInputs.joinIntoString(", "));
 }
 
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {

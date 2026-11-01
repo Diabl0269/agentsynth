@@ -383,3 +383,40 @@ TEST(MacroPortFlow, ATracksChannelStripInputCableDroppedOnTheCardsExistingOutput
     EXPECT_EQ(rig.editor.getMacros().find(rig.targetMacroId)->ports.size(), 1u) << "no second port was minted";
     EXPECT_TRUE(rig.reaches(portNode, rig.strip->nodeID));
 }
+
+// A jack of the wrong kind passed over on the release is no refusal once the collapsed card under it took the cable:
+// the status bar stays silent.
+TEST(MacroPortFlow, ACardThatTakesTheDropLeavesNoRefusalFromAJackUnderIt) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+
+    auto source = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 900);
+    auto blocker = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1200, 900);
+    ModuleComponent* sourceComp = nullptr;
+    ModuleComponent* blockerComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c != nullptr && c->getNodeId() == source)
+            sourceComp = c;
+        if (c != nullptr && c->getNodeId() == blocker)
+            blockerComp = c;
+    }
+    ASSERT_NE(sourceComp, nullptr);
+    ASSERT_NE(blockerComp, nullptr);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    const auto dropPoint = card->getBounds().getCentre();
+    // The blocker's MIDI input jack sits on the card's centre, above the card: an audio cable there is refused by the
+    // jack, and the card beneath takes it.
+    blockerComp->setTopLeftPosition(dropPoint - blockerComp->getMidiPortCenter(false));
+    ASSERT_TRUE(blockerComp->getPortForPoint(dropPoint - blockerComp->getPosition()).has_value());
+
+    juce::String status;
+    editor.onStatusMessage = [&status](const juce::String& msg) { status = msg; };
+    editor.beginConnectionDrag(sourceComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+    editor.endConnectionDrag(dropPoint);
+
+    EXPECT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "the card took the cable";
+    EXPECT_TRUE(status.isEmpty()) << status;
+}
