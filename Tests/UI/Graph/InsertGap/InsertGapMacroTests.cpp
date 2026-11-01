@@ -8,6 +8,7 @@
 
 #include "InsertGapTestFixture.h"
 
+#include "Modules/OscillatorModule.h"
 #include "Modules/VCAModule.h"
 
 #include "UI/Graph/InsertGap/InsertGapKeyboard.h"

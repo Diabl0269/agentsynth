@@ -13,6 +13,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/CurveEditor/CurveGridNoteLength.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"

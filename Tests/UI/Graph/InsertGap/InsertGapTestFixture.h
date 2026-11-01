@@ -9,7 +9,6 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
-#include "Modules/OscillatorModule.h"
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/InsertGap/InsertGap.h"
 #include "UI/Layout/InsertGap/InsertGapPlan.h"
