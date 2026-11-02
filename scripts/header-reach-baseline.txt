@@ -424,10 +424,10 @@
 250 Source/Modules/OscillatorModule.h
 233 Source/Modules/Envelope/EnvelopeTempoSync.h
 156 Source/Modules/FX/BrickwallCeiling.h
-155 Source/Modules/LfoRateDivisions.h
-154 Source/Modules/Lfo/LfoCustomShapes.h
-153 Source/Modules/Lfo/LfoShapeBlender.h
-152 Source/Modules/LFOModule.h
+156 Source/Modules/LfoRateDivisions.h
+155 Source/Modules/Lfo/LfoCustomShapes.h
+154 Source/Modules/Lfo/LfoShapeBlender.h
+153 Source/Modules/LFOModule.h
 140 Source/Modules/ChannelStripModule.h
 138 Source/Modules/MasterModule.h
 118 Source/Mixer/MixerModel/MixerModel.h

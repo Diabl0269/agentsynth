@@ -90,6 +90,8 @@ public:
     void showMenuAt(const juce::PopupMenu::Options& options);
     /** Opens the picker that points this lane at another parameter; a no-op without a host or a free parameter. */
     void openChangeParameterPicker();
+    /** True when a host is attached and at least one parameter has no lane (the picker's own availability). */
+    bool canPickParameter() const;
     /** Opens the picker for a copy of this lane directly below it; the copy exists only once a parameter is picked. */
     void openDuplicatePicker();
     /** The parameter name button's area, in this component's coordinates. */
@@ -141,7 +143,6 @@ public:
 
 private:
     void openParameterPicker(bool duplicate);
-    bool canPickParameter() const;
     void addModulatorItem(juce::PopupMenu& menu) const;
     void openAddModulatorPicker();
     // The control chips (AutomationLaneHeaderControls.cpp).

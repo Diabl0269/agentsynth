@@ -147,11 +147,15 @@ public:
     void focusGained(juce::Component::FocusChangeType cause) override;
     void focusLost(juce::Component::FocusChangeType cause) override;
     bool showContextMenuForKeyboardFocus() override;
+    /** Opens the Change source picker (the name button's press, the menu's "Change source..." and Replace Module's
+     *  chord); a no-op when canOpenChangeSourcePicker() is false. */
+    void openChangeSourcePicker();
+    /** True when the host can swap this row's source (the picker's own availability). */
+    bool canOpenChangeSourcePicker() const;
 
 private:
     void initLfoControls();
     void applyNames();
-    void openChangeSourcePicker(); // the name button's press and the menu's "Change source..."
     void edit(const juce::String& uuid, const juce::String& paramId, float value, ParameterEditPhase phase);
     void wireDragEdits(juce::Slider& slider, const juce::String& paramId, std::function<float(double)> toParameter);
     void applyCompact();

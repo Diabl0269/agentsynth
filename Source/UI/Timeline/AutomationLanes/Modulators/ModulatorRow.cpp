@@ -134,6 +134,7 @@ void ModulatorRow::setInfo(const ModulatorInfo& info, const juce::String& parame
     info_ = info;
     parameterName_ = parameterName;
     applyNames();
+    resized(); // the name button is as wide as the name: a title that changed under the same key needs its width
     repaint();
 }
 
