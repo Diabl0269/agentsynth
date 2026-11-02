@@ -1,10 +1,11 @@
-// Concern: TimelineAutomationLanes' modulator row fold (one line or three, tweened) and order (the keyboard move and
-// the one function that writes the order), both per lane and per routing.
+// Concern: TimelineAutomationLanes' modulator row fold (one line or three, tweened) and order (the keyboard move, on
+// into the next lane past either end, and the one function that writes the order), both per lane and per routing.
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <algorithm>
 #include <cmath>
 
@@ -177,7 +178,7 @@ bool TimelineAutomationLanes::moveModulatorBy(synth::LaneId lane, const juce::St
         return false;
     const int to = (int)(at - infos.begin()) + delta;
     if (to < 0 || to >= (int)infos.size())
-        return false;
+        return moveModulatorToNeighbourLane(lane, ModulatorInfo(*at), delta);
     std::map<juce::String, int> oldYs;
     for (size_t i = 0; i < it->second.rows.size() && i < infos.size(); ++i)
         oldYs[infos[i].key()] = it->second.rows[i]->getY();
@@ -185,6 +186,51 @@ bool TimelineAutomationLanes::moveModulatorBy(synth::LaneId lane, const juce::St
         return false;
     glideModulatorRows(lane, oldYs);
     return true;
+}
+
+// Past a lane's first or last row the move carries on through the lanes on screen around it, across tracks, to the
+// first one that can take the routing (a lane whose jack already has this source cannot). The row lands at the near end
+// of that lane: its top going down, its bottom going up. It is the drop's move (ONE undo step, the routing re-created
+// with a new key), so the old row only closes its gap while the new one grows in; keyboard focus follows it there.
+bool TimelineAutomationLanes::moveModulatorToNeighbourLane(synth::LaneId lane, const ModulatorInfo& info, int delta) {
+    if (doc_ == nullptr || host_ == nullptr || delta == 0)
+        return false;
+    std::vector<synth::LaneId> order;
+    for (const auto& track : doc_->getTracks())
+        if (isVisibleLane(track))
+            for (const auto id : shownLanesOf(track))
+                order.push_back(id);
+    const auto at = std::find(order.begin(), order.end(), lane);
+    if (at == order.end())
+        return false;
+    const bool hadFocus = modulatorHasKeyboardFocus(lane, info.key());
+    const int step = delta > 0 ? 1 : -1;
+    for (int i = (int)(at - order.begin()) + step; i >= 0 && i < (int)order.size(); i += step) {
+        const auto dest = order[(size_t)i];
+        if (!host_->canMoveModulatorToLane(info, dest))
+            continue;
+        const int index = step > 0 ? 0 : modulatorCount(dest);
+        droppedRoutingKey_ = info.key();
+        const bool moved = host_->moveModulatorToLane(info, dest, index);
+        droppedRoutingKey_.clear();
+        if (!moved)
+            return false;
+        if (auto* row = modulatorRowFor(dest, index); hadFocus && row != nullptr)
+            row->grabKeyboardFocus();
+        return true;
+    }
+    return false;
+}
+
+bool TimelineAutomationLanes::modulatorHasKeyboardFocus(synth::LaneId lane, const juce::String& key) const {
+    const auto it = modulators_.find(lane);
+    if (it == modulators_.end())
+        return false;
+    for (size_t i = 0; i < it->second.infos.size() && i < it->second.rows.size(); ++i)
+        if (it->second.infos[i].key() == key)
+            return it->second.rows[i]->hasKeyboardFocus(true) ||
+                   (i < it->second.bands.size() && it->second.bands[i]->hasKeyboardFocus(true));
+    return false;
 }
 
 // The offset left to travel (px, positive = still below its slot), applied on top of the row's slot by the layout.

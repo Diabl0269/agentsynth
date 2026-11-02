@@ -14,6 +14,7 @@ namespace synth::ui {
 struct ModulatorInfo {
     juce::String sourceUuid;       // the module driving the jack (an LFO, an envelope, a macro port...)
     juce::String sourceTitle;      // its card title
+    juce::String sourcePlace;      // where the source lives when that is outside the lane's macro; empty when inside
     int sourceChannel = 0;         // raw output channel of the source
     bool isLfo = false;            // an LFO gets the full row; anything else is read-only
     bool isEnvelope = false;       // an envelope: only the lane header's marker tooltip tells it from other sources

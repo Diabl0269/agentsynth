@@ -1,0 +1,53 @@
+# Cmd+Alt+Down on a lane's last modulator row (and Cmd+Alt+Up on its first) did nothing: a row could only change lanes
+# by dragging. Now it moves on into the next lane on screen that can take it, across tracks, and focus follows it.
+#
+# What a user does:
+#   1. Opens a project with three audio tracks, a Compressor lane on each and an LFO on Audio 1's Ratio lane (fixture
+#      cross-track-lanes.agsproj), shows the timeline in the main area and opens every track's automation.
+#   2. Focuses the LFO 2 row and presses Cmd+Alt+Down: it moves to Audio 1's Attack lane, focus on it. Again: to
+#      Audio 2's Threshold (marked as living in Audio 1). Again: to Audio 3's Threshold. Again: nothing, it stays.
+#   3. Cmd+Alt+Up: back to Audio 2's Threshold, focus still on it. Cmd+Z: back on Audio 3's Threshold.
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: "Show Audio 1 automation (2 lanes)"}
+  - click: {id: "Show Audio 2 automation (1 lane)"}
+  - click: {id: "Show Audio 3 automation (1 lane)"}
+  - wait: {}
+  - screenshot: {name: before}
+  - key: {keys: cmd+alt+down, target: LFO 2 mod lane on Ratio}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Attack (ms)", showing: true, hasFocus: true, within_ms: 2000}
+  - expect: {id: LFO 2 mod lane on Ratio, exists: false}
+  - screenshot: {name: on-attack}
+  - key: {keys: cmd+alt+down}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", showing: true, hasFocus: true, within_ms: 2000}
+  - expect: {id: "LFO 2 mod lane on Attack (ms)", exists: false}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", bounds: {x: 200, y: 340, w: 200, h: 54}, within_ms: 2000}
+  - screenshot: {name: on-audio-2}
+  - key: {keys: cmd+alt+down}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", bounds: {x: 200, y: 436, w: 200, h: 54}, within_ms: 2000}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", hasFocus: true}
+  - screenshot: {name: on-audio-3}
+  - key: {keys: cmd+alt+down}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", bounds: {x: 200, y: 436, w: 200, h: 54}}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", hasFocus: true}
+  - screenshot: {name: last-lane-stays}
+  - key: {keys: cmd+alt+up}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", bounds: {x: 200, y: 340, w: 200, h: 54}, within_ms: 2000}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", hasFocus: true}
+  - screenshot: {name: back-up}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", bounds: {x: 200, y: 436, w: 200, h: 54}, within_ms: 2000}
+  - screenshot: {name: undo}

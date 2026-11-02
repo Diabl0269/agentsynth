@@ -8,6 +8,7 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/IconGlyphs.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
@@ -64,6 +65,8 @@ ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, con
     addAndMakeVisible(marker_);
     marker_.addMouseListener(this, false);
     addAndMakeVisible(nameButton_);
+    addChildComponent(outsideMark_);
+    outsideMark_.addMouseListener(this, false);
     nameButton_.onClick = [this] { openChangeSourcePicker(); };
     addAndMakeVisible(strip_);
     strip_.onPreferredWidthChanged = [this] { resized(); };
@@ -127,6 +130,18 @@ void ModulatorRow::initLfoControls() {
     // The picture is display only; a right-click on it reaches the row's menu through the row's mouse listener.
     addAndMakeVisible(shapeIcon_);
     shapeIcon_.addMouseListener(this, false);
+}
+
+// Display only, like the marker: a press or a right-click on it reaches the row through the row's mouse listener.
+ModulatorOutsideMark::ModulatorOutsideMark() {
+    setComponentID("modulatorOutsideMark");
+    setAccessible(false); // the row's own name says where the source lives
+    setInterceptsMouseClicks(true, false);
+}
+
+void ModulatorOutsideMark::paint(juce::Graphics& g) {
+    synth::theme::paintGlyph(g, synth::theme::Glyph::Detach, getLocalBounds().toFloat(),
+                             synth::theme::themeOf(*this).colors.textMuted);
 }
 
 void ModulatorRow::setInfo(const ModulatorInfo& info, const juce::String& parameterName) {
@@ -237,7 +252,10 @@ void ModulatorRow::applyNames() {
         if (auto* tip = dynamic_cast<juce::SettableTooltipClient*>(&c))
             tip->setTooltip(text);
     };
-    setTitle(info_.sourceTitle + " mod lane on " + parameterName_);
+    const auto place = info_.sourcePlace.isNotEmpty() ? ", from " + info_.sourcePlace : juce::String();
+    setTitle(info_.sourceTitle + " mod lane on " + parameterName_ + place);
+    outsideMark_.setVisible(info_.sourcePlace.isNotEmpty());
+    outsideMark_.setTooltip(info_.sourceTitle + " lives in " + info_.sourcePlace + ", outside this macro");
     setTooltip("Right-click, Shift+F10 or Return for the " + who +
                " modulator menu. Drag to reorder or move to another lane");
     const auto kind = info_.isLfo ? juce::String("an LFO") : info_.isEnvelope ? "an envelope" : "a modulator";
@@ -325,9 +343,15 @@ void ModulatorRow::resized() {
     strip_.setChipSize(chipSize);
     const int stripWidth = juce::jmin(strip_.preferredWidth(), juce::jmax(chipSize, title.getWidth() - kMinNameWidth));
     strip_.setBounds(title.removeFromRight(stripWidth));
-    const auto button = title.withWidth(juce::jmin(nameButton_.getPreferredWidth(), title.getWidth()));
+    // The outside-macro sign sits right after the name, so the name gives up room for it.
+    const int markRoom = outsideMark_.isVisible() ? ModulatorOutsideMark::kSize + kMarkerGap : 0;
+    const auto button =
+        title.withWidth(juce::jmin(nameButton_.getPreferredWidth(), juce::jmax(0, title.getWidth() - markRoom)));
     nameButton_.setBounds(
         button.withSizeKeepingCentre(button.getWidth(), juce::jmin(button.getHeight(), kNameButtonHeight)));
+    const juce::Rectangle<int> mark(button.getRight() + kMarkerGap, title.getY(), ModulatorOutsideMark::kSize,
+                                    title.getHeight());
+    outsideMark_.setBounds(mark.withSizeKeepingCentre(ModulatorOutsideMark::kSize, ModulatorOutsideMark::kSize));
     strip_.placeTray(getBounds());
 }
 

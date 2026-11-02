@@ -392,8 +392,8 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterDuplicateAndChangeSourceKeep
     synth::test::waitUntil(findAdsrRow);
     ASSERT_GE(adsrRow, 0);
     const int tall = s.panel().modulatorRowBoundsForTest(s.lane, adsrRow).getHeight();
-    ASSERT_TRUE(
-        s.mc.changeModulatorSourceForTest(s.panel().modulatorRowForTest(s.lane, adsrRow)->getInfo(), spareUuid, 0));
+    ASSERT_TRUE(s.mc.trackHeaderHostForTest().changeModulatorSource(
+        s.panel().modulatorRowForTest(s.lane, adsrRow)->getInfo(), spareUuid, 0));
     synth::test::waitUntil([&] { return s.attenInto(spareUuid, "resonance").isNotEmpty(); });
     const auto swapped = s.attenInto(spareUuid, "resonance");
     ASSERT_TRUE(swapped.isNotEmpty());

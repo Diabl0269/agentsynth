@@ -170,6 +170,24 @@ RoutingEndpoint realEndpointBehindPorts(const synth::ConnectionIndex& cables, ju
                     : RoutingEndpoint{edge->destination.nodeID, edge->destination.channelIndex};
 }
 
+// A direct cable out of a macro port has no attenuverter to walk from, so the walk starts at the cable's own source
+// and steps back along the one cable into each port. A port fed by several cables is shared: it stays the answer.
+// Where the walk ends on an attenuverter, the cable is the far leg of that attenuverter's own routing (a chain whose
+// attenuverter sits before the port), which the chain already stands for.
+RoutingEndpoint realSourceBehindPorts(const synth::ConnectionIndex& cables, RoutingEndpoint from,
+                                      const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort,
+                                      std::vector<juce::AudioProcessorGraph::NodeID>* passedPorts) {
+    while (from.valid() && isPort(from.node)) {
+        const auto& in = cables.into(from.node);
+        if (in.size() != 1)
+            break;
+        if (passedPorts != nullptr)
+            passedPorts->push_back(from.node);
+        from = {in.front().source.nodeID, in.front().source.channelIndex};
+    }
+    return from;
+}
+
 ResolvedRouting resolveRouting(juce::AudioProcessorGraph& graph, const ModulationRouting& routing,
                                const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort) {
     if (routing.kind != ModulationRoutingKind::AttenuverterChain) // no walk: skip building the index
