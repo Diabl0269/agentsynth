@@ -91,6 +91,11 @@ RoutingEndpoint realEndpointBehindPorts(const synth::ConnectionIndex& cables, ju
                                         std::vector<juce::AudioProcessorGraph::NodeID>* passedPorts = nullptr,
                                         bool allowFanOut = false);
 
+/** What drives `from`, looking back through every macro port with exactly one cable in (`passedPorts` gets each). */
+RoutingEndpoint realSourceBehindPorts(const synth::ConnectionIndex& cables, RoutingEndpoint from,
+                                      const std::function<bool(juce::AudioProcessorGraph::NodeID)>& isPort,
+                                      std::vector<juce::AudioProcessorGraph::NodeID>* passedPorts = nullptr);
+
 /** A modulation routing with the macro ports between its modulator and its parameter looked through:
  *  the real source and destination, and every port on the chain (the ones a removal may leave empty).
  *  A direct cable has no attenuverter to walk from, so its own endpoints stand (and are the ports,

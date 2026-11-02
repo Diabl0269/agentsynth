@@ -381,7 +381,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceWithNoAmountLaneStillMovesTheRo
     s.mc.getGraphEditor().updateComponents();
     ASSERT_EQ(s.amountLane(), nullptr);
 
-    ASSERT_TRUE(s.mc.changeModulatorSourceForTest(s.row()->getInfo(), otherUuid));
+    ASSERT_TRUE(s.mc.trackHeaderHostForTest().changeModulatorSource(s.row()->getInfo(), otherUuid, 0));
     synth::test::waitUntil([&] { return (s.chainsInto(otherUuid, raw).size()) == (1u); });
     EXPECT_EQ(s.chainsInto(otherUuid, raw).size(), 1u);
     EXPECT_TRUE(s.chainsInto(oldLfo, raw).empty());
@@ -394,7 +394,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceWithNoAmountLaneStillMovesTheRo
 TEST_F(TimelinePanelIntegrationTest, ChangeSourceRefusesTheCurrentSourceAndALfoThatAlreadyMovesTheParameter) {
     AmountScene s;
     const auto info = s.row()->getInfo();
-    EXPECT_FALSE(s.mc.changeModulatorSourceForTest(info, s.lfoUuid)) << "already the source";
+    EXPECT_FALSE(s.mc.trackHeaderHostForTest().changeModulatorSource(info, s.lfoUuid, 0)) << "already the source";
 
     // A second LFO cabled by hand: re-pointing the first routing at it would double up on one jack.
     auto other = addNodeWithUuid(s.mc, "LFO");
@@ -405,7 +405,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceRefusesTheCurrentSourceAndALfoT
         0u);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     const auto otherUuid = other->properties["uuid"].toString();
-    EXPECT_FALSE(s.mc.changeModulatorSourceForTest(info, otherUuid));
+    EXPECT_FALSE(s.mc.trackHeaderHostForTest().changeModulatorSource(info, otherUuid, 0));
     EXPECT_EQ(s.chainsInto(s.lfoUuid, raw).size(), 1u) << "nothing changed";
     EXPECT_EQ(s.chainsInto(otherUuid, raw).size(), 1u);
 }
@@ -459,7 +459,7 @@ TEST_F(TimelinePanelIntegrationTest, AnEnvelopeRoutingChangesToAnLfoKeepsItsAmou
     ASSERT_NE(adsrRow, nullptr);
     EXPECT_FALSE(adsrRow->getInfo().isLfo);
     ASSERT_TRUE(adsrRow->getInfo().attenuverterUuid.isNotEmpty());
-    EXPECT_TRUE(s.mc.canChangeModulatorSourceForTest(adsrRow->getInfo()));
+    EXPECT_TRUE(s.mc.trackHeaderHostForTest().canChangeModulatorSource(adsrRow->getInfo()));
     const auto oldAtten = adsrRow->getInfo().attenuverterUuid;
 
     const std::vector<synth::AutomationLane::Breakpoint> drawn{{0.0, 0.25, 0.0f, kHold}, {4.0, -0.5, 0.0f, kHold}};
@@ -468,7 +468,7 @@ TEST_F(TimelinePanelIntegrationTest, AnEnvelopeRoutingChangesToAnLfoKeepsItsAmou
     ASSERT_NE(before, nullptr);
     const auto laneId = before->id;
 
-    ASSERT_TRUE(s.mc.changeModulatorSourceForTest(adsrRow->getInfo(), spareUuid, 0));
+    ASSERT_TRUE(s.mc.trackHeaderHostForTest().changeModulatorSource(adsrRow->getInfo(), spareUuid, 0));
     s.flush();
     EXPECT_TRUE(s.chainsInto(adsrUuid, raw).empty());
     ASSERT_EQ(s.chainsInto(spareUuid, raw).size(), 1u);
@@ -502,9 +502,9 @@ TEST_F(TimelinePanelIntegrationTest, AnLfoRoutingChangesToAnEnvelopeReadingTheCa
     s.mc.getGraphEditor().updateComponents();
     const int adsrChannel = catalogueChannelOf(s, adsrUuid);
     ASSERT_GE(adsrChannel, 0);
-    ASSERT_TRUE(s.mc.canChangeModulatorSourceForTest(s.row()->getInfo()));
+    ASSERT_TRUE(s.mc.trackHeaderHostForTest().canChangeModulatorSource(s.row()->getInfo()));
 
-    ASSERT_TRUE(s.mc.changeModulatorSourceForTest(s.row()->getInfo(), adsrUuid, adsrChannel));
+    ASSERT_TRUE(s.mc.trackHeaderHostForTest().changeModulatorSource(s.row()->getInfo(), adsrUuid, adsrChannel));
     s.flush();
     EXPECT_TRUE(s.chainsInto(s.lfoUuid, raw).empty());
     const auto chains = s.chainsInto(adsrUuid, raw);
@@ -515,8 +515,8 @@ TEST_F(TimelinePanelIntegrationTest, AnLfoRoutingChangesToAnEnvelopeReadingTheCa
     auto* envRow = rowFor(s, adsrUuid);
     ASSERT_NE(envRow, nullptr);
     EXPECT_EQ(envRow->getInfo().sourceChannel, adsrChannel);
-    EXPECT_FALSE(s.mc.changeModulatorSourceForTest(envRow->getInfo(), adsrUuid, adsrChannel));
-    EXPECT_FALSE(s.mc.changeModulatorSourceForTest(envRow->getInfo(), s.lfoUuid, 999));
+    EXPECT_FALSE(s.mc.trackHeaderHostForTest().changeModulatorSource(envRow->getInfo(), adsrUuid, adsrChannel));
+    EXPECT_FALSE(s.mc.trackHeaderHostForTest().changeModulatorSource(envRow->getInfo(), s.lfoUuid, 999));
 
     ASSERT_TRUE(s.undo().undo());
     EXPECT_EQ(s.chainsInto(s.lfoUuid, raw).size(), 1u);
@@ -587,7 +587,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowI
     ASSERT_LT(foldedHeight, openHeight);
     first->setForceSwapMotionForTest(true);
 
-    ASSERT_TRUE(s.mc.changeModulatorSourceForTest(first->getInfo(), spareUuid, 0));
+    ASSERT_TRUE(s.mc.trackHeaderHostForTest().changeModulatorSource(first->getInfo(), spareUuid, 0));
     synth::test::waitUntil([&] { return (lanes.modulatorCount(s.lane)) == (2); });
 
     ASSERT_EQ(lanes.modulatorCount(s.lane), 2);

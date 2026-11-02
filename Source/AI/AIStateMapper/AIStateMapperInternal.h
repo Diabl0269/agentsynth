@@ -70,6 +70,12 @@ namespace detail {
 
 typedef juce::AudioProcessorGraph::AudioGraphIOProcessor AudioGraphIOProcessor;
 
+/** True for a source whose cable into a modulation jack is never wrapped in a new attenuverter on load. */
+inline bool isModulationPassThrough(juce::AudioProcessor* source) {
+    return dynamic_cast<AttenuverterModule*>(source) != nullptr || dynamic_cast<MacroInletModule*>(source) != nullptr ||
+           dynamic_cast<MacroOutletModule*>(source) != nullptr;
+}
+
 using ModuleFactoryFunc = std::function<std::unique_ptr<juce::AudioProcessor>()>;
 
 // Factory map for module creation

@@ -160,7 +160,7 @@ TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutIsGreyedOnARowWhoseSourceCan
     // A hand-patched cable has no Attenuverter, the case the Change source item is hidden for.
     auto info = row->getInfo();
     info.attenuverterUuid = {};
-    ASSERT_FALSE(s.mc.canChangeModulatorSourceForTest(info));
+    ASSERT_FALSE(s.mc.trackHeaderHostForTest().canChangeModulatorSource(info));
     row->setRouting(info, "Cutoff");
     ASSERT_FALSE(row->canOpenChangeSourcePicker());
 

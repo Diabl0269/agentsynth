@@ -59,5 +59,10 @@ regenerates it and `scenarios/channel-strip-cable-on-folded-macro.yaml` drives i
 `fixtures/lane-rows.agsproj` holds a MIDI track playing a Filter whose Cutoff lane carries two LFO modulator rows;
 `UiVerifyLaneRowsFixture.DISABLED_WritesLaneRowsProject` regenerates it and `scenarios/lane-row-resize.yaml` drives it.
 
+`fixtures/cross-track-lanes.agsproj` is the shared saved project (three audio tracks in channel macros: folded, nested,
+open) with a Compressor lane on each track and an LFO on Audio 1's Ratio lane;
+`UiVerifyCrossTrackLanesFixture.DISABLED_WritesCrossTrackLanesProject` regenerates it and
+`scenarios/mod-row-cross-track-drag.yaml` and `scenarios/mod-row-key-move-across-lanes.yaml` drive it.
+
 `UiVerifyFixture.TheCommittedMacrosProjectHoldsAnOpenACollapsedAndANestedMacro` fails if the committed copy stops
 loading or loses a macro.

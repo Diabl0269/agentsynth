@@ -905,10 +905,10 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                         // Auto-detect modulation targets: if the destination port is a
                         // modulation target, route through an attenuverter automatically
                         // (same logic as GraphEditor::endConnectionDrag).
-                        // Skip if source is already an AttenuverterModule (existing routing).
+                        // Skip an AttenuverterModule source (existing routing) and a macro port: the routing
+                        // through a port already has its attenuverter before the port, and a second doubles it.
                         bool isModTarget = false;
-                        if (!isMidiConnection &&
-                            dynamic_cast<AttenuverterModule*>(srcNode->getProcessor()) == nullptr) {
+                        if (!isMidiConnection && !detail::isModulationPassThrough(srcNode->getProcessor())) {
                             if (auto* modBase = dynamic_cast<ModuleBase*>(dstNode->getProcessor()))
                                 isModTarget = modBase->isAutoPromotableModTarget(dstPort);
                         }

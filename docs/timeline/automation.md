@@ -344,8 +344,11 @@ with Animations Off ([Motion rules](../layout/animation.md#motion-rules)).
 **Order.** A lane's rows are in graph order until moved. Cmd+Alt+Up / Cmd+Alt+Down (`timelineMoveLaneUp` /
 `timelineMoveLaneDown`, rebindable) on a focused modulator row, one of its controls (a combo or bar would take the arrow
 itself, so the row's key listener is offered it first) or its band (where a bare Up/Down nudges the amount) move that
-modulator one slot up or down among the modulators of the SAME lane; the first row's Up and the last row's Down do
-nothing but still consume the key. One undo step (`setModulatorOrderUndoable`). The order is
+modulator one slot up or down among the modulators of the lane. Past the first row's Up or the last row's Down the
+row moves on to the nearest lane on screen that can take it, across tracks (hidden and collapsed tracks and amount
+lanes are skipped, and so is a lane whose jack already has this source), landing at that lane's near end: its top going
+down, its bottom going up. That is the drop's move (`moveModulatorToLane`, one undo step) and keyboard focus follows the
+row there. At the first lane on screen going up, or the last going down, nothing happens; the key is still consumed. One undo step (`setModulatorOrderUndoable`). The order is
 `AutomationLane::modulatorOrder`, a list of routing keys (`modulatorOrderKey`: the routing's Attenuverter uuid, else
 `ModulatorInfo::key()`) saved with the lane as an additive `modulatorOrder` array (absent = empty = graph order), copied by
 Duplicate and kept by Change parameter. The panel sorts the lane's routings by it (`sortedByModulatorOrder`): listed keys
@@ -379,7 +382,8 @@ slots (`DropIndicator`).
   new key, so its row fades and grows in under the destination lane like any new routing ([lane motion](lane-motion.md)).
 - Change parameter and Duplicate carry the lane's rows as shown (`shownModulatorOrder`) into its `modulatorOrder`, each
   carried routing's old key replaced by its new routing's key at the same position (`remapModulatorOrder`).
-- The keyboard path is unchanged (Cmd+Alt+Up/Down within the lane); the row's tooltip says "Drag to reorder or move to
+- The keyboard path is Cmd+Alt+Up/Down: within the lane, then past its end into the next lane that can take the row
+  (see Order above); the row's tooltip says "Drag to reorder or move to
   another lane". The row's old gap closes on the drop as it grows in where it landed. Not done: no auto-scroll while dragging.
 
 Any other source (an envelope, an envelope follower, a macro control...) gets a read-only row: the marker, its card
@@ -399,7 +403,16 @@ poll, only for rows on screen, writing a control only when its value moved and n
 **Macro ports in the chain.** A row names the real modulator and the real parameter, not the macro ports
 between them: `MainComponent::getModulators` follows each end of the routing through ports
 (`realEndpointBehindPorts`, `Source/UI/Graph/ModMatrixEndpoints.h`), whether the attenuverter sits before or
-after the port and however many macros deep. **Remove modulator** follows the cable the same way and removes
+after the port and however many macros deep. A routing whose attenuverter sits before a port also leaves a plain
+cable from the far port to the parameter: that cable's source is walked back through ports too
+(`realSourceBehindPorts`), and when it ends on an attenuverter the cable is skipped, since the chain's own row already
+stands for it (a row moved to another track's lane used to show a second, read-only "Macro In" row). Loading a project
+never wraps a cable out of a macro port or an attenuverter in a second attenuverter (`isModulationPassThrough` in the
+connection restore), which used to name the row "Mod Slot 1" after a reopen. When the modulator lives outside the lane's
+macro (another track's macro or the main canvas; a nested macro counts as inside), `ModulatorInfo::sourcePlace` names
+where, the row's title ends with ", from <place>" and a small detach sign after the name says so in its tooltip
+("LFO 2 lives in Audio 1, outside this macro"). The sign is not a stop of its own: the row's title carries it for a
+screen reader. **Remove modulator** follows the cable the same way and removes
 every port the removal leaves with nothing on one side, even when the "delete ports on last cable" preference
 is off (the person asked for the removal), all in the one undo step.
 

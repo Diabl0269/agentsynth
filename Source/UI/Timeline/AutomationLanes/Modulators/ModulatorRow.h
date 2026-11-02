@@ -22,6 +22,16 @@ namespace synth::ui {
 
 struct TrackHeaderHost;
 
+/** The small sign on a modulator row whose source lives outside the lane's macro; its tooltip says where. */
+class ModulatorOutsideMark
+    : public juce::Component
+    , public juce::SettableTooltipClient {
+public:
+    static constexpr int kSize = 12;
+    ModulatorOutsideMark();
+    void paint(juce::Graphics& g) override;
+};
+
 // The header-column half of one modulator row under an automation lane (a mod lane): a marker icon, the source card's
 // title as a button that opens the Change source picker, and -- for an LFO -- a picture of its shape, the shape, rate
 // and sync controls, a strip of control chips (the set every mod lane shows is the user's, see LaneControlStrip) and a
@@ -191,6 +201,7 @@ private:
     juce::Slider* dragging_ = nullptr; // the slider mid-gesture, which refreshValues() leaves alone
     LaneMarkerIcon marker_{LaneMarkerIcon::Kind::Mod};
     LaneNameButton nameButton_;
+    ModulatorOutsideMark outsideMark_;
     LaneControlStrip strip_;
     juce::Rectangle<int> rateTextArea_;      // the Hz value, beside its bar (never over it: the bar has a cap)
     juce::Rectangle<int> amountArea_;        // "Amount" and its readout

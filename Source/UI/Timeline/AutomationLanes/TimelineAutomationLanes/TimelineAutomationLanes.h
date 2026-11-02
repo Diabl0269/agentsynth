@@ -188,8 +188,8 @@ public:
     bool isModulatorGlideAnimating() const noexcept { return !glideTweens_.empty(); }
     /** Steps the glide in flight by hand (t is the eased progress 0..1; 1 lands it). */
     void stepModulatorGlideForTest(float t);
-    /** Moves it by `delta` rows (negative = up), the moved row and the one it swaps with gliding; false at either end.
-     */
+    /** Moves it by `delta` rows (negative = up), the moved row and the one it swaps with gliding. Past either end it
+     *  moves to the nearest lane on screen that can take it, across tracks; false when no lane can. */
     bool moveModulatorBy(synth::LaneId lane, const juce::String& orderKey, int delta);
 
     // ---- Dragging a modulator row (TimelineAutomationLanesModulatorDrag.cpp) ----
@@ -379,6 +379,8 @@ private:
     void frameModulatorFold(float t);
     void landModulatorFold();
     bool handleModulatorKey(synth::LaneId lane, const ModulatorInfo& info, const juce::KeyPress& key);
+    bool moveModulatorToNeighbourLane(synth::LaneId lane, const ModulatorInfo& info, int delta);
+    bool modulatorHasKeyboardFocus(synth::LaneId lane, const juce::String& key) const;
     int laneMoveDirection(const juce::KeyPress& key) const;
     void permuteModulators(LaneModulators& entry, const std::vector<ModulatorInfo>& infos);
     void wireModulatorDrag(ModulatorRow& row, synth::LaneId lane);

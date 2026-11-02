@@ -299,18 +299,8 @@ public:
                                            const synth::ui::TrackHeaderHost::AutomatableParameter& parameter) {
         return addAutomationLane(track, parameter);
     }
-    /** The row's "Change source..." host call (TrackHeaderHost is a private base). */
-    bool canChangeModulatorSourceForTest(const synth::ui::ModulatorInfo& modulator) {
-        return canChangeModulatorSource(modulator);
-    }
-    bool changeModulatorSourceForTest(const synth::ui::ModulatorInfo& modulator, const juce::String& sourceUuid,
-                                      int sourceChannel = 0) {
-        return changeModulatorSource(modulator, sourceUuid, sourceChannel);
-    }
-    bool changeModulatorSourceToNewForTest(const synth::ui::ModulatorInfo& modulator, const juce::String& typeName,
-                                           int sourceChannel = 0) {
-        return changeModulatorSourceToNew(modulator, typeName, sourceChannel);
-    }
+    /** Every lane host call at once, for a test that drives the host as the timeline does. */
+    synth::ui::TrackHeaderHost& trackHeaderHostForTest() noexcept { return *this; }
     synth::ui::ToolbarButton& getFeedbackButtonForTest() noexcept { return feedbackButton; }
     void setUrlOpenerForTest(std::function<void(const juce::URL&)> opener);
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption> getMidiDestinationOptionsForTest(synth::TrackId id);

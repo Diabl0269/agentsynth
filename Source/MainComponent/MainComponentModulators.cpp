@@ -50,10 +50,39 @@ private:
 
 // A routing with the macro ports between its modulator and its parameter looked through, so a row names the
 // real LFO and the real parameter however the cable crosses macro boundaries.
+// A direct cable out of a port is walked back too: across macros the attenuverter can sit before the port (source ->
+// attenuverter -> port -> parameter), and that cable's real source is then the chain's attenuverter.
 synth::ui::ResolvedRouting resolveThroughPorts(const synth::ui::ConnectionIndex& cables, const PortNodes& ports,
                                                const AudioEngine::ModulationRouting& routing) {
-    return synth::ui::resolveRouting(cables, routing,
-                                     [&ports](juce::AudioProcessorGraph::NodeID id) { return ports.contains(id); });
+    const auto isPort = [&ports](juce::AudioProcessorGraph::NodeID id) { return ports.contains(id); };
+    auto real = synth::ui::resolveRouting(cables, routing, isPort);
+    if (routing.kind != AudioEngine::RoutingKind::AttenuverterChain && ports.contains(real.source.node))
+        real.source = synth::ui::realSourceBehindPorts(cables, real.source, isPort);
+    return real;
+}
+
+// The far leg of a chain whose attenuverter sits before a port: the chain's own row already stands for it. Every
+// chain's attenuverter is in `chainAttenuverters`, so the routings themselves answer, without asking the processor.
+bool isChainTail(const std::set<juce::uint32>& chainAttenuverters, const AudioEngine::ModulationRouting& routing,
+                 const synth::ui::ResolvedRouting& real) {
+    return routing.kind != AudioEngine::RoutingKind::AttenuverterChain &&
+           chainAttenuverters.count(real.source.node.uid) > 0;
+}
+
+// Where `sourceUuid` lives when that is outside the macro `targetUuid` sits in: its own macro's name, or the main
+// canvas. Empty when the source is inside the target's macro (however deep) or the target is in no macro, so a row
+// only marks a source the cable reaches across a macro boundary.
+juce::String placeOutsideMacro(const synth::MacroSet& macros, const synth::MacroOwnerIndex& owners,
+                               const juce::String& sourceUuid, const juce::String& targetUuid) {
+    const auto* home = owners.ownerOf(targetUuid);
+    if (home == nullptr)
+        return {};
+    const auto* at = owners.ownerOf(sourceUuid);
+    for (const auto* macro = at; macro != nullptr;
+         macro = macro->parentId.isEmpty() ? nullptr : macros.find(macro->parentId))
+        if (macro->id == home->id)
+            return {};
+    return at != nullptr ? at->name : juce::String("the main canvas");
 }
 
 // "<module title> <parameter>" for a routing's real destination ("Pad oscillator detune").
@@ -142,11 +171,17 @@ MainComponent::getModulatorsForLanes(const std::vector<std::pair<juce::String, j
     std::map<std::pair<juce::uint32, int>, std::vector<Resolved>> byDest;
     const synth::ui::ConnectionIndex cables(graph);
     const PortNodes ports(graph, graphEditor.getMacros());
+    const synth::MacroOwnerIndex owners(graphEditor.getMacros());
+    std::set<juce::uint32> chainAttenuverters;
+    for (const auto& r : audioEngine.getModulationRoutings())
+        if (r.kind == AudioEngine::RoutingKind::AttenuverterChain)
+            chainAttenuverters.insert(r.attenuverterNodeID.uid);
     for (const auto& r : audioEngine.getModulationRoutings()) {
         if (!r.hasSource || !r.hasDest || r.role != PortRole::ModCV)
             continue;
         const auto real = resolveThroughPorts(cables, ports, r);
-        byDest[{real.dest.node.uid, real.dest.channel}].emplace_back(r, real);
+        if (!isChainTail(chainAttenuverters, r, real))
+            byDest[{real.dest.node.uid, real.dest.channel}].emplace_back(r, real);
     }
 
     std::vector<std::vector<synth::ui::ModulatorInfo>> out(lanes.size());
@@ -165,6 +200,7 @@ MainComponent::getModulatorsForLanes(const std::vector<std::pair<juce::String, j
             synth::ui::ModulatorInfo info;
             info.sourceUuid = uuidOf(source);
             info.sourceTitle = synth::moduleTitle(*source);
+            info.sourcePlace = placeOutsideMacro(graphEditor.getMacros(), owners, info.sourceUuid, nodeUuid);
             info.sourceChannel = real.source.channel;
             info.isLfo = dynamic_cast<LFOModule*>(source->getProcessor()) != nullptr;
             if (const auto* module = dynamic_cast<ModuleBase*>(source->getProcessor()))
