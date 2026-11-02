@@ -76,7 +76,7 @@ struct CrossTrack {
         attackA = doc().addLane(tracks[0].id, compressor[0], "attack", range);
         thresholdB = doc().addLane(tracks[1].id, compressor[1], "threshold", range);
         thresholdC = doc().addLane(tracks[2].id, compressor[2], "threshold", range);
-        lfoUuid = host().addLfoModulator(compressor[0], "ratio");
+        lfoUuid = host().addNewModulator(compressor[0], "ratio", "LFO", 0);
         mc->getUndoManager().clearUndoHistory();
     }
     std::vector<ModulatorInfo> rows(int track, const juce::String& paramId) {

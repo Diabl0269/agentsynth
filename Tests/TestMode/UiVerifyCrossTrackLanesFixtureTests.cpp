@@ -40,7 +40,7 @@ TEST(UiVerifyCrossTrackLanesFixture, DISABLED_WritesCrossTrackLanesProject) {
     doc.addLane(tracks[0].id, compressor[0], "attack", range);
     doc.addLane(tracks[1].id, compressor[1], "threshold", range);
     doc.addLane(tracks[2].id, compressor[2], "threshold", range);
-    ASSERT_TRUE(mc->trackHeaderHostForTest().addLfoModulator(compressor[0], "ratio").isNotEmpty());
+    ASSERT_TRUE(mc->trackHeaderHostForTest().addNewModulator(compressor[0], "ratio", "LFO", 0).isNotEmpty());
 
     const auto bundle = fixtureBundle();
     bundle.deleteRecursively();
