@@ -125,6 +125,10 @@ void ModulatorRow::applyMenuChoice(int menuId) {
 
 // The pick arrives after the call-out closes, when this row may be gone (the graph refresh prunes it), so the callback
 // holds the host and the routing by value and never this. The host re-points it as ONE undo step.
+bool ModulatorRow::canOpenChangeSourcePicker() const {
+    return host_ != nullptr && host_->canChangeModulatorSource(info_);
+}
+
 void ModulatorRow::openChangeSourcePicker() {
     if (host_ == nullptr || !host_->canChangeModulatorSource(info_))
         return;

@@ -110,6 +110,13 @@ public:
     /** The source module (sourceUuid) of the modulator row that is `focused` or holds it, or empty; Replace Module acts
      * on it. */
     juce::String modulatorSourceOwning(const juce::Component* focused) const;
+    /** The modulator row that is `focused` or holds it, or nullptr. */
+    ModulatorRow* modulatorRowOwning(const juce::Component* focused) const;
+    /** Replace Module's chord with `focused` inside the timeline: a focused modulator row opens its Change source
+     *  picker, a focused lane (header or editor) its Change parameter picker. The two are false when the picker could
+     *  not open (a source that cannot be swapped, no free parameter) or when `focused` is in neither. */
+    bool canOpenReplacePicker(const juce::Component* focused) const;
+    bool openReplacePicker(const juce::Component* focused);
     /** Opens the Duplicate picker of `lane`'s header; false when the lane has no header on screen. */
     bool requestDuplicateLane(synth::LaneId lane);
     AutomationLaneHeaderComponent* headerFor(synth::LaneId lane) const;
