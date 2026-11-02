@@ -1,0 +1,69 @@
+# Cmd+Alt+R on a focused mod lane opens its Change source picker, on a focused automation lane its Change parameter
+# picker, both in the timeline (it used to jump to the canvas and replace the lane's module). Also: after Change source
+# to a new envelope or LFO the mod lane's name shows in full, not cut with three dots, before and after undo.
+#
+# What a user does:
+#   1. Opens a project whose MIDI track has a Cutoff lane carrying two LFO mod rows (fixture lane-rows.agsproj),
+#      shows the timeline in the main area and opens the track's automation.
+#   2. Focuses the LFO 1 mod row and presses Cmd+Alt+R: the Change source picker opens. Picks "New envelope": the row
+#      swaps in place and its name button is as wide as the name. Cmd+Z and Cmd+Shift+Z: still shown in full.
+#   3. Focuses the Cutoff lane header and presses Cmd+Alt+R: the Change parameter picker opens. Picks another
+#      parameter: the lane re-points. Cmd+Z puts it back.
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/lane-rows.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: trackAutomationFoldArrow}
+  - wait: {}
+  - screenshot: {name: before}
+  - key: {keys: cmd+alt+r, target: LFO 1 mod lane on Cutoff}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - expect: {id: modMatrixPicker, contains: {title: "Change source of LFO 1 on Cutoff"}}
+  - screenshot: {id: modMatrixPicker, name: source-picker}
+  - type: {text: "new env"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {id: ADSR mod lane on Cutoff, showing: true, within_ms: 2000}
+  - screenshot: {name: after-new-envelope}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - screenshot: {name: undo-envelope}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - screenshot: {name: redo-envelope}
+  # The second row: New LFO, whose card is titled "LFO" first and "LFO 3" a moment later.
+  - key: {keys: cmd+alt+r, target: LFO 2 mod lane on Cutoff}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: "new lfo"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - screenshot: {name: after-new-lfo}
+  - expect: {id: LFO 3 mod lane on Cutoff, showing: true, within_ms: 2000}
+  # The lane header: Cmd+Alt+R opens the Change parameter picker on the lane.
+  - key: {keys: cmd+alt+r, target: Cutoff automation lane}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - expect: {id: modMatrixPicker, contains: {title: "Change parameter of Cutoff"}}
+  - screenshot: {id: modMatrixPicker, name: parameter-picker}
+  - type: {text: "reson"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {id: Resonance automation lane, showing: true, within_ms: 2000}
+  - screenshot: {name: after-parameter}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: Cutoff automation lane, showing: true, within_ms: 2000}
+  - screenshot: {name: undo-parameter}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {id: Resonance automation lane, showing: true, within_ms: 2000}

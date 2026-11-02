@@ -21,11 +21,13 @@ A lane row or a mod lane row can be made taller or shorter on its own (drag the 
 - **Names**: the accessible name is the control's name ("Read / Write", "Remove modulator" on a mod lane), the tooltip
   "Name: what it does" (Read / Write adds the current mode). Chips are Tab stops with the accent ring; Return and Space
   press; every other key (Up/Down, Cmd+Alt+Up/Down) bubbles to the header. A right-click on a chip opens the lane menu.
-- **Replace Module**: Cmd+Alt+R (Ctrl+Alt+R off the Mac) with a lane header focused replaces the lane's target module, and
-  with a modulator row focused the row's source module. The header and row leave the chord to the app; the canvas then
-  shows and selects the card and opens the "Replace with..." picker on it. A module inside a collapsed macro (every
-  instrument track's modules, by default) is unfolded first, one undo step, so the picker has a card to sit on. A
-  focused modulator row also makes the timeline the lane surface for Copy, Cut and Duplicate, as a focused header does.
+- **Replace Module**: Cmd+Alt+R (Ctrl+Alt+R off the Mac) swaps what the lane is about, in the timeline. With a
+  modulator row focused it opens the row's Change source picker (the name button's own); with a lane header focused,
+  the lane's Change parameter picker. The header and row leave the chord to the app, which asks the lane panel
+  (`TimelineAutomationLanes::canOpenReplacePicker` / `openReplacePicker`); the command is greyed out where the picker
+  could not open (a source that cannot be swapped, no free parameter). A focused modulator row also makes the timeline
+  the lane surface for Copy, Cut and Duplicate, as a focused header does. With a card selected on the canvas the chord
+  still opens "Replace with..." there; to replace a lane's module, Show on canvas first.
 - **Narrow header**: chips that do not fit the strip's width (the module note keeps 40 px, a mod row's name 40 px) are
   not drawn and are listed in the "+" row.
 - **The "+" row** (`LaneControlMoreRow`, "More actions for this lane"): a labelled button for every catalogue control
