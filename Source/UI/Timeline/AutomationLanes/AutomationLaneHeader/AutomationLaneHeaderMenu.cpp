@@ -51,9 +51,10 @@ void AutomationLaneHeaderComponent::addModulatorItem(juce::PopupMenu& menu) cons
 }
 
 // First in the lane menu, and the one item in the menu of a right-click inside the selected range on the lane's curve
-// (AutomationLaneEditor). It acts on the Range tool's selection, so it is enabled only when that sits on this lane, the
-// parameter has a CV jack and the range can become an LFO; a disabled item says why in its own text (a menu item has no
-// tooltip, and the reason must reach a screen reader too).
+// (AutomationLaneEditor). It acts on the Range tool's selection or, failing that, on the stretch of two or more points
+// selected on this lane with the Select tool (laneRangeProvider), so it is enabled only when one of them is there, the
+// parameter has a CV jack and the stretch can become an LFO; a disabled item says why in its own text (a menu item has
+// no tooltip, and the reason must reach a screen reader too).
 void AutomationLaneHeaderComponent::addCreateCustomLfoItem(juce::PopupMenu& menu, bool direct) const {
     const auto* lane = doc_.getLane(laneId_);
     const auto range = lane != nullptr && laneRangeProvider ? laneRangeProvider() : std::nullopt;

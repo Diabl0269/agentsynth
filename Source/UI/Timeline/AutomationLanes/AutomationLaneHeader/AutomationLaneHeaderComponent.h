@@ -101,8 +101,9 @@ public:
     /** Where the module note sits under the name, in this component's coordinates. */
     juce::Rectangle<int> getNoteAreaForTest() const noexcept { return noteArea_; }
 
-    /** The Range tool's selection when it sits on this lane and has width, as {start, end} beats; the pool answers. May
-     * be null (no range ever). */
+    /** The Range tool's selection when it sits on this lane and has width, else the first-to-last stretch of two or
+     * more points selected on it with the Select tool, as {start, end} beats; the pool answers. May be null (no range
+     * ever). */
     std::function<std::optional<std::pair<double, double>>()> laneRangeProvider;
     /** "Create custom LFO" was picked for the range {start, end}; the pool animates the lane and runs the host's
      * command. */

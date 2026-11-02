@@ -709,13 +709,19 @@ calls to it first, so the editor's own tools are unchanged.
 
 ## Create custom LFO from a range
 
-Right-click a lane that holds the lane range (its header, or the curve editor away from a handle) and the lane menu's
-first item, **Create custom LFO**, (also offered by a right-click inside the range on the curve editor, see [lane controls](lane-controls.md#create-custom-lfo-from-the-range)) turns the drawn movement inside the range into a NEW LFO whose Custom wave is that
+Right-click a lane that holds the lane range, or two or more points selected with the Select tool (its header, or the
+curve editor away from a handle), and the lane menu's first item, **Create custom LFO**, (also offered by a right-click
+inside that stretch on the curve editor, see [lane controls](lane-controls.md#create-custom-lfo-from-the-range)) turns the drawn movement inside the range into a NEW LFO whose Custom wave is that
 shape, so playback sounds the same and the LFO can then be reused elsewhere by drawing its amount band over other bars.
 It always adds an LFO (a lane that already has modulators gets another row). One Cmd+Z removes the LFO, its row, its
 amount lane and puts the lane's points back; Redo re-applies all of it, the wave included (it rides the node's saved
 state).
 
+- **Which stretch.** The Range tool's selection on the lane if there is one, otherwise the points selected on the lane
+  with the Select tool (click, Shift-click or a box) once there are two or more: from the first to the last selected
+  beat (`AutomationLaneEditor::pointSelectionSpan`, read by `TimelineAutomationLanes`'s `laneRangeProvider`). One point
+  or none is no stretch and the item says "select a range first". Everything below is the same for both, and the
+  Range selection wins when a lane has both.
 - **What it makes.** An LFO on Custom, Sync, Retrig off, unipolar. Its rate is the smallest of the LFO's straight rates (1/128
   up to 8/1, i.e. 8 bars; the triplets and dotted values are never chosen) that fits the range, so 1 bar is 1/1, 3 beats is also 1/1 (the drawn part fills the first
   three quarters of the cycle and the last value holds to the end), 2 bars is 2/1. Its Level is the drawn movement's

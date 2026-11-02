@@ -397,6 +397,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h
     Source/UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.cpp
+    Source/UI/Timeline/AutomationLanes/LaneToolCursors.cpp
     Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.h
     Source/UI/Timeline/AutomationLanes/PointReadout/PointValueBubble.cpp
     Source/UI/Timeline/AutomationLanes/PointReadout/PointValueField.h
