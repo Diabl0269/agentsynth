@@ -131,9 +131,16 @@ Both `TimelineClipLaneArea` and `PianoRollComponent` cache one cursor per tool
 (`rebuildToolCursors()`), rebuilt only on a theme change — never per mouse-move, since building one
 renders an icon into an `Image`.
 
-Under Draw the piano roll's velocity strip and every automation lane editor
-(`AutomationLaneEditor::getMouseCursor()`) show that same pen cursor over their own area, because a child
-does not inherit its parent's cursor; under every other tool they keep the arrow. The lane editor builds its
-pen lazily from the themed Draw icon and drops it on a theme change.
+Under Draw the piano roll's velocity strip shows that same pen cursor over its own area, because a child
+does not inherit its parent's cursor.
+
+The automation lane block follows the clip lanes for the tools that act on a lane: Draw (the pen), Range (the
+range cursor) and Erase (the eraser, which deletes points). Every lane editor (`AutomationLaneEditor::getMouseCursor()`)
+and every modulator amount band (`ModulatorBand::getMouseCursor()`, which takes the press itself while the
+modulator has no amount lane) show it over their own area, built lazily from the themed icon by
+`LaneToolCursors` (`UI/Timeline/AutomationLanes/LaneToolCursors.h`) and dropped on a theme change. Select keeps
+the arrow, and Split, Glue and Mute keep it too since they do nothing on a lane. The lane header and the modulator row
+header are not tool surfaces and keep their own cursors. A new tool or lane surface is one more row in
+`AutomationLanesCursorTest` (the guard for this gap).
 
 Tests: `Tests/UI/Timeline/TimelinePanel/TimelinePanelToolStripTests.cpp`.

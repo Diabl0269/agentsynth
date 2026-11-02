@@ -175,3 +175,36 @@ TEST(AutomationLanesRowIdentityTest, AnEditAfterTheSourceChangedReachesTheNewSou
     first->getRateSlider().setValue(4.0, juce::sendNotificationSync); // a key press on the bar: one edit of its own
     EXPECT_FLOAT_EQ(s.h.host.values["lfo-9.rateHz"], 4.0f);
 }
+
+// The graph refresh after Change source can land twice, the second time with the same
+// routing key and only the source's title changed (a created card is titled "LFO" first, "LFO 3" a moment later). That
+// second refresh goes to setInfo, which must widen the name button to the new name, not leave it at the old width
+// where the name is cut with three dots.
+TEST(AutomationLanesRowIdentityTest, ATitleThatChangesUnderTheSameKeyWidensTheNameButton) {
+    IdentityScene s;
+    auto* first = s.row(0);
+    ASSERT_NE(first, nullptr);
+    auto retitled = lfoInfo("1");
+    retitled.sourceTitle = "LFO 1234";
+    ASSERT_EQ(retitled.key(), first->getInfo().key());
+    const int before = first->getNameButton().getWidth();
+
+    s.replace(0, retitled);
+
+    ASSERT_EQ(s.row(0), first);
+    auto& button = first->getNameButton();
+    EXPECT_GT(button.getWidth(), before) << "a longer name needs a wider button";
+    EXPECT_EQ(button.getWidth(), button.getPreferredWidth()) << "the whole name fits: no three dots";
+}
+
+TEST(AutomationLanesRowIdentityTest, ANameThatChangesBackUnderTheSameKeyNarrowsTheNameButton) {
+    IdentityScene s;
+    auto* first = s.row(0);
+    auto retitled = lfoInfo("1");
+    retitled.sourceTitle = "LFO 1234";
+    s.replace(0, retitled);
+    const int wide = first->getNameButton().getWidth();
+    s.replace(0, lfoInfo("1"));
+    EXPECT_LT(first->getNameButton().getWidth(), wide);
+    EXPECT_EQ(first->getNameButton().getWidth(), first->getNameButton().getPreferredWidth());
+}

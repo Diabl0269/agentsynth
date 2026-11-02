@@ -1,14 +1,17 @@
 // AutomationLanesColourCursorTests.cpp -- an automation lane is drawn in its owning track's colour
 // (curve and points), follows a recolour, stays readable on a light background, and shows the pen
-// under the Draw tool. Real panel, real doc edits.
+// under the Draw, Range and Erase tools. Real panel, real doc edits.
 
+#include "AutomationLanesAmountFixture.h"
 #include "AutomationLanesTestFixture.h"
+#include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TrackColour.h"
 
 using namespace automation_lanes_test;
 using synth::TrackKind;
 using synth::ui::EditTool;
+using synth::ui::TimelinePanelComponent;
 
 namespace {
 
@@ -84,19 +87,51 @@ TEST(AutomationLanesColourTest, EveryPaletteColourReadsOnALightAndADarkLaneBackg
     EXPECT_NEAR(darkened.getHue(), amber.getHue(), 0.05f);
 }
 
-TEST(AutomationLanesCursorTest, TheLaneShowsThePenUnderTheDrawToolAndTheArrowOtherwise) {
+namespace {
+const juce::MouseCursor kArrow(juce::MouseCursor::NormalCursor);
+
+// What a lane surface must show under `tool`: the clip lanes' own cursor for a tool that acts on a lane, the arrow for
+// the rest (Select, and the tools that do nothing on a lane).
+juce::MouseCursor expectedLaneCursor(TimelinePanelComponent& panel, EditTool tool) {
+    panel.setActiveTool(tool);
+    return synth::ui::LaneToolCursors::hasCursor(tool) ? panel.getClipLaneArea().getMouseCursor() : kArrow;
+}
+} // namespace
+
+// Guard for the sibling-gap kind on tool cursors: every surface of the lane block that a tool acts on shows the same
+// cursor as the clip lanes, for every tool. A new tool or surface is one more row.
+TEST(AutomationLanesCursorTest, TheLaneShowsTheClipLanesCursorForEveryToolThatActsOnALane) {
     ColouredLane f;
     ASSERT_NE(f.editor, nullptr);
-    const juce::MouseCursor arrow(juce::MouseCursor::NormalCursor);
-    EXPECT_TRUE(f.editor->getMouseCursor() == arrow);
-
+    EXPECT_TRUE(f.editor->getMouseCursor() == kArrow);
+    for (auto tool : synth::ui::kAllEditTools) {
+        const auto expected = expectedLaneCursor(f.panel, tool);
+        EXPECT_TRUE(f.editor->getMouseCursor() == expected) << "tool " << (int)tool;
+    }
+    f.panel.setActiveTool(EditTool::Range);
+    EXPECT_FALSE(f.editor->getMouseCursor() == kArrow) << "the Range tool shows its cursor over a lane";
     f.panel.setActiveTool(EditTool::Draw);
-    EXPECT_TRUE(f.editor->getMouseCursor() == f.panel.getClipLaneArea().getMouseCursor())
-        << "the same pen the clip lanes show";
-    EXPECT_FALSE(f.editor->getMouseCursor() == arrow);
-
-    f.panel.setActiveTool(EditTool::Erase);
-    EXPECT_TRUE(f.editor->getMouseCursor() == arrow) << "only Draw makes the lane a pen";
+    EXPECT_FALSE(f.editor->getMouseCursor() == kArrow);
     f.panel.setActiveTool(EditTool::Select);
-    EXPECT_TRUE(f.editor->getMouseCursor() == arrow);
+    EXPECT_TRUE(f.editor->getMouseCursor() == kArrow);
+}
+
+TEST_F(TimelinePanelIntegrationTest, TheAmountBandShowsTheSameToolCursorWithAndWithoutAnAmountLane) {
+    amount_test::AmountScene s;
+    ASSERT_NE(s.band(), nullptr);
+    auto* band = s.band();
+    ASSERT_EQ(s.amountLane(), nullptr) << "a new modulator has no amount lane: the band itself takes the press";
+    for (auto tool : synth::ui::kAllEditTools) {
+        const auto expected = expectedLaneCursor(s.panel(), tool);
+        EXPECT_TRUE(band->getMouseCursor() == expected) << "no lane, tool " << (int)tool;
+        EXPECT_TRUE(band->getEditor()->getMouseCursor() == expected) << "editor, tool " << (int)tool;
+    }
+    s.panel().setActiveTool(EditTool::Draw);
+    s.penStroke(8.0, -0.5, 24.0, 0.5);
+    ASSERT_NE(s.amountLane(), nullptr);
+    for (auto tool : synth::ui::kAllEditTools) {
+        const auto expected = expectedLaneCursor(s.panel(), tool);
+        EXPECT_TRUE(band->getMouseCursor() == expected) << "with a lane, tool " << (int)tool;
+        EXPECT_TRUE(band->getEditor()->getMouseCursor() == expected) << "editor, tool " << (int)tool;
+    }
 }

@@ -11,9 +11,9 @@
 #include "UI/Timeline/AutomationLanes/AutomationLaneBipolarGuide.h"
 #include "UI/Timeline/AutomationLanes/AutomationToolMapping.h"
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
+#include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
-#include "UI/Timeline/ToolCursors.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <cmath>
@@ -32,11 +32,21 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
                "select several, Cmd+A selects all, Delete removes the selection. Keys: Left/Right pick a point, "
                "Shift+Left/Right select several, Up/Down change the value, Alt+arrows move the selection "
                "(Alt+Shift: finely), Ctrl+T inserts a point after the current one");
+    toolCursors_ = std::make_unique<LaneToolCursors>();
     selection_.onChange = [this] { selectionChanged(); };
     keyHold_.speedFactor = [this](KeyAxis axis) { return keyDragSpeedFactor(axis); };
     keyHold_.onFrame = [this] { applyKeyDrag(false); };
     keyHold_.onEnd = [this] { endKeyDrag(); };
     refreshDescription();
+    // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
+    // count.
+    testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
+        into.setProperty("cursor", laneCursorKind(getMouseCursor()));
+        into.setProperty("selectedPoints", selection_.size());
+        into.setProperty("points", lanePoints() != nullptr ? (int)lanePoints()->size() : 0);
+    });
+    addChildComponent(*testModeProbe_);
+    testModeProbe_->setVisible(true);
 }
 
 void AutomationLaneEditor::setActiveLane(synth::LaneId id) {
@@ -91,9 +101,11 @@ juce::Colour AutomationLaneEditor::getResolvedCurveColour() const {
     return readableOn(colour, laneBackground(*this));
 }
 
-// The draw tool is the pen whether it is followed from the timeline (Shift swaps the stroke for a
-// line only at mouse-down) or picked directly as Pencil/Line. Built lazily from the themed Draw icon,
-// the same cursor the clip lanes and the piano roll show under that tool.
+// The tool's cursor, the same icon the clip lanes and the piano roll show: the pen for Draw (whether followed from
+// the timeline, where Shift swaps the stroke for a line only at mouse-down, or picked directly as Pencil/Line), the
+// range cursor for Range and the eraser for Erase.
+AutomationLaneEditor::~AutomationLaneEditor() = default;
+
 juce::MouseCursor AutomationLaneEditor::getMouseCursor() {
     if (const auto resize = stretchCursor())
         return *resize;
@@ -101,21 +113,17 @@ juce::MouseCursor AutomationLaneEditor::getMouseCursor() {
     // (docs/layout/animation.md#drag-and-drop-cursor).
     if (dragMode_ == DragMode::MoveHandle || dragMode_ == DragMode::TensionScrub || dragMode_ == DragMode::LaneConstant)
         return dragGrabCursor();
-    const bool drawing =
-        editTool_.has_value() ? *editTool_ == EditTool::Draw : (tool_ == Tool::Pencil || tool_ == Tool::Line);
-    if (!drawing)
-        return juce::MouseCursor(juce::MouseCursor::NormalCursor);
-    if (!penCursorBuilt_) {
-        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        std::unique_ptr<juce::Drawable> icon = lf != nullptr ? lf->getIcon(synth::theme::Icon::ToolDraw) : nullptr;
-        penCursor_ = makeToolCursor(EditTool::Draw, icon.get());
-        penCursorBuilt_ = true;
-    }
-    return penCursor_;
+    if (editTool_.has_value())
+        return toolCursors_->get(*this, *editTool_);
+    if (tool_ == Tool::Pencil || tool_ == Tool::Line)
+        return toolCursors_->get(*this, EditTool::Draw);
+    if (tool_ == Tool::Eraser)
+        return toolCursors_->get(*this, EditTool::Erase);
+    return juce::MouseCursor(juce::MouseCursor::NormalCursor);
 }
 
 void AutomationLaneEditor::lookAndFeelChanged() {
-    penCursorBuilt_ = false; // re-tinted icon -> different cursor image
+    toolCursors_->invalidate(); // re-tinted icon -> different cursor image
     repaint();
 }
 
@@ -877,11 +885,12 @@ void AutomationLaneEditor::handlePopupClick(const juce::MouseEvent& e) {
 }
 
 bool AutomationLaneEditor::isInSelectedRange(juce::Point<int> pos) const {
-    const auto* range = shapeGesture_.getLaneRange();
-    if (range == nullptr || !range->hasWidth() || range->getLane() != laneId_)
-        return false;
     const double beat = viewState_.xToBeat((double)pos.x);
-    return beat >= range->getStartBeat() && beat <= range->getEndBeat();
+    const auto* range = shapeGesture_.getLaneRange();
+    if (range != nullptr && range->hasWidth() && range->getLane() == laneId_)
+        return beat >= range->getStartBeat() && beat <= range->getEndBeat();
+    const auto span = pointSelectionSpan();
+    return span.has_value() && beat >= span->first && beat <= span->second;
 }
 
 bool AutomationLaneEditor::showContextMenuForKeyboardFocus() {

@@ -280,14 +280,63 @@ bool readModulatorOrder(const juce::var& v, std::vector<juce::String>& out) {
     return true;
 }
 
-// A lane's display fields: modulatorOrder (absent -> graph order) and heightScale (absent -> 1, else finite and
-// clamped).
+double clampLaneScale(double scale) {
+    return std::clamp(scale, AutomationLane::kMinHeightScale, AutomationLane::kMaxHeightScale);
+}
+
+// A lane's modulatorHeightScales: absent -> none; present, an array of {key, scale} with a non-empty key and a finite
+// scale (clamped).
+bool readModulatorHeights(const juce::var& v, std::map<juce::String, double>& out) {
+    const juce::Array<juce::var>* list = nullptr;
+    if (!readOptionalArray(v, list))
+        return false;
+    if (list == nullptr)
+        return true;
+    for (const auto& entry : *list) {
+        const auto* obj = entry.getDynamicObject();
+        juce::String key;
+        double scale = 1.0;
+        if (obj == nullptr || !readString(obj->getProperty("key"), key) || key.isEmpty() ||
+            !readDouble(obj->getProperty("scale"), scale) || !std::isfinite(scale))
+            return false;
+        out[key] = clampLaneScale(scale);
+    }
+    return true;
+}
+
+// A lane's display fields: modulatorOrder (absent -> graph order), heightScale (absent -> 1, else finite and clamped)
+// and the modulator rows' heights. modulatorHeightScale absent -> heightScale: files written while the rows scaled with
+// their lane load looking exactly as they did, and a lane whose rows match its own row writes nothing extra.
 bool readLaneDisplayFields(const juce::DynamicObject& lObj, AutomationLane& lane) {
     if (!readModulatorOrder(lObj.getProperty("modulatorOrder"), lane.modulatorOrder) ||
         !readOptionalDouble(lObj.getProperty("heightScale"), lane.heightScale) || !std::isfinite(lane.heightScale))
         return false;
-    lane.heightScale = std::clamp(lane.heightScale, AutomationLane::kMinHeightScale, AutomationLane::kMaxHeightScale);
+    lane.heightScale = clampLaneScale(lane.heightScale);
+    lane.modulatorHeightScale = lane.heightScale;
+    if (!readOptionalDouble(lObj.getProperty("modulatorHeightScale"), lane.modulatorHeightScale) ||
+        !std::isfinite(lane.modulatorHeightScale) ||
+        !readModulatorHeights(lObj.getProperty("modulatorHeightScales"), lane.modulatorHeightScales))
+        return false;
+    lane.modulatorHeightScale = clampLaneScale(lane.modulatorHeightScale);
     return true;
+}
+
+// The writer's half of readLaneDisplayFields' height rules.
+void writeLaneHeights(juce::DynamicObject& l, const AutomationLane& lane) {
+    if (lane.heightScale != 1.0) // left out at the default, so older files stay byte-identical
+        l.setProperty("heightScale", lane.heightScale);
+    if (lane.modulatorHeightScale != lane.heightScale) // absent reads back as heightScale
+        l.setProperty("modulatorHeightScale", lane.modulatorHeightScale);
+    if (!lane.modulatorHeightScales.empty()) {
+        juce::Array<juce::var> rows;
+        for (const auto& [key, scale] : lane.modulatorHeightScales) {
+            juce::DynamicObject::Ptr row = new juce::DynamicObject();
+            row->setProperty("key", key);
+            row->setProperty("scale", scale);
+            rows.add(juce::var(row.get()));
+        }
+        l.setProperty("modulatorHeightScales", rows);
+    }
 }
 
 // A track's MIDI input: absent keys keep "all inputs, any channel" (files written before the field existed). A
@@ -489,8 +538,7 @@ juce::var TimelineDoc::toVar() const {
             l->setProperty("paramId", lane.paramId);
             l->setProperty("recordMode", lane.recordMode);
             l->setProperty("paramIndexHint", lane.paramIndexHint); // additive
-            if (lane.heightScale != 1.0) // left out at the default, so older files stay byte-identical
-                l->setProperty("heightScale", lane.heightScale);
+            writeLaneHeights(*l, lane);
             if (!lane.modulatorOrder.empty()) { // additive; absent = empty = graph order
                 juce::Array<juce::var> orderVars;
                 for (const auto& key : lane.modulatorOrder)

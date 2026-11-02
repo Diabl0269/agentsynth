@@ -19,6 +19,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <vector>
@@ -67,6 +68,8 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // LFO (addRangeMenuItems): on empty space it is the whole menu, on a handle or segment it follows that menu's items.
 namespace synth::ui {
 
+class LaneToolCursors; // Source/UI/Timeline/AutomationLanes/LaneToolCursors.h
+
 class AutomationLaneEditor
     : public juce::Component
     , public juce::SettableTooltipClient
@@ -75,7 +78,7 @@ public:
     enum class Tool { Pointer, Pencil, Line, Eraser };
 
     explicit AutomationLaneEditor(TimelineViewState& viewState);
-    ~AutomationLaneEditor() override = default;
+    ~AutomationLaneEditor() override;
 
     void paint(juce::Graphics& g) override;
 
@@ -180,6 +183,9 @@ public:
     // ---- Point selection (AutomationLaneEditorPoints.cpp) ----
     LanePointSelection& getPointSelection() noexcept { return selection_; }
     const LanePointSelection& getPointSelection() const noexcept { return selection_; }
+    // The stretch the Select tool's selected points cover: first to last selected beat, once two or more are selected
+    // (a single point is no stretch). What "Create custom LFO" reads when no Range tool selection sits on the lane.
+    std::optional<std::pair<double, double>> pointSelectionSpan() const;
     // Fired after the selection or the keyboard cursor changed; may be null.
     std::function<void()> onSelectionChanged;
     // Re-reads the lane after any doc change: drops selected points that are gone and glides removals/additions.
@@ -378,7 +384,7 @@ private:
 
     void handlePopupClick(const juce::MouseEvent& e);
     void showContextMenu(juce::PopupMenu menu, juce::Point<int> at);
-    bool isInSelectedRange(juce::Point<int> pos) const;
+    bool isInSelectedRange(juce::Point<int> pos) const; // the Range selection, else the selected points' span
     void showHandleContextMenu(double beat, juce::Point<int> pos);
     void showSegmentContextMenu(int leftIndex, juce::Point<int> pos);
 
@@ -391,8 +397,8 @@ private:
     Tool tool_ = Tool::Pointer;
     std::optional<EditTool> editTool_; // set = tool_ follows it (see setEditTool)
     std::optional<juce::Colour> curveColour_;
-    juce::MouseCursor penCursor_;
-    bool penCursorBuilt_ = false;
+    std::unique_ptr<LaneToolCursors> toolCursors_;
+    std::unique_ptr<juce::Component> testModeProbe_; // answers getState: the cursor and the selection
 
     DragMode dragMode_ = DragMode::None;
     juce::Point<int> mouseDownPos_;

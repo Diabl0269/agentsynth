@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 16,
+      "type": "Audio Output",
+      "uuid": "76570cc3-dac8-4c05-a025-0dbeb70c1d39",
+      "params": {},
+      "position": {
+        "x": 960,
+        "y": 40
+      }
+    },
+    {
+      "id": 17,
+      "type": "Filter",
+      "uuid": "7a5ef347-05bd-43f4-b470-6bf5cc165782",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "cutoff": 440.0,
+        "resonance": 0.100000001490116,
+        "drive": 1.0,
+        "filterType": "LPF24",
+        "poly": false,
+        "keyTrack": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "shift": 0.0,
+        "depth": 1.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 600,
+        "y": 200
+      }
+    },
+    {
+      "id": 18,
+      "type": "LFO",
+      "uuid": "688584f9-5808-4870-bf98-3c4c7b38f535",
+      "params": {
+        "bypassed": false,
+        "shape": "Sine",
+        "mode": true,
+        "bipolar": true,
+        "rateHz": 1.0,
+        "rateSync": "1/4",
+        "retrig": false,
+        "level": 1.0,
+        "glide": 0.0,
+        "phase": 0.0,
+        "fadeIn": 0.0,
+        "morphX": 0.5,
+        "morphY": 0.5,
+        "muted": false
+      },
+      "position": {
+        "x": 152,
+        "y": 200
+      }
+    },
+    {
+      "id": 19,
+      "type": "Attenuverter",
+      "uuid": "265c038a-e31e-4a3d-9e16-59ee8424bdfc",
+      "params": {
+        "bypassed": false,
+        "amount": 0.5
+      },
+      "position": {
+        "x": null,
+        "y": null
+      }
+    }
+  ],
+  "connections": [
+    {
+      "src": 18,
+      "srcPort": 0,
+      "dst": 19,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 0,
+      "dst": 17,
+      "dstPort": 1,
+      "isMidi": false
+    }
+  ],
+  "modulations": [
+    {
+      "source": 18,
+      "sourcePort": 0,
+      "dest": 17,
+      "destPort": 1,
+      "amount": 0.5,
+      "bypass": false
+    }
+  ],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 2,
+    "nextClipId": 1,
+    "nextLaneId": 2,
+    "nextNoteId": 1,
+    "nextMarkerId": 1,
+    "tracks": [
+      {
+        "id": 1,
+        "kind": 2,
+        "name": "Unassigned automation",
+        "colourArgb": 4283417087,
+        "muted": false,
+        "soloed": false,
+        "armed": false,
+        "bindingUuid": "",
+        "clips": [],
+        "lanes": [
+          {
+            "id": 1,
+            "nodeUuid": "7a5ef347-05bd-43f4-b470-6bf5cc165782",
+            "paramId": "cutoff",
+            "recordMode": 1,
+            "paramIndexHint": -1,
+            "range": {
+              "minValue": 20.0,
+              "maxValue": 20000.0,
+              "defaultValue": 440.0
+            },
+            "points": [
+              {
+                "beat": 0.0,
+                "value": 200.0,
+                "tension": 0.0,
+                "curve": 1
+              },
+              {
+                "beat": 2.0,
+                "value": 4000.0,
+                "tension": 0.0,
+                "curve": 1
+              },
+              {
+                "beat": 4.0,
+                "value": 800.0,
+                "tension": 0.0,
+                "curve": 1
+              },
+              {
+                "beat": 8.0,
+                "value": 800.0,
+                "tension": 0.0,
+                "curve": 1
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "markers": []
+  },
+  "macros": [],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": false
+  },
+  "view": {
+    "zoom": 1.0,
+    "panX": 0.0,
+    "panY": 0.0
+  }
+}

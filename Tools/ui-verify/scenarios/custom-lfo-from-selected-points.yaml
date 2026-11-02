@@ -1,0 +1,52 @@
+# Two bugs on automation lanes: "Create custom LFO" only worked from a Range-tool selection (a normal Select-tool
+# selection of points said "select a range first"), and the Range tool showed no Range cursor over a lane or a mod row.
+#
+# What a user does: opens the project with a lane on Filter cutoff and an LFO mod row, picks the Range tool and hovers
+# the lane and the mod row (the Range cursor shows on both), goes back to Select, clicks the first point and
+# shift-clicks the last one, right-clicks inside the stretch and picks "Create custom LFO" (a second LFO appears),
+# presses Cmd+Z (it is gone). With one point selected, the lane menu has no Create custom LFO item.
+# The cursor shape itself is read from the lane's and the mod row's state probes ("tool" is the Range cursor, "arrow" none);
+# the popup menu is its own window, so its PNGs capture the menu.
+record: true
+save_project: lane-custom-lfo
+steps:
+  - openProject: {path: "${FIXTURES}/lane-with-lfo.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {count: {prefix: "card:LFO", equals: 1}}
+  # The Range tool shows its cursor over the lane and the mod row; Select shows the plain arrow.
+  - expect: {id: automationLaneState, cursor: arrow}
+  - click: {id: timelineToolRange}
+  - hover: {id: automationLaneState, x: 120, y: 29}
+  - expect: {id: automationLaneState, cursor: tool}
+  - expect: {id: modulatorBandState, cursor: tool}
+  - screenshot: {name: range-tool-lane}
+  - click: {id: timelineToolSelect}
+  - expect: {id: automationLaneState, cursor: arrow}
+  - expect: {id: modulatorBandState, cursor: arrow}
+  # One selected point: no stretch, so the menu stays the plain lane menu (Hold, Linear).
+  - click: {id: automationLaneState, x: 48, y: 27}
+  - expect: {id: automationLaneState, selectedPoints: 1}
+  - click: {id: automationLaneState, x: 120, y: 29, button: right}
+  - screenshot: {id: menu, name: menu-one-point}
+  - key: {keys: escape}
+  # Two selected points: right-click inside the stretch offers the item and it makes an LFO.
+  - click: {id: automationLaneState, x: 48, y: 27}
+  - click: {id: automationLaneState, x: 192, y: 29, mods: shift}
+  - expect: {id: automationLaneState, selectedPoints: 2}
+  - click: {id: automationLaneState, x: 120, y: 29, button: right}
+  - screenshot: {id: menu, name: menu-two-points}
+  # Arrow keys reach the popup (its items carry no ids): Hold, Linear, then Create custom LFO.
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - screenshot: {id: menu, name: menu-highlight}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:LFO", equals: 2}, within_ms: 2000}
+  - screenshot: {name: after-create}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {count: {prefix: "card:LFO", equals: 1}, within_ms: 2000}
+  - screenshot: {name: after-undo}

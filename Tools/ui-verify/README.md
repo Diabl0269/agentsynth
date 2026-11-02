@@ -56,5 +56,8 @@ build-ci-local/Tests/Tests --gtest_also_run_disabled_tests --gtest_filter=UiVeri
 channel's output port) and a folded macro with no ports; `UiVerifyFixture.DISABLED_WritesChannelStripMacroProject`
 regenerates it and `scenarios/channel-strip-cable-on-folded-macro.yaml` drives it.
 
+`fixtures/lane-rows.agsproj` holds a MIDI track playing a Filter whose Cutoff lane carries two LFO modulator rows;
+`UiVerifyLaneRowsFixture.DISABLED_WritesLaneRowsProject` regenerates it and `scenarios/lane-row-resize.yaml` drives it.
+
 `UiVerifyFixture.TheCommittedMacrosProjectHoldsAnOpenACollapsedAndANestedMacro` fails if the committed copy stops
 loading or loses a macro.

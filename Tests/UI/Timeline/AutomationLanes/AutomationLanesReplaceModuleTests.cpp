@@ -1,14 +1,17 @@
 // AutomationLanesReplaceModuleTests.cpp -- the Replace Module With... shortcut (Cmd/Ctrl+Alt+R) with an automation
-// lane header or a modulator row focused: it replaces the lane's target module / the row's source module, through the
-// real key path (the focused component's keyPressed, then MainComponent::keyPressed, then the command table).
+// lane header or a modulator row focused: on a mod row it opens the row's Change source picker, on a lane header the
+// lane's Change parameter picker, both in the timeline; with a canvas card selected it opens the card's Replace with...
+// picker as before. Through the real key path (the focused component's keyPressed, then MainComponent::keyPressed, then
+// the command table).
 
+#include "../../../TestWait.h"
 #include "AutomationLanesModulatorFixture.h"
 
 #include "ShortcutManager/AppCommands.h"
-#include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
-#include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/ModuleComponent/ReplaceWithPicker.h"
-#include "UI/Layout/ReducedMotion.h"
+#include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h"
+#include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
 using namespace modulator_test;
@@ -23,39 +26,56 @@ bool isActive(MainComponent& mc, juce::CommandID id) {
     return (info.flags & juce::ApplicationCommandInfo::isDisabled) == 0;
 }
 
+// Which picker a press opened: the three hooks are captured at once so a wrong one shows up as the wrong slot.
+struct Pickers {
+    std::unique_ptr<synth::ui::ModMatrixPicker> source;    // a mod row's Change source
+    std::unique_ptr<synth::ui::ModMatrixPicker> parameter; // a lane header's Change parameter
+    std::unique_ptr<synth::ui::ModMatrixPicker> replace;   // a canvas card's Replace with...
+    Pickers() {
+        synth::ui::test_hooks::changeSourcePickerHookForTest() = [this](auto p) { source = std::move(p); };
+        synth::ui::test_hooks::laneParameterPickerHookForTest() = [this](auto p) { parameter = std::move(p); };
+        synth::ui::test_hooks::replacePickerHookForTest() = [this](auto p) { replace = std::move(p); };
+    }
+    ~Pickers() {
+        synth::ui::test_hooks::changeSourcePickerHookForTest() = nullptr;
+        synth::ui::test_hooks::laneParameterPickerHookForTest() = nullptr;
+        synth::ui::test_hooks::replacePickerHookForTest() = nullptr;
+    }
+    bool any() const { return source != nullptr || parameter != nullptr || replace != nullptr; }
+};
+
 // Presses the Replace Module binding the way the key reaches the app: the focused component offers it first, then it
-// bubbles to MainComponent, whose dispatch runs on the next message-loop pump. Returns the picker that opened.
-std::unique_ptr<synth::ui::ModMatrixPicker> pressReplace(MainComponent& mc, juce::Component& focused) {
+// bubbles to MainComponent, whose dispatch runs on the next message-loop pump.
+void pressReplace(MainComponent& mc, juce::Component& focused, Pickers& pickers) {
     mc.setFocusedComponentOverrideForTest(&focused);
     const auto key = mc.getShortcutManager().getBinding("replaceSelectedModule");
-    std::unique_ptr<synth::ui::ModMatrixPicker> captured;
-    synth::ui::test_hooks::replacePickerHookForTest() = [&captured](auto p) { captured = std::move(p); };
     EXPECT_FALSE(focused.keyPressed(key)) << "the focused lane header / row must not swallow the chord";
     EXPECT_TRUE(mc.keyPressed(key));
     // Wait for the dispatch rather than a fixed slice: a loaded machine can take longer than 50 ms to pump it.
-    for (int slice = 0; slice < 40 && captured == nullptr; ++slice)
+    for (int slice = 0; slice < 40 && !pickers.any(); ++slice)
         juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
-    synth::ui::test_hooks::replacePickerHookForTest() = nullptr;
     mc.setFocusedComponentOverrideForTest(nullptr);
-    return captured;
 }
 
-// Folds `uuids` into one collapsed macro, as an instrument track's modules are by default.
-const synth::Macro* collapseIntoMacro(Scene& s, const std::vector<juce::String>& uuids) {
-    synth::Macro macro;
-    macro.name = "Oscillator 1";
-    macro.collapsed = true;
-    macro.bounds = {900, 700, 400, 300};
-    macro.members.assign(uuids.begin(), uuids.end());
-    s.mc.getGraphEditor().getMacros().add(macro);
+// The track must play the Filter (Track In -> Oscillator -> Filter) for the lane's parameter picker to offer the
+// Filter's other parameters.
+void playTheFilter(Scene& s) {
+    auto osc = addNodeWithUuid(s.mc, "Oscillator");
+    for (auto* node : s.graph().getNodes())
+        if (node->properties["uuid"].toString() == s.doc().getTracks().front().bindingUuid) {
+            EXPECT_TRUE(s.graph().addConnection({{node->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                                 {osc->nodeID, juce::AudioProcessorGraph::midiChannelIndex}}));
+            break;
+        }
+    EXPECT_TRUE(s.graph().addConnection({{osc->nodeID, 0}, {s.target->nodeID, 0}}));
     s.mc.getGraphEditor().updateComponents();
-    return s.mc.getGraphEditor().getMacros().findByMember(uuids.front());
 }
 
 } // namespace
 
-TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutOnAFocusedLaneHeaderReplacesTheLanesTargetModule) {
+TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutOnAFocusedLaneHeaderOpensTheChangeParameterPickerInTheTimeline) {
     Scene s;
+    playTheFilter(s);
     auto* header = s.panel().laneHeaderForTest(s.lane);
     ASSERT_NE(header, nullptr);
     s.mc.getGraphEditor().clearSelection();
@@ -63,41 +83,91 @@ TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutOnAFocusedLaneHeaderReplaces
 
     s.mc.setFocusedComponentOverrideForTest(header);
     EXPECT_EQ(s.mc.resolveEditSurface(), MainComponent::EditSurface::AutomationLane);
-    EXPECT_TRUE(isActive(s.mc, AppCommands::replaceSelectedModule)) << "the lane's module is the target";
+    EXPECT_TRUE(isActive(s.mc, AppCommands::replaceSelectedModule)) << "the lane's parameter picker can open";
     s.mc.setFocusedComponentOverrideForTest(nullptr);
 
-    auto picker = pressReplace(s.mc, *header);
-    ASSERT_NE(picker, nullptr) << "the replace picker opened";
-    const auto selected = s.mc.getGraphEditor().getSelectedNodes();
-    ASSERT_EQ(selected.size(), 1u);
-    EXPECT_EQ(selected.front(), s.target->nodeID) << "the card is selected on the canvas so the picker sits on it";
-
-    picker->setSearchTextForTest("Chorus");
-    EXPECT_TRUE(picker->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)));
-    EXPECT_EQ(s.graph().getNodeForId(s.target->nodeID), nullptr) << "the lane's module was replaced";
+    Pickers pickers;
+    pressReplace(s.mc, *header, pickers);
+    ASSERT_NE(pickers.parameter, nullptr) << "the lane's Change parameter picker opened";
+    EXPECT_EQ(pickers.replace, nullptr) << "not the canvas card's picker";
+    EXPECT_TRUE(s.mc.getGraphEditor().getSelectedNodes().empty()) << "the canvas was not touched";
+    EXPECT_EQ(s.panel().getAutomationLanes().headerFor(s.lane), header);
+    EXPECT_NE(s.graph().getNodeForId(s.target->nodeID), nullptr) << "the lane's module is still there";
 }
 
-TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutOnAFocusedModulatorRowReplacesTheSourceModule) {
+TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutOnALaneHeaderRepointsTheLaneAndUndoPutsItBack) {
+    Scene s;
+    playTheFilter(s);
+    auto* header = s.panel().laneHeaderForTest(s.lane);
+    ASSERT_NE(header, nullptr);
+    const auto before = s.doc().getLane(s.lane)->paramId;
+
+    Pickers pickers;
+    pressReplace(s.mc, *header, pickers);
+    ASSERT_NE(pickers.parameter, nullptr);
+    const auto texts = pickers.parameter->getVisibleItemTextsForTest();
+    ASSERT_FALSE(texts.empty()) << "other parameters to pick";
+    pickers.parameter->chooseVisibleItemForTest(0);
+    synth::test::waitUntil([&] { return s.doc().getLane(s.lane)->paramId != before; });
+    EXPECT_NE(s.doc().getLane(s.lane)->paramId, before) << "the lane points at the picked parameter";
+
+    ASSERT_TRUE(s.undo().undo());
+    EXPECT_EQ(s.doc().getLane(s.lane)->paramId, before);
+}
+
+TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutOnAFocusedModulatorRowOpensItsChangeSourcePicker) {
     Scene s;
     s.addLfoFromLaneMenu();
     auto* row = s.row();
     ASSERT_NE(row, nullptr);
     const auto lfoUuid = row->getInfo().sourceUuid;
-    auto* lfo = s.byUuid(lfoUuid);
-    ASSERT_NE(lfo, nullptr);
     s.mc.getGraphEditor().clearSelection();
 
     s.mc.setFocusedComponentOverrideForTest(row);
     EXPECT_TRUE(isActive(s.mc, AppCommands::replaceSelectedModule));
     s.mc.setFocusedComponentOverrideForTest(nullptr);
 
-    const auto lfoId = lfo->nodeID;
-    auto picker = pressReplace(s.mc, *row);
-    ASSERT_NE(picker, nullptr);
-    const auto selected = s.mc.getGraphEditor().getSelectedNodes();
-    ASSERT_EQ(selected.size(), 1u);
-    EXPECT_EQ(selected.front(), lfoId) << "the row's source (the LFO), not the lane's target, is replaced";
-    EXPECT_NE(selected.front(), s.target->nodeID);
+    Pickers pickers;
+    pressReplace(s.mc, *row, pickers);
+    ASSERT_NE(pickers.source, nullptr) << "the row's Change source picker opened";
+    EXPECT_EQ(pickers.replace, nullptr) << "not the canvas card's picker";
+    EXPECT_EQ(pickers.parameter, nullptr) << "not the lane's parameter picker";
+    EXPECT_TRUE(s.mc.getGraphEditor().getSelectedNodes().empty()) << "the canvas was not touched";
+
+    // Picking "New envelope" swaps the row's source in place, as the name button's own picker does.
+    const auto texts = pickers.source->getVisibleItemTextsForTest();
+    int envelope = -1;
+    for (int i = 0; i < (int)texts.size(); ++i)
+        if (texts[(size_t)i].containsIgnoreCase("New envelope"))
+            envelope = i;
+    ASSERT_GE(envelope, 0);
+    pickers.source->chooseVisibleItemForTest(envelope);
+    synth::test::waitUntil([&] { return s.row() != nullptr && s.row()->getInfo().sourceUuid != lfoUuid; });
+    ASSERT_NE(s.row(), nullptr);
+    EXPECT_NE(s.row()->getInfo().sourceUuid, lfoUuid);
+    EXPECT_TRUE(s.row()->getInfo().isEnvelope);
+
+    ASSERT_TRUE(s.undo().undo());
+    ASSERT_NE(s.row(), nullptr);
+    EXPECT_EQ(s.row()->getInfo().sourceUuid, lfoUuid) << "one undo puts the LFO back";
+}
+
+TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutIsGreyedOnARowWhoseSourceCannotBeSwapped) {
+    Scene s;
+    s.addLfoFromLaneMenu();
+    auto* row = s.row();
+    ASSERT_NE(row, nullptr);
+    // A hand-patched cable has no Attenuverter, the case the Change source item is hidden for.
+    auto info = row->getInfo();
+    info.attenuverterUuid = {};
+    ASSERT_FALSE(s.mc.canChangeModulatorSourceForTest(info));
+    row->setRouting(info, "Cutoff");
+    ASSERT_FALSE(row->canOpenChangeSourcePicker());
+
+    s.mc.getGraphEditor().clearSelection();
+    s.mc.setFocusedComponentOverrideForTest(row);
+    EXPECT_FALSE(isActive(s.mc, AppCommands::replaceSelectedModule));
+    s.mc.setFocusedComponentOverrideForTest(nullptr);
 }
 
 TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutKeepsTheCanvasBehaviourWhenNoLaneOrRowHasFocus) {
@@ -106,87 +176,11 @@ TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutKeepsTheCanvasBehaviourWhenN
     EXPECT_FALSE(isActive(s.mc, AppCommands::replaceSelectedModule));
     s.mc.getGraphEditor().selectModule(s.target->nodeID, false);
     EXPECT_TRUE(isActive(s.mc, AppCommands::replaceSelectedModule));
-}
 
-TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutUnfoldsTheCollapsedMacroHoldingTheLanesTargetModule) {
-    Scene s;
-    const auto* macro = collapseIntoMacro(s, {s.targetUuid});
-    ASSERT_NE(macro, nullptr);
-    const auto macroId = macro->id;
-    ASSERT_TRUE(macro->collapsed);
-    auto* header = s.panel().laneHeaderForTest(s.lane);
-    ASSERT_NE(header, nullptr);
-    s.mc.getGraphEditor().clearSelection();
-
-    s.mc.setFocusedComponentOverrideForTest(header);
-    EXPECT_TRUE(isActive(s.mc, AppCommands::replaceSelectedModule)) << "a hidden card is no reason to grey it out";
-    s.mc.setFocusedComponentOverrideForTest(nullptr);
-
-    auto picker = pressReplace(s.mc, *header);
-    ASSERT_NE(picker, nullptr) << "the picker opened over the revealed card";
-    EXPECT_FALSE(s.mc.getGraphEditor().getMacros().find(macroId)->collapsed) << "the macro was unfolded";
-    const auto selected = s.mc.getGraphEditor().getSelectedNodes();
-    ASSERT_EQ(selected.size(), 1u);
-    EXPECT_EQ(selected.front(), s.target->nodeID);
-}
-
-TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutUnfoldsTheCollapsedMacroHoldingTheModulatorSource) {
-    Scene s;
-    s.addLfoFromLaneMenu();
-    auto* row = s.row();
-    ASSERT_NE(row, nullptr);
-    const auto lfoUuid = row->getInfo().sourceUuid;
-    auto* lfo = s.byUuid(lfoUuid);
-    ASSERT_NE(lfo, nullptr);
-    const auto lfoId = lfo->nodeID;
-    const auto* macro = collapseIntoMacro(s, {lfoUuid});
-    ASSERT_NE(macro, nullptr);
-    const auto macroId = macro->id;
-    s.mc.getGraphEditor().clearSelection();
-
-    auto picker = pressReplace(s.mc, *row);
-    ASSERT_NE(picker, nullptr);
-    EXPECT_FALSE(s.mc.getGraphEditor().getMacros().find(macroId)->collapsed);
-    const auto selected = s.mc.getGraphEditor().getSelectedNodes();
-    ASSERT_EQ(selected.size(), 1u);
-    EXPECT_EQ(selected.front(), lfoId);
-}
-
-// Regression test: the unfold hides the module's card until its glide lands, and a hidden card cannot take the
-// picker, so the first press opened nothing.
-TEST_F(TimelinePanelIntegrationTest, ReplaceShortcutOpensThePickerOnlyOnceTheUnfoldGlideHasLanded) {
-    synth::ui::setReducedMotionForTest(false);
-    Scene s;
-    const auto* macro = collapseIntoMacro(s, {s.targetUuid});
-    ASSERT_NE(macro, nullptr);
-    auto& editor = s.mc.getGraphEditor();
-    editor.getCardGlideForTest().setForceAnimateForTest(true);
-    auto* header = s.panel().laneHeaderForTest(s.lane);
-    ASSERT_NE(header, nullptr);
-    editor.clearSelection();
-
-    std::unique_ptr<synth::ui::ModMatrixPicker> captured;
-    synth::ui::test_hooks::replacePickerHookForTest() = [&captured](auto p) { captured = std::move(p); };
-    s.mc.setFocusedComponentOverrideForTest(header);
-    EXPECT_TRUE(s.mc.keyPressed(s.mc.getShortcutManager().getBinding("replaceSelectedModule")));
-    // The chord dispatches on a later message-loop turn (the first in a process can take well over a slice), so wait
-    // for the unfold to start rather than a fixed slice, and judge the picker at that moment, not after the glide.
-    bool gliding = false;
-    for (int slice = 0; slice < 200 && !gliding && captured == nullptr; ++slice) {
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(5);
-        gliding = editor.getCardGlide().fold().isLive();
-    }
-    const bool pickerOpenedEarly = captured != nullptr;
-    s.mc.setFocusedComponentOverrideForTest(nullptr);
-
-    EXPECT_TRUE(gliding) << "the unfold is gliding";
-    EXPECT_FALSE(pickerOpenedEarly) << "the card is still held back, so no picker yet";
-
-    editor.finishCardGlideForTest();
-    synth::ui::test_hooks::replacePickerHookForTest() = nullptr;
-    synth::ui::setReducedMotionForTest(std::nullopt);
-    ASSERT_NE(captured, nullptr) << "the picker opens when the glide lands";
-    const auto selected = editor.getSelectedNodes();
-    ASSERT_EQ(selected.size(), 1u);
-    EXPECT_EQ(selected.front(), s.target->nodeID);
+    Pickers pickers;
+    s.mc.getGraphEditor().grabKeyboardFocus();
+    EXPECT_TRUE(s.mc.getGraphEditor().getCardKeyboard().replaceSelectedModule());
+    EXPECT_NE(pickers.replace, nullptr) << "a selected card still opens Replace with...";
+    EXPECT_EQ(pickers.source, nullptr);
+    EXPECT_EQ(pickers.parameter, nullptr);
 }

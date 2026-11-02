@@ -8,6 +8,7 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
+#include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
@@ -41,9 +42,16 @@ private:
 ModulatorBand::ModulatorBand(TimelineViewState& viewState)
     : viewState_(viewState) {
     setComponentID("modulatorBand");
+    toolCursors_ = std::make_unique<LaneToolCursors>();
     setInterceptsMouseClicks(false, false);
     setAccessible(false);
     proxy_.addListener(this);
+    testModeProbe_ = makeLaneStateProbe("modulatorBandState", [this](juce::DynamicObject& into) {
+        into.setProperty("cursor", laneCursorKind(getMouseCursor()));
+        into.setProperty("hasAmountLane", amountLane() != nullptr);
+    });
+    addChildComponent(*testModeProbe_);
+    testModeProbe_->setVisible(true);
 }
 
 ModulatorBand::~ModulatorBand() {
@@ -58,8 +66,22 @@ void ModulatorBand::setTransport(synth::TransportService* transport) {
         editor_->setTransport(transport);
 }
 
+// The grabbing hand while the knob drag runs; otherwise the tool's cursor, the same one the lanes show. The band takes
+// the press itself only when there is no amount lane, but the cursor must read the same either way.
+juce::MouseCursor ModulatorBand::getMouseCursor() {
+    if (knobDragging_)
+        return dragGrabCursor();
+    return isEditable() ? toolCursors_->get(*this, tool_) : juce::Component::getMouseCursor();
+}
+
+void ModulatorBand::lookAndFeelChanged() {
+    toolCursors_->invalidate();
+    updateMouseCursor();
+}
+
 void ModulatorBand::setEditTool(EditTool tool) {
     tool_ = tool;
+    updateMouseCursor();
     if (editor_ != nullptr)
         editor_->setEditTool(tool);
     updateClickRouting();
@@ -221,7 +243,7 @@ void ModulatorBand::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
     knobDragging_ = false;
     knobCancelled_ = false;
-    endDragCursor(*this);
+    updateMouseCursor();
     bubble_.hide();
     knobDragStart_ = knobAmount();
 }
@@ -246,7 +268,7 @@ void ModulatorBand::mouseDrag(const juce::MouseEvent& e) {
     host_->setNodeParameter(info_.attenuverterUuid, kAmountParamId, (float)value, phase);
     setAmountReadout(value);
     // The grabbing hand and the value bubble of a drag on an empty lane's flat line, from the first real move.
-    showDragCursor(*this);
+    updateMouseCursor();
     if (editor_ != nullptr)
         bubble_.show({(float)e.x, (float)editor_->valueToY(value)}, amountText(value));
 }
@@ -255,7 +277,7 @@ void ModulatorBand::mouseUp(const juce::MouseEvent&) {
     if (!knobDragging_)
         return;
     knobDragging_ = false;
-    endDragCursor(*this);
+    updateMouseCursor();
     bubble_.hide();
     if (host_ != nullptr)
         host_->setNodeParameter(info_.attenuverterUuid, kAmountParamId, (float)knobAmount(), ParameterEditPhase::End);
@@ -276,7 +298,7 @@ bool ModulatorBand::keyPressed(const juce::KeyPress& key) {
         // nothing.
         knobDragging_ = false;
         knobCancelled_ = true;
-        endDragCursor(*this);
+        updateMouseCursor();
         bubble_.hide();
         host_->setNodeParameter(info_.attenuverterUuid, kAmountParamId, (float)knobDragStart_, ParameterEditPhase::End);
         setAmountReadout(knobDragStart_);

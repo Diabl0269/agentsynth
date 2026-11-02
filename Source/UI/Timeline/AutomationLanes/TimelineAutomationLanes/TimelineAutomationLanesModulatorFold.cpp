@@ -42,7 +42,7 @@ float TimelineAutomationLanes::modulatorOpenness(const juce::String& key) const 
 // A folded row is one title line tall: the line its controls are laid out in (a third of the full height), but never
 // so small the title and the arrow are clipped. A row growing in (a new routing) counts only its share so far.
 int TimelineAutomationLanes::modulatorRowHeightFor(synth::LaneId lane, int index) const {
-    const int full = modulatorRowHeight(lane);
+    const int full = modulatorRowHeight(lane, index);
     const auto it = modulators_.find(lane);
     if (it == modulators_.end() || index < 0 || index >= (int)it->second.infos.size())
         return full;
@@ -154,12 +154,13 @@ int TimelineAutomationLanes::laneMoveDirection(const juce::KeyPress& key) const 
 }
 
 // Offered by a focused modulator row, one of its controls, or its band. Consumed even at an end, so the combo or the
-// knob nudge never sees a Cmd+Alt+arrow.
+// knob nudge never sees a Cmd+Alt+arrow. The row's height keys (TimelineAutomationLanesHeight.cpp) resize just this
+// row.
 bool TimelineAutomationLanes::handleModulatorKey(synth::LaneId lane, const ModulatorInfo& info,
                                                  const juce::KeyPress& key) {
     const int direction = laneMoveDirection(key);
     if (direction == 0)
-        return false;
+        return handleRowHeightKey({lane, modulatorOrderKey(info)}, key);
     moveModulatorBy(lane, modulatorOrderKey(info), direction);
     return true;
 }

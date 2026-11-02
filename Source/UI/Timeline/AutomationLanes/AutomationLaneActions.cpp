@@ -86,6 +86,18 @@ bool setLaneHeightScaleUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, s
     return applyEdit(doc, undo, [target, lane, scale] { return target->setLaneHeightScale(lane, scale); });
 }
 
+bool setModulatorHeightScaleUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane,
+                                     const juce::String& key, double scale) {
+    const auto* current = doc.getLane(lane);
+    if (current == nullptr || key.isEmpty() || !std::isfinite(scale) ||
+        current->modulatorRowScale(key) ==
+            std::clamp(scale, synth::AutomationLane::kMinHeightScale, synth::AutomationLane::kMaxHeightScale))
+        return false;
+    synth::TimelineDoc* target = &doc;
+    return applyEdit(doc, undo,
+                     [target, lane, key, scale] { return target->setModulatorHeightScale(lane, key, scale); });
+}
+
 bool deleteLaneUndoable(synth::TimelineDoc& doc, AppUndoManager* undo, synth::LaneId lane) {
     synth::TimelineDoc* target = &doc;
     return applyEdit(doc, undo, [target, lane] {

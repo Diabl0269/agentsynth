@@ -47,9 +47,17 @@ bool hasKey(const std::vector<ModulatorInfo>& infos, const juce::String& key) {
 }
 } // namespace
 
-int TimelineAutomationLanes::modulatorRowHeight(synth::LaneId lane) const {
-    return std::max(kMinModulatorRowHeight, (int)std::llround((double)ModulatorRow::kBaseHeight *
-                                                              viewState_.rowHeightScale * laneHeightScale(lane)));
+// Each row has its own height scale (AutomationLane::modulatorHeightScales, by modulatorOrderKey, or the drag preview);
+// an index past the rows reads the lane's default for a row with no entry.
+int TimelineAutomationLanes::modulatorRowHeight(synth::LaneId lane, int index) const {
+    double scale = 1.0;
+    const auto it = modulators_.find(lane);
+    if (it != modulators_.end() && index >= 0 && index < (int)it->second.infos.size())
+        scale = modulatorHeightScale(lane, modulatorOrderKey(it->second.infos[(size_t)index]));
+    else if (const auto* l = doc_ != nullptr ? doc_->getLane(lane) : nullptr)
+        scale = l->modulatorHeightScale;
+    return std::max(kMinModulatorRowHeight,
+                    (int)std::llround((double)ModulatorRow::kBaseHeight * viewState_.rowHeightScale * scale));
 }
 
 // Asks the graph, once per sync, what routes into every lane's CV jack, and from that which lanes are only

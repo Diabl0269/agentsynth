@@ -90,6 +90,8 @@ public:
     void showMenuAt(const juce::PopupMenu::Options& options);
     /** Opens the picker that points this lane at another parameter; a no-op without a host or a free parameter. */
     void openChangeParameterPicker();
+    /** True when a host is attached and at least one parameter has no lane (the picker's own availability). */
+    bool canPickParameter() const;
     /** Opens the picker for a copy of this lane directly below it; the copy exists only once a parameter is picked. */
     void openDuplicatePicker();
     /** The parameter name button's area, in this component's coordinates. */
@@ -101,8 +103,9 @@ public:
     /** Where the module note sits under the name, in this component's coordinates. */
     juce::Rectangle<int> getNoteAreaForTest() const noexcept { return noteArea_; }
 
-    /** The Range tool's selection when it sits on this lane and has width, as {start, end} beats; the pool answers. May
-     * be null (no range ever). */
+    /** The Range tool's selection when it sits on this lane and has width, else the first-to-last stretch of two or
+     * more points selected on it with the Select tool, as {start, end} beats; the pool answers. May be null (no range
+     * ever). */
     std::function<std::optional<std::pair<double, double>>()> laneRangeProvider;
     /** "Create custom LFO" was picked for the range {start, end}; the pool animates the lane and runs the host's
      * command. */
@@ -140,7 +143,6 @@ public:
 
 private:
     void openParameterPicker(bool duplicate);
-    bool canPickParameter() const;
     void addModulatorItem(juce::PopupMenu& menu) const;
     void openAddModulatorPicker();
     // The control chips (AutomationLaneHeaderControls.cpp).

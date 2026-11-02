@@ -421,8 +421,8 @@ private:
     synth::ui::AutomationLaneEditor* activeLaneEditor() const; // where the point commands act
     synth::LaneId activeLane() const;                          // the lane the lane commands (Duplicate) act on
     // Replace Module (Cmd/Ctrl+Alt+R): the canvas card's own verb, or -- with a lane header/editor or a modulator
-    // row focused -- the lane's target module / the row's source module, revealed on the canvas first.
-    juce::String replaceModuleTargetUuid() const;
+    // row focused -- the row's Change source picker / the lane's Change parameter picker, right in the timeline.
+    const juce::Component* replaceShortcutLaneFocus() const;
     bool canReplaceModuleFromShortcut() const;
     bool replaceModuleFromShortcut();
     bool hasPointSelection() const;

@@ -19,6 +19,8 @@ class TransportService;
 
 namespace synth::ui {
 
+class LaneToolCursors; // Source/UI/Timeline/AutomationLanes/LaneToolCursors.h
+
 struct TrackHeaderHost;
 
 // The lanes-region half of a modulator row: the routing's AMOUNT over the song (ModulatorAmountLane.h).
@@ -87,6 +89,8 @@ public:
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
+    juce::MouseCursor getMouseCursor() override;
+    void lookAndFeelChanged() override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
@@ -122,6 +126,8 @@ private:
     synth::TransportService* transport_ = nullptr;
     TrackHeaderHost* host_ = nullptr;
     EditTool tool_ = EditTool::Select;
+    std::unique_ptr<LaneToolCursors> toolCursors_;
+    std::unique_ptr<juce::Component> testModeProbe_; // answers getState: the cursor the band shows
     DrawShape drawShape_ = DrawShape::Free;
 
     ModulatorInfo info_;

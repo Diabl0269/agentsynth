@@ -225,7 +225,7 @@ TEST(AutomationLanesBlockMotionTest, AnAddedModulatorRowGrowsInAndTheLaneBlockFo
     FadeAnimateGuard animate;
     const int before = s.extra();
     const int leadY = s.leadY();
-    const int full = s.lanes().modulatorRowHeight(s.cutoff);
+    const int full = s.lanes().modulatorRowHeight(s.cutoff, 0);
 
     s.h.host.modulators.push_back(lfoInfo("2"));
     s.f().panel.refreshModulators();
@@ -251,7 +251,7 @@ TEST(AutomationLanesBlockMotionTest, ARemovedModulatorRowFadesInAGapThatClosesTh
     s.f().panel.refreshModulators();
     s.lanes().stepBlockMotionForTest(1.0f);
     const int before = s.extra();
-    const int full = s.lanes().modulatorRowHeight(s.cutoff);
+    const int full = s.lanes().modulatorRowHeight(s.cutoff, 0);
     const auto secondY = s.lanes().modulatorRowFor(s.cutoff, 1)->getY();
 
     s.h.host.modulators.erase(s.h.host.modulators.begin()); // LFO 1 goes; LFO 2 was below it
@@ -276,7 +276,7 @@ TEST(AutomationLanesBlockMotionTest, UnderReduceMotionAModulatorRowArrivesAndLea
     RowScene s;
     FadeAnimateGuard reduced(synth::ui::AnimationMode::reduced);
     const int before = s.extra();
-    const int full = s.lanes().modulatorRowHeight(s.cutoff);
+    const int full = s.lanes().modulatorRowHeight(s.cutoff, 0);
 
     s.h.host.modulators.push_back(lfoInfo("2"));
     s.f().panel.refreshModulators();

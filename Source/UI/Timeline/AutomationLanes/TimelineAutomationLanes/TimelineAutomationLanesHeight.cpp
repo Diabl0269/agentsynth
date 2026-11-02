@@ -1,7 +1,8 @@
-// Concern: TimelineAutomationLanes' per-lane height -- the strip on the bottom edge of a lane's block that resizes it
-// by dragging (a drag previews, one doc write and one undo step on release), and the taller / shorter / default keys of
-// a focused lane header. The height is AutomationLane::heightScale (saved with the project) on top of the shared
-// vertical zoom; the lane's modulator rows scale with it, and the tracks below follow through the layout-change path.
+// Concern: TimelineAutomationLanes' per-row height -- the strip on the bottom edge of each lane row and each modulator
+// row that resizes just that row by dragging (a drag previews, one doc write and one undo step on release), and the
+// taller / shorter / default keys of a focused lane header or modulator row. A lane row's height is
+// AutomationLane::heightScale, a modulator row's is its entry in AutomationLane::modulatorHeightScales (by
+// modulatorOrderKey), both on top of the shared vertical zoom; the rows below follow through the layout-change path.
 // It mirrors the track row's height handle (TimelinePanelTrackHeight.cpp).
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
@@ -13,31 +14,51 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kHeightHandleThickness = 5; // the strip along the block's bottom edge, as on a track row
+constexpr int kHeightHandleThickness = 5; // the strip along a row's bottom edge, as on a track row
 
 const juce::KeyPress kIncreaseHeightKey('=', juce::ModifierKeys::altModifier, 0);
 const juce::KeyPress kDecreaseHeightKey('-', juce::ModifierKeys::altModifier, 0);
 const juce::KeyPress kResetHeightKey('0', juce::ModifierKeys::altModifier, 0);
 } // namespace
 
-double TimelineAutomationLanes::laneHeightScale(synth::LaneId lane) const {
-    if (heightDragLane_.isValid() && heightDragLane_ == lane)
+double TimelineAutomationLanes::rowHeightScale(const RowKey& row) const {
+    if (heightDragLane_.isValid() && heightDragLane_ == row.first && heightDragKey_ == row.second)
         return heightDragScale_;
-    const auto* l = doc_ != nullptr ? doc_->getLane(lane) : nullptr;
-    return l != nullptr ? l->heightScale : 1.0;
+    const auto* l = doc_ != nullptr ? doc_->getLane(row.first) : nullptr;
+    if (l == nullptr)
+        return 1.0;
+    return row.second.isEmpty() ? l->heightScale : l->modulatorRowScale(row.second);
+}
+
+double TimelineAutomationLanes::laneHeightScale(synth::LaneId lane) const { return rowHeightScale({lane, {}}); }
+
+double TimelineAutomationLanes::modulatorHeightScale(synth::LaneId lane, const juce::String& orderKey) const {
+    return orderKey.isEmpty() ? 1.0 : rowHeightScale({lane, orderKey});
 }
 
 EdgeResizeHandle* TimelineAutomationLanes::heightHandleFor(synth::LaneId lane) const {
-    const auto it = heightHandles_.find(lane);
+    const auto it = heightHandles_.find({lane, {}});
     return it != heightHandles_.end() ? it->second.get() : nullptr;
 }
 
-// The edit trays of the lane's header and modulator rows are fixed height; everything else in the block scales.
-int TimelineAutomationLanes::laneTrayExtent(synth::LaneId lane) const {
-    int extent = trayExtentOf(lane);
-    for (int i = 0; i < modulatorCount(lane); ++i)
-        extent += trayExtentOf(lane, i);
-    return extent;
+EdgeResizeHandle* TimelineAutomationLanes::heightHandleFor(synth::LaneId lane, int modulatorIndex) const {
+    const auto* row = modulatorRowFor(lane, modulatorIndex);
+    if (row == nullptr)
+        return nullptr;
+    const auto it = heightHandles_.find({lane, modulatorOrderKey(row->getInfo())});
+    return it != heightHandles_.end() ? it->second.get() : nullptr;
+}
+
+// The row's full height now (a folded modulator row resizes its full height; its title line follows), px.
+int TimelineAutomationLanes::rowFullHeight(const RowKey& row) const {
+    if (row.second.isEmpty())
+        return laneRowHeight(row.first);
+    const auto it = modulators_.find(row.first);
+    if (it != modulators_.end())
+        for (int i = 0; i < (int)it->second.infos.size(); ++i)
+            if (modulatorOrderKey(it->second.infos[(size_t)i]) == row.second)
+                return modulatorRowHeight(row.first, i);
+    return 0;
 }
 
 juce::String TimelineAutomationLanes::heightKeysText() const {
@@ -45,55 +66,84 @@ juce::String TimelineAutomationLanes::heightKeysText() const {
         const auto key = shortcuts_ != nullptr ? shortcuts_->getBinding(action) : fallback;
         return key.isValid() ? key.getTextDescriptionWithIcons() : juce::String("unbound");
     };
-    return "Keys on the lane: " + text("timelineIncreaseTrackHeight", kIncreaseHeightKey) + " taller, " +
+    return "Keys on the row: " + text("timelineIncreaseTrackHeight", kIncreaseHeightKey) + " taller, " +
            text("timelineDecreaseTrackHeight", kDecreaseHeightKey) + " shorter, " +
            text("timelineResetTrackHeight", kResetHeightKey) + " default.";
 }
 
-// The strip sits on the bottom edge of the lane's block (its row plus its modulator rows). The last lane of a track's
-// block shares that edge with the track's own resize strip, so it sits just above it.
-void TimelineAutomationLanes::placeHeightHandle(synth::LaneId lane, const synth::Track& track, int blockBottom,
-                                                int width) {
-    auto& slot = heightHandles_[lane];
+// One strip per row, on its bottom edge (past the row's edit tray, where the next row starts). `name` is what the
+// screen reader and the tooltip call the row.
+void TimelineAutomationLanes::placeHeightHandle(const RowKey& row, const juce::String& name, int rowBottom, int width,
+                                                bool visible) {
+    auto& slot = heightHandles_[row];
     if (slot == nullptr) {
         slot = std::make_unique<EdgeResizeHandle>(EdgeResizeHandle::Axis::Vertical);
-        slot->setComponentID("laneHeightHandle");
-        slot->onDragStarted = [this, lane] { beginLaneHeightDrag(lane); };
-        slot->onDragged = [this, lane](int delta) { dragLaneHeight(lane, delta); };
-        slot->onDragEnded = [this, lane] { endLaneHeightDrag(lane); };
-        slot->onResetRequested = [this, lane] { stepLaneHeight(lane, 0); };
+        slot->setComponentID(row.second.isEmpty() ? "laneHeightHandle" : "modulatorHeightHandle");
+        slot->onDragStarted = [this, row] { beginRowHeightDrag(row); };
+        slot->onDragged = [this, row](int delta) { dragRowHeight(row, delta); };
+        slot->onDragEnded = [this, row] { endRowHeightDrag(row); };
+        slot->onResetRequested = [this, row] { stepRowHeight(row, 0); };
         headerParent_.addAndMakeVisible(*slot);
     }
-    const auto* l = doc_ != nullptr ? doc_->getLane(lane) : nullptr;
-    const auto name = l != nullptr ? laneParameterName(*l, host_) : juce::String("lane");
-    slot->setTitle("Resize " + name + " lane");
-    slot->setTooltip("Drag to resize the " + name + " lane and its modulators; double-click for the default height. " +
-                     heightKeysText());
-    int shift = 0;
-    if (track.kind != synth::TrackKind::Automation) {
-        const auto lastShown = std::find_if(track.lanes.rbegin(), track.lanes.rend(),
-                                            [this](const synth::AutomationLane& x) { return !isAmountLane(x.id); });
-        if (lastShown != track.lanes.rend() && lastShown->id == lane)
-            shift = kHeightHandleThickness;
-    }
-    slot->setVisible(!laneDrag_.isReordering());
-    slot->setBounds(0, blockBottom - kHeightHandleThickness - shift, width, kHeightHandleThickness);
+    slot->setTitle("Resize " + name);
+    slot->setTooltip("Drag to resize the " + name + " only; double-click for the default height. " + heightKeysText());
+    slot->setVisible(visible);
+    slot->setBounds(0, rowBottom - kHeightHandleThickness, width, kHeightHandleThickness);
     slot->toFront(false);
 }
 
-void TimelineAutomationLanes::beginLaneHeightDrag(synth::LaneId lane) {
-    const auto* l = doc_ != nullptr ? doc_->getLane(lane) : nullptr;
-    if (l == nullptr)
+// The handles of a lane's row and of each of its modulator rows, placed after the rows themselves. The lowest row of a
+// track's last lane block shares its bottom edge with the track's own resize strip, so its strip sits just above it:
+// one row edge, then the track edge, never two strips on one line.
+void TimelineAutomationLanes::placeLaneHeightHandles(const synth::AutomationLane& lane, int laneY, bool lastBlock,
+                                                     bool visible, int width) {
+    const auto laneName = laneParameterName(lane, host_);
+    const int count = modulatorCount(lane.id);
+    const int shift = lastBlock ? kHeightHandleThickness : 0;
+    const int laneBottom = laneY + laneRowHeight(lane.id) + trayExtentOf(lane.id);
+    placeHeightHandle({lane.id, {}}, laneName + " lane", laneBottom - (count == 0 ? shift : 0), width, visible);
+    for (int i = 0; i < count; ++i) {
+        const auto* row = modulatorRowFor(lane.id, i);
+        const int bottom = row->getBottom() + trayExtentOf(lane.id, i) - (i == count - 1 ? shift : 0);
+        placeHeightHandle({lane.id, modulatorOrderKey(row->getInfo())},
+                          row->getInfo().sourceTitle + " mod lane on " + laneName, bottom, width, visible);
+    }
+    pruneHeightHandles(lane.id);
+}
+
+// Drops the strips of the lane's modulator rows that are gone (a routing removed, or re-keyed by Change source).
+void TimelineAutomationLanes::pruneHeightHandles(synth::LaneId lane) {
+    std::set<juce::String> keys;
+    const auto it = modulators_.find(lane);
+    if (it != modulators_.end())
+        for (const auto& info : it->second.infos)
+            keys.insert(modulatorOrderKey(info));
+    for (auto h = heightHandles_.lower_bound({lane, {}}); h != heightHandles_.end() && h->first.first == lane;) {
+        if (h->first.second.isEmpty() || keys.count(h->first.second) > 0) {
+            ++h;
+            continue;
+        }
+        if (heightDragLane_ == lane && heightDragKey_ == h->first.second)
+            heightDragLane_ = {}; // its row went mid-drag: the gesture goes with it
+        h = heightHandles_.erase(h);
+    }
+}
+
+void TimelineAutomationLanes::beginRowHeightDrag(const RowKey& row) {
+    if (doc_ == nullptr || doc_->getLane(row.first) == nullptr)
         return;
-    heightDragLane_ = lane;
-    heightDragStartScale_ = l->heightScale;
-    heightDragStartPx_ = std::max(1, laneBlockHeight(*l) - laneTrayExtent(lane));
-    heightDragScale_ = l->heightScale;
+    const double scale = rowHeightScale(row);
+    const int full = rowFullHeight(row);
+    heightDragLane_ = row.first;
+    heightDragKey_ = row.second;
+    heightDragStartScale_ = scale;
+    heightDragStartPx_ = std::max(1, full);
+    heightDragScale_ = scale;
 }
 
 // Previews only: a doc write per mouse move would republish the audio snapshot and dirty the project every pixel.
-void TimelineAutomationLanes::dragLaneHeight(synth::LaneId lane, int deltaPx) {
-    if (!(lane == heightDragLane_))
+void TimelineAutomationLanes::dragRowHeight(const RowKey& row, int deltaPx) {
+    if (!(row.first == heightDragLane_) || row.second != heightDragKey_)
         return;
     heightDragScale_ =
         std::clamp(heightDragStartScale_ * (double)(heightDragStartPx_ + deltaPx) / (double)heightDragStartPx_,
@@ -102,29 +152,43 @@ void TimelineAutomationLanes::dragLaneHeight(synth::LaneId lane, int deltaPx) {
         onLayoutChanged();
 }
 
-void TimelineAutomationLanes::endLaneHeightDrag(synth::LaneId lane) {
-    if (!(lane == heightDragLane_))
+void TimelineAutomationLanes::endRowHeightDrag(const RowKey& row) {
+    if (!(row.first == heightDragLane_) || row.second != heightDragKey_)
         return;
     const double scale = heightDragScale_;
-    if (doc_ != nullptr)
-        setLaneHeightScaleUndoable(*doc_, undo_, lane, scale); // one undo step; the preview still shows the same height
+    if (doc_ != nullptr) { // one undo step; the preview still shows the same height
+        if (row.second.isEmpty())
+            setLaneHeightScaleUndoable(*doc_, undo_, row.first, scale);
+        else
+            setModulatorHeightScaleUndoable(*doc_, undo_, row.first, row.second, scale);
+    }
     heightDragLane_ = {};
+    heightDragKey_ = {};
     if (onLayoutChanged)
         onLayoutChanged(); // also when the doc did not change (a drag back to where it started)
 }
 
-bool TimelineAutomationLanes::stepLaneHeight(synth::LaneId lane, int direction) {
-    if (doc_ == nullptr || doc_->getLane(lane) == nullptr)
+bool TimelineAutomationLanes::stepRowHeight(const RowKey& row, int direction) {
+    if (doc_ == nullptr || doc_->getLane(row.first) == nullptr)
         return false;
-    const double current = laneHeightScale(lane);
+    const double current = rowHeightScale(row);
     const double scale = direction > 0   ? current * kLaneHeightStepFactor
                          : direction < 0 ? current / kLaneHeightStepFactor
                                          : 1.0;
-    return setLaneHeightScaleUndoable(*doc_, undo_, lane, scale);
+    return row.second.isEmpty() ? setLaneHeightScaleUndoable(*doc_, undo_, row.first, scale)
+                                : setModulatorHeightScaleUndoable(*doc_, undo_, row.first, row.second, scale);
 }
 
-// Taller / Shorter / Default (the track row's keys, rebindable) act on the focused lane header.
-bool TimelineAutomationLanes::handleLaneHeightKey(synth::LaneId lane, const juce::KeyPress& key) {
+bool TimelineAutomationLanes::stepLaneHeight(synth::LaneId lane, int direction) {
+    return stepRowHeight({lane, {}}, direction);
+}
+
+bool TimelineAutomationLanes::stepModulatorHeight(synth::LaneId lane, const juce::String& orderKey, int direction) {
+    return !orderKey.isEmpty() && stepRowHeight({lane, orderKey}, direction);
+}
+
+// Taller / Shorter / Default (the track row's keys, rebindable) act on the focused lane header or modulator row only.
+bool TimelineAutomationLanes::handleRowHeightKey(const RowKey& row, const juce::KeyPress& key) {
     const auto matches = [this, &key](const char* action, const juce::KeyPress& fallback) {
         return shortcuts_ == nullptr ? key == fallback
                                      : ShortcutManager::keyPressMatches(shortcuts_->getBinding(action), key);
@@ -138,8 +202,12 @@ bool TimelineAutomationLanes::handleLaneHeightKey(synth::LaneId lane, const juce
         step = 0;
     if (step == 2)
         return false;
-    stepLaneHeight(lane, step);
+    stepRowHeight(row, step);
     return true;
+}
+
+bool TimelineAutomationLanes::handleLaneHeightKey(synth::LaneId lane, const juce::KeyPress& key) {
+    return handleRowHeightKey({lane, {}}, key);
 }
 
 } // namespace synth::ui

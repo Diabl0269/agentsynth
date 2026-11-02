@@ -1,0 +1,57 @@
+# Each automation lane row and each modulator row resizes on its own, from its own bottom edge: dragging one row's
+# strip used to grow the lane and all its modulator rows together.
+#
+# What a user does:
+#   1. Opens a project whose MIDI track has a Cutoff lane carrying two LFO modulator rows (fixture lane-rows.agsproj),
+#      shows the timeline in the main area and opens the track's automation. Each row has its own strip on its bottom
+#      edge; the last row's sits just above the track's own strip.
+#   2. Drags the bottom strip of the LFO 1 row down 30 px: only that row grows, the row below slides down. Cmd+Z puts
+#      it back in one step; Cmd+Shift+Z grows it again.
+#   3. Presses Option+= on the LFO 2 row: only that row grows.
+#   4. Drags the Cutoff lane's own strip down 20 px: the lane row grows, both modulator rows keep their heights.
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/lane-rows.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: trackAutomationFoldArrow}
+  - wait: {}
+  - expect: {id: Cutoff automation lane, bounds: {x: 200, y: 164, w: 200, h: 40}}
+  - expect: {id: LFO 1 mod lane on Cutoff, bounds: {x: 200, y: 204, w: 200, h: 54}}
+  - expect: {id: LFO 2 mod lane on Cutoff, bounds: {x: 200, y: 258, w: 200, h: 54}}
+  - expect: {id: Resize Cutoff lane, bounds: {x: 200, y: 199, w: 200, h: 5}}
+  - expect: {id: Resize LFO 1 mod lane on Cutoff, bounds: {x: 200, y: 253, w: 200, h: 5}}
+  - expect: {id: Resize LFO 2 mod lane on Cutoff, bounds: {x: 200, y: 302, w: 200, h: 5}}
+  - expect: {id: trackHeightHandleBelowLanes, bounds: {x: 200, y: 307, w: 200, h: 5}}
+  - expect: {id: Resize LFO 1 mod lane on Cutoff, contains: {tooltip: "resize the LFO 1 mod lane on Cutoff only"}}
+  - screenshot: {name: rows-before}
+  # 2. One modulator row, by its own strip.
+  - drag: {from: Resize LFO 1 mod lane on Cutoff, fromX: 100, fromY: 2, to: Resize LFO 1 mod lane on Cutoff, toX: 100, toY: 32}
+  - wait: {}
+  - expect: {id: LFO 1 mod lane on Cutoff, bounds: {x: 200, y: 204, w: 200, h: 84}}
+  - expect: {id: LFO 2 mod lane on Cutoff, bounds: {x: 200, y: 288, w: 200, h: 54}}
+  - expect: {id: Cutoff automation lane, bounds: {x: 200, y: 164, w: 200, h: 40}}
+  - screenshot: {name: lfo1-dragged}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: LFO 1 mod lane on Cutoff, bounds: {x: 200, y: 204, w: 200, h: 54}}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {id: LFO 1 mod lane on Cutoff, bounds: {x: 200, y: 204, w: 200, h: 84}}
+  # 3. The keys on a focused modulator row.
+  - key: {keys: "alt+=", target: LFO 2 mod lane on Cutoff}
+  - wait: {}
+  - expect: {id: LFO 1 mod lane on Cutoff, bounds: {x: 200, y: 204, w: 200, h: 84}}
+  - expect: {id: LFO 2 mod lane on Cutoff, bounds: {x: 200, y: 288, w: 200, h: 68}}
+  - screenshot: {name: lfo2-taller}
+  # 4. The lane's own row.
+  - drag: {from: Resize Cutoff lane, fromX: 100, fromY: 2, to: Resize Cutoff lane, toX: 100, toY: 22}
+  - wait: {}
+  - expect: {id: Cutoff automation lane, bounds: {x: 200, y: 164, w: 200, h: 60}}
+  - expect: {id: LFO 1 mod lane on Cutoff, bounds: {x: 200, y: 224, w: 200, h: 84}}
+  - expect: {id: LFO 2 mod lane on Cutoff, bounds: {x: 200, y: 308, w: 200, h: 68}}
+  - screenshot: {name: lane-dragged}

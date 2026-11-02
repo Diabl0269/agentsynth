@@ -49,3 +49,7 @@ and `ModulatorBand::setModulator`. The row:
   with `setForceSwapMotionForTest` and step it with `stepSwapMotionForTest`.
 - builds its LFO controls the first time it shows an LFO, and hides them when an LFO becomes an envelope;
 - sends every edit to the source it shows at the time (the control callbacks read the row's current info).
+- re-lays out whenever a name changes under the same key (`ModulatorRow::setInfo`, reached when the graph refreshes a
+  second time after Change source and the created card has only then got its unique title, "LFO" to "LFO 3"): the name
+  button is as wide as the name, so a refresh that left the layout alone cut the new name with three dots until an undo
+  rebuilt the row.

@@ -243,7 +243,7 @@ void TimelineAutomationLanes::syncPools() {
         it = wanted.count(it->first) == 0 ? headers_.erase(it) : std::next(it);
 
     for (auto it = heightHandles_.begin(); it != heightHandles_.end();)
-        it = wanted.count(it->first) == 0 ? heightHandles_.erase(it) : std::next(it);
+        it = wanted.count(it->first.first) == 0 ? heightHandles_.erase(it) : std::next(it);
     for (auto it = placedBlockHeights_.begin(); it != placedBlockHeights_.end();)
         it = wanted.count(it->first) == 0 ? placedBlockHeights_.erase(it) : std::next(it);
     syncAddRows();
@@ -374,6 +374,31 @@ juce::String TimelineAutomationLanes::modulatorSourceOwning(const juce::Componen
             if (row != nullptr && isOrContains(*row, focused))
                 return row->getInfo().sourceUuid;
     return {};
+}
+
+ModulatorRow* TimelineAutomationLanes::modulatorRowOwning(const juce::Component* focused) const {
+    for (const auto& [id, entry] : modulators_)
+        for (const auto& row : entry.rows)
+            if (row != nullptr && isOrContains(*row, focused))
+                return row.get();
+    return nullptr;
+}
+
+bool TimelineAutomationLanes::canOpenReplacePicker(const juce::Component* focused) const {
+    if (const auto* row = modulatorRowOwning(focused))
+        return row->canOpenChangeSourcePicker();
+    const auto* header = headerFor(laneOwning(focused));
+    return header != nullptr && header->canPickParameter();
+}
+
+bool TimelineAutomationLanes::openReplacePicker(const juce::Component* focused) {
+    if (!canOpenReplacePicker(focused))
+        return false;
+    if (auto* row = modulatorRowOwning(focused))
+        row->openChangeSourcePicker();
+    else
+        headerFor(laneOwning(focused))->openChangeParameterPicker();
+    return true;
 }
 
 bool TimelineAutomationLanes::requestDuplicateLane(synth::LaneId lane) {
