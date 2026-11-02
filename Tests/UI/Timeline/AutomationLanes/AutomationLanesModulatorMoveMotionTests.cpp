@@ -66,7 +66,7 @@ TEST_F(TimelinePanelIntegrationTest, ARowDroppedOnAnotherLaneGrowsInThereWhileIt
     FadeAnimateGuard animate;
     auto& lanes = s.lanes();
     ASSERT_EQ(lanes.modulatorCount(s.lane), 1);
-    const int full = lanes.modulatorRowHeight(s.lane);
+    const int full = lanes.modulatorRowHeight(s.lane, 0);
     const int resY = s.resY();
 
     dragRowToScreenY(*s.row(), s.rowsTopOnScreen(s.resLane) - 8); // onto the Resonance lane's own row

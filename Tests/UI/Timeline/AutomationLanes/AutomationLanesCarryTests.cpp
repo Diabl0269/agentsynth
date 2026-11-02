@@ -352,3 +352,51 @@ TEST(AutomationLanesCarryTest, APickInTheRealPickerReachesTheHostCallAndTheDocIs
     EXPECT_EQ(f.doc.getTrack(f.track)->lanes.size(), lanesBefore);
     f.panel.setTrackHeaderHost(&f.host);
 }
+
+// Each modulator row's own height is stored under its routing's Attenuverter, which Change parameter, Duplicate and
+// Change source replace: the height follows the routing to its new key, in the same undo step.
+TEST_F(TimelinePanelIntegrationTest, ChangeParameterDuplicateAndChangeSourceKeepEachModulatorRowsOwnHeight) {
+    CarryScene s;
+    s.undo().recordTimelineChange(s.doc(), [&] { s.doc().setModulatorHeightScale(s.lane, s.adsrAttenUuid, 2.0); });
+    s.undo().clearUndoHistory();
+
+    ASSERT_TRUE(s.pick(Header::kChangeParameterMenuId, "Resonance"));
+    synth::test::waitUntil([&] { return (s.doc().getLane(s.lane)->paramId) == ("resonance"); });
+    const auto newAdsr = s.attenInto(s.adsrUuid, "resonance");
+    const auto newLfo = s.attenInto(s.lfoUuid, "resonance");
+    ASSERT_TRUE(newAdsr.isNotEmpty() && newLfo.isNotEmpty());
+    EXPECT_EQ(s.doc().getLane(s.lane)->modulatorRowScale(newAdsr), 2.0) << "Change parameter: the row keeps its height";
+    EXPECT_EQ(s.doc().getLane(s.lane)->modulatorRowScale(newLfo), 1.0) << "and its neighbour keeps its own";
+    ASSERT_TRUE(s.undo().undo());
+    EXPECT_EQ(s.doc().getLane(s.lane)->modulatorRowScale(s.adsrAttenUuid), 2.0) << "one undo restores it";
+    ASSERT_TRUE(s.undo().redo());
+
+    ASSERT_TRUE(s.pick(Header::kDuplicateMenuId, "Drive"));
+    synth::test::waitUntil([&] { return s.doc().getLaneForParam(s.targetUuid, "drive") != nullptr; });
+    const auto* copy = s.doc().getLaneForParam(s.targetUuid, "drive");
+    ASSERT_NE(copy, nullptr);
+    EXPECT_EQ(copy->modulatorRowScale(s.attenInto(s.adsrUuid, "drive")), 2.0) << "Duplicate: the copy's row too";
+    EXPECT_EQ(s.doc().getLane(s.lane)->modulatorRowScale(newAdsr), 2.0) << "and the original keeps its own";
+
+    auto spare = addNodeWithUuid(s.mc, "LFO");
+    const auto spareUuid = spare->properties["uuid"].toString();
+    s.mc.getGraphEditor().updateComponents();
+    auto& lanes = s.panel().getAutomationLanes();
+    int adsrRow = -1;
+    const auto findAdsrRow = [&] {
+        for (int i = 0; i < lanes.modulatorCount(s.lane); ++i)
+            if (s.panel().modulatorRowForTest(s.lane, i)->getInfo().sourceUuid == s.adsrUuid)
+                adsrRow = i;
+        return adsrRow >= 0;
+    };
+    synth::test::waitUntil(findAdsrRow);
+    ASSERT_GE(adsrRow, 0);
+    const int tall = s.panel().modulatorRowBoundsForTest(s.lane, adsrRow).getHeight();
+    ASSERT_TRUE(
+        s.mc.changeModulatorSourceForTest(s.panel().modulatorRowForTest(s.lane, adsrRow)->getInfo(), spareUuid, 0));
+    synth::test::waitUntil([&] { return s.attenInto(spareUuid, "resonance").isNotEmpty(); });
+    const auto swapped = s.attenInto(spareUuid, "resonance");
+    ASSERT_TRUE(swapped.isNotEmpty());
+    EXPECT_EQ(s.doc().getLane(s.lane)->modulatorRowScale(swapped), 2.0) << "Change source: the row keeps its height";
+    EXPECT_EQ(s.panel().modulatorRowBoundsForTest(s.lane, adsrRow).getHeight(), tall);
+}

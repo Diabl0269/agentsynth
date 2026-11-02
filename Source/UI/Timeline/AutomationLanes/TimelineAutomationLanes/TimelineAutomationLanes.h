@@ -134,8 +134,9 @@ public:
         TimelineAutomationLanes& lanes_;
         JUCE_DECLARE_NON_COPYABLE(ModulatorHold)
     };
-    /** A modulator row's full (three line) height at the current zoom and its lane's height scale, px. */
-    int modulatorRowHeight(synth::LaneId lane) const;
+    /** The lane's `index`th modulator row's full (three line) height at the current zoom and its own height scale, px.
+     */
+    int modulatorRowHeight(synth::LaneId lane, int index) const;
     /** The height of the lane's `index`th modulator row now: full, one line when folded, between mid-tween. */
     int modulatorRowHeightFor(synth::LaneId lane, int index) const;
     /** Re-reads the live values of modulator rows inside content rows [visibleTop, visibleBottom). */
@@ -226,15 +227,21 @@ public:
     /** Re-places the gliding lanes from the clock now, as a frame would. */
     void stepLaneGlideForTest();
 
-    // ---- A lane's own height (TimelineAutomationLanesHeight.cpp) ----
-    /** Each step of Taller / Shorter multiplies (or divides) the lane's height scale by this. */
+    // ---- Each row's own height (TimelineAutomationLanesHeight.cpp) ----
+    /** Each step of Taller / Shorter multiplies (or divides) the row's height scale by this. */
     static constexpr double kLaneHeightStepFactor = 1.25;
-    /** The lane's height scale now: the drag preview while one runs, else AutomationLane::heightScale. */
+    /** The lane row's height scale now: the drag preview while one runs, else AutomationLane::heightScale. */
     double laneHeightScale(synth::LaneId lane) const;
-    /** The strip on the bottom edge of the lane's block that resizes it, or nullptr when the lane has none. */
+    /** The height scale of the lane's modulator row stored under `orderKey` (modulatorOrderKey), preview included. */
+    double modulatorHeightScale(synth::LaneId lane, const juce::String& orderKey) const;
+    /** The strip on the bottom edge of the lane's own row that resizes it, or nullptr when the lane has none. */
     EdgeResizeHandle* heightHandleFor(synth::LaneId lane) const;
+    /** The strip on the bottom edge of the lane's `index`th modulator row, or nullptr. */
+    EdgeResizeHandle* heightHandleFor(synth::LaneId lane, int modulatorIndex) const;
     /** Taller (+1), shorter (-1) or default (0) as one undo step; false when nothing changed or the lane is gone. */
     bool stepLaneHeight(synth::LaneId lane, int direction);
+    /** The same for the lane's modulator row stored under `orderKey`. */
+    bool stepModulatorHeight(synth::LaneId lane, const juce::String& orderKey, int direction);
     /** True while a lane's height handle is being dragged. */
     bool isLaneHeightDragActive() const noexcept { return heightDragLane_.isValid(); }
 
@@ -388,12 +395,19 @@ private:
     void retireModulatorRows(LaneModulators& entry, synth::LaneId lane, const std::set<juce::String>& staying);
     void sweepLeavingModulators();
 
+    // A row's height handle and drag are keyed by its lane plus its modulatorOrderKey; an empty key is the lane's row.
+    using RowKey = std::pair<synth::LaneId, juce::String>;
     bool handleLaneHeightKey(synth::LaneId lane, const juce::KeyPress& key);
-    void placeHeightHandle(synth::LaneId lane, const synth::Track& track, int blockBottom, int width);
-    void beginLaneHeightDrag(synth::LaneId lane);
-    void dragLaneHeight(synth::LaneId lane, int deltaPx);
-    void endLaneHeightDrag(synth::LaneId lane);
-    int laneTrayExtent(synth::LaneId lane) const;
+    bool handleRowHeightKey(const RowKey& row, const juce::KeyPress& key);
+    bool stepRowHeight(const RowKey& row, int direction);
+    double rowHeightScale(const RowKey& row) const;
+    int rowFullHeight(const RowKey& row) const;
+    void placeHeightHandle(const RowKey& row, const juce::String& name, int rowBottom, int width, bool visible);
+    void placeLaneHeightHandles(const synth::AutomationLane& lane, int laneY, bool lastBlock, bool visible, int width);
+    void pruneHeightHandles(synth::LaneId lane);
+    void beginRowHeightDrag(const RowKey& row);
+    void dragRowHeight(const RowKey& row, int deltaPx);
+    void endRowHeightDrag(const RowKey& row);
     juce::String heightKeysText() const;
     bool isVisibleLane(const synth::Track& track) const;
     int trayExtentOf(synth::LaneId lane) const;
@@ -448,10 +462,10 @@ private:
     std::set<synth::TrackId> collapsedUnassigned_; // Automation tracks the user closed
     std::map<synth::LaneId, std::unique_ptr<AutomationLaneEditor>> editors_;
     std::map<synth::LaneId, std::unique_ptr<AutomationLaneHeaderComponent>> headers_;
-    std::map<synth::LaneId, std::unique_ptr<EdgeResizeHandle>> heightHandles_; // bottom edge of each lane's block
-    std::map<synth::TrackId, std::unique_ptr<AddAutomationRow>> addRows_;      // one per track with open lanes
-    std::map<synth::LaneId, LaneModulators> modulators_;                       // one per visible lane
-    std::set<juce::String> collapsedMods_;          // routing keys of the folded modulator rows
+    std::map<RowKey, std::unique_ptr<EdgeResizeHandle>> heightHandles_;   // bottom edge of each lane and modulator row
+    std::map<synth::TrackId, std::unique_ptr<AddAutomationRow>> addRows_; // one per track with open lanes
+    std::map<synth::LaneId, LaneModulators> modulators_;                  // one per visible lane
+    std::set<juce::String> collapsedMods_;                                // routing keys of the folded modulator rows
     std::map<juce::String, FoldTween> glideTweens_; // rows sliding into a new slot: y offset left to travel, by key
     std::map<juce::String, FoldTween> foldTweens_;  // folds in flight, by routing key
     std::map<synth::LaneId, std::vector<ModulatorInfo>> routings_; // what the graph routes into each open lane
@@ -499,9 +513,10 @@ private:
     float dropToY_ = 0.0f;
     int rowWidth_ = 0;
 
-    // The height drag: the scalable part of the block (everything but the edit trays) and the scale at press, and the
-    // scale shown while it runs. The doc is written once, on release.
+    // The height drag: the row (its lane and modulatorOrderKey, empty for the lane's own row), its full height and
+    // scale at press, and the scale shown while it runs. The doc is written once, on release.
     synth::LaneId heightDragLane_;
+    juce::String heightDragKey_;
     double heightDragStartScale_ = 1.0;
     int heightDragStartPx_ = 1;
     double heightDragScale_ = 1.0;
