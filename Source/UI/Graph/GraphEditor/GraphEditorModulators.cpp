@@ -146,14 +146,30 @@ NodeID GraphEditor::addLfoModulator(NodeID targetId, const juce::String& paramId
 // The cable an existing LFO gets is the same CV path addLfoModulator uses, but through the programmatic-
 // connection seam, so a macro boundary between the LFO and the knob is crossed with ports (the mixer sends and
 // the Mod Matrix do the same). Port creation, the cable and its depth are one undo step.
-bool GraphEditor::connectExistingLfoModulator(NodeID lfoId, NodeID targetId, const juce::String& paramId) {
-    auto* lfo = moduleOf(audioEngine.getGraph(), lfoId);
-    if (lfo == nullptr || dynamic_cast<LFOModule*>(lfo) == nullptr)
+bool GraphEditor::connectExistingModulator(NodeID sourceId, int sourceChannel, NodeID targetId,
+                                           const juce::String& paramId) {
+    if (moduleOf(audioEngine.getGraph(), sourceId) == nullptr)
         return false;
     const int raw = claimModulationChannel(audioEngine.getGraph(), targetId, paramId);
     if (raw < 0)
         return false;
-    return connectModulationSource(lfoId, /*sourceChannel=*/0, targetId, raw, kDefaultModulatorDepth).uid != 0;
+    return connectModulationSource(sourceId, sourceChannel, targetId, raw, kDefaultModulatorDepth).uid != 0;
+}
+
+// The new module is found through the hidden attenuverter the cable runs into.
+NodeID GraphEditor::addNewModulatorTo(const juce::String& typeName, int sourceChannel, NodeID targetId,
+                                      const juce::String& paramId) {
+    auto& graph = audioEngine.getGraph();
+    const int raw = claimModulationChannel(graph, targetId, paramId);
+    if (raw < 0)
+        return {};
+    const auto atten = addModulationSourceModule(typeName, sourceChannel, targetId, raw, kDefaultModulatorDepth);
+    if (atten.uid == 0)
+        return {};
+    for (const auto& connection : graph.getConnections())
+        if (connection.destination.nodeID == atten)
+            return connection.source.nodeID;
+    return {};
 }
 
 // Any modulation source (an LFO, an envelope, a macro knob...) onto one CV jack: `sourceChannel` is the raw output

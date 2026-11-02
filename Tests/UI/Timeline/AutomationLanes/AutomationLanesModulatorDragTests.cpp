@@ -353,8 +353,8 @@ TEST_F(TimelinePanelIntegrationTest, ALaneWhoseParameterHasNoCvJackIsNotHereAndT
 TEST_F(TimelinePanelIntegrationTest, ALaneThatAlreadyHasThisSourceOnItsJackIsNotHere) {
     MoveScene s;
     // The same LFO cabled into Resonance too, as a second routing of the same source.
-    ASSERT_TRUE(s.mc.getGraphEditor().connectExistingLfoModulator(s.byUuid(s.lfoUuid)->nodeID,
-                                                                  s.byUuid(s.targetUuid)->nodeID, "resonance"));
+    ASSERT_TRUE(s.mc.getGraphEditor().connectExistingModulator(s.byUuid(s.lfoUuid)->nodeID, 0,
+                                                               s.byUuid(s.targetUuid)->nodeID, "resonance"));
     s.panel().refreshModulators();
     s.undo().clearUndoHistory();
     ASSERT_EQ(s.panel().getAutomationLanes().modulatorCount(s.resLane), 1);

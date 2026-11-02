@@ -141,7 +141,7 @@ TEST_F(TimelinePanelIntegrationTest, ACableDoubleClickWithAnotherDestinationLeft
     const auto lfoUuid = s.nodesOf<LFOModule>().front()->properties["uuid"].toString();
     auto other = addNodeWithUuid(s.mc, "Filter");
     s.mc.getGraphEditor().updateComponents();
-    ASSERT_TRUE(s.mc.getGraphEditor().connectExistingLfoModulator(s.byUuid(lfoUuid)->nodeID, other->nodeID, "cutoff"));
+    ASSERT_TRUE(s.mc.getGraphEditor().connectExistingModulator(s.byUuid(lfoUuid)->nodeID, 0, other->nodeID, "cutoff"));
 
     doubleClickTheCable(s);
 

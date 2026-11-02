@@ -601,15 +601,14 @@ private:
     std::vector<std::vector<synth::ui::ModulatorInfo>>
     getModulatorsForLanes(const std::vector<std::pair<juce::String, juce::String>>& lanes) override;
     bool canModulate(const juce::String& nodeUuid, const juce::String& paramId) override;
-    juce::String addLfoModulator(const juce::String& nodeUuid, const juce::String& paramId) override;
     std::optional<double> normaliseParameterValue(const juce::String& nodeUuid, const juce::String& paramId,
                                                   double value) override;
     bool createCustomLfoFromRange(synth::LaneId lane, double startBeat, double endBeat) override;
-    std::vector<synth::ui::TrackHeaderHost::LfoChoice> getLfoChoices(const juce::String& nodeUuid,
-                                                                     const juce::String& paramId) override;
+    juce::String addNewModulator(const juce::String& nodeUuid, const juce::String& paramId,
+                                 const juce::String& typeName, int sourceChannel) override;
     std::vector<synth::ui::TrackHeaderHost::LfoChoice> getChangeSourceChoices(const juce::String& nodeUuid,
                                                                               const juce::String& paramId) override;
-    bool connectModulator(const juce::String& lfoUuid, const juce::String& nodeUuid,
+    bool connectModulator(const juce::String& sourceUuid, int sourceChannel, const juce::String& nodeUuid,
                           const juce::String& paramId) override;
     bool canChangeModulatorSource(const synth::ui::ModulatorInfo& modulator) override;
     bool changeModulatorSource(const synth::ui::ModulatorInfo& modulator, const juce::String& sourceUuid,

@@ -271,27 +271,31 @@ the routings' keys, so a refresh that finds the same routings keeps the same row
 in-flight drag survive) and only a changed set rebuilds that lane's rows.
 
 **Add modulator...** (the lane's "..." menu) opens a picker, the Mod Matrix's `ModMatrixPicker` again (as
-"+ Add automation..." does): a search field, then **New LFO** first and every LFO in the project after it
-(`AddModulatorPicker`, `Source/UI/Timeline/AutomationLanes/AddModulator/`; the rows come from
-`TrackHeaderHost::getLfoChoices`, a graph walk for `LFOModule` nodes). An LFO row's first line is its card
+"+ Add automation..." does): a search field, then a "New" group (**New LFO**, **New envelope**), then
+"LFOs" and "Envelopes" with every one in the project (`AddModulatorPicker`,
+`Source/UI/Timeline/AutomationLanes/AddModulator/`; the rows come from `TrackHeaderHost::getChangeSourceChoices`,
+the same list and the same row builder as [Change source...](#modulators) below, so the two pickers offer the
+same source types; `AutomationLanesAddModulatorTests` guards it). A row's first line is its card
 title, plus "inside macro Pads" when it sits in a macro; its second line is what it already moves ("moves
 Pad oscillator detune", several joined with commas, or "not connected yet"). The search matches word by word
-over the name, the macro and the targets. An LFO that already moves **this** parameter stays in the list,
+over the name, the macro and the targets; "env" and "adsr" find New envelope. A source that already moves **this** parameter stays in the list,
 greyed, with "already moves Cutoff" as its reason: it is not highlighted by Up/Down and a click or Return on
 it does nothing. Up/Down/Return/Escape work as in the other pickers. The item stays disabled, as "Add
 modulator... (no CV input)", on a parameter with no CV jack: a menu item has no tooltip, and the reason has to
 reach a screen reader.
 
-- **New LFO** asks `TrackHeaderHost::addLfoModulator`, which reaches `GraphEditor::addLfoModulator`
-  (`GraphEditorModulators.cpp`): a real LFO card (Sine, synced at 1/4, bipolar, full level) placed beside the
+- **New LFO** / **New envelope** ask `TrackHeaderHost::addNewModulator(node, param, typeName, channel)` ("LFO" or
+  "ADSR", from `newModuleSources()`), which reaches `GraphEditor::addNewModulatorTo` and
+  `addModulationSourceModule` (`GraphEditorModulators.cpp`; the same recipe as Change source's New rows): a real card
+  (an LFO: Sine, synced at 1/4, bipolar, full level) placed beside the
   target card (left of it, else right; anti-overlapped by `resolvePlacement` at its estimated and then its
   real size), cabled from its output into the parameter's CV jack through `connectPorts` (so `addModRouting`
   inserts the hidden attenuverter), the attenuverter given a uuid and a depth of 0.5. When the target is a
-  macro member the LFO joins that macro (`addSelectionToMacro`, after the cable exists, so the cable is
+  macro member the new module joins that macro (`addSelectionToMacro`, after the cable exists, so the cable is
   interior and no port is minted); otherwise `makeRoomFor` runs on the new card. All of it is ONE
   `recordGraphAndMacroChange` step.
-- **An existing LFO** asks `TrackHeaderHost::connectModulator`, which reaches
-  `GraphEditor::connectExistingLfoModulator`: no new card; the same cable and depth, made inside
+- **An existing LFO or envelope** asks `TrackHeaderHost::connectModulator(uuid, channel, node, param)`, which reaches
+  `GraphEditor::connectExistingModulator` (an envelope is read from the output channel its row names): no new card; the same cable and depth, made inside
   `MacroGroupController::applyProgrammaticConnectionChange` (as the Mod Matrix and the mixer sends do), so an
   LFO and a knob in different macros are joined through macro ports. The cable, its depth and any ports are
   ONE undo step. The new modulator row appears through `getModulators`, which already looks through ports.
@@ -408,7 +412,7 @@ amount lane is keyed by that Attenuverter; a hand-patched direct cable has neith
 that already moves the parameter listed greyed out, and last a "New" group with **New LFO** and **New envelope** (a
 green plus before the text, a "New" tag at the right; `ModMatrixPicker::Item::ticked` / `isNew`). The search placeholder is
 "Search or create a source"; the New rows stay in the list, last, whatever is typed (Return picks the best existing
-match, Down reaches New). The item is always enabled. "Add modulator..." stays LFO-only. A New pick calls
+match, Down reaches New). The item is always enabled. "Add modulator..." lists the same sources. A New pick calls
 `TrackHeaderHost::changeModulatorSourceToNew(info, typeName, channel)` (type and channel from `newModuleSources()`:
 "LFO" and "ADSR"): `MainComponent::repointModulator` is the recipe below with the source made by
 `GraphEditor::addModulationSourceModule(..., recordUndo=false)` beside the target card, so create + cable + amount-lane
