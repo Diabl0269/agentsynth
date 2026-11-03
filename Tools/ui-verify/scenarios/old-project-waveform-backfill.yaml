@@ -1,0 +1,21 @@
+# Bug (FRO1487): a project saved before imports wrote a Peaks/*.agpk waveform file showed its audio clip with no
+# waveform until the clip was resized. Opening a bundle now writes each missing waveform file on a background thread and
+# refreshes the lane, and does not mark the project unsaved.
+#
+# What a user does: opens an older project (the fixture has an audio clip and no Peaks folder), opens the timeline and
+# sees the clip drawn with its waveform. The probe `clipWaveform` reads `name:none|summary|columns`; the backfill is
+# asynchronous, so the expect polls. The project must not be dirty: `openProject` is refused while the open project has
+# unsaved changes, so opening the same bundle again only succeeds when it is clean.
+record: true
+steps:
+  - copyFixture: {name: stretch-from-original.agsproj}
+  - openProject: {path: "${SCRATCH}/stretch-from-original.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipWaveform: "Tone:columns", within_ms: 10000}
+  - screenshot: {name: 1-waveform-after-open}
+  - openProject: {path: "${SCRATCH}/stretch-from-original.agsproj"}
+  - expect: {id: timelineClipPitches, clipWaveform: "Tone:columns", within_ms: 5000}

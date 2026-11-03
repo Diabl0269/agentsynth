@@ -5,6 +5,7 @@
 // next to this one.
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent.h"
+#include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
@@ -225,6 +226,8 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // Covers both the welcome screen's "Open an existing project" bundle path AND its
     // recent-project rows (both go through openFromFile -> here).
     hideWelcomeScreen();
+    // Projects saved before imports wrote a waveform sidecar get theirs now, off this thread.
+    MainComponentAudioImport::backfillMissingPeaks(*this);
     countUsage(synth::telemetry::Feature::ProjectOpened); // a user opened a project bundle (not during startup wiring)
     projectLoad_->graphBuilt(true); // last: the view is restored, so the reveal starts where the user will look
     return true;

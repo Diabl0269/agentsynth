@@ -14,6 +14,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackInputMonitoringTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/StemRenderOptionsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/MainComponentRenderToAudioTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/MainComponentPeaksBackfillTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/RenderProgressDialogTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineRoutingPaneAudioInputTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AudioInputMenuTrackSourceTests.cpp
