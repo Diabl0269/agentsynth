@@ -6,7 +6,11 @@
 # beats (150%), Option-drags it on to 8 beats (200%), then Option-drags it back to 4 beats. The probe `clipAudio` reads
 # `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`. The lane shows 24 px per beat from its left edge at the
 # default zoom (the status bar's "Stretched Tone to 150%" message is only in the PNGs), so x 96 is exactly beat 4; the grid snap (1/4 = one beat) lets the mouse land on it. Then Cmd+Z three times.
-# Stretching writes files beside the project, so it runs on a copy.
+# Bug FRO1411: the pill shown while dragging restarted at 100% on a second stretch (200% read 133%): it now reads the
+# total against the original audio, so the second and third drags are held open and their pill is read with
+# `sizingReadout` before release. Stretching writes files beside the project, so it runs on a copy.
+record: true
+save_project: end
 steps:
   - copyFixture: {name: stretch-from-original.agsproj}
   - openProject: {path: "${SCRATCH}/stretch-from-original.agsproj"}
@@ -22,12 +26,23 @@ steps:
   - expect: {id: timelineClipPitches, clipAudio: "Tone:Audio/tone-stretch150.wav,0.000,6.000,Audio/tone.wav@0.000*0.667", within_ms: 5000}
   - screenshot: {name: 2-stretched-150}
   # A second stretch starts from the original file, not from the 150% copy: the origin stays tone.wav.
-  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 143, fromY: 28, toX: 192, toY: 28, mods: alt}
+  - mouseDown: {id: timelineClipLaneArea, x: 143, y: 28, mods: alt}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 170, y: 28, mods: alt}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 192, y: 28, mods: alt}
+  - expect: {id: timelineClipPitches, sizingReadout: "200%", within_ms: 1000}
+  - screenshot: {name: 2b-readout-200}
+  - mouseUp: {id: timelineClipLaneArea, x: 192, y: 28, mods: alt}
   - wait: {}
   - expect: {id: timelineClipPitches, clipAudio: "Tone:Audio/tone-stretch200.wav,0.000,8.000,Audio/tone.wav@0.000*0.500", within_ms: 5000}
   - screenshot: {name: 3-stretched-200}
   # Back to the original length: the clip plays the original file again, with no origin left.
-  - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 191, fromY: 28, toX: 96, toY: 28, mods: alt}
+  - mouseDown: {id: timelineClipLaneArea, x: 191, y: 28, mods: alt}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 144, y: 28, mods: alt}
+  - expect: {id: timelineClipPitches, sizingReadout: "150%", within_ms: 1000}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 96, y: 28, mods: alt}
+  - expect: {id: timelineClipPitches, sizingReadout: "100%", within_ms: 1000}
+  - screenshot: {name: 3b-readout-100}
+  - mouseUp: {id: timelineClipLaneArea, x: 96, y: 28, mods: alt}
   - wait: {}
   - expect: {id: timelineClipPitches, clipAudio: "Tone:Audio/tone.wav,0.000,4.000,-", within_ms: 5000}
   - screenshot: {name: 4-back-to-original}

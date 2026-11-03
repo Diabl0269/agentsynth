@@ -115,7 +115,9 @@ the drag's preview from it (`TimelineClipLaneArea::resizePreviewFor`) and the dr
 length, so it previews and takes every mode's change too, except a left Trim, which unlinks the dragged clip
 ([linked clips](linked-clips.md)).
 
-While stretching, a small pill on the clip's top right shows the new length as a percentage of the old one ("75%").
+While stretching, a small pill on the clip's top right shows the new length as a percentage of the original audio's
+length (`synth::stretchShareOfOriginal`): a clip first stretched to 150% and dragged on to 200% reads "200%", and "100%"
+once it is back at the original length.
 An **audio** clip under Trim or Carry contents keeps its audio and only changes span; its left edge moves the start and
 keeps the end, as it always has. Under **Stretch** (the mode or Option) its audio is time-stretched to the new length at
 the same pitch, with the Signalsmith engine the Sounds view uses for loops: on the drop the lanes hand the new span to

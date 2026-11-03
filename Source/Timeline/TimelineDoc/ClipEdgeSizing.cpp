@@ -151,6 +151,14 @@ std::optional<AudioStretchWindow> audioStretchWindow(const Clip& clip, double ne
     return window;
 }
 
+double stretchShareOfOriginal(const Clip& clip, double lengthBeats) {
+    if (!(clip.lengthBeats > 0.0))
+        return 1.0;
+    // The origin's ratio is the original's length over the clip's, so the original is the clip's length times it.
+    const double originalBeats = clip.stretchOrigin ? clip.lengthBeats * clip.stretchOrigin->ratio : clip.lengthBeats;
+    return lengthBeats / originalBeats;
+}
+
 // Built from the public mutators rather than one new TimelineDoc member: the caller's recorded change makes them one
 // undo step, as importAudioFileToClip does with addClip and setClipAsset. The fades scale with the audio they cover.
 bool applyAudioClipStretch(TimelineDoc& doc, ClipId id, double newStartBeat, double newLengthBeats,

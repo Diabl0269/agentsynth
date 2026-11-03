@@ -204,6 +204,47 @@ TEST(TimelineClipLaneSizingTest, AnAudioClipStretchDropAsksTheOwnerWithItsNewSpa
     }
 }
 
+// Regression test for FRO1411: the readout of a second stretch restarted at 100% (stale-record: it measured against the
+// length at press, not the origin the clip records), so a 150% clip dragged to 200% read 133%.
+TEST(TimelineClipLaneSizingTest, TheReadoutOfASecondStretchIsTheTotalAgainstTheOriginalAudio) {
+    ClipLaneFixture f;
+    const auto clip = addAudioClip(f); // 4 beats
+    f.lane.setClipSizingMode(ClipSizingMode::Stretch);
+    // The owner's side of the drop (MainComponentClipStretch.cpp), minus the render: the same window and origin maths.
+    f.lane.onAudioClipStretchRequested = [&](ClipId id, double start, double length) {
+        const auto window = synth::audioStretchWindow(*f.doc.getClip(id), length, 0.5);
+        ASSERT_TRUE(window.has_value());
+        f.undo.recordTimelineChange(f.doc, [&] {
+            synth::applyAudioClipStretch(f.doc, id, start, length,
+                                         window->backToOriginal ? window->sourceRef : "Audio/copy.wav",
+                                         window->backToOriginal ? window->startSeconds : 0.0, window->origin);
+        });
+    };
+    const auto dragRightEdge = [&](double beats, const juce::String& readout) {
+        const auto rect = f.lane.getClipRect(clip);
+        const juce::Point<float> edge((float)rect.getRight() - 3.0f, (float)rect.getCentreY());
+        const juce::Point<float> dragged(edge.x + (float)(beats * 40.0), edge.y);
+        f.lane.mouseDown(leftClick(f.lane, edge));
+        f.lane.mouseDrag(leftDrag(f.lane, dragged, edge));
+        EXPECT_EQ(f.lane.getSizingReadoutForTest(), readout);
+        f.lane.mouseUp(leftDrag(f.lane, dragged, edge));
+    };
+
+    dragRightEdge(2.0, "150%");
+    ASSERT_DOUBLE_EQ(f.doc.getClip(clip)->lengthBeats, 6.0);
+    dragRightEdge(2.0, "200%");
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clip)->lengthBeats, 8.0);
+    dragRightEdge(-1.0, "175%");
+    dragRightEdge(-3.0, "100%");
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clip)->lengthBeats, 4.0);
+    EXPECT_FALSE(f.doc.getClip(clip)->stretchOrigin.has_value()) << "back at the original";
+
+    ASSERT_TRUE(f.undo.undo()); // undoing the return to 100% brings the origin back with the 7-beat clip
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clip)->lengthBeats, 7.0);
+    EXPECT_TRUE(f.doc.getClip(clip)->stretchOrigin.has_value());
+    dragRightEdge(1.0, "200%");
+}
+
 TEST(TimelineClipLaneSizingTest, OptionStretchesAnAudioClipOnceUnderTrim) {
     ClipLaneFixture f;
     const auto clip = addAudioClip(f);
