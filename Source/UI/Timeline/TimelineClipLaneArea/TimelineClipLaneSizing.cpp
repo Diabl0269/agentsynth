@@ -58,7 +58,8 @@ std::optional<std::pair<double, double>> TimelineClipLaneArea::audioStretchDrop(
     return std::make_pair(start, previewLength_);
 }
 
-// Only Stretch says anything: the new length as a share of the old one.
+// Only Stretch says anything: the new length as a share of the original audio's, so a clip stretched before reads
+// its total stretch, not a restart at 100%.
 juce::String TimelineClipLaneArea::sizingReadout() const {
     if (!isDragInProgress() || dragMode_ == DragMode::Move || dragSizingMode() != synth::ClipSizingMode::Stretch ||
         doc_ == nullptr)
@@ -66,7 +67,8 @@ juce::String TimelineClipLaneArea::sizingReadout() const {
     const auto* clip = doc_->getClip(activeClip_);
     if (clip == nullptr || resizeOriginalLength_ <= 0.0)
         return {};
-    return juce::String(juce::roundToInt(previewLength_ / resizeOriginalLength_ * 100.0)) + "%";
+    // The document is untouched mid-drag, so the clip still has the length the drag started from.
+    return juce::String(juce::roundToInt(synth::stretchShareOfOriginal(*clip, previewLength_) * 100.0)) + "%";
 }
 
 // A small dark pill at the clip's top right. Fixed black and white rather than theme tokens, like the clip's own

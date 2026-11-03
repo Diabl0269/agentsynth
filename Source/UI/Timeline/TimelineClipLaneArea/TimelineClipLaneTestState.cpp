@@ -36,8 +36,9 @@ juce::String originText(const synth::Clip& clip) {
 // `clipAudio`, "Clip 1:Audio/a.wav,0.000,4.000,Audio/orig.wav@0.000*1.500;...": every audio clip's asset, source start
 // in seconds, length in beats and stretch origin ("-" when none), so a scenario can tell which file a clip plays.
 // `clipWaveform`, "Clip 1:columns;Clip 2:summary": what each audio clip's waveform is drawn as (none, summary,
-// columns). `clipPitches`, "Clip 1:60,64;Clip 2:61": every clip's note pitches in track order. Pitches rather than a
-// count, because a scenario checking Fit to key needs to see that notes moved, and which way.
+// columns). `sizingReadout`: the pill an edge drag draws on the clip ("200%" while stretching), empty when none.
+// `clipPitches`, "Clip 1:60,64;Clip 2:61": every clip's note pitches in track order. Pitches rather than a count,
+// because a scenario checking Fit to key needs to see that notes moved, and which way.
 void TimelineClipLaneArea::addTestModeProbe() {
     testModeProbe_ = std::make_unique<ClipPitchesProbe>([this](juce::DynamicObject& into) {
         juce::StringArray clips;
@@ -59,6 +60,7 @@ void TimelineClipLaneArea::addTestModeProbe() {
         into.setProperty("clipPitches", clips.joinIntoString(";"));
         into.setProperty("clipAudio", audio.joinIntoString(";"));
         into.setProperty("clipWaveform", shapes.joinIntoString(";"));
+        into.setProperty("sizingReadout", sizingReadout());
     });
     testModeProbe_->setBounds(0, 0, 1, 1);
     addAndMakeVisible(*testModeProbe_);

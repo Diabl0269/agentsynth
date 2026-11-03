@@ -73,6 +73,11 @@ struct AudioStretchWindow {
 std::optional<AudioStretchWindow> audioStretchWindow(const Clip& clip, double newLengthBeats, double secondsPerBeat,
                                                      bool useOrigin = true);
 
+// The clip at `lengthBeats` as a share of the audio it was first stretched from (1.0 = the original's own length): the
+// length over the clip's current length, scaled back through its stretch origin when it has one, so a second stretch
+// reads against the original, not against the last render. A clip with no origin is its own original.
+double stretchShareOfOriginal(const Clip& clip, double lengthBeats);
+
 // Points audio clip `id` at `assetRef` (read from `sourceStartSeconds`) over [newStartBeat, + newLengthBeats), fades
 // scaled alike, and records `origin` (nullopt clears it). The stretched copy is read from 0 s. Call inside one
 // recorded change; false (possibly part-applied) when a mutator refuses.
