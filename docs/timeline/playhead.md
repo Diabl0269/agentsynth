@@ -135,7 +135,9 @@ Follow has a mode, Page or Smooth (`FollowMode`, `Source/UI/Timeline/FollowPlayh
   the start of the song the origin stops at beat 0, so the playhead travels to the pin first. The panel moves the view from
   the playhead overlay's own 30 Hz frames (`onDrawnBeat`, called before the line's x is read), not the 10 Hz poll, so the line
   does not drift and snap; the 10 Hz poll runs the same function, which does nothing when the view is already there. The same four
-  gates apply, and a view that moves under half a pixel repaints nothing.
+  gates apply. The origin is snapped to a whole pixel (`snapOriginToWholePixels`), so every grid line and clip edge, each
+  rounded to a pixel on its own, steps by the same whole number of pixels per frame; a fractional origin made them round at
+  different frames and the grid shook. A frame that lands on the pixel the view already has repaints nothing.
 
 Ctrl+F (`timelineFollowModeCycle`; Ctrl+Alt+F off the Mac) switches the mode without touching on/off, right-clicking the
 button (or Shift+F10 on it) opens a Page / Smooth menu with a check on the current mode (`FollowPlayheadButton`; a right-click

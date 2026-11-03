@@ -719,7 +719,7 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
             // The beat/subdivision loops below cull per line.
             if (x >= -1.0 && x <= widthPx + 1.0) {
                 g.setColour(barColour);
-                g.drawVerticalLine(xOrigin + (int)std::llround(x), (float)top, (float)bottom);
+                g.drawVerticalLine(xOrigin + (int)TimelineViewState::pixelOf(x), (float)top, (float)bottom);
             }
 
             if (drawBeatLines) {
@@ -728,7 +728,7 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
                     if (beatX < 0.0 || beatX > widthPx)
                         continue;
                     g.setColour(beatColour);
-                    g.drawVerticalLine(xOrigin + (int)std::llround(beatX), (float)top, (float)bottom);
+                    g.drawVerticalLine(xOrigin + (int)TimelineViewState::pixelOf(beatX), (float)top, (float)bottom);
                 }
             }
 
@@ -748,7 +748,7 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
                     const double subX = viewState_.beatToX(beatAbs);
                     if (subX < 0.0 || subX > widthPx)
                         continue;
-                    g.drawVerticalLine(xOrigin + (int)std::llround(subX), (float)top, (float)bottom);
+                    g.drawVerticalLine(xOrigin + (int)TimelineViewState::pixelOf(subX), (float)top, (float)bottom);
                 }
             }
         }

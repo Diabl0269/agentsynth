@@ -1,0 +1,31 @@
+# Smooth follow scrolls the arrangement without the grid shaking: every grid line and clip edge moves by the same whole
+# number of pixels per frame, because the view origin lands on a whole pixel.
+#
+# What a user does: opens a project with a MIDI clip, shows the timeline, turns Follow playhead on and switches it to
+# Smooth, and watches the lanes scroll.
+#
+# Test mode has no audio device, so the transport never ticks and the follow function itself cannot run here: the
+# frame-by-frame check of that is the gtest TimelineFollowModeTest.SmoothFollowMovesEveryGridLineByTheSameWholePixelStepEachFrame.
+# This scenario checks the switches a user flips and records the lanes under a sideways scroll at a zoom whose lines
+# fall between pixels, to see the grid and clips still draw as one set of lines.
+record: true
+save_project: follow-smooth
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 400, y: 20}
+  - key: {keys: f}
+  - expect: {id: timelineFollowPlayheadToggle, toggleState: true, within_ms: 1000}
+  - key: {keys: ctrl+f}
+  - expect: {id: timelineFollowPlayheadToggle, contains: {tooltip: "Smooth mode"}, within_ms: 1000}
+  - screenshot: {id: timelinePanel, name: smooth-start}
+  - wheel: {id: timelineClipLaneArea, dx: 0.5, mods: shift}
+  - wait: {}
+  - screenshot: {id: timelinePanel, name: smooth-scrolled-1}
+  - wheel: {id: timelineClipLaneArea, dx: 0.5, mods: shift}
+  - wait: {}
+  - screenshot: {id: timelinePanel, name: smooth-scrolled-2}

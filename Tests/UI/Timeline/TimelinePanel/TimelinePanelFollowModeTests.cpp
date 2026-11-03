@@ -6,9 +6,12 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Timeline/FollowPlayhead.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
+#include <vector>
 
 using synth::ui::FollowMode;
 
@@ -174,11 +177,11 @@ TEST(TimelineFollowModeTest, SmoothScrollsTheViewSoThePlayheadSitsAtThePoint) {
     const double beat = visible * 3.0;
 
     f.panel.updateFromTransport(playingAt(beat), 0.0);
-    EXPECT_NEAR(f.panel.getViewState().firstVisibleBeat, beat - 0.5 * visible, 1e-9);
+    EXPECT_NEAR(f.panel.getViewState().firstVisibleBeat, beat - 0.5 * visible, 0.5 / 40.0);
 
     f.panel.setFollowPointPercent(25); // applied live
     f.panel.updateFromTransport(playingAt(beat), 0.0);
-    EXPECT_NEAR(f.panel.getViewState().firstVisibleBeat, beat - 0.25 * visible, 1e-9);
+    EXPECT_NEAR(f.panel.getViewState().firstVisibleBeat, beat - 0.25 * visible, 0.5 / 40.0);
 
     // Even a playhead that is still on screen moves the view: that is the difference from Page.
     f.panel.getViewState().firstVisibleBeat = 0.0;
@@ -375,4 +378,87 @@ TEST(TimelineFollowMessageTest, NoHookIsNoProblem) {
     panel.setSize(1200, 320);
     EXPECT_TRUE(panel.keyPressed(juce::KeyPress('f')));
     EXPECT_TRUE(panel.keyPressed(juce::KeyPress('j')));
+}
+
+// ---- The painted frames of a Smooth follow ---------------------------------------------------------------------
+
+TEST(FollowViewOriginTest, SnappingLandsOnAWholePixelAndNeverBelowTheStart) {
+    using synth::ui::snapOriginToWholePixels;
+    const double ppb = 37.3;
+    const double snapped = snapOriginToWholePixels(12.3456, ppb);
+    EXPECT_NEAR(snapped * ppb, std::round(snapped * ppb), 1e-9);
+    EXPECT_NEAR(snapped, 12.3456, 0.5 / ppb);
+    EXPECT_DOUBLE_EQ(snapOriginToWholePixels(-3.0, ppb), 0.0);
+    EXPECT_DOUBLE_EQ(snapOriginToWholePixels(5.0, 0.0), 5.0) << "no zoom: left alone";
+}
+
+namespace {
+// The columns of one row of the lanes where something other than the background is painted (the grid lines).
+std::vector<int> paintedColumns(synth::ui::TimelinePanelComponent& panel) {
+    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    panel.paintEntireComponent(g, true);
+    const auto lanes = panel.getClipLaneArea().getBounds();
+    const int y = lanes.getY() + 4;
+    std::map<juce::uint32, int> counts;
+    for (int x = lanes.getX(); x < lanes.getRight(); ++x)
+        ++counts[image.getPixelAt(x, y).getARGB()];
+    juce::uint32 background = 0;
+    int best = -1;
+    for (const auto& [colour, n] : counts)
+        if (n > best) {
+            best = n;
+            background = colour;
+        }
+    std::vector<int> columns;
+    for (int x = lanes.getX(); x < lanes.getRight(); ++x)
+        if (image.getPixelAt(x, y).getARGB() != background)
+            columns.push_back(x);
+    return columns;
+}
+
+// True when every line of `a` and `b` away from the edges is the other's line moved by `step`.
+bool allLinesMovedBy(const std::vector<int>& a, const std::vector<int>& b, int step, int lo, int hi) {
+    for (const int x : a)
+        if (x + step > lo && x + step < hi && std::find(b.begin(), b.end(), x + step) == b.end())
+            return false;
+    for (const int x : b)
+        if (x - step > lo && x - step < hi && std::find(a.begin(), a.end(), x - step) == a.end())
+            return false;
+    return true;
+}
+} // namespace
+
+// Regression test for FRO1415: Smooth follow moved the view by a fractional pixel each frame, and every grid line
+// rounded to a pixel on its own, so lines stepped by different amounts (the grid shook). Each frame, every line must
+// have moved by the same whole number of pixels, the view only ever forward.
+TEST(TimelineFollowModeTest, SmoothFollowMovesEveryGridLineByTheSameWholePixelStepEachFrame) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+    panel.getViewState().pixelsPerBeat = 37.3; // a zoom whose lines fall between pixels
+    panel.getViewState().setSnap(synth::ui::TimelineViewState::Snap::Sixteenth);
+    panel.getPlayhead().setVisible(false);
+    panel.setFollowPlayheadEnabled(true);
+    panel.setFollowMode(FollowMode::Smooth);
+
+    double beat = 100.0;
+    panel.updateFromTransport(playingAt(beat), 0.0);
+    auto previous = paintedColumns(panel);
+    ASSERT_GT(previous.size(), 20u) << "the grid must be drawn for the test to mean anything";
+    double previousOrigin = panel.getViewState().firstVisibleBeat;
+    const int lo = panel.getClipLaneArea().getX() + 40;
+    const int hi = panel.getClipLaneArea().getRight() - 40;
+
+    for (int frame = 0; frame < 24; ++frame) {
+        beat += 0.0713; // about 2.66 px per frame: the step varies between 2 and 3
+        panel.updateFromTransport(playingAt(beat), 0.0);
+        const auto columns = paintedColumns(panel);
+        const double origin = panel.getViewState().firstVisibleBeat;
+        EXPECT_GE(origin, previousOrigin) << "frame " << frame << ": the view only moves forward";
+        const int step = (int)std::llround(-(origin - previousOrigin) * 37.3);
+        EXPECT_TRUE(allLinesMovedBy(previous, columns, step, lo, hi))
+            << "frame " << frame << ": the grid lines did not all move by " << step << " px";
+        previous = columns;
+        previousOrigin = origin;
+    }
 }

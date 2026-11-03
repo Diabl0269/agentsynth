@@ -265,8 +265,8 @@ juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewSta
                                                            double startBeat, double lengthBeats) {
     const double x0 = viewState.beatToX(startBeat);
     const double x1 = viewState.beatToX(startBeat + lengthBeats);
-    const int left = (int)std::llround(x0);
-    const int right = (int)std::llround(x1);
+    const int left = (int)TimelineViewState::pixelOf(x0);
+    const int right = (int)TimelineViewState::pixelOf(x1);
     return {left, layout.trackTop(trackIndex) - (int)std::llround(viewState.trackScrollY), std::max(right - left, 1),
             layout.trackRowHeight(trackIndex)};
 }

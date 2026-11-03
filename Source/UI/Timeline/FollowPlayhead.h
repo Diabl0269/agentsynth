@@ -59,4 +59,13 @@ inline double followViewOrigin(FollowMode mode, int pointPercent, double playhea
     return std::max(0.0, playheadBeat - kPageLandingFraction * visibleBeats);
 }
 
+// `origin` moved to the nearest whole pixel at `pixelsPerBeat`. Every line is placed at round(beat * ppb - origin *
+// ppb); with a whole-pixel origin that is round(beat * ppb) minus a whole number, so all lines step together by the
+// same amount. A fractional origin lets each line round at a different frame, which reads as the grid shaking.
+inline double snapOriginToWholePixels(double origin, double pixelsPerBeat) noexcept {
+    if (!std::isfinite(origin) || !(pixelsPerBeat > 0.0))
+        return origin;
+    return std::max(0.0, std::round(origin * pixelsPerBeat) / pixelsPerBeat);
+}
+
 } // namespace synth::ui
