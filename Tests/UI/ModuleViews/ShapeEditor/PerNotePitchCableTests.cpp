@@ -137,6 +137,11 @@ TEST_F(ModuleComponentTest, WithNoPitchSourceUpstreamTheModeIsSetNothingIsCabled
     EXPECT_TRUE(bar.isHintShown());
     EXPECT_TRUE(bar.getHint().getText().startsWith("Needs a Pitch cable"));
     EXPECT_EQ(bar.getHint().getTitle(), bar.getHint().getText());
+    // Regression test for FRO1418: the hint named only Poly MIDI and gave no reason. It names a Pitch source and says
+    // audio alone carries no pitch.
+    EXPECT_TRUE(bar.getHint().getText().contains("Pitch source")) << bar.getHint().getText();
+    EXPECT_TRUE(bar.getHint().getText().contains("Poly MIDI")) << bar.getHint().getText();
+    EXPECT_TRUE(bar.getHint().getText().contains("Audio alone carries none")) << bar.getHint().getText();
     pick(editor, Mode::Off);
     EXPECT_FALSE(bar.isHintShown());
 }

@@ -237,8 +237,9 @@ output feeds, which is how a mono Oscillator's pitch CV is found; `upstreamPitch
 by the same path as a hand-drawn cable (mono reads only voice 0's ch19), in the same undo step as the mode change, so one undo takes
 both back. An input that is already cabled
 gets no second cable; **Random** needs none. A line under the mode switch says why a mode cannot work yet: "Needs a
-Pitch cable: connect your Poly MIDI's Pitch to this Filter's Pitch input." (By hand or By pitch, Pitch uncabled, and
-no source to take it from, or the cable was removed later). The line fades in and out and follows the cabling at 10 Hz.
+Pitch cable: wire a Pitch source (like Poly MIDI) to the Filter's Pitch input. Audio alone carries none." (By hand or
+By pitch, Pitch uncabled, and no source to take it from, or the cable was removed later). A mono Oscillator with no
+Pitch cable is such a case: its pitch jack is an input, it sends no pitch on, and its audio holds none. The line fades in and out and follows the cabling at 10 Hz.
 
 **How a note is spotted.** The Filter has no gate input and takes no MIDI; it sees each voice's Pitch (ch19-26; ch19 alone in mono)
 and audio. A voice starts a new note when its pitch settles (moves less than 0.1 semitone across a block) more
