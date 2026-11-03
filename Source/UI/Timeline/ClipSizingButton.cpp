@@ -17,7 +17,7 @@ namespace synth::ui {
 namespace {
 constexpr synth::ClipSizingMode kModes[] = {synth::ClipSizingMode::Trim, synth::ClipSizingMode::CarryContents,
                                             synth::ClipSizingMode::Stretch};
-constexpr float kGlyphSize = 16.0f;
+constexpr float kSizingGlyphSize = 16.0f;
 constexpr float kGlyphLeft = 4.0f;
 constexpr float kChevronFromRight = 9.0f;
 
@@ -76,7 +76,7 @@ synth::theme::Glyph ClipSizingButton::glyphFor(synth::ClipSizingMode mode) noexc
 }
 
 juce::Rectangle<float> ClipSizingButton::glyphBounds() const noexcept {
-    const float side = std::min(kGlyphSize, (float)getHeight());
+    const float side = std::min(kSizingGlyphSize, (float)getHeight());
     return {kGlyphLeft, ((float)getHeight() - side) * 0.5f, side, side};
 }
 
