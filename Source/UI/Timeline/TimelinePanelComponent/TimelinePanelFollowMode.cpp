@@ -26,9 +26,12 @@ void TimelinePanelComponent::followViewToBeat(double beat) {
         return;
     }
     const double visibleBeats = (double)gridLanesBounds_.getWidth() / viewState_.pixelsPerBeat;
-    const double origin =
-        followViewOrigin(FollowMode::Smooth, follow_.pointPercent, beat, viewState_.firstVisibleBeat, visibleBeats);
-    // Under half a pixel is no visible move: an unmoved view repaints nothing.
+    // The origin lands on a whole pixel, so every grid line and clip edge steps by the same whole number of pixels per
+    // frame instead of rounding separately off a fractional origin (which made them shake while the view scrolled).
+    const double origin = snapOriginToWholePixels(
+        followViewOrigin(FollowMode::Smooth, follow_.pointPercent, beat, viewState_.firstVisibleBeat, visibleBeats),
+        viewState_.pixelsPerBeat);
+    // Landing on the pixel the view already sits on is no visible move: an unmoved view repaints nothing.
     if (std::abs(origin - viewState_.firstVisibleBeat) * viewState_.pixelsPerBeat < 0.5)
         return;
     viewState_.firstVisibleBeat = origin;

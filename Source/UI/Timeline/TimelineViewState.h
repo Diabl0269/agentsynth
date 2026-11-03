@@ -34,6 +34,10 @@ struct TimelineViewState {
         firstVisibleBeat = std::max(0.0, anchorBeat - anchorX / pixelsPerBeat);
     }
 
+    // The pixel a line at `x` is drawn on. A line exactly halfway between two pixels would round either way depending
+    // on float error in the origin, so a scrolling grid flickered; the nudge makes those ties always round up.
+    static long long pixelOf(double x) noexcept { return std::llround(x + 1e-6); }
+
     void scrollBeats(double deltaBeats) noexcept { firstVisibleBeat = std::max(0.0, firstVisibleBeat + deltaBeats); }
 
     // ---- Vertical track geometry, shared by the header column and the lanes grid ----
