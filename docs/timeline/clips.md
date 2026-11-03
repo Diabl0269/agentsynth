@@ -329,6 +329,15 @@ itself, so a test can assert on it without decoding pixels. `mouseEnter` re-appl
 tool's cursor and `mouseExit` drops the Split preview, so a hover line never survives the pointer
 leaving the lanes.
 
+## Waveform sidecar backfill
+
+An imported or relinked audio clip gets its `Peaks/<stem>.agpk` sidecar when it is imported. A project saved before
+that has audio clips with no sidecar, which draw no waveform. When a project bundle opens,
+`MainComponentAudioImport::backfillMissingPeaks` collects every audio clip whose audio resolves but whose sidecar does
+not, writes each missing sidecar once on a background thread (the load is not held up), then clears the lane area's
+peaks cache and repaints so the waveforms appear. It never touches the document, so the project is not marked
+unsaved. Tests: `Tests/App/MainComponent/MainComponentPeaksBackfillTests.cpp`.
+
 ## Relink audio
 
 Offered whenever the clicked clip's `assetRef` is non-empty, whether the asset currently resolves

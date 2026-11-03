@@ -10,6 +10,7 @@
 #include "SoundBrowser/LoopStretchFile.h"
 #include "Timeline/TakeCaptureWriter.h"
 #include "Timeline/TimelineDoc/ClipEdgeSizing.h"
+#include <set>
 
 namespace {
 
@@ -90,14 +91,61 @@ void MainComponentAudioImport::stretchAudioClip(MainComponent& mc, synth::ClipId
     mc.statusBar.showMessage("Stretched " + name + " to " + juce::String(percent) + "%");
 }
 
-// The waveform sidecar a recorded take has, so an imported clip shows its waveform at once. Both asset roots (the
-// bundle, the app-data Recordings/ parent) sit two levels above the copy. A failure costs only the waveform.
-void MainComponentAudioImport::writePeaksFor(MainComponent& mc, const juce::String& assetRef) {
+namespace {
+// The audio file `assetRef` resolves to and where its waveform sidecar belongs. Both asset roots (the bundle, the
+// app-data Recordings/ parent) sit two levels above the copy. Both Files are empty when the audio is not there.
+struct AudioAndPeaks {
+    juce::File audio;
+    juce::File peaks;
+};
+AudioAndPeaks audioAndPeaksFor(MainComponent& mc, const juce::String& assetRef) {
     const auto audioFile = mc.getAudioEngine().getAudioClipStreamer().resolveAssetRef(assetRef);
     if (!audioFile.existsAsFile())
-        return;
+        return {};
     const auto root = audioFile.getParentDirectory().getParentDirectory();
-    const auto peaksFile = root.getChildFile(detail::peaksRefForAssetRef(assetRef));
-    peaksFile.getParentDirectory().createDirectory();
-    synth::PeaksFile::writeForAudioFile(audioFile, peaksFile, synth::TakeCaptureWriter::kPeakBucketSize);
+    return {audioFile, root.getChildFile(detail::peaksRefForAssetRef(assetRef))};
+}
+void writePeaksFile(const AudioAndPeaks& target) {
+    target.peaks.getParentDirectory().createDirectory();
+    synth::PeaksFile::writeForAudioFile(target.audio, target.peaks, synth::TakeCaptureWriter::kPeakBucketSize);
+}
+} // namespace
+
+// The waveform sidecar a recorded take has, so an imported clip shows its waveform at once. A failure costs only the
+// waveform.
+void MainComponentAudioImport::writePeaksFor(MainComponent& mc, const juce::String& assetRef) {
+    const auto target = audioAndPeaksFor(mc, assetRef);
+    if (target.audio != juce::File())
+        writePeaksFile(target);
+}
+
+// A project saved before imports wrote their sidecar has audio clips with no waveform file. Writes each missing one
+// once, on a background thread (decoding a long file must not stall the load), then has the lane area look again. The
+// document is untouched, so the project is not marked dirty.
+void MainComponentAudioImport::backfillMissingPeaks(MainComponent& mc) {
+    std::vector<AudioAndPeaks> missing;
+    std::set<juce::String> seen;
+    for (const auto& track : mc.timelineDoc.getTracks())
+        for (const auto& clip : track.clips) {
+            if (clip.assetRef.isEmpty() || !seen.insert(clip.assetRef).second)
+                continue;
+            auto target = audioAndPeaksFor(mc, clip.assetRef);
+            if (target.audio != juce::File() && !target.peaks.existsAsFile())
+                missing.push_back(std::move(target));
+        }
+    if (missing.empty())
+        return;
+
+    juce::Component::SafePointer<MainComponent> safeThis(&mc);
+    juce::Thread::launch([safeThis, missing = std::move(missing)] {
+        for (const auto& target : missing)
+            writePeaksFile(target);
+        juce::MessageManager::callAsync([safeThis] {
+            if (auto* self = safeThis.getComponent()) {
+                auto& lanes = self->timelinePanel.getClipLaneArea();
+                lanes.invalidatePeaksCache(); // the cache remembers the misses
+                lanes.repaint();
+            }
+        });
+    });
 }
