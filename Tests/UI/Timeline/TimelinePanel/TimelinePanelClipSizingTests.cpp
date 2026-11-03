@@ -3,6 +3,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -60,6 +61,7 @@ TEST(TimelineClipSizingFieldTest, TheMenuListsTheThreeModesAndPickingOneReachesT
     EXPECT_TRUE(items[1].startsWith("Carry contents"));
     EXPECT_TRUE(items[2].startsWith("Stretch to fit"));
     EXPECT_TRUE(items[2].contains("notes and audio")) << "audio clips stretch too";
+    EXPECT_FALSE(items[2].contains("new length")) << "one short clause per mode";
     EXPECT_TRUE(items[3].contains("Option"));
 
     f.field().choose(ClipSizingMode::Stretch);
@@ -67,6 +69,39 @@ TEST(TimelineClipSizingFieldTest, TheMenuListsTheThreeModesAndPickingOneReachesT
     EXPECT_TRUE(f.field().getToggleState()) << "lit while it is not Trim";
     EXPECT_EQ(f.field().getTitle(), "Clip sizing, Stretch to fit");
     EXPECT_EQ(f.props.getUserSettings()->getValue("timelineClipSizingMode"), "stretch");
+}
+
+// Regression test for FRO1407: the menu opened far wider than its words needed, because every row carried a long
+// "name: description" sentence and the menu takes the width of its longest row. JUCE sizes a menu from each row's
+// getIdealPopupMenuItemSize, so the cap is measured the same way, with the app's look-and-feel.
+TEST(TimelineClipSizingFieldTest, TheMenuStaysNarrowAndTheModesKeepTheirFullNames) {
+    SizingPanelFixture f;
+    synth::theme::AppLookAndFeel lnf;
+    const auto menu = f.field().buildMenu();
+    constexpr int kMaxRowChars = 40;
+    constexpr int kMaxRowWidthPx = 340; // a long row used to be about 470 px
+    int widest = 0;
+    juce::String widestText;
+    for (juce::PopupMenu::MenuItemIterator it(menu); it.next();) {
+        const auto& item = it.getItem();
+        if (item.isSeparator)
+            continue;
+        int width = 0, height = 0;
+        lnf.getIdealPopupMenuItemSize(item.text, false, -1, width, height);
+        EXPECT_LE(item.text.length(), kMaxRowChars) << item.text;
+        if (width > widest) {
+            widest = width;
+            widestText = item.text;
+        }
+    }
+    EXPECT_LE(widest, kMaxRowWidthPx) << "widest row: " << widestText;
+
+    for (const auto& [mode, name] : {std::pair{ClipSizingMode::Trim, "Clip sizing, Trim"},
+                                     std::pair{ClipSizingMode::CarryContents, "Clip sizing, Carry contents"},
+                                     std::pair{ClipSizingMode::Stretch, "Clip sizing, Stretch to fit"}}) {
+        f.field().choose(mode);
+        EXPECT_EQ(f.field().getTitle(), name) << "the screen-reader name keeps the full mode name";
+    }
 }
 
 TEST(TimelineClipSizingFieldTest, TheSavedModeIsRestoredIntoAFreshPanel) {

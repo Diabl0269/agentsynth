@@ -97,8 +97,10 @@ tool buttons go through, so its lit and unlit fills equal theirs in every built-
 
 `ClipSizingButton` (`Source/UI/Timeline/ClipSizingButton.h`), right of the tool buttons: a `juce::TextButton` reading
 "Sizing: Trim" / "Carry" / "Stretch", lit (its toggle state) while the mode is not Trim so a stretch mode is never
-forgotten. A click opens a menu of the three modes, each with what it does to the clip (Stretch scales notes and
-audio), and a closing tip about Option. The Select key pressed again while Select is the tool
+forgotten. A click opens a menu of the three modes, each its full name and one short clause on what it does to the
+clip ("Stretch to fit: notes and audio scale"), and a closing tip about Option. The menu is as wide as its longest row,
+so every row stays short: `TimelineClipSizingFieldTest.TheMenuStaysNarrowAndTheModesKeepTheirFullNames` caps each row
+at 40 characters and the widest at 340 px, measured with `getIdealPopupMenuItemSize` as JUCE sizes the menu. The Select key pressed again while Select is the tool
 steps Trim -> Carry contents -> Stretch to fit -> Trim, as in Cubase; it follows a rebind of `timelineToolSelect`.
 The choice is the user setting `timelineClipSizingMode` and is pushed into the clip lanes
 ([clips](clips.md#edge-sizing)). Like the snap toggle it is a Tab stop that a click never focuses; its screen-reader

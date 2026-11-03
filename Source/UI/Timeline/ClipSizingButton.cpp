@@ -61,7 +61,8 @@ void ClipSizingButton::setApplicationProperties(juce::ApplicationProperties* pro
         onModeChanged(mode_);
 }
 
-// Each mode with what it does to a clip's contents. The Option tip closes the menu.
+// Each mode's full name with one short clause on what it does to a clip's contents, and the Option tip last. The menu
+// is as wide as its longest row, so every row stays one short line (TimelineClipSizingFieldTest caps the width).
 juce::PopupMenu ClipSizingButton::buildMenu() const {
     juce::PopupMenu menu;
     for (int i = 0; i < (int)std::size(kModes); ++i) {
@@ -71,7 +72,7 @@ juce::PopupMenu ClipSizingButton::buildMenu() const {
         menu.addItem(kFirstModeItemId + i, text, true, mode == mode_);
     }
     menu.addSeparator();
-    menu.addItem(-1, "Hold Option while dragging an edge to stretch once", false, false);
+    menu.addItem(-1, "Option-drag an edge to stretch once", false, false);
     return menu;
 }
 
