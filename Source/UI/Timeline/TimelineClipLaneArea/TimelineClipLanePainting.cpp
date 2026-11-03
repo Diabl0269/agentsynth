@@ -176,8 +176,6 @@ const synth::PeaksFile::Data* TimelineClipLaneArea::findPeaksData(const juce::St
 // "Nothing resolves" covers no resolver set, an unresolvable ref, or an unreadable/absent peaks
 // file.
 void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect) {
-    if (rect.getWidth() <= kMinWidthForWaveform)
-        return;
     const auto* data = findPeaksData(clip.assetRef);
     if (data == nullptr)
         return;
@@ -196,7 +194,39 @@ void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& c
     // Black at low alpha, not a theme token — a shadow-style darkening of whatever `fill` already
     // is (the module cards' drop shadows are composed the same way), not a colour of its own.
     g.setColour(juce::Colours::black.withAlpha(0.4f));
-    paintWaveformColumns(g, rect, data->buckets, data->numChannels, range.firstBucket, range.bucketCount);
+    if (rect.getWidth() <= kMinWidthForWaveform)
+        paintWaveformSummary(g, rect, *data, range.firstBucket, range.bucketCount);
+    else
+        paintWaveformColumns(g, rect, data->buckets, data->numChannels, range.firstBucket, range.bucketCount);
+}
+
+// What paintWaveform draws for `clip` in a rect `width` wide: nothing without peaks, a one-bar summary below
+// kMinWidthForWaveform, else the per-column waveform. Read by the test-mode state and the tests.
+TimelineClipLaneArea::WaveformShape TimelineClipLaneArea::waveformShapeFor(const synth::Clip& clip, int width) {
+    if (findPeaksData(clip.assetRef) == nullptr)
+        return WaveformShape::None;
+    return width <= kMinWidthForWaveform ? WaveformShape::Summary : WaveformShape::Columns;
+}
+
+// A clip too narrow for columns still shows its audio has a waveform: one centred bar across the clip, as tall as the
+// loudest peak under it (at least two pixels, so a quiet clip is not lost).
+void TimelineClipLaneArea::paintWaveformSummary(juce::Graphics& g, juce::Rectangle<int> rect,
+                                                const synth::PeaksFile::Data& data, int firstBucket, int bucketCount) {
+    if (bucketCount <= 0)
+        return;
+    float peak = 0.0f;
+    const std::size_t first = (std::size_t)firstBucket * (std::size_t)data.numChannels;
+    const std::size_t last =
+        std::min(data.buckets.size(), first + (std::size_t)bucketCount * (std::size_t)data.numChannels);
+    for (std::size_t i = first; i < last; ++i)
+        peak = std::max({peak, std::abs(data.buckets[i].first), std::abs(data.buckets[i].second)});
+
+    const auto bounds = rect.reduced(0, 1);
+    if (bounds.getWidth() <= 0 || bounds.getHeight() <= 0)
+        return;
+    const int height = juce::jlimit(2, bounds.getHeight(),
+                                    juce::roundToInt(juce::jlimit(0.0f, 1.0f, peak) * (float)bounds.getHeight()));
+    g.fillRect(bounds.getX(), bounds.getCentreY() - height / 2, bounds.getWidth(), height);
 }
 
 // Mirrors findPeaksData's cache shape exactly: a miss is cached too, so a still-missing clip never

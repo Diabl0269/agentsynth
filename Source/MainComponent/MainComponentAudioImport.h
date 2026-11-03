@@ -13,9 +13,13 @@ class MainComponent;
 struct MainComponentAudioImport {
     /** `file`'s duration in beats at the transport's current bpm; 0.0 when it is not readable audio. */
     static double audioFileLengthInBeats(const MainComponent& mc, const juce::File& file);
-    /** Copies `sourceFile` into the project and returns its asset ref; empty after a status-bar message when it fails.
+    /** Copies `sourceFile` into the project (with its waveform sidecar) and returns its asset ref; empty after a
+     * status-bar message when it fails.
      */
     static juce::String importAudioAsset(MainComponent& mc, const juce::File& sourceFile);
+    /** Writes the waveform sidecar for the imported audio `assetRef`, so the clip paints its waveform from its first
+     *  frame; a failure costs only the waveform. */
+    static void writePeaksFor(MainComponent& mc, const juce::String& assetRef);
     /** Imports `sourceFile`, then adds a new audio track holding a clip of it at `startBeat`, as one undo step. */
     static void addAudioTrackWithClip(MainComponent& mc, double startBeat, const juce::File& sourceFile);
     /** The body of addAudioTrack's undo step (call inside a recorded change); an invalid id when no track was added. */

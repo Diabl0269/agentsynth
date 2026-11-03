@@ -491,6 +491,7 @@ void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFi
         statusBar.showMessage("Relink failed: " + error);
         return;
     }
+    MainComponentAudioImport::writePeaksFor(*this, newRef);
 
     // Snapshot every clip sharing the OLD ref BEFORE mutating anything — a TimelineDoc reference
     // does not survive a mutation (see TimelineDoc::getClip's own contract), so the ids and each
@@ -551,6 +552,8 @@ juce::String MainComponentAudioImport::importAudioAsset(MainComponent& mc, const
     }
     if (newRef.isEmpty())
         mc.statusBar.showMessage("Import failed: " + error);
+    else
+        writePeaksFor(mc, newRef); // before the clip exists, so its first paint finds the sidecar
     return newRef;
 }
 
