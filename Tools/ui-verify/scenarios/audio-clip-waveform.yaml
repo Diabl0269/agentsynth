@@ -3,8 +3,8 @@
 #
 # What a user does: opens a project with one 4-beat audio clip whose file has no waveform file (an older project), then
 # Option-drags its right edge to 6 beats (the stretch imports a new copy of the audio) and on down to 1 beat (24 px at
-# the default zoom). The probe `clipWaveform` reads `name:none|summary|columns`. The old clip has no waveform file, so
-# it reads none; the imported copy reads columns while wide and summary once narrow.
+# the default zoom). The probe `clipWaveform` reads `name:none|summary|columns`. Opening the old project backfills the
+# clip's missing waveform file (FRO1487), so it reads columns; the imported copy reads columns while wide and summary once narrow.
 record: true
 save_project: audio-clip-waveform
 steps:
@@ -15,8 +15,8 @@ steps:
   - wait: {}
   - click: {id: Show Timeline in the main area}
   - wait: {}
-  - expect: {id: timelineClipPitches, clipWaveform: "Tone:none", within_ms: 2000}
-  - screenshot: {name: 1-no-waveform-file}
+  - expect: {id: timelineClipPitches, clipWaveform: "Tone:columns", within_ms: 10000}
+  - screenshot: {name: 1-backfilled-waveform}
   - drag: {from: timelineClipLaneArea, to: timelineClipLaneArea, fromX: 95, fromY: 28, toX: 144, toY: 28, mods: alt}
   - wait: {}
   - expect: {id: timelineClipPitches, clipWaveform: "Tone:columns", within_ms: 5000}
