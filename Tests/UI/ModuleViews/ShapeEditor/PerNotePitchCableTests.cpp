@@ -142,6 +142,13 @@ TEST_F(ModuleComponentTest, WithNoPitchSourceUpstreamTheModeIsSetNothingIsCabled
     EXPECT_TRUE(bar.getHint().getText().contains("Pitch source")) << bar.getHint().getText();
     EXPECT_TRUE(bar.getHint().getText().contains("Poly MIDI")) << bar.getHint().getText();
     EXPECT_TRUE(bar.getHint().getText().contains("Audio alone carries none")) << bar.getHint().getText();
+    // The whole hint fits on its one line at the window's fixed width: JUCE would end it with an ellipsis otherwise.
+    const auto& label = bar.getHint();
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(label.getFont(), label.getText(), 0.0f, 0.0f);
+    const float textWidth = glyphs.getBoundingBox(0, -1, true).getWidth();
+    EXPECT_GT(label.getWidth(), 0);
+    EXPECT_LE(textWidth, (float)label.getWidth()) << "hint text is wider than its label";
     pick(editor, Mode::Off);
     EXPECT_FALSE(bar.isHintShown());
 }
