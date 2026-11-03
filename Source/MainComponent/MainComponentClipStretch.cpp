@@ -24,18 +24,6 @@ void resizeInstead(MainComponent& mc, synth::ClipId id, double newStartBeat, dou
     });
 }
 
-// The waveform sidecar a recorded take has, so the clip keeps its waveform after the drop. Both asset roots (the
-// bundle, the app-data Recordings/ parent) sit two levels above the copy. A failure costs only the waveform.
-void writePeaksFor(MainComponent& mc, const juce::String& stretchedRef) {
-    const auto audioFile = mc.getAudioEngine().getAudioClipStreamer().resolveAssetRef(stretchedRef);
-    if (!audioFile.existsAsFile())
-        return;
-    const auto root = audioFile.getParentDirectory().getParentDirectory();
-    const auto peaksFile = root.getChildFile(detail::peaksRefForAssetRef(stretchedRef));
-    peaksFile.getParentDirectory().createDirectory();
-    synth::PeaksFile::writeForAudioFile(audioFile, peaksFile, synth::TakeCaptureWriter::kPeakBucketSize);
-}
-
 // The window to stretch, read through the clip's origin when that original file is still there; without it the clip's
 // current asset is the best source left, and the new stretch starts a fresh origin from it.
 std::optional<synth::AudioStretchWindow> windowFor(MainComponent& mc, const synth::Clip& clip, double newLength,
@@ -94,12 +82,22 @@ void MainComponentAudioImport::stretchAudioClip(MainComponent& mc, synth::ClipId
         return;
     }
 
-    if (!window->backToOriginal)
-        writePeaksFor(mc, stretchedRef);
     const double sourceStart = window->backToOriginal ? window->startSeconds : 0.0;
     mc.undoManager.recordTimelineChange(mc.timelineDoc, [&] {
         synth::applyAudioClipStretch(mc.timelineDoc, id, newStartBeat, newLengthBeats, stretchedRef, sourceStart,
                                      window->origin);
     });
     mc.statusBar.showMessage("Stretched " + name + " to " + juce::String(percent) + "%");
+}
+
+// The waveform sidecar a recorded take has, so an imported clip shows its waveform at once. Both asset roots (the
+// bundle, the app-data Recordings/ parent) sit two levels above the copy. A failure costs only the waveform.
+void MainComponentAudioImport::writePeaksFor(MainComponent& mc, const juce::String& assetRef) {
+    const auto audioFile = mc.getAudioEngine().getAudioClipStreamer().resolveAssetRef(assetRef);
+    if (!audioFile.existsAsFile())
+        return;
+    const auto root = audioFile.getParentDirectory().getParentDirectory();
+    const auto peaksFile = root.getChildFile(detail::peaksRefForAssetRef(assetRef));
+    peaksFile.getParentDirectory().createDirectory();
+    synth::PeaksFile::writeForAudioFile(audioFile, peaksFile, synth::TakeCaptureWriter::kPeakBucketSize);
 }

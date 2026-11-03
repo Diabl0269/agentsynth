@@ -96,6 +96,53 @@ TEST(TimelineClipLaneWaveformTest, CacheInvalidation) {
     EXPECT_FALSE(imagesIdentical(first, afterInvalidate)) << "invalidation must force a fresh resolve + read";
 }
 
+// Regression test for FRO1413: below kMinWidthForWaveform a clip painted nothing; it now paints a one-bar summary.
+TEST(TimelineClipLaneWaveformTest, SmallClipPaintsASummaryBarInsteadOfNothing) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 0.5, "Tiny"); // 0.5 beat * 40 px/beat = 20 px, under the cutoff
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 200);
+    ASSERT_LE(f.lane.getClipRect(clipId).getWidth(), 24) << "sanity: the clip must be under the waveform cutoff";
+
+    const juce::Image withoutPeaks = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    EXPECT_EQ(f.lane.getWaveformShapeForTest(clipId), "none");
+
+    ScopedPeaksFile peaksFile("agentsynth_clipslane_summary.agpk");
+    ASSERT_TRUE(synth::PeaksFile::write(peaksFile.file, makeWaveformData(400, 0.8f)));
+    const juce::File resolved = peaksFile.file;
+    f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
+    const juce::Image withPeaks = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+
+    EXPECT_EQ(f.lane.getWaveformShapeForTest(clipId), "summary");
+    EXPECT_FALSE(imagesIdentical(withoutPeaks, withPeaks)) << "a small clip with peaks must paint its summary bar";
+}
+
+// Regression test for FRO1413: a miss cached by the first paint must not outlive the sidecar appearing once the doc
+// notifies, which is what a drop's clip creation does.
+TEST(TimelineClipLaneWaveformTest, PeaksWrittenAfterTheFirstPaintShowOnTheNextDocChange) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take");
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 200);
+
+    ScopedPeaksFile peaksFile("agentsynth_clipslane_late_peaks.agpk");
+    const juce::File resolved = peaksFile.file;
+    f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; }); // file does not exist yet
+    const juce::Image first = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    EXPECT_EQ(f.lane.getWaveformShapeForTest(clipId), "none");
+
+    ASSERT_TRUE(synth::PeaksFile::write(peaksFile.file, makeWaveformData(400, 0.8f)));
+    ASSERT_TRUE(
+        f.doc.setClipAsset(clipId, "Audio/take-2.wav", 0.0)); // any doc notification (the resolver ignores the ref)
+    const juce::Image second = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    EXPECT_EQ(f.lane.getWaveformShapeForTest(clipId), "columns");
+    EXPECT_FALSE(imagesIdentical(first, second));
+}
+
 TEST(TimelineClipLaneLiveRecordingTest, LiveStripGrowsOnNewBucketsOnly) {
     ClipLaneFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");

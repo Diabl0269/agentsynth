@@ -24,6 +24,8 @@
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UserSettings.h"
 #include <cmath>
 #include <functional>
@@ -336,6 +338,32 @@ TEST_F(AssetManagerRelinkTest, DroppedAudioFileImportsIntoSavedBundleAsOneUndoSt
     mc.getUndoManager().undo();
     EXPECT_TRUE(doc.getTrack(trackId)->clips.empty());
     EXPECT_FALSE(mc.getUndoManager().canUndo());
+}
+
+// Regression test for FRO1413: a dropped file got no waveform sidecar, so its clip painted no waveform until a stretch
+// wrote one.
+TEST_F(AssetManagerRelinkTest, DroppedAudioFileGetsItsWaveformSidecarAndPaintsIt) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto bundleDir = root.getChildFile("Peaks.agsproj");
+    mc.saveProjectForTest(bundleDir);
+    ASSERT_TRUE(ProjectBundle::isBundle(bundleDir));
+
+    const auto source = root.getChildFile("peaky.wav");
+    ASSERT_TRUE(writeWav(source, 44100, 1, 44100.0, [](juce::int64 i, int) { return (float)i / 44100.0f; }));
+
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+
+    EXPECT_TRUE(bundleDir.getChildFile("Peaks").getChildFile("peaky.agpk").existsAsFile());
+    const auto* track = doc.getTrack(trackId);
+    ASSERT_NE(track, nullptr);
+    ASSERT_EQ(track->clips.size(), 1u);
+    EXPECT_NE(mc.getTimelinePanel().getClipLaneArea().getWaveformShapeForTest(track->clips[0].id), "none")
+        << "the clip must paint a waveform from its first frame";
 }
 
 TEST_F(AssetManagerRelinkTest, DroppedAudioFileOnUnsavedProjectUsesTheRecordingsPolicy) {

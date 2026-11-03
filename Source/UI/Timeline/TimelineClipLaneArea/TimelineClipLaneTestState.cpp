@@ -35,12 +35,14 @@ juce::String originText(const synth::Clip& clip) {
 
 // `clipAudio`, "Clip 1:Audio/a.wav,0.000,4.000,Audio/orig.wav@0.000*1.500;...": every audio clip's asset, source start
 // in seconds, length in beats and stretch origin ("-" when none), so a scenario can tell which file a clip plays.
-// `clipPitches`, "Clip 1:60,64;Clip 2:61": every clip's note pitches in track order. Pitches rather than a count,
-// because a scenario checking Fit to key needs to see that notes moved, and which way.
+// `clipWaveform`, "Clip 1:columns;Clip 2:summary": what each audio clip's waveform is drawn as (none, summary,
+// columns). `clipPitches`, "Clip 1:60,64;Clip 2:61": every clip's note pitches in track order. Pitches rather than a
+// count, because a scenario checking Fit to key needs to see that notes moved, and which way.
 void TimelineClipLaneArea::addTestModeProbe() {
     testModeProbe_ = std::make_unique<ClipPitchesProbe>([this](juce::DynamicObject& into) {
         juce::StringArray clips;
         juce::StringArray audio;
+        juce::StringArray shapes;
         if (doc_ != nullptr)
             for (const auto& track : doc_->getTracks())
                 for (const auto& clip : track.clips) {
@@ -48,15 +50,33 @@ void TimelineClipLaneArea::addTestModeProbe() {
                     for (const auto& note : clip.notes)
                         pitches.add(juce::String(note.pitch));
                     clips.add(clip.name + ":" + pitches.joinIntoString(","));
-                    if (clip.assetRef.isNotEmpty())
+                    if (clip.assetRef.isNotEmpty()) {
+                        shapes.add(clip.name + ":" + getWaveformShapeForTest(clip.id));
                         audio.add(clip.name + ":" + clip.assetRef + "," + juce::String(clip.sourceStartSeconds, 3) +
                                   "," + juce::String(clip.lengthBeats, 3) + "," + originText(clip));
+                    }
                 }
         into.setProperty("clipPitches", clips.joinIntoString(";"));
         into.setProperty("clipAudio", audio.joinIntoString(";"));
+        into.setProperty("clipWaveform", shapes.joinIntoString(";"));
     });
     testModeProbe_->setBounds(0, 0, 1, 1);
     addAndMakeVisible(*testModeProbe_);
+}
+
+juce::String TimelineClipLaneArea::getWaveformShapeForTest(synth::ClipId id) {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(id) : nullptr;
+    if (clip == nullptr)
+        return "none";
+    switch (waveformShapeFor(*clip, getDrawnClipRectForTest(id).getWidth())) {
+    case WaveformShape::Summary:
+        return "summary";
+    case WaveformShape::Columns:
+        return "columns";
+    case WaveformShape::None:
+        break;
+    }
+    return "none";
 }
 
 } // namespace synth::ui

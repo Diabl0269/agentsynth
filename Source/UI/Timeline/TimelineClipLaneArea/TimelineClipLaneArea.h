@@ -455,6 +455,8 @@ public:
     // being called) — the same idiom TimelineTransportBar::getReadoutRepaintCountForTest() uses.
     int getLiveStripRepaintCountForTest() const noexcept { return liveStripRepaintCount_; }
     int getClipsPaintedForTest() const noexcept { return clipsPainted_; } // clips drawn since construction
+    /** Tests/test mode: "none", "summary" or "columns" - the waveform `id` is drawn with right now. */
+    juce::String getWaveformShapeForTest(synth::ClipId id);
 
     /** Test-mode: adds the hidden `timelineClipPitches` child that reports every clip's note pitches (see the unit). */
     void addTestModeProbe();
@@ -753,12 +755,17 @@ private:
 
     // ---- Waveform + live-recording-strip painting ----
     // Resolves (lazily loading + caching) and paints a committed audio clip's waveform inside
-    // `rect`. A no-op below kMinWidthForWaveform or when nothing resolves.
+    // `rect`: columns, or below kMinWidthForWaveform a one-bar summary. A no-op when nothing resolves.
     void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
     // The cheap per-column line-pair loop shared by paintWaveform() and paintLiveRecordingStrip().
     // Assumes the caller already set the colour.
     static void paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
                                      const std::vector<std::pair<float, float>>& buckets, int numChannels,
+                                     int firstBucket, int bucketCount);
+    // What paintWaveform draws for a clip `width` px wide (see waveformShapeFor / getWaveformShapeForTest).
+    enum class WaveformShape { None, Summary, Columns };
+    WaveformShape waveformShapeFor(const synth::Clip& clip, int width);
+    static void paintWaveformSummary(juce::Graphics& g, juce::Rectangle<int> rect, const synth::PeaksFile::Data& data,
                                      int firstBucket, int bucketCount);
     // Cache lookup/lazy-load for one assetRef. Returns nullptr for an empty ref, no resolver, an
     // unresolvable file, or a file that fails synth::PeaksFile::read(); a miss is cached too — only
