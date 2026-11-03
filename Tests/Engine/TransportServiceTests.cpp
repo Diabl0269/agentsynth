@@ -109,6 +109,21 @@ TEST_F(TransportServiceTest, CommandsApplyInPostingOrder) {
     EXPECT_EQ(info.blockStartSample, expected);
 }
 
+TEST_F(TransportServiceTest, TheSnapshotCountsAppliedLocatesAndNamesTheLastTarget) {
+    transport.play();
+    tick();
+    const auto before = transport.getPositionSnapshot();
+
+    ASSERT_TRUE(transport.locateBeat(6.5));
+    EXPECT_EQ(transport.getPositionSnapshot().locateCount, before.locateCount) << "posted, not applied yet";
+    tick();
+    tick(); // playback moves on; the target stays
+    const auto after = transport.getPositionSnapshot();
+    EXPECT_EQ(after.locateCount, before.locateCount + 1);
+    EXPECT_DOUBLE_EQ(after.lastLocateBeat, 6.5);
+    EXPECT_GT(after.ppq, 6.5);
+}
+
 TEST_F(TransportServiceTest, StopHoldsPosition) {
     transport.play();
     tick();
