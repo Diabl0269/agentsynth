@@ -290,6 +290,37 @@ void paintLink(juce::Graphics& g, juce::Rectangle<float> area) {
     g.strokePath(links,
                  juce::PathStrokeType(2.2f * scale, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
+// The Sizing glyphs on a 16 x 16 grid drawn at up to 16 px, line art in one stroke weight like the tool icons. The
+// path strings are the design system's ClipSizingField artwork, so the app and the spec draw the same marks. Trim's
+// cut-off note end is the same colour at 35% alpha.
+void paintSizing(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juce::Colour colour) {
+    const float side = std::min(16.0f, std::min(area.getWidth(), area.getHeight()));
+    const auto square = juce::Rectangle<float>(side, side).withCentre(area.getCentre());
+    const float scale = side / 16.0f;
+    const auto toArea = juce::AffineTransform::scale(scale).translated(square.getX(), square.getY());
+    const juce::PathStrokeType stroke(1.6f * scale, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    const auto draw = [&](const char* svg, float alpha) {
+        auto path = juce::Drawable::parseSVGPath(svg);
+        path.applyTransform(toArea);
+        g.setColour(colour.withMultipliedAlpha(alpha));
+        g.strokePath(path, stroke);
+    };
+    switch (glyph) {
+    case Glyph::SizingTrim:
+        draw("M11 2.5V13.5M2.5 5.5H8.5M4 10.5H9", 1.0f);
+        draw("M12.5 10.5H14.5", 0.35f);
+        break;
+    case Glyph::SizingCarry:
+        draw("M2.5 3H12.5M10.5 1L13 3L10.5 5M13 6.5V14M2.5 9H6.5M5 12.5H10", 1.0f);
+        break;
+    case Glyph::SizingStretch:
+        draw("M2 3V13M14 3V13M4.5 8H11.5M6.5 6L4.5 8L6.5 10M9.5 6L11.5 8L9.5 10", 1.0f);
+        break;
+    default:
+        break;
+    }
+}
+
 // The social marks are the website's SVG drawings: a path set on a square grid (16 for the GitHub mark, 20 for the
 // rest), drawn at up to 18 px like the site. `stroke` is the line width on that grid, 0 for a filled mark.
 struct SocialShape {
@@ -432,6 +463,11 @@ void paintGlyph(juce::Graphics& g, Glyph glyph, juce::Rectangle<float> area, juc
         break;
     case Glyph::Link:
         paintLink(g, area);
+        break;
+    case Glyph::SizingTrim:
+    case Glyph::SizingCarry:
+    case Glyph::SizingStretch:
+        paintSizing(g, glyph, area, colour);
         break;
     case Glyph::SocialDiscord:
     case Glyph::SocialYouTube:

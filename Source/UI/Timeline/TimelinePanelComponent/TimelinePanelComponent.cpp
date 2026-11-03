@@ -361,10 +361,7 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
 
     const auto selectKey =
         shortcutHintFor(shortcuts_, "timelineToolSelect", juce::KeyPress('1', juce::ModifierKeys::noModifiers, 0));
-    clipSizingButton_.setTooltip(
-        "What dragging a clip edge does to its notes. Hold Option while dragging to stretch "
-        "once." +
-        (selectKey.isEmpty() ? juce::String() : " With Select active, " + selectKey + " switches it."));
+    clipSizingButton_.setStepKeyHint(selectKey);
 
     snapToggleButton_.setTooltip(synth::ui::formatShortcutHint(
         "Snap on/off",
