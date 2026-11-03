@@ -288,7 +288,10 @@ same content with the same options as the call site, or an exemption with a reas
 ticketed sit in `kKnownGaps` in `ThemeSweepTests.cpp`; the list is shrink-only: a new finding fails, and so does an
 entry that no longer fails ("fixed - remove it from kKnownGaps"). With `AGENTSYNTH_WRITE_THEME_PNG` set the sweep (and
 `ShapeWindowThemeTests`) also writes one PNG per surface and theme to `build-ci-local/theme-sweep/` under the working
-directory.
+directory. A glyph a control paints in `paint()` is not text, so the text check cannot see it:
+`ThemeSweepGlyphTests.cpp` renders such controls (today the timeline's Sizing field, in each of its modes) in every
+built-in theme and requires the glyph to reach 3:1 against the control's own rendered fill (the bar for a non-text
+graphic), and each mode's glyph to differ. A new control that shows its state only as a painted glyph joins that file.
 
 **Colour fallbacks go through `themeOf`.** A control with no `AppLookAndFeel` above it (a headless
 test, a component not yet parented) reads its colours with `synth::theme::themeOf(component)`, which

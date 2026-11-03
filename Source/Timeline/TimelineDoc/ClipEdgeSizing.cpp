@@ -195,9 +195,9 @@ const char* clipSizingModeDescription(ClipSizingMode mode) noexcept {
     case ClipSizingMode::Trim:
         return "notes stay put";
     case ClipSizingMode::CarryContents:
-        return "notes move with the edge";
+        return "notes follow the edge";
     case ClipSizingMode::Stretch:
-        return "notes and audio scale to the new length";
+        return "notes and audio scale";
     }
     return "";
 }

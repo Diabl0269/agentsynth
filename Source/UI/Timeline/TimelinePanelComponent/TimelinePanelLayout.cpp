@@ -53,7 +53,7 @@ constexpr int kSnapComboWidth = 90;
 // locate the marker against the arrangement without competing with the clips for attention.
 constexpr float kMarkerLaneStemAlpha = 0.40f;
 constexpr int kFollowPlayheadButtonWidth = 30;
-constexpr int kClipSizingButtonWidth = 96; // "Sizing: Stretch", the longest label
+constexpr int kClipSizingButtonWidth = ClipSizingButton::kWidth + 4; // the field, inset 2 px on each side
 } // namespace
 
 // Restores/persists the snap-selector choice under the "timelineSnap" key, same pattern as

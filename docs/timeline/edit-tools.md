@@ -95,14 +95,25 @@ tool buttons go through, so its lit and unlit fills equal theirs in every built-
 
 ## The Sizing field
 
-`ClipSizingButton` (`Source/UI/Timeline/ClipSizingButton.h`), right of the tool buttons: a `juce::TextButton` reading
-"Sizing: Trim" / "Carry" / "Stretch", lit (its toggle state) while the mode is not Trim so a stretch mode is never
-forgotten. A click opens a menu of the three modes, each with what it does to the clip (Stretch scales notes and
-audio), and a closing tip about Option. The Select key pressed again while Select is the tool
-steps Trim -> Carry contents -> Stretch to fit -> Trim, as in Cubase; it follows a rebind of `timelineToolSelect`.
-The choice is the user setting `timelineClipSizingMode` and is pushed into the clip lanes
-([clips](clips.md#edge-sizing)). Like the snap toggle it is a Tab stop that a click never focuses; its screen-reader
-name is "Clip sizing, <mode>".
+`ClipSizingButton` (`Source/UI/Timeline/ClipSizingButton.h`), right of the tool buttons: a `juce::TextButton`
+`ClipSizingButton::kWidth` (36 px) wide in every mode that paints the mode's glyph and the app's combo chevron instead of
+its text. The glyphs are `Glyph::SizingTrim` (a clip edge cutting a note, the part past it faded), `SizingCarry` (one
+arrow over the notes and the edge: they travel together) and `SizingStretch` (a double arrow between two edges), drawn by
+`paintGlyph` (`Source/UI/Theme/IconGlyphs.h`) in the theme's primary ink, the way Cubase badges its sizing modes on the
+selection tool. The glyph is the state: the fill is the plain button fill in every mode (it is never lit), so Trim never
+looks switched off and stepping the mode never shifts the strip. The button text keeps the short name ("Trim", "Carry",
+"Stretch") for test mode only. A click (or Space while it has focus) opens a menu of the three modes, each its full name and one short
+clause on what it does to the clip ("Stretch to fit: notes and audio scale"), and a closing tip about Option. The menu is as wide as its longest row,
+so every row stays short: `TimelineClipSizingFieldTest.TheMenuStaysNarrowAndTheModesKeepTheirFullNames` caps each row
+at 40 characters and the widest at 340 px, measured with `getIdealPopupMenuItemSize` as JUCE sizes the menu. The Select
+key pressed again while Select is the tool steps Trim -> Carry contents -> Stretch to fit -> Trim, as in Cubase; it
+follows a rebind of `timelineToolSelect`. The choice is the user setting `timelineClipSizingMode` and is pushed into the
+clip lanes ([clips](clips.md#edge-sizing)). Like the snap toggle it is a Tab stop that a click never focuses, with the
+accent focus ring of `drawButtonBackground`; its screen-reader name is "Clip sizing, <full mode name>", and its tooltip
+starts "Clip sizing: <full mode name>", explains Option and ends with the Select key that steps it (`(1)` by default,
+`setStepKeyHint`). Test mode reads `sizingMode`, `glyph` and `fieldWidth` from its 1x1 child `timelineClipSizingState` (scenario
+`clip-sizing-field.yaml`);
+`ThemeSweepGlyphs` checks the glyphs in every theme.
 
 ## Range menu
 
