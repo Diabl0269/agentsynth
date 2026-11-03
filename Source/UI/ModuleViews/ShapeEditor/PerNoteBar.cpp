@@ -8,6 +8,11 @@ namespace synth::ui {
 namespace {
 using Mode = synth::CustomFilterPerNote::Mode;
 
+// Names the rule in one clause: a Pitch source is any Pitch output (Poly MIDI's, say), and audio alone carries none, so
+// an Oscillator with no Pitch cable gives the Filter nothing to take.
+constexpr const char* kNeedsPitchHint =
+    "Needs a Pitch cable: wire a Pitch source (like Poly MIDI) to the Filter's Pitch input. Audio alone carries none.";
+
 constexpr int kLabelWidth = 150;
 constexpr int kModeWidth = 300;
 constexpr int kEndLabelWidth = 48;
@@ -137,7 +142,7 @@ void PerNoteBar::updateHint(const CustomFilterPerNote& perNote) {
         const auto input = adapter_.pitchInput();
         const bool needsPitch = perNote.mode == Mode::ByHand || perNote.mode == Mode::ByPitch;
         if (needsPitch && input != PitchInput::Connected)
-            text = "Needs a Pitch cable: connect your Poly MIDI's Pitch to this Filter's Pitch input.";
+            text = juce::String(kNeedsPitchHint);
     }
     if (text.isNotEmpty() && hint_.getText() != text) {
         hint_.setText(text, juce::dontSendNotification);
