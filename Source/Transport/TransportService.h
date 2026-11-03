@@ -215,6 +215,9 @@ public:
         bool looping = false;
         double loopStartPpq = 0.0;
         double loopEndPpq = 0.0;
+        // Counts the locates the audio thread has applied; a change between two snapshots is a jump, not playback.
+        std::uint32_t locateCount = 0;
+        double lastLocateBeat = 0.0; // where the latest of them put the transport
     };
 
     // Consistent snapshot of the position at the start of the current block.
@@ -256,6 +259,8 @@ private:
     ConstantTempoMap tempoMap;
     double ppqPosition = 0.0;        // canonical position, in beats
     std::int64_t samplePosition = 0; // always consistent with ppqPosition under tempoMap
+    std::uint32_t locateCount = 0;   // LocateBeat commands applied so far (published in the snapshot)
+    double lastLocateBeat = 0.0;
     bool playing = false;
     bool looping = false;
     double loopStartPpq = 0.0;
@@ -307,6 +312,8 @@ private:
         std::atomic<bool> looping{false};
         std::atomic<double> loopStartPpq{0.0};
         std::atomic<double> loopEndPpq{4.0};
+        std::atomic<std::uint32_t> locateCount{0};
+        std::atomic<double> lastLocateBeat{0.0};
     };
     SharedPosition shared;
     std::atomic<std::uint32_t> sharedVersion{0}; // odd while a write is in flight

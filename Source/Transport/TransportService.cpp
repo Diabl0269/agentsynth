@@ -157,6 +157,8 @@ void TransportService::applyCommand(const Command& command) noexcept {
     case Command::Type::LocateBeat:
         ppqPosition = command.a;
         samplePosition = tempoMap.sampleFromBeat(ppqPosition);
+        ++locateCount;
+        lastLocateBeat = ppqPosition;
         break;
     case Command::Type::SetLoop:
         loopStartPpq = command.a;
@@ -239,6 +241,8 @@ void TransportService::publishSnapshot() noexcept {
     shared.looping.store(looping);
     shared.loopStartPpq.store(loopStartPpq);
     shared.loopEndPpq.store(loopEndPpq);
+    shared.locateCount.store(locateCount);
+    shared.lastLocateBeat.store(lastLocateBeat);
     sharedVersion.fetch_add(1); // even: write complete
 }
 
@@ -258,6 +262,8 @@ TransportService::PositionSnapshot TransportService::getPositionSnapshot() const
         out.looping = shared.looping.load();
         out.loopStartPpq = shared.loopStartPpq.load();
         out.loopEndPpq = shared.loopEndPpq.load();
+        out.locateCount = shared.locateCount.load();
+        out.lastLocateBeat = shared.lastLocateBeat.load();
         if (sharedVersion.load() == before)
             return out;
     }

@@ -5,6 +5,9 @@
 
 namespace synth::ui {
 
+// A locate (jump to a marker, a locator or the ruler) lands the transport on the target and the heard audio catches
+// up `latency` later; the line sits on the target meanwhile instead of being drawn that far before it.
+//
 // Keeps the latency-shifted playhead from jumping back early when a loop wraps. The transport position wraps as
 // soon as the block being rendered crosses the loop end, but what is heard is `latency` behind it, so a plain
 // shift would turn the line around while the sound is still `latency` short of the loop end.
@@ -19,6 +22,10 @@ public:
     bool isWrapped() const noexcept { return wrapped_; }
 
 private:
+    bool haveLocateCount_ = false;
+    std::uint32_t locateCount_ = 0;
+    bool holdingLocate_ = false;
+    double locateTargetPpq_ = 0.0;
     bool havePrevious_ = false;
     bool wrapped_ = false;
     double previousPpq_ = 0.0;
@@ -31,6 +38,18 @@ inline void PlayheadWrapCompensation::observe(const TransportService::PositionSn
     // Snapshots arrive from a 10 Hz poll and a 30 Hz frame timer, so a wrap can be seen up to one poll late.
     const double slackBeats = std::max(0.0, snapshot.bpm) / 60.0 * 0.15;
     const double window = std::max(0.0, latencyBeats) + slackBeats;
+
+    // A locate the transport applied: the line holds on its target until the sound reaches it. The first snapshot only
+    // sets the baseline, so opening on a transport that has located before holds nothing.
+    if (haveLocateCount_ && snapshot.locateCount != locateCount_) {
+        holdingLocate_ = true;
+        locateTargetPpq_ = snapshot.lastLocateBeat;
+        wrapped_ = false;
+    }
+    haveLocateCount_ = true;
+    locateCount_ = snapshot.locateCount;
+    if (!snapshot.playing || snapshot.ppq - latencyBeats >= locateTargetPpq_)
+        holdingLocate_ = false;
 
     const bool loopChanged = snapshot.loopStartPpq != loopStartPpq_ || snapshot.loopEndPpq != loopEndPpq_;
     const bool active = snapshot.playing && snapshot.looping && snapshot.loopEndPpq > snapshot.loopStartPpq;
@@ -61,6 +80,8 @@ inline double PlayheadWrapCompensation::drawnBeat(const TransportService::Positi
     if (!snapshot.playing)
         return std::max(0.0, snapshot.ppq);
     const double heard = snapshot.ppq - latencyBeats;
+    if (holdingLocate_ && heard < locateTargetPpq_)
+        return locateTargetPpq_;
     if (wrapped_ && heard < snapshot.loopStartPpq)
         return heard + (snapshot.loopEndPpq - snapshot.loopStartPpq);
     return std::max(0.0, heard);

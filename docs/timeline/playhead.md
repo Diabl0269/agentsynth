@@ -53,6 +53,12 @@ a locate (the position moving backwards or jumping ahead) and when the loop rang
 from the loop start never enters it. The follow-playhead path and the piano roll's local playhead read
 `getDrawnBeat()`, so they inherit it.
 
+**At a locate.** A jump while playing (Option+1/2 to a loop locator, a marker jump, a ruler click) puts the transport on
+its target, and the heard audio reaches it one output latency later. The snapshot carries `locateCount` (locates the audio
+thread has applied) and `lastLocateBeat`; when the count changes, `PlayheadWrapCompensation` holds the line exactly on
+`lastLocateBeat` until the heard beat reaches it, then plain latency drawing resumes. The hold also ends on stop, so the
+line is never drawn the latency before a marker the cursor was sent to.
+
 `outputLatencySeconds` comes from `AudioEngine::getOutputLatencySamples()` — the open output
 device's `getOutputLatencyInSamples()`, `0` in Hosted mode and `0` when no device is open, which is
 every headless test. It is report-only, exactly like `getGraphLatencySamples()`.

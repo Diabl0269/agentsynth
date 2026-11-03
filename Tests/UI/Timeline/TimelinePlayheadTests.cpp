@@ -317,6 +317,58 @@ TEST(TimelinePlayheadTest, StopOrLocateOrLoopChangeEndsTheWrappedState) {
     EXPECT_FALSE(wrap.isWrapped()) << "loop change";
 }
 
+// Regression test for FRO1412: a locate while playing put the
+// line the output latency before its target, since the latency shift was applied to the first block after the jump.
+// The line must sit exactly on the target, then carry on with the sound.
+TEST(TimelinePlayheadTest, ALocateWhilePlayingDrawsTheLineOnTheTargetAndThenFollowsTheSound) {
+    Fixture f;
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+    transport.play();
+    constexpr double kLatency = 0.05; // 0.1 beat at 120 BPM
+    const auto block = [&] {
+        transport.tick(512);
+        f.playhead.updateFromTransport(transport.getPositionSnapshot(), kLatency);
+    };
+    for (int i = 0; i < 20; ++i)
+        block();
+    ASSERT_GT(transport.getPositionSnapshot().ppq, 0.3);
+
+    ASSERT_TRUE(transport.locateBeat(8.0));
+    block(); // the audio thread applies it at the start of this block
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 8.0) << "the cursor is on the target, not the latency before it";
+    EXPECT_EQ(f.playhead.getLineX(), 800);
+
+    for (int i = 0; i < 30; ++i) {
+        const double before = f.playhead.getDrawnBeat();
+        block();
+        EXPECT_GE(f.playhead.getDrawnBeat(), before) << "block " << i << ": playback continues from the target";
+    }
+    const auto snap = transport.getPositionSnapshot();
+    EXPECT_GT(snap.ppq - kLatency * 2.0, 8.0);
+    EXPECT_NEAR(f.playhead.getDrawnBeat(), snap.ppq - kLatency * 2.0, 1e-9) << "once the sound catches up it is plain";
+}
+
+TEST(TimelinePlayheadTest, ALocateBackwardsAndOneOnAStoppedTransportDrawOnTheTargetToo) {
+    Fixture f;
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+    transport.play();
+    for (int i = 0; i < 400; ++i)
+        transport.tick(512);
+    f.playhead.updateFromTransport(transport.getPositionSnapshot(), 0.05); // seen playing before the jump
+    transport.locateBeat(1.0);
+    transport.tick(512);
+    f.playhead.updateFromTransport(transport.getPositionSnapshot(), 0.05);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 1.0);
+
+    transport.stop();
+    transport.locateBeat(3.0);
+    transport.tick(512);
+    f.playhead.updateFromTransport(transport.getPositionSnapshot(), 0.05);
+    EXPECT_DOUBLE_EQ(f.playhead.getDrawnBeat(), 3.0);
+}
+
 // A zoom changes the beat->pixel mapping, so the pixels that must be repainted are where the line
 // ACTUALLY WAS — not where its old beat maps to under the new zoom.
 TEST(TimelinePlayheadTest, ZoomWhilePlayingRepaintsStalePixels) {
