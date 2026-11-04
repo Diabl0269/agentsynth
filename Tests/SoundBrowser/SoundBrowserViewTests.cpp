@@ -79,14 +79,14 @@ TEST(SoundBrowserTextTest, EveryRowEndsWithItsLengthAndTheSpokenTextReadsTheSame
     };
     const Row rows[] = {
         {"loop with tempo", sound(SoundKind::Loop, 120.0, 4.0), "120 BPM " + dot + " 2 bars " + dot + " 4.0 s",
-         "dusty, loop, 120 BPM, 2 bars, 4.0 seconds, 1 of 3"},
+         "Dusty, loop, 120 BPM, 2 bars, 4.0 seconds, 1 of 3"},
         {"loop of one bar", sound(SoundKind::Loop, 120.0, 2.0), "120 BPM " + dot + " 1 bar " + dot + " 2.0 s",
-         "dusty, loop, 120 BPM, 1 bar, 2.0 seconds, 1 of 3"},
+         "Dusty, loop, 120 BPM, 1 bar, 2.0 seconds, 1 of 3"},
         {"loop under half a bar", sound(SoundKind::Loop, 120.0, 0.4), "120 BPM " + dot + " 0.4 s",
-         "dusty, loop, 120 BPM, 0.4 seconds, 1 of 3"},
-        {"loop with no tempo", sound(SoundKind::Loop, 0.0, 4.0), "4.0 s", "dusty, loop, 4.0 seconds, 1 of 3"},
-        {"one-shot", sound(SoundKind::OneShot, 0.0, 0.8), "0.8 s", "dusty, one-shot, 0.8 seconds, 1 of 3"},
-        {"instrument", sound(SoundKind::Instrument, 0.0, 0.0), "instrument", "dusty, instrument, 1 of 3"},
+         "Dusty, loop, 120 BPM, 0.4 seconds, 1 of 3"},
+        {"loop with no tempo", sound(SoundKind::Loop, 0.0, 4.0), "4.0 s", "Dusty, loop, 4.0 seconds, 1 of 3"},
+        {"one-shot", sound(SoundKind::OneShot, 0.0, 0.8), "0.8 s", "Dusty, one-shot, 0.8 seconds, 1 of 3"},
+        {"instrument", sound(SoundKind::Instrument, 0.0, 0.0), "instrument", "Dusty, instrument, 1 of 3"},
     };
     for (const auto& row : rows) {
         EXPECT_EQ(synth::ui::soundDetailText(row.entry), row.detail) << row.what;
@@ -95,7 +95,7 @@ TEST(SoundBrowserTextTest, EveryRowEndsWithItsLengthAndTheSpokenTextReadsTheSame
     auto keyed = sound(SoundKind::Loop, 120.0, 4.0);
     keyed.key = "A minor";
     EXPECT_EQ(synth::ui::describeSoundForAccessibility(keyed, 1, 3),
-              "dusty, loop, 120 BPM, 2 bars, 4.0 seconds, A minor, 1 of 3");
+              "Dusty, loop, 120 BPM, 2 bars, 4.0 seconds, A minor, 1 of 3");
 }
 
 TEST(SoundBrowserTextTest, ARowDetailDropsPartsFromTheLeftInsteadOfCrowdingTheName) {
@@ -189,7 +189,7 @@ TEST(SoundBrowserViewTest, FKeyFavouritesTheSelectedSoundAndSpeaksIt) {
     v.showLocation("core", "Drums", 0);
     f.settle();
     v.selectRow(rowIndex(v, "snare_tight"));
-    EXPECT_NE(v.getAccessibilityValueText().indexOf("snare_tight"), -1);
+    EXPECT_NE(v.getAccessibilityValueText().indexOf("Snare_tight"), -1);
     EXPECT_TRUE(v.keyPressed(juce::KeyPress('f', juce::ModifierKeys(), 'f')));
     ASSERT_EQ(f.lists.favourites().size(), 1);
     EXPECT_TRUE(f.lists.isFavourite(v.getRows()[(size_t)v.getSelectedIndex()].entry->path));

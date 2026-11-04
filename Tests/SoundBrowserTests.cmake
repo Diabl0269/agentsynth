@@ -13,6 +13,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundBrowserViewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundBrowserLayoutTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundBrowserRowIconTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundBrowserDisplayNameTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundDragTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFilterTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundFilterViewTests.cpp

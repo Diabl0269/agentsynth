@@ -10,6 +10,11 @@
 
 namespace synth::ui {
 
+/** What a name is shown as: a name with no upper-case letter that starts with a lower-case one gets a capital first
+ *  letter ("crow" -> "Crow", "kick-01" -> "Kick-01"); "iPhone", "808 kick" and "Wolf" stay. Display only: search, sort,
+ *  keys, paths and the rename editor use the file's own name. */
+juce::String displayName(const juce::String& name);
+
 /** "0.8 s", "12 s", "1:05". */
 juce::String formatSoundLength(double seconds);
 

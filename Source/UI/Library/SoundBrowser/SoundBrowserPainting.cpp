@@ -62,6 +62,18 @@ std::optional<SoundRowIcon> iconOf(const SoundBrowserComponent::Row& row) {
 
 } // namespace
 
+juce::String SoundBrowserComponent::shownName(const Row& row) {
+    switch (row.kind) {
+    case RowKind::Sound:
+    case RowKind::Folder:
+    case RowKind::Place:
+    case RowKind::GetPack:
+        return displayName(row.text);
+    default:
+        return row.text;
+    }
+}
+
 void SoundBrowserComponent::layoutPathParts() {
     pathParts_ = getPathParts();
     if (showsFlatResults())
@@ -162,7 +174,7 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
             nameRight -= 14;
         }
         const auto query = isSearchActive() ? query_.trim() : juce::String();
-        drawSearchHighlightedText(g, row.text, query,
+        drawSearchHighlightedText(g, shownName(row), query,
                                   {area.getX() + kSoundRowTextLeft, area.getY(),
                                    juce::jmax(0, nameRight - kSoundRowTextLeft), area.getHeight()},
                                   nameFont, c.textPrimary, c.accent.withAlpha(0.28f), c.accent);
@@ -200,7 +212,7 @@ void SoundBrowserComponent::paintPlaceRow(juce::Graphics& g, const Row& row, juc
                juce::Justification::centredRight);
     g.setColour(c.textPrimary.withAlpha(alpha));
     g.setFont(juce::Font(juce::FontOptions(14.0f)));
-    g.drawText(row.text, area.getX() + kSoundRowTextLeft, area.getY(),
+    g.drawText(shownName(row), area.getX() + kSoundRowTextLeft, area.getY(),
                juce::jmax(0, countRight - detailWidth - 6 - kSoundRowTextLeft), area.getHeight(),
                juce::Justification::centredLeft, true);
 }
@@ -259,7 +271,7 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
     const auto& row = rows_[(size_t)selected_];
     g.setColour(c.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(14.0f)));
-    g.drawText(row.text, nameArea, juce::Justification::centredLeft, true);
+    g.drawText(shownName(row), nameArea, juce::Justification::centredLeft, true);
     g.setColour(c.textMuted);
     g.setFont(juce::Font(juce::FontOptions(11.5f)));
     juce::String sub;
@@ -286,7 +298,7 @@ void SoundBrowserComponent::paintCompactName(juce::Graphics& g) {
     const bool have = selected_ >= 0 && selected_ < (int)rows_.size() && rows_[(size_t)selected_].navigable();
     g.setColour(have ? c.textPrimary : c.textMuted);
     g.setFont(juce::Font(juce::FontOptions(13.0f)));
-    g.drawText(have ? rows_[(size_t)selected_].text : juce::String("Select a sound"), area,
+    g.drawText(have ? shownName(rows_[(size_t)selected_]) : juce::String("Select a sound"), area,
                juce::Justification::centredLeft, true);
 }
 

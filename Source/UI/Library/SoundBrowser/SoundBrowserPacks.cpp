@@ -168,8 +168,8 @@ bool SoundBrowserComponent::packButtonHit(int index, juce::Point<int> p) const {
 juce::String SoundBrowserComponent::packTooltip(const Row& row) const {
     const auto size = synth::soundpacks::formatPackSize(row.bytes);
     if (row.busy)
-        return "Downloading " + row.text + (row.cancellable ? ". Press Delete or click Cancel to stop." : ".");
-    return "Download " + row.text + " (" + size + ")" + (row.viaInstrument ? " to use this sound" : "");
+        return "Downloading " + shownName(row) + (row.cancellable ? ". Press Delete or click Cancel to stop." : ".");
+    return "Download " + shownName(row) + " (" + size + ")" + (row.viaInstrument ? " to use this sound" : "");
 }
 
 bool SoundBrowserComponent::activateSelectedAction() {
@@ -205,7 +205,7 @@ void SoundBrowserComponent::paintPackRow(juce::Graphics& g, const Row& row, int 
                juce::Justification::centredRight);
     g.setColour(c.textPrimary.withAlpha(kGreyedAlpha));
     g.setFont(juce::Font(juce::FontOptions(14.0f)));
-    g.drawText(row.text, area.getX() + kSoundRowTextLeft, area.getY(),
+    g.drawText(shownName(row), area.getX() + kSoundRowTextLeft, area.getY(),
                juce::jmax(0, detailRight - detailWidth - 8 - kSoundRowTextLeft), area.getHeight(),
                juce::Justification::centredLeft, true);
     if (showButton) {

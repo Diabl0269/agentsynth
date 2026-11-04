@@ -80,6 +80,9 @@ public:
         bool navigable() const { return kind != RowKind::Hint; }
     };
 
+    /** The name a row shows: sound, folder, place and pack names get `displayName`; row.text stays the raw name. */
+    static juce::String shownName(const Row& row);
+
     struct PathPart {
         juce::String label, placeId, folder;
         juce::Rectangle<int> bounds;

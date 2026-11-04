@@ -43,11 +43,11 @@ juce::String SoundBrowserComponent::tooltipForRow(int index) const {
     if (row.kind == RowKind::AddFolder)
         return "Add a folder of sounds. You can also drag a folder here from " + fileManagerName() + ".";
     if (row.missing)
-        return row.text + " was not found. It comes back when its drive is plugged in.";
+        return shownName(row) + " was not found. It comes back when its drive is plugged in.";
     if (row.userFolder)
-        return "Open " + row.text + ". Right-click, or press Shift+F10, for Rename, Show in " + fileManagerName() +
-               ", Scan again and Remove.";
-    return "Open " + row.text;
+        return "Open " + shownName(row) + ". Right-click, or press Shift+F10, for Rename, Show in " +
+               fileManagerName() + ", Scan again and Remove.";
+    return "Open " + shownName(row);
 }
 
 void SoundBrowserComponent::mouseMove(const juce::MouseEvent& e) {
