@@ -254,9 +254,18 @@ TEST(StereoDeclaration, MuteAndCVClearHoldForEveryDualIOCapableModuleInBothState
                     mb->setBypassed(bypassed);
                     fill(buffer);
                     mb->processBlock(buffer, midi);
-                    for (const auto& t : mb->getModulationTargets()) {
-                        ASSERT_GE(t.channelIndex, 2) << "an inferred stereo pair owns ch0/ch1, so a CV jack "
-                                                        "cannot sit below ch2";
+                    // A source with no audio input (the Drum Kit) owns ch0/ch1 on the output side only: its
+                    // knob-only CV on ch0 is read before the block writes its audio there.
+                    const auto targets = mb->getModulationTargets();
+                    bool takesAudio = false;
+                    for (int ch = 0; ch < mb->getTotalNumInputChannels(); ++ch)
+                        takesAudio = takesAudio || std::none_of(targets.begin(), targets.end(), [ch](const auto& t) {
+                                         return t.channelIndex == ch && t.knobOnly;
+                                     });
+                    for (const auto& t : targets) {
+                        if (takesAudio)
+                            ASSERT_GE(t.channelIndex, 2) << "an inferred stereo pair owns ch0/ch1, so a CV jack "
+                                                            "cannot sit below ch2";
                         if (t.channelIndex < channels)
                             EXPECT_LT(rmsOf(buffer, t.channelIndex), 1.0e-6f)
                                 << "CV channel " << t.channelIndex << " (" << t.name

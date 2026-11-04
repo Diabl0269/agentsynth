@@ -241,13 +241,12 @@ public:
      *  module at once; the parameter-listener path is asynchronous. Message thread only. */
     void applyDualIOLayoutChange();
 
-    /** Serum-style modulation drop: the visible knob under `localPoint`, reported as the input
-     *  Port its CV jack would be. `index` is the jack's RAW channel, not a visible jack index.
-     *
-     *  Deliberately NOT folded into getPortForPoint — that one also decides what starts a drag
-     *  on mouse-down, and a knob has to keep starting a value drag there, not a cable. This is
-     *  only consulted when a cable is already in flight and no real jack was hit. */
+    /** Serum-style modulation drop: the visible knob under `localPoint` as the input Port its CV jack would be (`index`
+     *  is the RAW channel). Not part of getPortForPoint: a press on a knob must keep starting a value drag, so this
+     *  is consulted only while a cable is in flight and no real jack was hit. */
     std::optional<Port> getModTargetPortForPoint(juce::Point<int> localPoint) const;
+    /** Why the shown knob under `localPoint` refuses a mod cable (ModuleBase::modulationRefusal), or empty. */
+    juce::String getModRefusalForPoint(juce::Point<int> localPoint) const;
 
     /** Highlights a knob as the pending modulation drop target (-1 clears); true when the highlight changed. */
     bool setModDropTargetChannel(int channelIndex);

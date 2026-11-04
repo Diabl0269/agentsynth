@@ -22,6 +22,7 @@ class MalletModule
     , public synth::VoiceCountSource {
 public:
     static constexpr int kNumChannels = 2;
+    static constexpr int kLevelCvChannel = 0; // the Level knob's cable; no gutter jack
     static constexpr float kTremoloHz = 5.5f;
 
     MalletModule();
@@ -33,6 +34,15 @@ public:
         return isDualIO() ? (i == 1 ? "Audio R" : "Audio L") : "Audio";
     }
     int getVisibleInputPortCount() const override { return 0; }
+    juce::String getInputPortLabel(int) const override { return "Level"; }
+    LogicalPort mapInputChannel(int raw) const override {
+        auto port = ModuleBase::mapInputChannel(raw);
+        port.role = PortRole::ModCV;
+        return port;
+    }
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Level", kLevelCvChannel, "level", true}};
+    }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }

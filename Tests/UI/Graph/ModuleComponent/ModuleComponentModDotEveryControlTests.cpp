@@ -39,15 +39,14 @@ const std::set<std::pair<juce::String, juce::String>> kControlsWithoutCable = []
     };
     // Read once when a note starts, so a continuous input would have nothing to modulate.
     add("Oscillator", {"phase", "randomPhase"});
-    // A whole number of voices, not a plain amount: its own channel layout decision on this module.
+    // A whole number of voices, not a plain amount: a cable dropped on it is refused with a status message saying so.
     add("Wavetable", {"unison"});
-    // These modules have no inputs at all, and every setting but Level is read when a note or a drum starts. A first
-    // input would also change what the AI catalog says about them, so Level waits for its own decision.
-    add("Drum Kit", {"level"});
+    // Read when a note starts (Release when it ends). Level takes a cable; Body and Tremolo are live but take none:
+    // each would add a channel of its own, and only Level was decided.
     add("Pluck", {"tune", "fine", "decay", "decayTrack", "brightness", "pickPosition", "pickHardness", "body",
-                  "stiffness", "release", "velBright", "level"});
-    add("Mallet", {"tune", "fine", "decay", "damping", "brightness", "hardness", "resonator", "tremolo", "release",
-                   "velBright", "level"});
+                  "stiffness", "release", "velBright"});
+    add("Mallet",
+        {"tune", "fine", "decay", "damping", "brightness", "hardness", "resonator", "tremolo", "release", "velBright"});
     // Read per step by the sequencer's own clock, not continuously.
     for (const auto* sequencer : {"Sequencer", "Poly Sequencer"})
         add(sequencer, {"bpm", "transpose", "gate", "velocity", "chance"});

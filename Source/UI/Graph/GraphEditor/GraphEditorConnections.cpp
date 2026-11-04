@@ -422,6 +422,9 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         // for a cable coming from an output — a mod source drives a destination, not the reverse.
         if (!port && !dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule) {
             port = comp->getModTargetPortForPoint(localPos);
+            if (!port)
+                if (const auto why = comp->getModRefusalForPoint(localPos); why.isNotEmpty())
+                    refusal = why;
             if (port && port->index <= ModuleComponent::kUnboundHostedKnobChannelBase)
                 port = claimHostedModSlot(*comp, *port, onStatusMessage);
             // A knob names its CV jack by RAW channel (the ModulationTarget's channelIndex), while

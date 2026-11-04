@@ -22,7 +22,7 @@ juce::AudioParameterFloat* MalletModule::addFloat(const char* id, const char* na
 }
 
 MalletModule::MalletModule()
-    : ModuleBase("Mallet", 0, kNumChannels, StereoAudio::Declared) {
+    : ModuleBase("Mallet", 1, kNumChannels, StereoAudio::Declared) {
     addParameter(materialParam = new juce::AudioParameterChoice(
                      "material", "Material",
                      juce::StringArray{"Marimba", "Vibraphone", "Xylophone", "Glockenspiel", "Bell"}, 0));
@@ -114,6 +114,9 @@ void MalletModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     if (buffer.getNumChannels() == 0 || numSamples <= 0)
         return;
 
+    // The Level cable arrives on channel 0, which the render overwrites: read it before anything writes the buffer.
+    const float levelCv = blockCV(buffer, kLevelCvChannel);
+
     // A pure source has no dry signal to pass through, so bypass and mute both clear. They stay two
     // branches, and either one cuts every bar that is still ringing.
     if (isBypassed()) {
@@ -127,7 +130,7 @@ void MalletModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         return;
     }
 
-    smoothedLevel_.setTargetValue(levelParam->get());
+    smoothedLevel_.setTargetValue(modulateNormalised(*levelParam, levelParam->get(), levelCv));
     smoothedTremolo_.setTargetValue(tremoloParam->get());
     float* left = buffer.getWritePointer(0);
     float* right = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;

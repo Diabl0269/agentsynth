@@ -197,6 +197,11 @@ Poly MIDI's Poly Out carries CV, so the Oscillator's MIDI input refuses it) make
 reports the reason through the status bar (`reportStatusMessage`). Nothing is said when the cable lands somewhere else
 on the same release (a collapsed macro's card, a plugin's knob picker).
 
+A knob that takes no mod cable on purpose says why the same way: a module names it in
+`ModuleBase::modulationRefusal(paramId)`, and a cable released on that knob (found by
+`ModuleComponent::getModRefusalForPoint` through the card's learnable registry) makes no cable and shows the reason.
+The Wavetable's Unison is the one today: "Unison takes no mod cable: it sets a whole number of voices".
+
 ## Hover
 
 `mouseMove` resolves the cable under the cursor and stores only its `CableId`. The canvas repaints

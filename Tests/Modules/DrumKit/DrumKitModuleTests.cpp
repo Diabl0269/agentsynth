@@ -95,7 +95,7 @@ const std::vector<MappedNote>& mappedNotes() {
 
 } // namespace
 
-TEST(DrumKitModule, IsRegisteredAsAMidiInstrumentWithAStereoPairAndNoInputs) {
+TEST(DrumKitModule, IsRegisteredAsAMidiInstrumentWithAStereoPairAndOnlyTheLevelCableIn) {
     auto module = synth::AIStateMapper::createModule("Drum Kit");
     ASSERT_NE(module, nullptr);
     auto* kit = dynamic_cast<DrumKitModule*>(module.get());
@@ -104,7 +104,7 @@ TEST(DrumKitModule, IsRegisteredAsAMidiInstrumentWithAStereoPairAndNoInputs) {
     EXPECT_TRUE(isMidiInstrumentType(ModuleType::DrumKit));
     EXPECT_TRUE(kit->acceptsMidi());
     EXPECT_FALSE(kit->producesMidi());
-    EXPECT_EQ(kit->getTotalNumInputChannels(), 0);
+    EXPECT_EQ(kit->getTotalNumInputChannels(), 1); // the Level knob's mod cable, no jack
     EXPECT_EQ(kit->getTotalNumOutputChannels(), 2);
     EXPECT_EQ(synth::AIStateMapper::getFactoryTypeName(kit), "Drum Kit");
 }

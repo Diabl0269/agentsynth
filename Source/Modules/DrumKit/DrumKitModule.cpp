@@ -44,7 +44,7 @@ juce::AudioParameterFloat* DrumKitModule::addFloat(const char* id, const char* n
 }
 
 DrumKitModule::DrumKitModule()
-    : ModuleBase("Drum Kit", 0, kNumChannels, StereoAudio::Declared) {
+    : ModuleBase("Drum Kit", 1, kNumChannels, StereoAudio::Declared) {
     // Tune is in semitones around the drum's own pitch; decay is the time the drum takes to fall 60 dB. These are the
     // group parameters: each one writes its value to its group's pads (see addGroupLink).
     using P = PadParam;
@@ -129,6 +129,9 @@ void DrumKitModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::M
     if (buffer.getNumChannels() == 0 || numSamples <= 0)
         return;
 
+    // The Level cable arrives on channel 0, which the render overwrites: read it before anything writes the buffer.
+    const float levelCv = blockCV(buffer, kLevelCvChannel);
+
     // A pure source has no dry signal to pass through, so bypass and mute both clear. They stay two
     // branches, and either one cuts every drum that is still ringing.
     if (isBypassed()) {
@@ -144,7 +147,7 @@ void DrumKitModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::M
         return;
     }
 
-    smoothedLevel_.setTargetValue(levelParam->get());
+    smoothedLevel_.setTargetValue(modulateNormalised(*levelParam, levelParam->get(), levelCv));
     acquireKit();
     acquirePads();
     pollGroupLinks();

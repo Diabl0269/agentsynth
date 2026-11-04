@@ -1,0 +1,128 @@
+# The Level knob of Drum Kit, Pluck and Mallet takes a modulation cable; the Wavetable's Unison refuses one out loud.
+#
+# What a user does: adds an instrument and an LFO from the library (Cmd+F), drags the LFO output onto the
+# instrument's Level, and the card lists the cable. Then adds a Wavetable and an LFO and drops the LFO output on
+# Unison: nothing connects and the status bar says "Unison takes no mod cable: it sets a whole number of voices".
+# The app restarts between modules so each card has the canvas to itself. The sound of a modulated Level is covered
+# by InstrumentLevelModCableTests (offline render).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: instrument-level-mod-cable
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "pluck"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Pluck > Level"}
+  - wait: {}
+  - expect: {id: "card:Pluck", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Pluck", name: "Pluck-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "mallet"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Mallet > Level"}
+  - wait: {}
+  - expect: {id: "card:Mallet", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Mallet", name: "Mallet-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "drum kit"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Drum Kit > Level"}
+  - wait: {}
+  - expect: {id: "card:Drum Kit", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Drum Kit", name: "Drum-Kit-Level"}
+  - restart: {}
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "wavetable"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: "card:Wavetable > cardTabStrip", x: 10}   # the Tune tab, already shown: focuses the strip
+  - key: {keys: right}                                      # the Unison tab
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Wavetable > Unison"}
+  - wait: {}
+  - screenshot: {id: window, name: "Wavetable-Unison-refused"}

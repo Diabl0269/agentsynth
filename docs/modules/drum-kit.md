@@ -62,7 +62,8 @@ of restarting each other, and the second one starts from a fresh voice instead o
 The card is 280 px wide. From the top:
 
 1. The kit picker.
-2. The master Level.
+2. The master Level. It takes a mod cable (an LFO or envelope dropped on the knob moves the whole kit's level live),
+   on the module's one input channel, which has no gutter jack.
 3. The **Pads** stepper:
    - "-" and "+", or Up/Down, Left/Right, + and -, step it by four.
    - Typing a number and Return sets it, rounded up to a multiple of four.
