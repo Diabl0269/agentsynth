@@ -1,6 +1,7 @@
 // Concern: the track header's "Show module" button (the pointer and Tab twin of Ctrl+E).
 #include "UI/Timeline/TrackShowModuleButton.h"
 
+#include "UI/Layout/ActionGlyphs.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -8,7 +9,6 @@ namespace synth::ui {
 
 namespace {
 constexpr float kGlyphSize = 12.0f;
-constexpr float kRingThickness = 1.4f;
 } // namespace
 
 // Focusable for the keyboard path, but a click must not pull focus off the row: the row's own focus is what
@@ -35,8 +35,8 @@ void TrackShowModuleButton::setTexts(const juce::String& title, const juce::Stri
     repaint();
 }
 
-// A target: a ring with four ticks reaching out of it, drawn as paths in the theme's text colour so it follows
-// every theme with no icon asset.
+// The shared show-on-canvas glyph (UI/Layout/ActionGlyphs.h), in the theme's text colour so it follows every theme
+// with no icon asset.
 void TrackShowModuleButton::paintButton(juce::Graphics& g, bool highlighted, bool down) {
     const auto bounds = getLocalBounds().toFloat();
     const auto& colors = synth::theme::themeOf(*this).colors;
@@ -44,15 +44,8 @@ void TrackShowModuleButton::paintButton(juce::Graphics& g, bool highlighted, boo
         g.setColour(colors.textPrimary.withAlpha(down ? 0.18f : 0.1f));
         g.fillRoundedRectangle(bounds, 3.0f);
     }
-    const auto glyph = juce::Rectangle<float>(kGlyphSize, kGlyphSize).withCentre(bounds.getCentre());
-    const auto centre = glyph.getCentre();
-    const float radius = kGlyphSize * 0.28f;
-    const float tick = kGlyphSize * 0.5f;
-    g.setColour(highlighted ? colors.textPrimary : colors.textMuted);
-    g.drawEllipse(glyph.withSizeKeepingCentre(radius * 2.0f, radius * 2.0f), kRingThickness);
-    for (const auto d :
-         {juce::Point<float>(1, 0), juce::Point<float>(-1, 0), juce::Point<float>(0, 1), juce::Point<float>(0, -1)})
-        g.drawLine({centre + d * (radius + 1.0f), centre + d * tick}, kRingThickness);
+    paintShowOnCanvasGlyph(g, juce::Rectangle<float>(kGlyphSize, kGlyphSize).withCentre(bounds.getCentre()),
+                           highlighted ? colors.textPrimary : colors.textMuted);
 
     synth::ui::paintFocusRing(g, bounds, *this, 3.0f);
 }

@@ -17,7 +17,7 @@ const LaneControlInfo kInfos[] = {
     {LaneControl::Mute, "mute", "Mute", "Mute this lane"},
     {LaneControl::Duplicate, "duplicate", "Duplicate", "Copy this lane below it, with its modulators"},
     {LaneControl::MoveToTrack, "moveToTrack", "Move to track", "Move this lane to another track"},
-    {LaneControl::ShowInCanvas, "showInCanvas", "Show in canvas", "Show the module on the canvas"},
+    {LaneControl::ShowInCanvas, "showInCanvas", "Show on canvas", "Show the module on the canvas"},
     {LaneControl::CreateCustomLfo, "createCustomLfo", "Create custom LFO", "Turn the selected range into an LFO"},
     {LaneControl::Remove, "remove", "Remove lane", "Remove this lane"},
 };

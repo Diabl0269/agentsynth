@@ -7,7 +7,7 @@ A lane row or a mod lane row can be made taller or shorter on its own (drag the 
 
 - **The catalogue** (`LaneControls.h`) is the actions the lane menus already have, in this order. Automation lane: Read /
   Write, Add mod, Change parameter, Mute, Duplicate, Move to track, Create custom LFO, Remove lane. Mod lane: Change
-  source, Show in canvas, Remove modulator. Each chip runs the menu item of the same name (`applyMenuChoice`), so the
+  source, Show on canvas, Remove modulator. Each chip runs the menu item of the same name (`applyMenuChoice`), so the
   undo steps, pickers and test hooks are the menu's own; Read / Write opens a menu of the five modes and Move to track a
   menu of the other tracks beside the chip. **Mute** is the record mode Off and puts the mode it replaced back (Read for
   a lane that was already Off); its chip reads as pressed while the lane is Off. A mod lane has no Mute: a routing cannot
@@ -21,6 +21,10 @@ A lane row or a mod lane row can be made taller or shorter on its own (drag the 
 - **Names**: the accessible name is the control's name ("Read / Write", "Remove modulator" on a mod lane), the tooltip
   "Name: what it does" (Read / Write adds the current mode). Chips are Tab stops with the accent ring; Return and Space
   press; every other key (Up/Down, Cmd+Alt+Up/Down) bubbles to the header. A right-click on a chip opens the lane menu.
+- **Show on canvas** has one icon everywhere it appears: the ring with four ticks of the track header's, the mixer's and the
+  drum pad's button, drawn by the one painter `paintShowOnCanvasGlyph` (`Source/UI/Layout/ActionGlyphs.h`). A change of
+  that icon is one edit; `ActionGlyphsTests.cpp` fails if a surface draws its own. The canvas "aim at a card" glyph
+  (`ModDotGlyph::Crosshair`, "Pick on canvas") looks alike but means something else, so it stays its own drawing.
 - **Replace Module**: Cmd+Alt+R (Ctrl+Alt+R off the Mac) swaps what the lane is about, in the timeline. With a
   modulator row focused it opens the row's Change source picker (the name button's own); with a lane header focused,
   the lane's Change parameter picker. The header and row leave the chord to the app, which asks the lane panel

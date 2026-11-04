@@ -92,7 +92,7 @@ edit its last statement. Every control is a Tab stop with a title and tooltip ("
 
 The bottom line of a lane header (and the title line of a mod lane row) carries a strip of small icon buttons, each one
 an action of the lane menu (Read / Write, Add mod, Change parameter, Mute, Duplicate, Move to track, Create custom LFO,
-Remove lane; on a mod lane Change source, Show in canvas, Remove modulator), then a "+" button. The set shown is the
+Remove lane; on a mod lane Change source, Show on canvas, Remove modulator), then a "+" button. The set shown is the
 user's, one per lane kind, kept in the user settings; the rest are listed in the "+" row, and Edit controls opens a tray
 under the header to show, hide and reorder them. Everything about them is in
 [`lane-controls.md`](lane-controls.md); the right-click menu is unchanged.

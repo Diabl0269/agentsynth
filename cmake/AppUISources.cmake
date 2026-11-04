@@ -336,6 +336,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/ExitEnterRowSlots.h
     Source/UI/Layout/FocusRing.h
     Source/UI/Layout/FocusRing.cpp
+    Source/UI/Layout/ActionGlyphs.h
+    Source/UI/Layout/ActionGlyphs.cpp
     Source/UI/Layout/KeyRing.h
     Source/UI/Layout/KeyRing.cpp
     Source/UI/Layout/TooltipHelpHandler.h
