@@ -31,6 +31,8 @@ add_library(Core STATIC
     Source/UI/Skipped.cpp
     Source/UI/Ok.cpp
     Source/UI/AddedLater.cpp
+    Source/UI/C.cpp
+    Source/UI/D.cpp
 )
 synth_enable_unity(Core)
 target_sources(Core PRIVATE Source/UI/Late.cpp)
@@ -46,6 +48,10 @@ printf 'namespace synth::ui {\nnamespace {\nusing Id = int;\nint twice(int v) { 
 printf 'namespace synth::ui {\nnamespace {\nusing Id = int;\nint twice(float v) { int kLocal = 0; return int(v) + kLocal; }\n}\nconstexpr int kPublic = 2;\n}\n' >"$ROOT/Source/UI/AddedLater.cpp"
 printf 'namespace {\nconstexpr float kGlyphSize = 1.0f;\n}\n' >"$ROOT/Source/UI/Late.cpp"
 
+# The shape from the FRO1496 Windows failure: a named namespace wrapping an anonymous one.
+printf 'namespace a::b {\nnamespace {\nconstexpr float k = 1;\n}\n}\n' >"$ROOT/Source/UI/C.cpp"
+printf 'namespace a::b {\nnamespace {\nconstexpr float k = 2;\n}\n}\n' >"$ROOT/Source/UI/D.cpp"
+
 out="$(guard 2>&1)"
 check "a clash fails" test $? -ne 0
 check "the failure names the constant" grep -q "synth::ui::(anon)::kGlyphSize" <<<"$out"
@@ -54,11 +60,13 @@ check "the struct clash is found too" grep -q "synth::ui::(anon)::Cell" <<<"$out
 check "an excluded file is not named" lacks Skipped.cpp "$out"
 check "a source added after synth_enable_unity is not named" lacks Late.cpp "$out"
 check "identical aliases, overloads and named-namespace names pass" lacks 'Ok.cpp\|AddedLater.cpp' "$out"
-check "--list prints the clashes" test "$(guard --list | wc -l | tr -d ' ')" = 2
+check "a nested namespace a::b { namespace { k } } clash is found" grep -q "a::b::(anon)::k" <<<"$out"
+check "--list prints the clashes" test "$(guard --list | wc -l | tr -d ' ')" = 3
 
 printf '%s\n' \
     'synth::ui::(anon)::kGlyphSize | Source/UI/A.cpp | Source/UI/B.cpp | old' \
-    'synth::ui::(anon)::Cell | Source/UI/A.cpp | Source/UI/B.cpp | old' >"$TMP/baseline.txt"
+    'synth::ui::(anon)::Cell | Source/UI/A.cpp | Source/UI/B.cpp | old' \
+    'a::b::(anon)::k | Source/UI/C.cpp | Source/UI/D.cpp | old' >"$TMP/baseline.txt"
 guard >/dev/null 2>&1
 check "baselined clashes pass" test $? -eq 0
 
