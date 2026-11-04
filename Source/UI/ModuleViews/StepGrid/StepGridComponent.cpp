@@ -197,6 +197,7 @@ void StepGridComponent::syncPattern() {
     if (lastSeen_.customMask != seenMask_)
         syncSettings();
     refreshPitchRange();
+    syncOpenRandomizePanel();
     startGlide(from);
     repaint();
 }

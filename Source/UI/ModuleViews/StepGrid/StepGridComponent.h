@@ -198,6 +198,8 @@ private:
     void openRandomizePanel();
     void seedRandomizeRange();
     void saveRandomizeRange(int lo, int hi);
+    /** An undo, redo or preset changed the pattern: an open Randomize panel shows the range it now has. */
+    void syncOpenRandomizePanel();
     bool randomizeRangeTouched() const noexcept {
         return randomize_.minPitch != seededRange_.first || randomize_.maxPitch != seededRange_.second;
     }
@@ -218,6 +220,7 @@ private:
     StepGridTools tools_;
     sequencer_ops::RandomizeSettings randomize_;
     bool randomizeSeeded_ = false;
+    juce::Component::SafePointer<StepGridRandomizePanel> randomizePanel_; ///< the open Randomize popover, if any
     bool randomizeFromSaved_ = false; ///< randomize_'s range came from the pattern's saved range, not a seed.
     StepGridPageStrip pages_;
     LaneChipRow chips_;

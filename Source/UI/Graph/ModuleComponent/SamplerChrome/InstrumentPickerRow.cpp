@@ -6,6 +6,7 @@
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerPackOffer.h"
+#include "UI/Layout/CardCallOut.h"
 
 namespace synth::ui {
 
@@ -80,7 +81,7 @@ void InstrumentPickerRow::openPicker() {
         hook(std::move(popup));
         return;
     }
-    juce::CallOutBox::launchAsynchronously(std::move(popup), picker_.getScreenBounds(), nullptr);
+    synth::ui::launchCardCallOut(std::move(popup), picker_.getScreenBounds(), &picker_);
 }
 
 void InstrumentPickerRow::chooseInstrument(const InstrumentChoice& choice) {

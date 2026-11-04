@@ -267,6 +267,7 @@ set(APPUI_SOURCES
     Source/UI/Layout/HelperTooltip.h
     Source/UI/Layout/CalloutReveal.h
     Source/UI/Layout/CalloutReveal.cpp
+    Source/UI/Layout/CardCallOut.cpp
     Source/UI/Layout/SplitButton.h
     Source/UI/Layout/SplitButton.cpp
     Source/UI/Layout/SidePane/SidePane.h

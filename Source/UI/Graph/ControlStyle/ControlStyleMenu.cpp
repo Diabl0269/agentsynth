@@ -6,6 +6,7 @@
 #include "UI/Graph/ControlStyle/ControlStylePanel.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/CardCallOut.h"
 
 namespace synth {
 
@@ -78,7 +79,7 @@ void showControlStylePanel(ModuleComponent& card) {
     if (auto& launcher = launcherForTest())
         return launcher(std::move(panel));
     auto* raw = panel.get();
-    juce::CallOutBox::launchAsynchronously(std::move(panel), card.getScreenBounds(), nullptr);
+    synth::ui::launchCardCallOut(std::move(panel), card.getScreenBounds(), &card);
     juce::Component::SafePointer<synth::ui::ControlStylePanel> safePanel(raw);
     juce::MessageManager::callAsync([safePanel] {
         if (safePanel != nullptr)

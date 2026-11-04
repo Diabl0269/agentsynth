@@ -4,6 +4,7 @@
 // same undo step. Pitch tools work on the pitch a step plays (written plus Transpose, through the scale), so a
 // transposed pattern moves and fits as it sounds.
 #include "StepGridComponent.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <cmath>
 
@@ -172,6 +173,13 @@ void StepGridComponent::saveRandomizeRange(int lo, int hi) {
     commit(before);
 }
 
+void StepGridComponent::syncOpenRandomizePanel() {
+    if (randomizePanel_ == nullptr)
+        return;
+    seedRandomizeRange();
+    randomizePanel_->showRange(randomize_.minPitch, randomize_.maxPitch);
+}
+
 void StepGridComponent::openRandomizePanel() {
     seedRandomizeRange();
     auto panel = std::make_unique<StepGridRandomizePanel>(randomize_, scale_, kMiddleCOctave);
@@ -188,12 +196,12 @@ void StepGridComponent::openRandomizePanel() {
         if (safe != nullptr)
             safe->roll(settings);
     };
+    randomizePanel_ = panel.get();
     if (auto& hook = test_hooks::randomizePanelHookForTest()) {
         hook(std::move(panel));
         return;
     }
-    juce::CallOutBox::launchAsynchronously(std::move(panel), tools_.getButton(Tool::Randomize).getScreenBounds(),
-                                           nullptr);
+    launchCardCallOut(std::move(panel), tools_.getButton(Tool::Randomize).getScreenBounds(), this);
 }
 
 } // namespace synth::ui

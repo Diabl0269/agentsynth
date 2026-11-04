@@ -31,6 +31,7 @@ One rule per bullet; mechanism and history live in the linked docs.
 - **Never call `addAnimator`/`removeAnimator` outside `AnimationDriver`**: erasing an updater's entry while it runs that animator is a use after free. → [animation](../../docs/layout/animation.md#animationdriver)
 - **Every app-decided popup close goes through `PopupMotion::dismiss*`/`closeHostingWindow`**, never `exitModalState(0)`/`closeButtonPressed()`/`CallOutBox::dismiss()`. → [animation](../../docs/layout/animation.md#popup-windows)
 - **Anything that grows a macro hull or card calls `makeRoomFor` inside its undo record**; hidden collapsed members are never layout units. → [layout](../../docs/layout/layout.md#making-room-when-something-grows)
+- **A popover a card opens uses `launchCardCallOut`**, never `CallOutBox::launchAsynchronously`, so Cmd+Z and Space reach the app from it. → [shortcuts](../../docs/layout/card-popovers.md)
 - **Every drag-and-drop uses the shared `Layout/DragCursor.h`** (`followDragCursor`/`endDragCursor`); never set drag cursors by hand. → [animation](../../docs/layout/animation.md#drag-and-drop-cursor)
 - **Never write Audio Output / Rec Tap / Master x directly**: `GraphEditor::reflowOutputDock()` derives it. → [layout](../../docs/layout/layout.md#output-dock)
 - **A user Poly-pill click goes through `PolyChainController` as ONE undo step; programmatic sets never propagate.** → [modulation](../../docs/modules/modulation.md#the-poly-toggle)

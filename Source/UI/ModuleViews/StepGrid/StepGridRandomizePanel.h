@@ -35,6 +35,9 @@ public:
     /** The range, density or rhythm choice changed, so the owner can remember it for the session. */
     std::function<void(const sequencer_ops::RandomizeSettings&)> onSettingsChanged;
 
+    /** Shows `lo`..`hi` as the note range (an undo or redo of the saved range moved it); reports nothing. */
+    void showRange(int lo, int hi);
+
     void resized() override;
     void paint(juce::Graphics& g) override;
     bool keyPressed(const juce::KeyPress& key) override;

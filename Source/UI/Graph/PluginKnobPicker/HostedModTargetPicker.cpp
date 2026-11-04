@@ -8,6 +8,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/PortPanel/PortConnector.h"
+#include "UI/Layout/CardCallOut.h"
 #include <unordered_map>
 
 namespace synth::ui {
@@ -68,8 +69,7 @@ void showHostedModTargetPicker(GraphEditor& editor, ModuleComponent& card, juce:
         hook(std::move(picker));
         return;
     }
-    juce::CallOutBox::launchAsynchronously(std::move(picker), juce::Rectangle<int>(screenPos, screenPos).expanded(4),
-                                           nullptr);
+    synth::ui::launchCardCallOut(std::move(picker), juce::Rectangle<int>(screenPos, screenPos).expanded(4), &card);
 }
 
 namespace {
