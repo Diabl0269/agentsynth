@@ -37,8 +37,8 @@ void spliceSnapRows(std::vector<Entry>& rows) {
 template <class Entry>
 void spliceDrumRowLengthRows(std::vector<Entry>& rows) {
     std::vector<Entry> lengthRows;
-    for (const char* id :
-         {"drumMachineRowShorter", "drumMachineRowLonger", "drumMachineRowShorterBar", "drumMachineRowLongerBar"})
+    for (const char* id : {"drumMachineRowShorter", "drumMachineRowLonger", "drumMachineRowShorterBar",
+                           "drumMachineRowLongerBar", "drumMachineCarryRight", "drumMachineCarryLeft"})
         lengthRows.push_back({id, ShortcutCategory::DrumMachine});
     const auto at = std::find_if(rows.begin(), rows.end(),
                                  [](const Entry& row) { return std::string_view(row.id) == "drumMachinePlayClip"; });

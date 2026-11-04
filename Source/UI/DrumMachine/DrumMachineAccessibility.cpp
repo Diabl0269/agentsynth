@@ -3,7 +3,10 @@
 
 #include "DrumMachineComponent.h"
 
+#include "TestMode/TestModeStateSource.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
+#include <algorithm>
+#include <map>
 
 namespace synth::ui {
 
@@ -56,5 +59,44 @@ void DrumMachineComponent::focusGained(FocusChangeType) {
 }
 
 void DrumMachineComponent::focusLost(FocusChangeType) { repaint(); }
+
+// Test mode: a hidden child (id `drumMachineState`) reports `hitCount` (cells holding a hit), `hits` (each row's steps
+// as `pitch:step,step;...`) and `stroke` (a paint or erase stroke is in flight).
+class DrumMachineComponent::StateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit StateProbe(const DrumMachineComponent& owner)
+        : owner_(owner) {
+        setComponentID("drumMachineState");
+        setInterceptsMouseClicks(false, false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override {
+        std::map<int, std::vector<int>> byPitch;
+        for (const auto& [key, hits] : owner_.cells_)
+            byPitch[static_cast<int>(key / 1000000)].push_back(static_cast<int>(key % 1000000));
+        juce::StringArray rows;
+        for (auto& [pitch, steps] : byPitch) {
+            std::sort(steps.begin(), steps.end());
+            juce::StringArray list;
+            for (const int step : steps)
+                list.add(juce::String(step));
+            rows.add(juce::String(pitch) + ":" + list.joinIntoString(","));
+        }
+        into.setProperty("hitCount", static_cast<int>(owner_.cells_.size()));
+        into.setProperty("hits", rows.joinIntoString(";"));
+        into.setProperty("stroke", owner_.gesture_.kind == Gesture::Kind::Stroke);
+    }
+
+private:
+    const DrumMachineComponent& owner_;
+};
+
+void DrumMachineComponent::attachStateProbe() {
+    stateProbe_ = std::make_unique<StateProbe>(*this);
+    addChildComponent(*stateProbe_);
+    stateProbe_->setBounds(0, 0, 1, 1);
+}
 
 } // namespace synth::ui

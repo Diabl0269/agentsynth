@@ -20,6 +20,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <optional>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -52,6 +53,7 @@ public:
     static constexpr int kRowHeight = 24;
     static constexpr int kVelocityDragThresholdPx = 3;
     static constexpr double kVelocityPerPixel = 1.5;
+    static constexpr double kStrokeAuditionGapMs = 40.0;
     static constexpr double kHitMotionMs = 110.0;
     static constexpr double kFlashMs = 120.0;
     static constexpr double kRowMotionMs = 160.0;
@@ -295,7 +297,7 @@ private:
         float to = 1.0f;
     };
     struct Gesture {
-        enum class Kind { None, PendingHit, Velocity, EdgeDrag };
+        enum class Kind { None, PendingHit, Velocity, EdgeDrag, Stroke };
         Kind kind = Kind::None;
         Cell cell;
         int pitch = 0;
@@ -305,7 +307,15 @@ private:
         bool shift = false;
         int previewLength = 0; ///< an edge drag: the length it shows now, committed as is
         int startLength = 0;
+        int startX = 0;
+        bool erase = false;                           ///< a stroke: removes the hits it passes (else adds)
+        int strokeVelocity = 0;                       ///< a stroke: the loudness of the hits it adds
+        juce::Point<float> lastPos;                   ///< a stroke: the last pointer sample
+        double lastAuditionMs = 0.0;                  ///< a stroke: when it last auditioned
+        std::vector<std::pair<int, int>> strokeCells; ///< a stroke: (pitch, step) in the order passed
+        std::set<drumgrid::CellKey> strokeKeys;
     };
+    class StateProbe;
     struct EdgeSlide {
         double from = 0.0;
         double to = 0.0;
@@ -440,6 +450,18 @@ private:
     void endGesture(bool commit);
 
     // DrumMachineAccessibility.cpp
+    void attachStateProbe();
+
+    // DrumMachineStroke.cpp
+    void beginStroke(const Cell& first, bool erase, int velocity, juce::Point<float> pos);
+    void extendStroke(juce::Point<float> pos);
+    void visitStrokeCell(const Cell& cell);
+    void commitStroke(const Gesture& stroke);
+    void cancelStroke(const Gesture& stroke);
+    bool carryFocus(int dStep);
+    void paintStrokeOutline(juce::Graphics& g, juce::Rectangle<float> area, float radius) const;
+
+    // DrumMachineAccessibility.cpp
     juce::String describeHitSettings(int pitch, int step) const;
     juce::String describeRowSettings(int pitch) const;
 
@@ -503,6 +525,8 @@ private:
     double previewEnd_ = 0.0;
 
     std::unordered_map<drumgrid::CellKey, HitMotion> hitMotions_;
+    std::unique_ptr<juce::Component> stateProbe_; ///< a hidden child that reports the grid to test mode
+    std::set<drumgrid::CellKey> settledKeys_;     ///< cells a stroke just wrote: their preview motion carries on
     std::unordered_map<drumgrid::CellKey, double> flashes_;
     std::unordered_map<drumgrid::CellKey, double> changed_; ///< cells an idea changed, by the time they were marked
     double staggerTailMs_ = 0.0;

@@ -71,7 +71,19 @@ keeps every note where it is in time and only changes which cell it falls in.
 | Click a hit | Removes every note of that pitch starting in the cell |
 | Shift-click an empty cell | Adds a hit at velocity 127 |
 | Shift-click a hit | Toggles accent (127 and 100) |
-| Drag a hit up or down | Sets velocity 1 to 127, previewed live, committed once on release |
+| Press an empty cell and drag | Paints: every empty cell the pointer passes gets a hit (Shift: accents), on any row |
+| Press a hit and drag sideways | Erases: every hit the pointer passes is removed, on any row |
+| Press a hit and drag up or down | Sets velocity 1 to 127, previewed live, committed once on release |
+| Shift+Right / Shift+Left | The keyboard stroke: the focus moves a step and carries the cell with it (a hit paints a hit of the same loudness onto the next cell, an empty cell erases the next cell's hit) |
+
+**Strokes.** The first cell of a press decides for the whole stroke, as in FL Studio and Ableton's drum grids: started on
+an empty cell it only adds, started on a hit it only removes, so crossing a hit during a paint leaves it alone. On a hit
+the first 3 px decide: more sideways than up or down is an erase, otherwise it is a loudness drag. The pointer is
+sampled every half cell between two mouse events, so a fast drag skips no cell. Nothing is written while the button is
+down: added hits show in their row, growing in with a faint accent outline, and removed ones shrink out. Release writes
+the whole stroke as ONE undo step; Escape drops it. Each new hit sounds once, at most one every 40 ms. Under Reduce
+Motion they fade in instead of growing. A stroke is announced ("Added 8 hits", "Removed 3 hits"); the keyboard form is one undo
+step per key press. The shortcuts are the rebindable actions `drumMachineCarryRight` and `drumMachineCarryLeft`.
 
 An accent is a velocity of 120 or more. Every edit is one undo step through the `TimelineDoc` mutators.
 

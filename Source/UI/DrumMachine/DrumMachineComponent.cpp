@@ -39,8 +39,10 @@ DrumMachineComponent::DrumMachineComponent()
     : viewSwitch_("View", juce::StringArray{"Drum machine", "Piano roll"}) {
     setComponentID("drumMachineComponent");
     setTitle("Drum machine grid");
-    setTooltip("Drum grid: click a step to add a hit, click a hit to remove it, drag a hit up or down to change how "
-               "loud it is, Shift-click for an accent");
+    attachStateProbe();
+    setTooltip("Drum grid: click a step to add a hit, press and drag across steps to add several, click a hit to "
+               "remove it, drag a hit sideways to remove several or up or down to change how loud it is, Shift-click "
+               "for an accent");
     setWantsKeyboardFocus(true);
     setOpaque(true);
 

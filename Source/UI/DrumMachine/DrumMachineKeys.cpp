@@ -73,6 +73,11 @@ bool DrumMachineComponent::keyPressed(const juce::KeyPress& key) {
     if (matchesAction(key, "drumMachineSofter", juce::KeyPress(juce::KeyPress::downKey, shift, 0)))
         return nudgeFocusedVelocity(-kVelocityKeyStep) || true;
 
+    if (matchesAction(key, "drumMachineCarryRight", juce::KeyPress(juce::KeyPress::rightKey, shift, 0)))
+        return carryFocus(1);
+    if (matchesAction(key, "drumMachineCarryLeft", juce::KeyPress(juce::KeyPress::leftKey, shift, 0)))
+        return carryFocus(-1);
+
     if (key == juce::KeyPress::escapeKey) {
         if (gesture_.kind != Gesture::Kind::None) {
             endGesture(false);
