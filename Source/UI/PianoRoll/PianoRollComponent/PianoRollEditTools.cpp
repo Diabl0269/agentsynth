@@ -181,7 +181,7 @@ void PianoRollComponent::beginMarquee(juce::Point<int> anchor, bool additive) {
     marqueeAdditive_ = additive;
     marqueeAnchor_ = anchor;
     marqueeRect_ = juce::Rectangle<int>(anchor, anchor);
-    marqueeBaseSelection_ = additive ? selection_.getSelected() : std::vector<synth::NoteId>{};
+    marqueeBaseSelection_ = selection_.getSelected(); // what an additive marquee adds to and a cancel puts back
     if (!additive)
         selection_.clear();
     repaint();

@@ -138,6 +138,7 @@ void TimelineClipLaneArea::beginRangeGesture(const juce::MouseEvent& e) {
     const auto point = rangePointAt(e.getPosition());
     if (!point)
         return;
+    rangeBeforeGesture_ = range_;
     if (e.mods.isShiftDown() && range_.isActive())
         setRange(range_.getAnchorTrack(), range_.getAnchorBeat(), point->first, point->second);
     else
@@ -155,6 +156,14 @@ void TimelineClipLaneArea::updateRangeGesture(juce::Point<int> pos) {
         return;
     const auto before = rangeRect();
     range_.extendTo(point->first, point->second);
+    requestToolPreviewRepaint(unionOf(before, rangeRect()).expanded(kRangeRepaintMarginPx, 0));
+}
+
+// Esc: the range goes back to what it was before the press (a Shift-extension returns to its old extent, a fresh
+// range disappears). The clip selection the press cleared stays cleared: a range and a clip selection never coexist.
+void TimelineClipLaneArea::cancelRangeGesture() {
+    const auto before = rangeRect();
+    range_ = rangeBeforeGesture_;
     requestToolPreviewRepaint(unionOf(before, rangeRect()).expanded(kRangeRepaintMarginPx, 0));
 }
 

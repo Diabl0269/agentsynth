@@ -529,7 +529,7 @@ private:
     void setCopyDrag(bool copy);
     void updateMoveCursor(); // grab/copy while a move drag is live, else back to the tool cursor
     void commitCopyDrag();
-    bool cancelNoteDrag(); // Esc: true when a Move/copy drag was in flight and is now abandoned
+    bool cancelNoteDrag(); // Esc: true when any note drag was in flight and is now abandoned
     void startGhostSettle(bool dropped);
     void clearGhostSettle();
     void paintCopyGhosts(juce::Graphics& g);
