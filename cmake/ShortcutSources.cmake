@@ -3,6 +3,9 @@
 list(APPEND APPUI_SOURCES
     Source/ShortcutManager/AppCommands.cpp
     Source/ShortcutManager/AppCommands.h
+    Source/ShortcutManager/MacPeerDroppedKey.cpp
+    Source/ShortcutManager/MacPeerDroppedKey.h
+    Source/ShortcutManager/MacPeerDroppedKeyRelay.h
     Source/ShortcutManager/ShortcutManager.h
     Source/ShortcutManager/ShortcutManager.cpp
     Source/ShortcutManager/ShortcutManagerActionNames.cpp
@@ -13,3 +16,10 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/KeyboardContextMenu.cpp
     Source/UI/Library/ModuleLibraryHelpPopup.cpp
 )
+
+# The Cocoa half of the macOS keys JUCE's peer drops (Ctrl+Shift+2 is the NUL code, so no key press is ever built):
+# Source/ShortcutManager/MacPeerDroppedKey{,Relay}.*. Objective-C++ with ARC, like the hosted-window key monitor.
+if(APPLE)
+    list(APPEND APPUI_SOURCES Source/ShortcutManager/MacPeerDroppedKeyRelay.mm)
+    set_source_files_properties(Source/ShortcutManager/MacPeerDroppedKeyRelay.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+endif()

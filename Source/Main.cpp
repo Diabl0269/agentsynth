@@ -6,6 +6,7 @@
 #include "Project/ProjectCommandLine.h"
 #include "SettingsMigration.h"
 #include "ShortcutManager/AppCommands.h"
+#include "ShortcutManager/MacPeerDroppedKeyRelay.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "TestMode/AutomationHiding.h"
 #include "TestMode/TestModeLaunch.h"
@@ -93,6 +94,10 @@ public:
         lookAndFeel.applyTheme(themeManager.getActiveTheme());
         juce::Desktop::getInstance().setDefaultLookAndFeel(&lookAndFeel);
         mainWindow.reset(new MainWindow(getApplicationName(), themeManager, lookAndFeel));
+#if JUCE_MAC
+        // JUCE's peer builds no key press for Ctrl+Shift+2 (NUL text); this relay hands it over.
+        droppedKeyRelay_ = std::make_unique<synth::MacPeerDroppedKeyRelay>();
+#endif
 
         // `Agent Synth.app/Contents/MacOS/Agent Synth my.agsproj` (or the OS opening a project with the app).
         // A path the OS hands over before this point waits in pendingProject_.
@@ -329,6 +334,9 @@ private:
     synth::theme::ThemeManager themeManager;
     synth::theme::AppLookAndFeel lookAndFeel;
     std::unique_ptr<MainWindow> mainWindow;
+#if JUCE_MAC
+    std::unique_ptr<synth::MacPeerDroppedKeyRelay> droppedKeyRelay_;
+#endif
     std::unique_ptr<synth::testmode::TestModeServer> testModeServer_;
     juce::File pendingProject_; // a project the OS handed over before the window existed
 };

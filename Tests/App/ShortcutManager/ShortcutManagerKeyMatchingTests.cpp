@@ -1,8 +1,10 @@
 // Concern: keyPressMatches' shifted-symbol normalization (the macOS peer bug it rescues from),
 // its use in getActionForKeyPress/getActionsForKeyPress, and the zoom/surface-default/display tests
 // that ride alongside it.
+#include "MacPeerKeyModel.h"
 #include "ShortcutManager/AppCommands.h"
 #include "ShortcutManagerTestFixture.h"
+#include <iterator>
 
 TEST_F(ShortcutManagerTest, KeyPressMatchesRescuesShiftChordedSymbolsFromTheMacPeer) {
     const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
@@ -217,4 +219,45 @@ TEST_F(ShortcutManagerTest, AnExtendedKeyNeverMatchesTheLetterInItsLowBits) {
 
     manager.setBinding("renameSelectedModule", windowsF2);
     EXPECT_NE(manager.getActionForKeyPress(letterQ), "renameSelectedModule");
+}
+
+// Regression test for FRO1414: Ctrl+Shift+2 reached no binding because the macOS peer dropped it.
+using synth::test::kCtrlShiftDigits;
+
+namespace {
+const char* const kSnapActions[] = {
+    "snapSetWhole",     "snapSetHalf",         "snapSetQuarter",     "snapSetEighth",
+    "snapSetSixteenth", "snapSetThirtySecond", "snapSetSixtyFourth", "snapSetHundredTwentyEighth"};
+}
+
+TEST_F(ShortcutManagerTest, OnlyCtrlShift2IsDroppedByTheMacPeer) {
+    for (size_t i = 0; i < std::size(kCtrlShiftDigits); ++i) {
+        const auto& event = kCtrlShiftDigits[i];
+        const bool dropped = !synth::test::keyPressAsThePeerBuildsIt(event, synth::test::ctrlShift()).has_value();
+        EXPECT_EQ(dropped, i == 1) << event.name;
+    }
+}
+
+TEST_F(ShortcutManagerTest, EveryGridChordArrivesAsThePlatformDeliversItAndMatchesItsAction) {
+    for (size_t i = 0; i < std::size(kCtrlShiftDigits); ++i) {
+        const auto& event = kCtrlShiftDigits[i];
+        const auto key = synth::test::keyPressTheAppReceives(event, synth::test::ctrlShift());
+        ASSERT_TRUE(key.has_value()) << event.name << " never reaches the app";
+        EXPECT_EQ(manager.getActionForKeyPress(*key), kSnapActions[i]) << event.name;
+    }
+}
+
+TEST_F(ShortcutManagerTest, RecoveryOnlyRebuildsWhatThePeerDrops) {
+    const auto ctrlShift = synth::test::ctrlShift();
+    // The peer builds a key for any non-NUL text: nothing to recover, so it is never delivered twice.
+    EXPECT_FALSE(synth::recoverKeyPressDroppedByMacPeer('!', '!', ctrlShift).has_value());
+    // No Control: an empty text is not a Control chord's NUL.
+    EXPECT_FALSE(synth::recoverKeyPressDroppedByMacPeer(0, '@', juce::ModifierKeys(juce::ModifierKeys::shiftModifier))
+                     .has_value());
+    // Nothing to rebuild a key from.
+    EXPECT_FALSE(synth::recoverKeyPressDroppedByMacPeer(0, 0, ctrlShift).has_value());
+    const auto key = synth::recoverKeyPressDroppedByMacPeer(0, '@', ctrlShift);
+    ASSERT_TRUE(key.has_value());
+    EXPECT_EQ(key->getKeyCode(), static_cast<int>('@'));
+    EXPECT_EQ(key->getModifiers().getRawFlags(), ctrlShift.getRawFlags());
 }
