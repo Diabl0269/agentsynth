@@ -216,11 +216,11 @@ std::vector<SoundBrowserComponent::PathPart> SoundBrowserComponent::getPathParts
     std::vector<PathPart> parts{{"Places", {}, {}, {}}};
     if (placeId_.isEmpty())
         return parts;
-    parts.push_back({placeNameOf(placeId_), placeId_, {}, {}});
+    parts.push_back({displayName(placeNameOf(placeId_)), placeId_, {}, {}});
     juce::String cumulative;
     for (const auto& segment : juce::StringArray::fromTokens(folder_, "/", "")) {
         cumulative = cumulative.isEmpty() ? segment : cumulative + "/" + segment;
-        parts.push_back({segment, placeId_, cumulative, {}});
+        parts.push_back({displayName(segment), placeId_, cumulative, {}});
     }
     return parts;
 }

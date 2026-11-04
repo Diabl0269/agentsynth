@@ -479,6 +479,24 @@ TEST(SoundBrowserDisplayName, RowsShowAndSpeakTheCapitalisedNameWhileTheRowKeeps
     EXPECT_TRUE(f.view->getAccessibilityValueText().startsWith("Animals, folder"));
 }
 
+TEST(SoundBrowserDisplayName, PathBarAndFooterLineShowCapitalisedFolderNames) {
+    NameFixture f;
+    f.view->showLocation("core", "animals");
+    f.view->completeListAnimationForTest();
+    const auto parts = f.view->getPathParts();
+    ASSERT_FALSE(parts.empty());
+    EXPECT_EQ(parts.back().label, "Animals");
+    EXPECT_EQ(parts.back().folder, "animals") << "navigation keeps the real folder";
+    const int sound = f.rowOf(Kind::Sound);
+    ASSERT_GE(sound, 0);
+    f.view->selectRow(sound);
+    juce::DynamicObject state;
+    f.view->addTestModeState(state);
+    const auto line = state.getProperty("footerLine").toString();
+    EXPECT_TRUE(line.contains("Animals")) << line;
+    EXPECT_FALSE(line.contains("animals")) << line;
+}
+
 TEST(SoundBrowserDisplayName, SearchStillFindsTheSoundByItsFileName) {
     NameFixture f;
     f.view->setQuery("cro");

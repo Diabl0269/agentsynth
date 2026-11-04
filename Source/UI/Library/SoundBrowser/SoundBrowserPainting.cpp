@@ -235,9 +235,9 @@ void SoundBrowserComponent::paintRows(juce::Graphics& g, int width) const {
 // Where the sound lives, led by the key line and then by what Match key will do, so the part that matters most is the
 // last to be cut when the line is ellipsised.
 juce::String SoundBrowserComponent::soundFooterLine(const synth::soundbrowser::SoundEntry& entry) const {
-    auto line = entry.placeName;
-    if (entry.folder.isNotEmpty())
-        line += " > " + entry.folder.replace("/", " > ");
+    auto line = displayName(entry.placeName);
+    for (const auto& part : juce::StringArray::fromTokens(entry.folder, "/", ""))
+        line += " > " + displayName(part);
     if (const auto keyMeta = soundKeyMetaText(entry, filters_.songKey()); keyMeta.isNotEmpty())
         line = keyMeta + "  -  " + line;
     if (entry.kind == synth::soundbrowser::SoundKind::Loop)
