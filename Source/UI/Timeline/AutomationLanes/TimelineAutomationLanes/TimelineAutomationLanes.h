@@ -413,6 +413,41 @@ private:
         float lift = 0.0f;
     };
     ModulatorDragPose modulatorDragPose(synth::LaneId lane, int index, int restY) const;
+    float dragModRestOf(int key) const;
+
+    // The room a dragged modulator row makes (TimelineAutomationLanesDragGap.cpp): over another lane that can take it,
+    // that lane opens a gap of the row's height at the drop slot and the source lane's gap closes; everything below
+    // moves with them. The gaps step on the block driver.
+    using GapKey = std::pair<synth::LaneId, int>; // a lane and the slot before its `int`th row (count: after the last)
+    std::map<GapKey, FoldTween> dragGaps_;        // 1 = open by the dragged row's height; closing ones go to 0
+    FoldTween dragClosure_{0.0f, 0.0f, 0.0f};     // the source lane's gap: 1 = closed, while the drop is elsewhere
+    int dragModHeight_ = 0;                       // the dragged row's height with its tray, at press
+    int dragModIndex_ = -1;                       // its index in the source lane, at press
+    std::vector<float> dragModRest_;              // the animator's rest starts by key
+    int draggedRowRestY_ = 0;                     // the dragged row's slot as last placed, header-list y
+    bool dragFree_ = false;                       // the lifted row was off its own lane at the last drag event
+    // A row moved to another lane by a drop or the keyboard, while the host moves it: it arrives in the gap the drag
+    // opened (`presence`, 0..1), its old gap starts as far closed as the drag had it, and it glides from `fromY`.
+    struct Landing {
+        synth::LaneId lane;
+        float presence = 0.0f;
+        float closure = 0.0f;
+        int fromY = 0;
+        juce::String newKey; // the routing that arrived in `lane`, set by the rebuild
+        bool active = false;
+    };
+    Landing landing_;
+    std::set<juce::String> travellingRows_; // rows gliding to another lane: drawn whole while their slot grows
+    int dragGapAt(synth::LaneId lane, int slot) const;
+    void updateDragGaps();
+    void closeDragGaps();
+    void clearDragGaps();
+    void landDragGaps();
+    float pointerAtDragOrigin() const;
+    void settleMovedRow(const Landing& landing);
+    int modulatorRowFoldHeight(synth::LaneId lane, int index) const;
+    int modulatorRowDrawHeight(synth::LaneId lane, int index) const;
+    void runModulatorGlide();
     void retireModulatorRows(LaneModulators& entry, synth::LaneId lane, const std::set<juce::String>& staying);
     void sweepLeavingModulators();
 

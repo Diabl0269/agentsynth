@@ -135,18 +135,24 @@ void TimelineAutomationLanes::placeHeadersFor(synth::TrackId track, int firstRow
         }
         int modY = y + rowHeight + trayExtentOf(lane.id);
         for (int i = 0; i < modulatorCount(lane.id); ++i) {
+            modY += dragGapAt(lane.id, i);
             modY += placeLeavingRows(lane.id, i, modY, width);
             auto* row = modulatorRowFor(lane.id, i);
             const int height = modulatorRowHeightFor(lane.id, i);
             row->setTitleLineHeight(modulatorRowHeight(lane.id, i) / 3);
+            const auto& key = row->getInfo().key();
+            if (lane.id == dragModLane_ && key == dragModInfo_.key())
+                draggedRowRestY_ = modY;
             const auto pose = modulatorDragPose(lane.id, i, modY);
-            const int rowY = modY + modulatorGlideOffset(row->getInfo().key()) + pose.shift;
-            row->setBounds(0, rowY, width, fit(rowY, height));
+            const int rowY = modY + modulatorGlideOffset(key) + pose.shift;
+            const bool travelling = travellingRows_.count(key) > 0;
+            row->setBounds(0, rowY, width, travelling ? modulatorRowDrawHeight(lane.id, i) : fit(rowY, height));
             row->setLift(pose.lift);
-            if (pose.lift > 0.0f)
+            if (pose.lift > 0.0f || travelling)
                 row->toFront(false);
             modY += height + trayExtentOf(lane.id, i);
         }
+        modY += dragGapAt(lane.id, modulatorCount(lane.id));
         placeLeavingRows(lane.id, modulatorCount(lane.id), modY, width);
         if (headerFor(lane.id) != nullptr)
             placeLaneHeightHandles(lane, y, lane.id == lastShown,
@@ -244,11 +250,15 @@ void TimelineAutomationLanes::placeBodies(const TimelineRowLayout& layout) {
     }
     for (auto& [id, entry] : modulators_)
         for (int i = 0; i < (int)entry.bands.size(); ++i) {
-            const auto rowBounds = modulatorRowContentBounds(id, i, layout);
+            auto rowBounds = modulatorRowContentBounds(id, i, layout);
+            const auto& key = entry.infos[(size_t)i].key();
+            const bool travelling = travellingRows_.count(key) > 0;
+            if (travelling && !rowBounds.isEmpty())
+                rowBounds.setHeight(modulatorRowDrawHeight(id, i));
             const auto pose = modulatorDragPose(id, i, rowBounds.getY());
             entry.bands[(size_t)i]->setBounds(
-                rowBounds.translated(0, -scroll + modulatorGlideOffset(entry.infos[(size_t)i].key()) + pose.shift));
-            if (pose.lift > 0.0f)
+                rowBounds.translated(0, -scroll + modulatorGlideOffset(key) + pose.shift));
+            if (pose.lift > 0.0f || travelling)
                 entry.bands[(size_t)i]->toFront(false);
         }
     placeLeavingBands(layout, scroll);

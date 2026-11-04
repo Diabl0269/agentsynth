@@ -43,17 +43,34 @@ float TimelineAutomationLanes::modulatorOpenness(const juce::String& key) const 
 // A folded row is one title line tall: the line its controls are laid out in (a third of the full height), but never
 // so small the title and the arrow are clipped. A row growing in (a new routing) counts only its share so far.
 int TimelineAutomationLanes::modulatorRowHeightFor(synth::LaneId lane, int index) const {
+    const int height = modulatorRowFoldHeight(lane, index);
+    const auto it = modulators_.find(lane);
+    if (it == modulators_.end() || index < 0 || index >= (int)it->second.infos.size())
+        return height;
+    const float presence = arrivingPresence(rowMotionKey(lane, it->second.infos[(size_t)index].key()));
+    return presence >= 1.0f ? height : (int)std::lround((double)height * (double)presence);
+}
+
+// The row's height from its fold alone, before any grow-in.
+int TimelineAutomationLanes::modulatorRowFoldHeight(synth::LaneId lane, int index) const {
     const int full = modulatorRowHeight(lane, index);
     const auto it = modulators_.find(lane);
     if (it == modulators_.end() || index < 0 || index >= (int)it->second.infos.size())
         return full;
     // A row too short for three lines is one line already: folding changes nothing.
     const int line = ModulatorRow::isCrowdedAt(full / 3) ? full : std::max(full / 3, std::min(full, kMinFoldedHeight));
-    const auto& key = it->second.infos[(size_t)index].key();
-    const float open = modulatorOpenness(key);
-    const int height = line + (int)std::lround((double)(full - line) * (double)open);
-    const float presence = arrivingPresence(rowMotionKey(lane, key));
-    return presence >= 1.0f ? height : (int)std::lround((double)height * (double)presence);
+    const float open = modulatorOpenness(it->second.infos[(size_t)index].key());
+    return line + (int)std::lround((double)(full - line) * (double)open);
+}
+
+// A row travelling into another lane is drawn whole while the slot it is heading for still grows; any other row is
+// drawn at its slot's height.
+int TimelineAutomationLanes::modulatorRowDrawHeight(synth::LaneId lane, int index) const {
+    if (!travellingRows_.empty())
+        if (const auto* row = modulatorRowFor(lane, index);
+            row != nullptr && travellingRows_.count(row->getInfo().key()))
+            return modulatorRowFoldHeight(lane, index);
+    return modulatorRowHeightFor(lane, index);
 }
 
 // How far the edit tray of the lane's header (or of its `modulatorIndex`th row) pushes what lies below it, px.
@@ -68,12 +85,14 @@ int TimelineAutomationLanes::trayExtentOf(synth::LaneId lane, int modulatorIndex
 }
 
 // Where the lane's `count`th modulator row starts under the lane row, px: past the lane header's edit tray (if open),
-// every row above it with its own, and the gaps of rows leaving before it (TimelineAutomationLanesBlockMotion.cpp).
+// every row above it with its own, the gaps of rows leaving before it (TimelineAutomationLanesBlockMotion.cpp) and the
+// room a dragged row makes or leaves (TimelineAutomationLanesDragGap.cpp).
 int TimelineAutomationLanes::modulatorOffset(synth::LaneId lane, int count) const {
     int offset = trayExtentOf(lane);
     for (int i = 0; i < count; ++i)
-        offset += leavingRowsHeightAt(lane, i) + modulatorRowHeightFor(lane, i) + trayExtentOf(lane, i);
-    return offset + (leaving_.empty() ? 0 : leavingRowsHeightAt(lane, count));
+        offset +=
+            dragGapAt(lane, i) + leavingRowsHeightAt(lane, i) + modulatorRowHeightFor(lane, i) + trayExtentOf(lane, i);
+    return offset + dragGapAt(lane, count) + (leaving_.empty() ? 0 : leavingRowsHeightAt(lane, count));
 }
 
 // The rows show the fold state; a folding row keeps its controls (they are clipped away as it shrinks) until it lands.
@@ -192,7 +211,8 @@ bool TimelineAutomationLanes::moveModulatorBy(synth::LaneId lane, const juce::St
 // Past a lane's first or last row the move carries on through the lanes on screen around it, across tracks, to the
 // first one that can take the routing (a lane whose jack already has this source cannot). The row lands at the near end
 // of that lane: its top going down, its bottom going up. It is the drop's move (ONE undo step, the routing re-created
-// with a new key), so the old row only closes its gap while the new one grows in; keyboard focus follows it there.
+// with a new key): the old row's gap closes while the new one's opens, and the row itself travels from where it stood
+// into its new slot (settleMovedRow), so it never jumps; keyboard focus follows it there.
 bool TimelineAutomationLanes::moveModulatorToNeighbourLane(synth::LaneId lane, const ModulatorInfo& info, int delta) {
     if (doc_ == nullptr || host_ == nullptr || delta == 0)
         return false;
@@ -205,6 +225,10 @@ bool TimelineAutomationLanes::moveModulatorToNeighbourLane(synth::LaneId lane, c
     if (at == order.end())
         return false;
     const bool hadFocus = modulatorHasKeyboardFocus(lane, info.key());
+    int fromY = 0;
+    for (int i = 0; i < modulatorCount(lane); ++i)
+        if (modulatorRowFor(lane, i)->getInfo().key() == info.key())
+            fromY = modulatorRowFor(lane, i)->getY();
     const int step = delta > 0 ? 1 : -1;
     for (int i = (int)(at - order.begin()) + step; i >= 0 && i < (int)order.size(); i += step) {
         const auto dest = order[(size_t)i];
@@ -212,10 +236,13 @@ bool TimelineAutomationLanes::moveModulatorToNeighbourLane(synth::LaneId lane, c
             continue;
         const int index = step > 0 ? 0 : modulatorCount(dest);
         droppedRoutingKey_ = info.key();
+        landing_ = {dest, 0.0f, 0.0f, fromY, {}, true};
         const bool moved = host_->moveModulatorToLane(info, dest, index);
         droppedRoutingKey_.clear();
+        const auto landing = std::exchange(landing_, {});
         if (!moved)
             return false;
+        settleMovedRow(landing);
         if (auto* row = modulatorRowFor(dest, index); hadFocus && row != nullptr)
             row->grabKeyboardFocus();
         return true;
@@ -253,8 +280,15 @@ void TimelineAutomationLanes::glideModulatorRows(synth::LaneId lane, const std::
         if (offset != 0.0f)
             glideTweens_[key] = {offset, 0.0f, offset};
     }
+    runModulatorGlide();
+}
+
+// Starts (or restarts) the glide of every row in glideTweens_ from its offset now.
+void TimelineAutomationLanes::runModulatorGlide() {
     if (glideTweens_.empty())
         return;
+    for (auto& [key, tween] : glideTweens_)
+        tween.from = tween.now;
     glideDriver_.start(
         foldUpdater_, kFoldMs, easeOutCubic, [this](float t) { frameModulatorGlide(t); },
         [this] { landModulatorGlide(); });
@@ -279,6 +313,7 @@ void TimelineAutomationLanes::frameModulatorGlide(float t) {
 void TimelineAutomationLanes::landModulatorGlide() {
     glideDriver_.stop(foldUpdater_);
     glideTweens_.clear();
+    travellingRows_.clear();
     if (onLayoutChanged)
         onLayoutChanged();
 }

@@ -383,13 +383,23 @@ slots (`DropIndicator`).
   `recordGraphTimelineAndMacroChange`: `MainComponent::moveModulatorRouting` cables the source into the new jack at the
   old depth, re-keys the amount lane to the new Attenuverter (same lane id, track and points) and cuts the old routing;
   then the destination lane's `modulatorOrder` gets the new routing's key at `index` and the old key leaves the order of
-  every lane on the old jack. One Cmd+Z puts the routing, the amount lane and both orders back. The moved routing has a
-  new key, so its row fades and grows in under the destination lane like any new routing ([lane motion](lane-motion.md)).
+  every lane on the old jack. One Cmd+Z puts the routing, the amount lane and both orders back.
+- *Making room in another lane* (`TimelineAutomationLanesDragGap.cpp`): while the row hangs over a lane that can take
+  it, of its own track or another, that lane opens a gap of the row's height (row plus band, plus an open Edit controls
+  tray) at the drop's slot, and the gap the row left in its own lane closes, so the lane blocks, curve bodies, bands and
+  tracks below slide with it. Moving to another slot or lane closes the old gap as the new one opens. The gaps are
+  height tweens on the lane-block driver (160 ms `easeOutCubic`, each retargeted from where it stands); the source
+  lane's other rows stay still meanwhile. Over a lane that refuses the row, or over no lane, every gap closes. Esc (or
+  a refused drop) closes them and the row glides back into its own slot. On the drop the row arrives in the gap it
+  opened, so nothing jumps; the moved routing has a new key, but its row is not faded in: it glides from where it was
+  released, drawn whole until it lands. Under Reduce Motion, with Animations off or off screen the gaps open and
+  close at once. A whole-lane drag (lane header) never leaves its track, so it only moves its own track's lanes.
 - Change parameter and Duplicate carry the lane's rows as shown (`shownModulatorOrder`) into its `modulatorOrder`, each
   carried routing's old key replaced by its new routing's key at the same position (`remapModulatorOrder`).
 - The keyboard path is Cmd+Alt+Up/Down: within the lane, then past its end into the next lane that can take the row
   (see Order above); the row's tooltip says "Drag to reorder or move to
-  another lane". The row's old gap closes on the drop as it grows in where it landed. Not done: no auto-scroll while dragging.
+  another lane". A keyboard move into another lane travels the same way: the row glides from where it stood into
+  its new slot while its old gap closes and the new lane's grows. Not done: no auto-scroll while dragging.
 
 Any other source (an envelope, an envelope follower, a macro control...) gets a read-only row: the marker, its card
 title and the amount readout; its band edits the amount exactly like an LFO's. Its menu is the same
