@@ -247,10 +247,9 @@ public:
     /** Replaces the last beat (snare roll) or two (tom fill) of the clip's last bar, or of every 4th bar, as one step.
      */
     void addFill(drumideas::Fill fill, bool everyFourthBar);
-    /** Puts a take in the clip (`replace`) or in a new clip right after it, and returns the clip that now holds it. */
-    synth::ClipId pickTake(const std::vector<synth::MidiNote>& notes, bool replace);
-    /** The owner is told when a pick made a new clip (it selects it); the grid has already opened it. */
-    std::function<void(synth::ClipId)> onClipCreated;
+    /** Replaces this clip's pattern with a take as one undo step; the clip stays open and a playing loop keeps going.
+     */
+    void pickTake(const std::vector<synth::MidiNote>& notes);
     bool isChangedOutlineActive(int row, int step) const;
     /** Gives the Ideas button the keyboard focus (the popover closed). */
     void focusIdeasButton();

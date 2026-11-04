@@ -257,8 +257,9 @@ seeds from the time); every result is ONE undo step, and the cells it changed ke
   the same undo step when coarser. One undo step, the changed-cell outline, and an announcement ("Added a snare roll").
 - **Vary**: an Amount slider (Subtle to Wild) and "Make 3 takes" show three mini grids side by side. Pressing a mini
   grid plays one pass of that take at the project tempo through the single-note audition path (a timer; it stops after
-  the pass or on the next press). "Pick" under a take adds it as a new clip right after this one (same grid, swing, humanise and per-drum length and
-  swing; the grid opens it) or, with "Replace this clip" on, swaps this clip's notes. The rules move, add and remove
+  the pass or on the next press). "Pick" under a take always replaces this clip's pattern (the same path starters and Randomize use: the grid, swing,
+  humanise and per-drum length and swing stay, no clip is added, the clip stays open, and a looping "Play clip" keeps
+  going); one Cmd+Z brings the old pattern back. To keep the old pattern, duplicate the clip first. The rules move, add and remove
   ghost hits on the snare and hats, push the kick, swap a closed hat for an open one and humanise some velocities;
   the amount scales how many; a kick on a bar's first beat and the snare backbeats stay unless the amount is Wild.
 - **Randomize**: a Density slider (Sparse to Busy) and "Keep kick and snare"; with it on the existing kick (35, 36) and
