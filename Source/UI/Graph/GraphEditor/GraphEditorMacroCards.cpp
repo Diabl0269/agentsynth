@@ -62,6 +62,8 @@ void GraphEditor::syncMacroCards() {
             card = cards.add(new MacroCardComponent(*this, macro.id));
             content.addAndMakeVisible(card);
         }
+        card->setName("macroCard:" +
+                      macro.name); // test mode tells several cards apart (docs/development/test-mode.md#ids)
         // The card's height is derived from its port rows (one 16px row each on the busier side; a
         // two-jack Stereo port takes two), never persisted: macro.bounds keeps whatever height it was saved with.
         int inputs = 0, outputs = 0;

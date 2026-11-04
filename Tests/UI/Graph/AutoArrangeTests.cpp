@@ -2,7 +2,8 @@
 //
 // Auto-arrange through a real MainComponent: tracks created the way the app creates them (each one a collapsed
 // channel macro), a shared LFO, then GraphEditor::autoArrange(). The pure layout is covered in
-// Tests/UI/Layout/HierarchicalArrangeTests.cpp, macros on a bare canvas in AutoArrangeMacroTests.cpp.
+// Tests/UI/Layout/HierarchicalArrangeTests.cpp, macros on a bare canvas in AutoArrangeMacroTests.cpp. The end of this
+// file checks the layout units themselves on saved projects (nothing invisible, every insert gap lands where aimed).
 // (docs/layout/layout.md#auto-arrange)
 
 #include "../../Mixer/ChannelFlow/ChannelFlowTestFixture.h"
@@ -10,6 +11,12 @@
 
 #include "AppUndoManager.h"
 #include "Mixer/MasterSplice.h"
+#include "TestPaths.h"
+#include "UI/Layout/InsertGap/InsertGapPlan.h"
+
+#include <algorithm>
+#include <functional>
+#include <vector>
 
 namespace {
 using autoarrange_test::Snapshot;
@@ -259,4 +266,175 @@ TEST_F(AutoArrangeTrackTest, TheLfoPlacementIsIdempotent) {
     const auto first = autoarrange_test::snapshot(editor, rig.mc->getAudioEngine().getGraph());
     editor.autoArrange();
     EXPECT_TRUE(first == autoarrange_test::snapshot(editor, rig.mc->getAudioEngine().getGraph()));
+}
+
+// ---- Layout units on saved projects -----------------------------------------------------------------------------
+// Every rect the canvas places against (the layout units make-room, auto-arrange and the insert gap move, and the
+// placement blockers a dropped card dodges) must be something the user can see: a showing module card, a showing folded
+// macro card, or an open macro's painted border. A rect with nothing drawn there is a "ghost": a card dragged over
+// empty canvas snags on it. And wherever a dragged card would open an insert gap, it has to land where it is aimed, not
+// at a slot across the canvas (the next card after a wide open macro). Each saved project is opened through the real
+// open path, then every level is walked.
+
+namespace {
+
+struct Drawn {
+    juce::String what;
+    juce::Rectangle<int> rect;
+};
+
+// What the user sees on the canvas: showing module cards, showing folded macro cards, open macros' borders.
+std::vector<Drawn> drawnFootprints(GraphEditor& editor) {
+    std::vector<Drawn> drawn;
+    for (auto* comp : editor.getModuleComponents())
+        if (comp != nullptr && comp->isVisible())
+            drawn.push_back({"card " + comp->getTitle(), comp->getBounds()});
+    // Folded macro cards are found by the name test mode reads them by ("macroCard:<macro name>").
+    std::function<void(juce::Component&)> walk = [&](juce::Component& c) {
+        for (auto* child : c.getChildren()) {
+            if (child->isVisible() && child->getName().startsWith("macroCard"))
+                drawn.push_back({child->getName(), child->getBounds()});
+            walk(*child);
+        }
+    };
+    walk(editor);
+    auto& macros = editor.getMacros();
+    for (const auto& macro : macros.getAll())
+        if (!macros.isEffectivelyCollapsed(macro.id))
+            drawn.push_back({"open macro " + macro.name, editor.getMacroController().macroHullBounds(macro.id)});
+    return drawn;
+}
+
+const synth::LayoutUtil::LayoutUnit* findUnit(const std::vector<synth::LayoutUtil::LayoutUnit>& units,
+                                              const juce::String& key) {
+    const auto it = std::find_if(units.begin(), units.end(), [&key](const auto& u) { return u.key == key; });
+    return it != units.end() ? &*it : nullptr;
+}
+
+bool isDrawn(const std::vector<Drawn>& drawn, juce::Rectangle<int> rect) {
+    return std::any_of(drawn.begin(), drawn.end(), [&rect](const Drawn& d) { return d.rect == rect; });
+}
+
+class LayoutUnitFootprint : public ChannelFlowTest {
+protected:
+    // Opens a copy of a committed fixture (the open path may write sidecar files).
+    void open(MainComponent& mc, const char* name) {
+        const auto src = juce::File(juce::String(UI_VERIFY_FIXTURES_DIR)).getChildFile(name);
+        ASSERT_TRUE(src.isDirectory()) << src.getFullPathName();
+        copy_ = juce::File::createTempFile(".agsproj");
+        ASSERT_TRUE(src.copyDirectoryTo(copy_));
+        mc.setSize(1600, 900);
+        mc.getAudioEngine().suspendDeviceCallback();
+        ASSERT_TRUE(mc.openProjectForTest(copy_));
+    }
+    void TearDown() override {
+        copy_.deleteRecursively();
+        ChannelFlowTest::TearDown();
+    }
+    juce::File copy_;
+};
+
+// Every layout unit at every level, and every placement blocker, is drawn where it says.
+void expectNoGhosts(GraphEditor& editor, const char* project) {
+    SCOPED_TRACE(project);
+    const auto drawn = drawnFootprints(editor);
+    auto& ctl = editor.getMacroController();
+    std::vector<juce::String> containers{juce::String()};
+    for (const auto& macro : editor.getMacros().getAll())
+        if (!editor.getMacros().isEffectivelyCollapsed(macro.id))
+            containers.push_back(macro.id);
+    int units = 0;
+    for (const auto& container : containers)
+        for (const auto& unit : ctl.buildLayoutUnits(container)) {
+            ++units;
+            EXPECT_TRUE(isDrawn(drawn, unit.rect)) << "layout unit " << unit.key << " in '" << container << "' at "
+                                                   << unit.rect.toString() << " has nothing drawn there";
+        }
+    EXPECT_GT(units, 0);
+    for (const auto& box : ctl.placementBlockers({}))
+        EXPECT_TRUE(isDrawn(drawn, box.rect))
+            << "placement blocker at " << box.rect.toString() << " has nothing drawn there";
+}
+
+// Every gap a card of `size` opens over a level (a pointer every 40 px over the level's units and a margin around them,
+// over that level's own space) puts the card where it is aimed.
+void expectEveryGapLandsWhereAimed(GraphEditor& editor, const char* project, juce::Point<int> size) {
+    SCOPED_TRACE(project);
+    namespace ig = synth::insert_gap;
+    auto& ctl = editor.getMacroController();
+    std::vector<juce::String> containers{juce::String()};
+    for (const auto& macro : editor.getMacros().getAll())
+        if (!editor.getMacros().isEffectivelyCollapsed(macro.id))
+            containers.push_back(macro.id);
+    int gaps = 0;
+    for (const auto& container : containers) {
+        const auto units = ctl.buildLayoutUnits(container);
+        juce::Rectangle<int> area;
+        for (const auto& unit : units)
+            area = area.isEmpty() ? unit.rect : area.getUnion(unit.rect);
+        area = area.expanded(size.x, size.y);
+        for (int y = area.getY(); y < area.getBottom(); y += 40)
+            for (int x = area.getX(); x < area.getRight(); x += 40) {
+                if (ctl.macroHullAt({x, y}) != container)
+                    continue; // over a border the card is not in: that is a join or leave, and no gap opens (InsertGap)
+                const auto target = ig::pickTarget(units, {x, y}, size);
+                if (!target.has_value())
+                    continue;
+                const auto plan = ig::planBefore(units, *target, size);
+                if (!plan.has_value() || plan->moves.empty())
+                    continue; // a gap that already fits opens nothing, and the drop is an ordinary one
+                ++gaps;
+                // The card lands level with the anchor, so the aimed card overlaps the anchor across the axis. Along it
+                // the slot is the gap the pointer is over, up to an edge band deep inside a card (pickTarget).
+                const auto* anchor = findUnit(units, target->anchorKey);
+                ASSERT_NE(anchor, nullptr);
+                const juce::Rectangle<int> aimed(x - size.x / 2, y - size.y / 2, size.x, size.y);
+                const bool across =
+                    target->axis == ig::Axis::Row
+                        ? aimed.getY() < anchor->rect.getBottom() && anchor->rect.getY() < aimed.getBottom()
+                        : aimed.getX() < anchor->rect.getRight() && anchor->rect.getX() < aimed.getRight();
+                EXPECT_TRUE(across) << "aimed at " << aimed.toString() << " in '" << container
+                                    << "', the gap in front of " << target->anchorKey << " lands the card at "
+                                    << plan->slot.toString();
+                // An open macro's hull spans many cards, so the slot itself (at its lead edge across) has to be across
+                // from the aim, or a card aimed above the middle of a wide macro lands at its left edge.
+                const auto* macro =
+                    target->anchorKey.startsWith("m:")
+                        ? editor.getMacros().find(target->anchorKey.fromFirstOccurrenceOf("m:", false, false))
+                        : nullptr;
+                if (macro != nullptr && !macro->collapsed) {
+                    const bool slotAcross =
+                        target->axis == ig::Axis::Row
+                            ? aimed.getY() < plan->slot.getBottom() && plan->slot.getY() < aimed.getBottom()
+                            : aimed.getX() < plan->slot.getRight() && plan->slot.getX() < aimed.getRight();
+                    EXPECT_TRUE(slotAcross) << "aimed at " << aimed.toString() << " in '" << container
+                                            << "', the gap in front of open macro " << target->anchorKey
+                                            << " lands the card at " << plan->slot.toString();
+                }
+            }
+    }
+    EXPECT_GT(gaps, 0) << "the walk found no gap at all";
+}
+
+} // namespace
+
+TEST_F(LayoutUnitFootprint, EveryInsertGapOfASavedProjectLandsTheCardWhereItIsAimed) {
+    for (const char* project : {"fro1153.agsproj", "macros.agsproj", "fro830-test.agsproj"}) {
+        MainComponent mc(std::make_unique<MockProviderCFT>());
+        open(mc, project);
+        auto& editor = mc.getGraphEditor();
+        for (auto* comp : editor.getModuleComponents())
+            if (comp != nullptr && comp->isVisible())
+                expectEveryGapLandsWhereAimed(editor, project, {comp->getWidth(), comp->getHeight()});
+        copy_.deleteRecursively();
+    }
+}
+
+TEST_F(LayoutUnitFootprint, EveryUnitAndBlockerOfASavedProjectIsDrawn) {
+    for (const char* project : {"fro1153.agsproj", "macros.agsproj", "fro830-test.agsproj"}) {
+        MainComponent mc(std::make_unique<MockProviderCFT>());
+        open(mc, project);
+        expectNoGhosts(mc.getGraphEditor(), project);
+        copy_.deleteRecursively();
+    }
 }

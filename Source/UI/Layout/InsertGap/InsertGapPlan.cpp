@@ -155,7 +155,8 @@ std::optional<juce::String> nextAfter(const std::vector<LayoutUnit>& units, cons
 // Inside a card, only its edge bands count (the nearer edge, in pixels, picks the axis): deeper in is an ordinary drop
 // onto the card. In empty space the ghost has to touch a card; the nearest one decides: beside it is a row, above or
 // below it a column, and off a corner the farther offset wins. The leading half of the card means "in front of it",
-// the trailing half "in front of the next one".
+// the trailing half "in front of the next one". The card lands level with that anchor, so an anchor the aimed card
+// does not overlap across the axis is no gap, nor is an open macro's hull whose lead edge across it does not overlap.
 std::optional<Target> pickTarget(const std::vector<LayoutUnit>& units, juce::Point<int> pointer,
                                  juce::Point<int> size) {
     const LayoutUnit* ref = unitUnder(units, pointer);
@@ -187,6 +188,20 @@ std::optional<Target> pickTarget(const std::vector<LayoutUnit>& units, juce::Poi
     const auto* anchorUnit = findUnit(units, *anchor);
     if (anchorUnit == nullptr || anchorUnit->pinned)
         return std::nullopt;
+    // The card lands level with the anchor (planBefore), so the anchor has to be across from where the card is aimed:
+    // the next unit after a wide open macro may sit far to one side, and the card would land there, not where dropped.
+    const Rect aimed(pointer.x - size.x / 2, pointer.y - size.y / 2, size.x, size.y);
+    if (!overlapsAcross(aimed, anchorUnit->rect, axis))
+        return std::nullopt;
+    // An open macro's hull spans many cards, so "level with it" is its lead edge across: a card aimed just above the
+    // middle of a wide macro would land at the macro's left edge. A hull anchor needs that slot across from the aim.
+    if (anchorUnit->hull) {
+        const auto& b = anchorUnit->rect;
+        const Rect slot = axis == Axis::Row ? Rect(aimed.getX(), b.getY(), size.x, size.y)
+                                            : Rect(b.getX(), aimed.getY(), size.x, size.y);
+        if (!overlapsAcross(aimed, slot, axis))
+            return std::nullopt;
+    }
     return Target{axis, *anchor};
 }
 

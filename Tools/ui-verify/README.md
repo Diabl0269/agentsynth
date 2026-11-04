@@ -59,10 +59,23 @@ regenerates it and `scenarios/channel-strip-cable-on-folded-macro.yaml` drives i
 `fixtures/lane-rows.agsproj` holds a MIDI track playing a Filter whose Cutoff lane carries two LFO modulator rows;
 `UiVerifyLaneRowsFixture.DISABLED_WritesLaneRowsProject` regenerates it and `scenarios/lane-row-resize.yaml` drives it.
 
+`fixtures/fro830-test.agsproj` is a copy of a real saved project (two track macros, three folded macros and the
+output dock, with no audio); `scenarios/open-macro-pushes-neighbour-right.yaml` drives it.
+
+`fixtures/fro1153.agsproj` is a copy of another real saved project (an open track macro holding a folded nested macro
+and a Reverb, a folded track macro below it, and a loose Reverb between them, with no audio);
+`scenarios/drag-card-across-gap-lands-where-dropped.yaml` drives it, and `LayoutUnitFootprint` tests open it.
+
 `fixtures/cross-track-lanes.agsproj` is the shared saved project (three audio tracks in channel macros: folded, nested,
 open) with a Compressor lane on each track and an LFO on Audio 1's Ratio lane;
 `UiVerifyCrossTrackLanesFixture.DISABLED_WritesCrossTrackLanesProject` regenerates it and
 `scenarios/mod-row-cross-track-drag.yaml` and `scenarios/mod-row-key-move-across-lanes.yaml` drive it.
+
+`fixtures/macro-card-drops.agsproj` holds an open track macro (a Channel Strip) beside folded macros, and
+`scenarios/macro-card-drops.yaml` drops the strip's Left and Right cables on a folded card and on its input jack;
+`fixtures/macro-input-drop.agsproj` is a saved project (a folded macro inside the open track macro Oscillator 1, a Reverb
+outside it) and `scenarios/macro-input-drop.yaml` drops the Reverb's cable on the folded macro. The saved project is
+also read by `MacroPortFlowCardDrop.ASavedProjectsMacroInputTakesACableAcrossABorderThroughAPortLikeAnOutputDoes`.
 
 `UiVerifyFixture.TheCommittedMacrosProjectHoldsAnOpenACollapsedAndANestedMacro` fails if the committed copy stops
 loading or loses a macro.

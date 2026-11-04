@@ -519,6 +519,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPortSplice.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerProgrammaticRouting.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerPortDrop.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerPorts.cpp
     Source/UI/Graph/MacroGroupController/MacroNesting.h
     Source/UI/Graph/MacroGroupController/ModelCardBounds.h
