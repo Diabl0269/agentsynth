@@ -18,7 +18,7 @@ class SoundPreviewFooter : public juce::Component {
 public:
     static constexpr int kHeight = 108;
     static constexpr int kCompactHeight = 36;
-    static constexpr int kSwitchesBesideStopWidth = 240; ///< Below this inner width the switches get their own row.
+    static constexpr int kSwitchesBesidePlayWidth = 240; ///< Below this inner width the switches get their own row.
 
     SoundPreviewFooter();
     ~SoundPreviewFooter() override;
@@ -33,7 +33,14 @@ public:
     ShapeCurveView& getShapeCurve() { return curve_; }
     bool isShapeMotionRunning() const { return shapeAnim_.isRunning(); }
     void finishShapeMotionForTest();
-    void setPlayer(const synth::soundbrowser::SoundPreviewPlayer* player) { wave_.setPlayer(player); }
+    /** The preview whose state the Play/Stop button and the playhead follow (may be null). */
+    void setPlayer(const synth::soundbrowser::SoundPreviewPlayer* player);
+    /** The button reads "Stop" while a preview sounds and "Play" otherwise. Only a change touches the button. */
+    void setPlaying(bool playing);
+    bool isPlaying() const { return playing_; }
+    /** Reads the player now and sets the label to match; a 12 Hz timer does this while the footer shows. */
+    void syncPlayState();
+    bool isPlayStateTimerRunningForTest() const { return playTimer_.isTimerRunning(); }
     void followRequest(std::uint64_t requestId) { wave_.followRequest(requestId); }
 
     bool isAutoPlay() const { return autoPlay_.getToggleState(); }
@@ -43,28 +50,40 @@ public:
     float getGainDb() const { return (float)volume_.getValue(); }
     void setGainDb(float db) { volume_.setValue(db, juce::dontSendNotification); }
 
-    /** The user flipped Auto-play or Match key, moved the volume or pressed Stop. */
+    /** The user flipped Auto-play or Match key, moved the volume or pressed Play/Stop. */
     std::function<void(bool)> onAutoPlayChanged;
     std::function<void(bool)> onMatchKeyChanged;
     std::function<void(float)> onGainChanged;
-    std::function<void()> onStop;
+    /** The user pressed the Play/Stop button: the owner stops what plays, or plays the selected sound. */
+    std::function<void()> onTogglePlay;
 
     SoundWaveformView& getWaveform() { return wave_; }
     juce::Slider& getVolume() { return volume_; }
     juce::ToggleButton& getAutoPlay() { return autoPlay_; }
     juce::ToggleButton& getMatchKey() { return matchKey_; }
-    juce::TextButton& getStopButton() { return stop_; }
+    juce::TextButton& getPlayButton() { return play_; }
 
-    /** Compact is one row: Stop, then room for the sound's name (drawn by the browser), then the volume. The waveform
-     *  and Auto-play are hidden, and keep their state. */
+    /** Compact is one row: Play/Stop, then room for the sound's name (drawn by the browser), then the volume. The
+     * waveform and Auto-play are hidden, and keep their state. */
     void setCompact(bool compact);
     bool isCompact() const { return compact_; }
     /** In the footer's own coordinates; empty unless compact. */
     juce::Rectangle<int> getCompactNameBounds() const { return compactName_; }
 
     void resized() override;
+    void visibilityChanged() override;
 
 private:
+    class PlayStateTimer : public juce::Timer {
+    public:
+        explicit PlayStateTimer(SoundPreviewFooter& owner)
+            : owner_(owner) {}
+        void timerCallback() override { owner_.syncPlayState(); }
+
+    private:
+        SoundPreviewFooter& owner_;
+    };
+
     void applyShapeMix();
 
     bool compact_ = false;
@@ -75,7 +94,10 @@ private:
     ShapeCurveView curve_;
     juce::Rectangle<int> compactName_;
     SoundWaveformView wave_;
-    juce::TextButton stop_{"Stop"};
+    const synth::soundbrowser::SoundPreviewPlayer* player_ = nullptr;
+    bool playing_ = false;
+    PlayStateTimer playTimer_{*this};
+    juce::TextButton play_{"Play"};
     juce::ToggleButton autoPlay_{"Auto-play"};
     juce::ToggleButton matchKey_{"Match key"};
     juce::Slider volume_{juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight};

@@ -68,8 +68,8 @@ TEST(SoundPreviewFooterMatchKeyTest, AtTheNarrowestSidebarBothSwitchesKeepRoomFo
         EXPECT_GE(match.getWidth(), 80) << width;
         EXPECT_GE(autoPlay.getWidth(), 80) << width;
         EXPECT_FALSE(match.getBounds().intersects(autoPlay.getBounds())) << width;
-        EXPECT_FALSE(match.getBounds().intersects(footer.getStopButton().getBounds())) << width;
-        EXPECT_FALSE(autoPlay.getBounds().intersects(footer.getStopButton().getBounds())) << width;
+        EXPECT_FALSE(match.getBounds().intersects(footer.getPlayButton().getBounds())) << width;
+        EXPECT_FALSE(autoPlay.getBounds().intersects(footer.getPlayButton().getBounds())) << width;
         EXPECT_FALSE(autoPlay.getBounds().intersects(footer.getVolume().getBounds())) << width;
         EXPECT_FALSE(match.getBounds().intersects(footer.getVolume().getBounds())) << width;
         EXPECT_TRUE(footer.getLocalBounds().contains(autoPlay.getBounds())) << width;

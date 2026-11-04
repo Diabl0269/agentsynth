@@ -1,4 +1,4 @@
-// SoundPreviewFooter.cpp -- the waveform, Stop, preview volume and Auto-play controls under the Sounds list.
+// SoundPreviewFooter.cpp -- the waveform, Play/Stop, preview volume and Auto-play controls under the Sounds list.
 #include "UI/Library/SoundBrowser/SoundPreviewFooter.h"
 #include "SoundBrowser/SoundPreviewPlayer.h"
 
@@ -10,13 +10,15 @@ SoundPreviewFooter::SoundPreviewFooter() {
     addAndMakeVisible(wave_);
     addChildComponent(curve_);
 
-    stop_.setTitle("Stop preview");
-    stop_.setTooltip("Stop the preview (Space)");
-    stop_.onClick = [this] {
-        if (onStop)
-            onStop();
+    play_.setComponentID("soundPreviewPlay"); // a stable name for test mode: the title changes with the state
+    play_.setTitle("Play preview");
+    play_.setTooltip("Play or stop the preview (Space)");
+    play_.onClick = [this] {
+        if (onTogglePlay)
+            onTogglePlay();
+        syncPlayState();
     };
-    addAndMakeVisible(stop_);
+    addAndMakeVisible(play_);
 
     autoPlay_.setTitle("Auto-play");
     autoPlay_.setTooltip("Play a sound when you select it");
@@ -52,7 +54,37 @@ SoundPreviewFooter::SoundPreviewFooter() {
     addAndMakeVisible(volume_);
 }
 
-SoundPreviewFooter::~SoundPreviewFooter() { shapeAnim_.stop(vblank_); }
+SoundPreviewFooter::~SoundPreviewFooter() {
+    playTimer_.stopTimer();
+    shapeAnim_.stop(vblank_);
+}
+
+void SoundPreviewFooter::setPlayer(const synth::soundbrowser::SoundPreviewPlayer* player) {
+    player_ = player;
+    wave_.setPlayer(player);
+    syncPlayState();
+}
+
+void SoundPreviewFooter::setPlaying(bool playing) {
+    if (playing == playing_)
+        return;
+    playing_ = playing;
+    play_.setButtonText(playing ? "Stop" : "Play");
+    play_.setTitle(playing ? "Stop preview" : "Play preview");
+}
+
+void SoundPreviewFooter::syncPlayState() { setPlaying(player_ != nullptr && player_->isPlaying()); }
+
+// The label follows the player (a sound ends by itself, Space stops it, a selection starts another) from a light
+// timer that runs only while the footer shows.
+void SoundPreviewFooter::visibilityChanged() {
+    if (isVisible()) {
+        syncPlayState();
+        playTimer_.startTimerHz(12);
+    } else {
+        playTimer_.stopTimer();
+    }
+}
 
 void SoundPreviewFooter::showSound(const std::optional<synth::soundbrowser::SoundEntry>& entry) {
     wave_.setFile(entry.has_value() ? juce::File(entry->path) : juce::File());
@@ -98,7 +130,7 @@ void SoundPreviewFooter::applyShapeMix() {
     const bool transport = shapeMix_ < 1.0f;
     const bool picture = shapeMix_ > 0.0f && !compact_;
     const float transportAlpha = 1.0f - shapeMix_;
-    for (juce::Component* c : {static_cast<juce::Component*>(&stop_), static_cast<juce::Component*>(&volume_)}) {
+    for (juce::Component* c : {static_cast<juce::Component*>(&play_), static_cast<juce::Component*>(&volume_)}) {
         c->setVisible(transport);
         c->setAlpha(transportAlpha);
     }
@@ -114,7 +146,7 @@ void SoundPreviewFooter::applyShapeMix() {
 void SoundPreviewFooter::resized() {
     if (compact_) {
         auto row = getLocalBounds().withTrimmedTop(1).reduced(12, 4);
-        stop_.setBounds(row.removeFromLeft(56));
+        play_.setBounds(row.removeFromLeft(56));
         const int volumeWidth = juce::jmax(64, juce::jmin(100, row.getWidth() - 60));
         volume_.setBounds(row.removeFromRight(juce::jmin(volumeWidth, row.getWidth())));
         compactName_ = row.reduced(6, 0);
@@ -126,17 +158,17 @@ void SoundPreviewFooter::resized() {
     wave_.setBounds(area.removeFromTop(40));
     area.removeFromTop(6);
     auto row = area.removeFromTop(24);
-    if (area.getWidth() < kSwitchesBesideStopWidth) {
-        // Too narrow for two labelled switches beside Stop: they take the row, Stop shares the next one with the level.
+    if (area.getWidth() < kSwitchesBesidePlayWidth) {
+        // Too narrow for two labelled switches beside Play: they take the row, Play shares the next one with the level.
         matchKey_.setBounds(row.removeFromLeft(row.getWidth() / 2));
         autoPlay_.setBounds(row);
         area.removeFromTop(4);
         auto levelRow = area.removeFromTop(22);
-        stop_.setBounds(levelRow.removeFromLeft(56));
+        play_.setBounds(levelRow.removeFromLeft(56));
         volume_.setBounds(levelRow);
         return;
     }
-    stop_.setBounds(row.removeFromLeft(56));
+    play_.setBounds(row.removeFromLeft(56));
     const int switchWidth = juce::jmax(0, juce::jmin(110, (row.getWidth() - 8) / 2));
     autoPlay_.setBounds(row.removeFromRight(switchWidth));
     matchKey_.setBounds(row.removeFromRight(switchWidth));
