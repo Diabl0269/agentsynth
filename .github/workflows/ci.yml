@@ -185,6 +185,10 @@ jobs:
       # legacy files already over it. See scripts/check-file-sizes.sh's own doc comment and
       # docs/development/file-size-guard.md for the full mechanism.
       run: bash scripts/check-file-sizes.sh
+    - name: Check unity clashes
+      # A name declared in an anonymous namespace in two sources of one Windows unity group fails
+      # only the Windows build (no clashes today; a new one is renamed, never baselined); the self-test runs first.
+      run: bash scripts/tests/check-unity-clashes.test.sh && bash scripts/check-unity-clashes.sh
     - name: Check docs integrity
       # FRO169: runs scripts/check-docs.sh against the REAL tree, not just its unit test -- a PR
       # that only edits a Source/*.h comment (in scope for check C/D, but never under docs/**)

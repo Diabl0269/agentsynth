@@ -71,6 +71,16 @@ if ! bash "$repo_root/scripts/check-file-sizes.sh"; then
     exit 1
 fi
 
+# --- Unity-clash guard: whole tree. A name declared in an anonymous namespace in two sources of one
+# Windows unity group fails only the Windows build, so catch it here.
+if ! bash "$repo_root/scripts/check-unity-clashes.sh"; then
+    echo "" >&2
+    echo "pre-commit: unity-clash guard failed (see above)." >&2
+    echo "  Rename the name in one of the two files (docs/development/ci-pipeline.md, \"Unity groups on Windows\")." >&2
+    echo "  Bypass:   git commit --no-verify" >&2
+    exit 1
+fi
+
 # --- Function-size guard: whole tree, same deal as the file-size guard above (FRO78).
 if ! bash "$repo_root/scripts/check-function-sizes.sh"; then
     echo "" >&2

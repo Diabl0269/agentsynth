@@ -15,7 +15,7 @@ namespace {
 
 using synth::ui::BottomDockComponent;
 using Tab = BottomDockComponent::Tab;
-using Order = std::vector<Tab>;
+using TabOrder = std::vector<Tab>;
 
 constexpr auto kCmd = juce::ModifierKeys::commandModifier;
 constexpr auto kCmdAlt = juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier;
