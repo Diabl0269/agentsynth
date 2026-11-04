@@ -18,6 +18,8 @@
 
 namespace synth::ui {
 
+class StepGridPolyHint;
+
 /** What the card gives the step grid after it is built: the undo record, and the card's height hooks. */
 struct StepGridHooks {
     /** One finished edit (a drag, a key, a click): the module's extra state before and after. */
@@ -31,6 +33,8 @@ struct StepGridHooks {
     std::function<void()> layoutChanged;
     /** The neighbours make room: once when a lane starts to open, once when a lane has closed. */
     std::function<void()> makeRoom;
+    /** The hint's link was pressed: turn Poly on for the module the card named, as one undo step. */
+    std::function<void()> turnPolyOn;
 };
 
 /**
@@ -86,6 +90,13 @@ public:
     void auditionChord(int step, std::optional<SequencerChord> chord);
     /** The label's hit rectangle for `step` in this component's coordinates; empty when no label is drawn. */
     juce::Rectangle<int> chordLabelBounds(int step) const;
+
+    // ---- Poly hint (Poly Sequencer) ------------------------------------------------------------------
+    /** The module the card's Midi output feeds that plays one note at a time ("Oscillator"); empty when none. Shows or
+     *  hides the hint line and sets the chord picker's footer. */
+    void setMonoDestination(const juce::String& moduleName);
+    const juce::String& getMonoDestination() const noexcept { return monoDestination_; }
+    StepGridPolyHint& getPolyHint() noexcept { return *polyHint_; }
 
     // ---- Pages ---------------------------------------------------------------------------------------
     StepGridPageStrip& getPageStrip() noexcept { return pages_; }
@@ -146,6 +157,7 @@ private:
     void syncPattern();
     void updatePages();
     void layoutParts();
+    void layoutPolyHint(juce::Rectangle<int> stripRow);
     stepgrid::StepGridLayout currentLayout() const;
     void rebuildScale();
     void refreshPitchRange();
@@ -224,6 +236,8 @@ private:
     juce::AudioParameterBool* runParam_ = nullptr;
     StepGridHooks hooks_;
     StepGridTools tools_;
+    std::unique_ptr<StepGridPolyHint> polyHint_;
+    juce::String monoDestination_;
     sequencer_ops::RandomizeSettings randomize_;
     bool randomizeSeeded_ = false;
     juce::Component::SafePointer<StepGridRandomizePanel> randomizePanel_; ///< the open Randomize popover, if any

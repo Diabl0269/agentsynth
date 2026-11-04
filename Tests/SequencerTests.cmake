@@ -9,10 +9,12 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/SequencerStateTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/SequencerPatternOpsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/SequencerPreviewTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/Sequencer/SequencerChordRenderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridCardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridToolsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridWrittenOutlineTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridPolyHintTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridChordPickerTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/LaneChips/LaneChipRowTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/NoteRangePicker/NoteRangePickerTests.cpp

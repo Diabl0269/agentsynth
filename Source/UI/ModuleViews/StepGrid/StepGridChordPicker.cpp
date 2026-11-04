@@ -1,5 +1,6 @@
 // StepGridChordPicker.cpp -- the chord picker's layout (chips wrap inside 250 px), painting, mouse and keys.
 #include "StepGridChordPicker.h"
+#include "StepGridPolyHint.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
@@ -17,6 +18,7 @@ constexpr int kChipPadding = 7;
 constexpr int kRowGap = 6;
 constexpr int kHeaderHeight = 14;
 constexpr int kGroupHeight = 16;
+constexpr int kFooterHeight = 14;
 constexpr float kFont = 11.0f;
 constexpr float kSmallFont = 10.5f;
 
@@ -24,9 +26,11 @@ int chipWidth(const juce::String& name) { return theme::AppLookAndFeel::uiTextWi
 
 } // namespace
 
-StepGridChordPicker::StepGridChordPicker(stepgrid::ChordPickerContent content, SequencerChord current)
+StepGridChordPicker::StepGridChordPicker(stepgrid::ChordPickerContent content, SequencerChord current,
+                                         const juce::String& monoDestination)
     : content_(std::move(content))
-    , current_(current) {
+    , current_(current)
+    , monoDestination_(monoDestination) {
     setTitle("Chord picker");
     setTooltip("Chords for this step. Arrow keys move, Enter picks, Escape closes");
     setWantsKeyboardFocus(true);
@@ -79,7 +83,18 @@ int StepGridChordPicker::layoutAll() {
         rowPlaces_[(size_t)r] = {rowTop, kChipHeight};
         y += kChipHeight + kRowGap;
     }
-    return y - kRowGap + kPad;
+    y -= kRowGap;
+    footerY_ = 0;
+    if (monoDestination_.isNotEmpty()) {
+        footerY_ = y + kRowGap + 4;
+        y = footerY_ + kFooterHeight;
+    }
+    return y + kPad;
+}
+
+// The footer: why a chord may sound like one note, when the module after the sequencer plays one at a time.
+juce::String StepGridChordPicker::getFooterText() const {
+    return monoDestination_.isEmpty() ? juce::String() : StepGridPolyHint::lineFor(monoDestination_);
 }
 
 void StepGridChordPicker::resized() { layoutAll(); }
@@ -102,6 +117,15 @@ void StepGridChordPicker::paint(juce::Graphics& g) {
     g.setColour(c.textMuted);
     g.drawText("Outside the key", juce::Rectangle<int>(kPad, outsideHeaderY_, kWidth - 2 * kPad, kGroupHeight),
                juce::Justification::centredLeft);
+
+    if (footerY_ > 0) {
+        g.setColour(c.border);
+        g.fillRect(kPad, footerY_ - 5, kWidth - 2 * kPad, 1);
+        g.setColour(c.textMuted);
+        g.setFont(theme::AppLookAndFeel::uiFont(kSmallFont));
+        g.drawText(getFooterText(), juce::Rectangle<int>(kPad, footerY_, kWidth - 2 * kPad, kFooterHeight),
+                   juce::Justification::centredLeft, true);
+    }
 
     g.setFont(theme::AppLookAndFeel::uiFont(kFont));
     const bool focused = hasKeyboardFocus(false);

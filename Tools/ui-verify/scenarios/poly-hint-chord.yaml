@@ -1,0 +1,53 @@
+# FRO1043: a Poly Sequencer chord only plays all its notes when the voices after it are Poly. The card now says so, and
+# one click on its link fixes it.
+#
+# What a user does: adds a Poly Sequencer and an Oscillator (Poly off) and cables the sequencer's Midi output to the
+# Oscillator's Midi input: the card shows "Next: Oscillator plays one note at a time" and a Turn Poly on link. Clicks the
+# link: the Oscillator goes Poly (a Poly MIDI node joins the cable), the line goes. One Cmd+Z puts it all back and the
+# line returns. (The cable is dragged by the jacks' positions after a pan; the audio itself is measured by
+# SequencerChordRender in the unit tests.)
+record: true
+save_project: poly-hint-chord
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: poly sequencer}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: oscillator}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: Auto Arrange}
+  - wait: {settleMs: 800}
+  - drag: {from: window, fromX: 1300, fromY: 450, to: window, toX: 1200, toY: 800}
+  - wait: {settleMs: 600}
+  - click: {id: Hide Minimap}
+  - wait: {}
+  - screenshot: {name: 0-added}
+  - drag: {from: "card:Poly Sequencer", fromX: 550, fromY: 38, to: "card:Oscillator", toX: 10, toY: 38}
+  - wait: {settleMs: 600}
+  - screenshot: {name: 1-cabled}
+  - expect: {id: polyHint, showing: true, within_ms: 2000}
+  - expect: {id: Poly, exists: true}
+  - click: {id: polyHintLink}
+  - wait: {settleMs: 600}
+  - expect: {id: polyHint, showing: false, within_ms: 2000}
+  - screenshot: {name: 2-poly-on}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 600}
+  - expect: {id: polyHint, showing: true, within_ms: 2000}
+  - screenshot: {name: 3-undone}

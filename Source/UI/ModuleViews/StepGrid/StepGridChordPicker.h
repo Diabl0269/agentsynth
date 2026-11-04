@@ -21,7 +21,10 @@ class StepGridChordPicker
 public:
     static constexpr int kWidth = 250;
 
-    StepGridChordPicker(stepgrid::ChordPickerContent content, SequencerChord current);
+    /** `monoDestination` names the module after the sequencer that plays one note at a time (empty: none); the footer
+     *  then says so. */
+    StepGridChordPicker(stepgrid::ChordPickerContent content, SequencerChord current,
+                        const juce::String& monoDestination = {});
     ~StepGridChordPicker() override;
 
     /** A chip was picked (click or Enter); the popover closes after reporting it. */
@@ -34,6 +37,8 @@ public:
     static constexpr int kAuditionDelayMs = 60;
 
     const stepgrid::ChordPickerContent& getContent() const noexcept { return content_; }
+    /** The footer line, empty when the next module plays every note. */
+    juce::String getFooterText() const;
     /** The chip the keyboard is on, as row and index. */
     int getFocusedRow() const noexcept { return row_; }
     int getFocusedChip() const noexcept { return chip_; }
@@ -77,6 +82,8 @@ private:
     std::vector<Placed> placed_;
     std::vector<RowPlace> rowPlaces_;
     int outsideHeaderY_ = 0;
+    int footerY_ = 0;
+    juce::String monoDestination_;
     int row_ = 0;
     int chip_ = 0;
     int hoverRow_ = -1;
