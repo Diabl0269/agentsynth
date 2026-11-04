@@ -187,7 +187,7 @@ jobs:
       run: bash scripts/check-file-sizes.sh
     - name: Check unity clashes
       # A name declared in an anonymous namespace in two sources of one Windows unity group fails
-      # only the Windows build (strict ratchet, scripts/unity-clashes-baseline.txt); the self-test runs first.
+      # only the Windows build (no clashes today; a new one is renamed, never baselined); the self-test runs first.
       run: bash scripts/tests/check-unity-clashes.test.sh && bash scripts/check-unity-clashes.sh
     - name: Check docs integrity
       # FRO169: runs scripts/check-docs.sh against the REAL tree, not just its unit test -- a PR
