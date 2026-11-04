@@ -6,6 +6,7 @@
 // host does with the request (the whole voice graph, one undo step) is GraphEditorPolyChainTests.cpp's concern.
 
 #include "../../TestWait.h"
+#include "../Layout/FadeVisibilityTestGuard.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
@@ -163,3 +164,23 @@ TEST(TimelineTrackVoiceToggleTest, ItIsASquareIconTheSizeOfTheShowModuleButtonBe
 // A header is built on the doc change that adds its track, before the track's graph exists, and shown whole by the
 // refresh that follows in the same gesture: those controls land with the row. A change on a row that has been on
 // screen since still fades.
+TEST(TimelineTrackVoiceToggleTest, TheToggleOfAHeaderThatIsStillArrivingLandsAtOnceAndALaterOneFades) {
+    FadeAnimateGuard animate;
+    Fixture f;
+    const auto lead = f.doc.addTrack(TrackKind::Midi, "Lead"); // built with no graph: the host says none
+    auto& toggle = f.header()->getVoiceToggle();
+    ASSERT_FALSE(toggle.isVisible());
+
+    f.host.states[lead] = TrackPolyState::mono; // the graph is there now, the same gesture
+    f.header()->refreshFromDoc();
+    EXPECT_TRUE(toggle.isVisible());
+    EXPECT_EQ(toggle.getAlpha(), 1.0f) << "the arriving row's toggle must not fade in on its own";
+    EXPECT_EQ(toggle.getWidth(), synth::ui::TrackShowModuleButton::kSize);
+
+    synth::test::flushMessageQueue(); // the row's arrival is over
+    f.host.states[lead] = TrackPolyState::none;
+    f.header()->refreshFromDoc();
+    EXPECT_TRUE(toggle.isVisible()) << "a toggle that goes later fades out first";
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(toggle.isVisible());
+}

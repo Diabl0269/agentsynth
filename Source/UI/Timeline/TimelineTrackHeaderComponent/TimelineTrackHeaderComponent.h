@@ -975,6 +975,7 @@ private:
     TrackVoiceToggle voiceToggle_;
     synth::ui::FadeVisibility voiceToggleFade_{&voiceToggle_};
 
+    bool arriving_ = true; // until the message loop first turns: controls land at once, not by fade
     juce::Colour resolvedColour_{juce::Colours::grey};
     bool chipWarning_ = false;
     // True from the moment a background mouseDrag crosses the reorder threshold (see

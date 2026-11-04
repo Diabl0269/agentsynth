@@ -43,6 +43,15 @@ constexpr float kRowDragThreshold = 4.0f;
 } // namespace
 
 //==============================================================================
+// Shows or hides one of the row's controls: a fade on a row that is on screen, a plain change while the row is
+// still arriving (a fade then would start a moment after the row, and look like the control came late).
+static void setControlShown(synth::ui::FadeVisibility& fade, bool shown, bool arriving) {
+    if (!arriving)
+        fade.setShown(shown);
+    else if (fade.isShown() != shown || fade.isFading())
+        fade.snapTo(shown);
+}
+
 TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId,
                                                            TrackHeaderHost* host)
     : doc_(doc)
@@ -158,6 +167,13 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     openMidiDestinationsPickerHook_ = [this] { openMidiDestinationsPicker(); };
 
     refreshFromDoc();
+    // The row arrives in one gesture: it is built on the doc change that adds the track, before the track's graph
+    // exists, and the refresh that follows once the graph does is part of the same arrival. Until the message loop
+    // turns, a control that appears lands at once with its row; after that it fades like on any row on screen.
+    juce::MessageManager::callAsync([row = juce::Component::SafePointer<TimelineTrackHeaderComponent>(this)] {
+        if (row != nullptr)
+            row->arriving_ = false;
+    });
 }
 
 //==============================================================================
@@ -298,7 +314,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     // 5.2: every track whose notes/audio play into a channel shows the chip -- linked or not.
     const bool showChannelChip = channelInfo_.hasChannel && t->kind != synth::TrackKind::Automation;
     if (channelChipFade_.isShown() != showChannelChip) {
-        channelChipFade_.setShown(showChannelChip);
+        setControlShown(channelChipFade_, showChannelChip, arriving_);
         resized(); // the chip shares the bottom row with the binding chip
     }
     if (showChannelChip) {
@@ -315,19 +331,19 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     if (polyState != TrackPolyState::none)
         voiceToggle_.setState(polyState, t->name);
     if (voiceToggleFade_.isShown() != (polyState != TrackPolyState::none)) {
-        voiceToggleFade_.setShown(polyState != TrackPolyState::none);
+        setControlShown(voiceToggleFade_, polyState != TrackPolyState::none, arriving_);
         resized(); // the toggle shares the bottom row with the binding chip
     }
 
     const bool showDrumButton = host_ != nullptr && !isSectionHeader() && host_->isDrumKitTrack(trackId_);
     if (drumButtonFade_.isShown() != showDrumButton) {
-        drumButtonFade_.setShown(showDrumButton);
+        setControlShown(drumButtonFade_, showDrumButton, arriving_);
         resized(); // the button shares the bottom row with the binding chip
     }
 
     // Every track has the arrow (open, an empty track shows just "+ Add automation..."); the Unassigned
     // section only while it holds lanes.
-    foldArrowFade_.setShown(!isSectionHeader() || !t->lanes.empty());
+    setControlShown(foldArrowFade_, !isSectionHeader() || !t->lanes.empty(), arriving_);
     foldArrow_.setState(automationExpanded_, isSectionHeader() ? juce::String("Unassigned") : t->name,
                         shownLaneCount());
 
