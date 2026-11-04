@@ -158,6 +158,38 @@ TEST(OutputDock, ExpandingAMacroThatGrowsPastTheDockMovesTheDock) {
     EXPECT_EQ(c.rect(out).getX(), snapUp(hull.getRight()) + LU::kLayerGapX);
 }
 
+// Regression test for FRO1436: opening a folded macro whose open border covers the folded macro on its right pushed
+// that macro DOWN, because sliding it right would have landed it on the dock, which counted as in the way. The dock
+// is re-derived right of everything afterwards, so the neighbour slides right, stays level, and the dock follows.
+TEST(OutputDock, OpeningAMacroSlidesTheMacroBesideItRightEvenWithTheDockJustPastIt) {
+    Canvas c;
+    const auto out = addAudioOutput(c.editor, c.engine, 40, 300); // the dock on the macros' row
+    auto group = [&c](int x, int y) {
+        const auto a = c.osc(x, y);
+        const auto b = c.osc(x + 320, y);
+        c.editor.setSelectedNodes({a, b});
+        const auto id = c.editor.getMacroController().groupSelectionIntoMacro();
+        c.editor.getMacroController().setMacroCollapsed(id, true);
+        return id;
+    };
+    const auto left = group(400, 300);
+    const auto right = group(760, 300);
+    ASSERT_FALSE(left.isEmpty());
+    ASSERT_FALSE(right.isEmpty());
+    auto& ctl = c.editor.getMacroController();
+    const auto rightBefore = ctl.macroCableAnchorBounds(*c.editor.getMacros().find(right));
+    ASSERT_LT(c.rect(out).getX(), rightBefore.getRight() + 400) << "sanity: the dock sits just past the right macro";
+
+    ctl.setMacroCollapsed(left, false);
+
+    const auto hull = ctl.macroHullBounds(left);
+    const auto rightAfter = ctl.macroCableAnchorBounds(*c.editor.getMacros().find(right));
+    EXPECT_EQ(rightAfter.getY(), rightBefore.getY()) << "the macro beside it stays level";
+    EXPECT_GT(rightAfter.getX(), rightBefore.getX()) << "and slides right";
+    EXPECT_FALSE(rightAfter.intersects(hull));
+    EXPECT_GE(c.rect(out).getX(), rightAfter.getRight()) << "the dock is re-derived right of it";
+}
+
 TEST(OutputDock, AudioOutputCanNeverBeDeleted) {
     Canvas c;
     const auto out = addAudioOutput(c.editor, c.engine, 40, 40);

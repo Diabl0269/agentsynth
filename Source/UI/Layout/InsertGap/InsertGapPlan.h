@@ -38,7 +38,9 @@ inline constexpr int kMaxSpacing = LayoutUtil::kLayerGapX;
 
 /** Which gap the pointer is over, judged on the units as they are drawn now. `units` are one level's layout units
  *  without the card being placed; `size` is that card's (w, h). Empty when the pointer is over no gap, deep inside
- *  a card, or past the last card of its row or column. Pinned units are never anchors. */
+ *  a card, past the last card of its row or column, or when the card aimed there would not overlap the
+ *  anchor across the axis (for an open macro's hull, its lead edge across).
+ *  Pinned units are never anchors. */
 std::optional<Target> pickTarget(const std::vector<LayoutUtil::LayoutUnit>& units, juce::Point<int> pointer,
                                  juce::Point<int> size);
 
