@@ -96,6 +96,13 @@ void GraphEditor::slidePatchForEdgeDrop() {
     for (const auto& unit : macroController_.buildLayoutUnits({}))
         if (!edgeDrag_.isMoving(unit.key))
             macroController_.moveUnitBy(unit.key, d);
+    // A dragged card that joined an open macro while it was held is now part of a unit that just slid: it stays where
+    // the pointer left it, so the macro's other cards slide and it does not.
+    for (const auto& key : edgeDrag_.movingKeys())
+        if (key.startsWith("n:") &&
+            macroController_.isMemberOfOpenMacro(juce::AudioProcessorGraph::NodeID(
+                static_cast<juce::uint32>(key.fromFirstOccurrenceOf("n:", false, false).getLargeIntValue()))))
+            macroController_.moveUnitBy(key, {-d.x, -d.y});
     macroController_.dockMacroPortWidgets();
 
     panOffset -= d.toFloat() * zoomLevel;

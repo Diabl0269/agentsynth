@@ -329,6 +329,12 @@ public:
      *  Returns the {original, copy} macro id pairs so the caller can glide the copy's border from the original's. */
     std::vector<std::pair<juce::String, juce::String>> glideCopiesOutOfOriginals(
         const std::vector<std::pair<juce::AudioProcessorGraph::NodeID, juce::AudioProcessorGraph::NodeID>>& nodes);
+    /** True when `nodeId` is an ordinary (non-port) member of an open macro. */
+    bool isMemberOfOpenMacro(juce::AudioProcessorGraph::NodeID nodeId) const;
+    /** The smallest top-left a member card of an open macro may take: its hull then stays on the canvas, so the drop
+     *  never has to slide the macro to keep it there. */
+    static juce::Point<int> memberCardFloor();
+
     /** What a module being PLACED must keep clear of, as boxes for LayoutUtil::findFreeSlot: every visible module,
      *  every collapsed card and every open hull, flattened across nesting levels, except `excludeNodes` themselves,
      *  every macro that contains them (their own hull and its ancestors), the collapsed macros a drag of them carries,

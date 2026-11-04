@@ -51,6 +51,13 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
                 if (const auto* level = owner.getMacros().find(id))
                     macroPath.insert(0, level->name);
         }
+    // The landing outline the canvas shows for this card while it is dragged ("" otherwise), as "x y w h" in canvas
+    // coordinates, so a scenario can compare it with where the card lands.
+    const auto& dragDrop = owner.getDragDropController();
+    into.setProperty("landingOutline", dragDrop.isDragPreviewActive() && !dragDrop.getDragPreviewGhost().isEmpty()
+                                           ? dragDrop.getDragPreviewGhost().toString()
+                                           : juce::String());
+    into.setProperty("canvasBounds", getBounds().toString());
     into.setProperty("macro", macroName);
     into.setProperty("macroPath", macroPath.joinIntoString(" > "));
     // The targets with a cable on them, so a scenario can tell a cable landed and a reopened project kept it.

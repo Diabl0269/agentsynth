@@ -1,0 +1,34 @@
+# Bug: a single module dragged (Cmd held) onto the cards inside an open macro showed its landing outline in one spot and
+# landed in another (the macro was slid to keep its border on the canvas, carrying the card, and the outline looked for
+# room among neighbours that had not slid yet).
+#
+# What a user does (group-drop fixture, zoomed out):
+#   1. Presses on "Oscillator 1" with Cmd held and drags it onto the top of "Open macro", over its own cards.
+#   2. Mid-drag the landing outline is drawn (PNG 2).
+#   3. Releases: the oscillator is a member of "Open macro", exactly where the outline was (PNG 3: compare with PNG 2).
+# The unit guard is MacroGroupDrop.SingleModuleGhostMatchesLandingAcrossAndBeyondTheMacroBorder (Tests/Macros/MacroContainer/).
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/group-drop.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", macroPath: ""}
+  - screenshot: {name: 1-before}
+  - mouseDown: {id: "card:Oscillator 1", x: 58, y: 10, mods: cmd}
+  - mouseMoveHeld: {id: window, x: 520, y: 230, mods: cmd}
+  - wait: {}
+  - screenshot: {name: 2-outline-settled}
+  - mouseMoveHeld: {id: window, x: 520, y: 230, mods: cmd}
+  - wait: {}
+  - screenshot: {name: 2b-next-frame}
+  - getState: {id: "card:Oscillator 1"}
+  - mouseUp: {id: window, x: 520, y: 230, mods: cmd}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", macroPath: "Open macro"}
+  - getState: {id: "card:Oscillator 1"}
+  - screenshot: {name: 3-after-drop}

@@ -135,6 +135,7 @@ private:
     void recomputeDragPreview(juce::Point<int> desiredTopLeftCanvas);
     /** Sets dragPreviewGhost_ from the open gap, else the join snap, else the nearest free slot. */
     void placeGhost(juce::Point<int> desiredTopLeftCanvas);
+    void settleDragPreview(juce::Point<int> desiredTopLeftCanvas);
     /** Opens, moves or closes the gap between cards for the ghost aimed at `aim`. */
     void hoverInsertGap(juce::Rectangle<int> aim);
 

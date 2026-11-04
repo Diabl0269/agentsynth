@@ -16,6 +16,7 @@
 
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/HierarchicalArrange.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
@@ -404,6 +405,22 @@ void MacroGroupController::notePushesBy(const juce::String& growerKey,
 }
 
 void MacroGroupController::refreshAfterUnitMoves() { refreshAfterMove(); }
+
+bool MacroGroupController::isMemberOfOpenMacro(juce::AudioProcessorGraph::NodeID nodeId) const {
+    const auto uuid = nodeUuidFor(nodeId);
+    const auto* owner = uuid.isEmpty() ? nullptr : host_.getMacros().findByMember(uuid);
+    return owner != nullptr && !owner->memberIsPort(uuid) && !host_.getMacros().isEffectivelyCollapsed(owner->id);
+}
+
+// A card's own share of the hull (margin, chip row, port strip) reaches left of and above it, and the hull's left edge
+// must stay kMacroPortOverhang inside the canvas (nudgeHullIntoCanvas). Rounded up to the grid, because a placement
+// snaps: a floor between two grid steps would snap below itself and leave the hull to be nudged.
+juce::Point<int> MacroGroupController::memberCardFloor() {
+    constexpr int g = synth::LayoutUtil::kGridSize;
+    const auto hull = synth::LayoutUtil::openMacroHull({0, 0, 1, 1}, 0);
+    const auto up = [](int v) { return (v + g - 1) / g * g; };
+    return {up(synth::LayoutUtil::kMacroPortOverhang - hull.getX()), up(-hull.getY())};
+}
 
 // Boxes for findFreeSlot, built like buildLayoutUnits but flattened over every level instead of one: a module being
 // placed must clear a collapsed card, an open hull and every visible module wherever they nest. The hidden members of a
