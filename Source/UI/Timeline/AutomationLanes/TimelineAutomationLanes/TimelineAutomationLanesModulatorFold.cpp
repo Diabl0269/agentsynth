@@ -15,10 +15,7 @@ namespace {
 constexpr int kMinFoldedHeight = 12;
 constexpr double kFoldMs = 160.0;
 
-juce::KeyPress defaultMoveKey(int keyCode) {
-    return juce::KeyPress(keyCode,
-                          juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier), 0);
-}
+juce::KeyPress defaultMoveKey(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::altModifier, 0); }
 } // namespace
 
 bool TimelineAutomationLanes::isModulatorCollapsed(const juce::String& key) const {
@@ -162,7 +159,7 @@ void TimelineAutomationLanes::stepModulatorFoldForTest(float t) {
 //==============================================================================
 // Order
 
-// -1 for the Move Lane Up key, +1 for Move Lane Down, else 0 (rebindable; Cmd+Alt+Up/Down without a shortcut manager).
+// -1 for the Move Lane Up key, +1 for Move Lane Down, else 0 (rebindable; Alt+Up/Down without a shortcut manager).
 int TimelineAutomationLanes::laneMoveDirection(const juce::KeyPress& key) const {
     const auto matches = [this, &key](const char* action, int keyCode) {
         if (shortcuts_ == nullptr)
@@ -175,7 +172,7 @@ int TimelineAutomationLanes::laneMoveDirection(const juce::KeyPress& key) const 
 }
 
 // Offered by a focused modulator row, one of its controls, or its band. Consumed even at an end, so the combo or the
-// knob nudge never sees a Cmd+Alt+arrow. The row's height keys (TimelineAutomationLanesHeight.cpp) resize just this
+// knob nudge never sees an Alt+arrow. The row's height keys (TimelineAutomationLanesHeight.cpp) resize just this
 // row.
 bool TimelineAutomationLanes::handleModulatorKey(synth::LaneId lane, const ModulatorInfo& info,
                                                  const juce::KeyPress& key) {
@@ -296,7 +293,7 @@ void TimelineAutomationLanes::runModulatorGlide() {
 }
 
 // An undo or redo of a row move: the held refresh permuted the rows (noting where each stood) and laid them out in
-// their restored slots; they glide there from their old ones, like Cmd+Alt+Up/Down glided them forward.
+// their restored slots; they glide there from their old ones, like Alt+Up/Down glided them forward.
 void TimelineAutomationLanes::glideModulatorsReorderedByRestore() {
     const auto glides = std::exchange(restoreGlides_, {});
     for (const auto& [lane, oldYs] : glides)

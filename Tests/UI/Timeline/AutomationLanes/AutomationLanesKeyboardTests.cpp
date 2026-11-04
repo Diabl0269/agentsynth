@@ -1,6 +1,6 @@
 // AutomationLanesKeyboardTests.cpp -- Up/Down through a track's open lanes: track row -> lane headers (each followed by
 // its modulator rows) -> next track row, and back; folded lanes are skipped; the header's own combo keeps its arrows
-// and Cmd+Alt+Up/Down still moves the lane; screen readers get each lane's name. Key events go through the focused
+// and Alt+Up/Down still moves the lane; screen readers get each lane's name. Key events go through the focused
 // component's own keyPressed, as the key dispatcher does (a headless test has no native focus, so the panel's model,
 // getKeyboardLaneStopForTest(), says where focus went).
 
@@ -143,11 +143,11 @@ TEST(AutomationLanesKeyboardTest, ModulatorRowsAreStopsDirectlyUnderTheirLane) {
 TEST(AutomationLanesKeyboardTest, MoveLaneStillMovesTheLaneAndModifiedArrowsAreNotSteps) {
     KeyboardPanel f;
     auto& header = f.header(f.cutoff);
-    const juce::ModifierKeys commandAlt(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier);
+    const juce::ModifierKeys alt(juce::ModifierKeys::altModifier);
     ASSERT_EQ(f.doc.getTrack(f.bass)->lanes.front().id, f.cutoff);
 
-    EXPECT_TRUE(header.keyPressed(juce::KeyPress(juce::KeyPress::downKey, commandAlt, 0)))
-        << "Cmd+Alt+Down is the move-lane key, as it bubbles from a control chip";
+    EXPECT_TRUE(header.keyPressed(juce::KeyPress(juce::KeyPress::downKey, alt, 0)))
+        << "Alt+Down is the move-lane key, as it bubbles from a control chip";
     EXPECT_EQ(f.doc.getTrack(f.bass)->lanes.front().id, f.res) << "the lane moved down one slot";
     EXPECT_EQ(f.stop(), nullptr) << "and focus did not step";
 

@@ -74,7 +74,7 @@ empty row is left under the lanes ([below](#adding-a-lane-from-the-timeline)).
   right-click anywhere on the lane ([below](#right-click-anywhere-on-a-lane)), Shift+F10 and Return on the focused
   row open it, and the header's tooltip says so (the space the button took goes to the value readout);
 - **A click on the header** anywhere that is not a control (the marker and the value readout count as the header) gives
-  the row keyboard focus on release (accent ring; Up/Down, Return and Cmd+Alt+Up/Down then work as for any focused
+  the row keyboard focus on release (accent ring; Up/Down, Return and Alt+Up/Down then work as for any focused
   header) and opens no picker or menu; a press that became a reorder drag focuses nothing.
 - the **name button** (`LaneNameButton`, a `juce::Button`): a Tab stop with the shared accent ring, a border in the accent
   colour while the pointer is over it, named "Change parameter of Cutoff", tooltip "Pick a different parameter". A click
@@ -185,9 +185,10 @@ panel is not on screen. A lane never leaves its own track: the block is clamped 
   no row, so the drop passes the doc index of the visible lane whose slot it took (`TimelineDoc::moveLane(lane, index)`:
   the index is where the lane ends up, clamped; a move that changes nothing is not a mutation) and the hidden lanes keep
   their relative places. One undo step (`moveLaneOrderUndoable`); the order is saved and loaded with the track.
-- **Keyboard:** Cmd+Alt+Up / Cmd+Alt+Down (`timelineMoveLaneUp` / `timelineMoveLaneDown`, rebindable) move the lane whose
-  header controls or editor hold focus one visible slot, one undo step, the block gliding into its slot. The keys reach
-  the lane before the control chips and the point keys.
+- **Keyboard:** Alt+Up / Alt+Down (`timelineMoveLaneUp` / `timelineMoveLaneDown`, rebindable; the chord the canvas
+  and mixer use to move an item one place) move the lane whose header controls or editor hold focus one visible slot,
+  one undo step, the block gliding into its slot. The keys reach the lane before the control chips; in the curve editor
+  they reach the points first while any point is selected (Alt+Up/Down moves those points), the lane when none is.
   The lane keeps its header, its accessible names and its focus.
 - **Modulator order.** The modulator rows of one lane have an order of their own, stored with the lane
   (`AutomationLane::modulatorOrder`, below), moved with the same keys and by their own drag: see [Modulators](#modulators).
@@ -199,9 +200,9 @@ panel is not on screen. A lane never leaves its own track: the block is clamped 
 Up/Down walk the track list as one column: a track's row, then each of its open lanes (a lane header, followed by its
 modulator rows), then the next track's row, and back. Folded lanes are not stops, and the last stop's Down reaches
 "Add Track". Stepping onto a lane or modulator row also makes its track the focused one, so the routing pane follows.
-Where the arrows navigate: only when focus is on the row itself (a lane header or a modulator row). Return on a row opens its menu. Up/Down on a control chip bubble to the row like any other key, and Cmd+Alt+Up/Down still move the lane; any other modified
+Where the arrows navigate: only when focus is on the row itself (a lane header or a modulator row). Return on a row opens its menu. Up/Down on a control chip bubble to the row like any other key, and Alt+Up/Down still move the lane; any other modified
 arrow is left alone. On a modulator row Left folds it to its title line and Right opens it (as a tree view does), and
-Cmd+Alt+Up/Down (the same rebindable `timelineMoveLaneUp` / `timelineMoveLaneDown`) move that modulator one slot among its
+Alt+Up/Down (the same rebindable `timelineMoveLaneUp` / `timelineMoveLaneDown`) move that modulator one slot among its
 lane's modulators, from the row, any of its controls or its band; see [Modulators](#modulators). Each lane header is named "<Parameter> automation lane" for screen readers and shows the accent ring while
 it holds focus (a click on the header takes focus, see [the lane header](#the-lane-header)); a modulator row is named
 "<Source> mod lane on <Parameter>" and shows the same ring. The name on each is a Tab stop of its own (Return or Space opens
@@ -346,7 +347,7 @@ place keeps its fold ([row identity](modulator-row-identity.md)), a gone one's k
 leave when it lands and return as it starts); it lands at once when the timeline is not showing, under Reduce Motion or
 with Animations Off ([Motion rules](../layout/animation.md#motion-rules)).
 
-**Order.** A lane's rows are in graph order until moved. Cmd+Alt+Up / Cmd+Alt+Down (`timelineMoveLaneUp` /
+**Order.** A lane's rows are in graph order until moved. Alt+Up / Alt+Down (`timelineMoveLaneUp` /
 `timelineMoveLaneDown`, rebindable) on a focused modulator row, one of its controls (a combo or bar would take the arrow
 itself, so the row's key listener is offered it first) or its band (where a bare Up/Down nudges the amount) move that
 modulator one slot up or down among the modulators of the lane. Past the first row's Up or the last row's Down the
@@ -396,7 +397,7 @@ slots (`DropIndicator`).
   close at once. A whole-lane drag (lane header) never leaves its track, so it only moves its own track's lanes.
 - Change parameter and Duplicate carry the lane's rows as shown (`shownModulatorOrder`) into its `modulatorOrder`, each
   carried routing's old key replaced by its new routing's key at the same position (`remapModulatorOrder`).
-- The keyboard path is Cmd+Alt+Up/Down: within the lane, then past its end into the next lane that can take the row
+- The keyboard path is Alt+Up/Down: within the lane, then past its end into the next lane that can take the row
   (see Order above); the row's tooltip says "Drag to reorder or move to
   another lane". A keyboard move into another lane travels the same way: the row glides from where it stood into
   its new slot while its old gap closes and the new lane's grows. Not done: no auto-scroll while dragging.
@@ -880,11 +881,11 @@ collide with the first's own new identity. `swapLaneParams` mutates both sides i
 
 ## Tests
 
-`AutomationLanesReorderTests.cpp` (the header drag, Esc, click versus drag, the track boundary, Cmd+Alt+Up/Down, a rebind)
+`AutomationLanesReorderTests.cpp` (the header drag, Esc, click versus drag, the track boundary, Alt+Up/Down, Alt+Up on an editor with a point selected, a rebind)
 and `Tests/Timeline/TimelineDoc/TimelineDocLaneOrderTests.cpp` (`moveLane`, save and load; the saved, copied and kept
 `modulatorOrder`) cover the reorder. `AutomationLanesModulatorFoldOrderTests.cpp` covers the modulator rows' fold (a real
 click on the arrow, Return/Space, Left/Right, the one-line height and the band following, the hidden controls, the names,
-the tween and Reduce Motion) and their order (rows sorted by the stored order, Cmd+Alt+Up/Down from the row, a control and
+the tween and Reduce Motion) and their order (rows sorted by the stored order, Alt+Up/Down from the row, a control and
 the band, one undo step, the same row kept, the ends, a rebind). `AutomationLanesModulatorDragTests.cpp` covers the row drag
 (a real press and drag on the row: reorder within the lane as one undo step, Esc, a click under 4 px, the drop line, a lane
 that cannot take the row, the host call on a drop onto another lane) and, against a real `MainComponent`, the move

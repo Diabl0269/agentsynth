@@ -54,7 +54,7 @@ public:
     void setUndoManager(AppUndoManager* undo);
     void setTransport(synth::TransportService* transport);
     void setEditTool(EditTool tool);
-    /** The bindings Move Lane Up/Down read; null falls back to Cmd+Alt+Up/Down. */
+    /** The bindings Move Lane Up/Down read; null falls back to Alt+Up/Down. */
     void setShortcuts(ShortcutManager* shortcuts) noexcept { shortcuts_ = shortcuts; }
 
     /** The container the lane editors live in; the panel sizes it to its lanes region. */

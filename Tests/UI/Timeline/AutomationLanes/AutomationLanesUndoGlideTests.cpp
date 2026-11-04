@@ -1,5 +1,5 @@
 // AutomationLanesUndoGlideTests.cpp -- Cmd+Z and Cmd+Shift+Z of a reorder glide like the move did (docs/layout/
-// animation.md "Undo and redo glide"): a modulator row moved with Cmd+Alt+Up/Down and an automation lane moved within
+// animation.md "Undo and redo glide"): a modulator row moved with Alt+Up/Down and an automation lane moved within
 // its track both slide from where they stood to their restored slots instead of snapping. The real AppUndoManager
 // drives it. Headless: the animated path is forced (FadeAnimateGuard); the row glide is stepped by hand and the lane
 // glide runs on a pinned clock that the test advances, never on frames.
@@ -15,10 +15,7 @@ using synth::TrackKind;
 
 namespace {
 
-juce::KeyPress commandAlt(int keyCode) {
-    return juce::KeyPress(keyCode,
-                          juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier), 0);
-}
+juce::KeyPress altArrow(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::altModifier, 0); }
 
 void expectBetween(int value, int a, int b, const char* what) {
     EXPECT_GT(value, std::min(a, b)) << what;
@@ -81,7 +78,7 @@ TEST(AutomationLanesUndoGlideTest, UndoAndRedoOfAModulatorRowMoveGlideTheRowsBac
     auto* neighbour = s.row(1);
     const int top = moved->getY();
     const int second = neighbour->getY();
-    ASSERT_TRUE(moved->keyPressed(commandAlt(juce::KeyPress::downKey)));
+    ASSERT_TRUE(moved->keyPressed(altArrow(juce::KeyPress::downKey)));
     s.lanes().stepModulatorGlideForTest(1.0f);
     ASSERT_EQ(s.row(1), moved);
     ASSERT_EQ(moved->getY(), second);
@@ -113,7 +110,7 @@ TEST(AutomationLanesUndoGlideTest, UnderReduceMotionAnUndoneModulatorRowMoveLand
     FadeAnimateGuard reduced(synth::ui::AnimationMode::reduced);
     auto* moved = s.row(0);
     const int top = moved->getY();
-    ASSERT_TRUE(moved->keyPressed(commandAlt(juce::KeyPress::downKey)));
+    ASSERT_TRUE(moved->keyPressed(altArrow(juce::KeyPress::downKey)));
     ASSERT_TRUE(s.h.f.undo.undo());
     EXPECT_FALSE(s.lanes().isModulatorGlideAnimating());
     EXPECT_EQ(moved->getY(), top);
@@ -126,7 +123,7 @@ TEST(AutomationLanesUndoGlideTest, UndoAndRedoOfALaneMoveGlideTheLanesBackAndFor
     auto& header = *f.panel.laneHeaderForTest(f.cutoff);
     const int top = f.y(f.cutoff);
     const int second = f.y(f.res);
-    ASSERT_TRUE(header.keyPressed(commandAlt(juce::KeyPress::downKey)));
+    ASSERT_TRUE(header.keyPressed(altArrow(juce::KeyPress::downKey)));
     f.advance(1000.0);
     ASSERT_EQ(f.y(f.cutoff), second);
     ASSERT_EQ(f.y(f.res), top);
@@ -158,7 +155,7 @@ TEST(AutomationLanesUndoGlideTest, UnderReduceMotionAnUndoneLaneMoveLandsAtOnce)
     LaneScene f;
     FadeAnimateGuard reduced(synth::ui::AnimationMode::reduced);
     const int top = f.y(f.cutoff);
-    ASSERT_TRUE(f.panel.laneHeaderForTest(f.cutoff)->keyPressed(commandAlt(juce::KeyPress::downKey)));
+    ASSERT_TRUE(f.panel.laneHeaderForTest(f.cutoff)->keyPressed(altArrow(juce::KeyPress::downKey)));
     ASSERT_TRUE(f.undo.undo());
     EXPECT_FALSE(f.lanes().isLaneReorderActive());
     EXPECT_EQ(f.y(f.cutoff), top);

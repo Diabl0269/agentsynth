@@ -1,7 +1,7 @@
 // AutomationLanesCrossTrackMoveTests.cpp -- a mod row moved onto a lane of ANOTHER track, in a real saved project
 // (tracks in their own channel macros, one folded, one nested, one open): the moved row still names the real LFO or
 // envelope, keeps its controls and amount lane, marks a source that lives outside the lane's macro, and one undo puts
-// it back; Cmd+Alt+Up/Down past a lane's end carries the row into the next lane on screen. Also the load path: a
+// it back; Alt+Up/Down past a lane's end carries the row into the next lane on screen. Also the load path: a
 // modulation that crosses a macro boundary reopens with one attenuverter, not two.
 #include "../../../UniqueTempDir.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
