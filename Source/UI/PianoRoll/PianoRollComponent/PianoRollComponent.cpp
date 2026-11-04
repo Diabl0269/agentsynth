@@ -61,6 +61,7 @@
 #include "AppUndoManager.h"
 #include "PianoRollHeaderChip.h"
 #include "PianoRollInternal.h"
+#include "UI/Layout/EditorTabWalk.h"
 #include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
 #include <algorithm>
 #include <cmath>
@@ -95,6 +96,7 @@ bool noteRangeShownDiffers(const ScaleAssistPanel& panel, const synth::Clip& cli
 //==============================================================================
 PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
     : viewState_(viewState) {
+    tabWalk_ = std::make_unique<EditorTabWalk>(*this); // first: initHeaderChips and focusLost use it
     setComponentID("pianoRollComponent");
     setTitle("Piano roll");
     setInterceptsMouseClicks(true, false);
@@ -169,6 +171,7 @@ PianoRollComponent::~PianoRollComponent() {
 
 void PianoRollComponent::openClip(synth::ClipId id) {
     wheelTween_.stop();
+    tabWalk_->reset();
     clearVelocityPreview(); // a strip gesture on the OLD clip commits nothing
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;

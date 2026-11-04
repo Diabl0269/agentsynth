@@ -286,7 +286,11 @@ The grid is one Tab stop titled "Drum machine grid". Arrow keys, Home and End mo
 focus ring); Return toggles a hit, Space plays or stops the clip, Shift+Return toggles accent, Shift+Up and Shift+Down change loudness
 by 10, Delete removes the hit, Escape closes. Return, Space (Play clip), Shift+Return, Shift+Up/Down and Alt(+Shift)+Left/Right (a drum's
 [length](#per-drum-length-and-swing)) are rebindable (Drum Machine category in Settings). The focused cell is read out as, for example, "Kick, step 5, hit, loudness 100, accent" or
-"Kick, step 5, empty". Header controls (the Swing and Humanise knobs, Ideas) and each row's name, M and S are Tab-reachable with names and tooltips.
+"Kick, step 5, empty". Opening the editor focuses the grid. Tab from the grid walks the header: View switch, Play
+clip, Show all drums (skipped while it is greyed), Steps per bar, Swing, Humanise and Ideas, each with a name and a
+tooltip, then back to the grid; the next Tab leaves for the next region, and Shift+Tab walks backwards
+([Clip editor Tab walk](focus.md#clip-editor-tab-walk)). Each row's name, M and S and the lanes are not on the walk:
+they are reached with the pointer.
 
 ## Motion
 

@@ -1,6 +1,8 @@
 # The drum machine step-grid editor and its panel hosting, appended to AppUI's source list (kept out of
 # AppUISources.cmake to stay under the file-size cap).
 list(APPEND APPUI_SOURCES
+    Source/UI/Layout/EditorTabWalk.h # the Tab walk of the drum machine and the piano roll
+    Source/UI/Layout/EditorTabWalk.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelDrumMachine.cpp
     Source/MainComponent/MainComponentDrumMachine.cpp
     Source/UI/Timeline/TrackDrumMachineButton.h

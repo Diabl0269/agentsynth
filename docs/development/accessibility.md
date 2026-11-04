@@ -153,6 +153,14 @@ the ringed control's name to test mode (`topBarRing`). The main Toolbar and Canv
 
 `Tests/UI/Layout/KeyboardReachTests.cpp` checks that every operable control (button, slider, combo box, text editor) in every keyboard focus region is a keyboard stop. It walks the regions of a real `MainComponent`'s `FocusRegionRegistry` (each main view in turn, the routing pane and Mod Matrix open, then the piano roll and the drum machine open on a clip) and every dialog of the theme sweep registry, so a new region or dialog is covered without being listed. A control is reached when it is one of `focusableDescendants(region root)`. A control that takes no clicks (`setInterceptsMouseClicks(false, ...)`, such as the routing pane's channel chip) is read-only and not walked; the control beside it that does the finding carries its facts in its description. A region that reaches controls with keys of its own (the toolbars' key rings, the timeline top bar and the mixer's top bar, both `synth::ui::KeyRing`; the mixer's one-leaf keys; the Settings tab strip) has an adapter in the test with a one-line reason; a segmented switch and a lane chip row count as one control. A control that is not reached fails with `<region> / <control>`, unless `kKnownGaps` lists it with its ticket. The list may only shrink: a listed control that is now reached fails with "fixed - remove it from kKnownGaps". A region with no operable control and no adapter fails, since the walk is then not seeing it. Every stop a key can land on, the region's `shownFocusableDescendants` and its key ring's stops, must also show: visible up to the region root with a non-empty size, or the test fails with "a keyboard stop that does not show". The per-region counts are printed in the test output.
 
+## Controls inside a focus region
+
+Tab is the region cycle, so a region that holds more than one stop (a clip editor's grid plus its header) claims Tab
+itself with `synth::ui::EditorTabWalk` (`Source/UI/Layout/EditorTabWalk.h`): the grid is home, the stops are walked in
+screen order, and the Tab after a full walk leaves the region
+([focus.md](../timeline/focus.md#clip-editor-tab-walk)). `Tests/UI/Layout/EditorHeaderTabReachTests.cpp` checks every
+header control of every clip editor is landed on, named and tooltipped; a new editor adds one row there.
+
 ## Dialogs: Tab order, hidden stops, Escape
 
 Every dialog, tab and popup is held to three more things, all in `Source/UI/Layout/DialogKeyboard.h`

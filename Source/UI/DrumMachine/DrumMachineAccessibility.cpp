@@ -2,6 +2,7 @@
 // speaks "Kick, step 5, hit, loudness 100, accent" or "Kick, step 5, empty".
 
 #include "DrumMachineComponent.h"
+#include "UI/Layout/EditorTabWalk.h"
 
 #include "TestMode/TestModeStateSource.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
@@ -58,10 +59,39 @@ void DrumMachineComponent::focusGained(FocusChangeType) {
     announceFocus();
 }
 
-void DrumMachineComponent::focusLost(FocusChangeType) { repaint(); }
+// Focus leaving the grid (to a header stop, or anywhere else) starts the Tab walk over. The walk is null while the
+// component is torn down.
+void DrumMachineComponent::focusLost(FocusChangeType) {
+    if (tabWalk_ != nullptr)
+        tabWalk_->reset();
+    repaint();
+}
+
+// The header row in screen order. Rows, lane chips and lanes are not on the walk: the grid's own keys reach a row
+// (Alt+Left/Right, the context-menu key), and a Tab after Ideas comes back to the grid.
+void DrumMachineComponent::setupTabWalk() {
+    tabWalk_->setShortcuts([this] { return shortcuts_; });
+    tabWalk_->setStops([this] {
+        return std::vector<juce::Component*>{&viewSwitch_, &playClipButton_, &showAllButton_, &stepsCombo_,
+                                             &swingKnob_,  &humaniseKnob_,   &ideasButton_};
+    });
+}
+
+// The accessible name of the control that holds focus inside the drum machine: its title, else a button's text.
+static juce::String focusedNameIn(const juce::Component& owner) {
+    auto* focused = juce::Component::getCurrentlyFocusedComponent();
+    if (focused == nullptr || (focused != &owner && !owner.isParentOf(focused)))
+        return {};
+    if (focused->getTitle().isNotEmpty())
+        return focused->getTitle();
+    if (auto* button = dynamic_cast<juce::Button*>(focused))
+        return button->getButtonText();
+    return {};
+}
 
 // Test mode: a hidden child (id `drumMachineState`) reports `hitCount` (cells holding a hit), `hits` (each row's steps
-// as `pitch:step,step;...`) and `stroke` (a paint or erase stroke is in flight).
+// as `pitch:step,step;...`), `stroke` (a paint or erase stroke is in flight) and `focused` (the name of the
+// focused control inside the editor, empty when focus is elsewhere).
 class DrumMachineComponent::StateProbe
     : public juce::Component
     , public synth::testmode::StateSource {
@@ -87,6 +117,7 @@ public:
         into.setProperty("hitCount", static_cast<int>(owner_.cells_.size()));
         into.setProperty("hits", rows.joinIntoString(";"));
         into.setProperty("stroke", owner_.gesture_.kind == Gesture::Kind::Stroke);
+        into.setProperty("focused", focusedNameIn(owner_)); // the Tab walk's stop, read as a screen reader names it
     }
 
 private:

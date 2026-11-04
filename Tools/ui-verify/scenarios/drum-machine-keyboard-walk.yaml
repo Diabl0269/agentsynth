@@ -1,0 +1,70 @@
+# A drum clip and every drum machine header control are reachable from the keyboard alone (FRO1047: Tab jumped out
+# of the timeline and out of the drum machine, so none of them were).
+#
+# What a user does, keys only:
+#   1. Opens the project with a Drum Kit track and its "Beat 1" clip, and focuses the timeline (Cmd+Shift+T).
+#   2. Tab: the Drum Kit track's row. Tab: its clip, outlined, read as "MIDI clip Beat 1 ...".
+#   3. Return: the drum machine opens on the clip with the grid focused.
+#   4. Tab, Tab, ...: View switch, Play clip, Steps per bar, Swing, Humanise, Ideas (Show all drums is greyed with
+#      nothing hidden, so it is skipped), then back to the grid. Each stop shows the accent focus ring.
+#   5. Shift+Tab from the grid goes back to Ideas; Escape closes the drum machine and focus is back on the clip.
+record: true
+save_project: keyboard-walk
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+shift+t}
+  - wait: {}
+  - key: {keys: tab}
+  - wait: {}
+  - screenshot: {name: 01-track-row}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: timelineClipLaneArea, hasFocus: true}
+  - getState: {id: timelineClipLaneArea}
+  - screenshot: {name: 02-clip}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 1500}
+  - expect: {id: timelineDrumMachine, hasFocus: true}
+  - getState: {id: drumMachineState}
+  - screenshot: {name: 03-grid}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: View}
+  - screenshot: {name: 04-view-switch}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Play clip}
+  - screenshot: {name: 05-play-clip}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Steps per bar}
+  - screenshot: {name: 06-steps-per-bar}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Swing}
+  - screenshot: {name: 07-swing}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Humanise}
+  - screenshot: {name: 08-humanise}
+  - key: {keys: tab}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Ideas}
+  - screenshot: {name: 09-ideas}
+  - key: {keys: tab}
+  - wait: {}
+  - getState: {id: drumMachineState}
+  - expect: {id: drumMachineState, contains: {focused: Drum machine}}
+  - expect: {id: timelineDrumMachine, hasFocus: true}
+  - screenshot: {name: 10-back-to-grid}
+  - key: {keys: shift+tab}
+  - wait: {}
+  - expect: {id: drumMachineState, focused: Ideas}
+  - screenshot: {name: 11-shift-tab-ideas}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: false, within_ms: 1500}
+  - expect: {id: timelineClipLaneArea, hasFocus: true}
+  - screenshot: {name: 12-closed-back-on-clip}

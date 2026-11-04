@@ -41,6 +41,7 @@ class TransportService;
 // the clip lanes (the same rect the piano roll uses) when such a clip is double-clicked. It reads and writes the same
 // notes the piano roll shows; docs/timeline/drum-machine.md has the cell mapping and the gesture table.
 namespace synth::ui {
+class EditorTabWalk;
 
 class DrumMachineComponent
     : public juce::Component
@@ -258,6 +259,8 @@ public:
     int getIdeasFocusReturns() const noexcept { return ideasFocusReturns_; }
     const juce::String& getLastAnnouncement() const noexcept { return lastAnnouncement_; }
 
+    /** Tab from the grid: the header's controls in screen order, then the grid again (DrumMachineAccessibility.cpp). */
+    EditorTabWalk& getTabWalk() noexcept { return *tabWalk_; }
     CardSegmentedSwitch& getViewSwitch() noexcept { return viewSwitch_; }
     juce::ComboBox& getStepsCombo() noexcept { return stepsCombo_; }
     juce::Button& getShowAllButton() noexcept { return showAllButton_; }
@@ -451,6 +454,7 @@ private:
 
     // DrumMachineAccessibility.cpp
     void attachStateProbe();
+    void setupTabWalk();
 
     // DrumMachineStroke.cpp
     void beginStroke(const Cell& first, bool erase, int velocity, juce::Point<float> pos);
@@ -548,6 +552,7 @@ private:
     CardKnobSlider swingKnob_;
     CardKnobSlider humaniseKnob_;
     LaneChipRow chips_;
+    std::unique_ptr<EditorTabWalk> tabWalk_; // UI/Layout/EditorTabWalk.h
     std::array<LaneBand, kDrumLaneKindCount> bands_;
     DrumRowLabels labels_;
     juce::Rectangle<int> nameBounds_, stepsCaptionBounds_, swingCaptionBounds_, swingValueBounds_, forBounds_;
