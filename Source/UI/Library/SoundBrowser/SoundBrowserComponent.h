@@ -20,10 +20,13 @@
 #include <algorithm>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 #include <vector>
 
 namespace synth::ui {
+
+class ChevronTurn;
 
 /** The Sounds view of the left sidebar: Places, folders, search results and a footer for the selected sound. The rows
  *  are painted and one accessibility list speaks the selected one, the same pattern as the module library. */
@@ -57,8 +60,9 @@ public:
     static constexpr const char* kShapesId = "@shapes";
 
     /** GetPack is a pack you have not downloaded (greyed, with its size); AddFolder is the "Add folder..." row; Shape
-     * is a saved or built-in curve under the Shapes place. */
-    enum class RowKind { Hint, Place, Folder, Sound, GetPack, AddFolder, Shape };
+     * is a saved or built-in curve under the Shapes place; PackHeading is the "Get more" row that folds the GetPack
+     * rows away (its soundCount is how many packs it holds). */
+    enum class RowKind { Hint, Place, Folder, Sound, GetPack, AddFolder, Shape, PackHeading };
 
     struct Row {
         RowKind kind = RowKind::Hint;
@@ -79,6 +83,9 @@ public:
         std::optional<synth::shapes::LibraryShape> shape;     ///< Shape rows only.
         bool navigable() const { return kind != RowKind::Hint; }
     };
+
+    /** The name a row shows: sound, folder, place and pack names get `displayName`; row.text stays the raw name. */
+    static juce::String shownName(const Row& row);
 
     struct PathPart {
         juce::String label, placeId, folder;
@@ -183,6 +190,18 @@ public:
     bool toggleDownload(int index);
     /** Where GetPack row `index`'s Download (Cancel) button is painted, in this view's coordinates. */
     juce::Rectangle<int> getPackButtonBounds(int index) const;
+    /** The user's choice for the Get more section (default open); a download in flight shows it open without changing
+     *  this. `animate` fades the rows (190 ms) instead of swapping them. */
+    void setGetMoreOpen(bool open, bool animate = true);
+    bool isGetMoreOpen() const { return getMoreOpen_; }
+    /** Whether the GetPack rows are listed now: the choice, or open while a pack downloads. */
+    bool isGetMoreShowing() const { return getMoreOpen_ || getMoreForcedOpen_; }
+    /** Folds or opens Get more as its heading row does (click, Return). */
+    void toggleGetMore();
+    /** The choice changed by the user (or setGetMoreOpen with animate); the owner saves it. */
+    std::function<void()> onGetMoreChanged;
+    const ChevronTurn& getMoreChevron() const;
+    float getGetMoreChevronOpenness() const;
 
     // ---- The user's folders (SoundBrowserFolders.cpp) -----------------------------------------------------------
     enum class FolderAction { Rename, ShowInFinder, ScanAgain, Remove };
@@ -298,7 +317,7 @@ private:
                     const juce::String& selectKey);
     juce::String placeNameOf(const juce::String& placeId) const;
     void capturePreviousList();
-    void playListMotion(int direction);
+    void playListMotion(int direction, bool fold = false);
 
     // Shapes (SoundBrowserShapes.cpp)
     void rebuildShapeRows();
@@ -323,6 +342,7 @@ private:
     void paintPackRow(juce::Graphics& g, const Row& row, int index, juce::Rectangle<int> area) const;
     void paintAddFolderRow(juce::Graphics& g, juce::Rectangle<int> area) const;
     void paintPlaceRow(juce::Graphics& g, const Row& row, juce::Rectangle<int> area) const;
+    void paintPackHeadingRow(juce::Graphics& g, const Row& row, juce::Rectangle<int> area) const;
     bool activateSelectedAction();
     void paintPathBar(juce::Graphics& g, juce::Colour muted, juce::Colour primary, juce::Colour accent);
     void paintFooter(juce::Graphics& g);
@@ -414,6 +434,9 @@ private:
     synth::soundpacks::SoundPackInstaller* installer_ = nullptr;
     synth::soundbrowser::SoundFolderBook* folderBook_ = nullptr;
     juce::String packSignature_;
+    bool getMoreOpen_ = true;
+    bool getMoreForcedOpen_ = false; // a pack downloads: the rows show whatever the choice is
+    std::unique_ptr<ChevronTurn> getMoreTurn_;
     std::function<void(std::function<void(const juce::File&)>)> folderPicker_;
     std::function<void(const juce::File&)> reveal_;
     std::function<bool()> foregroundCheck_;

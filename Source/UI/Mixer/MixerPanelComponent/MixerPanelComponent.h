@@ -230,10 +230,10 @@ public:
      *  member, never a value captured at bind time. */
     void setShortcutManager(ShortcutManager* manager) {
         shortcuts_ = manager;
-        toolbar_.refresh();
+        refreshShortcutHints();
     }
-    /** Re-reads the section toggles' shortcut hints after a rebind. */
-    void refreshShortcutHints() { toolbar_.refresh(); }
+    /** Re-reads the section toggles' and the colour dots' shortcut hints after a rebind. */
+    void refreshShortcutHints();
 
     /** Re-runs buildMixerSnapshot() and brings the column set in line with it, keeping every strip column whose
      *  column did not change (MixerPanelColumnReuse.cpp). Also re-resolves focusedColumnIndex_ by NodeID/uuid across
@@ -392,6 +392,9 @@ public:
     }
     /** Leaving the panel (another control or region takes focus) ends row mode and the top-bar ring. */
     void focusLost(FocusChangeType cause) override;
+    /** Coming back shows the focused column's ring again (focusLost hid it). */
+    void focusGained(FocusChangeType cause) override;
+    void focusOfChildComponentChanged(FocusChangeType cause) override;
     /** Opens the focused column's header right-click menu, anchored at that column. False with no column focused. */
     bool showContextMenuForKeyboardFocus() override;
     void paintOverChildren(juce::Graphics& g) override;
@@ -410,6 +413,12 @@ private:
     ColourRoute colourRouteFor(const std::vector<synth::TrackId>& feedingTracks, const juce::String& uuid) const;
     void openColourPicker(const juce::String& uuid, juce::Rectangle<int> dotScreenBounds);
     juce::String bypassShortcutText() const;
+    juce::String colourShortcutText() const;
+    bool openFocusedColour();
+    bool panFocused(float delta);
+    bool hideFocusedChannel();
+    juce::String panShortcutText() const;
+    static constexpr float kPanStep = 0.1f; // a tenth of the way to one side
     void wireSectionLayout();
     void onSectionGeometryChanged();
     void wireSectionFades();
@@ -452,6 +461,11 @@ private:
         bool linkedToTrack = false;                // Strip only
         std::vector<synth::TrackId> feedingTracks; // Strip only
     };
+    struct FocusIdentity {
+        ColumnEntry::Kind kind;
+        juce::String uuid;
+    };
+    std::optional<FocusIdentity> focusFallback_; // where focus goes when the focused column is gone after a rebuild
 
     // ---- Incremental column rebuild -- implemented in MixerPanelColumnReuse.cpp -------------------
     /** What the panel itself gave a strip column; with MixerColumnComponent::showsColumn it decides reuse. */
@@ -488,7 +502,12 @@ private:
     bool toggleFocusedSoloed();
     bool armFocusedTrack();
     int columnIndexContaining(const juce::Component* focused) const;
-    bool renameFocusedColumn(); // the Rename key: the focused column's header name editor
+    int columnIndexOf(const juce::Component* c) const; // the column holding `c`, or -1
+    /** A press anywhere in a column (a control, the header or empty space) focuses that column. */
+    void focusColumnFromClick(const juce::MouseEvent& e);
+    bool duplicateFocusedTrack(); // the Duplicate key: the focused strip's one feeding track
+    void noteKeyboardMoved();     // shows or hides the focused column's ring as the keyboard leaves or returns
+    bool renameFocusedColumn();   // the Rename key: the focused column's header name editor
 
     // ---- Row focus -- implemented in MixerPanelRowKeyboard.cpp ---------------------------------
     /** The focused column's insert / send lists while their sections are shown; null otherwise. */
@@ -614,9 +633,21 @@ private:
     MixerPanelToolbar toolbar_;
     MixerZonesPane zonesPane_;
     std::vector<juce::Component*> topBarStops();
-    static std::unique_ptr<juce::Component> makeTopBarRingProbe(const KeyRing& ring);
     std::unique_ptr<juce::Component> topBarRingProbe_; // hidden; reports the ring to test mode
+    // Hidden; reports `focusedColumn` to test mode (the title of the column whose focus ring shows, empty when none),
+    // so this widely included header stays free of TestModeStateSource.h.
+    std::unique_ptr<juce::Component> focusedColumnProbe_;
+    void fillFocusedColumnState(juce::DynamicObject& into) const;
     KeyRing topBarRing_{*this, [this] { return topBarStops(); }, KeyRing::Order::given};
+    // Hears every press inside the panel (a nested listener), so a click on any control in a column focuses it.
+    struct ClickFocus : juce::MouseListener {
+        explicit ClickFocus(MixerPanelComponent& o)
+            : owner(o) {}
+        void mouseDown(const juce::MouseEvent& e) override { owner.focusColumnFromClick(e); }
+        MixerPanelComponent& owner;
+    };
+    ClickFocus clickFocus_{*this};
+    bool keyboardAway_ = false; // the keyboard left the panel: the focused column keeps its place, not its ring
     Zone leftZone_;
     Zone rightZone_;
     synth::MixerViewDoc ownedViewDoc_ = synth::MixerViewDoc::forNewProject();

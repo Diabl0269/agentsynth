@@ -1,0 +1,46 @@
+# Bug: a click on a mixer strip showed no focus, the outline stayed after a click elsewhere, Duplicate stopped acting
+# on the chosen strip after the first use, and Cmd+Up from a clicked strip did not reach the top bar ring.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel, adds an Oscillator track and opens the Mixer tab.
+#   2. Clicks empty space in the strip (its header, beside the name): the strip shows the focus outline.
+#   3. Presses Cmd+D three times: three copies of the track, the outline stays on the strip.
+#   4. Clicks the canvas: the outline goes.
+#   5. Clicks the strip again and presses Cmd+Up: the top bar ring lands on the side pane button.
+record: true
+save_project: mixer-strip-click-focus
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - wait: {}
+  - click: {id: Mixer}                                       # the Mixer tab
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, focusedColumn: ""}
+  - expect: {count: {prefix: mixerColumnHeaderName, equals: 3}}   # the strip, Direct and Master
+  - click: {id: mixerPanel, x: 310, y: 38}                    # empty space in the strip's header, beside its name
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Oscillator 1"}
+  - screenshot: {name: strip-clicked}
+  - key: {keys: cmd+d}
+  - expect: {count: {prefix: mixerColumnHeaderName, equals: 4}, within_ms: 3000}
+  - key: {keys: cmd+d}
+  - expect: {count: {prefix: mixerColumnHeaderName, equals: 5}, within_ms: 3000}
+  - key: {keys: cmd+d}
+  - expect: {count: {prefix: mixerColumnHeaderName, equals: 6}, within_ms: 3000}
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Oscillator 1"}
+  - screenshot: {name: three-copies}
+  - click: {id: window, x: 1000, y: 420}                     # empty canvas
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, focusedColumn: ""}
+  - screenshot: {name: canvas-clicked}
+  - click: {id: mixerPanel, x: 310, y: 38}
+  - wait: {}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Oscillator 1"}
+  - key: {keys: cmd+up}
+  - expect: {id: mixerTopBarRing, topBarRing: "Side pane", within_ms: 1000}
+  - screenshot: {name: top-bar-ring}

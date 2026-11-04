@@ -23,6 +23,8 @@ public:
     bool isActive() const noexcept { return active_; }
     /** Puts the ring on the control it last sat on (the first one the first time). False when no stop shows. */
     bool enter();
+    /** Puts the ring on `stop` when it is one of getStops(), else does what enter() does. */
+    bool enterAt(juce::Component& stop);
     void leave();
     /** Left/Right/Home/End move the ring, Return/Space press the ringed control, Down/Escape return to the panel;
      *  anything else (any chord too) is not ours. Only while active. */
@@ -50,5 +52,9 @@ private:
     bool active_ = false;
     juce::Component::SafePointer<juce::Component> ringed_;
 };
+
+/** A hidden child for the owner to add: test mode reads it by `componentId` as {"topBarRing": the ringed control's
+ *  name, "" when the ring is off}. */
+std::unique_ptr<juce::Component> makeKeyRingProbe(const KeyRing& ring, const juce::String& componentId);
 
 } // namespace synth::ui

@@ -37,6 +37,13 @@ below for the Mixer region's own keyboard behaviour.
   and deliberate: a direct-focus shortcut is a request to go somewhere specific, so it is allowed to
   get you there even if that panel was closed; Tab-cycling only ever moves between what's already on
   screen. Neither is suppressed by the welcome screen.
+- **Cmd+Shift+Up (`focusTransportBar`) reaches the transport bar from every region** — it does what
+  Cmd+Shift+T does, then puts the Timeline top bar's key ring on Play
+  (`TimelinePanelComponent::focusTransportBar`, `KeyRing::enterAt`). From the mixer docked as a tab the
+  Timeline tab comes forward. A surface's own arrow keys ignore Cmd, Ctrl and Alt arrows (the mixer's
+  column and fader keys, a track row's Up/Down), so the chord bubbles to the app. Guarded by
+  `KeyboardReachTests`' `TheFocusTransportBarKeyReachesTheTransportFromEveryRegion`
+  (`Tools/ui-verify/scenarios/transport-bar-reach.yaml`).
 - **Cmd+Shift+M is deliberately NOT used for a Library shortcut** — `Cmd+M` already owns "Toggle Mod
   Matrix", and the chord instead went to "Locate Master" (Graph category — see [**Locate Master
   **](shortcuts.md#locate-master)), the same "find the mix bus" need this reservation was
@@ -55,7 +62,7 @@ below for the Mixer region's own keyboard behaviour.
   this adds; reaching the clip lanes themselves by keyboard alone stays out of scope (the locked
   "track headers only" decision). The **Add Track** button is the last stop of that column: Down on the last
   row moves focus to it (with no tracks, Down on the region root lands on it directly), Up returns to the
-  last row, and Return/Space press it (`TimelinePanelComponent::handleAddTrackButtonKey`). It shows the
+  last row (reached from the top, or with no tracks, Up puts the top bar's key ring on at once), and Return/Space press it (`TimelinePanelComponent::handleAddTrackButtonKey`). It shows the
   standard button focus ring.
 - **Mod Matrix nests inside Canvas** — `ModMatrixComponent` is a child component of `GraphEditor`,
   so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`

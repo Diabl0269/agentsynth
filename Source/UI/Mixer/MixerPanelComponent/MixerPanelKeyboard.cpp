@@ -6,7 +6,6 @@
 #include "MixerPanelComponent.h"
 
 #include "ShortcutManager/ShortcutManager.h"
-#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/RenameKey.h"
 #include "UI/Mixer/MixerColumnComponent.h"
@@ -33,20 +32,37 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     }
     if (rowFocus_.has_value() && handleRowKey(key))
         return true;
-    if (key.isKeyCode(juce::KeyPress::leftKey))
+    // A Cmd, Ctrl or Alt arrow is another action's chord (Focus Transport Bar is Cmd+Shift+Up), so it bubbles on.
+    // Before the arrows: the default pan chords are Shift+Left / Shift+Right.
+    if (matchesAction(key, "mixerPanLeft",
+                      juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0)))
+        return panFocused(-kPanStep);
+    if (matchesAction(key, "mixerPanRight",
+                      juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0)))
+        return panFocused(kPanStep);
+    if (matchesAction(key, "mixerToggleChannelHidden", juce::KeyPress('h', juce::ModifierKeys::noModifiers, 0)))
+        return hideFocusedChannel();
+    const auto mods = key.getModifiers();
+    const bool arrowIsOurs = !mods.isCommandDown() && !mods.isCtrlDown() && !mods.isAltDown();
+    if (arrowIsOurs && key.isKeyCode(juce::KeyPress::leftKey))
         return moveFocus(-1);
-    if (key.isKeyCode(juce::KeyPress::rightKey))
+    if (arrowIsOurs && key.isKeyCode(juce::KeyPress::rightKey))
         return moveFocus(1);
-    if (key.isKeyCode(juce::KeyPress::upKey))
-        return nudgeFocusedFader(key.getModifiers().isShiftDown() ? 0.1f : 1.0f);
-    if (key.isKeyCode(juce::KeyPress::downKey))
-        return nudgeFocusedFader(key.getModifiers().isShiftDown() ? -0.1f : -1.0f);
+    if (arrowIsOurs && key.isKeyCode(juce::KeyPress::upKey))
+        return nudgeFocusedFader(mods.isShiftDown() ? 0.1f : 1.0f);
+    if (arrowIsOurs && key.isKeyCode(juce::KeyPress::downKey))
+        return nudgeFocusedFader(mods.isShiftDown() ? -0.1f : -1.0f);
     if (key.isKeyCode(juce::KeyPress::returnKey))
         return selectFocusedOnCanvas();
 
     // The Rename key (F2 / Option+R) renames the focused column's name in place; a text editor keeps its own keys.
     if (isRenameKeyPress(shortcuts_, key) && !isTextEditorFocused())
         return renameFocusedColumn();
+    // The track row's own Duplicate action id (Cmd+D by default), so one rebind covers both; it copies the
+    // focused strip's track, and a column with no single track lets the key bubble.
+    if (matchesAction(key, "timelineDuplicateFocusedTrack",
+                      juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0)))
+        return duplicateFocusedTrack();
 
     // Rebindable, Timeline category -- the SAME action ids the timeline track-header row already
     // binds (TimelineTrackHeaderComponent::matchesAction), deliberately: a new id would not
@@ -66,6 +82,8 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
         return enterRows();
     if (matchesAction(key, "mixerOpenEq", juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0)))
         return openFocusedEq();
+    if (matchesAction(key, "mixerOpenColour", juce::KeyPress('c', juce::ModifierKeys::noModifiers, 0)))
+        return openFocusedColour();
 
     // Rebindable, Mixer category: the toolbar's Inserts / Sends / EQ toggles, through the same
     // MixerSectionLayout::toggleHidden a click calls, so a key and a click can never diverge.
@@ -146,11 +164,54 @@ bool MixerPanelComponent::selectFocusedOnCanvas() {
 // The column holding keyboard focus: the one whose component contains the focused widget (a click lands focus on a
 // colour dot, fader or button inside a column, which never moves focusedColumnIndex_), else the arrow-key column.
 int MixerPanelComponent::columnIndexContaining(const juce::Component* focused) const {
-    for (auto* c = focused; c != nullptr && c != this; c = c->getParentComponent())
+    const int index = columnIndexOf(focused);
+    return index >= 0 ? index : focusedColumnIndex_;
+}
+
+int MixerPanelComponent::columnIndexOf(const juce::Component* c) const {
+    for (; c != nullptr && c != this; c = c->getParentComponent())
         for (size_t i = 0; i < columnEntries_.size(); ++i)
             if (columnEntries_[i].component == c)
                 return (int)i;
-    return focusedColumnIndex_;
+    return -1;
+}
+
+// No scroll: the column is under the pointer already. A pressed control that takes the keyboard itself (the rename
+// editor, the colour dot) keeps it. Anything else hands the keyboard to the panel, so the column's keys work at
+// once: left alone, JUCE would give it to the column's first focusable child, the colour dot.
+void MixerPanelComponent::focusColumnFromClick(const juce::MouseEvent& e) {
+    const int index = columnIndexOf(e.eventComponent);
+    if (index < 0)
+        return;
+    if (index != focusedColumnIndex_) {
+        exitRows();
+        focusedColumnIndex_ = index;
+        grabAccessibilityFocusForFocusedColumn();
+    }
+    keyboardAway_ = false;
+    syncFocusVisuals();
+    repaint();
+    if (e.eventComponent == nullptr || !e.eventComponent->getWantsKeyboardFocus())
+        grabKeyboardFocus();
+}
+
+// The copy's column arrives through the rebuild; focus stays on this strip (resolveFocusAfterRebuild matches it by
+// uuid), so pressing it again copies the same track again.
+bool MixerPanelComponent::duplicateFocusedTrack() {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size() || !onDuplicateTrack)
+        return false;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    if (entry.kind != ColumnEntry::Kind::Strip || entry.feedingTracks.size() != 1)
+        return false;
+    const auto track = entry.feedingTracks.front();
+    onDuplicateTrack(track);
+    return true;
+}
+
+void MixerPanelComponent::fillFocusedColumnState(juce::DynamicObject& into) const {
+    const bool shown = !keyboardAway_ && juce::isPositiveAndBelow(focusedColumnIndex_, (int)columnEntries_.size());
+    into.setProperty("focusedColumn",
+                     shown ? columnEntries_[(size_t)focusedColumnIndex_].component->getTitle() : juce::String());
 }
 
 // Direct and Master have no name to edit, so the key falls through there.
@@ -200,8 +261,34 @@ bool MixerPanelComponent::armFocusedTrack() {
     return true;
 }
 
+// A strip's pan; Direct has no pan and Master's is its pan law, so the key bubbles there.
+bool MixerPanelComponent::panFocused(float delta) {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
+        return false;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    return entry.kind == ColumnEntry::Kind::Strip &&
+           static_cast<MixerColumnComponent*>(entry.component)->nudgePan(delta);
+}
+
+// Hides the focused column (Master cannot be hidden) and hands the focus to its right-hand neighbour, or the left one
+// at the end, so the keys keep working; the side pane's eye or its H shows the channel again.
+bool MixerPanelComponent::hideFocusedChannel() {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
+        return false;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    if (entry.kind == ColumnEntry::Kind::Master || entry.channelId.isEmpty())
+        return false;
+    const int neighbour =
+        focusedColumnIndex_ + 1 < (int)columnEntries_.size() ? focusedColumnIndex_ + 1 : focusedColumnIndex_ - 1;
+    if (neighbour >= 0)
+        focusFallback_ = FocusIdentity{columnEntries_[(size_t)neighbour].kind, columnEntries_[(size_t)neighbour].uuid};
+    setChannelHidden(entry.channelId, true);
+    return true;
+}
+
 void MixerPanelComponent::resolveFocusAfterRebuild(bool hadFocus, ColumnEntry::Kind previousKind,
                                                    const juce::String& previousUuid) {
+    const auto fallback = std::exchange(focusFallback_, std::nullopt);
     if (!hadFocus)
         return;
     for (size_t i = 0; i < columnEntries_.size(); ++i) {
@@ -215,8 +302,17 @@ void MixerPanelComponent::resolveFocusAfterRebuild(bool hadFocus, ColumnEntry::K
             return;
         }
     }
-    focusedColumnIndex_ = -1; // the previously-focused column is gone -- focus clears, never
-                              // silently reattaches to whatever now sits at the old index.
+    // The previously-focused column is gone: focus clears, never silently reattaching to whatever now sits at the old
+    // index, unless the panel itself named where it goes (the hide key's neighbour).
+    focusedColumnIndex_ = -1;
+    if (!fallback.has_value())
+        return;
+    for (size_t i = 0; i < columnEntries_.size(); ++i)
+        if (columnEntries_[i].kind == fallback->kind &&
+            (fallback->kind == ColumnEntry::Kind::Direct || columnEntries_[i].uuid == fallback->uuid)) {
+            focusedColumnIndex_ = (int)i;
+            return;
+        }
 }
 
 void MixerPanelComponent::setFocusedColumnIndex(int index) {
@@ -263,7 +359,7 @@ void MixerPanelComponent::grabAccessibilityFocusForFocusedColumn() {
 
 void MixerPanelComponent::syncFocusVisuals() {
     for (size_t i = 0; i < columnEntries_.size(); ++i) {
-        const bool focused = (int)i == focusedColumnIndex_;
+        const bool focused = (int)i == focusedColumnIndex_ && !keyboardAway_;
         auto& entry = columnEntries_[i];
         if (entry.component == nullptr)
             continue;
@@ -299,32 +395,6 @@ void MixerPanelComponent::paintOverChildren(juce::Graphics& g) {
     paintRowFocusRing(g);
     topBarRing_.paintRing(g);
     paintDragBubble(g);
-}
-
-namespace {
-// A hidden child of the panel (id "mixerTopBarRing") that test mode reads: the name of the ringed control, "" when off.
-class TopBarRingProbe
-    : public juce::Component
-    , public synth::testmode::StateSource {
-public:
-    explicit TopBarRingProbe(const KeyRing& ring)
-        : ring_(ring) {
-        setComponentID("mixerTopBarRing");
-        setInterceptsMouseClicks(false, false);
-        setWantsKeyboardFocus(false);
-        setAccessible(false);
-    }
-    void addTestModeState(juce::DynamicObject& into) const override {
-        into.setProperty("topBarRing", ring_.getValueText());
-    }
-
-private:
-    const KeyRing& ring_;
-};
-} // namespace
-
-std::unique_ptr<juce::Component> MixerPanelComponent::makeTopBarRingProbe(const KeyRing& ring) {
-    return std::make_unique<TopBarRingProbe>(ring);
 }
 
 // Reading order: the toolbar (side pane, Inserts, Sends, EQ, Reset Meters, Add Bus, dock back), then the zones pane's

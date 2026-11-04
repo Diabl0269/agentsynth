@@ -434,6 +434,27 @@ juce::String MacroGroupController::macroNestTargetAt(const juce::String& dragged
     return target;
 }
 
+// The group twin of macroNestTargetAt: the innermost open border under the anchor. A dragged macro and everything
+// inside it are left out (a group never drops into itself), and the macros the group sits in are read at their border
+// held at press, since their live union follows the group (beginGroupDrag). The group's own container is "no change".
+juce::String MacroGroupController::groupDropTargetAt(juce::Point<int> anchor) const {
+    const auto& macros = host_.getMacros();
+    const auto insideDragged = [&](const juce::String& id) {
+        const auto chain = macros.ancestorChain(id);
+        return std::any_of(groupDrag_.units.begin(), groupDrag_.units.end(), [&](const GroupDragUnit& unit) {
+            return unit.macroId.isNotEmpty() &&
+                   (unit.macroId == id || std::find(chain.begin(), chain.end(), unit.macroId) != chain.end());
+        });
+    };
+    return deepestMacroAt(macros, anchor, [&](const synth::Macro& macro) {
+        if (insideDragged(macro.id))
+            return juce::Rectangle<int>();
+        if (const auto held = groupDragHeldHull(macro.id); !held.isEmpty())
+            return held;
+        return paintedHullBounds(macro.id);
+    });
+}
+
 // The macro-unit twin of macroDragJoinOrLeaveTarget, with the same live-union trap: the parent's border is a union
 // that includes the dragged macro's own footprint, so it follows the drag and the macro could never test as outside
 // it. The parent and its ancestors are therefore tested against their borders held at press (beginMacroUnitDrag), or,

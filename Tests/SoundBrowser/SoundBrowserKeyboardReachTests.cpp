@@ -413,6 +413,8 @@ TEST(SoundBrowserKeyboardReachTest, DownAtPlacesVisitsThePackRowsAndAddFolderBef
             visited.push_back(v.getRows()[(size_t)v.getSelectedIndex()].kind);
     }
     using Kind = SoundBrowserComponent::RowKind;
+    EXPECT_NE(std::find(visited.begin(), visited.end(), Kind::PackHeading), visited.end())
+        << "the Get more heading is a stop, so the keyboard can fold it";
     EXPECT_NE(std::find(visited.begin(), visited.end(), Kind::GetPack), visited.end()) << "the Download rows";
     ASSERT_EQ(visited.back(), Kind::AddFolder) << "Add folder is the last row before the footer";
     ASSERT_NE(v.lastFocusRequestForTest(), nullptr);
@@ -424,4 +426,32 @@ TEST(SoundBrowserKeyboardReachTest, DownAtPlacesVisitsThePackRowsAndAddFolderBef
         << "Up returns to the list, selection kept";
     dispatchKey(v, v, key(juce::KeyPress::upKey));
     EXPECT_NE(v.getRows()[(size_t)v.getSelectedIndex()].kind, Kind::AddFolder);
+}
+
+// The Get more heading takes the keys the real dispatch order delivers to the list: Left folds, Right opens, and the
+// Download rows leave the walk while it is folded.
+TEST(SoundBrowserKeyboardReachTest, TheGetMoreHeadingFoldsWithLeftAndRightFromTheListWalk) {
+    sound_pack_test::Rig packs;
+    packs.publish("core", "1.0.0");
+    TempTree tree;
+    tree.fill();
+    synth::soundbrowser::SoundLists lists;
+    synth::soundbrowser::SoundIndex index(juce::File(),
+                                          [&] { return std::vector<juce::File>{packs.dir.path(), tree.packs}; });
+    scanAndWait(index);
+    SoundBrowserComponent v(index, lists);
+    v.setSize(300, 900);
+    v.setPackInstaller(&packs.installer);
+    using Kind = SoundBrowserComponent::RowKind;
+    v.selectRow(0);
+    for (int guard = 0; guard < 20 && v.getRows()[(size_t)v.getSelectedIndex()].kind != Kind::PackHeading; ++guard)
+        dispatchKey(v, v, key(juce::KeyPress::downKey));
+    ASSERT_EQ(v.getRows()[(size_t)v.getSelectedIndex()].kind, Kind::PackHeading);
+    EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::leftKey)));
+    EXPECT_FALSE(v.isGetMoreShowing());
+    dispatchKey(v, v, key(juce::KeyPress::downKey));
+    EXPECT_EQ(v.getRows()[(size_t)v.getSelectedIndex()].kind, Kind::PackHeading)
+        << "folded, the heading is the last stop: the hidden packs are not reachable";
+    EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(v.isGetMoreShowing());
 }

@@ -81,39 +81,34 @@ juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std:
     if (!intersectsAny(candidate, others, selfId, gap))
         return snapped;
 
-    // Square spiral search around the desired point
+    // Square spiral search around the desired point. Every spot of one ring is as far as the next by the ring, but not
+    // in a straight line: the first clear spot in walk order can be a corner (beside and below a wide open macro) while
+    // the spot straight below is as near by the ring, so a ring's clear spots are compared and the nearest one wins.
     for (int ring = 1; ring <= kSpiralMaxRings; ++ring) {
-        int step = kSpiralStep * ring;
-
-        // Walk the perimeter of the ring: top, right, bottom, left sides
-        // Top side: y = -step, x from -step to +step
-        for (int dx = -step; dx <= step; dx += kSpiralStep) {
-            auto pt = clamp(snap(juce::Point<int>{snapped.x + dx, snapped.y - step}));
-            auto rect = juce::Rectangle<int>{pt.x, pt.y, w, h};
-            if (!intersectsAny(rect, others, selfId, gap))
-                return pt;
-        }
-        // Right side: x = +step, y from -step+kSpiralStep to +step
-        for (int dy = -step + kSpiralStep; dy <= step; dy += kSpiralStep) {
-            auto pt = clamp(snap(juce::Point<int>{snapped.x + step, snapped.y + dy}));
-            auto rect = juce::Rectangle<int>{pt.x, pt.y, w, h};
-            if (!intersectsAny(rect, others, selfId, gap))
-                return pt;
-        }
-        // Bottom side: y = +step, x from +step-kSpiralStep to -step
-        for (int dx = step - kSpiralStep; dx >= -step; dx -= kSpiralStep) {
-            auto pt = clamp(snap(juce::Point<int>{snapped.x + dx, snapped.y + step}));
-            auto rect = juce::Rectangle<int>{pt.x, pt.y, w, h};
-            if (!intersectsAny(rect, others, selfId, gap))
-                return pt;
-        }
-        // Left side: x = -step, y from +step-kSpiralStep to -step+kSpiralStep
-        for (int dy = step - kSpiralStep; dy >= -step + kSpiralStep; dy -= kSpiralStep) {
-            auto pt = clamp(snap(juce::Point<int>{snapped.x - step, snapped.y + dy}));
-            auto rect = juce::Rectangle<int>{pt.x, pt.y, w, h};
-            if (!intersectsAny(rect, others, selfId, gap))
-                return pt;
-        }
+        const int step = kSpiralStep * ring;
+        std::optional<juce::Point<int>> best;
+        int64_t bestDist = 0;
+        auto consider = [&](int dx, int dy) {
+            const auto pt = clamp(snap(juce::Point<int>{snapped.x + dx, snapped.y + dy}));
+            if (intersectsAny(juce::Rectangle<int>{pt.x, pt.y, w, h}, others, selfId, gap))
+                return;
+            const int64_t ex = pt.x - snapped.x, ey = pt.y - snapped.y;
+            if (!best.has_value() || ex * ex + ey * ey < bestDist) {
+                best = pt;
+                bestDist = ex * ex + ey * ey;
+            }
+        };
+        // The perimeter of the ring, in the old walk order (top, right, bottom, left), which breaks ties.
+        for (int dx = -step; dx <= step; dx += kSpiralStep)
+            consider(dx, -step);
+        for (int dy = -step + kSpiralStep; dy <= step; dy += kSpiralStep)
+            consider(step, dy);
+        for (int dx = step - kSpiralStep; dx >= -step; dx -= kSpiralStep)
+            consider(dx, step);
+        for (int dy = step - kSpiralStep; dy >= -step + kSpiralStep; dy -= kSpiralStep)
+            consider(-step, dy);
+        if (best.has_value())
+            return *best;
     }
 
     // Give up: return snapped+clamped desired

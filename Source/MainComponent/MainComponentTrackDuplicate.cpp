@@ -294,6 +294,10 @@ void MainComponent::duplicateTrack(synth::TrackId trackId) {
         duplicateTracksBelow(selected, selected.back(), "Duplicated");
         return;
     }
+    duplicateOneTrack(trackId, /*focusCopyRow=*/true);
+}
+
+void MainComponent::duplicateOneTrack(synth::TrackId trackId, bool focusCopyRow) {
     const auto* source = timelineDoc.getTrack(trackId);
     if (source == nullptr || source->kind == synth::TrackKind::Automation)
         return;
@@ -318,7 +322,8 @@ void MainComponent::duplicateTrack(synth::TrackId trackId) {
         growIn.noteOrigin(copy, trackId);
     reconcileTimelineAfterGraphChange();
     if (copy.isValid() && pushed) {
-        timelinePanel.focusTrackRow(copy); // the copy is what the user will want to act on next
+        if (focusCopyRow)
+            timelinePanel.focusTrackRow(copy); // the copy is what the user will want to act on next
         statusBar.showMessage("Duplicated track: " + copyName);
     } else {
         statusBar.showMessage("Could not duplicate the track");

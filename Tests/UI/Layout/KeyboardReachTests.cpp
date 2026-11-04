@@ -5,6 +5,7 @@
 // A gap that is known and ticketed lives in kKnownGaps; the list may only shrink (docs/development/accessibility.md).
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "BottomDockActiveTabResetGuard.h"
 #include "NativeWindowTestGuard.h"
@@ -45,11 +46,9 @@ struct KnownGap {
 };
 
 const std::vector<KnownGap> kKnownGaps = {
-    {"mixer / Audio 1 colour", "FRO1206"},           {"mixer / Show Gate on canvas", "FRO1203"},
-    {"mixer / Gate bypass, on", "FRO1203"},          {"mixer / Show Parametric EQ on canvas", "FRO1203"},
-    {"mixer / Parametric EQ bypass, on", "FRO1203"}, {"mixer / Show Compressor on canvas", "FRO1203"},
-    {"mixer / Compressor bypass, on", "FRO1203"},    {"mixer / Audio 1 pan", "FRO1310"},
-    {"mixer / Audio 1 visibility", "FRO1310"},       {"mixer / Direct visibility", "FRO1310"},
+    {"mixer / Show Gate on canvas", "FRO1203"},          {"mixer / Gate bypass, on", "FRO1203"},
+    {"mixer / Show Parametric EQ on canvas", "FRO1203"}, {"mixer / Parametric EQ bypass, on", "FRO1203"},
+    {"mixer / Show Compressor on canvas", "FRO1203"},    {"mixer / Compressor bypass, on", "FRO1203"},
 };
 
 // A region that reaches some of its controls with keys of its own. `reaches` answers for one control; `reason` says
@@ -105,8 +104,9 @@ bool timelineReaches(juce::Component& control, juce::Component& root) {
 }
 
 // The mixer panel is one focusable leaf: Left/Right pick a column, Up/Down nudge its fader, M and S mute and solo it,
-// Return selects it on the canvas and the section keys toggle the Inserts, Sends and EQ rows. The rest of the top bar
-// (toolbar, zones pane filter and chips, master pan law) is the key ring's stops.
+// C opens its colour picker, Shift+Left/Right pan it, H hides it (and shows or hides the side pane's cursor row),
+// Return selects it on the canvas and the section keys toggle the Inserts, Sends and EQ
+// rows. The rest of the top bar (toolbar, zones pane filter and chips, master pan law) is the key ring's stops.
 bool mixerKeysReach(juce::Component& control, juce::Component& root) {
     const auto stops = static_cast<synth::ui::MixerPanelComponent&>(root).getTopBarRingForTest().getStops();
     if (std::find(stops.begin(), stops.end(), &control) != stops.end())
@@ -114,7 +114,8 @@ bool mixerKeysReach(juce::Component& control, juce::Component& root) {
     const auto title = control.getTitle();
     if (title == "Inserts" || title == "Sends" || title == "EQ")
         return true;
-    return title.endsWith(" fader") || title.contains(" mute") || title.contains(" solo") ||
+    return title.endsWith(" fader") || title.endsWith(" colour") || title.endsWith(" pan") ||
+           title.endsWith(" visibility") || title.contains(" mute") || title.contains(" solo") ||
            (title.startsWith("Edit ") && title.endsWith(" on canvas"));
 }
 
@@ -127,8 +128,10 @@ const std::vector<Adapter> kAdapters = {
      "the top bar is a key ring (Up from the track column, Left/Right along it); M, S and R are keys of a track row",
      false, nullptr, timelineReaches},
     {"mixer",
-     "one focusable leaf: column, fader, mute, solo, select and section keys; the top bar is a key ring (Cmd+Up)", true,
-     nullptr, mixerKeysReach},
+     "one focusable leaf: column, fader, colour, pan, hide, mute, solo, select and section keys; the top bar is a key "
+     "ring "
+     "(Cmd+Up)",
+     true, nullptr, mixerKeysReach},
     {"modMatrix", "a painted grid: the arrow keys move its cell cursor", false, nullptr, nullptr},
     {"dockTabs", "the tabs are painted: Left/Right/Home/End select one; Shift/Option+Return press its icons", false,
      nullptr, nullptr},
@@ -213,7 +216,24 @@ struct RegionReport {
     int stops = 0;
     std::string adapterReason;
     std::set<std::string> unreachable;
+    std::set<std::string> hiddenStops; // stops a key can land on that show nothing
 };
+
+// The stops of a region's top bar key ring, for the regions that have one.
+std::vector<juce::Component*> keyRingStops(const std::string& regionId, juce::Component& root) {
+    if (regionId == "timeline")
+        return static_cast<synth::ui::TimelinePanelComponent&>(root).getTopBarKeysForTest().getStops();
+    if (regionId == "mixer")
+        return static_cast<synth::ui::MixerPanelComponent&>(root).getTopBarRingForTest().getStops();
+    return {};
+}
+
+// Every stop the step keys or a key ring can land on must show: visible and opaque up to the root, with a size.
+void checkStopsShow(RegionReport& report, juce::Component& root, const std::vector<juce::Component*>& stops) {
+    for (auto* stop : stops)
+        if (stop != nullptr && !isOnScreenInside(*stop, root))
+            report.hiddenStops.insert(report.name + " / " + controlName(*stop));
+}
 
 const Adapter* adapterFor(const std::string& id) {
     for (const auto& a : kAdapters)
@@ -238,6 +258,8 @@ RegionReport walkSurface(const std::string& name, juce::Component& root, const s
     if (adapter != nullptr)
         report.adapterReason = adapter->reason;
     report.stops = (int)stops.size();
+    checkStopsShow(report, root, synth::ui::shownFocusableDescendants(root));
+    checkStopsShow(report, root, keyRingStops(adapterId, root));
     for (size_t i = 0; i < controls.size(); ++i) {
         const auto& control = controls[i];
         if (i < ownControls && !owns(*control.component))
@@ -267,6 +289,8 @@ public:
         printReport(report);
         walked_.insert(report.name);
         found_.insert(report.unreachable.begin(), report.unreachable.end());
+        for (const auto& key : report.hiddenStops)
+            ADD_FAILURE() << "a keyboard stop that does not show: " << key;
         if (report.controls == 0 && report.adapterReason.empty())
             ADD_FAILURE() << report.name
                           << ": no operable controls and no adapter - the walk is not seeing this surface";
@@ -339,6 +363,36 @@ protected:
                 return owner != nullptr && owner->id == id;
             }));
         }
+    }
+
+    // From every open region's root, the Focus Transport Bar key walks up the real parent chain (each keyPressed in
+    // turn, the way the window delivers an unclaimed key) and must end with the timeline's ring on a transport
+    // control. Returns "<region><suffix>" for each region where it does not.
+    std::set<std::string> regionsMissingTheTransportBar(const std::string& suffix,
+                                                        const std::function<void()>& restoreView) {
+        std::set<std::string> missing;
+        const juce::KeyPress key(juce::KeyPress::upKey,
+                                 juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        auto& timeline = mc_->getTimelinePanel();
+        auto& transport = timeline.getTransportBar();
+        for (const auto& region : openRegions()) {
+            restoreView();
+            if (!region.isCurrentlyOpen() && region.open)
+                region.open();
+            mc_->resized();
+            timeline.getTopBarKeysForTest().leave();
+            for (auto* at = region.root; at != nullptr; at = at->getParentComponent())
+                if (at->keyPressed(key))
+                    break;
+            synth::test::waitUntil([&] { return timeline.getTopBarKeysForTest().isActive(); }, 1000); // async command
+            const auto* ringed = timeline.getTopBarKeysForTest().getRingedStop();
+            const bool onTransport =
+                timeline.getTopBarKeysForTest().isActive() && ringed != nullptr && transport.isParentOf(ringed);
+            if (!onTransport)
+                missing.insert((region.id + suffix).toStdString());
+        }
+        timeline.getTopBarKeysForTest().leave();
+        return missing;
     }
 
     std::optional<BottomDockActiveTabResetGuardMDT> resetGuard_;
@@ -418,4 +472,41 @@ TEST_F(KeyboardReachDialogs, EveryControlInEveryDialogIsAKeyboardStop) {
         findings.add(walkSurface(surface.name, *window, surface.name, [](juce::Component&) { return true; }));
     }
     findings.expectOnlyKnownGaps();
+}
+
+// Regression test for FRO1403: the transport bar had no key path from the canvas, the library, the mixer or the
+// piano roll; only from inside the timeline, with Up from its track column.
+TEST_F(KeyboardReachShell, TheFocusTransportBarKeyReachesTheTransportFromEveryRegion) {
+    std::set<std::string> missing;
+    for (const Tab view : {Tab::Canvas, Tab::Timeline, Tab::Mixer, Tab::MidiRemote}) {
+        mc_->setMainViewForTest(view);
+        if (view == Tab::Mixer) // a focused column, whose fader takes the plain arrows
+            mc_->getBottomDock().getMixerPanel().keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
+        const auto suffix = std::string(" [view ") + std::to_string((int)view) + "]";
+        const auto found = regionsMissingTheTransportBar(suffix, [this, view] { mc_->setMainViewForTest(view); });
+        missing.insert(found.begin(), found.end());
+    }
+    mc_->setMainViewForTest(Tab::Timeline); // false when it is already there
+    auto& panel = mc_->getTimelinePanel();
+    const auto clip = mc_->getTimelineDoc().addClip(mc_->getTimelineDoc().getTracks().front().id, 0.0, 8.0, "Clip");
+    panel.openPianoRoll(clip);
+    panel.getPianoRoll().toggleScalePanel();
+    mc_->resized();
+    const auto withRoll =
+        regionsMissingTheTransportBar(" [piano roll open]", [this] { mc_->setMainViewForTest(Tab::Timeline); });
+    missing.insert(withRoll.begin(), withRoll.end());
+    for (const auto& region : missing)
+        ADD_FAILURE() << "Cmd+Shift+Up does not reach the transport bar from " << region;
+
+    // From a focused track row too, whose plain Up and Down step the rows.
+    panel.closePianoRoll();
+    mc_->resized();
+    panel.getTopBarKeysForTest().leave();
+    const juce::KeyPress key(juce::KeyPress::upKey,
+                             juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    for (juce::Component* at = panel.getTrackHeaderAt(0); at != nullptr; at = at->getParentComponent())
+        if (at->keyPressed(key))
+            break;
+    synth::test::waitUntil([&] { return panel.getTopBarKeysForTest().isActive(); }, 1000);
+    EXPECT_TRUE(panel.getTopBarKeysForTest().isActive()) << "Cmd+Shift+Up from a track row";
 }

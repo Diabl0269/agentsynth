@@ -1,5 +1,5 @@
-// Concern: MixerPanelComponent's colour dot -- which picker a column's dot opens, how it opens, and the shortcut
-// text the row bypass buttons' tooltips name.
+// Concern: MixerPanelComponent's colour dot -- which picker a column's dot opens and how it opens -- and the shortcut
+// texts the tooltips name (colour dots, pan knobs, side pane eyes, row bypass buttons).
 #include "Mixer/ChannelMacroLookup.h"
 #include "MixerPanelComponent.h"
 #include "ShortcutManager/ShortcutManager.h"
@@ -8,6 +8,19 @@
 #include "UI/Mixer/MixerColumnComponent.h"
 
 namespace synth::ui {
+
+namespace {
+// A closing CallOutBox leaves the keyboard with nobody, so the control that opened the picker (the dot after a click or
+// Return, the panel after the colour key) takes it back: its ring shows, and its keys (Space to play) work again.
+std::function<void()> giveKeyboardBackTo(juce::Component* opener) {
+    return [opener = juce::Component::SafePointer<juce::Component>(opener)] {
+        juce::MessageManager::callAsync([opener] {
+            if (opener != nullptr && opener->isShowing())
+                opener->grabKeyboardFocus();
+        });
+    };
+}
+} // namespace
 
 // A channel one track feeds is recoloured through that track (the picker its Timeline swatch opens, which also
 // recolours the track's channel macro); a bus, a channel two tracks share and an orphan strip have no single track,
@@ -52,10 +65,58 @@ void MixerPanelComponent::openColourPicker(const juce::String& uuid, juce::Recta
         showColourPickerHook_(route, std::move(popup), dotScreenBounds);
         return;
     }
-    if (route == ColourRoute::Track && popup != nullptr)
+    if (route == ColourRoute::Track && popup != nullptr) {
+        popup->onClosed = giveKeyboardBackTo(juce::Component::getCurrentlyFocusedComponent());
         juce::CallOutBox::launchAsynchronously(std::move(popup), dotScreenBounds, nullptr);
-    else if (route == ColourRoute::Macro && graphEditor_ != nullptr)
+    } else if (route == ColourRoute::Macro && graphEditor_ != nullptr)
         graphEditor_->promptRecolourMacro(macroId, dotScreenBounds);
+}
+
+// The colour key: the focused strip's picker, anchored on its dot, as a click on the dot opens it. A column with
+// nothing to recolour (Direct, Master, a channel with no track or macro) lets the key bubble.
+bool MixerPanelComponent::openFocusedColour() {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
+        return false;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    if (entry.kind != ColumnEntry::Kind::Strip || colourRouteFor(entry.feedingTracks, entry.uuid) == ColourRoute::None)
+        return false;
+    openColourPicker(entry.uuid, static_cast<MixerColumnComponent*>(entry.component)->getColourDotScreenBounds());
+    return true;
+}
+
+// The colour dot's tooltip names the colour key; the default letter stands in when no ShortcutManager is installed.
+juce::String MixerPanelComponent::colourShortcutText() const {
+    if (shortcuts_ == nullptr)
+        return "C";
+    return ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerOpenColour"));
+}
+
+void MixerPanelComponent::refreshShortcutHints() {
+    toolbar_.refresh();
+    zonesPane_.setHideKey(
+        [this](const juce::KeyPress& key) {
+            return matchesAction(key, "mixerToggleChannelHidden",
+                                 juce::KeyPress('h', juce::ModifierKeys::noModifiers, 0));
+        },
+        shortcuts_ == nullptr
+            ? juce::String("H")
+            : ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerToggleChannelHidden")));
+    for (const auto& entry : columnEntries_) {
+        if (entry.kind != ColumnEntry::Kind::Strip)
+            continue;
+        auto* column = static_cast<MixerColumnComponent*>(entry.component);
+        if (const auto state = stripColumnState_.find(column); state != stripColumnState_.end())
+            column->setColourEditable(state->second.colourEditable, colourShortcutText());
+        column->setPanShortcutText(panShortcutText());
+    }
+}
+
+// Both pan keys, for the pan knobs' tooltips.
+juce::String MixerPanelComponent::panShortcutText() const {
+    if (shortcuts_ == nullptr)
+        return "Shift+Left / Shift+Right";
+    return ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerPanLeft")) + " / " +
+           ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerPanRight"));
 }
 
 // The row bypass buttons' tooltips name the key; the default letter stands in when no ShortcutManager is installed.

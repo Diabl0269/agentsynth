@@ -91,6 +91,14 @@ from the module library or the sound browser; a marquee and a cable drag do not 
   that panned sends the card a synthetic `mouseDrag` at the pointer (its own press point and `ComponentDragger` keep the
   grab offset), so it takes the real drag path: group drag, canvas frame growth, landing ghost, macro join highlight. A
   library drag gets a synthetic `itemDragMove` at the pointer.
+- **Cost per tick.** The full landing preview (gap hover aside, which follows every aim because the way a gap opens
+  depends on the path) costs tens of ms at a crowded aim on the Load test project, so inside a tick it runs at most once
+  per `GraphDragDropController::kScrollPreviewIntervalMs` (100 ms, every third tick). A skipped aim is flushed by a tick
+  that did not pan, by `CanvasEdgeScrollDriver::end()` (every release, drop, exit and cancel calls it first) and at the
+  top of `itemDropped`, so the drop always lands where an unthrottled drag would. A real pointer move is never
+  throttled. `CanvasEdgeScrollCost` (`CanvasEdgeScrollTests.cpp`) holds it for every drag kind the scroll drives (library drag, module card,
+  folded macro card) and has a disabled bench that prints a tick's cost on a real project
+  (`AGENTSYNTH_BENCH_PROJECT=<project.json>`).
 - **Limits.** The pan never goes past the origin (nothing exists left of or above it) and never further right or down
   than the content extends; a card drag grows the content ahead of itself, so it can keep going.
 - **Keyboard.** There is no pointer to park, so the keyboard move (arrow keys on a focused card) already pans the card
@@ -110,7 +118,9 @@ When a module is placed (library drop or drag-release) the engine:
    position is returned as a fallback — always a valid on-canvas coordinate.
 
 The spiral visits positions in ring order, innermost first, so the module lands as close to the
-intended drop point as possible.
+intended drop point as possible. Within the first ring that has a clear slot, the one nearest in a straight line wins
+(ties go to the walk order: top, right, bottom, left): every slot of a square ring is as far by the ring, so taking the
+first one walked would put a module dropped over a wide open macro at a corner far to its side, not straight below.
 
 Two boxes A and B collide at gap `g` when `A.inflated(g/2).intersects(B.inflated(g/2))`, which is
 equivalent to requiring at least `g` px of clear space on all sides between the edges. The `selfId`
@@ -139,7 +149,8 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   Nothing ever moves back, so the cascade always settles.
 - **Canvas edge and pinned units.** The top-left of the canvas is a wall: a move that would leave
   it is not taken, and the unit instead goes the smaller of right or down. The same rule applies
-  to a move that would land on a pinned unit (which never moves). A unit that is blocked both
+  to a move that would land on a pinned unit (which never moves; the output dock is not one here, see
+  [Output dock](#output-dock)). A unit that is blocked both
   ways is left where it is.
   The wall also applies to an open macro's hull. An input port's widget overhangs the hull's left
   border by 5 px (`LayoutUtil::kMacroPortOverhang`), and anything left of x = 0 is neither painted
@@ -233,6 +244,11 @@ pure geometry is `synth::insert_gap` (`Source/UI/Layout/InsertGap/InsertGapPlan.
   which dodges as before. In empty space the ghost has to touch a card (12 px clearance); beside it is a row, above or
   below it a column. The leading half of a card means "in front of it", the trailing half "in front of the next card
   in its row (column)". Past the last card of a row nothing needs to move, so there is no gap and the drop is ordinary.
+  The module lands level with that anchor, so an anchor the module would not overlap across the axis (row: vertically,
+  column: horizontally) where it is aimed is no gap either: just below a wide open macro, the next card in the macro's
+  "column" can sit far to one side, and the module would land there wherever it was released. An open macro is wider
+  (or taller) than any module, so "level with it" is its left (top) edge: in front of an open macro is a gap only
+  where that edge is across from the aimed module, and just above the middle of a wide macro the drop is ordinary.
   A dock card or a macro port is never an anchor, and a snippet, a group drag, a dock card, a port widget or a sound
   from the Sounds view never opens a gap (a sound may be meant for a card, a Sampler or a Drum Kit pad, so no card may
   slide away from under the pointer; dropped on the canvas it lands in the nearest free slot). A card dragged from the canvas opens none while its centre is still over the place it was picked up
@@ -289,8 +305,9 @@ Master (once any mixer channel exists), the Rec Tap (if the project has one) and
 - **Dragging** a dock card moves it, and the whole dock with it, vertically only: x is held while dragging and
   is not snapped back afterwards because it was never moved. Dock cards never travel with a multi-selection
   drag (they stay put), and never join or leave a macro.
-- **Pinned.** Dock cards are `pinned` layout units, so make-room never pushes them; a grown macro pushes the
-  dock (re-derived to its right) instead.
+- **Pinned.** Dock cards are `pinned` layout units. Make-room leaves them out entirely (`makeRoomFor`): they are
+  neither pushed nor in the way, so a neighbour that has to slide right goes right even when the dock sat just past it
+  (it used to be sent down instead), and the dock is then re-derived to the right of everything.
 - **When it is re-derived**, all inside the causing undo step where there is one: every `updateComponents()` (which
   covers project/preset load, module add/remove, undo/redo, track creation and the Master splice, and
   auto-arrange), module and selection drag release, a collapsed-macro card drop, a library drop, and the end of

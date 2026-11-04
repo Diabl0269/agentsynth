@@ -67,6 +67,7 @@ public:
 
     // The per-category default bindings resetToDefaults() assembles (ShortcutManagerDefaults.cpp).
     void addGeneralDefaultBindings();
+    void addFocusDefaultBindings(); // called by addGeneralDefaultBindings
     void addGraphDefaultBindings();
     void addTimelineDefaultBindings();
     void addPianoRollDefaultBindings();

@@ -263,6 +263,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return focusPrevRegion;
     if (actionId == "focusTimeline")
         return focusTimeline;
+    if (actionId == "focusTransportBar")
+        return focusTransportBar;
     if (actionId == "focusLibrary")
         return focusLibrary;
     if (actionId == "focusLibrarySearch")

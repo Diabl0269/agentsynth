@@ -65,6 +65,7 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+- | Zoom Out Vertically |
 | Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas toolbar, Canvas, Dock tabs, Timeline, Timeline routing pane, piano-roll scale pane, Mixer, Controllers, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
 | Cmd+Shift+T | Focus Timeline — opens the Timeline panel first if it's closed, then focuses it |
+| Cmd+Shift+Up | Focus Transport Bar (`focusTransportBar`) — from any view (canvas, library, timeline, piano roll, mixer, controllers) opens the Timeline first if it's closed and puts its top bar key ring on **Play**; Left/Right walk the transport (Record, Loop, Metronome, Count-in, Tempo, Time Signature, Key) and the rest of the top bar, Return presses the ringed control, Down or Escape leaves. Ctrl+Shift+Up off the Mac. Rebindable |
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
 | Shift+F10 | Open Context Menu (`openContextMenu`) — opens the right-click menu of whatever holds keyboard focus, anchored at that item. See [**Open Context Menu**](#open-context-menu) below. Rebindable |
 | Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation**](#library-keyboard-navigation) below |
@@ -542,7 +543,7 @@ on one default key would read as a binding conflict in Settings. No existing act
 here, not a per-column child: `MixerPanelComponent` is the Mixer region's own root (see **Focus
 regions** above), `setWantsKeyboardFocus(true)`, and every child control inside a column (the
 fader/pan sliders, the M/S buttons, Direct's "Make channel" button) gives up keyboard focus
-(`setWantsKeyboardFocus(false)`), except the small icon buttons that take no key beyond Return and Space (the colour dot,
+(`setWantsKeyboardFocus(false)`), except the small icon buttons that take no key beyond Return and Space (the colour dot, which takes Return only so Space still plays,
 the sources badge and the per-row bypass buttons, besides the toolbar), so they can never intercept these keys — the same trap
 `TimelineTrackHeaderComponent` sidesteps by being the focusable leaf itself, just one level higher
 here because a column hosts several controls, not one. The focused column is
@@ -551,23 +552,23 @@ left-to-right order `rebuild()` lays columns out in (strips in track order, then
 then Master if visible) — and survives a `rebuild()` of the same strip by re-resolving through the
 strip's own uuid (Direct/Master match by kind alone), never a raw index; the focused strip/Direct/
 Master column also paints its own outline, reusing `paintFocusRegionOutline`'s colour/alpha/
-thickness the same way a track-header row does.
+thickness the same way a track-header row does. Clicks focus a column too: [strip focus](../mixer/strip-focus.md).
 
 | Shortcut | Action |
 |----------|--------|
 | Left / Right | Move focus to the previous/next column (strips, then Direct, then Master), clamped at either end — never wraps. From nothing focused, either direction seeds column 0. Auto-scrolls the focused column into view |
-| Up / Down | Nudge the focused fader by 1.0 dB (undo: one step, the same `parameterGestureChanged` bracket a mouse drag uses). No-op on Direct (no fader) or with nothing focused |
-| Shift+Up / Shift+Down | Nudge by 0.1 dB — the gain parameter's own declared interval |
+| Up / Down | Nudge the focused fader by 1.0 dB, or 0.1 dB with Shift, the gain parameter's own interval (undo: one step, the same `parameterGestureChanged` bracket a mouse drag uses). No-op on Direct (no fader) or with nothing focused |
 | Enter | Select the focused column's macro (or bare node, if unboxed) on the canvas — mirrors clicking the column |
 | Tab | Move into the focused column's send and insert rows (`mixerEnterRows`) — see [Mixer row navigation](#mixer-row-navigation). With no column focused, or nothing to enter, the key is left unhandled and the app-wide region cycle gets it |
 | E | Open the focused strip's EQ window (`mixerOpenEq`) — only while the EQ section is shown and the strip has a Parametric EQ insert |
+| C, Shift+Left / Shift+Right, H | The focused strip's colour picker (`mixerOpenColour`), its pan a tenth left or right per press, one undo step each (`mixerPanLeft`, `mixerPanRight`), and hiding the column, the focus moving to its neighbour (`mixerToggleChannelHidden`; in the side pane's list H shows or hides the cursor row); [strip focus](../mixer/strip-focus.md#colour) |
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — same action id and `performTrackEdit`-equivalent undo bracket the Timeline row's M key uses; Master has its own mute, Direct has none |
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — strips only, always through `AudioEngine::setChannelStripSoloed`, never a direct `setSoloed()` (`Source/CLAUDE.md`'s mixer-solo invariant); no-op on Direct/Master |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — only when the focused strip is linked to exactly one track (`MixerColumn.linkedToTrack`); routes through `MainComponent::performTrackEdit`, never a direct `TimelineDoc` write |
+| Cmd+D | Duplicate Focused Track (`timelineDuplicateFocusedTrack`) — copies the focused strip's track, like the strip menu's Duplicate Track; [strip focus](../mixer/strip-focus.md) |
 
-M/S/R resolve the exact same rebindable Timeline-category action ids the track-header row above
-already binds — deliberately, so a user's rebind applies to whichever of the two surfaces has
-focus, and a new id would not have inherited an existing rebind. Falls back to hardcoded bare letters with no `ShortcutManager` installed, the same "no manager installed" contract every other surface action in this app follows.
+M/S/R and Cmd+D resolve the exact same rebindable Timeline-category action ids the track-header row above already
+binds — deliberately, so a user's rebind applies to whichever surface has focus (a new id would not inherit it). Falls back to hardcoded bare letters with no `ShortcutManager` installed, the same "no manager installed" contract every other surface action in this app follows.
 
 Accessibility (JUCE `AccessibilityHandler`, this ticket's other half): the fader and pan sliders
 report their value as spoken text (`"-3.0 dB"`, `"50% left"`) via `textFromValueFunction`; the
@@ -774,7 +775,7 @@ tool (`timelineToolRange`, bare **2**) arrived without moving any other key.
 
 ## Mixer
 
-The five Mixer actions are surface-resolved like the piano roll's: `MixerPanelComponent::keyPressed()`
+The Mixer actions are surface-resolved like the piano roll's: `MixerPanelComponent::keyPressed()`
 reads them only while the mixer (the panel, a column control, or its side pane's list) has focus. The first
 three are the keyboard twins of the toolbar's Inserts / Sends / EQ toggles and call the same
 `MixerSectionLayout::toggleHidden`, so a key and a click can never disagree; the toggles' tooltips
@@ -787,7 +788,7 @@ name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind. The other
 | Ctrl+S | Ctrl+Alt+S | Show or Hide Mixer Sends (`mixerToggleSends`) |
 | Ctrl+E | Ctrl+Alt+E | Show or Hide Mixer EQ (`mixerToggleEq`) |
 | Tab | Tab | Enter Mixer Send and Insert Rows (`mixerEnterRows`) |
-| E | E | Open Mixer EQ (`mixerOpenEq`) |
+| E / C / H, Shift+Left / Shift+Right | same | Open Mixer EQ (`mixerOpenEq`) / Change Mixer Channel Colour (`mixerOpenColour`) / Hide or Show Mixer Channel (`mixerToggleChannelHidden`), Pan Mixer Channel Left / Right (`mixerPanLeft`, `mixerPanRight`) |
 | B | B | Bypass Mixer Send or Insert (`mixerToggleRowBypass`) |
 | Alt+Up / Alt+Down | Alt+Up / Alt+Down | Move Mixer Row Up / Down (`mixerMoveRowUp`, `mixerMoveRowDown`) |
 | Cmd+Up | Ctrl+Up | Focus the Mixer Top Bar (`mixerFocusTopBar`): a key ring over the toolbar buttons, the side pane's filter and chips and the master pan law ([top bar keys](../mixer/top-bar-keys.md)) |
@@ -796,7 +797,7 @@ name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind. The other
 the physical Control key, as `pianoRollToggleScalePanel` does. On Windows and Linux JUCE's Cmd *is* Ctrl,
 so a bare Ctrl+S would shadow Save whenever the mixer has focus; those platforms add Alt instead.
 
-The side pane's own list keys (Up/Down, Space, Alt+Up/Down, Esc) are fixed, like the Library list's
+The side pane's own list keys (Up/Down, Space, Alt+Up/Down, Esc; H is the rebindable hide key above) are fixed, like the Library list's
 arrows: see [`mixer/panel.md`](../mixer/panel.md#side-pane-zones-and-visibility).
 
 ## Layout Editor

@@ -373,8 +373,9 @@ TEST(MacroDragTransfer, PreferenceOffPlainDragNeitherJoinsNorLeaves) {
 }
 
 // The trap: a plain press on an already-selected module of a multi-selection keeps the group, and a
-// pref-latched reparentArmed would reparent only the grabbed module and skip finalizeSelectionDrag.
-TEST(MacroDragTransfer, PreferenceOnNeverReparentsAGroupDragAndStillFinalizesIt) {
+// pref-latched reparentArmed would reparent only the grabbed module and skip finalizeSelectionDrag. The group joins as
+// a whole on the drop instead (MacroGroupDropTests.cpp).
+TEST(MacroDragTransfer, PreferenceOnNeverReparentsOneMemberOfAGroupDragAndStillFinalizesIt) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(2000, 1400);
@@ -391,16 +392,22 @@ TEST(MacroDragTransfer, PreferenceOnNeverReparentsAGroupDragAndStillFinalizesIt)
     editor.setSelectedNodes({c, d});
     dragBodyBy(*compC, deltaIntoHull(editor, *compC, t.macroB), kPlainClick, [&] {
         EXPECT_TRUE(editor.isSelectionDragActive()) << "sanity: this is a group drag";
-        EXPECT_FALSE(editor.hasMacroDragCandidate()) << "a group drag never arms a reparent candidate";
+        EXPECT_TRUE(editor.getMacroDragLeaveId().isEmpty()) << "a group drag never arms one member's reparent";
+        EXPECT_TRUE(editor.getMacroDragLiveOwnerId().isEmpty()) << "nor moves one member live";
+        EXPECT_EQ(editor.getMacroDragJoinId(), t.macroB) << "it outlines the macro the whole group drops into";
     });
 
     EXPECT_FALSE(editor.isSelectionDragActive()) << "finalizeSelectionDrag must have run (no stuck group drag)";
     EXPECT_FALSE(editor.getDragDropController().isDragPreviewActive());
-    EXPECT_EQ(editor.getMacroController().macroForNode(c), nullptr) << "the grabbed module must not reparent alone";
-    EXPECT_EQ(editor.getMacroController().macroForNode(d), nullptr);
+    const auto* ownerC = editor.getMacroController().macroForNode(c);
+    const auto* ownerD = editor.getMacroController().macroForNode(d);
+    ASSERT_NE(ownerC, nullptr);
+    ASSERT_NE(ownerD, nullptr);
+    EXPECT_EQ(ownerC->id, t.macroB) << "the grabbed module never reparents alone: the whole group joins";
+    EXPECT_EQ(ownerD->id, t.macroB);
     EXPECT_EQ(compD->getPosition() - compC->getPosition(), offsetBefore) << "the group moved as one rigid body";
 
-    // The same for a group of A's own members dragged out: both stay members.
+    // A's every member dragged out is the whole macro A moving: both stay members.
     editor.setSelectedNodes({t.a1, t.a2});
     auto* compA1 = findComponent(editor, t.a1);
     ASSERT_NE(compA1, nullptr);

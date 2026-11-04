@@ -2,6 +2,7 @@
 // "a sound is being dragged" state that the drop targets outline themselves from.
 #include "UI/Layout/DragCursor.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
+#include "UI/Library/SoundBrowser/SoundBrowserText.h"
 #include "UI/Library/SoundBrowser/SoundDragPayload.h"
 #include "UI/Library/SoundBrowser/SoundDragState.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -46,7 +47,8 @@ bool SoundBrowserComponent::beginSoundDrag(int index) {
     // The container is the window's (MainComponent): it paints the image over every view and flies it back to the row
     // on its own when the drop is not taken.
     if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
-        container->startDragging(makeSoundPayload(file.getFullPathName()), this, makeSoundDragImage(row.text));
+        container->startDragging(makeSoundPayload(file.getFullPathName()), this,
+                                 makeSoundDragImage(displayName(row.text)));
     soundDragging_ = true;
     showDragCursor(*this);
     SoundDragState::begin(file, row.entry->kind == synth::soundbrowser::SoundKind::Loop

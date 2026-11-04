@@ -28,8 +28,9 @@ public:
     void beginCardDrag(juce::Component& card, juce::Point<int> pressInCard);
     /** Arms it for a library or sound-browser drag that entered the canvas. */
     void beginLibraryDrag(const juce::DragAndDropTarget::SourceDetails& details);
-    /** Disarms it: mouse up, drop, exit, or a cancelled drag. Safe when nothing is armed. */
-    void end() { scroller_.end(); }
+    /** Disarms it: mouse up, drop, exit, or a cancelled drag; first brings a landing preview a tick skipped up to
+     *  date. Safe when nothing is armed. */
+    void end();
     bool isActive() const noexcept { return scroller_.isActive(); }
 
     /** Test seams: the pointer as the canvas sees it (canvas-local), replacing the real mouse and the "button is

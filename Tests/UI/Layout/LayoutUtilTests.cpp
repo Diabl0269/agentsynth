@@ -141,6 +141,20 @@ TEST(LayoutUtilTest, FindFreeSlotFarRightIsNotClamped) {
     EXPECT_EQ(result.y, 400);
 }
 
+// Regression test for FRO1443: a card dropped just above a wide open macro, with no room above it, was moved to the
+// first clear spot of the search ring in walk order, a corner far right of and below where it was dropped, rather than
+// the spot straight below the macro that is as near by the ring.
+TEST(LayoutUtilTest, FindFreeSlotPicksTheNearestSpotOfItsRing) {
+    using namespace synth::LayoutUtil;
+    const std::vector<Box> wide{{juce::AudioProcessorGraph::NodeID{2}, {0, 100, 4000, 600}}};
+    for (int x : {400, 1000, 3000}) {
+        SCOPED_TRACE("dropped at x " + std::to_string(x));
+        const auto result = findFreeSlot({x, 80}, 280, 105, wide, juce::AudioProcessorGraph::NodeID{1});
+        EXPECT_EQ(result.x, x) << "straight below the macro, not off to one side";
+        EXPECT_EQ(result.y, 712);
+    }
+}
+
 // ============================================================================
 // CollisionGapIsEnforcedOnce (regression: VCA column "doesn't fit")
 // ============================================================================

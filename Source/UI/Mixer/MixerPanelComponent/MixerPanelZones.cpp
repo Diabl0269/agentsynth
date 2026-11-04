@@ -6,6 +6,7 @@
 
 #include "Mixer/MixerModel/MixerModel.h"
 #include "MixerPanelInternal.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -211,10 +212,15 @@ void MixerPanelComponent::showChannelMenu(const juce::String& channelId, std::op
     });
     if (duplicable != columnEntries_.end() && onDuplicateTrack) {
         menu.addSeparator();
-        menu.addItem("Duplicate Track", [safe, track = duplicable->feedingTracks.front()] {
+        juce::PopupMenu::Item duplicate("Duplicate Track");
+        duplicate.action = [safe, track = duplicable->feedingTracks.front()] {
             if (safe != nullptr && safe->onDuplicateTrack)
                 safe->onDuplicateTrack(track);
-        });
+        };
+        if (shortcuts_ != nullptr)
+            duplicate.shortcutKeyDescription =
+                ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("timelineDuplicateFocusedTrack"));
+        menu.addItem(std::move(duplicate));
     }
     if (showZoneMenuHook_) {
         showZoneMenuHook_(menu);

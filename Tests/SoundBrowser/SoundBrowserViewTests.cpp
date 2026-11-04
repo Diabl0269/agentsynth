@@ -16,6 +16,7 @@ using synth::soundbrowser::SoundKind;
 using synth::ui::LibrarySidebarViews;
 using synth::ui::SidebarView;
 using synth::ui::SoundBrowserComponent;
+using Kind = SoundBrowserComponent::RowKind;
 
 namespace {
 
@@ -79,14 +80,14 @@ TEST(SoundBrowserTextTest, EveryRowEndsWithItsLengthAndTheSpokenTextReadsTheSame
     };
     const Row rows[] = {
         {"loop with tempo", sound(SoundKind::Loop, 120.0, 4.0), "120 BPM " + dot + " 2 bars " + dot + " 4.0 s",
-         "dusty, loop, 120 BPM, 2 bars, 4.0 seconds, 1 of 3"},
+         "Dusty, loop, 120 BPM, 2 bars, 4.0 seconds, 1 of 3"},
         {"loop of one bar", sound(SoundKind::Loop, 120.0, 2.0), "120 BPM " + dot + " 1 bar " + dot + " 2.0 s",
-         "dusty, loop, 120 BPM, 1 bar, 2.0 seconds, 1 of 3"},
+         "Dusty, loop, 120 BPM, 1 bar, 2.0 seconds, 1 of 3"},
         {"loop under half a bar", sound(SoundKind::Loop, 120.0, 0.4), "120 BPM " + dot + " 0.4 s",
-         "dusty, loop, 120 BPM, 0.4 seconds, 1 of 3"},
-        {"loop with no tempo", sound(SoundKind::Loop, 0.0, 4.0), "4.0 s", "dusty, loop, 4.0 seconds, 1 of 3"},
-        {"one-shot", sound(SoundKind::OneShot, 0.0, 0.8), "0.8 s", "dusty, one-shot, 0.8 seconds, 1 of 3"},
-        {"instrument", sound(SoundKind::Instrument, 0.0, 0.0), "instrument", "dusty, instrument, 1 of 3"},
+         "Dusty, loop, 120 BPM, 0.4 seconds, 1 of 3"},
+        {"loop with no tempo", sound(SoundKind::Loop, 0.0, 4.0), "4.0 s", "Dusty, loop, 4.0 seconds, 1 of 3"},
+        {"one-shot", sound(SoundKind::OneShot, 0.0, 0.8), "0.8 s", "Dusty, one-shot, 0.8 seconds, 1 of 3"},
+        {"instrument", sound(SoundKind::Instrument, 0.0, 0.0), "instrument", "Dusty, instrument, 1 of 3"},
     };
     for (const auto& row : rows) {
         EXPECT_EQ(synth::ui::soundDetailText(row.entry), row.detail) << row.what;
@@ -95,7 +96,7 @@ TEST(SoundBrowserTextTest, EveryRowEndsWithItsLengthAndTheSpokenTextReadsTheSame
     auto keyed = sound(SoundKind::Loop, 120.0, 4.0);
     keyed.key = "A minor";
     EXPECT_EQ(synth::ui::describeSoundForAccessibility(keyed, 1, 3),
-              "dusty, loop, 120 BPM, 2 bars, 4.0 seconds, A minor, 1 of 3");
+              "Dusty, loop, 120 BPM, 2 bars, 4.0 seconds, A minor, 1 of 3");
 }
 
 TEST(SoundBrowserTextTest, ARowDetailDropsPartsFromTheLeftInsteadOfCrowdingTheName) {
@@ -189,7 +190,7 @@ TEST(SoundBrowserViewTest, FKeyFavouritesTheSelectedSoundAndSpeaksIt) {
     v.showLocation("core", "Drums", 0);
     f.settle();
     v.selectRow(rowIndex(v, "snare_tight"));
-    EXPECT_NE(v.getAccessibilityValueText().indexOf("snare_tight"), -1);
+    EXPECT_NE(v.getAccessibilityValueText().indexOf("Snare_tight"), -1);
     EXPECT_TRUE(v.keyPressed(juce::KeyPress('f', juce::ModifierKeys(), 'f')));
     ASSERT_EQ(f.lists.favourites().size(), 1);
     EXPECT_TRUE(f.lists.isFavourite(v.getRows()[(size_t)v.getSelectedIndex()].entry->path));
@@ -417,4 +418,90 @@ TEST(SoundBrowserViewTest, RendersInEveryBuiltInThemeWithoutBlankOutput) {
         }
         f.view->setLookAndFeel(nullptr);
     }
+}
+
+// Names are shown with a capital first letter when the file's own name has no capital at all; everything that is not
+// shown (search, sorting, keys, the rename text) keeps the raw name.
+TEST(SoundBrowserDisplayName, CapitalisesOnlyAnAllLowerCaseName) {
+    using synth::ui::displayName;
+    EXPECT_EQ(displayName("crow"), "Crow");
+    EXPECT_EQ(displayName("crow caw"), "Crow caw");
+    EXPECT_EQ(displayName("kick-01"), "Kick-01");
+    EXPECT_EQ(displayName("iPhone"), "iPhone");
+    EXPECT_EQ(displayName("808 kick"), "808 kick");
+    EXPECT_EQ(displayName("Wolf"), "Wolf");
+    EXPECT_EQ(displayName("snare_Tight"), "snare_Tight");
+    EXPECT_EQ(displayName(""), "");
+}
+
+namespace {
+struct NameFixture {
+    TempTree tree;
+    synth::soundbrowser::SoundLists lists;
+    std::unique_ptr<synth::soundbrowser::SoundIndex> index;
+    std::unique_ptr<SoundBrowserComponent> view;
+    NameFixture() {
+        writePack(tree.packs, "core", "Core instruments");
+        writeWav(tree.packs.getChildFile("core/animals/crow.wav"), 0.3);
+        index = makeIndex(tree);
+        scanAndWait(*index);
+        view = std::make_unique<SoundBrowserComponent>(*index, lists);
+        view->setSize(300, 700);
+    }
+    int rowOf(Kind kind) const {
+        for (size_t i = 0; i < view->getRows().size(); ++i)
+            if (view->getRows()[i].kind == kind)
+                return (int)i;
+        return -1;
+    }
+};
+} // namespace
+
+TEST(SoundBrowserDisplayName, RowsShowAndSpeakTheCapitalisedNameWhileTheRowKeepsTheFileName) {
+    NameFixture f;
+    f.view->showLocation("core", "animals");
+    f.view->completeListAnimationForTest();
+    const int sound = f.rowOf(Kind::Sound);
+    ASSERT_GE(sound, 0);
+    const auto& row = f.view->getRows()[(size_t)sound];
+    EXPECT_EQ(row.text, "crow") << "the raw name stays on the row";
+    EXPECT_EQ(SoundBrowserComponent::shownName(row), "Crow");
+    f.view->selectRow(sound);
+    EXPECT_TRUE(f.view->getAccessibilityValueText().startsWith("Crow, one-shot"));
+
+    f.view->showLocation("core", "");
+    f.view->completeListAnimationForTest();
+    const int folder = f.rowOf(Kind::Folder);
+    ASSERT_GE(folder, 0);
+    EXPECT_EQ(f.view->getRows()[(size_t)folder].text, "animals");
+    EXPECT_EQ(SoundBrowserComponent::shownName(f.view->getRows()[(size_t)folder]), "Animals");
+    f.view->selectRow(folder);
+    EXPECT_TRUE(f.view->getAccessibilityValueText().startsWith("Animals, folder"));
+}
+
+TEST(SoundBrowserDisplayName, PathBarAndFooterLineShowCapitalisedFolderNames) {
+    NameFixture f;
+    f.view->showLocation("core", "animals");
+    f.view->completeListAnimationForTest();
+    const auto parts = f.view->getPathParts();
+    ASSERT_FALSE(parts.empty());
+    EXPECT_EQ(parts.back().label, "Animals");
+    EXPECT_EQ(parts.back().folder, "animals") << "navigation keeps the real folder";
+    const int sound = f.rowOf(Kind::Sound);
+    ASSERT_GE(sound, 0);
+    f.view->selectRow(sound);
+    juce::DynamicObject state;
+    f.view->addTestModeState(state);
+    const auto line = state.getProperty("footerLine").toString();
+    EXPECT_TRUE(line.contains("Animals")) << line;
+    EXPECT_FALSE(line.contains("animals")) << line;
+}
+
+TEST(SoundBrowserDisplayName, SearchStillFindsTheSoundByItsFileName) {
+    NameFixture f;
+    f.view->setQuery("cro");
+    ASSERT_EQ(f.view->getRows().size(), 1u);
+    EXPECT_EQ(f.view->getRows()[0].text, "crow");
+    f.view->setQuery("CRO");
+    EXPECT_EQ(f.view->getRows().size(), 1u);
 }

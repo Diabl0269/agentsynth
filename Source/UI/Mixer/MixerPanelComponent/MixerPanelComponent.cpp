@@ -18,6 +18,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
 
 namespace synth::ui {
 
@@ -65,6 +66,7 @@ MixerPanelComponent::MixerPanelComponent() {
     zonesPane_.onFocusReleased = [this] { grabKeyboardFocus(); };
     toolbar_.shortcutTextFor = [this](MixerSection section) { return sectionToggleShortcutText(section); };
     toolbar_.setLayout(sectionLayout_);
+    refreshShortcutHints();
     toolbar_.onAddBus = [this] {
         createBus();
         rebuild(); // the new bus's own column, without waiting for the owner's reconcile
@@ -85,11 +87,15 @@ MixerPanelComponent::MixerPanelComponent() {
     emptyHint_.setTitle(kEmptyHintText); // accessibility: name equals the visible text
     setTitle("Mixer");
     setComponentID("mixerPanel");
-    topBarRingProbe_ = makeTopBarRingProbe(topBarRing_);
+    topBarRingProbe_ = makeKeyRingProbe(topBarRing_, "mixerTopBarRing");
     addChildComponent(*topBarRingProbe_);
+    focusedColumnProbe_ =
+        makeLaneStateProbe("mixerFocusedColumn", [this](juce::DynamicObject& into) { fillFocusedColumnState(into); });
+    addChildComponent(*focusedColumnProbe_);
+    addMouseListener(&clickFocus_, true);
 }
 
-MixerPanelComponent::~MixerPanelComponent() = default;
+MixerPanelComponent::~MixerPanelComponent() { removeMouseListener(&clickFocus_); }
 
 // `meterReader` defaults to the pre-existing `MeterReader::Mixer` slot -- the Mixer's
 // optional second live view (MixerMirrorController) passes `MeterReader::MixerMirror` instead, so

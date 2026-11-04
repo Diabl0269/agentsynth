@@ -25,8 +25,8 @@ void MacroGroupController::selectMacroForDrag(const juce::String& macroId) {
 // The parent's border is a live union that includes the dragged macro, so without a snapshot it would follow the drag
 // (it looked as if the parent's border was being dragged) and the macro could never leave it. Every ancestor is held
 // at its press-time border until the drop; the drop's glide then takes each to where the new membership puts it.
-// A group drag (more than this macro selected) is no unit drag: like a module group drag it never joins or leaves, so
-// nothing is held and no target is outlined.
+// A group drag (more than this macro selected) is no unit drag: it holds its own borders and finds its own target
+// (beginGroupDrag, MacroGroupControllerGroupDrop.cpp).
 void MacroGroupController::beginMacroUnitDrag(const juce::String& draggedMacroId) {
     clearMacroNestCandidate();
     frozenDragHulls_.clear();
@@ -34,6 +34,7 @@ void MacroGroupController::beginMacroUnitDrag(const juce::String& draggedMacroId
     if (!isMacroSelected(draggedMacroId))
         return;
     draggedMacroUnit_ = draggedMacroId;
+    endGroupDrag(); // the macro alone is selected: this is its own unit drag, not a group's
     for (const auto& id : host_.getMacros().ancestorChain(draggedMacroId))
         if (const auto hull = macroHullBounds(id); !hull.isEmpty())
             frozenDragHulls_[id] = hull;
@@ -109,11 +110,17 @@ void MacroGroupController::moveDraggedMacroToCandidate(const juce::String& dragg
     const auto target = std::exchange(macroNestCandidate_, {});
     clearMacroNestCandidate(); // ends the unit drag: the borders are live again for the drop's glide
     host_.setMacroDropCandidate({});
+    if (moveMacroInto(draggedMacroId, leave, target))
+        makeRoomFor("m:" + draggedMacroId);
+}
+
+bool MacroGroupController::moveMacroInto(const juce::String& draggedMacroId, const juce::String& leave,
+                                         const juce::String& target) {
     auto& macros = host_.getMacros();
     if (macros.find(draggedMacroId) == nullptr || (leave.isEmpty() && target.isEmpty()))
-        return;
+        return false;
     if (target.isNotEmpty() && macros.find(target) == nullptr)
-        return;
+        return false;
 
     std::vector<juce::String> path; // outermost -> the target itself
     if (target.isNotEmpty()) {
@@ -146,6 +153,5 @@ void MacroGroupController::moveDraggedMacroToCandidate(const juce::String& dragg
             break; // refused (its status message says why); the steps already taken stay in the one undo record
         moved = true;
     }
-    if (moved)
-        makeRoomFor("m:" + draggedMacroId);
+    return moved;
 }

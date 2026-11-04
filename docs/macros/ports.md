@@ -386,10 +386,17 @@ node or an ordinary member.
 
 A cable anchors on the row of the jack it uses (raw 0 for Left, `kRightBase` for Right); a drop on the R row wires the Right leg.
 
-Dropping a cable exactly on an existing port's jack wires straight into that port's node instead of
-minting a fresh one; a jack whose direction or kind does not match the drag is refused, the same as a
-mismatched drop on an ordinary module jack. Missing that jack falls through to the whole-card
-shape-from-a-dropped-cable convenience above.
+Dropping a cable exactly on an existing port's jack feeds that port instead of minting a fresh one; a jack whose
+direction or kind does not match the drag is refused, the same as a mismatched drop on an ordinary module jack. The
+drop follows the same rules as a drop on a module's own jack (`PortConnector::connectJacks`): a source inside another
+macro leaves it through that macro's own ports, never by a plain cable across its border. The row dropped on picks the
+port's jack (Left 0, Right 1 of a two-jack Stereo port). The port's own inner cable carries the signal on; a port with
+nothing behind it yet (one made from a dropped cable has no inner cable) is joined to the module it was made for, the
+first ordinary member with a free matching jack (`connectEmptyPortInterior`), both legs for a Stereo port, in the same
+undo step. Missing the jack falls through to the whole-card shape-from-a-dropped-cable convenience above.
+
+The same jack dropped on the card again finds its port (and the ports on the macros it leaves), so nothing is minted or
+cabled twice; a cable from one of several jacks (a Channel Strip's Left and Right) names its port after that jack.
 
 ## Nested macros
 

@@ -24,6 +24,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 class InsertGap;
@@ -42,6 +43,29 @@ public:
     void updateDragPreview(juce::Point<int> desiredTopLeftCanvas);
     void endDragPreview();
 
+    /** Held by an edge-scroll tick around its re-aim: inside it updateDragPreview refreshes the preview at most once
+     *  per kScrollPreviewIntervalMs and otherwise only moves the gap and remembers the aim. */
+    class ScrollTick {
+    public:
+        explicit ScrollTick(GraphDragDropController& c)
+            : c_(c) {
+            ++c_.scrollTickDepth_;
+        }
+        ~ScrollTick() { --c_.scrollTickDepth_; }
+        ScrollTick(const ScrollTick&) = delete;
+        ScrollTick& operator=(const ScrollTick&) = delete;
+
+    private:
+        GraphDragDropController& c_;
+    };
+    static constexpr double kScrollPreviewIntervalMs = 100.0;
+    /** Brings a preview a scroll tick skipped up to date; a no-op when none was skipped. Call it before a drop. */
+    void flushDragPreview();
+    /** How many times the preview was really recomputed (placement, gap, guides, suggestions). */
+    int fullPreviewCount() const noexcept { return fullPreviewCount_; }
+    /** Test seam: the clock the scroll throttle reads, in ms. */
+    void setClockForTest(std::function<double()> clock) { clock_ = std::move(clock); }
+
     bool isDragPreviewActive() const noexcept { return dragPreviewActive_; }
     juce::Rectangle<int> getDragPreviewGhost() const noexcept { return dragPreviewGhost_; }
     /** The landing ghost as drawn: it slides to getDragPreviewGhost() when its aim jumps
@@ -50,6 +74,10 @@ public:
     /** Where the cursor pointed, before anti-overlap moved the landing rect (empty before the first move). */
     juce::Rectangle<int> getDragPreviewAim() const noexcept { return dragPreviewAim_; }
     juce::AudioProcessorGraph::NodeID getDragPreviewSelfId() const noexcept { return dragPreviewSelfId_; }
+    /** A group drag's landing ghost: one rect per card it moves, where the drop would put each if released now. Set by
+     *  the group drag from the placement its drop applies; empty outside one. It replaces the single-card ghost. */
+    void setGroupGhosts(std::vector<juce::Rectangle<int>> ghosts) { groupGhosts_ = std::move(ghosts); }
+    const std::vector<juce::Rectangle<int>>& getGroupGhosts() const noexcept { return groupGhosts_; }
 
     /** Ghost top-left for a library drag's cursor position: the ghost is CENTRED on the cursor.
      *
@@ -101,6 +129,8 @@ public:
 private:
     /** The expanded macro a plain-module library drop at `details` would join, or empty. */
     juce::String macroJoinTargetForDrop(const juce::DragAndDropTarget::SourceDetails& details) const;
+    /** The full preview for the ghost aimed at `desiredTopLeftCanvas`: gap, placement, guides, suggestions. */
+    void recomputeDragPreview(juce::Point<int> desiredTopLeftCanvas);
     /** Opens, moves or closes the gap between cards for the ghost aimed at `aim`. */
     void hoverInsertGap(juce::Rectangle<int> aim);
 
@@ -118,6 +148,7 @@ private:
     // The un-de-overlapped rect under the cursor. Suggestion candidacy is judged from this, so
     // aiming at a gap narrower than the card still counts; the card still LANDS at dragPreviewGhost_.
     juce::Rectangle<int> dragPreviewAim_;
+    std::vector<juce::Rectangle<int>> groupGhosts_;
     // Library-drag probe: jack metadata for a module that does not exist on the canvas yet.
     bool dragPreviewIsSnippet_ = false;
     // True only for a plain factory-module library payload (not a snippet or a plugin), the one kind
@@ -128,4 +159,12 @@ private:
     std::unique_ptr<juce::AudioProcessor> dragPreviewProbe_;
 
     std::vector<AlignmentGuide> alignmentGuides_;
+
+    // Edge-scroll throttle (updateDragPreview / flushDragPreview).
+    int scrollTickDepth_ = 0;
+    std::function<double()> clock_;
+    double lastFullPreviewMs_ = 0.0;
+    bool anyFullPreview_ = false;
+    std::optional<juce::Point<int>> pendingScrollAim_;
+    int fullPreviewCount_ = 0;
 };

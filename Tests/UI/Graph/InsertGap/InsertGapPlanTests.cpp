@@ -206,6 +206,42 @@ TEST(InsertGapPlan, ThePointerBetweenStackedCardsPicksAColumn) {
     EXPECT_EQ(nearEdge->anchorKey, "bottom");
 }
 
+// Regression test for FRO1443: a card dragged just below a wide open macro, far to the right of the card under it, was
+// put in front of that card (the macro's "next" in its column) and landed far left of where it was dropped, at the same
+// spot wherever it was dropped along the macro.
+TEST(InsertGapPlan, AnAnchorNotAcrossFromTheAimIsNoGap) {
+    const std::vector<LayoutUnit> units = {{"m:wide", Rect(40, 40, 3600, 400)}, {"n:below", Rect(40, 480, kW, 200)}};
+    const juce::Point<int> card{kW, 200};
+    for (int x : {1000, 1800, 3000}) {
+        SCOPED_TRACE("pointer x " + std::to_string(x));
+        EXPECT_FALSE(ig::pickTarget(units, {x, 420}, card).has_value()) << "below the macro, far from the card";
+    }
+    // Over the card's own column the gap still opens.
+    const auto target = ig::pickTarget(units, {180, 460}, card);
+    ASSERT_TRUE(target.has_value());
+    EXPECT_EQ(target->axis, ig::Axis::Column);
+    EXPECT_EQ(target->anchorKey, "n:below");
+}
+
+// Regression test for FRO1443: a card dragged just above a wide open macro was put in front of the macro itself, at
+// the macro's left edge, wherever along it the card was dropped.
+TEST(InsertGapPlan, AnOpenMacroIsNoGapWhereItsLeadEdgeIsNotAcrossFromTheAim) {
+    LayoutUnit hull{"m:wide", Rect(40, 40, 3600, 400)};
+    hull.hull = true;
+    const std::vector<LayoutUnit> units = {hull};
+    const juce::Point<int> card{kW, 200};
+    for (int x : {1000, 1800, 3000}) {
+        SCOPED_TRACE("pointer x " + std::to_string(x));
+        EXPECT_FALSE(ig::pickTarget(units, {x, 30}, card).has_value()) << "above the macro, far from its left edge";
+    }
+    const auto atEdge = ig::pickTarget(units, {180, 30}, card);
+    ASSERT_TRUE(atEdge.has_value()) << "above the macro's left edge the gap still opens";
+    EXPECT_EQ(atEdge->axis, ig::Axis::Column);
+    EXPECT_EQ(atEdge->anchorKey, "m:wide");
+    hull.hull = false;
+    EXPECT_TRUE(ig::pickTarget({hull}, {1800, 30}, card).has_value()) << "a card as wide is still level with it";
+}
+
 TEST(InsertGapPlan, ThePointerDeepInsideACardIsAnOrdinaryDrop) {
     const auto units = row(3);
     EXPECT_FALSE(ig::pickTarget(units, units[1].rect.getCentre(), kCard).has_value());
