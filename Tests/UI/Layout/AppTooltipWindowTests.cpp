@@ -159,16 +159,16 @@ TEST(AppTooltipWindowTest, UnderTestModeATipIsPlacedAtTheSyntheticPointerNotTheO
     Hosted h;
     const auto atScreen = [&](juce::Point<int> p) { return h.parent.getLocalPoint(nullptr, p); };
 
-    h.window->setLastTipForTest("Level");      // what getTipFor returned for the control, as the mouse timer does
-    h.window->displayTip({350, 250}, "Level"); // the OS cursor, far from the control
-    const auto osPlaced = h.window->getBounds();
-    EXPECT_TRUE(osPlaced.expanded(40).contains(atScreen({350, 250}))) << "without a synthetic pointer: at the cursor";
+    h.window->setLastTipForTest("Level");        // what getTipFor returned for the control, as the mouse timer does
+    h.window->displayTip({350, 250}, "Level");   // the OS cursor, far from the control
+    const auto osPlaced = h.window->getBounds(); // where juce puts it differs by platform: only "elsewhere" is checked
 
     h.window->hideTip();
     AppTooltipWindow::setSyntheticPointer(juce::Point<int>(60, 40));
     h.window->displayTip({350, 250}, "Level");
     EXPECT_NE(h.window->getBounds(), osPlaced);
     EXPECT_TRUE(h.window->getBounds().expanded(40).contains(atScreen({60, 40})));
+    EXPECT_FALSE(h.window->getBounds().expanded(40).contains(atScreen({350, 250}))) << "not at the OS cursor";
 
     juce::DynamicObject state;
     h.window->addTestModeState(state);
