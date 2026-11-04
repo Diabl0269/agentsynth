@@ -19,11 +19,11 @@ steps:
   - wait: {}
   - click: {id: Mixer}                                       # the Mixer tab
   - wait: {}
-  - expect: {id: mixerPanel, focusedColumn: ""}
+  - expect: {id: mixerFocusedColumn, focusedColumn: ""}
   - expect: {count: {prefix: mixerColumnHeaderName, equals: 3}}   # the strip, Direct and Master
   - click: {id: mixerPanel, x: 310, y: 38}                    # empty space in the strip's header, beside its name
   - wait: {}
-  - expect: {id: mixerPanel, focusedColumn: "Oscillator 1"}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Oscillator 1"}
   - screenshot: {name: strip-clicked}
   - key: {keys: cmd+d}
   - expect: {count: {prefix: mixerColumnHeaderName, equals: 4}, within_ms: 3000}
@@ -32,15 +32,15 @@ steps:
   - key: {keys: cmd+d}
   - expect: {count: {prefix: mixerColumnHeaderName, equals: 6}, within_ms: 3000}
   - wait: {}
-  - expect: {id: mixerPanel, focusedColumn: "Oscillator 1"}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Oscillator 1"}
   - screenshot: {name: three-copies}
   - click: {id: window, x: 1000, y: 420}                     # empty canvas
   - wait: {}
-  - expect: {id: mixerPanel, focusedColumn: ""}
+  - expect: {id: mixerFocusedColumn, focusedColumn: ""}
   - screenshot: {name: canvas-clicked}
   - click: {id: mixerPanel, x: 310, y: 38}
   - wait: {}
-  - expect: {id: mixerPanel, focusedColumn: "Oscillator 1"}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Oscillator 1"}
   - key: {keys: cmd+up}
   - expect: {id: mixerTopBarRing, topBarRing: "Side pane", within_ms: 1000}
   - screenshot: {name: top-bar-ring}

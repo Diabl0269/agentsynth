@@ -208,7 +208,7 @@ bool MixerPanelComponent::duplicateFocusedTrack() {
     return true;
 }
 
-void MixerPanelComponent::addTestModeState(juce::DynamicObject& into) const {
+void MixerPanelComponent::fillFocusedColumnState(juce::DynamicObject& into) const {
     const bool shown = !keyboardAway_ && juce::isPositiveAndBelow(focusedColumnIndex_, (int)columnEntries_.size());
     into.setProperty("focusedColumn",
                      shown ? columnEntries_[(size_t)focusedColumnIndex_].component->getTitle() : juce::String());

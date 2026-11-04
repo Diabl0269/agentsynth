@@ -18,6 +18,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
 
 namespace synth::ui {
 
@@ -88,6 +89,9 @@ MixerPanelComponent::MixerPanelComponent() {
     setComponentID("mixerPanel");
     topBarRingProbe_ = makeKeyRingProbe(topBarRing_, "mixerTopBarRing");
     addChildComponent(*topBarRingProbe_);
+    focusedColumnProbe_ =
+        makeLaneStateProbe("mixerFocusedColumn", [this](juce::DynamicObject& into) { fillFocusedColumnState(into); });
+    addChildComponent(*focusedColumnProbe_);
     addMouseListener(&clickFocus_, true);
 }
 

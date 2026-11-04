@@ -48,8 +48,8 @@ name the keys and follow a rebind.
 
 ## Test mode
 
-`getState` on `mixerPanel` reports `focusedColumn`, the title of the column whose outline shows (empty when none).
+`getState` on `mixerFocusedColumn` (a hidden child of the panel) reports `focusedColumn`, the title of the column whose outline shows (empty when none).
 `Tools/ui-verify/scenarios/mixer-strip-click-focus.yaml` clicks a strip, duplicates it three times, clicks the canvas
-and presses Cmd+Up; `Tests/UI/Mixer/MixerStripClickFocusTests.cpp` drives the same through the real ComponentPeer.
-`mixer-colour-key.yaml` opens the picker with C and with Return on the dot; `MixerColourKeyTests.cpp` pins the keys.
-`mixer-pan-hide-keys.yaml` pans and hides a strip and shows it again; `MixerPanHideKeyTests.cpp` pins those keys.
+and presses Cmd+Up; `Tests/UI/Mixer/MixerPanelKeyboardFocusTests.cpp` drives the same through the real ComponentPeer.
+`mixer-colour-key.yaml` opens the picker with C and with Return on the dot; `MixerColourDotTests.cpp` pins the keys.
+`mixer-pan-hide-keys.yaml` pans and hides a strip and shows it again; `MixerZonesKeyboardTests.cpp` pins those keys.

@@ -6,7 +6,7 @@
 #   2. Clicks the strip's header beside its name and presses C: the colour picker opens on the strip's dot. Esc closes it.
 #   3. Clicks the colour dot (the picker opens), presses Esc, then Return on the still-focused dot: one picker opens.
 #   4. Closes it and presses Space on the dot: no picker opens; the key goes on to the window's play command.
-# Test mode has no audio device, so the transport never starts here: MixerColourKeyTests checks Space reaches the window.
+# Test mode has no audio device, so the transport never starts here: MixerColourDotTests checks Space reaches the window.
 record: true
 save_project: mixer-colour-key
 steps:
@@ -21,7 +21,7 @@ steps:
   - wait: {}
   - click: {id: mixerPanel, x: 310, y: 38}                    # empty space in the strip's header, beside its name
   - wait: {}
-  - expect: {id: mixerPanel, focusedColumn: "Oscillator 1"}
+  - expect: {id: mixerFocusedColumn, focusedColumn: "Oscillator 1"}
   - expect: {id: colourPickerPopup, exists: false}
   - key: {keys: c}
   - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}

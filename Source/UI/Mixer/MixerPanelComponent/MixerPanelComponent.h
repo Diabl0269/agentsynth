@@ -3,7 +3,6 @@
 #include "MacroSet.h"
 #include "Mixer/MixerViewDoc.h"
 #include "Mixer/PeakMeterLatch.h"
-#include "TestMode/TestModeStateSource.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
@@ -62,8 +61,7 @@ namespace synth::ui {
 class MixerPanelComponent
     : public juce::Component
     , public DockBackSlot
-    , public KeyboardContextMenuProvider
-    , public synth::testmode::StateSource {
+    , public KeyboardContextMenuProvider {
 public:
     MixerPanelComponent();
     ~MixerPanelComponent() override;
@@ -397,8 +395,6 @@ public:
     /** Coming back shows the focused column's ring again (focusLost hid it). */
     void focusGained(FocusChangeType cause) override;
     void focusOfChildComponentChanged(FocusChangeType cause) override;
-    /** Test mode: `focusedColumn`, the title of the column whose focus ring shows (empty when none). */
-    void addTestModeState(juce::DynamicObject& into) const override;
     /** Opens the focused column's header right-click menu, anchored at that column. False with no column focused. */
     bool showContextMenuForKeyboardFocus() override;
     void paintOverChildren(juce::Graphics& g) override;
@@ -638,6 +634,10 @@ private:
     MixerZonesPane zonesPane_;
     std::vector<juce::Component*> topBarStops();
     std::unique_ptr<juce::Component> topBarRingProbe_; // hidden; reports the ring to test mode
+    // Hidden; reports `focusedColumn` to test mode (the title of the column whose focus ring shows, empty when none),
+    // so this widely included header stays free of TestModeStateSource.h.
+    std::unique_ptr<juce::Component> focusedColumnProbe_;
+    void fillFocusedColumnState(juce::DynamicObject& into) const;
     KeyRing topBarRing_{*this, [this] { return topBarStops(); }, KeyRing::Order::given};
     // Hears every press inside the panel (a nested listener), so a click on any control in a column focuses it.
     struct ClickFocus : juce::MouseListener {
