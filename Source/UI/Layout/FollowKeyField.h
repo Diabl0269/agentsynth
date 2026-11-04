@@ -42,7 +42,7 @@ public:
      *  the on/off setting is read. */
     KeyAuditioner& getAuditioner() noexcept { return *auditioner_; }
 
-    /** Opens the key picker (the field's click, Space, Return or Down). */
+    /** Opens the key picker (the field's click, Return or Down). */
     void openPicker();
     /** The open picker, or null. */
     KeyPicker* getOpenPicker() const noexcept;

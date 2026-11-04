@@ -73,8 +73,8 @@ size_t moduleTitlesSignature(juce::AudioProcessorGraph& graph) {
 }
 
 /** A combo that shows its closed label as usual but opens the searchable picker instead of a menu. With no
- *  picker hook wired it falls back to the stock menu. Reachable by keyboard (Return/Space open it, like any
- *  combo) and outlined in the accent colour while focused. */
+ *  picker hook wired it falls back to the stock menu. Reachable by keyboard (Return opens it, like any
+ *  combo; Space stays the app's play key) and outlined in the accent colour while focused. */
 class PickerComboBox : public juce::ComboBox {
 public:
     std::function<void()> onShowPicker;
@@ -96,10 +96,6 @@ public:
         if (key == juce::KeyPress::upKey || key == juce::KeyPress::downKey || key == juce::KeyPress::leftKey ||
             key == juce::KeyPress::rightKey)
             return false;
-        if (key == juce::KeyPress::spaceKey) {
-            showPopup();
-            return true;
-        }
         return juce::ComboBox::keyPressed(key);
     }
     void paintOverChildren(juce::Graphics& g) override { synth::ui::paintFocusRegionOutline(*this, g); }

@@ -45,11 +45,12 @@ void NoteLengthBox::setCurrentName(const juce::String& name, juce::NotificationT
         setSelectedItemIndex(index, notification);
 }
 
-// Space and Return open the popup at once (the mouse path goes through ComboBox's own asynchronous open and lands here
-// too). Left / Right keep the combo's step through the choices; Up and Down are left to the region around the box,
-// which moves focus on (the combo would otherwise swallow them to step the choice).
+// Return (and Enter) opens the popup at once (the mouse path goes through ComboBox's own asynchronous open and lands
+// here too); Space is not ours, it stays the app's play key. Left / Right keep the combo's step through the choices; Up
+// and Down are left to the region around the box, which moves focus on (the combo would otherwise swallow them to step
+// the choice).
 bool NoteLengthBox::keyPressed(const juce::KeyPress& key) {
-    if (isEnabled() && (key == juce::KeyPress::spaceKey || key == juce::KeyPress::returnKey)) {
+    if (isEnabled() && key == juce::KeyPress::returnKey) {
         showPopup();
         return true;
     }

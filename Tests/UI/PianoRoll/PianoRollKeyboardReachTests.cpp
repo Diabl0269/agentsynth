@@ -208,22 +208,23 @@ TEST(PianoRollKeyboardReachTest, TheCustomScaleEditorsControlsAreKeyStopsToo) {
     pane_walk::expectEveryControlReachedByDownAndUp(pane.getPaneKeysForTest(), pane);
 }
 
-TEST(PianoRollKeyboardReachTest, SpaceOpensTheKeyFieldAndDownDoesNot) {
+TEST(PianoRollKeyboardReachTest, ReturnOpensTheKeyFieldAndSpaceAndDownDoNot) {
     RollWithClip f;
     f.roll.toggleScalePanel();
     f.roll.resized();
     auto& pane = f.roll.getScaleAssistPanel();
     int opened = 0;
     pane.getKeyField().onOpen = [&] { ++opened; };
-    EXPECT_TRUE(
-        pane_walk::dispatchKey(pane.getPaneKeysForTest(), pane, pane.getKeyField(), plain(juce::KeyPress::spaceKey)));
-    EXPECT_EQ(opened, 1);
+    EXPECT_FALSE(
+        pane_walk::dispatchKey(pane.getPaneKeysForTest(), pane, pane.getKeyField(), plain(juce::KeyPress::spaceKey)))
+        << "Space bubbles to the app's play/stop";
+    EXPECT_EQ(opened, 0);
     EXPECT_TRUE(
         pane_walk::dispatchKey(pane.getPaneKeysForTest(), pane, pane.getKeyField(), plain(juce::KeyPress::returnKey)));
-    EXPECT_EQ(opened, 2);
+    EXPECT_EQ(opened, 1);
     EXPECT_TRUE(
         pane_walk::dispatchKey(pane.getPaneKeysForTest(), pane, pane.getKeyField(), plain(juce::KeyPress::downKey)));
-    EXPECT_EQ(opened, 2) << "Down moves on";
+    EXPECT_EQ(opened, 1) << "Down moves on";
     EXPECT_EQ(pane.getPaneKeysForTest().getLastStepForTest(), &pane.getCustomScalesButton());
 }
 

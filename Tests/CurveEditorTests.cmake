@@ -12,6 +12,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeEditorKeyboardReachTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ModalCloseKeysTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/KeyboardReachTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/MenuFieldSpaceTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ShortcutRelayTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragSurfaceRegistryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragCancelTests.cpp

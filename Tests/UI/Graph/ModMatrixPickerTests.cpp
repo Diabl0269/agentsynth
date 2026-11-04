@@ -4,6 +4,7 @@
 // filters, Up/Down/Return/Escape work, and a pick re-points the routing through the same path a combo
 // selection takes. Every test opens it through the combo's real showPopup().
 
+#include "../../TestWait.h"
 #include "ModMatrixCanvasHelpers.h"
 
 #include "Modules/MacroInletModule.h"
@@ -233,7 +234,7 @@ TEST(ModMatrixPicker, AnOpenedAndClosedPickerLetsThePanelRefreshAgain) {
         << "a closed picker no longer holds the list frozen";
 }
 
-TEST(ModMatrixPicker, SpaceOpensThePickerAndArrowsNeverRepointTheRouting) {
+TEST(ModMatrixPicker, ReturnOpensThePickerSpaceDoesNotAndArrowsNeverRepointTheRouting) {
     PickerFixture f;
     f.source.reset();
     f.dest.reset();
@@ -248,7 +249,10 @@ TEST(ModMatrixPicker, SpaceOpensThePickerAndArrowsNeverRepointTheRouting) {
         EXPECT_FALSE(combo->keyPressed(juce::KeyPress(key))) << "left to the matrix's grid navigation";
         EXPECT_EQ(combo->getSelectedId(), selected);
     }
-    EXPECT_TRUE(combo->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_FALSE(combo->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey))) << "Space stays the app's play key";
+    EXPECT_EQ(launches, 0);
+    EXPECT_TRUE(combo->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    synth::test::waitUntil([&] { return launches == 1; });
     EXPECT_EQ(launches, 1);
 }
 

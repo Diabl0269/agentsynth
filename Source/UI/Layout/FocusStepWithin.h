@@ -55,8 +55,8 @@ inline bool stepFocusWithin(juce::Component& root, int direction, juce::Componen
 
 /** The keys of a pane whose root is a plain container: bare Up/Down step to the neighbouring control and Escape returns
  *  focus to the root. Only a text field keeps its own Up/Down (it uses them), so only Escape leaves one. A combo box
- *  opens on Space (Return is its own) and a slider moves with Left and Right. Attach it to every control with
- *  attachToDescendants() once they exist; a control added later needs attach() too. */
+ *  opens on Return (Space stays the app's play key) and a slider moves with Left and Right. Attach it to every control
+ * with attachToDescendants() once they exist; a control added later needs attach() too. */
 class PaneKeys : public juce::KeyListener {
 public:
     explicit PaneKeys(juce::Component& root)
@@ -72,13 +72,6 @@ public:
         if (usesArrows(*origin))
             return false;
         const bool plain = !key.getModifiers().isAnyModifierKeyDown();
-        if (plain && key.isKeyCode(juce::KeyPress::spaceKey)) {
-            auto* menu = dynamic_cast<juce::ComboBox*>(origin);
-            if (menu == nullptr)
-                return false;
-            menu->showPopup();
-            return true;
-        }
         const bool up = plain && key.isKeyCode(juce::KeyPress::upKey);
         if (!up && !(plain && key.isKeyCode(juce::KeyPress::downKey)))
             return false;

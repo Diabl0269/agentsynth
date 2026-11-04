@@ -1,6 +1,7 @@
 #pragma once
 
-// The Sampler card's instrument name with a caret: a Tab stop that opens the picker list on click, Return or Space.
+// The Sampler card's instrument name with a caret: a Tab stop that opens the picker list on click or Return (Space
+// stays the app's play key).
 
 #include "UI/Layout/ChevronTurn.h"
 #include <juce_gui_basics/juce_gui_basics.h>

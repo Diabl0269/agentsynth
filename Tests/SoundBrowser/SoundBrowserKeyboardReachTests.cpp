@@ -273,7 +273,7 @@ TEST(SoundBrowserKeyboardReachTest, EscFromAMenuInThePanelStillClosesIt) {
     EXPECT_FALSE(v.areFiltersOpen());
 }
 
-TEST(SoundBrowserKeyboardReachTest, AMenuStepsWithUpAndDownAndOpensWithReturnOrSpace) {
+TEST(SoundBrowserKeyboardReachTest, AMenuStepsWithUpAndDownAndOpensWithReturnButNotSpace) {
     Fixture f;
     auto& v = *f.view;
     v.setFiltersOpen(true, false);
@@ -297,9 +297,8 @@ TEST(SoundBrowserKeyboardReachTest, AMenuStepsWithUpAndDownAndOpensWithReturnOrS
     EXPECT_TRUE(length.isPopupActive());
     length.hidePopup();
     EXPECT_FALSE(length.isPopupActive());
-    EXPECT_TRUE(dispatchKey(v, length, space()));
-    EXPECT_TRUE(length.isPopupActive());
-    length.hidePopup();
+    EXPECT_FALSE(dispatchKey(v, length, space())) << "Space is the app's play key: it bubbles on";
+    EXPECT_FALSE(length.isPopupActive());
 }
 
 TEST(SoundBrowserKeyboardReachTest, LeftAndRightStillMoveATempoHandleAndTheVolume) {

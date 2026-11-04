@@ -263,6 +263,13 @@ that should answer Space derives from `SpaceClaimingButton<Base>` (`Layout/Space
 once and is consumed, even on a disabled button. `Tests/UI/Mixer/MixerSpaceKeyTests.cpp` walks every focusable button
 of a real mixer panel, so a new one joins the check by existing.
 
+## Space on a menu field
+
+Opposite of the button rule: a menu-style field (`KeyField`, `FollowKeyField`, `NoteLengthBox`, the mod matrix combos,
+the Sampler's instrument picker, every stock `juce::ComboBox`) opens on Return (and Enter) only. Space is not
+theirs: it bubbles to the app's play/stop. `PaneKeys`, `KeyRing` and the Sound browser's key relay never open a
+combo on Space either. `MenuFieldSpaceTests` walks every combo-style opener of a real main window and pins both keys.
+
 ## Arrow keys in lists of controls
 
 A Settings tab or a dialog is a list of controls, so the arrow keys walk it the way they walk the module
