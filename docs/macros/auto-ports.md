@@ -479,7 +479,10 @@ rebuilt as a chain: external -> parent inlet -> child inlet -> member (an outlet
   destination side. A cable between a parent member and a child member therefore mints only the child's port. An
   endpoint that is itself a port never crosses its own macro's boundary, only its ancestors'.
 - **Dropped on a collapsed card.** `createMacroPortFromDroppedCable` chains through the other end's own boundaries
-  first, then wires the last of them to the new port.
+  first, then wires the last of them to the new port. A port that already carries the same jack (`existingPortLinkedTo`,
+  on this macro and on each macro of the chain) is reused, so a repeated drop changes nothing. A drop on an existing
+  port jack goes through the cable-drag path above, so it crosses the same borders. A card nested in a macro the other
+  end sits outside of also gets a port on that outer macro (outermost first), so the cable never crosses its border bare.
 - **Crossing plans.** Every plan's "inside" set is `MacroSet::descendantMembers` (minus the macro's own ports), so an
   edge between a parent member and a child member is never read as crossing the parent. This covers grouping-time
   plans, `macroPortsThatBecomeInteriorOnAdd` and `macroPortsThatBecomeObsoleteOnRemove`. A child's port counts as

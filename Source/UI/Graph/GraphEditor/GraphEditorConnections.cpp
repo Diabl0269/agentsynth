@@ -507,18 +507,16 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             // macro offers an OUTPUT.
             const bool newPortIsInput = !dragSourceIsInput;
 
-            // An existing port's jack under the cursor wires directly into that port's own
-            // node, rather than always minting a fresh one — "one jack per port" makes a jack a
-            // real, precise drop target, not just the card as a whole. A jack whose direction or
-            // kind doesn't match the drag is refused silently, the same way an ordinary mismatched
-            // module-jack drop is refused a few lines above
-            // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed: not silently adapted). DEFERRED
-            // (not this stage): a Mono port is wired on its one jack; a two-row Stereo port (Left/Right
-            // jacks, docs/macros/ports.md#how-a-port-is-drawn) wires the leg of the ROW dropped on (raw 0 for Left,
-            // kRightBase for Right). A StereoCollapsed / Poly-N port is one row and wires raw channel 0 only, same as
-            // createMacroPortFromDroppedCable below; widening that to resolvePolyLink-style fan-out is future work,
-            // and the modal (docs/macros/configure-io.md#renaming-and-reordering-ports) remains the reliable way to
-            // wire those completely.
+            // An existing port's jack under the cursor wires into that port's own node, rather than always minting a
+            // fresh one — "one jack per port" makes a jack a real, precise drop target, not just the card as a whole.
+            // A jack whose direction or kind doesn't match the drag is refused silently, the same way an ordinary
+            // mismatched module-jack drop is refused a few lines above
+            // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed: not silently adapted).
+            // The cable then follows the SAME rules as a drop on a module's own jack (PortConnector::connectJacks: a
+            // source inside another macro leaves through its own ports, a Track In's auto channel, the poly fan), so
+            // the card and the module can never route differently; and a port with nothing behind it yet is joined to
+            // the module it was made for (connectEmptyPortInterior), both legs for a two-jack Stereo port. The row
+            // dropped on picks the port's jack (Left 0, Right 1); a one-row port is its jack 0.
             if (auto hitPort = macroController_.macroCardPortForPoint(card->getMacroId(), cardLocal)) {
                 if (hitPort->isInput == newPortIsInput &&
                     (hitPort->kind == synth::MacroPortKind::Midi) == dragSourceIsMidi) {
@@ -526,31 +524,23 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                     if (graph.getNodeForId(portNodeId) != nullptr) {
                         const auto connSrcId = newPortIsInput ? srcNode->nodeID : portNodeId;
                         const auto connDstId = newPortIsInput ? portNodeId : srcNode->nodeID;
-                        const int portChannel = hitPort->visibleJack == 1 ? MacroOutletModule::kRightBase : 0;
-                        const int connSrcJack = newPortIsInput ? dragSourceChannel : portChannel;
-                        const int connDstJack = newPortIsInput ? portChannel : dragSourceChannel;
-
-                        // The same auto-channel trigger as the direct-jack branch above,
-                        // for a Track In dropped straight onto an EXISTING port jack on a
-                        // collapsed macro's card. The port node (a MacroMidiInletModule) is a
-                        // plain pass-through — findUnchanneledOutputFeeds (via
-                        // maybeAutoCreateChannelAfterConnect) reaches whatever it forwards to on
-                        // its own, so searching from the port node itself is enough.
-                        if (autoCreateChannelOnConnectEnabled && dragSourceIsMidi &&
-                            nodeIsTimelineMidiSource(connSrcId)) {
-                            auto doMutation = [this, connSrcId, connSrcJack, connDstId, connDstJack] {
-                                connectPorts(connSrcId, connSrcJack, connDstId, connDstJack, /*isMidi=*/true,
-                                             /*recordUndo=*/false);
-                                maybeAutoCreateChannelAfterConnect(connDstId);
-                                updateComponents();
-                            };
-                            if (undoManager)
-                                undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
-                            else
-                                doMutation();
-                        } else {
-                            connectPorts(connSrcId, connSrcJack, connDstId, connDstJack, dragSourceIsMidi, true);
-                        }
+                        const int portJack = std::max(hitPort->visibleJack, 0);
+                        const int connSrcJack = newPortIsInput ? dragSourceChannel : portJack;
+                        const int connDstJack = newPortIsInput ? portJack : dragSourceChannel;
+                        const auto macroId = card->getMacroId();
+                        const auto slideFrom = content.getLocalPoint(nullptr, screenPos).toFloat();
+                        auto doDrop = [this, macroId, portNodeId, connSrcId, connSrcJack, connDstId, connDstJack,
+                                       slideFrom] {
+                            synth::ui::PortConnector::connectJacks(*this, connSrcId, connSrcJack, connDstId,
+                                                                   connDstJack, dragSourceIsMidi,
+                                                                   /*recordUndo=*/false, slideFrom);
+                            macroController_.connectEmptyPortInterior(macroId, portNodeId);
+                            updateComponents();
+                        };
+                        if (undoManager)
+                            undoManager->recordGraphAndMacroChange(graph, macros, doDrop);
+                        else
+                            doDrop();
                         connectedToAModule = true;
                     }
                 }

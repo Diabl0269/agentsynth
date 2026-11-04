@@ -1,0 +1,60 @@
+# Check: dropping a Channel Strip's Left and Right cables on a folded macro's card makes one port per jack and reuses
+# them on a repeat drop, and a cable dropped on an existing input jack feeds what is inside.
+#
+# What a user does:
+#   1. Opens a project with an open track macro (Oscillator 2, holding a Channel Strip) and a folded macro "Macro2"
+#      (a Filter into a Filter) beside it. Zooms out so both are on screen.
+#   2. Drags the strip's Left output onto the folded card, then the strip's Right output, then Left again.
+#   3. The card holds one new port for Left and one for Right (3 members of its own ports plus its two Filters),
+#      and the second Left drop adds nothing. Cmd+Z takes the Right drop away in one step.
+#   4. Drops the strip's Left on the card's Left input jack: the cable feeds that port, and the port (which had nothing
+#      inside) is joined to the first Filter, so the sound passes through the macro.
+record: true
+save_project: macro-card-drops
+steps:
+  - copyFixture: {name: macro-card-drops.agsproj}
+  - openProject: {path: "${SCRATCH}/macro-card-drops.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wait: {}
+  - wait: {}
+  - screenshot: {name: 1-before}
+  - drag: {from: "card:Channel Strip 2", to: window, fromX: 88, fromY: 18, toX: 870, toY: 439, steps: 40}
+  - wait: {}
+  - screenshot: {name: 2-left-dropped}
+  - drag: {from: "card:Channel Strip 2", to: window, fromX: 88, fromY: 26, toX: 870, toY: 439, steps: 40}
+  - wait: {}
+  - screenshot: {name: 3-right-dropped}
+  - drag: {from: "card:Channel Strip 2", to: window, fromX: 88, fromY: 18, toX: 870, toY: 439, steps: 40}
+  - wait: {}
+  - screenshot: {name: 4-after-left-again}
+  - drag: {from: "card:Channel Strip 2", to: window, fromX: 88, fromY: 18, toX: 828, toY: 442, steps: 40}
+  - wait: {}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 870, y: 439, dy: 0.5, mods: cmd}
+  - wait: {}
+  - wait: {}
+  - screenshot: {name: 5-zoomed-after-left-on-the-left-jack}
