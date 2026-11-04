@@ -64,6 +64,17 @@ protected:
             juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
         return playing() == want;
     }
+    // Gives `c` the keyboard and waits for it. A native window hands focus over asynchronously (on Windows the window
+    // that a just-closed popup menu left focus on takes a few turns of the message loop to give it back), and the OS
+    // delivers a key to whatever holds focus, so a key sent before the grab lands goes to the wrong component.
+    static bool takeFocus(juce::Component& c) {
+        for (int i = 0; i < 20 && !c.hasKeyboardFocus(false); ++i) {
+            c.grabKeyboardFocus();
+            if (!c.hasKeyboardFocus(false))
+                juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+        }
+        return c.hasKeyboardFocus(false);
+    }
     // Delivers `press` the way the OS does: to the focused component and up its parents, listeners first.
     bool deliver(juce::Component& focused, const juce::KeyPress& press) {
         auto* peer = focused.getPeer();
@@ -127,8 +138,7 @@ TEST_F(MenuFieldSpaceTest, SpaceTogglesPlaybackAndOpensNoMenuOnEverySelectFieldA
                 std::string(scene) + " / " + select->getTitle().toStdString() + " (" + typeid(*select).name() + ")";
             if (!select->getWantsKeyboardFocus())
                 continue; // not a keyboard stop, so no key reaches it
-            select->grabKeyboardFocus();
-            if (!select->hasKeyboardFocus(false)) {
+            if (!takeFocus(*select)) {
                 unfocusable.push_back(name);
                 continue;
             }
@@ -147,7 +157,7 @@ TEST_F(MenuFieldSpaceTest, SpaceTogglesPlaybackAndOpensNoMenuOnEverySelectFieldA
             EXPECT_FALSE(probe.opened()) << name << ": the second Space opened the menu";
             probe.close();
 
-            select->grabKeyboardFocus();
+            ASSERT_TRUE(takeFocus(*select)) << name << ": lost keyboard focus, so Return would not reach it";
             deliver(*select, plain(juce::KeyPress::returnKey));
             EXPECT_TRUE(probe.opened()) << name << ": Return did not open the menu";
             EXPECT_FALSE(playing()) << name << ": Return started playback";
