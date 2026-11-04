@@ -302,7 +302,8 @@ private:
         float now = 1.0f;
     };
     // A row and band whose routing is gone, fading out in a gap that shrinks from its height to nothing in its old
-    // place (before the lane's `slot`th remaining row); swept once both have finished.
+    // place (before the lane's `slot`th remaining row). It lands as soon as both have finished: the gap's end
+    // (landBlockMotion) or the fade's end (leavingSweep_) deletes it, so no hidden row waits for the next sync.
     struct LeavingModulator {
         synth::LaneId lane;
         int slot = 0;
@@ -313,6 +314,17 @@ private:
         std::unique_ptr<synth::ui::FadeVisibility> fade; // declared last: gone before the components it drives
     };
     std::vector<std::unique_ptr<LeavingModulator>> leaving_;
+    // Sweeps the leaving rows on the message-loop turn after a fade-out ends: the fade's own callback is still on the
+    // stack when it reports, so its row is never deleted inside it. Declared after leaving_: cancelled first.
+    struct LeavingSweep : juce::AsyncUpdater {
+        std::function<void()> sweep;
+        ~LeavingSweep() override { cancelPendingUpdate(); }
+        void handleAsyncUpdate() override {
+            if (sweep)
+                sweep();
+        }
+    };
+    LeavingSweep leavingSweep_;
 
     // A picture of a lane block that left, drawn in its shrinking gap: it never reads the doc its lane is gone from.
     class BlockPicture : public juce::Component {

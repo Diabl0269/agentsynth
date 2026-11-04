@@ -1,0 +1,48 @@
+# Bug: a cable whose input sits left of its output loops out past both ends, and its paint box left those loops out.
+# The canvas tick repaints only the cables' boxes, so the signal-flow dots on the loops stayed on screen at an old
+# phase (pieces of dots near the LFO's output and the Reverb's Level jack), and an undo or redo left the same pieces.
+#
+# What a user does: adds a Reverb and then an LFO (placed right of it) from the library (Cmd+F), drags the LFO output
+# onto the Reverb's Level, then presses Cmd+Z and Cmd+Shift+Z. After every step the window must equal a full repaint.
+# CablePaintBounds.HoldsTheWholeDrawnPathOfEveryCable covers the box headlessly.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+motion: true
+stale_pixel_check: true
+record: true
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "reverb"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Reverb > Level"}
+  - wait: {}
+  - expect: {id: "card:Reverb", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {id: "card:Reverb", name: "Reverb-Level"}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Reverb", cabledTargets: "", within_ms: 3000}
+  - screenshot: {name: after-undo}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {id: "card:Reverb", contains: {cabledTargets: Level}, within_ms: 3000}
+  - screenshot: {name: after-redo}

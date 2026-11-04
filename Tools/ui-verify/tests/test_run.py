@@ -397,5 +397,65 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual([e["cmd"] for e in log], ["copyFixture", "openProject"])
 
 
+class StalePixelCheckTests(unittest.TestCase):
+    def run_steps(self, text, app):
+        with tempfile.TemporaryDirectory() as out:
+            runner = run.Runner(None, out, run.parse_scenario(text, "demo"), app_factory=lambda *a, **k: app)
+            return runner.run(), out
+
+    def test_the_option_parses_as_true_or_a_mapping_and_refuses_anything_else(self):
+        self.assertIsNone(run.parse_scenario("- wait: {}\n", "x").stale_pixel_check)
+        self.assertEqual(run.parse_scenario("stale_pixel_check: true\nsteps:\n  - wait: {}\n", "x").stale_pixel_check, {})
+        s = run.parse_scenario("stale_pixel_check: {ignore: [caret], settle_ms: 900}\nsteps:\n  - wait: {}\n", "x")
+        self.assertEqual(s.stale_pixel_check, {"ignore": ["caret"], "settle_ms": 900})
+        for bad in ["3", "{nope: 1}", "{ignore: caret}"]:
+            with self.assertRaises(run.ScenarioError, msg=bad):
+                run.parse_scenario("stale_pixel_check: %s\nsteps:\n  - wait: {}\n" % bad, "x")
+
+    def test_a_check_follows_each_step_that_can_change_the_window_but_not_a_held_press(self):
+        app = FakeApp({})
+        text = ("stale_pixel_check: {ignore: [caret], settle_ms: 900}\nsteps:\n  - click: {id: a}\n"
+                "  - expect: {id: a, exists: false}\n  - wait: {}\n  - mouseDown: {id: a}\n  - mouseMoveHeld: {id: a}\n"
+                "  - key: {keys: escape}\n  - mouseUp: {id: a}\n  - key: {keys: cmd+z}\n")
+        (ok, _), _ = self.run_steps(text, app)
+        self.assertTrue(ok)
+        names = [c[0] for c in app.calls]
+        self.assertEqual(names[0], "trackPresentedFrame")
+        checks = [c[1] for c in app.calls if c[0] == "checkStalePixels"]
+        self.assertEqual([os.path.basename(c["dir"]) for c in checks], ["stale-step-01", "stale-step-07", "stale-step-08"])
+        self.assertEqual(checks[0]["ignore"], ["caret"])
+        self.assertEqual(checks[0]["settleMs"], 900)
+
+    def test_without_the_option_nothing_is_checked(self):
+        app = FakeApp({})
+        (ok, _), _ = self.run_steps("- click: {id: a}\n", app)
+        self.assertTrue(ok)
+        self.assertEqual([c[0] for c in app.calls], ["click"])
+
+    def test_a_stale_pixel_fails_the_scenario_at_that_step_with_the_app_s_message(self):
+        class Stale(FakeApp):
+            def call(self, cmd, timeout_ms=None, **args):
+                if cmd == "checkStalePixels" and len([c for c in self.calls if c[0] == "checkStalePixels"]) == 1:
+                    self.calls.append((cmd, args))
+                    raise TestModeError("checkStalePixels failed: 12 pixels differ from a full repaint")
+                return super().call(cmd, timeout_ms=timeout_ms, **args)
+
+        app = Stale({})
+        (ok, message), _ = self.run_steps("stale_pixel_check: true\nsteps:\n  - click: {id: a}\n"
+                                          "  - key: {keys: cmd+z}\n  - click: {id: b}\n", app)
+        self.assertFalse(ok)
+        self.assertIn("step 2", message)
+        self.assertIn("stale pixels after key", message)
+        self.assertIn("12 pixels differ", message)
+        self.assertNotIn(("click", {"id": "b"}), app.calls)
+
+    def test_a_restart_follows_the_new_instance(self):
+        app = FakeApp({})
+        (ok, _), _ = self.run_steps("stale_pixel_check: true\nsteps:\n  - restart: {}\n  - click: {id: a}\n", app)
+        self.assertTrue(ok)
+        self.assertEqual([c[0] for c in app.calls], ["trackPresentedFrame", "trackPresentedFrame", "click",
+                                                     "checkStalePixels"])
+
+
 if __name__ == "__main__":
     unittest.main()

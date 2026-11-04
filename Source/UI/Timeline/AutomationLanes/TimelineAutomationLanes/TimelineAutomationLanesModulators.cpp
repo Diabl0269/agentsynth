@@ -303,6 +303,8 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
 void TimelineAutomationLanes::retireModulatorRows(LaneModulators& entry, synth::LaneId lane,
                                                   const std::set<juce::String>& staying) {
     sweepLeavingModulators();
+    if (!leavingSweep_.sweep)
+        leavingSweep_.sweep = [this] { sweepLeavingModulators(); };
     const bool shrink = canAnimateBlocks();
     int stayingAbove = 0;
     bool started = false;
@@ -324,6 +326,9 @@ void TimelineAutomationLanes::retireModulatorRows(LaneModulators& entry, synth::
         leaving->band = std::move(entry.bands[i]);
         leaving->fade = std::make_unique<FadeVisibility>(
             std::initializer_list<juce::Component*>{leaving->row.get(), leaving->band.get()});
+        // The fade's end hides the row and band (their parents repaint where they last stood); the sweep then
+        // deletes them unless the gap is still closing.
+        leaving->fade->onHidden = [this] { leavingSweep_.triggerAsyncUpdate(); };
         leaving->fade->setShown(false);
         // A row dropped on another lane is already drawn there (it grows in at its new slot): here only its gap closes.
         if (entry.infos[i].key() == droppedRoutingKey_)

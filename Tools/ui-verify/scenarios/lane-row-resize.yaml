@@ -9,6 +9,8 @@
 #      it back in one step; Cmd+Shift+Z grows it again.
 #   3. Presses Option+= on the LFO 2 row: only that row grows.
 #   4. Drags the Cutoff lane's own strip down 20 px: the lane row grows, both modulator rows keep their heights.
+motion: true
+stale_pixel_check: true
 record: true
 save_project: end
 steps:

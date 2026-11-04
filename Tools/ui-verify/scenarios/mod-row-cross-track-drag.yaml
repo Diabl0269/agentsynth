@@ -10,6 +10,8 @@
 #      shape, rate and sync controls and a small sign saying the LFO lives in Audio 1. No "Macro In" row.
 #   3. Cmd+Z puts it back on Ratio in one step; Cmd+Shift+Z moves it again.
 #   4. Saves, reopens the saved project: still one LFO row on Audio 3's Threshold, still named LFO 2.
+motion: true
+stale_pixel_check: true
 record: true
 save_project: end
 steps:

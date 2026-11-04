@@ -490,7 +490,8 @@ TEST(PopupMotionLeaving, AWindowJuceDeletesWhileShowingLeavesAFadingPicture) {
         GTEST_SKIP() << "no native window in this environment";
     letItSettle();
     window.reset();
-    EXPECT_EQ(PopupMotion::getNumLeavingGhosts(), 1);
+    // Opened one turn after the delete, never inside the window's destructor (PopupDismissPaths covers that).
+    EXPECT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 1; }));
     EXPECT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0; }));
 }
 

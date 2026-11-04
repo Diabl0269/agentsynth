@@ -5,6 +5,7 @@
 // closes a popup also raises the app window, which buried the fade). The popup kinds stand for the users listed in
 // PopupMotionRegistryTests.cpp; a kind that is modal by design (alerts, dialogs) must instead stay open on a click
 // outside and on deactivation. docs/layout/animation.md#popup-windows.
+#include "../../SilentLookAndFeel.h"
 #include "NativeWindowTestGuard.h"
 #include "TestMode/AutomationHiding.h"
 #include "UI/Graph/ModDot/ModDotPanelFrame.h"
@@ -12,6 +13,7 @@
 #include "UI/Layout/NoteLengthMenu/NoteLengthPopup.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <functional>
 #include <gtest/gtest.h>
@@ -131,6 +133,9 @@ protected:
     }
     void TearDown() override {
         drainMessageQueue(); // a leaving picture or a deferred close still queued must run while the rig's owners exist
+        // A rig deleted while its window was shown leaves a fading picture behind. Let it finish here: the next test
+        // reads the first live picture and would otherwise find this one, already faded to nothing (seen 1 run in 200).
+        pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0; });
         synth::testmode::setAppInFrontForTest(std::nullopt);
         synth::ui::setReducedMotionForTest(std::nullopt);
     }
@@ -368,6 +373,19 @@ TEST_F(PopupDismissPaths, AnAlertPromptFadesOnEscapeAndStaysOpenOnAClickOutsideO
     EXPECT_TRUE(pumpUntil([&] { return *rig.answered; }));
 }
 
+// A window deleted while it is still shown leaves a picture of itself. That picture is a native window of its own, and
+// opening one inside the dying window's destructor makes Windows send messages to its half-destroyed peer (an access
+// violation that hit the alert test now and then), so the picture must open only after the deletion has returned.
+TEST_F(PopupDismissPaths, AWindowDeletedWhileShownOpensItsLeavingPictureOnlyAfterItIsGone) {
+    ModalAlertRig rig;
+    ASSERT_TRUE(pumpUntil([&] { return rig.alert != nullptr && rig.alert->getAlpha() >= 0.999f; }));
+    ASSERT_EQ(PopupMotion::getNumLeavingGhosts(), 0) << "an earlier test left a picture behind";
+    delete rig.alert.getComponent();
+    EXPECT_EQ(PopupMotion::getNumLeavingGhosts(), 0) << "the picture opened inside the window's destructor";
+    EXPECT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() > 0; })) << "the window just vanished";
+    EXPECT_TRUE(pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0; }));
+}
+
 TEST_F(PopupDismissPaths, ADialogFadesOnEscapeAndStaysOpenOnAClickOutsideOrDeactivation) {
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(new juce::Component());
@@ -401,3 +419,21 @@ TEST_F(PopupDismissPaths, ADialogFadesOnEscapeAndStaysOpenOnAClickOutsideOrDeact
 }
 
 } // namespace
+
+// ---- the suite never beeps -------------------------------------------------------------------------------------
+// A press outside a modal prompt makes JUCE play the system beep, and the tests above do that on purpose.
+
+TEST(AlertSoundSilence, TheDesktopDefaultSwallowsTheBeepOfAPressOutsideAModalPrompt) {
+    auto& silent = synth::tests::SilentAlertSoundsListener::instance();
+    ASSERT_EQ(&juce::LookAndFeel::getDefaultLookAndFeel(), &silent) << "a test left an audible default look and feel";
+    const int before = silent.suppressed;
+    juce::Component anything;
+    anything.getLookAndFeel().playAlertSound(); // what inputAttemptWhenModal() calls
+    EXPECT_EQ(silent.suppressed, before + 1);
+}
+
+TEST(AlertSoundSilence, TheAppLookAndFeelIsMutedByTheAutomationFlag) {
+    EXPECT_TRUE(synth::testmode::alertSoundsAreMuted());
+    synth::theme::AppLookAndFeel appLaf;
+    appLaf.playAlertSound(); // would beep without the flag
+}
