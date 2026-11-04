@@ -530,6 +530,8 @@ void GraphEditor::updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID dra
     if ((targets.leave.isNotEmpty() || targets.join.isNotEmpty()) &&
         canApplyMembershipLive(draggedNodeId, targets.leave)) {
         applyMembershipLive(draggedNodeId, targets.leave, targets.join);
+        // The ghost was placed before this crossing, against the old macros: place it again against the new ones.
+        dragDropController_.replaceGhostAfterCrossing();
         return;
     }
     const auto hullsBefore = snapshotPaintedHulls();

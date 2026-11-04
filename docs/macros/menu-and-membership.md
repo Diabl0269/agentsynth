@@ -568,7 +568,10 @@ live re-derivation in `mouseDrag`. The preference adds two exclusions, both corr
 **Landing inside the hull.** A module that will join a hull is not blocked by it: `resolvePlacement` leaves the
 join candidate's hull (and its ancestors') out of the placement blockers, so it lands where it was released, inside
 the hull, instead of being pushed clear. A collapsed card is different: it is a solid obstacle and dropping on it
-never joins. A library drag sets the join candidate BEFORE placing its ghost, for the same reason.
+never joins. A library drag sets the join candidate BEFORE placing its ghost, for the same reason. A canvas card's
+ghost is placed before the tick's live crossing (the crossing reads the card's bounds), so a tick that joins, leaves or
+transfers places it again right after (`GraphDragDropController::replaceGhostAfterCrossing`, which moves the ghost only
+and never re-samples the insert gap): the outline is never one frame behind the macros.
 See [placement blockers](../layout/layout.md#making-room-when-something-grows).
 
 **Why you may want to turn it off.** With a small macro the "excluding hull" a member is tested

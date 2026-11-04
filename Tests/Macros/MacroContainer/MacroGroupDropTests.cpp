@@ -311,11 +311,11 @@ TEST(MacroGroupDrop, GroupNeverDropsIntoAMacroItCarries) {
 // Regression test for FRO1440: a group drag's ghost showed only the grabbed card, at a spot the group never landed on,
 // and a group holding a macro was pushed off its placement by its own room-making. For every group drag kind dropped
 // into an open macro (a lone folded card or open macro moves its members as a group), and a plain group move on the
-// empty canvas, the ghost rects shown just before the release are exactly where the moved cards land. The single-module
-// drag has its own ghost path (dragPreviewGhost_), placed before that tick's live macro crossing, so on the very tick
-// it crosses it still shows the pre-crossing spot; it is not covered here.
+// empty canvas, the ghost rects shown just before the release are exactly where the moved cards land. A single module
+// has its own ghost path (dragPreviewGhost_), so it is checked on the very tick it crosses the border too
+// (SingleModuleGhostIsRightOnTheTickItCrosses).
 TEST(MacroGroupDrop, GhostShowsWhereEveryMovedCardLands) {
-    for (const int k : {1, 2, 3, 4, 5, -1}) {
+    for (const int k : {2, 3, 4, 5, -1}) {
         GroupDropFixture f;
         const bool canvasMove = k < 0;
         SCOPED_TRACE(canvasMove ? "two modules on the canvas" : nameOf(static_cast<Kind>(k)));
@@ -334,4 +334,22 @@ TEST(MacroGroupDrop, GhostShowsWhereEveryMovedCardLands) {
         EXPECT_EQ(sorted(ghosts), sorted(landed)) << "the ghost is where the cards land";
         EXPECT_TRUE(shownGhosts(f.editor).empty()) << "the ghost ends with the drop";
     }
+}
+
+// Regression test for FRO1491: a single module dragged into an open macro drew its landing ghost one frame late on the
+// exact tick it crossed the border, because the ghost was placed before that tick's live join. The ghost shown on the
+// crossing tick is where the module lands.
+TEST(MacroGroupDrop, SingleModuleGhostIsRightOnTheTickItCrosses) {
+    GroupDropFixture f;
+    std::vector<juce::Rectangle<int>> ghosts;
+    juce::String outlined;
+    selectAndDrag(f, {f.m1}, {}, f.gapInB(), [&] {
+        ghosts = shownGhosts(f.editor);
+        outlined = f.editor.getMacroDragLiveOwnerId();
+    });
+    f.editor.finishCardGlideForTest();
+
+    EXPECT_EQ(outlined, f.bId) << "the drag has crossed into the macro";
+    ASSERT_EQ(ghosts.size(), 1u) << "the drag shows one landing ghost";
+    EXPECT_EQ(ghosts.front(), findComponent(f.editor, f.m1)->getBounds()) << "the ghost is where the module lands";
 }
