@@ -4,6 +4,7 @@
 #include "UI/Layout/UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 
 // AppTooltipWindow.h (docs/layout/animation.md#tooltips): the ONE tooltip window every app window uses (the main
 // window and each detached panel window own one). A juce::TooltipWindow that
@@ -36,6 +37,16 @@ public:
     static void blockHoverTips(bool block) noexcept;
     static bool hoverTipsBlocked() noexcept;
 
+    /** Test mode only: where the synthetic pointer is (screen coordinates), or nullopt for the real one. juce places a
+     *  tip at the OS cursor, which synthetic input never moves, so under test mode a tip would float wherever the
+     *  user's own cursor happens to be, away from the control it explains. While set, every tip is placed at this
+     *  point instead. */
+    static void setSyntheticPointer(std::optional<juce::Point<int>> screenPosition) noexcept;
+
+    /** Test mode: `tipText` (empty when no tip shows) and `tipAtPointer` (true when no tip shows, else whether the tip
+     *  sits within a short reach of the synthetic pointer, as a tip beside the control under it does). */
+    void addTestModeState(juce::DynamicObject& into) const;
+
     /** The preference, read now: true when info tooltips are on (the default). */
     bool areInfoTooltipsOn() const;
 
@@ -59,8 +70,11 @@ public:
 
 private:
     class Ghost;
+    class StateChild;
 
     void visibilityChanged() override;
+    void moved() override;
+    void placeAtSyntheticPointer();
     bool shouldAnimate() const;
     void beginFadeIn();
     void beginFadeOut();
@@ -71,9 +85,12 @@ private:
     bool hostShowingForTest_ = false;
     bool fadingIn_ = false;
     bool destroying_ = false;
+    bool replacing_ = false;
     juce::VBlankAnimatorUpdater updater_;
     AnimationDriver driver_;
     std::unique_ptr<Ghost> ghost_;
+    std::unique_ptr<StateChild>
+        stateChild_; // the id test mode reads (a sibling, so this header stays free of test mode)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AppTooltipWindow)
 };

@@ -5,10 +5,13 @@
 # What a user does: adds a Reverb and then an LFO (placed right of it) from the library (Cmd+F), drags the LFO output
 # onto the Reverb's Level, then presses Cmd+Z and Cmd+Shift+Z. After every step the window must equal a full repaint.
 # CablePaintBounds.HoldsTheWholeDrawnPathOfEveryCable covers the box headlessly.
+# The "Level" tooltip of the control under the pointer stays up through the steps; it must sit at the pointer, not at the
+# user's own cursor (juce reads the OS cursor, which synthetic input never moves), where it once floated left of the canvas.
 # Needs the app to be the active application (the library search field must have keyboard focus).
 motion: true
 stale_pixel_check: true
 record: true
+save_project: end
 steps:
   - click: {id: New empty project}
   - wait: {}
@@ -37,12 +40,15 @@ steps:
   - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Reverb > Level"}
   - wait: {}
   - expect: {id: "card:Reverb", contains: {cabledTargets: Level}, within_ms: 3000}
+  - expect: {id: tooltipWindow, tipAtPointer: true}
   - screenshot: {id: "card:Reverb", name: "Reverb-Level"}
   - key: {keys: cmd+z}
   - wait: {}
   - expect: {id: "card:Reverb", cabledTargets: "", within_ms: 3000}
+  - expect: {id: tooltipWindow, tipAtPointer: true}
   - screenshot: {name: after-undo}
   - key: {keys: cmd+shift+z}
   - wait: {}
   - expect: {id: "card:Reverb", contains: {cabledTargets: Level}, within_ms: 3000}
+  - expect: {id: tooltipWindow, tipAtPointer: true}
   - screenshot: {name: after-redo}
