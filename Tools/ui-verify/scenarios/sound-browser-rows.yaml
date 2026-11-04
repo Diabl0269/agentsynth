@@ -1,10 +1,10 @@
-# Sound browser rows: every row starts with a line icon (folder, loop, star, clock, pack, plus), a file named in lower
-# case shows a capital first letter, and the Get more heading folds. The recording shows the Sounds view, a search, a
-# selected loop row (accent icon) and the footer; the Get more heading shows only when the hosted pack list loads,
-# which a scenario without network does not get, so the fold itself is covered by SoundPackOfferTests.
+# Sound browser rows: every row starts with a line icon (folder, loop, star, clock, pack, plus), a file named wholly in
+# lower case shows a capital first letter, and the Get more heading folds. The recording shows the Sounds view with its
+# Get more heading (a chevron and "1 pack"), then a search and a selected loop row with its accent icon.
+# The loop here is "test loop 120bpm Am": it has a capital, so it keeps its name as written. The capital-first-letter
+# rule and the fold itself are covered by SoundBrowserViewTests and SoundPackOfferTests.
 #
 # What a user does: opens the Sounds view over the fixture folder, looks at the rows, searches for a loop and selects it.
-# The row text and the tooltip read "Test loop 120bpm Am" while the stored name stays "test loop 120bpm Am".
 record: true
 save_project: sound-browser-rows
 settings:
