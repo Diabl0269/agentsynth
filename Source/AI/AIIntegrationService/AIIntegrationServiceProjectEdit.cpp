@@ -230,8 +230,9 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // section markers, 6 drums on one Drum Kit track instead of one Oscillator track per drum, 7 a sequencer's
 // pattern as the node's "state" (steps, velocity, chance) instead of eight step parameters, 8 the song key (a
 // songKey context line and the setSongKey op), 9 new and edited Sequencers stay on Follow Song Key, 10 a part is played
-// by clip notes OR a sequencer wired to the track's instrument, never both, and accents get a real velocity spread.
-static constexpr int kProjectGeneratePromptVersion = 10;
+// by clip notes OR a sequencer wired to the track's instrument, never both, and accents get a real velocity spread, 11
+// the same with the sequencer cable on the MIDI sentinel and Run on.
+static constexpr int kProjectGeneratePromptVersion = 11;
 
 juce::String AIIntegrationService::songKeyContext() const {
     if (transportService == nullptr)
@@ -252,8 +253,9 @@ juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text
     // "instrumentParams", 3 adds the whole-track rules, 4 the song layout the server expands into ordinary
     // clips, 5 the tempo and markers (setTempo and addMarker ops), 6 the Drum Kit track, 7 a sequencer's
     // pattern state, 8 the song key ("songKey" below, and the setSongKey op), 9 Sequencers staying on Follow Song
-    // Key and 10 one player per part (clip notes or a sequencer). A build that does not understand those fields sends
-    // no version and keeps getting version 1, so a server deploy can never hand an older app a field it would reject.
+    // Key, 10 one player per part (clip notes or a sequencer) and 11 that part's cable on the MIDI sentinel with Run
+    // on. A build that does not understand those fields sends no version and keeps getting version 1, so a server
+    // deploy can never hand an older app a field it would reject.
     body.getDynamicObject()->setProperty("promptVersion", projectPromptVersionOverride > 0
                                                               ? projectPromptVersionOverride
                                                               : kProjectGeneratePromptVersion);

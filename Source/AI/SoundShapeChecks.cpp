@@ -249,12 +249,71 @@ std::set<juce::String> sequencerDrivenTrackNames(const juce::var& response) {
     return names;
 }
 
+// The ids of the instruments this response's addInstrumentTrack ops declare.
+std::set<juce::int64> newInstrumentIds(const juce::var& response) {
+    std::set<juce::int64> ids;
+    if (auto* ops = response.getProperty("timelineOps", {}).getArray())
+        for (const auto& op : *ops) {
+            juce::int64 id = 0;
+            if (op.getProperty("op", {}).toString() == "addInstrumentTrack" &&
+                readId(op.getProperty("instrumentId", {}), id))
+                ids.insert(id);
+        }
+    return ids;
+}
+
 bool asksForAccents(const juce::String& request) {
     const auto lower = request.toLowerCase();
     return lower.contains("accent") || lower.contains("punchy") || lower.contains("groove");
 }
 
 } // namespace
+
+juce::var repairSequencerWiring(const juce::var& response, juce::StringArray& notes) {
+    const auto sequencers = sequencerNodeIds(response);
+    const auto instruments = newInstrumentIds(response);
+    if (sequencers.empty() || instruments.empty())
+        return response;
+    juce::var fixed = juce::JSON::parse(juce::JSON::toString(response));
+    bool rewired = false;
+    std::set<juce::int64> started;
+    if (auto* connections = fixed.getProperty("connections", {}).getArray())
+        for (auto& connection : *connections) {
+            auto* object = connection.getDynamicObject();
+            juce::int64 src = 0, dst = 0;
+            if (object == nullptr || !readId(object->getProperty("src"), src) ||
+                !readId(object->getProperty("dst"), dst) || sequencers.count(src) == 0 || instruments.count(dst) == 0)
+                continue;
+            // A port left out reads as 0 when the patch is applied.
+            if (static_cast<int>(object->getProperty("srcPort")) >= 0 ||
+                static_cast<int>(object->getProperty("dstPort")) >= 0) {
+                object->setProperty("srcPort", -1);
+                object->setProperty("dstPort", -1);
+                rewired = true;
+            }
+            started.insert(src);
+        }
+    if (auto* nodes = fixed.getProperty("nodes", {}).getArray())
+        for (auto& node : *nodes) {
+            juce::int64 id = 0;
+            auto* object = node.getDynamicObject();
+            if (object == nullptr || !readId(object->getProperty("id"), id) || started.count(id) == 0)
+                continue;
+            auto* params = object->getProperty("params").getDynamicObject();
+            if (params == nullptr) {
+                object->setProperty("params", juce::var(new juce::DynamicObject()));
+                params = object->getProperty("params").getDynamicObject();
+            }
+            if (!params->hasProperty("run")) {
+                params->setProperty("run", 1);
+                notes.add("A sequencer was set to Run, because it is silent until Run is on");
+            }
+        }
+    if (rewired)
+        notes.add("A sequencer's cable to a track's instrument was changed to a MIDI cable, because a sequencer sends "
+                  "notes rather than audio");
+    return fixed;
+}
 
 juce::var dropDoubledClipNotes(const juce::var& response, juce::StringArray& notes) {
     const auto driven = sequencerDrivenTrackNames(response);

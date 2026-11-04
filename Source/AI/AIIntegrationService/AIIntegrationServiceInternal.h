@@ -58,6 +58,8 @@ struct Plan {
     std::vector<Reservation> reservations;
     std::set<juce::uint32> patchNodeIds;
     bool buildsInstrumentTracks = false;
+    juce::var
+        repairedRoot; // the response with the app's repairs (readPlan); the patch phase reads this, not the raw root
     std::vector<PlanNote> notes;        // what readPlan dropped or ignored; those ops are already out of otherOps
     std::set<juce::uint32> unusableIds; // ids that clashed: a writeLane naming one is ambiguous, so it is skipped
 };

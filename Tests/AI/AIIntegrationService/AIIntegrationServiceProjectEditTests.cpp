@@ -491,12 +491,13 @@ TEST_F(AIIntegrationServiceProjectEditTest, HostedRequestIsProjectGenerateWithTh
         EXPECT_EQ(juce::JSON::toString(body[key]), juce::JSON::toString(arrange[key])) << key;
     EXPECT_EQ(juce::JSON::toString(service->buildProjectRequestBody("a wobbly bass")), juce::JSON::toString(body));
     EXPECT_EQ((int)arrange["promptVersion"], 2) << "the timeline.generate prompt that teaches the drum-hit note fields";
-    EXPECT_EQ((int)body["promptVersion"], 10) << "the server prompt with one player per part";
+    EXPECT_EQ((int)body["promptVersion"], 11)
+        << "the server prompt with one player per part and a MIDI sequencer cable";
 
     service->setProjectPromptVersion(3); // the eval harness measuring a newer server prompt
     EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 3);
     service->setProjectPromptVersion(0);
-    EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 10) << "0 restores the default";
+    EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 11) << "0 restores the default";
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, LocalRequestComposesTheSameSectionsAndOffersTheWidenedSchema) {
@@ -650,9 +651,10 @@ TEST_F(AIIntegrationServiceProjectEditTest, ProjectRequestOnEmptyTimelineSaysSoE
     EXPECT_EQ(body["availableTracks"].getArray()->size(), 0);
 }
 
-// A v10-style plan: one track whose part is played by a Poly Sequencer wired MIDI to MIDI (port -1 -> port -1, the
-// patch format's MIDI sentinel) to the track's instrument, with a 16-step accented pattern. The cable exists, the track
-// holds no clip notes (the doubled clip the model also wrote is dropped, with a note), and the graph really plays.
+// A v10-style plan: one track whose part is played by a Poly Sequencer wired port 0 -> port 0 to the track's instrument
+// (no Run), with a 16-step accented pattern. The app repairs the cable to the MIDI sentinel and starts the sequencer,
+// so the cable exists, the track holds no clip notes (the doubled clip the model also wrote is dropped), each repair is
+// a plan note, and the graph really plays the sequencer's pitch.
 TEST_F(AIIntegrationServiceProjectEditTest, ASequencerWiredToATracksInstrumentPlaysAndTheTrackHoldsNoNotes) {
     juce::String steps;
     const int velocities[4] = {120, 80, 80, 62};
@@ -660,10 +662,10 @@ TEST_F(AIIntegrationServiceProjectEditTest, ASequencerWiredToATracksInstrumentPl
         steps += juce::String(i > 0 ? "," : "") + R"({"pitch": )" + juce::String(i % 4 == 3 ? 43 : 36) +
                  R"(, "velocity": )" + juce::String(velocities[i % 4]) + "}";
     const auto plan = parse(R"({"mode": "merge",
-        "nodes": [{"id": 7100, "type": "Poly Sequencer", "params": {"steps": 16, "run": 1}, "state": {"steps": [)" +
+        "nodes": [{"id": 7100, "type": "Poly Sequencer", "params": {"steps": 16}, "state": {"steps": [)" +
                             steps +
                             R"(]}}, {"id": 7200, "type": "Audio Output"}],
-        "connections": [{"src": 7100, "srcPort": -1, "dst": 7001, "dstPort": -1},
+        "connections": [{"src": 7100, "srcPort": 0, "dst": 7001, "dstPort": 0},
                         {"src": 7001, "srcPort": 0, "dst": 7200, "dstPort": 0}],
         "timelineOps": [
             {"op": "addInstrumentTrack", "name": "Acid", "instrument": "Oscillator", "instrumentId": 7001,
@@ -683,6 +685,12 @@ TEST_F(AIIntegrationServiceProjectEditTest, ASequencerWiredToATracksInstrumentPl
     for (const auto& note : applied.notes)
         noted = noted || note.contains("sequencer plays it once");
     EXPECT_TRUE(noted) << "the dropped clip notes are said in the plan notes";
+    for (const char* repair : {"MIDI cable", "set to Run"}) {
+        bool said = false;
+        for (const auto& note : applied.notes)
+            said = said || note.contains(repair);
+        EXPECT_TRUE(said) << repair;
+    }
     for (const auto& note : applied.notes)
         EXPECT_FALSE(note.contains("flat")) << "the accents are spread: " << note;
 

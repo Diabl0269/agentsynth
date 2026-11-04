@@ -9,6 +9,7 @@ using synth::soundshape::checkAcid;
 using synth::soundshape::checkFilterEnvelope;
 using synth::soundshape::checkPluck;
 using synth::soundshape::dropDoubledClipNotes;
+using synth::soundshape::repairSequencerWiring;
 
 namespace {
 
@@ -281,4 +282,45 @@ TEST(SoundShapeChecksTest, SpreadAccentsPass) {
     EXPECT_TRUE(checkAccents(sequencerPlan(true, "", "[120, 80, 60]"), "a bassline with accents").pass);
     EXPECT_FALSE(checkAccents(sequencerPlan(true, "", "[90, 100, 105]"), "an accented bassline").pass);
     EXPECT_FALSE(checkAccents(sequencerPlan(true, "", "[100, 100]"), "a bassline with groove").pass);
+}
+
+// -- a sequencer's cable and Run ---------------------------------------------------------------------
+
+TEST(SoundShapeChecksTest, ASequencerCableToATracksInstrumentBecomesAMidiCableAndTheSequencerRuns) {
+    const auto response = sequencerPlan(true, "");
+    juce::StringArray notes;
+    const auto fixed = repairSequencerWiring(response, notes);
+    const auto cable = fixed["connections"][0];
+    EXPECT_EQ((int)cable["srcPort"], -1);
+    EXPECT_EQ((int)cable["dstPort"], -1);
+    EXPECT_EQ((int)fixed["nodes"][0]["params"]["run"], 1);
+    EXPECT_EQ(notes.size(), 2) << notes.joinIntoString("; ");
+    EXPECT_EQ((int)response["connections"][0]["srcPort"], 0) << "the input is not modified";
+}
+
+TEST(SoundShapeChecksTest, ARunTheResponseStatedAndAnAlreadyMidiCableAreLeftAlone) {
+    auto response = sequencerPlan(true, "");
+    auto* node = response["nodes"][0].getDynamicObject();
+    node->setProperty("params", parse(R"({"run": 0})"));
+    auto* cable = response["connections"][0].getDynamicObject();
+    cable->setProperty("srcPort", -1);
+    cable->setProperty("dstPort", -1);
+    juce::StringArray notes;
+    const auto fixed = repairSequencerWiring(response, notes);
+    EXPECT_EQ((int)fixed["nodes"][0]["params"]["run"], 0) << "a stated run is the model's choice";
+    EXPECT_TRUE(notes.isEmpty());
+}
+
+TEST(SoundShapeChecksTest, ANonSequencerCableOrAnUnwiredSequencerIsUntouched) {
+    const auto plain = parse(R"({"nodes": [{"id": 1, "type": "LFO"}, {"id": 7100, "type": "Sequencer"}],
+        "connections": [{"src": 1, "srcPort": 0, "dst": 7001, "dstPort": 0}],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Bass", "instrument": "Oscillator",
+                         "instrumentId": 7001}]})");
+    juce::StringArray notes;
+    EXPECT_EQ(juce::JSON::toString(repairSequencerWiring(plain, notes)), juce::JSON::toString(plain));
+    EXPECT_TRUE(notes.isEmpty());
+    const auto toExisting = parse(R"({"nodes": [{"id": 7100, "type": "Sequencer"}],
+        "connections": [{"src": 7100, "srcPort": 0, "dst": 12, "dstPort": 0}], "timelineOps": []})");
+    EXPECT_EQ(juce::JSON::toString(repairSequencerWiring(toExisting, notes)), juce::JSON::toString(toExisting))
+        << "only a cable to a track this plan builds is repaired";
 }
