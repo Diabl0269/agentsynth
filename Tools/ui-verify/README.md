@@ -64,5 +64,11 @@ open) with a Compressor lane on each track and an LFO on Audio 1's Ratio lane;
 `UiVerifyCrossTrackLanesFixture.DISABLED_WritesCrossTrackLanesProject` regenerates it and
 `scenarios/mod-row-cross-track-drag.yaml` and `scenarios/mod-row-key-move-across-lanes.yaml` drive it.
 
+`fixtures/macro-card-drops.agsproj` holds an open track macro (a Channel Strip) beside folded macros, and
+`scenarios/macro-card-drops.yaml` drops the strip's Left and Right cables on a folded card and on its input jack;
+`fixtures/macro-input-drop.agsproj` is a saved project (a folded macro inside the open track macro Oscillator 1, a Reverb
+outside it) and `scenarios/macro-input-drop.yaml` drops the Reverb's cable on the folded macro. The saved project is
+also read by `MacroPortFlowCardDrop.ASavedProjectsMacroInputTakesACableAcrossABorderThroughAPortLikeAnOutputDoes`.
+
 `UiVerifyFixture.TheCommittedMacrosProjectHoldsAnOpenACollapsedAndANestedMacro` fails if the committed copy stops
 loading or loses a macro.

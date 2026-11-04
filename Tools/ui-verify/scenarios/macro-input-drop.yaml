@@ -1,0 +1,51 @@
+# Check: a cable dragged from a module OUTSIDE a macro onto the jack of a folded macro's input crosses the outer
+# macro's border through a new input of that macro, the way a cable out of the folded macro leaves through a new output.
+#
+# What a user does:
+#   1. Opens a project: the track "Oscillator 1" is an open macro holding a folded macro "Macro" (a Filter into a Delay,
+#      one input and one output), and a Reverb sits outside it.
+#   2. Drags a cable from the outside Reverb's output onto the folded macro's input jack.
+#   3. Oscillator 1 now has an input of its own and the cable runs Reverb, Oscillator 1's input, the folded macro's input.
+record: true
+save_project: macro-input-drop
+steps:
+  - copyFixture: {name: macro-input-drop.agsproj}
+  - openProject: {path: "${SCRATCH}/macro-input-drop.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.5, mods: cmd}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 500, dy: -0.35, dx: -1.2}
+  - wait: {}
+  - wait: {}
+  - wait: {}
+  - screenshot: {name: 1-before}
+
+  - drag: {from: "card:Reverb 2", to: window, fromX: 80, fromY: 17, toX: 756, toY: 177, steps: 40}
+  - wait: {}
+  - screenshot: {name: 2-after-drop}
+  - wheel: {id: window, x: 640, y: 230, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 640, y: 230, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 640, y: 230, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 640, y: 230, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 640, y: 230, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 640, y: 230, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 640, y: 230, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 640, y: 230, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 640, y: 230, dy: 0.5, mods: cmd}
+  - wheel: {id: window, x: 640, y: 230, dy: 0.5, mods: cmd}
+  - wait: {}
+  - wait: {}
+  - screenshot: {name: 3-zoomed-on-the-border}
