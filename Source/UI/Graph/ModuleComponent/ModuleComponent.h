@@ -526,12 +526,8 @@ private:
     juce::Array<juce::RangedAudioParameter*> sliderParams;
     juce::Array<juce::RangedAudioParameter*> comboParams;
 
-    /** Every learnable control on this card, mapped to the RangedAudioParameter it drives --
-     *  registered via registerMidiLearnable(), read by the menu builder and the badge/pulse paint.
-     *  A nested class rather than living in ModuleComponentInternal.h: it's used as a member's TYPE
-     *  here, and that header assumes ModuleComponent.h is already complete. Entries are non-owning
-     *  (same lifetime as sliderParams/comboParams above). See ModuleComponentMidiLearn.cpp for the
-     *  full design. */
+    /** Every learnable control on this card and the parameter it drives (non-owning, same lifetime as
+     *  sliderParams). Design: ModuleComponentMidiLearn.cpp. */
     class MidiLearnableRegistry {
     public:
         struct Entry {
@@ -548,6 +544,8 @@ private:
         };
 
         void add(juce::Component& component, juce::RangedAudioParameter* param);
+        /** Points `component`'s entry at `param` (adds one if missing); true when it added. */
+        bool rebind(juce::Component& component, juce::RangedAudioParameter* param);
         /** Hosted-card counterpart of add() -- see the .cpp for why `param`/`paramId` differ. */
         void addHosted(juce::Component& component, juce::AudioProcessorParameter& param, const juce::String& paramId);
         /** Drops every hosted entry; call before a hosted card rebuild destroys its widgets. */
@@ -785,10 +783,10 @@ private:
 
     // ---- MIDI Learn (ModuleComponentMidiLearn.cpp) ----
 
-    /** Every control on this card whose right-click should offer MIDI Learn -- see
-     *  MidiLearnableRegistry's own comment. Called once per control from createControls(); a null
-     *  `param` is silently ignored. */
+    /** A control whose right-click offers MIDI Learn, registered once; a null `param` is ignored. */
     void registerMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param);
+    /** `control` now drives `param` (registered on first call): a re-binding knob, the Drum Kit's pad knobs. */
+    void rebindMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param);
 
     /** Hosted-card counterpart of registerMidiLearnable(); see ModuleComponentHostedPluginCard.cpp. */
     void registerHostedMidiLearnable(juce::Component& control, juce::AudioProcessorParameter& param,

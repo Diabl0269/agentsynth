@@ -154,6 +154,9 @@ void DrumPadControls::refresh() {
         const juce::String name = juce::String(kFieldWords[f]) + ": " + pad.name;
         knobs_[f].setTitle(name);
         knobs_[f].setTooltip(name);
+        // After the tooltip, so the owner's MIDI Learn registry keeps it as the knob's own text.
+        if (onKnobBound)
+            onKnobBound(knobs_[f], kit_.padParameter(bound_, (PadParam)f));
     }
     refreshSoundRow(pad);
     // A recording plays out at its own length and an instrument shapes its own notes, so the Decay has nothing to

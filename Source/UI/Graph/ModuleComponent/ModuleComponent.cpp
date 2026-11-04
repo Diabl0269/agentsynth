@@ -148,6 +148,12 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     if (cardBody_ != nullptr) {
         cardBody_->createViews();
         thresholdControl = cardBody_->getThresholdView();
+        // The Threshold slider is built outside createControls(), so it joins MIDI Learn here.
+        if (auto* slider = thresholdControl != nullptr ? thresholdControl->getSlider() : nullptr)
+            for (auto* p : module->getParameters())
+                if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p);
+                    ranged != nullptr && ranged->getName(100) == thresholdControl->getParamName())
+                    rebindMidiLearnable(*slider, ranged);
     }
 
     if (auto* filterMod = dynamic_cast<FilterModule*>(module)) {
@@ -579,7 +585,7 @@ void ModuleComponent::timerCallback() {
     if (midiLearnArmedParamId_.isNotEmpty()) {
         for (const auto& e : midiLearnableRegistry_.entries()) {
             if (e.param != nullptr && e.paramId == midiLearnArmedParamId_) {
-                repaint(e.component->getBounds().expanded(2));
+                repaint(getLocalArea(e.component, e.component->getLocalBounds()).expanded(2));
                 ++midiLearnArmedRepaintCount_;
                 break;
             }

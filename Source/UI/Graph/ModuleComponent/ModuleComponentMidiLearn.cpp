@@ -51,6 +51,35 @@ void ModuleComponent::MidiLearnableRegistry::add(juce::Component& component, juc
     entries_.push_back(std::move(e));
 }
 
+// A knob that re-binds (the Drum Kit's picked-pad knobs follow the pad) keeps one entry: on a new parameter its
+// mapping badge, automated marker and their tooltip lines start over, so the next tick shows the new parameter's own.
+// The control's current tooltip becomes the base either way, since its owner rewrites it on every bind.
+bool ModuleComponent::MidiLearnableRegistry::rebind(juce::Component& component, juce::RangedAudioParameter* param) {
+    if (param == nullptr)
+        return false;
+    for (auto& e : entries_) {
+        if (e.component != &component)
+            continue;
+        if (e.paramId != param->paramID) {
+            if (e.marker.isAutomated())
+                e.component->setDescription(e.descriptionBeforeAutomated);
+            e.param = param;
+            e.paramId = param->paramID;
+            e.mapped = false;
+            e.tooltip = {};
+            e.marker = {};
+            e.automatedName = {};
+            e.descriptionBeforeAutomated = {};
+        }
+        if (auto* tooltipClient = dynamic_cast<juce::SettableTooltipClient*>(&component))
+            e.baseTooltip = tooltipClient->getTooltip();
+        applyTooltip(e);
+        return false;
+    }
+    add(component, param);
+    return true;
+}
+
 // The control keeps showing its mapping on top of the new tooltip, the way it would have had the
 // tooltip been set before registration.
 void ModuleComponent::MidiLearnableRegistry::setBaseTooltip(const juce::Component& component,
@@ -119,6 +148,13 @@ bool ModuleComponent::MidiLearnableRegistry::refreshBadges(
 
 void ModuleComponent::registerMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param) {
     midiLearnableRegistry_.add(control, param);
+}
+
+// The card hears the control's right-click from its first bind on, like a createControls() knob.
+void ModuleComponent::rebindMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param) {
+    if (midiLearnableRegistry_.rebind(control, param))
+        control.addMouseListener(this, false);
+    refreshMidiLearnBadges();
 }
 
 void ModuleComponent::registerHostedMidiLearnable(juce::Component& control, juce::AudioProcessorParameter& param,
@@ -249,7 +285,7 @@ void ModuleComponent::setMidiLearnArmedParam(const juce::String& paramId) {
             return;
         for (const auto& e : midiLearnableRegistry_.entries())
             if (e.param != nullptr && e.paramId == id) {
-                repaint(e.component->getBounds().expanded(2));
+                repaint(getLocalArea(e.component, e.component->getLocalBounds()).expanded(2));
                 return;
             }
     };
@@ -281,7 +317,8 @@ void ModuleComponent::paintMidiLearnOverlays(juce::Graphics& g) {
 
     for (const auto& e : midiLearnableRegistry_.entries()) {
         if (e.mapped)
-            synth::ui::midilearn::paintMidiMappedBadge(g, e.component->getBounds(), badgeColour);
+            synth::ui::midilearn::paintMidiMappedBadge(g, getLocalArea(e.component, e.component->getLocalBounds()),
+                                                       badgeColour);
     }
 
     if (midiLearnArmedParamId_.isEmpty())
@@ -293,8 +330,8 @@ void ModuleComponent::paintMidiLearnOverlays(juce::Graphics& g) {
         // Time-bounded overall by RemoteEngine's 10 s learn timeout (setMidiLearnArmedParam({})
         // on cancel/bind/timeout); repainted only by the existing gated 15 Hz timerCallback while
         // armed -- never a free-running animation (docs/control/midi-remote-ui.md#the-learn-interaction).
-        synth::ui::midilearn::paintMidiLearnArmedOutline(g, e.component->getBounds(), armedColour,
-                                                         midiLearnArmedSinceMs_);
+        synth::ui::midilearn::paintMidiLearnArmedOutline(g, getLocalArea(e.component, e.component->getLocalBounds()),
+                                                         armedColour, midiLearnArmedSinceMs_);
         break;
     }
 }

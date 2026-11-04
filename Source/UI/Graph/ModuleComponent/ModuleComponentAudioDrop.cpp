@@ -36,6 +36,9 @@ void ModuleComponent::createSamplerControls() {
             repaint();
         };
         host.showNode = [this](juce::AudioProcessorGraph::NodeID id) { showModuleOnCanvas(owner, id); };
+        host.rebindLearnable = [this](juce::Component& knob, juce::RangedAudioParameter* param) {
+            rebindMidiLearnable(knob, param);
+        };
         instrumentChrome_ = std::make_unique<synth::ui::DrumKitChrome>(host, *kit);
     }
 }

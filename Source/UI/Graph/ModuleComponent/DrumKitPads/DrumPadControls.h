@@ -65,6 +65,9 @@ public:
     /** The switch was flipped for pad `index` (the owner records the undo step and may ask first). */
     std::function<void(int index, bool shown)> onShownChanged;
 
+    /** After every bind or refresh: `knob` drives `param` (the bound pad's), with its tooltip set. */
+    std::function<void(juce::Slider& knob, juce::RangedAudioParameter* param)> onKnobBound;
+
     /** Called when Escape is pressed on a knob; the owner moves focus back to the pad. */
     std::function<void()> onEscape;
 

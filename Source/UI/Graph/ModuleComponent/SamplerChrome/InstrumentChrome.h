@@ -25,6 +25,8 @@ public:
         /** Drum Kit: hiding the pad on `note` named `padName`; runs `proceed` now, or after a confirmation when its
          *  drum has hits in a clip (empty: no question). */
         std::function<void(int note, const juce::String& padName, std::function<void()> proceed)> confirmHidePad;
+        /** Drum Kit: a picked-pad knob now drives `param`, so its right-click MIDI Learn targets that pad. */
+        std::function<void(juce::Component& knob, juce::RangedAudioParameter* param)> rebindLearnable;
     };
 
     virtual ~InstrumentChrome() = default;
