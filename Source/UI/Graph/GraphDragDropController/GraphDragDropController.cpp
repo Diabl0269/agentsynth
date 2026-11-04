@@ -92,12 +92,13 @@ void GraphDragDropController::placeGhost(juce::Point<int> desiredTopLeftCanvas) 
     dragPreviewGhost_ = juce::Rectangle<int>(resolved.x, resolved.y, dragPreviewW_, dragPreviewH_);
 }
 
-// Only the ghost's own spot: the insert gap follows the path of the aims, so sampling it a second time on the crossing
-// tick would open it among the cards of the new macro early and leave a neighbour pushed after a drag back out.
+// Everything a preview tick does but the insert gap, which follows the path of the aims: sampling it a second time on
+// the crossing tick would open it among the cards of the new macro early and leave a neighbour pushed after a drag back
+// out. The ghost's slide is aimed again too, or the outline would stay drawn at the old spot until the pointer moves.
 void GraphDragDropController::replaceGhostAfterCrossing() {
     if (!dragPreviewActive_)
         return;
-    placeGhost(dragPreviewAim_.getPosition());
+    settleDragPreview(dragPreviewAim_.getPosition());
     host_.repaintCanvas();
 }
 
@@ -114,6 +115,11 @@ void GraphDragDropController::recomputeDragPreview(juce::Point<int> desiredTopLe
     // join an open macro lands where it is aimed (snapped) and the macro makes room for it on the drop; every other
     // drop dodges to the nearest free slot.
     hoverInsertGap(dragPreviewAim_);
+    settleDragPreview(desiredTopLeftCanvas);
+}
+
+// The ghost's spot, then the alignment guides and smart suggestions that follow it.
+void GraphDragDropController::settleDragPreview(juce::Point<int> desiredTopLeftCanvas) {
     placeGhost(desiredTopLeftCanvas);
 
     // ---- Alignment guides (UI Phase 7 - Item 4) ----

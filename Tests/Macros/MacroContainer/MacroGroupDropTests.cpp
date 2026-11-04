@@ -353,3 +353,51 @@ TEST(MacroGroupDrop, SingleModuleGhostIsRightOnTheTickItCrosses) {
     ASSERT_EQ(ghosts.size(), 1u) << "the drag shows one landing ghost";
     EXPECT_EQ(ghosts.front(), findComponent(f.editor, f.m1)->getBounds()) << "the ghost is where the module lands";
 }
+
+// Regression test for FRO1494: a single module aimed on or beside an open macro's own cards showed its landing outline
+// in one spot and landed in another (the macro's border is kept on the canvas by sliding the card, and the outline
+// ignored the slide). A macro sits at the canvas origin and a loose module is dragged to a grid of pointer spots across
+// and beyond the border, through the real gesture; wherever it ends inside the macro, the outline shown just before the
+// release is exactly where the card lands.
+TEST(MacroGroupDrop, SingleModuleGhostMatchesLandingAcrossAndBeyondTheMacroBorder) {
+    int joined = 0;
+    for (const int x : {5, 40, 100, 160, 260, 400}) {
+        for (const int y : {-60, 10, 60, 160, 300, 450, 700}) {
+            AudioEngine engine;
+            AppUndoManager undo;
+            GraphEditor editor{engine, &undo};
+            undo.setGraphEditor(&editor);
+            editor.setSize(4800, 3600);
+            const auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 110, 300);
+            const auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 400, 300);
+            const auto loose = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 1500);
+            editor.setSelectedNodes({a, b});
+            const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
+            editor.getMacroController().setMacroCollapsed(macroId, false);
+            editor.clearSelection();
+            editor.updateComponents();
+            editor.finishCardGlideForTest();
+            undo.clearUndoHistory();
+
+            SCOPED_TRACE("pointer " + juce::String(x).toStdString() + "," + juce::String(y).toStdString());
+            std::vector<juce::Rectangle<int>> ghosts;
+            auto* card = findComponent(editor, loose);
+            juce::Rectangle<float> drawn;
+            dragBodyBy(*card, juce::Point<int>(x, y) - card->getBounds().getCentre(), kCmdClick, [&] {
+                ghosts = shownGhosts(editor);
+                drawn = editor.getDragDropController().getGhostSlide().drawn();
+            });
+            editor.finishCardGlideForTest();
+
+            const auto* owner = editor.getMacros().findByMember(uuidOf(engine, loose));
+            if (owner == nullptr || owner->id != macroId)
+                continue; // not aimed at the macro: the plain-canvas path is covered elsewhere
+            ++joined;
+            ASSERT_EQ(ghosts.size(), 1u);
+            EXPECT_EQ(ghosts.front(), findComponent(editor, loose)->getBounds()) << "the outline is where it lands";
+            EXPECT_EQ(drawn, ghosts.front().toFloat())
+                << "the outline is drawn where it is aimed, with no pointer move";
+        }
+    }
+    EXPECT_GT(joined, 10) << "the sweep must reach the macro from many sides";
+}

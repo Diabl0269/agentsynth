@@ -370,8 +370,19 @@ juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, 
                                                juce::AudioProcessorGraph::NodeID selfId) {
     // Layout units, not raw components (hidden members of collapsed macros are not obstacles; collapsed cards and
     // open hulls are). macroDragJoinId_ is the macro this placement is about to join: landing inside it is the point.
-    const auto boxes = macroController_.placementBlockers(
+    auto boxes = macroController_.placementBlockers(
         selfId.uid != 0 ? std::vector{selfId} : std::vector<juce::AudioProcessorGraph::NodeID>{}, macroDragJoinId_);
+    // A card held past the canvas origin drops with the rest of the patch slid out of its way (slidePatchForEdgeDrop):
+    // the preview looks for room among the neighbours where they will be, the drop among them where they are.
+    if (const auto slide = edgeDrag_.pendingOvershoot(); !slide.isOrigin())
+        for (auto& box : boxes)
+            box.rect.translate(slide.x, slide.y);
+    // A card in an open macro (one that joined it as it was dragged included) keeps the macro's hull on the canvas
+    // itself, so the drop does not slide the whole macro, card and all, to somewhere the preview never showed.
+    if (selfId.uid != 0 && macroController_.isMemberOfOpenMacro(selfId)) {
+        const auto floor = MacroGroupController::memberCardFloor();
+        desired = {juce::jmax(desired.x, floor.x), juce::jmax(desired.y, floor.y)};
+    }
     auto snapped = synth::LayoutUtil::snap(desired);
     return synth::LayoutUtil::findFreeSlot(snapped, w, h, boxes, selfId);
 }

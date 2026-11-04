@@ -67,7 +67,11 @@ is the theme `bg0`; inside is `bg1` with the dot grid, a 10 px rounded corner an
   the frame's animated rect shifts with it, so nothing jumps on screen: the frame glides out to the left/top. A drag
   that moves only part of a macro (one member out of an open hull) is not held; that hull's edge stays
   `nudgeHullIntoCanvas`'s job. A single-card drop now records graph and macros together, since the slide moves
-  collapsed macro cards.
+  collapsed macro cards. A card that joined an open macro while it was held stays where the pointer left it (only the
+  macro's other cards slide), and a card in an open macro is floored at `MacroGroupController::memberCardFloor()` so its
+  hull never pokes past the origin. Both the landing outline and the drop place the card through
+  `GraphEditor::resolvePlacement`, which looks for room among the neighbours where they will be after the slide, so the
+  outline is exactly where the card lands (guard: `MacroGroupDrop.SingleModuleGhostMatchesLandingAcrossAndBeyondTheMacroBorder`).
 - **Grows live, shrinks on drop.** Every drag event (module card, macro card, hull chip) and the 30 Hz tick only grow the target (`Mode::GrowOnly`), so a card dragged out
   and back does not pulse the frame. Every drop and every `updateComponents()` (add, delete, undo, redo, load)
   re-fits it both ways (`Mode::Animate`).

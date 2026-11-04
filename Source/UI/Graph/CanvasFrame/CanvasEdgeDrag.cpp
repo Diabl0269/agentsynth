@@ -22,9 +22,13 @@ juce::Point<int> CanvasEdgeDrag::clampDelta(juce::Point<int> raw) {
     return clamped;
 }
 
-juce::Point<int> CanvasEdgeDrag::takeOvershoot() {
+juce::Point<int> CanvasEdgeDrag::pendingOvershoot() const {
     constexpr int g = synth::LayoutUtil::kGridSize;
-    const juce::Point<int> d{(overshoot_.x + g - 1) / g * g, (overshoot_.y + g - 1) / g * g};
+    return {(overshoot_.x + g - 1) / g * g, (overshoot_.y + g - 1) / g * g};
+}
+
+juce::Point<int> CanvasEdgeDrag::takeOvershoot() {
+    const auto d = pendingOvershoot();
     overshoot_ = {};
     return d;
 }

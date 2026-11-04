@@ -25,6 +25,13 @@ public:
     /** The last overshoot, rounded up to the grid so a slide keeps every card on it, then cleared. */
     juce::Point<int> takeOvershoot();
 
+    /** What takeOvershoot would return now, without clearing it: how far the rest of the patch would slide if the
+     *  drag were released here. */
+    juce::Point<int> pendingOvershoot() const;
+
+    /** The unit keys the drag moves. */
+    const std::set<juce::String>& movingKeys() const { return movingKeys_; }
+
     bool isMoving(const juce::String& unitKey) const { return movingKeys_.count(unitKey) != 0; }
 
 private:
