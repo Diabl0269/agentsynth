@@ -72,7 +72,8 @@ public:
     /** Same routing (same key()), possibly re-titled or re-coloured. */
     void setInfo(const ModulatorInfo& info, const juce::String& parameterName);
     /** Another routing took this row's slot in one change (its source or parameter changed): the row re-binds to it in
-     *  place, its name, picture and controls swapping with the in-place swap motion when it is on screen. */
+     *  place; when its source changed, its name, picture and controls swap with the in-place swap motion (on screen); a
+     *  changed Attenuverter or target under the same source re-binds with nothing moving. */
     void setRouting(const ModulatorInfo& info, const juce::String& parameterName);
     /** True while a setRouting swap is still moving. */
     bool isSwapMotionRunning() const;

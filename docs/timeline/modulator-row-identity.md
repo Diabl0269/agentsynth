@@ -43,10 +43,13 @@ A paired routing hands its fold state, a fold tween and a glide in flight to its
 the fold set drops keys that are gone), and its row and band re-bind to it (`rekeyModulators`): `ModulatorRow::setRouting`
 and `ModulatorBand::setModulator`. The row:
 
-- swaps what shows the source with the [in-place swap motion](../layout/animation.md#controls-swapping-in-place)
+- swaps what shows the source, only when the source changed (another module or output: Change source and its undo),
+  with the [in-place swap motion](../layout/animation.md#controls-swapping-in-place)
   (`SwapMotion`): pictures of the old name button, shape picture and LFO controls shrink away (190 ms), then the new ones
   grow in with the 8% bounce. It lands at once off screen, under Reduce Motion or with Animations Off. Tests force it
-  with `setForceSwapMotionForTest` and step it with `stepSwapMotionForTest`.
+  with `setForceSwapMotionForTest` and step it with `stepSwapMotionForTest`. A new Attenuverter or target under the
+  same source (Change parameter, Duplicate, the undo of each) re-binds with nothing moving: motion shows what changed,
+  and the modulator did not.
 - builds its LFO controls the first time it shows an LFO, and hides them when an LFO becomes an envelope;
 - sends every edit to the source it shows at the time (the control callbacks read the row's current info).
 - re-lays out whenever a name changes under the same key (`ModulatorRow::setInfo`, reached when the graph refreshes a

@@ -164,7 +164,11 @@ void ModulatorRow::setRouting(const ModulatorInfo& info, const juce::String& par
         return;
     }
     finishSwapMotion();
-    const bool animate = canAnimateSwap() && !getLocalBounds().isEmpty();
+    // Only a changed source swaps its name and controls; a new Attenuverter or target under the same source (Change
+    // parameter, Duplicate, their undo) re-binds with nothing moving.
+    const bool sourceChanged = info.sourceUuid != info_.sourceUuid || info.sourceChannel != info_.sourceChannel ||
+                               info.isLfo != info_.isLfo || info.isEnvelope != info_.isEnvelope;
+    const bool animate = sourceChanged && canAnimateSwap() && !getLocalBounds().isEmpty();
     std::vector<synth::SwapMotion::Departure> leaving;
     if (animate)
         for (auto* part : sourceParts())
