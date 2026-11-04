@@ -12,6 +12,8 @@ target_sources(AppUI PRIVATE
     Source/TestMode/TestModeInput.h
     Source/TestMode/TestModeLaunch.cpp
     Source/TestMode/TestModeLaunch.h
+    Source/TestMode/TestModePresentedFrame.cpp
+    Source/TestMode/TestModePresentedFrame.h
     Source/TestMode/TestModeProtocol.cpp
     Source/TestMode/TestModeProtocol.h
     Source/TestMode/TestModeServer.cpp

@@ -4,9 +4,13 @@
 # What a user does: opens the project with a lane on Filter cutoff and an LFO mod row, picks the Range tool and hovers
 # the lane and the mod row (the Range cursor shows on both), goes back to Select, clicks the first point and
 # shift-clicks the last one, right-clicks inside the stretch and picks "Create custom LFO" (a second LFO appears),
-# presses Cmd+Z (it is gone). With one point selected, the lane menu has no Create custom LFO item.
+# presses Cmd+Z (it is gone), Cmd+Shift+Z (back) and Cmd+Z again. With one point selected, the lane menu has no Create
+# custom LFO item. The LFO's mod row grows in and leaves in a closing gap; after every step the window must equal a full
+# repaint (a leaving row once left its Sync checkbox and pieces of the row painted at the bottom left).
 # The cursor shape itself is read from the lane's and the mod row's state probes ("tool" is the Range cursor, "arrow" none);
 # the popup menu is its own window, so its PNGs capture the menu.
+motion: true
+stale_pixel_check: true
 record: true
 save_project: lane-custom-lfo
 steps:
@@ -36,6 +40,7 @@ steps:
   - click: {id: automationLaneState, x: 192, y: 29, mods: shift}
   - expect: {id: automationLaneState, selectedPoints: 2}
   - click: {id: automationLaneState, x: 120, y: 29, button: right}
+  - wait: {settleMs: 500} # the menu fades in before it takes keys
   - screenshot: {id: menu, name: menu-two-points}
   # Arrow keys reach the popup (its items carry no ids): Hold, Linear, then Create custom LFO.
   - key: {keys: down}
@@ -50,3 +55,11 @@ steps:
   - wait: {}
   - expect: {count: {prefix: "card:LFO", equals: 1}, within_ms: 2000}
   - screenshot: {name: after-undo}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {count: {prefix: "card:LFO", equals: 2}, within_ms: 2000}
+  - screenshot: {name: after-redo}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {count: {prefix: "card:LFO", equals: 1}, within_ms: 2000}
+  - screenshot: {name: after-undo-again}

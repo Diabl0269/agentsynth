@@ -43,12 +43,15 @@ inline constexpr float kCablePaintMargin = 12.0f;
 // A box holding everything a cable paints, without building its path: a cubic never leaves the hull of its control
 // points, and the midpoint carries the attenuverter knob (20 px) and the poly "xN" badge to its right. A paint whose
 // clip misses this box can skip the cable, and a frame that moves the cable repaints this box before and after.
+// The control points are spanned by min/max, not by unions of rectangles: a handle is a zero-height rectangle, and
+// Rectangle::getUnion drops an empty one, which cut a backward cable's loops out of the box.
 inline juce::Rectangle<float> cablePaintBounds(juce::Point<float> p1, juce::Point<float> p2) {
     const float handle = cableHandle(p1, p2);
-    const auto curve = juce::Rectangle<float>(p1, p2)
-                           .getUnion(juce::Rectangle<float>(p1, p1.translated(handle, 0.0f)))
-                           .getUnion(juce::Rectangle<float>(p2, p2.translated(-handle, 0.0f)))
-                           .expanded(kCablePaintMargin);
+    const float left = std::min({p1.x, p2.x, p2.x - handle});
+    const float right = std::max({p1.x, p2.x, p1.x + handle});
+    const auto curve =
+        juce::Rectangle<float>::leftTopRightBottom(left, std::min(p1.y, p2.y), right, std::max(p1.y, p2.y))
+            .expanded(kCablePaintMargin);
     const auto mid = (p1 + p2) * 0.5f;
     return curve.getUnion({mid.x - 12.0f, mid.y - 12.0f, 72.0f, 24.0f});
 }

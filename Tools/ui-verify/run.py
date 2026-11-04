@@ -8,8 +8,10 @@ screenshots it takes, writes a JSON-lines run log and prints a summary. The exit
 failed. The format is described in docs/development/test-mode.md (Scenarios).
 
 A scenario file is either a list of steps or a mapping with `steps:` and optional `settings:` (values, with ${FIXTURES} and ${OUT} filled in, written to the
-instance's settings file before it first starts), `motion: true` (start with --automation-motion), `record: true` (<out>/<scenario>.mp4, no sound) and
-`save_project: <name>` (<out>/<name>.agsproj, saved after the last step). One mapping per step, `- <command>: {args}`:
+instance's settings file before it first starts), `motion: true` (start with --automation-motion), `record: true` (<out>/<scenario>.mp4, no sound),
+`save_project: <name>` (<out>/<name>.agsproj, saved after the last step) and `stale_pixel_check: true` (after every step
+that can change the window, what the window shows must equal a full repaint; a mapping {ignore: [ids], settle_ms: N}
+masks components and sets how long paints may settle). One mapping per step, `- <command>: {args}`:
 
     - openProject: {path: ${FIXTURES}/macros.agsproj}   # any protocol command (click, drag, key, getState, ...)
     - click: {id: "card:LFO 1", x: 40, y: 12}
@@ -50,6 +52,7 @@ SETTINGS_FILE = "Agent Synth.settings"
 EXPECT_KEYS = {"id", "contains", "exists", "count", "within_ms"}
 RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture"}
 UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture"}  # no video frame after these
+NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld"}  # no stale-pixel check
 
 
 class ScenarioError(ValueError):
@@ -57,7 +60,8 @@ class ScenarioError(ValueError):
 
 
 class Scenario:
-    def __init__(self, name, steps, settings, path=None, motion=False, record=False, save_project=None):
+    def __init__(self, name, steps, settings, path=None, motion=False, record=False, save_project=None,
+                 stale_pixel_check=None):
         self.name = name
         self.steps = steps  # [(command, args dict)]
         self.settings = settings  # {name: value}
@@ -65,6 +69,7 @@ class Scenario:
         self.motion = motion  # start with --automation-motion, for a check that needs a slide or fade to run
         self.record = record  # write <out>/<name>.mp4
         self.save_project = save_project  # write <out>/<save_project>.agsproj after the last step
+        self.stale_pixel_check = stale_pixel_check  # None, or {"ignore": [ids], "settle_ms": N}
 
 
 def _substitute(value, variables):
@@ -87,6 +92,19 @@ def _project_name(value, name):
     return text
 
 
+def _stale_pixel_option(value, name):
+    """`stale_pixel_check: true`, or a mapping with `ignore` (component ids) and `settle_ms`. None when off."""
+    if value is None or value is False:
+        return None
+    if value is True:
+        return {}
+    if not isinstance(value, dict) or set(value) - {"ignore", "settle_ms"}:
+        raise ScenarioError("%s: `stale_pixel_check` is true or a mapping with `ignore` and `settle_ms`" % name)
+    if not isinstance(value.get("ignore", []), list):
+        raise ScenarioError("%s: `stale_pixel_check.ignore` must be a list of component ids" % name)
+    return dict(value)
+
+
 def parse_scenario(text, name="scenario", path=None):
     """Parses scenario YAML. A step is a mapping with exactly one key (the command); its value is the args mapping."""
     import yaml
@@ -97,8 +115,9 @@ def parse_scenario(text, name="scenario", path=None):
         raise ScenarioError("%s: not valid YAML: %s" % (name, error))
     settings = {}
     motion = record = False
-    save_project = None
+    save_project = stale = None
     if isinstance(document, dict):
+        stale = _stale_pixel_option(document.get("stale_pixel_check"), name)
         motion = bool(document.get("motion"))
         record = bool(document.get("record"))
         if document.get("save_project") is not None:
@@ -119,7 +138,7 @@ def parse_scenario(text, name="scenario", path=None):
         if not isinstance(args, dict):
             raise ScenarioError("%s: step %d (%s) takes a mapping of arguments, got %r" % (name, index, command, args))
         steps.append((str(command), args))
-    return Scenario(name, steps, settings, path, motion, record, save_project)
+    return Scenario(name, steps, settings, path, motion, record, save_project, stale)
 
 
 def load_scenarios(target):
@@ -237,6 +256,7 @@ class Runner:
         self.app = None
         self.settings_dir = None
         self.recorder = None
+        self.held = False
         self.variables = {"FIXTURES": FIXTURES, "OUT": out_dir}
 
     def _launch(self):
@@ -245,6 +265,28 @@ class Runner:
             extra["visible"] = True
         self.app = self.app_factory(self.app_path, settings_dir=self.settings_dir, **extra)
         self.app.start()
+        if self.scenario.stale_pixel_check is not None:
+            self.app.call("trackPresentedFrame")
+        self.held = False
+
+    def _check_stale_pixels(self, index, command):
+        """After a step that can change the window: what it shows must equal a full repaint once paints settle.
+        Returns an error message, or "" when it holds. On a failure the three PNGs are in <out>/stale-step-NN/."""
+        option = self.scenario.stale_pixel_check
+        if option is None or command in NOT_CHECKED_AFTER or self.held:
+            return ""
+        args = {"dir": os.path.join(self.out_dir, "stale-step-%02d" % index)}
+        if option.get("ignore"):
+            args["ignore"] = option["ignore"]
+        if "settle_ms" in option:
+            args["settleMs"] = option["settle_ms"]
+        try:
+            reply = self.app.call("checkStalePixels", **args)
+        except TestModeError as error:
+            self._record(index, "checkStalePixels", args, None, False, str(error))
+            return "stale pixels after %s: %s" % (command, error)
+        self._record(index, "checkStalePixels", args, reply, True)
+        return ""
 
     def _record(self, index, command, args, reply, ok, error=None):
         entry = {"scenario": self.scenario.name, "step": index, "cmd": command, "args": args, "reply": reply, "pass": ok}
@@ -314,9 +356,12 @@ class Runner:
             timeout = args.pop("timeoutMs", None)
             reply = app.call(command, timeout_ms=timeout, **args) if timeout else app.call(command, **args)
         self._record(index, command, args, reply, True)
+        if command in ("mouseDown", "mouseUp"):
+            self.held = command == "mouseDown"  # a held press shows a gesture in flight: checked once released
         if self.recorder is not None and command not in UNCHANGED_BY:
             self.recorder.frame(self.app)
-        return True, ""
+        stale = self._check_stale_pixels(index, command)
+        return (False, stale) if stale else (True, "")
 
     def _save_project(self):
         """Saves over an earlier run's bundle. Returns an error message, or "" when it worked."""

@@ -5,6 +5,7 @@
 #include "ProjectBundle.h"
 #include "TestMode/TestModeComponents.h"
 #include "TestMode/TestModeInput.h"
+#include "TestMode/TestModePresentedFrame.h"
 #include <cmath>
 #if JUCE_WINDOWS
 #include <process.h>
@@ -17,6 +18,10 @@ namespace synth::testmode {
 namespace {
 
 constexpr int kDefaultDragSteps = 12;
+// A partial repaint and a full one can leave an anti-aliased pixel a few levels apart: a zoomed canvas half-covers the
+// pixel column at its edge and blends it over what was there, not over the background (up to 4 levels seen). A
+// left-behind dot, cable or text pixel differs by 9 levels and far more.
+constexpr int kStaleTolerance = 6;
 
 int processId() {
 #if JUCE_WINDOWS
@@ -262,6 +267,7 @@ StepResult cmdScreenshot(const juce::var& args, Scratch&, int) {
     if (path.isEmpty() || !juce::File::isAbsolutePath(path))
         return StepResult::failed("\"path\" must be an absolute file path");
     const float scale = args.hasProperty("scale") ? static_cast<float>(static_cast<double>(args["scale"])) : 1.0f;
+    const ScopedOffscreenPaint offscreen; // not what the screen shows: the presented frame ignores it
     const auto image = found.component->createComponentSnapshot(found.component->getLocalBounds(), true, scale);
     if (!image.isValid())
         return StepResult::failed("the component has no size to capture");
@@ -327,6 +333,76 @@ StepResult cmdWaitForIdle(const juce::var& args, Scratch& s, int attempt) {
     return StepResult::pending();
 }
 
+bool writePng(const juce::Image& image, const juce::File& file) {
+    file.getParentDirectory().createDirectory();
+    file.deleteFile();
+    juce::FileOutputStream stream(file);
+    return stream.openedOk() && juce::PNGImageFormat().writeImageToStream(image, stream);
+}
+
+StepResult cmdTrackPresentedFrame(const juce::var& args, Scratch&, int) {
+    auto& frame = PresentedFrame::shared();
+    if (static_cast<bool>(args.getProperty("stop", false))) {
+        frame.stop();
+        return StepResult::done(object({{"following", false}}));
+    }
+    auto* window = findMainWindow();
+    if (window == nullptr)
+        return StepResult::failed("no main window");
+    frame.start(*window);
+    return StepResult::done(
+        object({{"following", true}, {"width", frame.image().getWidth()}, {"height", frame.image().getHeight()}}));
+}
+
+// Compared again every 50 ms until the frame equals a full repaint, so paints still on their way (a fade, a glide, a
+// blinking caret) settle first; whatever still differs after `settleMs` is a stale pixel.
+StepResult cmdCheckStalePixels(const juce::var& args, Scratch& s, int attempt) {
+    auto* window = findMainWindow();
+    if (window == nullptr || !PresentedFrame::shared().isFollowing(*window))
+        return StepResult::failed("not following the window: send trackPresentedFrame first");
+    const double settleMs = args.hasProperty("settleMs") ? static_cast<double>(args["settleMs"]) : 1500.0;
+    const int tolerance = static_cast<int>(args.getProperty("tolerance", kStaleTolerance));
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    if (attempt == 0)
+        s.vars->setProperty("start", now);
+    else if (now - static_cast<double>(s.vars->getProperty("compared")) < 50.0)
+        return StepResult::pending();
+    s.vars->setProperty("compared", now);
+    juce::RectangleList<int> ignore;
+    if (const auto* ids = args.getProperty("ignore", {}).getArray())
+        for (const auto& id : *ids)
+            if (const auto found = findComponent(id.toString()); found.component != nullptr)
+                ignore.add(window->getLocalArea(found.component, found.component->getLocalBounds()));
+    auto& frame = PresentedFrame::shared();
+    const auto presented = frame.image().createCopy();
+    const auto difference = frame.compareWithFullRepaint(ignore, tolerance);
+    const double waited = now - static_cast<double>(s.vars->getProperty("start"));
+    if (difference.pixels == 0) {
+        const auto counts = frame.takePaintCounts();
+        return StepResult::done(object({{"differing", 0},
+                                        {"waitedMs", waited},
+                                        {"paints", counts.paints},
+                                        {"wholeWindowPaints", counts.wholeWindow}}));
+    }
+    if (waited < settleMs)
+        return StepResult::pending();
+    const auto b = difference.bounds;
+    juce::String message = juce::String(difference.pixels) + " pixels differ from a full repaint, in x " +
+                           juce::String(b.getX()) + " y " + juce::String(b.getY()) + " w " +
+                           juce::String(b.getWidth()) + " h " + juce::String(b.getHeight());
+    const auto dir = args.getProperty("dir", {}).toString();
+    if (dir.isNotEmpty() && juce::File::isAbsolutePath(dir)) {
+        const juce::File folder(dir);
+        writePng(presented, folder.getChildFile("presented.png"));
+        writePng(difference.fullRepaint, folder.getChildFile("full-repaint.png"));
+        writePng(PresentedFrame::markDifferences(presented, difference.fullRepaint, ignore, tolerance),
+                 folder.getChildFile("differences.png"));
+        message << " (presented.png, full-repaint.png, differences.png in " << dir << ")";
+    }
+    frame.start(*window); // the next check starts from what a full repaint shows
+    return StepResult::failed(message);
+}
+
 StepResult cmdQuit(const juce::var&, Scratch&, int) {
     // After the reply has gone out: quit() only stops the dispatch loop, so the socket thread still writes it.
     juce::Timer::callAfterDelay(150, [] {
@@ -355,6 +431,8 @@ CommandTable CommandTable::standard() {
     table.add("openProject", {cmdOpenProject});
     table.add("saveProject", {cmdSaveProject});
     table.add("waitForIdle", {cmdWaitForIdle});
+    table.add("trackPresentedFrame", {cmdTrackPresentedFrame});
+    table.add("checkStalePixels", {cmdCheckStalePixels});
     table.add("quit", {cmdQuit});
     return table;
 }

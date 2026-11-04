@@ -12,8 +12,9 @@ using testmode_rig::run;
 
 TEST(TestModeCommands, TheRegistryHasEveryProtocolCommand) {
     const auto names = CommandTable::standard().names();
-    for (const char* name : {"ping", "list", "click", "wheel", "hover", "mouseDown", "mouseMoveHeld", "mouseUp", "drag",
-                             "key", "getState", "screenshot", "openProject", "saveProject", "waitForIdle", "quit"})
+    for (const char* name :
+         {"ping", "list", "click", "wheel", "hover", "mouseDown", "mouseMoveHeld", "mouseUp", "drag", "key", "getState",
+          "screenshot", "openProject", "saveProject", "waitForIdle", "quit", "trackPresentedFrame", "checkStalePixels"})
         EXPECT_TRUE(names.contains(name)) << name;
     EXPECT_EQ(CommandTable::standard().find("nope"), nullptr);
 }
@@ -234,4 +235,33 @@ TEST(TestModeCommands, WaitForIdleWaitsOutARunningAnimation) {
     ASSERT_EQ(r.state, StepResult::State::done) << r.error;
     EXPECT_GE(static_cast<double>(r.value["waitedMs"]), 100.0);
     EXPECT_FALSE(juce::Desktop::getInstance().getAnimator().isAnimating());
+}
+
+// The rig's window never hands its paints to the presented frame, so any change it draws is, to the frame, a pixel no
+// repaint reached: what a missing repaint looks like in the app.
+TEST(TestModeCommands, CheckStalePixelsFailsOnWhatNoPresentedPaintReachedAndSavesThePictures) {
+    Rig rig;
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    if (findMainWindow() != &rig)
+        GTEST_SKIP() << "another top-level window is first on the desktop";
+    EXPECT_EQ(run("checkStalePixels", args({})).state, StepResult::State::failed) << "not following yet";
+    ASSERT_EQ(run("trackPresentedFrame", args({})).state, StepResult::State::done);
+    const auto clean = run("checkStalePixels", args({{"settleMs", 0}}));
+    ASSERT_EQ(clean.state, StepResult::State::done) << clean.error;
+    EXPECT_EQ(static_cast<int>(clean.value["differing"]), 0);
+
+    const auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("testmode-stale-tests");
+    dir.deleteRecursively();
+    rig.label.setText("a much longer greeting", juce::dontSendNotification);
+    const auto stale = run("checkStalePixels", args({{"settleMs", 60}, {"dir", dir.getFullPathName()}}));
+    ASSERT_EQ(stale.state, StepResult::State::failed);
+    EXPECT_TRUE(stale.error.contains("pixels differ from a full repaint")) << stale.error;
+    for (const char* name : {"presented.png", "full-repaint.png", "differences.png"})
+        EXPECT_TRUE(dir.getChildFile(name).existsAsFile()) << name;
+    const auto masked = args({{"settleMs", 0}, {"ignore", juce::Array<juce::var>{"greeting"}}});
+    EXPECT_EQ(run("checkStalePixels", masked).state, StepResult::State::done)
+        << "a failure starts the next check clean";
+    EXPECT_EQ(run("trackPresentedFrame", args({{"stop", true}})).state, StepResult::State::done);
+    dir.deleteRecursively();
 }
