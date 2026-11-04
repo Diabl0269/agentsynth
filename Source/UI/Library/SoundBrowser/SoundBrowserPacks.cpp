@@ -20,11 +20,11 @@ bool isBusy(State state) {
     return state == State::Downloading || state == State::Verifying || state == State::Installing;
 }
 
-// Words a search can find a pack by: its name and the names of its instruments.
+// Words a search can find a pack by: its name and the name and category of each instrument in it.
 juce::String searchableText(const Installer::Row& pack) {
     juce::String text = pack.name;
     for (const auto& instrument : pack.instruments)
-        text += " " + instrument.name;
+        text += " " + instrument.name + " " + instrument.category;
     return text;
 }
 

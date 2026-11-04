@@ -126,6 +126,32 @@ TEST(SoundPackOffer, SearchEndsWithThePacksWhoseNameOrInstrumentsMatch) {
     EXPECT_EQ(rig.view->getRows()[0].kind, Kind::Hint);
 }
 
+TEST(SoundPackOffer, SearchFindsAPackByTheCategoriesOfItsInstruments) {
+    OfferRig rig;
+    const auto entry = [&](const juce::String& id, const juce::String& instrumentName, const juce::String& category) {
+        const auto zip = goodPackZip(id, "1.0.0");
+        rig.server.bodies["https://example.test/" + id + "-1.0.0.zip"] = zip;
+        auto json = packEntryJson(id, "1.0.0", zip);
+        return json.replace(R"("name":"Grand","category":"Keys")",
+                            R"("name":")" + instrumentName + R"(","category":")" + category + "\"");
+    };
+    const auto json = indexJsonOf({entry("core", "Kick", "Drums"), entry("animals", "Raven", "Crow calls")});
+    rig.server.bodies[kIndexUrl] = juce::MemoryBlock(json.toRawUTF8(), json.getNumBytesAsUTF8());
+    rig.installer.refreshIndex();
+    pump();
+    const auto packsFor = [&](const juce::String& query) {
+        rig.view->setQuery(query);
+        juce::StringArray names;
+        for (const auto& row : rig.view->getRows())
+            if (row.kind == Kind::GetPack)
+                names.add(row.packId);
+        return names.joinIntoString(",");
+    };
+    EXPECT_EQ(packsFor("drums"), "core") << "Drums is a category in the Core pack, not a name";
+    EXPECT_EQ(packsFor("crow"), "animals");
+    EXPECT_EQ(packsFor("rock"), "");
+}
+
 // Regression test: the Sounds view restored at startup turned visible while its window was still hidden, skipped the
 // fetch, and never got a second call, so Get more stayed empty until the view was switched away and back.
 TEST(SoundPackOffer, AViewThatTurnsVisibleBeforeItsWindowShowsStillLoadsThePackList) {
