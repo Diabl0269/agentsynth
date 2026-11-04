@@ -7,7 +7,7 @@ namespace synth::ui {
 
 namespace {
 constexpr float kFont = 11.0f;
-constexpr int kGap = 6;
+constexpr int kHintGap = 6;
 const char* const kLinkText = "Turn Poly on";
 } // namespace
 
@@ -46,7 +46,7 @@ void StepGridPolyHint::setModule(const juce::String& moduleName) {
 }
 
 int StepGridPolyHint::preferredWidth() const {
-    return theme::AppLookAndFeel::uiTextWidth(lineFor(module_), kFont) + kGap +
+    return theme::AppLookAndFeel::uiTextWidth(lineFor(module_), kFont) + kHintGap +
            theme::AppLookAndFeel::uiTextWidth(kLinkText, kFont) + 4;
 }
 
@@ -58,8 +58,8 @@ void StepGridPolyHint::resized() {
 void StepGridPolyHint::paint(juce::Graphics& g) {
     g.setColour(theme::themeOf(*this).colors.textMuted);
     g.setFont(theme::AppLookAndFeel::uiFont(kFont));
-    g.drawText(lineFor(module_), 0, 0, std::max(0, link_.getX() - kGap), getHeight(), juce::Justification::centredLeft,
-               true);
+    g.drawText(lineFor(module_), 0, 0, std::max(0, link_.getX() - kHintGap), getHeight(),
+               juce::Justification::centredLeft, true);
 }
 
 } // namespace synth::ui
