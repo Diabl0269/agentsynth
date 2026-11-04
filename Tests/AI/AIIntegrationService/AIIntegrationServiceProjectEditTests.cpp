@@ -2,6 +2,7 @@
 // how a writeLane names its node), a preview that mutates nothing, the all-or-nothing backstop,
 // and how a plan is asked for (project.generate hosted, sendPrompt locally). The apply order end to
 // end through the real app host is Tests/Mixer/ChannelFlow/ChannelFlowProjectEditTests.cpp.
+#include "../../TestAudioHelpers.h"
 #include "AI/SoundShapeChecks.h"
 #include "AIIntegrationServiceTestFixture.h"
 #include "Modules/ADSRModule.h"
@@ -490,12 +491,12 @@ TEST_F(AIIntegrationServiceProjectEditTest, HostedRequestIsProjectGenerateWithTh
         EXPECT_EQ(juce::JSON::toString(body[key]), juce::JSON::toString(arrange[key])) << key;
     EXPECT_EQ(juce::JSON::toString(service->buildProjectRequestBody("a wobbly bass")), juce::JSON::toString(body));
     EXPECT_EQ((int)arrange["promptVersion"], 2) << "the timeline.generate prompt that teaches the drum-hit note fields";
-    EXPECT_EQ((int)body["promptVersion"], 9) << "the server prompt that keeps Sequencers on Follow Song Key";
+    EXPECT_EQ((int)body["promptVersion"], 10) << "the server prompt with one player per part";
 
     service->setProjectPromptVersion(3); // the eval harness measuring a newer server prompt
     EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 3);
     service->setProjectPromptVersion(0);
-    EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 9) << "0 restores the default";
+    EXPECT_EQ((int)service->buildProjectRequestBody("a wobbly bass")["promptVersion"], 10) << "0 restores the default";
 }
 
 TEST_F(AIIntegrationServiceProjectEditTest, LocalRequestComposesTheSameSectionsAndOffersTheWidenedSchema) {
@@ -647,6 +648,101 @@ TEST_F(AIIntegrationServiceProjectEditTest, ProjectRequestOnEmptyTimelineSaysSoE
     EXPECT_EQ(body["arrangementContext"].toString(), juce::String());
     ASSERT_TRUE(body["availableTracks"].isArray());
     EXPECT_EQ(body["availableTracks"].getArray()->size(), 0);
+}
+
+// A v10-style plan: one track whose part is played by a Poly Sequencer wired MIDI to MIDI (port -1 -> port -1, the
+// patch format's MIDI sentinel) to the track's instrument, with a 16-step accented pattern. The cable exists, the track
+// holds no clip notes (the doubled clip the model also wrote is dropped, with a note), and the graph really plays.
+TEST_F(AIIntegrationServiceProjectEditTest, ASequencerWiredToATracksInstrumentPlaysAndTheTrackHoldsNoNotes) {
+    juce::String steps;
+    const int velocities[4] = {120, 80, 80, 62};
+    for (int i = 0; i < 16; ++i)
+        steps += juce::String(i > 0 ? "," : "") + R"({"pitch": )" + juce::String(i % 4 == 3 ? 43 : 36) +
+                 R"(, "velocity": )" + juce::String(velocities[i % 4]) + "}";
+    const auto plan = parse(R"({"mode": "merge",
+        "nodes": [{"id": 7100, "type": "Poly Sequencer", "params": {"steps": 16, "run": 1}, "state": {"steps": [)" +
+                            steps +
+                            R"(]}}, {"id": 7200, "type": "Audio Output"}],
+        "connections": [{"src": 7100, "srcPort": -1, "dst": 7001, "dstPort": -1},
+                        {"src": 7001, "srcPort": 0, "dst": 7200, "dstPort": 0}],
+        "timelineOps": [
+            {"op": "addInstrumentTrack", "name": "Acid", "instrument": "Oscillator", "instrumentId": 7001,
+             "instrumentParams": {"waveform": "Saw"}},
+            {"op": "placeClips", "track": "Acid", "clips": [{"startBeat": 0, "lengthBeats": 4,
+                "notes": [{"startBeat": 0, "lengthBeats": 1, "pitch": 36, "velocity": 100}]}]}]})");
+
+    // The graph's Audio Output node mirrors the graph's own bus, so it is configured before the plan wires into it.
+    graph->setPlayConfigDetails(0, 2, 44100.0, 512);
+    graph->prepareToPlay(44100.0, 512);
+    service->setProvider(std::make_unique<MockAIProvider>());
+    service->sendProjectMessage("16-step acid bassline on a poly sequencer with accents", {});
+    const auto applied = service->applyProjectEdit(plan);
+    ASSERT_TRUE(applied.ok) << applied.message;
+
+    bool noted = false;
+    for (const auto& note : applied.notes)
+        noted = noted || note.contains("sequencer plays it once");
+    EXPECT_TRUE(noted) << "the dropped clip notes are said in the plan notes";
+    for (const auto& note : applied.notes)
+        EXPECT_FALSE(note.contains("flat")) << "the accents are spread: " << note;
+
+    for (const auto& track : doc.getTracks())
+        if (track.name == "Acid")
+            for (const auto& clip : track.clips)
+                EXPECT_TRUE(clip.notes.empty()) << "the sequencer is the only player";
+
+    juce::AudioProcessorGraph::Node *sequencer = nullptr, *instrument = nullptr;
+    for (auto* node : graph->getNodes()) {
+        if (dynamic_cast<ModuleBase*>(node->getProcessor()) == nullptr)
+            continue;
+        const auto name = node->getProcessor()->getName();
+        sequencer = name == "Poly Sequencer" ? node : sequencer;
+        instrument = name == "Oscillator" ? node : instrument;
+    }
+    ASSERT_NE(sequencer, nullptr);
+    ASSERT_NE(instrument, nullptr);
+    bool cable = false;
+    for (const auto& connection : graph->getConnections())
+        cable = cable ||
+                (connection.source.nodeID == sequencer->nodeID && connection.destination.nodeID == instrument->nodeID);
+    EXPECT_TRUE(cable) << "src MIDI -> MIDI made a cable from the sequencer to the instrument";
+
+    juce::MidiBuffer midi;
+    const auto rendered = TestAudioHelpers::renderGraphMultiBlock(*graph, midi, 2 * 88200); // two bars at 120 bpm
+    EXPECT_GT(TestAudioHelpers::computeRMS(rendered, 0), 0.001f) << "MIDI -> MIDI plays: the output is not silent";
+    juce::AudioBuffer<float> firstStep(1, 3000);
+    firstStep.copyFrom(0, 0, rendered, 0, 0, 3000);
+    const float firstStepHz = TestAudioHelpers::estimateFrequencyByZeroCrossings(firstStep);
+    EXPECT_LT(firstStepHz, 200.0f) << "the first step is pitch 36 (65 Hz), not the oscillator's own default note";
+    if (const auto dir = juce::SystemStats::getEnvironmentVariable("SEQ_PLAN_RENDER_WAV", {}); dir.isNotEmpty()) {
+        juce::File wav(dir);
+        wav.getParentDirectory().createDirectory();
+        juce::WavAudioFormat format;
+        if (auto stream = wav.createOutputStream())
+            if (std::unique_ptr<juce::AudioFormatWriter> writer{
+                    format.createWriterFor(stream.get(), 44100.0, 2, 16, {}, 0)}) {
+                stream.release();
+                writer->writeFromAudioSampleBuffer(rendered, 0, rendered.getNumSamples());
+            }
+    }
+}
+
+// Accents asked for, sequencer velocities all within a few units of each other: the plan still applies and says so.
+TEST_F(AIIntegrationServiceProjectEditTest, FlatSequencerAccentsAreNotedOnThePlan) {
+    const auto plan = parse(R"({"mode": "merge",
+        "nodes": [{"id": 7100, "type": "Sequencer", "state": {"steps": [{"pitch": 36, "velocity": 100},
+            {"pitch": 36, "velocity": 104}, {"pitch": 36, "velocity": 100}]}}],
+        "connections": [{"src": 7100, "srcPort": 0, "dst": 7001, "dstPort": 0}],
+        "timelineOps": [{"op": "addInstrumentTrack", "name": "Acid", "instrument": "Oscillator",
+                         "instrumentId": 7001}]})");
+    service->setProvider(std::make_unique<MockAIProvider>());
+    service->sendProjectMessage("a punchy bassline on a sequencer", {});
+    const auto preview = service->previewProjectEdit(plan);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    bool flat = false;
+    for (const auto& note : preview.notes)
+        flat = flat || note.contains("accents came out flat");
+    EXPECT_TRUE(flat);
 }
 
 } // namespace synth

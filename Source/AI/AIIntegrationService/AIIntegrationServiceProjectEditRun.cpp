@@ -8,6 +8,7 @@
 #include "AIIntegrationServiceInternal.h"
 
 #include "AI/PatchEval.h"
+#include "AI/SoundShapeChecks.h"
 #include "Modules/ModuleBase.h"
 #include "SoundPacks/CoreSounds.h"
 #include "Timeline/TimelineOps.h"
@@ -211,10 +212,20 @@ juce::String readMode(const juce::var& root, Plan& out) {
 
 } // namespace
 
-juce::String readPlan(const juce::var& root, const std::set<juce::uint32>& liveIds, Plan& out) {
-    auto* rootObj = root.getDynamicObject();
-    if (rootObj == nullptr)
+juce::String readPlan(const juce::var& rawRoot, const std::set<juce::uint32>& liveIds, Plan& out,
+                      const juce::String& request) {
+    if (rawRoot.getDynamicObject() == nullptr)
         return "The response is not a JSON object.";
+
+    // One player per part: a track a sequencer drives loses clip notes the same response also places on it,
+    // before any op is split off, so preview and apply both see the repaired plan.
+    juce::StringArray doubled;
+    const juce::var root = soundshape::dropDoubledClipNotes(rawRoot, doubled);
+    for (const auto& line : doubled)
+        out.notes.push_back({PlanNote::Kind::Repaired, {}, line});
+    if (const auto accents = soundshape::checkAccents(rawRoot, request); !accents.pass)
+        out.notes.push_back({PlanNote::Kind::Repaired, {}, accents.reason});
+    auto* rootObj = root.getDynamicObject();
 
     for (const char* key : {"nodes", "connections", "remove", "modulations", "removeModulations"})
         out.hasPatch = out.hasPatch || rootObj->hasProperty(key);

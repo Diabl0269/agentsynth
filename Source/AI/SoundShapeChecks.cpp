@@ -8,10 +8,13 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ModuleBase.h"
+#include "Modules/Sequencer/SequencerPattern.h"
 #include "Timeline/TimelineOps.h"
 
+#include <algorithm>
 #include <cmath>
 #include <map>
+#include <set>
 #include <vector>
 
 namespace synth::soundshape {
@@ -24,6 +27,7 @@ constexpr double kPluckMaxDecay = 0.5;
 constexpr double kPluckMaxSustain = 0.01;
 constexpr double kAcidMaxSustain = 0.3;
 constexpr double kAcidMinResonanceFraction = 0.6;
+constexpr int kMinAccentSpread = 20; // velocity units between the quietest and loudest step
 
 using IdMap = std::map<juce::int64, juce::var>; // id -> that node's params object (void when it has none)
 
@@ -207,7 +211,111 @@ juce::String findCutoffModulations(const juce::var& response, const juce::var& e
     return found.empty() ? firstProblem : juce::String();
 }
 
+bool isSequencerType(const juce::String& type) { return type == "Sequencer" || type == "Poly Sequencer"; }
+
+// The ids of the Sequencer / Poly Sequencer nodes of a response's patch.
+std::set<juce::int64> sequencerNodeIds(const juce::var& response) {
+    std::set<juce::int64> ids;
+    if (auto* nodes = response.getProperty("nodes", {}).getArray())
+        for (const auto& node : *nodes) {
+            juce::int64 id = 0;
+            if (isSequencerType(node.getProperty("type", {}).toString()) && readId(node.getProperty("id", {}), id))
+                ids.insert(id);
+        }
+    return ids;
+}
+
+// Names of the new tracks whose instrument a response's sequencer is wired to.
+std::set<juce::String> sequencerDrivenTrackNames(const juce::var& response) {
+    std::set<juce::String> names;
+    const auto sequencers = sequencerNodeIds(response);
+    if (sequencers.empty())
+        return names;
+    std::set<juce::int64> targets;
+    if (auto* connections = response.getProperty("connections", {}).getArray())
+        for (const auto& connection : *connections) {
+            juce::int64 src = 0, dst = 0;
+            if (readId(connection.getProperty("src", {}), src) && readId(connection.getProperty("dst", {}), dst) &&
+                sequencers.count(src) > 0)
+                targets.insert(dst);
+        }
+    if (auto* ops = response.getProperty("timelineOps", {}).getArray())
+        for (const auto& op : *ops) {
+            juce::int64 instrumentId = 0;
+            if (op.getProperty("op", {}).toString() == "addInstrumentTrack" &&
+                readId(op.getProperty("instrumentId", {}), instrumentId) && targets.count(instrumentId) > 0)
+                names.insert(op.getProperty("name", {}).toString());
+        }
+    return names;
+}
+
+bool asksForAccents(const juce::String& request) {
+    const auto lower = request.toLowerCase();
+    return lower.contains("accent") || lower.contains("punchy") || lower.contains("groove");
+}
+
 } // namespace
+
+juce::var dropDoubledClipNotes(const juce::var& response, juce::StringArray& notes) {
+    const auto driven = sequencerDrivenTrackNames(response);
+    if (driven.empty())
+        return response;
+    juce::var fixed = juce::JSON::parse(juce::JSON::toString(response));
+    auto* ops = fixed.getProperty("timelineOps", {}).getArray();
+    if (ops == nullptr)
+        return response;
+    std::set<juce::String> fixedTracks;
+    for (auto& op : *ops) {
+        if (op.getProperty("op", {}).toString() != "placeClips")
+            continue;
+        const juce::String track = op.getProperty("track", {}).toString();
+        auto* clips = op.getProperty("clips", {}).getArray();
+        if (clips == nullptr || driven.count(track) == 0)
+            continue;
+        for (auto& clip : *clips)
+            if (auto* clipObject = clip.getDynamicObject(); clipObject != nullptr && clipObject->hasProperty("notes")) {
+                auto* clipNotes = clipObject->getProperty("notes").getArray();
+                if (clipNotes != nullptr && !clipNotes->isEmpty())
+                    fixedTracks.insert(track);
+                clipObject->removeProperty("notes");
+            }
+    }
+    if (fixedTracks.empty())
+        return response;
+    for (const auto& track : fixedTracks)
+        notes.add("Track \"" + track +
+                  "\" has a sequencer and clip notes for the same part, so the clip notes were left "
+                  "out and the sequencer plays it once");
+    return fixed;
+}
+
+ShapeCheck checkAccents(const juce::var& response, const juce::String& request) {
+    if (!asksForAccents(request))
+        return {true, "accents were not asked for"};
+    const auto defaultVelocity = static_cast<int>(SequencerStep{}.velocity);
+    if (auto* nodes = response.getProperty("nodes", {}).getArray())
+        for (const auto& node : *nodes) {
+            if (!isSequencerType(node.getProperty("type", {}).toString()))
+                continue;
+            auto* steps = node.getProperty("state", {}).getProperty("steps", {}).getArray();
+            if (steps == nullptr)
+                continue;
+            int lowest = 128, highest = 0;
+            for (const auto& step : *steps) {
+                if (step.hasProperty("on") && !static_cast<bool>(step.getProperty("on", true)))
+                    continue;
+                const auto velocity =
+                    step.hasProperty("velocity") ? static_cast<int>(step.getProperty("velocity", {})) : defaultVelocity;
+                lowest = std::min(lowest, velocity);
+                highest = std::max(highest, velocity);
+            }
+            if (highest > 0 && highest - lowest < kMinAccentSpread)
+                return {false, "The accents came out flat: the sequencer's step velocities only span " +
+                                   juce::String(highest - lowest) + " (want at least " +
+                                   juce::String(kMinAccentSpread) + "), so the steps sound about equally loud"};
+        }
+    return {true, "step velocities spread enough, or no sequencer pattern to judge"};
+}
 
 ShapeCheck checkPluck(const juce::var& response) {
     Nodes nodes;

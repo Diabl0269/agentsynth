@@ -27,4 +27,15 @@ ShapeCheck checkFilterEnvelope(const juce::var& response, const juce::var& exist
  * sustain <= 0.3. */
 ShapeCheck checkAcid(const juce::var& response, const juce::var& existingPatch = {});
 
+/** One player per part (prompt v10): when a Sequencer or Poly Sequencer node is wired to an addInstrumentTrack op's
+ * `instrumentId` and the same response also places clip notes (placeClips) on that track by name, returns a copy of
+ * `response` with those notes removed so the part plays once. One plain-words line per track fixed is appended to
+ * `notes`. A response that does not double a part comes back unchanged. */
+juce::var dropDoubledClipNotes(const juce::var& response, juce::StringArray& notes);
+
+/** When `request` asks for accents (accent, accented, accents, punchy, groove), every Sequencer or Poly Sequencer in
+ * `response` that carries step `state` must have step velocities spanning at least 20. Fails with a plain-words
+ * reason (the plan note) when one is flatter; passes when accents were not asked for or the spread is there. */
+ShapeCheck checkAccents(const juce::var& response, const juce::String& request);
+
 } // namespace synth::soundshape

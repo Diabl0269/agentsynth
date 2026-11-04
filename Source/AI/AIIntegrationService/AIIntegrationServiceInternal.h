@@ -62,8 +62,10 @@ struct Plan {
     std::set<juce::uint32> unusableIds; // ids that clashed: a writeLane naming one is ambiguous, so it is skipped
 };
 
-/** Reads `root` into `out`; empty on success, else the rejection. `liveIds` = every node uid now live. */
-juce::String readPlan(const juce::var& root, const std::set<juce::uint32>& liveIds, Plan& out);
+/** Reads `root` into `out`; empty on success, else the rejection. `liveIds` = every node uid now live. `request` is
+ * the user's words, read only to judge whether accents were asked for. */
+juce::String readPlan(const juce::var& root, const std::set<juce::uint32>& liveIds, Plan& out,
+                      const juce::String& request = {});
 
 /** What one run of the three phases produced. */
 struct RunResult {
