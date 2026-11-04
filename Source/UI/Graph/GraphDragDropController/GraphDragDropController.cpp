@@ -30,6 +30,7 @@ void GraphDragDropController::beginDragPreview(int w, int h, juce::AudioProcesso
     dragPreviewH_ = h;
     dragPreviewSelfId_ = selfId;
     dragPreviewGhost_ = {};
+    groupGhosts_.clear();
     alignmentGuides_.clear();
     if (insertGap_ != nullptr)
         insertGap_->endSession(); // a fresh gesture: nothing of the last one stays open or cancelled

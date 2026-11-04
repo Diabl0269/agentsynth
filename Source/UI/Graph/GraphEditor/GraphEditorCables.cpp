@@ -897,26 +897,27 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     editor.getModDot().paintTooltip(g);
 
     // ---- Drag-preview landing ghost (on top of module cards) ----
-    // Draw a translucent rounded rect at the exact snapped+anti-overlapped landing position.
-    if (editor.getDragDropController().isDragPreviewActive() &&
-        !editor.getDragDropController().getDragPreviewGhost().isEmpty()) {
+    // A translucent rounded rect at the exact snapped+anti-overlapped landing position: one per card for a group drag
+    // (where the whole group lands), else the single card's, which slides to where it is aimed.
+    auto& dragDrop = editor.getDragDropController();
+    std::vector<juce::Rectangle<float>> ghosts;
+    for (const auto& r : dragDrop.getGroupGhosts())
+        ghosts.push_back(r.toFloat());
+    if (ghosts.empty() && dragDrop.isDragPreviewActive() && !dragDrop.getDragPreviewGhost().isEmpty())
+        ghosts.push_back(dragDrop.getGhostSlide().drawn());
+    if (!ghosts.empty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
         const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
-        const float cornerRadius = m.cornerRadius;
-
-        // On the card body, with the card's corner radius, so the ghost's corners are the corners the card will have.
-        auto ghostF = synth::ui::cardBodyRect(
-            editor.getDragDropController().getGhostSlide().drawn()); // slides to where it is aimed
-
-        // Fill: accent colour at ~18% alpha
-        g.setColour(accentColour.withAlpha(0.18f));
-        g.fillRoundedRectangle(ghostF, cornerRadius);
-
-        // Outline: accent colour at ~70% alpha, 1.5px
-        g.setColour(accentColour.withAlpha(0.70f));
-        const float guideLineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
-        g.drawRoundedRectangle(ghostF, cornerRadius, guideLineWidth);
+        const float guideLineWidth = lf != nullptr ? m.guideLineWidth : 1.5f;
+        for (const auto& ghost : ghosts) {
+            // On the card body, with the card's corner radius, so its corners are the corners the card will have.
+            const auto ghostF = synth::ui::cardBodyRect(ghost);
+            g.setColour(accentColour.withAlpha(0.18f));
+            g.fillRoundedRectangle(ghostF, m.cornerRadius);
+            g.setColour(accentColour.withAlpha(0.70f));
+            g.drawRoundedRectangle(ghostF, m.cornerRadius, guideLineWidth);
+        }
     }
 
     // ---- Alignment guides (UI Phase 7 - Item 4) ----

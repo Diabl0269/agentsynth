@@ -74,6 +74,10 @@ public:
     /** Where the cursor pointed, before anti-overlap moved the landing rect (empty before the first move). */
     juce::Rectangle<int> getDragPreviewAim() const noexcept { return dragPreviewAim_; }
     juce::AudioProcessorGraph::NodeID getDragPreviewSelfId() const noexcept { return dragPreviewSelfId_; }
+    /** A group drag's landing ghost: one rect per card it moves, where the drop would put each if released now. Set by
+     *  the group drag from the placement its drop applies; empty outside one. It replaces the single-card ghost. */
+    void setGroupGhosts(std::vector<juce::Rectangle<int>> ghosts) { groupGhosts_ = std::move(ghosts); }
+    const std::vector<juce::Rectangle<int>>& getGroupGhosts() const noexcept { return groupGhosts_; }
 
     /** Ghost top-left for a library drag's cursor position: the ghost is CENTRED on the cursor.
      *
@@ -144,6 +148,7 @@ private:
     // The un-de-overlapped rect under the cursor. Suggestion candidacy is judged from this, so
     // aiming at a gap narrower than the card still counts; the card still LANDS at dragPreviewGhost_.
     juce::Rectangle<int> dragPreviewAim_;
+    std::vector<juce::Rectangle<int>> groupGhosts_;
     // Library-drag probe: jack metadata for a module that does not exist on the canvas yet.
     bool dragPreviewIsSnippet_ = false;
     // True only for a plain factory-module library payload (not a snippet or a plugin), the one kind

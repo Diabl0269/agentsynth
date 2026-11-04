@@ -9,6 +9,10 @@
 
 #include "AppUndoManager.h"
 
+#include <algorithm>
+#include <map>
+#include <tuple>
+
 namespace {
 
 const juce::ModifierKeys kShift(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier);
@@ -102,6 +106,88 @@ const char* nameOf(Kind k) {
     return "";
 }
 
+using Units = std::pair<std::vector<NodeID>, std::vector<juce::String>>;
+
+Units unitsOf(GroupDropFixture& f, Kind kind) {
+    switch (kind) {
+    case Kind::module:
+        return {{f.m1}, {}};
+    case Kind::foldedCard:
+        return {{}, {f.fId}};
+    case Kind::openMacro:
+        return {{}, {f.oId}};
+    case Kind::modules:
+        return {{f.m1, f.m2}, {}};
+    case Kind::macros:
+        return {{}, {f.fId, f.oId}};
+    case Kind::mixed:
+        return {{f.m1}, {f.fId}};
+    }
+    return {};
+}
+
+// Selects the units (a lone unit is selected by its own press) and drags the first one's centre (a module's or folded
+// card's) or pointer (an open macro's chip) to `target` through its real mouse callbacks; `midDrag` runs before
+// release.
+void selectAndDrag(GroupDropFixture& f, const std::vector<NodeID>& modules, const std::vector<juce::String>& macros,
+                   juce::Point<int> target, const std::function<void()>& midDrag) {
+    const bool groupDrag = modules.size() + macros.size() > 1;
+    if (groupDrag) {
+        for (auto id : modules)
+            shiftClickModule(f.editor, id);
+        for (const auto& id : macros)
+            shiftClickMacro(f.editor, id);
+    }
+    if (!modules.empty())
+        dragBodyBy(*findComponent(f.editor, modules.front()), target - f.centreOf(modules.front()),
+                   groupDrag ? kPlainClick : kCmdClick, midDrag);
+    else if (f.ctl().getMacroCardForTest(macros.front())->isVisible())
+        dragCardCentreTo(f.editor, macros.front(), target, midDrag);
+    else
+        dragChipTo(f.editor, macros.front(), target, midDrag);
+}
+
+// Every visible card on the canvas (modules and folded macro cards), by component.
+std::map<juce::Component*, juce::Rectangle<int>> visibleCards(GroupDropFixture& f) {
+    std::map<juce::Component*, juce::Rectangle<int>> cards;
+    for (auto* comp : f.editor.getModuleComponents())
+        if (comp != nullptr && comp->isVisible())
+            cards[comp] = comp->getBounds();
+    for (const auto& m : f.editor.getMacros().getAll())
+        if (auto* card = f.ctl().getMacroCardForTest(m.id); card != nullptr && card->isVisible())
+            cards[card] = card->getBounds();
+    return cards;
+}
+
+// A card the drag moves: a dragged module, a dragged folded macro's card or an open dragged macro's member.
+bool isDragged(GroupDropFixture& f, const std::vector<NodeID>& modules, const std::vector<juce::String>& macros,
+               juce::Component* card) {
+    if (auto* macroCard = dynamic_cast<MacroCardComponent*>(card))
+        return std::find(macros.begin(), macros.end(), macroCard->getMacroId()) != macros.end();
+    const auto id = static_cast<ModuleComponent*>(card)->getNodeId();
+    if (std::find(modules.begin(), modules.end(), id) != modules.end())
+        return true;
+    const auto* owner = f.editor.getMacros().findByMember(uuidOf(f.engine, id));
+    return owner != nullptr && std::find(macros.begin(), macros.end(), owner->id) != macros.end();
+}
+
+// The landing ghost the canvas paints (GraphEditorCables.cpp): a group drag's rects, else the single card's.
+std::vector<juce::Rectangle<int>> shownGhosts(GraphEditor& editor) {
+    const auto& dragDrop = editor.getDragDropController();
+    auto ghosts = dragDrop.getGroupGhosts();
+    if (ghosts.empty() && dragDrop.isDragPreviewActive() && !dragDrop.getDragPreviewGhost().isEmpty())
+        ghosts.push_back(dragDrop.getDragPreviewGhost());
+    return ghosts;
+}
+
+std::vector<juce::Rectangle<int>> sorted(std::vector<juce::Rectangle<int>> rects) {
+    std::sort(rects.begin(), rects.end(), [](auto a, auto b) {
+        return std::make_tuple(a.getX(), a.getY(), a.getWidth(), a.getHeight()) <
+               std::make_tuple(b.getX(), b.getY(), b.getWidth(), b.getHeight());
+    });
+    return rects;
+}
+
 } // namespace
 
 // Regression test for FRO1440: only a single card's drag joined an open macro; a multi-selection dropped on one stayed
@@ -112,51 +198,13 @@ TEST(MacroGroupDrop, EveryDragKindJoinsOrNestsInAnOpenMacro) {
          {Kind::module, Kind::foldedCard, Kind::openMacro, Kind::modules, Kind::macros, Kind::mixed}) {
         SCOPED_TRACE(nameOf(kind));
         GroupDropFixture f;
-        std::vector<NodeID> modules;
-        std::vector<juce::String> macros;
-        switch (kind) {
-        case Kind::module:
-            modules = {f.m1};
-            break;
-        case Kind::foldedCard:
-            macros = {f.fId};
-            break;
-        case Kind::openMacro:
-            macros = {f.oId};
-            break;
-        case Kind::modules:
-            modules = {f.m1, f.m2};
-            break;
-        case Kind::macros:
-            macros = {f.fId, f.oId};
-            break;
-        case Kind::mixed:
-            modules = {f.m1};
-            macros = {f.fId};
-            break;
-        }
-        const bool groupDrag = modules.size() + macros.size() > 1;
-        if (groupDrag) {
-            for (auto id : modules)
-                shiftClickModule(f.editor, id);
-            for (const auto& id : macros)
-                shiftClickMacro(f.editor, id);
-        }
-
+        const auto [modules, macros] = unitsOf(f, kind);
         juce::String shownBeforeRelease;
         // The outline a user sees: the join target, or the macro a single module already moved into live.
-        const auto watch = [&] {
+        selectAndDrag(f, modules, macros, f.gapInB(), [&] {
             shownBeforeRelease = f.editor.getMacroDragJoinId().isNotEmpty() ? f.editor.getMacroDragJoinId()
                                                                             : f.editor.getMacroDragLiveOwnerId();
-        };
-        const auto target = f.gapInB();
-        if (!modules.empty())
-            dragBodyBy(*findComponent(f.editor, modules.front()), target - f.centreOf(modules.front()),
-                       groupDrag ? kPlainClick : kCmdClick, watch);
-        else if (f.ctl().getMacroCardForTest(macros.front())->isVisible())
-            dragCardCentreTo(f.editor, macros.front(), target, watch);
-        else
-            dragChipTo(f.editor, macros.front(), target, watch);
+        });
 
         EXPECT_EQ(shownBeforeRelease, f.bId) << "the drag outlines the macro it drops into";
         for (auto id : modules)
@@ -258,4 +306,32 @@ TEST(MacroGroupDrop, GroupNeverDropsIntoAMacroItCarries) {
     EXPECT_EQ(editor.getMacros().parentOf(cId), pId);
     EXPECT_EQ(editor.getMacros().findByMember(uuidOf(engine, m)), nullptr);
     EXPECT_TRUE(undo.canUndo()) << "the group still moved";
+}
+
+// Regression test for FRO1440: a group drag's ghost showed only the grabbed card, at a spot the group never landed on,
+// and a group holding a macro was pushed off its placement by its own room-making. For every group drag kind dropped
+// into an open macro (a lone folded card or open macro moves its members as a group), and a plain group move on the
+// empty canvas, the ghost rects shown just before the release are exactly where the moved cards land. The single-module
+// drag has its own ghost path (dragPreviewGhost_), placed before that tick's live macro crossing, so on the very tick
+// it crosses it still shows the pre-crossing spot; it is not covered here.
+TEST(MacroGroupDrop, GhostShowsWhereEveryMovedCardLands) {
+    for (const int k : {1, 2, 3, 4, 5, -1}) {
+        GroupDropFixture f;
+        const bool canvasMove = k < 0;
+        SCOPED_TRACE(canvasMove ? "two modules on the canvas" : nameOf(static_cast<Kind>(k)));
+        const auto [modules, macros] = canvasMove ? Units{{f.m1, f.m2}, {}} : unitsOf(f, static_cast<Kind>(k));
+        const auto target = canvasMove ? f.centreOf(f.m1) + juce::Point<int>(0, -700) : f.gapInB();
+        std::vector<juce::Rectangle<int>> ghosts;
+        selectAndDrag(f, modules, macros, target, [&] { ghosts = shownGhosts(f.editor); });
+        f.editor.finishCardGlideForTest();
+
+        // Where the dragged cards are now (a neighbour the drop makes room for is not one of them).
+        std::vector<juce::Rectangle<int>> landed;
+        for (const auto& [card, rect] : visibleCards(f))
+            if (isDragged(f, modules, macros, card))
+                landed.push_back(rect);
+        EXPECT_FALSE(ghosts.empty()) << "the drag shows a landing ghost";
+        EXPECT_EQ(sorted(ghosts), sorted(landed)) << "the ghost is where the cards land";
+        EXPECT_TRUE(shownGhosts(f.editor).empty()) << "the ghost ends with the drop";
+    }
 }

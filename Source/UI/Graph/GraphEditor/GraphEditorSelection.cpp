@@ -17,6 +17,7 @@
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 #include <algorithm>
+#include <optional>
 
 // ---------------------------------------------------------------------------------------
 // Selection
@@ -388,6 +389,88 @@ juce::Rectangle<int> visibleGroupBounds(const std::vector<ModuleComponent*>& mem
             add(card->getBounds());
     return bounds;
 }
+
+std::vector<ModuleComponent*> selectionDragMembers(const DragStarts& starts,
+                                                   juce::OwnedArray<ModuleComponent>& modules) {
+    std::vector<ModuleComponent*> members;
+    for (const auto& [nodeId, startPos] : starts) {
+        juce::ignoreUnused(startPos);
+        for (auto* comp : modules)
+            if (comp != nullptr && comp->getNodeId() == nodeId) {
+                members.push_back(comp);
+                break;
+            }
+    }
+    return members;
+}
+
+std::vector<juce::AudioProcessorGraph::NodeID> movingNodeIds(const DragStarts& starts) {
+    std::vector<juce::AudioProcessorGraph::NodeID> ids;
+    for (const auto& [nodeId, startPos] : starts) {
+        juce::ignoreUnused(startPos);
+        ids.push_back(nodeId);
+    }
+    return ids;
+}
+
+// The one placement a group drop applies (finalizeSelectionDrag) and its landing ghost shows (refreshGroupGhost): the
+// group's visible bounding box snapped and moved to the nearest free slot as one rigid body, colliding only with what
+// it does not move. A macro dragged by its chip, or a group, onto an open macro lands inside it (it joins or nests
+// there on drop), so that border is not an obstacle. Returns the offset from where the cards are now.
+std::optional<juce::Point<int>> groupLandingOffset(juce::Rectangle<int> groupBounds, const DragStarts& starts,
+                                                   const MacroGroupController& ctl) {
+    if (groupBounds.isEmpty())
+        return std::nullopt;
+    const auto& joinTarget = ctl.macroNestCandidate().isNotEmpty() ? ctl.macroNestCandidate() : ctl.groupDropTarget();
+    const auto clear = synth::LayoutUtil::findFreeSlot(
+        synth::LayoutUtil::snap(groupBounds.getTopLeft()), groupBounds.getWidth(), groupBounds.getHeight(),
+        ctl.placementBlockers(movingNodeIds(starts), joinTarget), juce::AudioProcessorGraph::NodeID{});
+    return clear - groupBounds.getTopLeft();
+}
+
+// The one placement a lone folded macro card's drop applies (finalizeMacroCardDrag) and its ghost shows: the card's
+// rect alone through findFreeSlot, its hidden members excluded; over an open macro it lands inside that border.
+juce::Point<int> foldedCardLanding(const synth::Macro& m, juce::Point<int> cardTopLeft, const DragStarts& starts,
+                                   const MacroGroupController& ctl) {
+    const auto cardSize = ctl.macroCableAnchorBounds(m);
+    return synth::LayoutUtil::findFreeSlot(
+        synth::LayoutUtil::snap(cardTopLeft), cardSize.getWidth(), cardSize.getHeight(),
+        ctl.placementBlockers(movingNodeIds(starts), ctl.macroNestCandidate()), juce::AudioProcessorGraph::NodeID{});
+}
+
+// The landing ghost of a group drag: every visible card it moves and every folded card it carries, at the rect the
+// drop would give it if released now. It goes through the same placement the drop calls (groupLandingOffset, or
+// foldedCardLanding for a lone folded card), so preview and drop cannot disagree. `foldedCardId` names the folded card
+// being dragged by its body, when that is the gesture.
+void refreshGroupGhost(bool active, const DragStarts& starts, const juce::String& foldedCardId, synth::MacroSet& macros,
+                       const MacroGroupController& ctl, juce::OwnedArray<ModuleComponent>& modules,
+                       juce::OwnedArray<MacroCardComponent>& cards, GraphDragDropController& dragDrop) {
+    std::vector<juce::Rectangle<int>> ghosts;
+    if (active) {
+        const auto* m = foldedCardId.isNotEmpty() ? macros.find(foldedCardId) : nullptr;
+        if (m != nullptr && ctl.isMacroSelected(foldedCardId)) {
+            for (auto* card : cards)
+                if (card != nullptr && card->getMacroId() == foldedCardId)
+                    ghosts.push_back(
+                        card->getBounds().withPosition(foldedCardLanding(*m, card->getPosition(), starts, ctl)));
+        } else {
+            const auto members = selectionDragMembers(starts, modules);
+            const auto carried =
+                macro_nesting::collapsedMacrosCarriedBy(macros, movedUuidsForCarry(macros, ctl, starts));
+            const auto bounds = visibleGroupBounds(members, cards, carried);
+            if (const auto offset = groupLandingOffset(bounds, starts, ctl)) {
+                for (auto* comp : members)
+                    if (comp->isVisible())
+                        ghosts.push_back(comp->getBounds() + *offset);
+                for (auto* card : cards)
+                    if (card != nullptr && card->isVisible() &&
+                        std::find(carried.begin(), carried.end(), card->getMacroId()) != carried.end())
+                        ghosts.push_back(card->getBounds() + *offset);
+            }
+        }
+    }
+    dragDrop.setGroupGhosts(std::move(ghosts));
+}
 } // namespace
 
 void GraphEditor::beginSelectionDrag(juce::AudioProcessorGraph::NodeID initiator) {
@@ -429,6 +512,8 @@ void GraphEditor::dragSelectionBy(juce::Point<int> delta, ModuleComponent* initi
     // chip drag aims from its own call site; a keyboard nudge (no initiator) never aims, so it changes no membership.
     if (initiator != nullptr)
         macroController_.updateGroupDropCandidate(initiator->getBounds().getCentre());
+    refreshGroupGhost(selectionDragActive, selectionDragStartPositions, {}, macros, macroController_,
+                      content.getModules(), content.getMacroCards(), dragDropController_);
 }
 
 void GraphEditor::finalizeSelectionDrag() {
@@ -436,6 +521,7 @@ void GraphEditor::finalizeSelectionDrag() {
     const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};
     if (!selectionDragActive) {
         selectionDragStartPositions.clear();
+        dragDropController_.setGroupGhosts({});
         macroController_.endGroupDrag();
         return;
     }
@@ -445,41 +531,14 @@ void GraphEditor::finalizeSelectionDrag() {
     // Resolve the group as a single rigid body: snap and de-overlap its bounding box, then apply
     // that one offset to every member. Running finalizeModuleDrag() per module would let members
     // spiral away from each other and destroy the layout the user arranged.
-    std::vector<ModuleComponent*> members;
-    for (auto& [nodeId, startPos] : selectionDragStartPositions) {
-        juce::ignoreUnused(startPos);
-        for (auto* comp : content.getModules()) {
-            if (comp == nullptr || comp->getNodeId() != nodeId)
-                continue;
-            members.push_back(comp);
-            break;
-        }
-    }
+    const auto members = selectionDragMembers(selectionDragStartPositions, content.getModules());
     const auto carriedUuids = movedUuidsForCarry(macros, macroController_, selectionDragStartPositions);
     const auto groupBounds = visibleGroupBounds(members, content.getMacroCards(),
                                                 macro_nesting::collapsedMacrosCarriedBy(macros, carriedUuids));
 
     if (!members.empty() && !groupBounds.isEmpty()) {
-        auto snapped = synth::LayoutUtil::snap(groupBounds.getTopLeft());
-        // Collide against unselected modules only — members are moving together and must not be
-        // treated as obstacles by one another.
-        // Layout units, like a single drop (resolvePlacement): collapsed cards and open hulls block, hidden members do
-        // not.
-        std::vector<juce::AudioProcessorGraph::NodeID> movingIds;
-        for (const auto& [nodeId, startPos] : selectionDragStartPositions) {
-            juce::ignoreUnused(startPos);
-            movingIds.push_back(nodeId);
-        }
-        // A macro dragged by its chip, or a group, onto an open macro lands inside it (it joins or nests there on
-        // drop).
-        const auto& joinTarget = macroController_.macroNestCandidate().isNotEmpty()
-                                     ? macroController_.macroNestCandidate()
-                                     : macroController_.groupDropTarget();
-        auto obstacles = macroController_.placementBlockers(movingIds, joinTarget);
-        auto clear = synth::LayoutUtil::findFreeSlot(snapped, groupBounds.getWidth(), groupBounds.getHeight(),
-                                                     obstacles, juce::AudioProcessorGraph::NodeID{});
-        auto offset = clear - groupBounds.getTopLeft();
-
+        const auto offset =
+            groupLandingOffset(groupBounds, selectionDragStartPositions, macroController_).value_or(juce::Point<int>());
         for (auto* comp : members) {
             comp->setTopLeftPosition(comp->getPosition() + offset);
             updateModulePosition(comp);
@@ -513,6 +572,7 @@ void GraphEditor::finalizeSelectionDrag() {
 
     selectionDragActive = false;
     selectionDragStartPositions.clear();
+    dragDropController_.setGroupGhosts({});
     reflowOutputDock(); // the group may now be the rightmost thing on the canvas
     repaintCanvas();
 }
@@ -524,6 +584,7 @@ void GraphEditor::cancelSelectionDrag() {
     edgeDrag_.reset();
     selectionDragActive = false;
     selectionDragStartPositions.clear();
+    dragDropController_.setGroupGhosts({});
     macroController_.endGroupDrag();
     // A drag that came back to where it started grew the frame on the way: fit it again.
     refreshCanvasFrame(CanvasFrame::Mode::Animate);
@@ -585,6 +646,8 @@ void GraphEditor::dragMacroCardBy(const juce::String& macroId, juce::Point<int> 
             macroController_.updateMacroNestCandidate(macroId, card->getBounds().getCentre());
             macroController_.updateGroupDropCandidate(card->getBounds().getCentre());
         }
+    refreshGroupGhost(selectionDragActive, selectionDragStartPositions, macroId, macros, macroController_,
+                      content.getModules(), content.getMacroCards(), dragDropController_); // aimed at the candidate
     refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // the frame steps out ahead of the card
     // Matches ModuleComponent::mouseDrag's own per-frame repaint call exactly (one repaint per
     // drag tick), but goes through repaintCanvas() rather than a bare Component::repaint(): once
@@ -625,16 +688,7 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
             return;
         }
 
-        std::vector<juce::AudioProcessorGraph::NodeID> movingIds;
-        for (const auto& [nodeId, startPos] : selectionDragStartPositions) {
-            juce::ignoreUnused(startPos);
-            movingIds.push_back(nodeId);
-        }
-        const auto cardSize = macroController_.macroCableAnchorBounds(*m);
-        const auto resolved = synth::LayoutUtil::findFreeSlot(
-            synth::LayoutUtil::snap(newCardTopLeft), cardSize.getWidth(), cardSize.getHeight(),
-            macroController_.placementBlockers(movingIds, macroController_.macroNestCandidate()),
-            juce::AudioProcessorGraph::NodeID{});
+        const auto resolved = foldedCardLanding(*m, newCardTopLeft, selectionDragStartPositions, macroController_);
         const auto delta = resolved - m->bounds.getPosition();
 
         for (const auto& [nodeId, startPos] : selectionDragStartPositions)
@@ -655,6 +709,7 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
         detail::applyCanvasAccessibilityClip(content.getModules(), content.getMacroCards(), getVisibleCanvasRect());
         selectionDragActive = false;
         selectionDragStartPositions.clear();
+        dragDropController_.setGroupGhosts({});
         macroController_.moveDraggedMacroToCandidate(macroId);
         reflowOutputDock(); // a collapsed card dropped right of the dock pushes the dock along
     };

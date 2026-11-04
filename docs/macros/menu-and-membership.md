@@ -683,11 +683,15 @@ back.
   treats the target as room to land in): each macro unit takes `moveMacroInto` (the unit drag's walk, out level by
   level then down), each module walks out of every macro not on the target's chain (`removeSelectionFromMacro`), or
   steps down out of its own macro's member list as a single drag does, and the modules then join the target in one
-  `addSelectionToMacro`, so a cable between two of them gets no port.
+  `addSelectionToMacro`, so a cable between two of them gets no port. Room is made (`makeRoomFor`) only once the whole
+  group is in: made per unit, the border one unit just grew would push the group's other units, still outside, off the
+  spot the placement gave them, and away from the landing ghost.
 
 Tests: `Tests/Macros/MacroContainer/MacroGroupDropTests.cpp`: every drag kind (single module, single folded card,
 single open macro, two modules, two macros, a module and a macro) dropped on an open macro ends inside it, outlined
-before the release, one undo step; a group dragged out leaves; a group never drops into a macro it carries. In-app:
+before the release, one undo step; a group dragged out leaves; a group never drops into a macro it carries; for every
+kind and a plain group move the ghost shown before the release is where the cards land (the
+[landing ghost](../layout/selection.md#group-drag-resolves-as-one-rigid-body)). In-app:
 `Tools/ui-verify/scenarios/group-drop-into-macro.yaml`.
 
 ## The expanded hull's collapse button

@@ -101,6 +101,15 @@ drifts at non-1.0 zoom and shears the group apart.
 Calling the single-module `finalizeModuleDrag()` per member instead would spiral them away from each
 other and destroy the arrangement the user just made.
 
+**The landing ghost is that same placement, live.** Every tick of a group drag (`dragSelectionBy`, then
+`dragMacroCardBy` and the chip drag once they have aimed) runs the drop's own placement on where the cards are now
+(`groupLandingOffset`, or `foldedCardLanding` for a lone folded card, both in `GraphEditorSelection.cpp` and called by
+`finalizeSelectionDrag` / `finalizeMacroCardDrag` too) and stores one rect per moved visible card in
+`GraphDragDropController::setGroupGhosts`. The canvas paints those in place of the single-card ghost, so the ghost
+shows where the whole group lands, inside a macro it drops into or out of one it leaves. A widely spread group is
+still one rigid box, gaps included, so it can land away from a nearby macro's cards it would straddle; the ghost shows
+that too.
+
 `cancelSelectionDrag()` exists for the zero-delta case, a click that never moved. Preset positions
 are not necessarily grid-aligned, so running the finalize path on a drag that did not happen would
 visibly nudge the group.

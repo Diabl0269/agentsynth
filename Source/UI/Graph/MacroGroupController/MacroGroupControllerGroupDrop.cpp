@@ -106,12 +106,15 @@ void MacroGroupController::applyGroupDrop() {
             return; // never into itself or a macro inside it (groupDropTargetAt already skips those)
 
     const synth::GraphRebuildScope rebuildScope{host_.graph()};
-    std::vector<juce::String> joining;
+    // Room is made once the whole group is in. Made per step, the border a macro or module just grew would push the
+    // group's other units (still outside) off the spot the rigid-body placement gave them, away from the landing ghost.
+    const bool wasDeferred = std::exchange(makeRoomDeferred_, true);
+    std::vector<juce::String> joining, nested;
     for (const auto& unit : drag.units) {
         if (unit.macroId.isNotEmpty()) {
             if (macros.find(unit.macroId) != nullptr && macros.parentOf(unit.macroId) != target &&
                 moveMacroInto(unit.macroId, macros.parentOf(unit.macroId), target))
-                makeRoomFor("m:" + unit.macroId);
+                nested.push_back(unit.macroId);
             continue;
         }
         for (const auto* owner = macros.findByMember(unit.uuid); owner != nullptr && owner->id != target;
@@ -132,4 +135,10 @@ void MacroGroupController::applyGroupDrop() {
     }
     if (!joining.empty())
         addSelectionToMacro(target, joining, /*recordUndo=*/false);
+    makeRoomDeferred_ = wasDeferred;
+    for (const auto& id : nested)
+        makeRoomFor("m:" + id);
+    if (!wasDeferred)
+        for (const auto& grower : takeDeferredMakeRoom())
+            makeRoomFor(grower);
 }
