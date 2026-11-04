@@ -1,0 +1,30 @@
+# Gap: Up from the timeline's Add Track button (reached from the top of the track column) went to the panel root,
+# which shows no ring, so the first Up looked like it did nothing and only a second Up reached the top bar.
+#
+# What a keyboard user does:
+#   1. Starts a new project, opens the bottom panel and adds an Oscillator track.
+#   2. Focuses the Timeline (Cmd+Shift+T) and presses Down: Add Track takes focus.
+#   3. Presses Up once: the top bar's ring appears at once, on its first control.
+#   4. Presses Right: the ring moves along the top bar.
+record: true
+save_project: add-track-up
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - wait: {}
+  - key: {keys: escape}
+  - key: {keys: cmd+shift+t}                                 # focus the Timeline panel root
+  - wait: {}
+  - key: {keys: down}
+  - expect: {id: timelineAddTrackButton, hasFocus: true}
+  - expect: {id: timelineTopBarRing, topBarRing: ""}
+  - key: {keys: up}
+  - expect: {id: timelineTopBarRing, topBarRing: "Side pane", within_ms: 1000}
+  - screenshot: {name: add-track-up-ring}
+  - key: {keys: right}
+  - expect: {id: timelineTopBarRing, topBarRing: "Return to Start"}
+  - screenshot: {name: add-track-up-ring-moved}

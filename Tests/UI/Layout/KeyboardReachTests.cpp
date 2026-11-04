@@ -213,7 +213,24 @@ struct RegionReport {
     int stops = 0;
     std::string adapterReason;
     std::set<std::string> unreachable;
+    std::set<std::string> hiddenStops; // stops a key can land on that show nothing
 };
+
+// The stops of a region's top bar key ring, for the regions that have one.
+std::vector<juce::Component*> keyRingStops(const std::string& regionId, juce::Component& root) {
+    if (regionId == "timeline")
+        return static_cast<synth::ui::TimelinePanelComponent&>(root).getTopBarKeysForTest().getStops();
+    if (regionId == "mixer")
+        return static_cast<synth::ui::MixerPanelComponent&>(root).getTopBarRingForTest().getStops();
+    return {};
+}
+
+// Every stop the step keys or a key ring can land on must show: visible and opaque up to the root, with a size.
+void checkStopsShow(RegionReport& report, juce::Component& root, const std::vector<juce::Component*>& stops) {
+    for (auto* stop : stops)
+        if (stop != nullptr && !isOnScreenInside(*stop, root))
+            report.hiddenStops.insert(report.name + " / " + controlName(*stop));
+}
 
 const Adapter* adapterFor(const std::string& id) {
     for (const auto& a : kAdapters)
@@ -238,6 +255,8 @@ RegionReport walkSurface(const std::string& name, juce::Component& root, const s
     if (adapter != nullptr)
         report.adapterReason = adapter->reason;
     report.stops = (int)stops.size();
+    checkStopsShow(report, root, synth::ui::shownFocusableDescendants(root));
+    checkStopsShow(report, root, keyRingStops(adapterId, root));
     for (size_t i = 0; i < controls.size(); ++i) {
         const auto& control = controls[i];
         if (i < ownControls && !owns(*control.component))
@@ -267,6 +286,8 @@ public:
         printReport(report);
         walked_.insert(report.name);
         found_.insert(report.unreachable.begin(), report.unreachable.end());
+        for (const auto& key : report.hiddenStops)
+            ADD_FAILURE() << "a keyboard stop that does not show: " << key;
         if (report.controls == 0 && report.adapterReason.empty())
             ADD_FAILURE() << report.name
                           << ": no operable controls and no adapter - the walk is not seeing this surface";

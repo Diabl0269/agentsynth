@@ -8,6 +8,7 @@
 #include "../../TestWait.h"
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Layout/KeyRing.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
@@ -121,6 +122,7 @@ TEST(TimelineAddTrackKeyboard, FromTheTopUpReturnsToTheRootAndFromTheFirstRowUpR
     ASSERT_TRUE(f.panel.isAddTrackButtonFocused());
     EXPECT_TRUE(f.panel.keyPressed(upKey())) << "entered from the top, Up goes back to the panel root";
     EXPECT_FALSE(f.panel.isAddTrackButtonFocused());
+    f.panel.getTopBarKeysForTest().leave();
 
     f.focusRow(0);
     ASSERT_EQ(f.panel.getFocusedTrackIndexForTest(), 0);
@@ -148,6 +150,29 @@ TEST(TimelineAddTrackKeyboard, EmptyTimelineRootDownLandsOnAddTrack) {
 
     EXPECT_TRUE(f.panel.keyPressed(upKey())) << "Up has nowhere to go but the panel root";
     EXPECT_FALSE(f.panel.isAddTrackButtonFocused());
+    EXPECT_TRUE(f.panel.getTopBarKeysForTest().isActive()) << "and the top bar ring shows at once";
+}
+
+// Regression test for FRO1416: Up from Add Track (reached from the top) went to the panel root, which shows no ring,
+// so the first Up seemed to do nothing and a second Up was needed to reach the top bar.
+TEST(TimelineAddTrackKeyboard, OneUpFromAddTrackAtTheTopPutsTheRingOnTheTopBar) {
+    AddTrackFixture f(3);
+    ASSERT_TRUE(f.panel.handleRootFocusKey(downKey()));
+    ASSERT_TRUE(f.panel.isAddTrackButtonFocused());
+    ASSERT_FALSE(f.panel.getTopBarKeysForTest().isActive());
+
+    // The button ignores Up, so the key reaches the panel the way the window delivers it.
+    ASSERT_FALSE(static_cast<juce::Component&>(f.panel.getAddTrackButton()).keyPressed(upKey()));
+    ASSERT_TRUE(f.panel.keyPressed(upKey()));
+
+    auto& ring = f.panel.getTopBarKeysForTest();
+    ASSERT_TRUE(ring.isActive());
+    auto* ringed = ring.getRingedStop();
+    ASSERT_NE(ringed, nullptr);
+    EXPECT_TRUE(ringed->isVisible());
+    EXPECT_FALSE(ringed->getBounds().isEmpty()) << "the ring sits on a control that shows";
+    EXPECT_TRUE(f.panel.keyPressed(key(juce::KeyPress::rightKey)));
+    EXPECT_NE(ring.getRingedStop(), ringed) << "Right walks the top bar from there";
 }
 
 TEST(TimelineAddTrackKeyboard, ReturnAndSpacePressTheButtonAndDownStaysPut) {

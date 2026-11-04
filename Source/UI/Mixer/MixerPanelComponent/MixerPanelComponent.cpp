@@ -85,7 +85,7 @@ MixerPanelComponent::MixerPanelComponent() {
     emptyHint_.setTitle(kEmptyHintText); // accessibility: name equals the visible text
     setTitle("Mixer");
     setComponentID("mixerPanel");
-    topBarRingProbe_ = makeTopBarRingProbe(topBarRing_);
+    topBarRingProbe_ = makeKeyRingProbe(topBarRing_, "mixerTopBarRing");
     addChildComponent(*topBarRingProbe_);
 }
 

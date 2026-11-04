@@ -30,11 +30,22 @@ inline std::vector<juce::Component*> focusableDescendants(juce::Component& root)
     return stops;
 }
 
+/** focusableDescendants(root) less the controls laid out to an empty rectangle, which show nothing: the stops Up and
+ *  Down step through. `keep` stays in even when empty, so a step from it still knows where it is. */
+inline std::vector<juce::Component*> shownFocusableDescendants(juce::Component& root, juce::Component* keep = nullptr) {
+    auto stops = focusableDescendants(root);
+    stops.erase(std::remove_if(stops.begin(), stops.end(),
+                               [keep](juce::Component* c) { return c != keep && c->getBounds().isEmpty(); }),
+                stops.end());
+    return stops;
+}
+
 /** The control that follows (`direction` > 0) or precedes `current` in `root`; `current` null or not in the list means
  *  the root itself is where focus sits, so Down gives the first control and Up gives none. Never wraps. Null at an end.
  */
 inline juce::Component* neighbourStop(juce::Component& root, juce::Component* current, int direction) {
-    const auto stops = focusableDescendants(root);
+    // Filtered here, not in focusableDescendants: PaneKeys attaches to every control before the first layout.
+    const auto stops = shownFocusableDescendants(root, current);
     int index = -1;
     for (int i = 0; i < (int)stops.size(); ++i)
         if (stops[(size_t)i] == current)

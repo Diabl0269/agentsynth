@@ -614,7 +614,6 @@ private:
     MixerPanelToolbar toolbar_;
     MixerZonesPane zonesPane_;
     std::vector<juce::Component*> topBarStops();
-    static std::unique_ptr<juce::Component> makeTopBarRingProbe(const KeyRing& ring);
     std::unique_ptr<juce::Component> topBarRingProbe_; // hidden; reports the ring to test mode
     KeyRing topBarRing_{*this, [this] { return topBarStops(); }, KeyRing::Order::given};
     Zone leftZone_;

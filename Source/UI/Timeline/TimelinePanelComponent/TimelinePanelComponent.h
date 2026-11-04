@@ -986,7 +986,8 @@ private:
     juce::Rectangle<int> gridLanesBounds_; // lanesBounds_ minus the ruler strip at its top
 
     std::vector<juce::Component*> topBarStops();
-    std::unique_ptr<KeyRing> topBarKeys_; // the top bar's key ring, built in the constructor
+    std::unique_ptr<KeyRing> topBarKeys_;              // the top bar's key ring, built in the constructor
+    std::unique_ptr<juce::Component> topBarRingProbe_; // hidden; reports the ring to test mode
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelinePanelComponent)
 };

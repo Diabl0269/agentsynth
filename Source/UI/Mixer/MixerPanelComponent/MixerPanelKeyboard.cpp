@@ -6,7 +6,6 @@
 #include "MixerPanelComponent.h"
 
 #include "ShortcutManager/ShortcutManager.h"
-#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/RenameKey.h"
 #include "UI/Mixer/MixerColumnComponent.h"
@@ -299,32 +298,6 @@ void MixerPanelComponent::paintOverChildren(juce::Graphics& g) {
     paintRowFocusRing(g);
     topBarRing_.paintRing(g);
     paintDragBubble(g);
-}
-
-namespace {
-// A hidden child of the panel (id "mixerTopBarRing") that test mode reads: the name of the ringed control, "" when off.
-class TopBarRingProbe
-    : public juce::Component
-    , public synth::testmode::StateSource {
-public:
-    explicit TopBarRingProbe(const KeyRing& ring)
-        : ring_(ring) {
-        setComponentID("mixerTopBarRing");
-        setInterceptsMouseClicks(false, false);
-        setWantsKeyboardFocus(false);
-        setAccessible(false);
-    }
-    void addTestModeState(juce::DynamicObject& into) const override {
-        into.setProperty("topBarRing", ring_.getValueText());
-    }
-
-private:
-    const KeyRing& ring_;
-};
-} // namespace
-
-std::unique_ptr<juce::Component> MixerPanelComponent::makeTopBarRingProbe(const KeyRing& ring) {
-    return std::make_unique<TopBarRingProbe>(ring);
 }
 
 // Reading order: the toolbar (side pane, Inserts, Sends, EQ, Reset Meters, Add Bus, dock back), then the zones pane's

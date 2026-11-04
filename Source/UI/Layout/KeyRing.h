@@ -51,4 +51,8 @@ private:
     juce::Component::SafePointer<juce::Component> ringed_;
 };
 
+/** A hidden child for the owner to add: test mode reads it by `componentId` as {"topBarRing": the ringed control's
+ *  name, "" when the ring is off}. */
+std::unique_ptr<juce::Component> makeKeyRingProbe(const KeyRing& ring, const juce::String& componentId);
+
 } // namespace synth::ui

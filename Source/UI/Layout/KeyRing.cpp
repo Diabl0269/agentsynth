@@ -1,5 +1,6 @@
 #include "UI/Layout/KeyRing.h"
 
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReadOnlyTextValue.h"
 #include <algorithm>
@@ -9,8 +10,10 @@ namespace synth::ui {
 namespace {
 constexpr int kRingOutset = 1;
 
+// A stop must show something to ring: a control laid out to an empty rectangle (a collapsed pane's field) would put
+// the ring nowhere, so the key seems to do nothing.
 bool isReachable(const juce::Component& c, const juce::Component& owner) {
-    if (!c.isEnabled())
+    if (!c.isEnabled() || c.getBounds().isEmpty())
         return false;
     for (const auto* at = &c; at != nullptr && at != &owner; at = at->getParentComponent())
         if (!at->isVisible())
@@ -153,6 +156,32 @@ void KeyRing::paintRing(juce::Graphics& g) const {
         return;
     if (const auto* stop = getRingedStop())
         paintFocusRingAlways(g, boundsInOwner(*stop, owner_).expanded(kRingOutset).toFloat(), owner_, 4.0f);
+}
+
+namespace {
+// Reports the ring to test mode; never painted, never focused, never heard.
+class KeyRingProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    KeyRingProbe(const KeyRing& ring, const juce::String& componentId)
+        : ring_(ring) {
+        setComponentID(componentId);
+        setInterceptsMouseClicks(false, false);
+        setWantsKeyboardFocus(false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override {
+        into.setProperty("topBarRing", ring_.getValueText());
+    }
+
+private:
+    const KeyRing& ring_;
+};
+} // namespace
+
+std::unique_ptr<juce::Component> makeKeyRingProbe(const KeyRing& ring, const juce::String& componentId) {
+    return std::make_unique<KeyRingProbe>(ring, componentId);
 }
 
 } // namespace synth::ui

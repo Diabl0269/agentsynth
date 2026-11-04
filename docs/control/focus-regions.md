@@ -55,7 +55,7 @@ below for the Mixer region's own keyboard behaviour.
   this adds; reaching the clip lanes themselves by keyboard alone stays out of scope (the locked
   "track headers only" decision). The **Add Track** button is the last stop of that column: Down on the last
   row moves focus to it (with no tracks, Down on the region root lands on it directly), Up returns to the
-  last row, and Return/Space press it (`TimelinePanelComponent::handleAddTrackButtonKey`). It shows the
+  last row (reached from the top, or with no tracks, Up puts the top bar's key ring on at once), and Return/Space press it (`TimelinePanelComponent::handleAddTrackButtonKey`). It shows the
   standard button focus ring.
 - **Mod Matrix nests inside Canvas** — `ModMatrixComponent` is a child component of `GraphEditor`,
   so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`
