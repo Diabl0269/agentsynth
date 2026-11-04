@@ -4,13 +4,17 @@
 //   - a tool window that edits a module on the canvas (relaysAppShortcuts) hands them to the app, and keeps the keys
 //     that act on the main window's selection (select all);
 //   - a modal prompt keeps all of them, since an undo would change the canvas behind a question being answered.
-// Dialogs come from the theme sweep's registry, so a new dialog has to pick a side. Windows that open on a real
-// display are skipped on a headless runner.
+// The keys the macOS menu owns (Cmd+Q, Cmd+H) are never used by a dialog's focus chain; the window's key
+// listener then does the menu's job (JUCE's peer would swallow them while the dialog is modal), once, from every
+// focused child. Dialogs come from the theme sweep's registry, so a new dialog has to pick a side. Windows that open on
+// a real display are skipped on a headless runner.
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "NativeWindowTestGuard.h"
+#include "UI/Layout/DialogMenuKeys.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/BuiltInThemes.h"
+#include <array>
 #include <gtest/gtest.h>
 #include <map>
 #include <set>
@@ -40,6 +44,7 @@ struct Sample {
     juce::KeyPress key;
     bool relayed; // false: the key acts on the main window only, so even a tool window keeps it
     bool printable;
+    int menuAction = -1; // 0 quit, 1 hide: the macOS menu item the key stands for
 };
 
 std::vector<Sample> samples() {
@@ -50,6 +55,8 @@ std::vector<Sample> samples() {
         {"Cmd+Z", juce::KeyPress('z', juce::ModifierKeys(cmd), 0), true, false},
         {"Cmd+Shift+Z", juce::KeyPress('z', juce::ModifierKeys(cmd | shift), 0), true, false},
         {"Cmd+A", juce::KeyPress('a', juce::ModifierKeys(cmd), 0), false, false}, // select all modules
+        {"Cmd+Q", juce::KeyPress('q', juce::ModifierKeys(cmd), 0), false, false, 0},
+        {"Cmd+H", juce::KeyPress('h', juce::ModifierKeys(cmd), 0), false, false, 1},
     };
 }
 
@@ -83,14 +90,22 @@ protected:
         if (nativeWindowsAbortHere())
             GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
         juce::MessageManager::getInstance();
+        savedMenuActions_ = synth::ui::dialog_menu_keys::actions();
+        synth::ui::dialog_menu_keys::actions() = {
+            [this] { ++menuCalls[0]; },
+            [this] { ++menuCalls[1]; },
+        };
         wasEnabled_ = PopupMotion::isEnabled();
         PopupMotion::setEnabled(false); // a dialog shows at once
     }
     void TearDown() override {
         synth::ui::deleteOpenModalDialogs();
+        synth::ui::dialog_menu_keys::actions() = savedMenuActions_; // a test seam must not leak into the next test
         PopupMotion::setEnabled(wasEnabled_);
     }
     bool wasEnabled_ = true;
+    synth::ui::dialog_menu_keys::Actions savedMenuActions_;
+    std::array<int, 2> menuCalls{0, 0}; // quit, hide
 };
 
 // Dialogs and keys that failed, compared with kKnownGaps.
@@ -129,8 +144,17 @@ TEST_F(ShortcutRelay, EveryDialogHandsAppShortcutsToTheAppFromItsFocusedChildren
                 if (sample.printable && isTextEditorPart(*stops[stop]))
                     continue; // a text field keeps a printable key as text
                 env.appKeys().clear();
+                menuCalls = {0, 0};
                 dispatchKey(*dialog, *stops[stop], sample.key);
                 pumpMessages();
+#if JUCE_MAC
+                for (int action = 0; action < 2; ++action)
+                    if (menuCalls[static_cast<size_t>(action)] != (action == sample.menuAction ? 1 : 0))
+                        found.insert(surface.name + " / " + sample.name + " (menu action count)");
+#else
+                if (menuCalls != std::array<int, 2>{0, 0})
+                    found.insert(surface.name + " / " + sample.name + " (menu action off macOS)");
+#endif
                 const size_t expected = surface.relaysAppShortcuts && sample.relayed ? 1 : 0;
                 if (env.appKeys().size() != expected)
                     found.insert(surface.name + " / " + sample.name);

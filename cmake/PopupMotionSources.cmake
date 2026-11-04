@@ -8,6 +8,8 @@ target_sources(Core PRIVATE
     Source/UI/Layout/AppTooltipWindow.h
     Source/UI/Layout/AppTooltipWindow.cpp
     Source/UI/Layout/HelperTooltip.h
+    Source/UI/Layout/DialogMenuKeys.h
+    Source/UI/Layout/DialogMenuKeys.cpp
     Source/UI/Layout/DialogTooltip.h
     Source/UI/Layout/DialogTooltip.cpp
     Source/UI/Layout/ReducedMotion.h

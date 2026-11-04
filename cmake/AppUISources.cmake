@@ -2,6 +2,8 @@
 # Paths are relative to the repo root.
 set(APPUI_SOURCES
     Source/MainComponent/MainComponent.cpp
+    Source/MainComponent/QuitRequest.h
+    Source/MainComponent/QuitRequest.cpp
     Source/MainComponent/MainComponent.h
     Source/MainComponent/MainComponentInternal.h
     Source/MainComponent/MainComponentRemoteActionInvoker.h

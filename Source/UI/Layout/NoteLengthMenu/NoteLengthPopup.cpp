@@ -1,6 +1,7 @@
 #include "UI/Layout/NoteLengthMenu/NoteLengthPopup.h"
 
 #include "TestMode/AutomationHiding.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/ButtonStateEase.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"

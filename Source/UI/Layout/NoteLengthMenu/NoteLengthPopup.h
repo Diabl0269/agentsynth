@@ -1,6 +1,5 @@
 #pragma once
 
-#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/ArrowKeyNavigation.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthMenuModel.h"
 #include "UI/Layout/PopupMotion.h"
@@ -11,6 +10,8 @@
 #include <vector>
 
 namespace synth::ui {
+
+class AppTooltipWindow; // UI/Layout/AppTooltipWindow.h
 
 /** The note-length popup (docs/layout/note-length-menu.md): a compact window with three letter buttons (S straight,
  *  T triplet, D dotted) over one row of narrow chips. The chips write "1/" once, as a prefix, and only the bottom

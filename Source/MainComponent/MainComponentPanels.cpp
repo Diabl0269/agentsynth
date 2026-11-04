@@ -11,6 +11,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/PointEditorDuplicate.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Library/LibrarySidebarViews.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "WhatsNewData.h"

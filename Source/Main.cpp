@@ -1,6 +1,7 @@
 #include "AutomationLaunch.h"
 #include "Branding.h"
 #include "MainComponent/MainComponent.h"
+#include "MainComponent/QuitRequest.h"
 #include "MainComponent/WindowKeyForward.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "Project/ProjectCommandLine.h"
@@ -124,20 +125,7 @@ public:
     }
 
     void systemRequestedQuit() override {
-        if (mainWindow != nullptr) {
-            if (auto* mc = dynamic_cast<MainComponent*>(mainWindow->getContentComponent())) {
-                // Asks first, quits only on Save/Discard. quit() is the LAST thing the continuation
-                // does, and juce::JUCEApplicationBase::quit() only stops the dispatch loop
-                // (juce_events/messages/juce_ApplicationBase.cpp: it's a one-line call to
-                // MessageManager::stopDispatchLoop()) — shutdown(), which destroys mainWindow and
-                // with it the MainComponent whose method invoked this continuation, runs later, after
-                // main()'s call to JUCEApplicationBase::main() unwinds the now-stopped loop. Nothing
-                // here touches a freed object.
-                mc->guardUnsavedChanges("Quitting", [this] { quit(); });
-                return;
-            }
-        }
-        quit();
+        synth::requestQuit(mainWindow != nullptr ? mainWindow->getContentComponent() : nullptr, [this] { quit(); });
     }
 
     void anotherInstanceStarted(const juce::String& commandLine) override {
