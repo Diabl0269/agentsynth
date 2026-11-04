@@ -62,6 +62,11 @@ public:
     juce::Rectangle<int> bandBounds() const;
     /** Where the overview bar's frame is drawn. */
     juce::Rectangle<float> overviewFrame() const;
+    /** Where an edge's note name goes: inside the band, outside beside its handle, or pinned at the strip's end. */
+    enum class LabelSpot { Inside, Outside, Pinned };
+    LabelSpot labelSpot(Part edge) const;
+    /** Where that name is drawn, in this component's coordinates. */
+    juce::Rectangle<float> labelArea(Part edge) const;
     juce::Component& getStop(Part part) noexcept;
     Part getFocusedPart() const;
     /** True while the band or the keys are gliding to their place. */
@@ -111,10 +116,6 @@ private:
     float toX(float units) const;
     float bandX0() const;
     float bandX1() const;
-    /** Where an edge's note name goes: inside the band, outside beside its handle, or pinned at the strip's end. */
-    enum class LabelSpot { Inside, Outside, Pinned };
-    LabelSpot labelSpot(Part edge) const;
-    juce::Rectangle<float> labelArea(Part edge) const;
     std::optional<Part> partAt(float x) const;
     std::optional<Part> labelAt(const juce::Point<float>& p) const;
 

@@ -163,7 +163,8 @@ NoteRangePicker::LabelSpot NoteRangePicker::labelSpot(Part edge) const {
     const float w = (float)getWidth();
     const float x0 = bandX0();
     const float x1 = bandX1();
-    if (edge == Part::LowEdge ? x0 < 1.0f : x1 > w - 1.0f)
+    const float own = edge == Part::LowEdge ? x0 : x1;
+    if (own < 1.0f || own > w - 1.0f)
         return LabelSpot::Pinned;
     const float lowW = (float)theme::AppLookAndFeel::uiTextWidth(nameOf(low_), kLabelFont) + 2.0f;
     const float highW = (float)theme::AppLookAndFeel::uiTextWidth(nameOf(high_), kLabelFont) + 2.0f;
@@ -185,15 +186,12 @@ juce::Rectangle<float> NoteRangePicker::labelArea(Part edge) const {
     const float width =
         (float)theme::AppLookAndFeel::uiTextWidth(nameOf(edge == Part::LowEdge ? low_ : high_), kLabelFont) + 2.0f;
     const auto spot = labelSpot(edge);
-    if (edge == Part::LowEdge) {
-        if (spot == LabelSpot::Pinned)
-            return {kChevronSpace, top, width, 10.0f};
-        return {spot == LabelSpot::Outside ? bandX0() - kLabelClear - width : bandX0() + kLabelClear, top, width,
-                10.0f};
-    }
+    const float own = edge == Part::LowEdge ? bandX0() : bandX1();
     if (spot == LabelSpot::Pinned)
-        return {w - kChevronSpace - width, top, width, 10.0f};
-    return {spot == LabelSpot::Outside ? bandX1() + kLabelClear : bandX1() - kLabelClear - width, top, width, 10.0f};
+        return {own < 1.0f ? kChevronSpace : w - kChevronSpace - width, top, width, 10.0f};
+    if (edge == Part::LowEdge)
+        return {spot == LabelSpot::Outside ? own - kLabelClear - width : own + kLabelClear, top, width, 10.0f};
+    return {spot == LabelSpot::Outside ? own + kLabelClear : own - kLabelClear - width, top, width, 10.0f};
 }
 
 // A name is shown unless it would run into the other one.
@@ -464,8 +462,10 @@ void NoteRangePicker::paintBand(juce::Graphics& g) const {
         const auto area = labelArea(edge).translated(0.0f, -shift);
         drawLabel(nameOf(low ? low_ : high_), area,
                   low ? juce::Justification::centredLeft : juce::Justification::centredRight);
-        if (labelSpot(edge) == LabelSpot::Pinned)
-            chevron(low ? 4.0f : (float)getWidth() - 4.0f, low ? -1.0f : 1.0f, area.getCentreY());
+        if (labelSpot(edge) == LabelSpot::Pinned) {
+            const bool left = (low ? bandX0() : bandX1()) < 1.0f;
+            chevron(left ? 4.0f : (float)getWidth() - 4.0f, left ? -1.0f : 1.0f, area.getCentreY());
+        }
     }
 }
 

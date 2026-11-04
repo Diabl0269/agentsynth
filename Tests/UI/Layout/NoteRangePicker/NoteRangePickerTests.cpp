@@ -718,3 +718,42 @@ TEST(PianoRollScaleAssistTest, AKeyChangeMovesTheSavedRangeInTheSameUndoStepAndF
     EXPECT_EQ(f.doc.getClip(clipId)->noteRange, std::make_pair(38, 72));
     EXPECT_EQ(panel.getMinPitchSelection(), 38) << "the saved range stays on screen";
 }
+
+TEST(NoteRangePicker, ANameSitsInsideAWideBandOutsideANarrowOneAndPinnedWhenItsEdgeIsOffView) {
+    using Spot = NoteRangePicker::LabelSpot;
+    using Part = NoteRangePicker::Part;
+    NoteRangePicker picker;
+    picker.setSize(230, 45);
+    picker.setRange(48, 72);
+    picker.finishMotionForTest();
+    EXPECT_EQ(picker.labelSpot(Part::LowEdge), Spot::Inside);
+    EXPECT_EQ(picker.labelSpot(Part::HighEdge), Spot::Inside);
+    EXPECT_GE(picker.labelArea(Part::LowEdge).getX(), picker.bandBounds().getX() + 6.0f) << "clear of the handle";
+    EXPECT_LE(picker.labelArea(Part::HighEdge).getRight(), picker.bandBounds().getRight() - 6.0f);
+
+    picker.setRange(60, 62);
+    picker.finishMotionForTest();
+    EXPECT_EQ(picker.labelSpot(Part::LowEdge), Spot::Outside);
+    EXPECT_EQ(picker.labelSpot(Part::HighEdge), Spot::Outside);
+    EXPECT_LE(picker.labelArea(Part::LowEdge).getRight(), (float)picker.bandBounds().getX());
+    EXPECT_GE(picker.labelArea(Part::HighEdge).getX(), (float)picker.bandBounds().getRight());
+
+    // The overview bar moves the strip without moving the range.
+    picker.setRange(100, 120);
+    picker.finishMotionForTest();
+    const auto press = [&](float x) {
+        picker.mouseDown(mouseAt(picker, x, juce::ModifierKeys::leftButtonModifier, 3.0f));
+        picker.finishMotionForTest();
+    };
+    press(4.0f);
+    ASSERT_EQ(picker.getLow(), 100);
+    EXPECT_EQ(picker.labelSpot(Part::LowEdge), Spot::Pinned);
+    EXPECT_GT(picker.bandBounds().getX(), picker.getWidth() - 1) << "the band is off the right end";
+    EXPECT_FLOAT_EQ(picker.labelArea(Part::LowEdge).getRight(), picker.getWidth() - 8.0f) << "chevron on the right";
+
+    picker.setRange(0, 12);
+    picker.finishMotionForTest();
+    press(226.0f);
+    EXPECT_EQ(picker.labelSpot(Part::HighEdge), Spot::Pinned);
+    EXPECT_FLOAT_EQ(picker.labelArea(Part::HighEdge).getX(), 8.0f) << "chevron on the left";
+}
