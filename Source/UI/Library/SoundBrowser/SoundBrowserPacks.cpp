@@ -1,10 +1,12 @@
 // SoundBrowserPacks.cpp -- the packs you have not downloaded: their rows under Places ("Get more") and at the end of
 // search results, the Download / Cancel button painted in the row, and the shared installer's progress. The download is
 // the installer's own job, the same one Settings > Sound packs starts, so both places show the same bar.
+#include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserPackLayout.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -13,18 +15,17 @@ namespace {
 using Installer = synth::soundpacks::SoundPackInstaller;
 using State = Installer::State;
 
-constexpr float kGreyedAlpha = 0.55f;
 constexpr int kBarHeight = 3;
 
 bool isBusy(State state) {
     return state == State::Downloading || state == State::Verifying || state == State::Installing;
 }
 
-// Words a search can find a pack by: its name and the names of its instruments.
+// Words a search can find a pack by: its name and the name and category of each instrument in it.
 juce::String searchableText(const Installer::Row& pack) {
     juce::String text = pack.name;
     for (const auto& instrument : pack.instruments)
-        text += " " + instrument.name;
+        text += " " + instrument.name + " " + instrument.category;
     return text;
 }
 
@@ -96,15 +97,26 @@ juce::String SoundBrowserComponent::packSignature() const {
 // query finds, by name or by an instrument's name.
 void SoundBrowserComponent::appendOfferedPackRows(const synth::soundbrowser::SoundSnapshot& snap, bool places) {
     const auto offered = offeredPacks(snap);
-    bool headed = false;
+    if (places) {
+        getMoreForcedOpen_ = std::any_of(offered.begin(), offered.end(), [&snap](const Installer::Row& pack) {
+            return isBusy(pack.state) || (pack.installedVersion.isNotEmpty() && !snapshotHasPlace(snap, pack.id));
+        });
+        getMoreTurn_->setOpen(isGetMoreShowing());
+        if (!offered.empty()) {
+            Row heading;
+            heading.kind = RowKind::PackHeading;
+            heading.text = "Get more";
+            heading.soundCount = (int)offered.size();
+            heading.detail = juce::String(heading.soundCount) + (heading.soundCount == 1 ? " pack" : " packs");
+            rows_.push_back(std::move(heading));
+        }
+    }
     for (const auto& pack : offered) {
         const bool byName = searchMatches(pack.name, query_);
         if (!places && !searchMatches(searchableText(pack), query_))
             continue;
-        if (places && !headed) {
-            rows_.push_back({RowKind::Hint, "Get more", {}, {}, {}, 0, std::nullopt});
-            headed = true;
-        }
+        if (places && !isGetMoreShowing())
+            continue;
         Row row;
         row.kind = RowKind::GetPack;
         row.text = pack.name;
@@ -169,9 +181,27 @@ bool SoundBrowserComponent::packButtonHit(int index, juce::Point<int> p) const {
 juce::String SoundBrowserComponent::packTooltip(const Row& row) const {
     const auto size = synth::soundpacks::formatPackSize(row.bytes);
     if (row.busy)
-        return "Downloading " + row.text + (row.cancellable ? ". Press Delete or click Cancel to stop." : ".");
-    return "Download " + row.text + " (" + size + ")" + (row.viaInstrument ? " to use this sound" : "");
+        return "Downloading " + shownName(row) + (row.cancellable ? ". Press Delete or click Cancel to stop." : ".");
+    return "Download " + shownName(row) + " (" + size + ")" + (row.viaInstrument ? " to use this sound" : "");
 }
+
+// The user's choice. The list fades to the folded (or opened) one; a restore at startup, with no window yet, just
+// builds it.
+void SoundBrowserComponent::setGetMoreOpen(bool open, bool animate) {
+    if (open == getMoreOpen_)
+        return;
+    const bool onPlaces = placeId_.isEmpty() && !isSearchActive();
+    if (animate && onPlaces)
+        capturePreviousList();
+    getMoreOpen_ = open;
+    rebuildRows();
+    if (animate && onPlaces)
+        playListMotion(0, true);
+    if (animate && onGetMoreChanged)
+        onGetMoreChanged();
+}
+
+void SoundBrowserComponent::toggleGetMore() { setGetMoreOpen(!getMoreOpen_); }
 
 bool SoundBrowserComponent::activateSelectedAction() {
     if (selected_ < 0 || selected_ >= (int)rows_.size())
@@ -184,10 +214,34 @@ bool SoundBrowserComponent::activateSelectedAction() {
     case RowKind::AddFolder:
         chooseFolderToAdd();
         return true;
+    case RowKind::PackHeading:
+        toggleGetMore();
+        return true;
     default:
         break;
     }
     return false;
+}
+
+// "Get more": the chevron (down while the packs show), the label and how many packs it holds.
+void SoundBrowserComponent::paintPackHeadingRow(juce::Graphics& g, const Row& row, juce::Rectangle<int> area) const {
+    const auto& c = synth::theme::themeOf(*this).colors;
+    constexpr float kChevron = 9.0f;
+    constexpr int kLabelGap = 6;
+    synth::theme::paintDisclosureChevron(
+        g, {(float)(area.getX() + kSoundRowSideMargin), (float)area.getCentreY() - kChevron / 2.0f, kChevron, kChevron},
+        getMoreTurn_->openness(), c.textMuted);
+    const juce::Font countFont(juce::FontOptions(12.0f));
+    const int countWidth = (int)std::ceil(juce::GlyphArrangement::getStringWidth(countFont, row.detail)) + 2;
+    g.setColour(c.textMuted);
+    g.setFont(countFont);
+    g.drawText(row.detail, area.getRight() - kSoundRowSideMargin - countWidth, area.getY(), countWidth,
+               area.getHeight(), juce::Justification::centredRight);
+    const int labelLeft = area.getX() + kSoundRowSideMargin + (int)kChevron + kLabelGap;
+    g.setFont(juce::Font(juce::FontOptions(12.5f)));
+    g.drawText(row.text, labelLeft, area.getY(),
+               juce::jmax(0, area.getRight() - kSoundRowSideMargin - countWidth - 8 - labelLeft), area.getHeight(),
+               juce::Justification::centredLeft, true);
 }
 
 // A greyed row: the name and the size (or the percentage), then the button; while the pack downloads a bar fills along
@@ -206,8 +260,8 @@ void SoundBrowserComponent::paintPackRow(juce::Graphics& g, const Row& row, int 
                juce::Justification::centredRight);
     g.setColour(c.textPrimary.withAlpha(kGreyedAlpha));
     g.setFont(juce::Font(juce::FontOptions(14.0f)));
-    g.drawText(row.text, area.getX() + kSoundRowSideMargin, area.getY(),
-               juce::jmax(0, detailRight - detailWidth - 8 - kSoundRowSideMargin), area.getHeight(),
+    g.drawText(shownName(row), area.getX() + kSoundRowTextLeft, area.getY(),
+               juce::jmax(0, detailRight - detailWidth - 8 - kSoundRowTextLeft), area.getHeight(),
                juce::Justification::centredLeft, true);
     if (showButton) {
         const auto& metrics = synth::theme::themeOf(*this).metrics;

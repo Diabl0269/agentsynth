@@ -4,6 +4,7 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
+#include "UI/Library/SoundBrowser/SoundBrowserIcons.h"
 #include "UI/Library/SoundBrowser/SoundBrowserPackLayout.h"
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -25,7 +26,54 @@ void strokeChevron(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour 
     g.strokePath(p, juce::PathStrokeType(1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
+// The icon a row starts with; none for a hint or a shape (the shape keeps its curve thumbnail).
+std::optional<SoundRowIcon> iconOf(const SoundBrowserComponent::Row& row) {
+    using Kind = SoundBrowserComponent::RowKind;
+    switch (row.kind) {
+    case Kind::Folder:
+        return SoundRowIcon::Folder;
+    case Kind::GetPack:
+        return SoundRowIcon::Pack;
+    case Kind::AddFolder:
+        return SoundRowIcon::Plus;
+    case Kind::Sound:
+        switch (row.entry->kind) {
+        case synth::soundbrowser::SoundKind::Loop:
+            return SoundRowIcon::Loop;
+        case synth::soundbrowser::SoundKind::Instrument:
+            return SoundRowIcon::Instrument;
+        default:
+            return SoundRowIcon::OneShot;
+        }
+    case Kind::Place:
+        if (row.placeId == SoundBrowserComponent::kFavouritesId)
+            return SoundRowIcon::Favourites;
+        if (row.placeId == SoundBrowserComponent::kRecentId)
+            return SoundRowIcon::Recent;
+        if (row.placeId == SoundBrowserComponent::kShapesId)
+            return SoundRowIcon::Shapes;
+        return row.userFolder ? SoundRowIcon::Folder : SoundRowIcon::Pack;
+    case Kind::Hint:
+    case Kind::Shape:
+    case Kind::PackHeading:
+        break;
+    }
+    return std::nullopt;
+}
+
 } // namespace
+
+juce::String SoundBrowserComponent::shownName(const Row& row) {
+    switch (row.kind) {
+    case RowKind::Sound:
+    case RowKind::Folder:
+    case RowKind::Place:
+    case RowKind::GetPack:
+        return displayName(row.text);
+    default:
+        return row.text;
+    }
+}
 
 void SoundBrowserComponent::layoutPathParts() {
     pathParts_ = getPathParts();
@@ -101,6 +149,13 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
         g.fillRect(area);
     }
 
+    if (const auto icon = iconOf(row)) {
+        const auto colour = index == selected_
+                                ? c.accent
+                                : (row.kind == RowKind::GetPack ? c.textPrimary.withAlpha(kGreyedAlpha) : c.textMuted);
+        paintSoundRowIcon(g, *icon, rowIconCell(area), colour.withMultipliedAlpha(row.missing ? kGreyedAlpha : 1.0f));
+    }
+
     const juce::Font nameFont(juce::FontOptions(14.0f));
     const juce::Font detailFont(juce::FontOptions(12.0f));
     if (row.kind == RowKind::Sound) {
@@ -120,16 +175,18 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
             nameRight -= 14;
         }
         const auto query = isSearchActive() ? query_.trim() : juce::String();
-        drawSearchHighlightedText(
-            g, row.text, query,
-            {area.getX() + kSideMargin, area.getY(), juce::jmax(0, nameRight - kSideMargin), area.getHeight()},
-            nameFont, c.textPrimary, c.accent.withAlpha(0.28f), c.accent);
+        drawSearchHighlightedText(g, shownName(row), query,
+                                  {area.getX() + kSoundRowTextLeft, area.getY(),
+                                   juce::jmax(0, nameRight - kSoundRowTextLeft), area.getHeight()},
+                                  nameFont, c.textPrimary, c.accent.withAlpha(0.28f), c.accent);
         g.setColour(c.textMuted);
         g.setFont(detailFont);
         g.drawText(detail, detailLeft, area.getY(), detailRight - detailLeft, area.getHeight(),
                    juce::Justification::centredRight);
     } else if (row.kind == RowKind::GetPack) {
         paintPackRow(g, row, index, area);
+    } else if (row.kind == RowKind::PackHeading) {
+        paintPackHeadingRow(g, row, area);
     } else if (row.kind == RowKind::AddFolder) {
         paintAddFolderRow(g, area);
     } else if (row.kind == RowKind::Shape) {
@@ -148,7 +205,7 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
 void SoundBrowserComponent::paintPlaceRow(juce::Graphics& g, const Row& row, juce::Rectangle<int> area) const {
     const auto& c = synth::theme::themeOf(*this).colors;
     const int width = area.getWidth();
-    const float alpha = row.missing ? 0.55f : 1.0f;
+    const float alpha = row.missing ? kGreyedAlpha : 1.0f;
     const int detailWidth = 76;
     strokeChevron(g, {(float)width - kSideMargin - 5.0f, (float)area.getCentreY() - 4.0f, 5.0f, 8.0f}, c.textMuted);
     const int countRight = width - kSideMargin - 14;
@@ -158,8 +215,8 @@ void SoundBrowserComponent::paintPlaceRow(juce::Graphics& g, const Row& row, juc
                juce::Justification::centredRight);
     g.setColour(c.textPrimary.withAlpha(alpha));
     g.setFont(juce::Font(juce::FontOptions(14.0f)));
-    g.drawText(row.text, area.getX() + kSideMargin, area.getY(),
-               juce::jmax(0, countRight - detailWidth - 6 - kSideMargin), area.getHeight(),
+    g.drawText(shownName(row), area.getX() + kSoundRowTextLeft, area.getY(),
+               juce::jmax(0, countRight - detailWidth - 6 - kSoundRowTextLeft), area.getHeight(),
                juce::Justification::centredLeft, true);
 }
 
@@ -178,9 +235,9 @@ void SoundBrowserComponent::paintRows(juce::Graphics& g, int width) const {
 // Where the sound lives, led by the key line and then by what Match key will do, so the part that matters most is the
 // last to be cut when the line is ellipsised.
 juce::String SoundBrowserComponent::soundFooterLine(const synth::soundbrowser::SoundEntry& entry) const {
-    auto line = entry.placeName;
-    if (entry.folder.isNotEmpty())
-        line += " > " + entry.folder.replace("/", " > ");
+    auto line = displayName(entry.placeName);
+    for (const auto& part : juce::StringArray::fromTokens(entry.folder, "/", ""))
+        line += " > " + displayName(part);
     if (const auto keyMeta = soundKeyMetaText(entry, filters_.songKey()); keyMeta.isNotEmpty())
         line = keyMeta + "  -  " + line;
     if (entry.kind == synth::soundbrowser::SoundKind::Loop)
@@ -217,7 +274,7 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
     const auto& row = rows_[(size_t)selected_];
     g.setColour(c.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(14.0f)));
-    g.drawText(row.text, nameArea, juce::Justification::centredLeft, true);
+    g.drawText(shownName(row), nameArea, juce::Justification::centredLeft, true);
     g.setColour(c.textMuted);
     g.setFont(juce::Font(juce::FontOptions(11.5f)));
     juce::String sub;
@@ -225,6 +282,8 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
         sub = soundFooterLine(*row.entry);
     } else if (row.kind == RowKind::Shape) {
         sub = shapeKindAndSource(*row.shape);
+    } else if (row.kind == RowKind::PackHeading) {
+        sub = row.detail + " you can download";
     } else if (row.kind == RowKind::GetPack) {
         sub = row.busy ? row.detail : "Not downloaded - " + synth::soundpacks::formatPackSize(row.bytes);
     } else if (row.kind == RowKind::AddFolder) {
@@ -244,7 +303,7 @@ void SoundBrowserComponent::paintCompactName(juce::Graphics& g) {
     const bool have = selected_ >= 0 && selected_ < (int)rows_.size() && rows_[(size_t)selected_].navigable();
     g.setColour(have ? c.textPrimary : c.textMuted);
     g.setFont(juce::Font(juce::FontOptions(13.0f)));
-    g.drawText(have ? rows_[(size_t)selected_].text : juce::String("Select a sound"), area,
+    g.drawText(have ? shownName(rows_[(size_t)selected_]) : juce::String("Select a sound"), area,
                juce::Justification::centredLeft, true);
 }
 

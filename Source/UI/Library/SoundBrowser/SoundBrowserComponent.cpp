@@ -2,6 +2,7 @@
 // navigation are in SoundBrowserNavigation.cpp, painting in SoundBrowserPainting.cpp, keys and mouse in
 // SoundBrowserInput.cpp, the screen-reader list in SoundBrowserAccessibility.cpp.
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
+#include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Library/SoundBrowser/SoundDragState.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -47,10 +48,15 @@ SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& in
     setupFilters();
     setupPreview();
     setupFolders();
+    getMoreTurn_ = std::make_unique<ChevronTurn>(*this, true);
     index_.addListener(this);
     juce::Desktop::getInstance().addFocusChangeListener(this);
     rebuildRows();
 }
+
+const ChevronTurn& SoundBrowserComponent::getMoreChevron() const { return *getMoreTurn_; }
+
+float SoundBrowserComponent::getGetMoreChevronOpenness() const { return getMoreTurn_->openness(); }
 
 SoundBrowserComponent::~SoundBrowserComponent() {
     // The members go after this body while this is still the dynamic type: a focused child (a footer or panel control)

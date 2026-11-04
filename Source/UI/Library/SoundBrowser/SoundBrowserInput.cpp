@@ -38,16 +38,19 @@ juce::String SoundBrowserComponent::tooltipForRow(int index) const {
         return kDefaultTooltip;
     if (row.kind == RowKind::GetPack)
         return packTooltip(row);
+    if (row.kind == RowKind::PackHeading)
+        return juce::String(isGetMoreShowing() ? "Hide" : "Show") + " the " + row.detail +
+               " you can download. Click, or press Return, Left or Right.";
     if (row.kind == RowKind::Shape)
         return shapeTooltip(row);
     if (row.kind == RowKind::AddFolder)
         return "Add a folder of sounds. You can also drag a folder here from " + fileManagerName() + ".";
     if (row.missing)
-        return row.text + " was not found. It comes back when its drive is plugged in.";
+        return shownName(row) + " was not found. It comes back when its drive is plugged in.";
     if (row.userFolder)
-        return "Open " + row.text + ". Right-click, or press Shift+F10, for Rename, Show in " + fileManagerName() +
-               ", Scan again and Remove.";
-    return "Open " + row.text;
+        return "Open " + shownName(row) + ". Right-click, or press Shift+F10, for Rename, Show in " +
+               fileManagerName() + ", Scan again and Remove.";
+    return "Open " + shownName(row);
 }
 
 void SoundBrowserComponent::mouseMove(const juce::MouseEvent& e) {
@@ -115,6 +118,8 @@ void SoundBrowserComponent::mouseDown(const juce::MouseEvent& e) {
     } else if (kind == RowKind::GetPack) {
         if (packButtonHit(row, e.getPosition()))
             toggleDownload(row);
+    } else if (kind == RowKind::PackHeading) {
+        toggleGetMore();
     } else if (kind == RowKind::AddFolder) {
         chooseFolderToAdd();
     } else {
@@ -245,10 +250,21 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
             moved = moveSelection(dir) || moved;
         return moved;
     }
-    if (key.isKeyCode(juce::KeyPress::leftKey))
+    const bool onHeading = selected_ >= 0 && rows_[(size_t)selected_].kind == RowKind::PackHeading;
+    if (key.isKeyCode(juce::KeyPress::leftKey)) {
+        if (onHeading) {
+            setGetMoreOpen(false);
+            return true;
+        }
         return goUp();
-    if (key.isKeyCode(juce::KeyPress::rightKey))
+    }
+    if (key.isKeyCode(juce::KeyPress::rightKey)) {
+        if (onHeading) {
+            setGetMoreOpen(true);
+            return true;
+        }
         return openSelected();
+    }
     if (key.isKeyCode(juce::KeyPress::returnKey)) {
         if (selected_ >= 0 && rows_[(size_t)selected_].kind == RowKind::Sound) {
             if (onSoundActivated) {

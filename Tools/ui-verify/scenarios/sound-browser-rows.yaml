@@ -1,0 +1,24 @@
+# Sound browser rows: every row starts with a line icon (folder, loop, star, clock, pack, plus), a file named wholly in
+# lower case shows a capital first letter, and the Get more heading folds. The recording shows the Sounds view with its
+# Get more heading (a chevron and "1 pack"), then a search and a selected loop row with its accent icon.
+# The loop here is "test loop 120bpm Am": it has a capital, so it keeps its name as written. The capital-first-letter
+# rule and the fold itself are covered by SoundBrowserViewTests and SoundPackOfferTests.
+#
+# What a user does: opens the Sounds view over the fixture folder, looks at the rows, searches for a loop and selects it.
+record: true
+save_project: sound-browser-rows
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/sounds"
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - screenshot: {id: soundBrowser, name: places-with-icons}
+  - click: {id: "Search sounds"}
+  - type: {text: test loop}
+  - wait: {}
+  - key: {keys: down}
+  - wait: {}
+  - screenshot: {id: soundBrowser, name: loop-row-selected}
+  - expect: {id: soundBrowser, contains: {selectedName: "test loop"}}

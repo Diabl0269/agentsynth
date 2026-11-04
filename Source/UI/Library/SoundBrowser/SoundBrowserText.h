@@ -10,6 +10,11 @@
 
 namespace synth::ui {
 
+/** What a name is shown as: a name with no upper-case letter that starts with a lower-case one gets a capital first
+ *  letter ("crow" -> "Crow", "kick-01" -> "Kick-01"); "iPhone", "808 kick" and "Wolf" stay. Display only: search, sort,
+ *  keys, paths and the rename editor use the file's own name. */
+juce::String displayName(const juce::String& name);
+
 /** "0.8 s", "12 s", "1:05". */
 juce::String formatSoundLength(double seconds);
 
@@ -49,6 +54,8 @@ juce::String describePlaceForAccessibility(const juce::String& name, int soundCo
 /** "Animals, not downloaded, 12 MB, press Return to download, 4 of 7" (or "downloading", with no button hint). */
 juce::String describePackOfferForAccessibility(const juce::String& name, const juce::String& size, bool busy,
                                                int position, int count);
+/** "Get more, 2 packs, expanded, 5 of 8" (or "collapsed"). */
+juce::String describePackHeadingForAccessibility(int packs, bool open, int position, int count);
 /** "Add folder, press Return to choose a folder, 7 of 8". */
 juce::String describeAddFolderForAccessibility(int position, int count);
 /** "ah, filter shape, built in, 3 of 20"; `kindWord` is "filter" or "lfo". Saved shapes read "saved by you". */

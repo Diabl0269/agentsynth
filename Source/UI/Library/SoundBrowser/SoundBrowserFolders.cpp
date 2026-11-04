@@ -138,15 +138,10 @@ void SoundBrowserComponent::paintDropOutline(juce::Graphics& g) const {
 
 void SoundBrowserComponent::paintAddFolderRow(juce::Graphics& g, juce::Rectangle<int> area) const {
     const auto& c = synth::theme::themeOf(*this).colors;
-    const float cx = (float)area.getX() + (float)kSoundRowSideMargin + 5.0f;
-    const float cy = (float)area.getCentreY();
-    g.setColour(c.accent);
-    g.drawLine(cx - 4.5f, cy, cx + 4.5f, cy, 1.5f);
-    g.drawLine(cx, cy - 4.5f, cx, cy + 4.5f, 1.5f);
     g.setColour(c.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(14.0f)));
-    g.drawText("Add folder...", area.getX() + kSoundRowSideMargin + 18, area.getY(),
-               juce::jmax(0, area.getWidth() - 2 * kSoundRowSideMargin - 18), area.getHeight(),
+    g.drawText("Add folder...", area.getX() + kSoundRowTextLeft, area.getY(),
+               juce::jmax(0, area.getWidth() - kSoundRowTextLeft - kSoundRowSideMargin), area.getHeight(),
                juce::Justification::centredLeft, true);
 }
 
@@ -228,8 +223,9 @@ bool SoundBrowserComponent::beginRename(int rowIndex) {
     renameLabel_.setTooltip("Type a new name for this folder. It changes only the name shown here.");
     scrollSelectionIntoView();
     const auto bounds = getRowBounds(rowIndex);
-    renameLabel_.setBounds(bounds.getX() + kSoundRowSideMargin - 4, bounds.getY() + 3,
-                           juce::jmax(40, bounds.getWidth() - 2 * kSoundRowSideMargin - 30), bounds.getHeight() - 6);
+    renameLabel_.setBounds(bounds.getX() + kSoundRowTextLeft - 4, bounds.getY() + 3,
+                           juce::jmax(40, bounds.getWidth() - kSoundRowTextLeft - kSoundRowSideMargin - 30),
+                           bounds.getHeight() - 6);
     renameLabel_.setText(row.text, juce::dontSendNotification);
     renameLabel_.setVisible(true);
     renameLabel_.showEditor();

@@ -39,6 +39,15 @@ LoopFields loopFields(const SoundEntry& entry) {
 
 } // namespace
 
+juce::String displayName(const juce::String& name) {
+    if (name.isEmpty() || !juce::CharacterFunctions::isLowerCase(name[0]))
+        return name;
+    for (auto c = name.getCharPointer(); !c.isEmpty(); ++c)
+        if (juce::CharacterFunctions::isUpperCase(*c))
+            return name;
+    return name.substring(0, 1).toUpperCase() + name.substring(1); // not-ui-text: one capital letter, not all caps
+}
+
 juce::String formatSoundLength(double seconds) {
     if (seconds >= 60.0) {
         const int total = (int)std::lround(seconds);
@@ -115,7 +124,7 @@ juce::String matchKeyText(const synth::soundbrowser::LoopTarget& target) {
 }
 
 juce::String describeSoundForAccessibility(const SoundEntry& entry, int position, int count) {
-    juce::String text = entry.name + ", ";
+    juce::String text = displayName(entry.name) + ", ";
     if (entry.kind == SoundKind::Instrument) {
         text += "instrument";
     } else {
@@ -137,19 +146,25 @@ juce::String describeSoundForAccessibility(const SoundEntry& entry, int position
 }
 
 juce::String describeFolderForAccessibility(const juce::String& name, int soundCount, int position, int count) {
-    return name + ", folder, " + plural(soundCount, "sound", "sounds") + ", " + juce::String(position) + " of " +
-           juce::String(count);
+    return displayName(name) + ", folder, " + plural(soundCount, "sound", "sounds") + ", " + juce::String(position) +
+           " of " + juce::String(count);
 }
 
 juce::String describePlaceForAccessibility(const juce::String& name, int soundCount, int position, int count,
                                            const juce::String& status) {
-    return name + ", " + (status.isNotEmpty() ? status.toLowerCase() : plural(soundCount, "sound", "sounds")) + ", " +
+    return displayName(name) + ", " +
+           (status.isNotEmpty() ? status.toLowerCase() : plural(soundCount, "sound", "sounds")) + ", " +
            juce::String(position) + " of " + juce::String(count);
 }
 
 juce::String describePackOfferForAccessibility(const juce::String& name, const juce::String& size, bool busy,
                                                int position, int count) {
-    return name + (busy ? ", downloading" : ", not downloaded, " + size + ", press Return to download") + ", " +
+    return displayName(name) + (busy ? ", downloading" : ", not downloaded, " + size + ", press Return to download") +
+           ", " + juce::String(position) + " of " + juce::String(count);
+}
+
+juce::String describePackHeadingForAccessibility(int packs, bool open, int position, int count) {
+    return "Get more, " + plural(packs, "pack", "packs") + ", " + (open ? "expanded" : "collapsed") + ", " +
            juce::String(position) + " of " + juce::String(count);
 }
 

@@ -40,6 +40,8 @@ juce::String SoundBrowserComponent::selectionKey(int index) const {
         return "g:" + row.packId;
     case RowKind::AddFolder:
         return "a:add";
+    case RowKind::PackHeading:
+        return "t:getmore";
     case RowKind::Shape:
         return "h:" + juce::String(synth::shapes::kindWord(row.shape->kind)) + (row.shape->factory ? ":f:" : ":u:") +
                row.shape->name;
@@ -214,11 +216,11 @@ std::vector<SoundBrowserComponent::PathPart> SoundBrowserComponent::getPathParts
     std::vector<PathPart> parts{{"Places", {}, {}, {}}};
     if (placeId_.isEmpty())
         return parts;
-    parts.push_back({placeNameOf(placeId_), placeId_, {}, {}});
+    parts.push_back({displayName(placeNameOf(placeId_)), placeId_, {}, {}});
     juce::String cumulative;
     for (const auto& segment : juce::StringArray::fromTokens(folder_, "/", "")) {
         cumulative = cumulative.isEmpty() ? segment : cumulative + "/" + segment;
-        parts.push_back({segment, placeId_, cumulative, {}});
+        parts.push_back({displayName(segment), placeId_, cumulative, {}});
     }
     return parts;
 }
@@ -294,7 +296,7 @@ void SoundBrowserComponent::capturePreviousList() {
     listMotion_ = 1.0f;
     previousList_ = {};
     const auto area = listArea();
-    if (!isShowing() || area.isEmpty())
+    if ((!isShowing() && !animateOffscreenForTest_) || area.isEmpty())
         return;
     previousList_ = juce::Image(juce::Image::ARGB, area.getWidth(), area.getHeight(), true);
     juce::Graphics ig(previousList_);
@@ -304,7 +306,7 @@ void SoundBrowserComponent::capturePreviousList() {
 
 // Carries the picture away: a slide (new list in from the right going into a folder, from the left going up) or, for
 // a search and under Reduce Motion, a fade.
-void SoundBrowserComponent::playListMotion(int direction) {
+void SoundBrowserComponent::playListMotion(int direction, bool fold) {
     if (previousList_.isNull()) {
         listMotion_ = 1.0f;
         return;
@@ -313,7 +315,7 @@ void SoundBrowserComponent::playListMotion(int direction) {
     if (!vblank_.has_value())
         vblank_.emplace(this);
     listMotion_ = 0.0f;
-    const double ms = direction == 0 ? motionMs(120.0, 80.0) : motionMs(190.0, 80.0);
+    const double ms = direction == 0 && !fold ? motionMs(120.0, 80.0) : motionMs(190.0, 80.0);
     listAnim_.start(
         *vblank_, ms, easeOutCubic,
         [this](float t) {
