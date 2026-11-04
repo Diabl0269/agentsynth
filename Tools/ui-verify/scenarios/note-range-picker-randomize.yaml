@@ -47,6 +47,14 @@ steps:
   - click: {id: randomizeRangePicker, x: 12, y: 28}
   - wait: {}
   - screenshot: {id: randomizeRangePicker, name: 5-click-to-move}
+  # Type an exact key into the low note's name.
+  - click: {id: randomizeRangePicker, x: 16, y: 39}
+  - wait: {}
+  - screenshot: {id: randomizeRangePicker, name: 5b-typing-zoom, scale: 4}
+  - type: {text: "E5"}
+  - key: {keys: enter}
+  - wait: {}
+  - screenshot: {id: randomizeRangePicker, name: 5c-typed-zoom, scale: 4}
   # Overview bar.
   - click: {id: randomizeRangePicker, x: 170, y: 4}
   - wait: {}

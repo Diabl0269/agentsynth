@@ -5,7 +5,7 @@
 #   1. Opens a project with one MIDI clip and a Sequencer (fixture clip-and-sequencer.agsproj).
 #   2. Opens the Sequencer's Randomize panel, drags its range, closes the panel, presses Cmd+Z and reopens it: the
 #      range is the seeded one again; Cmd+Shift+Z moves it again.
-#   3. Shows the timeline in the main area, opens the clip in the piano roll, opens Scale assist and drags the high edge of the Note range band down.
+#   3. Shows the timeline in the main area, opens the clip in the piano roll, opens Scale assist and drags the Note range band down.
 #   4. Presses Cmd+Z: the band is back at C2 to C5. Presses Cmd+Shift+Z: it is moved again.
 # Saving and reopening is covered by the round-trip unit tests: a scenario cannot save without changing the fixture.
 steps:
@@ -37,7 +37,7 @@ steps:
   - wait: {}
   - click: {id: Randomize notes in the scale}
   - wait: {}
-  - expect: {id: randomizeRangePicker, title: "Note range, C1 to C3", within_ms: 1500}
+  - expect: {id: randomizeRangePicker, title: "Note range, F#1 to F#3", within_ms: 1500}
   - screenshot: {id: randomizeRangePicker, name: randomize-range-redone}
   - key: {keys: escape}
   - wait: {}
@@ -61,5 +61,5 @@ steps:
   - screenshot: {id: window, name: piano-roll-range-undone}
   - key: {keys: cmd+shift+z}
   - wait: {}
-  - expect: {id: scaleAssistRangePicker, title: "Note range, C2 to F4", within_ms: 1500}
+  - expect: {id: scaleAssistRangePicker, title: "Note range, F#1 to F#4", within_ms: 1500}
   - screenshot: {id: window, name: piano-roll-range-redone}

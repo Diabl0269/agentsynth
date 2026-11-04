@@ -22,6 +22,8 @@ constexpr float kHandleHeight = 26.0f;
 constexpr double kGlideMs = 120.0;
 constexpr double kReducedFadeMs = 80.0;
 constexpr float kLabelFont = 8.0f;
+constexpr float kLabelClear = 8.0f;   ///< Between a handle's centre and the name beside it.
+constexpr float kChevronSpace = 8.0f; ///< Room for the chevron before a pinned name.
 
 const char* partName(NoteRangePicker::Part part) {
     switch (part) {
@@ -155,25 +157,50 @@ NoteRangePicker::Part NoteRangePicker::getFocusedPart() const {
     return lowStop_->hasKeyboardFocus(false) ? Part::LowEdge : Part::Band;
 }
 
-// The note name sits inside its end of the band, at the strip's bottom.
-juce::Rectangle<float> NoteRangePicker::labelArea(Part edge) const {
-    const float top = (float)(stripTop() + stripHeight()) - 12.0f;
-    if (edge == Part::LowEdge) {
-        const float width = (float)theme::AppLookAndFeel::uiTextWidth(nameOf(low_), kLabelFont) + 2.0f;
-        return {bandX0() + 5.0f, top, width, 10.0f};
-    }
-    const float width = (float)theme::AppLookAndFeel::uiTextWidth(nameOf(high_), kLabelFont) + 2.0f;
-    return {bandX1() - 5.0f - width, top, width, 10.0f};
+// A note name sits inside its end of the band, clear of the handle. When the band is too narrow for both names it goes
+// outside, beside its handle; when its edge is off the strip it is pinned at the strip's end with a chevron.
+NoteRangePicker::LabelSpot NoteRangePicker::labelSpot(Part edge) const {
+    const float w = (float)getWidth();
+    const float x0 = bandX0();
+    const float x1 = bandX1();
+    if (edge == Part::LowEdge ? x0 < 1.0f : x1 > w - 1.0f)
+        return LabelSpot::Pinned;
+    const float lowW = (float)theme::AppLookAndFeel::uiTextWidth(nameOf(low_), kLabelFont) + 2.0f;
+    const float highW = (float)theme::AppLookAndFeel::uiTextWidth(nameOf(high_), kLabelFont) + 2.0f;
+    const float pad = 2.0f * kLabelClear;
+    const float inner = std::min(x1, w) - std::max(x0, 0.0f);
+    const bool bothInside = x0 >= 1.0f && x1 <= w - 1.0f;
+    const bool fits =
+        bothInside ? inner >= lowW + highW + pad + 2.0f : inner >= (edge == Part::LowEdge ? lowW : highW) + pad;
+    if (fits)
+        return LabelSpot::Inside;
+    if (edge == Part::LowEdge)
+        return x0 - kLabelClear - lowW >= 0.0f ? LabelSpot::Outside : LabelSpot::Inside;
+    return x1 + kLabelClear + highW <= w ? LabelSpot::Outside : LabelSpot::Inside;
 }
 
-// A name is shown when its edge is on the strip and, for the high one, when it does not run into the low one.
-bool NoteRangePicker::labelVisible(Part edge) const {
+juce::Rectangle<float> NoteRangePicker::labelArea(Part edge) const {
     const float w = (float)getWidth();
-    const auto area = labelArea(edge);
+    const float top = (float)(stripTop() + stripHeight()) - 12.0f;
+    const float width =
+        (float)theme::AppLookAndFeel::uiTextWidth(nameOf(edge == Part::LowEdge ? low_ : high_), kLabelFont) + 2.0f;
+    const auto spot = labelSpot(edge);
+    if (edge == Part::LowEdge) {
+        if (spot == LabelSpot::Pinned)
+            return {kChevronSpace, top, width, 10.0f};
+        return {spot == LabelSpot::Outside ? bandX0() - kLabelClear - width : bandX0() + kLabelClear, top, width,
+                10.0f};
+    }
+    if (spot == LabelSpot::Pinned)
+        return {w - kChevronSpace - width, top, width, 10.0f};
+    return {spot == LabelSpot::Outside ? bandX1() + kLabelClear : bandX1() - kLabelClear - width, top, width, 10.0f};
+}
+
+// A name is shown unless it would run into the other one.
+bool NoteRangePicker::labelVisible(Part edge) const {
     if (edge == Part::LowEdge)
-        return bandX0() >= 0.0f && area.getRight() <= w;
-    return bandX1() <= w && area.getX() >= 0.0f &&
-           (!labelVisible(Part::LowEdge) || area.getX() > labelArea(Part::LowEdge).getRight() + 2.0f);
+        return true;
+    return labelArea(Part::HighEdge).getX() > labelArea(Part::LowEdge).getRight() + 2.0f;
 }
 
 // ---- Range, scale and the shown octaves ---------------------------------------------------------------------
@@ -339,8 +366,8 @@ void NoteRangePicker::layoutStops() {
     const auto edgeX = [w](int x) { return std::clamp(x - 4, 0, std::max(0, w - 8)); };
     lowStop_->setBounds(edgeX(x0), top, 8, handleH);
     highStop_->setBounds(edgeX(x1), top, 8, handleH);
-    const int bx0 = std::max(x0, 0) + 5;
-    const int bx1 = std::min(x1, w) - 5;
+    const int bx0 = std::max(x0, 0) + 1;
+    const int bx1 = std::min(x1, w) - 1;
     bandStop_->setBounds(bx0, stripTop() + 1, std::max(4, bx1 - bx0), std::max(2, h - 2));
 }
 
@@ -422,10 +449,24 @@ void NoteRangePicker::paintBand(juce::Graphics& g) const {
         g.drawText(text, area, where);
     };
     const float shift = (float)stripTop();
-    if (labelVisible(Part::LowEdge))
-        drawLabel(nameOf(low_), labelArea(Part::LowEdge).translated(0.0f, -shift), juce::Justification::centredLeft);
-    if (labelVisible(Part::HighEdge))
-        drawLabel(nameOf(high_), labelArea(Part::HighEdge).translated(0.0f, -shift), juce::Justification::centredRight);
+    const auto chevron = [&](float x, float dir, float y) {
+        juce::Path p;
+        p.startNewSubPath(x - dir * 1.5f, y - 3.0f);
+        p.lineTo(x + dir * 1.5f, y);
+        p.lineTo(x - dir * 1.5f, y + 3.0f);
+        g.setColour(c.textPrimary);
+        g.strokePath(p, juce::PathStrokeType(1.2f));
+    };
+    for (const Part edge : {Part::LowEdge, Part::HighEdge}) {
+        if (!labelVisible(edge))
+            continue;
+        const bool low = edge == Part::LowEdge;
+        const auto area = labelArea(edge).translated(0.0f, -shift);
+        drawLabel(nameOf(low ? low_ : high_), area,
+                  low ? juce::Justification::centredLeft : juce::Justification::centredRight);
+        if (labelSpot(edge) == LabelSpot::Pinned)
+            chevron(low ? 4.0f : (float)getWidth() - 4.0f, low ? -1.0f : 1.0f, area.getCentreY());
+    }
 }
 
 void NoteRangePicker::paint(juce::Graphics& g) {
