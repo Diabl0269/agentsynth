@@ -20,8 +20,8 @@ the marquee is gated behind **Shift** instead and pan is untouched.
 | **Shift** + click a folded macro card, an open macro's name chip, or an open macro's empty space | Toggle the whole macro in the selection, so several macros can be selected together (each folded card draws its selected outline while all its members are selected). **Cmd** + click a card does the same. Fold and Pack Macros, Collapse / Expand, Delete and a drag then act on all of them. On the empty space the toggle happens on release, and only when no box was drawn: a **Shift** + drag from there is still a selection box |
 | **Shift** + drag a marquee across folded macro cards | Selects the macros whose cards it touches (their members are hidden, so the card stands in) |
 | **Cmd** + click a module (no movement) | Toggle that module's membership, same as Shift |
-| **Cmd** + drag a module across an expanded macro's hull (or a plain drag, with the on-by-default "drag without Cmd" preference) | Joins, leaves, or moves the module between macros in one gesture — [`docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border`](../macros/menu-and-membership.md#cmd-drag-across-a-hull-border) has the full gesture and undo contract; a group drag never changes membership |
-| Drag any selected module, or the card or name chip of any selected macro | Move the entire selection together: modules, open macros and folded cards (a folded card follows its hidden members, `macro_nesting::collapsedMacrosCarriedBy`). The drop resolves as one rigid body over what is visible and is one undo step; a group drag never joins or leaves a macro. A click (no movement) on a macro's card or chip selects just that macro, as a click on a module does |
+| **Cmd** + drag a module across an expanded macro's hull (or a plain drag, with the on-by-default "drag without Cmd" preference) | Joins, leaves, or moves the module between macros in one gesture — [`docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border`](../macros/menu-and-membership.md#cmd-drag-across-a-hull-border) has the full gesture and undo contract; a group drag joins or leaves as a whole on the drop ([group drag](../macros/menu-and-membership.md#dragging-a-group-into-or-out-of-a-macro)) |
+| Drag any selected module, or the card or name chip of any selected macro | Move the entire selection together: modules, open macros and folded cards (a folded card follows its hidden members, `macro_nesting::collapsedMacrosCarriedBy`). The drop resolves as one rigid body over what is visible and is one undo step; dropped on an open macro the group joins (modules) and nests in (macros) it, and dragged out of its macro's border it leaves ([group drag](../macros/menu-and-membership.md#dragging-a-group-into-or-out-of-a-macro)). A click (no movement) on a macro's card or chip selects just that macro, as a click on a module does |
 | Click empty canvas (no drag) | Clear the selection. Inside an expanded macro's hull the first click selects the macro; a click on the hull of an already-selected macro clears (a double-click on the hull keeps it selected) |
 | Right-click a module | Select it if it was not, then open the menu |
 | Right-click empty canvas | Open the canvas menu (Paste Here / Select All / Go to Output — [shortcuts](../control/shortcuts.md)) — the selection is **kept**, so the menu can still act on it |
@@ -100,6 +100,15 @@ drifts at non-1.0 zoom and shears the group apart.
 
 Calling the single-module `finalizeModuleDrag()` per member instead would spiral them away from each
 other and destroy the arrangement the user just made.
+
+**The landing ghost is that same placement, live.** Every tick of a group drag (`dragSelectionBy`, then
+`dragMacroCardBy` and the chip drag once they have aimed) runs the drop's own placement on where the cards are now
+(`groupLandingOffset`, or `foldedCardLanding` for a lone folded card, both in `GraphEditorSelection.cpp` and called by
+`finalizeSelectionDrag` / `finalizeMacroCardDrag` too) and stores one rect per moved visible card in
+`GraphDragDropController::setGroupGhosts`. The canvas paints those in place of the single-card ghost, so the ghost
+shows where the whole group lands, inside a macro it drops into or out of one it leaves. A widely spread group is
+still one rigid box, gaps included, so it can land away from a nearby macro's cards it would straddle; the ghost shows
+that too.
 
 `cancelSelectionDrag()` exists for the zero-delta case, a click that never moved. Preset positions
 are not necessarily grid-aligned, so running the finalize path on a drag that did not happen would

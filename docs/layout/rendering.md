@@ -113,6 +113,13 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
 - **A scrolled list paints only what is in view.** The timeline's clip lanes are laid out for every track and scrolled
   by offset, so `TimelineClipLaneArea::paintClip` culls each clip against the area being painted, in both directions;
   drawing every track's notes made a timeline scroll frame cost in proportion to the project.
+- **The drag grid is one fill.** The dot grid a card drag shows (`paintDragPreviewGrid`,
+  `Source/UI/Graph/DragPreviewGrid/`) is a tiled image of one dot (four tile px per canvas px, so it stays round zoomed
+  in), not one ellipse per grid point: a zoomed-out view of the Load test project covers about 17,000 grid points, and
+  an edge scroll repaints the whole view every tick. `TheDragGridPutsADotOnEveryMajorGridPointAtAnyZoom` holds the dot
+  positions.
+- **An edge-scroll tick does not recompute the landing preview every time.** See
+  [layout.md](layout.md#edge-scroll-while-dragging).
 
 `Tests/UI/Graph/GraphEditor/GraphEditorPaintWorkTests.cpp`, `GraphEditorCanvasTickTests.cpp` (same folder) and
 `Tests/UI/Graph/CardGlide/CardGlideFrameCostTests.cpp` hold these as work counts (`graph_editor_paint::

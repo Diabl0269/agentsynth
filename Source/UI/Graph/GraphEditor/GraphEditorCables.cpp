@@ -12,6 +12,7 @@
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
 #include "UI/Graph/CardOutline.h"
+#include "UI/Graph/DragPreviewGrid/DragPreviewGrid.h"
 #include "UI/Graph/GraphEditor/CableEndName.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
@@ -122,7 +123,8 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // parent it would leave on MacroGroupController (its join goes through the same join id).
         const bool isDragCandidate =
             macro.id == editor.getMacroDragLeaveId() || macro.id == editor.getMacroController().macroLeaveCandidate() ||
-            macro.id == editor.getMacroDragJoinId() || macro.id == editor.getMacroDragLiveOwnerId();
+            editor.getMacroController().isGroupDropLeaving(macro.id) || macro.id == editor.getMacroDragJoinId() ||
+            macro.id == editor.getMacroDragLiveOwnerId();
 
         MacroFoldAnimator::paintDashedBorder(g, hull.toFloat(), macro.colour, isDragCandidate);
 
@@ -636,28 +638,6 @@ static void paintSmartConnectionPreviewCables(juce::Graphics& g, GraphEditor& ed
 
 // Subtle dots every 40 px over the VISIBLE canvas region, shown only while a module is being dragged. Cheap: the clip
 // is already in canvas coordinates, so everything outside it is skipped.
-static void paintDragPreviewGrid(juce::Graphics& g, synth::theme::AppLookAndFeel* lf) {
-    // The content component's transform maps canvas -> screen. The clip rect of g is
-    // already in canvas coords (paint runs in local/canvas space), so getClipBounds()
-    // gives us the visible region for free.
-    auto clip = g.getClipBounds();
-
-    // Dot colour: textPrimary at ~8% alpha for a gentle, non-distracting grid.
-    const juce::Colour textPrimaryColourForGrid =
-        lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-    g.setColour(textPrimaryColourForGrid.withAlpha(0.08f));
-
-    constexpr int kMajorGrid = synth::LayoutUtil::kGridSize * 5; // 40px
-    int startX = (clip.getX() / kMajorGrid) * kMajorGrid;
-    int startY = (clip.getY() / kMajorGrid) * kMajorGrid;
-
-    for (int gx = startX; gx <= clip.getRight(); gx += kMajorGrid) {
-        for (int gy = startY; gy <= clip.getBottom(); gy += kMajorGrid) {
-            g.fillEllipse((float)gx - 1.2f, (float)gy - 1.2f, 2.4f, 2.4f);
-        }
-    }
-}
-
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     const graph_editor_paint::HullMemoScope hullMemo(editor); // each macro border is computed once per paint
     // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
@@ -687,7 +667,8 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     }
 
     if (editor.getDragDropController().isDragPreviewActive())
-        paintDragPreviewGrid(g, lf);
+        synth::ui::paintDragPreviewGrid( // textPrimary at ~8%: a gentle, non-distracting grid
+            g, (lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white).withAlpha(0.08f));
 
     if (!editor.cablesOnTop)
         paintCables(g);
@@ -916,26 +897,27 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     editor.getModDot().paintTooltip(g);
 
     // ---- Drag-preview landing ghost (on top of module cards) ----
-    // Draw a translucent rounded rect at the exact snapped+anti-overlapped landing position.
-    if (editor.getDragDropController().isDragPreviewActive() &&
-        !editor.getDragDropController().getDragPreviewGhost().isEmpty()) {
+    // A translucent rounded rect at the exact snapped+anti-overlapped landing position: one per card for a group drag
+    // (where the whole group lands), else the single card's, which slides to where it is aimed.
+    auto& dragDrop = editor.getDragDropController();
+    std::vector<juce::Rectangle<float>> ghosts;
+    for (const auto& r : dragDrop.getGroupGhosts())
+        ghosts.push_back(r.toFloat());
+    if (ghosts.empty() && dragDrop.isDragPreviewActive() && !dragDrop.getDragPreviewGhost().isEmpty())
+        ghosts.push_back(dragDrop.getGhostSlide().drawn());
+    if (!ghosts.empty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         const juce::Colour accentColour = synth::theme::themeOf(*this).colors.accent;
         const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
-        const float cornerRadius = m.cornerRadius;
-
-        // On the card body, with the card's corner radius, so the ghost's corners are the corners the card will have.
-        auto ghostF = synth::ui::cardBodyRect(
-            editor.getDragDropController().getGhostSlide().drawn()); // slides to where it is aimed
-
-        // Fill: accent colour at ~18% alpha
-        g.setColour(accentColour.withAlpha(0.18f));
-        g.fillRoundedRectangle(ghostF, cornerRadius);
-
-        // Outline: accent colour at ~70% alpha, 1.5px
-        g.setColour(accentColour.withAlpha(0.70f));
-        const float guideLineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
-        g.drawRoundedRectangle(ghostF, cornerRadius, guideLineWidth);
+        const float guideLineWidth = lf != nullptr ? m.guideLineWidth : 1.5f;
+        for (const auto& ghost : ghosts) {
+            // On the card body, with the card's corner radius, so its corners are the corners the card will have.
+            const auto ghostF = synth::ui::cardBodyRect(ghost);
+            g.setColour(accentColour.withAlpha(0.18f));
+            g.fillRoundedRectangle(ghostF, m.cornerRadius);
+            g.setColour(accentColour.withAlpha(0.70f));
+            g.drawRoundedRectangle(ghostF, m.cornerRadius, guideLineWidth);
+        }
     }
 
     // ---- Alignment guides (UI Phase 7 - Item 4) ----

@@ -836,13 +836,13 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         if (!owner.isSelectionDragActive())
             reparentArmed = computeReparentArmed(e.mods);
 
-        // Gated on reparentArmed, NOT on ctrlTogglePending || cmdReparentPending — the
-        // latter is also true for a plain macOS Ctrl+drag, which must never highlight or act on a
-        // hull crossing (see reparentArmed's own comment on ModuleComponent.h). The CENTRE, not
-        // the top-left, is what macroDragJoinOrLeaveTarget tests against (docs/macros/ports.md).
+        // Gated on reparentArmed, NOT on ctrlTogglePending || cmdReparentPending — the latter is also true for a plain
+        // macOS Ctrl+drag, which must never highlight or act on a hull crossing (see reparentArmed's own comment on
+        // ModuleComponent.h). The CENTRE, not the top-left, is what macroDragJoinOrLeaveTarget tests against
+        // (docs/macros/ports.md). A group drag outlines its own target (updateGroupDropCandidate): left alone here.
         if (reparentArmed)
             owner.updateMacroDragCandidate(nodeId, getBounds().getCentre());
-        else
+        else if (!owner.isSelectionDragActive())
             owner.clearMacroDragCandidate(/*keepFrozenBorders=*/true);
 
         if (auto* p = getParentComponent())

@@ -915,9 +915,10 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
         // The delta MUST be in CANVAS space (content.getLocalPoint), not GraphEditor-local like the pan below:
         // `content` carries the zoom, so a raw e.getPosition() delta would drift at any zoom other than 1.0.
         auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
-        dragSelectionBy(clampDragDeltaToCanvas(canvasPos - macroChipDragStartCanvasPos), nullptr);
         macroController_.updateMacroNestCandidate(macroChipDragId, canvasPos); // the open macro under the pointer
-        refreshCanvasFrame(CanvasFrame::Mode::GrowOnly);                       // the frame steps out ahead of the hull
+        macroController_.updateGroupDropCandidate(canvasPos); // or a group's target; aimed before the ghost moves
+        dragSelectionBy(clampDragDeltaToCanvas(canvasPos - macroChipDragStartCanvasPos), nullptr);
+        refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // the frame steps out ahead of the hull
         repaintCanvas();
         return;
     }

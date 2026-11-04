@@ -91,6 +91,14 @@ from the module library or the sound browser; a marquee and a cable drag do not 
   that panned sends the card a synthetic `mouseDrag` at the pointer (its own press point and `ComponentDragger` keep the
   grab offset), so it takes the real drag path: group drag, canvas frame growth, landing ghost, macro join highlight. A
   library drag gets a synthetic `itemDragMove` at the pointer.
+- **Cost per tick.** The full landing preview (gap hover aside, which follows every aim because the way a gap opens
+  depends on the path) costs tens of ms at a crowded aim on the Load test project, so inside a tick it runs at most once
+  per `GraphDragDropController::kScrollPreviewIntervalMs` (100 ms, every third tick). A skipped aim is flushed by a tick
+  that did not pan, by `CanvasEdgeScrollDriver::end()` (every release, drop, exit and cancel calls it first) and at the
+  top of `itemDropped`, so the drop always lands where an unthrottled drag would. A real pointer move is never
+  throttled. `CanvasEdgeScrollCost` (`CanvasEdgeScrollTests.cpp`) holds it for every drag kind the scroll drives (library drag, module card,
+  folded macro card) and has a disabled bench that prints a tick's cost on a real project
+  (`AGENTSYNTH_BENCH_PROJECT=<project.json>`).
 - **Limits.** The pan never goes past the origin (nothing exists left of or above it) and never further right or down
   than the content extends; a card drag grows the content ahead of itself, so it can keep going.
 - **Keyboard.** There is no pointer to park, so the keyboard move (arrow keys on a focused card) already pans the card

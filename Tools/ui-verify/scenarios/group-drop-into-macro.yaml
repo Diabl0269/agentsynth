@@ -1,0 +1,47 @@
+# Bug: with two loose modules selected, dragging them onto an open macro moved them on top of it but neither joined;
+# only a single card could be dropped into a macro.
+#
+# What a user does (group-drop fixture: the macros fixture plus a second loose Oscillator below the first, zoomed out):
+#   1. Clicks "Oscillator 1", Shift-clicks "Oscillator 3": both are selected, neither is in a macro.
+#   2. Drags "Oscillator 1" by its header into "Open macro": the macro's border is highlighted mid-drag, and the landing
+#      ghost shows BOTH cards where the group will land (one ghost per card, the same rigid box the drop applies).
+#   3. Releases: both oscillators are members of "Open macro", on the spots the ghost showed (compare PNG 2 with 3).
+#   4. Presses Cmd+Z once: both are loose again, back where they were.
+# Every drag kind onto an open macro (single module, folded card, open chip, several modules, several macros, a mix)
+# is covered by MacroGroupDrop.EveryDragKindJoinsOrNestsInAnOpenMacro (Tests/Macros/MacroContainer/); that the ghost
+# matches the landing for each kind, and for a plain group move, by MacroGroupDrop.GhostShowsWhereEveryMovedCardLands.
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/group-drop.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", bounds: {x: 429, y: 436, w: 116, h: 244}}
+  - expect: {id: "card:Oscillator 3", bounds: {x: 429, y: 696, w: 116, h: 244}}
+  - click: {id: "card:Oscillator 1", x: 58, y: 10}
+  - click: {id: "card:Oscillator 3", x: 58, y: 10, mods: shift}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", selected: true, macroPath: ""}
+  - expect: {id: "card:Oscillator 3", selected: true, macroPath: ""}
+  - screenshot: {name: 1-two-loose-selected}
+  - mouseDown: {id: "card:Oscillator 1", x: 58, y: 10}
+  - mouseMoveHeld: {id: window, x: 500, y: 380}
+  - mouseMoveHeld: {id: window, x: 515, y: 260}
+  - mouseMoveHeld: {id: window, x: 520, y: 188}
+  - screenshot: {name: 2-mid-drag-group-ghost-in-macro}
+  - mouseUp: {id: window, x: 520, y: 188}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", macroPath: "Open macro"}
+  - expect: {id: "card:Oscillator 3", macroPath: "Open macro"}
+  - screenshot: {name: 3-after-drop-both-joined}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Oscillator 1", macroPath: "", within_ms: 1500}
+  - expect: {id: "card:Oscillator 3", macroPath: ""}
+  - expect: {id: "card:Oscillator 1", bounds: {x: 429, y: 436, w: 116, h: 244}}
+  - expect: {id: "card:Oscillator 3", bounds: {x: 429, y: 696, w: 116, h: 244}}
+  - screenshot: {name: 4-after-undo-both-out}

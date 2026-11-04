@@ -20,13 +20,17 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 void GraphDragDropController::beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId) {
     dragPreviewActive_ = true;
+    pendingScrollAim_.reset();
+    anyFullPreview_ = false;
     dragPreviewW_ = w;
     dragPreviewH_ = h;
     dragPreviewSelfId_ = selfId;
     dragPreviewGhost_ = {};
+    groupGhosts_.clear();
     alignmentGuides_.clear();
     if (insertGap_ != nullptr)
         insertGap_->endSession(); // a fresh gesture: nothing of the last one stays open or cancelled
@@ -44,9 +48,41 @@ void GraphDragDropController::beginDragPreview(int w, int h, juce::AudioProcesso
     host_.repaintCanvas();
 }
 
+// An edge-scroll tick re-aims the preview 30 times a second while the pointer sits still, and on a big patch one full
+// preview (gap hover, anti-overlap search, guides over every card, smart suggestions) can take tens of ms at a crowded
+// aim. Inside a tick everything but the gap hover therefore runs at most once per kScrollPreviewIntervalMs; a skipped
+// aim is remembered and flushDragPreview() (the scroll's end, before every drop, and a tick that did not pan) brings it
+// up to date, so what is dropped is always the preview for where the pointer really is. A real pointer move is never
+// throttled.
 void GraphDragDropController::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
     if (!dragPreviewActive_)
         return;
+    const double now = clock_ != nullptr ? clock_() : juce::Time::getMillisecondCounterHiRes();
+    if (scrollTickDepth_ > 0 && anyFullPreview_ && now - lastFullPreviewMs_ < kScrollPreviewIntervalMs) {
+        // The gap still follows every aim: which way it opens depends on the path the ghost took to get here, so
+        // sampling that path would change where the drop lands.
+        dragPreviewAim_ =
+            juce::Rectangle<int>(desiredTopLeftCanvas.x, desiredTopLeftCanvas.y, dragPreviewW_, dragPreviewH_);
+        hoverInsertGap(dragPreviewAim_);
+        pendingScrollAim_ = desiredTopLeftCanvas;
+        return;
+    }
+    pendingScrollAim_.reset();
+    anyFullPreview_ = true;
+    lastFullPreviewMs_ = now;
+    ++fullPreviewCount_;
+    recomputeDragPreview(desiredTopLeftCanvas);
+}
+
+void GraphDragDropController::flushDragPreview() {
+    if (const auto aim = std::exchange(pendingScrollAim_, std::nullopt); aim && dragPreviewActive_) {
+        lastFullPreviewMs_ = clock_ != nullptr ? clock_() : juce::Time::getMillisecondCounterHiRes();
+        ++fullPreviewCount_;
+        recomputeDragPreview(*aim);
+    }
+}
+
+void GraphDragDropController::recomputeDragPreview(juce::Point<int> desiredTopLeftCanvas) {
     // Where the user is POINTING, before anti-overlap moves the card. A ghost aimed at the gap
     // between two wired cards necessarily overlaps them — it is wider than the gap — so
     // resolvePlacement throws it clear, and judging a suggestion only by that landing spot means
@@ -233,6 +269,7 @@ void GraphDragDropController::endDragPreview() {
     if (insertGap_ != nullptr)
         insertGap_->endSession(); // a drop that landed in the gap has already taken it; anything else goes home
     dragPreviewActive_ = false;
+    pendingScrollAim_.reset();
     dragPreviewJoinsMacro_ = false;
     dragPreviewJoinId_.clear();
     dragPreviewGhost_ = {};
@@ -349,6 +386,7 @@ void GraphDragDropController::itemDragExit(const juce::DragAndDropTarget::Source
 }
 
 void GraphDragDropController::itemDropped(const juce::DragAndDropTarget::SourceDetails& dragSourceDetails) {
+    flushDragPreview(); // the drop lands where the preview shows; a skipped scroll-tick aim is brought up to date
     const juce::String name = dragSourceDetails.description.toString();
     if (synth::ui::isSoundPayload(dragSourceDetails.description)) {
         // Checked before every module kind: the payload is a path, never a module type name.

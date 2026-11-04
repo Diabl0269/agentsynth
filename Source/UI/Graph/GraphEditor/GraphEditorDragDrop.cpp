@@ -690,6 +690,9 @@ juce::Rectangle<int> GraphEditor::macroHullTargetBounds(const juce::String& macr
     if (const auto& unit = macroController_.draggedMacroUnit(); unit.isNotEmpty())
         if (const auto frozen = macroController_.frozenDragHull(macroId); !frozen.isEmpty())
             return frozen;
+    // A group drag holds the border of every macro the group is in, the same way, so it reads as where it will drop.
+    if (const auto held = macroController_.groupDragHeldHull(macroId); !held.isEmpty())
+        return held;
     if (const auto stored = canvasMemo_->hull(macroId))
         return *stored;
     ++graph_editor_paint::workCounters().hullComputations;

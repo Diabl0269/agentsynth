@@ -253,9 +253,9 @@ and never touches Ctrl):
 at `mouseDown`.** Sampling only at press time meant the user had to already be holding the modifier
 before grabbing the module, with no way to discover the gesture since the candidate highlight never
 lit up. `mouseDrag` re-reads the live modifier each tick, gated on `!isSelectionDragActive()`: a
-multi-selection group drag keeps whatever `mouseDown` latched for its whole gesture — reparenting one
-member out of a group drag is ambiguous, in both which macro and which dragged module, and stays out
-of scope — but an ordinary single-module drag can have the modifier pressed or released mid-gesture
+multi-selection group drag keeps whatever `mouseDown` latched for its whole gesture (it changes membership
+as a group, on the drop: [Dragging a group into or out of a macro](#dragging-a-group-into-or-out-of-a-macro))
+— but an ordinary single-module drag can have the modifier pressed or released mid-gesture
 and see the candidate highlight arm or clear immediately.
 
 **A macro keeps the border it had at press, and still counts the dragged member as inside, until
@@ -301,7 +301,7 @@ without a second, unrelated modifier.
 re-route through (or away from) the macro's ports during the drag and nothing moves on release. The
 macro just joined is re-frozen (its border held where it is), so the module stays a member until its
 centre leaves that border — the same hysteresis as the press-time freeze. Two cases still wait for the
-drop: a group (multi-selection) drag, and a leave when the module is the macro's last ordinary member
+drop: a group (multi-selection) drag ([its own path](#dragging-a-group-into-or-out-of-a-macro)), and a leave when the module is the macro's last ordinary member
 (leaving would dissolve the macro). Crossing back and forth any number of times is still ONE undo step
 back to the press state: the drag keeps the macros as they were at press (`macrosBeforeLiveDrag_`) and
 passes them as `macrosBeforeOverride` to `AppUndoManager::recordGraphAndMacroChange`, next to the
@@ -559,8 +559,8 @@ live re-derivation in `mouseDrag`. The preference adds two exclusions, both corr
   and skip `finalizeSelectionDrag`, leaving the group's drag state armed and the other members
   unresolved. The preference arms reparent only when the selection is just the dragged module (Cmd
   cannot hit this: a Cmd press collapses the selection onto the module first), and `mouseDrag` keeps
-  its `!isSelectionDragActive()` guard, so a group drag never reparents and always finalizes as a
-  group.
+  its `!isSelectionDragActive()` guard, so a group drag never reparents one member and always finalizes as a
+  group (the group then joins or leaves as a whole on the drop, see below).
 - **Never with Ctrl held (macOS).** A macOS Ctrl-drag is the insert-between gesture and stays that
   alone; the preference does not arm it. (On Windows and Linux Ctrl IS Cmd, so the platform matrix
   above applies unchanged.)
@@ -647,9 +647,9 @@ its name chip (or by its empty space, with the "move macro on hull drag" prefere
 - A channel macro nests like any other, as it does with Cmd+G.
 - **Several macros selected.** Pressing the card or chip of a macro that is selected together with other macros or
   modules keeps the selection (`MacroGroupController::selectMacroForDrag`), so the drag moves all of it, every folded
-  card included, as one undo step. Like a module group drag it never joins or leaves: `beginMacroUnitDrag` arms nothing
-  (no held borders, no outlined target), the drop is `finalizeSelectionDrag`, and Esc does not cancel it. A click that
-  never moved selects just that macro. Moving a whole selection into or out of a macro is not offered.
+  card included, as one undo step. `beginMacroUnitDrag` arms no unit drag; the group's own drag
+  ([below](#dragging-a-group-into-or-out-of-a-macro)) holds the borders, outlines the target and joins or leaves on
+  the drop, which is `finalizeSelectionDrag`. Esc does not cancel it. A click that never moved selects just that macro.
 
 Tests, through the real card and canvas mouse events: `Tests/Macros/MacroContainer/MacroDropIntoMacroTests.cpp`
 (join), `MacroLeaveDragTests.cpp` (leave one and two levels, transfer, port splicing, Esc, the carried parent) and
@@ -658,6 +658,41 @@ stay, each one undo step, plus the multi-macro row (each unit dragged with a sec
 both move by the same delta in one step). A membership gesture added for one of these units and missing on another
 fails a row there.
 The in-app checks are `Tools/ui-verify/scenarios/macro-leave-drag.yaml` and `multi-macro-drag.yaml`.
+
+## Dragging a group into or out of a macro
+
+**Several selected cards dragged together join, nest in or leave macros as one, on the drop, in one undo step**, the
+way one card does. Two modules dropped on an open macro both join it; two macros (folded or open) both nest in it; a
+mix does both; a group dragged out of its macro's border onto the empty canvas leaves it. One Cmd+Z puts everything
+back.
+
+- **Units.** At press (`GraphEditor::beginSelectionDrag`, more than one card moving) `MacroGroupController::
+  beginGroupDrag` resolves the moving nodes into units the way grouping does (`macro_units::unitsFor`: a whole macro,
+  or a loose module, each with the macro that directly holds it). A macro's own card or chip drag with only it
+  selected is a unit drag instead (`beginMacroUnitDrag` ends the group drag).
+- **Held borders.** The macro each unit sits in, and its ancestors, are live unions that would follow the group, so
+  their borders are held at press (`groupDragHeldHull`, painted through `macroHullTargetBounds`) until the drop, which
+  glides them to their new bounds.
+- **The anchor and the target.** Every pointer tick aims from the grabbed unit: the pressed module's centre
+  (`dragSelectionBy` with an initiator), the pressed folded card's centre (`dragMacroCardBy`) or the chip pointer.
+  `groupDropTargetAt` is the deepest open border under it, never a dragged macro or a macro inside one (no cycles), with
+  the held border for the group's own macros. The target is outlined with the join stroke when a unit would move into
+  it, and each macro a unit would walk out of with the leave stroke, so what the drag shows is what the drop does. A
+  keyboard nudge never aims, so it changes no membership.
+- **The drop** (`applyGroupDrop`, inside the selection drag's own undo record, after the rigid-body placement, which
+  treats the target as room to land in): each macro unit takes `moveMacroInto` (the unit drag's walk, out level by
+  level then down), each module walks out of every macro not on the target's chain (`removeSelectionFromMacro`), or
+  steps down out of its own macro's member list as a single drag does, and the modules then join the target in one
+  `addSelectionToMacro`, so a cable between two of them gets no port. Room is made (`makeRoomFor`) only once the whole
+  group is in: made per unit, the border one unit just grew would push the group's other units, still outside, off the
+  spot the placement gave them, and away from the landing ghost.
+
+Tests: `Tests/Macros/MacroContainer/MacroGroupDropTests.cpp`: every drag kind (single module, single folded card,
+single open macro, two modules, two macros, a module and a macro) dropped on an open macro ends inside it, outlined
+before the release, one undo step; a group dragged out leaves; a group never drops into a macro it carries; for every
+kind and a plain group move the ghost shown before the release is where the cards land (the
+[landing ghost](../layout/selection.md#group-drag-resolves-as-one-rigid-body)). In-app:
+`Tools/ui-verify/scenarios/group-drop-into-macro.yaml`.
 
 ## The expanded hull's collapse button
 
