@@ -36,4 +36,4 @@ steps:
   - screenshot: {name: 3-second-space-opens-no-picker}
   - key: {keys: return, target: timelinePanel}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
-  - screenshot: {id: keyPicker, name: 4-return-opens-picker}
+  - screenshot: {id: keyPickerPanel, name: 4-return-opens-picker}
