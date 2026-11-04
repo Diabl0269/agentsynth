@@ -45,6 +45,14 @@ public:
     int openWidth(int modulesWidth) const;
     int getSoundsWidth() const { return soundsWidth_; }
     void setSoundsWidth(int width, bool persist);
+    /** Glides the Sounds width to the default over 190 ms (a drag, a key step or a new width stops the glide); under
+     *  Reduce Motion, Animations Off, or off screen it jumps. The width is saved once, where it lands. */
+    void resetSoundsWidth();
+    bool isWidthGlideRunning() const { return widthAnim_.isRunning(); }
+    /** Test seams: run the glide while the column is off screen, and step it to `ms` after its first frame. */
+    void setAnimateOffscreenForTest(bool on) { animateOffscreenForTest_ = on; }
+    void stepWidthGlideForTest(double ms) { widthAnim_.stepForTest(ms); }
+    void completeWidthGlideForTest() { widthAnim_.completeForTest(); }
     bool isViewMotionRunning() const { return anim_.isRunning(); }
     void completeViewMotionForTest() { anim_.completeForTest(); }
 
@@ -77,6 +85,7 @@ private:
     void soundPacksChanged() override;
     void soundFoldersChanged() override;
     void commitWidth();
+    void setSoundsWidthNow(int width, bool persist); // sets and notifies; leaves a running glide alone
 
     juce::PropertiesFile* settings_;
     ModuleLibraryComponent& modules_;
@@ -96,6 +105,8 @@ private:
     juce::String installedSignature_;
     std::optional<juce::VBlankAnimatorUpdater> vblank_;
     AnimationDriver anim_;
+    AnimationDriver widthAnim_; // the double-click reset's glide; apart from anim_ so neither stops the other
+    bool animateOffscreenForTest_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LibrarySidebarViews)
 };

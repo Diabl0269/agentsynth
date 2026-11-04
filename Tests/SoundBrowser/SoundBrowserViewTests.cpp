@@ -1,8 +1,10 @@
 // The Sounds view of the left sidebar: its pure wording, keyboard and mouse navigation, search, favourites, the
-// Modules / Sounds switch, the width handle, and every built-in theme rendered to a PNG strip for review.
+// Modules / Sounds switch, the width handle (drag, keys, the double-click glide), and every built-in theme rendered to
+// a PNG strip for review.
 #include "../App/MainComponent/MainComponentTestFixture.h"
 #include "../TestWait.h"
 #include "SoundBrowserTestKit.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
@@ -237,6 +239,107 @@ TEST(SoundBrowserSidebarTest, WidthClampsPersistsAndResets) {
     LibrarySidebarViews again(library2, &settings);
     EXPECT_EQ(again.getSoundsWidth(), 333);
     EXPECT_EQ(again.getView(), SidebarView::Sounds) << "the last-used view is restored";
+}
+
+namespace {
+
+struct ReducedMotionGuard {
+    explicit ReducedMotionGuard(bool reduced) { synth::ui::setReducedMotionForTest(reduced); }
+    ~ReducedMotionGuard() { synth::ui::setReducedMotionForTest(std::nullopt); }
+};
+
+struct WidthRig {
+    juce::PropertiesFile::Options opts = [] {
+        juce::PropertiesFile::Options o;
+        o.applicationName = "sound-browser-glide-test-" + juce::Uuid().toDashedString();
+        o.filenameSuffix = "settings";
+        o.folderName = juce::File::getSpecialLocation(juce::File::tempDirectory).getFullPathName();
+        return o;
+    }();
+    juce::PropertiesFile settings{opts};
+    ModuleLibraryComponent library;
+    LibrarySidebarViews sidebar{library, &settings};
+    WidthRig() {
+        sidebar.setSize(300, 800);
+        sidebar.setView(SidebarView::Sounds, false);
+        sidebar.setAnimateOffscreenForTest(true);
+    }
+    int saved() { return settings.getIntValue(synth::kSoundBrowserWidthSettingKey, -1); }
+};
+
+} // namespace
+
+// Regression test for FRO1380: a double-click on the divider jumped to the default width. It glides (ease-out over
+// 190 ms), is saved once where it lands, and a drag or key step stops it. Guards the motion-over-time kind for this
+// reset.
+TEST(SoundBrowserSidebarTest, DoubleClickingTheDividerGlidesToTheDefaultWidthAndSavesOnce) {
+    ReducedMotionGuard motion(false);
+    WidthRig r;
+    r.sidebar.setSoundsWidth(380, true);
+    ASSERT_EQ(r.saved(), 380);
+    int layouts = 0;
+    r.sidebar.onLayoutChanged = [&layouts] { ++layouts; };
+
+    r.sidebar.getResizeHandle().onResetRequested();
+    ASSERT_TRUE(r.sidebar.isWidthGlideRunning());
+    EXPECT_EQ(r.sidebar.getSoundsWidth(), 380) << "it starts where it is";
+    EXPECT_EQ(r.saved(), 380) << "nothing is saved while it moves";
+    int previous = 380;
+    for (const double ms : {20.0, 60.0, 100.0, 150.0}) {
+        r.sidebar.stepWidthGlideForTest(ms);
+        const int w = r.sidebar.getSoundsWidth();
+        EXPECT_LT(w, 380) << ms;
+        EXPECT_GT(w, LibrarySidebarViews::kDefaultSoundsWidth) << "strictly between old and default at " << ms;
+        EXPECT_LE(w, previous) << "it only moves toward the default";
+        EXPECT_EQ(r.saved(), 380);
+        previous = w;
+    }
+    EXPECT_GT(layouts, 1) << "the owner lays out every frame";
+    r.sidebar.completeWidthGlideForTest();
+    EXPECT_FALSE(r.sidebar.isWidthGlideRunning());
+    EXPECT_EQ(r.sidebar.getSoundsWidth(), LibrarySidebarViews::kDefaultSoundsWidth);
+    EXPECT_EQ(r.saved(), LibrarySidebarViews::kDefaultSoundsWidth) << "saved once, at the end";
+}
+
+TEST(SoundBrowserSidebarTest, ADragOrAKeyStepStopsTheGlide) {
+    ReducedMotionGuard motion(false);
+    WidthRig r;
+    auto& handle = r.sidebar.getResizeHandle();
+    r.sidebar.setSoundsWidth(380, true);
+    handle.onResetRequested();
+    r.sidebar.stepWidthGlideForTest(60.0);
+    handle.onDragStarted();
+    EXPECT_FALSE(r.sidebar.isWidthGlideRunning()) << "a drag takes over";
+    const int held = r.sidebar.getSoundsWidth();
+    r.sidebar.completeWidthGlideForTest();
+    EXPECT_EQ(r.sidebar.getSoundsWidth(), held) << "the stopped glide does not finish";
+
+    r.sidebar.setSoundsWidth(380, true);
+    handle.onResetRequested();
+    r.sidebar.stepWidthGlideForTest(60.0);
+    const int mid = r.sidebar.getSoundsWidth();
+    handle.onKeyboardStep(1);
+    EXPECT_FALSE(r.sidebar.isWidthGlideRunning());
+    EXPECT_EQ(r.sidebar.getSoundsWidth(), mid + LibrarySidebarViews::kWidthKeyStep) << "a key step is instant";
+}
+
+TEST(SoundBrowserSidebarTest, TheDividerResetJumpsUnderReducedMotionAndOffScreen) {
+    {
+        ReducedMotionGuard motion(true);
+        WidthRig r;
+        r.sidebar.setSoundsWidth(380, true);
+        r.sidebar.getResizeHandle().onResetRequested();
+        EXPECT_FALSE(r.sidebar.isWidthGlideRunning());
+        EXPECT_EQ(r.sidebar.getSoundsWidth(), LibrarySidebarViews::kDefaultSoundsWidth);
+        EXPECT_EQ(r.saved(), LibrarySidebarViews::kDefaultSoundsWidth);
+    }
+    ReducedMotionGuard motion(false);
+    WidthRig r;
+    r.sidebar.setAnimateOffscreenForTest(false); // no window: no frames would ever come
+    r.sidebar.setSoundsWidth(380, true);
+    r.sidebar.getResizeHandle().onResetRequested();
+    EXPECT_FALSE(r.sidebar.isWidthGlideRunning());
+    EXPECT_EQ(r.sidebar.getSoundsWidth(), LibrarySidebarViews::kDefaultSoundsWidth);
 }
 
 // Cmd+B and Cmd+Opt+B through the real key path: closed -> view, other view -> switch, same view -> closed.
