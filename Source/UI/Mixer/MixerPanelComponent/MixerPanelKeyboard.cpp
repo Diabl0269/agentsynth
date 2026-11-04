@@ -49,6 +49,11 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     // The Rename key (F2 / Option+R) renames the focused column's name in place; a text editor keeps its own keys.
     if (isRenameKeyPress(shortcuts_, key) && !isTextEditorFocused())
         return renameFocusedColumn();
+    // The track row's own Duplicate action id (Cmd+D by default), so one rebind covers both; it copies the
+    // focused strip's track, and a column with no single track lets the key bubble.
+    if (matchesAction(key, "timelineDuplicateFocusedTrack",
+                      juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0)))
+        return duplicateFocusedTrack();
 
     // Rebindable, Timeline category -- the SAME action ids the timeline track-header row already
     // binds (TimelineTrackHeaderComponent::matchesAction), deliberately: a new id would not
@@ -148,11 +153,54 @@ bool MixerPanelComponent::selectFocusedOnCanvas() {
 // The column holding keyboard focus: the one whose component contains the focused widget (a click lands focus on a
 // colour dot, fader or button inside a column, which never moves focusedColumnIndex_), else the arrow-key column.
 int MixerPanelComponent::columnIndexContaining(const juce::Component* focused) const {
-    for (auto* c = focused; c != nullptr && c != this; c = c->getParentComponent())
+    const int index = columnIndexOf(focused);
+    return index >= 0 ? index : focusedColumnIndex_;
+}
+
+int MixerPanelComponent::columnIndexOf(const juce::Component* c) const {
+    for (; c != nullptr && c != this; c = c->getParentComponent())
         for (size_t i = 0; i < columnEntries_.size(); ++i)
             if (columnEntries_[i].component == c)
                 return (int)i;
-    return focusedColumnIndex_;
+    return -1;
+}
+
+// No scroll: the column is under the pointer already. A pressed control that takes the keyboard itself (the rename
+// editor, the colour dot) keeps it. Anything else hands the keyboard to the panel, so the column's keys work at
+// once: left alone, JUCE would give it to the column's first focusable child, the colour dot.
+void MixerPanelComponent::focusColumnFromClick(const juce::MouseEvent& e) {
+    const int index = columnIndexOf(e.eventComponent);
+    if (index < 0)
+        return;
+    if (index != focusedColumnIndex_) {
+        exitRows();
+        focusedColumnIndex_ = index;
+        grabAccessibilityFocusForFocusedColumn();
+    }
+    keyboardAway_ = false;
+    syncFocusVisuals();
+    repaint();
+    if (e.eventComponent == nullptr || !e.eventComponent->getWantsKeyboardFocus())
+        grabKeyboardFocus();
+}
+
+// The copy's column arrives through the rebuild; focus stays on this strip (resolveFocusAfterRebuild matches it by
+// uuid), so pressing it again copies the same track again.
+bool MixerPanelComponent::duplicateFocusedTrack() {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size() || !onDuplicateTrack)
+        return false;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    if (entry.kind != ColumnEntry::Kind::Strip || entry.feedingTracks.size() != 1)
+        return false;
+    const auto track = entry.feedingTracks.front();
+    onDuplicateTrack(track);
+    return true;
+}
+
+void MixerPanelComponent::addTestModeState(juce::DynamicObject& into) const {
+    const bool shown = !keyboardAway_ && juce::isPositiveAndBelow(focusedColumnIndex_, (int)columnEntries_.size());
+    into.setProperty("focusedColumn",
+                     shown ? columnEntries_[(size_t)focusedColumnIndex_].component->getTitle() : juce::String());
 }
 
 // Direct and Master have no name to edit, so the key falls through there.
@@ -265,7 +313,7 @@ void MixerPanelComponent::grabAccessibilityFocusForFocusedColumn() {
 
 void MixerPanelComponent::syncFocusVisuals() {
     for (size_t i = 0; i < columnEntries_.size(); ++i) {
-        const bool focused = (int)i == focusedColumnIndex_;
+        const bool focused = (int)i == focusedColumnIndex_ && !keyboardAway_;
         auto& entry = columnEntries_[i];
         if (entry.component == nullptr)
             continue;

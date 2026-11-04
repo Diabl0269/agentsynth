@@ -552,7 +552,7 @@ left-to-right order `rebuild()` lays columns out in (strips in track order, then
 then Master if visible) — and survives a `rebuild()` of the same strip by re-resolving through the
 strip's own uuid (Direct/Master match by kind alone), never a raw index; the focused strip/Direct/
 Master column also paints its own outline, reusing `paintFocusRegionOutline`'s colour/alpha/
-thickness the same way a track-header row does.
+thickness the same way a track-header row does. Clicks focus a column too: [strip focus](../mixer/strip-focus.md).
 
 | Shortcut | Action |
 |----------|--------|
@@ -565,10 +565,10 @@ thickness the same way a track-header row does.
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — same action id and `performTrackEdit`-equivalent undo bracket the Timeline row's M key uses; Master has its own mute, Direct has none |
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — strips only, always through `AudioEngine::setChannelStripSoloed`, never a direct `setSoloed()` (`Source/CLAUDE.md`'s mixer-solo invariant); no-op on Direct/Master |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — only when the focused strip is linked to exactly one track (`MixerColumn.linkedToTrack`); routes through `MainComponent::performTrackEdit`, never a direct `TimelineDoc` write |
+| Cmd+D | Duplicate Focused Track (`timelineDuplicateFocusedTrack`) — copies the focused strip's track, like the strip menu's Duplicate Track; [strip focus](../mixer/strip-focus.md) |
 
-M/S/R resolve the exact same rebindable Timeline-category action ids the track-header row above
-already binds — deliberately, so a user's rebind applies to whichever of the two surfaces has
-focus, and a new id would not have inherited an existing rebind. Falls back to hardcoded bare letters with no `ShortcutManager` installed, the same "no manager installed" contract every other surface action in this app follows.
+M/S/R and Cmd+D resolve the exact same rebindable Timeline-category action ids the track-header row above already
+binds — deliberately, so a user's rebind applies to whichever surface has focus (a new id would not inherit it). Falls back to hardcoded bare letters with no `ShortcutManager` installed, the same "no manager installed" contract every other surface action in this app follows.
 
 Accessibility (JUCE `AccessibilityHandler`, this ticket's other half): the fader and pan sliders
 report their value as spoken text (`"-3.0 dB"`, `"50% left"`) via `textFromValueFunction`; the

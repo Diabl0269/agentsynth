@@ -814,6 +814,7 @@ bypass button on every insert and send row (each a Tab stop with a name, a toolt
   `MixerFader::nudge()` (begin and end change gesture bracketing a single `setValueNotifyingHost`,
   like a real drag).
 - **Enter** selects the focused column's macro or node on canvas.
+- **A click in a column** focuses it, and **Cmd+D** copies the focused strip's track: [strip focus](strip-focus.md).
 - **M, S and R** resolve the SAME rebindable `timelineMuteFocusedTrack`,
   `timelineSoloFocusedTrack` and `timelineArmFocusedTrack` action ids the Timeline track-header row
   binds — **deliberately, because a new id would not inherit an existing rebind** — through

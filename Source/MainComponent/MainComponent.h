@@ -544,6 +544,8 @@ private:
     bool deleteMacrosOfTracks(const std::vector<juce::String>& macroIds, bool wholeSelection);
     void askThenDeleteTrack(synth::TrackId track, const synth::ui::DeleteTrackConfirmText& text);
     void duplicateTrack(synth::TrackId track) override;
+    // One track, never the timeline's selection; `focusCopyRow` false leaves the keyboard where it is (the mixer).
+    void duplicateOneTrack(synth::TrackId track, bool focusCopyRow);
     // docs/timeline/tracks.md#selecting-several-tracks -- the bulk half of the track-row commands
     // (MainComponentTrackSelectionActions.cpp); each reuses the single-track path per track inside one undo step.
     std::vector<synth::TrackId> tracksActedOnBy(synth::TrackId clicked) const override;

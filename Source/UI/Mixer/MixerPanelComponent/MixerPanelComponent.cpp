@@ -87,9 +87,10 @@ MixerPanelComponent::MixerPanelComponent() {
     setComponentID("mixerPanel");
     topBarRingProbe_ = makeKeyRingProbe(topBarRing_, "mixerTopBarRing");
     addChildComponent(*topBarRingProbe_);
+    addMouseListener(&clickFocus_, true);
 }
 
-MixerPanelComponent::~MixerPanelComponent() = default;
+MixerPanelComponent::~MixerPanelComponent() { removeMouseListener(&clickFocus_); }
 
 // `meterReader` defaults to the pre-existing `MeterReader::Mixer` slot -- the Mixer's
 // optional second live view (MixerMirrorController) passes `MeterReader::MixerMirror` instead, so

@@ -3,6 +3,7 @@
 #include "MacroSet.h"
 #include "Mixer/MixerViewDoc.h"
 #include "Mixer/PeakMeterLatch.h"
+#include "TestMode/TestModeStateSource.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/DetachablePanelHost/DockBackSlot.h"
 #include "UI/Layout/ExitEnterList/ExitEnterListMotion.h"
@@ -61,7 +62,8 @@ namespace synth::ui {
 class MixerPanelComponent
     : public juce::Component
     , public DockBackSlot
-    , public KeyboardContextMenuProvider {
+    , public KeyboardContextMenuProvider
+    , public synth::testmode::StateSource {
 public:
     MixerPanelComponent();
     ~MixerPanelComponent() override;
@@ -392,6 +394,11 @@ public:
     }
     /** Leaving the panel (another control or region takes focus) ends row mode and the top-bar ring. */
     void focusLost(FocusChangeType cause) override;
+    /** Coming back shows the focused column's ring again (focusLost hid it). */
+    void focusGained(FocusChangeType cause) override;
+    void focusOfChildComponentChanged(FocusChangeType cause) override;
+    /** Test mode: `focusedColumn`, the title of the column whose focus ring shows (empty when none). */
+    void addTestModeState(juce::DynamicObject& into) const override;
     /** Opens the focused column's header right-click menu, anchored at that column. False with no column focused. */
     bool showContextMenuForKeyboardFocus() override;
     void paintOverChildren(juce::Graphics& g) override;
@@ -488,7 +495,12 @@ private:
     bool toggleFocusedSoloed();
     bool armFocusedTrack();
     int columnIndexContaining(const juce::Component* focused) const;
-    bool renameFocusedColumn(); // the Rename key: the focused column's header name editor
+    int columnIndexOf(const juce::Component* c) const; // the column holding `c`, or -1
+    /** A press anywhere in a column (a control, the header or empty space) focuses that column. */
+    void focusColumnFromClick(const juce::MouseEvent& e);
+    bool duplicateFocusedTrack(); // the Duplicate key: the focused strip's one feeding track
+    void noteKeyboardMoved();     // shows or hides the focused column's ring as the keyboard leaves or returns
+    bool renameFocusedColumn();   // the Rename key: the focused column's header name editor
 
     // ---- Row focus -- implemented in MixerPanelRowKeyboard.cpp ---------------------------------
     /** The focused column's insert / send lists while their sections are shown; null otherwise. */
@@ -616,6 +628,15 @@ private:
     std::vector<juce::Component*> topBarStops();
     std::unique_ptr<juce::Component> topBarRingProbe_; // hidden; reports the ring to test mode
     KeyRing topBarRing_{*this, [this] { return topBarStops(); }, KeyRing::Order::given};
+    // Hears every press inside the panel (a nested listener), so a click on any control in a column focuses it.
+    struct ClickFocus : juce::MouseListener {
+        explicit ClickFocus(MixerPanelComponent& o)
+            : owner(o) {}
+        void mouseDown(const juce::MouseEvent& e) override { owner.focusColumnFromClick(e); }
+        MixerPanelComponent& owner;
+    };
+    ClickFocus clickFocus_{*this};
+    bool keyboardAway_ = false; // the keyboard left the panel: the focused column keeps its place, not its ring
     Zone leftZone_;
     Zone rightZone_;
     synth::MixerViewDoc ownedViewDoc_ = synth::MixerViewDoc::forNewProject();

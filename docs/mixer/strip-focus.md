@@ -1,0 +1,35 @@
+# Mixer strip focus
+
+The mixer panel is the one focusable leaf of its region, and `MixerPanelComponent::focusedColumnIndex_` is the column
+the keys act on ([panel](panel.md#keyboard-navigation-and-accessibility)). Left and Right move it; so does the mouse.
+
+## A click focuses the column
+
+A press anywhere in a column (a control, the header or the empty space beside the name) focuses that column, without
+scrolling, and shows its outline. A right-click does too, so the outline shows which strip the header menu acts on.
+The panel hears every press through a nested mouse listener (`MixerPanelComponent::focusColumnFromClick`,
+`MixerPanelKeyboard.cpp`) and takes the keyboard itself: left alone, JUCE would hand it to the column's first focusable
+child, the colour dot, which is why the column's keys used to miss. A pressed control that takes the keyboard (the
+rename editor, the colour dot) keeps it.
+
+A press in a strip's empty send area still opens the Add Send menu as before; the column is focused all the same.
+
+## The outline follows the keyboard
+
+When another control takes the keyboard (a click on the canvas) the outline goes; the column keeps its place, and the
+outline comes back with the keyboard. A pop-up window (a menu) holding the keyboard, or the app going to the background,
+keeps it (`MixerPanelComponent::noteKeyboardMoved`, `MixerPanelRowKeyboard.cpp`).
+
+## Duplicate
+
+**Cmd+D** resolves the track row's `timelineDuplicateFocusedTrack` (one rebind covers both) and copies the focused
+strip's track: only a strip fed by exactly one track, else the key bubbles. It is the same `onDuplicateTrack` path as
+the header menu's **Duplicate Track**, which names the key. From the mixer, `MainComponent::duplicateOneTrack` copies
+that one track (never the timeline's selection) and leaves the keyboard on the strip; the strip keeps its focus across
+the rebuild by uuid, so every press copies it again.
+
+## Test mode
+
+`getState` on `mixerPanel` reports `focusedColumn`, the title of the column whose outline shows (empty when none).
+`Tools/ui-verify/scenarios/mixer-strip-click-focus.yaml` clicks a strip, duplicates it three times, clicks the canvas
+and presses Cmd+Up; `Tests/UI/Mixer/MixerStripClickFocusTests.cpp` drives the same through the real ComponentPeer.
