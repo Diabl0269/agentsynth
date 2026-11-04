@@ -67,7 +67,7 @@ MacroGroupController::buildLayoutUnits(const juce::String& containerId) const {
         const auto rect =
             macro.collapsed ? macroCableAnchorBounds(macro) : macro_geometry::openHullBounds(host_, cards, macro.id);
         if (!rect.isEmpty())
-            units.push_back({macroKey(macro.id), rect, false});
+            units.push_back({macroKey(macro.id), rect, false, {}, !macro.collapsed});
     }
     return units;
 }

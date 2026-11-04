@@ -7,8 +7,13 @@
 # What a user does (a copy of Tal's 'fro1153' project):
 #   1. Zooms out so the whole macro row and the gap under it show.
 #   2. Drags Reverb 1 out of "Oscillator 1" to just under the border, then across the gap to three more points.
-#   3. After every drop the card is where it was released (nudged just clear of the border), and Reverb 2 never moves.
-# InsertGapPlan.AnAnchorNotAcrossFromTheAimIsNoGap and
+#   3. After every drop the card is where it was released (nudged straight down, just clear of the border), and
+#      Reverb 2 never moves.
+#   4. Drags Track In 1 out of the macro, then drops it just over the macro's middle and right, where there is no room
+#      above it: it lands straight below the macro at the x it was dropped at. Before, the gap in front of the macro put
+#      it at the macro's left edge, and the free-spot search then took a corner far right of the drop.
+# InsertGapPlan.AnAnchorNotAcrossFromTheAimIsNoGap, InsertGapPlan.AnOpenMacroIsNoGapWhereItsLeadEdgeIsNotAcrossFromTheAim,
+# LayoutUtilTest.FindFreeSlotPicksTheNearestSpotOfItsRing and
 # LayoutUnitFootprint.EveryInsertGapOfASavedProjectLandsTheCardWhereItIsAimed cover the geometry headlessly.
 record: true
 save_project: end
@@ -29,7 +34,7 @@ steps:
   - mouseMoveHeld: {id: window, x: 1010, y: 384}
   - mouseUp: {id: window, x: 1010, y: 384}
   - wait: {}
-  - expect: {id: "card:Reverb 1", bounds: {x: 1024, y: 402, w: 69, h: 110}}   # released at 1005, 383; was 724, 408
+  - expect: {id: "card:Reverb 1", bounds: {x: 1005, y: 402, w: 69, h: 110}}   # released at 1005, 383: straight below it; was 724, 408
   - expect: {id: "card:Reverb 2", bounds: {x: 724, y: 408, w: 69, h: 110}}
   - screenshot: {name: 2-out-of-the-macro-where-released}
   - mouseDown: {id: "card:Reverb 1", x: 20, y: 4}
@@ -37,19 +42,47 @@ steps:
   - mouseMoveHeld: {id: window, x: 1200, y: 384}
   - mouseUp: {id: window, x: 1200, y: 384}
   - wait: {}
-  - expect: {id: "card:Reverb 1", bounds: {x: 1214, y: 402, w: 69, h: 110}}
+  - expect: {id: "card:Reverb 1", bounds: {x: 1195, y: 402, w: 69, h: 110}}
   - mouseDown: {id: "card:Reverb 1", x: 20, y: 4}
   - mouseMoveHeld: {id: window, x: 1145, y: 384}
   - mouseMoveHeld: {id: window, x: 1390, y: 384}
   - mouseUp: {id: window, x: 1390, y: 384}
   - wait: {}
-  - expect: {id: "card:Reverb 1", bounds: {x: 1405, y: 402, w: 69, h: 110}}
+  - expect: {id: "card:Reverb 1", bounds: {x: 1385, y: 402, w: 69, h: 110}}
   - screenshot: {name: 3-across-the-gap-where-released}
   - mouseDown: {id: "card:Reverb 1", x: 20, y: 4}
   - mouseMoveHeld: {id: window, x: 910, y: 384}
   - mouseMoveHeld: {id: window, x: 920, y: 384}
   - mouseUp: {id: window, x: 920, y: 384}
   - wait: {}
-  - expect: {id: "card:Reverb 1", bounds: {x: 935, y: 402, w: 69, h: 110}}
+  - expect: {id: "card:Reverb 1", bounds: {x: 915, y: 402, w: 69, h: 110}}
   - expect: {id: "card:Reverb 2", bounds: {x: 724, y: 408, w: 69, h: 110}}
   - screenshot: {name: 4-back-near-the-start-where-released}
+  - mouseDown: {id: "card:Reverb 1", x: 20, y: 4}
+  - mouseMoveHeld: {id: window, x: 1300, y: 384}
+  - mouseMoveHeld: {id: window, x: 1560, y: 384}
+  - mouseUp: {id: window, x: 1560, y: 384}
+  - wait: {}
+  - expect: {id: "card:Reverb 1", bounds: {x: 1556, y: 402, w: 69, h: 110}}   # just under the macro's far right
+  - mouseDown: {id: "card:Track In 1", x: 20, y: 4}
+  - mouseMoveHeld: {id: window, x: 1000, y: 500}
+  - mouseMoveHeld: {id: window, x: 1300, y: 620}
+  - mouseUp: {id: window, x: 1300, y: 620}
+  - wait: {}
+  - expect: {id: "card:Track In 1", bounds: {x: 1294, y: 620, w: 69, h: 25}}   # out of the macro, below it
+  - mouseDown: {id: "card:Track In 1", x: 20, y: 4}
+  - mouseMoveHeld: {id: window, x: 1250, y: 400}
+  - mouseMoveHeld: {id: window, x: 1180, y: 222}
+  - mouseUp: {id: window, x: 1180, y: 222}
+  - wait: {}
+  - expect: {id: "card:Track In 1", bounds: {x: 1176, y: 402, w: 69, h: 25}}   # no room above: straight below
+  - expect: {id: "card:Oscillator 1", bounds: {x: 802, y: 251, w: 69, h: 145}}
+  - screenshot: {name: 5-over-the-macro-middle-straight-below}
+  - mouseDown: {id: "card:Track In 1", x: 20, y: 4}
+  - mouseMoveHeld: {id: window, x: 1300, y: 300}
+  - mouseMoveHeld: {id: window, x: 1400, y: 222}
+  - mouseUp: {id: window, x: 1400, y: 222}
+  - wait: {}
+  - expect: {id: "card:Track In 1", bounds: {x: 1395, y: 402, w: 69, h: 25}}
+  - expect: {id: "card:Oscillator 1", bounds: {x: 802, y: 251, w: 69, h: 145}}
+  - screenshot: {name: 6-over-the-macro-right-straight-below}

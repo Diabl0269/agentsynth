@@ -396,6 +396,21 @@ void expectEveryGapLandsWhereAimed(GraphEditor& editor, const char* project, juc
                 EXPECT_TRUE(across) << "aimed at " << aimed.toString() << " in '" << container
                                     << "', the gap in front of " << target->anchorKey << " lands the card at "
                                     << plan->slot.toString();
+                // An open macro's hull spans many cards, so the slot itself (at its lead edge across) has to be across
+                // from the aim, or a card aimed above the middle of a wide macro lands at its left edge.
+                const auto* macro =
+                    target->anchorKey.startsWith("m:")
+                        ? editor.getMacros().find(target->anchorKey.fromFirstOccurrenceOf("m:", false, false))
+                        : nullptr;
+                if (macro != nullptr && !macro->collapsed) {
+                    const bool slotAcross =
+                        target->axis == ig::Axis::Row
+                            ? aimed.getY() < plan->slot.getBottom() && plan->slot.getY() < aimed.getBottom()
+                            : aimed.getX() < plan->slot.getRight() && plan->slot.getX() < aimed.getRight();
+                    EXPECT_TRUE(slotAcross) << "aimed at " << aimed.toString() << " in '" << container
+                                            << "', the gap in front of open macro " << target->anchorKey
+                                            << " lands the card at " << plan->slot.toString();
+                }
             }
     }
     EXPECT_GT(gaps, 0) << "the walk found no gap at all";

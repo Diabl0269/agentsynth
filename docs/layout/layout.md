@@ -110,7 +110,9 @@ When a module is placed (library drop or drag-release) the engine:
    position is returned as a fallback — always a valid on-canvas coordinate.
 
 The spiral visits positions in ring order, innermost first, so the module lands as close to the
-intended drop point as possible.
+intended drop point as possible. Within the first ring that has a clear slot, the one nearest in a straight line wins
+(ties go to the walk order: top, right, bottom, left): every slot of a square ring is as far by the ring, so taking the
+first one walked would put a module dropped over a wide open macro at a corner far to its side, not straight below.
 
 Two boxes A and B collide at gap `g` when `A.inflated(g/2).intersects(B.inflated(g/2))`, which is
 equivalent to requiring at least `g` px of clear space on all sides between the edges. The `selfId`
@@ -236,7 +238,9 @@ pure geometry is `synth::insert_gap` (`Source/UI/Layout/InsertGap/InsertGapPlan.
   in its row (column)". Past the last card of a row nothing needs to move, so there is no gap and the drop is ordinary.
   The module lands level with that anchor, so an anchor the module would not overlap across the axis (row: vertically,
   column: horizontally) where it is aimed is no gap either: just below a wide open macro, the next card in the macro's
-  "column" can sit far to one side, and the module would land there wherever it was released.
+  "column" can sit far to one side, and the module would land there wherever it was released. An open macro is wider
+  (or taller) than any module, so "level with it" is its left (top) edge: in front of an open macro is a gap only
+  where that edge is across from the aimed module, and just above the middle of a wide macro the drop is ordinary.
   A dock card or a macro port is never an anchor, and a snippet, a group drag, a dock card, a port widget or a sound
   from the Sounds view never opens a gap (a sound may be meant for a card, a Sampler or a Drum Kit pad, so no card may
   slide away from under the pointer; dropped on the canvas it lands in the nearest free slot). A card dragged from the canvas opens none while its centre is still over the place it was picked up
