@@ -4,6 +4,7 @@
 #include "ModuleComponent.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/CardCallOut.h"
 
 namespace synth::ui {
 
@@ -126,7 +127,7 @@ void showReplacePicker(GraphEditor& editor, ModuleComponent& card, ModuleType cu
         hook(std::move(picker));
         return;
     }
-    juce::CallOutBox::launchAsynchronously(std::move(picker), card.getScreenBounds(), nullptr);
+    synth::ui::launchCardCallOut(std::move(picker), card.getScreenBounds(), &card);
 }
 
 namespace test_hooks {

@@ -80,6 +80,12 @@ StepGridRandomizePanel::StepGridRandomizePanel(const sequencer_ops::RandomizeSet
 
 StepGridRandomizePanel::~StepGridRandomizePanel() = default;
 
+void StepGridRandomizePanel::showRange(int lo, int hi) {
+    range_.setRange(lo, hi);
+    settings_.minPitch = range_.getLow();
+    settings_.maxPitch = range_.getHigh();
+}
+
 void StepGridRandomizePanel::settingsChanged() {
     densityValue_.setText(juce::String(juce::roundToInt(settings_.density * 100.0f)) + "%", juce::dontSendNotification);
     if (onSettingsChanged)

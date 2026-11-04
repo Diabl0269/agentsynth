@@ -5,6 +5,7 @@
 #include "DrumMachineComponent.h"
 
 #include "AppUndoManager.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <algorithm>
 #include <cmath>
@@ -79,7 +80,7 @@ void DrumMachineComponent::openIdeasPanel() {
         hook(std::move(panel));
         return;
     }
-    juce::CallOutBox::launchAsynchronously(std::move(panel), ideasButton_.getScreenBounds(), nullptr);
+    synth::ui::launchCardCallOut(std::move(panel), ideasButton_.getScreenBounds(), &ideasButton_);
 }
 
 void DrumMachineComponent::focusIdeasButton() {
