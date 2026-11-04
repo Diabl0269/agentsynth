@@ -44,19 +44,25 @@ void paintVoiceGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colou
             juce::AffineTransform::rotation(-0.35f).translated(glyph.getX() + cx * unit, glyph.getY() + cy * unit));
         return path;
     };
+    const auto stem = [&](float x, float top, float bottom) {
+        g.fillRect(juce::Rectangle<float>(glyph.getX() + x * unit, glyph.getY() + top * unit, 1.2f * unit,
+                                          (bottom - top) * unit));
+    };
     g.setColour(ink);
-    if (voice == VoiceGlyph::mono) {
-        g.fillPath(head(6.0f, 6.0f, 8.0f, 5.6f));
+    if (voice == VoiceGlyph::mono) { // one filled head, its stem rising from the right edge
+        g.fillPath(head(5.0f, 9.0f, 5.6f, 4.0f));
+        stem(6.6f, 1.0f, 9.0f);
         return;
     }
     const juce::PathStrokeType outline(1.0f * unit * strokeScale);
-    for (const float cy : {2.4f, 6.0f, 9.6f}) {
-        const auto path = head(6.0f, cy, 6.8f, 3.4f);
+    for (const float cy : {2.8f, 6.0f, 9.2f}) { // a chord: three stacked heads sharing one stem
+        const auto path = head(4.6f, cy, 4.6f, 2.8f);
         if (voice == VoiceGlyph::poly)
             g.fillPath(path);
         else
             g.strokePath(path, outline);
     }
+    stem(6.2f, 0.8f, 9.2f);
 }
 
 } // namespace synth::ui

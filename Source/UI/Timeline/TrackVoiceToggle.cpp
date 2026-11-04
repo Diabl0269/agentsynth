@@ -56,7 +56,9 @@ void TrackVoiceToggle::paintButton(juce::Graphics& g, bool highlighted, bool dow
     const auto voice = state_ == TrackPolyState::poly    ? VoiceGlyph::poly
                        : state_ == TrackPolyState::mixed ? VoiceGlyph::mixed
                                                          : VoiceGlyph::mono;
-    paintVoiceGlyph(g, juce::Rectangle<float>(kGlyphSize, kGlyphSize).withCentre(bounds.getCentre()), ink, voice);
+    // The glyph shrinks with a row too short for it, so it is never clipped.
+    const float size = juce::jmin(kGlyphSize, bounds.getHeight());
+    paintVoiceGlyph(g, juce::Rectangle<float>(size, size).withCentre(bounds.getCentre()), ink, voice);
     synth::ui::paintFocusRing(g, bounds, *this, 3.0f);
 }
 

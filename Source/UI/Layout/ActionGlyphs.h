@@ -9,7 +9,8 @@
 // - paintShowOnCanvasGlyph: "show this module on the canvas" -- a ring with four ticks. The track header's, the
 //   mixer's, the drum pad's and the mod row's button all call it (not ModDotGlyph::Crosshair, which means "aim
 //   at a card" and keeps its own drawing).
-// - paintVoiceGlyph: a track's voice mode -- one note head for mono, a stack of three for poly, the stack outlined
+// - paintVoiceGlyph: a track's voice mode -- one note (head and stem) for mono, a chord of three heads on one stem for
+// poly, the chord outlined
 //   for a track that is half and half.
 namespace synth::ui {
 
