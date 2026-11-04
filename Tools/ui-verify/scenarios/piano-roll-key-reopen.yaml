@@ -18,11 +18,11 @@ steps:
   - click: {id: scaleAssistKeyField}
   - wait: {}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
-  - screenshot: {id: keyPicker, name: key-picker-first}
+  - screenshot: {id: keyPickerPanel, name: key-picker-first}
   - key: {keys: escape}
   - wait: {}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}
   - click: {id: scaleAssistKeyField}
   - wait: {}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
-  - screenshot: {id: keyPicker, name: key-picker-second}
+  - screenshot: {id: keyPickerPanel, name: key-picker-second}

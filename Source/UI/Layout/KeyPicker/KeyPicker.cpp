@@ -1,5 +1,6 @@
 #include "KeyPicker.h"
 
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/KeyPicker/KeyPickerKeyboard.h"
 #include "UI/Layout/KeyPicker/KeyPickerPalette.h"
@@ -27,6 +28,23 @@ constexpr float kFontSize = 13.0f;
 constexpr float kSmallFontSize = 11.0f;
 } // namespace
 
+// The picker's test-mode state lives on this 1x1 child so KeyPicker.h need not include TestModeStateSource.h.
+class KeyPickerStateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit KeyPickerStateProbe(std::function<void(juce::DynamicObject&)> fill)
+        : fill_(std::move(fill)) {
+        setComponentID("keyPicker");
+        setInterceptsMouseClicks(false, false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override { fill_(into); }
+
+private:
+    std::function<void(juce::DynamicObject&)> fill_;
+};
+
 int KeyPicker::preferredHeight(bool followRow, bool previewRow, bool fitRow) {
     const int follow = followRow ? kFollowHeight + kGap : 0;
     const int preview = previewRow ? kPreviewHeight + kGap : 0;
@@ -41,7 +59,7 @@ KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalSc
     , search_(std::make_unique<NavigationSearchField>())
     , keyboard_(std::make_unique<KeyPickerKeyboard>()) {
     root_ = options_.current.has_value() ? ((options_.current->rootPitchClass % 12) + 12) % 12 : 0;
-    setComponentID("keyPicker");
+    setComponentID("keyPickerPanel");
     setTitle(options_.what + " picker");
     setWantsKeyboardFocus(false);
     setFocusContainerType(FocusContainerType::keyboardFocusContainer);
@@ -117,6 +135,11 @@ KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalSc
     applyColours();
     setSize(kWidth, preferredHeight(options_.showFollowRow, options_.showPreviewSound, options_.showFitProject));
     ready_ = true;
+
+    stateProbe_ = std::make_unique<KeyPickerStateProbe>([this](juce::DynamicObject& into) { fillTestModeState(into); });
+    addChildComponent(*stateProbe_);
+    stateProbe_->setBounds(0, 0, 1, 1);
+    stateProbe_->setVisible(true);
 }
 
 KeyPicker::~KeyPicker() {
@@ -570,7 +593,7 @@ bool KeyPicker::sendKey(const juce::KeyPress& key) {
 }
 
 // Test-mode state: whether a hovered key is being auditioned, which key, and the Preview sound the picker shows.
-void KeyPicker::addTestModeState(juce::DynamicObject& into) const {
+void KeyPicker::fillTestModeState(juce::DynamicObject& into) const {
     into.setProperty("auditioning", auditioning_);
     into.setProperty("auditionKey",
                      auditioning_ && lastHighlight_.has_value() ? keyDisplayName(*lastHighlight_) : juce::String());

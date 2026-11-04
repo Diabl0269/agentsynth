@@ -268,6 +268,20 @@ once and is consumed, even on a disabled button. `Tests/UI/Mixer/MixerSpaceKeyTe
 of a real mixer panel, so a new one joins the check by existing. The mixer's colour dot is its one listed exception: a
 click on a strip often lands on it, so it takes Return only and Space still plays (`docs/mixer/strip-focus.md`).
 
+## Space on a menu field
+
+Opposite of the button rule: a menu-style field (`KeyField`, `FollowKeyField`, `NoteLengthBox`, the mod matrix combos,
+the Sampler's instrument picker, every stock `juce::ComboBox`) opens on Return (and Enter) only. Space is not
+theirs: it bubbles to the app's play/stop. `PaneKeys`, `KeyRing` and the Sound browser's key relay never open a
+combo on Space either. `MenuFieldSpaceTests` walks every combo-style opener of a real main window and pins both keys.
+
+## Focus ring on every select
+
+A dropdown shows the shared accent focus ring (`paintFocusRing`, `FocusRing.h`) while it has keyboard focus: one call at
+the end of `AppLookAndFeel::drawComboBox` covers every `juce::ComboBox`, and the routing pane's `RoutingComboButton`
+paints it itself. `SelectFocusRingTests` renders focused against unfocused pixels for every focusable control in the
+routing pane and every combo box of a real main window, so a new select without a ring fails.
+
 ## Arrow keys in lists of controls
 
 A Settings tab or a dialog is a list of controls, so the arrow keys walk it the way they walk the module

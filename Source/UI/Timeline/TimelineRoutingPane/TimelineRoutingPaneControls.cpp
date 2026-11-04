@@ -1,6 +1,7 @@
 // Concern: RoutingComboButton -- painting and focus behaviour.
 #include "TimelineRoutingPaneControls.h"
 
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
@@ -44,6 +45,7 @@ void RoutingComboButton::paintButton(juce::Graphics& g, bool highlighted, bool d
     g.setColour(warning_ ? colors.warning : (muted_ ? colors.textMuted : colors.textPrimary));
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.drawText(getButtonText(), area, juce::Justification::centredLeft, true);
+    paintFocusRing(g, getLocalBounds().toFloat(), *this, theme.metrics.cornerRadiusSmall);
 }
 
 } // namespace synth::ui

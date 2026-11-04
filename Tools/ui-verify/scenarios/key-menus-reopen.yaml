@@ -19,12 +19,12 @@ steps:
   - expect: {id: keyPicker, exists: false}
   - click: {id: timelineTransportSongKey}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
-  - screenshot: {id: keyPicker, name: song-key-first-open}
+  - screenshot: {id: keyPickerPanel, name: song-key-first-open}
   - key: {keys: escape}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}
   - click: {id: timelineTransportSongKey}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
-  - screenshot: {id: keyPicker, name: song-key-second-open}
+  - screenshot: {id: keyPickerPanel, name: song-key-second-open}
   - key: {keys: escape}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}
   - click: {id: timelineTransportSongKey}
@@ -47,9 +47,9 @@ steps:
   - expect: {id: sequencerKey, showing: true, within_ms: 2000}
   - click: {id: sequencerKey}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
-  - screenshot: {id: keyPicker, name: sequencer-key-first-open}
+  - screenshot: {id: keyPickerPanel, name: sequencer-key-first-open}
   - key: {keys: escape}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}
   - click: {id: sequencerKey}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
-  - screenshot: {id: keyPicker, name: sequencer-key-second-open}
+  - screenshot: {id: keyPickerPanel, name: sequencer-key-second-open}

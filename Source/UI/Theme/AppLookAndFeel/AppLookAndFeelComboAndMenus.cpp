@@ -1,5 +1,7 @@
 #include "AppLookAndFeel.h"
 
+#include "UI/Layout/FocusRing.h"
+
 namespace synth::theme {
 
 // Concern: combo boxes and popup menus.
@@ -38,8 +40,9 @@ void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool
     g.setColour(fill);
     g.fillRoundedRectangle(bounds, m.pillRadius);
 
-    // Outline: accent when focused, else themed border.
-    g.setColour(box.hasKeyboardFocus(false) ? c.accent : box.findColour(juce::ComboBox::outlineColourId));
+    // Outline: the themed border; the keyboard-focus ring is the shared one, painted last (below) so every select in
+    // the app shows the same ring a button does.
+    g.setColour(box.findColour(juce::ComboBox::outlineColourId));
     g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
 
     // Chevron: dimmed when disabled.
@@ -75,6 +78,8 @@ void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool
             }
         }
     }
+
+    synth::ui::paintFocusRing(g, juce::Rectangle<float>(0, 0, (float)width, (float)height), box, m.pillRadius);
 }
 
 void AppLookAndFeel::drawComboBoxTextWhenNothingSelected(juce::Graphics& g, juce::ComboBox& box, juce::Label& label) {

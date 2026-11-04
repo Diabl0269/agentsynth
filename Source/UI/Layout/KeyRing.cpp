@@ -135,8 +135,9 @@ bool KeyRing::handleKey(const juce::KeyPress& key) {
         moveRingTo(stops.front());
     } else if (key.isKeyCode(juce::KeyPress::endKey)) {
         moveRingTo(stops.back());
-    } else if (key.isKeyCode(juce::KeyPress::returnKey) || key.isKeyCode(juce::KeyPress::spaceKey)) {
-        activate(*current);
+    } else if (key.isKeyCode(juce::KeyPress::returnKey) ||
+               (key.isKeyCode(juce::KeyPress::spaceKey) && dynamic_cast<juce::ComboBox*>(current) == nullptr)) {
+        activate(*current); // Space on a menu is not ours: it stays the app's play key
     } else if (key.isKeyCode(juce::KeyPress::downKey) || key.isKeyCode(juce::KeyPress::escapeKey)) {
         leave();
     } else if (!key.isKeyCode(juce::KeyPress::upKey)) {

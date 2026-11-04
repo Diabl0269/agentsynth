@@ -24,18 +24,17 @@ TEST(KeyFieldTest, ShowsTheKeyOrTheNoKeyText) {
     EXPECT_EQ(field.getText(), "None");
 }
 
-TEST(KeyFieldTest, SpaceAndReturnOpenOnceAndAreConsumedButUpAndDownAreNot) {
+// Space is the app's play key, so a Key field no longer opens on it.
+TEST(KeyFieldTest, ReturnOpensOnceAndIsConsumedButSpaceUpAndDownAreNot) {
     KeyField field;
     int opened = 0;
     field.onOpen = [&] { ++opened; };
-    for (const auto& key : {juce::KeyPress(juce::KeyPress::spaceKey), juce::KeyPress(juce::KeyPress::returnKey)}) {
-        const int before = opened;
-        EXPECT_TRUE(field.keyPressed(key)) << key.getTextDescription();
-        EXPECT_EQ(opened, before + 1);
-    }
-    for (const auto& key : {juce::KeyPress(juce::KeyPress::downKey), juce::KeyPress(juce::KeyPress::upKey)}) {
-        EXPECT_FALSE(field.keyPressed(key)) << key.getTextDescription() << " bubbles so the region can move on";
-        EXPECT_EQ(opened, 2);
+    EXPECT_TRUE(field.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_EQ(opened, 1);
+    for (const auto& key : {juce::KeyPress(juce::KeyPress::spaceKey), juce::KeyPress(juce::KeyPress::downKey),
+                            juce::KeyPress(juce::KeyPress::upKey)}) {
+        EXPECT_FALSE(field.keyPressed(key)) << key.getTextDescription() << " bubbles so the app or region takes it";
+        EXPECT_EQ(opened, 1);
     }
 }
 

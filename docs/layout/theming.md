@@ -380,7 +380,8 @@ implemented in `AppLookAndFeel`:
   constructor argument (the mixer's "Show all" is right-aligned, the routing pane's links left-aligned),
   and the underline follows it. The text is its accessible title; description, tooltip and focus policy
   stay with the call site. It lives in `Core` next to `IconButton`.
-- **ComboBox** — `drawComboBox` (pressed/disabled/focused states, drawn chevron arrow),
+- **ComboBox** — `drawComboBox` (pressed/disabled states, drawn chevron arrow, and the shared focus ring from
+  `FocusRing.h` when it holds keyboard focus; the routing pane's `RoutingComboButton` paints the same ring),
   `drawComboBoxTextWhenNothingSelected` (muted placeholder text).
 - **PopupMenu** — `drawPopupMenuItem` (separator hairline, highlight fill, drawn tick checkmark,
   submenu chevron, disabled dim). It also paints a 14x14 waveform glyph left of the item text for

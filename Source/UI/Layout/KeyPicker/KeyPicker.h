@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Music/SongKey.h"
-#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/FilteredRowFades.h"
 #include "UI/Layout/NavigationSearchField.h"
@@ -17,6 +16,7 @@ class KeyPickerButton;
 class KeyPickerFollowRow;
 class KeyPickerKeyboard;
 class KeyPickerRow;
+class KeyPickerStateProbe;
 
 /** The key picker: a popover for choosing a musical key (root plus scale). Lives in a juce::CallOutBox the caller
  *  launches (like ModMatrixPicker); it never launches one itself. A pick reports through `onPick` and closes the box.
@@ -26,7 +26,6 @@ class KeyPickerRow;
  */
 class KeyPicker
     : public juce::Component
-    , public synth::testmode::StateSource
     , private juce::Timer {
 public:
     struct Options {
@@ -74,8 +73,6 @@ public:
     void mouseExit(const juce::MouseEvent& e) override;
     void focusOfChildComponentChanged(FocusChangeType) override { repaint(); }
 
-    void addTestModeState(juce::DynamicObject& into) const override;
-
     /** Closes the launching CallOutBox, if any. */
     void dismiss();
 
@@ -109,6 +106,7 @@ public:
 private:
     CalloutReveal reveal_{*this};
 
+    void fillTestModeState(juce::DynamicObject& into) const;
     void buildPreviewSound();
     void buildFitProject();
     void buildRows();
@@ -152,6 +150,8 @@ private:
     juce::Label previewLabel_;
     juce::ComboBox previewCombo_;
     std::unique_ptr<KeyPickerButton> fitProject_;
+    // A 1x1 child (id "keyPicker") that answers test-mode getState, so this header stays free of TestModeStateSource.h.
+    std::unique_ptr<KeyPickerStateProbe> stateProbe_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(KeyPicker)
 };

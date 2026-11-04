@@ -59,7 +59,7 @@ void SamplerInstrumentPicker::paintButton(juce::Graphics& g, bool highlighted, b
 }
 
 bool SamplerInstrumentPicker::keyPressed(const juce::KeyPress& key) {
-    if (isEnabled() && (key == juce::KeyPress::returnKey || key == juce::KeyPress::spaceKey)) {
+    if (isEnabled() && key == juce::KeyPress::returnKey) {
         if (onClick)
             onClick();
         return true;

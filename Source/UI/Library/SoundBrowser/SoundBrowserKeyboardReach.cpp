@@ -56,13 +56,6 @@ void SoundBrowserComponent::focusStop(juce::Component& stop) {
 bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key, juce::Component* origin) {
     if (origin == nullptr || key.getModifiers().isAnyModifierKeyDown() || keepsUpAndDown(*origin))
         return false;
-    if (key.isKeyCode(juce::KeyPress::spaceKey)) {
-        auto* menu = dynamic_cast<juce::ComboBox*>(origin);
-        if (menu == nullptr)
-            return false;
-        menu->showPopup();
-        return true;
-    }
     const bool up = key.isKeyCode(juce::KeyPress::upKey);
     if (!up && !key.isKeyCode(juce::KeyPress::downKey))
         return false;

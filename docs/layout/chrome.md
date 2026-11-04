@@ -667,7 +667,7 @@ Its rows paint under these rules:
   Modulation, Flat Sources, then each row's source, destination, amount, bypass, delete), Up/Down move
   to the same column on the row above or below, and the amount slider keeps Up/Down to nudge the
   amount, as a mixer fader does. A combo never re-points its routing on an arrow key (the stock combo
-  would, one undo step per press); Return or Space opens its picker. Every control draws the accent
+  would, one undo step per press); Return opens its picker (Space stays play/stop). Every control draws the accent
   focus ring through `AppLookAndFeel`. `AccessibilityCoverageTests` audits the open matrix and the
   picker (`ModMatrix`, `ModMatrixPicker` at 0/0).
   The picker is also the timeline's "Add automation..." list ([automation](../timeline/automation.md#adding-a-lane-from-the-timeline)):

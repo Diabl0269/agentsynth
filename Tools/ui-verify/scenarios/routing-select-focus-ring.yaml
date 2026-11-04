@@ -1,0 +1,33 @@
+# Gap: the routing pane's selects (Canvas node, MIDI input, Input channel, MIDI destinations) drew no focus ring, so a
+# keyboard user stepping through them could not see where focus was. Every dropdown now draws the shared accent ring.
+#
+# What a user does: opens a project with a MIDI track, opens the side pane and selects the track. Clicks the pane's empty
+# area, then steps down through its selects with the Down key; each focused select shows the accent ring.
+record: true
+save_project: routing-select-focus-ring
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: window, x: 213, y: 61}                      # the side-pane button
+  - wait: {}
+  - click: {id: window, x: 470, y: 124}                     # the track's header: the pane follows it
+  - wait: {}
+  - expect: {id: timelineRoutingPane, showing: true, within_ms: 2000}
+  - screenshot: {name: 0-nothing-focused}
+  - click: {id: window, x: 300, y: 500}                     # the pane's empty area
+  - key: {keys: down, target: timelineRoutingPane}
+  - wait: {}
+  - screenshot: {name: 1-canvas-node-focused}
+  - key: {keys: down}
+  - wait: {}
+  - screenshot: {name: 2-midi-input-focused}
+  - key: {keys: down}
+  - wait: {}
+  - screenshot: {name: 3-input-channel-focused}
+  - key: {keys: down}
+  - wait: {}
+  - screenshot: {name: 4-midi-destinations-focused}

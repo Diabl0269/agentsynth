@@ -7,7 +7,7 @@
 
 namespace synth::ui {
 
-/** The closed box of a key choice: looks and behaves like a juce::ComboBox (a Tab stop; a click, Space, Return or Down
+/** The closed box of a key choice: looks and behaves like a juce::ComboBox (a Tab stop; a click, Return or Down
  *  opens) but has no items and opens whatever `onOpen` launches, the key picker. It shows the key ("D Dorian") or the
  *  no-key text. A mouse click never takes keyboard focus from the editing surface. */
 class KeyField : public juce::ComboBox {

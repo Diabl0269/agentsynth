@@ -113,13 +113,13 @@ below for the Mixer region's own keyboard behaviour.
   outline stands down while focus is in a pane). Inside a pane, Down from the root enters the first control and Up/Down
   step between controls in on-screen order (no wrap; Up off the first control returns to the root); only a multi-line
   text editor keeps its own Up/Down (a one-line field gives them up, or focus would be trapped in it), a combo box or
-  the song Key field opens with Space or Return, a slider moves with Left/Right, and Escape from any control returns
+  the song Key field opens with Return (Space stays play/stop), a slider moves with Left/Right, and Escape from any control returns
   to the pane root. A stop is always the control itself, never a part of it (a slider's text box). The rule lives in
   `Source/UI/Layout/FocusStepWithin.h` (`PaneKeys`).
 - **The Timeline's top bar** (side-pane toggle, tool strip, Sizing, Snap, Follow, the transport buttons, count-in,
   tempo, time signature, song Key) — focus stays on the Timeline root. Up on the root raises a ring on the first
   control (`synth::ui::KeyRing`); Left/Right/Home/End move it across the visible, enabled controls in on-screen order
-  (no wrap), Return or Space presses the ringed one (a menu opens, tempo and time signature start typing), Down or
+  (no wrap), Return or Space presses the ringed one (tempo and time signature start typing); a menu field (Snap, Follow, song Key) opens with Return only, and Space on it plays and stops, Down or
   Escape drops back to the root, and a chord or a tool digit still reaches the panel. The main Toolbar and the Canvas
   toolbar already have the same ring, and the Mixer's top bar has it too (entered with Cmd+Up, since plain Up/Down there
   nudge the fader; [top bar keys](../mixer/top-bar-keys.md)). The Timeline's and the Mixer's rings are one

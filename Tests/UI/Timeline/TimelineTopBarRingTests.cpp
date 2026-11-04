@@ -136,6 +136,23 @@ TEST(TimelineTopBarRingTest, ReturnAndSpacePressTheRingedControl) {
     EXPECT_TRUE(f.panel.getTransportBar().getBpmLabel().isBeingEdited()) << "Return starts typing the tempo";
 }
 
+// A menu on the ring opens with Return only; Space is left to the app's play/stop.
+TEST(TimelineTopBarRingTest, ReturnOpensTheRingedKeyMenuButSpaceIsNotTheRings) {
+    TopBarFixture f;
+    ASSERT_TRUE(f.panel.handleRootFocusKey(key(juce::KeyPress::upKey)));
+    auto& songKey = f.panel.getTransportBar().getSongKeyField();
+    int opened = 0;
+    songKey.onOpen = [&] { ++opened; };
+    f.keys().handleKey(key(juce::KeyPress::homeKey));
+    while (f.keys().getRingedStop() != &songKey && f.keys().getRingedStop() != f.keys().getStops().back())
+        f.keys().handleKey(key(juce::KeyPress::rightKey));
+    ASSERT_EQ(f.keys().getRingedStop(), &songKey);
+    EXPECT_FALSE(f.keys().handleKey(key(juce::KeyPress::spaceKey))) << "the ring leaves Space to the app";
+    EXPECT_EQ(opened, 0);
+    EXPECT_TRUE(f.keys().handleKey(key(juce::KeyPress::returnKey)));
+    EXPECT_EQ(opened, 1);
+}
+
 // Regression test for FRO1291: the ring moved a painted box while the panel kept focus, so a screen reader heard
 // nothing. The panel's handler value is the ringed control's name, and it changes on every move.
 TEST(TimelineTopBarRingTest, TheScreenReaderValueNamesTheRingedControlAndChangesWithEveryMove) {

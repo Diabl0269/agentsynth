@@ -350,20 +350,20 @@ TEST(NoteLengthBox, TabsToTheBoxAndKeysOpenPickAndWriteTheParameter) {
     EXPECT_EQ(box.getPopup(), nullptr) << "the popup is gone once it closed";
 }
 
-TEST(NoteLengthBox, SpaceAndEnterOpenThePopupAndEscapeLeavesTheValue) {
+TEST(NoteLengthBox, EnterOpensThePopupSpaceDoesNotAndEscapeLeavesTheValue) {
     SkipDesktop skip;
     NoteLengthBox box;
     box.setBounds(0, 0, 80, 22);
     box.setChoices(synth::envelopeNoteDivisions());
     box.setCurrentName("1/2", juce::dontSendNotification);
-    for (const int key : {juce::KeyPress::spaceKey, juce::KeyPress::returnKey}) {
-        ASSERT_TRUE(box.keyPressed(juce::KeyPress(key))) << key;
-        ASSERT_NE(box.getPopup(), nullptr) << key;
-        EXPECT_EQ(box.getPopup()->activeItem()->getTooltip(), "1/2") << "it opens on the current value";
-        box.getPopup()->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
-        EXPECT_EQ(box.getPopup(), nullptr);
-        EXPECT_EQ(box.getCurrentName(), "1/2");
-    }
+    EXPECT_FALSE(box.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey))) << "Space stays the app's play key";
+    EXPECT_EQ(box.getPopup(), nullptr);
+    ASSERT_TRUE(box.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    ASSERT_NE(box.getPopup(), nullptr);
+    EXPECT_EQ(box.getPopup()->activeItem()->getTooltip(), "1/2") << "it opens on the current value";
+    box.getPopup()->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+    EXPECT_EQ(box.getPopup(), nullptr);
+    EXPECT_EQ(box.getCurrentName(), "1/2");
 }
 
 TEST(NoteLengthBox, AParameterChangeFromElsewhereMovesTheBox) {
