@@ -31,4 +31,32 @@ void paintShowOnCanvasGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce
         g.drawLine({centre + d * (radius + unit), centre + d * tick}, thickness);
 }
 
+// Note heads, a little tilted like engraved ones. Mono is one large head; poly is three smaller ones stacked like a
+// chord; mixed is the same stack as outlines, so "some of each" reads as "not filled in".
+void paintVoiceGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, VoiceGlyph voice,
+                     float strokeScale) {
+    const auto glyph = squareIn(area);
+    const float unit = glyph.getWidth() / kGridSize;
+    const auto head = [&](float cx, float cy, float w, float h) {
+        juce::Path path;
+        path.addEllipse(-w * 0.5f * unit, -h * 0.5f * unit, w * unit, h * unit);
+        path.applyTransform(
+            juce::AffineTransform::rotation(-0.35f).translated(glyph.getX() + cx * unit, glyph.getY() + cy * unit));
+        return path;
+    };
+    g.setColour(ink);
+    if (voice == VoiceGlyph::mono) {
+        g.fillPath(head(6.0f, 6.0f, 8.0f, 5.6f));
+        return;
+    }
+    const juce::PathStrokeType outline(1.0f * unit * strokeScale);
+    for (const float cy : {2.4f, 6.0f, 9.6f}) {
+        const auto path = head(6.0f, cy, 6.8f, 3.4f);
+        if (voice == VoiceGlyph::poly)
+            g.fillPath(path);
+        else
+            g.strokePath(path, outline);
+    }
+}
+
 } // namespace synth::ui

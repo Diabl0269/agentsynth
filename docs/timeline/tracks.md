@@ -61,7 +61,7 @@ colour picker, built by `buildTrackColourPicker` in `TrackColourPicker.h`, which
 shares -- [the colour dot](../mixer/panel.md#the-colour-dot)), a track-kind badge, an "N lanes" badge while the lanes are folded, a name label
 (double-click to edit), `M` / `S` / `R` toggles, on an audio track the [Monitor](#monitoring) speaker button right of
 `R` (every row keeps its slot, so M/S/R line up down the column), the binding chip and, for a track with a poly-capable voice chain, the
-[Mono | Poly switch](#the-monopoly-switch). The Automation track is
+[mono / poly voice toggle](#the-monopoly-switch). The Automation track is
 drawn differently, as the "Unassigned automation" section header
 ([automation](automation.md#unassigned-automation)).
 
@@ -540,24 +540,32 @@ undo or redo restore.
 ## The Mono/Poly switch
 
 A track whose voice graph holds a poly-capable module (Oscillator, Wavetable, Noise, Filter, ADSR or VCA) shows a
-**Mono | Poly** switch (`TrackPolySwitch`, `Source/UI/Timeline/TrackPolySwitch.h`) in the bottom row, left of the channel
-chip. It does what the **Poly** pill on a card does ([the Poly toggle](../modules/modulation.md#the-poly-toggle)), for
-the whole track at once: the same plan, the same question when other tracks' modules would change, and ONE undo step.
+**voice toggle** (`TrackVoiceToggle`, `Source/UI/Timeline/TrackVoiceToggle.h`) in the bottom row, left of the channel
+chip: one icon button, the same square size as the show-module button beside it (`TrackShowModuleButton::kSize`). It does
+what the **Poly** pill on a card does ([the Poly toggle](../modules/modulation.md#the-poly-toggle)), for the whole track
+at once: the same plan, the same question when other tracks' modules would change, and ONE undo step.
 
 - **Where the state comes from.** The header stays graph-free: `TrackHeaderHost::getTrackPolyState(track)` answers
-  `none` (no poly-capable module, so the switch is hidden), `mono`, `poly` or `mixed`, and `setTrackPoly(track, poly)`
+  `none` (no poly-capable module, so the toggle is hidden), `mono`, `poly` or `mixed`, and `setTrackPoly(track, poly)`
   asks for a switch. `MainComponent` resolves the track's source node and calls
   `PolyChainController::trackPolyState` / `trackPolyClicked`, which plan the voice graph from that node (a source node
   has no pill of its own, so nothing falls back to it).
-- **Looks.** The current side is filled. While a chain is half poly (a card's pill flipped by hand) neither side is
-  filled and the tooltips say so; pressing either side then sets every module. Both sides are Tab stops (Return or
-  Space presses), named "Mono, <track>" and "Poly, <track>", and a click leaves focus on the row. The tooltips describe the effect
-  ("Play several notes at once: switches the whole voice chain of <track> to poly.").
-- **Staying current.** A pill click, the switch and an undo all end in a header refresh
-  (`PolyChainController::onVoiceGraphChanged`, `reconcileTimelineAfterGraphChange`), so the switch and the cards never disagree.
-  The switch fades in and out with the chip row ([header chips fade](#header-chips-fade)).
+- **Looks.** One note head means mono (drawn in the muted text colour), a stack of three note heads means poly (drawn in
+  the accent, and the toggle reads as on). While a chain is half poly (a card's pill flipped by hand) the stack is drawn
+  as outlines and the tooltip says "Some of <track>'s modules are mono and some poly right now"; a click on it sets every
+  module to poly. The pictures come from `paintVoiceGlyph` (`Source/UI/Layout/ActionGlyphs.h`). The tooltip names what the
+  state is and what a click does.
+- **Fits any row height.** The toggle keeps its width and takes the row's height when the row is shorter than the
+  button, like the show-module and drum buttons; every child of the header stays inside it and none overlap at any row
+  height (`TimelineTrackHeaderRowFitTests.cpp` sweeps heights, widths and control sets).
+- **Keyboard and screen reader.** A Tab stop (Return or Space presses it) that leaves focus on the row when clicked, with
+  the accent focus ring. Its name is "Poly voices, <track>", reported on (poly) or off (mono or half poly).
+- **Staying current.** A pill click, the toggle and an undo all end in a header refresh
+  (`PolyChainController::onVoiceGraphChanged`, `reconcileTimelineAfterGraphChange`), so the toggle and the cards never
+  disagree. The toggle fades in and out with the chip row ([header chips fade](#header-chips-fade)).
 
-Tests: `Tests/UI/Timeline/TimelineTrackPolySwitchTests.cpp` (the header, against a stub host) and
+Tests: `Tests/UI/Timeline/TimelineTrackVoiceToggleTests.cpp` (the header, against a stub host),
+`Tests/UI/Timeline/TimelineTrackHeaderRowFitTests.cpp` (every child inside the row at every height) and
 `Tests/UI/Graph/GraphEditor/GraphEditorPolyChainTests.cpp` (the voice-graph switch from a track source).
 
 ## Routing from the side pane
@@ -845,6 +853,6 @@ coverage), `Tests/UI/Timeline/TimelineTrackFocusTests.cpp`, and
 
 ## Header chips fade
 
-A track header's channel chip, Mono | Poly switch and fold arrow fade in and out as the track gains or loses them, the binding chip giving
+A track header's channel chip, voice toggle and fold arrow fade in and out as the track gains or loses them, the binding chip giving
 way (or taking the room back) as the channel chip's width follows the fade. A new modulator row and its band under a
 lane fade in. See [animation](../layout/animation.md#fading-things-in-and-out).

@@ -4,10 +4,12 @@
 #
 # What a user does:
 #   1. Starts a new project and adds an Oscillator track; opens the track on the canvas (double-click).
-#   2. Presses Poly on the track header: the Oscillator's Poly switch turns on and a Poly MIDI module appears.
-#   3. Presses Mono: the Poly switch turns off and the Poly MIDI module is gone.
-#   4. Presses Poly again: the chain comes back the same way.
+#   2. Clicks the voice toggle on the track header (one note = mono, stacked notes = poly): the Oscillator's Poly switch turns on and a Poly MIDI module appears.
+#   3. Clicks it again: the Poly switch turns off and the Poly MIDI module is gone.
+#   4. Clicks it a third time: the chain comes back the same way.
+# The toggle is one icon button: its state follows the graph in both directions.
 # Not asserted: the extra Track In cable some Poly flips leave behind (known and open).
+record: true
 steps:
   - click: {id: New empty project}                           # the welcome screen
   - wait: {}
@@ -19,17 +21,21 @@ steps:
   - click: {id: macroCard, clicks: 2}                        # open the track on the canvas
   - wait: {}
   - expect: {id: "card:Oscillator > Poly", toggleState: false}
+  - expect: {id: trackVoiceToggle, toggleState: false}      # one note: mono
   - expect: {count: {prefix: "card:Poly MIDI", equals: 0}}
-  - click: {id: trackPolyButton}
+  - click: {id: trackVoiceToggle}
   - wait: {}
+  - expect: {id: trackVoiceToggle, toggleState: true, within_ms: 1500}  # stacked notes: poly
   - expect: {id: "card:Oscillator > Poly", toggleState: true, within_ms: 1500}
   - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
-  - click: {id: trackMonoButton}
+  - click: {id: trackVoiceToggle}
   - wait: {}
+  - expect: {id: trackVoiceToggle, toggleState: false, within_ms: 1500}
   - expect: {id: "card:Oscillator > Poly", toggleState: false, within_ms: 1500}
   - expect: {count: {prefix: "card:Poly MIDI", equals: 0}, within_ms: 1500}
-  - click: {id: trackPolyButton}
+  - click: {id: trackVoiceToggle}
   - wait: {}
   - expect: {id: "card:Oscillator > Poly", toggleState: true, within_ms: 1500}
   - expect: {count: {prefix: "card:Poly MIDI", equals: 1}, within_ms: 1500}
   - screenshot: {name: poly-switch-chain}
+  - screenshot: {id: trackVoiceToggle, name: voice-toggle-poly, scale: 6}

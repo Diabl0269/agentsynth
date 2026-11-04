@@ -50,7 +50,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackDuplicateMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackShowModuleTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ActionGlyphsTests.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackPolySwitchTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackVoiceToggleTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTrackHeaderRowFitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineAddTrackKeyboardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTopBarRingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineAddTrackPickerTests.cpp

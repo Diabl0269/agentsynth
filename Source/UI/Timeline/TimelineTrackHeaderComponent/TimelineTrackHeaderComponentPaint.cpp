@@ -142,9 +142,10 @@ void TimelineTrackHeaderComponent::resized() {
             bottomRow.removeFromRight(juce::roundToInt(static_cast<float>(bottomRow.getWidth() / 2) * p)));
         bottomRow.removeFromRight(juce::roundToInt(static_cast<float>(kRowPadding) * p));
     }
-    if (const float p = polySwitchFade_.progress(); p > 0.0f) { // Mono | Poly sits left of the channel chip
-        const int width = juce::roundToInt(static_cast<float>(TrackPolySwitch::kWidth) * p);
-        polySwitch_.setBounds(bottomRow.removeFromRight(width).withSizeKeepingCentre(width, 20));
+    if (const float p = voiceToggleFade_.progress(); p > 0.0f) { // the voice toggle sits left of the channel chip
+        const int width = juce::roundToInt(static_cast<float>(TrackShowModuleButton::kSize) * p);
+        voiceToggle_.setBounds(bottomRow.removeFromRight(width).withSizeKeepingCentre(
+            width, juce::jmin(TrackShowModuleButton::kSize, bottomRow.getHeight())));
         bottomRow.removeFromRight(juce::roundToInt(static_cast<float>(kRowPadding) * p));
     }
     bindingChip_.setBounds(bottomRow);
@@ -157,8 +158,9 @@ void TimelineTrackHeaderComponent::layoutFoldArrowAndBadges(juce::Rectangle<int>
     const auto* t = track();
     const int laneCount = t != nullptr ? shownLaneCount() : 0;
     if (const float p = foldArrowFade_.progress(); p > 0.0f) // the arrow's slot opens and closes with its fade
-        foldArrow_.setBounds(row.removeFromLeft(juce::roundToInt(static_cast<float>(TrackFoldArrow::kSize) * p))
-                                 .withSizeKeepingCentre(TrackFoldArrow::kSize, TrackFoldArrow::kSize));
+        foldArrow_.setBounds(
+            row.removeFromLeft(juce::roundToInt(static_cast<float>(TrackFoldArrow::kSize) * p))
+                .withSizeKeepingCentre(TrackFoldArrow::kSize, juce::jmin(TrackFoldArrow::kSize, row.getHeight())));
     kindBadgeBounds_ = isSectionHeader() ? juce::Rectangle<int>() : row.removeFromLeft(kKindBadgeWidth);
     laneBadgeBounds_ = {};
     if (laneCount > 0 && isSectionHeader()) {

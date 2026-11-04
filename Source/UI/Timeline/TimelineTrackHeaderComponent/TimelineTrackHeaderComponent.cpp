@@ -118,7 +118,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     foldArrow_.onPopupMenuRequested = [this] { showContextMenu(); };
     initHeightHandle();
     // The chips and the arrow fade as the track gains or loses them; their widths follow the fade so the row slides.
-    for (auto* fade : {&foldArrowFade_, &channelChipFade_, &polySwitchFade_, &drumButtonFade_})
+    for (auto* fade : {&foldArrowFade_, &channelChipFade_, &voiceToggleFade_, &drumButtonFade_})
         fade->onFrame = [this] { resized(); };
 
     // Drum Kit tracks only (refreshFromDoc shows it); it opens the drum machine on the clip under the playhead.
@@ -148,9 +148,9 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
             link->revealChannelForTrack(trackId_);
     };
 
-    // Mono | Poly: shown only for a track whose voice graph has something poly-capable (refreshFromDoc).
-    addChildComponent(polySwitch_);
-    polySwitch_.onSwitch = [this](bool poly) {
+    // The voice toggle: shown only for a track whose voice graph has something poly-capable (refreshFromDoc).
+    addChildComponent(voiceToggle_);
+    voiceToggle_.onSwitch = [this](bool poly) {
         if (host_ != nullptr)
             host_->setTrackPoly(trackId_, poly);
     };
@@ -313,10 +313,10 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     const auto polyState =
         host_ != nullptr && !isSectionHeader() ? host_->getTrackPolyState(trackId_) : TrackPolyState::none;
     if (polyState != TrackPolyState::none)
-        polySwitch_.setState(polyState, t->name);
-    if (polySwitchFade_.isShown() != (polyState != TrackPolyState::none)) {
-        polySwitchFade_.setShown(polyState != TrackPolyState::none);
-        resized(); // the switch shares the bottom row with the binding chip
+        voiceToggle_.setState(polyState, t->name);
+    if (voiceToggleFade_.isShown() != (polyState != TrackPolyState::none)) {
+        voiceToggleFade_.setShown(polyState != TrackPolyState::none);
+        resized(); // the toggle shares the bottom row with the binding chip
     }
 
     const bool showDrumButton = host_ != nullptr && !isSectionHeader() && host_->isDrumKitTrack(trackId_);
@@ -336,7 +336,7 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     if (isSectionHeader()) {
         bindingChipFade_.setShown(false);
         for (juce::Component* hidden :
-             {static_cast<juce::Component*>(&colourSwatch_), static_cast<juce::Component*>(&polySwitch_),
+             {static_cast<juce::Component*>(&colourSwatch_), static_cast<juce::Component*>(&voiceToggle_),
               static_cast<juce::Component*>(&muteButton_), static_cast<juce::Component*>(&soloButton_),
               static_cast<juce::Component*>(&armButton_), static_cast<juce::Component*>(&monitorButton_),
               static_cast<juce::Component*>(&showModuleButton_), static_cast<juce::Component*>(&drumButton_)})
