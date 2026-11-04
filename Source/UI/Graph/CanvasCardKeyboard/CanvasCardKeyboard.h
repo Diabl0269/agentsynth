@@ -39,11 +39,16 @@ public:
     /** The card of the one selected module, or null for no selection, several, or a node with no card. */
     ModuleComponent* getSingleSelectedCard() const;
 
-    /** Whether the single selected card can be renamed / replaced (drives the command's enablement). */
+    /** The outermost macro whose members are exactly the selection, or empty. Rename targets it when no single
+     *  visible module card is selected. */
+    juce::String selectedMacroId() const;
+
+    /** Whether the single selected card (or, failing that, the selected macro) can be renamed / replaced (drives the
+     *  command's enablement). */
     bool canRenameSelectedModule() const;
     bool canReplaceSelectedModule() const;
 
-    /** Open the selected card's inline title editor / "Replace with..." picker. False when not allowed. */
+    /** Open the selected card's (or macro's) inline title editor / "Replace with..." picker. False when not allowed. */
     bool renameSelectedModule();
     bool replaceSelectedModule();
 

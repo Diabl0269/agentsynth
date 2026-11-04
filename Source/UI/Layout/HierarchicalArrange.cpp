@@ -498,6 +498,56 @@ void seatMovedSources(std::vector<int>& members, const std::vector<int>& depth, 
     }
 }
 
+// A modulation source (one that also has a signal cable, so it is not in the shared row) whose consumers sit in two or
+// more rows is centred, vertically, on the span from the first
+// consumer's top to the last consumer's bottom, so it reads as feeding all of them instead of sitting level with one.
+// The column is left alone. When the centre is taken by another block of the column, the source slides back toward the
+// row it was seated in until it fits, so the result never overlaps. A source with one consumer row is untouched.
+void centreSourcesOnTheirConsumers(const Graph& g, const Rows& rows, const std::vector<juce::Point<int>>& size,
+                                   const std::vector<juce::Point<int>>& anchorOff,
+                                   std::vector<juce::Rectangle<int>>& rect, Frame& frame,
+                                   const std::vector<int>& itemOf) {
+    for (int i = 0; i < g.n; ++i) {
+        if (rows.shared[i] || !g.flowIn[i].empty() || !g.modIn[i].empty())
+            continue; // a pure modulator of several rows keeps the shared row; a fed block keeps its row
+        std::set<int> consumerRows;
+        bool modulates = false;
+        int top = 0, bottom = 0;
+        bool first = true;
+        for (const auto& e : g.edges) {
+            if (e.a != i)
+                continue;
+            modulates = modulates || e.mod;
+            consumerRows.insert(rows.rowOf[e.b]);
+            top = first ? rect[e.b].getY() : std::min(top, rect[e.b].getY());
+            bottom = first ? rect[e.b].getBottom() : std::max(bottom, rect[e.b].getBottom());
+            first = false;
+        }
+        if (!modulates || consumerRows.size() < 2)
+            continue;
+        const int home = rect[i].getY();
+        const int target = std::max(0, gridUp((top + bottom) / 2 - size[i].y / 2));
+        const int step = target < home ? kGridSize : -kGridSize;
+        int y = target;
+        auto overlaps = [&](int at) {
+            const auto moved = rect[i].withY(at).expanded(0, kIntraLayerGapY / 2);
+            for (int j = 0; j < g.n; ++j)
+                if (j != i && moved.intersects(rect[j]))
+                    return true;
+            return false;
+        };
+        while (y != home && overlaps(y)) {
+            y += step;
+            if ((step > 0 && y > home) || (step < 0 && y < home))
+                y = home;
+        }
+        if (overlaps(y))
+            continue;
+        rect[i] = rect[i].withY(y);
+        frame.items[itemOf[i]].pos.y = gridUp(y - anchorOff[i].y);
+    }
+}
+
 Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const std::vector<juce::String>& starts) {
     Frame frame;
     if (blocks.empty())
@@ -548,6 +598,8 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
     for (int i = 0; i < n; ++i)
         rowMembers[rows.finalRank[rows.rowOf[i]]].push_back(i);
 
+    std::vector<int> itemOf(n, -1);
+    std::vector<juce::Rectangle<int>> rect(n);
     int y = 0;
     for (int rank = 0; rank < rowCount; ++rank) {
         auto& members = rowMembers[rank];
@@ -572,14 +624,17 @@ Frame layoutLevel(Context& ctx, std::vector<const ArrangeBlock*> blocks, const s
             const int x = hugRight ? colX[k] + colW[k] - gridUp(size[i].x) : colX[k];
             const juce::Point<int> slot{x, y + stackY[k]};
             const juce::Point<int> anchor{gridUp(slot.x - anchorOff[i].x), gridUp(slot.y - anchorOff[i].y)};
+            itemOf[i] = static_cast<int>(frame.items.size());
             frame.items.push_back({blocks[i], anchor});
-            const juce::Rectangle<int> rect(anchor + anchorOff[i], juce::Point<int>(anchor + anchorOff[i]) + size[i]);
-            frame.bounds = frame.bounds.isEmpty() ? rect : frame.bounds.getUnion(rect);
+            rect[i] = {anchor.x + anchorOff[i].x, anchor.y + anchorOff[i].y, size[i].x, size[i].y};
             stackY[k] += gridUp(size[i].y) + kIntraLayerGapY;
             rowHeight = std::max(rowHeight, stackY[k] - kIntraLayerGapY);
         }
         y += gridUp(rowHeight) + kIntraLayerGapY;
     }
+    centreSourcesOnTheirConsumers(g, rows, size, anchorOff, rect, frame, itemOf);
+    for (int i = 0; i < n; ++i)
+        frame.bounds = frame.bounds.isEmpty() ? rect[i] : frame.bounds.getUnion(rect[i]);
     return frame;
 }
 

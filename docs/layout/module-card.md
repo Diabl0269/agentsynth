@@ -391,7 +391,7 @@ the old module back inside the macro (`Tests/Macros/MacroReplaceMemberTests.cpp`
 
 ## Keyboard: rename and replace
 
-With exactly one card selected (and no track header or mixer column holding the name focus, which answer the same key first), **F2** or **Option+R** (`renameSelectedModuleAlt`, Alt+R off the Mac) opens the inline title editor (Rename) and **Cmd+Alt+R** (Ctrl+Alt+R off
+With a macro selected (its whole member set, nothing else), the same keys rename the macro: inline on its card when folded, in the Rename Macro dialog when open; a single visible module card still wins. With exactly one card selected (and no track header or mixer column holding the name focus, which answer the same key first), **F2** or **Option+R** (`renameSelectedModuleAlt`, Alt+R off the Mac) opens the inline title editor (Rename) and **Cmd+Alt+R** (Ctrl+Alt+R off
 the Mac) opens the "Replace with..." picker (Replace Module With...). Both are rebindable Graph actions
 (`renameSelectedModule`, `replaceSelectedModule`) dispatched through the command table, which greys them out with no
 selection, several cards, an Attenuverter or macro port (rename) or the singleton Audio Input and Output (replace). The

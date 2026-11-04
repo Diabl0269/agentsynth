@@ -7,6 +7,7 @@
 #include "UI/Layout/HierarchicalArrange.h"
 #include <algorithm>
 #include <gtest/gtest.h>
+#include <limits>
 
 namespace {
 using namespace synth::LayoutUtil;
@@ -693,4 +694,77 @@ TEST(HierarchicalArrangeColumns, EveryTopologyArrangesTheSameTwice) {
         SCOPED_TRACE(t.name);
         EXPECT_EQ(computeHierarchicalArrange(t.input).positions, computeHierarchicalArrange(t.input).positions);
     }
+}
+
+// Regression test for FRO1435: an LFO cabled into one track's macro and modulating the others sat level with one macro
+// (the one it is cabled into) instead of halfway between the first and the last macro it feeds.
+namespace lfo_centre {
+using namespace synth::LayoutUtil;
+
+// `rows` tracks, each a macro card followed by an effect; the LFO is cabled into the last macro and modulates the
+// macros of `fedRows` (row indices).
+ArrangeInput tracksWithLfo(int rows, const std::vector<int>& fedRows) {
+    ArrangeInput in;
+    long long order = 1;
+    for (int t = 0; t < rows; ++t) {
+        const auto s = juce::String(t);
+        in.blocks.push_back(card("m" + s, 280, 200 + 100 * t, order++));
+        in.blocks.push_back(module("fx" + s, 280, 300, order++, 2));
+        in.edges.push_back(flow("m" + s, "fx" + s));
+        in.trackStarts.push_back("m" + s);
+    }
+    in.blocks.push_back(module("lfo", 280, 300, 100, 3));
+    in.edges.push_back(flow("lfo", "m" + juce::String(rows - 1)));
+    for (int r : fedRows)
+        in.edges.push_back(mod("lfo", "m" + juce::String(r)));
+    return in;
+}
+
+// The span from the first consumer's top to the last one's bottom, and the LFO beside it. `exact`: the LFO's centre
+// is the mean of the span (to the grid); otherwise it only has to sit inside the span (a block of a row in between
+// can occupy the LFO's column and push it off the mean).
+void expectCentred(const ArrangeInput& in, const std::vector<int>& consumers, bool exact) {
+    const auto out = computeHierarchicalArrange(in);
+    const auto lfo = rectOf(in, out, "lfo");
+    int top = std::numeric_limits<int>::max(), bottom = std::numeric_limits<int>::min();
+    for (int r : consumers) {
+        const auto m = rectOf(in, out, "m" + juce::String(r));
+        top = std::min(top, m.getY());
+        bottom = std::max(bottom, m.getBottom());
+        EXPECT_LT(lfo.getRight(), m.getX()) << "left of m" << r;
+    }
+    if (exact)
+        EXPECT_LE(std::abs(lfo.getCentreY() - (top + bottom) / 2), kGridSize) << consumers.size() << " rows";
+    else
+        EXPECT_TRUE(lfo.getCentreY() > top && lfo.getCentreY() < bottom) << "between the first and the last";
+    EXPECT_EQ(computeHierarchicalArrange(in).positions, out.positions);
+}
+} // namespace lfo_centre
+
+TEST(HierarchicalArrangeLfoCentre, AnLfoFeedingMacrosInRowsZeroAndOneSitsAtTheMeanOfThem) {
+    lfo_centre::expectCentred(lfo_centre::tracksWithLfo(2, {0}), {0, 1}, true);
+}
+
+TEST(HierarchicalArrangeLfoCentre, AnLfoFeedingMacrosInRowsZeroAndTwoSitsBetweenThem) {
+    lfo_centre::expectCentred(lfo_centre::tracksWithLfo(3, {0}), {0, 2}, false);
+}
+
+// Guard (first-of-many): every source with 2..4 consumers in as many rows reads all of them.
+TEST(HierarchicalArrangeLfoCentre, EveryConsumerCountPlacesTheSourceAtTheCentreOfAllItsConsumers) {
+    for (int rows = 2; rows <= 4; ++rows) {
+        SCOPED_TRACE("rows=" + std::to_string(rows));
+        std::vector<int> consumers, fedRows;
+        for (int r = 0; r < rows; ++r) {
+            consumers.push_back(r);
+            if (r < rows - 1)
+                fedRows.push_back(r); // the last macro is cabled, the others modulated
+        }
+        lfo_centre::expectCentred(lfo_centre::tracksWithLfo(rows, fedRows), consumers, true);
+    }
+}
+
+TEST(HierarchicalArrangeLfoCentre, AnLfoWithOneConsumerRowStaysLevelWithIt) {
+    const auto in = lfo_centre::tracksWithLfo(2, {});
+    const auto out = computeHierarchicalArrange(in);
+    EXPECT_EQ(out.positions.at("lfo").y, out.positions.at("m1").y);
 }
