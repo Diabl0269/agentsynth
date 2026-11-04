@@ -237,7 +237,7 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
     g.drawText(sub, subArea, juce::Justification::centredLeft, true);
 }
 
-// The compact footer has room for the name only, ellipsised, between the Stop button and the volume.
+// The compact footer has room for the name only, ellipsised, between the Play button and the volume.
 void SoundBrowserComponent::paintCompactName(juce::Graphics& g) {
     const auto& c = synth::theme::themeOf(*this).colors;
     const auto area = footer_.getCompactNameBounds().translated(footer_.getX(), footer_.getY());

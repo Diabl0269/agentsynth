@@ -11,6 +11,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 namespace {
 
@@ -167,7 +168,19 @@ ModuleComponent* CanvasCardKeyboard::getSingleSelectedCard() const {
 
 bool CanvasCardKeyboard::canRenameSelectedModule() const {
     auto* card = getSingleSelectedCard();
-    return card != nullptr && card->isVisible() && card->canRename();
+    if (card != nullptr && card->isVisible() && card->canRename())
+        return true;
+    return selectedMacroId().isNotEmpty();
+}
+
+juce::String CanvasCardKeyboard::selectedMacroId() const {
+    // The outermost macro whose whole (nested) member set is the selection: an inner macro that is
+    // the only child of its parent selects the same nodes, and the parent is the one the user sees.
+    juce::String found;
+    for (const auto& macro : editor_.getMacros().getAll())
+        if (editor_.getMacroController().isMacroSelected(macro.id) && (found.isEmpty() || macro.parentId.isEmpty()))
+            found = macro.id;
+    return found;
 }
 
 bool CanvasCardKeyboard::canReplaceSelectedModule() const {
@@ -176,9 +189,23 @@ bool CanvasCardKeyboard::canReplaceSelectedModule() const {
 }
 
 bool CanvasCardKeyboard::renameSelectedModule() {
-    if (!canRenameSelectedModule())
+    auto* card = getSingleSelectedCard();
+    if (card != nullptr && card->isVisible() && card->canRename()) {
+        card->beginTitleRename();
+        return true;
+    }
+    const auto macroId = selectedMacroId();
+    if (macroId.isEmpty())
         return false;
-    getSingleSelectedCard()->beginTitleRename();
+    // A folded macro renames inline on its own card; an open one has no card, so it asks in a dialog.
+    const auto* macro = editor_.getMacros().find(macroId);
+    if (macro != nullptr && macro->collapsed)
+        if (auto* macroCard = editor_.getMacroController().getMacroCard(macroId);
+            macroCard != nullptr && macroCard->isVisible()) {
+            macroCard->beginRename();
+            return true;
+        }
+    editor_.promptRenameMacro(macroId);
     return true;
 }
 

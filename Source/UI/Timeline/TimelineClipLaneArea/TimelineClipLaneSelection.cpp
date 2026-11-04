@@ -41,6 +41,9 @@ std::optional<std::pair<double, double>> TimelineClipLaneArea::getSelectedClipSp
 // cross-panel key arbitration — MainComponent::resolveEditSurface decides which panel's
 // keyPressed even gets called.
 bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
+    // Mid-drag, Esc abandons the drag and is spent: it must not also clear the selection.
+    if (key == juce::KeyPress::escapeKey && cancelDrag())
+        return true;
     if (handleKeyboardClipKey(key))
         return true;
     if (matchesRenderToAudioKey(key) && renderSelectionToAudio())
@@ -123,7 +126,7 @@ void TimelineClipLaneArea::beginMarquee(juce::Point<int> anchor, bool additive) 
     marqueeAdditive_ = additive;
     marqueeAnchor_ = anchor;
     marqueeRect_ = juce::Rectangle<int>(anchor, anchor);
-    marqueeBaseSelection_ = additive ? selection_.getSelected() : std::vector<synth::ClipId>{};
+    marqueeBaseSelection_ = selection_.getSelected(); // what an additive marquee adds to and a cancel puts back
 
     // A non-additive marquee starts from nothing, so dragging over no clip deselects.
     if (!additive)

@@ -280,8 +280,9 @@ void SoundFilterChipRow::paint(juce::Graphics& g) {
             g.setColour(c.textMuted.withMultipliedAlpha(alpha));
             g.strokePath(x, juce::PathStrokeType(1.3f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
-        if (i == focused_ && hasKeyboardFocus(false))
-            paintFocusRing(g, b.toFloat().expanded(1.0f), *this, (float)kChipHeight * 0.5f);
+        if (i == focused_) // paintFocusRing draws only while the row holds keyboard focus
+            paintFocusRing(g, b.toFloat(), *this,
+                           (float)kChipHeight * 0.5f); // on the chip's own bounds, as the other chips
     }
 }
 

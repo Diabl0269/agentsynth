@@ -186,7 +186,7 @@ juce::KeyPress keyOf(int code) { return juce::KeyPress(code); }
 
 } // namespace
 
-// Regression test for FRO1118: a shape row showed the sound footer (0 sounds, empty waveform, Stop, Auto-play, volume).
+// Regression test for FRO1118: a shape row showed the sound footer (0 sounds, empty waveform, Play, Auto-play, volume).
 TEST(ShapesPlaceTest, TheFooterOfAShapeRowSaysKindAndSourceAndHidesTheTransportButASoundKeepsIt) {
     ShapesFixture f;
     f.openShapes();
@@ -196,7 +196,7 @@ TEST(ShapesPlaceTest, TheFooterOfAShapeRowSaysKindAndSourceAndHidesTheTransportB
     EXPECT_EQ(f.view->getShapeFooterText(), "Filter shape, yours");
     EXPECT_TRUE(footer.isShowingShape());
     EXPECT_TRUE(footer.getShapeCurve().isVisible());
-    EXPECT_FALSE(footer.getStopButton().isVisible());
+    EXPECT_FALSE(footer.getPlayButton().isVisible());
     EXPECT_FALSE(footer.getAutoPlay().isVisible());
     EXPECT_FALSE(footer.getVolume().isVisible());
     EXPECT_FALSE(footer.getWaveform().isVisible());
@@ -214,7 +214,7 @@ TEST(ShapesPlaceTest, TheFooterOfAShapeRowSaysKindAndSourceAndHidesTheTransportB
     f.view->selectRow(sound);
     footer.finishShapeMotionForTest();
     EXPECT_FALSE(footer.isShowingShape());
-    EXPECT_TRUE(footer.getStopButton().isVisible());
+    EXPECT_TRUE(footer.getPlayButton().isVisible());
     EXPECT_TRUE(footer.getAutoPlay().isVisible());
     EXPECT_TRUE(footer.getVolume().isVisible());
     EXPECT_FALSE(footer.getShapeCurve().isVisible());

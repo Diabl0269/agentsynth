@@ -203,6 +203,11 @@ public:
         return dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
     }
 
+    // Esc mid-drag (move, edge resize, stretch, marquee, range, draw): abandons the gesture. The document, the
+    // preview and the undo history return to what they were before the press, and the release that follows commits
+    // nothing. False, with nothing touched, when no drag is in flight.
+    bool cancelDrag();
+
     // ---- Edit tools (synth::ui::EditTool — the Cubase-style tool row) ----
 
     // THE tool every pointer gesture in the lanes is interpreted through. TimelinePanelComponent
@@ -882,6 +887,8 @@ private:
 
     // ---- Range tool (see TimelineClipLaneRange.cpp) ----
     RangeSelectionModel range_;
+    RangeSelectionModel rangeBeforeGesture_; // what a cancelled range drag puts back
+    void cancelRangeGesture();
 
     // ---- Split tool hover preview (the (clip, snapped beat) pair IS the repaint gate) ----
     synth::ClipId splitPreviewClip_;
@@ -893,6 +900,7 @@ private:
     double drawAnchorBeat_ = 0.0;
     double drawEndBeat_ = 0.0;
     bool drawDragged_ = false;
+    void cancelDrawGesture();
 
     // ---- Keyboard clip mode ----
     synth::ClipId keyboardClip_;

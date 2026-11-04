@@ -127,9 +127,9 @@ TEST(SoundBrowserLayoutTest, TheFooterGoesCompactThenHiddenAsTheColumnShortens) 
     EXPECT_TRUE(footer.isCompact() && footer.isVisible());
     EXPECT_FALSE(footer.getWaveform().isVisible());
     EXPECT_FALSE(footer.getAutoPlay().isVisible());
-    EXPECT_TRUE(footer.getStopButton().isVisible() && footer.getVolume().isVisible());
-    EXPECT_EQ(footer.getStopButton().getTitle(), "Stop preview");
-    EXPECT_EQ(footer.getStopButton().getTooltip(), "Stop the preview (Space)");
+    EXPECT_TRUE(footer.getPlayButton().isVisible() && footer.getVolume().isVisible());
+    EXPECT_EQ(footer.getPlayButton().getTitle(), "Play preview");
+    EXPECT_EQ(footer.getPlayButton().getTooltip(), "Play or stop the preview (Space)");
     EXPECT_EQ(footer.getVolume().getTitle(), "Preview volume");
     EXPECT_EQ(footer.getVolume().getTooltip(), "Preview volume, only for previews");
     EXPECT_FALSE(footer.getCompactNameBounds().isEmpty());

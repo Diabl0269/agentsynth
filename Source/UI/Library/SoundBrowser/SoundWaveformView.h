@@ -10,7 +10,8 @@
 namespace synth::ui {
 
 /** The waveform of the selected sound with the preview's playhead. The picture is built by a JUCE audio thumbnail on
- * its own thread, and draws in from the left over 190 ms (a fade over 80 ms under Reduce Motion). While a preview of
+ * its own thread, and draws in from the left over 190 ms (a fade over 80 ms under Reduce Motion). With no file the box
+ * says "Select a sound to preview" in muted 12 px text. While a preview of
  * this sound plays, a 30 Hz timer moves the playhead and repaints only the strip it crosses; it stops with the sound.
  */
 class SoundWaveformView

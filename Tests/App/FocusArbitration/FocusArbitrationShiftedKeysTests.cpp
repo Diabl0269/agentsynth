@@ -4,7 +4,9 @@
 // macOS flake under concurrent test suites -- rerun the locked ci-local step before assuming a
 // real regression.
 #include "../../TestWait.h"
+#include "../ShortcutManager/MacPeerKeyModel.h"
 #include "FocusArbitrationTestFixture.h"
+#include <iterator>
 
 // ============================================================================
 // 15. REAL-KEYBOARD dispatch: the shifted-symbol key codes the macOS peer delivers
@@ -206,4 +208,28 @@ TEST_F(FocusArbitrationTest, ShiftedPunctuationReachesTheVerticalZoomCommands) {
 
     EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('_', juce::ModifierKeys(cmdShift), '_')));
     EXPECT_LT(roll.getPixelsPerSemitone(), afterIn) << "'_' is Cmd+Shift+'-', the zoom-OUT half of the pair";
+}
+
+// Regression test for FRO1414: Ctrl+Shift+2 never reached the grid. The same end-to-end path, for all eight chords,
+// with the key press built as the platform delivers it. The test above misses Ctrl+Shift+2: the macOS peer builds no
+// key press for it at all (NUL text), so the app relays it.
+TEST_F(FocusArbitrationTest, EveryGridChordAsThePlatformDeliversItSetsItsGrid) {
+    PersistedKeysGuard guard({"timelineSnap", "timelineSnapEnabled"});
+    using Snap = synth::ui::TimelineViewState::Snap;
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    mc.setSize(1200, 800);
+    mc.simulateToggleBottomPanelClick();
+    ASSERT_TRUE(mc.isBottomDockConfiguredVisible());
+    auto& view = mc.getTimelinePanel().getViewState();
+    const Snap expected[] = {Snap::Whole,     Snap::Half,         Snap::Quarter,     Snap::Eighth,
+                             Snap::Sixteenth, Snap::ThirtySecond, Snap::SixtyFourth, Snap::HundredTwentyEighth};
+    for (size_t i = 0; i < std::size(synth::test::kCtrlShiftDigits); ++i) {
+        const auto& event = synth::test::kCtrlShiftDigits[i];
+        // A different grid first, so a key that does nothing cannot pass by luck.
+        view.setSnap(expected[i] == Snap::Quarter ? Snap::Eighth : Snap::Quarter);
+        const auto key = synth::test::keyPressTheAppReceives(event, synth::test::ctrlShift());
+        ASSERT_TRUE(key.has_value()) << event.name << " never reaches the app";
+        EXPECT_TRUE(pressAndPump(mc, *key)) << event.name;
+        EXPECT_EQ(view.snap, expected[i]) << event.name;
+    }
 }

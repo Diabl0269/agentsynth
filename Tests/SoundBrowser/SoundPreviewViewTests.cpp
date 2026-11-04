@@ -1,5 +1,6 @@
 // The Sounds view's preview: Auto-play on plays on select, off stays silent until Space, Space stops, the settings
-// persist, instruments and missing files never play, and the waveform repaints only the playhead's strip.
+// persist, instruments and missing files never play, the Play/Stop button follows the player, and the waveform repaints
+// only the playhead's strip.
 #include "../App/MainComponent/MainComponentTestFixture.h"
 #include "SoundBrowser/SoundPreviewPlayer.h"
 #include "SoundBrowserTestKit.h"
@@ -40,6 +41,18 @@ float renderPeak(SoundPreviewPlayer& player, int blocks = 12) {
         peak = std::max(peak, buffer.getMagnitude(0, 512));
     }
     return peak;
+}
+
+// A left click on `button` through its own mouse handlers.
+void clickButton(juce::Button& button) {
+    const juce::Point<float> p((float)button.getWidth() * 0.5f, (float)button.getHeight() * 0.5f);
+    const auto event = [&](juce::Time down) {
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), p, juce::ModifierKeys(), 0.0f, 0.0f,
+                                0.0f, 0.0f, 0.0f, &button, &button, juce::Time::getCurrentTime(), p, down, 1, false);
+    };
+    juce::Component& component = button; // Component's mouse handlers are public; Button's overrides are not
+    component.mouseDown(event(juce::Time::getCurrentTime()));
+    component.mouseUp(event(juce::Time::getCurrentTime()));
 }
 
 struct Fixture {
@@ -180,4 +193,73 @@ TEST(SoundPreviewViewTest, ThePlayheadRepaintsOnlyItsOwnStripAndStopsWhenThePrev
     wave.tickForTest();
     wave.tickForTest();
     EXPECT_EQ(strips.size(), count) << "no repaint once nothing plays";
+}
+
+// Regression test for FRO1382: the button said Stop while nothing played. It reads Play, Stop while a preview sounds,
+// and a click toggles.
+TEST(SoundPreviewViewTest, ThePlayButtonReadsPlayWhenIdleAndStopWhileSoundingAndAClickToggles) {
+    Fixture f;
+    auto& footer = f.view->getPreviewFooter();
+    auto& button = footer.getPlayButton();
+    EXPECT_EQ(button.getButtonText(), "Play") << "nothing plays yet";
+    EXPECT_EQ(button.getTitle(), "Play preview");
+    EXPECT_EQ(button.getTooltip(), "Play or stop the preview (Space)");
+
+    f.selectSnare(); // Auto-play is on
+    ASSERT_TRUE(f.player.waitForDecodeForTests(10000));
+    renderPeak(f.player, 2);
+    footer.syncPlayState();
+    EXPECT_EQ(button.getButtonText(), "Stop");
+    EXPECT_EQ(button.getTitle(), "Stop preview");
+
+    clickButton(button);
+    renderPeak(f.player, 4);
+    footer.syncPlayState();
+    EXPECT_FALSE(f.player.isPlaying());
+    EXPECT_EQ(button.getButtonText(), "Play") << "the click stopped it";
+    EXPECT_EQ(button.getTitle(), "Play preview");
+
+    clickButton(button);
+    ASSERT_TRUE(f.player.waitForDecodeForTests(10000));
+    renderPeak(f.player, 2);
+    footer.syncPlayState();
+    EXPECT_TRUE(f.player.isPlaying()) << "the second click plays the selected sound";
+    EXPECT_LT(f.player.playheadFraction(), 0.5f) << "from the start";
+    EXPECT_EQ(button.getButtonText(), "Stop");
+}
+
+TEST(SoundPreviewViewTest, ThePlayButtonFlipsToPlayWhenTheSoundEndsOrSpaceStopsIt) {
+    Fixture f;
+    auto& footer = f.view->getPreviewFooter();
+    auto& button = footer.getPlayButton();
+    f.selectSnare();
+    ASSERT_TRUE(f.player.waitForDecodeForTests(10000));
+    renderPeak(f.player, 2);
+    footer.syncPlayState();
+    ASSERT_EQ(button.getButtonText(), "Stop");
+    renderPeak(f.player, 120); // the 0.3 s snare ends by itself
+    footer.syncPlayState();
+    EXPECT_FALSE(f.player.isPlaying());
+    EXPECT_EQ(button.getButtonText(), "Play");
+
+    EXPECT_TRUE(f.view->keyPressed(space()));
+    ASSERT_TRUE(f.player.waitForDecodeForTests(10000));
+    renderPeak(f.player, 2);
+    footer.syncPlayState();
+    EXPECT_EQ(button.getButtonText(), "Stop");
+    EXPECT_TRUE(f.view->keyPressed(space()));
+    renderPeak(f.player, 4);
+    footer.syncPlayState();
+    EXPECT_EQ(button.getButtonText(), "Play") << "Space stopped it";
+}
+
+TEST(SoundPreviewViewTest, ThePlayStateTimerRunsOnlyWhileTheFooterShows) {
+    Fixture f;
+    auto& footer = f.view->getPreviewFooter();
+    f.view->setVisible(true);
+    EXPECT_TRUE(footer.isPlayStateTimerRunningForTest());
+    footer.setVisible(false);
+    EXPECT_FALSE(footer.isPlayStateTimerRunningForTest());
+    footer.setVisible(true);
+    EXPECT_TRUE(footer.isPlayStateTimerRunningForTest());
 }

@@ -679,7 +679,7 @@ real-event form instead, on the grid family's own `!`/`^`/`&`/`*`.
 Note that `charactersIgnoringModifiers` DOES ignore **Option**, which is half of why the locator
 jumps sit on plain `Option+digit`: a real Option+2 arrives carrying `2` and matches by key code
 directly, so that pair is outside this bug's reach entirely. The rescue matters for the eight
-Ctrl+Shift grid commands and the Cmd+Shift zoom pair.
+Ctrl+Shift grid commands and the Cmd+Shift zoom pair. Ctrl+Shift+2 is a different case: the peer drops it ([details](shortcuts-mac-peer-keys.md)).
 
 **Ctrl, not Cmd — deliberately, including on macOS.** `ShortcutManager::resetToDefaults` binds
 these with `juce::ModifierKeys::ctrlModifier`, a REAL Ctrl rather than `commandModifier`. On macOS

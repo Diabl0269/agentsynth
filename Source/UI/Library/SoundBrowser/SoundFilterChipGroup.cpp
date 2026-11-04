@@ -143,7 +143,7 @@ void SoundFilterChipGroup::paint(juce::Graphics& g) {
         g.setColour(item.on ? c.textPrimary : c.textMuted);
         g.drawText(item.label, bounds_[(size_t)i], juce::Justification::centred, false);
         if (i == focused_)
-            paintFocusRing(g, area.expanded(1.0f), *this, area.getHeight() * 0.5f + 1.0f);
+            paintFocusRing(g, area, *this, area.getHeight() * 0.5f); // on the chip's own bounds: nothing to clip
     }
 }
 

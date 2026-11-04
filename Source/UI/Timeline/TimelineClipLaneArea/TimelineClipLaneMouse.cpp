@@ -340,6 +340,45 @@ void TimelineClipLaneArea::autoScrollTick() {
     repaint();
 }
 
+// Every drag keeps its state apart from the document until the release, so abandoning one is a reset: the document is
+// never touched, nothing reaches the undo manager, and the release that follows finds no drag mode and does nothing.
+// The clip selection is view state and stays as the press left it (a marquee puts back what it replaced).
+bool TimelineClipLaneArea::cancelDrag() {
+    if (dragMode_ == DragMode::None)
+        return false;
+    stopTimer();
+
+    switch (dragMode_) {
+    case DragMode::Range:
+        cancelRangeGesture();
+        break;
+    case DragMode::Draw:
+        cancelDrawGesture();
+        break;
+    case DragMode::Marquee:
+        selection_.setSelection(marqueeBaseSelection_);
+        endMarquee();
+        break;
+    case DragMode::Move:
+    case DragMode::ResizeLeft:
+    case DragMode::ResizeRight:
+        break;
+    case DragMode::None:
+        break;
+    }
+
+    dragMode_ = DragMode::None;
+    dragClips_.clear();
+    previewDeltaBeats_ = 0.0;
+    previewRowDelta_ = 0;
+    copyDrag_ = false;
+    stretchOnce_ = false;
+    pendingEmptyClick_ = false;
+    applyToolCursor();
+    repaint();
+    return true;
+}
+
 void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     // The release always ends whatever drag was in flight, so the edge-scroll timer never outlives
     // it — stopped unconditionally rather than only from the Move/Resize branches below, since a

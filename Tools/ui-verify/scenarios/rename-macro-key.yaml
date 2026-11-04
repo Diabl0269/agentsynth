@@ -1,0 +1,36 @@
+# Bug: with a macro selected (folded card or open macro), Option+R and F2 did nothing; they only renamed a module card.
+#
+# What a user does (macros fixture, zoomed out so both macros are in the window):
+#   1. Clicks the folded "Collapsed macro" card, presses Option+R: the card's name editor opens in place.
+#   2. Presses Escape: the editor closes, the name is unchanged.
+#   3. Clicks empty space inside "Open macro" (selects it), presses Option+R: the Rename Macro dialog opens (an open
+#      macro has no card to edit in place). Escape closes it.
+record: true
+save_project: rename-macro-key
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - key: {keys: "cmd+-"}
+  - wait: {}
+  - click: {id: "macroCard", x: 72, y: 30}
+  - wait: {}
+  - expect: {id: "card:LFO 2", selected: true}
+  - expect: {id: "macroCard", renaming: false}
+  - key: {keys: "alt+r"}
+  - wait: {}
+  - expect: {id: "macroCard", renaming: true, within_ms: 1500}
+  - screenshot: {id: window, name: 1-folded-macro-renaming}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: "macroCard", renaming: false, name: "Collapsed macro", within_ms: 1500}
+  - click: {id: window, x: 420, y: 360}
+  - wait: {}
+  - expect: {id: "card:LFO 1", selected: true}
+  - key: {keys: "alt+r"}
+  - wait: {}
+  - screenshot: {id: window, name: 2-open-macro-rename-dialog}
+  - key: {keys: escape}
+  - wait: {}
+  - screenshot: {id: window, name: 3-dialog-closed}

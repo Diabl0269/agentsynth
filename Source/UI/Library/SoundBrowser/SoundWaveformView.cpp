@@ -1,5 +1,5 @@
-// SoundWaveformView.cpp -- the footer's waveform: the thumbnail, its draw-in, and the playhead that follows the
-// preview player only while the sound plays.
+// SoundWaveformView.cpp -- the footer's waveform: the thumbnail, its draw-in, the playhead that follows the
+// preview player only while the sound plays, and the hint shown while no sound is selected.
 #include "UI/Library/SoundBrowser/SoundWaveformView.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -9,6 +9,7 @@ namespace synth::ui {
 namespace {
 constexpr int kStripHalfWidth = 3;
 constexpr int kFrameHz = 30;
+constexpr const char* kPlaceholder = "Select a sound to preview";
 constexpr juce::uint32 kGiveUpMs = 4000; // a request that never starts (decode failed) stops being followed
 } // namespace
 
@@ -116,8 +117,12 @@ void SoundWaveformView::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(getLocalBounds().toFloat(), 4.0f);
     g.setColour(c.border);
     g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 4.0f, 1.0f);
-    if (file_ == juce::File())
+    if (file_ == juce::File()) {
+        g.setColour(c.textMuted);
+        g.setFont(juce::Font(juce::FontOptions(12.0f)));
+        g.drawText(kPlaceholder, getLocalBounds().reduced(6, 0), juce::Justification::centred, true);
         return;
+    }
     {
         juce::Graphics::ScopedSaveState state(g);
         const bool slide = !prefersReducedMotion();
