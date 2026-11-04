@@ -88,19 +88,30 @@ void PianoRollComponent::commitCopyDrag() {
         startGhostSettle(true);
 }
 
-// Esc during a Move/copy drag: the gesture is dropped without touching the document, so there is no
-// undo step. Selection is view state and stays as the press left it. The mouse-up that follows finds
+// Esc during any note drag (move, copy, resize, velocity scrub, draw, marquee): the gesture is dropped
+// without touching the document, so there is no undo step. Selection is view state and stays as the
+// press left it (a marquee puts back what it replaced). The mouse-up that follows finds
 // dragMode_ == None and only runs the common reset.
 bool PianoRollComponent::cancelNoteDrag() {
-    if (dragMode_ != DragMode::Move)
+    if (dragMode_ == DragMode::None)
         return false;
 
-    if (copyDrag_)
+    if (dragMode_ == DragMode::Marquee) {
+        selection_.setSelection(marqueeBaseSelection_);
+        endMarquee();
+    }
+    if (dragMode_ == DragMode::Move && copyDrag_)
         startGhostSettle(false);
     dragMode_ = DragMode::None;
     dragNotes_.clear();
+    resizeNotes_.clear();
     previewDeltaBeats_ = 0.0;
     previewDeltaPitch_ = 0;
+    previewDeltaVelocity_ = 0;
+    previewLengthDelta_ = 0.0;
+    drawLengthBeats_ = 0.0;
+    pendingEmptyClick_ = false;
+    resizeUnquantized_ = false;
     moveUnquantized_ = false;
     cmdToggleNote_ = {};
     cmdToggleWasSelected_ = false;

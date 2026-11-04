@@ -89,6 +89,8 @@ The same list is walked under Reduce Motion (a fade for the point surfaces, an i
 
 ## Registration
 
+`DragCancel.EscMidDragRestoresTheDocumentAndLeavesNoUndoStep` (`Tests/UI/Layout/DragCancelTests.cpp`) holds every clip-lane and piano-roll drag gesture to Esc: real press and drag, Esc through the key walk, release; the document and undo history must be unchanged and the preview gone. `DragCancel.EveryDragModeOfBothSurfacesIsListed` fails by name for a drag mode missing from its table.
+
 Two discovery tests keep the guards above from being skipped by a new surface. `DragSurfaces.EveryMouseDragOverrideIsRegistered`
 (`Tests/UI/Layout/DragSurfaceRegistryTests.cpp`) scans `Source/` for every class that overrides `mouseDrag` and fails by
 name for one that is not in its table. A class maps to the guard that checks its preview against its commit

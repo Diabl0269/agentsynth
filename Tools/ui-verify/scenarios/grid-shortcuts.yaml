@@ -1,0 +1,35 @@
+# Ctrl+Shift+1 to 8 set the timeline grid to 1/1, 1/2, 1/4, 1/8, 1/16, 1/32, 1/64 and 1/128.
+#
+# What a user does: focuses the timeline and presses each chord; the Snap box (and the status bar) follow.
+# The `key` command hands a ready-made key press to the window, so it proves the chord reaches the command, not the
+# macOS step before it: there the peer builds no key press at all for Ctrl+Shift+2 (NUL text), which the app's own relay
+# rebuilds. That step is proved by the gtests ShortcutManagerTest.EveryGridChordArrivesAsThePlatformDeliversItAndMatchesItsAction
+# and FocusArbitrationTest.EveryGridChordAsThePlatformDeliversItSetsItsGrid.
+record: true
+save_project: grid-shortcuts
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 400, y: 20}
+  - key: {keys: ctrl+shift+1}
+  - expect: {id: timelineSnapCombo, text: "1/1", within_ms: 1000}
+  - key: {keys: ctrl+shift+2}
+  - expect: {id: timelineSnapCombo, text: "1/2", within_ms: 1000}
+  - screenshot: {id: timelinePanel, name: grid-1-2}
+  - key: {keys: ctrl+shift+3}
+  - expect: {id: timelineSnapCombo, text: "1/4", within_ms: 1000}
+  - key: {keys: ctrl+shift+4}
+  - expect: {id: timelineSnapCombo, text: "1/8", within_ms: 1000}
+  - key: {keys: ctrl+shift+5}
+  - expect: {id: timelineSnapCombo, text: "1/16", within_ms: 1000}
+  - key: {keys: ctrl+shift+6}
+  - expect: {id: timelineSnapCombo, text: "1/32", within_ms: 1000}
+  - key: {keys: ctrl+shift+7}
+  - expect: {id: timelineSnapCombo, text: "1/64", within_ms: 1000}
+  - key: {keys: ctrl+shift+8}
+  - expect: {id: timelineSnapCombo, text: "1/128", within_ms: 1000}
+  - screenshot: {id: timelinePanel, name: grid-1-128}

@@ -221,6 +221,15 @@ void TimelineClipLaneArea::updateDrawGesture(const juce::MouseEvent& e) {
     requestToolPreviewRepaint(before.getUnion(getDrawGhostRectForTest()));
 }
 
+void TimelineClipLaneArea::cancelDrawGesture() {
+    const auto ghost = getDrawGhostRectForTest();
+    drawDragged_ = false;
+    drawRow_ = -1;
+    drawTrack_ = {};
+    if (!ghost.isEmpty())
+        requestToolPreviewRepaint(ghost);
+}
+
 void TimelineClipLaneArea::commitDrawGesture() {
     const auto ghost = getDrawGhostRectForTest();
     const bool dragged = drawDragged_ && drawEndBeat_ > drawAnchorBeat_ + 1e-9;
