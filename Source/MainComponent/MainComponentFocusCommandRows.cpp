@@ -32,6 +32,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
              m.focusRegions_.focusRegionById("timeline");
              return true;
          }},
+        {AppCommands::focusTransportBar,
+         "Focus Transport Bar",
+         "Open (if needed) the Timeline and put its key ring on the transport bar's Play button",
+         "General",
+         "focusTransportBar",
+         {},
+         [](MainComponent& m) {
+             m.focusRegions_.focusRegionById("timeline");
+             m.timelinePanel.focusTransportBar();
+             return true;
+         }},
         {AppCommands::focusLibrary,
          "Focus Library",
          "Open (if needed) and focus the Library",

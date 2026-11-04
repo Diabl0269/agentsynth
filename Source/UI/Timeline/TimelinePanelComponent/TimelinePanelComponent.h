@@ -101,6 +101,9 @@ public:
     void resized() override;
     void focusLost(FocusChangeType) override;
     KeyRing& getTopBarKeysForTest() noexcept { return *topBarKeys_; }
+    /** Focuses this panel and puts the top bar ring on the transport's Play button. False when no top bar stop shows.
+     */
+    bool focusTransportBar();
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     // Wheel = horizontal scroll; Cmd+wheel (Ctrl on platforms without a Cmd key) = zoom around the

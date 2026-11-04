@@ -74,8 +74,17 @@ void spliceSongKeyRow(std::vector<Entry>& rows) {
     rows.insert(at + 1, Entry{"setSongKey", ShortcutCategory::General});
 }
 
+// Focus Transport Bar follows Focus Timeline: the same "open it, then go there" key, one step further.
+template <class Entry>
+void spliceFocusTransportRow(std::vector<Entry>& rows) {
+    const auto at = std::find_if(rows.begin(), rows.end(),
+                                 [](const Entry& row) { return std::string_view(row.id) == "focusTimeline"; });
+    rows.insert(at + 1, Entry{"focusTransportBar", ShortcutCategory::General});
+}
+
 template <class Entry>
 void spliceRows(std::vector<Entry>& rows) {
+    spliceFocusTransportRow(rows);
     spliceTimelineRows(rows);
     spliceDockKeyRows(rows);
     spliceSongKeyRow(rows);

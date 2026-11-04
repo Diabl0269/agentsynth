@@ -32,14 +32,17 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     }
     if (rowFocus_.has_value() && handleRowKey(key))
         return true;
-    if (key.isKeyCode(juce::KeyPress::leftKey))
+    // A Cmd, Ctrl or Alt arrow is another action's chord (Focus Transport Bar is Cmd+Shift+Up), so it bubbles on.
+    const auto mods = key.getModifiers();
+    const bool arrowIsOurs = !mods.isCommandDown() && !mods.isCtrlDown() && !mods.isAltDown();
+    if (arrowIsOurs && key.isKeyCode(juce::KeyPress::leftKey))
         return moveFocus(-1);
-    if (key.isKeyCode(juce::KeyPress::rightKey))
+    if (arrowIsOurs && key.isKeyCode(juce::KeyPress::rightKey))
         return moveFocus(1);
-    if (key.isKeyCode(juce::KeyPress::upKey))
-        return nudgeFocusedFader(key.getModifiers().isShiftDown() ? 0.1f : 1.0f);
-    if (key.isKeyCode(juce::KeyPress::downKey))
-        return nudgeFocusedFader(key.getModifiers().isShiftDown() ? -0.1f : -1.0f);
+    if (arrowIsOurs && key.isKeyCode(juce::KeyPress::upKey))
+        return nudgeFocusedFader(mods.isShiftDown() ? 0.1f : 1.0f);
+    if (arrowIsOurs && key.isKeyCode(juce::KeyPress::downKey))
+        return nudgeFocusedFader(mods.isShiftDown() ? -0.1f : -1.0f);
     if (key.isKeyCode(juce::KeyPress::returnKey))
         return selectFocusedOnCanvas();
 

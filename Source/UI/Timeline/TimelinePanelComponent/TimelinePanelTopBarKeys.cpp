@@ -10,6 +10,14 @@ std::unique_ptr<juce::AccessibilityHandler> TimelinePanelComponent::createAccess
     return topBarKeys_->createAccessibilityHandler();
 }
 
+// The Focus Transport Bar key: the ring starts on Play, the control a keyboard user most often wants there. The root
+// takes focus first, as after Cmd+Shift+T, so the ring's keys arrive here; headless (record mode) the grab is skipped.
+bool TimelinePanelComponent::focusTransportBar() {
+    if (!recordFocusForTest_)
+        grabKeyboardFocus();
+    return topBarKeys_->enterAt(transportBar_.getPlayStopButton());
+}
+
 // Every control of the top bar. Add Track is not here: it is the first stop of the track column below, reached with
 // Down.
 std::vector<juce::Component*> TimelinePanelComponent::topBarStops() {

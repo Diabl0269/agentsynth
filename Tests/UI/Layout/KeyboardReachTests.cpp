@@ -5,6 +5,7 @@
 // A gap that is known and ticketed lives in kKnownGaps; the list may only shrink (docs/development/accessibility.md).
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "../Theme/ThemeSweep/ThemeSweepSurfaces.h"
 #include "BottomDockActiveTabResetGuard.h"
 #include "NativeWindowTestGuard.h"
@@ -362,6 +363,36 @@ protected:
         }
     }
 
+    // From every open region's root, the Focus Transport Bar key walks up the real parent chain (each keyPressed in
+    // turn, the way the window delivers an unclaimed key) and must end with the timeline's ring on a transport
+    // control. Returns "<region><suffix>" for each region where it does not.
+    std::set<std::string> regionsMissingTheTransportBar(const std::string& suffix,
+                                                        const std::function<void()>& restoreView) {
+        std::set<std::string> missing;
+        const juce::KeyPress key(juce::KeyPress::upKey,
+                                 juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        auto& timeline = mc_->getTimelinePanel();
+        auto& transport = timeline.getTransportBar();
+        for (const auto& region : openRegions()) {
+            restoreView();
+            if (!region.isCurrentlyOpen() && region.open)
+                region.open();
+            mc_->resized();
+            timeline.getTopBarKeysForTest().leave();
+            for (auto* at = region.root; at != nullptr; at = at->getParentComponent())
+                if (at->keyPressed(key))
+                    break;
+            synth::test::waitUntil([&] { return timeline.getTopBarKeysForTest().isActive(); }, 1000); // async command
+            const auto* ringed = timeline.getTopBarKeysForTest().getRingedStop();
+            const bool onTransport =
+                timeline.getTopBarKeysForTest().isActive() && ringed != nullptr && transport.isParentOf(ringed);
+            if (!onTransport)
+                missing.insert((region.id + suffix).toStdString());
+        }
+        timeline.getTopBarKeysForTest().leave();
+        return missing;
+    }
+
     std::optional<BottomDockActiveTabResetGuardMDT> resetGuard_;
     std::unique_ptr<MainComponent> mc_;
 };
@@ -439,4 +470,41 @@ TEST_F(KeyboardReachDialogs, EveryControlInEveryDialogIsAKeyboardStop) {
         findings.add(walkSurface(surface.name, *window, surface.name, [](juce::Component&) { return true; }));
     }
     findings.expectOnlyKnownGaps();
+}
+
+// Regression test for FRO1403: the transport bar had no key path from the canvas, the library, the mixer or the
+// piano roll; only from inside the timeline, with Up from its track column.
+TEST_F(KeyboardReachShell, TheFocusTransportBarKeyReachesTheTransportFromEveryRegion) {
+    std::set<std::string> missing;
+    for (const Tab view : {Tab::Canvas, Tab::Timeline, Tab::Mixer, Tab::MidiRemote}) {
+        mc_->setMainViewForTest(view);
+        if (view == Tab::Mixer) // a focused column, whose fader takes the plain arrows
+            mc_->getBottomDock().getMixerPanel().keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
+        const auto suffix = std::string(" [view ") + std::to_string((int)view) + "]";
+        const auto found = regionsMissingTheTransportBar(suffix, [this, view] { mc_->setMainViewForTest(view); });
+        missing.insert(found.begin(), found.end());
+    }
+    mc_->setMainViewForTest(Tab::Timeline); // false when it is already there
+    auto& panel = mc_->getTimelinePanel();
+    const auto clip = mc_->getTimelineDoc().addClip(mc_->getTimelineDoc().getTracks().front().id, 0.0, 8.0, "Clip");
+    panel.openPianoRoll(clip);
+    panel.getPianoRoll().toggleScalePanel();
+    mc_->resized();
+    const auto withRoll =
+        regionsMissingTheTransportBar(" [piano roll open]", [this] { mc_->setMainViewForTest(Tab::Timeline); });
+    missing.insert(withRoll.begin(), withRoll.end());
+    for (const auto& region : missing)
+        ADD_FAILURE() << "Cmd+Shift+Up does not reach the transport bar from " << region;
+
+    // From a focused track row too, whose plain Up and Down step the rows.
+    panel.closePianoRoll();
+    mc_->resized();
+    panel.getTopBarKeysForTest().leave();
+    const juce::KeyPress key(juce::KeyPress::upKey,
+                             juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    for (juce::Component* at = panel.getTrackHeaderAt(0); at != nullptr; at = at->getParentComponent())
+        if (at->keyPressed(key))
+            break;
+    synth::test::waitUntil([&] { return panel.getTopBarKeysForTest().isActive(); }, 1000);
+    EXPECT_TRUE(panel.getTopBarKeysForTest().isActive()) << "Cmd+Shift+Up from a track row";
 }

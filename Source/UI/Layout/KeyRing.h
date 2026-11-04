@@ -23,6 +23,8 @@ public:
     bool isActive() const noexcept { return active_; }
     /** Puts the ring on the control it last sat on (the first one the first time). False when no stop shows. */
     bool enter();
+    /** Puts the ring on `stop` when it is one of getStops(), else does what enter() does. */
+    bool enterAt(juce::Component& stop);
     void leave();
     /** Left/Right/Home/End move the ring, Return/Space press the ringed control, Down/Escape return to the panel;
      *  anything else (any chord too) is not ours. Only while active. */

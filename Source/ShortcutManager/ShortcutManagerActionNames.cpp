@@ -394,6 +394,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Focus Previous Region";
     if (actionId == "focusTimeline")
         return "Focus Timeline";
+    if (actionId == "focusTransportBar")
+        return "Focus Transport Bar";
     if (actionId == "focusLibrary")
         return "Focus Library";
     if (actionId == "focusLibrarySearch")

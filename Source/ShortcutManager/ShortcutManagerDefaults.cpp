@@ -112,25 +112,7 @@ void ShortcutManager::addGeneralDefaultBindings() {
     bindings["zoomOutVertical"] =
         juce::KeyPress('-', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
 
-    // Tab/Shift+Tab cycle keyboard focus between the app's currently OPEN focus regions
-    // (Library, Canvas, Timeline, AI Panel, Mod Matrix — see Source/UI/Layout/FocusRegion.h; a closed
-    // region is skipped, never opened, by the cycle itself). Bare Tab is free to claim: this
-    // codebase has never customized it (no KeyPress::tabKey/FocusTraverser/setExplicitFocusOrder
-    // usage anywhere) — the only behaviour is JUCE's own generic
-    // ComponentPeer::handleKeyPress fallback (a sibling-order focus jump with no notion of these
-    // regions, triggered only when nothing else claims the key), which registering Tab here
-    // deliberately supersedes with a well-defined region cycle.
-    bindings["focusNextRegion"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
-    bindings["focusPrevRegion"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0);
-    // Direct-focus shortcuts OPEN a closed target region before focusing it (unlike Tab-cycling
-    // above, which only ever visits what's already open). Cmd+Shift+M is deliberately NOT used
-    // for Library: Cmd+M already owns "Toggle Mod Matrix", and 'm' went to "locateMaster"
-    // (Graph, below) instead. Free on both
-    // counts against the rest of this table: no other binding uses 't' or 'l' with Cmd+Shift
-    // (toggleBottomPanel is bare Cmd+J; autoArrange is bare Cmd+L, a different category
-    // entirely), and no component keyPressed() override hardcodes either chord.
-    bindings["focusTimeline"] =
-        juce::KeyPress('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    addFocusDefaultBindings();
     // Cmd+T opens the Add Track menu on the Mac. The physical Control+T is the point editors' "insert a point" key
     // (curve editor and automation lanes), so the app-level chord is the Cmd one. Off the Mac Cmd IS Ctrl, so the
     // key stays on Ctrl+Alt+T, where installs that already saved it hold it.
@@ -204,6 +186,33 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // sidebar; the Shift chord is free on every platform.
     bindings["toggleSidePane"] =
         juce::KeyPress('b', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+}
+
+// The focus-region keys: the Tab cycle and the direct-focus chords (General).
+void ShortcutManager::addFocusDefaultBindings() {
+    // Tab/Shift+Tab cycle keyboard focus between the app's currently OPEN focus regions
+    // (Library, Canvas, Timeline, AI Panel, Mod Matrix — see Source/UI/Layout/FocusRegion.h; a closed
+    // region is skipped, never opened, by the cycle itself). Bare Tab is free to claim: this
+    // codebase has never customized it (no KeyPress::tabKey/FocusTraverser/setExplicitFocusOrder
+    // usage anywhere) — the only behaviour is JUCE's own generic
+    // ComponentPeer::handleKeyPress fallback (a sibling-order focus jump with no notion of these
+    // regions, triggered only when nothing else claims the key), which registering Tab here
+    // deliberately supersedes with a well-defined region cycle.
+    bindings["focusNextRegion"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
+    bindings["focusPrevRegion"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0);
+    // Direct-focus shortcuts OPEN a closed target region before focusing it (unlike Tab-cycling
+    // above, which only ever visits what's already open). Cmd+Shift+M is deliberately NOT used
+    // for Library: Cmd+M already owns "Toggle Mod Matrix", and 'm' went to "locateMaster"
+    // (Graph, below) instead. Free on both
+    // counts against the rest of this table: no other binding uses 't' or 'l' with Cmd+Shift
+    // (toggleBottomPanel is bare Cmd+J; autoArrange is bare Cmd+L, a different category
+    // entirely), and no component keyPressed() override hardcodes either chord.
+    bindings["focusTimeline"] =
+        juce::KeyPress('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    // Cmd+Shift+Up (Ctrl+Shift+Up off the Mac) climbs to the transport bar from any view: Up is "towards the top bar"
+    // everywhere (Cmd+Up is the mixer's own top bar), and no table row or keyPressed override uses the chord.
+    bindings["focusTransportBar"] = juce::KeyPress(
+        juce::KeyPress::upKey, juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
 }
 
 void ShortcutManager::addGraphDefaultBindings() {

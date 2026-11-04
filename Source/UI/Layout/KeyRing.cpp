@@ -75,6 +75,15 @@ bool KeyRing::enter() {
     return true;
 }
 
+bool KeyRing::enterAt(juce::Component& stop) {
+    const auto stops = getStops();
+    if (std::find(stops.begin(), stops.end(), &stop) == stops.end())
+        return enter();
+    active_ = true;
+    moveRingTo(&stop);
+    return true;
+}
+
 void KeyRing::leave() {
     if (!active_)
         return;
