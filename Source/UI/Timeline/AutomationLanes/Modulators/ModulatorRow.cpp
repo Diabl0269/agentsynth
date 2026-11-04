@@ -3,6 +3,7 @@
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
 #include "Modules/LfoRateDivisions.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/CardBody/CardBodySwapMotion.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/FocusRing.h"
@@ -51,6 +52,24 @@ void paintSliderValue(juce::Graphics& g, juce::Slider& slider, juce::Rectangle<i
 }
 } // namespace
 
+// The row's test-mode state lives on this 1x1 child so ModulatorRow.h need not include TestModeStateSource.h (a
+// scenario reads "<row title> > modulatorRowState").
+class ModulatorRowStateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit ModulatorRowStateProbe(std::function<void(juce::DynamicObject&)> fill)
+        : fill_(std::move(fill)) {
+        setComponentID("modulatorRowState");
+        setInterceptsMouseClicks(false, false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override { fill_(into); }
+
+private:
+    std::function<void(juce::DynamicObject&)> fill_;
+};
+
 ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, const juce::String& parameterName,
                            LaneControlSet* controls)
     : info_(info)
@@ -81,6 +100,10 @@ ModulatorRow::ModulatorRow(const ModulatorInfo& info, TrackHeaderHost* host, con
             onFoldRequested(!collapsed_);
     };
     foldArrow_.onPopupMenuRequested = [this] { showMenuAt(contextMenuOptionsAtPointer()); };
+    stateProbe_ =
+        std::make_unique<ModulatorRowStateProbe>([this](juce::DynamicObject& into) { addTestModeState(into); });
+    addAndMakeVisible(*stateProbe_);
+    stateProbe_->setBounds(0, 0, 1, 1);
     applyNames();
     refreshValues();
 }
@@ -154,10 +177,10 @@ void ModulatorRow::setInfo(const ModulatorInfo& info, const juce::String& parame
 }
 
 // A routing replaced in place (Change source, Change parameter, the undo of either) keeps its row, so focus, the fold
-// and the slot stay; only what names or drives the source changes. The parts that show the source (the name, the shape
-// picture, the LFO controls) are pictured first, then the row re-binds and re-lays out at once, and the pictures shrink
-// away before the new parts grow in: animation.md "Controls swapping in place". It lands at once off screen, under
-// Reduce Motion or with Animations off.
+// and the slot stay; only what names or drives the source changes. When the source itself changed, the parts that show
+// it (the name, the shape picture, the LFO controls) are pictured first, then the row re-binds and re-lays out at once,
+// and the pictures shrink away before the new parts grow in: animation.md "Controls swapping in place". It lands at
+// once off screen, under Reduce Motion or with Animations off.
 void ModulatorRow::setRouting(const ModulatorInfo& info, const juce::String& parameterName) {
     if (info.key() == info_.key()) {
         setInfo(info, parameterName);
@@ -190,6 +213,7 @@ void ModulatorRow::setRouting(const ModulatorInfo& info, const juce::String& par
         if (part->isVisible() && !part->getBounds().isEmpty())
             arriving.push_back({part, nullptr, part->getBounds()});
     swap_ = std::make_unique<synth::SwapMotion>(*this, std::move(leaving), std::move(arriving));
+    ++swapsStarted_;
     auto landed = [this] {
         applySourceKind(); // a fold or a mode flip during the motion decides what shows now
         refreshValues();
@@ -206,7 +230,7 @@ void ModulatorRow::setRouting(const ModulatorInfo& info, const juce::String& par
 void ModulatorRow::applySourceKind() {
     if (!lfoControlsBuilt_)
         return;
-    const bool show = info_.isLfo && !compact_;
+    const bool show = info_.isLfo && !isCompactLook();
     setPartVisible(shape_, show);
     setPartVisible(sync_, show);
     setPartVisible(shapeIcon_, show);
@@ -294,18 +318,30 @@ void ModulatorRow::setCompact(bool compact) {
     applyCompact();
 }
 
+bool ModulatorRow::isCrowdedAt(int titleLineHeight) noexcept {
+    return titleLineHeight > 0 && titleLineHeight < kMinLineHeight;
+}
+
+bool ModulatorRow::isCompactLook() const noexcept { return compact_ || isCrowdedAt(titleLineHeight_); }
+
+// A row too short for three lines takes the folded look whatever its saved fold: crossing that size re-applies the
+// look the way a fold does (the focus keeps its place, the controls hide or return).
 void ModulatorRow::setTitleLineHeight(int height) {
     if (titleLineHeight_ == height)
         return;
+    const bool lookBefore = isCompactLook();
     titleLineHeight_ = height;
-    resized();
+    if (isCompactLook() != lookBefore)
+        applyCompact();
+    else
+        resized();
 }
 
 // A folded row shows its title and amount only. Focus inside a control that is about to hide moves to the row, so the
 // keyboard keeps its place.
 void ModulatorRow::applyCompact() {
     if (info_.isLfo) {
-        if (compact_) {
+        if (isCompactLook()) {
             auto* focused = juce::Component::getCurrentlyFocusedComponent();
             if (focused != nullptr && focused != this && isParentOf(focused) && focused != &foldArrow_)
                 grabKeyboardFocus();
@@ -319,7 +355,10 @@ void ModulatorRow::applyCompact() {
 
 void ModulatorRow::resized() {
     auto bounds = getLocalBounds().withTrimmedLeft(kIndent + kStripeWidth + kPadding).withTrimmedRight(kPadding);
-    const int lineHeight = titleLineHeight_ > 0 ? titleLineHeight_ : bounds.getHeight() / 3;
+    // A crowded row is one line: the title takes the whole row.
+    const int lineHeight = isCrowdedAt(titleLineHeight_) ? bounds.getHeight()
+                           : titleLineHeight_ > 0        ? titleLineHeight_
+                                                         : bounds.getHeight() / 3;
     auto title = bounds.removeFromTop(lineHeight);
     auto middle = bounds.removeFromTop(lineHeight);
     bounds.setHeight(juce::jmax(bounds.getHeight(), lineHeight)); // while the row tweens, the last line is clipped
@@ -331,7 +370,7 @@ void ModulatorRow::resized() {
                           .withSizeKeepingCentre(LaneMarkerIcon::kSize, LaneMarkerIcon::kSize));
     title.removeFromLeft(kMarkerGap);
     compactAmountArea_ = {};
-    if (compact_) {
+    if (isCompactLook()) {
         if (amount_.has_value())
             compactAmountArea_ = title.removeFromRight(kAmountTextWidth);
         amountArea_ = {};
@@ -357,6 +396,15 @@ void ModulatorRow::resized() {
                                     title.getHeight());
     outsideMark_.setBounds(mark.withSizeKeepingCentre(ModulatorOutsideMark::kSize, ModulatorOutsideMark::kSize));
     strip_.placeTray(getBounds());
+}
+
+// What a scenario reads with getState: the look the row shows, its saved fold and whether a source swap is moving.
+void ModulatorRow::addTestModeState(juce::DynamicObject& into) const {
+    into.setProperty("compactLook", isCompactLook());
+    into.setProperty("collapsed", collapsed_);
+    into.setProperty("swapRunning", isSwapMotionRunning());
+    into.setProperty("swapsStarted", swapsStarted_);
+    into.setProperty("sourceTitle", info_.sourceTitle);
 }
 
 void ModulatorRow::moved() {
@@ -396,7 +444,7 @@ void ModulatorRow::setAmount(std::optional<double> amount) {
     const auto before = getAmountText();
     const bool hadAmount = amount_.has_value();
     amount_ = amount;
-    if (compact_ && hadAmount != amount_.has_value())
+    if (isCompactLook() && hadAmount != amount_.has_value())
         resized(); // the folded row's title line gives the readout room only while there is one
     if (getAmountText() != before)
         repaint();
@@ -419,7 +467,7 @@ void ModulatorRow::paint(juce::Graphics& g) {
     g.setColour(accent.withAlpha(0.45f));
     g.fillRect(kIndent, 0, kStripeWidth, getHeight());
 
-    if (compact_ && amount_.has_value() && !compactAmountArea_.isEmpty()) {
+    if (isCompactLook() && amount_.has_value() && !compactAmountArea_.isEmpty()) {
         g.setFont(juce::Font(juce::FontOptions(kValueFontSize)));
         g.setColour(accent);
         g.drawText(getAmountText(), compactAmountArea_, juce::Justification::centredRight, false);

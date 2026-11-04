@@ -335,3 +335,96 @@ TEST(AutomationLanesHeightTest, TheHeightIsKeptWhenALaneIsRetargetedAndCopiedByA
     ASSERT_TRUE(copy.isValid());
     EXPECT_DOUBLE_EQ(f.scale(copy), 2.0);
 }
+
+namespace {
+
+// "a vs b" for every pair of visible, non-empty children that intersect, and every child that leaves `parent`.
+std::vector<juce::String> overlapsIn(const juce::Component& parent) {
+    std::vector<juce::String> found;
+    std::vector<const juce::Component*> kids;
+    for (auto* child : parent.getChildren())
+        if (child->isVisible() && !child->getBounds().isEmpty() &&
+            child->getComponentID() != "modulatorRowState") // the 1x1 test-mode state probe draws nothing
+            kids.push_back(child);
+    const auto name = [](const juce::Component* c) {
+        return c->getComponentID().isNotEmpty() ? c->getComponentID()
+               : c->getName().isNotEmpty()      ? c->getName()
+                                                : juce::String(typeid(*c).name());
+    };
+    for (size_t i = 0; i < kids.size(); ++i) {
+        if (!parent.getLocalBounds().contains(kids[i]->getBounds()))
+            found.push_back(name(kids[i]) + " leaves the row");
+        for (size_t j = i + 1; j < kids.size(); ++j)
+            if (kids[i]->getBounds().intersects(kids[j]->getBounds()))
+                found.push_back(name(kids[i]) + " overlaps " + name(kids[j]));
+    }
+    return found;
+}
+
+} // namespace
+
+// Regression test for FRO1471: a lane row dragged or stepped to its limits ran its controls into each other. Guards the
+// layout-overlap kind on lane rows: every row scale x zoom, for a lane header and for an LFO and an envelope mod row,
+// open and folded.
+TEST(AutomationLanesHeightTest, NoTwoVisibleChildrenOfALaneRowOverlapAtAnyScaleOrZoom) {
+    const double scales[] = {0.5,        0.512,        0.64,           0.8, 1.0, 1.25, 1.5625, 1.953125,
+                             2.44140625, 3.0517578125, 3.814697265625, 4.0};
+    for (const double zoom : {0.5, 1.0, 2.0})
+        for (const bool folded : {false, true})
+            for (const double scale : scales) {
+                HeightPanel f;
+                f.addModulator(2);
+                f.host.modulators[1].isLfo = false; // the second row is an envelope
+                f.host.modulators[1].isEnvelope = true;
+                f.panel.setTrackAutomationExpanded(f.bass, false);
+                f.panel.setTrackAutomationExpanded(f.bass, true);
+                f.panel.getViewState().rowHeightScale = 1.0;
+                f.panel.zoomTimelineVertical(zoom);
+                ASSERT_TRUE(f.doc.setLaneHeightScale(f.cutoff, scale));
+                ASSERT_TRUE(f.doc.setModulatorHeightScale(f.cutoff, "atten-1", scale));
+                ASSERT_TRUE(f.doc.setModulatorHeightScale(f.cutoff, "atten-2", scale));
+                if (folded)
+                    for (int i = 0; i < 2; ++i) {
+                        f.panel.getAutomationLanes().setModulatorCollapsed(f.mod(i).getInfo().key(), true);
+                        f.panel.getAutomationLanes().stepModulatorFoldForTest(1.0f);
+                    }
+                f.panel.resized();
+
+                const juce::String where =
+                    "zoom " + juce::String(zoom) + ", scale " + juce::String(scale) + (folded ? ", folded" : ", open");
+                for (const auto& problem : overlapsIn(*f.panel.laneHeaderForTest(f.cutoff)))
+                    ADD_FAILURE() << "lane header, " << where << ": " << problem;
+                for (int i = 0; i < 2; ++i) {
+                    for (const auto& problem : overlapsIn(f.mod(i)))
+                        ADD_FAILURE() << "mod row " << i << ", " << where << ": " << problem;
+                    if (!folded) // a folded row is its title line, as it always was
+                        EXPECT_GE(f.mod(i).getHeight(), synth::ui::ModulatorRow::kMinHeight) << where;
+                }
+            }
+}
+
+TEST(AutomationLanesHeightTest, AModulatorRowTooShortForThreeLinesTakesTheFoldedLookAndKeepsItsSavedFold) {
+    HeightPanel f;
+    f.addModulator();
+    auto& row = f.mod(0);
+    ASSERT_FALSE(row.isCompactLook()) << "the default height shows every control";
+    ASSERT_TRUE(row.getShapeCombo().isVisible());
+
+    ASSERT_TRUE(f.doc.setModulatorHeightScale(f.cutoff, "atten-1", synth::AutomationLane::kMinHeightScale));
+    f.panel.resized();
+    EXPECT_TRUE(row.isCompactLook());
+    EXPECT_FALSE(row.isCompact()) << "the saved fold is untouched";
+    EXPECT_FALSE(row.isCollapsed());
+    EXPECT_FALSE(row.getShapeCombo().isVisible());
+    EXPECT_FALSE(row.getSyncToggle().isVisible());
+    EXPECT_FALSE(row.getShapeIcon().isVisible());
+    EXPECT_TRUE(row.getNameButton().isVisible());
+    EXPECT_GE(row.getNameButton().getHeight(), 16) << "the title is one readable line";
+    EXPECT_GE(row.getHeight(), synth::ui::ModulatorRow::kMinHeight);
+
+    ASSERT_TRUE(f.doc.setModulatorHeightScale(f.cutoff, "atten-1", 1.0));
+    f.panel.resized();
+    EXPECT_FALSE(row.isCompactLook()) << "dragged back, the full controls return";
+    EXPECT_TRUE(row.getShapeCombo().isVisible());
+    EXPECT_TRUE(row.getSyncToggle().isVisible());
+}

@@ -114,8 +114,8 @@ void AutomationLaneHeaderComponent::resized() {
     strip_.setChipSize(chipSize);
     const int stripWidth = juce::jmin(strip_.preferredWidth(), juce::jmax(chipSize, bottom.getWidth() - kMinNoteWidth));
     strip_.setBounds(bottom.removeFromRight(stripWidth));
-    marker_.setBounds(
-        top.removeFromLeft(LaneMarkerIcon::kSize).withSizeKeepingCentre(LaneMarkerIcon::kSize, LaneMarkerIcon::kSize));
+    const int markerSize = juce::jmin(LaneMarkerIcon::kSize, top.getHeight()); // a short row keeps it inside
+    marker_.setBounds(top.removeFromLeft(LaneMarkerIcon::kSize).withSizeKeepingCentre(markerSize, markerSize));
     top.removeFromLeft(kMarkerGap);
     const auto button = top.withWidth(juce::jmin(nameButton_.getPreferredWidth(), top.getWidth()));
     nameArea_ = button.withSizeKeepingCentre(button.getWidth(), juce::jmin(button.getHeight(), kNameButtonHeight));

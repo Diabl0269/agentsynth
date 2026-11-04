@@ -47,7 +47,8 @@ int TimelineAutomationLanes::modulatorRowHeightFor(synth::LaneId lane, int index
     const auto it = modulators_.find(lane);
     if (it == modulators_.end() || index < 0 || index >= (int)it->second.infos.size())
         return full;
-    const int line = std::max(full / 3, std::min(full, kMinFoldedHeight));
+    // A row too short for three lines is one line already: folding changes nothing.
+    const int line = ModulatorRow::isCrowdedAt(full / 3) ? full : std::max(full / 3, std::min(full, kMinFoldedHeight));
     const auto& key = it->second.infos[(size_t)index].key();
     const float open = modulatorOpenness(key);
     const int height = line + (int)std::lround((double)(full - line) * (double)open);
