@@ -14,7 +14,6 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kMinModulatorRowHeight = 12;
 
 bool sameRoutings(const std::vector<ModulatorInfo>& a, const std::vector<ModulatorInfo>& b) {
     if (a.size() != b.size())
@@ -56,7 +55,7 @@ int TimelineAutomationLanes::modulatorRowHeight(synth::LaneId lane, int index) c
         scale = modulatorHeightScale(lane, modulatorOrderKey(it->second.infos[(size_t)index]));
     else if (const auto* l = doc_ != nullptr ? doc_->getLane(lane) : nullptr)
         scale = l->modulatorHeightScale;
-    return std::max(kMinModulatorRowHeight,
+    return std::max(ModulatorRow::kMinHeight,
                     (int)std::llround((double)ModulatorRow::kBaseHeight * viewState_.rowHeightScale * scale));
 }
 

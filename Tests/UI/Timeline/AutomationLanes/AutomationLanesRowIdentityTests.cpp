@@ -128,6 +128,40 @@ TEST(AutomationLanesRowIdentityTest, TheOldNameShrinksAwayThenTheNewOneGrowsInPl
     EXPECT_EQ(first->getNameButton().getTransform(), juce::AffineTransform());
 }
 
+// Regression test for FRO1476: Change parameter (and Duplicate, and the undo of both) re-cables a routing through a new
+// Attenuverter and so changes its key, but the source is the same: the row's name and controls must not swap.
+TEST(AutomationLanesRowIdentityTest, ANewAttenuverterOrTargetUnderTheSameSourceRebindsWithNoSwapMotion) {
+    FadeAnimateGuard animate;
+    IdentityScene s;
+    auto* first = s.row(0);
+    ASSERT_NE(first, nullptr);
+    first->setForceSwapMotionForTest(true);
+    const auto original = lfoInfo("1");
+
+    auto retargeted = original; // Change parameter: a new Attenuverter, another CV channel, the same LFO
+    retargeted.attenuverterUuid = "atten-new";
+    retargeted.paramId = "resonance";
+    retargeted.targetChannel = 3;
+    s.replace(0, retargeted);
+    ASSERT_EQ(s.row(0), first);
+    EXPECT_EQ(first->getInfo().key(), retargeted.key()) << "the row still re-binds to the new routing";
+    EXPECT_FALSE(first->isSwapMotionRunning()) << "Change parameter";
+    EXPECT_TRUE(first->getNameButton().isVisible());
+    EXPECT_TRUE(first->getShapeCombo().isVisible());
+    EXPECT_EQ(first->getNameButton().getTransform(), juce::AffineTransform());
+
+    s.replace(0, original); // its undo
+    ASSERT_EQ(s.row(0), first);
+    EXPECT_EQ(first->getInfo().key(), original.key());
+    EXPECT_FALSE(first->isSwapMotionRunning()) << "the undo of Change parameter";
+
+    auto otherChannel = original; // the same source output kind but another channel is a different source
+    otherChannel.sourceChannel = 1;
+    otherChannel.attenuverterUuid = "atten-ch1";
+    s.replace(0, otherChannel);
+    EXPECT_TRUE(first->isSwapMotionRunning()) << "a changed source output still swaps";
+}
+
 TEST(AutomationLanesRowIdentityTest, TheSwapLandsAtOnceUnderReduceMotion) {
     FadeAnimateGuard reduced(synth::ui::AnimationMode::reduced);
     IdentityScene s;

@@ -21,6 +21,7 @@ class SwapMotion;
 namespace synth::ui {
 
 struct TrackHeaderHost;
+class ModulatorRowStateProbe;
 
 /** The small sign on a modulator row whose source lives outside the lane's macro; its tooltip says where. */
 class ModulatorOutsideMark
@@ -56,6 +57,10 @@ public:
     // Three lines (title; shape and rate; sync and amount) at 100% row zoom, scaled like a lane row. The
     // header column is ~200 px, too narrow for the app's combos and bars side by side on two lines.
     static constexpr int kBaseHeight = 54;
+    // Below this line height (a third of the open row) the three lines would overlap: the row takes the folded look,
+    // and it never goes shorter than one readable title line.
+    static constexpr int kMinLineHeight = 18;
+    static constexpr int kMinHeight = 22;
     static constexpr int kIndent = 16;     // the same inset as a lane header, so the marker and name line up with it
     static constexpr int kStripeWidth = 4; // px of track colour at the row's left edge, as on a lane header
     static constexpr int kShowOnCanvasMenuId = 1;
@@ -72,7 +77,8 @@ public:
     /** Same routing (same key()), possibly re-titled or re-coloured. */
     void setInfo(const ModulatorInfo& info, const juce::String& parameterName);
     /** Another routing took this row's slot in one change (its source or parameter changed): the row re-binds to it in
-     *  place, its name, picture and controls swapping with the in-place swap motion when it is on screen. */
+     *  place; when its source changed, its name, picture and controls swap with the in-place swap motion (on screen),
+     * and a changed Attenuverter or target under the same source re-binds with nothing moving. */
     void setRouting(const ModulatorInfo& info, const juce::String& parameterName);
     /** True while a setRouting swap is still moving. */
     bool isSwapMotionRunning() const;
@@ -96,6 +102,10 @@ public:
      *  lands. */
     void setCompact(bool compact);
     bool isCompact() const noexcept { return compact_; }
+    /** True when the row shows the folded look: folded, or too short for its three lines (see isCrowdedAt). */
+    bool isCompactLook() const noexcept;
+    /** True for a row whose `titleLineHeight` (a third of its open height) is under kMinLineHeight. */
+    static bool isCrowdedAt(int titleLineHeight) noexcept;
     /** The height of one line, px; 0 = a third of the row. The owner sets it so lines keep their place while the row's
      *  height tweens. */
     void setTitleLineHeight(int height);
@@ -165,6 +175,7 @@ public:
 
 private:
     void initLfoControls();
+    void addTestModeState(juce::DynamicObject& into) const;
     void applyNames();
     void edit(const juce::String& uuid, const juce::String& paramId, float value, ParameterEditPhase phase);
     void wireDragEdits(juce::Slider& slider, const juce::String& paramId, std::function<float(double)> toParameter);
@@ -210,7 +221,9 @@ private:
     std::optional<double> amount_;
     bool lfoControlsBuilt_ = false;
     bool forceSwapForTest_ = false;
-    std::unique_ptr<synth::SwapMotion> swap_; // declared last: gone before the controls it holds or scales
+    int swapsStarted_ = 0;                               // how many source swaps this row has started (test-mode state)
+    std::unique_ptr<ModulatorRowStateProbe> stateProbe_; // the row's test-mode state (id "modulatorRowState")
+    std::unique_ptr<synth::SwapMotion> swap_;            // declared last: gone before the controls it holds or scales
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModulatorRow)
 };

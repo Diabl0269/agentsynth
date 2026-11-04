@@ -334,7 +334,12 @@ Return, Space or a click toggles; it is named and tooltipped "Collapse LFO 1 on 
 tooltip adding the key ("Left arrow" / "Right arrow" on the row). A folded row is one title line tall (a third of the row,
 times the row zoom): the title and the amount readout stay (the readout moves up to the right end of the title line),
 the shape picture and the shape, rate and sync controls are hidden, and its band shrinks with it, the rows and lanes
-below closing up. Left on a focused open row folds it, Right on a folded row opens it. Fold state is runtime-only, never
+below closing up. **A short row is one line.** A row whose open height is under 54 px at 100% zoom (a third of it under 18 px, `ModulatorRow::kMinLineHeight`; the
+smallest sizes of the drag and of Option+-, or a zoomed-out timeline) takes the folded look whatever its saved fold: the title and
+the amount readout fill the whole row, the shape picture and the shape, rate and sync controls are hidden
+(`ModulatorRow::isCompactLook`), so nothing overlaps. Dragging it taller brings the controls back. A row is never shorter than 22 px
+(`ModulatorRow::kMinHeight`), one readable title line, and folding such a row changes nothing (it is one line already).
+`AutomationLanesHeightTest.NoTwoVisibleChildrenOfALaneRowOverlapAtAnyScaleOrZoom` sweeps every scale and zoom. Left on a focused open row folds it, Right on a folded row opens it. Fold state is runtime-only, never
 saved: `TimelineAutomationLanes` keeps a set of folded routing keys (`ModulatorInfo::key()`); a routing replaced in
 place keeps its fold ([row identity](modulator-row-identity.md)), a gone one's key is dropped. The height change is a 160 ms
 `easeOutCubic` tween driven by `TimelineAutomationLanes` (the row shrinks to, and grows from, its title line; the controls

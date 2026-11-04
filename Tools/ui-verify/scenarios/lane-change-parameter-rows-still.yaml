@@ -1,0 +1,54 @@
+# Changing an automation lane's parameter leaves its mod rows perfectly still: their names and controls do not swap.
+# A Change source on a row still swaps that row's name and controls with their motion.
+#
+# What a user does:
+#   1. Opens the lane-rows project (a Cutoff lane with two LFO mod rows), shows the timeline and opens the automation.
+#   2. Focuses the Cutoff lane header, presses Cmd+Alt+R and picks Resonance: the lane re-points and neither row runs a
+#      swap (getState swapsStarted stays 0). Cmd+Z and Cmd+Shift+Z: the same.
+#   3. Presses Cmd+Alt+R on the LFO 1 row and picks a new envelope: that row's swapsStarted becomes 1.
+motion: true
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/lane-rows.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: trackAutomationFoldArrow}
+  - wait: {}
+  - expect: {id: "LFO 1 mod lane on Cutoff > modulatorRowState", swapsStarted: 0, compactLook: false}
+  - screenshot: {name: before}
+  - key: {keys: cmd+alt+r, target: Cutoff automation lane}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: "reson"}
+  - key: {keys: return}
+  - expect: {id: Resonance automation lane, showing: true, within_ms: 2000}
+  - expect: {id: "LFO 1 mod lane on Resonance > modulatorRowState", swapsStarted: 0, showing: true, within_ms: 2000}
+  - expect: {id: "LFO 2 mod lane on Resonance > modulatorRowState", swapsStarted: 0, showing: true, within_ms: 2000}
+  - screenshot: {name: after-parameter}
+  - wait: {}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: Cutoff automation lane, showing: true, within_ms: 2000}
+  - expect: {id: "LFO 1 mod lane on Cutoff > modulatorRowState", swapsStarted: 0, showing: true, within_ms: 2000}
+  - expect: {id: "LFO 2 mod lane on Cutoff > modulatorRowState", swapsStarted: 0, showing: true, within_ms: 2000}
+  - screenshot: {name: undo-parameter}
+  - wait: {}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {id: Resonance automation lane, showing: true, within_ms: 2000}
+  - expect: {id: "LFO 1 mod lane on Resonance > modulatorRowState", swapsStarted: 0, showing: true, within_ms: 2000}
+  - expect: {id: "LFO 2 mod lane on Resonance > modulatorRowState", swapsStarted: 0, showing: true, within_ms: 2000}
+  - screenshot: {name: redo-parameter}
+  - wait: {}
+  # Change source still swaps its row.
+  - key: {keys: cmd+alt+r, target: LFO 1 mod lane on Resonance}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: "new env"}
+  - key: {keys: return}
+  - expect: {id: "ADSR mod lane on Resonance > modulatorRowState", swapsStarted: 1, within_ms: 2000}
+  - screenshot: {name: change-source-swapping}
