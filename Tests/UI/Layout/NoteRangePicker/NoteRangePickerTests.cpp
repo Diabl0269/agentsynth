@@ -738,6 +738,11 @@ TEST(NoteRangePicker, ANameSitsInsideAWideBandOutsideANarrowOneAndPinnedWhenItsE
     EXPECT_LE(picker.labelArea(Part::LowEdge).getRight(), (float)picker.bandBounds().getX());
     EXPECT_GE(picker.labelArea(Part::HighEdge).getX(), (float)picker.bandBounds().getRight());
 
+    picker.setRange(76, 76);
+    picker.finishMotionForTest();
+    EXPECT_TRUE(picker.labelVisible(Part::LowEdge));
+    EXPECT_FALSE(picker.labelVisible(Part::HighEdge)) << "a one-note band names its note once";
+
     // The overview bar moves the strip without moving the range.
     picker.setRange(100, 120);
     picker.finishMotionForTest();

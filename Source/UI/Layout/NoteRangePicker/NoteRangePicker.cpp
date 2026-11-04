@@ -194,10 +194,12 @@ juce::Rectangle<float> NoteRangePicker::labelArea(Part edge) const {
     return {spot == LabelSpot::Outside ? own + kLabelClear : own - kLabelClear - width, top, width, 10.0f};
 }
 
-// A name is shown unless it would run into the other one.
+// A name is shown unless it would run into the other one; a one-note band shows its name once.
 bool NoteRangePicker::labelVisible(Part edge) const {
     if (edge == Part::LowEdge)
         return true;
+    if (low_ == high_)
+        return false;
     return labelArea(Part::HighEdge).getX() > labelArea(Part::LowEdge).getRight() + 2.0f;
 }
 

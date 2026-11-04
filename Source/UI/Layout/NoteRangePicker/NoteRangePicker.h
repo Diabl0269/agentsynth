@@ -67,6 +67,8 @@ public:
     LabelSpot labelSpot(Part edge) const;
     /** Where that name is drawn, in this component's coordinates. */
     juce::Rectangle<float> labelArea(Part edge) const;
+    /** False when the name would collide with the other edge's, or the band is one note (its name shows once). */
+    bool labelVisible(Part edge) const;
     juce::Component& getStop(Part part) noexcept;
     Part getFocusedPart() const;
     /** True while the band or the keys are gliding to their place. */
@@ -126,7 +128,6 @@ private:
     void scrollTo(float target);
     void setScrollNow(float scroll);
     void scrollBy(float keys);
-    bool labelVisible(Part edge) const;
     void finishUserChange(int lo, int hi, Part part);
     void glideTo(float a0, float a1, float scroll);
     void landShown();
