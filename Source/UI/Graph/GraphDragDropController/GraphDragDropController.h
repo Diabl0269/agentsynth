@@ -41,6 +41,8 @@ public:
     // ---- Drag-preview (grid + landing ghost shown during a module drag) -------------------
     void beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId);
     void updateDragPreview(juce::Point<int> desiredTopLeftCanvas);
+    /** Places the ghost again, at the aim of the last update, against the macros as they stand now. */
+    void replaceGhostAfterCrossing();
     void endDragPreview();
 
     /** Held by an edge-scroll tick around its re-aim: inside it updateDragPreview refreshes the preview at most once
@@ -131,6 +133,8 @@ private:
     juce::String macroJoinTargetForDrop(const juce::DragAndDropTarget::SourceDetails& details) const;
     /** The full preview for the ghost aimed at `desiredTopLeftCanvas`: gap, placement, guides, suggestions. */
     void recomputeDragPreview(juce::Point<int> desiredTopLeftCanvas);
+    /** Sets dragPreviewGhost_ from the open gap, else the join snap, else the nearest free slot. */
+    void placeGhost(juce::Point<int> desiredTopLeftCanvas);
     /** Opens, moves or closes the gap between cards for the ghost aimed at `aim`. */
     void hoverInsertGap(juce::Rectangle<int> aim);
 

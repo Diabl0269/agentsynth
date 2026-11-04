@@ -82,6 +82,25 @@ void GraphDragDropController::flushDragPreview() {
     }
 }
 
+void GraphDragDropController::placeGhost(juce::Point<int> desiredTopLeftCanvas) {
+    const auto* gap = insertGap_ != nullptr ? insertGap_->plan() : nullptr;
+    const auto resolved =
+        gap != nullptr ? gap->slot.getPosition()
+        : dragPreviewJoinsMacro_
+            ? synth::LayoutUtil::snap({juce::jmax(0, desiredTopLeftCanvas.x), juce::jmax(0, desiredTopLeftCanvas.y)})
+            : host_.resolvePlacement(desiredTopLeftCanvas, dragPreviewW_, dragPreviewH_, dragPreviewSelfId_);
+    dragPreviewGhost_ = juce::Rectangle<int>(resolved.x, resolved.y, dragPreviewW_, dragPreviewH_);
+}
+
+// Only the ghost's own spot: the insert gap follows the path of the aims, so sampling it a second time on the crossing
+// tick would open it among the cards of the new macro early and leave a neighbour pushed after a drag back out.
+void GraphDragDropController::replaceGhostAfterCrossing() {
+    if (!dragPreviewActive_)
+        return;
+    placeGhost(dragPreviewAim_.getPosition());
+    host_.repaintCanvas();
+}
+
 void GraphDragDropController::recomputeDragPreview(juce::Point<int> desiredTopLeftCanvas) {
     // Where the user is POINTING, before anti-overlap moves the card. A ghost aimed at the gap
     // between two wired cards necessarily overlaps them — it is wider than the gap — so
@@ -95,13 +114,7 @@ void GraphDragDropController::recomputeDragPreview(juce::Point<int> desiredTopLe
     // join an open macro lands where it is aimed (snapped) and the macro makes room for it on the drop; every other
     // drop dodges to the nearest free slot.
     hoverInsertGap(dragPreviewAim_);
-    const auto* gap = insertGap_ != nullptr ? insertGap_->plan() : nullptr;
-    const auto resolved =
-        gap != nullptr ? gap->slot.getPosition()
-        : dragPreviewJoinsMacro_
-            ? synth::LayoutUtil::snap({juce::jmax(0, desiredTopLeftCanvas.x), juce::jmax(0, desiredTopLeftCanvas.y)})
-            : host_.resolvePlacement(desiredTopLeftCanvas, dragPreviewW_, dragPreviewH_, dragPreviewSelfId_);
-    dragPreviewGhost_ = juce::Rectangle<int>(resolved.x, resolved.y, dragPreviewW_, dragPreviewH_);
+    placeGhost(desiredTopLeftCanvas);
 
     // ---- Alignment guides (UI Phase 7 - Item 4) ----
     // Scan existing modules and compute alignment guides for closest edges
