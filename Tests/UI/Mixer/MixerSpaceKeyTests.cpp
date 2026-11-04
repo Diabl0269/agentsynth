@@ -1,7 +1,8 @@
 // MixerSpaceKeyTests.cpp -- every focusable button in the mixer panel claims a bare Space: the key presses the
 // button once and is consumed, so it never bubbles to the window's play/stop command. Walks the real panel
 // (a strip with an insert chain and a send, a bus, the toolbar and the zones pane) rather than a list of
-// classes, so a new focusable button joins the check by existing.
+// classes, so a new focusable button joins the check by existing. The one exception is a column's colour dot: a
+// click on a strip often lands on it, so it leaves Space to play (docs/mixer/strip-focus.md#colour).
 #include "../../TestSettingsHelpers.h"
 #include "../../TestWait.h"
 #include "AI/AIProvider.h"
@@ -93,20 +94,26 @@ TEST(MixerSpaceKeyTest, EveryFocusableMixerButtonConsumesSpaceAndClicksOnce) {
     ASSERT_GT(buttons.size(), 12u);
 
     const juce::KeyPress space(juce::KeyPress::spaceKey);
+    int colourDots = 0;
     for (auto& pointer : buttons) {
         ASSERT_NE(pointer.getComponent(), nullptr);
         // Count the click instead of running the button's action (a section toggle would rebuild the panel).
         int clicks = 0;
         pointer->onClick = [&clicks] { ++clicks; };
         const auto label = pointer->getTitle() + " / " + pointer->getName();
-        const int expectedClicks = pointer->isEnabled() ? 1 : 0; // a greyed control consumes Space and does nothing
+        const bool leavesSpace = pointer->getComponentID() == "mixerColourDot";
+        colourDots += leavesSpace ? 1 : 0;
+        // A greyed control consumes Space and does nothing; the colour dot leaves it to play.
+        const int expectedClicks = pointer->isEnabled() && !leavesSpace ? 1 : 0;
         const bool consumed = static_cast<juce::Component&>(*pointer).keyPressed(space);
         // Button::triggerClick posts the click as a command message; run it before counting.
         synth::test::flushMessageQueue();
         ASSERT_NE(pointer.getComponent(), nullptr) << label << " was destroyed by its own press";
-        EXPECT_TRUE(consumed) << label << " lets Space bubble to the window";
+        EXPECT_EQ(consumed, !leavesSpace)
+            << label << (leavesSpace ? " claims Space" : " lets Space bubble to the window");
         EXPECT_EQ(clicks, expectedClicks) << label;
         pointer->onClick = nullptr;
         juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
     }
+    EXPECT_GT(colourDots, 0) << "the walk reached no colour dot, so the exception is untested";
 }

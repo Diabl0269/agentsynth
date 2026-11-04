@@ -28,8 +28,17 @@ the header menu's **Duplicate Track**, which names the key. From the mixer, `Mai
 that one track (never the timeline's selection) and leaves the keyboard on the strip; the strip keeps its focus across
 the rebuild by uuid, so every press copies it again.
 
+## Colour
+
+**C** (`mixerOpenColour`, Mixer category, rebindable) opens the focused strip's colour picker on its dot, the same
+`MixerPanelComponent::openColourPicker` a click on the dot calls (`openFocusedColour`, `MixerPanelColour.cpp`). A
+column with nothing to recolour (Direct, Master) lets the key bubble. The dot's tooltip names the key and follows a
+rebind. The dot itself takes Return only, so after a click lands on it Space still plays: it is the one mixer button
+`Tests/UI/Mixer/MixerSpaceKeyTests.cpp` expects to leave Space alone.
+
 ## Test mode
 
 `getState` on `mixerPanel` reports `focusedColumn`, the title of the column whose outline shows (empty when none).
 `Tools/ui-verify/scenarios/mixer-strip-click-focus.yaml` clicks a strip, duplicates it three times, clicks the canvas
 and presses Cmd+Up; `Tests/UI/Mixer/MixerStripClickFocusTests.cpp` drives the same through the real ComponentPeer.
+`mixer-colour-key.yaml` opens the picker with C and with Return on the dot; `MixerColourKeyTests.cpp` pins the keys.

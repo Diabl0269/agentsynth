@@ -14,7 +14,7 @@ constexpr float kFocusRadius = 3.0f;
 } // namespace
 
 MixerColourDot::MixerColourDot()
-    : SpaceClaimingButton<juce::Button>("mixerColourDot") {
+    : juce::Button("mixerColourDot") {
     setComponentID("mixerColourDot");
     setClickingTogglesState(false);
     setWantsKeyboardFocus(true);

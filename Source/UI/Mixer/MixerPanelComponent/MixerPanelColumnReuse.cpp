@@ -122,7 +122,7 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::buildStripColumn(cons
         return onQuerySoloMidiMapping ? onQuerySoloMidiMapping(nodeId) : juce::String();
     };
     widget->setHeaderContextMenu([this, channelId](const juce::MouseEvent&) { showChannelMenu(channelId); });
-    widget->setColourEditable(state.colourEditable);
+    widget->setColourEditable(state.colourEditable, colourShortcutText());
     widget->onColourPickRequested = [this, uuid = column.uuid](juce::Rectangle<int> dotScreenBounds) {
         openColourPicker(uuid, dotScreenBounds);
     };

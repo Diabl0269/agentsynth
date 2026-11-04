@@ -1,0 +1,47 @@
+# Bug: no key opened a mixer strip's colour picker, and Space on the colour dot (where a click on a strip often leaves
+# the keyboard) opened the picker instead of playing.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel, adds an Oscillator track and opens the Mixer tab.
+#   2. Clicks the strip's header beside its name and presses C: the colour picker opens on the strip's dot. Esc closes it.
+#   3. Clicks the colour dot (the picker opens), presses Esc, then Return on the still-focused dot: one picker opens.
+#   4. Closes it and presses Space on the dot: no picker opens; the key goes on to the window's play command.
+# Test mode has no audio device, so the transport never starts here: MixerColourKeyTests checks Space reaches the window.
+record: true
+save_project: mixer-colour-key
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - wait: {}
+  - click: {id: Mixer}                                       # the Mixer tab
+  - wait: {}
+  - click: {id: mixerPanel, x: 310, y: 38}                    # empty space in the strip's header, beside its name
+  - wait: {}
+  - expect: {id: mixerPanel, focusedColumn: "Oscillator 1"}
+  - expect: {id: colourPickerPopup, exists: false}
+  - key: {keys: c}
+  - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
+  - screenshot: {name: c-opens-picker}
+  - key: {keys: escape}
+  - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}
+  - click: {id: "Oscillator 1 colour"}                       # the dot itself
+  - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
+  - key: {keys: escape}
+  - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}
+  - expect: {id: "Oscillator 1 colour", hasFocus: true}
+  - key: {keys: return}
+  - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
+  - wait: {}
+  - screenshot: {name: return-opens-picker-once}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: colourPickerPopup, exists: false}            # one Esc closes it: Return opened only one picker
+  - expect: {id: "Oscillator 1 colour", hasFocus: true, within_ms: 1000}   # the closed picker gave the dot the keyboard back
+  - key: {keys: space}
+  - wait: {}
+  - expect: {id: colourPickerPopup, exists: false}            # Space on the dot no longer opens the picker
+  - screenshot: {name: space-on-dot}

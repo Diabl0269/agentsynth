@@ -50,6 +50,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "mixerToggleEq",
         "mixerEnterRows",
         "mixerOpenEq",
+        "mixerOpenColour",
         "mixerToggleRowBypass",
         "mixerMoveRowUp",
         "mixerMoveRowDown",

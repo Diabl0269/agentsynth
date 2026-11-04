@@ -52,16 +52,22 @@ TEST(MixerColourDotTest, TheDotIsANamedKeyboardReachableButtonWithATooltip) {
     EXPECT_TRUE(dot.getWantsKeyboardFocus());
     EXPECT_TRUE(dot.isEnabled());
     EXPECT_EQ(dot.getTitle(), header.getDisplayName() + " colour");
-    EXPECT_EQ(dot.getTooltip(), "Change this channel's colour");
+    EXPECT_EQ(dot.getTooltip(), "Change this channel's colour  (C)") << "the tooltip names the colour key";
     EXPECT_EQ(dot.getColour(), header.getColour());
     EXPECT_FALSE(dot.getBounds().isEmpty());
     EXPECT_FALSE(dot.getBounds().intersects(header.getNameLabelForTest().getBounds()));
 }
 
-TEST(MixerColourDotTest, TheDotAlsoActsOnSpace) {
+// Regression test for FRO1206: the dot claimed Space, so after a click on a strip Space opened a picker, not play.
+TEST(MixerColourDotTest, TheDotTakesReturnAndLeavesSpaceToPlay) {
     HeaderRig rig;
-    EXPECT_TRUE(rig.firstColumn().getHeaderForTest().getColourDotForTest().keyPressed(
-        juce::KeyPress(juce::KeyPress::spaceKey)));
+    Captured captured;
+    capturePickers(rig, captured);
+    auto& dot = static_cast<juce::Component&>(rig.firstColumn().getHeaderForTest().getColourDotForTest());
+    EXPECT_FALSE(dot.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+    EXPECT_TRUE(dot.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    synth::test::flushMessageQueue(); // the click is posted as a command message
+    EXPECT_EQ(captured.opens, 1);
 }
 
 TEST(MixerColourDotTest, ClickingTheDotOpensTheTracksPickerAnchoredOnTheDot) {

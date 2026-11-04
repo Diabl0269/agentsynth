@@ -82,9 +82,18 @@ void spliceFocusTransportRow(std::vector<Entry>& rows) {
     rows.insert(at + 1, Entry{"focusTransportBar", ShortcutCategory::General});
 }
 
+// The focused column's own keys follow Open Mixer EQ: its colour picker.
+template <class Entry>
+void spliceMixerColumnRows(std::vector<Entry>& rows) {
+    const auto at = std::find_if(rows.begin(), rows.end(),
+                                 [](const Entry& row) { return std::string_view(row.id) == "mixerOpenEq"; });
+    rows.insert(at + 1, Entry{"mixerOpenColour", ShortcutCategory::Mixer});
+}
+
 template <class Entry>
 void spliceRows(std::vector<Entry>& rows) {
     spliceFocusTransportRow(rows);
+    spliceMixerColumnRows(rows);
     spliceTimelineRows(rows);
     spliceDockKeyRows(rows);
     spliceSongKeyRow(rows);

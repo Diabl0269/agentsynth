@@ -3,7 +3,7 @@
 // clicked strip reaches the top bar ring. Clicks travel the real ComponentPeer path the test mode uses, on a native
 // window holding the real panel of an off-screen MainComponent.
 #include "../../TestWait.h"
-#include "../Layout/NativeWindowTestGuard.h"
+#include "MixerNativeHost.h"
 #include "MixerZonesTestRig.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "TestMode/TestModeInput.h"
@@ -11,45 +11,10 @@
 
 namespace {
 
+using namespace synth::test::mixer;
+
 juce::KeyPress cmdD() { return juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0); }
 juce::KeyPress cmdUp() { return juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0); }
-
-// The real panel moved onto a native window for the length of a test, next to a stand-in for the canvas (a control
-// that takes the keyboard). Puts the panel back where it was afterwards.
-struct NativeHost : juce::Component {
-    synth::ui::MixerPanelComponent& panel;
-    juce::Component* const home;
-    juce::Component canvas;
-    const bool previousIgnoreOrder = juce::ComponentPeer::ignoreWindowOrderForHitTests;
-
-    explicit NativeHost(synth::ui::MixerPanelComponent& p)
-        : panel(p)
-        , home(p.getParentComponent()) {
-        juce::ComponentPeer::ignoreWindowOrderForHitTests = true;
-        setSize(1400, 380);
-        addAndMakeVisible(panel);
-        panel.setBounds(0, 0, 1400, 300);
-        canvas.setWantsKeyboardFocus(true);
-        addAndMakeVisible(canvas);
-        canvas.setBounds(0, 310, 1400, 60);
-        addToDesktop(juce::ComponentPeer::windowIsTemporary);
-        setVisible(true);
-    }
-    ~NativeHost() override {
-        removeChildComponent(&panel);
-        if (home != nullptr)
-            home->addChildComponent(panel);
-        removeFromDesktop();
-        juce::ComponentPeer::ignoreWindowOrderForHitTests = previousIgnoreOrder;
-    }
-};
-
-bool click(juce::Component& target, juce::Point<int> local, synth::testmode::Button button = {}) {
-    juce::String error;
-    const bool sent = synth::testmode::click(target, local, button, 1, {}, error);
-    EXPECT_TRUE(sent) << error;
-    return sent;
-}
 
 // A point in the column where nothing but the column itself is hit: its empty space.
 std::optional<juce::Point<int>> emptySpaceIn(juce::Component& column) {
@@ -65,10 +30,6 @@ int showingRings(synth::ui::MixerPanelComponent& panel) {
     for (int i = 0; auto* column = panel.getStripColumnForTest(i); ++i)
         rings += column->isKeyboardFocusedForTest() ? 1 : 0;
     return rings;
-}
-
-bool nativeWindowsUnavailable() {
-    return nativeWindowsAbortHere() || juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr;
 }
 
 } // namespace

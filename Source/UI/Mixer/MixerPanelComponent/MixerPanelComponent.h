@@ -234,8 +234,8 @@ public:
         shortcuts_ = manager;
         toolbar_.refresh();
     }
-    /** Re-reads the section toggles' shortcut hints after a rebind. */
-    void refreshShortcutHints() { toolbar_.refresh(); }
+    /** Re-reads the section toggles' and the colour dots' shortcut hints after a rebind. */
+    void refreshShortcutHints();
 
     /** Re-runs buildMixerSnapshot() and brings the column set in line with it, keeping every strip column whose
      *  column did not change (MixerPanelColumnReuse.cpp). Also re-resolves focusedColumnIndex_ by NodeID/uuid across
@@ -417,6 +417,8 @@ private:
     ColourRoute colourRouteFor(const std::vector<synth::TrackId>& feedingTracks, const juce::String& uuid) const;
     void openColourPicker(const juce::String& uuid, juce::Rectangle<int> dotScreenBounds);
     juce::String bypassShortcutText() const;
+    juce::String colourShortcutText() const;
+    bool openFocusedColour();
     void wireSectionLayout();
     void onSectionGeometryChanged();
     void wireSectionFades();

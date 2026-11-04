@@ -265,7 +265,8 @@ Settings window's strip both do):
 leaves `keyPressed` unconsumed, so the key also bubbled to the window's Space command (play/stop). A focusable button
 that should answer Space derives from `SpaceClaimingButton<Base>` (`Layout/SpaceClaimingButton.h`): Space presses it
 once and is consumed, even on a disabled button. `Tests/UI/Mixer/MixerSpaceKeyTests.cpp` walks every focusable button
-of a real mixer panel, so a new one joins the check by existing.
+of a real mixer panel, so a new one joins the check by existing. The mixer's colour dot is its one listed exception: a
+click on a strip often lands on it, so it takes Return only and Space still plays (`docs/mixer/strip-focus.md`).
 
 ## Arrow keys in lists of controls
 

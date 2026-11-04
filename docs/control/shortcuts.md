@@ -557,11 +557,11 @@ thickness the same way a track-header row does. Clicks focus a column too: [stri
 | Shortcut | Action |
 |----------|--------|
 | Left / Right | Move focus to the previous/next column (strips, then Direct, then Master), clamped at either end — never wraps. From nothing focused, either direction seeds column 0. Auto-scrolls the focused column into view |
-| Up / Down | Nudge the focused fader by 1.0 dB (undo: one step, the same `parameterGestureChanged` bracket a mouse drag uses). No-op on Direct (no fader) or with nothing focused |
-| Shift+Up / Shift+Down | Nudge by 0.1 dB — the gain parameter's own declared interval |
+| Up / Down | Nudge the focused fader by 1.0 dB, or 0.1 dB with Shift, the gain parameter's own interval (undo: one step, the same `parameterGestureChanged` bracket a mouse drag uses). No-op on Direct (no fader) or with nothing focused |
 | Enter | Select the focused column's macro (or bare node, if unboxed) on the canvas — mirrors clicking the column |
 | Tab | Move into the focused column's send and insert rows (`mixerEnterRows`) — see [Mixer row navigation](#mixer-row-navigation). With no column focused, or nothing to enter, the key is left unhandled and the app-wide region cycle gets it |
 | E | Open the focused strip's EQ window (`mixerOpenEq`) — only while the EQ section is shown and the strip has a Parametric EQ insert |
+| C | Change Mixer Channel Colour (`mixerOpenColour`) — the focused strip's colour picker, as a click on its dot opens it; [strip focus](../mixer/strip-focus.md#colour) |
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — same action id and `performTrackEdit`-equivalent undo bracket the Timeline row's M key uses; Master has its own mute, Direct has none |
 | S | Solo Focused Track (`timelineSoloFocusedTrack`) — strips only, always through `AudioEngine::setChannelStripSoloed`, never a direct `setSoloed()` (`Source/CLAUDE.md`'s mixer-solo invariant); no-op on Direct/Master |
 | R | Arm Focused Track (`timelineArmFocusedTrack`) — only when the focused strip is linked to exactly one track (`MixerColumn.linkedToTrack`); routes through `MainComponent::performTrackEdit`, never a direct `TimelineDoc` write |
@@ -788,7 +788,7 @@ name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind. The other
 | Ctrl+S | Ctrl+Alt+S | Show or Hide Mixer Sends (`mixerToggleSends`) |
 | Ctrl+E | Ctrl+Alt+E | Show or Hide Mixer EQ (`mixerToggleEq`) |
 | Tab | Tab | Enter Mixer Send and Insert Rows (`mixerEnterRows`) |
-| E | E | Open Mixer EQ (`mixerOpenEq`) |
+| E / C | E / C | Open Mixer EQ (`mixerOpenEq`) / Change Mixer Channel Colour (`mixerOpenColour`) |
 | B | B | Bypass Mixer Send or Insert (`mixerToggleRowBypass`) |
 | Alt+Up / Alt+Down | Alt+Up / Alt+Down | Move Mixer Row Up / Down (`mixerMoveRowUp`, `mixerMoveRowDown`) |
 | Cmd+Up | Ctrl+Up | Focus the Mixer Top Bar (`mixerFocusTopBar`): a key ring over the toolbar buttons, the side pane's filter and chips and the master pan law ([top bar keys](../mixer/top-bar-keys.md)) |

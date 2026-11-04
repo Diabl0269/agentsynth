@@ -148,7 +148,12 @@ public:
         selector_.removeChangeListener(this);
         commitOnce(); // the callout closing (or this component being torn down any other way)
                       // is the ONE close event — fire the deferred commit here if it never fired.
+        if (onClosed)
+            onClosed();
     }
+
+    /** Runs once as the popup closes, after the commit. */
+    std::function<void()> onClosed;
 
     // The sliders rebuild their value boxes when the look and feel changes (as it does on first
     // being parented), after this runs, so the names are applied again once that has settled.

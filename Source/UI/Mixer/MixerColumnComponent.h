@@ -294,7 +294,10 @@ public:
     }
 
     /** Whether the header's dot opens a colour picker; false leaves it a plain swatch. */
-    void setColourEditable(bool editable) { header_.setColourEditable(editable); }
+    void setColourEditable(bool editable, const juce::String& shortcut = {}) {
+        header_.setColourEditable(editable, shortcut);
+    }
+    juce::Rectangle<int> getColourDotScreenBounds() const { return header_.getColourDotScreenBounds(); }
     /** Fires when the dot is clicked or activated from the keyboard, with its screen bounds. */
     std::function<void(juce::Rectangle<int>)> onColourPickRequested;
 

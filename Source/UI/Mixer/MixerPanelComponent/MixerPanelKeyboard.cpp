@@ -73,6 +73,8 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
         return enterRows();
     if (matchesAction(key, "mixerOpenEq", juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0)))
         return openFocusedEq();
+    if (matchesAction(key, "mixerOpenColour", juce::KeyPress('c', juce::ModifierKeys::noModifiers, 0)))
+        return openFocusedColour();
 
     // Rebindable, Mixer category: the toolbar's Inserts / Sends / EQ toggles, through the same
     // MixerSectionLayout::toggleHidden a click calls, so a key and a click can never diverge.

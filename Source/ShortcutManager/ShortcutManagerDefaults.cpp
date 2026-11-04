@@ -551,6 +551,8 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     // Return is not free for the EQ: it already selects the focused column on the canvas.
     bindings["mixerEnterRows"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
     bindings["mixerOpenEq"] = juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0);
+    // Bare C opens the focused column's colour picker, the keyboard twin of a click on its colour dot.
+    bindings["mixerOpenColour"] = juce::KeyPress('c', juce::ModifierKeys::noModifiers, 0);
     // Bare B bypasses the focused send or insert row; it is only read while a row holds the panel's row focus.
     bindings["mixerToggleRowBypass"] = juce::KeyPress('b', juce::ModifierKeys::noModifiers, 0);
     // Alt+Up / Alt+Down move the focused row one place within its list (the zones pane's own Alt+Up/Down is a

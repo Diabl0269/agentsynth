@@ -114,12 +114,15 @@ public:
 
     /** Whether clicking the dot opens a colour picker. A channel with no track or macro to recolour keeps the dot as
      *  a plain swatch: it still paints and is still named, but takes no click and no focus. */
-    void setColourEditable(bool editable) {
+    void setColourEditable(bool editable, const juce::String& shortcut = {}) {
         colourDot_.setEnabled(editable);
         colourDot_.setWantsKeyboardFocus(editable);
-        colourDot_.setTooltip(editable ? "Change this channel's colour"
+        colourDot_.setTooltip(editable ? formatShortcutHint("Change this channel's colour", shortcut)
                                        : "This channel's colour (nothing here to recolour)");
     }
+
+    /** Where the picker opens, for a click and for the colour key alike. */
+    juce::Rectangle<int> getColourDotScreenBounds() const { return colourDot_.getScreenBounds(); }
 
     /** Fires when the dot is clicked or activated from the keyboard, with the dot's screen bounds (where the picker
      *  opens). Left null for Direct/Master, which have no colour. */
