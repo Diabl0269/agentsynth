@@ -84,6 +84,41 @@ TEST(LayoutUtilDisplacement, ANeighbourBelowThePreviousRectIsPushedDownEvenWhenU
     EXPECT_LT(unaided[0].delta.y, 0) << "without the previous rect the shorter way is up";
 }
 
+// Guard for the layout-overlap bug kind: a neighbour wholly on one side of the rect the grower had
+// before it grew is pushed on that side, for every side, even where another direction needs less travel. Each case
+// also checks that without the previous rect the shortest way is a different one, so the case means something.
+TEST(LayoutUtilDisplacement, ANeighbourOnAnySideOfThePreviousRectIsPushedOnThatSide) {
+    const juce::Rectangle<int> was{1000, 1000, 280, 90};
+    struct Case {
+        const char* side;
+        juce::Rectangle<int> grown;
+        juce::Rectangle<int> neighbour;
+        juce::Point<int> sign; // the expected direction of the push
+    };
+    const Case cases[] = {
+        {"right (mostly overlapping vertically)", {800, 800, 1200, 520}, {1300, 1000, 280, 90}, {1, 0}},
+        {"left", {500, 800, 1200, 520}, {700, 1000, 280, 90}, {-1, 0}},
+        {"above", {800, 500, 1200, 820}, {1000, 880, 280, 90}, {0, -1}},
+        {"below", {800, 800, 1200, 900}, {1000, 1100, 280, 90}, {0, 1}},
+    };
+    auto sign = [](juce::Point<int> d) { return juce::Point<int>((d.x > 0) - (d.x < 0), (d.y > 0) - (d.y < 0)); };
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.side);
+        LayoutUnit grower{"g", c.grown};
+        grower.before = was;
+        const LayoutUnit n{"a", c.neighbour};
+        const auto moves = resolveDisplacement("g", {grower, n});
+        ASSERT_EQ(moves.size(), 1u);
+        EXPECT_EQ(sign(moves[0].delta), c.sign);
+        expectClear({grower, n}, moves, "g");
+
+        grower.before = {};
+        const auto unaided = resolveDisplacement("g", {grower, n});
+        ASSERT_EQ(unaided.size(), 1u);
+        EXPECT_NE(sign(unaided[0].delta), c.sign) << "the case must have a shorter way than its own side";
+    }
+}
+
 TEST(LayoutUtilDisplacement, TieGoesDownThenRight) {
     // a sits diagonally so right and down penetrate equally.
     const std::vector<LayoutUnit> units{unit("g", 100, 100), unit("a", 180, 180)};

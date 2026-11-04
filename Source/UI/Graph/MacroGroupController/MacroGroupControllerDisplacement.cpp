@@ -185,6 +185,11 @@ void MacroGroupController::makeRoomFor(const juce::String& growerKey, juce::Rect
     for (int depth = 0; depth < 64; ++depth) {
         const auto container = containerOfKey(*this, macros, key);
         auto units = buildLayoutUnits(container);
+        // The output dock is re-derived right of whatever moved (reflowOutputDock below), so it neither moves nor
+        // blocks here: a neighbour pushed right past the dock must not be sent down because the dock was in its way.
+        units.erase(std::remove_if(units.begin(), units.end(),
+                                   [&key](const LayoutUnit& u) { return u.pinned && u.key != key; }),
+                    units.end());
         if (depth == 0 && !previousFootprint.isEmpty())
             for (auto& unit : units)
                 if (unit.key == key)

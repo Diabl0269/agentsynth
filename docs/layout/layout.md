@@ -139,7 +139,8 @@ glue (`buildLayoutUnits`, `moveUnitBy`, `makeRoomFor`) lives in `MacroGroupContr
   Nothing ever moves back, so the cascade always settles.
 - **Canvas edge and pinned units.** The top-left of the canvas is a wall: a move that would leave
   it is not taken, and the unit instead goes the smaller of right or down. The same rule applies
-  to a move that would land on a pinned unit (which never moves). A unit that is blocked both
+  to a move that would land on a pinned unit (which never moves; the output dock is not one here, see
+  [Output dock](#output-dock)). A unit that is blocked both
   ways is left where it is.
   The wall also applies to an open macro's hull. An input port's widget overhangs the hull's left
   border by 5 px (`LayoutUtil::kMacroPortOverhang`), and anything left of x = 0 is neither painted
@@ -289,8 +290,9 @@ Master (once any mixer channel exists), the Rec Tap (if the project has one) and
 - **Dragging** a dock card moves it, and the whole dock with it, vertically only: x is held while dragging and
   is not snapped back afterwards because it was never moved. Dock cards never travel with a multi-selection
   drag (they stay put), and never join or leave a macro.
-- **Pinned.** Dock cards are `pinned` layout units, so make-room never pushes them; a grown macro pushes the
-  dock (re-derived to its right) instead.
+- **Pinned.** Dock cards are `pinned` layout units. Make-room leaves them out entirely (`makeRoomFor`): they are
+  neither pushed nor in the way, so a neighbour that has to slide right goes right even when the dock sat just past it
+  (it used to be sent down instead), and the dock is then re-derived to the right of everything.
 - **When it is re-derived**, all inside the causing undo step where there is one: every `updateComponents()` (which
   covers project/preset load, module add/remove, undo/redo, track creation and the Master splice, and
   auto-arrange), module and selection drag release, a collapsed-macro card drop, a library drop, and the end of
