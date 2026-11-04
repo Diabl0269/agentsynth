@@ -57,7 +57,7 @@ def walk(root, path, base, state, snapshots):
             name = args[0].replace("${CMAKE_CURRENT_LIST_DIR}", os.path.dirname(path))
             name = name.replace("${CMAKE_CURRENT_SOURCE_DIR}", os.path.join(root, base))
             name = name.replace("${CMAKE_SOURCE_DIR}", root)
-            candidates = [name, os.path.join(root, base, name), os.path.join(root, name)]
+            candidates = [name] if os.path.isabs(name) else [os.path.join(root, base, name), os.path.join(root, name)]
             found = next((c for c in candidates if os.path.isfile(c)), None)
             if found and found.endswith(".cmake"):
                 walk(root, found, base, state, snapshots)

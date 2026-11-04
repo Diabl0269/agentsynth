@@ -22,7 +22,10 @@ lacks() { ! grep -q "$1" <<<"$2"; } # lacks <pattern> <text>
 export UNITY_CLASHES_BASELINE="$TMP/baseline.txt"
 ROOT="$TMP/repo"
 mkdir -p "$ROOT/cmake" "$ROOT/Source/UI"
-guard() { bash "$GUARD" --root "$ROOT" "$@"; }
+# Runs from a decoy directory with its own cmake/Extra.cmake: includes must resolve against --root, not the cwd.
+mkdir -p "$TMP/decoy/cmake"
+: >"$TMP/decoy/cmake/Extra.cmake"
+guard() { (cd "$TMP/decoy" && bash "$GUARD" --root "$ROOT" "$@"); }
 
 cat >"$ROOT/CMakeLists.txt" <<'CMAKE'
 add_library(Core STATIC
@@ -34,9 +37,13 @@ add_library(Core STATIC
     Source/UI/C.cpp
     Source/UI/D.cpp
 )
+include(cmake/Extra.cmake)
 synth_enable_unity(Core)
 target_sources(Core PRIVATE Source/UI/Late.cpp)
 CMAKE
+printf 'target_sources(Core PRIVATE Source/UI/E.cpp Source/UI/F.cpp)\n' >"$ROOT/cmake/Extra.cmake"
+printf 'namespace {\nconstexpr int kViaInclude = 1;\n}\n' >"$ROOT/Source/UI/E.cpp"
+printf 'namespace {\nconstexpr int kViaInclude = 2;\n}\n' >"$ROOT/Source/UI/F.cpp"
 printf 'set(AGENTSYNTH_UNITY_GROUP_SIZE 12 CACHE STRING "x")\n' >"$ROOT/cmake/Pch.cmake"
 printf 'set(SYNTH_UNITY_SKIP\n    Source/UI/Skipped.cpp\n)\n' >"$ROOT/cmake/UnityExclusions.cmake"
 
@@ -61,11 +68,13 @@ check "an excluded file is not named" lacks Skipped.cpp "$out"
 check "a source added after synth_enable_unity is not named" lacks Late.cpp "$out"
 check "identical aliases, overloads and named-namespace names pass" lacks 'Ok.cpp\|AddedLater.cpp' "$out"
 check "a nested namespace a::b { namespace { k } } clash is found" grep -q "a::b::(anon)::k" <<<"$out"
-check "--list prints the clashes" test "$(guard --list | wc -l | tr -d ' ')" = 3
+check "sources from an included cmake file resolve against --root, not the cwd" grep -q "(anon)::kViaInclude" <<<"$out"
+check "--list prints the clashes" test "$(guard --list | wc -l | tr -d ' ')" = 4
 
 printf '%s\n' \
     'synth::ui::(anon)::kGlyphSize | Source/UI/A.cpp | Source/UI/B.cpp | old' \
     'synth::ui::(anon)::Cell | Source/UI/A.cpp | Source/UI/B.cpp | old' \
+    '(anon)::kViaInclude | Source/UI/E.cpp | Source/UI/F.cpp | old' \
     'a::b::(anon)::k | Source/UI/C.cpp | Source/UI/D.cpp | old' >"$TMP/baseline.txt"
 guard >/dev/null 2>&1
 check "baselined clashes pass" test $? -eq 0
