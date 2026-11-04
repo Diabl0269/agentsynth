@@ -6,6 +6,16 @@
 # translation unit those two declarations redefine each other. A clash fails MSVC only because macOS
 # and Linux compile each file alone.
 #
+# Header names too (FRO1043: an anonymous `kGap` in StepGridPolyHint.cpp against `stepgrid::kGap` in
+# StepGridModel.h, error C2872 'ambiguous symbol'). For each group the scan also reads the project
+# headers its sources #include DIRECTLY (one level, not their includes; resolved against Source/, the
+# source's folder and the repo root) for names declared at named-namespace scope (variables, functions,
+# types, enumerators, aliases). A source's anonymous-namespace name clashes with such a header name when
+# another source of the group includes that header and the namespaces are the same, or the anonymous one
+# is an ancestor of the header's and some source of the group has `using namespace <header's namespace>;`
+# (the directive leaks across the merged file). Identical aliases pass. Reported as
+# `<anon name> | <source .cpp> | <header>`.
+#
 # The groups are the ones cmake/Pch.cmake (synth_enable_unity) builds: per target (Core, AppUI,
 # Tests), a source's folder plus md5 of its path, with AGENTSYNTH_UNITY_GROUP_SIZE sources per group.
 # The source lists are read from the CMake files, only those added before the target's
@@ -97,7 +107,11 @@ while IFS= read -r line; do
     [ -n "$line" ] || continue
     name="${line%% | *}"
     rest="${line#* | }"
-    echo "::error::unity clash: '$name' is declared in an anonymous namespace in both ${rest%% | *} and ${rest##* | } (one Windows unity group) -- rename it in one file, or move it into a named namespace"
+    if [[ "${rest##* | }" == *.cpp ]]; then
+        echo "::error::unity clash: '$name' is declared in an anonymous namespace in both ${rest%% | *} and ${rest##* | } (one Windows unity group) -- rename it in one file, or move it into a named namespace"
+    else
+        echo "::error::unity clash: '$name' in an anonymous namespace in ${rest%% | *} is also declared in the header ${rest##* | }, which another source of its Windows unity group includes (ambiguous symbol, C2872) -- rename the anonymous one"
+    fi
     status=1
 done <"$work/new.txt"
 while IFS= read -r line; do
