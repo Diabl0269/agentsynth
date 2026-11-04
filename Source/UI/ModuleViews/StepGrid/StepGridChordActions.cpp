@@ -30,7 +30,7 @@ juce::Rectangle<int> StepGridComponent::chordLabelBounds(int step) const {
     if (!laneShown(SequencerLane::Pitch))
         return {};
     const auto bar = pitchBarRect(step, (float)playedPitchOf(step), lane);
-    return chordLabelRect(bar, lane).toNearestInt();
+    return chordLabelRect(bar, lane, step).toNearestInt();
 }
 
 bool StepGridComponent::chordLabelAt(juce::Point<int> p, int step) const { return chordLabelBounds(step).contains(p); }

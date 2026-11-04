@@ -30,6 +30,7 @@ StepGridComponent::StepGridComponent(SequencerModuleBase& module)
     , lanes_(lanesOf(module))
     , revealTarget_(lanes_)
     , lastSeen_(module.getPattern()) {
+    setComponentID("stepGrid");
     setTitle("Step grid");
     setTooltip("Step grid: click a pad to turn a step on or off, drag in a lane to draw values. Arrow keys move, "
                "Up and Down change the value, Space turns the step on or off");
@@ -279,6 +280,18 @@ juce::String StepGridComponent::describeFocus() const {
 
 std::unique_ptr<juce::AccessibilityHandler> StepGridComponent::createAccessibilityHandler() {
     return makeValueTextHandler(*this, [this] { return describeFocus(); });
+}
+
+// Test mode: the pitches the steps play, and the steps whose written note shows as an outline.
+void StepGridComponent::addTestModeState(juce::DynamicObject& into) const {
+    juce::StringArray played, outlined;
+    for (int i = 0; i < std::min(stepCount(), kMaxSequencerSteps); ++i) {
+        played.add(noteName(playedPitchOf(i)));
+        if (!writtenOutlineBounds(i).isEmpty())
+            outlined.add(juce::String(i + 1));
+    }
+    into.setProperty("playedNotes", played.joinIntoString(","));
+    into.setProperty("outlinedSteps", outlined.joinIntoString(","));
 }
 
 void StepGridComponent::focusGained(FocusChangeType) { repaint(); }

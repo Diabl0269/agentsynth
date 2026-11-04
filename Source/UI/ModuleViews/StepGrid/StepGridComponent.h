@@ -8,6 +8,7 @@
 #include "StepGridPageStrip.h"
 #include "StepGridRandomizePanel.h"
 #include "StepGridTools.h"
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/CardBody/CardBodyViews.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/UIAnimation.h"
@@ -42,7 +43,8 @@ struct StepGridHooks {
 class StepGridComponent
     : public juce::Component
     , public juce::SettableTooltipClient
-    , public synth::CardAnimatedHeightView {
+    , public synth::CardAnimatedHeightView
+    , public synth::testmode::StateSource {
 public:
     explicit StepGridComponent(SequencerModuleBase& module);
     ~StepGridComponent() override;
@@ -99,6 +101,8 @@ public:
     /** The cell of `step` in `lane`, in this component's coordinates; empty when the lane is folded. */
     juce::Rectangle<int> cellBounds(SequencerLane lane, int step) const;
     juce::Rectangle<int> padBounds(int step) const;
+    /** The outline of the note `step` was written at when a scale moved its bar elsewhere; empty when none is drawn. */
+    juce::Rectangle<float> writtenOutlineBounds(int step) const;
     /** The words a screen reader hears for the focused cell: "Step 5 of 16, F2, on, chance 100 percent". */
     juce::String describeFocus() const;
     /** The note a Pitch lane bar sits at: the pitch the step plays. */
@@ -107,6 +111,7 @@ public:
     void finishMotionForTest();
     bool isMotionRunning() const;
 
+    void addTestModeState(juce::DynamicObject& into) const override;
     void resized() override;
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
@@ -172,8 +177,9 @@ private:
     float shownNormal(SequencerLane lane, int step) const;
     float shownPitch(int step) const;
     stepgrid::ChordLabel labelOf(SequencerChord chord, int playedRoot, int step) const;
+    juce::Rectangle<float> writtenOutlineRect(int step, juce::Rectangle<int> lane) const;
     juce::Rectangle<float> pitchBarRect(int step, float played, juce::Rectangle<int> lane) const;
-    juce::Rectangle<float> chordLabelRect(const juce::Rectangle<float>& bar, juce::Rectangle<int> lane) const;
+    juce::Rectangle<float> chordLabelRect(const juce::Rectangle<float>& bar, juce::Rectangle<int> lane, int step) const;
     void paintLabel(juce::Graphics& g, const stepgrid::ChordLabel& label, juce::Rectangle<float> area,
                     float alpha) const;
     void paintStepLabel(juce::Graphics& g, int step, int playedRoot, juce::Rectangle<float> area) const;

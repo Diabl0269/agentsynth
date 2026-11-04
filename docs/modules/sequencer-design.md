@@ -251,7 +251,8 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
   mini piano roll, a row of step pads, the lane chips ([lane-chips.md](../layout/lane-chips.md)) and the other lanes
   stacked under them. Steps past `steps` are dimmed, never removed.
   - **Pitch** shows each step as a bar at the pitch it plays (scale rows shaded, the key's root tinted, the note name or
-    chord label over the bar); when the scale moved the note, the written note is a dashed outline. A drag lands only on
+    chord label over the bar); when the scale moved the note, the written note is a solid 1.5 px outline in the text colour
+    (readable on a dark and a light theme), drawn the moment a Key or Scale change reaches the card tick. A drag lands only on
     scale notes (`MusicalScale::snapPitch`; chromatic with No scale); Shift moves by octaves; the written pitch is the
     played pitch minus Transpose. The rows are frozen while a drag is in progress.
   - **Pads** turn a step on or off; a stroke across them paints one state. **Gate, Velocity, Chance, Repeat, Nudge,

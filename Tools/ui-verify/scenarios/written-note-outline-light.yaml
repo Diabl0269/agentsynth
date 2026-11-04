@@ -1,0 +1,45 @@
+# FRO1037: a sequencer step that a scale moved shows the note you wrote as a clearly visible solid outline, at once.
+#
+# What a user does: adds a Sequencer, writes E2 on step 1, picks C Natural Minor in the card's Key picker (E plays as
+# D#2 and the steps the scale moved show their written note as an outline in the text colour; the note names stay clear
+# of the outlines), then picks Follow song key again (the song has no key) (every outline goes). Light theme (Daylight).
+# The Key picker is its own desktop window, so the PNGs are of the main window after it closes.
+settings:
+  themeId: daylight
+  themeMode: Light
+record: true
+save_project: written-note-outline-light
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: sequencer}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: sequencerKey, showing: true, within_ms: 2000}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: stepGrid, x: 20, y: 120}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: stepGrid, playedNotes: "E2,F3,F#2,C#3,F2,A2,F#2,C3", outlinedSteps: "", within_ms: 1000}
+  - screenshot: {name: 1-before-scale}
+  - click: {id: sequencerKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - click: {id: "C Natural Minor, C D D# F G G# A#"}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - expect: {id: stepGrid, playedNotes: "D#2,F3,F2,C3,F2,G#2,F2,C3", outlinedSteps: "1,3,4,6,7", within_ms: 1500}
+  - screenshot: {name: 2-natural-minor}
+  - click: {id: sequencerKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - click: {id: Follow song key}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - expect: {id: stepGrid, outlinedSteps: "", within_ms: 1500}
+  - screenshot: {name: 3-no-key}
