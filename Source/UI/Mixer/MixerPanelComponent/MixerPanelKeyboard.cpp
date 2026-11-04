@@ -33,6 +33,15 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     if (rowFocus_.has_value() && handleRowKey(key))
         return true;
     // A Cmd, Ctrl or Alt arrow is another action's chord (Focus Transport Bar is Cmd+Shift+Up), so it bubbles on.
+    // Before the arrows: the default pan chords are Shift+Left / Shift+Right.
+    if (matchesAction(key, "mixerPanLeft",
+                      juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0)))
+        return panFocused(-kPanStep);
+    if (matchesAction(key, "mixerPanRight",
+                      juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0)))
+        return panFocused(kPanStep);
+    if (matchesAction(key, "mixerToggleChannelHidden", juce::KeyPress('h', juce::ModifierKeys::noModifiers, 0)))
+        return hideFocusedChannel();
     const auto mods = key.getModifiers();
     const bool arrowIsOurs = !mods.isCommandDown() && !mods.isCtrlDown() && !mods.isAltDown();
     if (arrowIsOurs && key.isKeyCode(juce::KeyPress::leftKey))
@@ -252,8 +261,34 @@ bool MixerPanelComponent::armFocusedTrack() {
     return true;
 }
 
+// A strip's pan; Direct has no pan and Master's is its pan law, so the key bubbles there.
+bool MixerPanelComponent::panFocused(float delta) {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
+        return false;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    return entry.kind == ColumnEntry::Kind::Strip &&
+           static_cast<MixerColumnComponent*>(entry.component)->nudgePan(delta);
+}
+
+// Hides the focused column (Master cannot be hidden) and hands the focus to its right-hand neighbour, or the left one
+// at the end, so the keys keep working; the side pane's eye or its H shows the channel again.
+bool MixerPanelComponent::hideFocusedChannel() {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
+        return false;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    if (entry.kind == ColumnEntry::Kind::Master || entry.channelId.isEmpty())
+        return false;
+    const int neighbour =
+        focusedColumnIndex_ + 1 < (int)columnEntries_.size() ? focusedColumnIndex_ + 1 : focusedColumnIndex_ - 1;
+    if (neighbour >= 0)
+        focusFallback_ = FocusIdentity{columnEntries_[(size_t)neighbour].kind, columnEntries_[(size_t)neighbour].uuid};
+    setChannelHidden(entry.channelId, true);
+    return true;
+}
+
 void MixerPanelComponent::resolveFocusAfterRebuild(bool hadFocus, ColumnEntry::Kind previousKind,
                                                    const juce::String& previousUuid) {
+    const auto fallback = std::exchange(focusFallback_, std::nullopt);
     if (!hadFocus)
         return;
     for (size_t i = 0; i < columnEntries_.size(); ++i) {
@@ -267,8 +302,17 @@ void MixerPanelComponent::resolveFocusAfterRebuild(bool hadFocus, ColumnEntry::K
             return;
         }
     }
-    focusedColumnIndex_ = -1; // the previously-focused column is gone -- focus clears, never
-                              // silently reattaches to whatever now sits at the old index.
+    // The previously-focused column is gone: focus clears, never silently reattaching to whatever now sits at the old
+    // index, unless the panel itself named where it goes (the hide key's neighbour).
+    focusedColumnIndex_ = -1;
+    if (!fallback.has_value())
+        return;
+    for (size_t i = 0; i < columnEntries_.size(); ++i)
+        if (columnEntries_[i].kind == fallback->kind &&
+            (fallback->kind == ColumnEntry::Kind::Direct || columnEntries_[i].uuid == fallback->uuid)) {
+            focusedColumnIndex_ = (int)i;
+            return;
+        }
 }
 
 void MixerPanelComponent::setFocusedColumnIndex(int index) {

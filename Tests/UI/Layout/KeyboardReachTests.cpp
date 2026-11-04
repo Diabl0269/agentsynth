@@ -46,15 +46,9 @@ struct KnownGap {
 };
 
 const std::vector<KnownGap> kKnownGaps = {
-    {"mixer / Show Gate on canvas", "FRO1203"},
-    {"mixer / Gate bypass, on", "FRO1203"},
-    {"mixer / Show Parametric EQ on canvas", "FRO1203"},
-    {"mixer / Parametric EQ bypass, on", "FRO1203"},
-    {"mixer / Show Compressor on canvas", "FRO1203"},
-    {"mixer / Compressor bypass, on", "FRO1203"},
-    {"mixer / Audio 1 pan", "FRO1310"},
-    {"mixer / Audio 1 visibility", "FRO1310"},
-    {"mixer / Direct visibility", "FRO1310"},
+    {"mixer / Show Gate on canvas", "FRO1203"},          {"mixer / Gate bypass, on", "FRO1203"},
+    {"mixer / Show Parametric EQ on canvas", "FRO1203"}, {"mixer / Parametric EQ bypass, on", "FRO1203"},
+    {"mixer / Show Compressor on canvas", "FRO1203"},    {"mixer / Compressor bypass, on", "FRO1203"},
 };
 
 // A region that reaches some of its controls with keys of its own. `reaches` answers for one control; `reason` says
@@ -110,7 +104,8 @@ bool timelineReaches(juce::Component& control, juce::Component& root) {
 }
 
 // The mixer panel is one focusable leaf: Left/Right pick a column, Up/Down nudge its fader, M and S mute and solo it,
-// C opens its colour picker, Return selects it on the canvas and the section keys toggle the Inserts, Sends and EQ
+// C opens its colour picker, Shift+Left/Right pan it, H hides it (and shows or hides the side pane's cursor row),
+// Return selects it on the canvas and the section keys toggle the Inserts, Sends and EQ
 // rows. The rest of the top bar (toolbar, zones pane filter and chips, master pan law) is the key ring's stops.
 bool mixerKeysReach(juce::Component& control, juce::Component& root) {
     const auto stops = static_cast<synth::ui::MixerPanelComponent&>(root).getTopBarRingForTest().getStops();
@@ -119,8 +114,9 @@ bool mixerKeysReach(juce::Component& control, juce::Component& root) {
     const auto title = control.getTitle();
     if (title == "Inserts" || title == "Sends" || title == "EQ")
         return true;
-    return title.endsWith(" fader") || title.endsWith(" colour") || title.contains(" mute") ||
-           title.contains(" solo") || (title.startsWith("Edit ") && title.endsWith(" on canvas"));
+    return title.endsWith(" fader") || title.endsWith(" colour") || title.endsWith(" pan") ||
+           title.endsWith(" visibility") || title.contains(" mute") || title.contains(" solo") ||
+           (title.startsWith("Edit ") && title.endsWith(" on canvas"));
 }
 
 const std::vector<Adapter> kAdapters = {
@@ -132,7 +128,8 @@ const std::vector<Adapter> kAdapters = {
      "the top bar is a key ring (Up from the track column, Left/Right along it); M, S and R are keys of a track row",
      false, nullptr, timelineReaches},
     {"mixer",
-     "one focusable leaf: column, fader, colour, mute, solo, select and section keys; the top bar is a key ring "
+     "one focusable leaf: column, fader, colour, pan, hide, mute, solo, select and section keys; the top bar is a key "
+     "ring "
      "(Cmd+Up)",
      true, nullptr, mixerKeysReach},
     {"modMatrix", "a painted grid: the arrow keys move its cell cursor", false, nullptr, nullptr},

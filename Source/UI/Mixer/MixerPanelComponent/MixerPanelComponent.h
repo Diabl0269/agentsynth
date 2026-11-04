@@ -232,7 +232,7 @@ public:
      *  member, never a value captured at bind time. */
     void setShortcutManager(ShortcutManager* manager) {
         shortcuts_ = manager;
-        toolbar_.refresh();
+        refreshShortcutHints();
     }
     /** Re-reads the section toggles' and the colour dots' shortcut hints after a rebind. */
     void refreshShortcutHints();
@@ -419,6 +419,10 @@ private:
     juce::String bypassShortcutText() const;
     juce::String colourShortcutText() const;
     bool openFocusedColour();
+    bool panFocused(float delta);
+    bool hideFocusedChannel();
+    juce::String panShortcutText() const;
+    static constexpr float kPanStep = 0.1f; // a tenth of the way to one side
     void wireSectionLayout();
     void onSectionGeometryChanged();
     void wireSectionFades();
@@ -461,6 +465,11 @@ private:
         bool linkedToTrack = false;                // Strip only
         std::vector<synth::TrackId> feedingTracks; // Strip only
     };
+    struct FocusIdentity {
+        ColumnEntry::Kind kind;
+        juce::String uuid;
+    };
+    std::optional<FocusIdentity> focusFallback_; // where focus goes when the focused column is gone after a rebuild
 
     // ---- Incremental column rebuild -- implemented in MixerPanelColumnReuse.cpp -------------------
     /** What the panel itself gave a strip column; with MixerColumnComponent::showsColumn it decides reuse. */

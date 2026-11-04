@@ -1,5 +1,5 @@
-// Concern: MixerPanelComponent's colour dot -- which picker a column's dot opens, how it opens, and the shortcut
-// text the row bypass buttons' tooltips name.
+// Concern: MixerPanelComponent's colour dot -- which picker a column's dot opens and how it opens -- and the shortcut
+// texts the tooltips name (colour dots, pan knobs, side pane eyes, row bypass buttons).
 #include "Mixer/ChannelMacroLookup.h"
 #include "MixerPanelComponent.h"
 #include "ShortcutManager/ShortcutManager.h"
@@ -93,13 +93,30 @@ juce::String MixerPanelComponent::colourShortcutText() const {
 
 void MixerPanelComponent::refreshShortcutHints() {
     toolbar_.refresh();
+    zonesPane_.setHideKey(
+        [this](const juce::KeyPress& key) {
+            return matchesAction(key, "mixerToggleChannelHidden",
+                                 juce::KeyPress('h', juce::ModifierKeys::noModifiers, 0));
+        },
+        shortcuts_ == nullptr
+            ? juce::String("H")
+            : ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerToggleChannelHidden")));
     for (const auto& entry : columnEntries_) {
         if (entry.kind != ColumnEntry::Kind::Strip)
             continue;
         auto* column = static_cast<MixerColumnComponent*>(entry.component);
         if (const auto state = stripColumnState_.find(column); state != stripColumnState_.end())
             column->setColourEditable(state->second.colourEditable, colourShortcutText());
+        column->setPanShortcutText(panShortcutText());
     }
+}
+
+// Both pan keys, for the pan knobs' tooltips.
+juce::String MixerPanelComponent::panShortcutText() const {
+    if (shortcuts_ == nullptr)
+        return "Shift+Left / Shift+Right";
+    return ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerPanLeft")) + " / " +
+           ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerPanRight"));
 }
 
 // The row bypass buttons' tooltips name the key; the default letter stands in when no ShortcutManager is installed.

@@ -37,6 +37,9 @@ public:
     /** Alt-click on an eye: show only that channel, or restore the previous set when it already is. */
     std::function<void(const juce::String& channelId)> onSoloShow;
     std::function<void()> onShowAll;
+    /** The hide key: it shows or hides the cursor row as Space does, and the eyes' tooltips name `text`. */
+    void setHideKey(std::function<bool(const juce::KeyPress&)> matches, const juce::String& text);
+
     /** Fired when the filter box gives up keyboard focus (Return / Esc) so the owner can take it back. */
     std::function<void()> onFocusReleased;
 
@@ -126,6 +129,8 @@ private:
     std::vector<MixerZoneChannel> channels_;
     std::vector<Item> items_;
     std::map<juce::String, std::unique_ptr<MixerZonesRow>> rows_;
+    std::function<bool(const juce::KeyPress&)> hideKeyMatches_;
+    juce::String hideKeyText_;
     std::array<std::unique_ptr<MixerZonesGroupHeader>, 3> headers_;
 
     juce::TextEditor filter_;

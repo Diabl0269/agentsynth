@@ -1,0 +1,50 @@
+# Bug: a mixer strip's pan and its hide/show had no key: a keyboard user could reach neither.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel, adds an Oscillator track and opens the Mixer tab.
+#   2. Clicks the strip's header beside its name and presses Shift+Left until the pan is hard left.
+#   3. Presses H: the strip is hidden and the focus moves to Direct, its neighbour.
+#   4. Opens the side pane's list (Cmd+Shift+B), moves to Oscillator 1 and presses H: the strip is back.
+record: true
+save_project: mixer-pan-hide-keys
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - wait: {}
+  - click: {id: Mixer}                                       # the Mixer tab
+  - wait: {}
+  - click: {id: mixerPanel, x: 310, y: 38}                    # empty space in the strip's header, beside its name
+  - wait: {}
+  - expect: {id: mixerPanel, focusedColumn: "Oscillator 1"}
+  - expect: {id: "Oscillator 1 pan", value: 0.0}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - key: {keys: shift+left}
+  - expect: {id: "Oscillator 1 pan", value: -1.0, within_ms: 1000}   # hard left, clamped
+  - expect: {id: mixerPanel, focusedColumn: "Oscillator 1"}  # Shift+Left panned; it did not walk the columns
+  - screenshot: {name: panned-hard-left}
+  - key: {keys: h}
+  - expect: {count: {prefix: mixerColumnHeaderName, equals: 2}, within_ms: 3000}   # Direct and Master
+  - expect: {id: mixerPanel, focusedColumn: "Direct", within_ms: 1000}
+  - screenshot: {name: hidden-focus-on-direct}
+  - key: {keys: cmd+shift+b}                                 # the side pane starts open: close it...
+  - wait: {}
+  - key: {keys: cmd+shift+b}                                 # ...and reopen it, the keyboard in its list on the first row
+  - wait: {}
+  - key: {keys: h}                                           # Oscillator 1's row: shown again
+  - expect: {count: {prefix: mixerColumnHeaderName, equals: 3}, within_ms: 3000}
+  - wait: {}
+  - screenshot: {name: shown-again}

@@ -111,6 +111,10 @@ public:
     /** The fader nudged one undo step, or false when nothing is bound (Direct-column-style
      *  no-op) or the fader has no live param (post-unbind). */
     bool nudgeFader(float deltaDb) { return fader_.nudge(deltaDb); }
+    /** Moves the pan by `delta` (the parameter runs -1 left to +1 right) as one gesture; false when unbound. */
+    bool nudgePan(float delta);
+    /** The pan keys' text for the pan knob's tooltip, e.g. "Shift+Left / Shift+Right"; empty names none. */
+    void setPanShortcutText(const juce::String& keys);
 
     MixerFader& getFaderForTest() noexcept { return fader_; }
     juce::Slider& getPanSliderForTest() noexcept { return panSlider_; }
@@ -415,6 +419,7 @@ private:
     std::array<std::unique_ptr<MixerSectionSwap>, MixerSectionLayout::kSectionCount> sectionSwaps_;
     juce::Slider panSlider_;
     std::unique_ptr<juce::SliderParameterAttachment> panAttachment_;
+    juce::String panShortcutText_;
     MixerFader fader_;
     MixerMeter meter_;
     MixerMeterReadout meterReadout_;

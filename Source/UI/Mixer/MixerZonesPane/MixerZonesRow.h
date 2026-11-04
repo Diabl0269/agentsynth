@@ -51,6 +51,8 @@ public:
 
     void setChannel(const MixerZoneChannel& channel);
     const MixerZoneChannel& getChannel() const noexcept { return channel_; }
+    /** The hide key's text for the eye's tooltip (blank names none); applies from the next setChannel(). */
+    void setHideShortcutText(const juce::String& text) { hideShortcutText_ = text; }
     /** The channel-filter text whose matched letters the name paints highlighted (blank = none). */
     void setHighlightQuery(const juce::String& query);
     /** 0..1: how strongly the row is drawn lifted while it is dragged. */
@@ -73,6 +75,7 @@ private:
     MixerZoneChannel channel_;
     MixerZonesEye eye_;
     juce::String highlightQuery_;
+    juce::String hideShortcutText_;
     float lift_ = 0.0f;
     bool cursor_ = false;
 

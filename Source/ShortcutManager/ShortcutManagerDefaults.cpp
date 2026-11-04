@@ -553,6 +553,11 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     bindings["mixerOpenEq"] = juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0);
     // Bare C opens the focused column's colour picker, the keyboard twin of a click on its colour dot.
     bindings["mixerOpenColour"] = juce::KeyPress('c', juce::ModifierKeys::noModifiers, 0);
+    // Shift+Left / Shift+Right pan the focused column (the plain arrows walk the columns); H hides it, or shows and
+    // hides the side pane's cursor row while that list has the keyboard.
+    bindings["mixerPanLeft"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0);
+    bindings["mixerPanRight"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0);
+    bindings["mixerToggleChannelHidden"] = juce::KeyPress('h', juce::ModifierKeys::noModifiers, 0);
     // Bare B bypasses the focused send or insert row; it is only read while a row holds the panel's row focus.
     bindings["mixerToggleRowBypass"] = juce::KeyPress('b', juce::ModifierKeys::noModifiers, 0);
     // Alt+Up / Alt+Down move the focused row one place within its list (the zones pane's own Alt+Up/Down is a

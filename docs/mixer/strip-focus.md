@@ -36,9 +36,20 @@ column with nothing to recolour (Direct, Master) lets the key bubble. The dot's 
 rebind. The dot itself takes Return only, so after a click lands on it Space still plays: it is the one mixer button
 `Tests/UI/Mixer/MixerSpaceKeyTests.cpp` expects to leave Space alone.
 
+## Pan and hide
+
+**Shift+Left / Shift+Right** (`mixerPanLeft`, `mixerPanRight`) move the focused strip's pan a tenth of the way left or
+right per press, clamped at either end, through the pan knob itself (`MixerColumnComponent::nudgePan`), so each press is
+one undo step, as a click on the knob is. Master's pan is its pan law and Direct has none, so the keys bubble there.
+**H** (`mixerToggleChannelHidden`) hides the focused column (not Master) as one undo step and hands the focus to its
+right-hand neighbour, or the left one at the end (`MixerPanelComponent::hideFocusedChannel`, through `focusFallback_`).
+In the side pane's list the same key shows or hides the cursor row, as Space does. The pan knob's and the eyes' tooltips
+name the keys and follow a rebind.
+
 ## Test mode
 
 `getState` on `mixerPanel` reports `focusedColumn`, the title of the column whose outline shows (empty when none).
 `Tools/ui-verify/scenarios/mixer-strip-click-focus.yaml` clicks a strip, duplicates it three times, clicks the canvas
 and presses Cmd+Up; `Tests/UI/Mixer/MixerStripClickFocusTests.cpp` drives the same through the real ComponentPeer.
 `mixer-colour-key.yaml` opens the picker with C and with Return on the dot; `MixerColourKeyTests.cpp` pins the keys.
+`mixer-pan-hide-keys.yaml` pans and hides a strip and shows it again; `MixerPanHideKeyTests.cpp` pins those keys.

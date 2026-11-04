@@ -102,6 +102,12 @@ juce::String mixerActionName(const juce::String& actionId) {
         return "Open Mixer EQ";
     if (actionId == "mixerOpenColour")
         return "Change Mixer Channel Colour";
+    if (actionId == "mixerPanLeft")
+        return "Pan Mixer Channel Left";
+    if (actionId == "mixerPanRight")
+        return "Pan Mixer Channel Right";
+    if (actionId == "mixerToggleChannelHidden")
+        return "Hide or Show Mixer Channel";
     if (actionId == "mixerToggleRowBypass")
         return "Bypass Mixer Send or Insert";
     if (actionId == "mixerMoveRowUp")

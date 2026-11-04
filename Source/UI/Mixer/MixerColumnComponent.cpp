@@ -11,6 +11,7 @@
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -216,7 +217,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     setTitle(column.name);
     fader_.setChannelName(column.name);
     panSlider_.setTitle(column.name + " pan");
-    panSlider_.setTooltip("Pan: drag to change");
+    setPanShortcutText(panShortcutText_);
     meter_.setTitle(column.name + " meter");
     meter_.setTooltip("Output level meter");
     meterReadout_.setTitle(column.name + " peak");
@@ -289,6 +290,23 @@ void MixerColumnComponent::commitHeaderRename(const juce::String& rawNewName) {
     undoManager_->recordNodeExtraStateChange(*graph_, nodeId_, before, after);
     if (onMutated)
         onMutated(); // refreshes the column from a fresh buildMixerSnapshot, same as any other edit here
+}
+
+// Through the slider, so the attachment writes the parameter and the knob and its screen-reader value follow; the
+// capture/push pair around it makes each press one undo step, the same bracket toggleMuted uses.
+bool MixerColumnComponent::nudgePan(float delta) {
+    if (panAttachment_ == nullptr || graph_ == nullptr || undoManager_ == nullptr)
+        return false;
+    undoManager_->captureBeforeState(*graph_);
+    panSlider_.setValue(juce::jlimit(panSlider_.getMinimum(), panSlider_.getMaximum(), panSlider_.getValue() + delta),
+                        juce::sendNotificationSync);
+    undoManager_->pushSnapshotFromCapture(*graph_);
+    return true;
+}
+
+void MixerColumnComponent::setPanShortcutText(const juce::String& keys) {
+    panShortcutText_ = keys;
+    panSlider_.setTooltip(formatShortcutHint("Pan: drag to change", keys));
 }
 
 void MixerColumnComponent::rebindControls() {

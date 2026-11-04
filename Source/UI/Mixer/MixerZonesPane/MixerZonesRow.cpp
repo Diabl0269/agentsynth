@@ -5,6 +5,7 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Layout/SearchMatch.h"
+#include "UI/Layout/UIAnimation.h"
 
 namespace synth::ui {
 
@@ -58,7 +59,8 @@ void MixerZonesRow::setChannel(const MixerZoneChannel& channel) {
     eye_.setEnabled(!master);
     eye_.setTitle(channel_.name + " visibility");
     eye_.setTooltip(master ? "Master cannot be hidden"
-                           : juce::String(channel_.hidden ? "Show " : "Hide ") + channel_.name +
+                           : formatShortcutHint(juce::String(channel_.hidden ? "Show " : "Hide ") + channel_.name,
+                                                hideShortcutText_) +
                                  " (Alt-click: show only this channel)");
     repaint();
 }

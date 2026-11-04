@@ -65,6 +65,7 @@ MixerPanelComponent::MixerPanelComponent() {
     zonesPane_.onFocusReleased = [this] { grabKeyboardFocus(); };
     toolbar_.shortcutTextFor = [this](MixerSection section) { return sectionToggleShortcutText(section); };
     toolbar_.setLayout(sectionLayout_);
+    refreshShortcutHints();
     toolbar_.onAddBus = [this] {
         createBus();
         rebuild(); // the new bus's own column, without waiting for the owner's reconcile

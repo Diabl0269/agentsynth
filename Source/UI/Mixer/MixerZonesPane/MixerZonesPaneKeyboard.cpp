@@ -33,7 +33,7 @@ bool MixerZonesPane::keyPressed(const juce::KeyPress& key) {
         return alt ? moveCursorZone(-1) : moveCursor(-1);
     if (key.isKeyCode(juce::KeyPress::downKey))
         return alt ? moveCursorZone(1) : moveCursor(1);
-    if (key.isKeyCode(juce::KeyPress::spaceKey))
+    if (key.isKeyCode(juce::KeyPress::spaceKey) || (hideKeyMatches_ && hideKeyMatches_(key)))
         return toggleCursorHidden();
     if (key.isKeyCode(juce::KeyPress::escapeKey)) {
         giveAwayKeyboardFocus();
@@ -75,6 +75,15 @@ void MixerZonesPane::setCursor(const juce::String& id, bool announce) {
 }
 
 // Master's eye is disabled, and so is its Space.
+void MixerZonesPane::setHideKey(std::function<bool(const juce::KeyPress&)> matches, const juce::String& text) {
+    hideKeyMatches_ = std::move(matches);
+    hideKeyText_ = text;
+    for (auto& [id, row] : rows_) {
+        row->setHideShortcutText(text);
+        row->setChannel(row->getChannel());
+    }
+}
+
 bool MixerZonesPane::toggleCursorHidden() {
     const auto* channel = findChannel(cursorId_);
     if (channel == nullptr || channel->kind == MixerZoneChannelKind::Master || !onSetHidden)

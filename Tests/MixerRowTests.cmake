@@ -9,4 +9,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerTopBarRingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerStripClickFocusTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerColourKeyTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerPanHideKeyTests.cpp
 )
