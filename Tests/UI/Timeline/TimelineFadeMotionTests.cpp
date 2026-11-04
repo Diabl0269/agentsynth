@@ -2,6 +2,7 @@
 // piano roll cross-fading with the clip lanes, the routing pane's controls and a track header's chips and fold arrow
 // fading in and out while the row around them slides. A control that is going away stays visible until its fade ends.
 // The fades are forced on for off-screen components and stepped by hand (FadeVisibility::stepAllForTest).
+#include "../../TestWait.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "../Layout/FadeVisibilityTestGuard.h"
 #include "AppUndoManager.h"
@@ -216,6 +217,7 @@ TEST(TimelineFadeMotionTest, ATrackHeadersChannelChipFadesInAndOutAndTheRowFollo
     LinkHost host;
     TimelineTrackHeaderComponent header(doc, track, &host);
     header.setSize(160, TimelineTrackHeaderComponent::kRowHeight);
+    synth::test::flushMessageQueue(); // the row's arrival is over: from here a control fades
     auto& chip = header.getChannelChip();
     auto& binding = header.getBindingChip();
     FadeVisibility::stepAllForTest(1.0f); // the chip the constructor's first refresh fades out is gone
@@ -253,6 +255,7 @@ TEST(TimelineFadeMotionTest, TheFoldArrowFadesInWhenTheUnassignedSectionGainsIts
     LinkHost host;
     TimelineTrackHeaderComponent header(doc, track, &host);
     header.setSize(160, TimelineTrackHeaderComponent::kRowHeight);
+    synth::test::flushMessageQueue(); // the row's arrival is over: from here a control fades
     ASSERT_TRUE(header.isSectionHeader());
     EXPECT_FALSE(header.getFoldArrow().isVisible()) << "an empty Unassigned section has no arrow";
 

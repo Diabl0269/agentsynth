@@ -579,7 +579,7 @@ TEST(AutomationLanesControlChipsTest, AModLaneShowsChangeSourceAndTheRowListsSho
     juce::StringArray labels;
     for (auto& b : strip.getRow()->getButtons())
         labels.add(b->getTitle());
-    EXPECT_EQ(labels, (juce::StringArray{"Show in canvas", "Remove modulator", "Edit controls"}));
+    EXPECT_EQ(labels, (juce::StringArray{"Show on canvas", "Remove modulator", "Edit controls"}));
     clickButton(*rowButton(strip, LaneControl::ShowInCanvas));
     EXPECT_EQ(f.host.shown, "lfo-1");
     pressInRow(strip, LaneControl::Remove);

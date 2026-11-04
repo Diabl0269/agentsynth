@@ -1,0 +1,28 @@
+# Bug: a new instrument track's header showed its bottom row (voice toggle, channel chip) about a second after the row
+# itself: the header is built before the track's graph exists, and the controls that need the graph then faded in on
+# their own.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel and adds an Oscillator track from the + Track menu.
+#   2. The new track's header is whole on the first frame: the voice toggle, the channel chip and the show-on-canvas
+#      button each already have room (no waiting). Animations are on, so a late fade would show.
+# Every expect below waits at most 1 ms, so a fade that lands later fails it.
+record: true
+save_project: new-track-header-complete-at-once
+motion: true
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - expect: {id: trackVoiceToggle, bounds: {x: 71, y: 774, w: 20, h: 20}, within_ms: 1}
+  - expect: {id: trackChannelChip, bounds: {x: 94, y: 773, w: 80, h: 23}, within_ms: 1}
+  - expect: {id: trackShowModuleButton, bounds: {x: 177, y: 774, w: 20, h: 20}, within_ms: 1}
+  - screenshot: {name: oscillator-first-frame}
+  - wait: {}
+  - expect: {id: trackVoiceToggle, bounds: {x: 71, y: 774, w: 20, h: 20}}      # nothing moves after the first frame
+  - expect: {id: trackChannelChip, bounds: {x: 94, y: 773, w: 80, h: 23}}
+  - screenshot: {name: oscillator-settled}

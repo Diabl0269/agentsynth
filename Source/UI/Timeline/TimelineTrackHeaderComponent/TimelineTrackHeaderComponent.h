@@ -19,8 +19,8 @@
 #include "UI/Timeline/TrackChannelLinkSurface.h"
 #include "UI/Timeline/TrackDrumMachineButton.h"
 #include "UI/Timeline/TrackMonitorButton.h"
-#include "UI/Timeline/TrackPolySwitch.h"
 #include "UI/Timeline/TrackShowModuleButton.h"
+#include "UI/Timeline/TrackVoiceToggle.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <limits>
 #include <memory>
@@ -487,9 +487,9 @@ struct TrackHeaderHost {
     /** The audio Input row's view of the app's inputs, same one-accessor shape; null for a host with none. */
     virtual TrackAudioInputSurface* getAudioInputSurface() { return nullptr; }
 
-    /** The Mono/Poly switch (docs/timeline/tracks.md#the-monopoly-switch): whether the voice graph that starts at
-     *  `track`'s source is mono, poly or half and half; `none` (the default) when it has nothing poly-capable, which
-     *  hides the switch. */
+    /** The mono / poly voice toggle (docs/timeline/tracks.md#the-monopoly-switch): whether the voice graph that starts
+     * at `track`'s source is mono, poly or half and half; `none` (the default) when it has nothing poly-capable, which
+     *  hides the toggle. */
     virtual TrackPolyState getTrackPolyState(synth::TrackId /*track*/) { return TrackPolyState::none; }
 
     /** The switch was pressed: sets the whole voice graph of `track` to `poly`, as ONE undo step (the same flow as
@@ -766,7 +766,7 @@ public:
     TrackFoldArrow& getFoldArrow() noexcept { return foldArrow_; }
     TrackShowModuleButton& getShowModuleButton() noexcept { return showModuleButton_; }
     TrackDrumMachineButton& getDrumMachineButton() noexcept { return drumButton_; }
-    TrackPolySwitch& getPolySwitch() noexcept { return polySwitch_; }
+    TrackVoiceToggle& getVoiceToggle() noexcept { return voiceToggle_; }
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
 
     /** Builds a ColourPickerPopup wired with the EXACT same onPreview/onCommit callbacks the real
@@ -972,9 +972,10 @@ private:
     synth::ui::FadeVisibility foldArrowFade_{&foldArrow_};
     synth::ui::FadeVisibility bindingChipFade_{&bindingChip_};
     synth::ui::FadeVisibility channelChipFade_{&channelChip_};
-    TrackPolySwitch polySwitch_;
-    synth::ui::FadeVisibility polySwitchFade_{&polySwitch_};
+    TrackVoiceToggle voiceToggle_;
+    synth::ui::FadeVisibility voiceToggleFade_{&voiceToggle_};
 
+    bool arriving_ = true; // until the message loop first turns: controls land at once, not by fade
     juce::Colour resolvedColour_{juce::Colours::grey};
     bool chipWarning_ = false;
     // True from the moment a background mouseDrag crosses the reorder threshold (see

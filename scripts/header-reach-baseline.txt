@@ -229,7 +229,7 @@
 402 Source/UI/Timeline/TrackAudioInputSurface.h
 402 Source/UI/Timeline/TrackDrumMachineButton.h
 402 Source/UI/Timeline/TrackMonitorButton.h
-402 Source/UI/Timeline/TrackPolySwitch.h
+402 Source/UI/Timeline/TrackVoiceToggle.h
 401 Source/UI/Graph/ModDot/ModDotButton.h
 401 Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h
 401 Source/UI/Graph/ModuleComponent/ModRingFades.h

@@ -285,7 +285,7 @@ add_executable(Tests
     App/MainComponent/MainComponentFreshUndoTests.cpp
     App/MainComponent/MainComponentDuplicateTrackTests.cpp
     App/MainComponent/MainComponentDuplicateTrackMotionTests.cpp
-    App/MainComponent/MainComponentTrackPolySwitchTests.cpp
+    App/MainComponent/MainComponentTrackVoiceToggleTests.cpp
     App/MainComponent/MainComponentShowTrackModuleTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
     App/MainComponent/MainComponentTeardownTests.cpp

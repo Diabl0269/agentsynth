@@ -2,6 +2,8 @@
 // the headless test build and at any chip size).
 #include "UI/Timeline/AutomationLanes/LaneHeaderParts/LaneControls.h"
 
+#include "UI/Layout/ActionGlyphs.h"
+
 #include <algorithm>
 
 namespace synth::ui {
@@ -98,11 +100,6 @@ void paintMove(juce::Graphics& g, const Grid& grid) {
     stroke(g, grid, line(grid, 2.5f, 12, 11.5f, 12));
 }
 
-void paintCanvas(juce::Graphics& g, const Grid& grid) {
-    g.drawRoundedRectangle(grid.rect(1.5f, 2.5f, 11, 9), 1.5f * grid.scale, 1.3f * grid.scale);
-    g.fillRoundedRectangle(grid.rect(4, 5, 4.5f, 4), 0.8f * grid.scale);
-}
-
 void paintSwap(juce::Graphics& g, const Grid& grid) {
     juce::Path arrows;
     arrows.startNewSubPath(grid.at(2, 4.5f));
@@ -156,7 +153,7 @@ void paintLaneControlIcon(juce::Graphics& g, LaneControl control, juce::Rectangl
         paintMove(g, grid);
         break;
     case LaneControl::ShowInCanvas:
-        paintCanvas(g, grid);
+        paintShowOnCanvasGlyph(g, area, colour); // the track header's own glyph, one painter
         break;
     case LaneControl::CreateCustomLfo:
         paintCustomLfo(g, grid);

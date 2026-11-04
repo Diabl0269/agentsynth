@@ -118,8 +118,8 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/TrackFoldArrow.h
     Source/UI/Timeline/AutomationLanes/TrackFoldArrow.cpp
     Source/UI/Timeline/TrackPolyState.h
-    Source/UI/Timeline/TrackPolySwitch.h
-    Source/UI/Timeline/TrackPolySwitch.cpp
+    Source/UI/Timeline/TrackVoiceToggle.h
+    Source/UI/Timeline/TrackVoiceToggle.cpp
     Source/UI/Timeline/TrackShowModuleButton.h
     Source/UI/Timeline/TrackShowModuleButton.cpp
     Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h
@@ -336,6 +336,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/ExitEnterRowSlots.h
     Source/UI/Layout/FocusRing.h
     Source/UI/Layout/FocusRing.cpp
+    Source/UI/Layout/ActionGlyphs.h
+    Source/UI/Layout/ActionGlyphs.cpp
     Source/UI/Layout/KeyRing.h
     Source/UI/Layout/KeyRing.cpp
     Source/UI/Layout/TooltipHelpHandler.h
