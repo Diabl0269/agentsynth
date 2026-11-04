@@ -25,9 +25,9 @@ public:
         : hooks_(std::move(hooks)) {}
     ~CanvasEdgeScroller() override { stopTimer(); }
 
-    /** Arms the scroller for one drag; `onScrolled` runs after every tick that moved the view. Replaces any drag
-     *  already armed. */
-    void begin(std::function<void()> onScrolled);
+    /** Arms the scroller for one drag; `onScrolled` runs after every tick that moved the view, `onStill` after a
+     *  tick that did not. Replaces any drag already armed. */
+    void begin(std::function<void()> onScrolled, std::function<void()> onStill = nullptr);
     /** Disarms it (mouse up, drop, cancel). Safe to call when nothing is armed. */
     void end();
     bool isActive() const noexcept { return isTimerRunning(); }
@@ -40,4 +40,5 @@ private:
 
     Hooks hooks_;
     std::function<void()> onScrolled_;
+    std::function<void()> onStill_;
 };

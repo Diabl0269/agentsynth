@@ -48,28 +48,41 @@ bool CanvasEdgeScrollDriver::panBy(juce::Point<float> d) {
 // exactly as for a mouse move (ComponentDragger measures from the press, so the grab point is kept).
 void CanvasEdgeScrollDriver::beginCardDrag(juce::Component& card, juce::Point<int> pressInCard) {
     juce::Component::SafePointer<juce::Component> safeCard(&card);
-    scroller_.begin([this, safeCard, pressInCard] {
-        auto* c = safeCard.getComponent();
-        if (c == nullptr)
-            return;
-        const auto pos = c->getLocalPoint(&editor_, pointerInView());
-        const auto now = juce::Time::getCurrentTime();
-        c->mouseDrag(juce::MouseEvent(
-            juce::Desktop::getInstance().getMainMouseSource(), pos,
-            juce::ModifierKeys::getCurrentModifiersRealtime().withFlags(juce::ModifierKeys::leftButtonModifier), 0.0f,
-            0.0f, 0.0f, 0.0f, 0.0f, c, c, now, pressInCard.toFloat(), now, 1, true));
-    });
+    scroller_.begin(
+        [this, safeCard, pressInCard] {
+            auto* c = safeCard.getComponent();
+            if (c == nullptr)
+                return;
+            const GraphDragDropController::ScrollTick tick(editor_.getDragDropController());
+            const auto pos = c->getLocalPoint(&editor_, pointerInView());
+            const auto now = juce::Time::getCurrentTime();
+            c->mouseDrag(juce::MouseEvent(
+                juce::Desktop::getInstance().getMainMouseSource(), pos,
+                juce::ModifierKeys::getCurrentModifiersRealtime().withFlags(juce::ModifierKeys::leftButtonModifier),
+                0.0f, 0.0f, 0.0f, 0.0f, 0.0f, c, c, now, pressInCard.toFloat(), now, 1, true));
+        },
+        [this] { editor_.getDragDropController().flushDragPreview(); });
 }
 
 void CanvasEdgeScrollDriver::beginLibraryDrag(const juce::DragAndDropTarget::SourceDetails& details) {
     libraryDrag_ = details;
-    scroller_.begin([this] {
-        if (!libraryDrag_)
-            return;
-        auto moved = *libraryDrag_;
-        moved.localPosition = pointerInView().roundToInt();
-        editor_.getDragDropController().itemDragMove(moved);
-    });
+    scroller_.begin(
+        [this] {
+            if (!libraryDrag_)
+                return;
+            auto moved = *libraryDrag_;
+            moved.localPosition = pointerInView().roundToInt();
+            const GraphDragDropController::ScrollTick tick(editor_.getDragDropController());
+            editor_.getDragDropController().itemDragMove(moved);
+        },
+        [this] { editor_.getDragDropController().flushDragPreview(); });
+}
+
+// Every drop and release ends the scroll before it reads the preview, so the flush here is what makes the drop use
+// the preview for where the pointer is now rather than one a throttled tick skipped (GraphDragDropController).
+void CanvasEdgeScrollDriver::end() {
+    editor_.getDragDropController().flushDragPreview();
+    scroller_.end();
 }
 
 } // namespace synth::ui

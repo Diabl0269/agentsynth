@@ -2,14 +2,16 @@
 
 #include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScroll.h"
 
-void CanvasEdgeScroller::begin(std::function<void()> onScrolled) {
+void CanvasEdgeScroller::begin(std::function<void()> onScrolled, std::function<void()> onStill) {
     onScrolled_ = std::move(onScrolled);
+    onStill_ = std::move(onStill);
     startTimerHz(synth::ui::kEdgeScrollHz);
 }
 
 void CanvasEdgeScroller::end() {
     stopTimer();
     onScrolled_ = nullptr;
+    onStill_ = nullptr;
 }
 
 // Every tick re-reads the pointer, so moving back inward (or off the zone) stops the pan on the next tick and a
@@ -25,8 +27,14 @@ void CanvasEdgeScroller::tick() {
     const auto view = hooks_.view();
     const auto pointer = hooks_.pointer().roundToInt();
     const auto delta = synth::ui::canvasEdgePanDelta(pointer, view);
-    if (delta.isOrigin() || !hooks_.panBy(delta))
+    if (delta.isOrigin() || !hooks_.panBy(delta)) {
+        if (auto cb = std::move(onStill_)) { // moved out for the same reason as onScrolled_ below
+            cb();
+            if (isActive() && !onStill_)
+                onStill_ = std::move(cb);
+        }
         return;
+    }
     if (auto cb = std::move(onScrolled_)) {
         cb();
         if (isActive() && !onScrolled_)

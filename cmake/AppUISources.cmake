@@ -492,11 +492,6 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroFoldAnimator/MacroFoldAnimator.cpp
     Source/UI/Graph/NewModulePlacement/NewModulePlacement.h
     Source/UI/Graph/NewModulePlacement/NewModulePlacement.cpp
-    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroll.h
-    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h
-    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.cpp
-    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h
-    Source/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.cpp
     Source/UI/Graph/CanvasFrame/CanvasFrame.h
     Source/UI/Graph/CanvasFrame/CanvasFrame.cpp
     Source/UI/Graph/CanvasFrame/CanvasEdgeDrag.h
@@ -997,3 +992,4 @@ include(cmake/DrumMachineSources.cmake) # appends the drum machine editor to APP
 include(cmake/TimelinePanelSources.cmake) # appends the timeline panel to APPUI_SOURCES
 include(cmake/CardLayoutGroupMoveSources.cmake) # appends the Edit Layout group move and rename to APPUI_SOURCES
 list(APPEND APPUI_SOURCES ${SOUND_BROWSER_UI_SOURCES}) # the Sounds view, from SoundBrowserSources.cmake
+include(cmake/CanvasDragSources.cmake) # appends the edge scroll and the drag grid to APPUI_SOURCES

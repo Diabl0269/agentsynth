@@ -12,6 +12,7 @@
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
 #include "UI/Graph/CardOutline.h"
+#include "UI/Graph/DragPreviewGrid/DragPreviewGrid.h"
 #include "UI/Graph/GraphEditor/CableEndName.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Graph/MacroGroupController/MacroNesting.h"
@@ -637,28 +638,6 @@ static void paintSmartConnectionPreviewCables(juce::Graphics& g, GraphEditor& ed
 
 // Subtle dots every 40 px over the VISIBLE canvas region, shown only while a module is being dragged. Cheap: the clip
 // is already in canvas coordinates, so everything outside it is skipped.
-static void paintDragPreviewGrid(juce::Graphics& g, synth::theme::AppLookAndFeel* lf) {
-    // The content component's transform maps canvas -> screen. The clip rect of g is
-    // already in canvas coords (paint runs in local/canvas space), so getClipBounds()
-    // gives us the visible region for free.
-    auto clip = g.getClipBounds();
-
-    // Dot colour: textPrimary at ~8% alpha for a gentle, non-distracting grid.
-    const juce::Colour textPrimaryColourForGrid =
-        lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-    g.setColour(textPrimaryColourForGrid.withAlpha(0.08f));
-
-    constexpr int kMajorGrid = synth::LayoutUtil::kGridSize * 5; // 40px
-    int startX = (clip.getX() / kMajorGrid) * kMajorGrid;
-    int startY = (clip.getY() / kMajorGrid) * kMajorGrid;
-
-    for (int gx = startX; gx <= clip.getRight(); gx += kMajorGrid) {
-        for (int gy = startY; gy <= clip.getBottom(); gy += kMajorGrid) {
-            g.fillEllipse((float)gx - 1.2f, (float)gy - 1.2f, 2.4f, 2.4f);
-        }
-    }
-}
-
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     const graph_editor_paint::HullMemoScope hullMemo(editor); // each macro border is computed once per paint
     // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
@@ -688,7 +667,8 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     }
 
     if (editor.getDragDropController().isDragPreviewActive())
-        paintDragPreviewGrid(g, lf);
+        synth::ui::paintDragPreviewGrid( // textPrimary at ~8%: a gentle, non-distracting grid
+            g, (lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white).withAlpha(0.08f));
 
     if (!editor.cablesOnTop)
         paintCables(g);
