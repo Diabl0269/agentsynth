@@ -1,5 +1,6 @@
 #include "AppLookAndFeel.h"
 #include "AppLookAndFeelInternal.h"
+#include "TestMode/AutomationHiding.h"
 
 namespace synth::theme {
 
@@ -28,6 +29,11 @@ AppLookAndFeel::AppLookAndFeel() {
 }
 
 AppLookAndFeel::~AppLookAndFeel() = default;
+
+void AppLookAndFeel::playAlertSound() {
+    if (!synth::testmode::alertSoundsAreMuted())
+        juce::LookAndFeel_V4::playAlertSound();
+}
 
 void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     const bool familyChanged =

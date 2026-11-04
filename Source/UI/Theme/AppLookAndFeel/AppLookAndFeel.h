@@ -98,6 +98,9 @@ public:
     // family changed, and set the default sans/serif font. Does NOT repaint — the caller
     // (MainComponent::changeListenerCallback) issues the single repaint pass (section 6.5).
     void applyTheme(const Theme& theme);
+
+    // The system alert beep, except in an automation run (the Tests binary, the test-mode app), which stays silent.
+    void playAlertSound() override;
     const Theme& getTheme() const noexcept { return theme; }
 
     // ---------- Meter colour stops -------------------
