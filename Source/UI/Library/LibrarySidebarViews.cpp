@@ -50,6 +50,14 @@ LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::
                                                                                  Player::kDefaultGainDb)),
                                    settings_->getBoolValue(kSoundBrowserMatchKeySettingKey, false));
     }
+    if (settings_ != nullptr)
+        sounds_.setGetMoreOpen(settings_->getBoolValue(kSoundBrowserGetMoreOpenSettingKey, true), false);
+    sounds_.onGetMoreChanged = [this] {
+        if (settings_ == nullptr)
+            return;
+        settings_->setValue(kSoundBrowserGetMoreOpenSettingKey, sounds_.isGetMoreOpen());
+        settings_->saveIfNeeded();
+    };
     sounds_.onPreviewSettingsChanged = [this] { persistPreviewSettings(); };
     lists_.onChanged = [this] { persistLists(); };
     mix_.snapTo(view_ == SidebarView::Sounds ? 1.0f : 0.0f);

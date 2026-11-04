@@ -55,6 +55,7 @@ std::optional<SoundRowIcon> iconOf(const SoundBrowserComponent::Row& row) {
         return row.userFolder ? SoundRowIcon::Folder : SoundRowIcon::Pack;
     case Kind::Hint:
     case Kind::Shape:
+    case Kind::PackHeading:
         break;
     }
     return std::nullopt;
@@ -184,6 +185,8 @@ void SoundBrowserComponent::paintRow(juce::Graphics& g, const Row& row, int inde
                    juce::Justification::centredRight);
     } else if (row.kind == RowKind::GetPack) {
         paintPackRow(g, row, index, area);
+    } else if (row.kind == RowKind::PackHeading) {
+        paintPackHeadingRow(g, row, area);
     } else if (row.kind == RowKind::AddFolder) {
         paintAddFolderRow(g, area);
     } else if (row.kind == RowKind::Shape) {
@@ -279,6 +282,8 @@ void SoundBrowserComponent::paintFooter(juce::Graphics& g) {
         sub = soundFooterLine(*row.entry);
     } else if (row.kind == RowKind::Shape) {
         sub = shapeKindAndSource(*row.shape);
+    } else if (row.kind == RowKind::PackHeading) {
+        sub = row.detail + " you can download";
     } else if (row.kind == RowKind::GetPack) {
         sub = row.busy ? row.detail : "Not downloaded - " + synth::soundpacks::formatPackSize(row.bytes);
     } else if (row.kind == RowKind::AddFolder) {

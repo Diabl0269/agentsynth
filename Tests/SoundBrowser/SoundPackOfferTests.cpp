@@ -78,7 +78,7 @@ TEST(SoundPackOffer, NotInstalledPacksAreListedUnderGetMoreWithTheirSize) {
     const auto& rows = rig.view->getRows();
     const int heading = [&] {
         for (size_t i = 0; i < rows.size(); ++i)
-            if (rows[i].kind == Kind::Hint && rows[i].text == "Get more")
+            if (rows[i].kind == Kind::PackHeading && rows[i].text == "Get more")
                 return (int)i;
         return -1;
     }();

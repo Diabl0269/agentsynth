@@ -101,6 +101,7 @@ void SoundBrowserComponent::addTestModeState(juce::DynamicObject& into) const {
         selected_ >= 0 && selected_ < (int)rows_.size() && rows_[(size_t)selected_].kind == RowKind::Sound;
     into.setProperty("selectedName", sound ? rows_[(size_t)selected_].text : juce::String());
     into.setProperty("selectedDetail", sound ? rows_[(size_t)selected_].detail : juce::String());
+    into.setProperty("getMoreOpen", isGetMoreShowing());
     into.setProperty("footerLine", sound ? soundFooterLine(*rows_[(size_t)selected_].entry) : juce::String());
 }
 

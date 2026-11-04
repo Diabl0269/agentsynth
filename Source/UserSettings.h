@@ -134,6 +134,9 @@ inline constexpr const char* kSoundBrowserWidthSettingKey = "soundBrowserWidth";
 inline constexpr const char* kSoundBrowserAutoPlaySettingKey = "soundBrowserAutoPlay";
 inline constexpr const char* kSoundBrowserPreviewGainDbSettingKey = "soundBrowserPreviewGainDb";
 
+/** Whether the Sounds view shows the packs under "Get more" ("1", the default) or has folded them away ("0"). */
+inline constexpr const char* kSoundBrowserGetMoreOpenSettingKey = "soundBrowserGetMoreOpen";
+
 /** Whether the Sounds view plays and drops loops in the song's key ("1") or leaves their pitch alone ("0", the
  *  default); the tempo always follows the song. */
 inline constexpr const char* kSoundBrowserMatchKeySettingKey = "soundBrowserMatchKey";

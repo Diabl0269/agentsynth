@@ -163,6 +163,11 @@ juce::String describePackOfferForAccessibility(const juce::String& name, const j
            ", " + juce::String(position) + " of " + juce::String(count);
 }
 
+juce::String describePackHeadingForAccessibility(int packs, bool open, int position, int count) {
+    return "Get more, " + plural(packs, "pack", "packs") + ", " + (open ? "expanded" : "collapsed") + ", " +
+           juce::String(position) + " of " + juce::String(count);
+}
+
 juce::String describeAddFolderForAccessibility(int position, int count) {
     return "Add folder, press Return to choose a folder, " + juce::String(position) + " of " + juce::String(count);
 }
