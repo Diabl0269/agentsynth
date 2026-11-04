@@ -8,7 +8,6 @@
 #include "SoundBrowser/SoundPreviewPlayer.h"
 #include "SoundPacks/SoundPackInstaller.h"
 #include "TestMode/TestModeStateSource.h"
-#include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/NonModalLabel.h"
@@ -21,10 +20,13 @@
 #include <algorithm>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 #include <vector>
 
 namespace synth::ui {
+
+class ChevronTurn;
 
 /** The Sounds view of the left sidebar: Places, folders, search results and a footer for the selected sound. The rows
  *  are painted and one accessibility list speaks the selected one, the same pattern as the module library. */
@@ -198,8 +200,8 @@ public:
     void toggleGetMore();
     /** The choice changed by the user (or setGetMoreOpen with animate); the owner saves it. */
     std::function<void()> onGetMoreChanged;
-    const synth::ui::ChevronTurn& getMoreChevron() const { return getMoreTurn_; }
-    float getGetMoreChevronOpenness() const { return getMoreTurn_.openness(); }
+    const ChevronTurn& getMoreChevron() const;
+    float getGetMoreChevronOpenness() const;
 
     // ---- The user's folders (SoundBrowserFolders.cpp) -----------------------------------------------------------
     enum class FolderAction { Rename, ShowInFinder, ScanAgain, Remove };
@@ -434,7 +436,7 @@ private:
     juce::String packSignature_;
     bool getMoreOpen_ = true;
     bool getMoreForcedOpen_ = false; // a pack downloads: the rows show whatever the choice is
-    synth::ui::ChevronTurn getMoreTurn_{*this, true};
+    std::unique_ptr<ChevronTurn> getMoreTurn_;
     std::function<void(std::function<void(const juce::File&)>)> folderPicker_;
     std::function<void(const juce::File&)> reveal_;
     std::function<bool()> foregroundCheck_;

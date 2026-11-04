@@ -1,6 +1,7 @@
 // SoundBrowserPacks.cpp -- the packs you have not downloaded: their rows under Places ("Get more") and at the end of
 // search results, the Download / Cancel button painted in the row, and the shared installer's progress. The download is
 // the installer's own job, the same one Settings > Sound packs starts, so both places show the same bar.
+#include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserPackLayout.h"
@@ -100,7 +101,7 @@ void SoundBrowserComponent::appendOfferedPackRows(const synth::soundbrowser::Sou
         getMoreForcedOpen_ = std::any_of(offered.begin(), offered.end(), [&snap](const Installer::Row& pack) {
             return isBusy(pack.state) || (pack.installedVersion.isNotEmpty() && !snapshotHasPlace(snap, pack.id));
         });
-        getMoreTurn_.setOpen(isGetMoreShowing());
+        getMoreTurn_->setOpen(isGetMoreShowing());
         if (!offered.empty()) {
             Row heading;
             heading.kind = RowKind::PackHeading;
@@ -229,7 +230,7 @@ void SoundBrowserComponent::paintPackHeadingRow(juce::Graphics& g, const Row& ro
     constexpr int kLabelGap = 6;
     synth::theme::paintDisclosureChevron(
         g, {(float)(area.getX() + kSoundRowSideMargin), (float)area.getCentreY() - kChevron / 2.0f, kChevron, kChevron},
-        getMoreTurn_.openness(), c.textMuted);
+        getMoreTurn_->openness(), c.textMuted);
     const juce::Font countFont(juce::FontOptions(12.0f));
     const int countWidth = (int)std::ceil(juce::GlyphArrangement::getStringWidth(countFont, row.detail)) + 2;
     g.setColour(c.textMuted);

@@ -45,7 +45,7 @@ juce::String displayName(const juce::String& name) {
     for (auto c = name.getCharPointer(); !c.isEmpty(); ++c)
         if (juce::CharacterFunctions::isUpperCase(*c))
             return name;
-    return name.substring(0, 1).toUpperCase() + name.substring(1);
+    return name.substring(0, 1).toUpperCase() + name.substring(1); // not-ui-text: one capital letter, not all caps
 }
 
 juce::String formatSoundLength(double seconds) {
