@@ -169,6 +169,12 @@ TEST_F(MenuFieldSpaceTest, SpaceTogglesPlaybackAndOpensNoMenuOnEverySelectFieldA
                 juce::MessageManager::getInstance()->runDispatchLoopUntil(2);
                 sawOpen = probe.opened();
             }
+            // The menu's own deferred open settles first: it is either on screen (modal) or already closed again.
+            synth::test::waitUntil(
+                [&] {
+                    return juce::ModalComponentManager::getInstance()->getNumModalComponents() > 0 || !probe.opened();
+                },
+                500);
             EXPECT_TRUE(sawOpen) << name << ": Return did not open the menu";
             EXPECT_FALSE(playing()) << name << ": Return started playback";
             probe.close();
