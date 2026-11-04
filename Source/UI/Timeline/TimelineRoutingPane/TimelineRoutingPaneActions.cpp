@@ -1,6 +1,7 @@
 // Concern: TimelineRoutingPane's clicks -- the re-bind menu, the MIDI-destination picker and the two "show" links.
 // Every edit goes out through the TrackHeaderHost the track header uses, so it is the same undoable step there.
 #include "TimelineRoutingPane.h"
+#include "UI/Layout/CardCallOut.h"
 
 #include "UI/Timeline/TrackRoutingMenus.h"
 
@@ -48,7 +49,7 @@ void TimelineRoutingPane::openMidiDestinationsPicker() {
     auto picker = buildPicker();
     if (picker == nullptr)
         return; // no host: nothing to build a picker against
-    juce::CallOutBox::launchAsynchronously(std::move(picker), midiDestinations_.getScreenBounds(), nullptr);
+    synth::ui::launchCardCallOut(std::move(picker), midiDestinations_.getScreenBounds(), &midiDestinations_, true);
 }
 
 // The existing select path (a highlight of the node in the graph editor's selection, no canvas scroll), the same one

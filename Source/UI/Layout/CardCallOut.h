@@ -12,13 +12,16 @@
 namespace synth::ui {
 
 /** Opens `content` in a CallOutBox pointing at `area` (screen coordinates) and relays app shortcuts to the main window
- *  that holds `anchor` (the card, or any component on it). */
-void launchCardCallOut(std::unique_ptr<juce::Component> content, juce::Rectangle<int> area, juce::Component* anchor);
+ *  that holds `anchor` (a card or any component on it, or any panel of the main window: timeline, mixer, MIDI
+ * Remote...). `closeOnUndo`: the content lists project state and does not implement AppUndoAware, so the popover closes
+ *  after an undo or redo rather than show it stale. Returns the box (null only when a test launcher declines). */
+juce::CallOutBox* launchCardCallOut(std::unique_ptr<juce::Component> content, juce::Rectangle<int> area,
+                                    juce::Component* anchor, bool closeOnUndo = false);
 
 /** Makes `box` relay forwardable app shortcuts (see isWindowForwardableShortcut) for a card `anchor`. A key listener on
  *  the box sees a key after the focused child and every component between it and the box have declined it. Frees
  *  itself when the box goes. launchCardCallOut calls this; tests call it on a box they build headless. */
-void relayAppShortcutsFromCallOut(juce::CallOutBox& box, juce::Component* anchor);
+void relayAppShortcutsFromCallOut(juce::CallOutBox& box, juce::Component* anchor, bool closeOnUndo = false);
 
 namespace test_hooks {
 /** When set, launchCardCallOut hands the content here instead of opening a window (a CallOutBox needs a desktop) and

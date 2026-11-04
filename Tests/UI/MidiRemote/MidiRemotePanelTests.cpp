@@ -4,6 +4,7 @@
 // their own test files; this one covers only what MidiRemotePanelComponent itself owns.
 #include "../../TestWait.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
+#include "../Layout/MainPopoverKeys.h"
 #include "AI/AIProvider.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
@@ -216,4 +217,26 @@ TEST_F(MidiRemotePanelLiveRefreshTest, MappedParameterCellSeedsWidgetFromItsCurr
     const juce::String controlId = doc_.assignments.front().control.controlId;
     EXPECT_NEAR(panel_.getSurfaceCellValueForTest(controlId), expected, 1.0e-3)
         << "before this fix the cell always started at 0.0f regardless of the parameter's real value";
+}
+
+// The Add controller popover is a call-out of the main window: Cmd+Z, Cmd+Shift+Z and Space reach the app from it, and
+// it stays open (it shows nothing from the project that an undo could change).
+namespace {
+class MidiRemotePopoverRelay : public main_popover::MainPopoverTest {};
+} // namespace
+
+TEST_F(MidiRemotePopoverRelay, TheAddControllerPopoverTakesCmdZCmdShiftZAndSpaceFromTheApp) {
+    mc_->simulateAddAudioTrackClick(); // an undo step to take back
+    synth::test::waitUntil([&] { return mc_->getUndoManager().canUndo(); });
+    auto& panel = mc_->getBottomDock().getMidiRemotePanel();
+    main_popover::Capture popover(*mc_);
+    panel.showAddControllerPopover(panel);
+    ASSERT_NE(popover.box(), nullptr);
+    expectSpacePlaysAndStops(popover, "add controller");
+    expectCanvasKeysStay(popover, "add controller");
+    expectUndoReachesTheApp(popover, "add controller", false);
+    popover.closeNow();
+    panel.showAddControllerPopover(panel);
+    ASSERT_NE(popover.box(), nullptr);
+    expectRedoReachesTheApp(popover, "add controller");
 }

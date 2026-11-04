@@ -10,6 +10,16 @@
 // screen. Only the entrance is animated: a callout dismisses synchronously, so there is no exit to ease.
 namespace synth::ui {
 
+class AppUndoAware {
+public:
+    virtual ~AppUndoAware() = default;
+    /** The app is about to run undo or redo (the key has just been handed over): put back anything the popover has
+     *  changed live and not recorded, so the undo works on the project as it was. */
+    virtual void appAboutToUndoOrRedo() {}
+    /** The app has just run undo or redo. Re-read what is shown, or close the popover without applying anything. */
+    virtual void appUndoneOrRedone() = 0;
+};
+
 class CalloutReveal {
 public:
     static constexpr double kInMs = 160.0;

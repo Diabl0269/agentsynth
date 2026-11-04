@@ -112,6 +112,7 @@ inline void saveFavouriteColours(juce::PropertiesFile* props, const std::vector<
 //==============================================================================
 class ColourPickerPopup
     : public juce::Component
+    , public AppUndoAware
     , private juce::ChangeListener {
 public:
     ColourPickerPopup(juce::Colour initial, juce::PropertiesFile* props, std::function<void(juce::Colour)> onPreview,
@@ -150,6 +151,21 @@ public:
                       // is the ONE close event — fire the deferred commit here if it never fired.
         if (onClosed)
             onClosed();
+    }
+
+    /** An undo or redo is about to run while the popup is open: the colour dragged so far is only a live preview (no
+     *  undo step yet), so it goes back to the colour the popup opened with, as Escape does, and the undo then works on
+     *  the project as it was. */
+    void appAboutToUndoOrRedo() override {
+        selector_.setCurrentColour(initial_, juce::dontSendNotification);
+        previewNow(initial_);
+    }
+    /** The undo or redo has run. The colour the owner remembered when the popup opened may no longer be the one in
+     *  the project, so the popup closes without applying or putting back anything: the project keeps what the undo
+     *  gave it. */
+    void appUndoneOrRedone() override {
+        committed_ = true;
+        synth::ui::closeHostingWindow(*this);
     }
 
     /** Runs once as the popup closes, after the commit. */

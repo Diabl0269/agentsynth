@@ -3,15 +3,23 @@
 // dialogs and tool windows; this covers the popovers a card opens):
 //   - a sequencer's Randomize panel hands undo and redo to the main window from every focusable child, stays open,
 //     and shows the range the undo gave back;
-//   - every CallOutBox opened from a card goes through launchCardCallOut: a raw launch must be registered below with
-//     the reason it is not a card popover or does not relay.
+//   - the popovers the main window opens (timeline, mixer, MIDI Remote, key pickers) do the same from a real
+//     MainComponent: Cmd+Z undoes, Cmd+Shift+Z redoes, Space plays and stops, a popover that would show a stale
+//     project closes instead;
+//   - every CallOutBox opened from a card or a main-window panel goes through launchCardCallOut: a raw launch must be
+//     registered below with the reason it does not relay.
 #include "../../TestWait.h"
+#include "../Mixer/MixerHeaderTestRig.h"
 #include "../ModuleViews/StepGrid/StepGridCardFixture.h"
 #include "../SourceScan.h"
+#include "MainPopoverKeys.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
+#include "UI/Timeline/SongKeyField.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <map>
 #include <regex>
 
@@ -165,7 +173,6 @@ TEST(CardCallOutRelay, EveryRawCallOutLaunchIsRegisteredWithItsReason) {
     };
     const char* kSettings = "Settings window: its own window, not over the canvas";
     const char* kEditing = "a layout editing session: an undo would rewrite the layout being edited";
-    const char* kMain = "opened from a main-window panel, not a card: relay not wired yet";
     const std::vector<Raw> raw = {
         {"Source/UI/Settings/AppearanceSettingsTab.cpp", 1, kSettings},
         {"Source/UI/Settings/AccountSettingsTab.cpp", 1, kSettings},
@@ -173,25 +180,10 @@ TEST(CardCallOutRelay, EveryRawCallOutLaunchIsRegisteredWithItsReason) {
         {"Source/UI/Layout/CardCallOut.cpp", 1, "launchCardCallOut itself"},
         {"Source/UI/Graph/ModuleComponent/ModuleComponentLayoutEditor.cpp", 1, kEditing},
         {"Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorPanel.cpp", 1, kEditing},
-        {"Source/UI/Graph/ModMatrixComponent.cpp", 1, kMain},
         {"Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", 1,
          "macro prompt: answers a question about the canvas"},
         {"Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogInternal.h", 1, "inside a modal dialog"},
-        {"Source/UI/PianoRoll/ScaleAssistPanel.cpp", 1, kMain},
-        {"Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp", 1, kMain},
-        {"Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelAssign.cpp", 1, kMain},
-        {"Source/UI/Chrome/ColourPickerPopup.h", 1, kMain},
-        {"Source/UI/Timeline/TimelineRulerComponent.cpp", 1, kMain},
-        {"Source/UI/Timeline/SongKeyField.cpp", 1, kMain},
-        {"Source/UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.cpp", 2, kMain},
-        {"Source/UI/Timeline/TimelinePanelComponent/AddTrackPicker.cpp", 1, kMain},
-        {"Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAddAutomation.cpp", 1, kMain},
-        {"Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneActions.cpp", 1, kMain},
-        {"Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderParameterPicker.cpp", 1, kMain},
-        {"Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderMenu.cpp", 1, kMain},
-        {"Source/UI/Timeline/AutomationLanes/Modulators/ModulatorRowEdits.cpp", 1, kMain},
-        {"Source/UI/Mixer/MixerInsertList/MixerInsertListEdits.cpp", 1, kMain},
-        {"Source/UI/Mixer/MixerPanelComponent/MixerPanelColour.cpp", 1, kMain},
+        {"Source/UI/Chrome/ColourPickerPopup.h", 1, "ColourPickerPopup::show: only the Appearance settings call it"},
     };
     std::map<std::string, int> registered;
     for (const auto& r : raw) {
@@ -202,4 +194,119 @@ TEST(CardCallOutRelay, EveryRawCallOutLaunchIsRegisteredWithItsReason) {
         "CallOutBox::launchAsynchronously",
         synth::test::source_scan::countCallSites(std::regex(R"(CallOutBox::launchAsynchronously\s*\()"), ""),
         registered, "CardCallOutRelayTests.cpp (raw) - a popover a card opens goes through launchCardCallOut");
+}
+
+// ---- The popovers the main window opens ------------------------------------------------------------------------
+namespace {
+
+using main_popover::Capture;
+using Tab = synth::ui::BottomDockComponent::Tab;
+
+juce::Component* findById(juce::Component& root, const juce::String& id) {
+    for (auto* child : root.getChildren()) {
+        if (child->getComponentID() == id)
+            return child;
+        if (auto* deeper = findById(*child, id))
+            return deeper;
+    }
+    return nullptr;
+}
+
+template <class T>
+T* findFirst(juce::Component& root) {
+    for (auto* child : root.getChildren()) {
+        if (auto* hit = dynamic_cast<T*>(child))
+            return hit;
+        if (auto* deeper = findFirst<T>(*child))
+            return deeper;
+    }
+    return nullptr;
+}
+
+class MainPopoverRelay : public main_popover::MainPopoverTest {
+protected:
+    // Two audio tracks for the strips and headers: the second one's add is the undo step the keys take back and bring
+    // back, and the first track's popovers stay valid across it.
+    void SetUp() override {
+        MainPopoverTest::SetUp();
+        mc_->simulateAddAudioTrackClick();
+        main_popover::pump();
+        mc_->simulateAddAudioTrackClick();
+        main_popover::pump();
+    }
+
+    // Opens the popover `open` makes, presses Space and the canvas keys in it, then Cmd+Z (the popover closes when its
+    // content would be stale), reopens it and presses Cmd+Shift+Z.
+    void exercise(const std::string& name, const std::function<void()>& open, Capture& popover, bool goesStale) {
+        SCOPED_TRACE(name);
+        open();
+        ASSERT_NE(popover.box(), nullptr) << name << ": the real button did not open a popover";
+        ASSERT_TRUE(popover.box()->isParentOf(popover.content()));
+        expectSpacePlaysAndStops(popover, name);
+        expectCanvasKeysStay(popover, name);
+        expectUndoReachesTheApp(popover, name, goesStale);
+        popover.closeNow();
+        open();
+        ASSERT_NE(popover.box(), nullptr) << name;
+        expectRedoReachesTheApp(popover, name);
+        popover.closeNow();
+        EXPECT_FALSE(undone());
+    }
+};
+
+} // namespace
+
+TEST_F(MainPopoverRelay, TheTimelineTrackColourPickerTakesCmdZCmdShiftZAndSpaceFromTheApp) {
+    mc_->setMainViewForTest(Tab::Timeline);
+    mc_->resized();
+    synth::test::waitUntil([&] { return findById(*mc_, "trackColourSwatch") != nullptr; });
+    auto* swatch = dynamic_cast<juce::Button*>(findById(*mc_, "trackColourSwatch"));
+    ASSERT_NE(swatch, nullptr);
+    Capture popover(*mc_);
+    exercise("track colour swatch", [&] { swatch->onClick(); }, popover, true);
+}
+
+TEST_F(MainPopoverRelay, TheTransportKeyPickerTakesCmdZCmdShiftZAndSpaceFromTheApp) {
+    mc_->setMainViewForTest(Tab::Timeline);
+    mc_->resized();
+    synth::test::waitUntil([&] { return findFirst<synth::ui::SongKeyField>(*mc_) != nullptr; });
+    auto* field = findFirst<synth::ui::SongKeyField>(*mc_);
+    ASSERT_NE(field, nullptr);
+    Capture popover(*mc_);
+    exercise("song key field", [&] { field->openPicker(); }, popover, true);
+}
+
+TEST_F(MainPopoverRelay, TheMixerColourPickerAndInsertPickerTakeCmdZCmdShiftZAndSpaceFromTheApp) {
+    auto& panel = mc_->getBottomDock().getMixerPanel();
+    panel.setSize(1400, 700);
+    panel.resized();
+    panel.rebuild();
+    synth::test::waitUntil([&] { return panel.getStripColumnForTest(0) != nullptr; });
+    auto* column = panel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    Capture popover(*mc_);
+    exercise(
+        "mixer colour dot",
+        [&] {
+            mixer_header_test::clickThroughMouse(
+                static_cast<juce::Component&>(column->getHeaderForTest().getColourDotForTest()));
+        },
+        popover, true);
+    ASSERT_TRUE(column->getInsertList().hasAddRow());
+    exercise("mixer + Insert row", [&] { column->getInsertList().activateAddRow(); }, popover, true);
+}
+
+TEST_F(MainPopoverRelay, TheScaleAssistKeyPickerTakesCmdZCmdShiftZAndSpaceFromTheApp) {
+    mc_->setMainViewForTest(Tab::Timeline);
+    auto& doc = mc_->getTimelineDoc();
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Track 1");
+    const auto clip = doc.addClip(track, 0.0, 8.0, "Clip");
+    auto& timeline = mc_->getTimelinePanel();
+    timeline.selectTracks({track}, track);
+    timeline.openPianoRoll(clip);
+    timeline.getPianoRoll().toggleScalePanel();
+    mc_->resized();
+    synth::test::waitUntil([&] { return timeline.getPianoRoll().isScalePanelShowing(); });
+    Capture popover(*mc_);
+    exercise("scale assist key", [&] { timeline.getPianoRoll().getScaleAssistPanel().openKeyPicker(); }, popover, true);
 }

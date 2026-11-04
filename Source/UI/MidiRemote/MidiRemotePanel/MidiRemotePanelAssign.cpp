@@ -3,6 +3,7 @@
 // Learn target menu, the pick-target overlay entry and the action picker.
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemotePanelComponent.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/MidiRemote/ActionPicker/ActionPickerComponent.h"
 
@@ -42,7 +43,10 @@ void MidiRemotePanelComponent::showActionPicker(juce::Component& anchor) {
     picker->setEffectivePageCount(remoteEngine_ != nullptr ? remoteEngine_->getEffectivePageCount(selectedProfileId_)
                                                            : 1);
     juce::Component::SafePointer<MidiRemotePanelComponent> safePanel(this);
-    auto& box = juce::CallOutBox::launchAsynchronously(std::move(picker), anchor.getScreenBounds(), nullptr);
+    auto* boxPtr = synth::ui::launchCardCallOut(std::move(picker), anchor.getScreenBounds(), &anchor);
+    if (boxPtr == nullptr)
+        return;
+    auto& box = *boxPtr;
     if (auto* content = dynamic_cast<ActionPickerComponent*>(box.getChildComponent(0))) {
         juce::Component::SafePointer<juce::CallOutBox> safeBox(&box);
         content->onChosen = [safePanel, safeBox](const juce::String& actionId) {

@@ -70,8 +70,9 @@ void TimelinePanelComponent::openShapeFlyout() {
     }
     // The press that opened a hold is still down until its release; that release must not dismiss the flyout.
     juce::Component::SafePointer<DrawPenButton> pen(penButton_);
-    auto& box = launchDrawShapeCallOut(std::move(flyout), penButton_->getScreenBounds(),
-                                       [pen] { return pen != nullptr && pen->isHoldGestureDown(); });
+    auto& box = launchDrawShapeCallOut(
+        std::move(flyout), penButton_->getScreenBounds(), [pen] { return pen != nullptr && pen->isHoldGestureDown(); },
+        penButton_);
     shapeFlyoutBox_ = &box;
 }
 

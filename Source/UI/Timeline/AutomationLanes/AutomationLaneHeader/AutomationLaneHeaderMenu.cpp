@@ -2,6 +2,7 @@
 // (Create custom LFO, Add modulator..., Change parameter..., Duplicate, Move to track, Delete lane), opened from the
 // "..." button, a right-click anywhere on the header, or the keyboard. Every edit is one undo step: the lane edits go
 // through AutomationLaneActions, the modulator through the host, which owns the graph.
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
 
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h"
@@ -109,7 +110,7 @@ void AutomationLaneHeaderComponent::openAddModulatorPicker() {
         hook(std::move(picker));
         return;
     }
-    juce::CallOutBox::launchAsynchronously(std::move(picker), getScreenBounds(), nullptr);
+    synth::ui::launchCardCallOut(std::move(picker), getScreenBounds(), this);
 }
 
 // Both edits can remove this lane (and with it this component) from inside the call, so the doc,
