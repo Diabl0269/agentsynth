@@ -8,7 +8,7 @@
 namespace synth::ui {
 
 namespace {
-constexpr float kGlyphSize = 14.0f;
+constexpr float kVoiceGlyphSize = 14.0f;
 } // namespace
 
 TrackVoiceToggle::TrackVoiceToggle() {
@@ -57,7 +57,7 @@ void TrackVoiceToggle::paintButton(juce::Graphics& g, bool highlighted, bool dow
                        : state_ == TrackPolyState::mixed ? VoiceGlyph::mixed
                                                          : VoiceGlyph::mono;
     // The glyph shrinks with a row too short for it, so it is never clipped.
-    const float size = juce::jmin(kGlyphSize, bounds.getHeight());
+    const float size = juce::jmin(kVoiceGlyphSize, bounds.getHeight());
     paintVoiceGlyph(g, juce::Rectangle<float>(size, size).withCentre(bounds.getCentre()), ink, voice);
     synth::ui::paintFocusRing(g, bounds, *this, 3.0f);
 }

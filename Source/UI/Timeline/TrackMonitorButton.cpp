@@ -6,7 +6,7 @@
 namespace synth::ui {
 
 namespace {
-constexpr float kGlyphSize = 11.0f;
+constexpr float kMonitorGlyphSize = 11.0f;
 constexpr float kCorner = 3.0f;
 
 // The screen reader reads the title, then this value, so the mode is spoken whenever the button is reached.
@@ -96,17 +96,18 @@ void TrackMonitorButton::paintButton(juce::Graphics& g, bool highlighted, bool d
         g.drawRoundedRectangle(bounds, kCorner, 1.2f);
     }
 
-    const auto glyph = juce::Rectangle<float>(kGlyphSize, kGlyphSize).withCentre(bounds.getCentre());
+    const auto glyph = juce::Rectangle<float>(kMonitorGlyphSize, kMonitorGlyphSize).withCentre(bounds.getCentre());
     const auto ink = lit == 2 ? colors.bg0 : (lit == 1 ? colors.accent : colors.textMuted);
     g.setColour(ink);
     g.fillPath(speakerGlyph(glyph));
     if (mode_ == synth::MonitorMode::Off) { // a slash through the waves: Off never plays the input
-        g.drawLine(glyph.getRight() - kGlyphSize * 0.35f, glyph.getY(), glyph.getRight(), glyph.getBottom(), 1.2f);
+        g.drawLine(glyph.getRight() - kMonitorGlyphSize * 0.35f, glyph.getY(), glyph.getRight(), glyph.getBottom(),
+                   1.2f);
         return;
     }
     juce::Path waves;
-    const auto centre = juce::Point<float>(glyph.getX() + kGlyphSize * 0.55f, glyph.getCentreY());
-    for (const float radius : {kGlyphSize * 0.2f, kGlyphSize * 0.4f})
+    const auto centre = juce::Point<float>(glyph.getX() + kMonitorGlyphSize * 0.55f, glyph.getCentreY());
+    for (const float radius : {kMonitorGlyphSize * 0.2f, kMonitorGlyphSize * 0.4f})
         waves.addCentredArc(centre.x, centre.y, radius, radius, 0.0f, juce::MathConstants<float>::pi * 0.25f,
                             juce::MathConstants<float>::pi * 0.75f, true);
     g.strokePath(waves, juce::PathStrokeType(1.1f));

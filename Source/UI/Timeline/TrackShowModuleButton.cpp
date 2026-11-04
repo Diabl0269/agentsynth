@@ -8,7 +8,7 @@
 namespace synth::ui {
 
 namespace {
-constexpr float kGlyphSize = 12.0f;
+constexpr float kShowGlyphSize = 12.0f;
 } // namespace
 
 // Focusable for the keyboard path, but a click must not pull focus off the row: the row's own focus is what
@@ -44,7 +44,7 @@ void TrackShowModuleButton::paintButton(juce::Graphics& g, bool highlighted, boo
         g.setColour(colors.textPrimary.withAlpha(down ? 0.18f : 0.1f));
         g.fillRoundedRectangle(bounds, 3.0f);
     }
-    paintShowOnCanvasGlyph(g, juce::Rectangle<float>(kGlyphSize, kGlyphSize).withCentre(bounds.getCentre()),
+    paintShowOnCanvasGlyph(g, juce::Rectangle<float>(kShowGlyphSize, kShowGlyphSize).withCentre(bounds.getCentre()),
                            highlighted ? colors.textPrimary : colors.textMuted);
 
     synth::ui::paintFocusRing(g, bounds, *this, 3.0f);

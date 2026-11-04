@@ -7,7 +7,6 @@
 namespace synth::ui {
 
 namespace {
-constexpr float kGlyphSize = 12.0f;
 constexpr float kCellSize = 3.0f;
 constexpr float kCellGap = 1.5f;
 constexpr int kColumns = 3;
