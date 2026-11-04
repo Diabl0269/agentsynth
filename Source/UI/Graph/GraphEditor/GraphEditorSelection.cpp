@@ -398,6 +398,14 @@ void GraphEditor::beginSelectionDrag(juce::AudioProcessorGraph::NodeID initiator
             selectionDragStartPositions.emplace_back(comp->getNodeId(), comp->getPosition());
     }
     selectionDragActive = selectionDragStartPositions.size() > 1 && !isOutputDockNode(initiator);
+    if (selectionDragActive) {
+        std::vector<juce::AudioProcessorGraph::NodeID> moving;
+        for (const auto& [nodeId, startPos] : selectionDragStartPositions)
+            moving.push_back(nodeId);
+        macroController_.beginGroupDrag(moving); // a macro's own card or chip drag ends it again (beginMacroUnitDrag)
+    } else {
+        macroController_.endGroupDrag();
+    }
     beginCanvasEdgeDrag();
 }
 
@@ -417,6 +425,10 @@ void GraphEditor::dragSelectionBy(juce::Point<int> delta, ModuleComponent* initi
     }
     shiftCarriedMacroCards(macros, content.getMacroCards(),
                            movedUuidsForCarry(macros, macroController_, selectionDragStartPositions), delta, false);
+    // The grabbed card's centre aims a module-led group drop, as a single module's centre aims its drag. A card or
+    // chip drag aims from its own call site; a keyboard nudge (no initiator) never aims, so it changes no membership.
+    if (initiator != nullptr)
+        macroController_.updateGroupDropCandidate(initiator->getBounds().getCentre());
 }
 
 void GraphEditor::finalizeSelectionDrag() {
@@ -424,8 +436,10 @@ void GraphEditor::finalizeSelectionDrag() {
     const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};
     if (!selectionDragActive) {
         selectionDragStartPositions.clear();
+        macroController_.endGroupDrag();
         return;
     }
+    const auto hullsBefore = snapshotPaintedHulls(); // the borders held during the drag glide to their new bounds
     slidePatchForEdgeDrop(); // a drag held at the canvas origin: the rest of the patch makes room
 
     // Resolve the group as a single rigid body: snap and de-overlap its bounding box, then apply
@@ -456,8 +470,12 @@ void GraphEditor::finalizeSelectionDrag() {
             juce::ignoreUnused(startPos);
             movingIds.push_back(nodeId);
         }
-        // A macro dragged by its chip onto an open macro lands inside it (it nests there on drop).
-        auto obstacles = macroController_.placementBlockers(movingIds, macroController_.macroNestCandidate());
+        // A macro dragged by its chip, or a group, onto an open macro lands inside it (it joins or nests there on
+        // drop).
+        const auto& joinTarget = macroController_.macroNestCandidate().isNotEmpty()
+                                     ? macroController_.macroNestCandidate()
+                                     : macroController_.groupDropTarget();
+        auto obstacles = macroController_.placementBlockers(movingIds, joinTarget);
         auto clear = synth::LayoutUtil::findFreeSlot(snapped, groupBounds.getWidth(), groupBounds.getHeight(),
                                                      obstacles, juce::AudioProcessorGraph::NodeID{});
         auto offset = clear - groupBounds.getTopLeft();
@@ -483,6 +501,11 @@ void GraphEditor::finalizeSelectionDrag() {
     // members — has no such guarantee: the hull (built from non-port members, selected or not) may not have moved by
     // that same delta, desyncing the port from its dock. Re-deriving here (idempotent — a no-op for the whole-macro
     // case, which already agrees) is the guard for that gap.
+    // Dropped over an open macro the group joins it (modules) and nests in it (macros); dropped outside the border
+    // its macro had at press, it leaves. Inside the caller's undo record, like a single drag's membership change.
+    macroController_.applyGroupDrop();
+    glideHullsFrom(hullsBefore);
+
     macroController_.dockMacroPortWidgets();
 
     // A group drag can carry the whole selection outside the visible rect in one gesture.
@@ -501,6 +524,7 @@ void GraphEditor::cancelSelectionDrag() {
     edgeDrag_.reset();
     selectionDragActive = false;
     selectionDragStartPositions.clear();
+    macroController_.endGroupDrag();
     // A drag that came back to where it started grew the frame on the way: fit it again.
     refreshCanvasFrame(CanvasFrame::Mode::Animate);
 }
@@ -554,10 +578,13 @@ void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {
 
 void GraphEditor::dragMacroCardBy(const juce::String& macroId, juce::Point<int> delta) {
     dragSelectionBy(delta, nullptr);
-    // The card's centre decides the open macro it would nest into, like a dragged module's (outlined live).
+    // The card's centre decides the open macro it would nest into, like a dragged module's (outlined live); a group
+    // led by this card aims from it too.
     for (auto* card : content.getMacroCards())
-        if (card != nullptr && card->getMacroId() == macroId)
+        if (card != nullptr && card->getMacroId() == macroId) {
             macroController_.updateMacroNestCandidate(macroId, card->getBounds().getCentre());
+            macroController_.updateGroupDropCandidate(card->getBounds().getCentre());
+        }
     refreshCanvasFrame(CanvasFrame::Mode::GrowOnly); // the frame steps out ahead of the card
     // Matches ModuleComponent::mouseDrag's own per-frame repaint call exactly (one repaint per
     // drag tick), but goes through repaintCanvas() rather than a bare Component::repaint(): once
@@ -578,8 +605,8 @@ void GraphEditor::dragMacroCardBy(const juce::String& macroId, juce::Point<int> 
 // card, so a collision test on their own bounds would shove them away from a card that landed in free space.
 // Dropped over an open macro (the live nest candidate), the card lands where it was released, inside that border, and
 // nests there in the same undo step; the borders that change glide. A card dragged with other macros or modules
-// selected moves the whole selection as one rigid body (finalizeSelectionDrag, which carries every folded card) and
-// changes no membership, like any group drag.
+// selected moves the whole selection as one rigid body (finalizeSelectionDrag, which carries every folded card), and
+// the group joins, nests in or leaves macros as one (applyGroupDrop).
 void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft) {
     // Every exit path: a drop can both grow and shrink the canvas frame.
     const juce::ScopeGuard frameRefresh{[this] { refreshCanvasFrame(CanvasFrame::Mode::Animate); }};

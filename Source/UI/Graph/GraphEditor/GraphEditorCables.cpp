@@ -122,7 +122,8 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // parent it would leave on MacroGroupController (its join goes through the same join id).
         const bool isDragCandidate =
             macro.id == editor.getMacroDragLeaveId() || macro.id == editor.getMacroController().macroLeaveCandidate() ||
-            macro.id == editor.getMacroDragJoinId() || macro.id == editor.getMacroDragLiveOwnerId();
+            editor.getMacroController().isGroupDropLeaving(macro.id) || macro.id == editor.getMacroDragJoinId() ||
+            macro.id == editor.getMacroDragLiveOwnerId();
 
         MacroFoldAnimator::paintDashedBorder(g, hull.toFloat(), macro.colour, isDragCandidate);
 

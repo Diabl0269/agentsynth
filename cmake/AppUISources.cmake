@@ -516,6 +516,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/MacroGroupController/MacroGroupControllerFold.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerFoldPack.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerMacroDrop.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerGroupDrop.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerDeleteReflow.cpp
     Source/UI/Graph/MacroGroupController/MacroGroupControllerDuplicateGlide.cpp
     Source/UI/Graph/MacroGroupController/MacroPackLayout.h

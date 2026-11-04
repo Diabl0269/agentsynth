@@ -363,7 +363,8 @@ public:
     /** Press on a macro's card or chip: keeps a selection the macro is already part of, else selects just it. */
     void selectMacroForDrag(const juce::String& macroId);
     /** Call at the press of a macro body drag (card or name chip), after the selection is set: holds its parent and
-     *  ancestors' borders still. With more than this macro selected it is a group drag and arms nothing. */
+     *  ancestors' borders still. With more than this macro selected it is a group drag (beginGroupDrag) and arms
+     * nothing. */
     void beginMacroUnitDrag(const juce::String& draggedMacroId);
     /** The macro being dragged as a unit, empty between gestures. */
     const juce::String& draggedMacroUnit() const noexcept { return draggedMacroUnit_; }
@@ -379,9 +380,34 @@ public:
     /** Call inside the drop's undo record, after the drag's positions are final. Walks the macro out of its parent
      *  (level by level) when leaving, then into the join target, ports spliced at each level. Always ends the drag. */
     void moveDraggedMacroToCandidate(const juce::String& draggedMacroId);
+    /** The walk behind moveDraggedMacroToCandidate: out of its parent level by level when `leave` is set (until the
+     *  target's chain), then down into `target` one level at a time. True when the macro moved. No undo record. */
+    bool moveMacroInto(const juce::String& macroId, const juce::String& leave, const juce::String& target);
     /** Takes `childMacroId` one level up, out of its parent, with that level's ports spliced. False when it has none.
      *  Records no undo step: call inside the caller's record. */
     bool moveMacroOutOfParent(const juce::String& childMacroId);
+
+    // ---- Dragging a group (several selected modules and macros) into, out of or between open macros
+    // (docs/macros/menu-and-membership.md#dragging-a-group-into-or-out-of-a-macro; MacroGroupControllerGroupDrop.cpp)
+    /** Call at the press of a group drag with the nodes it moves: resolves them into units and holds the border of
+     *  every macro that holds one (and its ancestors) still until the drop. A macro unit drag ends it. */
+    void beginGroupDrag(const std::vector<juce::AudioProcessorGraph::NodeID>& movingNodes);
+    /** Each pointer tick of a group drag: the open macro under `anchor` (the grabbed card's centre, the chip pointer)
+     *  becomes the target, outlined like a single drag's join, and the macros the group would leave like its leave. */
+    void updateGroupDropCandidate(juce::Point<int> anchor);
+    /** The deepest open border under `anchor` a group drop would end in: never a dragged macro or one inside it, and
+     *  the held border for the macros the group is in. Empty: the top level. */
+    juce::String groupDropTargetAt(juce::Point<int> anchor) const;
+    /** The macro the group drag in progress ends in, empty between gestures or for the top level. */
+    const juce::String& groupDropTarget() const noexcept { return groupDrag_.target; }
+    bool isGroupDropLeaving(const juce::String& macroId) const;
+    /** The border held at press for `macroId` during a group drag, empty when none is held. */
+    juce::Rectangle<int> groupDragHeldHull(const juce::String& macroId) const;
+    /** Inside the drop's undo record, positions final: moves every unit into the target (or out to the top level).
+     *  Only a drag a pointer tick aimed changes membership (a keyboard nudge never does). Always ends the drag. */
+    void applyGroupDrop();
+    /** Ends a group drag with no change. */
+    void endGroupDrag();
     /** Ends a macro unit drag with no change: clears the outlines and the held borders. */
     void clearMacroNestCandidate();
 
@@ -585,6 +611,20 @@ private:
     juce::String macroNestCandidate_;
     juce::String macroLeaveCandidate_;
     juce::String draggedMacroUnit_;
+    struct GroupDragUnit {
+        juce::String macroId; // a whole macro, or empty for a loose node
+        juce::String uuid;    // a loose node's uuid
+        juce::String container;
+    };
+    struct GroupDrag {
+        bool active = false;
+        bool aimed = false; // a pointer tick computed the target
+        std::vector<GroupDragUnit> units;
+        std::map<juce::String, juce::Rectangle<int>> held;
+        juce::String target;
+        juce::String shownJoin;
+        std::vector<juce::String> leaving;
+    } groupDrag_;
 
     // The shared return walk behind returnDisplacedNeighbours and reflowForResizedModule: offers each record (newest
     // first, repeated until a pass returns nothing) its way back and answers the ones that could not go, in push

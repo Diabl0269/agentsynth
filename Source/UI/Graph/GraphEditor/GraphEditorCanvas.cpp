@@ -917,6 +917,7 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
         auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
         dragSelectionBy(clampDragDeltaToCanvas(canvasPos - macroChipDragStartCanvasPos), nullptr);
         macroController_.updateMacroNestCandidate(macroChipDragId, canvasPos); // the open macro under the pointer
+        macroController_.updateGroupDropCandidate(canvasPos);                  // or, for a group, its target
         refreshCanvasFrame(CanvasFrame::Mode::GrowOnly);                       // the frame steps out ahead of the hull
         repaintCanvas();
         return;
