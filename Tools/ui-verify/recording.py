@@ -29,8 +29,9 @@ def even(value):
 
 
 class Recorder:
-    def __init__(self, frames_dir):
+    def __init__(self, frames_dir, target=None):
         self.frames_dir = frames_dir
+        self.target = target or {"id": "window", "scale": 1}  # what a frame shows
         self.frames = []  # [(path, seconds on screen)]
         self.size = None  # the first frame's; a later frame of another size is fitted inside it
 
@@ -38,7 +39,7 @@ class Recorder:
         """One frame of the main window. A frame that cannot be taken is skipped: the step's own result decides pass or fail."""
         path = os.path.join(self.frames_dir, "frame-%05d.png" % len(self.frames))
         try:
-            reply = app.call("screenshot", id="window", path=path)
+            reply = app.call("screenshot", id=self.target["id"], scale=self.target["scale"], path=path)
         except (TestModeError, OSError):
             return
         if self.size is None:

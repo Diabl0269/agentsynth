@@ -303,6 +303,7 @@ set(APPUI_SOURCES
     Source/UI/Layout/NoteRangePicker/NoteRangeGeometry.h
     Source/UI/Layout/NoteRangePicker/NoteRangePicker.h
     Source/UI/Layout/NoteRangePicker/NoteRangePicker.cpp
+    Source/UI/Layout/NoteRangePicker/NoteRangePickerGestures.cpp
     Source/UI/Layout/LaneChips/LaneChipRow.h
     Source/UI/Layout/LaneChips/LaneChipRow.cpp
     Source/UI/Layout/FoldAllButton.h

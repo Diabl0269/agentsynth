@@ -1,6 +1,6 @@
-// NoteRangePicker.cpp -- the keyboard strip with its band: drawing, the mouse (edges add or remove notes, the middle
-// moves the range by octaves), the keys on three focusable parts, and the 120 ms glide of the band to its place.
-// The pointer maths is NoteRangeGeometry.h. docs/layout/note-range-picker.md.
+// NoteRangePicker.cpp -- the keyboard strip with its band and the overview bar: state, the scrolling window, drawing,
+// the 120 ms glide and the accessibility parts. The mouse, keys and the note editor are NoteRangePickerGestures.cpp;
+// the pointer maths is NoteRangeGeometry.h. docs/layout/note-range-picker.md.
 #include "NoteRangePicker.h"
 #include "Music/NoteNames.h"
 #include "NoteRangeGeometry.h"
@@ -35,10 +35,25 @@ const char* partName(NoteRangePicker::Part part) {
     return "Move the whole range";
 }
 
+const char* partTooltip(NoteRangePicker::Part part) {
+    switch (part) {
+    case NoteRangePicker::Part::LowEdge:
+        return "Lowest note. Left and Right move it a note, Shift an octave, Enter types a note, Page Up and Page "
+               "Down show other octaves";
+    case NoteRangePicker::Part::HighEdge:
+        return "Highest note. Left and Right move it a note, Shift an octave, Enter types a note, Page Up and Page "
+               "Down show other octaves";
+    case NoteRangePicker::Part::Band:
+        break;
+    }
+    return "Move the whole range. Left and Right move it a note, Shift an octave, Page Up and Page Down show other "
+           "octaves";
+}
+
 } // namespace
 
 // One of the three Tab stops. It takes no mouse (the picker handles every pointer event itself), only the keyboard,
-// the focus ring and the accessibility name.
+// the focus ring and the accessibility name. Taking focus scrolls its part into view.
 class NoteRangePicker::Stop
     : public juce::Component
     , public juce::SettableTooltipClient {
@@ -47,7 +62,7 @@ public:
         : owner_(owner)
         , part_(part) {
         setTitle(partName(part));
-        setTooltip(partName(part));
+        setTooltip(partTooltip(part));
         setWantsKeyboardFocus(true);
         setInterceptsMouseClicks(false, false);
         setExplicitFocusOrder(1 + (int)part);
@@ -56,7 +71,10 @@ public:
     Part part() const noexcept { return part_; }
     void paint(juce::Graphics& g) override { paintFocusRing(g, getLocalBounds().toFloat(), *this, 3.0f); }
     bool keyPressed(const juce::KeyPress& key) override { return owner_.keyPressedOn(part_, key); }
-    void focusGained(FocusChangeType) override { repaint(); }
+    void focusGained(FocusChangeType) override {
+        owner_.scrollTo(owner_.revealTarget(part_, owner_.low_, owner_.high_));
+        repaint();
+    }
     void focusLost(FocusChangeType) override { repaint(); }
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override {
         return std::make_unique<TooltipHelpHandler>(*this, juce::AccessibilityRole::button);
@@ -70,12 +88,28 @@ private:
 NoteRangePicker::NoteRangePicker()
     : lowStop_(std::make_unique<Stop>(*this, Part::LowEdge))
     , highStop_(std::make_unique<Stop>(*this, Part::HighEdge))
-    , bandStop_(std::make_unique<Stop>(*this, Part::Band)) {
+    , bandStop_(std::make_unique<Stop>(*this, Part::Band))
+    , noteEditor_(std::make_unique<juce::TextEditor>()) {
     addAndMakeVisible(*lowStop_);
     addAndMakeVisible(*highStop_);
     addAndMakeVisible(*bandStop_);
+    addChildComponent(*noteEditor_);
+    noteEditor_->setMultiLine(false);
+    noteEditor_->setSelectAllWhenFocused(true);
+    noteEditor_->setJustification(juce::Justification::centred);
+    noteEditor_->setIndents(2, 0);
+    noteEditor_->setBorder(juce::BorderSize<int>(0));
+    noteEditor_->setInputRestrictions(5, "ABCDEFGabcdefg#-0123456789"); // not-ui-text: characters a note name may hold
+    noteEditor_->onReturnKey = [this] { finishNoteEdit(true); };
+    noteEditor_->onEscapeKey = [this] {
+        const Part edge = editing_;
+        finishNoteEdit(false);
+        getStop(edge).grabKeyboardFocus();
+    };
+    noteEditor_->onFocusLost = [this] { finishNoteEdit(false); };
     setSize(kPreferredWidth, kPreferredHeight);
-    base_ = windowBaseFor(low_, high_, 0);
+    scroll_ = scrollToShowRange();
+    landShown();
     updateTitle();
 }
 
@@ -83,13 +117,32 @@ NoteRangePicker::~NoteRangePicker() = default;
 
 juce::String NoteRangePicker::nameOf(int pitch) const { return noteNameWithOctave(pitch, middleCOctave_); }
 
-float NoteRangePicker::whiteKeyWidth() const { return (float)getWidth() / (float)kWhiteKeys; }
+// ---- Positions ------------------------------------------------------------------------------------------
 
-float NoteRangePicker::keyCentreX(int pitch) const { return keySpan(pitch, base_, (float)getWidth()).centre(); }
+int NoteRangePicker::overviewHeight() const noexcept { return getHeight() >= kPreferredHeight ? kOverviewHeight : 0; }
+
+int NoteRangePicker::stripTop() const noexcept { return overviewHeight() > 0 ? kOverviewHeight + kOverviewGap : 0; }
+
+int NoteRangePicker::stripHeight() const noexcept { return getHeight() - stripTop(); }
+
+float NoteRangePicker::whiteKeyWidth() const { return keyW_; }
+
+float NoteRangePicker::toX(float units) const { return (units - shownScroll_) * keyW_; }
+
+float NoteRangePicker::bandX0() const { return toX(shownA0_); }
+
+float NoteRangePicker::bandX1() const { return toX(shownA1_); }
+
+float NoteRangePicker::keyCentreX(int pitch) const { return keySpan(pitch, shownScroll_, keyW_).centre(); }
 
 juce::Rectangle<int> NoteRangePicker::bandBounds() const {
-    const int x0 = juce::roundToInt(shownX0_);
-    return {x0, 0, std::max(1, juce::roundToInt(shownX1_) - x0), getHeight()};
+    const int x0 = juce::roundToInt(bandX0());
+    return {x0, stripTop(), std::max(1, juce::roundToInt(bandX1()) - x0), stripHeight()};
+}
+
+juce::Rectangle<float> NoteRangePicker::overviewFrame() const {
+    const float w = (float)getWidth();
+    return {overviewX(shownScroll_, w), 0.3f, overviewX((float)keys_, w), (float)kOverviewHeight - 0.6f};
 }
 
 juce::Component& NoteRangePicker::getStop(Part part) noexcept {
@@ -102,7 +155,28 @@ NoteRangePicker::Part NoteRangePicker::getFocusedPart() const {
     return lowStop_->hasKeyboardFocus(false) ? Part::LowEdge : Part::Band;
 }
 
-// ---- Range, scale and the visible octaves ----------------------------------------------------------------
+// The note name sits inside its end of the band, at the strip's bottom.
+juce::Rectangle<float> NoteRangePicker::labelArea(Part edge) const {
+    const float top = (float)(stripTop() + stripHeight()) - 12.0f;
+    if (edge == Part::LowEdge) {
+        const float width = (float)theme::AppLookAndFeel::uiTextWidth(nameOf(low_), kLabelFont) + 2.0f;
+        return {bandX0() + 5.0f, top, width, 10.0f};
+    }
+    const float width = (float)theme::AppLookAndFeel::uiTextWidth(nameOf(high_), kLabelFont) + 2.0f;
+    return {bandX1() - 5.0f - width, top, width, 10.0f};
+}
+
+// A name is shown when its edge is on the strip and, for the high one, when it does not run into the low one.
+bool NoteRangePicker::labelVisible(Part edge) const {
+    const float w = (float)getWidth();
+    const auto area = labelArea(edge);
+    if (edge == Part::LowEdge)
+        return bandX0() >= 0.0f && area.getRight() <= w;
+    return bandX1() <= w && area.getX() >= 0.0f &&
+           (!labelVisible(Part::LowEdge) || area.getX() > labelArea(Part::LowEdge).getRight() + 2.0f);
+}
+
+// ---- Range, scale and the shown octaves ---------------------------------------------------------------------
 
 void NoteRangePicker::setScale(const MusicalScale* scale) {
     if (scale == nullptr || scale->isChromatic())
@@ -123,33 +197,54 @@ void NoteRangePicker::setRange(int lo, int hi) {
     hi = std::clamp(hi, 0, 127);
     if (lo > hi)
         std::swap(lo, hi);
-    commit(lo, hi, false);
+    noteEditor_->setVisible(false);
+    // A range already on the strip leaves the keys where they are; one off it brings the strip to it.
+    const auto extent = rangeExtent(lo, hi);
+    commit(lo, hi, false, isInView(extent, scroll_, keys_) ? scroll_ : scrollCentredOn(extent, keys_));
 }
 
-// The one place the range changes. The visible octaves follow the range except while a drag is in progress (the strip
-// would move under the pointer); they catch up when the drag ends.
-void NoteRangePicker::commit(int lo, int hi, bool notify) {
-    if (lo == low_ && hi == high_)
+float NoteRangePicker::scrollToShowRange() const {
+    const auto extent = rangeExtent(low_, high_);
+    return isInView(extent, scroll_, keys_) ? scroll_ : scrollCentredOn(extent, keys_);
+}
+
+// Where the strip must be for `part` of the range lo..hi to show with a key to spare: the least move from now.
+float NoteRangePicker::revealTarget(Part part, int lo, int hi) const {
+    const auto extent = part == Part::LowEdge    ? rangeExtent(lo, lo)
+                        : part == Part::HighEdge ? rangeExtent(hi, hi)
+                                                 : rangeExtent(lo, hi);
+    return scrollToReveal(extent, scroll_, keys_);
+}
+
+// The one place the range or the window moves. The band and the keys glide together to their place.
+void NoteRangePicker::commit(int lo, int hi, bool notify, float scrollTarget) {
+    scrollTarget = clampScroll(scrollTarget, keys_);
+    const bool rangeChanged = lo != low_ || hi != high_;
+    if (!rangeChanged && scrollTarget == scroll_)
         return;
     low_ = lo;
     high_ = hi;
-    if (!drag_.active)
-        base_ = windowBaseFor(low_, high_, base_);
-    glideTo(keySpan(low_, base_, (float)getWidth()).x0, keySpan(high_, base_, (float)getWidth()).x1);
-    updateTitle();
+    scroll_ = scrollTarget;
+    const auto extent = rangeExtent(low_, high_);
+    glideTo(extent.x0, extent.x1, scroll_);
+    if (rangeChanged)
+        updateTitle();
     repaint();
-    if (notify && onChange)
+    if (notify && rangeChanged && onChange)
         onChange(low_, high_);
 }
 
-void NoteRangePicker::afterRangeChanged() {
-    const int base = windowBaseFor(low_, high_, base_);
-    if (base == base_)
-        return;
-    base_ = base;
-    glideTo(keySpan(low_, base_, (float)getWidth()).x0, keySpan(high_, base_, (float)getWidth()).x1);
+void NoteRangePicker::scrollTo(float target) { commit(low_, high_, false, target); }
+
+// The strip follows the pointer at once (no glide): it scrolls under a drag.
+void NoteRangePicker::setScrollNow(float scroll) {
+    scroll_ = clampScroll(scroll, keys_);
+    shownScroll_ = fromScroll_ = toScroll_ = scroll_;
+    layoutStops();
     repaint();
 }
+
+void NoteRangePicker::scrollBy(float keys) { setScrollNow(scroll_ + keys); }
 
 void NoteRangePicker::updateTitle() {
     setTitle("Note range, " + nameOf(low_) + " to " + nameOf(high_));
@@ -160,26 +255,41 @@ void NoteRangePicker::updateTitle() {
         handler->notifyAccessibilityEvent(juce::AccessibilityEvent::titleChanged);
 }
 
+int NoteRangePicker::stepNote(int pitch, int direction) const {
+    if (scale_.has_value())
+        return scale_->stepBy(pitch, direction);
+    return std::clamp(pitch + direction, 0, 127);
+}
+
 // ---- Motion -----------------------------------------------------------------------------------------------
 
-// The band's edges ease to their place in 120 ms. Reduce Motion: they land at once and the band fades in over 80 ms.
-// Animations Off, or a picker that is not on screen: they land at once.
-void NoteRangePicker::glideTo(float x0, float x1) {
+void NoteRangePicker::landShown() {
+    shownScroll_ = fromScroll_ = toScroll_ = scroll_;
+    const auto extent = rangeExtent(low_, high_);
+    shownA0_ = fromA0_ = toA0_ = extent.x0;
+    shownA1_ = fromA1_ = toA1_ = extent.x1;
+    layoutStops();
+    repaint();
+}
+
+// The band's edges and the keys ease to their place in 120 ms. Reduce Motion: they land at once and the band fades in
+// over 80 ms. Animations Off, or a picker that is not on screen: they land at once.
+void NoteRangePicker::glideTo(float a0, float a1, float scroll) {
     glideAnim_.stop(vblank_);
     fadeAnim_.stop(vblank_);
     bandAlpha_ = 1.0f;
-    const auto land = [this, x0, x1] {
-        shownX0_ = x0;
-        shownX1_ = x1;
-        layoutStops();
-        repaint();
-    };
+    fromScroll_ = shownScroll_;
+    fromA0_ = shownA0_;
+    fromA1_ = shownA1_;
+    toScroll_ = scroll;
+    toA0_ = a0;
+    toA1_ = a1;
     if (!isShowing() || animationsOff()) {
-        land();
+        landShown();
         return;
     }
     if (prefersReducedMotion()) {
-        land();
+        landShown();
         bandAlpha_ = 0.4f;
         fadeAnim_.start(
             vblank_, kReducedFadeMs, [](float t) { return t; },
@@ -193,11 +303,10 @@ void NoteRangePicker::glideTo(float x0, float x1) {
             });
         return;
     }
-    fromX0_ = shownX0_;
-    fromX1_ = shownX1_;
-    glideAnim_.start(vblank_, kGlideMs, easeOutCubic, [this, x0, x1](float t) {
-        shownX0_ = fromX0_ + (x0 - fromX0_) * t;
-        shownX1_ = fromX1_ + (x1 - fromX1_) * t;
+    glideAnim_.start(vblank_, kGlideMs, easeOutCubic, [this](float t) {
+        shownScroll_ = fromScroll_ + (toScroll_ - fromScroll_) * t;
+        shownA0_ = fromA0_ + (toA0_ - fromA0_) * t;
+        shownA1_ = fromA1_ + (toA1_ - fromA1_) * t;
         layoutStops();
         repaint();
     });
@@ -206,39 +315,74 @@ void NoteRangePicker::glideTo(float x0, float x1) {
 void NoteRangePicker::finishMotionForTest() {
     glideAnim_.completeForTest();
     fadeAnim_.completeForTest();
+    landShown();
 }
 
 // ---- Layout -----------------------------------------------------------------------------------------------
 
 void NoteRangePicker::resized() {
-    shownX0_ = keySpan(low_, base_, (float)getWidth()).x0;
-    shownX1_ = keySpan(high_, base_, (float)getWidth()).x1;
-    layoutStops();
+    keys_ = visibleKeysFor((float)getWidth());
+    keyW_ = getWidth() > 0 ? (float)getWidth() / (float)keys_ : 1.0f;
+    scroll_ = clampScroll(scroll_, keys_);
+    scroll_ = scrollToShowRange();
+    noteEditor_->setVisible(false);
+    landShown();
 }
 
 void NoteRangePicker::layoutStops() {
-    const int h = getHeight();
+    const int h = stripHeight();
+    const int w = getWidth();
     const int handleH = std::min((int)kHandleHeight, std::max(4, h - 8)) + 2;
-    const int top = (h - handleH) / 2;
-    const int x0 = juce::roundToInt(shownX0_);
-    const int x1 = juce::roundToInt(shownX1_);
-    lowStop_->setBounds(x0 - 4, top, 8, handleH);
-    highStop_->setBounds(x1 - 4, top, 8, handleH);
-    bandStop_->setBounds(x0 + 5, 1, std::max(4, x1 - x0 - 10), std::max(2, h - 2));
+    const int top = stripTop() + (h - handleH) / 2;
+    const int x0 = juce::roundToInt(bandX0());
+    const int x1 = juce::roundToInt(bandX1());
+    const auto edgeX = [w](int x) { return std::clamp(x - 4, 0, std::max(0, w - 8)); };
+    lowStop_->setBounds(edgeX(x0), top, 8, handleH);
+    highStop_->setBounds(edgeX(x1), top, 8, handleH);
+    const int bx0 = std::max(x0, 0) + 5;
+    const int bx1 = std::min(x1, w) - 5;
+    bandStop_->setBounds(bx0, stripTop() + 1, std::max(4, bx1 - bx0), std::max(2, h - 2));
 }
 
 // ---- Painting ---------------------------------------------------------------------------------------------
 
+void NoteRangePicker::paintOverview(juce::Graphics& g) const {
+    const auto& c = theme::themeOf(*this).colors;
+    const float w = (float)getWidth();
+    const juce::Rectangle<float> bar(0.0f, 0.0f, w, (float)kOverviewHeight);
+    g.setColour(c.bg0);
+    g.fillRoundedRectangle(bar, 2.0f);
+    g.setColour(c.border);
+    g.drawRoundedRectangle(bar.reduced(0.3f), 2.0f, 0.6f);
+    g.setColour(c.textDisabled);
+    for (int octave = 0; octave <= 10; ++octave) {
+        const float x = overviewX((float)(octave * 7), w);
+        g.drawLine(x, 5.0f, x, (float)kOverviewHeight, 0.6f);
+    }
+    const auto extent = rangeExtent(low_, high_);
+    const float x0 = overviewX(extent.x0, w);
+    const float x1 = overviewX(extent.x1, w);
+    g.setColour(c.accent);
+    g.fillRoundedRectangle(x0, 2.0f, std::max(2.0f, x1 - x0), 4.0f, 1.0f);
+    const auto frame = overviewFrame();
+    g.setColour(c.textPrimary.withAlpha(0.08f));
+    g.fillRoundedRectangle(frame, 2.0f);
+    g.setColour(c.textMuted);
+    g.drawRoundedRectangle(frame, 2.0f, 1.0f);
+}
+
 void NoteRangePicker::paintKeys(juce::Graphics& g) const {
     const auto& c = theme::themeOf(*this).colors;
     const float width = (float)getWidth();
-    const float height = (float)getHeight();
+    const float height = (float)stripHeight();
     for (int pass = 0; pass < 2; ++pass) {
-        for (int p = base_; p < base_ + kSpan; ++p) {
+        for (int p = 0; p < 128; ++p) {
             const bool black = isBlackKey(p);
             if (black != (pass == 1))
                 continue;
-            const auto span = keySpan(p, base_, width);
+            const auto span = keySpan(p, shownScroll_, keyW_);
+            if (span.x1 < 0.0f || span.x0 > width)
+                continue;
             const bool lit = scale_.has_value() && scale_->contains(p);
             juce::Rectangle<float> key(span.x0, 0.0f, span.x1 - span.x0, black ? height * 0.62f : height);
             g.setColour(black ? (lit ? c.bg1.brighter(0.5f) : c.bg0)
@@ -252,26 +396,24 @@ void NoteRangePicker::paintKeys(juce::Graphics& g) const {
 
 void NoteRangePicker::paintBand(juce::Graphics& g) const {
     const auto& c = theme::themeOf(*this).colors;
-    const float height = (float)getHeight();
-    const juce::Rectangle<float> band(shownX0_, 0.5f, std::max(1.0f, shownX1_ - shownX0_), height - 1.0f);
+    const float height = (float)stripHeight();
+    const float x0 = bandX0();
+    const float x1 = bandX1();
+    const juce::Rectangle<float> band(x0, 0.5f, std::max(1.0f, x1 - x0), height - 1.0f);
     g.setColour(c.accent.withAlpha(0.25f * bandAlpha_));
     g.fillRect(band);
     g.setColour(c.accent.withAlpha(bandAlpha_));
     g.drawRect(band, 1.0f);
 
     const float handleH = std::min(kHandleHeight, std::max(4.0f, height - 8.0f));
-    for (const float x : {shownX0_, shownX1_}) {
+    for (const float x : {x0, x1}) {
+        if (x < -kHandleWidth || x > (float)getWidth() + kHandleWidth)
+            continue;
         const juce::Rectangle<float> handle(x - kHandleWidth * 0.5f, (height - handleH) * 0.5f, kHandleWidth, handleH);
         g.fillRoundedRectangle(handle, 2.0f);
     }
 
     g.setFont(theme::AppLookAndFeel::uiFont(kLabelFont));
-    const auto lowName = nameOf(low_);
-    const auto highName = nameOf(high_);
-    const float lowWidth = (float)theme::AppLookAndFeel::uiTextWidth(lowName, kLabelFont) + 2.0f;
-    const float highWidth = (float)theme::AppLookAndFeel::uiTextWidth(highName, kLabelFont) + 2.0f;
-    const juce::Rectangle<float> lowArea(band.getX() + 5.0f, height - 12.0f, lowWidth, 10.0f);
-    const juce::Rectangle<float> highArea(band.getRight() - 5.0f - highWidth, height - 12.0f, highWidth, 10.0f);
     const auto drawLabel = [&](const juce::String& text, juce::Rectangle<float> area, juce::Justification where) {
         g.setColour(c.bg0);
         for (const auto& offset : {std::pair<float, float>{-1, 0}, {1, 0}, {0, -1}, {0, 1}})
@@ -279,156 +421,61 @@ void NoteRangePicker::paintBand(juce::Graphics& g) const {
         g.setColour(c.textPrimary);
         g.drawText(text, area, where);
     };
-    drawLabel(lowName, lowArea, juce::Justification::centredLeft);
-    if (highArea.getX() > lowArea.getRight() + 2.0f)
-        drawLabel(highName, highArea, juce::Justification::centredRight);
+    const float shift = (float)stripTop();
+    if (labelVisible(Part::LowEdge))
+        drawLabel(nameOf(low_), labelArea(Part::LowEdge).translated(0.0f, -shift), juce::Justification::centredLeft);
+    if (labelVisible(Part::HighEdge))
+        drawLabel(nameOf(high_), labelArea(Part::HighEdge).translated(0.0f, -shift), juce::Justification::centredRight);
 }
 
 void NoteRangePicker::paint(juce::Graphics& g) {
+    if (overviewHeight() > 0)
+        paintOverview(g);
+    g.saveState();
+    g.setOrigin(0, stripTop());
+    g.reduceClipRegion(0, 0, getWidth(), stripHeight());
     paintKeys(g);
     paintBand(g);
+    g.restoreState();
 }
 
-// ---- Mouse ------------------------------------------------------------------------------------------------
+// ---- Parts under the pointer, tooltip and accessibility ---------------------------------------------------
 
 std::optional<NoteRangePicker::Part> NoteRangePicker::partAt(float x) const {
-    const float lowDistance = std::abs(x - shownX0_);
-    const float highDistance = std::abs(x - shownX1_);
+    const float w = (float)getWidth();
+    const float x0 = bandX0();
+    const float x1 = bandX1();
+    const float lowDistance = x0 >= -kEdgeGrabPx && x0 <= w + kEdgeGrabPx ? std::abs(x - x0) : 1.0e9f;
+    const float highDistance = x1 >= -kEdgeGrabPx && x1 <= w + kEdgeGrabPx ? std::abs(x - x1) : 1.0e9f;
     if (std::min(lowDistance, highDistance) <= kEdgeGrabPx) {
         if (lowDistance == highDistance)
-            return x < shownX0_ ? Part::LowEdge : Part::HighEdge;
+            return x < x0 ? Part::LowEdge : Part::HighEdge;
         return lowDistance < highDistance ? Part::LowEdge : Part::HighEdge;
     }
-    if (x > shownX0_ && x < shownX1_)
+    if (x > x0 && x < x1)
         return Part::Band;
     return std::nullopt;
 }
 
-void NoteRangePicker::mouseDown(const juce::MouseEvent& e) {
-    const auto part = partAt(e.position.x);
-    if (!part.has_value())
-        return;
-    drag_ = {true, *part, e.position.x, low_, high_};
-    getStop(*part).grabKeyboardFocus();
+std::optional<NoteRangePicker::Part> NoteRangePicker::labelAt(const juce::Point<float>& p) const {
+    for (const auto edge : {Part::LowEdge, Part::HighEdge})
+        if (labelVisible(edge) && labelArea(edge).expanded(1.0f, 2.0f).contains(p))
+            return edge;
+    return std::nullopt;
 }
-
-void NoteRangePicker::mouseDrag(const juce::MouseEvent& e) {
-    if (!drag_.active)
-        return;
-    if (drag_.part == Part::Band)
-        dragBand(e);
-    else
-        dragEdge(drag_.part, e.position.x);
-}
-
-void NoteRangePicker::mouseUp(const juce::MouseEvent&) {
-    if (!drag_.active)
-        return;
-    const bool changed = low_ != drag_.startLow || high_ != drag_.startHigh;
-    drag_.active = false;
-    afterRangeChanged();
-    if (changed && onGestureEnd)
-        onGestureEnd(low_, high_);
-}
-
-void NoteRangePicker::mouseMove(const juce::MouseEvent& e) {
-    const auto part = partAt(e.position.x);
-    hoverOnKeys_ = !part.has_value();
-    hover_ = part.value_or(Part::Band);
-}
-
-int NoteRangePicker::stepNote(int pitch, int direction) const {
-    if (scale_.has_value())
-        return scale_->stepBy(pitch, direction);
-    return std::clamp(pitch + direction, 0, 127);
-}
-
-// The edge goes to the key under the pointer (the low edge's left side, the high edge's right side), then to the
-// nearest scale note.
-void NoteRangePicker::dragEdge(Part part, float x) {
-    const float half = whiteKeyWidth() * 0.5f;
-    const bool low = part == Part::LowEdge;
-    int pitch = pitchAtX(low ? x + half : x - half, base_, (float)getWidth());
-    if (scale_.has_value())
-        pitch = scale_->snapPitch(pitch);
-    if (low)
-        commit(std::min(pitch, high_), high_, true);
-    else
-        commit(low_, std::max(pitch, low_), true);
-}
-
-// A drag of the middle moves the range by whole octaves; with Option, by one note at a time. The range stays inside
-// the visible octaves until the pointer is released.
-void NoteRangePicker::dragBand(const juce::MouseEvent& e) {
-    const float octaveWidth = whiteKeyWidth() * 7.0f;
-    const float dx = e.position.x - drag_.startX;
-    const bool byNote = e.mods.isAltDown();
-    const int amount = byNote ? juce::roundToInt(dx / (octaveWidth / 12.0f)) : juce::roundToInt(dx / octaveWidth) * 12;
-    int lo = drag_.startLow;
-    int hi = drag_.startHigh;
-    if (byNote && scale_.has_value()) {
-        const int direction = amount < 0 ? -1 : 1;
-        for (int i = 0; i < std::abs(amount); ++i) {
-            const int nextLo = stepNote(lo, direction);
-            const int nextHi = stepNote(hi, direction);
-            if (nextLo == lo || nextHi == hi)
-                break;
-            lo = nextLo;
-            hi = nextHi;
-        }
-    } else {
-        lo += amount;
-        hi += amount;
-    }
-    if (lo < base_ || hi > base_ + kSpan - 1 || lo < 0 || hi > 127)
-        return;
-    commit(lo, hi, true);
-}
-
-// ---- Keyboard ---------------------------------------------------------------------------------------------
-
-// Left and Right: the focused edge moves one scale note (Shift: an octave); the range moves an octave (Option: one
-// scale note). Returns whether the key was one of those.
-bool NoteRangePicker::keyPressedOn(Part part, const juce::KeyPress& key) {
-    const int code = key.getKeyCode();
-    if (code != juce::KeyPress::leftKey && code != juce::KeyPress::rightKey)
-        return false;
-    const int direction = code == juce::KeyPress::rightKey ? 1 : -1;
-    const int lowBefore = low_;
-    const int highBefore = high_;
-    const bool octave = key.getModifiers().isShiftDown();
-    const auto snapped = [this](int pitch) {
-        pitch = std::clamp(pitch, 0, 127);
-        return scale_.has_value() ? scale_->snapPitch(pitch) : pitch;
-    };
-    if (part == Part::LowEdge) {
-        const int pitch = octave ? snapped(low_ + direction * 12) : stepNote(low_, direction);
-        commit(std::clamp(pitch, 0, high_), high_, true);
-    } else if (part == Part::HighEdge) {
-        const int pitch = octave ? snapped(high_ + direction * 12) : stepNote(high_, direction);
-        commit(low_, std::clamp(pitch, low_, 127), true);
-    } else if (key.getModifiers().isAltDown()) {
-        const int nextLo = stepNote(low_, direction);
-        const int nextHi = stepNote(high_, direction);
-        if (nextLo != low_ && nextHi != high_)
-            commit(nextLo, nextHi, true);
-    } else {
-        const int shift = std::clamp(direction * 12, -low_, 127 - high_);
-        commit(low_ + shift, high_ + shift, true);
-    }
-    // One key step is one finished gesture (so one undo step), but only when it moved something.
-    if ((low_ != lowBefore || high_ != highBefore) && onGestureEnd)
-        onGestureEnd(low_, high_);
-    return true;
-}
-
-// ---- Tooltip and accessibility ----------------------------------------------------------------------------
 
 juce::String NoteRangePicker::getTooltip() {
-    const auto part = partAt((float)getMouseXYRelative().x);
-    if (part.has_value())
+    const auto p = getMouseXYRelative().toFloat();
+    if (p.y < (float)stripTop() && overviewHeight() > 0)
+        return "The whole keyboard. Click or drag to show other octaves";
+    if (const auto label = labelAt(p))
+        return *label == Part::LowEdge ? "Click to type the lowest note" : "Click to type the highest note";
+    if (const auto part = partAt(p.x)) {
+        if (*part == Part::Band)
+            return "Drag to move the range a note at a time, Shift for octaves";
         return partName(*part);
-    return "Note range: drag an edge to add or remove notes, drag the middle to move the range";
+    }
+    return "Click to move the range here";
 }
 
 std::unique_ptr<juce::AccessibilityHandler> NoteRangePicker::createAccessibilityHandler() {

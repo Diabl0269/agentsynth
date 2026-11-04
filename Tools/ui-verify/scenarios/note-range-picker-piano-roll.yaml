@@ -1,0 +1,50 @@
+# The redesigned note range picker in the piano roll's Scale assist panel (the small variant, 158 px wide).
+#
+# What a user does:
+#   1. Opens a project with a MIDI clip (fixture clip-and-sequencer.agsproj), opens it in the piano roll and opens Scale assist.
+#   2. Drags the high edge past the right end of the strip and holds: the keys scroll under the pointer.
+#   3. Drags the middle of the band, then with Shift by octaves.
+#   4. Clicks empty keys: the band moves there at the same width.
+#   5. Clicks the overview bar: the strip centres on that spot.
+#   6. Clicks a note name, types a key and presses Enter.
+record: true
+record_target: {id: scaleAssistRangePicker, scale: 4}
+save_project: note-range-picker-piano-roll
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 120, y: 30, clicks: 2}
+  - wait: {}
+  - click: {id: pianoRollScaleChip}
+  - wait: {}
+  - expect: {id: scaleAssistRangePicker, showing: true, within_ms: 2000}
+  - expect: {id: scaleAssistRangePicker, title: "Note range, C2 to C5"}
+  - screenshot: {id: scaleAssistRangePicker, name: 1-start}
+  - screenshot: {id: scaleAssistRangePicker, name: 1-start-zoom, scale: 4}
+  - mouseDown: {id: scaleAssistRangePicker, x: 124, y: 28}
+  - mouseMoveHeld: {id: scaleAssistRangePicker, x: 150, y: 28}
+  - mouseMoveHeld: {id: scaleAssistRangePicker, x: 175, y: 28}
+  - wait: {}
+  - screenshot: {id: scaleAssistRangePicker, name: 2-edge-scrolling-zoom, scale: 4}
+  - mouseUp: {id: scaleAssistRangePicker, x: 175, y: 28}
+  - wait: {}
+  - mouseDown: {id: scaleAssistRangePicker, x: 80, y: 28}
+  - mouseMoveHeld: {id: scaleAssistRangePicker, x: 70, y: 28}
+  - mouseUp: {id: scaleAssistRangePicker, x: 70, y: 28}
+  - wait: {}
+  - screenshot: {id: scaleAssistRangePicker, name: 3-band-notes-zoom, scale: 4}
+  - mouseDown: {id: scaleAssistRangePicker, x: 70, y: 28, mods: shift}
+  - mouseMoveHeld: {id: scaleAssistRangePicker, x: 100, y: 28, mods: shift}
+  - mouseUp: {id: scaleAssistRangePicker, x: 100, y: 28, mods: shift}
+  - wait: {}
+  - screenshot: {id: scaleAssistRangePicker, name: 4-band-octaves-zoom, scale: 4}
+  - click: {id: scaleAssistRangePicker, x: 10, y: 28}
+  - wait: {}
+  - screenshot: {id: scaleAssistRangePicker, name: 5-click-to-move-zoom, scale: 4}
+  - click: {id: scaleAssistRangePicker, x: 100, y: 4}
+  - wait: {}
+  - screenshot: {id: scaleAssistRangePicker, name: 6-overview-zoom, scale: 4}

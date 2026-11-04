@@ -1,0 +1,54 @@
+# The redesigned note range picker in a sequencer's Randomize panel (the small variant, 230 px wide).
+#
+# What a user does:
+#   1. Opens a project with a Sequencer (fixture clip-and-sequencer.agsproj) and opens the Randomize panel.
+#   2. Drags the high edge past the right end of the strip and holds: the keys scroll under the pointer.
+#   3. Drags the middle of the band one note at a time, then with Shift by octaves.
+#   4. Clicks empty keys: the band moves there at the same width.
+#   5. Clicks the overview bar: the strip centres on that spot.
+#   6. Clicks the low note name, types C#3 and presses Enter.
+record: true
+record_target: {id: randomizeRangePicker, scale: 3}
+save_project: note-range-picker-randomize
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Randomize notes in the scale}
+  - wait: {}
+  - expect: {id: randomizeRangePicker, showing: true, within_ms: 2000}
+  - expect: {id: randomizeRangePicker, title: "Note range, C2 to C4"}
+  - screenshot: {id: randomizeRangePicker, name: 1-start}
+  - screenshot: {id: randomizeRangePicker, name: 1-start-zoom, scale: 4}
+  # Edge dragged past the strip's end: the strip scrolls.
+  - mouseDown: {id: randomizeRangePicker, x: 172, y: 28}
+  - mouseMoveHeld: {id: randomizeRangePicker, x: 200, y: 28}
+  - mouseMoveHeld: {id: randomizeRangePicker, x: 240, y: 28}
+  - wait: {}
+  - mouseMoveHeld: {id: randomizeRangePicker, x: 250, y: 28}
+  - wait: {}
+  - screenshot: {id: randomizeRangePicker, name: 2-edge-scrolling}
+  - mouseUp: {id: randomizeRangePicker, x: 250, y: 28}
+  - wait: {}
+  - screenshot: {id: randomizeRangePicker, name: 2-edge-scrolled-zoom, scale: 4}
+  # Band by notes, then by octaves.
+  - mouseDown: {id: randomizeRangePicker, x: 115, y: 28}
+  - mouseMoveHeld: {id: randomizeRangePicker, x: 100, y: 28}
+  - mouseUp: {id: randomizeRangePicker, x: 100, y: 28}
+  - wait: {}
+  - screenshot: {id: randomizeRangePicker, name: 3-band-notes}
+  - mouseDown: {id: randomizeRangePicker, x: 100, y: 28, mods: shift}
+  - mouseMoveHeld: {id: randomizeRangePicker, x: 130, y: 28, mods: shift}
+  - mouseUp: {id: randomizeRangePicker, x: 130, y: 28, mods: shift}
+  - wait: {}
+  - screenshot: {id: randomizeRangePicker, name: 4-band-octaves}
+  # Click on empty keys.
+  - click: {id: randomizeRangePicker, x: 12, y: 28}
+  - wait: {}
+  - screenshot: {id: randomizeRangePicker, name: 5-click-to-move}
+  # Overview bar.
+  - click: {id: randomizeRangePicker, x: 170, y: 4}
+  - wait: {}
+  - screenshot: {id: randomizeRangePicker, name: 6-overview}
+  - screenshot: {id: randomizeRangePicker, name: 6-overview-zoom, scale: 4}
