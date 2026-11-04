@@ -4,6 +4,7 @@
 // Under Reduce Motion everything lands at once. Headless: the animated path is forced (FadeAnimateGuard) and the
 // tweens are stepped by hand, never by frames.
 
+#include "../../../TestWait.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AutomationLanesMenuFixture.h"
 #include "AutomationLanesModulatorHost.h"
@@ -287,4 +288,32 @@ TEST(AutomationLanesBlockMotionTest, UnderReduceMotionAModulatorRowArrivesAndLea
     s.f().panel.refreshModulators();
     EXPECT_FALSE(s.lanes().isBlockMotionAnimating());
     EXPECT_EQ(s.extra(), before);
+}
+
+// Regression test for FRO1472: under Reduce Motion a removed row only fades, in place. Once the fade ends the row is
+// hidden and deleted on the next message-loop turn; it used to stay a hidden child of the header column until the
+// next routing change.
+TEST(AutomationLanesBlockMotionTest, UnderReduceMotionARemovedRowIsDeletedOnceItsFadeEnds) {
+    RowScene s;
+    FadeAnimateGuard reduced(synth::ui::AnimationMode::reduced);
+    s.h.host.modulators.push_back(lfoInfo("2"));
+    s.f().panel.refreshModulators();
+    auto* leavingRow = s.lanes().modulatorRowFor(s.cutoff, 1);
+    ASSERT_NE(leavingRow, nullptr);
+    auto* column = leavingRow->getParentComponent();
+    ASSERT_NE(column, nullptr);
+    const juce::Component::SafePointer<juce::Component> row(leavingRow);
+
+    s.h.host.modulators.pop_back();
+    s.f().panel.refreshModulators();
+    ASSERT_EQ(s.lanes().leavingModulatorCountForTest(), 1);
+    EXPECT_TRUE(row->isVisible()) << "the row fades where it stood";
+
+    synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    ASSERT_NE(row.getComponent(), nullptr) << "never deleted inside the fade's own callback";
+    EXPECT_FALSE(row->isVisible());
+    ASSERT_TRUE(synth::test::flushMessageQueue());
+    EXPECT_EQ(s.lanes().leavingModulatorCountForTest(), 0);
+    EXPECT_EQ(row.getComponent(), nullptr);
+    EXPECT_EQ(column->getIndexOfChildComponent(leavingRow), -1);
 }

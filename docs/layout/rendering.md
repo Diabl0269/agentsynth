@@ -83,7 +83,9 @@ tick's own work flat and the paint linear in what is on screen, and keep animati
   The project load reveal's frames work the same way: a popping card repaints only itself (its own transform and
   alpha), and the frame asks only for the borders it fades and the cables whose drawn length changed.
   A partial paint then skips every cable (`synth::ui::cablePaintBounds`, `CableCurve.h`) and macro border whose box
-  misses the clip, before building its path. Repainting the whole canvas and rebuilding every cable per frame made
+  misses the clip, before building its path. The box spans every control point by min/max, so a backward cable's
+  loops (out past its output, in before its input) are inside it; a box that left them out let the flow dots there stay
+  on screen at an old phase. `CablePaintBounds.HoldsTheWholeDrawnPathOfEveryCable` checks it. Repainting the whole canvas and rebuilding every cable per frame made
   a one-card delete or undo cost as much as the idle tick's full paint at every frame (about 16 ms on the Load test
   project, 49 ms at 80 tracks).
 - **A glide only snapshots what can be seen.** `CardGlideAnimator::arm` renders a snapshot (a full card paint) only for

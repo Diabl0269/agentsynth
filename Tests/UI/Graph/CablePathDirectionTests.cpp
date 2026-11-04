@@ -94,3 +94,21 @@ TEST(CablePathDirection, GraphEditorAndTheSharedCurveAgree) {
     EXPECT_EQ(viaEditor.c1, viaShared.c1);
     EXPECT_EQ(viaEditor.c2, viaShared.c2);
 }
+
+// Regression test for FRO1472: a backward cable's loops lay outside its paint box, so the 30 Hz tick never repainted
+// the flow dots there and they stayed on screen at an old phase.
+TEST(CablePaintBounds, HoldsTheWholeDrawnPathOfEveryCable) {
+    const std::pair<juce::Point<float>, juce::Point<float>> cables[] = {
+        {{1270.0f, 346.0f}, {748.5f, 692.5f}}, // backward, far apart
+        {{400.0f, 100.0f}, {380.0f, 300.0f}},  // backward, short
+        {{100.0f, 100.0f}, {140.0f, 400.0f}},  // forward, near vertical
+        {{100.0f, 100.0f}, {700.0f, 120.0f}},  // forward, long
+        {{100.0f, 100.0f}, {100.0f, 100.0f}},  // zero length
+    };
+    for (const auto& [p1, p2] : cables) {
+        const auto drawn = synth::ui::makeCablePath(p1, p2).getBounds();
+        const auto box = synth::ui::cablePaintBounds(p1, p2);
+        EXPECT_TRUE(box.contains(drawn.expanded(synth::ui::kCablePaintMargin - 0.5f)))
+            << p1.toString() << " -> " << p2.toString() << ": box " << box.toString() << ", path " << drawn.toString();
+    }
+}

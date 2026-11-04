@@ -10,6 +10,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "TestMode/AutomationHiding.h"
 #include "TestMode/TestModeLaunch.h"
+#include "TestMode/TestModePresentedFrame.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
@@ -273,6 +274,12 @@ private:
         }
 
         void closeButtonPressed() override { JUCEApplication::getInstance()->systemRequestedQuit(); }
+
+        // The clip here is the area the peer is painting: the test mode's stale-pixel check follows it.
+        void paintOverChildren(juce::Graphics& g) override {
+            DocumentWindow::paintOverChildren(g);
+            synth::testmode::notePresentedPaint(*this, g);
+        }
 
         // With nothing focused (right after launch, or once an in-place editor closes) a key lands on this window,
         // not on a component under MainComponent; forward it so Cmd+N and the like still run.

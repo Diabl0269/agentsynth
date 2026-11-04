@@ -767,7 +767,7 @@ state).
   is flat)" (the curve moves less than 1/10000 of the parameter's range), "(lane has too many points)".
 - **Motion.** The old curve melts into the flat line: the editor keeps the old shape and cross-fades it out over the
   range (200 ms, 80 ms under Reduce Motion, at once under Animations Off or off screen) while the old points shrink away,
-  repainting only the range's rectangle. The new modulator row and band fade and grow in like any new routing, and a row whose routing goes (Undo) fades out in a closing gap where it stood (`TimelineAutomationLanes::retireModulatorRows`; dropped at once off screen or under Animations Off).
+  repainting only the range's rectangle. The new modulator row and band fade and grow in like any new routing, and a row whose routing goes (Undo) fades out in a closing gap where it stood (`TimelineAutomationLanes::retireModulatorRows`; dropped at once off screen or under Animations Off, and deleted as soon as its fade and gap end, see [lane-motion.md](lane-motion.md)).
 
 The math is `CustomLfoFromRange` (`LaneShapes/`, pure, one plan shared by the menu's enabled state and the command);
 the command is `TrackHeaderHost::createCustomLfoFromRange`, implemented by `MainComponent` as one

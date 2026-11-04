@@ -16,7 +16,9 @@ runs one shared grow / shrink tween for them (`TimelineAutomationLanesBlockMotio
 - **Leaving.** A lane that leaves an open track (Delete lane, Move to track, an undo taking it away) is replaced by a
   picture of its block taken just before it went (`BlockPicture`), which shrinks and fades in its old place and is
   dropped when the gap has closed. A modulator row whose routing went (Remove modulator, an undo) fades out in a gap
-  that closes in its old slot; the rows below slide up with it.
+  that closes in its old slot; the rows below slide up with it. It is deleted as soon as both have ended: the gap's
+  end (`landBlockMotion`) or, where only the fade runs (Reduce Motion), the fade's end on the next message-loop turn
+  (`leavingSweep_`). Hiding it repaints where it last stood, so nothing of it stays on screen.
 - **A row dropped on another lane** (the modulator row drag) is both at once: it grows in at the slot it was dropped in,
   and its old lane's gap closes, so neither lane block and nothing below jumps. Its old row is not drawn fading in the
   old slot (`droppedRoutingKey_` hides it at once): it is the row growing in the new one. The undo moves it back the
