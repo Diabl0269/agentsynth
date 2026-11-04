@@ -37,11 +37,13 @@ juce::String originText(const synth::Clip& clip) {
 // in seconds, length in beats and stretch origin ("-" when none), so a scenario can tell which file a clip plays.
 // `clipWaveform`, "Clip 1:columns;Clip 2:summary": what each audio clip's waveform is drawn as (none, summary,
 // columns). `sizingReadout`: the pill an edge drag draws on the clip ("200%" while stretching), empty when none.
-// `clipPitches`, "Clip 1:60,64;Clip 2:61": every clip's note pitches in track order. Pitches rather than a count,
-// because a scenario checking Fit to key needs to see that notes moved, and which way.
+// `clipLengths`, "Clip 1:4.000;Clip 2:2.500": every clip's length in beats, so a scenario can see whether a drag
+// committed. `clipPitches`, "Clip 1:60,64;Clip 2:61": every clip's note pitches in track order. Pitches rather than a
+// count, because a scenario checking Fit to key needs to see that notes moved, and which way.
 void TimelineClipLaneArea::addTestModeProbe() {
     testModeProbe_ = std::make_unique<ClipPitchesProbe>([this](juce::DynamicObject& into) {
         juce::StringArray clips;
+        juce::StringArray lengths;
         juce::StringArray audio;
         juce::StringArray shapes;
         if (doc_ != nullptr)
@@ -50,6 +52,7 @@ void TimelineClipLaneArea::addTestModeProbe() {
                     juce::StringArray pitches;
                     for (const auto& note : clip.notes)
                         pitches.add(juce::String(note.pitch));
+                    lengths.add(clip.name + ":" + juce::String(clip.lengthBeats, 3));
                     clips.add(clip.name + ":" + pitches.joinIntoString(","));
                     if (clip.assetRef.isNotEmpty()) {
                         shapes.add(clip.name + ":" + getWaveformShapeForTest(clip.id));
@@ -58,6 +61,7 @@ void TimelineClipLaneArea::addTestModeProbe() {
                     }
                 }
         into.setProperty("clipPitches", clips.joinIntoString(";"));
+        into.setProperty("clipLengths", lengths.joinIntoString(";"));
         into.setProperty("clipAudio", audio.joinIntoString(";"));
         into.setProperty("clipWaveform", shapes.joinIntoString(";"));
         into.setProperty("sizingReadout", sizingReadout());

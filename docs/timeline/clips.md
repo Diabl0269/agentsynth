@@ -94,7 +94,7 @@ marquees or double-click-authors. Switching away from Select disables all of it;
 | Double-click empty lane space | Authors content on the row under the pointer — see **Adding content** |
 | Drop audio files from the OS | Imports the first readable one onto the audio row under the cursor — see **Adding content** |
 | Delete / Backspace | Deletes every selected clip as ONE undo step; returns `false` (key falls through) when the selection is empty |
-| Escape | Clears the selection; returns `false` when it is already empty |
+| Escape | Mid-drag (move, edge resize, stretch, marquee, range, draw): abandons the drag (`cancelDrag`): the document, preview and undo history are as before the press, the release commits nothing, and the selection is untouched (a marquee puts back the selection it replaced; a range returns to the previous range). Otherwise clears the selection; returns `false` when it is already empty |
 | P | **Loop the selection** — see **Loop the selection** below |
 
 ## Edge sizing
