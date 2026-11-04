@@ -158,8 +158,18 @@ TEST_F(MenuFieldSpaceTest, SpaceTogglesPlaybackAndOpensNoMenuOnEverySelectFieldA
             probe.close();
 
             ASSERT_TRUE(takeFocus(*select)) << name << ": lost keyboard focus, so Return would not reach it";
-            deliver(*select, plain(juce::KeyPress::returnKey));
-            EXPECT_TRUE(probe.opened()) << name << ": Return did not open the menu";
+            // A popup menu closes itself on any platform where this process is not the foreground one (Windows CI): it
+            // must be seen open the moment it opens, not after the dispatch loop has run on and closed it again.
+            bool sawOpen = false;
+            auto* peer = select->getPeer();
+            ASSERT_NE(peer, nullptr) << name;
+            peer->handleKeyPress(plain(juce::KeyPress::returnKey));
+            sawOpen = probe.opened(); // a plain combo box has its flag up before it returns
+            for (int i = 0; i < 30 && !sawOpen; ++i) {
+                juce::MessageManager::getInstance()->runDispatchLoopUntil(2);
+                sawOpen = probe.opened();
+            }
+            EXPECT_TRUE(sawOpen) << name << ": Return did not open the menu";
             EXPECT_FALSE(playing()) << name << ": Return started playback";
             probe.close();
         }
