@@ -39,8 +39,8 @@ header, and its keyboard focus ring is the shared one `AppLookAndFeel::drawDrawa
 
 ### The colour dot
 
-The coloured dot at the left of a header is a real button (`MixerColourDot`), not painted swatch. Clicking it, or
-pressing Return or Space while it has focus (it is a Tab stop), opens the colour picker of what the colour comes from:
+The coloured dot at the left of a header is a real button (`MixerColourDot`), not painted swatch. Clicking it, Return
+while it has focus, or **C** on the focused column ([strip focus](strip-focus.md#colour)) opens the picker of its source:
 
 - **A channel one track feeds** opens that track's picker -- the very one its Timeline swatch opens
   (`buildTrackColourPicker`, `Source/UI/Timeline/TrackColourPicker.h`, shared by both). A live preview writes the track
@@ -803,7 +803,7 @@ the bottom dock with `"timeline"`. `MixerPanelComponent` is the region's focusab
 (`setWantsKeyboardFocus(true)`) and **the controls that act on keys the panel owns give focus back up** (the fader,
 pan, M and S) — the same focus-trap avoidance `TimelineTrackHeaderComponent` uses, one level higher, since a column hosts
 several controls. The deliberate exceptions are small icon buttons that take no key beyond Return and Space, so every
-other key still bubbles to the panel: the toolbar's buttons, the header's colour dot and sources badge, and the
+other key still bubbles to the panel: the toolbar's buttons, the header's colour dot (Return only: Space still plays) and sources badge, and the
 bypass button on every insert and send row (each a Tab stop with a name, a tooltip and the accent focus ring). The one other focusable element is the side pane's channel list, which has keys of its own ([side pane](#side-pane-zones-and-visibility)) and passes every other key up to the panel.
 
 `MixerPanelKeyboard.cpp` (`Source/UI/Mixer/MixerPanelComponent/`) owns `keyPressed()`:
@@ -814,13 +814,14 @@ bypass button on every insert and send row (each a Tab stop with a name, a toolt
   `MixerFader::nudge()` (begin and end change gesture bracketing a single `setValueNotifyingHost`,
   like a real drag).
 - **Enter** selects the focused column's macro or node on canvas.
+- **A click in a column** focuses it, and **Cmd+D** copies the focused strip's track: [strip focus](strip-focus.md).
 - **M, S and R** resolve the SAME rebindable `timelineMuteFocusedTrack`,
   `timelineSoloFocusedTrack` and `timelineArmFocusedTrack` action ids the Timeline track-header row
   binds — **deliberately, because a new id would not inherit an existing rebind** — through
   `MixerColumnComponent::toggleMuted()`/`toggleSoloed()`/`MixerMasterColumn::toggleMuted()`,
   extracted from the M and S buttons' own `onClick` so a keypress and a real click can never diverge,
   plus an `onArmTrack` callback routed through `MainComponent::performTrackEdit`.
-
+- **C**, **Shift+Left/Right** and **H** (rebindable) open the colour picker, pan and hide: [strip focus](strip-focus.md#colour).
 - **Tab** (`mixerEnterRows`, rebindable, Mixer category) moves into the focused column's rows --
   [below](#keyboard-walk-through-the-send-and-insert-rows). With no column focused, or no rows to
   enter, `keyPressed()` returns false so the app-wide Tab region cycle still gets the key.

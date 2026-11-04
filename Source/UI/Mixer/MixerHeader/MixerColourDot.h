@@ -1,17 +1,18 @@
 #pragma once
 
-#include "UI/Layout/SpaceClaimingButton.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // MixerColourDot.h (docs/mixer/panel.md#the-colour-dot): the coloured dot at the left of a mixer column's header.
-// A real juce::Button, so it is a Tab stop that takes Return and Space, carries a screen-reader name and a tooltip,
-// and draws the shared focus ring; clicking it asks the owner to open the colour picker. A press that turns into a
+// A real juce::Button, so it is a Tab stop that takes Return, carries a screen-reader name and a tooltip, and draws
+// the shared focus ring; clicking it asks the owner to open the colour picker. It is the one mixer button that leaves
+// Space alone: a click on a strip often lands on the dot, and Space there should still play (the colour key, C, and
+// Return open the picker from the keyboard). A press that turns into a
 // drag belongs to the header (the column is reordered by its header), so the dot forwards those events instead of
 // treating them as a click.
 namespace synth::ui {
 
-class MixerColourDot : public SpaceClaimingButton<juce::Button> {
+class MixerColourDot : public juce::Button {
 public:
     MixerColourDot();
 

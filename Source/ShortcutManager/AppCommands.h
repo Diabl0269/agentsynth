@@ -160,7 +160,9 @@ enum CommandIDs {
     // Opens the transport bar's song key picker.
     setSongKey,
     // Opens the community Discord page (branding::kDiscordUrl) in the default browser. Menu-only.
-    joinDiscord
+    joinDiscord,
+    // Opens the Timeline if needed and puts its top bar ring on the transport's Play button.
+    focusTransportBar
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

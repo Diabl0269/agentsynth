@@ -284,6 +284,27 @@ void MixerPanelComponent::reconcileRowFocus() {
 void MixerPanelComponent::focusLost(FocusChangeType) {
     topBarRing_.leave();
     exitRows();
+    noteKeyboardMoved();
+}
+
+void MixerPanelComponent::focusGained(FocusChangeType) { noteKeyboardMoved(); }
+
+// A click inside a column can land the keyboard on a child (a viewport); only the subtree callback sees it leave.
+void MixerPanelComponent::focusOfChildComponentChanged(FocusChangeType) { noteKeyboardMoved(); }
+
+// The ring leaves with the keyboard when another control takes it (a click on the canvas). It stays while the panel or
+// a child holds it (the rename editor, the colour dot), while a pop-up window (a menu) does, and when the app goes to
+// the background (nothing holds it).
+void MixerPanelComponent::noteKeyboardMoved() {
+    const auto* now = juce::Component::getCurrentlyFocusedComponent();
+    const auto* peer = now != nullptr ? now->getPeer() : nullptr;
+    const bool popup =
+        peer != nullptr && peer != getPeer() && (peer->getStyleFlags() & juce::ComponentPeer::windowIsTemporary) != 0;
+    const bool away = now != nullptr && now != this && !isParentOf(now) && !popup;
+    if (away == keyboardAway_)
+        return;
+    keyboardAway_ = away;
+    syncFocusVisuals();
 }
 
 // Only the focused column's lists carry a focused row; every other list is cleared.

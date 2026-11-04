@@ -484,12 +484,14 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
             onToggleSelectionRequested();
         return true;
     }
-    if (key.isKeyCode(juce::KeyPress::upKey)) {
+    // A Cmd, Ctrl or Alt arrow is another action's chord (Focus Transport Bar is Cmd+Shift+Up), so it bubbles on.
+    const bool plainArrow = !mods.isCommandDown() && !mods.isAltDown() && !mods.isCtrlDown();
+    if (plainArrow && key.isKeyCode(juce::KeyPress::upKey)) {
         if (onFocusMoveRequested)
             onFocusMoveRequested(-1);
         return true;
     }
-    if (key.isKeyCode(juce::KeyPress::downKey)) {
+    if (plainArrow && key.isKeyCode(juce::KeyPress::downKey)) {
         if (onFocusMoveRequested)
             onFocusMoveRequested(1);
         return true;

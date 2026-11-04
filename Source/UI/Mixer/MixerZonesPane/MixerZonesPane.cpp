@@ -157,6 +157,7 @@ void MixerZonesPane::rebuildList() {
         it = findChannel(it->first) == nullptr ? rows_.erase(it) : std::next(it);
     for (const auto& channel : channels_) {
         auto& row = rowFor(channel);
+        row.setHideShortcutText(hideKeyText_);
         row.setChannel(channel);
         row.setHighlightQuery(filter_.getText().trim());
         const bool listed = std::any_of(items_.begin(), items_.end(), [&](const Item& item) {

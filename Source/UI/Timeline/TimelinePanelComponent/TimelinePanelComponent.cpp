@@ -58,6 +58,8 @@ TimelinePanelComponent::TimelinePanelComponent()
 
     addAndMakeVisible(addTrackButton_);
     setComponentID("timelinePanel");
+    topBarRingProbe_ = makeKeyRingProbe(*topBarKeys_, "timelineTopBarRing");
+    addChildComponent(*topBarRingProbe_);
     addTrackButton_.setComponentID("timelineAddTrackButton");
     addTrackButton_.setIcon(synth::theme::Icon::ToolbarAddTrack, ToolbarGroup::Edit);
     // Tooltip text (it names the shortcut) is set by refreshShortcutTooltips() below.

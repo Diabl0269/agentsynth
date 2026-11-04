@@ -11,6 +11,7 @@
 #include "UI/DrumMachine/DrumMachineHost.h"
 
 #include "AppUndoManager.h"
+#include "UI/Layout/KeyRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cstdint>
 #include <map>
@@ -731,6 +732,9 @@ bool TimelinePanelComponent::handleAddTrackButtonKey(const juce::KeyPress& key) 
             addTrackFocusRecorded_ = false;
         else
             grabKeyboardFocus();
+        // The panel root alone shows no ring, so Up there looked like it went nowhere. Put the ring on
+        // the top bar at once; the root keeps focus, as after Up on the root itself.
+        topBarKeys_->enter();
         return true;
     }
     focusedTrackIndex_ = count - 1;
