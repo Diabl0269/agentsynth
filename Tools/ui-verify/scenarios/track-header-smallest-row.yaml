@@ -7,6 +7,7 @@
 #   3. At the smallest row the voice toggle, channel chip and show button stay inside the header (they shrink to
 #      the 9 px the bottom row has left) instead of running out of it.
 record: true
+save_project: track-header-smallest-row
 steps:
   - click: {id: New empty project}
   - wait: {}

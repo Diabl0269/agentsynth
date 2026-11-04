@@ -10,6 +10,7 @@
 # The toggle is one icon button: its state follows the graph in both directions.
 # Not asserted: the extra Track In cable some Poly flips leave behind (known and open).
 record: true
+save_project: poly-switch-chain
 steps:
   - click: {id: New empty project}                           # the welcome screen
   - wait: {}

@@ -8,6 +8,7 @@
 #      button each already have room (no waiting). Animations are on, so a late fade would show.
 # Every expect below waits at most 1 ms, so a fade that lands later fails it.
 record: true
+save_project: new-track-header-complete-at-once
 motion: true
 steps:
   - click: {id: New empty project}
