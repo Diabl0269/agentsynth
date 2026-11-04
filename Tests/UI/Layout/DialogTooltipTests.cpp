@@ -17,6 +17,14 @@ namespace dt = synth::ui::dialog_tooltip;
 
 namespace {
 
+// juce gives no hover tip outside the foreground app, and a CI test process (Windows runner, headless Linux) never is.
+// A hidden automation process counts as foreground, so this lets the real tip path run on every platform.
+struct TipsCountAsForeground {
+    TipsCountAsForeground() { juce::ComponentPeer::hideWindowsForAutomation = true; }
+    ~TipsCountAsForeground() { juce::ComponentPeer::hideWindowsForAutomation = previous; }
+    const bool previous = juce::ComponentPeer::hideWindowsForAutomation;
+};
+
 class DialogTooltip : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -63,6 +71,7 @@ TEST_F(DialogTooltip, ALaunchedDialogHostsExactlyOneTooltipWindowThatReturnsTheT
     auto* tip = dt::tooltipOf(*host.dialog);
     ASSERT_NE(tip, nullptr);
     // The button lives in the dialog's content, so the dialog's own tooltip window serves it.
+    TipsCountAsForeground foreground;
     EXPECT_EQ(tip->getTipFor(*host.dialog->getContentComponent()->getChildComponent(0)), "Hover tip");
 }
 
@@ -80,6 +89,7 @@ TEST_F(DialogTooltip, TheTooltipWindowReadsShowInfoTooltipsFromTheAppProperties)
         ASSERT_NE(host.dialog, nullptr);
         auto* tip = dt::tooltipOf(*host.dialog);
         ASSERT_NE(tip, nullptr);
+        TipsCountAsForeground foreground;
         EXPECT_EQ(tip->getTipFor(host.button), "") << "an info tip is hidden while the preference is off";
         synth::ui::markHelperTooltip(host.button);
         EXPECT_EQ(tip->getTipFor(host.button), "Hover tip") << "a helper tip still shows";
