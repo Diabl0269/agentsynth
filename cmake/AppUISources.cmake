@@ -262,9 +262,6 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
     Source/UI/Layout/ProgressStrip.cpp
     Source/UI/Layout/ProgressStrip.h
-    Source/UI/Layout/AppTooltipWindow.h
-    Source/UI/Layout/AppTooltipWindow.cpp
-    Source/UI/Layout/HelperTooltip.h
     Source/UI/Layout/CalloutReveal.h
     Source/UI/Layout/CalloutReveal.cpp
     Source/UI/Layout/CardCallOut.cpp

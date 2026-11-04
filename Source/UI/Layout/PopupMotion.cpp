@@ -1,6 +1,7 @@
 #include "UI/Layout/PopupMotion.h"
 
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/DialogTooltip.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -82,6 +83,7 @@ PopupMotion::launchDialog(juce::DialogWindow::LaunchOptions& options,
     if (dialog != nullptr) {
         attach(*dialog, makeStyle(*dialog));
         new DialogCloseKeys(*dialog); // owns itself: deleted with the window
+        dialog_tooltip::attach(*dialog);
     }
     return dialog;
 }

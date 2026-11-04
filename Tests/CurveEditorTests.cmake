@@ -15,6 +15,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/MenuFieldSpaceTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/SelectFocusRingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ShortcutRelayTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DialogTooltipTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/CardCallOutRelayTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragSurfaceRegistryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragCancelTests.cpp

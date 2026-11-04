@@ -8,6 +8,7 @@
 #include "Timeline/AssetManager.h"
 #include "UI/Graph/CardBody/ModuleCardLayoutBinding.h"
 #include "UI/Graph/ProjectLoad/ProjectLoadPipeline.h"
+#include "UI/Layout/DialogTooltip.h"
 #include "UI/Layout/TextFieldKeys.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
@@ -210,6 +211,7 @@ void MainComponent::setControllerProfileTestDirectory(const juce::File& dir) {
 void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry) {
     setOpaque(true); // paint() fills every pixel with the theme's page colour; nothing behind it may show through
     synth::ui::TextFieldKeys::install(); // Cmd+Backspace clears to line start in every text field
+    synth::ui::dialog_tooltip::setAppProperties(&appProperties); // every dialog's tooltip window reads the preference
     // Overlay the meter-colours override (if any) onto the AppLookAndFeel's already- theme-derived
     // cache — every ctor above already ran lookAndFeel->applyTheme() before calling this, so the
     // theme-default stops are in place; this only pins a user override on top, before the first
@@ -270,6 +272,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 }
 
 MainComponent::~MainComponent() {
+    if (synth::ui::dialog_tooltip::appProperties() == &appProperties)
+        synth::ui::dialog_tooltip::setAppProperties(nullptr);
     audioEngine.getTransport().onTimeSignatureChanged = nullptr;
     // Send every open handshake's `close` bytes FIRST, while remoteFeedbackOutputs_ (the sink) and
     // every MIDI output device are still fully alive -- "the app lets go of the controller" is the
