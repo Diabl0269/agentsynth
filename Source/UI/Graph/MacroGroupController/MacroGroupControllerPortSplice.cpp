@@ -655,29 +655,71 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
     return node->nodeID;
 }
 
-// A source gets one output per macro: the drag-created leg source -> outlet is plain and direct, so an outlet that
-// already has a connection from this source's jack is the one a second cable from it should leave through.
-juce::AudioProcessorGraph::NodeID MacroGroupController::existingOutletFedBy(const juce::String& macroId,
-                                                                            juce::AudioProcessorGraph::NodeID sourceId,
-                                                                            int visibleJack, bool isMidi) const {
+// A source gets one output per macro (and a destination one input): the drag-created leg other -> outlet (or inlet ->
+// other) is plain and direct, so a port that already has a connection to this jack is the one a second cable should
+// reuse. `otherOutside` flips the direction for a jack in the macro's parent (an input port is fed by it, an output
+// port feeds it).
+juce::AudioProcessorGraph::NodeID MacroGroupController::existingPortLinkedTo(const juce::String& macroId,
+                                                                             bool portIsInput,
+                                                                             juce::AudioProcessorGraph::NodeID otherId,
+                                                                             int visibleJack, bool isMidi,
+                                                                             bool otherOutside) const {
     const auto* macro = host_.getMacros().find(macroId);
     auto& graph = host_.graph();
-    auto* sourceNode = graph.getNodeForId(sourceId);
-    if (macro == nullptr || sourceNode == nullptr)
+    auto* otherNode = graph.getNodeForId(otherId);
+    if (macro == nullptr || otherNode == nullptr)
         return {};
-    auto* sourceMb = dynamic_cast<ModuleBase*>(sourceNode->getProcessor());
+    auto* otherMb = dynamic_cast<ModuleBase*>(otherNode->getProcessor());
+    const bool portFeedsOther = portIsInput != otherOutside;
     for (const auto& port : macro->ports) {
-        if (port.isInput || (port.kind == synth::MacroPortKind::Midi) != isMidi)
+        if (port.isInput != portIsInput || (port.kind == synth::MacroPortKind::Midi) != isMidi)
             continue;
         const auto portId = resolveMemberNodeId(port.nodeUuid);
         if (portId.uid == 0)
             continue;
         for (const auto& c : graph.getConnections()) {
-            if (c.source.nodeID != sourceId || c.destination.nodeID != portId)
+            const auto& portEnd = portFeedsOther ? c.source : c.destination;
+            const auto& farEnd = portFeedsOther ? c.destination : c.source;
+            if (portEnd.nodeID != portId)
                 continue;
-            if (isMidi || sourceMb == nullptr ||
-                sourceMb->mapOutputChannel(c.source.channelIndex).visibleJackIndex == visibleJack)
+            int otherRaw = farEnd.channelIndex;
+            if (farEnd.nodeID != otherId) {
+                // A mod wire runs through its hidden attenuverter: port -> attenuverter -> jack.
+                auto* farNode = graph.getNodeForId(farEnd.nodeID);
+                if (farNode == nullptr || dynamic_cast<AttenuverterModule*>(farNode->getProcessor()) == nullptr)
+                    continue;
+                bool found = false;
+                for (const auto& c2 : graph.getConnections()) {
+                    const auto& nearEnd2 = portFeedsOther ? c2.source : c2.destination;
+                    const auto& farEnd2 = portFeedsOther ? c2.destination : c2.source;
+                    if (nearEnd2.nodeID == farEnd.nodeID && farEnd2.nodeID == otherId) {
+                        otherRaw = farEnd2.channelIndex;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                    continue;
+            }
+            if (isMidi)
                 return portId;
+            // Only the port's first jack counts: a chain continues from jack 0, so a Stereo port's Right jack (raw
+            // kRightBase) is not "the port that carries this jack".
+            auto* portNode = graph.getNodeForId(portId);
+            auto* portMb = portNode != nullptr ? dynamic_cast<ModuleBase*>(portNode->getProcessor()) : nullptr;
+            if (portMb != nullptr) {
+                const auto portLogical = portFeedsOther ? portMb->mapOutputChannel(portEnd.channelIndex)
+                                                        : portMb->mapInputChannel(portEnd.channelIndex);
+                if (portLogical.visibleJackIndex > 0)
+                    continue;
+            }
+            if (otherMb == nullptr)
+                return portId;
+            // The jack's own raw channels (a fan of voices counts), so a modulation jack whose wire lands off the
+            // plain raw==jack identity still matches.
+            for (const auto& t : otherMb->getJackTargets(visibleJack, /*isInput=*/portFeedsOther))
+                if (otherRaw >= t.rawHeadChannel && otherRaw < t.rawHeadChannel + t.voiceSpan * t.rawStride)
+                    return portId;
         }
     }
     return {};
@@ -716,7 +758,8 @@ bool MacroGroupController::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessor
         // Source side, innermost boundary first: member -> outlet -> the next boundary's outlet -> ...
         for (const auto& macroId : srcCrossings) {
             // A source already leaving this macro through an outlet reuses it: one output, many destinations.
-            const auto reused = existingOutletFedBy(macroId, effectiveSrc, effectiveSrcJack, isMidi);
+            const auto reused =
+                existingPortLinkedTo(macroId, /*portIsInput=*/false, effectiveSrc, effectiveSrcJack, isMidi);
             const auto portId = reused.uid != 0
                                     ? reused
                                     : mintMacroPortForAutoCreate(macroId, /*isInput=*/false, isMidi, srcId, srcJack);

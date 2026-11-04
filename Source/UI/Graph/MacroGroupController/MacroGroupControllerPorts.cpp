@@ -12,20 +12,20 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/AIStateMapper/GraphRebuildBatch.h"
 #include "AppUndoManager.h"
+#include "MacroGroupControllerInternal.h"
 #include "MacroNesting.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroOutletModule.h"
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
 
-namespace {
 // Mirrors GraphEditor::rightAudioLegOf + audioChannelReachableFromJack's rule (the Dual
 // I/O toggle's own "which raw channel is this peer's right leg, and can the user actually reach
 // it" lookup) without pulling in GraphEditor.h, which MacroGroupController deliberately never
 // includes (MacroGroupController.h's class comment: it reaches its host only through
 // GraphCanvasHost). A collapsed split-block peer's hidden kRightBase must not get a cable nobody
 // can unplug, exactly as it mustn't for an ordinary Dual I/O toggle.
-int reachablePeerRightAudioLeg(juce::AudioProcessor* proc, bool asInput) {
+int macro_ports::reachablePeerRightAudioLeg(juce::AudioProcessor* proc, bool asInput) {
     auto* peerMb = dynamic_cast<ModuleBase*>(proc);
     if (peerMb == nullptr) {
         // Graph I/O (Audio Input/Output) is a plain contiguous pair, same as rightAudioLegOf.
@@ -50,7 +50,6 @@ int reachablePeerRightAudioLeg(juce::AudioProcessor* proc, bool asInput) {
                     return leg;
     return -1; // reported but hidden behind a collapsed jack — not reachable
 }
-} // namespace
 
 void MacroGroupController::autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph::NodeID nodeId) {
     if (!host_.getAutoDeleteMacroPortsOnLastCableEnabled())
@@ -640,7 +639,7 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
                 // already exposes — the "no second visible jack" ruling
                 // completeStereoPairConnections applies for an ordinary Dual I/O toggle.
                 const bool peerIsInput = e.oldNodeIsSource;
-                const int peerLeg = reachablePeerRightAudioLeg(otherNode->getProcessor(), peerIsInput);
+                const int peerLeg = macro_ports::reachablePeerRightAudioLeg(otherNode->getProcessor(), peerIsInput);
                 const int peerChannel = peerLeg >= 0 ? peerLeg : e.otherChannel;
                 if (e.oldNodeIsSource)
                     g.addConnection({{node->nodeID, kRightBase}, {e.otherId, peerChannel}},
@@ -661,118 +660,6 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
 
     host_.requestRepaint();
     return newUuid;
-}
-
-void MacroGroupController::createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput,
-                                                           bool isMidi, juce::AudioProcessorGraph::NodeID otherNodeId,
-                                                           int otherVisibleJack) {
-    auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr)
-        return;
-
-    const auto kind = isMidi ? synth::MacroPortKind::Midi : synth::MacroPortKind::AudioCV;
-    const juce::String typeName = macroPortNodeTypeName(newPortIsInput, kind);
-    auto newProcessor = synth::AIStateMapper::createModule(typeName);
-    if (!newProcessor)
-        return;
-    if (!isMidi) {
-        // Infer the shape from the dragged cable's own jack fan (same getJackTargets read
-        // resolvePolyLink already does) instead of always Mono. newPortIsInput true means the drag
-        // started at an OUTPUT (this new port receives it), so the OTHER module's relevant side is
-        // its output; false is the mirror.
-        auto& graphForInference = host_.graph();
-        auto* otherNodeForInference = graphForInference.getNodeForId(otherNodeId);
-        auto* otherMbForInference = otherNodeForInference != nullptr
-                                        ? dynamic_cast<ModuleBase*>(otherNodeForInference->getProcessor())
-                                        : nullptr;
-        const auto [inferredShape, inferredVoices] =
-            inferPortShapeFromCableFan(otherMbForInference, otherVisibleJack, /*otherAsInput=*/!newPortIsInput);
-        if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
-            inlet->setPortShape(inferredShape, inferredVoices);
-        else if (auto* outlet = dynamic_cast<MacroOutletModule*>(newProcessor.get()))
-            outlet->setPortShape(inferredShape, inferredVoices);
-    }
-
-    // See addMacroPort's identical comment: dockMacroPortWidgets() (run from doCreate()'s own
-    // updateComponents() below) places the widget for real.
-    const auto placed = macro->bounds.getTopLeft();
-
-    const juce::String name = defaultMacroPortName(newPortIsInput, kind);
-    const int order = nextMacroPortOrder(*macro, newPortIsInput);
-
-    // The new port's outward side lives in this macro's parent, so a cable to a node nested in some OTHER macro
-    // crosses that node's own boundaries first: one port per boundary, innermost first, chained to the new port.
-    // Every macro in this macro's own chain is shared ground, not a crossing.
-    const auto& macros = host_.getMacros();
-    auto sharedChain = macros.ancestorChain(macroId);
-    sharedChain.insert(sharedChain.begin(), macroId);
-    const auto otherCrossings = macro_nesting::boundariesCrossed(macros, nodeUuidFor(otherNodeId), sharedChain);
-
-    auto& graph = host_.graph();
-    auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
-    auto doCreate = [this, macroId, proc, placed, newPortIsInput, kind, name, order, isMidi, otherNodeId,
-                     otherVisibleJack, otherCrossings] {
-        auto& g = host_.graph();
-        const synth::GraphRebuildScope rebuildScope{g};
-        if (!*proc)
-            return;
-        auto node = g.addNode(std::move(*proc), {}, juce::AudioProcessorGraph::UpdateKind::none);
-        if (!node)
-            return;
-        node->properties.set("x", placed.x);
-        node->properties.set("y", placed.y);
-        const juce::String uuid = synth::AIStateMapper::ensureNodeUuid(node);
-
-        auto* m = host_.getMacros().find(macroId);
-        if (m == nullptr)
-            return;
-        m->members.push_back(uuid);
-        synth::MacroPort port;
-        port.nodeUuid = uuid;
-        port.isInput = newPortIsInput;
-        port.name = name;
-        port.order = order;
-        port.kind = kind;
-        m->ports.push_back(port);
-
-        // Wire the boundary through the SAME connectPorts a completed manual cable-drag uses.
-        // recordUndo=false: already inside this method's own recordGraphAndMacroChange
-        // transaction. Deliberately does NOT also wire anything on the INTERIOR side.
-        if (g.getNodeForId(otherNodeId) != nullptr) {
-            auto effectiveOther = otherNodeId;
-            int effectiveJack = otherVisibleJack;
-            for (const auto& crossedId : otherCrossings) {
-                // The other end exits its macro through an outlet when it feeds the new port, enters through an
-                // inlet when the new port feeds it.
-                const auto chainPort =
-                    mintMacroPortForAutoCreate(crossedId, !newPortIsInput, isMidi, otherNodeId, otherVisibleJack);
-                if (chainPort.uid == 0)
-                    continue;
-                if (newPortIsInput)
-                    host_.connectPorts(effectiveOther, effectiveJack, chainPort, 0, isMidi, /*recordUndo=*/false);
-                else
-                    host_.connectPorts(chainPort, 0, effectiveOther, effectiveJack, isMidi, /*recordUndo=*/false);
-                effectiveOther = chainPort;
-                effectiveJack = 0;
-            }
-            if (newPortIsInput)
-                host_.connectPorts(effectiveOther, effectiveJack, node->nodeID, 0, isMidi, /*recordUndo=*/false);
-            else
-                host_.connectPorts(node->nodeID, 0, effectiveOther, effectiveJack, isMidi, /*recordUndo=*/false);
-        }
-
-        host_.updateComponents();
-        makeRoomFor("m:" + macroId);
-        for (const auto& crossedId : otherCrossings)
-            makeRoomFor("m:" + crossedId);
-    };
-
-    if (host_.undo())
-        host_.undo()->recordGraphAndMacroChange(graph, host_.getMacros(), doCreate);
-    else
-        doCreate();
-
-    host_.requestRepaint();
 }
 
 std::pair<MacroPortShape, int>

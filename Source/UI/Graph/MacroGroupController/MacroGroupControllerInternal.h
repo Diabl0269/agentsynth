@@ -28,3 +28,11 @@ inline const synth::Macro* targetFor(const synth::MacroSet& macros, const juce::
 }
 
 } // namespace macro_toggle
+
+namespace macro_ports {
+
+/** The raw channel of a peer's Right audio leg when a cable can actually be unplugged from it, else -1: GraphEditor's
+ *  rightAudioLegOf rule without pulling in GraphEditor.h. */
+int reachablePeerRightAudioLeg(juce::AudioProcessor* proc, bool asInput);
+
+} // namespace macro_ports

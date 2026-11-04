@@ -465,6 +465,13 @@ public:
     void createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
                                          juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack);
 
+    /** A cable was dropped on an EXISTING port's jack and that port has nothing behind it yet (a port made from a
+     *  dropped cable wires no interior): joins the port to the macro's own module it was made for, the first ordinary
+     *  member with a free matching jack (the head of the chain for an input, the tail for an output). A two-jack Stereo
+     *  port gets both legs. Does nothing when the port already has an inner cable or no member fits. Runs inside the
+     *  caller's undo step (docs/macros/ports.md#how-a-port-is-drawn). */
+    bool connectEmptyPortInterior(const juce::String& macroId, juce::AudioProcessorGraph::NodeID portNodeId);
+
     // ---- Auto-create-ports-on-group (docs/macros/auto-ports.md#auto-creating-ports-when-grouping) ----
 
     /** The crossing plan a would-be macro's members (by NodeID) would need on creation. */
@@ -633,11 +640,13 @@ private:
     juce::AudioProcessorGraph::NodeID mintMacroPortForAutoCreate(const juce::String& macroId, bool isInput, bool isMidi,
                                                                  juce::AudioProcessorGraph::NodeID internalNodeId,
                                                                  int internalVisibleJack);
-    /** The macro's existing outlet already fed by jack `visibleJack` of `sourceId` (same kind), or an invalid NodeID.
-     *  A second cable from the same source reuses it instead of minting another output. */
-    juce::AudioProcessorGraph::NodeID existingOutletFedBy(const juce::String& macroId,
-                                                          juce::AudioProcessorGraph::NodeID sourceId, int visibleJack,
-                                                          bool isMidi) const;
+    /** The macro's existing port (an input when `portIsInput`, else an output; same kind) already cabled to jack
+     *  `visibleJack` of `otherId`, or an invalid NodeID. An output port is fed by `otherId`, an input port feeds it
+     * (reversed when `otherOutside`). A second cable from/to the same jack reuses the port instead of minting another
+     * one. */
+    juce::AudioProcessorGraph::NodeID existingPortLinkedTo(const juce::String& macroId, bool portIsInput,
+                                                           juce::AudioProcessorGraph::NodeID otherId, int visibleJack,
+                                                           bool isMidi, bool otherOutside = false) const;
     /** Infers a macro port's shape (Mono/StereoCollapsed/Poly) from ONE dragged cable's
      *  own jack fan, instead of always Mono. Returns {shape, voiceCount}. See the .cpp. */
     static std::pair<MacroPortShape, int> inferPortShapeFromCableFan(ModuleBase* otherMb, int otherVisibleJack,
