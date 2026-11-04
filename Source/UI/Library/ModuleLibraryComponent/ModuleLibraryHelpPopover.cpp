@@ -1,6 +1,7 @@
 // ModuleLibraryHelpPopover.cpp -- the "?" help popover: pin/float vs CallOutBox hosting,
 // its floating position/clamping, and the button bounds paint() and the mouse handlers share.
 #include "ModuleLibraryComponent.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/PopupMotion.h"
 
 juce::Rectangle<int> ModuleLibraryComponent::getHelpButtonBounds() noexcept {
@@ -39,6 +40,7 @@ void ModuleLibraryComponent::launchHelpCallOutBox() {
     helpCallOutBox_ =
         std::make_unique<juce::CallOutBox>(*helpPopup_, localAreaToGlobal(getHelpButtonBounds()), nullptr);
     helpCallOutBox_->setVisible(true);
+    synth::ui::relayAppShortcutsFromCallOut(*helpCallOutBox_, this);
     // deleteWhenDismissed = false: an outside click / Esc ends modal state and hides the box
     // (CallOutBox::inputAttemptWhenModal()) but never deletes it or its content, which is what
     // lets a later pin click safely reparent *helpPopup_ instead of losing it.

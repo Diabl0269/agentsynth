@@ -3,6 +3,7 @@
 // reuse the "+ Add automation..." picker, which already leaves out every parameter that has a lane, so a lane can
 // never end up automating the same parameter twice. Every edit is ONE undo step: the host's (which carries the lane's
 // modulators along) or, without one, AutomationLaneActions'.
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
@@ -60,8 +61,7 @@ void AutomationLaneHeaderComponent::openParameterPicker(bool duplicate) {
         hook(std::move(picker));
         return;
     }
-    juce::CallOutBox::launchAsynchronously(std::move(picker), getScreenBounds().withWidth(kIndent + kStripeWidth + 120),
-                                           nullptr);
+    synth::ui::launchCardCallOut(std::move(picker), getScreenBounds().withWidth(kIndent + kStripeWidth + 120), this);
 }
 
 } // namespace synth::ui

@@ -1,4 +1,5 @@
 #include "DrawShapeFlyout.h"
+#include "UI/Layout/CardCallOut.h"
 
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
@@ -200,8 +201,11 @@ public:
 } // namespace
 
 DrawShapeCallOutBox& launchDrawShapeCallOut(std::unique_ptr<DrawShapeFlyout> flyout, juce::Rectangle<int> area,
-                                            std::function<bool()> holdGestureDown) {
-    return (new DrawShapeCallOutLauncher(std::move(flyout), area, std::move(holdGestureDown)))->callout;
+                                            std::function<bool()> holdGestureDown, juce::Component* anchor) {
+    auto& box = (new DrawShapeCallOutLauncher(std::move(flyout), area, std::move(holdGestureDown)))->callout;
+    if (anchor != nullptr)
+        relayAppShortcutsFromCallOut(box, anchor);
+    return box;
 }
 
 namespace test_hooks {

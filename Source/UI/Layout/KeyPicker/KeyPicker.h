@@ -26,6 +26,7 @@ class KeyPickerStateProbe;
  */
 class KeyPicker
     : public juce::Component
+    , public AppUndoAware
     , private juce::Timer {
 public:
     struct Options {
@@ -75,6 +76,9 @@ public:
 
     /** Closes the launching CallOutBox, if any. */
     void dismiss();
+
+    /** The ticked key and the Fit enabled state were read when it opened: it closes without picking. */
+    void appUndoneOrRedone() override { dismiss(); }
 
     // ---- Test seams ----
     void setQuery(const juce::String& text);

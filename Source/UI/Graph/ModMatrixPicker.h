@@ -28,7 +28,9 @@ namespace synth::ui {
  *
  *  Styling is self-contained (opaque themed panel, explicit colours), like MidiDestinationPicker: a
  *  parentless CallOutBox is a new top-level window that does not inherit the app's LookAndFeel. */
-class ModMatrixPicker : public juce::Component {
+class ModMatrixPicker
+    : public juce::Component
+    , public AppUndoAware {
 public:
     struct Item {
         int id = 0;
@@ -84,6 +86,9 @@ public:
 
     /** Closes the launching CallOutBox, if any. Called on a pick and on Escape. */
     void dismiss();
+
+    /** Its rows were listed when it opened and an undo can remove what they name: it closes without picking. */
+    void appUndoneOrRedone() override { dismiss(); }
 
     // ---- Test seams ----
     void setSearchTextForTest(const juce::String& text);

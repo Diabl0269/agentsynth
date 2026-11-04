@@ -1,6 +1,7 @@
 #include "UI/Timeline/SongKeyField.h"
 #include "Music/SongKey.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
 #include <algorithm>
@@ -102,7 +103,7 @@ void SongKeyField::openPicker() {
     if (pickerLauncher)
         pickerLauncher(std::move(picker), area);
     else
-        juce::CallOutBox::launchAsynchronously(std::move(picker), area, nullptr);
+        synth::ui::launchCardCallOut(std::move(picker), area, this);
 }
 
 // The key is set on the transport's document state; the transport poll in MainComponent records it as one undo step,

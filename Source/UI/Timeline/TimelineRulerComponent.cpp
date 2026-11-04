@@ -1,6 +1,7 @@
 #include "TimelineRulerComponent.h"
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -342,7 +343,7 @@ void TimelineRulerComponent::openMarkerContextMenu(synth::MarkerId id) {
         for (const auto& flag : flags)
             if (flag.id == id)
                 anchor = self->localAreaToGlobal(flag.bounds.toNearestInt());
-        juce::CallOutBox::launchAsynchronously(std::move(popup), anchor, nullptr);
+        synth::ui::launchCardCallOut(std::move(popup), anchor, self);
     });
     menu.addSeparator();
     menu.addItem("Delete", [safeThis, id] {

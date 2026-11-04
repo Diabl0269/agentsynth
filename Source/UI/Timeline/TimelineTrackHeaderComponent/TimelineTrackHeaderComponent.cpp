@@ -2,6 +2,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "TimelineTrackHeaderInternal.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
@@ -62,7 +63,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
         auto popup = buildColourPicker();
         if (popup == nullptr)
             return; // the track is gone — nothing to pick a colour for
-        juce::CallOutBox::launchAsynchronously(std::move(popup), colourSwatch_.getScreenBounds(), nullptr);
+        synth::ui::launchCardCallOut(std::move(popup), colourSwatch_.getScreenBounds(), &colourSwatch_);
     };
 
     addAndMakeVisible(nameLabel_);
@@ -252,7 +253,7 @@ void TimelineTrackHeaderComponent::openMidiDestinationsPicker() {
     auto popup = buildMidiDestinationPicker();
     if (popup == nullptr)
         return; // no host — nothing to build a picker against
-    juce::CallOutBox::launchAsynchronously(std::move(popup), bindingChip_.getScreenBounds(), nullptr);
+    synth::ui::launchCardCallOut(std::move(popup), bindingChip_.getScreenBounds(), &bindingChip_, true);
 }
 
 //==============================================================================

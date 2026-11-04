@@ -71,9 +71,10 @@ private:
 };
 
 /** Opens `flyout` modally in a DrawShapeCallOutBox pointing at `area` (screen), the way juce::CallOutBox's own
- *  launchAsynchronously does; the box and the content go when the modal state ends. */
+ *  launchAsynchronously does; the box and the content go when the modal state ends. With an `anchor` (a component of
+ * the main window) Cmd+Z, Cmd+Shift+Z and Space reach the app from the box (see launchCardCallOut). */
 DrawShapeCallOutBox& launchDrawShapeCallOut(std::unique_ptr<DrawShapeFlyout> flyout, juce::Rectangle<int> area,
-                                            std::function<bool()> holdGestureDown);
+                                            std::function<bool()> holdGestureDown, juce::Component* anchor = nullptr);
 
 namespace test_hooks {
 /** When set, opening the pen's flyout hands the content here instead of launching a CallOutBox (which cannot open

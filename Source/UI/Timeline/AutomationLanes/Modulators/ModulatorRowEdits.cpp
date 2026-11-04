@@ -1,6 +1,7 @@
 // Concern: the modulator row's edits -- every control writes its parameter through the host's undoable
 // parameter path -- the live-value refresh that keeps the controls in step with the canvas card, and the
 // "..." menu (Show on canvas, Change source..., Remove modulator).
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
 #include "UI/Layout/DragCursor.h"
@@ -149,7 +150,7 @@ void ModulatorRow::openChangeSourcePicker() {
         hook(std::move(picker));
         return;
     }
-    juce::CallOutBox::launchAsynchronously(std::move(picker), getScreenBounds(), nullptr);
+    synth::ui::launchCardCallOut(std::move(picker), getScreenBounds(), this);
 }
 
 void ModulatorRow::showMenuAt(const juce::PopupMenu::Options& options) {
