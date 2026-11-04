@@ -112,6 +112,8 @@ not hide anything (the flag is only set on macOS) and build and run as before.
 The `Tests` binary does the same right after JUCE starts (`Tests/TestMain.cpp`); `AGENTSYNTH_TESTS_VISIBLE=1` skips it.
 `Tools/ui-verify` is hidden by default and takes `--visible`.
 
+An automation run is also silent: `muteAlertSounds()` (called by `hideAutomationWindows()`) makes `AppLookAndFeel::playAlertSound()` a no-op, and the `Tests` binary installs a silent default look and feel before every test (`Tests/SilentLookAndFeel.h`), so a test that presses outside a modal prompt does not play the system beep. the `AlertSoundSilence` tests in `PopupDismissPathsTests.cpp` check both.
+
 ## Running in parallel
 
 Any number of instances can run at once (several worktrees, several agents, plus your own app). Per instance:

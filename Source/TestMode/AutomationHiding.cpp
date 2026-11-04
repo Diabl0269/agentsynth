@@ -11,7 +11,19 @@ void applyHiddenProcessSettingsMac(); // AutomationHidingMac.mm
 
 namespace synth::testmode {
 
+namespace {
+bool& alertSoundsMutedFlag() {
+    static bool muted = false;
+    return muted;
+}
+} // namespace
+
+void muteAlertSounds() { alertSoundsMutedFlag() = true; }
+
+bool alertSoundsAreMuted() { return alertSoundsMutedFlag(); }
+
 void hideAutomationWindows() {
+    muteAlertSounds();
     // Only macOS hides anything; Windows and Linux windows behave as in a normal run (docs/development/test-mode.md).
 #if JUCE_MAC
     juce::ComponentPeer::hideWindowsForAutomation = true;
