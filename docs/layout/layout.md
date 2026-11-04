@@ -234,6 +234,9 @@ pure geometry is `synth::insert_gap` (`Source/UI/Layout/InsertGap/InsertGapPlan.
   which dodges as before. In empty space the ghost has to touch a card (12 px clearance); beside it is a row, above or
   below it a column. The leading half of a card means "in front of it", the trailing half "in front of the next card
   in its row (column)". Past the last card of a row nothing needs to move, so there is no gap and the drop is ordinary.
+  The module lands level with that anchor, so an anchor the module would not overlap across the axis (row: vertically,
+  column: horizontally) where it is aimed is no gap either: just below a wide open macro, the next card in the macro's
+  "column" can sit far to one side, and the module would land there wherever it was released.
   A dock card or a macro port is never an anchor, and a snippet, a group drag, a dock card, a port widget or a sound
   from the Sounds view never opens a gap (a sound may be meant for a card, a Sampler or a Drum Kit pad, so no card may
   slide away from under the pointer; dropped on the canvas it lands in the nearest free slot). A card dragged from the canvas opens none while its centre is still over the place it was picked up

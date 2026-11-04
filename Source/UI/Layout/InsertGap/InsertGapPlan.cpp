@@ -155,7 +155,8 @@ std::optional<juce::String> nextAfter(const std::vector<LayoutUnit>& units, cons
 // Inside a card, only its edge bands count (the nearer edge, in pixels, picks the axis): deeper in is an ordinary drop
 // onto the card. In empty space the ghost has to touch a card; the nearest one decides: beside it is a row, above or
 // below it a column, and off a corner the farther offset wins. The leading half of the card means "in front of it",
-// the trailing half "in front of the next one".
+// the trailing half "in front of the next one". The card lands level with that anchor, so an anchor the aimed card
+// does not overlap across the axis is no gap.
 std::optional<Target> pickTarget(const std::vector<LayoutUnit>& units, juce::Point<int> pointer,
                                  juce::Point<int> size) {
     const LayoutUnit* ref = unitUnder(units, pointer);
@@ -186,6 +187,11 @@ std::optional<Target> pickTarget(const std::vector<LayoutUnit>& units, juce::Poi
         return std::nullopt;
     const auto* anchorUnit = findUnit(units, *anchor);
     if (anchorUnit == nullptr || anchorUnit->pinned)
+        return std::nullopt;
+    // The card lands level with the anchor (planBefore), so the anchor has to be across from where the card is aimed:
+    // the next unit after a wide open macro may sit far to one side, and the card would land there, not where dropped.
+    const Rect aimed(pointer.x - size.x / 2, pointer.y - size.y / 2, size.x, size.y);
+    if (!overlapsAcross(aimed, anchorUnit->rect, axis))
         return std::nullopt;
     return Target{axis, *anchor};
 }
