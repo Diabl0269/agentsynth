@@ -292,6 +292,7 @@ step "Guards: UTF-8 literals, file sizes, cache budget, function sizes, header c
 fast_skip "the guards" || run_parallel "$CORES" \
     "utf8-literal-check::bash scripts/utf8-literal-check.sh" \
     "check-file-sizes::bash scripts/check-file-sizes.sh" \
+    "check-unity-clashes::bash scripts/check-unity-clashes.sh" \
     "ci-cache-budget::bash scripts/ci-cache-budget.sh" \
     "check-function-sizes::bash scripts/check-function-sizes.sh" \
     "check-header-comments::bash scripts/check-header-comments.sh" \

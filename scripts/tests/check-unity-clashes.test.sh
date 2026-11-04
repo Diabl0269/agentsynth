@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+#
+# Tests scripts/check-unity-clashes.sh on a small fixture tree: two files of one unity group that
+# declare the same anonymous-namespace name fail and are named, a file in SYNTH_UNITY_SKIP is
+# ignored, legal repeats (identical aliases, overloads, named-namespace names) pass, and the baseline
+# ratchets (never adds, stale entries fail, --update drops them).
+
+set -uo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+GUARD="$REPO_ROOT/scripts/check-unity-clashes.sh"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+failures=0
+check() { # check <name> <condition...>
+    local name="$1"
+    shift
+    if "$@"; then echo "ok: $name"; else echo "FAIL: $name"; failures=$((failures + 1)); fi
+}
+lacks() { ! grep -q "$1" <<<"$2"; } # lacks <pattern> <text>
+
+export UNITY_CLASHES_BASELINE="$TMP/baseline.txt"
+ROOT="$TMP/repo"
+mkdir -p "$ROOT/cmake" "$ROOT/Source/UI"
+guard() { bash "$GUARD" --root "$ROOT" "$@"; }
+
+cat >"$ROOT/CMakeLists.txt" <<'CMAKE'
+add_library(Core STATIC
+    Source/UI/A.cpp
+    Source/UI/B.cpp
+    Source/UI/Skipped.cpp
+    Source/UI/Ok.cpp
+    Source/UI/AddedLater.cpp
+)
+synth_enable_unity(Core)
+target_sources(Core PRIVATE Source/UI/Late.cpp)
+CMAKE
+printf 'set(AGENTSYNTH_UNITY_GROUP_SIZE 12 CACHE STRING "x")\n' >"$ROOT/cmake/Pch.cmake"
+printf 'set(SYNTH_UNITY_SKIP\n    Source/UI/Skipped.cpp\n)\n' >"$ROOT/cmake/UnityExclusions.cmake"
+
+printf 'namespace synth::ui {\nnamespace {\nconstexpr float kGlyphSize = 12.0f;\nstruct Cell { int x; };\n}\n}\n' >"$ROOT/Source/UI/A.cpp"
+printf 'namespace synth::ui {\nnamespace {\nconstexpr float kGlyphSize = 9.0f;\nstruct Cell { int y; };\n}\n}\n' >"$ROOT/Source/UI/B.cpp"
+printf 'namespace synth::ui {\nnamespace {\nconstexpr float kGlyphSize = 1.0f;\n}\n}\n' >"$ROOT/Source/UI/Skipped.cpp"
+# Legal repeats: an identical alias, an overload, a function-local name and a named-namespace name.
+printf 'namespace synth::ui {\nnamespace {\nusing Id = int;\nint twice(int v) { return v; }\n}\nconstexpr int kPublic = 1;\n}\n' >"$ROOT/Source/UI/Ok.cpp"
+printf 'namespace synth::ui {\nnamespace {\nusing Id = int;\nint twice(float v) { int kLocal = 0; return int(v) + kLocal; }\n}\nconstexpr int kPublic = 2;\n}\n' >"$ROOT/Source/UI/AddedLater.cpp"
+printf 'namespace {\nconstexpr float kGlyphSize = 1.0f;\n}\n' >"$ROOT/Source/UI/Late.cpp"
+
+out="$(guard 2>&1)"
+check "a clash fails" test $? -ne 0
+check "the failure names the constant" grep -q "synth::ui::(anon)::kGlyphSize" <<<"$out"
+check "the failure names both files" grep -q 'Source/UI/A.cpp and Source/UI/B.cpp' <<<"$out"
+check "the struct clash is found too" grep -q "synth::ui::(anon)::Cell" <<<"$out"
+check "an excluded file is not named" lacks Skipped.cpp "$out"
+check "a source added after synth_enable_unity is not named" lacks Late.cpp "$out"
+check "identical aliases, overloads and named-namespace names pass" lacks 'Ok.cpp\|AddedLater.cpp' "$out"
+check "--list prints the clashes" test "$(guard --list | wc -l | tr -d ' ')" = 2
+
+printf '%s\n' \
+    'synth::ui::(anon)::kGlyphSize | Source/UI/A.cpp | Source/UI/B.cpp | old' \
+    'synth::ui::(anon)::Cell | Source/UI/A.cpp | Source/UI/B.cpp | old' >"$TMP/baseline.txt"
+guard >/dev/null 2>&1
+check "baselined clashes pass" test $? -eq 0
+
+printf 'namespace synth::ui {\nnamespace {\nconstexpr float kOther = 9.0f;\n}\n}\n' >"$ROOT/Source/UI/B.cpp"
+printf 'namespace synth::ui {\nnamespace {\nconstexpr float kOther = 9.0f;\n}\n}\n' >"$ROOT/Source/UI/A.cpp"
+out="$(guard 2>&1)"
+check "a baseline entry that no longer clashes is stale and fails" grep -q 'stale unity-clash baseline entry' <<<"$out"
+check "a new clash is not covered by the old entries" grep -q "kOther" <<<"$out"
+guard --update >/dev/null 2>&1
+check "--update never adds a new clash (exits 1)" test $? -ne 0
+check "--update dropped the stale entries" lacks kGlyphSize "$(cat "$TMP/baseline.txt")"
+check "--update did not add the new clash" lacks kOther "$(cat "$TMP/baseline.txt")"
+
+[ "$failures" -eq 0 ] && echo "check-unity-clashes tests: all passed" || echo "check-unity-clashes tests: $failures failed"
+exit "$failures"

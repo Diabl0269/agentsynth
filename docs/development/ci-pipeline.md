@@ -212,6 +212,14 @@ rather than shifting every later one. About 2,230 compiles become about 680.
 
 A clash shows up as a redefinition or ambiguity error on Windows only: usually two files in a group with the
 same name in an anonymous namespace. Rename it, or add the file to `cmake/UnityExclusions.cmake` (203 files today).
+
+`scripts/check-unity-clashes.sh` finds these on any machine (pre-commit, `ci-local.sh`, the Lint job; tests in
+`scripts/tests/check-unity-clashes.test.sh`). It rebuilds the groups exactly as `synth_enable_unity` does (per target,
+folder, md5 of the path, `AGENTSYNTH_UNITY_GROUP_SIZE`, `SYNTH_UNITY_SKIP` left out; only sources added before the
+target's `synth_enable_unity` call), then scans each file for names declared in an anonymous namespace (variables,
+functions, types, enumerators, aliases) and prints each repeated name with both files. Identical `using` aliases and
+overloads are legal and pass. It is a text scan, so a clash it cannot see (macro-generated names) still shows on Windows.
+Existing clashes sit in `scripts/unity-clashes-baseline.txt`, a strict ratchet: never add an entry, rename instead.
 To try it on any machine: configure with `-DAGENTSYNTH_UNITY=ON` and build Core, AppUI and Tests.
 
 ## What did not work
