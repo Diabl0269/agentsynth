@@ -13,7 +13,6 @@ namespace {
 using Installer = synth::soundpacks::SoundPackInstaller;
 using State = Installer::State;
 
-constexpr float kGreyedAlpha = 0.55f;
 constexpr int kBarHeight = 3;
 
 bool isBusy(State state) {
@@ -206,8 +205,8 @@ void SoundBrowserComponent::paintPackRow(juce::Graphics& g, const Row& row, int 
                juce::Justification::centredRight);
     g.setColour(c.textPrimary.withAlpha(kGreyedAlpha));
     g.setFont(juce::Font(juce::FontOptions(14.0f)));
-    g.drawText(row.text, area.getX() + kSoundRowSideMargin, area.getY(),
-               juce::jmax(0, detailRight - detailWidth - 8 - kSoundRowSideMargin), area.getHeight(),
+    g.drawText(row.text, area.getX() + kSoundRowTextLeft, area.getY(),
+               juce::jmax(0, detailRight - detailWidth - 8 - kSoundRowTextLeft), area.getHeight(),
                juce::Justification::centredLeft, true);
     if (showButton) {
         const auto& metrics = synth::theme::themeOf(*this).metrics;

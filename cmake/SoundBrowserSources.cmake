@@ -50,6 +50,8 @@ set(SOUND_BROWSER_UI_SOURCES
     Source/UI/Library/SoundBrowser/SoundBrowserDrag.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserFilters.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserFolders.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserIcons.cpp
+    Source/UI/Library/SoundBrowser/SoundBrowserIcons.h
     Source/UI/Library/SoundBrowser/SoundBrowserInput.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserKeyboardReach.cpp
     Source/UI/Library/SoundBrowser/SoundBrowserNavigation.cpp
