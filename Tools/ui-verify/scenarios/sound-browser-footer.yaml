@@ -1,0 +1,46 @@
+# Bugs FRO1382, FRO1388, FRO1380 and FRO1383 in the Sounds view: the preview button said Stop while nothing played, the
+# empty waveform box was blank, a double-click on the divider jumped to the default width, and the focus ring on a
+# filter chip was cut off at the top and bottom.
+#
+# What a user does: opens the Sounds view (nothing selected: the box says what to do), selects the one fixture sound
+# and presses the button twice, focuses a filter chip with the
+# keys, drags the divider wider and double-clicks it (the column glides back to 280 px). Test mode has no audio device, so the preview never sounds here: the button
+# stays on Play (the Stop state is covered by the unit tests, which render the player).
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/sounds"
+record: true
+save_project: sound-browser-footer
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - screenshot: {id: soundBrowser, name: nothing-selected-placeholder}
+  - expect: {id: soundPreviewPlay, text: "Play"}
+  - click: {id: "Search sounds"}
+  - type: {text: test loop}
+  - wait: {}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: soundBrowser, contains: {selectedName: "test loop"}}
+  - expect: {id: soundPreviewPlay, text: "Play"}
+  - expect: {id: soundPreviewPlay, title: "Play preview"}
+  - screenshot: {id: soundBrowser, name: selected-play-button}
+  - click: {id: soundPreviewPlay}
+  - wait: {}
+  - expect: {id: soundPreviewPlay, text: "Play"}
+  - screenshot: {id: soundBrowser, name: after-click-no-device}
+  # A focused filter chip shows its whole ring.
+  - click: {id: Filters}
+  - wait: {}
+  - click: {id: "Sound filters", x: 30, y: 12}
+  - wait: {}
+  - screenshot: {id: soundBrowser, name: focused-filter-chip}
+  # The divider: drag it wider, then double-click to reset; the width glides to the default.
+  - drag: {from: "Resize Sounds column", to: "Resize Sounds column", fromX: 3, fromY: 300, toX: 103, toY: 300, steps: 20}
+  - wait: {}
+  - screenshot: {id: window, name: divider-dragged-wider}
+  - click: {id: "Resize Sounds column", x: 3, y: 300, clicks: 2}
+  - screenshot: {id: window, name: divider-reset-mid-glide}
+  - wait: {}
+  - screenshot: {id: window, name: divider-reset-end}

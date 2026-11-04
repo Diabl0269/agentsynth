@@ -1,5 +1,5 @@
 // SoundBrowserPreview.cpp -- what the Sounds view asks of the preview player: play the selected sound, stop it, Space,
-// the footer's controls, and keeping the footer's waveform on the selected sound.
+// the Play/Stop button and the footer's other controls, and keeping the footer's waveform on the selected sound.
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserText.h"
 
@@ -8,7 +8,7 @@ namespace synth::ui {
 using synth::soundbrowser::SoundKind;
 
 void SoundBrowserComponent::setupPreview() {
-    footer_.onStop = [this] { stopPreview(); };
+    footer_.onTogglePlay = [this] { togglePreview(); };
     footer_.onAutoPlayChanged = [this](bool) {
         if (onPreviewSettingsChanged)
             onPreviewSettingsChanged();

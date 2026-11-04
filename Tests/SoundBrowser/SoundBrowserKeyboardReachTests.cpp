@@ -334,9 +334,9 @@ TEST(SoundBrowserKeyboardReachTest, DownFromTheLastRowEntersTheFooterAndUpFromIt
         last = v.getRows()[(size_t)i].navigable() ? i : last;
     v.selectRow(last);
     EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::downKey)));
-    EXPECT_EQ(f.landed(), &v.getPreviewFooter().getStopButton());
+    EXPECT_EQ(f.landed(), &v.getPreviewFooter().getPlayButton());
     EXPECT_EQ(v.getSelectedIndex(), last) << "the selection is kept";
-    EXPECT_TRUE(dispatchKey(v, v.getPreviewFooter().getStopButton(), key(juce::KeyPress::upKey)));
+    EXPECT_TRUE(dispatchKey(v, v.getPreviewFooter().getPlayButton(), key(juce::KeyPress::upKey)));
     EXPECT_EQ(f.landed(), &v);
     EXPECT_EQ(v.getSelectedIndex(), last);
 }
@@ -348,7 +348,7 @@ TEST(SoundBrowserKeyboardReachTest, ACompactFooterIsReachableAndAHiddenOneMakesD
     ASSERT_GT(heightShowing(v, Mode::Compact), 0);
     v.selectRow((int)v.getRows().size() - 1);
     EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::downKey)));
-    EXPECT_EQ(f.landed(), &v.getPreviewFooter().getStopButton());
+    EXPECT_EQ(f.landed(), &v.getPreviewFooter().getPlayButton());
 
     const int hiddenHeight = heightShowing(v, Mode::Hidden);
     ASSERT_GT(hiddenHeight, 0);

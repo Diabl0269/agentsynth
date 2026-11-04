@@ -59,10 +59,13 @@ LibrarySidebarViews::LibrarySidebarViews(ModuleLibraryComponent& modules, juce::
     handle_.setTitle("Resize Sounds column");
     handle_.setTooltip("Drag to resize the Sounds column. Double-click to reset it.");
     handle_.setKeyboardFocusable(true);
-    handle_.onDragStarted = [this] { widthAtDragStart_ = soundsWidth_; };
+    handle_.onDragStarted = [this] {
+        widthAnim_.stop();
+        widthAtDragStart_ = soundsWidth_;
+    };
     handle_.onDragged = [this](int delta) { setSoundsWidth(widthAtDragStart_ + delta, false); };
     handle_.onDragEnded = [this] { commitWidth(); };
-    handle_.onResetRequested = [this] { setSoundsWidth(kDefaultSoundsWidth, true); };
+    handle_.onResetRequested = [this] { resetSoundsWidth(); };
     handle_.onKeyboardStep = [this](int direction) { setSoundsWidth(soundsWidth_ + direction * kWidthKeyStep, true); };
 
     installer_->addListener(this);
@@ -79,8 +82,8 @@ LibrarySidebarViews::~LibrarySidebarViews() {
     sounds_.setShapeLibrary(nullptr);
     folderBook_.removeListener(this);
     installer_->removeListener(this);
-    if (vblank_.has_value())
-        anim_.stop(*vblank_);
+    anim_.stop();
+    widthAnim_.stop();
     removeChildComponent(&modules_); // the module library outlives this column
 }
 
@@ -188,6 +191,11 @@ int LibrarySidebarViews::openWidth(int modulesWidth) const {
 }
 
 void LibrarySidebarViews::setSoundsWidth(int width, bool persist) {
+    widthAnim_.stop(); // a drag or a key step takes over from a glide in progress
+    setSoundsWidthNow(width, persist);
+}
+
+void LibrarySidebarViews::setSoundsWidthNow(int width, bool persist) {
     const int clamped = juce::jlimit(kMinSoundsWidth, kMaxSoundsWidth, width);
     if (clamped != soundsWidth_) {
         soundsWidth_ = clamped;
@@ -195,6 +203,27 @@ void LibrarySidebarViews::setSoundsWidth(int width, bool persist) {
     }
     if (persist)
         commitWidth();
+}
+
+// The double-click reset: the width eases from where it is to the default (ease-out, 190 ms) and is saved once, at the
+// end. A column that is not on screen gets no frames, so it jumps, as it does under Reduce Motion or Animations Off.
+void LibrarySidebarViews::resetSoundsWidth() {
+    widthAnim_.stop();
+    const int from = soundsWidth_;
+    const double ms = motionMs(190.0, 80.0);
+    if (from == kDefaultSoundsWidth || prefersReducedMotion() || ms <= 0.0 ||
+        !(isShowing() || animateOffscreenForTest_)) {
+        setSoundsWidthNow(kDefaultSoundsWidth, true);
+        return;
+    }
+    if (!vblank_.has_value())
+        vblank_.emplace(this);
+    widthAnim_.start(
+        *vblank_, ms, easeOutCubic,
+        [this, from](float t) {
+            setSoundsWidthNow(from + juce::roundToInt(t * (float)(kDefaultSoundsWidth - from)), false);
+        },
+        [this] { setSoundsWidthNow(kDefaultSoundsWidth, true); });
 }
 
 void LibrarySidebarViews::commitWidth() {
