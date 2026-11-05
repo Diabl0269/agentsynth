@@ -114,6 +114,13 @@ DrumPadControls::~DrumPadControls() { fade_.stop(); }
 
 // ---- Binding ----
 
+// An attachment removes its listener from the parameter it was made on; once the kit is freed that removal would lock
+// a freed parameter, so the attachments are given up without running it (the knobs die with the card).
+void DrumPadControls::releaseBindings() {
+    for (auto& attachment : attachments_)
+        (void)attachment.release();
+}
+
 // The knobs re-attach to the pad's own parameters, so a drag on them is the parameter's gesture: the card's
 // parameter listener makes it one undo step, like any card knob.
 void DrumPadControls::bind(int index) {

@@ -62,7 +62,12 @@ struct Drop {
         if (targetCard != nullptr)
             targetCard->setTopLeftPosition(400, 0);
         editor.onStatusMessage = [this](const juce::String& m) { status = m; };
+        // The contract of AudioEngine::shutdown(): the owner of the cards lets go of their parameters first.
+        engine.onBeforeShutdown = [this] { editor.detachAllModuleComponents(); };
     }
+
+    // The hook points at the editor, which dies before the engine's own shutdown runs.
+    ~Drop() { engine.onBeforeShutdown = nullptr; }
 
     // Drags the LFO's output and releases it on the centre of `knob`.
     void onto(juce::Component& knob) {

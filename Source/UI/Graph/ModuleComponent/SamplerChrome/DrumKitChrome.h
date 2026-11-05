@@ -26,6 +26,7 @@ public:
     }
     void poll() override;
     void refreshLoaded() override { row_.refresh(); }
+    void releaseBindings() override { pads_.controls().releaseBindings(); }
 
     InstrumentPickerRow& getRow() noexcept { return row_; }
     juce::Button& getDrumMachineButton() noexcept { return drumMachineButton_; }

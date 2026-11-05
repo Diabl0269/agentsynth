@@ -274,6 +274,36 @@ void ModuleComponent::detachFromProcessor() {
     stopTimer();
     setVisible(false);
 
+    // Destroy attachments and remove our own parameter listener ONLY if the processor is still
+    // alive. During undo, graph.clear() may have already freed the processor and its parameters
+    // by the time this runs — if so, touching it (even just to call removeListener) is a
+    // use-after-free, so we release/leak instead.
+    //
+    // "Still alive" means something different depending on how this card came to exist:
+    //  - The normal case: this card's node WAS part of `owner`'s graph when the card was built
+    //    (nodeWasInGraphAtConstruction_, captured once in the ctor — see the comment there).
+    //    A later single-node removal (GraphEditor::deleteSelection / requestDeleteModule /
+    //    replaceModule) frees the processor before this destructor runs, so we confirm liveness
+    //    by re-checking the CURRENT graph for a node whose processor still matches `module`.
+    //  - The card was built directly on a bare processor that was never added to any graph at all
+    //    (never true in production — GraphEditor only ever builds a card for an existing node —
+    //    but exactly what ModuleComponentKnobCoverageTests.cpp and ModuleComponentLifecycleTests.cpp
+    //    do). There the graph can never have freed it out from under us, because the graph never
+    //    owned it in the first place, so it is always safe to detach (treating it as "gone" would leave our listener
+    //    registration dangling on the still-live processor — a heap-use-after-free on the next parameter write).
+    bool processorAlive = false;
+    if (module != nullptr) {
+        if (!nodeWasInGraphAtConstruction_) {
+            processorAlive = true;
+        } else {
+            for (auto* node : owner.getAudioEngine().getGraph().getNodes()) {
+                if (node->getProcessor() == module) {
+                    processorAlive = true;
+                    break;
+                }
+            }
+        }
+    }
     // Hosted Plugin card: leave the module's observers and unbind every hosted parameter listener FIRST,
     // while the instance is still alive (the module frees it once its node goes).
     releaseHostedPluginCard();
@@ -318,7 +348,10 @@ void ModuleComponent::detachFromProcessor() {
         cardBody_->releaseViews();
 
     // Same reason: the waveform view times against the SamplerModule, so it must go before the
-    // processor pointer is dropped.
+    // processor pointer is dropped. A processor that is already gone has its parameters freed: the chrome gives up
+    // its parameter attachments instead of detaching them.
+    if (instrumentChrome_ != nullptr && !processorAlive)
+        instrumentChrome_->releaseBindings();
     instrumentChrome_.reset();
 
     // Same reason: the wavetable display holds a module reference and its own timer, and the
@@ -330,36 +363,6 @@ void ModuleComponent::detachFromProcessor() {
     if (auto* parent = getParentComponent())
         parent->removeChildComponent(this);
 
-    // Destroy attachments and remove our own parameter listener ONLY if the processor is still
-    // alive. During undo, graph.clear() may have already freed the processor and its parameters
-    // by the time this runs — if so, touching it (even just to call removeListener) is a
-    // use-after-free, so we release/leak instead.
-    //
-    // "Still alive" means something different depending on how this card came to exist:
-    //  - The normal case: this card's node WAS part of `owner`'s graph when the card was built
-    //    (nodeWasInGraphAtConstruction_, captured once in the ctor — see the comment there).
-    //    A later single-node removal (GraphEditor::deleteSelection / requestDeleteModule /
-    //    replaceModule) frees the processor before this destructor runs, so we confirm liveness
-    //    by re-checking the CURRENT graph for a node whose processor still matches `module`.
-    //  - The card was built directly on a bare processor that was never added to any graph at all
-    //    (never true in production — GraphEditor only ever builds a card for an existing node —
-    //    but exactly what ModuleComponentKnobCoverageTests.cpp and ModuleComponentLifecycleTests.cpp
-    //    do). There the graph can never have freed it out from under us, because the graph never
-    //    owned it in the first place, so it is always safe to detach (treating it as "gone" would leave our listener
-    //    registration dangling on the still-live processor — a heap-use-after-free on the next parameter write).
-    bool processorAlive = false;
-    if (module != nullptr) {
-        if (!nodeWasInGraphAtConstruction_) {
-            processorAlive = true;
-        } else {
-            for (auto* node : owner.getAudioEngine().getGraph().getNodes()) {
-                if (node->getProcessor() == module) {
-                    processorAlive = true;
-                    break;
-                }
-            }
-        }
-    }
     if (cardBody_ != nullptr)
         cardBody_->releaseBindings(processorAlive);
     if (processorAlive) {

@@ -68,6 +68,9 @@ public:
     /** After every bind or refresh: `knob` drives `param` (the bound pad's), with its tooltip set. */
     std::function<void(juce::Slider& knob, juce::RangedAudioParameter* param)> onKnobBound;
 
+    /** The kit is already freed: leaks the knobs' attachments rather than detaching them from its parameters. */
+    void releaseBindings();
+
     /** Called when Escape is pressed on a knob; the owner moves focus back to the pad. */
     std::function<void()> onEscape;
 

@@ -39,6 +39,8 @@ public:
     virtual void poll() = 0;
     /** Re-reads the module (after a project's deferred loads landed). */
     virtual void refreshLoaded() = 0;
+    /** The module is already freed: give up any parameter attachment without touching its parameters (leaks it). */
+    virtual void releaseBindings() {}
 
     // ---- File drop and the Sampler's sample name: nothing for a chrome that has none ----
     virtual void refreshSampleLabel(const juce::String& /*fallbackMessage*/ = {}) {}
