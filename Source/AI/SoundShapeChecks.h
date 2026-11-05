@@ -34,11 +34,12 @@ ShapeCheck checkAcid(const juce::var& response, const juce::var& existingPatch =
  * back unchanged. */
 juce::var repairSequencerWiring(const juce::var& response, juce::StringArray& notes);
 
-/** One player per part (prompt v10): when a Sequencer or Poly Sequencer node is wired to an addInstrumentTrack op's
- * `instrumentId` and the same response also places clip notes (placeClips) on that track by name, returns a copy of
- * `response` with those notes removed so the part plays once. One plain-words line per track fixed is appended to
- * `notes`. A response that does not double a part comes back unchanged. */
-juce::var dropDoubledClipNotes(const juce::var& response, juce::StringArray& notes);
+/** One player per part: when a Sequencer or Poly Sequencer node is wired to an addInstrumentTrack op's `instrumentId`
+ * and the same response also places clip notes (placeClips) or a MIDI clip (placeMidiClip) on that track, by name or
+ * by `{"index": N}`, returns a copy of `response` without those notes (placeClips) or ops (placeMidiClip) so the part
+ * plays once. `existingTrackCount` = the timeline's tracks other than Automation, which an index counts first. One
+ * plain-words line per track fixed is appended to `notes`; a response that doubles no part comes back unchanged. */
+juce::var dropDoubledClipNotes(const juce::var& response, juce::StringArray& notes, int existingTrackCount = 0);
 
 /** When `request` asks for accents (accent, accented, accents, punchy, groove), every Sequencer or Poly Sequencer in
  * `response` that carries step `state` must have step velocities spanning at least 20. Fails with a plain-words

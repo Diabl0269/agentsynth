@@ -268,6 +268,63 @@ TEST(SoundShapeChecksTest, ClipNotesOnAnotherTrackSurvive) {
     EXPECT_TRUE(notes.isEmpty());
 }
 
+TEST(SoundShapeChecksTest, AnIndexSelectorOnTheDrivenNewTrackDropsTheClipNotes) {
+    juce::StringArray notes;
+    // Two existing tracks, so the new "Bass" track is index 2.
+    const auto response =
+        sequencerPlan(true, R"(, {"op": "placeClips", "track": {"index": 2}, "clips": [{"startBeat": 0,
+        "notes": [{"startBeat": 0, "lengthBeats": 1, "pitch": 36}]}]})");
+    ASSERT_EQ(noteCount(response), 1);
+    EXPECT_EQ(noteCount(dropDoubledClipNotes(response, notes, 2)), 0);
+    ASSERT_EQ(notes.size(), 1);
+    EXPECT_TRUE(notes[0].contains("Bass")) << notes[0];
+}
+
+TEST(SoundShapeChecksTest, AnIndexSelectorListedBeforeTheTrackItNamesStillDropsTheNotes) {
+    // Track-creating ops run first whatever the list order, so a clip op listed before them still lands on the track.
+    juce::StringArray notes;
+    auto response = sequencerPlan(true, R"(, {"op": "placeClips", "track": {"index": 2}, "clips": [{"startBeat": 0,
+        "notes": [{"startBeat": 0, "lengthBeats": 1, "pitch": 36}]}]})");
+    auto* ops = response["timelineOps"].getArray();
+    ops->move(ops->size() - 1, 0);
+    EXPECT_EQ(noteCount(dropDoubledClipNotes(response, notes, 2)), 0);
+    EXPECT_EQ(notes.size(), 1);
+}
+
+TEST(SoundShapeChecksTest, AnIndexSelectorOnAnotherTrackKeepsItsNotes) {
+    juce::StringArray notes;
+    const auto response =
+        sequencerPlan(true, R"(, {"op": "placeClips", "track": {"index": 1}, "clips": [{"startBeat": 0,
+        "notes": [{"startBeat": 0, "lengthBeats": 1, "pitch": 60}]}]})");
+    EXPECT_EQ(noteCount(dropDoubledClipNotes(response, notes, 2)), 1) << "index 1 is an existing track";
+    EXPECT_TRUE(notes.isEmpty());
+    EXPECT_EQ(noteCount(dropDoubledClipNotes(response, notes, 0)), 1) << "index 1 is past the one new track";
+    EXPECT_TRUE(notes.isEmpty());
+}
+
+TEST(SoundShapeChecksTest, AMidiClipOnTheDrivenTrackIsRemoved) {
+    const auto opCount = [](const juce::var& response) { return response["timelineOps"].getArray()->size(); };
+    for (const char* selector : {R"("Bass")", R"({"index": 3})"}) {
+        juce::StringArray notes;
+        const auto response = sequencerPlan(true, juce::String(R"(, {"op": "placeMidiClip", "track": )") + selector +
+                                                      R"(, "startBeat": 0, "midBase64": "TVRoZA=="})");
+        ASSERT_EQ(opCount(response), 2);
+        const auto fixed = dropDoubledClipNotes(response, notes, 3);
+        EXPECT_EQ(opCount(fixed), 1) << selector;
+        ASSERT_EQ(notes.size(), 1) << selector;
+        EXPECT_TRUE(notes[0].contains("Bass") && notes[0].contains("MIDI clip")) << notes[0];
+    }
+}
+
+TEST(SoundShapeChecksTest, AMidiClipOnAnotherTrackStays) {
+    juce::StringArray notes;
+    const auto response = sequencerPlan(true, R"(, {"op": "placeMidiClip", "track": "Keys", "startBeat": 0,
+        "midBase64": "TVRoZA=="}, {"op": "placeMidiClip", "track": {"index": 0}, "startBeat": 0,
+        "midBase64": "TVRoZA=="})");
+    EXPECT_EQ(dropDoubledClipNotes(response, notes, 3)["timelineOps"].getArray()->size(), 3);
+    EXPECT_TRUE(notes.isEmpty());
+}
+
 TEST(SoundShapeChecksTest, FlatAccentsAreNotedWhenAccentsWereAsked) {
     const auto flat = sequencerPlan(true, "", "[100, 100, 105]");
     const auto check = checkAccents(flat, "16-step acid bassline on a poly sequencer with accents");
