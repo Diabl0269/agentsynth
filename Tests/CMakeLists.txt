@@ -349,6 +349,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
     UI/Graph/ModuleComponent/EnvelopeCardTempoSyncTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLfoCardTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentFilterCurveViewTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMorphShapesCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLfoMorphCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp

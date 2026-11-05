@@ -245,8 +245,10 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
 std::vector<juce::ToggleButton*> ModuleComponent::footerChromeToggles(bool visibleOnly) const {
     std::vector<juce::ToggleButton*> toggles;
     juce::ToggleButton* morphToggle = morphCard_ != nullptr ? &morphCard_->getToggle() : nullptr;
-    for (auto* toggle :
-         {envelopeGraphToggle.get(), freqResponseToggle.get(), spectrumToggle.get(), morphToggle, scopeToggle.get()})
+    juce::ToggleButton* curveToggle =
+        morphCard_ != nullptr && morphCard_->hasCurveView() ? &morphCard_->getCurveToggle() : nullptr;
+    for (auto* toggle : {envelopeGraphToggle.get(), freqResponseToggle.get(), spectrumToggle.get(), morphToggle,
+                         curveToggle, scopeToggle.get()})
         if (toggle != nullptr && (!visibleOnly || toggle->isVisible()))
             toggles.push_back(toggle);
     return toggles;

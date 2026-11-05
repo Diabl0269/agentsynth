@@ -425,6 +425,14 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   cursor, the shapes and the knobs, and draws the cutoff marker (a thin vertical line) like the other types. Double-clicking it opens the shape editor on the shape nearest the cursor.
 - **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
   shape nearest the cursor.
+- **Curve view** (252 x 110, under the button, above the map; `MorphShapesCardCurve.cpp`): the shape under the morph
+  cursor on log-frequency and dB axes (`FilterShapesAdapter::getAxisGuides`). With the cursor on a dot (within 0.06
+  map units, or the only shape) it shows and edits that shape in place: a drag goes through the adapter's
+  `beginEdit` / `setShapes` / `endEdit`, so it is one undo step, the sound and the Edit shapes window follow, and
+  double-clicking empty space opens the window. **Between dots it shows the blend the cursor hears and is read-only**
+  (no pointer or keyboard editing; its screen-reader name says so). **Show Curve** is a footer pill like Show Morph
+  Map, remembered as `CardViewState::showCurveView` (`"cardView"."curveView"`); with no choice it shows from two shapes
+  up. The LFO card keeps its own in-card editor (`ModuleComponentLfoCard.cpp`).
 - **Morph map** (252 x 159, under the button) with thin **Morph X** (bottom edge) and **Morph Y** (left edge) sliders
   hugging it; the right edge is left free. The slider thumbs sit at the cursor; a drag, a click or the arrow keys set
   that one parameter (one host gesture and one undo step). **Show Morph Map** is a footer pill, shown only in Custom;

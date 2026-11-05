@@ -43,6 +43,8 @@ type Filter size 280x553
   child 41 component id="" at 0,0 0x0 visible=0 title="Morph map" tip="" focusOrder=0 wantsFocus=1
   child 42 textButton id="" at 0,0 0x0 visible=0 title="Edit shapes" tip="Edit shapes: open the shape editor window" focusOrder=0 wantsFocus=1
   child 43 toggle id="" at 0,0 0x0 visible=0 title="Show Morph Map" tip="Show Morph Map: the map of shapes and the morph cursor under the response view" focusOrder=0 wantsFocus=1
+  child 44 component id="" at 0,0 0x0 visible=0 title="Filter shape curve" tip="Shape under the morph cursor: drag its points to reshape it when the cursor is on a dot (double-click empty space opens the shape editor); between dots it shows the blend the filter uses, read-only" focusOrder=0 wantsFocus=1
+  child 45 toggle id="" at 0,0 0x0 visible=0 title="Show Curve" tip="Show Curve: the shape under the morph cursor as a small curve" focusOrder=0 wantsFocus=1
   in 0 10, 58
   in 1 10, 78
   in 2 29, 235

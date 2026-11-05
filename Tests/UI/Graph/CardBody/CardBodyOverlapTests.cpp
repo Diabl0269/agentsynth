@@ -33,13 +33,15 @@ struct ChromeState {
     bool response = false;
     bool spectrum = false;
     std::optional<bool> morphMap;
+    std::optional<bool> curveView; ///< the Filter's Custom curve view: default, hidden or shown
     bool custom = false;
     bool envelopeGraph = false;
 
     juce::String describe() const {
         return juce::String("scope=") + (scope ? "1" : "0") + " response=" + (response ? "1" : "0") +
                " spectrum=" + (spectrum ? "1" : "0") + " morphMap=" + (morphMap ? (*morphMap ? "1" : "0") : "default") +
-               " custom=" + (custom ? "1" : "0") + " envelopeGraph=" + (envelopeGraph ? "1" : "0");
+               " curveView=" + (curveView ? (*curveView ? "1" : "0") : "default") + " custom=" + (custom ? "1" : "0") +
+               " envelopeGraph=" + (envelopeGraph ? "1" : "0");
     }
 };
 
@@ -50,16 +52,19 @@ std::vector<ChromeState> chromeStates() {
             for (const bool scope : {false, true})
                 for (const bool envelopeGraph : {false, true})
                     for (const auto morph :
-                         {std::optional<bool>(), std::optional<bool>(false), std::optional<bool>(true)}) {
-                        ChromeState s;
-                        s.custom = custom;
-                        s.response = response;
-                        s.spectrum = response;
-                        s.scope = scope;
-                        s.envelopeGraph = envelopeGraph;
-                        s.morphMap = morph;
-                        states.push_back(s);
-                    }
+                         {std::optional<bool>(), std::optional<bool>(false), std::optional<bool>(true)})
+                        for (const auto curve :
+                             {std::optional<bool>(), std::optional<bool>(false), std::optional<bool>(true)}) {
+                            ChromeState s;
+                            s.curveView = curve;
+                            s.custom = custom;
+                            s.response = response;
+                            s.spectrum = response;
+                            s.scope = scope;
+                            s.envelopeGraph = envelopeGraph;
+                            s.morphMap = morph;
+                            states.push_back(s);
+                        }
     return states;
 }
 
@@ -175,6 +180,7 @@ TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
             if (state.response)
                 view.showSpectrum = state.spectrum;
             view.showMorphMap = state.morphMap;
+            view.showCurveView = state.curveView;
             module->setCardViewState(view);
 
             ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
