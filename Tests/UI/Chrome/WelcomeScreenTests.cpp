@@ -324,8 +324,12 @@ TEST_F(WelcomeScreenTest, LoadMenuFactoryPresetBranch_LeavesAnAlreadyOpenProject
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
+    ASSERT_FALSE(mc.isWelcomeScreenHiddenForTest());
     mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
-    synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Compensated); });
+    // Regression test for FRO1503: startup already holds Compensated, so waiting for it returned before the posted
+    // New command ran, and on a loaded runner that command reset the law after the switch to Balance below. newPatch()
+    // hides the welcome screen as its last step, so wait for that.
+    ASSERT_TRUE(synth::test::waitUntil([&] { return mc.isWelcomeScreenHiddenForTest(); }));
     ASSERT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);
 
     // The user then deliberately switches this already-open project to Balance...
