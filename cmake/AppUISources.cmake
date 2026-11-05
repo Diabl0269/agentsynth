@@ -626,10 +626,6 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentLfoCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentSequencerCard.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentMorphCard.cpp
-    Source/UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h
-    Source/UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.cpp
-    Source/UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCardCurve.cpp
     Source/UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h
     Source/UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.cpp
     Source/UI/Graph/ModuleComponent/SamplerChrome/InstrumentChrome.h
@@ -1000,3 +996,4 @@ include(cmake/TimelinePanelSources.cmake) # appends the timeline panel to APPUI_
 include(cmake/CardLayoutGroupMoveSources.cmake) # appends the Edit Layout group move and rename to APPUI_SOURCES
 list(APPEND APPUI_SOURCES ${SOUND_BROWSER_UI_SOURCES}) # the Sounds view, from SoundBrowserSources.cmake
 include(cmake/CanvasDragSources.cmake) # appends the edge scroll and the drag grid to APPUI_SOURCES
+include(cmake/MorphShapesCardSources.cmake) # appends the morph card and the Morph Shapes card to APPUI_SOURCES
