@@ -796,6 +796,7 @@ add_executable(Tests
     Engine/MetronomeTests.cpp
     Engine/DeviceChangeTests.cpp
     Engine/LiveReconfigureTests.cpp
+    Engine/LiveDeviceRenderGuardTests.cpp
     Engine/MidiInputReconcileTests.cpp
     Engine/MidiInputDeliveryTests.cpp
     Timeline/TimelineE2ETests.cpp
