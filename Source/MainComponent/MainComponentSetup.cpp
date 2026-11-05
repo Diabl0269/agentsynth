@@ -298,6 +298,10 @@ void MainComponent::wireGraphEditorCallbacks() {
     };
     // Macros: GraphEditor owns no status bar — see onStatusMessage's own comment.
     graphEditor.onStatusMessage = [this](const juce::String& msg) { statusBar.showMessage(msg); };
+    // A cable that cannot land says why in a toast over the canvas, where the cursor is, not in the status bar.
+    graphEditor.onDropRefused = [this](const juce::String& reason) {
+        toast_->show(reason, {}, {}, {}, synth::ui::ToastComponent::Severity::error);
+    };
     // The canvas/module menus' "Make Channel" and "Duplicate into Channel" route here so their ONE
     // undo step also covers the timeline and runs the reconcile pass.
     graphEditor.onMakeChannelRequested = [this](juce::AudioProcessorGraph::NodeID source) {

@@ -33,9 +33,12 @@ public:
     ToastComponent();
     ~ToastComponent() override;
 
+    /** How the toast reads: info is the plain pill; warning and error add a bar and border in that theme colour. */
+    enum class Severity { info, warning, error };
+
     /** Shows `message`; `actionLabel` empty means no action button. `actionTooltip` is the button's tooltip. */
     void show(const juce::String& message, const juce::String& actionLabel = {}, std::function<void()> action = {},
-              const juce::String& actionTooltip = {});
+              const juce::String& actionTooltip = {}, Severity severity = Severity::info);
     /** Fades out and hides. A no-op when not shown. */
     void dismiss();
     /** Hides at once, with no animation. */
@@ -47,6 +50,7 @@ public:
     bool isToastShown() const noexcept { return shown_; }
     juce::Button& getActionButton() noexcept { return action_; }
     const juce::String& getMessageForTest() const noexcept { return message_; }
+    Severity getSeverityForTest() const noexcept { return severity_; }
     /** The 0..1 shown amount as the animation has it (1 once landed). */
     float getProgressForTest() const noexcept { return progress_; }
     /** Runs the auto-hide as if its time had elapsed. */
@@ -64,6 +68,7 @@ private:
     juce::Rectangle<int> restingBounds() const;
 
     juce::String message_;
+    Severity severity_ = Severity::info;
     TextLinkButton action_{"Undo", juce::Justification::centred};
     std::function<void()> onAction_;
     juce::Rectangle<int> area_;

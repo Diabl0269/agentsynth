@@ -559,9 +559,9 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         }
     }
 
-    // A drop on a jack that cannot take this cable is not silent: the status bar says why.
+    // A drop on a jack that cannot take this cable is not silent: a toast says why.
     if (!connectedToAModule && refusal.isNotEmpty())
-        reportStatusMessage(refusal);
+        onDropRefused(refusal);
 
     settleCableOpenedRows(openedRows, landedOn);
     restoreFocusAfterCableDrag(*this);

@@ -11,6 +11,7 @@ constexpr int kGap = 12;
 constexpr int kActionW = 56;
 constexpr float kFontSize = 12.0f;
 constexpr int kTextSlack = 2;
+constexpr float kBarWidth = 4.0f;
 } // namespace
 
 ToastComponent::ToastComponent() {
@@ -87,8 +88,9 @@ void ToastComponent::animateTo(bool shown) {
 }
 
 void ToastComponent::show(const juce::String& message, const juce::String& actionLabel, std::function<void()> action,
-                          const juce::String& actionTooltip) {
+                          const juce::String& actionTooltip, Severity severity) {
     message_ = message;
+    severity_ = severity;
     onAction_ = std::move(action);
     const bool hasAction = actionLabel.isNotEmpty() && onAction_ != nullptr;
     action_.setButtonText(actionLabel);
@@ -149,7 +151,19 @@ void ToastComponent::paint(juce::Graphics& g) {
     const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
     g.setColour(c.surfaceHi);
     g.fillRoundedRectangle(bounds, 8.0f);
-    g.setColour(c.border);
+    // A warning or an error is told by its theme colour on the border and a bar down the left edge, so it does not
+    // rest on the text alone.
+    const bool flagged = severity_ != Severity::info;
+    const auto flag = severity_ == Severity::error ? c.error : c.warning;
+    if (flagged) {
+        juce::Graphics::ScopedSaveState state(g);
+        juce::Path pill;
+        pill.addRoundedRectangle(bounds, 8.0f);
+        g.reduceClipRegion(pill);
+        g.setColour(flag);
+        g.fillRect(bounds.withWidth(kBarWidth));
+    }
+    g.setColour(flagged ? flag : c.border);
     g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
     g.setColour(c.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(kFontSize)));

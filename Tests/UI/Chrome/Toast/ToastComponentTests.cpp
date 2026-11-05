@@ -4,6 +4,8 @@
 #include "UI/Chrome/Toast/ToastComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -176,4 +178,43 @@ TEST(ToastComponentTests, AMessageTooLongForTheAreaIsCappedWithAnEllipsis) {
     toast.show(text);
     EXPECT_EQ(toast.getWidth(), 600 - 40);
     EXPECT_LT(glyphsDrawn(text, toast.getWidth() - 28), glyphsInFull(text));
+}
+
+TEST(ToastComponentTests, TheDefaultSeverityIsInfo) {
+    ToastFixture f;
+    f.toast.show("Saved");
+    EXPECT_EQ(f.toast.getSeverityForTest(), synth::ui::ToastComponent::Severity::info);
+    f.toast.show("Cannot connect", {}, {}, {}, synth::ui::ToastComponent::Severity::error);
+    EXPECT_EQ(f.toast.getSeverityForTest(), synth::ui::ToastComponent::Severity::error);
+    f.toast.show("Saved again");
+    EXPECT_EQ(f.toast.getSeverityForTest(), synth::ui::ToastComponent::Severity::info) << "a later show() starts over";
+}
+
+// The bar down the left edge is the theme's own warning or error colour in every built-in theme, and an info toast
+// has none.
+TEST(ToastComponentTests, SeverityShowsAsABarInTheThemesWarningAndErrorColoursInEveryTheme) {
+    using Severity = synth::ui::ToastComponent::Severity;
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lookAndFeel;
+        lookAndFeel.applyTheme(theme);
+        for (const auto severity : {Severity::info, Severity::warning, Severity::error}) {
+            ToastFixture f;
+            f.toast.setLookAndFeel(&lookAndFeel);
+            f.toast.show("Cannot connect", {}, {}, {}, severity);
+            juce::Image image(juce::Image::ARGB, f.toast.getWidth(), f.toast.getHeight(), true,
+                              juce::SoftwareImageType());
+            {
+                juce::Graphics g(image);
+                f.toast.paint(g);
+            }
+            const auto bar = image.getPixelAt(2, f.toast.getHeight() / 2).withAlpha(1.0f);
+            const auto expected =
+                (severity == Severity::error ? theme.colors.error : theme.colors.warning).withAlpha(1.0f);
+            if (severity == Severity::info)
+                EXPECT_NE(bar, theme.colors.error.withAlpha(1.0f)) << theme.name;
+            else
+                EXPECT_EQ(bar, expected) << theme.name << " severity " << (int)severity;
+            f.toast.setLookAndFeel(nullptr);
+        }
+    }
 }

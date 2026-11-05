@@ -209,7 +209,7 @@ Ties go to the later cable, matching paint order: mod wires draw over audio wire
 
 A cable released on a jack that cannot take it (an output on an output, or a MIDI jack against an audio or CV jack:
 Poly MIDI's Poly Out carries CV, so the Oscillator's MIDI input refuses it) makes no cable, and `GraphEditor::endConnectionDrag`
-reports the reason through the status bar (`reportStatusMessage`). Nothing is said when the cable lands somewhere else
+reports the reason through a toast with error severity (`GraphEditor::onDropRefused`, wired in `MainComponentSetup.cpp`; [toast](chrome.md#toast)), so a refusal is as visible as the cable it did not make. Nothing is said when the cable lands somewhere else
 on the same release (a collapsed macro's card, a plugin's knob picker).
 
 ## Hover

@@ -562,6 +562,11 @@ is a real `TextLinkButton`: focusable, titled "Undo", with a tooltip ("Undo this
 runs. The Poly pill's Undo only undoes while its step is still the last edit (`AppUndoManager::getEditSerial()`).
 Colours are theme tokens only.
 
+A toast has a severity (`ToastComponent::Severity`: `info` by default, `warning`, `error`). Info keeps the plain pill. A
+warning or an error paints its border and a 4 px bar down its left edge in the theme's `warning` or `error` token, so
+it reads in every theme; the text stays `textPrimary`. A cable dropped on a jack that cannot take it shows its reason
+as an error toast ([cables](cables.md#a-refused-drop-says-why)); other status messages stay on the status bar.
+
 A second use is a plain message with no action: a timeline hotkey that changes a setting says what it did ("Follow
 playhead on", "Follow: Smooth", "Snap off"). `TimelinePanelComponent::onShowMessage` is wired to `toast_->show(message)`
 where the toast is created (`MainComponentSetup.cpp`); only key presses call it (a click on the button already shows the new
