@@ -121,13 +121,17 @@ public:
     /** True while a row is lifted or still gliding into its slot. */
     bool isReordering() const noexcept { return animator_.isReordering(); }
 
+    /** Test seam: lets an off-screen owner take the timed path (a headless test of the Reduce Motion gate). */
+    void setAnimateOffScreenForTest(bool animate) noexcept { animateOffScreenForTest_ = animate; }
+
     /** Test seam: delivers Esc through the same listener a real key press reaches. */
     bool sendEscapeForTest() { return cancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), &owner_); }
 
 private:
     // Off screen no VBlank arrives, and under Animations Off the frame pump lands at once: either way a tween timed on
-    // the real clock would never be seen to finish, so the gesture runs untimed and lands where it is released.
-    bool animates() const { return owner_.isShowing() && !animationsOff(); }
+    // the real clock would never be seen to finish, so the gesture runs untimed and lands where it is released. Reduce
+    // Motion lands it at once too, in the animator itself.
+    bool animates() const { return (owner_.isShowing() || animateOffScreenForTest_) && !animationsOff(); }
 
     void frame() {
         animator_.finishIfSettled();
@@ -152,6 +156,7 @@ private:
     std::function<void()> onFrame_;
     unsigned generationSeen_ = 0;
     bool cancelled_ = false;
+    bool animateOffScreenForTest_ = false;
 };
 
 } // namespace synth::ui

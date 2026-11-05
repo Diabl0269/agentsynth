@@ -38,7 +38,7 @@ public:
 
     /** `slots` are in display order; an item's key is its index here. `pointerAtPress` and
      *  `grabOffset` (pointer minus the dragged slot's start) are on the axis, both measured once.
-     *  Without `animate` (an off-screen owner gets no frames) every glide lands instantly. */
+     *  Without `animate` (an off-screen owner gets no frames), or under Reduce Motion, every glide lands instantly. */
     void begin(const std::vector<Slot>& slots, int draggedKey, float grabOffset, float pointerAtPress,
                bool animate = true);
 
