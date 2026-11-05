@@ -134,7 +134,9 @@ int CardStepper::getIdealWidth(int forHeight) const {
     const bool compact = (forHeight > 0 ? forHeight : getHeight()) < kCompactHeight;
     const auto font = valueFont(*this, compact);
     const auto& text = widestText_.isNotEmpty() ? widestText_ : valueText_;
-    const int textWidth = (int)std::ceil(juce::GlyphArrangement::getStringWidth(font, text));
+    // The value face is monospaced (0.6 em per glyph), so the width follows the character count, not a measurement
+    // that changes with whichever mono font the platform falls back to: the card is the same size everywhere.
+    const int textWidth = text.length() * (int)std::ceil(0.6f * font.getHeight());
     return 2 * (compact ? kCompactArrowWidth : kArrowWidth) + textWidth + 2 * kValuePadding;
 }
 
