@@ -1,15 +1,23 @@
 // The shape library inside the shape window and on the canvas: Save shape, the Start from menu that lists the library,
 // and a dragged library shape stamped onto a chip or a card in one undo step.
+#include "../../../SoundBrowser/SoundBrowserTestKit.h"
+#include "../../../TestWait.h"
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "../../Graph/CardBody/CardCanvas.h"
 #include "Modules/LFOModule.h"
 #include "ShapeEditorTestHelpers.h"
+#include "UI/Chrome/Badge/Badge.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Library/SoundBrowser/ShapeDragPayload.h"
 #include "UI/Library/SoundBrowser/ShapeStamp.h"
+#include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Library/SoundBrowser/SoundDragState.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
+#include "UI/ModuleViews/ShapeEditor/ShapePicker.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeSavePrompts.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
+#include <cmath>
 
 using namespace synth::ui;
 using namespace synth::ui::test;
@@ -124,16 +132,18 @@ TEST(ShapeLibraryWindow, StartFromListsTheFactoryShapesAndTheUsersSavedShapeOfTh
     const auto has = [&](const char* name) {
         return std::find(captured.items.begin(), captured.items.end(), name) != captured.items.end();
     };
-    for (const char* name : {"ah", "ee", "oo", "eh", "ih", "wolf", "telephone band", "comb", "tilt", "mine"})
+    for (const char* name :
+         {"ah, Factory", "ee, Factory", "oo, Factory", "eh, Factory", "ih, Factory", "wolf, Factory",
+          "telephone band, Factory", "comb, Factory", "tilt, Factory", "double peak, Factory", "mine, Yours"})
         EXPECT_TRUE(has(name)) << name;
-    EXPECT_FALSE(has("lfo only"));
-    EXPECT_FALSE(has("ramp up"));
+    EXPECT_FALSE(has("lfo only, Yours"));
+    EXPECT_FALSE(has("ramp up, Factory"));
 
     const int serial = rig.undo.getEditSerial();
-    ASSERT_TRUE(captured.run("mine"));
+    ASSERT_TRUE(captured.run("mine, Yours"));
     EXPECT_EQ(rig.filter->getCustomShapes().shapes[2].curve, rampWave());
     EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
-    ASSERT_TRUE(captured.run("telephone band"));
+    ASSERT_TRUE(captured.run("telephone band, Factory"));
     EXPECT_EQ(rig.filter->getCustomShapes().shapes[2].curve, ShapeLibrary::factoryShapes(ShapeKind::Filter)[5].curve);
 }
 
@@ -282,4 +292,201 @@ TEST(ShapeLibraryWindow, ReturnStampsTheSelectedFilterCardInOneUndoStepAndDoesNo
 
     setChoice(*canvas.processor(filterId), "filterType", 0);
     EXPECT_TRUE(stampShapeOnSelectedCard(canvas.editor, shape).isEmpty()) << "the filter is not on Custom";
+}
+
+using namespace synth::ui;
+using namespace synth::ui::test;
+using synth::shapes::ShapeKind;
+using synth::shapes::ShapeLibrary;
+
+namespace {
+
+/** How many pixels of `area` sit close to `target`. */
+int pixelsNear(const juce::Image& image, juce::Rectangle<int> area, juce::Colour target, int tolerance) {
+    int count = 0;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x) {
+            const auto p = image.getPixelAt(x, y);
+            if (std::abs(p.getRed() - target.getRed()) <= tolerance &&
+                std::abs(p.getGreen() - target.getGreen()) <= tolerance &&
+                std::abs(p.getBlue() - target.getBlue()) <= tolerance)
+                ++count;
+        }
+    return count;
+}
+
+} // namespace
+
+TEST(Badge, EachKindHasItsOwnTextAndWidthAndTheComponentIsNamedByIt) {
+    EXPECT_STREQ(badgeText(BadgeKind::Yours), "Yours");
+    EXPECT_STREQ(badgeText(BadgeKind::Factory), "Factory");
+    EXPECT_STREQ(badgeText(BadgeKind::Pack), "Pack");
+    EXPECT_STREQ(badgeText(BadgeKind::Marketplace), "Marketplace");
+    EXPECT_GT(badgeWidth(BadgeKind::Marketplace), badgeWidth(BadgeKind::Pack));
+    Badge badge(BadgeKind::Yours);
+    EXPECT_EQ(badge.getTitle(), "Yours");
+    badge.setKind(BadgeKind::Factory);
+    EXPECT_EQ(badge.getTitle(), "Factory") << "a screen reader hears the kind it shows";
+    EXPECT_EQ(badge.getIdealBounds().getHeight(), kBadgeHeight);
+}
+
+TEST(Badge, TheKindsAreToldApartByColourInEveryTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        const auto yours = badgeColours(theme, BadgeKind::Yours);
+        const auto factory = badgeColours(theme, BadgeKind::Factory);
+        EXPECT_NE(yours.text, factory.text) << theme.id;
+        EXPECT_NE(yours.border, factory.border) << theme.id;
+    }
+}
+
+TEST(ShapePicker, ListsTheSavedShapesFirstBadgedYoursThenTheFactorySetBadgedFactory) {
+    TempShapes shapes;
+    ASSERT_EQ(ShapeLibrary::shared().save(ShapeKind::Filter, "mine", rampWave()), ShapeLibrary::SaveResult::Saved);
+    const auto entries = libraryPickerEntries(ShapeLibrary::shared(), ShapeKind::Filter);
+    ASSERT_GE(entries.size(), 2u);
+    EXPECT_EQ(entries.front().name, "mine");
+    EXPECT_EQ(entries.front().badge, BadgeKind::Yours);
+    EXPECT_EQ(pickerEntryTitle(entries.front()), "mine, Yours");
+    EXPECT_EQ(entries.back().badge, BadgeKind::Factory);
+    EXPECT_EQ(entries.size(), 1u + ShapeLibrary::factoryShapes(ShapeKind::Filter).size());
+}
+
+TEST(ShapePicker, TheShapeWindowsStartFromRowsAreThumbnailRowsWithTheirBadgeInTheirName) {
+    TempShapes shapes;
+    ShapeRig rig;
+    ASSERT_EQ(ShapeLibrary::shared().save(ShapeKind::Filter, "mine", rampWave()), ShapeLibrary::SaveResult::Saved);
+    ShapeListEditor editor(rig.adapter, 2);
+    CapturedMenu captured;
+    editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
+    editor.getStartFromButton().onClick();
+
+    bool sawMine = false;
+    bool sawFactory = false;
+    juce::PopupMenu::MenuItemIterator it(captured.menu, false);
+    while (it.next()) {
+        const auto& item = it.getItem();
+        if (item.isSeparator || item.isSectionHeader)
+            continue;
+        EXPECT_NE(item.customComponent, nullptr) << item.text;
+        sawMine = sawMine || item.text == "mine, Yours";
+        sawFactory = sawFactory || item.text == "double peak, Factory";
+    }
+    EXPECT_TRUE(sawMine);
+    EXPECT_TRUE(sawFactory);
+}
+
+// Regression test for FRO1172: after Save shape the Sounds view's new row has to read as Yours the moment it appears.
+TEST(ShapePicker, AShapeSavedFromTheWindowShowsAsYoursInTheOpenShapesListAtOnce) {
+    TempShapes shapes;
+    sound_browser_test::TempTree tree;
+    tree.fill();
+    auto index = sound_browser_test::makeIndex(tree);
+    sound_browser_test::scanAndWait(*index);
+    synth::soundbrowser::SoundLists lists;
+    SoundBrowserComponent view(*index, lists);
+    view.setSize(420, 900);
+    synth::theme::AppLookAndFeel laf;
+    view.setLookAndFeel(&laf);
+    view.setShapeLibrary(&ShapeLibrary::shared());
+    view.showLocation(SoundBrowserComponent::kShapesId, {});
+    view.completeListAnimationForTest();
+
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 1);
+    test_hooks::shapeNamePromptHookForTest() = [](const juce::String&, const juce::String&,
+                                                  std::function<void(juce::String)> done) { done("fresh"); };
+    editor.getSaveShapeButton().onClick();
+
+    int row = -1;
+    for (size_t i = 0; i < view.getRows().size(); ++i)
+        if (view.getRows()[i].text == "fresh")
+            row = (int)i;
+    ASSERT_GE(row, 0) << "the saved shape is listed at once";
+    ASSERT_TRUE(view.getRows()[(size_t)row].shape.has_value());
+    EXPECT_FALSE(view.getRows()[(size_t)row].shape->factory) << "and it is the user's";
+
+    // The row paints the Yours badge, not the Factory one (the badge sits at the right edge of the row).
+    view.completeListAnimationForTest();
+    const auto image = view.createComponentSnapshot(view.getLocalBounds());
+    auto bounds = view.getRowBounds(row);
+    const auto badgeArea = bounds.removeFromRight(100);
+    const auto& theme = synth::theme::themeOf(view);
+    const auto yoursBorder = theme.colors.bg0.overlaidWith(badgeColours(theme, BadgeKind::Yours).border);
+    EXPECT_GT(pixelsNear(image, badgeArea, yoursBorder, 30), 10) << "the Yours badge is drawn on the new row";
+    view.setLookAndFeel(nullptr);
+}
+
+TEST(ShapePicker, EveryRowOfThePickerMenuPaintsItsThumbnailAndItsBadgeAndTheSheetIsWrittenToLookAt) {
+    TempShapes shapes;
+    ASSERT_EQ(ShapeLibrary::shared().save(ShapeKind::Filter, "mine", rampWave()), ShapeLibrary::SaveResult::Saved);
+    synth::theme::AppLookAndFeel laf;
+    auto menu = makeShapePickerMenu(libraryPickerEntries(ShapeLibrary::shared(), ShapeKind::Filter), [](auto&) {});
+    std::vector<juce::PopupMenu::CustomComponent*> rows;
+    juce::PopupMenu::MenuItemIterator it(menu, false);
+    while (it.next())
+        if (auto* c = it.getItem().customComponent.get())
+            rows.push_back(c);
+    ASSERT_GE(rows.size(), 17u);
+
+    const int rowH = 30;
+    const int rowW = 260;
+    juce::Image sheet(juce::Image::ARGB, rowW * 2, rowH * 9, true, juce::SoftwareImageType());
+    juce::Graphics g(sheet);
+    g.fillAll(juce::Colour(0xff161a22));
+    for (size_t i = 0; i < rows.size(); ++i) {
+        int w = 0;
+        int h = 0;
+        rows[i]->getIdealSize(w, h);
+        rows[i]->setBounds(0, 0, rowW, h);
+        juce::Image one(juce::Image::ARGB, rowW, h, true, juce::SoftwareImageType());
+        juce::Graphics og(one);
+        og.fillAll(juce::Colour(0xff161a22));
+        rows[i]->paintEntireComponent(og, false);
+        const auto col = (int)(i / 9);
+        g.drawImageAt(one, col * rowW, (int)(i % 9) * rowH);
+        // The thumbnail box (left) holds drawn curve pixels and the badge (right) holds its pill.
+        int lit = 0;
+        for (int y = 0; y < h; ++y)
+            for (int x = 4; x < 60; ++x)
+                lit += one.getPixelAt(x, y).getBrightness() > 0.5f ? 1 : 0;
+        EXPECT_GT(lit, 8) << "row " << i << " has a curve drawn in its thumbnail";
+        int badge = 0;
+        for (int y = 0; y < h; ++y)
+            for (int x = rowW - 70; x < rowW; ++x)
+                badge += one.getPixelAt(x, y) != juce::Colour(0xff161a22) ? 1 : 0;
+        EXPECT_GT(badge, 40) << "row " << i << " has its badge pill";
+    }
+    if (const auto dir = juce::SystemStats::getEnvironmentVariable("AGENTSYNTH_EVIDENCE_DIR", {}); dir.isNotEmpty()) {
+        const auto file = juce::File(dir).getChildFile("shape-picker-rows.png");
+        file.deleteFile();
+        juce::FileOutputStream out(file);
+        if (out.openedOk())
+            juce::PNGImageFormat().writeImageToStream(sheet, out);
+    }
+}
+
+// Regression test for FRO1172: the Start from menu worked out "is this row a saved shape" from a variable that
+// shadowed the saved-shape count, so the origin it passed on was stale. A saved shape picked there is noted as Yours.
+TEST(ShapePicker, AShapePickedFromStartFromIsNotedAsYoursAndAFactoryOneAsFactory) {
+    struct Heard : ShapeLibrary::Listener {
+        std::vector<synth::shapes::LibraryShape> used;
+        void shapeLibraryChanged() override {}
+        void shapeLibraryUsed(const synth::shapes::LibraryShape& s) override { used.push_back(s); }
+    } heard;
+    TempShapes shapes;
+    ShapeRig rig;
+    ASSERT_EQ(ShapeLibrary::shared().save(ShapeKind::Filter, "mine", rampWave()), ShapeLibrary::SaveResult::Saved);
+    ShapeLibrary::shared().addListener(&heard);
+    ShapeListEditor editor(rig.adapter, 2);
+    CapturedMenu captured;
+    editor.showMenu = [&](juce::PopupMenu& m) { captured.capture(m); };
+    editor.getStartFromButton().onClick();
+    ASSERT_TRUE(captured.run("mine, Yours"));
+    ASSERT_TRUE(captured.run("double peak, Factory"));
+    ShapeLibrary::shared().removeListener(&heard);
+    ASSERT_EQ(heard.used.size(), 2u);
+    EXPECT_EQ(heard.used[0].name, "mine");
+    EXPECT_FALSE(heard.used[0].factory);
+    EXPECT_EQ(heard.used[1].name, "double peak");
+    EXPECT_TRUE(heard.used[1].factory);
 }

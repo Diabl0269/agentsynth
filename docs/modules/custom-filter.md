@@ -316,13 +316,25 @@ Named curves outside any one Filter: the user's saved shapes and a factory set, 
   most 500 files a kind are read.
 - **Factory set** (compiled in, read-only, `FactoryShapes.cpp`): Filter `ah`, `ee`, `oo`, `eh`, `ih` (the preset curves
   above), `telephone band` (a band-pass, -3 dB at 300 Hz and 3.4 kHz, below -30 dB at 100 Hz and 8 kHz), `comb` (a
-  24 dB notch every kHz from 1 to 19 kHz) and `tilt` (0 dB at 20 Hz sloping to -12 dB at 20 kHz). Every Filter shape
+  24 dB notch every kHz from 1 to 19 kHz) and `tilt` (0 dB at 20 Hz sloping to -12 dB at 20 kHz), then the starter set:
+  simple `low-pass ramp`, `band`, `notch`, `two formants` and experimental `wide comb`, `stairs`, `double peak`,
+  `seesaw` (sixteen Filter and sixteen LFO shapes in all). Every Filter shape
   peaks at or below 0 dB (the vowels at most +2.3 dB), under the gain audit's +6 dB ceiling.
 - **Stamping**: a library shape replaces one shape's curve (the name and map position stay) as ONE undo step, from Start
   from, by [dragging](../layout/sound-browser.md#dragging-a-shape) it onto a shape chip in the window, or onto a Filter
   card on its Custom type (the shape nearest the cursor), or with Return on a shape row in the Sounds view while that
   card is the selected one. Each stamp adds the shape to Used recently. `rename` and `remove` change a saved shape's file
   (`remove` is what the Sounds view's Delete calls after asking); `noteUsed` tells listeners a shape was stamped.
+
+### Shape picker
+
+One picker for every place a module holds shapes (`ShapePicker.h`, `makeShapePickerMenu`): a menu whose rows are a
+52 x 20 thumbnail of the curve (`paintShapeThumbnail`, the same drawing as the Sounds view's Shapes rows), the name and
+a Badge, under **Your shapes** then **Factory shapes**. It opens from the **Pick shape** button beside Edit shapes in the
+Custom section of the Filter and LFO cards (`MorphShapesCard`; the shape nearest the morph cursor takes the pick as ONE
+undo step and the pick joins Used recently) and from the shape window's **Start from**. Enter or Space on the button
+opens it, arrows move, Enter picks, Escape closes; each row is named "<name>, <badge>" and the button has a title, a
+tooltip and the shared focus ring.
 
 ## Shape editor window
 
@@ -381,8 +393,9 @@ slider drag is one undo step (the settings are part of the module's extra state)
   name and map position stay. The curves are `CustomFilterShapes::presetCurve`; a new Filter starts with the three
   vowels, which are the same curves. After the built-ins the menu lists **Your shapes** (the Filter shapes saved with
   Save shape) and **Factory shapes** (the [factory set](#shape-library) that is not already a built-in's curve:
-  telephone band, comb, tilt). Each item carries its curve, so a library that changes while the menu is open cannot
-  change what an item stamps.
+  telephone band, comb, tilt). Each row is a shared [shape picker](#shape-picker) row (a small picture of the curve, the name and a Yours or
+  Factory badge, spoken "name, Yours"). Each row carries its curve, so a library that changes while the menu is open
+  cannot change what a row stamps.
 - **Save shape** (right of Draw) saves the selected shape's curve to the [shape library](#shape-library) under a name
   typed in the usual alert prompt (it starts from the shape's name, is cut to 24 characters and refuses an empty
   name by asking again). A name already saved asks "Replace it?" first. A Tab stop named "Save shape" with a tooltip.

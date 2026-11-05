@@ -1,6 +1,6 @@
-// FactoryShapes.cpp -- the shapes built into the app. The five Filter vowels are CustomFilterShapes' own preset
-// curves (not copies of their tables); the other shapes are built here from a few numbers. Every Filter shape keeps
-// its peaks at or below 0 dB, well under the +6 dB gain ceiling.
+// FactoryShapes.cpp -- the shapes built into the app, with the starter set (plain shapes, then experimental ones). The
+// five Filter vowels are CustomFilterShapes' own preset curves (not copies of their tables); the other shapes are built
+// here from a few numbers. Every Filter shape keeps its peaks at or below 0 dB, well under the +6 dB gain ceiling.
 #include "Modules/Filter/CustomFilterShapes.h"
 #include "Modules/Shapes/ShapeLibrary.h"
 #include <cmath>
@@ -139,6 +139,133 @@ LfoCustomWave sixteenthGate() {
     }
     return waveOf(std::move(points));
 }
+// ---- The starter set: a few plain shapes to start from, then a few strange ones to play with. ----
+
+/** Open to 500 Hz, then falls away to the top of the range: a gentle low-pass. */
+LfoCustomWave lowPassRamp() { return responseThrough({{20.0f, 0.0f}, {500.0f, 0.0f}, {20000.0f, -48.0f}}); }
+
+/** One band around 1 kHz with the rest pulled down. */
+LfoCustomWave band() {
+    return responseThrough(
+        {{20.0f, -48.0f}, {400.0f, -30.0f}, {800.0f, 0.0f}, {1250.0f, 0.0f}, {2500.0f, -30.0f}, {20000.0f, -48.0f}});
+}
+
+/** Flat except for one deep notch at 1 kHz. */
+LfoCustomWave notch() {
+    return responseThrough({{20.0f, 0.0f}, {700.0f, 0.0f}, {1000.0f, -36.0f}, {1400.0f, 0.0f}, {20000.0f, 0.0f}});
+}
+
+/** Two close peaks, like a vowel with two formants. */
+LfoCustomWave twoFormants() {
+    return responseThrough({{20.0f, -36.0f},
+                            {250.0f, -18.0f},
+                            {400.0f, 0.0f},
+                            {600.0f, -14.0f},
+                            {1400.0f, -10.0f},
+                            {2000.0f, 0.0f},
+                            {2600.0f, -14.0f},
+                            {6000.0f, -36.0f},
+                            {20000.0f, -48.0f}});
+}
+
+/** A notch every octave from 150 Hz up, 24 dB deep. */
+LfoCustomWave wideComb() {
+    std::vector<std::pair<float, float>> hzDb{{20.0f, 0.0f}, {100.0f, 0.0f}};
+    float hz = 150.0f;
+    while (hz < 12000.0f) {
+        hzDb.push_back({hz, -24.0f});
+        hzDb.push_back({hz * 1.45f, 0.0f});
+        hz *= 2.0f;
+    }
+    hzDb.push_back({20000.0f, 0.0f});
+    return responseThrough(hzDb);
+}
+
+/** Falls in three flat steps, each 12 dB lower, with a sheer edge between them. */
+LfoCustomWave stairs() {
+    return responseThrough({{20.0f, 0.0f},
+                            {250.0f, 0.0f},
+                            {250.0f, -12.0f},
+                            {800.0f, -12.0f},
+                            {800.0f, -24.0f},
+                            {2500.0f, -24.0f},
+                            {2500.0f, -36.0f},
+                            {20000.0f, -36.0f}});
+}
+
+/** Two narrow peaks with a gap between them. */
+LfoCustomWave doublePeak() {
+    return responseThrough({{20.0f, -40.0f},
+                            {300.0f, -40.0f},
+                            {500.0f, 0.0f},
+                            {800.0f, -30.0f},
+                            {1500.0f, -30.0f},
+                            {2500.0f, 0.0f},
+                            {4000.0f, -40.0f},
+                            {20000.0f, -48.0f}});
+}
+
+/** Up and down in wide zigzags across the range. */
+LfoCustomWave seesaw() {
+    return responseThrough({{20.0f, -24.0f},
+                            {200.0f, 0.0f},
+                            {500.0f, -24.0f},
+                            {1200.0f, 0.0f},
+                            {3000.0f, -24.0f},
+                            {7000.0f, 0.0f},
+                            {20000.0f, -24.0f}});
+}
+
+/** Two bumps of different height in one cycle. */
+LfoCustomWave doubleBump() {
+    std::vector<LfoCustomWave::Point> points;
+    for (int i = 0; i <= 24; ++i) {
+        const float x = (float)i / 24.0f;
+        const float first = std::exp(-std::pow((x - 0.25f) / 0.09f, 2.0f));
+        const float second = 0.55f * std::exp(-std::pow((x - 0.72f) / 0.09f, 2.0f));
+        points.push_back({x, juce::jlimit(0.0f, 1.0f, first + second), 0.0f});
+    }
+    return waveOf(std::move(points));
+}
+
+/** A heartbeat: a strong beat, a softer one right after it, then rest. */
+LfoCustomWave heartbeat() {
+    return waveOf({{0.0f, 0.0f, 0.0f},
+                   {0.06f, 1.0f, 0.0f},
+                   {0.16f, 0.0f, 0.0f},
+                   {0.26f, 0.6f, 0.0f},
+                   {0.36f, 0.0f, 0.0f},
+                   {1.0f, 0.0f, 0.0f}});
+}
+
+/** Four short ramps in a row, each starting where the last one began. */
+LfoCustomWave stutterRamp() {
+    std::vector<LfoCustomWave::Point> points;
+    for (int i = 0; i < 4; ++i) {
+        const float start = (float)i * 0.25f;
+        points.push_back({start, 0.0f, 0.0f});
+        points.push_back({start + 0.2f, 1.0f, 0.0f});
+    }
+    points.push_back({1.0f, 0.0f, 0.0f});
+    return waveOf(std::move(points));
+}
+
+/** A staircase that climbs in uneven steps and then falls back in one drop. */
+LfoCustomWave wobbleSteps() {
+    return waveOf({{0.0f, 0.1f, 0.0f},
+                   {0.18f, 0.1f, 0.0f},
+                   {0.18f, 0.45f, 0.0f},
+                   {0.3f, 0.45f, 0.0f},
+                   {0.3f, 0.3f, 0.0f},
+                   {0.5f, 0.3f, 0.0f},
+                   {0.5f, 0.8f, 0.0f},
+                   {0.72f, 0.8f, 0.0f},
+                   {0.72f, 0.6f, 0.0f},
+                   {0.88f, 0.6f, 0.0f},
+                   {0.88f, 1.0f, 0.0f},
+                   {0.97f, 1.0f, 0.0f},
+                   {1.0f, 0.0f, 0.0f}});
+}
 } // namespace
 
 std::vector<LibraryShape> ShapeLibrary::factoryShapes(ShapeKind kind) {
@@ -149,6 +276,15 @@ std::vector<LibraryShape> ShapeLibrary::factoryShapes(ShapeKind kind) {
         out.push_back(filterShape("telephone band", telephoneBand()));
         out.push_back(filterShape("comb", comb()));
         out.push_back(filterShape("tilt", tilt()));
+        // The starter set: plain shapes first, then the experimental ones.
+        out.push_back(filterShape("low-pass ramp", lowPassRamp()));
+        out.push_back(filterShape("band", band()));
+        out.push_back(filterShape("notch", notch()));
+        out.push_back(filterShape("two formants", twoFormants()));
+        out.push_back(filterShape("wide comb", wideComb()));
+        out.push_back(filterShape("stairs", stairs()));
+        out.push_back(filterShape("double peak", doublePeak()));
+        out.push_back(filterShape("seesaw", seesaw()));
         return out;
     }
     return {lfoShape("ramp up", LfoCustomWave::preset(LfoCustomWave::Preset::RampUp)),
@@ -158,7 +294,15 @@ std::vector<LibraryShape> ShapeLibrary::factoryShapes(ShapeKind kind) {
             lfoShape("bounce", bounce()),
             lfoShape("4-step staircase", LfoCustomWave::preset(LfoCustomWave::Preset::Steps4)),
             lfoShape("smooth random", smoothRandom()),
-            lfoShape("1/16 gate", sixteenthGate())};
+            lfoShape("1/16 gate", sixteenthGate()),
+            lfoShape("triangle", LfoCustomWave::preset(LfoCustomWave::Preset::Triangle)),
+            lfoShape("soft sine", LfoCustomWave::preset(LfoCustomWave::Preset::SoftSine)),
+            lfoShape("square", LfoCustomWave::preset(LfoCustomWave::Preset::Square)),
+            lfoShape("pulse", LfoCustomWave::preset(LfoCustomWave::Preset::Pulse)),
+            lfoShape("double bump", doubleBump()),
+            lfoShape("heartbeat", heartbeat()),
+            lfoShape("stutter ramp", stutterRamp()),
+            lfoShape("wobble steps", wobbleSteps())};
 }
 
 } // namespace synth::shapes

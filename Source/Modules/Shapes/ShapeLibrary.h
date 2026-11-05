@@ -60,7 +60,8 @@ public:
     /** Tests only: keeps this library's files under `root` (empty restores the default folder). */
     void setRootForTest(const juce::File& root);
 
-    /** The shapes built into the app, in the order the Sounds view lists them: 8 for each kind. */
+    /** The shapes built into the app, in the order the Sounds view lists them: 16 for each kind, the starter set last.
+     */
     static std::vector<LibraryShape> factoryShapes(ShapeKind kind);
     /** The user's saved shapes, by name; a file that cannot be trusted is left out. */
     std::vector<LibraryShape> userShapes(ShapeKind kind) const;

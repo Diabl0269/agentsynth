@@ -158,11 +158,29 @@ TEST(ShapeEditor, StartFromListsTheBuiltInsThenTheFactoryShapesAndStampsTheCurve
     click(editor.getStartFromButton());
 
     // The built-ins as before; the factory shapes whose curve is already a built-in (the vowels) are not repeated.
-    const std::vector<std::string> expected{
-        "ah", "ee", "oo", "eh", "ih", "wolf", "crow", "frog", "Factory shapes", "telephone band", "comb", "tilt"};
+    const std::vector<std::string> expected{"ah, Factory",
+                                            "ee, Factory",
+                                            "oo, Factory",
+                                            "eh, Factory",
+                                            "ih, Factory",
+                                            "wolf, Factory",
+                                            "crow, Factory",
+                                            "frog, Factory",
+                                            "Factory shapes",
+                                            "telephone band, Factory",
+                                            "comb, Factory",
+                                            "tilt, Factory",
+                                            "low-pass ramp, Factory",
+                                            "band, Factory",
+                                            "notch, Factory",
+                                            "two formants, Factory",
+                                            "wide comb, Factory",
+                                            "stairs, Factory",
+                                            "double peak, Factory",
+                                            "seesaw, Factory"};
     EXPECT_EQ(captured.items, expected);
     const int serial = rig.undo.getEditSerial();
-    ASSERT_TRUE(captured.run("wolf"));
+    ASSERT_TRUE(captured.run("wolf, Factory"));
     const auto& shape = rig.filter->getCustomShapes().shapes[2];
     EXPECT_EQ(shape.curve, CustomFilterShapes::presetCurve(CustomFilterShapes::Preset::Wolf));
     EXPECT_EQ(shape.name, "oo") << "only the curve is replaced";

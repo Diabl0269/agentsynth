@@ -28,6 +28,8 @@ public:
         std::function<void()> makeRoom;
         bool* settling = nullptr;
         std::function<void(juce::PopupMenu&)> showMenu;
+        /** Shows a menu beside `screenArea` (the Pick shape button); unset falls back to showMenu. */
+        std::function<void(juce::PopupMenu&, juce::Rectangle<int> screenArea)> showMenuAt;
         /** Opens the control menu of the parameter behind raw channel `channel` beside `screenArea`; unset shows none.
          */
         std::function<void(int channel, juce::Rectangle<int> screenArea)> stripMenu;
@@ -105,6 +107,12 @@ public:
 
     MorphMap& getMap() noexcept { return map_; }
     juce::TextButton& getEditButton() noexcept { return editButton_; }
+    juce::TextButton& getPickButton() noexcept { return pickButton_; }
+    /** Opens the shape picker beside the Pick shape button (what a press of the button does). */
+    void openPicker();
+    /** Applies a library shape picked from the picker or dropped: the shape nearest the cursor takes its curve, as
+     *  one undo step. */
+    void applyPickedShape(const synth::shapes::LibraryShape& shape);
     juce::ToggleButton& getToggle() noexcept { return toggle_; }
     ShapeMapController& getController() noexcept { return *controller_; }
     ModuleShapesAdapter& getAdapter() noexcept { return *adapter_; }
@@ -137,6 +145,7 @@ private:
     int morphYChannel_;
     MorphMap map_;
     juce::TextButton editButton_{"Edit shapes"};
+    juce::TextButton pickButton_{"Pick shape"};
     juce::ToggleButton toggle_{"Show Morph Map"};
     std::unique_ptr<ShapeMapController> controller_;
     synth::CardBlockFade editFade_;
