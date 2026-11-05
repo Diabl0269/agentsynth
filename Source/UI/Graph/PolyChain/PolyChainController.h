@@ -5,6 +5,7 @@
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 class GraphEditor;
@@ -19,6 +20,12 @@ struct PolyChainPrompt {
     int otherModuleCount = 0;
     juce::String trackNames; ///< "Bass and Lead".
     juce::String message;    ///< "This also changes 2 modules on Bass and Lead."
+};
+
+/** A module a sequencer's Midi output feeds that plays one note at a time: its node and the name the hint shows. */
+struct MonoNoteDestination {
+    juce::AudioProcessorGraph::NodeID node;
+    juce::String name;
 };
 
 /**
@@ -62,6 +69,13 @@ public:
     /** The header switch was clicked: the same plan, question and ONE undo step as polyPillClicked, started from the
      *  track's source node (which has no pill of its own, so nothing falls back to it). */
     void trackPolyClicked(juce::AudioProcessorGraph::NodeID trackSource, bool poly);
+
+    /** The first module with a Poly switch that is off which `sequencer`'s Midi output feeds directly, or nullopt when
+     *  every note reaches something that plays them all (or nothing). The Poly Sequencer card's hint reads this. */
+    std::optional<MonoNoteDestination> monoNoteDestination(juce::AudioProcessorGraph::NodeID sequencer) const;
+
+    /** The hint's button: the same call, plan, question and ONE undo step as clicking `destination`'s own Poly pill. */
+    void turnPolyOn(juce::AudioProcessorGraph::NodeID destination) { polyPillClicked(destination, true); }
 
     /** Called after a click changed the voice graph, so surfaces that show its state (the track headers) re-read it. */
     std::function<void()> onVoiceGraphChanged;

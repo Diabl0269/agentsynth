@@ -191,18 +191,14 @@ DrumIdeasPanel::DrumIdeasPanel(std::function<DrumIdeasContext()> context)
         auto& pick = *picks_[(size_t)i];
         pick.setTitle("Pick take " + number);
         pick.setTooltip("Use take " + number +
-                        ": add it as a new clip after this one (one undo step), or replace this "
-                        "clip when Replace this clip is on");
+                        " in this clip: it replaces the pattern, playback keeps going, and "
+                        "one undo brings the old pattern back");
         pick.onClick = [this, i] {
             if (!takes_[(size_t)i].empty() && onPick)
-                onPick(takes_[(size_t)i], replace_.getToggleState(), i);
+                onPick(takes_[(size_t)i], i);
         };
         addAndMakeVisible(pick);
     }
-    replace_.setTitle("Replace this clip");
-    replace_.setTooltip("Pick puts the take into this clip instead of adding a new clip after it");
-    setTogglePillStyle(replace_, true);
-    addAndMakeVisible(replace_);
 
     density_.setRange(0.0, 100.0, 1.0);
     density_.setValue(50.0, juce::dontSendNotification);
@@ -341,9 +337,6 @@ void DrumIdeasPanel::resized() {
         takesRow.removeFromLeft(kGap);
         picksRow.removeFromLeft(kGap);
     }
-    area.removeFromTop(kGap);
-    replace_.setBounds(area.removeFromTop(kRowHeight)
-                           .removeFromLeft(theme::AppLookAndFeel::togglePillWidth(replace_.getButtonText())));
     area.removeFromTop(kGap);
     dividerY_[1] = area.getY();
     area.removeFromTop(kGap);

@@ -66,7 +66,7 @@ void LaneNameButton::paintButton(juce::Graphics& g, bool, bool) {
 }
 
 // Return and Space press at once, like the fold arrow: juce::Button posts Return's click to the message queue and has
-// no Space handling. Every other key (Up/Down, Cmd+Alt+Up/Down) bubbles to the header.
+// no Space handling. Every other key (Up/Down, Alt+Up/Down) bubbles to the header.
 bool LaneNameButton::keyPressed(const juce::KeyPress& key) {
     if (key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
         return false;

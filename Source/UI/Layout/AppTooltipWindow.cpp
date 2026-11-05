@@ -1,5 +1,6 @@
 #include "UI/Layout/AppTooltipWindow.h"
 
+#include "TestMode/TestModeStateSource.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <algorithm>
@@ -63,19 +64,77 @@ private:
     AnimationDriver driver_;
 };
 
+// A 1x1 child that carries the id and the state test mode reads: the window's text and placement.
+class AppTooltipWindow::StateChild final
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit StateChild(const AppTooltipWindow& window)
+        : window_(window) {
+        setComponentID("tooltipWindow");
+        setInterceptsMouseClicks(false, false);
+        setAccessible(false);
+        setBounds(0, 0, 1, 1);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override { window_.addTestModeState(into); }
+
+private:
+    const AppTooltipWindow& window_;
+};
+
 AppTooltipWindow::AppTooltipWindow(juce::Component* parent, juce::ApplicationProperties* appProperties,
                                    int millisecondsBeforeTipAppears)
     : juce::TooltipWindow(parent, millisecondsBeforeTipAppears)
     , appProperties_(appProperties)
     , updater_(this) {
     setOpaque(false); // it fades, and its corners are rounded: nothing behind it may be assumed
+    stateChild_ = std::make_unique<StateChild>(*this);
+    if (parent != nullptr)
+        parent->addAndMakeVisible(*stateChild_); // beside the window: it is hidden whenever no tip shows
 }
 
 AppTooltipWindow::~AppTooltipWindow() {
+    if (auto* host = stateChild_->getParentComponent())
+        host->removeChildComponent(stateChild_.get());
     destroying_ = true; // the base class hides the tip as it goes: no ghost for that
     driver_.stop(updater_);
     if (ghost_ != nullptr)
         ghost_->stop();
+}
+
+namespace {
+std::optional<juce::Point<int>>& syntheticPointer() {
+    static std::optional<juce::Point<int>> pointer;
+    return pointer;
+}
+} // namespace
+
+void AppTooltipWindow::setSyntheticPointer(std::optional<juce::Point<int>> screenPosition) noexcept {
+    syntheticPointer() = screenPosition;
+}
+
+// juce puts the tip where it read the OS cursor, just before this call: with a synthetic pointer set, put it at that
+// pointer instead (juce's own placement rule, so the tip clears the pointer the same way).
+void AppTooltipWindow::moved() { placeAtSyntheticPointer(); }
+
+void AppTooltipWindow::placeAtSyntheticPointer() {
+    const auto pointer = syntheticPointer();
+    auto* parent = getParentComponent();
+    if (replacing_ || !pointer || parent == nullptr || lastTip_.isEmpty())
+        return;
+    const juce::ScopedValueSetter<bool> guard(replacing_, true);
+    setBounds(getLookAndFeel().getTooltipBounds(lastTip_, parent->getLocalPoint(nullptr, *pointer),
+                                                parent->getLocalBounds()));
+}
+
+void AppTooltipWindow::addTestModeState(juce::DynamicObject& into) const {
+    constexpr int kReach = 40; // a tip sits 24 px right of, or 12 px left of, the pointer and 6 px beside it
+    const bool shown = isVisible() && !lastTip_.isEmpty();
+    into.setProperty("tipText", shown ? lastTip_ : juce::String());
+    bool atPointer = true;
+    if (const auto pointer = syntheticPointer(); shown && pointer && getParentComponent() != nullptr)
+        atPointer = getBounds().expanded(kReach).contains(getParentComponent()->getLocalPoint(nullptr, *pointer));
+    into.setProperty("tipAtPointer", atPointer);
 }
 
 bool AppTooltipWindow::areInfoTooltipsOn() const {
@@ -129,10 +188,12 @@ bool AppTooltipWindow::shouldAnimate() const {
 void AppTooltipWindow::visibilityChanged() {
     if (destroying_)
         return;
-    if (isVisible())
+    if (isVisible()) {
+        placeAtSyntheticPointer(); // a tip shown again where juce had it before does not move, so moved() is not called
         beginFadeIn();
-    else
+    } else {
         beginFadeOut();
+    }
 }
 
 void AppTooltipWindow::applyFadeInFrameForTest(float eased) {

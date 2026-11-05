@@ -4,6 +4,7 @@
 #include "MainComponent.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Library/LibrarySidebarViews.h"
 
 std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandRows() {
     return {

@@ -1,0 +1,542 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": 16,
+      "type": "Audio Output",
+      "uuid": "2a8fdfe5-9bb1-466c-a2a8-2e8baf91b99b",
+      "params": {
+      },
+      "position": {
+        "x": 792,
+        "y": 40
+      }
+    },
+    {
+      "id": 17,
+      "type": "Track In",
+      "uuid": "ab968dda-68a2-4b14-a348-e0609f57a998",
+      "params": {
+        "bypassed": false
+      },
+      "position": {
+        "x": 112,
+        "y": 184
+      }
+    },
+    {
+      "id": 18,
+      "type": "Drum Kit",
+      "uuid": "2095cba9-80fe-486f-9566-f0fae37237d8",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "kickLevel": 0.899999976158142,
+        "kickTune": 0.0,
+        "kickDecay": 0.349999994039536,
+        "snareLevel": 0.800000011920929,
+        "snareTune": 0.0,
+        "snareDecay": 0.180000007152557,
+        "clapLevel": 0.800000011920929,
+        "clapTune": 0.0,
+        "clapDecay": 0.200000002980232,
+        "hatLevel": 0.600000023841858,
+        "hatTune": 0.0,
+        "closedDecay": 0.050000000745058,
+        "openDecay": 0.449999988079071,
+        "tomLevel": 0.800000011920929,
+        "tomTune": 0.0,
+        "tomDecay": 0.300000011920929,
+        "cymbalLevel": 0.5,
+        "cymbalTune": 0.0,
+        "cymbalDecay": 1.50000011920929,
+        "cowbellLevel": 0.800000011920929,
+        "cowbellTune": 0.0,
+        "cowbellDecay": 0.25,
+        "level": 0.699999988079071,
+        "muted": false,
+        "kickRecorded": true,
+        "snareRecorded": true,
+        "clapRecorded": true,
+        "hatRecorded": true,
+        "tomRecorded": true,
+        "cymbalRecorded": true,
+        "cowbellRecorded": true,
+        "pad1Level": 0.899999976158142,
+        "pad1Tune": 0.0,
+        "pad1Decay": 0.349999994039536,
+        "pad1Start": 0.0,
+        "pad2Level": 0.800000011920929,
+        "pad2Tune": 0.0,
+        "pad2Decay": 0.179999977350235,
+        "pad2Start": 0.0,
+        "pad3Level": 0.800000011920929,
+        "pad3Tune": 0.0,
+        "pad3Decay": 0.199999988079071,
+        "pad3Start": 0.0,
+        "pad4Level": 0.600000023841858,
+        "pad4Tune": 0.0,
+        "pad4Decay": 0.049999997019768,
+        "pad4Start": 0.0,
+        "pad5Level": 0.600000023841858,
+        "pad5Tune": 0.0,
+        "pad5Decay": 0.449999988079071,
+        "pad5Start": 0.0,
+        "pad6Level": 0.800000011920929,
+        "pad6Tune": 0.0,
+        "pad6Decay": 0.300000041723251,
+        "pad6Start": 0.0,
+        "pad7Level": 0.5,
+        "pad7Tune": 0.0,
+        "pad7Decay": 1.500000238418579,
+        "pad7Start": 0.0,
+        "pad8Level": 0.800000011920929,
+        "pad8Tune": 0.0,
+        "pad8Decay": 0.250000029802322,
+        "pad8Start": 0.0,
+        "pad9Level": 0.800000011920929,
+        "pad9Tune": 0.0,
+        "pad9Decay": 0.179999977350235,
+        "pad9Start": 0.0,
+        "pad10Level": 0.600000023841858,
+        "pad10Tune": 0.0,
+        "pad10Decay": 0.049999997019768,
+        "pad10Start": 0.0,
+        "pad11Level": 0.800000011920929,
+        "pad11Tune": 0.0,
+        "pad11Decay": 0.300000041723251,
+        "pad11Start": 0.0,
+        "pad12Level": 0.800000011920929,
+        "pad12Tune": 0.0,
+        "pad12Decay": 0.300000041723251,
+        "pad12Start": 0.0,
+        "pad13Level": 0.800000011920929,
+        "pad13Tune": 0.0,
+        "pad13Decay": 0.300000041723251,
+        "pad13Start": 0.0,
+        "pad14Level": 0.800000011920929,
+        "pad14Tune": 0.0,
+        "pad14Decay": 0.300000041723251,
+        "pad14Start": 0.0,
+        "pad15Level": 0.800000011920929,
+        "pad15Tune": 0.0,
+        "pad15Decay": 0.300000041723251,
+        "pad15Start": 0.0,
+        "pad16Level": 0.5,
+        "pad16Tune": 0.0,
+        "pad16Decay": 1.500000238418579,
+        "pad16Start": 0.0,
+        "pad17Level": 0.899999976158142,
+        "pad17Tune": 0.0,
+        "pad17Decay": 0.349999994039536,
+        "pad17Start": 0.0,
+        "pad18Level": 0.800000011920929,
+        "pad18Tune": 0.0,
+        "pad18Decay": 0.179999977350235,
+        "pad18Start": 0.0,
+        "pad19Level": 0.5,
+        "pad19Tune": 0.0,
+        "pad19Decay": 1.500000238418579,
+        "pad19Start": 0.0,
+        "pad20Level": 0.5,
+        "pad20Tune": 0.0,
+        "pad20Decay": 1.500000238418579,
+        "pad20Start": 0.0,
+        "pad21Level": 0.800000011920929,
+        "pad21Tune": 0.0,
+        "pad21Decay": 0.300000041723251,
+        "pad21Start": 0.0,
+        "pad22Level": 0.800000011920929,
+        "pad22Tune": 0.0,
+        "pad22Decay": 0.300000041723251,
+        "pad22Start": 0.0,
+        "pad23Level": 0.800000011920929,
+        "pad23Tune": 0.0,
+        "pad23Decay": 0.300000041723251,
+        "pad23Start": 0.0,
+        "pad24Level": 0.800000011920929,
+        "pad24Tune": 0.0,
+        "pad24Decay": 0.300000041723251,
+        "pad24Start": 0.0,
+        "pad25Level": 0.800000011920929,
+        "pad25Tune": 0.0,
+        "pad25Decay": 0.300000041723251,
+        "pad25Start": 0.0,
+        "pad26Level": 0.800000011920929,
+        "pad26Tune": 0.0,
+        "pad26Decay": 0.300000041723251,
+        "pad26Start": 0.0,
+        "pad27Level": 0.800000011920929,
+        "pad27Tune": 0.0,
+        "pad27Decay": 0.300000041723251,
+        "pad27Start": 0.0,
+        "pad28Level": 0.800000011920929,
+        "pad28Tune": 0.0,
+        "pad28Decay": 0.300000041723251,
+        "pad28Start": 0.0,
+        "pad29Level": 0.800000011920929,
+        "pad29Tune": 0.0,
+        "pad29Decay": 0.300000041723251,
+        "pad29Start": 0.0,
+        "pad30Level": 0.800000011920929,
+        "pad30Tune": 0.0,
+        "pad30Decay": 0.300000041723251,
+        "pad30Start": 0.0,
+        "pad31Level": 0.800000011920929,
+        "pad31Tune": 0.0,
+        "pad31Decay": 0.300000041723251,
+        "pad31Start": 0.0,
+        "pad32Level": 0.800000011920929,
+        "pad32Tune": 0.0,
+        "pad32Decay": 0.300000041723251,
+        "pad32Start": 0.0
+      },
+      "position": {
+        "x": 432,
+        "y": 184
+      }
+    },
+    {
+      "id": 19,
+      "type": "Gate",
+      "uuid": "c7cd271f-757a-4d1c-a6a5-c02a8044db62",
+      "params": {
+        "bypassed": true,
+        "dualIO": false,
+        "threshold": -40.0,
+        "attack": 1.99999988079071,
+        "hold": 10.0,
+        "release": 150.0,
+        "range": -80.0,
+        "outputLevel": 1.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 752,
+        "y": 184
+      }
+    },
+    {
+      "id": 20,
+      "type": "Parametric EQ",
+      "uuid": "e11d7b55-64e9-4b66-bae6-705afdcae7ab",
+      "params": {
+        "bypassed": true,
+        "dualIO": false,
+        "band1On": false,
+        "band1Freq": 100.0,
+        "band1Gain": 0.0,
+        "band1Q": 0.707106709480286,
+        "band2On": false,
+        "band2Freq": 499.999969482421875,
+        "band2Gain": 0.0,
+        "band2Q": 0.707106709480286,
+        "band3On": false,
+        "band3Freq": 2999.999755859375,
+        "band3Gain": 0.0,
+        "band3Q": 0.707106709480286,
+        "band4On": false,
+        "band4Freq": 7999.99951171875,
+        "band4Gain": 0.0,
+        "band4Q": 0.707106709480286,
+        "outputGain": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1072,
+        "y": 184
+      }
+    },
+    {
+      "id": 21,
+      "type": "Compressor",
+      "uuid": "e2fee759-533d-41a5-89f1-a60466d43142",
+      "params": {
+        "bypassed": true,
+        "dualIO": false,
+        "threshold": -11.999999046325684,
+        "ratio": 4.0,
+        "attack": 10.0,
+        "release": 100.0,
+        "makeupGain": 5.960464477539062e-7,
+        "knee": 0.0,
+        "muted": false,
+        "mix": 1.0,
+        "pan": 0.0
+      },
+      "position": {
+        "x": 1672,
+        "y": 184
+      }
+    },
+    {
+      "id": 22,
+      "type": "Channel Strip",
+      "uuid": "df2d986f-e013-4ee2-a027-9f49b557e1b8",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "gain": -1.430511474609375e-6,
+        "pan": 0.0,
+        "send1Level": -1.430511474609375e-6,
+        "send2Level": -1.430511474609375e-6,
+        "send3Level": -1.430511474609375e-6,
+        "send4Level": -1.430511474609375e-6,
+        "muted": false,
+        "send1Pan": 0.0,
+        "send2Pan": 0.0,
+        "send3Pan": 0.0,
+        "send4Pan": 0.0
+      },
+      "state": {
+        "shape": "stereo",
+        "solo": false,
+        "isBus": false,
+        "name": "",
+        "sends": []
+      },
+      "position": {
+        "x": 1992,
+        "y": 184
+      }
+    },
+    {
+      "id": 23,
+      "type": "Master",
+      "uuid": "653b1c48-76e7-44c8-a316-421eaf0c9c77",
+      "params": {
+        "bypassed": false,
+        "dualIO": false,
+        "gain": -1.430511474609375e-6,
+        "safetyLimiter": true,
+        "muted": false
+      },
+      "position": {
+        "x": 472,
+        "y": 40
+      }
+    },
+    {
+      "id": 24,
+      "type": "Macro Out",
+      "uuid": "3de4e5c3-5d66-4097-8fd9-35c10a61163d",
+      "params": {
+        "bypassed": false
+      },
+      "state": {
+        "shape": "stereo_collapsed",
+        "voices": 1
+      },
+      "position": {
+        "x": 112,
+        "y": 184
+      }
+    }
+  ],
+  "connections": [
+    {
+      "src": 17,
+      "srcPort": -1,
+      "dst": 18,
+      "dstPort": -1,
+      "isMidi": true
+    },
+    {
+      "src": 18,
+      "srcPort": 0,
+      "dst": 19,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 18,
+      "srcPort": 1,
+      "dst": 19,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 0,
+      "dst": 20,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 19,
+      "srcPort": 1,
+      "dst": 20,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 20,
+      "srcPort": 0,
+      "dst": 21,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 20,
+      "srcPort": 1,
+      "dst": 21,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 0,
+      "dst": 22,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 21,
+      "srcPort": 1,
+      "dst": 22,
+      "dstPort": 4,
+      "isMidi": false
+    },
+    {
+      "src": 22,
+      "srcPort": 0,
+      "dst": 24,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 22,
+      "srcPort": 4,
+      "dst": 24,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 23,
+      "srcPort": 0,
+      "dst": 16,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 23,
+      "srcPort": 1,
+      "dst": 16,
+      "dstPort": 1,
+      "isMidi": false
+    },
+    {
+      "src": 24,
+      "srcPort": 0,
+      "dst": 23,
+      "dstPort": 0,
+      "isMidi": false
+    },
+    {
+      "src": 24,
+      "srcPort": 1,
+      "dst": 23,
+      "dstPort": 1,
+      "isMidi": false
+    }
+  ],
+  "modulations": [],
+  "timeline": {
+    "version": 1,
+    "nextTrackId": 2,
+    "nextClipId": 2,
+    "nextLaneId": 1,
+    "nextNoteId": 1,
+    "nextMarkerId": 1,
+    "tracks": [
+      {
+        "id": 1,
+        "kind": 0,
+        "name": "Drum Kit 1",
+        "colourArgb": 4283417087,
+        "muted": false,
+        "soloed": false,
+        "armed": false,
+        "bindingUuid": "ab968dda-68a2-4b14-a348-e0609f57a998",
+        "clips": [
+          {
+            "id": 1,
+            "name": "Beat 1",
+            "startBeat": 0.0,
+            "lengthBeats": 4.0,
+            "muted": false,
+            "assetRef": "",
+            "gainDb": 0.0,
+            "fadeInBeats": 0.0,
+            "fadeOutBeats": 0.0,
+            "sourceStartSeconds": 0.0,
+            "notes": []
+          }
+        ],
+        "lanes": []
+      }
+    ],
+    "markers": []
+  },
+  "macros": [
+    {
+      "id": "7ed30273-9379-4ed7-9d6f-32720ad2f659",
+      "name": "Drum Kit 1",
+      "colour": "ff4fc1ff",
+      "collapsed": true,
+      "bounds": {
+        "x": 112,
+        "y": 184,
+        "w": 280,
+        "h": 90
+      },
+      "members": [
+        "ab968dda-68a2-4b14-a348-e0609f57a998",
+        "2095cba9-80fe-486f-9566-f0fae37237d8",
+        "c7cd271f-757a-4d1c-a6a5-c02a8044db62",
+        "e11d7b55-64e9-4b66-bae6-705afdcae7ab",
+        "e2fee759-533d-41a5-89f1-a60466d43142",
+        "df2d986f-e013-4ee2-a027-9f49b557e1b8",
+        "3de4e5c3-5d66-4097-8fd9-35c10a61163d"
+      ],
+      "ports": [
+        {
+          "nodeUuid": "3de4e5c3-5d66-4097-8fd9-35c10a61163d",
+          "isInput": false,
+          "name": "Output",
+          "order": 0,
+          "kind": "audioCV"
+        }
+      ]
+    }
+  ],
+  "midiRemote": {
+    "version": 1,
+    "assignments": [],
+    "controllers": []
+  },
+  "mixerPanLaw": "compensated",
+  "mixerView": {
+    "zones": {
+      "master": "right"
+    },
+    "hidden": []
+  },
+  "transport": {
+    "bpm": 120.0,
+    "timeSigNum": 4,
+    "timeSigDen": 4,
+    "loopStartBeat": 0.0,
+    "loopEndBeat": 4.0,
+    "loopEnabled": false
+  },
+  "view": {
+    "zoom": 1.0,
+    "panX": 0.0,
+    "panY": 0.0
+  }
+}

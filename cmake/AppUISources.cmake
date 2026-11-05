@@ -2,6 +2,8 @@
 # Paths are relative to the repo root.
 set(APPUI_SOURCES
     Source/MainComponent/MainComponent.cpp
+    Source/MainComponent/QuitRequest.h
+    Source/MainComponent/QuitRequest.cpp
     Source/MainComponent/MainComponent.h
     Source/MainComponent/MainComponentInternal.h
     Source/MainComponent/MainComponentRemoteActionInvoker.h
@@ -152,6 +154,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulators.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulatorFold.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesModulatorDrag.cpp
+    Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesDragGap.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesReorder.cpp
     Source/UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanesShapes.cpp
     Source/UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h
@@ -262,9 +265,6 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
     Source/UI/Layout/ProgressStrip.cpp
     Source/UI/Layout/ProgressStrip.h
-    Source/UI/Layout/AppTooltipWindow.h
-    Source/UI/Layout/AppTooltipWindow.cpp
-    Source/UI/Layout/HelperTooltip.h
     Source/UI/Layout/CalloutReveal.h
     Source/UI/Layout/CalloutReveal.cpp
     Source/UI/Layout/CardCallOut.cpp

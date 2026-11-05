@@ -1,0 +1,23 @@
+# Cmd+Q did nothing while Settings (or any dialog) was open: JUCE's macOS peer swallows every unused key while a modal
+# component is up, so the menu's Quit never ran. The dialog now asks the app to quit itself (DialogMenuKeys).
+#
+# What a user does: makes a change, opens Settings, presses Cmd+Q: the unsaved-changes question appears on top of
+# Settings. `requestQuit` runs the app's own quit request (what the menu item and the dialog's key reach); the key and
+# the native menu are not driven here (the dialog's key handling is covered by ShortcutRelayTests).
+record: true
+save_project: quit-with-settings-open
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - click: {id: "card:Oscillator 2", x: 60, y: 12}
+  - wait: {}
+  - key: {keys: delete}
+  - wait: {}
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - expect: {id: "Settings", showing: true, within_ms: 3000}
+  - requestQuit: {}
+  - expect: {id: "Unsaved Changes", showing: true, within_ms: 3000}
+  - expect: {id: "Settings", showing: true}
+  - screenshot: {id: "Unsaved Changes", name: unsaved-prompt}
+  - screenshot: {id: "Settings", name: settings-under-prompt}

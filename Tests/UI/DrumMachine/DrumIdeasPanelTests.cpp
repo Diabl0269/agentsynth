@@ -67,9 +67,8 @@ TEST(DrumIdeasPanelTest, EveryControlIsATabStopWithATitleAndATooltipInsideThePan
         EXPECT_TRUE(client->getTooltip().isNotEmpty()) << child->getTitle();
         EXPECT_TRUE(f.panel->getLocalBounds().contains(child->getBounds())) << child->getTitle();
     }
-    EXPECT_EQ(controls, 12 + 2 + 1 + 1 + 1 + 3 + 3 + 1 + 1 + 1 + 1)
-        << "starters, snare roll, tom fill, every 4th bar, amount, make, takes, picks, replace, density, keep, "
-           "randomize";
+    EXPECT_EQ(controls, 12 + 2 + 1 + 1 + 1 + 3 + 3 + 1 + 1 + 1)
+        << "starters, snare roll, tom fill, every 4th bar, amount, make, takes, picks, density, keep, randomize";
 }
 
 TEST(DrumIdeasPanelTest, AStarterFillsTheClipAsOneUndoStepAndAnnouncesIt) {
@@ -138,48 +137,55 @@ TEST(DrumIdeasPanelTest, MakeThreeTakesShowsThreePicturesAndNothingIsWrittenYet)
     EXPECT_FALSE(f.undo.canUndo());
 }
 
-TEST(DrumIdeasPanelTest, PickAddsANewClipRightAfterTheCurrentOneAndOpensIt) {
+TEST(DrumIdeasPanelTest, PickReplacesThisClipsPatternWithNoNewClipAndOneUndoStep) {
     IdeasFixture f;
     f.panel->getStarterButton(Style::Rock).onClick();
     ASSERT_TRUE(f.doc.setClipHumanise(f.clip, 0.4));
     f.undo.clearUndoHistory();
-    synth::ClipId created;
-    f.grid.onClipCreated = [&](synth::ClipId id) { created = id; };
+    const auto original = f.c().notes;
     f.panel->getMakeTakesButton().onClick();
     const auto take = f.panel->getTakeGrid(1).getNotes();
     f.panel->getPickButton(1).onClick();
 
-    ASSERT_TRUE(created.isValid());
-    const auto* track = f.doc.getTrackForClip(f.clip);
-    ASSERT_NE(track, nullptr);
-    EXPECT_EQ(track->clips.size(), 2u);
-    const auto* added = f.doc.getClip(created);
-    ASSERT_NE(added, nullptr);
-    EXPECT_DOUBLE_EQ(added->startBeat, 8.0) << "right after the current clip";
-    EXPECT_DOUBLE_EQ(added->lengthBeats, 8.0);
-    EXPECT_EQ(added->notes.size(), take.size());
-    EXPECT_DOUBLE_EQ(added->humanise, 0.4) << "the new clip keeps the groove";
-    EXPECT_EQ(f.grid.getClipId(), created) << "the grid opens the new clip";
+    EXPECT_EQ(f.doc.getTrackForClip(f.clip)->clips.size(), 1u) << "no new clip";
+    EXPECT_EQ(f.grid.getClipId(), f.clip) << "the grid stays on this clip";
+    EXPECT_EQ(f.c().notes.size(), take.size());
+    EXPECT_DOUBLE_EQ(f.c().humanise, 0.4) << "the groove stays";
+    EXPECT_NE(f.grid.getLastAnnouncement().indexOf("Replaced this clip"), -1);
     f.undo.undo();
-    EXPECT_EQ(f.doc.getTrackForClip(f.clip)->clips.size(), 1u);
+    EXPECT_EQ(f.c().notes.size(), original.size());
     EXPECT_FALSE(f.undo.canUndo()) << "one undo step";
 }
 
-TEST(DrumIdeasPanelTest, PickWithReplaceSwapsTheNotesOfThisClipInOneUndoStep) {
+// Regression test for FRO1049: Pick opened a new clip, and reopening the grid stopped the looping clip.
+TEST(DrumIdeasPanelTest, PickKeepsAPlayingClipLoopRunning) {
     IdeasFixture f;
-    f.panel->getStarterButton(Style::Rock).onClick();
-    f.undo.clearUndoHistory();
+    int starts = 0;
+    int stops = 0;
+    f.grid.onStartClipPreview = [&](double, double) {
+        ++starts;
+        return true;
+    };
+    f.grid.onStopClipPreview = [&] { ++stops; };
+    f.grid.startClipPreview();
+    ASSERT_TRUE(f.grid.isClipPreviewing());
     f.panel->getMakeTakesButton().onClick();
-    const auto take = f.panel->getTakeGrid(2).getNotes();
-    const auto before = f.c().notes.size();
-    f.panel->getReplaceToggle().setToggleState(true, juce::dontSendNotification);
+    f.panel->getPickButton(0).onClick();
+    EXPECT_TRUE(f.grid.isClipPreviewing()) << "the playing flag is unchanged";
+    EXPECT_EQ(starts, 1) << "the loop is not restarted";
+    EXPECT_EQ(stops, 0) << "and not stopped";
+    f.panel->getMakeTakesButton().onClick();
     f.panel->getPickButton(2).onClick();
-    EXPECT_EQ(f.doc.getTrackForClip(f.clip)->clips.size(), 1u);
-    EXPECT_EQ(f.c().notes.size(), take.size());
-    EXPECT_EQ(f.grid.getClipId(), f.clip);
-    f.undo.undo();
-    EXPECT_EQ(f.c().notes.size(), before);
-    EXPECT_FALSE(f.undo.canUndo());
+    EXPECT_TRUE(f.grid.isClipPreviewing());
+    EXPECT_EQ(stops, 0);
+}
+
+TEST(DrumIdeasPanelTest, TheReplaceSwitchIsGoneAndPickSaysItReplacesTheClip) {
+    IdeasFixture f;
+    for (auto* child : f.panel->getChildren())
+        EXPECT_NE(child->getTitle(), "Replace this clip");
+    EXPECT_NE(f.panel->getPickButton(0).getTooltip().indexOf("replaces"), -1);
+    EXPECT_EQ(f.panel->getPickButton(0).getTooltip().indexOf("new clip"), -1);
 }
 
 TEST(DrumIdeasPanelTest, RandomizeKeepingKickAndSnareLeavesThemAloneAsOneUndoStep) {
@@ -340,26 +346,23 @@ TEST(DrumIdeasPanelTest, AFillLiftsAnEightStepGridToSixteenInTheSameUndoStep) {
     EXPECT_FALSE(f.undo.canUndo());
 }
 
-TEST(DrumIdeasPanelTest, PickingATakeAsANewClipCopiesTheDrumsOwnLengthAndSwing) {
+TEST(DrumIdeasPanelTest, PickingATakeKeepsTheDrumsOwnLengthAndSwingAndTheGrid) {
     IdeasFixture f;
     f.panel->getStarterButton(Style::Rock).onClick();
     ASSERT_TRUE(f.doc.setClipRowLength(f.clip, 42, 12));
     ASSERT_TRUE(f.doc.setClipRowSwing(f.clip, 42, 0.6));
     ASSERT_TRUE(f.doc.setClipRowSwing(f.clip, 38, 0.7));
+    const int steps = f.c().stepsPerBar;
     f.undo.clearUndoHistory();
-    synth::ClipId created;
-    f.grid.onClipCreated = [&](synth::ClipId id) { created = id; };
     f.panel->getMakeTakesButton().onClick();
     f.panel->getPickButton(0).onClick();
-    const auto* added = f.doc.getClip(created);
-    ASSERT_NE(added, nullptr);
-    ASSERT_EQ(added->drumRows.size(), 2u);
-    EXPECT_EQ(added->drumRows[0].pitch, 38);
-    EXPECT_DOUBLE_EQ(added->drumRows[0].swing, 0.7);
-    EXPECT_EQ(added->drumRows[0].lengthSteps, 0);
-    EXPECT_EQ(added->drumRows[1].pitch, 42);
-    EXPECT_EQ(added->drumRows[1].lengthSteps, 12);
-    EXPECT_DOUBLE_EQ(added->drumRows[1].swing, 0.6);
+    EXPECT_EQ(f.c().stepsPerBar, steps);
+    ASSERT_EQ(f.c().drumRows.size(), 2u);
+    EXPECT_EQ(f.c().drumRows[0].pitch, 38);
+    EXPECT_DOUBLE_EQ(f.c().drumRows[0].swing, 0.7);
+    EXPECT_EQ(f.c().drumRows[1].pitch, 42);
+    EXPECT_EQ(f.c().drumRows[1].lengthSteps, 12);
+    EXPECT_DOUBLE_EQ(f.c().drumRows[1].swing, 0.6);
     f.undo.undo();
-    EXPECT_EQ(f.doc.getTrackForClip(f.clip)->clips.size(), 1u) << "still one undo step";
+    EXPECT_FALSE(f.undo.canUndo()) << "still one undo step";
 }

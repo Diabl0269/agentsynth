@@ -529,6 +529,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                 audioTab->setEditorHook([this](juce::TextEditor& editor) { tabSwitchKeys.attachTo(editor); });
         }
         if (auto* tabButton = tabs.getTabbedButtonBar().getTabButton(i)) {
+            tabButton->setComponentID("settingsTab:" + tabs.getTabNames()[i]);
             tabButton->setTooltip(
                 "Show the " + tabs.getTabNames()[i] + " settings" +
                 (i < 9 ? " (" + platformCommandKeyName() + "+" + juce::String(i + 1) + ")" : juce::String()));

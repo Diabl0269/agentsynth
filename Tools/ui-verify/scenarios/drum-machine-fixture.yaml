@@ -1,0 +1,25 @@
+# Builds the project the drum machine scenarios open: a Drum Kit track with one empty one-bar drum clip ("Beat 1").
+# Run it with save_project and copy the bundle to fixtures/drum-kit-track-clip.agsproj to refresh the fixture.
+#
+# What a user does:
+#   1. Starts a new project, opens the timeline (Cmd+T) and presses Add Track.
+#   2. Types "dru" in the picker and presses Return: a Drum Kit track is added.
+#   3. Presses the track header's Drum machine button: the grid opens on a new one-bar clip, "Beat 1".
+save_project: drum-kit-track-clip
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - key: {keys: escape}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - type: {text: dru}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 1500}
+  - expect: {id: drumMachineState, hitCount: 0}
+  - expect: {id: timelineClipPitches, clipLengths: "Beat 1:4.000"}
+  - screenshot: {name: drum-kit-track-clip}

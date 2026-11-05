@@ -5,7 +5,8 @@
 // and one that leaves fades out in a gap that closes. Every height feeds the track layout (extraHeights), so the
 // tracks below glide through the usual onLayoutChanged path. One AnimationDriver steps every tween (160 ms
 // easeOutCubic, retargeted from where each one is when another starts); it lands at once off screen, under Reduce
-// Motion and with Animations off. docs/layout/animation.md "Lane blocks and modulator rows".
+// Motion and with Animations off. The room a dragged modulator row makes in another lane steps on the same driver
+// (TimelineAutomationLanesDragGap.cpp). docs/layout/animation.md "Lane blocks and modulator rows".
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
 #include "AppUndoManager.h"
@@ -69,6 +70,9 @@ void TimelineAutomationLanes::startBlockMotion() {
         leaving.presence.from = leaving.presence.now;
     for (auto& leaving : leaving_)
         leaving->presence.from = leaving->presence.now;
+    for (auto& [key, gap] : dragGaps_)
+        gap.from = gap.now;
+    dragClosure_.from = dragClosure_.now;
     blockDriverRunning_ = true;
     blockDriver_.start(
         foldUpdater_, kBlockMs, easeOutCubic, [this](float t) { frameBlockMotion(t); }, [this] { landBlockMotion(); });
@@ -82,6 +86,9 @@ void TimelineAutomationLanes::frameBlockMotion(float t) {
         step(leaving.presence);
     for (auto& leaving : leaving_)
         step(leaving->presence);
+    for (auto& [key, gap] : dragGaps_)
+        step(gap);
+    step(dragClosure_);
     if (onLayoutChanged)
         onLayoutChanged();
 }
@@ -93,6 +100,7 @@ void TimelineAutomationLanes::landBlockMotion() {
     arriving_.clear();
     leavingLanes_.clear();
     leaving_.clear();
+    landDragGaps(); // a gap still open (the drag hovers on) stays open
     if (onLayoutChanged)
         onLayoutChanged();
 }
@@ -250,6 +258,7 @@ int TimelineAutomationLanes::leavingRowOffset(const LeavingModulator& leaving) c
     int offset = slot > 0 ? modulatorOffset(leaving.lane, slot - 1) + modulatorRowHeightFor(leaving.lane, slot - 1) +
                                 trayExtentOf(leaving.lane, slot - 1)
                           : trayExtentOf(leaving.lane);
+    offset += dragGapAt(leaving.lane, slot);
     for (const auto& other : leaving_) {
         if (other.get() == &leaving)
             break;

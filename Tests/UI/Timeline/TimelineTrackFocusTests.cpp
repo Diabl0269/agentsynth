@@ -335,6 +335,31 @@ TEST(TimelineTrackFocusTest, MoveFocusedTrackIsANoOpWithNoTracks) {
     EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), -1);
 }
 
+// Regression test for FRO1047: Tab on the timeline root jumped straight to the next region, past every track.
+TEST(TimelineTrackFocusTest, TabOnThePanelRootFocusesTheFirstRow) {
+    TrackFocusFixture f;
+    f.addTrack("A");
+    f.addTrack("B");
+    EXPECT_TRUE(f.panel.handleRootFocusKey(juce::KeyPress(juce::KeyPress::tabKey)));
+    EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), 0);
+}
+
+TEST(TimelineTrackFocusTest, TabOnThePanelRootKeepsTheFocusedRow) {
+    TrackFocusFixture f;
+    f.addTrack("A");
+    f.addTrack("B");
+    f.panel.getTrackHeaderAt(0)->keyPressed(downKey()); // -> 0
+    f.panel.getTrackHeaderAt(0)->keyPressed(downKey()); // -> 1
+    EXPECT_TRUE(f.panel.handleRootFocusKey(juce::KeyPress(juce::KeyPress::tabKey)));
+    EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), 1);
+}
+
+TEST(TimelineTrackFocusTest, TabOnThePanelRootWithNoTracksGoesOnToTheNextRegion) {
+    TrackFocusFixture f;
+    EXPECT_FALSE(f.panel.handleRootFocusKey(juce::KeyPress(juce::KeyPress::tabKey)));
+    EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), -1);
+}
+
 // ============================================================================
 // Panel-level: auto-scroll via the real Viewport/trackScrollY plumbing
 // ============================================================================
