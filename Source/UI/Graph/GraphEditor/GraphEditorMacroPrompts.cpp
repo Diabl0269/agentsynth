@@ -22,6 +22,7 @@
 #include "GraphEditor.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 
@@ -253,7 +254,32 @@ void GraphEditor::promptRecolourMacro(const juce::String& macroId, juce::Rectang
     auto popup = buildMacroColourPicker(macroId);
     if (popup == nullptr)
         return;
-    juce::CallOutBox::launchAsynchronously(std::move(popup), screenArea, nullptr);
+    // Through the card call-out so Cmd+Z and the other app shortcuts reach the main window from the picker.
+    synth::ui::launchCardCallOut(std::move(popup), screenArea, this);
+}
+
+// Alt+C: with exactly one macro selected (its card, or every member of an open one), its colour picker beside it, as
+// the menu's "Change Colour..." opens it. Anything else leaves the key unhandled.
+bool GraphEditor::openColourForKeyboardFocus() {
+    const synth::Macro* only = nullptr;
+    for (const auto& macro : macros.getAll()) {
+        if (!macroController_.isMacroInSelection(macro.id))
+            continue;
+        if (only != nullptr)
+            return false;
+        only = &macro;
+    }
+    if (only == nullptr)
+        return false;
+    juce::Rectangle<int> anchor;
+    if (only->collapsed) {
+        if (auto* card = macroController_.getMacroCard(only->id))
+            anchor = card->getScreenBounds();
+    } else {
+        anchor = content.localAreaToGlobal(macroController_.macroChipBounds(only->id));
+    }
+    promptRecolourMacro(only->id, anchor.isEmpty() ? getScreenBounds() : anchor);
+    return true;
 }
 
 // Builds the recolour popup with the EXACT onPreview/onCommit callbacks promptRecolourMacro

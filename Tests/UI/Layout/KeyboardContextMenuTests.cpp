@@ -12,11 +12,19 @@
 //   4. The clip lane and the detached panel window.
 #include "../../TestWait.h"
 #include "../Mixer/MixerZonesTestRig.h"
+#include "../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "../Timeline/TimelineClipLane/TimelineClipLaneTestFixture.h"
+#include "Modules/Filter/CustomFilterShapes.h"
+#include "Modules/Lfo/LfoCustomShapes.h"
+#include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/ModuleViews/MorphMap/MorphMap.h"
+#include "UI/ModuleViews/MorphMap/MorphMapPalette.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeMapController.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -335,4 +343,287 @@ TEST(KeyboardContextMenuDetachedWindow, TheBoundKeyReachesTheFocusedSurfaceAndHo
     EXPECT_FALSE(window.keyPressed(shiftF10()));
     EXPECT_TRUE(window.keyPressed(shiftF9));
     EXPECT_EQ(provider.calls, 2);
+}
+
+// ============================================================================
+// 5. Recolour Focused Item (Alt+C): the same provider walk for colour pickers
+// ============================================================================
+// Bug kinds: keyboard-reach (every "Colour..." menu item has a key) and shortcut-relay (the key also works in a
+// detached window and a card call-out).
+using synth::ui::ColourPickerPopup;
+using synth::ui::KeyboardColourProvider;
+using synth::ui::openColourForFocusedComponent;
+
+namespace {
+
+juce::KeyPress altC() { return juce::KeyPress('c', juce::ModifierKeys::altModifier, 0); }
+
+struct ColourCountingProvider
+    : juce::Component
+    , KeyboardColourProvider {
+    explicit ColourCountingProvider(bool answer)
+        : answer_(answer) {}
+    bool openColourForKeyboardFocus() override {
+        ++calls;
+        return answer_;
+    }
+    int calls = 0;
+
+private:
+    bool answer_;
+};
+
+bool pressAltC(MainComponent& mc, juce::Component* focused) {
+    mc.setFocusedComponentOverrideForTest(focused);
+    const bool handled = mc.keyPressed(altC());
+    synth::test::flushMessageQueue();
+    return handled;
+}
+
+// Takes the place of the card call-out window: keeps the content the key opened and where it was anchored.
+struct CapturedCallOut {
+    CapturedCallOut() {
+        synth::ui::test_hooks::cardCallOutLauncherForTest() = [this](std::unique_ptr<juce::Component> c,
+                                                                     juce::Rectangle<int> a) {
+            ++opened;
+            area = a;
+            content = std::move(c);
+            return nullptr;
+        };
+    }
+    ~CapturedCallOut() { synth::ui::test_hooks::cardCallOutLauncherForTest() = nullptr; }
+    ColourPickerPopup* picker() const { return dynamic_cast<ColourPickerPopup*>(content.get()); }
+    int opened = 0;
+    juce::Rectangle<int> area;
+    std::unique_ptr<juce::Component> content;
+};
+
+} // namespace
+
+TEST(KeyboardColourAction, IsGeneralBoundToAltCByDefaultAndConflictsWithNothing) {
+    ShortcutManager manager;
+    EXPECT_EQ(ShortcutManager::getCategory("recolourFocusedItem"), ShortcutCategory::General);
+    EXPECT_EQ(ShortcutManager::getActionDescription("recolourFocusedItem"), "Recolour Focused Item");
+    EXPECT_TRUE(ShortcutManager::keyPressMatches(manager.getBinding("recolourFocusedItem"), altC()));
+    EXPECT_TRUE(
+        manager.getConflictingAction("recolourFocusedItem", manager.getBinding("recolourFocusedItem")).isEmpty());
+}
+
+TEST(KeyboardColourResolver, NearestProviderAnswersAndADecliningOneIsFinal) {
+    ColourCountingProvider outer(true), inner(false);
+    juce::Component leaf;
+    outer.addAndMakeVisible(inner);
+    inner.addAndMakeVisible(leaf);
+    EXPECT_FALSE(openColourForFocusedComponent(&leaf));
+    EXPECT_EQ(inner.calls, 1);
+    EXPECT_EQ(outer.calls, 0);
+    EXPECT_FALSE(openColourForFocusedComponent(nullptr));
+}
+
+TEST(KeyboardColourKeyPath, AltCOpensTheFocusedTracksPickerAndAPickIsOneUndoStep) {
+    MixerZonesRig r(2);
+    hideWelcome(r.mc);
+    auto* second = r.mc.getTimelinePanel().getTrackHeaderAt(1);
+    ASSERT_NE(second, nullptr);
+    CapturedCallOut out;
+
+    EXPECT_TRUE(pressAltC(r.mc, second));
+    ASSERT_EQ(out.opened, 1);
+    ASSERT_NE(out.picker(), nullptr);
+    EXPECT_EQ(out.area, second->getColourSwatch().getScreenBounds()) << "beside the swatch a click opens it from";
+
+    const auto original = r.mc.getTimelineDoc().getTrack(second->getTrackId())->colourArgb;
+    out.picker()->setCurrentColourForTest(juce::Colours::red);
+    EXPECT_EQ(r.mc.getTimelineDoc().getTrack(second->getTrackId())->colourArgb, juce::Colours::red.getARGB());
+    out.content.reset(); // the popup closes: the commit
+    EXPECT_TRUE(r.mc.getUndoManager().undo());
+    EXPECT_EQ(r.mc.getTimelineDoc().getTrack(second->getTrackId())->colourArgb, original);
+}
+
+TEST(KeyboardColourKeyPath, AltCOpensThePickerOfAChildOfTheFocusedRow) {
+    MixerZonesRig r(1);
+    hideWelcome(r.mc);
+    auto* header = r.mc.getTimelinePanel().getTrackHeaderAt(0);
+    ASSERT_NE(header, nullptr);
+    CapturedCallOut out;
+    EXPECT_TRUE(pressAltC(r.mc, &header->getNameLabel()));
+    EXPECT_EQ(out.opened, 1);
+}
+
+TEST(KeyboardColourKeyPath, MixerOpensThePickerOfTheFocusedStripAndLeavesMasterUnhandled) {
+    MixerZonesRig r(2);
+    hideWelcome(r.mc);
+    int opened = 0;
+    r.panel->setShowColourPickerHookForTest(
+        [&](auto, std::unique_ptr<ColourPickerPopup>, juce::Rectangle<int>) { ++opened; });
+    const juce::KeyPress right(juce::KeyPress::rightKey, juce::ModifierKeys::noModifiers, 0);
+
+    EXPECT_FALSE(openColourForFocusedComponent(r.panel)) << "no column focused yet";
+    r.panel->keyPressed(right);
+    r.panel->keyPressed(right);
+    EXPECT_TRUE(openColourForFocusedComponent(r.panel));
+    EXPECT_EQ(opened, 1);
+    for (int i = 0; i < r.panel->getColumnCount(); ++i)
+        r.panel->keyPressed(right);
+    EXPECT_FALSE(openColourForFocusedComponent(r.panel)) << "Master has no colour";
+    EXPECT_EQ(opened, 1);
+}
+
+TEST(KeyboardColourKeyPath, WelcomeScreenSuppressesTheAction) {
+    MixerZonesRig r(1);
+    auto* header = r.mc.getTimelinePanel().getTrackHeaderAt(0);
+    ASSERT_NE(header, nullptr);
+    CapturedCallOut out;
+    r.mc.getWelcomeScreenForTest()->setVisible(true);
+    EXPECT_FALSE(pressAltC(r.mc, header));
+    EXPECT_EQ(out.opened, 0);
+}
+
+TEST(KeyboardColourKeyPath, RebindingMovesTheBehaviourToTheNewKey) {
+    MixerZonesRig r(1);
+    hideWelcome(r.mc);
+    auto* header = r.mc.getTimelinePanel().getTrackHeaderAt(0);
+    ASSERT_NE(header, nullptr);
+    CapturedCallOut out;
+    const juce::KeyPress altJ('j', juce::ModifierKeys::altModifier, 0);
+    r.mc.getShortcutManager().setBinding("recolourFocusedItem", altJ);
+    r.mc.setFocusedComponentOverrideForTest(header);
+    EXPECT_FALSE(r.mc.keyPressed(altC()));
+    synth::test::flushMessageQueue();
+    EXPECT_EQ(out.opened, 0);
+    EXPECT_TRUE(r.mc.keyPressed(altJ));
+    synth::test::waitUntil([&] { return out.opened == 1; });
+    EXPECT_EQ(out.opened, 1);
+}
+
+TEST(KeyboardColourDetachedWindow, TheBoundKeyReachesTheFocusedSurface) {
+    struct Panel : juce::Component {};
+    Panel panel;
+    juce::String title{"Test"};
+    juce::ApplicationProperties appProperties;
+    ShortcutManager shortcutManager;
+    synth::ui::DetachedPanelWindow window(panel, title, "kcolWindowBounds", &appProperties, nullptr, &shortcutManager);
+    ColourCountingProvider provider(true);
+    panel.addAndMakeVisible(provider);
+    window.setFocusedComponentOverrideForTest(&provider);
+
+    EXPECT_TRUE(window.keyPressed(altC()));
+    EXPECT_EQ(provider.calls, 1);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The morph map dot
+// ---------------------------------------------------------------------------------------------------------------
+
+namespace colour_test {
+using namespace synth::ui;
+using namespace synth::ui::test;
+
+struct DotRig : ShapeRig {
+    MorphMap map;
+    ShapeMapController controller{map, *adapter};
+    CapturedMenu menu;
+    CapturedCallOut out;
+
+    DotRig() {
+        map.setSize(252, 150);
+        map.showMenu = [this](juce::PopupMenu& m, juce::Rectangle<int>) { menu.capture(m); };
+        controller.refresh();
+    }
+    std::optional<juce::uint32> storedColour(size_t i) const { return filter->getCustomShapes().shapes[i].colour; }
+};
+} // namespace colour_test
+using namespace colour_test;
+
+TEST(MorphDotColour, TheDotMenuOffersColourAndItOpensThePickerBesideTheDot) {
+    DotRig rig;
+    rig.map.showDotMenu(1);
+    ASSERT_NE(std::find(rig.menu.items.begin(), rig.menu.items.end(), "Colour..."), rig.menu.items.end());
+    ASSERT_TRUE(rig.menu.run("Colour..."));
+    ASSERT_EQ(rig.out.opened, 1);
+    EXPECT_NE(rig.out.picker(), nullptr);
+}
+
+TEST(MorphDotColour, PreviewShowsOnTheDotLiveAndTheCommitIsExactlyOneUndoStep) {
+    DotRig rig;
+    ASSERT_FALSE(rig.storedColour(1).has_value());
+    const int steps = rig.undo.getEditSerial();
+    ASSERT_TRUE(rig.map.showDotColour(1));
+    auto* picker = rig.out.picker();
+    ASSERT_NE(picker, nullptr);
+
+    for (const auto c : {juce::Colours::red, juce::Colours::green, juce::Colours::blue}) {
+        picker->setCurrentColourForTest(c);
+        EXPECT_EQ(rig.storedColour(1), c.getARGB()) << "the module wears each tick";
+        EXPECT_EQ(rig.map.getDots()[1].colour, c.getARGB()) << "and so does the dot";
+    }
+    EXPECT_EQ(rig.undo.getEditSerial(), steps) << "dragging records nothing";
+
+    rig.out.content.reset(); // the popup closes
+    EXPECT_EQ(rig.storedColour(1), juce::Colours::blue.getARGB());
+    EXPECT_EQ(rig.undo.getEditSerial(), steps + 1) << "one step for the whole drag";
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_FALSE(rig.storedColour(1).has_value()) << "undo puts the palette colour back";
+    EXPECT_FALSE(rig.undo.undo() && rig.storedColour(1).has_value());
+}
+
+TEST(MorphDotColour, APickThatEndsWhereItBeganRecordsNothingAndKeepsTheOriginal) {
+    DotRig rig;
+    const int steps = rig.undo.getEditSerial();
+    ASSERT_TRUE(rig.map.showDotColour(0));
+    const auto initial = rig.out.picker()->getCurrentColourForTest();
+    rig.out.picker()->setCurrentColourForTest(juce::Colours::red);
+    rig.out.picker()->setCurrentColourForTest(initial);
+    rig.out.content.reset();
+    EXPECT_EQ(rig.undo.getEditSerial(), steps);
+    EXPECT_FALSE(rig.storedColour(0).has_value());
+}
+
+TEST(MorphDotColour, ThePickedColourIsWhatTheChipTheDotAndTheSavedStateWear) {
+    DotRig rig;
+    ASSERT_TRUE(rig.map.showDotColour(1));
+    rig.out.picker()->setCurrentColourForTest(juce::Colours::orange);
+    rig.out.content.reset();
+
+    const auto& colors = synth::theme::themeOf(rig.map).colors;
+    EXPECT_EQ(morphShapeColour(colors, 1, rig.map.getDots()[1].colour), juce::Colours::orange);
+    EXPECT_EQ(morphShapeColour(colors, 0, rig.map.getDots()[0].colour), morphShapeColour(colors, 0))
+        << "others keep theirs";
+
+    const auto saved = rig.filter->getExtraState();
+    FilterModule reloaded;
+    reloaded.setExtraState(saved);
+    ASSERT_GE(reloaded.getCustomShapes().shapes.size(), 2u);
+    EXPECT_EQ(reloaded.getCustomShapes().shapes[1].colour, juce::Colours::orange.getARGB()) << "survives save and load";
+    EXPECT_FALSE(reloaded.getCustomShapes().shapes[0].colour.has_value());
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The stored colour in the saved lists
+// ---------------------------------------------------------------------------------------------------------------
+
+TEST(MorphShapeColourFormat, FilterAndLfoListsRoundTripAColourAndOldListsLoadWithNone) {
+    synth::CustomFilterShapes filter;
+    filter.shapes.resize(2);
+    filter.shapes[1].colour = 0xFF112233u;
+    const auto filterBack = synth::CustomFilterShapes::fromVar(filter.toVar());
+    ASSERT_EQ(filterBack.shapes.size(), 2u);
+    EXPECT_FALSE(filterBack.shapes[0].colour.has_value());
+    EXPECT_EQ(filterBack.shapes[1].colour, 0xFF112233u);
+
+    // A lone unnamed centre shape with a colour must not collapse to the bare curve (which has no colour).
+    auto lfo = synth::LfoCustomShapes::defaultShapes();
+    ASSERT_TRUE(lfo.isPlainSingle());
+    lfo.shapes[0].colour = 0xFFAA5500u;
+    EXPECT_FALSE(lfo.isPlainSingle());
+    EXPECT_EQ(synth::LfoCustomShapes::fromVar(lfo.toVar()).shapes[0].colour, 0xFFAA5500u);
+
+    auto plain = synth::LfoCustomShapes::defaultShapes();
+    EXPECT_FALSE(synth::LfoCustomShapes::fromVar(plain.toVar()).shapes[0].colour.has_value());
+
+    // Model-authored lists never set a colour.
+    juce::var untrusted = lfo.toVar();
+    synth::LfoCustomShapes parsed;
+    if (synth::LfoCustomShapes::fromUntrustedVar(untrusted, parsed))
+        EXPECT_FALSE(parsed.shapes[0].colour.has_value());
 }

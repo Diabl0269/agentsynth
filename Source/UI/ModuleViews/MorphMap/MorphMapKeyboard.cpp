@@ -2,7 +2,11 @@
 // menu and the inline rename.
 #include "MorphMap.h"
 #include "MorphMapInternal.h"
+#include "MorphMapPalette.h"
+#include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/PointEditing/PointEditorKeys.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -182,6 +186,11 @@ void MorphMap::showDotMenu(int index) {
         if (safe != nullptr)
             safe->beginRename(index);
     });
+    if (onCommitDotColour)
+        menu.addItem("Colour...", [safe, index] {
+            if (safe != nullptr)
+                safe->showDotColour(index);
+        });
     menu.addItem("Delete", canDelete, false, [safe, index] {
         if (safe != nullptr && safe->onDeleteDot)
             safe->onDeleteDot(index);
@@ -261,6 +270,51 @@ void MorphMap::endRename(bool commit) {
         onRenameDot(index, text);
     if (index >= 0 && index < (int)dotStops_.size())
         dotStops_[(size_t)index]->grabKeyboardFocus();
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// A dot's own colour: the "Colour..." menu item and the Alt+C key open the shared colour picker beside the dot. It
+// previews live (no undo step); closing it asks the owner for ONE step, or none when the pick ended where it began.
+// ---------------------------------------------------------------------------------------------------------------
+
+bool MorphMap::showDotColour(int index) {
+    if (index < 0 || index >= (int)dots_.size() || !onCommitDotColour)
+        return false;
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    const std::optional<juce::uint32> original = dots_[(size_t)index].colour;
+    const juce::Colour shown = morphShapeColour(colors, index, original);
+    juce::Component::SafePointer<MorphMap> safe(this);
+    auto popup = std::make_unique<ColourPickerPopup>(
+        shown, colourFavourites,
+        [safe, index](juce::Colour c) {
+            if (safe == nullptr || index >= (int)safe->dots_.size())
+                return;
+            safe->dots_[(size_t)index].colour = c.getARGB();
+            safe->repaint();
+            if (safe->onPreviewDotColour)
+                safe->onPreviewDotColour(index, c);
+        },
+        [safe, index, original, shown](juce::Colour finalColour) {
+            if (safe == nullptr)
+                return;
+            const bool noNetChange = finalColour.getARGB() == shown.getARGB();
+            if (index < (int)safe->dots_.size())
+                safe->dots_[(size_t)index].colour = original;
+            if (safe->onCommitDotColour)
+                safe->onCommitDotColour(
+                    index, original, noNetChange ? std::nullopt : std::optional<juce::uint32>(finalColour.getARGB()));
+            if (index < (int)safe->dotStops_.size())
+                safe->dotStops_[(size_t)index]->grabKeyboardFocus();
+        });
+    launchCardCallOut(std::move(popup), menuAreaAt(getDotCentre(index)), this);
+    return true;
+}
+
+bool MorphMap::openColourForKeyboardFocus() {
+    for (int i = 0; i < (int)dotStops_.size(); ++i)
+        if (dotStops_[(size_t)i]->hasKeyboardFocus(false))
+            return showDotColour(i);
+    return false;
 }
 
 } // namespace synth::ui

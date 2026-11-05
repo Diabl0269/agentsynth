@@ -98,7 +98,8 @@ resolve back to the app's real `AppLookAndFeel`, and the plugin build never call
 `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h`) is the one full colour
 picker in the app — a `juce::ColourSelector` plus a favourites shelf — shared by the timeline track
 header's colour swatch, the timeline ruler's marker menu, the macro Change Colour item (see
-[macro-cards](macro-cards.md#the-macro-menu)) and the Appearance tab's note-colour swatches, rather
+[macro-cards](macro-cards.md#the-macro-menu)), the morph map dot's Colour... item and the Alt+C key
+([shortcuts](../control/recolour-focused-item.md)) and the Appearance tab's note-colour swatches, rather
 than each rolling its own `juce::CallOutBox` plus `ColourSelector`.
 
 Favourites persist under the single properties key `"favouriteColoursArgb"` — comma-separated

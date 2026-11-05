@@ -504,7 +504,8 @@ struct TrackHeaderHost {
 class TimelineTrackHeaderComponent
     : public juce::Component
     , public juce::SettableTooltipClient
-    , public KeyboardContextMenuProvider {
+    , public KeyboardContextMenuProvider
+    , public KeyboardColourProvider {
 public:
     // Fixed row height. The header column scrolls (juce::Viewport in TimelinePanelComponent) rather
     // than compressing rows, so this stays constant however many tracks there are.
@@ -569,13 +570,13 @@ public:
     //
     // A row is a real focusable leaf (setWantsKeyboardFocus(true) in the constructor, matching
     // TimelineClipLaneArea/PianoRollComponent's own pattern) rather than a virtual row painted by
-    // one big component (contrast ModuleLibraryComponent's row nav) — TimelineTrackHeaderComponent
-    // already IS one-component-per-track. Up/Down and M/S/R only ever reach keyPressed() below while
-    // THIS row genuinely holds real OS keyboard focus, by JUCE's own key-dispatch rule — no extra
-    // "am I the focused one" guard is needed or wanted (see docs/timeline/tracks.md#keyboard-focus-and-msr).
+    // one big component (contrast ModuleLibraryComponent's row nav). Up/Down and M/S/R only ever reach
+    // keyPressed() below while THIS row genuinely holds real OS keyboard focus, by JUCE's own key-dispatch rule — no
+    // extra "am I the focused one" guard is needed or wanted (see docs/timeline/tracks.md#keyboard-focus-and-msr).
     bool keyPressed(const juce::KeyPress& key) override;
     /** Opens the same menu a right-click on this row does, anchored at the row. Always handled. */
     bool showContextMenuForKeyboardFocus() override;
+    bool openColourForKeyboardFocus() override; ///< the swatch's picker, beside the row
     // The three toggle buttons opt OUT of taking focus for themselves (juce::Button opts in by
     // default) — otherwise clicking M/S/R would silently move real focus off the row and onto the
     // button, exactly the trap TimelinePanelComponent's own tool-strip buttons avoid the same way.
@@ -909,9 +910,7 @@ private:
     // agree with what is on screen without each re-walking the graph.
     TrackChannelLinkSurface::ChannelInfo channelInfo_;
 
-    // Shared by the real swatch click and createColourPickerForTest(): builds the popup with the
-    // preview-writes-directly / commit-restores-then-one-undo-step wiring described on the class'
-    // colour-swatch behaviour, WITHOUT launching it in a juce::CallOutBox.
+    // Shared by the swatch click, Alt+C and createColourPickerForTest(): the popup, not yet launched.
     std::unique_ptr<synth::ui::ColourPickerPopup> buildColourPicker();
 
     // The "MIDI destinations..." menu entry's handler: builds the picker via

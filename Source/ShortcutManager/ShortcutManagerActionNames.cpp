@@ -414,6 +414,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Focus Library Search";
     if (actionId == "openContextMenu")
         return "Open Context Menu";
+    if (actionId == "recolourFocusedItem")
+        return "Recolour Focused Item";
     if (const auto name = canvasCardActionName(actionId); name.isNotEmpty())
         return name;
     if (const auto name = transportAndSelectionActionName(actionId); name.isNotEmpty())

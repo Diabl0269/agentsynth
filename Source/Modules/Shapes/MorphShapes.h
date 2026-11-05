@@ -6,6 +6,7 @@
 
 #include "Modules/Lfo/LfoCustomWave.h"
 #include <juce_core/juce_core.h>
+#include <optional>
 #include <vector>
 
 namespace synth::morph {
@@ -16,6 +17,8 @@ struct Shape {
     juce::String name;
     LfoCustomWave curve;
     std::vector<float> position;
+    /** An ARGB the user picked for this dot; empty keeps the palette colour its index gives. */
+    std::optional<juce::uint32> colour;
 
     bool operator==(const Shape&) const;
 };
@@ -57,7 +60,8 @@ bool isFiniteNumber(const juce::var& v);
 /** True when `v` looks like an LfoCustomWave object with at least two points to read. */
 bool hasReadableCurve(const juce::var& v);
 
-/** `{"name":..,"position":[..],"curve":{LfoCustomWave::toVar}}`. */
+/** `{"name":..,"position":[..],"curve":{LfoCustomWave::toVar}}`, plus `"colour"` (an ARGB integer) only when the
+ *  shape has one. */
 juce::var shapeToVar(const Shape& shape);
 
 /** The shapes of a JSON list. A shape whose curve is unreadable gets `unreadableCurve`; a non-object entry is dropped;

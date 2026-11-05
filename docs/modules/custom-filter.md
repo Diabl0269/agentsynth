@@ -277,6 +277,8 @@ defaults, so projects that never use Custom save exactly as before. Otherwise:
   "curve": {"version": 1, "points": [{"x": 0, "y": 0.3, "bend": 0}, {"x": 1, "y": 0.13, "bend": 0}]}}]}
 ```
 
+A shape the user recoloured also has `"colour"`, an ARGB integer (absent: the palette colour by shape index; the LFO's list stores it the same way, and an unnamed centre shape with a colour saves as a list, not the bare curve). Model-authored lists never carry one.
+
 Per-note settings other than the defaults add a `"perNote"` object beside `"shapes"` (the outer `version` stays 1,
 so an older build still reads the shapes and ignores it):
 
@@ -389,7 +391,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
 
 ## Morph map
 
-One dot per shape, coloured by shape index, and a dark cursor at (Morph X, Morph Y). Drag a dot to move the shape,
+One dot per shape, coloured by shape index unless you gave it a colour (**Colour...** in its menu, or Alt+C on a focused dot: the picker previews live, one undo step; the chip and the per-note key dots wear it too), and a dark cursor at (Morph X, Morph Y). Drag a dot to move the shape,
 drag the cursor to set Morph X and Y (one host gesture and one undo step per drag, so automation records it), double-click
 empty space to add a shape there that copies the current blend (the blended dB curve at the cursor sampled back into at most 16
 points placed on its shape: both ends, every prominent peak with its dip and flanks, then a point wherever the straight segments still miss the blend by more than half a dB, so narrow formants survive and a flat or straight blend is two points; a single click adds nothing, and the new dot takes keyboard focus so Delete or Backspace removes it at once),

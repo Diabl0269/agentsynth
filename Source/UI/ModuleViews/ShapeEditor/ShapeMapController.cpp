@@ -63,6 +63,18 @@ ShapeMapController::ShapeMapController(MorphMap& map, ShapeListAdapter& adapter)
     map_.onDeleteDot = [this](int index) { deleteShape(index); };
     map_.onInsertAfterDot = [this](int index) { return insertShapeAfter(index); };
     map_.onRenameDot = [this](int index, const juce::String& name) { renameShape(index, name); };
+    map_.onPreviewDotColour = [this](int index, juce::Colour colour) {
+        auto shapes = adapter_.getShapes();
+        if (index < 0 || index >= (int)shapes.size())
+            return;
+        shapes[(size_t)index].colour = colour.getARGB();
+        adapter_.setShapes(shapes);
+        changed();
+    };
+    map_.onCommitDotColour = [this](int index, std::optional<juce::uint32> original,
+                                    std::optional<juce::uint32> chosen) { commitDotColour(index, original, chosen); };
+    if (auto* props = adapter_.getApplicationProperties())
+        map_.colourFavourites = props->getUserSettings();
     map_.canDeleteDot = [this] { return (int)adapter_.getShapes().size() > 1; };
 }
 
@@ -74,7 +86,7 @@ bool ShapeMapController::restoreSince(RestoreWatch& watch) const {
 void ShapeMapController::refresh() {
     std::vector<MorphMap::Dot> dots;
     for (const auto& shape : adapter_.getShapes())
-        dots.push_back({shape.name, positionOf(shape, 0), positionOf(shape, 1)});
+        dots.push_back({shape.name, positionOf(shape, 0), positionOf(shape, 1), shape.colour});
     map_.setDots(std::move(dots), restoreSince(shapesWatch_));
     map_.setCursorVisible(adapter_.hasCursor());
     syncCursor();
@@ -198,6 +210,24 @@ bool ShapeMapController::deleteShape(int index) {
     if (onSelect)
         onSelect(next);
     return true;
+}
+
+/** The preview has been writing the colour live without a step: put the original back unrecorded, then make the one
+    recorded edit, so undo returns to the original and a pick that ended where it began records nothing. */
+void ShapeMapController::commitDotColour(int index, std::optional<juce::uint32> original,
+                                         std::optional<juce::uint32> chosen) {
+    auto shapes = adapter_.getShapes();
+    if (index < 0 || index >= (int)shapes.size())
+        return;
+    shapes[(size_t)index].colour = original;
+    adapter_.setShapes(shapes);
+    if (chosen.has_value()) {
+        adapter_.beginEdit();
+        shapes[(size_t)index].colour = chosen;
+        adapter_.setShapes(shapes);
+        adapter_.endEdit();
+    }
+    changed();
 }
 
 void ShapeMapController::renameShape(int index, const juce::String& name) {

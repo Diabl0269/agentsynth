@@ -19,9 +19,11 @@ struct ShapeItem {
     juce::String name;
     LfoCustomWave curve;
     std::vector<float> position; // map x, map y
+    /** The ARGB the user gave this shape's dot and chip; empty wears the palette colour its index gives. */
+    std::optional<juce::uint32> colour;
 
     bool operator==(const ShapeItem& other) const {
-        return name == other.name && curve == other.curve && position == other.position;
+        return name == other.name && curve == other.curve && position == other.position && colour == other.colour;
     }
 };
 

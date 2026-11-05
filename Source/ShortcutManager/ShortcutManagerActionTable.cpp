@@ -157,10 +157,10 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"focusLibrary", ShortcutCategory::General},
             {"focusLibrarySearch", ShortcutCategory::General},
             {"openContextMenu", ShortcutCategory::General},
+            {"recolourFocusedItem", ShortcutCategory::General},
             {"openAddTrackMenu", ShortcutCategory::General},
             {"openFeedback", ShortcutCategory::General},
-            // Transport verbs as command-dispatched actions (docs/control/midi-remote.md#action-targets), UNBOUND by
-            // default. "transportTogglePlayStop" has no row: an alias AppCommands resolves to "togglePlayback".
+            // Transport verbs (midi-remote.md#action-targets): UNBOUND by default; transportTogglePlayStop is an alias.
             {"transportPlay", ShortcutCategory::General},
             {"transportStop", ShortcutCategory::General},
             {"transportToggleLoop", ShortcutCategory::General},

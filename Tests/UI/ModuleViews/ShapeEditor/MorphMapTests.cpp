@@ -196,7 +196,7 @@ TEST(MorphMap, RightClickOnADotOpensEditDuplicateRenameDeleteAndEachWorks) {
     const auto at = rig.map.getDotCentre(1);
 
     rig.map.mouseDown(curveRightClick(rig.map, at));
-    const std::vector<std::string> expected{"Edit", "Duplicate", "Rename", "Delete"};
+    const std::vector<std::string> expected{"Edit", "Duplicate", "Rename", "Colour...", "Delete"};
     EXPECT_EQ(rig.menu.items, expected);
 
     ASSERT_TRUE(rig.menu.run("Edit"));

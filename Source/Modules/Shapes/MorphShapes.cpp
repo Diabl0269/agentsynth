@@ -16,7 +16,7 @@ bool isFiniteNumber(const juce::var& v) {
 }
 
 bool Shape::operator==(const Shape& other) const {
-    return name == other.name && curve == other.curve && position == other.position;
+    return name == other.name && curve == other.curve && position == other.position && colour == other.colour;
 }
 
 void blendWeights(const float* xs, const float* ys, int count, float x, float y, float* out) noexcept {
@@ -48,6 +48,8 @@ juce::var shapeToVar(const Shape& shape) {
         pos.add((double)c);
     so->setProperty("position", juce::var(pos));
     so->setProperty("curve", shape.curve.toVar());
+    if (shape.colour.has_value())
+        so->setProperty("colour", (juce::int64)*shape.colour);
     return juce::var(so);
 }
 
@@ -70,6 +72,9 @@ std::vector<Shape> shapesFromVar(const juce::var& list, const LfoCustomWave& unr
                                                "0123456789 -")
                              .trim()
                              .substring(0, kMaxUntrustedNameLength);
+        if (const auto colour = so->getProperty("colour"); !untrusted && isFiniteNumber(colour))
+            if (const double argb = (double)colour; argb >= 0.0 && argb <= 4294967295.0)
+                shape.colour = (juce::uint32)(juce::int64)argb;
         const juce::var curve = so->getProperty("curve");
         shape.curve = hasReadableCurve(curve) ? LfoCustomWave::fromVar(curve) : unreadableCurve;
         const juce::var pos = so->getProperty("position");

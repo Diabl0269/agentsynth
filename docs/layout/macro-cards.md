@@ -151,7 +151,7 @@ same `SafePointer` plus `ModalCallbackFunction` plus callback-owned-`unique_ptr`
 `MainComponent::promptSaveSnippet`), since there is no card to host an inline editor at a hull
 click. Empty or whitespace-only dialog input cancels without renaming.
 
-**"Change Colour..." opens the same shared picker as everywhere else.** The item calls
+**"Change Colour..." opens the same shared picker as everywhere else** (Alt+C opens it for the one selected macro: `GraphEditor::openColourForKeyboardFocus`). The item calls
 `GraphEditor::promptRecolourMacro(macroId, screenArea)`, which launches
 `synth::ui::ColourPickerPopup` — the same `juce::ColourSelector` plus favourites-shelf popup the
 timeline ruler's marker menu and the track header swatch use — rather than a hardcoded swatch list;

@@ -767,6 +767,14 @@ juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
     return menu;
 }
 
+bool TimelineTrackHeaderComponent::openColourForKeyboardFocus() {
+    auto popup = buildColourPicker();
+    if (popup == nullptr)
+        return false;
+    synth::ui::launchCardCallOut(std::move(popup), colourSwatch_.getScreenBounds(), &colourSwatch_);
+    return true;
+}
+
 bool TimelineTrackHeaderComponent::showContextMenuForKeyboardFocus() {
     showContextMenu(getScreenBounds());
     return true;

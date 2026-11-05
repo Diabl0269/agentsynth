@@ -422,12 +422,12 @@ opens (`CurveEditorBoxSelect.cpp`, [`point-editing.md`](../control/point-editing
 ## MorphMap
 
 `Source/UI/ModuleViews/MorphMap/`. The morph map of the Filter's Custom type and the LFO's Custom shape: one dot per shape (its colour from
-`morphShapeColour`, by shape index, from theme tokens) and a dark cursor dot on a square map whose coordinates run
+`morphShapeColour`: the colour the user picked for it (`Dot::colour`), else the palette colour by shape index, from theme tokens) and a dark cursor dot on a square map whose coordinates run
 0..1 (x to the right, y downwards). It edits nothing itself and reports through callbacks; `ShapeMapController`
 (`Source/UI/ModuleViews/ShapeEditor/`) turns them into shape-list edits with their undo steps, so the module card's map
 and the shape editor window's map behave identically. The behaviour is in
 [`custom-filter.md`](../modules/custom-filter.md#morph-map). Pointer: drag a dot or the cursor, click empty space to
-add a shape, double-click a dot to edit it, right-click a dot for Edit / Duplicate / Rename / Delete (the menu opens beside the dot; the shape editor window leaves Edit out, since a press already selected the dot: `setEditItemShown`), right-click a slider for its Morph knob menu (`onStripMenu`: the owner opens the usual Automate / MIDI Learn menu of that Morph X / Y parameter beside the slider, on the card and in the window alike). Keyboard: the map,
+add a shape, double-click a dot to edit it, right-click a dot for Edit / Duplicate / Rename / Colour... / Delete (Colour... and Alt+C open the shared colour picker beside the dot: `onPreviewDotColour` shows each tick without an undo step, `onCommitDotColour` hands the owner the original and the final pick so it records ONE step, or none when the pick ended where it began; `MorphMapKeyboard.cpp`) (the menu opens beside the dot; the shape editor window leaves Edit out, since a press already selected the dot: `setEditItemShown`), right-click a slider for its Morph knob menu (`onStripMenu`: the owner opens the usual Automate / MIDI Learn menu of that Morph X / Y parameter beside the slider, on the card and in the window alike). Keyboard: the map,
 then each dot, then the cursor are Tab stops (transparent, mouse-inert `Stop` children carrying the name, tooltip and
 focus ring over the painted dots, the `PianoRollHeaderChip` idea); an arrow moves the focused dot or cursor one step (Shift for a
 bigger one) and, held, glides it on (`MorphMapGlide`, the timeline cursor glide's curve at 0.15 to 1.2 map units a

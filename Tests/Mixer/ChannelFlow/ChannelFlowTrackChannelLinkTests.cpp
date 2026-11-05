@@ -23,7 +23,9 @@
 #include "Mixer/TrackChannelLink.h"
 #include "Modules/ChannelStripModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Mixer/MixerMeterScale.h"
@@ -836,4 +838,31 @@ TEST_F(ChannelFlowTest, UndoAfterAColourCommitRestoresTheCardAndTheHeader) {
     ASSERT_TRUE(rig.undo.undo());
     EXPECT_EQ(header->getResolvedColour(), originalHeader);
     EXPECT_EQ(dominantChannel(cardBorderColour(rig.editor, rig.leadMacroId)), originalCard);
+}
+
+// Alt+C on a selected macro card opens its colour picker; with none or several selected the key is left alone.
+TEST_F(ChannelFlowTest, AltCOnTheSelectedMacroOpensItsPickerAndPreviewsLive) {
+    LinkRigApp rig;
+    std::unique_ptr<juce::Component> content;
+    synth::ui::test_hooks::cardCallOutLauncherForTest() = [&](std::unique_ptr<juce::Component> c,
+                                                              juce::Rectangle<int>) {
+        content = std::move(c);
+        return nullptr;
+    };
+    EXPECT_FALSE(rig.editor.openColourForKeyboardFocus()) << "nothing selected";
+    EXPECT_EQ(content, nullptr);
+
+    rig.editor.getMacroController().selectMacro(rig.leadMacroId, false);
+    ASSERT_TRUE(rig.editor.openColourForKeyboardFocus());
+    auto* picker = dynamic_cast<synth::ui::ColourPickerPopup*>(content.get());
+    ASSERT_NE(picker, nullptr);
+    picker->setCurrentColourForTest(juce::Colours::red);
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, juce::Colours::red);
+    content.reset(); // the commit
+    ASSERT_TRUE(rig.undo.undo());
+
+    rig.editor.getMacroController().selectMacro(rig.leadMacroId, false);
+    rig.editor.getMacroController().selectMacro(rig.drumsMacroId, true);
+    EXPECT_FALSE(rig.editor.openColourForKeyboardFocus()) << "two macros selected: no single item to recolour";
+    synth::ui::test_hooks::cardCallOutLauncherForTest() = nullptr;
 }
