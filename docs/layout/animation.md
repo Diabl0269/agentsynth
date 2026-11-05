@@ -159,8 +159,8 @@ Every reorderable list (the bottom dock's tab strip, the mixer's track columns, 
 - `ReorderDragSession` — the three above wired together for a list that owns one animator: the frame
   pump started only when the tween generation changes, the Esc listener armed at the first lifted
   drag event, the drag auto-repeat, and the "Esc already cancelled, so the release must not commit"
-  flag. `end()` tells the release apart (`Click` / `Commit` / `Cancelled` / `Nothing`). Off screen or under
-  Animations Off the gesture is untimed, so a drop, an Esc or a `settleInto` lands at once (the pump lands at once there too, and a tween on the real clock would leave the list reordering).
+  flag. `end()` tells the release apart (`Click` / `Commit` / `Cancelled` / `Nothing`). Off screen, under
+  Animations Off or under Reduce Motion the gesture is untimed, so a drop, an Esc or a `settleInto` (a keyboard move) lands at once (under Off the pump lands at once too, and a tween on the real clock would leave the list reordering). Reduce Motion is enforced in `ReorderDragAnimator::begin` itself, so every reorderable list, session or not, lands its make-room and settle at once there: a reorder is movement with no plain-fade form (the lifted row still follows the pointer).
   The macro port dialog, the knob picker and the mixer send list use it; the older owners above hold the pieces themselves.
 - `ReorderLiftLook.h` — `paintReorderLift()`, the lifted row's look (soft shadow, raised
   `surfaceHi` fill, 1 px `accent` border, all scaled by the animator's lift). Zones rows, the

@@ -6,6 +6,7 @@
 
 #include "AutomationLanesMenuFixture.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <algorithm>
 
 using namespace lane_menu_test;
@@ -206,6 +207,23 @@ TEST(AutomationLanesReorderTest, AltDownAndUpOnTheFocusedHeaderMoveTheLaneOneSlo
     EXPECT_TRUE(header.keyPressed(up)) << "consumed at the top";
     EXPECT_EQ(f.order(f.bass), (std::vector<synth::LaneId>{f.cutoff, f.res, f.detune}));
     EXPECT_FALSE(f.undo.canUndo()) << "nothing moved, nothing recorded";
+}
+
+// Regression test for FRO1503: with Reduce Motion on, Alt+Up/Down on a lane header put the header at its final slot at
+// once, with no glide pending.
+TEST(AutomationLanesReorderTest, UnderReduceMotionAKeyboardLaneMoveLandsAtOnce) {
+    ReorderPanel f;
+    f.panel.getAutomationLanes().setLaneDragAnimatesOffScreenForTest(true);
+    const juce::KeyPress down(juce::KeyPress::downKey, juce::ModifierKeys::altModifier, 0);
+
+    struct Reduced {
+        Reduced() { synth::ui::setReducedMotionForTest(true); }
+        ~Reduced() { synth::ui::setReducedMotionForTest(std::nullopt); }
+    } reduced;
+    ASSERT_TRUE(f.header(f.cutoff).keyPressed(down));
+    EXPECT_FALSE(f.panel.getAutomationLanes().isLaneReorderActive()) << "no frames pending";
+    EXPECT_EQ(f.onScreenOrder(f.bass), (std::vector<synth::LaneId>{f.res, f.cutoff, f.detune}));
+    f.panel.getAutomationLanes().setLaneDragAnimatesOffScreenForTest(false);
 }
 
 TEST(AutomationLanesReorderTest, AltDownOnTheFocusedEditorMovesTheLaneAndKeepsPointKeysForThePoints) {

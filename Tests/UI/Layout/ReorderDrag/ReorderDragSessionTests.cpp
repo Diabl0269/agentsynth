@@ -20,6 +20,11 @@ struct AnimationsOff {
     ~AnimationsOff() { synth::ui::setAnimationMode(before); }
 };
 
+struct ReduceMotionOn {
+    ReduceMotionOn() { synth::ui::setReducedMotionForTest(true); }
+    ~ReduceMotionOn() { synth::ui::setReducedMotionForTest(std::nullopt); }
+};
+
 struct ShowingOwner {
     juce::Component owner;
     ShowingOwner() {
@@ -62,4 +67,26 @@ TEST(ReorderDragSessionTest, UnderAnimationsOffEverySettleOnAShowingOwnerLandsAt
     session.abort();
     EXPECT_FALSE(session.isReordering()) << "Esc puts everything back at once";
     EXPECT_FLOAT_EQ(session.animator().getLayoutStart(0), 0.0f);
+}
+
+// Regression test for FRO1503: Reduce Motion has no plain-fade form for a reorder, so every settle on a showing owner
+// lands at once, as under Animations Off.
+TEST(ReorderDragSessionTest, UnderReduceMotionEverySettleOnAShowingOwnerLandsAtOnce) {
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "native windows abort the process under the ASAN job's Xvfb";
+    ReduceMotionOn reduced;
+    ShowingOwner rig;
+    ASSERT_TRUE(rig.owner.isShowing());
+    ReorderDragSession session(rig.owner, [] {});
+
+    auto moved = threeRows();
+    session.settleInto(moved, 1, 0.0f);
+    EXPECT_FALSE(session.isReordering()) << "the keyboard move's settle lands at once";
+    EXPECT_FLOAT_EQ(session.animator().getLayoutStart(1), 40.0f);
+
+    session.begin(threeRows(), 0, 10.0f, 10.0f);
+    ASSERT_TRUE(session.dragTo(60.0f));
+    ASSERT_EQ(session.end(), ReorderDragSession::End::Commit);
+    session.release({40.0f, 0.0f, 80.0f});
+    EXPECT_FALSE(session.isReordering()) << "the drop lands at once";
 }

@@ -215,6 +215,8 @@ public:
     bool moveLaneBy(synth::LaneId lane, int delta);
     /** True while a lane header is lifted or still settling into its slot. */
     bool isLaneReorderActive() const noexcept { return laneDrag_.isReordering(); }
+    /** Lets the headless panel take the timed lane-move path, as a showing one does. */
+    void setLaneDragAnimatesOffScreenForTest(bool animate) noexcept { laneDrag_.setAnimateOffScreenForTest(animate); }
     /** Esc through the same listener a real key press reaches. */
     bool sendLaneDragEscapeForTest() { return laneDrag_.sendEscapeForTest(); }
     /** How many times the modulator routings were asked of the graph since this was made. */
