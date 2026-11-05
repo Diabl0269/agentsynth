@@ -17,7 +17,6 @@
 #include "Modules/FX/PhaserModule.h"
 #include "Modules/FX/RingModulatorModule.h"
 #include "Modules/FilterModule.h"
-#include "Modules/LFOModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/PolyMidiModule.h"
