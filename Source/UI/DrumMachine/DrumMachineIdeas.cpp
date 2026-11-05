@@ -64,9 +64,9 @@ void DrumMachineComponent::openIdeasPanel() {
         if (safe != nullptr)
             safe->randomizePattern(density, keep, seed);
     };
-    panel->onPick = [safe](const std::vector<synth::MidiNote>& notes, bool replace, int) {
+    panel->onPick = [safe](const std::vector<synth::MidiNote>& notes, int) {
         if (safe != nullptr)
-            safe->pickTake(notes, replace);
+            safe->pickTake(notes);
     };
     panel->onAudition = [safe](int pitch, int velocity) {
         if (safe != nullptr)
@@ -152,50 +152,10 @@ void DrumMachineComponent::addFill(drumideas::Fill fill, bool everyFourthBar) {
                        (steps != c->stepsPerBar ? ", grid set to 16 steps per bar" : ""));
 }
 
-// Replace puts the take into this clip; otherwise it becomes a new clip right after this one, with the same grid,
-// swing and humanise, and the grid opens it. Either way one undo step.
-synth::ClipId DrumMachineComponent::pickTake(const std::vector<synth::MidiNote>& notes, bool replace) {
-    const auto* c = clip();
-    if (c == nullptr)
-        return {};
-    if (replace) {
-        applyIdeaNotes(notes, 0, "Replaced this clip with the take");
-        return clipId_;
-    }
-    const auto* track = doc_->getTrackForClip(clipId_);
-    if (track == nullptr)
-        return {};
-    const auto trackId = track->id;
-    const double start = c->startBeat + c->lengthBeats;
-    const double length = c->lengthBeats;
-    const int steps = c->stepsPerBar;
-    const double swing = c->swing;
-    const double humanise = c->humanise;
-    const auto rows = c->drumRows; // copied before addClip, which can move the clip
-    const auto sourceName = c->name;
-    const auto name = sourceName + " take";
-    synth::ClipId created;
-    record([&] {
-        created = doc_->addClip(trackId, start, length, name);
-        if (!created.isValid())
-            return;
-        doc_->setClipStepsPerBar(created, steps);
-        doc_->setClipSwing(created, swing);
-        doc_->setClipHumanise(created, humanise);
-        for (const auto& row : rows) {
-            doc_->setClipRowLength(created, row.pitch, row.lengthSteps);
-            doc_->setClipRowSwing(created, row.pitch, row.swing);
-        }
-        for (const auto& note : notes)
-            doc_->addNote(created, note);
-    });
-    if (!created.isValid())
-        return {};
-    openClip(created);
-    if (onClipCreated)
-        onClipCreated(created);
-    announce("Take added as a new clip after " + sourceName);
-    return created;
+// A take always replaces this clip's pattern, through the path starters and randomize use: the clip stays open (so a
+// playing loop is not stopped by a reopen), the grid and the drums' own length and swing stay, one undo step.
+void DrumMachineComponent::pickTake(const std::vector<synth::MidiNote>& notes) {
+    applyIdeaNotes(notes, 0, "Replaced this clip with the take");
 }
 
 //==============================================================================

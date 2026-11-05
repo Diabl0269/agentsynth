@@ -54,6 +54,7 @@ namespace synth::ui {
 
 class PianoRollVelocityLane; // UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h
 class PianoRollHeaderChip;   // PianoRollHeaderChip.h
+class EditorTabWalk;         // UI/Layout/EditorTabWalk.h
 
 class PianoRollComponent
     : public juce::Component
@@ -365,9 +366,8 @@ public:
     int getPlayheadLineX() const noexcept;
     bool hasPlayheadPosition() const noexcept;
 
-    // ---- Test hooks (mirrors TimelineClipLaneArea's getClipRect / isMarqueeActiveForTest); each
-    // one's contract is documented next to its out-of-line definition in the matching
-    // PianoRoll<Concern>.cpp unit ----
+    // ---- Test hooks; each one's contract is beside its definition in the matching PianoRoll<Concern>.cpp ----
+    synth::ui::EditorTabWalk& getTabWalkForTest() noexcept { return *tabWalk_; }
     juce::Rectangle<int> getBackButtonBounds() const noexcept;
     juce::Rectangle<int> getQuantiseButtonBounds() const noexcept;
     juce::Rectangle<int> getQuantiseLengthButtonBounds() const noexcept;
@@ -696,13 +696,11 @@ private:
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
-    // Non-owning, may stay null (see setShortcutManager). const because the roll only ever READS
-    // bindings — rebinding is the Settings window's job.
+    // Non-owning, may stay null; read only (rebinding is the Settings window's job).
     const ShortcutManager* shortcuts_ = nullptr;
     // App-level scroll-direction preference; false == natural == the juce::Viewport convention.
     bool scrollInverted_ = false;
-    // App-level ZOOM-direction preference; false == wheel up zooms in. A separate flag from
-    // scrollInverted_ — see setZoomScrollInverted.
+    // App-level ZOOM-direction preference (false: wheel up zooms in); see setZoomScrollInverted.
     bool zoomScrollInverted_ = false;
     synth::ClipId clipId_;
     NoteSelectionModel selection_;
@@ -993,6 +991,7 @@ private:
     std::array<std::unique_ptr<PianoRollHeaderChip>, 9> headerChips_; // indexed by HeaderButtonId - 1
     juce::String announcedValueText_;
     bool focusRingForced_ = false;
+    std::unique_ptr<synth::ui::EditorTabWalk> tabWalk_; // set up in PianoRollAccessibility.cpp
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PianoRollComponent)
 };

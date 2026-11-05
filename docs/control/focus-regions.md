@@ -108,6 +108,9 @@ below for the Mixer region's own keyboard behaviour.
   is the main view; focus is also handed over when the pane closes around the canvas shown as a tab). Modified keys fall through, so Cmd+1/2/3 and Tab behave as
   before. Details: [`layout/chrome.md`](../layout/chrome.md#toolbar-keyboard-access) and
   [`layout/chrome.md`](../layout/chrome.md#tab-strip-keyboard-and-screen-reader-access).
+- **Tab inside the Timeline** — before leaving, Tab walks into the region: from the root to the focused track row,
+  from a row to its clips, and from an open clip editor's grid through its header controls and back
+  ([`timeline/focus.md`](../timeline/focus.md#clip-keyboard-mode), [clip editor Tab walk](../timeline/focus.md#clip-editor-tab-walk)).
 - **The Timeline's two side panes** — Tab goes track list, routing pane, scale pane, each only while it is on screen
   (Shift+Tab reverses), like any region. Each pane root takes focus and draws the panel outline (the Timeline's own
   outline stands down while focus is in a pane). Inside a pane, Down from the root enters the first control and Up/Down

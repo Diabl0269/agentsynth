@@ -71,7 +71,19 @@ keeps every note where it is in time and only changes which cell it falls in.
 | Click a hit | Removes every note of that pitch starting in the cell |
 | Shift-click an empty cell | Adds a hit at velocity 127 |
 | Shift-click a hit | Toggles accent (127 and 100) |
-| Drag a hit up or down | Sets velocity 1 to 127, previewed live, committed once on release |
+| Press an empty cell and drag | Paints: every empty cell the pointer passes gets a hit (Shift: accents), on any row |
+| Press a hit and drag sideways | Erases: every hit the pointer passes is removed, on any row |
+| Press a hit and drag up or down | Sets velocity 1 to 127, previewed live, committed once on release |
+| Shift+Right / Shift+Left | The keyboard stroke: the focus moves a step and carries the cell with it (a hit paints a hit of the same loudness onto the next cell, an empty cell erases the next cell's hit) |
+
+**Strokes.** The first cell of a press decides for the whole stroke, as in FL Studio and Ableton's drum grids: started on
+an empty cell it only adds, started on a hit it only removes, so crossing a hit during a paint leaves it alone. On a hit
+the first 3 px decide: more sideways than up or down is an erase, otherwise it is a loudness drag. The pointer is
+sampled every half cell between two mouse events, so a fast drag skips no cell. Nothing is written while the button is
+down: added hits show in their row, growing in with a faint accent outline, and removed ones shrink out. Release writes
+the whole stroke as ONE undo step; Escape drops it. Each new hit sounds once, at most one every 40 ms. Under Reduce
+Motion they fade in instead of growing. A stroke is announced ("Added 8 hits", "Removed 3 hits"); the keyboard form is one undo
+step per key press. The shortcuts are the rebindable actions `drumMachineCarryRight` and `drumMachineCarryLeft`.
 
 An accent is a velocity of 120 or more. Every edit is one undo step through the `TimelineDoc` mutators.
 
@@ -257,8 +269,9 @@ seeds from the time); every result is ONE undo step, and the cells it changed ke
   the same undo step when coarser. One undo step, the changed-cell outline, and an announcement ("Added a snare roll").
 - **Vary**: an Amount slider (Subtle to Wild) and "Make 3 takes" show three mini grids side by side. Pressing a mini
   grid plays one pass of that take at the project tempo through the single-note audition path (a timer; it stops after
-  the pass or on the next press). "Pick" under a take adds it as a new clip right after this one (same grid, swing, humanise and per-drum length and
-  swing; the grid opens it) or, with "Replace this clip" on, swaps this clip's notes. The rules move, add and remove
+  the pass or on the next press). "Pick" under a take always replaces this clip's pattern (the same path starters and Randomize use: the grid, swing,
+  humanise and per-drum length and swing stay, no clip is added, the clip stays open, and a looping "Play clip" keeps
+  going); one Cmd+Z brings the old pattern back. To keep the old pattern, duplicate the clip first. The rules move, add and remove
   ghost hits on the snare and hats, push the kick, swap a closed hat for an open one and humanise some velocities;
   the amount scales how many; a kick on a bar's first beat and the snare backbeats stay unless the amount is Wild.
 - **Randomize**: a Density slider (Sparse to Busy) and "Keep kick and snare"; with it on the existing kick (35, 36) and
@@ -273,7 +286,11 @@ The grid is one Tab stop titled "Drum machine grid". Arrow keys, Home and End mo
 focus ring); Return toggles a hit, Space plays or stops the clip, Shift+Return toggles accent, Shift+Up and Shift+Down change loudness
 by 10, Delete removes the hit, Escape closes. Return, Space (Play clip), Shift+Return, Shift+Up/Down and Alt(+Shift)+Left/Right (a drum's
 [length](#per-drum-length-and-swing)) are rebindable (Drum Machine category in Settings). The focused cell is read out as, for example, "Kick, step 5, hit, loudness 100, accent" or
-"Kick, step 5, empty". Header controls (the Swing and Humanise knobs, Ideas) and each row's name, M and S are Tab-reachable with names and tooltips.
+"Kick, step 5, empty". Opening the editor focuses the grid. Tab from the grid walks the header: View switch, Play
+clip, Show all drums (skipped while it is greyed), Steps per bar, Swing, Humanise and Ideas, each with a name and a
+tooltip, then back to the grid; the next Tab leaves for the next region, and Shift+Tab walks backwards
+([Clip editor Tab walk](focus.md#clip-editor-tab-walk)). Each row's name, M and S and the lanes are not on the walk:
+they are reached with the pointer.
 
 ## Motion
 

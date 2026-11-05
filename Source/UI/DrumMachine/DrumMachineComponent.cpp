@@ -7,6 +7,7 @@
 // clip-relative in the document, so every cell maps through clip->startBeat.
 
 #include "DrumMachineComponent.h"
+#include "UI/Layout/EditorTabWalk.h"
 
 #include "Transport/TransportService.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -37,10 +38,13 @@ int rankOfPitch(int pitch) {
 
 DrumMachineComponent::DrumMachineComponent()
     : viewSwitch_("View", juce::StringArray{"Drum machine", "Piano roll"}) {
+    tabWalk_ = std::make_unique<EditorTabWalk>(*this); // first: setupTabWalk and focusLost use it
     setComponentID("drumMachineComponent");
     setTitle("Drum machine grid");
-    setTooltip("Drum grid: click a step to add a hit, click a hit to remove it, drag a hit up or down to change how "
-               "loud it is, Shift-click for an accent");
+    attachStateProbe();
+    setTooltip("Drum grid: click a step to add a hit, press and drag across steps to add several, click a hit to "
+               "remove it, drag a hit sideways to remove several or up or down to change how loud it is, Shift-click "
+               "for an accent");
     setWantsKeyboardFocus(true);
     setOpaque(true);
 
@@ -97,6 +101,7 @@ DrumMachineComponent::DrumMachineComponent()
     };
     setupGroove();
     setupIdeas();
+    setupTabWalk();
 }
 
 DrumMachineComponent::~DrumMachineComponent() {
@@ -160,6 +165,7 @@ void DrumMachineComponent::openClip(synth::ClipId id) {
     rebuildCells(false); // the first build is the baseline: nothing grows in on open
     syncRowLengths(false);
     focus_ = {0, 0};
+    tabWalk_->reset();
     viewSwitch_.setSelectedIndex(0, juce::dontSendNotification);
     stepsCombo_.setSelectedId(
         1 + static_cast<int>(std::find(std::begin(kStepChoices), std::end(kStepChoices), c->stepsPerBar) -

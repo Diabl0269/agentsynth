@@ -76,6 +76,10 @@ juce::String drumMachineActionName(const juce::String& actionId) {
         return "Make Focused Hit Louder";
     if (actionId == "drumMachineSofter")
         return "Make Focused Hit Softer";
+    if (actionId == "drumMachineCarryRight")
+        return "Carry the Focused Cell's Hit Right";
+    if (actionId == "drumMachineCarryLeft")
+        return "Carry the Focused Cell's Hit Left";
     if (actionId == "drumMachinePlayClip")
         return "Play or Stop the Clip";
     if (actionId == "drumMachineRowShorter")
