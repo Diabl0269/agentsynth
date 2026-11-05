@@ -12,9 +12,9 @@ using testmode_rig::run;
 
 TEST(TestModeCommands, TheRegistryHasEveryProtocolCommand) {
     const auto names = CommandTable::standard().names();
-    for (const char* name :
-         {"ping", "list", "click", "wheel", "hover", "mouseDown", "mouseMoveHeld", "mouseUp", "drag", "key", "getState",
-          "screenshot", "openProject", "saveProject", "waitForIdle", "quit", "trackPresentedFrame", "checkStalePixels"})
+    for (const char* name : {"ping", "list", "click", "wheel", "hover", "mouseDown", "mouseMoveHeld", "mouseUp", "drag",
+                             "key", "getState", "screenshot", "openProject", "saveProject", "waitForIdle", "quit",
+                             "trackPresentedFrame", "checkStalePixels", "requestQuit"})
         EXPECT_TRUE(names.contains(name)) << name;
     EXPECT_EQ(CommandTable::standard().find("nope"), nullptr);
 }

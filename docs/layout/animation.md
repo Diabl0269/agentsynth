@@ -783,7 +783,7 @@ a change mid-motion retargets from the current slots, and a leaving tab takes no
 ## Tooltips
 
 One shared window, `synth::ui::AppTooltipWindow` (`Source/UI/Layout/AppTooltipWindow.{h,cpp}`), serves every app
-window: `MainComponent` owns one and each `DetachedPanelWindow` owns one. It is a `juce::TooltipWindow` that fades
+window: `MainComponent`, each `DetachedPanelWindow` and each dialog `PopupMotion::launchDialog` opens (`DialogTooltip.{h,cpp}`: a dialog is its own native window, so the main window's tip would draw under it; the dialog owns its tip and deletes it first; `dialog_tooltip::setAppProperties`, set once by `MainComponent`, gives the info-tips preference; guard `DialogTooltipTests.cpp` over the theme sweep's dialogs). It is a `juce::TooltipWindow` that fades
 a tip in over 160 ms and out over 110 ms, linear in time, the numbers and curve from `popup_motion`, with no
 slide. juce hides a tip synchronously, so the fade-out runs on a click-through ghost sibling that paints the same text; whether
 to animate is asked of the window the tip lives in, because the tip itself is already hidden by then.

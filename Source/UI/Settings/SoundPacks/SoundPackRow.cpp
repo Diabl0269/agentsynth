@@ -94,7 +94,8 @@ SoundPackRow::SoundPackRow(juce::String packId, Actions actions)
         addAndMakeVisible(*label);
     setUpLabel(name_, kNameSize, true);
     setUpLabel(detail_, kLineSize, false);
-    detail_.setInterceptsMouseClicks(true, false); // hovering it shows the full list when the line is elided
+    detail_.setComponentID("packDetail:" + packId_); // test mode hovers it to read the tooltip popup
+    detail_.setInterceptsMouseClicks(true, false);   // hovering it shows the full list when the line is elided
     setUpLabel(status_, kLineSize, false);
     for (auto* button : {&download_, &update_, &remove_, &cancel_})
         addChildComponent(*button);

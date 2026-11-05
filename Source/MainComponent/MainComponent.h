@@ -56,7 +56,6 @@
 #include "UI/Layout/MainViewHolder.h"
 #include "UI/Layout/MainViewSwapMotion.h"
 #include "UI/Layout/UIAnimation.h"
-#include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Mixer/MixerPlacementController.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -84,8 +83,10 @@ namespace telemetry {
 class TelemetryService; // Telemetry/TelemetryService.h
 }
 namespace ui {
-class ProjectLoadPipeline; // UI/Graph/ProjectLoad/ProjectLoadPipeline.h
-}
+class LibrarySidebarViews;    // UI/Library/LibrarySidebarViews.h
+enum class SidebarView : int; // UI/Library/LibrarySidebarSwitch.h
+class ProjectLoadPipeline;    // UI/Graph/ProjectLoad/ProjectLoadPipeline.h
+} // namespace ui
 } // namespace synth
 class MainComponent
     : public juce::Component

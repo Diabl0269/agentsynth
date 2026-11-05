@@ -412,6 +412,16 @@ StepResult cmdQuit(const juce::var&, Scratch&, int) {
     return StepResult::done(object({{"quitting", true}}));
 }
 
+// What the native Quit menu item reaches (applicationShouldTerminate -> systemRequestedQuit), without the key: with
+// unsaved changes the app asks first. After the reply, like quit.
+StepResult cmdRequestQuit(const juce::var&, Scratch&, int) {
+    juce::Timer::callAfterDelay(150, [] {
+        if (auto* app = juce::JUCEApplicationBase::getInstance())
+            app->systemRequestedQuit();
+    });
+    return StepResult::done(object({{"requested", true}}));
+}
+
 } // namespace
 
 CommandTable CommandTable::standard() {
@@ -434,6 +444,7 @@ CommandTable CommandTable::standard() {
     table.add("trackPresentedFrame", {cmdTrackPresentedFrame});
     table.add("checkStalePixels", {cmdCheckStalePixels});
     table.add("quit", {cmdQuit});
+    table.add("requestQuit", {cmdRequestQuit});
     return table;
 }
 

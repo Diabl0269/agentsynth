@@ -1,6 +1,8 @@
 #include "UI/Layout/PopupMotion.h"
 
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/DialogMenuKeys.h"
+#include "UI/Layout/DialogTooltip.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -32,6 +34,8 @@ public:
     }
 
     bool keyPressed(const juce::KeyPress& key, juce::Component*) override {
+        if (dialog_menu_keys::handle(key, *window_))
+            return true;
         static const juce::KeyPress closeKey('w', juce::ModifierKeys::commandModifier, 0);
         if (key != juce::KeyPress(juce::KeyPress::escapeKey) && key != closeKey)
             return false;
@@ -82,6 +86,7 @@ PopupMotion::launchDialog(juce::DialogWindow::LaunchOptions& options,
     if (dialog != nullptr) {
         attach(*dialog, makeStyle(*dialog));
         new DialogCloseKeys(*dialog); // owns itself: deleted with the window
+        dialog_tooltip::attach(*dialog);
     }
     return dialog;
 }
