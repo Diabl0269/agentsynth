@@ -63,6 +63,7 @@ thread is never blocked and timers and animations run in between.
 | `trackPresentedFrame` | `stop?` | `{following, width, height}`; starts (or stops) following what the main window shows, see [Stale pixels](#stale-pixels) |
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |
 | `quit` | | quits at once, without the unsaved-changes prompt |
+| `requestQuit` | | what the Quit menu item (Cmd+Q) reaches: the app's own quit request, so with unsaved changes the Save / Discard / Cancel question appears first; the native menu and the key itself are not driven |
 
 ## Ids
 

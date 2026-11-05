@@ -114,8 +114,8 @@ public:
 
     bool showContextMenuForKeyboardFocus() override;
 
-    /** Offered every key first (Move Lane Up/Down act on the whole lane, not its points); true when used. May be null.
-     */
+    /** Move Lane Up/Down for the whole lane: offered a key first, or after the points when any is selected (both
+     *  default to Alt+Up/Down); true when used. May be null. */
     std::function<bool(const juce::KeyPress&)> onLaneKey;
 
     /** Fired when this editor takes keyboard focus; may be null. */
@@ -343,6 +343,7 @@ private:
     bool extendSelection(int direction);
     void showBubbleOnCursor(std::optional<double> beat);
     bool handleSelectionKey(const juce::KeyPress& key);
+    bool handleEditorKey(const juce::KeyPress& key);
     void selectionChanged();
     struct OwnEditScope {
         explicit OwnEditScope(AutomationLaneEditor& editor)

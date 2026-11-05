@@ -1,0 +1,47 @@
+# Moving an automation lane or a modulator row one place was Cmd+Alt+Up/Down, while the canvas moves a card and the
+# mixer a row with Alt+Up/Down. Now the lanes use Alt+Up/Down too; in a curve editor with points selected the chord
+# still moves the points, not the lane.
+#
+# What a user does:
+#   1. Opens a project with three audio tracks, a Compressor lane on each (Audio 1 has Ratio and Attack) and an LFO on
+#      Audio 1's Ratio lane (fixture cross-track-lanes.agsproj), shows the timeline and opens Audio 1's automation.
+#   2. Focuses the Ratio lane header and presses Alt+Down: Ratio moves below Attack. Alt+Up: back on top.
+#   3. Focuses the LFO 2 row and presses Alt+Down: it moves on to Attack. Alt+Up: back on Ratio.
+#   Each move lands where it should and the next one is taken (a lane move used to stay "reordering" under
+#   Animations Off, which every run here has, leaving two headers on one spot and refusing later moves).
+#   Alt+Up/Down on a curve with points selected moves the points: the unit test
+#   AltUpOnAnEditorWithAPointSelectedMovesThePointNotTheLane covers it (every curve shares one id here).
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: "Show Audio 1 automation (2 lanes)"}
+  - wait: {}
+  - expect: {id: "Ratio automation lane", bounds: {x: 200, y: 164, w: 200, h: 40}, within_ms: 2000}
+  - expect: {id: "Attack (ms) automation lane", bounds: {x: 200, y: 258, w: 200, h: 40}, within_ms: 2000}
+  - screenshot: {name: before}
+  # 2. The lane header.
+  - key: {keys: alt+down, target: Ratio automation lane}
+  - wait: {}
+  - expect: {id: "Attack (ms) automation lane", bounds: {x: 200, y: 164, w: 200, h: 40}, within_ms: 2000}
+  - expect: {id: "Ratio automation lane", bounds: {x: 200, y: 204, w: 200, h: 40}, within_ms: 2000}
+  - screenshot: {name: header-alt-down}
+  - key: {keys: alt+up, target: Ratio automation lane}
+  - wait: {}
+  - expect: {id: "Ratio automation lane", bounds: {x: 200, y: 164, w: 200, h: 40}, within_ms: 2000}
+  - expect: {id: "Attack (ms) automation lane", bounds: {x: 200, y: 258, w: 200, h: 40}, within_ms: 2000}
+  - screenshot: {name: header-alt-up}
+  # 3. The modulator row.
+  - key: {keys: alt+down, target: LFO 2 mod lane on Ratio}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Attack (ms)", showing: true, hasFocus: true, within_ms: 2000}
+  - screenshot: {name: row-alt-down}
+  - key: {keys: alt+up}
+  - wait: {}
+  - expect: {id: LFO 2 mod lane on Ratio, showing: true, hasFocus: true, within_ms: 2000}
+  - screenshot: {name: row-alt-up}

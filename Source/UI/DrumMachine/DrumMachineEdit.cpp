@@ -36,14 +36,14 @@ void DrumMachineComponent::rebuildCells(bool animate) {
         return;
     }
     for (const auto& [key, hits] : cells_)
-        if (previous.count(key) == 0 || !sameGrid)
+        if ((previous.count(key) == 0 || !sameGrid) && settledKeys_.count(key) == 0)
             beginHitMotion(key, true, hits.velocity,
                            stagger ? std::min(kMaxStaggerMs, kStaggerMsPerColumn * static_cast<double>(key % 1000000))
                                    : 0.0);
     if (!sameGrid)
         return;
     for (const auto& [key, hits] : previous)
-        if (cells_.count(key) == 0)
+        if (cells_.count(key) == 0 && settledKeys_.count(key) == 0)
             beginHitMotion(key, false, hits.velocity);
 }
 

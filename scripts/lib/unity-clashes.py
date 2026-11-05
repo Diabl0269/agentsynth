@@ -3,6 +3,8 @@
 
 Used by scripts/check-unity-clashes.sh. Usage: unity-clashes.py <repo-root>
 Prints one "<key>\t<fileA>\t<fileB>\t<group>" line per clashing pair (files sorted), then exits 0.
+A second kind of line has a header as fileB: a source's anonymous-namespace name that a header another
+source of the group #includes (directly, one level) declares at named-namespace scope.
 
 Grouping mirrors synth_enable_unity in cmake/Pch.cmake: per target (Core, AppUI, Tests), the .cpp
 files not in SYNTH_UNITY_SKIP are counted per folder; a folder splits into count/SIZE+1 groups and a
@@ -227,8 +229,9 @@ def enumerators(body, scoped):
     return names
 
 
-def declarations(text):
-    """Returns {qualified key: alias target or None} for the names declared at anonymous-namespace scope."""
+def declarations(text, named=False):
+    """Returns {qualified key: alias target or None} for the names declared at anonymous-namespace scope,
+    or, with named=True (a header), at the scope of a named namespace (never inside an anonymous one)."""
     text = blank_out(text)
     found = {}
     stack = []  # frames: ("ns", name) or ("body", None)
@@ -237,7 +240,10 @@ def declarations(text):
     i, n = 0, len(text)
 
     def in_anon_scope():
-        return all(f[0] == "ns" for f in stack) and any(f[1] == "(anon)" or f[1].endswith("::(anon)") for f in stack)
+        if not all(f[0] == "ns" for f in stack):
+            return False
+        anon = any(f[1] == "(anon)" or f[1].endswith("::(anon)") for f in stack)
+        return (not anon and any(f[1] for f in stack)) if named else anon
 
     def prefix():
         return "::".join(f[1] for f in stack if f[0] == "ns") + "::"
@@ -321,9 +327,70 @@ def declarations(text):
     return found
 
 
+USING_NAMESPACE = re.compile(r"\busing\s+namespace\s+(?:::)?([\w:]+)\s*;")
+INCLUDE = re.compile(r'(?m)^[ \t]*#[ \t]*include[ \t]+"([^"]+)"')
+
+
+def included_headers(root, rel):
+    """Project headers a source #includes directly (one level), resolved against Source/, the source's
+    folder and the repo root. Returns repo-relative paths."""
+    found = []
+    for name in INCLUDE.findall(read(os.path.join(root, rel))):
+        for base in (os.path.join("Source"), os.path.dirname(rel), ""):
+            cand = os.path.normpath(os.path.join(base, name))
+            if os.path.isfile(os.path.join(root, cand)):
+                found.append(cand)
+                break
+    return found
+
+
+def split_key(key):
+    """Returns (namespace segments without anonymous ones, bare name) of a qualified key."""
+    k = key.replace("(anon)", "@A@")
+    head = k.split("(", 1)[0]
+    cut = head.rfind("::")
+    ns = k[:cut] if cut >= 0 else ""
+    return [seg for seg in ns.split("::") if seg and seg != "@A@"], k[cut + 2:] if cut >= 0 else k
+
+
+def header_clashes(root, paths, anon_decls, header_cache):
+    """Yields (anonymous key, source, header) where a source of the group declares, in an anonymous
+    namespace, a name a header included by another source of the group declares at named-namespace scope
+    in the same namespace (an unqualified use is ambiguous), or in a namespace below it that some source of
+    the group opens with a namespace-scope `using namespace` (the directive makes the header's name appear
+    in the common ancestor, beside the anonymous one, and in a unity build it leaks into every later source)."""
+    directives = set()
+    for rel in paths:
+        directives.update(USING_NAMESPACE.findall(blank_out(read(os.path.join(root, rel)))))
+    users = {}
+    for rel in sorted(paths):
+        for header in included_headers(root, rel):
+            users.setdefault(header, set()).add(rel)
+    for header, includers in sorted(users.items()):
+        if header not in header_cache:
+            source = read(os.path.join(root, header))
+            header_cache[header] = [split_key(k) + (alias,) for k, alias in declarations(source, named=True).items()]
+        if not header_cache[header]:
+            continue
+        for rel in sorted(paths):
+            if includers == {rel}:
+                continue  # that one file would already fail on every platform
+            for key, alias_a in anon_decls[rel].items():
+                ns_a, name_a = split_key(key)
+                for ns_h, name_h, alias_h in header_cache[header]:
+                    if name_a != name_h or ns_h[:len(ns_a)] != ns_a:
+                        continue
+                    if alias_a is not None and alias_a == alias_h:
+                        continue  # the same alias twice denotes one type: legal
+                    joined = "::".join(ns_h)
+                    if ns_h == ns_a or any(joined == t or joined.endswith("::" + t) for t in directives):
+                        yield key, rel, header
+
+
 def main():
     root = os.path.abspath(sys.argv[1])
     cache = {}
+    header_cache = {}
     for group, paths in sorted(unity_groups(root).items()):
         by_key = {}
         for rel in sorted(paths):
@@ -340,6 +407,8 @@ def main():
                     if entries[a][1] is not None and entries[a][1] == entries[b][1]:
                         continue
                     print("%s\t%s\t%s\t%s" % (key, owners[a], owners[b], group))
+        for key, rel, header in sorted(set(header_clashes(root, sorted(paths), cache, header_cache))):
+            print("%s\t%s\t%s\t%s" % (key, rel, header, group))
 
 
 if __name__ == "__main__":

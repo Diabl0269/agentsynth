@@ -27,4 +27,22 @@ ShapeCheck checkFilterEnvelope(const juce::var& response, const juce::var& exist
  * sustain <= 0.3. */
 ShapeCheck checkAcid(const juce::var& response, const juce::var& existingPatch = {});
 
+/** A Sequencer or Poly Sequencer wired to an addInstrumentTrack op's `instrumentId` plays through a MIDI cable, so the
+ * connection is rewritten to the MIDI sentinel (`srcPort` and `dstPort` -1) when it names a port >= 0 (the cable would
+ * otherwise be dropped), and the sequencer gets `run` 1 in its params when it states none (it is silent while Run is
+ * off). Returns a repaired copy and appends one plain-words line per repair to `notes`; any other response comes
+ * back unchanged. */
+juce::var repairSequencerWiring(const juce::var& response, juce::StringArray& notes);
+
+/** One player per part (prompt v10): when a Sequencer or Poly Sequencer node is wired to an addInstrumentTrack op's
+ * `instrumentId` and the same response also places clip notes (placeClips) on that track by name, returns a copy of
+ * `response` with those notes removed so the part plays once. One plain-words line per track fixed is appended to
+ * `notes`. A response that does not double a part comes back unchanged. */
+juce::var dropDoubledClipNotes(const juce::var& response, juce::StringArray& notes);
+
+/** When `request` asks for accents (accent, accented, accents, punchy, groove), every Sequencer or Poly Sequencer in
+ * `response` that carries step `state` must have step velocities spanning at least 20. Fails with a plain-words
+ * reason (the plan note) when one is flatter; passes when accents were not asked for or the spread is there. */
+ShapeCheck checkAccents(const juce::var& response, const juce::String& request);
+
 } // namespace synth::soundshape

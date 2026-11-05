@@ -25,7 +25,7 @@ model, and presets, snippets and undo snapshots all persist it.
   - `type`: the module's factory type name (`"Oscillator"`, `"Filter"`, `"ADSR"`).
   - `params`: optional key/value pairs for the module's parameters.
     A param left out takes the module's current default (an Oscillator or Wavetable with only `unison` set gets the default Detune, Blend, Width and Rand).
-- **`connections`** — the signal flow: `src`/`srcPort` to `dst`/`dstPort`, ports by index.
+- **`connections`** — the signal flow: `src`/`srcPort` to `dst`/`dstPort`, ports by index. A MIDI connection (a Sequencer or other MIDI source to an instrument) uses `srcPort` -1 and `dstPort` -1; a port index past a module's audio ports builds no cable (silently), so a sequencer cable written as port 0 to port 0 would be lost (edit plans repair that one case, see [timeline-ops](timeline-ops.md#one-edit-plan)).
 - **`modulations`** — optional control routings, each created as an attenuverter between source and
   destination: `source`, optional `sourcePort` (default 0), `dest`, optional `amount` (-1 to 1,
   default 1) and `bypass`, and the destination channel named by **`destPort` or `destParam`** (see

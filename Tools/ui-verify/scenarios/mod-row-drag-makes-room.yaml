@@ -1,0 +1,53 @@
+# A modulator row dragged over another track's lane showed only a drop line: nothing below moved until the drop, and
+# then the lanes and tracks below jumped. Now the lane under the pointer opens a gap of the row's height at the drop's
+# slot while the row's own gap closes, and everything below slides.
+#
+# What a user does:
+#   1. Opens a project with three audio tracks, a Compressor lane on each and an LFO on Audio 1's Ratio lane (fixture
+#      cross-track-lanes.agsproj), shows the timeline in the main area and opens every track's automation.
+#   2. Presses on the LFO 2 row and holds it over Audio 2's Threshold lane: a row-high gap opens under that lane's
+#      header, Audio 3 slides down, Audio 1's gap closes (frame mid-drag). Esc: the gaps close and the row glides back
+#      to Ratio (frame after-escape); the release changes nothing.
+#   3. The same drag released: the row lands in the gap, nothing jumps, one LFO row on Audio 2's Threshold.
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: "Show Audio 1 automation (2 lanes)"}
+  - click: {id: "Show Audio 2 automation (1 lane)"}
+  - click: {id: "Show Audio 3 automation (1 lane)"}
+  - wait: {}
+  - expect: {id: LFO 2 mod lane on Ratio, showing: true}
+  - screenshot: {name: before}
+  # 2. Held over the bottom of Audio 2's Threshold lane header, then Esc.
+  - mouseDown: {id: LFO 2 mod lane on Ratio, x: 60, y: 8}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 150}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 230}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 278}
+  - wait: {}
+  - screenshot: {name: mid-drag}
+  - key: {keys: escape}
+  - wait: {}
+  - screenshot: {name: after-escape}
+  - mouseUp: {id: timelineTrackHeaderViewport, x: 100, y: 278}
+  - wait: {}
+  - expect: {id: LFO 2 mod lane on Ratio, showing: true, within_ms: 2000}
+  - screenshot: {name: escape-released}
+  # 3. The same drag, released.
+  - mouseDown: {id: LFO 2 mod lane on Ratio, x: 60, y: 8}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 150}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 230}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 278}
+  - wait: {}
+  - screenshot: {name: mid-drag-again}
+  - mouseUp: {id: timelineTrackHeaderViewport, x: 100, y: 278}
+  - screenshot: {name: just-dropped}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", showing: true, within_ms: 2000}
+  - expect: {id: LFO 2 mod lane on Ratio, exists: false}
+  - screenshot: {name: dropped}

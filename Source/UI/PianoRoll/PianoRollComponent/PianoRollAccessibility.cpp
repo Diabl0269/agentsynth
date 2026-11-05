@@ -10,10 +10,13 @@
 // ends it without this file being told, and every selection-based verb acts on it unchanged.
 
 #include "PianoRollComponent.h"
+#include "UI/Layout/EditorTabWalk.h"
 
 #include "PianoRollHeaderChip.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/PianoRoll/NoteAccessibilityText.h"
+#include "UI/PianoRoll/VelocityLane/PianoRollVelocityLane.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -113,6 +116,8 @@ void PianoRollComponent::focusGained(juce::Component::FocusChangeType) {
 }
 
 void PianoRollComponent::focusLost(juce::Component::FocusChangeType) {
+    if (tabWalk_ != nullptr) // null while the roll is torn down
+        tabWalk_->reset();   // focus left the grid: the next Tab from it walks the header again
     if (getFocusedNote().isValid())
         repaint();
 }
@@ -135,6 +140,18 @@ void PianoRollComponent::initHeaderChips() {
         addAndMakeVisible(*chip);
         headerChips_[chipIndex(id)] = std::move(chip);
     }
+    // Tab from the grid: the header chips left to right, then the velocity Set box and strip, then the grid again.
+    // The scale-assist pane is a focus region of its own (the region cycle reaches it), so it is not on this walk.
+    tabWalk_->setShortcuts([this] { return shortcuts_; });
+    tabWalk_->setStops([this] {
+        std::vector<juce::Component*> stops;
+        for (auto& chip : headerChips_)
+            stops.push_back(chip.get());
+        std::stable_sort(stops.begin(), stops.end(), [](auto* a, auto* b) { return a->getX() < b->getX(); });
+        stops.push_back(&velocityBox_);
+        stops.push_back(velocityLane_.get());
+        return stops;
+    });
 }
 
 void PianoRollComponent::layoutHeaderChips() {

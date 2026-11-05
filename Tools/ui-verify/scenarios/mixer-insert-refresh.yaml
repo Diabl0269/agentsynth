@@ -31,7 +31,9 @@ steps:
   - key: {keys: "cmd+-"}
   - key: {keys: "cmd+-"}
   - wait: {}
-  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 1300, fromY: 280, toX: 1300, toY: 420}   # pan down
+  - drag: {from: "Patch canvas", to: "Patch canvas", fromX: 1300, fromY: 250, toX: 1300, toY: 430}   # pan down so every cable end sits 48px clear of the canvas edge (edge scroll)
+  - wait: {}
+  - drag: {from: "card:Distortion", to: window, fromX: 40, fromY: 17, toX: 1380, toY: 400, steps: 30}   # park it under the EQ so no cable crosses a card
   - wait: {}
   - drag: {from: "card:Parametric EQ > Audio output", to: "card:Distortion > Audio input"}
   - drag: {from: "card:Distortion > Audio output", to: "card:Compressor > Audio input"}

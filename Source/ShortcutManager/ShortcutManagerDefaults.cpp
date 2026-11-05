@@ -418,11 +418,11 @@ void ShortcutManager::addTimelineDefaultBindings() {
     // outside this table; the row claims only the Cmd chord, and only while it has focus.
     bindings["timelineDeleteFocusedTrack"] =
         juce::KeyPress(juce::KeyPress::backspaceKey, juce::ModifierKeys::commandModifier, 0);
-    // Cmd+Alt+Up / Down move the focused automation lane within its track, the way the canvas moves a card
-    // with Alt+arrows. Unbound everywhere else: the only Cmd+Alt+arrow in the table would be this pair.
-    const juce::ModifierKeys commandAlt{juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier};
-    bindings["timelineMoveLaneUp"] = juce::KeyPress(juce::KeyPress::upKey, commandAlt, 0);
-    bindings["timelineMoveLaneDown"] = juce::KeyPress(juce::KeyPress::downKey, commandAlt, 0);
+    // Alt+Up / Down move the focused automation lane within its track, or the focused modulator row, the way the
+    // canvas moves a card and the mixer a row: every "move this item one place" action is Alt+arrow. No other
+    // timeline action is on Alt+Up/Down; a curve editor with points selected keeps the chord for the points.
+    bindings["timelineMoveLaneUp"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::altModifier, 0);
+    bindings["timelineMoveLaneDown"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::altModifier, 0);
 
     // REAL ctrlModifier, not commandModifier. On macOS the Ctrl+digit space is genuinely free
     // (Cmd+digit is reserved by hosts and by the native menu bar), which is what the user asked
@@ -467,6 +467,8 @@ void ShortcutManager::addDrumMachineDefaultBindings() {
         juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0);
     bindings["drumMachineLouder"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0);
     bindings["drumMachineSofter"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0);
+    bindings["drumMachineCarryRight"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0);
+    bindings["drumMachineCarryLeft"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0);
     bindings["drumMachinePlayClip"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, 0);
     // A drum's own length: Alt+Left / Alt+Right by a step, Alt+Shift by a bar. Conflicts are per category, and the
     // grid claims these before the timeline's clip-move chords (also Alt+arrows) can see them.

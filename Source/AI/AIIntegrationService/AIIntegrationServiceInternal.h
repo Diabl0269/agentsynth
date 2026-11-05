@@ -58,12 +58,16 @@ struct Plan {
     std::vector<Reservation> reservations;
     std::set<juce::uint32> patchNodeIds;
     bool buildsInstrumentTracks = false;
+    juce::var
+        repairedRoot; // the response with the app's repairs (readPlan); the patch phase reads this, not the raw root
     std::vector<PlanNote> notes;        // what readPlan dropped or ignored; those ops are already out of otherOps
     std::set<juce::uint32> unusableIds; // ids that clashed: a writeLane naming one is ambiguous, so it is skipped
 };
 
-/** Reads `root` into `out`; empty on success, else the rejection. `liveIds` = every node uid now live. */
-juce::String readPlan(const juce::var& root, const std::set<juce::uint32>& liveIds, Plan& out);
+/** Reads `root` into `out`; empty on success, else the rejection. `liveIds` = every node uid now live. `request` is
+ * the user's words, read only to judge whether accents were asked for. */
+juce::String readPlan(const juce::var& root, const std::set<juce::uint32>& liveIds, Plan& out,
+                      const juce::String& request = {});
 
 /** What one run of the three phases produced. */
 struct RunResult {

@@ -8,6 +8,7 @@
 #include "AIIntegrationServiceInternal.h"
 
 #include "AI/PatchEval.h"
+#include "AI/SoundShapeChecks.h"
 #include "Modules/ModuleBase.h"
 #include "SoundPacks/CoreSounds.h"
 #include "Timeline/TimelineOps.h"
@@ -211,10 +212,23 @@ juce::String readMode(const juce::var& root, Plan& out) {
 
 } // namespace
 
-juce::String readPlan(const juce::var& root, const std::set<juce::uint32>& liveIds, Plan& out) {
-    auto* rootObj = root.getDynamicObject();
-    if (rootObj == nullptr)
+juce::String readPlan(const juce::var& rawRoot, const std::set<juce::uint32>& liveIds, Plan& out,
+                      const juce::String& request) {
+    if (rawRoot.getDynamicObject() == nullptr)
         return "The response is not a JSON object.";
+
+    // A sequencer wired to a new track's instrument gets a MIDI cable and Run on; then one player per part: a track a
+    // sequencer drives loses clip notes the same response also places on it, before any op is split off, so preview and
+    // apply both see the repaired plan.
+    juce::StringArray doubled;
+    const juce::var rewired = soundshape::repairSequencerWiring(rawRoot, doubled);
+    const juce::var root = soundshape::dropDoubledClipNotes(rewired, doubled);
+    for (const auto& line : doubled)
+        out.notes.push_back({PlanNote::Kind::Repaired, {}, line});
+    if (const auto accents = soundshape::checkAccents(rawRoot, request); !accents.pass)
+        out.notes.push_back({PlanNote::Kind::Repaired, {}, accents.reason});
+    out.repairedRoot = root;
+    auto* rootObj = root.getDynamicObject();
 
     for (const char* key : {"nodes", "connections", "remove", "modulations", "removeModulations"})
         out.hasPatch = out.hasPatch || rootObj->hasProperty(key);
@@ -611,7 +625,7 @@ RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juc
 
     // 1. Track-creating ops, in list order.
     PatchIdScope scope;
-    juce::var patchRoot = root;
+    juce::var patchRoot = plan.repairedRoot.isVoid() ? root : plan.repairedRoot;
     if (!plan.trackOps.isVoid()) {
         const auto before = nodeIdsOf(graph);
         RecordingHost recorder(buildHost);
@@ -620,7 +634,7 @@ RunResult runPlan(const Plan& plan, const juce::var& root, TimelineDoc& doc, juc
             return fail(error);
         if (const auto error = bindReservations(plan, recorder, graph, before, scope); error.isNotEmpty())
             return fail(error);
-        patchRoot = dropStandInModulations(root, plan, recorder, scope, graph, out.notes);
+        patchRoot = dropStandInModulations(patchRoot, plan, recorder, scope, graph, out.notes);
     }
 
     // 2. The patch, its namespace widened by the ids phase 1 bound.

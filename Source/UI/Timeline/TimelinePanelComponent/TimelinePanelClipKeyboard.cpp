@@ -22,9 +22,9 @@ void TimelinePanelComponent::wireClipLaneCallbacks() {
     clipLaneArea_.onReturnToTrackHeaderRequested = [this](synth::TrackId id) { returnToTrackHeader(id); };
 }
 
-// Keys for the panel root holding focus. Down enters the track-header column at its top, "Add Track"
-// (the first stop, with or without tracks), and Down again reaches the first track; the Next Clip key enters the clips
-// of the focused track, else of the first track that has any.
+// Keys for the panel root holding focus. Tab enters the focused track's row. Down enters the track-header column at its
+// top, "Add Track" (the first stop, with or without tracks), and Down again reaches the first track; the Next Clip key
+// enters the clips of the focused track, else of the first track that has any.
 bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
     // Up from the panel root climbs to the top bar (tools, snap, follow, transport); Down from the bar comes back.
     if (key == juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0))
@@ -32,6 +32,15 @@ bool TimelinePanelComponent::handleRootFocusKey(const juce::KeyPress& key) {
     if (key.isKeyCode(juce::KeyPress::downKey)) {
         addTrackFromTop_ = true;
         focusAddTrackButton();
+        return true;
+    }
+    // Tab from the root enters the track column on the focused row (else the first): the next stop after a row is its
+    // clips. With no tracks it goes on to the next region.
+    if (matchesAction(key, "focusNextRegion",
+                      juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0))) {
+        if (trackHeaderList_.headers.isEmpty())
+            return false;
+        moveFocusedTrack(0);
         return true;
     }
     if (doc_ == nullptr || !matchesAction(key, "timelineClipNext",

@@ -5,6 +5,7 @@
 #include "Timeline/TimelineSnapshot.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
+#include "UI/Layout/EditorTabWalk.h"
 #include "UI/Layout/FadeVisibility.h"
 
 using synth::ui::DrumMachineComponent;
@@ -185,6 +186,112 @@ TEST(DrumMachineGridTest, ArrowKeysMoveTheFocusCellAndEscapeCloses) {
     EXPECT_TRUE(f.grid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
     EXPECT_FALSE(f.grid.isOpen());
     EXPECT_TRUE(closed);
+}
+
+namespace {
+// Tab and Shift+Tab as they reach the grid's walk: from the focused control's KeyListener chain on the grid.
+struct HeaderWalk {
+    DrumFixture& f;
+    juce::Component* focused;
+    juce::StringArray visited;
+
+    explicit HeaderWalk(DrumFixture& fixture)
+        : f(fixture)
+        , focused(&fixture.grid) {
+        f.grid.getTabWalk().setFocusHooksForTest({[this] { return focused; },
+                                                  [this](juce::Component& to) {
+                                                      focused = &to;
+                                                      visited.add(to.getComponentID());
+                                                  }});
+    }
+    bool press(bool forward) {
+        return f.grid.getTabWalk().keyPressed(
+            juce::KeyPress(juce::KeyPress::tabKey,
+                           forward ? juce::ModifierKeys::noModifiers : juce::ModifierKeys::shiftModifier, 0),
+            &f.grid);
+    }
+};
+const juce::StringArray kHeaderOrder{"drumViewSwitch", "drumPlayClip", "drumShowAll", "drumStepsPerBar",
+                                     "drumSwing",      "drumHumanise", "drumIdeas",   "drumMachineGrid"};
+} // namespace
+
+// Regression test for FRO1047: Tab from the grid jumped to the next region, so no header control was reachable.
+TEST(DrumMachineGridTest, TabFromTheGridWalksTheHeaderInScreenOrderThenLeaves) {
+    DrumFixture f;
+    f.grid.setComponentID("drumMachineGrid");
+    HeaderWalk walk(f);
+    for (int i = 0; i < kHeaderOrder.size(); ++i)
+        ASSERT_TRUE(walk.press(true)) << "Tab " << i + 1 << " is claimed";
+    EXPECT_EQ(walk.visited, kHeaderOrder);
+    EXPECT_EQ(walk.focused, &f.grid);
+    EXPECT_FALSE(walk.press(true)) << "the Tab after a full walk goes on to the next region";
+    EXPECT_TRUE(walk.press(true)) << "and the walk is ready again for the next visit";
+}
+
+TEST(DrumMachineGridTest, ShiftTabAfterAFullWalkGoesBackIntoTheHeader) {
+    DrumFixture f;
+    f.grid.setComponentID("drumMachineGrid");
+    HeaderWalk walk(f);
+    for (int i = 0; i < kHeaderOrder.size(); ++i)
+        ASSERT_TRUE(walk.press(true));
+    ASSERT_EQ(walk.focused, &f.grid);
+    EXPECT_TRUE(walk.press(false)) << "Shift+Tab undoes the last Tab, it does not leave";
+    EXPECT_EQ(walk.visited.strings.getLast(), "drumIdeas");
+}
+
+TEST(DrumMachineGridTest, ShiftTabFromTheGridWalksTheHeaderBackwards) {
+    DrumFixture f;
+    f.grid.setComponentID("drumMachineGrid");
+    HeaderWalk walk(f);
+    for (int i = 0; i < kHeaderOrder.size(); ++i)
+        ASSERT_TRUE(walk.press(false));
+    juce::StringArray backwards;
+    for (int i = kHeaderOrder.size() - 2; i >= 0; --i)
+        backwards.add(kHeaderOrder[i]);
+    backwards.add("drumMachineGrid");
+    EXPECT_EQ(walk.visited, backwards);
+    EXPECT_FALSE(walk.press(false));
+}
+
+TEST(DrumMachineGridTest, EveryHeaderStopHasANameAndATooltip) {
+    DrumFixture f;
+    const auto stops = f.grid.getTabWalk().getStops();
+    ASSERT_EQ((int)stops.size(), kHeaderOrder.size() - 1);
+    for (auto* stop : stops) {
+        SCOPED_TRACE(stop->getComponentID().toStdString());
+        EXPECT_TRUE(stop->getTitle().isNotEmpty());
+        auto* tip = dynamic_cast<juce::TooltipClient*>(stop);
+        ASSERT_NE(tip, nullptr);
+        EXPECT_TRUE(tip->getTooltip().isNotEmpty());
+    }
+    auto* play = stops[1];
+    EXPECT_TRUE(dynamic_cast<juce::TooltipClient*>(play)->getTooltip().contains("Space")) << "names its shortcut";
+}
+
+TEST(DrumMachineGridTest, ReturnAndDeleteOnAFocusedHeaderControlDoNotEditTheGrid) {
+    DrumFixture f;
+    f.grid.setFocusCell({f.grid.rowOfPitch(38), 3});
+    ASSERT_TRUE(f.grid.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    ASSERT_EQ(f.c().notes.size(), 1u);
+    HeaderWalk walk(f);
+    ASSERT_TRUE(walk.press(true)); // on the view switch
+    EXPECT_FALSE(f.grid.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_FALSE(f.grid.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey)));
+    EXPECT_EQ(f.c().notes.size(), 1u) << "the focus cell's hit is untouched";
+}
+
+TEST(DrumMachineGridTest, OpeningAClipOrLosingFocusStartsTheWalkAgain) {
+    DrumFixture f;
+    HeaderWalk walk(f);
+    for (int i = 0; i < kHeaderOrder.size(); ++i)
+        ASSERT_TRUE(walk.press(true));
+    f.grid.openClip(f.clip);
+    EXPECT_TRUE(walk.press(true)) << "a newly opened clip's first Tab enters the header";
+    for (int i = 1; i < kHeaderOrder.size(); ++i)
+        ASSERT_TRUE(walk.press(true));
+    ASSERT_EQ(walk.focused, &f.grid) << "a full walk again";
+    f.grid.focusLost(juce::Component::focusChangedDirectly);
+    EXPECT_TRUE(walk.press(true)) << "coming back to the grid, the first Tab enters the header";
 }
 
 TEST(DrumMachineGridTest, AHitGrowsInAndShrinksOutThenLandsWhenAnimationIsOffScreen) {

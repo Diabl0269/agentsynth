@@ -221,7 +221,7 @@ juce::String AutomationLaneHeaderComponent::getTooltip() {
     return juce::SettableTooltipClient::getTooltip();
 }
 
-// Cmd+Alt+Up/Down move the lane; a bare Up/Down move focus to the row above or below; a bare Return opens the lane
+// Alt+Up/Down move the lane; a bare Up/Down move focus to the row above or below; a bare Return opens the lane
 // menu beside the row. Everything else bubbles on.
 bool AutomationLaneHeaderComponent::keyPressed(const juce::KeyPress& key) {
     if (onLaneKey && onLaneKey(key))

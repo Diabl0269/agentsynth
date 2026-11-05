@@ -1,0 +1,62 @@
+# Drum machine paint stroke: pressing an empty cell and dragging along a row sets every cell passed (previewed with a
+# faint outline while the button is down, written once on release); a stroke started on a hit clears the hits it passes;
+# the first cell decides which. One Cmd+Z takes back a whole stroke.
+#
+# What a user does:
+#   1. Opens the project with a Drum Kit track and its empty "Beat 1" clip, opens the timeline and the drum machine.
+#   2. Presses the empty Kick cell of step 1, drags right to step 9 and lets go: nine hits (steps 1 to 9, 0-based). Cmd+Z removes all nine.
+#   3. Cmd+Shift+Z brings them back; presses the hit at step 4 and drags to step 7: those four hits go (steps 3 to 6).
+# Cell centres (local to the grid, 1400 px wide with a 132 px label column, 16 steps of 79.25 px): step n is at
+# x = 132 + 79.25 * (n + 0.5); the Kick row is at y = 62.
+record: true
+save_project: paint-stroke
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 1500}
+  - expect: {id: drumMachineState, hitCount: 0}
+  - screenshot: {name: 1-empty}
+  # Stroke 1: press on empty step 1 (0-based) and drag across steps 2..8.
+  - mouseDown: {id: timelineDrumMachine, x: 251, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 330, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 409, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 488, y: 62}
+  - expect: {id: drumMachineState, stroke: true, hitCount: 0}
+  - screenshot: {name: 2-add-stroke-preview}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 567, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 646, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 726, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 805, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 884, y: 62}
+  - mouseUp: {id: timelineDrumMachine, x: 884, y: 62}
+  - wait: {}
+  - expect: {id: drumMachineState, stroke: false, hitCount: 9, hits: "36:1,2,3,4,5,6,7,8,9", within_ms: 1500}
+  - screenshot: {name: 3-add-stroke-done}
+  # One Cmd+Z takes the whole stroke back, Cmd+Shift+Z puts it back.
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: drumMachineState, hitCount: 0, within_ms: 1500}
+  - screenshot: {name: 4-after-undo}
+  - key: {keys: cmd+shift+z}
+  - wait: {}
+  - expect: {id: drumMachineState, hitCount: 9, within_ms: 1500}
+  # Stroke 2: press on the hit at step 3 and drag right to step 6: the first cell is a hit, so the stroke erases.
+  - mouseDown: {id: timelineDrumMachine, x: 409, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 430, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 488, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 567, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 646, y: 62}
+  - expect: {id: drumMachineState, stroke: true, hitCount: 9}
+  - screenshot: {name: 5-erase-stroke-preview}
+  - mouseUp: {id: timelineDrumMachine, x: 646, y: 62}
+  - wait: {}
+  - expect: {id: drumMachineState, stroke: false, hitCount: 5, hits: "36:1,2,7,8,9", within_ms: 1500}
+  - screenshot: {name: 6-erase-stroke-done}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: drumMachineState, hitCount: 9, within_ms: 1500}
+  - screenshot: {name: 7-erase-undone}

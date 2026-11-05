@@ -3,6 +3,7 @@
 // matchesAction. Delete/Backspace, the arrows, Home/End and Escape are fixed conventions.
 
 #include "DrumMachineComponent.h"
+#include "UI/Layout/EditorTabWalk.h"
 
 #include "ShortcutManager/ShortcutManager.h"
 #include <algorithm>
@@ -48,6 +49,20 @@ bool DrumMachineComponent::keyPressed(const juce::KeyPress& key) {
     const auto shift = juce::ModifierKeys(juce::ModifierKeys::shiftModifier);
     const int pitch = getLanePitch(focus_.row);
 
+    // A key bubbling from a focused header control (one the control did not use) must not edit the grid's focus cell:
+    // only Escape (close) and Play clip work from there.
+    if (tabWalk_->focusedStop() != nullptr) {
+        if (key == juce::KeyPress::escapeKey) {
+            requestClose();
+            return true;
+        }
+        if (matchesAction(key, "drumMachinePlayClip", juce::KeyPress(juce::KeyPress::spaceKey, none, 0))) {
+            toggleClipPreview();
+            return true;
+        }
+        return false;
+    }
+
     // The length actions carry Alt, so they go before the "any modifier" bail below.
     if (handleRowLengthKey(key))
         return true;
@@ -72,6 +87,11 @@ bool DrumMachineComponent::keyPressed(const juce::KeyPress& key) {
         return nudgeFocusedVelocity(kVelocityKeyStep) || true;
     if (matchesAction(key, "drumMachineSofter", juce::KeyPress(juce::KeyPress::downKey, shift, 0)))
         return nudgeFocusedVelocity(-kVelocityKeyStep) || true;
+
+    if (matchesAction(key, "drumMachineCarryRight", juce::KeyPress(juce::KeyPress::rightKey, shift, 0)))
+        return carryFocus(1);
+    if (matchesAction(key, "drumMachineCarryLeft", juce::KeyPress(juce::KeyPress::leftKey, shift, 0)))
+        return carryFocus(-1);
 
     if (key == juce::KeyPress::escapeKey) {
         if (gesture_.kind != Gesture::Kind::None) {

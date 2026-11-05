@@ -2,6 +2,7 @@
 // sync with the module, the hit test and the screen-reader text. Painting is StepGridPaint.cpp, editing
 // StepGridEdit.cpp, keys StepGridKeys.cpp and every animation StepGridMotion.cpp.
 #include "StepGridComponent.h"
+#include "StepGridPolyHint.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
 #include <cmath>
@@ -30,6 +31,7 @@ StepGridComponent::StepGridComponent(SequencerModuleBase& module)
     , lanes_(lanesOf(module))
     , revealTarget_(lanes_)
     , lastSeen_(module.getPattern()) {
+    setComponentID("stepGrid");
     setTitle("Step grid");
     setTooltip("Step grid: click a pad to turn a step on or off, drag in a lane to draw values. Arrow keys move, "
                "Up and Down change the value, Space turns the step on or off");
@@ -52,6 +54,12 @@ StepGridComponent::StepGridComponent(SequencerModuleBase& module)
     pages_.onFollow = [this](bool follow) { follow_ = follow; };
     tools_.onTool = [this](StepGridTools::Tool tool) { applyTool(tool); };
     addAndMakeVisible(tools_);
+    polyHint_ = std::make_unique<StepGridPolyHint>();
+    addChildComponent(*polyHint_);
+    polyHint_->onTurnPolyOn = [this] {
+        if (hooks_.turnPolyOn)
+            hooks_.turnPolyOn();
+    };
     addAndMakeVisible(pages_);
     addAndMakeVisible(chips_);
 
@@ -77,9 +85,36 @@ void StepGridComponent::resized() { layoutParts(); }
 void StepGridComponent::layoutParts() {
     const auto layout = currentLayout();
     tools_.setBounds(layout.tools);
+    layoutPolyHint(layout.strip);
     pages_.setBounds(layout.strip);
     chips_.setBounds(layout.chips.withTrimmedLeft(kGutterWidth));
     repaint();
+}
+
+// The hint takes the page strip's row: all of it while the strip is hidden (one page), else the room between the last
+// page bar and the Follow pill. Too narrow for its whole line, it stays out of the way (the chord picker's footer says
+// the same).
+void StepGridComponent::layoutPolyHint(juce::Rectangle<int> stripRow) {
+    int left = kGutterWidth;
+    int right = stripRow.getRight();
+    if (pages_.isVisible()) {
+        left = pages_.getX() + pages_.pageBounds(pages_.getPageCount() - 1).getRight() + 8;
+        right = pages_.getX() + pages_.getFollowPill().getX() - 8;
+    }
+    const int width = right - left;
+    const bool fits = width >= polyHint_->preferredWidth();
+    polyHint_->setVisible(fits && monoDestination_.isNotEmpty());
+    polyHint_->setBounds(left, stripRow.getY(), std::max(std::min(width, polyHint_->preferredWidth()), 0),
+                         stripRow.getHeight());
+}
+
+void StepGridComponent::setMonoDestination(const juce::String& moduleName) {
+    const auto shown = module_.isPoly() ? moduleName : juce::String();
+    if (shown == monoDestination_)
+        return;
+    monoDestination_ = shown;
+    polyHint_->setModule(shown);
+    layoutPolyHint(currentLayout().strip);
 }
 
 double StepGridComponent::columnWidth() const {
@@ -228,6 +263,7 @@ void StepGridComponent::updatePages() {
         setViewedPage(count - 1);
     const int active = runningStep();
     pages_.setPages(count, page_, active >= 0 && active < steps ? active / kColumns : -1, steps);
+    layoutPolyHint(currentLayout().strip);
 }
 
 void StepGridComponent::setViewedPage(int page) {
@@ -279,6 +315,18 @@ juce::String StepGridComponent::describeFocus() const {
 
 std::unique_ptr<juce::AccessibilityHandler> StepGridComponent::createAccessibilityHandler() {
     return makeValueTextHandler(*this, [this] { return describeFocus(); });
+}
+
+// Test mode: the pitches the steps play, and the steps whose written note shows as an outline.
+void StepGridComponent::addTestModeState(juce::DynamicObject& into) const {
+    juce::StringArray played, outlined;
+    for (int i = 0; i < std::min(stepCount(), kMaxSequencerSteps); ++i) {
+        played.add(noteName(playedPitchOf(i)));
+        if (!writtenOutlineBounds(i).isEmpty())
+            outlined.add(juce::String(i + 1));
+    }
+    into.setProperty("playedNotes", played.joinIntoString(","));
+    into.setProperty("outlinedSteps", outlined.joinIntoString(","));
 }
 
 void StepGridComponent::focusGained(FocusChangeType) { repaint(); }

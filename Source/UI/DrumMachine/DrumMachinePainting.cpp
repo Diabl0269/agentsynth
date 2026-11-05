@@ -196,6 +196,8 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
         if (!dense)
             g.drawRoundedRectangle(cell.area.reduced(0.5f), cell.radius, 1.0f);
     }
+    if (gesture_.kind == Gesture::Kind::Stroke && gesture_.strokeKeys.count(cell.key) > 0)
+        paintStrokeOutline(g, cell.area, cell.radius);
     // A cell an idea just changed keeps an orange outline that fades out.
     if (const float amount = changedAmount(cell.key); amount > 0.0f) {
         g.setColour(juce::Colour(kChangedOutlineArgb).withAlpha(amount));
