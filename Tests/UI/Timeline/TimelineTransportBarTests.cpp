@@ -379,7 +379,7 @@ TEST_F(TimelineTransportBarAppWiringTest, RecordCommandWithThePreferenceOffDoesN
     ASSERT_TRUE(mc.getTimelineDoc().setTrackArmed(trackId, true));
 
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::transportRecord, false));
-    pumpMessages();
+    synth::test::waitUntil([&] { return bar.isRecordingForTest() && mc.getMidiRecorderForTest().isRecording(); });
     transport.tick(512);
     EXPECT_TRUE(bar.isRecordingForTest()) << "recording is engaged";
     EXPECT_FALSE(transport.getPositionSnapshot().playing) << "but nothing started the transport";
@@ -390,7 +390,7 @@ TEST_F(TimelineTransportBarAppWiringTest, RecordCommandWithThePreferenceOffDoesN
     transport.tick(512);
     EXPECT_TRUE(transport.getPositionSnapshot().playing);
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::transportRecord, false));
-    pumpMessages();
+    synth::test::waitUntil([&] { return !bar.isRecordingForTest() && !mc.getMidiRecorderForTest().isRecording(); });
     EXPECT_FALSE(bar.isRecordingForTest());
     EXPECT_FALSE(mc.getMidiRecorderForTest().isRecording());
 }
