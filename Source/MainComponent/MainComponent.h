@@ -291,6 +291,10 @@ public:
     synth::midi::MidiLearnController& getMidiLearnControllerForTest() noexcept { return midiLearnController_; }
     synth::midi::RemoteEngine& getRemoteEngineForTest() noexcept { return remoteEngine; }
     synth::telemetry::TelemetryService* getTelemetryServiceForTest() noexcept { return telemetry_.get(); }
+    // Plugin instrument loads started but not yet completed and dropped or built into a track.
+    int getPendingInstrumentPluginLoadCountForTest() const noexcept {
+        return static_cast<int>(pendingInstrumentPluginLoads_.size());
+    }
     bool midiRemoteDevicesOpenedAfterEngineUpForTest() const noexcept { return midiRemoteDevicesOpenedAfterEngineUp_; }
     const auto& getCommandTableForTest() const { return commandTable(); } // CommandSpec stays private; read via auto
     // The "Add automation..." host calls (TrackHeaderHost is a private base), plus deleteTrack.
