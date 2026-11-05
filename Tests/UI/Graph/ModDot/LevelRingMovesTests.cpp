@@ -29,6 +29,8 @@ struct LevelRing {
     int levelChannel = -1;
 
     LevelRing() {
+        // Regression test for FRO1505: the real device also rendered this graph while the test did.
+        engine.setAudioDeviceDisabled(true);
         engine.initialise();
         engine.getGraph().clear();
         editor = std::make_unique<GraphEditor>(engine, &undo);
