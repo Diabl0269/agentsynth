@@ -697,3 +697,14 @@ Its rows paint under these rules:
   `SliderParameterAttachment` construction, whose constructor does not itself fire `onValueChange`.
 - The empty-state message ("No modulations active...") draws inside the post-header/footer `area`
   rect, not `getLocalBounds()`, so it does not overlap the title and header bands.
+
+## Quit and Hide inside a dialog
+
+Cmd+Q and Cmd+H belong to the macOS menu. While any modal component is up, JUCE's macOS peer reports every key-down no
+component used as used, so a dialog opened through `PopupMotion::launchDialog` (Settings, Export Audio, the EQ window ...)
+kept the menu from ever seeing them: Quit did nothing. The dialog's key listener (`DialogMenuKeys.{h,cpp}`, run from
+`DialogCloseKeys`) now does the menu's job for the keys that bubble up unused: Cmd+Q is the app's own quit request
+(`systemRequestedQuit`, so unsaved changes are asked about first, on top of the dialog) and Cmd+H hides the application.
+Cmd+M is not one of them: the app binds it (Toggle Mod Matrix). Guard: `ShortcutRelayTests.cpp` (each key from every
+dialog's focused children runs its action once) and `QuitRequestTests.cpp` (the quit request with every dialog open).
+Test mode's `requestQuit` runs the same request without the key.

@@ -110,6 +110,34 @@ public:
         return true;
     }
 
+    /** A number field's drag: pixels of vertical travel per step. The whole range takes about
+     *  kStepperDragRangePixels, a step never under kStepperDragMinPixels or over kStepperDragMaxPixels; a field with
+     *  no known range (`span` 0) takes kStepperDragDefaultPixels. Shift divides the rate by kFineDragDivisor. */
+    static double stepperDragPixelsPerStep(int span) noexcept {
+        if (span <= 0)
+            return kStepperDragDefaultPixels;
+        return juce::jlimit(kStepperDragMinPixels, kStepperDragMaxPixels, kStepperDragRangePixels / (double)span);
+    }
+
+    /** Hold-to-repeat on a number field's arrow: milliseconds between steps once the key or button has been held
+     *  `heldMs` (counted from the press). The pause comes first (kHoldPauseMs), then the rate climbs from
+     *  kHoldStartPerSecond to kHoldFastPerSecond over kHoldRampMs. */
+    static int holdRepeatIntervalMs(int heldMs) noexcept {
+        const double ramp = juce::jlimit(0.0, 1.0, (double)(heldMs - kHoldPauseMs) / (double)kHoldRampMs);
+        const double perSecond = kHoldStartPerSecond + (kHoldFastPerSecond - kHoldStartPerSecond) * ramp;
+        return juce::roundToInt(1000.0 / perSecond);
+    }
+
+    static constexpr double kStepperDragRangePixels = 300.0;
+    static constexpr double kStepperDragMinPixels = 2.0;
+    static constexpr double kStepperDragMaxPixels = 8.0;
+    static constexpr double kStepperDragDefaultPixels = 3.0;
+    static constexpr double kFineDragDivisor = 8.0;
+    static constexpr int kHoldPauseMs = 400;
+    static constexpr double kHoldStartPerSecond = 6.0;
+    static constexpr double kHoldFastPerSecond = 30.0;
+    static constexpr int kHoldRampMs = 2000;
+
     static constexpr double kStep = 0.01;      // of the travel
     static constexpr double kFineStep = 0.001; // Shift
     static constexpr double kCoarseStep = 0.1; // Page Up / Page Down

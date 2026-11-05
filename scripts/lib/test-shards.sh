@@ -72,10 +72,14 @@ test_slot_pick_tool() {
 # Runs <command> while holding one free slot. Returns its exit status, or TEST_SLOT_TIMEOUT_STATUS
 # when no slot came free in time. A command that itself exits 75 is simply run again in another
 # slot; nothing the suite does exits 75.
+#
+# Optional environment, for other users of the slot mechanism (scripts/lib/build-slots.sh):
+#   SLOT_WAIT_NOTICE    a line printed once, the first time every slot is taken
+#   SLOT_POLL_SECONDS   seconds between passes over the slots (default: 1)
 test_slot_run() {
     local dir="$1" slots="$2" timeout="$3"
     shift 3
-    local tool rc i start
+    local tool rc i start noticed=false
     tool="$(test_slot_pick_tool)"
     if [ "$tool" = none ]; then
         "$@"
@@ -95,7 +99,11 @@ test_slot_run() {
             i=$((i + 1))
         done
         [ $(($(date +%s) - start)) -ge "$timeout" ] && return "$TEST_SLOT_TIMEOUT_STATUS"
-        sleep 1
+        if [ "$noticed" = false ] && [ -n "${SLOT_WAIT_NOTICE:-}" ]; then
+            echo "$SLOT_WAIT_NOTICE"
+            noticed=true
+        fi
+        sleep "${SLOT_POLL_SECONDS:-1}"
     done
 }
 

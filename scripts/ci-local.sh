@@ -59,6 +59,10 @@
 #       its own settings folder, temp folder and hard link of the binary, and holds one of the
 #       machine-wide test slots while it runs, so several gates at once overlap rather than queue.
 #
+# Fair sharing: only one gate runs per build folder (a second one exits at once, naming the holder), and
+# a heavy compile step (over CI_LOCAL_SLOT_MIN_EDGES build steps left, default 60) holds one of the machine-wide
+# build slots, cores / jobs of them (CI_LOCAL_BUILD_SLOTS overrides), so six sessions queue their builds instead of thrashing the machine (scripts/lib/build-slots.sh).
+#
 # Speed: lint checks run in parallel; builds use half the cores (CI_LOCAL_JOBS). Nothing that has not
 # changed runs twice (docs/development/local-ci.md, "What a gate skips"): the guards remember per-file
 # results by content (scripts/lib/guard-cache.sh), step 7 reruns a script test only when it, a file it
@@ -445,7 +449,17 @@ case "${CI_LOCAL_JOBS:-}" in
 esac
 build_args=(--parallel "$JOBS")
 [ "$FAST" = true ] && build_args+=(--target Tests)
-cmake --build "$BUILD_DIR" "${build_args[@]}"
+# shellcheck source=scripts/lib/build-slots.sh
+source "$REPO_ROOT/scripts/lib/build-slots.sh"
+# One gate per build folder for the rest of the run, and a machine-wide cap on compiling at once.
+build_dir_lock "$BUILD_DIR" || exit 1
+# CI_LOCAL_BUILD_CMD is a seam for scripts/tests/ci-local-build-slots.test.sh; unset, it is cmake.
+build_edges="$(build_edges_left "$BUILD_DIR" $([ "$FAST" = true ] && echo Tests))"
+if [ -n "${CI_LOCAL_BUILD_CMD:-}" ]; then
+    build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" bash -c "$CI_LOCAL_BUILD_CMD"
+else
+    build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" cmake --build "$BUILD_DIR" "${build_args[@]}"
+fi
 
 # --- 9. Dev-sign the app bundle (macOS only, before tests so a signing failure surfaces early) --
 step "Dev-sign app bundle (stable TCC identity)"

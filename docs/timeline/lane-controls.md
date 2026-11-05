@@ -20,7 +20,7 @@ A lane row or a mod lane row can be made taller or shorter on its own (drag the 
   kind at once. The defaults: Read / Write and Add mod on an automation lane, Change source on a mod lane.
 - **Names**: the accessible name is the control's name ("Read / Write", "Remove modulator" on a mod lane), the tooltip
   "Name: what it does" (Read / Write adds the current mode). Chips are Tab stops with the accent ring; Return and Space
-  press; every other key (Up/Down, Cmd+Alt+Up/Down) bubbles to the header. A right-click on a chip opens the lane menu.
+  press; every other key (Up/Down, Alt+Up/Down) bubbles to the header. A right-click on a chip opens the lane menu.
 - **Show on canvas** has one icon everywhere it appears: the ring with four ticks of the track header's, the mixer's and the
   drum pad's button, drawn by the one painter `paintShowOnCanvasGlyph` (`Source/UI/Layout/ActionGlyphs.h`). A change of
   that icon is one edit; `ActionGlyphsTests.cpp` fails if a surface draws its own. The canvas "aim at a card" glyph

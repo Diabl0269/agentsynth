@@ -7,7 +7,7 @@ type Drum Kit size 280x607
   child 5 drawableButton id="" at 182,2 22x20 visible=1 title="Dual I/O" tip="Dual I/O on - separate Left and Right jacks" focusOrder=0 wantsFocus=1
   child 6 textButton id="drumKitDrumMachineButton" at 12,141 256x24 visible=1 title="Drum machine" tip="No track plays this Drum Kit. Add a track and connect it to this kit to use the drum machine." focusOrder=0 wantsFocus=0
   child 7 label id="" at 12,249 152x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 8 component id="drumPadCount" at 164,249 104x24 visible=1 title="Pads, 8 of 32 maximum" tip="How many pads the card shows. Hidden pads keep their sounds." focusOrder=0 wantsFocus=0
+  child 8 component id="drumPadCount" at 164,249 104x24 visible=1 title="Pads, 8 of 32 maximum" tip="How many pads the card shows. Hidden pads keep their sounds." focusOrder=0 wantsFocus=1
   child 9 component id="drumPads" at 12,279 256x92 visible=1 title="Drum pads" tip="" focusOrder=0 wantsFocus=1
   child 10 label id="drumPadsCaption" at 12,375 256x16 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 11 button id="drumPadsShowAll" at 268,375 56x16 visible=0 title="Show all hidden pads" tip="Show every hidden pad again. Undo hides them again." focusOrder=0 wantsFocus=1

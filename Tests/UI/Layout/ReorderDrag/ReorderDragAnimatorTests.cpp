@@ -1,4 +1,5 @@
 // ReorderDragAnimatorTests.cpp: the shared drag-to-reorder maths, driven with an injected clock.
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Layout/UIAnimation.h"
 #include <gtest/gtest.h>
@@ -168,6 +169,23 @@ TEST(ReorderDragAnimatorTests, AnOffScreenOwnerLandsEverythingInstantly) {
     EXPECT_FLOAT_EQ(r.animator.getLift(), 1.0f);
     r.animator.release({144.0f, 0.0f, 288.0f, 432.0f});
     EXPECT_FALSE(r.animator.isReordering());
+    EXPECT_FALSE(r.animator.needsFrames());
+}
+
+// Regression test for FRO1503: every reorderable list (tracks, mixer columns, dock tabs, lanes, mod rows) glided its
+// rows under Reduce Motion; the animator itself now lands them at once there, whatever the owner asked.
+TEST(ReorderDragAnimatorTests, UnderReduceMotionEveryGlideLandsAtOnceEvenWhenTheOwnerAsksToAnimate) {
+    struct Reduced {
+        Reduced() { synth::ui::setReducedMotionForTest(true); }
+        ~Reduced() { synth::ui::setReducedMotionForTest(std::nullopt); }
+    } reduced;
+    Rig r;
+    r.animator.begin(columnSlots(), 0, 0.0f, 0.0f, /*animate=*/true);
+    r.animator.dragTo(200.0f);
+    EXPECT_FALSE(r.animator.needsFrames()) << "the neighbours make room at once";
+    EXPECT_FLOAT_EQ(r.animator.getLayoutStart(1), 0.0f);
+    r.animator.release({144.0f, 0.0f, 288.0f, 432.0f});
+    EXPECT_FALSE(r.animator.isReordering()) << "the drop lands at once";
     EXPECT_FALSE(r.animator.needsFrames());
 }
 

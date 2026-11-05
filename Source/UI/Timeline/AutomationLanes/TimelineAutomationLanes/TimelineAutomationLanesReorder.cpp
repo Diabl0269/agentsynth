@@ -214,14 +214,14 @@ void TimelineAutomationLanes::onLaneDragFrame() {
     headerParent_.repaint();
 }
 
-// Cmd+Alt+Up / Down (rebindable: timelineMoveLaneUp / timelineMoveLaneDown), offered by the focused header's controls
+// Alt+Up / Down (rebindable: timelineMoveLaneUp / timelineMoveLaneDown), offered by the focused header's controls
 // and the focused editor.
 bool TimelineAutomationLanes::handleLaneKey(synth::LaneId lane, const juce::KeyPress& key) {
     const int direction = laneMoveDirection(key);
     if (direction == 0)
         return false;
     moveLaneBy(lane, direction);
-    return true; // consumed even at an end, so the combo or the point nudge never sees a Cmd+Alt+arrow
+    return true; // consumed even at an end, so the combo or the point nudge never sees an Alt+arrow
 }
 
 bool TimelineAutomationLanes::moveLaneBy(synth::LaneId lane, int delta) {

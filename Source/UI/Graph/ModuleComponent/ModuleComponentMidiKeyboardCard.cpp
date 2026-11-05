@@ -6,7 +6,7 @@
 // docs/layout/module-card.md#faders-switches-and-steppers.
 #include "ModuleComponent.h"
 #include "Modules/MidiKeyboardModule.h"
-#include "UI/Graph/CardWidgets/CardStepper.h"
+#include "UI/Graph/CardWidgets/CardStepperBinding.h"
 #include "UI/Layout/LayoutUtil.h"
 
 namespace {
@@ -15,7 +15,7 @@ constexpr int kKeyboardCardMargin = 10;
 constexpr int kOctaveRowY = 32;      // under the header, clear of the Midi output jack at the right edge
 constexpr int kOctaveRowHeight = 24; // a stepper is one row tall
 constexpr int kOctaveCaptionWidth = 52;
-constexpr int kOctaveStepperWidth = 132;
+constexpr int kOctaveStepperWidth = 88;
 constexpr int kKeysGap = 4; // between the row and the keys
 constexpr int kKeysHeight = 90;
 // 160: GraphEditorDragDrop.cpp's bespokeCardSizeTable pins the same number for the size estimate.
@@ -38,18 +38,14 @@ void ModuleComponent::createMidiKeyboardOctaveRow() {
 
     auto* stepper = adoptBespokeWidget(new synth::ui::CardStepper(param->getName(100)));
     stepper->setComponentID(param->getName(100));
-    stepper->setTooltip(param->getName(100));
     addAndMakeVisible(stepper);
     stepper->addMouseListener(this, true);
     registerMidiLearnable(*stepper, param);
-    octaveAttachment_ = std::make_unique<juce::ParameterAttachment>(
-        *param, [stepper, param](float) { stepper->setValueText(param->getCurrentValueAsText()); });
-    stepper->onStep = [this, param](int delta) {
-        const auto range = param->getRange();
-        const int next = juce::jlimit(range.getStart(), range.getEnd(), param->get() + delta);
-        if (next != param->get())
-            octaveAttachment_->setValueAsCompleteGesture((float)next);
-    };
+    octaveAttachment_ = std::make_unique<juce::ParameterAttachment>(*param, [stepper, param](float) {
+        stepper->setValue(param->get());
+        stepper->setValueText(param->getCurrentValueAsText());
+    });
+    synth::ui::bindStepperToParameter(*stepper, *octaveAttachment_, *param);
     octaveAttachment_->sendInitialUpdate();
     octaveStepper_ = stepper;
 }

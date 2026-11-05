@@ -476,19 +476,6 @@ add_executable(Tests
     UI/Settings/SettingsWindowTabStripTests.cpp
     UI/Settings/SettingsWindowShortcutHintsTests.cpp
     UI/Settings/SoundPacksSettingsTabTests.cpp
-    App/ShortcutManager/ShortcutManagerActionRegressionTests.cpp
-    App/ShortcutManager/ShortcutManagerAddTrackKeyTests.cpp
-    App/ShortcutManager/ShortcutManagerApiTests.cpp
-    App/ShortcutManager/ShortcutManagerBottomPanelMigrationTests.cpp
-    App/ShortcutManager/ShortcutManagerConflictTests.cpp
-    App/ShortcutManager/ShortcutManagerDefaultsTests.cpp
-    App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
-    App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp
-    App/ShortcutManager/ShortcutManagerTransportChordsTests.cpp
-    App/ShortcutManager/ShortcutManagerCursorActionsTests.cpp
-    App/ShortcutManager/ShortcutManagerMarkerActionsTests.cpp
-    App/ShortcutManager/ShortcutManagerSelectionStepTests.cpp
-    App/ShortcutManager/ShortcutManagerRemovedActionsTests.cpp
     UI/Settings/ShortcutsSettingsTabTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviourTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviourTests.cpp
@@ -555,6 +542,7 @@ add_executable(Tests
     UI/Layout/PopupMotionTests.cpp
     UI/Layout/AppTooltipWindowTests.cpp
     UI/Layout/ReorderDrag/ReorderDragAnimatorTests.cpp
+    UI/Layout/ReorderDrag/ReorderDragSessionTests.cpp
     UI/Layout/ExitEnterTimelineTests.cpp
     UI/Layout/ExitEnterList/ExitEnterListMotionTests.cpp
     UI/Layout/ExitEnterList/ExitEnterListFromSourceTests.cpp
@@ -808,6 +796,7 @@ add_executable(Tests
     Engine/MetronomeTests.cpp
     Engine/DeviceChangeTests.cpp
     Engine/LiveReconfigureTests.cpp
+    Engine/LiveDeviceRenderGuardTests.cpp
     Engine/MidiInputReconcileTests.cpp
     Engine/MidiInputDeliveryTests.cpp
     Timeline/TimelineE2ETests.cpp
@@ -945,6 +934,13 @@ if(WIN32)
     )
 endif()
 
+# Writes Tests.pdb (MSVC) so the in-process crash reporter (WindowsCrashReport.h) can print function names.
+# Off by default; the Windows CI job turns it on. /DEBUG turns off the linker's default /OPT, so restore it.
+option(AGENTSYNTH_TEST_PDB "Link Tests with /DEBUG so crash stacks are symbolized (MSVC)" OFF)
+if(MSVC AND AGENTSYNTH_TEST_PDB)
+    target_link_options(Tests PRIVATE /DEBUG /OPT:REF /OPT:ICF)
+endif()
+
 target_link_libraries(Tests PRIVATE
     GTest::gtest
     # AppUI links Core PUBLIC. Linking the library instead of recompiling its sources here halves
@@ -977,6 +973,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/ClickAuditTests.cmake) # the headless click 
 include(${CMAKE_CURRENT_SOURCE_DIR}/TimelineTests.cmake) # the timeline UI tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/RecordingTests.cmake) # MIDI and audio recording, each track's input
 include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutFoldTests.cmake) # the Keyboard Shortcuts fold motion tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutManagerTests.cmake) # the shortcut table: defaults, conflicts, migrations
 include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/OscillatorVoiceTests.cmake) # the Oscillator voice feel tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/CardGlideTests.cmake) # the card glide, delete-gap and undo motion tests

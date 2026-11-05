@@ -9,6 +9,7 @@
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
+#include "WindowsCrashReport.h"
 #include <cstdlib>
 #include <gtest/gtest.h>
 #include <iostream>
@@ -105,6 +106,9 @@ int main(int argc, char** argv) {
         }
     }
 
+#if JUCE_WINDOWS
+    synth::tests::crashreport::install();
+#endif
     juce::ScopedJuceInitialiser_GUI juceInit;
 
     // The suite puts real native windows and dialogs on the desktop; they stay invisible, click-through and never take

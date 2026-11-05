@@ -520,8 +520,10 @@ bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
         !key.getModifiers().testFlags(juce::ModifierKeys::allKeyboardModifiers))
         return showContextMenuForKeyboardFocus();
 
-    // The "Next Clip" key carries focus from the row into its track's clips.
-    if (onEnterClipsRequested && matchesAction(key, "timelineClipNext", plainKey(juce::KeyPress::rightKey)))
+    // The "Next Clip" key carries focus from the row into its track's clips, and so does Tab (the region cycle's key):
+    // a track with clips is the next Tab stop after its row. A row with no clips lets Tab go on to the next region.
+    if (onEnterClipsRequested && (matchesAction(key, "timelineClipNext", plainKey(juce::KeyPress::rightKey)) ||
+                                  matchesAction(key, "focusNextRegion", plainKey(juce::KeyPress::tabKey))))
         return onEnterClipsRequested();
 
     // The Rename key (F2 / Option+R) opens THIS row's inline name editor, the double-click's own gesture; a text editor

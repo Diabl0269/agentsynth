@@ -52,7 +52,7 @@ steps:
   - key: {keys: cmd+-}
   - key: {keys: cmd+-}
   - wait: {}
-  - drag: {from: Patch canvas, to: Patch canvas, fromX: 1200, fromY: 300, toX: 1200, toY: 400}   # pan the ports off the toolbar
+  - drag: {from: Patch canvas, to: Patch canvas, fromX: 1200, fromY: 300, toX: 1200, toY: 270}   # pan up so the Poly MIDI card clears the bottom panel
   - wait: {}
   - drag: {from: "card:Oscillator > Audio output", to: "card:Filter > Audio input"}
   - wait: {}

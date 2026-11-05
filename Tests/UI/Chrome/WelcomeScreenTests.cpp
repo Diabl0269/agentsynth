@@ -324,6 +324,9 @@ TEST_F(WelcomeScreenTest, LoadMenuFactoryPresetBranch_LeavesAnAlreadyOpenProject
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
+    // The startup document is already Compensated, so start from Balance: otherwise the wait below passes before New
+    // has run, and New's own reset lands after the switch to Balance (a flaky failure on slow runners).
+    mc.getAudioEngine().setMixerPanLaw(synth::MixerPanLaw::Balance);
     mc.getWelcomeScreenForTest()->getNewProjectButtonForTest().triggerClick();
     synth::test::waitUntil([&] { return (mc.getAudioEngine().getMixerPanLaw()) == (synth::MixerPanLaw::Compensated); });
     ASSERT_EQ(mc.getAudioEngine().getMixerPanLaw(), synth::MixerPanLaw::Compensated);

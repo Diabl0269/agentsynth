@@ -61,12 +61,9 @@ private:
     double startMs_ = 1000.0;
 };
 
-juce::KeyPress commandAlt(int keyCode) {
-    return juce::KeyPress(keyCode,
-                          juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier), 0);
-}
+juce::KeyPress altArrow(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::altModifier, 0); }
 
-/** Automation lane rows: a lane moved down with Cmd+Alt+Down, then restored, on a pinned glide clock. */
+/** Automation lane rows: a lane moved down with Alt+Down, then restored, on a pinned glide clock. */
 class LaneRowSurface : public Surface {
 public:
     LaneRowSurface() {
@@ -83,7 +80,7 @@ public:
     }
 
     void move() override {
-        scene_.panel.laneHeaderForTest(cutoff_)->keyPressed(commandAlt(juce::KeyPress::downKey));
+        scene_.panel.laneHeaderForTest(cutoff_)->keyPressed(altArrow(juce::KeyPress::downKey));
         nowMs_ += 1000.0;
         lanes().stepLaneGlideForTest();
     }

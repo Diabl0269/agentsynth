@@ -23,6 +23,14 @@ std::set<juce::uint32> liveNodeUids(const juce::AudioProcessorGraph& graph) {
     return uids;
 }
 
+// The newest user turn: the words the plan answers.
+juce::String lastUserRequest(const std::vector<AIProvider::Message>& history) {
+    for (auto it = history.rbegin(); it != history.rend(); ++it)
+        if (it->role == "user")
+            return it->content;
+    return {};
+}
+
 // Every node in `graph` that `before` did not hold, in creation order (uids only grow).
 std::vector<juce::AudioProcessorGraph::NodeID> nodesCreatedSince(const juce::AudioProcessorGraph& graph,
                                                                  const std::set<juce::uint32>& before) {
@@ -111,7 +119,8 @@ ProjectEditResult rejected(const juce::String& message) {
 // of an instrument track cannot be dry-run; every other check is the real one.
 ProjectEditResult AIIntegrationService::previewProjectEdit(const juce::var& root) const {
     projectedit::Plan plan;
-    if (const auto error = projectedit::readPlan(root, liveNodeUids(audioGraph), plan); error.isNotEmpty())
+    if (const auto error = projectedit::readPlan(root, liveNodeUids(audioGraph), plan, lastUserRequest(chatHistory));
+        error.isNotEmpty())
         return rejected(error);
     const bool carriesOps = !plan.trackOps.isVoid() || !plan.otherOps.isVoid();
     if (carriesOps && timelineDoc == nullptr)
@@ -161,7 +170,8 @@ ProjectEditResult AIIntegrationService::applyProjectEdit(const juce::var& root) 
         return preview;
     projectedit::Plan plan;
     const auto uidsBefore = liveNodeUids(audioGraph);
-    if (const auto error = projectedit::readPlan(root, uidsBefore, plan); error.isNotEmpty())
+    if (const auto error = projectedit::readPlan(root, uidsBefore, plan, lastUserRequest(chatHistory));
+        error.isNotEmpty())
         return rejected(error);
 
     juce::WeakReference<AIIntegrationService> weakThis(this);
@@ -219,8 +229,10 @@ ProjectEditResult AIIntegrationService::applyPatchOnlyPlan(const juce::var& root
 // Prompt versions: 2 envelope and instrumentParams, 3 whole-track rules, 4 song layout, 5 tempo and
 // section markers, 6 drums on one Drum Kit track instead of one Oscillator track per drum, 7 a sequencer's
 // pattern as the node's "state" (steps, velocity, chance) instead of eight step parameters, 8 the song key (a
-// songKey context line and the setSongKey op), 9 new and edited Sequencers stay on Follow Song Key.
-static constexpr int kProjectGeneratePromptVersion = 9;
+// songKey context line and the setSongKey op), 9 new and edited Sequencers stay on Follow Song Key, 10 a part is played
+// by clip notes OR a sequencer wired to the track's instrument, never both, and accents get a real velocity spread, 11
+// the same with the sequencer cable on the MIDI sentinel and Run on.
+static constexpr int kProjectGeneratePromptVersion = 11;
 
 juce::String AIIntegrationService::songKeyContext() const {
     if (transportService == nullptr)
@@ -240,8 +252,9 @@ juce::var AIIntegrationService::buildProjectRequestBody(const juce::String& text
     // Pins the server prompt this build understands: version 2 teaches addInstrumentTrack's "envelope" and
     // "instrumentParams", 3 adds the whole-track rules, 4 the song layout the server expands into ordinary
     // clips, 5 the tempo and markers (setTempo and addMarker ops), 6 the Drum Kit track, 7 a sequencer's
-    // pattern state, 8 the song key ("songKey" below, and the setSongKey op) and 9 Sequencers staying on Follow Song
-    // Key. A build that does not understand those fields sends no version and keeps getting version 1, so a server
+    // pattern state, 8 the song key ("songKey" below, and the setSongKey op), 9 Sequencers staying on Follow Song
+    // Key, 10 one player per part (clip notes or a sequencer) and 11 that part's cable on the MIDI sentinel with Run
+    // on. A build that does not understand those fields sends no version and keeps getting version 1, so a server
     // deploy can never hand an older app a field it would reject.
     body.getDynamicObject()->setProperty("promptVersion", projectPromptVersionOverride > 0
                                                               ? projectPromptVersionOverride

@@ -271,7 +271,7 @@ out as its own run, by the same measure-and-apply walk:
 | `faderVLong` | `CardFader` (vertical) | a float or int | a grid, one per cell, 40 px wide | 144 |
 | `faderH` | `CardFader` (horizontal) | a float or int | one per row, full width | 28 |
 | `segmented` | `CardSegmentedSwitch` | a choice with 2 to 6 values of at most 10 characters | one per row, full width | 24 |
-| `stepper` | `CardStepper` | an int spanning at most 24 steps | one per row, centred band | 24 |
+| `stepper` | `CardStepper` | an int spanning at most 24 steps | one per row, centred band, as wide as its widest value plus the arrows | 24 |
 
 - **Faders.** `CardFader` is a linear `juce::Slider` painted by `AppLookAndFeel`'s fader painter
   (`AppLookAndFeelFader.cpp`, the design system's Fader): a vertical one at 40 px wide gets the small
@@ -294,8 +294,20 @@ out as its own run, by the same measure-and-apply walk:
   "Tempo"); the switch
   is the one Tab stop and the segments take no clicks themselves (the switch hit-tests them), so a
   right click reaches the card as the switch's.
-- **Stepper.** "-" value "+": two buttons, each a Tab stop; the card listens to the stepper and its
-  buttons, and a right click on a button resolves to the stepper's registered parameter.
+- **Stepper.** `CardStepper` is the one number field (the sequencer's Steps, the MIDI Keyboard octave, the Drum Kit
+  Pads counts, the drum machine's Swing). It is ONE component and ONE Tab stop with a focus ring, drawn as a bar with
+  a range fill (when the owner gives a range), `<` and `>` arrows at the ends and the value centred, vertically,
+  between them; its width is the widest value plus the arrows, so every field of this kind is as narrow as it can be.
+  In a tall cell (`setOrientation(vertical)`) the arrows sit above and below. Up/Down or Left/Right step; a click on
+  an arrow steps; holding it pauses 0.4 s, then repeats from 6 to 30 steps a second, and stops on release or focus
+  loss; dragging the number steps every `CardControlGestures::stepperDragPixelsPerStep` (about 3 px, fewer for a long
+  range), Shift at an eighth of the rate, never jumping when Shift toggles mid-drag; a double-click (or Enter, or a
+  digit) opens a text box over the number (Enter commits, Escape cancels; a typable field only); Cmd-click resets to
+  the default. A step blocked at a limit turns the number amber. The owner applies each step (`onStep`) and groups the
+  steps of one gesture between `onGestureBegin` and `onGestureEnd`, so a click, a hold, a drag, a reset or a typed
+  value is one undo step and an unmoved press creates none (`bindStepperToParameter`, `CardStepperBinding.h`, does
+  this for an int parameter). To a screen reader it is one element named after the parameter whose value is the
+  value text; the tooltip names the gestures. A right click resolves to the stepper's registered parameter.
 - **Height.** Switching a control between a knob and a fader changes the card's height, as a discrete
   layout edit; a value change on any widget never does
   (`CardBodyWidgetKind.NoValueChangeOnAnyNewWidgetResizesTheCard`).

@@ -39,6 +39,8 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "drumMachineToggleAccent",
         "drumMachineLouder",
         "drumMachineSofter",
+        "drumMachineCarryRight",
+        "drumMachineCarryLeft",
         "drumMachinePlayClip",
         "drumMachineRowShorter",
         "drumMachineRowLonger",

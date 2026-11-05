@@ -73,7 +73,7 @@ private:
 class DrumIdeasPanel : public juce::Component {
 public:
     static constexpr int kWidth = 452;
-    static constexpr int kHeight = 446;
+    static constexpr int kHeight = 418;
     static constexpr int kTakes = 3;
 
     explicit DrumIdeasPanel(std::function<DrumIdeasContext()> context);
@@ -85,8 +85,8 @@ public:
     std::function<void(drumideas::Fill, bool everyFourthBar)> onFill;
     /** Randomize was pressed. */
     std::function<void(double density, bool keepKickAndSnare, int seed)> onRandomize;
-    /** A take was picked: `replace` swaps the clip's notes, otherwise the owner adds a clip after it. */
-    std::function<void(const std::vector<synth::MidiNote>& notes, bool replace, int takeIndex)> onPick;
+    /** A take was picked: the owner replaces this clip's notes with it. */
+    std::function<void(const std::vector<synth::MidiNote>& notes, int takeIndex)> onPick;
     /** A take's hits play through this, one note on then off. */
     std::function<void(int pitch, int velocity)> onAudition;
     /** The panel closed (Escape, click-away, or destroyed): the owner returns the focus to the Ideas button. */
@@ -106,7 +106,6 @@ public:
     juce::TextButton& getMakeTakesButton() noexcept { return makeTakes_; }
     DrumMiniGrid& getTakeGrid(int index) noexcept { return *takeGrids_[(size_t)index]; }
     juce::TextButton& getPickButton(int index) noexcept { return *picks_[(size_t)index]; }
-    juce::ToggleButton& getReplaceToggle() noexcept { return replace_; }
     juce::Slider& getDensitySlider() noexcept { return density_; }
     juce::ToggleButton& getKeepToggle() noexcept { return keep_; }
     juce::TextButton& getRandomizeButton() noexcept { return randomize_; }
@@ -143,7 +142,6 @@ private:
     juce::TextButton tomFill_{"Tom fill"};
     juce::ToggleButton everyFourth_{"Every 4th bar"};
     juce::TextButton makeTakes_{"Make 3 takes"};
-    juce::ToggleButton replace_{"Replace this clip"};
     juce::Slider density_{juce::Slider::LinearHorizontal, juce::Slider::NoTextBox};
     juce::ToggleButton keep_{"Keep kick and snare"};
     juce::TextButton randomize_{"Randomize"};

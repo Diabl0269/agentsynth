@@ -30,7 +30,7 @@ juce::Rectangle<int> StepGridComponent::chordLabelBounds(int step) const {
     if (!laneShown(SequencerLane::Pitch))
         return {};
     const auto bar = pitchBarRect(step, (float)playedPitchOf(step), lane);
-    return chordLabelRect(bar, lane).toNearestInt();
+    return chordLabelRect(bar, lane, step).toNearestInt();
 }
 
 bool StepGridComponent::chordLabelAt(juce::Point<int> p, int step) const { return chordLabelBounds(step).contains(p); }
@@ -51,7 +51,8 @@ void StepGridComponent::openChordPicker(int step) {
     if (!module_.isPoly() || step < 0 || step >= kMaxSequencerSteps)
         return;
     const auto& entry = module_.getPattern().steps[(size_t)step];
-    auto picker = std::make_unique<StepGridChordPicker>(chordPickerContent(playedPitchOf(step), scale_), entry.chord);
+    auto picker = std::make_unique<StepGridChordPicker>(chordPickerContent(playedPitchOf(step), scale_), entry.chord,
+                                                        monoDestination_);
     juce::Component::SafePointer<StepGridComponent> safe(this);
     picker->onPick = [safe, step](SequencerChord chord) {
         if (safe != nullptr)

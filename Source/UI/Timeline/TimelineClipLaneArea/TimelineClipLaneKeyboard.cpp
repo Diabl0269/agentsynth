@@ -153,14 +153,17 @@ synth::ClipId TimelineClipLaneArea::keyboardVerbTarget() const {
     return doc_->getClip(id) != nullptr ? id : synth::ClipId{};
 }
 
-// Escape is a fixed platform key (like Delete) and so is not in the shortcut table; every other
-// verb resolves through a Timeline-category action. Nothing here runs mid-drag or while the inline
+// Escape is a fixed platform key (like Delete) and so is not in the shortcut table; Shift+Tab is the region cycle's
+// key; every other verb resolves through a Timeline-category action. Nothing here runs mid-drag or while the inline
 // rename editor owns the keyboard.
 bool TimelineClipLaneArea::handleKeyboardClipKey(const juce::KeyPress& key) {
     if (doc_ == nullptr || renameEditor_ != nullptr || dragMode_ != DragMode::None)
         return false;
 
-    if (key == juce::KeyPress::escapeKey) {
+    // Shift+Tab (the region cycle's backward key) walks back from the clip to its track's row, as Escape does; Tab goes
+    // on to the next region.
+    const juce::KeyPress shiftTab(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0);
+    if (key == juce::KeyPress::escapeKey || matchesClipAction(key, "focusPrevRegion", shiftTab)) {
         const auto id = getKeyboardClip();
         const auto* track = id.isValid() ? doc_->getTrackForClip(id) : nullptr;
         if (track == nullptr)

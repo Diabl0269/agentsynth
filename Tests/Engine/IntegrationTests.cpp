@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
+// live-device-render-ok: the hand-rendered graph is a local one, not the initialised engine's.
 class IntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override { engine.initialise(); }

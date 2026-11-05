@@ -1,6 +1,7 @@
 // MainComponentLibraryViews.cpp -- the left column's two views as MainComponent drives them: the Cmd+B / Cmd+Opt+B
 // state machine and the toolbar toggle's tooltip. The views themselves live in LibrarySidebarViews.
 #include "MainComponent.h"
+#include "UI/Library/LibrarySidebarViews.h"
 
 // Closed: open on the view asked for. Open on the other view: switch to it and stay open. Open on this view: close.
 void MainComponent::toggleLibraryView(synth::ui::SidebarView view) {

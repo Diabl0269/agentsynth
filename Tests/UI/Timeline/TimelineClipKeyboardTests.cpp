@@ -10,6 +10,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"
+#include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
@@ -361,4 +362,60 @@ TEST(TimelineClipKeyboardTest, RootFocusIgnoresOtherKeys) {
     EXPECT_FALSE(f.panel.handleRootFocusKey(leftKey()));
     EXPECT_FALSE(f.panel.handleRootFocusKey(returnKey()));
     EXPECT_FALSE(f.lane().getKeyboardClip().isValid());
+}
+
+// Tab walks the timeline the way the arrows do: a focused track header's next stop is its clips, Shift+Tab from the
+// clip comes back to the header, and a row with no clips lets Tab go on to the next region.
+namespace {
+juce::KeyPress tabKey() { return key(juce::KeyPress::tabKey); }
+juce::KeyPress shiftTabKey() { return key(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier); }
+} // namespace
+
+// Regression test for FRO1047: Tab from a track header jumped to the next region, so no clip was reachable by Tab.
+TEST(TimelineClipKeyboardTest, TabOnAHeaderEntersThatTracksClips) {
+    ClipKeyboardFixture f;
+    EXPECT_TRUE(f.header(2).keyPressed(tabKey()));
+    EXPECT_EQ(f.lane().getKeyboardClip(), f.lead2);
+    EXPECT_EQ(f.panel.getClipSelection().getSelected(), std::vector<ClipId>{f.lead2});
+}
+
+TEST(TimelineClipKeyboardTest, TabOnAHeaderWithNoClipsGoesOnToTheNextRegion) {
+    ClipKeyboardFixture f;
+    EXPECT_FALSE(f.header(1).keyPressed(tabKey()));
+    EXPECT_FALSE(f.lane().getKeyboardClip().isValid());
+}
+
+TEST(TimelineClipKeyboardTest, ShiftTabFromTheKeyboardClipReturnsToItsHeader) {
+    ClipKeyboardFixture f;
+    ASSERT_TRUE(f.header(2).keyPressed(tabKey()));
+    EXPECT_TRUE(f.press(shiftTabKey()));
+    EXPECT_FALSE(f.lane().getKeyboardClip().isValid()) << "clip mode is left";
+    EXPECT_EQ(f.panel.getFocusedTrackIndexForTest(), 2) << "focus is back on the clip's own row";
+}
+
+// A Drum Kit track's clips are reached the same way, and Enter opens them in the drum machine.
+namespace {
+struct DrumKitStubHost : StubHost {
+    TrackId drumTrack;
+    bool drumKitRows(TrackId t, synth::ui::KitRows*) const override { return t == drumTrack; }
+};
+} // namespace
+
+TEST(TimelineClipKeyboardTest, TabThenEnterOnADrumKitClipOpensTheDrumMachineAndEscapeComesBack) {
+    DrumKitStubHost drumHost; // outlives the panel that points at it
+    ClipKeyboardFixture f;
+    drumHost.drumTrack = f.bass;
+    f.panel.setTrackHeaderHost(&drumHost);
+    ASSERT_TRUE(f.header(0).keyPressed(tabKey()));
+    ASSERT_EQ(f.lane().getKeyboardClip(), f.bass0);
+
+    EXPECT_TRUE(f.press(returnKey()));
+    auto& drums = f.panel.getDrumMachine();
+    ASSERT_TRUE(drums.isOpen()) << "a drum clip opens the drum machine, not the piano roll";
+    EXPECT_EQ(drums.getClipId(), f.bass0);
+    EXPECT_FALSE(f.panel.getPianoRoll().isOpen());
+
+    EXPECT_TRUE(drums.keyPressed(escapeKey()));
+    EXPECT_FALSE(drums.isOpen());
+    EXPECT_FALSE(f.panel.clipEditorOpen());
 }

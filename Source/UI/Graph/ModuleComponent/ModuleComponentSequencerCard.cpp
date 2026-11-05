@@ -8,6 +8,7 @@
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/PolyChain/PolyChainController.h"
 #include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/ModuleViews/SequencerKey/SequencerKeyField.h"
 #include "UI/ModuleViews/StepGrid/StepGridComponent.h"
@@ -93,12 +94,21 @@ void ModuleComponent::wireSequencerCard() {
         if (safeThis != nullptr)
             safeThis->owner.handleModuleResized(safeThis.getComponent());
     };
+    hooks.turnPolyOn = [safeThis] {
+        if (safeThis == nullptr)
+            return;
+        auto& polyChain = safeThis->owner.getPolyChain();
+        if (const auto next = polyChain.monoNoteDestination(safeThis->nodeId))
+            polyChain.turnPolyOn(next->node);
+    };
     grid->setHooks(std::move(hooks));
 }
 
 // The card body can be rebuilt under a new layout, which makes a new grid and key field: wire each again the first
-// tick it exists. The key field's pick is one graph snapshot around all of its writes. The grid reads the song key
-// from the same transport, so a key change repaints both on the same tick.
+// tick it exists. A Poly Sequencer whose notes reach a one-note module says so (the grid's hint), checked on this tick
+// so a cable, a Poly click or an undo shows or clears it within a frame. The key field's pick is one graph snapshot
+// around all of its writes. The grid reads the song key from the same transport, so a key change repaints both on the
+// same tick.
 void ModuleComponent::pollSequencerCard() {
     auto& transport = owner.getAudioEngine().getTransport();
     if (auto* key = keyFieldOf(cardBody_.get())) {
@@ -126,4 +136,9 @@ void ModuleComponent::pollSequencerCard() {
         wireSequencerCard();
     grid->setSongKey(transport.getDocumentState().songKey);
     grid->poll();
+    if (auto* sequencer = dynamic_cast<synth::SequencerModuleBase*>(module);
+        sequencer != nullptr && sequencer->isPoly()) {
+        const auto next = owner.getPolyChain().monoNoteDestination(nodeId);
+        grid->setMonoDestination(next.has_value() ? next->name : juce::String());
+    }
 }

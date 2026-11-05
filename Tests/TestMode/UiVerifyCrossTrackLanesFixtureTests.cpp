@@ -1,6 +1,6 @@
 // Tools/ui-verify/fixtures/cross-track-lanes.agsproj: the shared saved project (three audio tracks in channel macros,
 // one folded, one nested, one open; Tests/fixtures/saved-project) with a Compressor lane on each track and an LFO on
-// Audio 1's Ratio lane, for the scenarios that move a modulator row to another track (by drag and by Cmd+Alt+Down).
+// Audio 1's Ratio lane, for the scenarios that move a modulator row to another track (by drag and by Alt+Down).
 // One test proves the committed fixture still loads with those lanes and the LFO's one routing; a disabled one
 // regenerates it through the app's real save path:
 //   build-ci-local/Tests/Tests --gtest_also_run_disabled_tests

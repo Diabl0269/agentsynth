@@ -45,8 +45,7 @@ void DrumMachineComponent::setupPercentKnob(CardKnobSlider& knob, const juce::St
 }
 
 void DrumMachineComponent::setupGroove() {
-    setupPercentKnob(swingKnob_, "drumSwing", "Swing", "Swing: push every second step later (0% is straight)",
-                     swingValueBounds_, swingDragging_, updatingKnob_, [this] { commitSwingKnob(); });
+    setupSwing();
     setupPercentKnob(humaniseKnob_, "drumHumanise", "Humanise",
                      "Humanise: small random changes to each hit's loudness and timing (0% is exact)",
                      humaniseValueBounds_, humaniseDragging_, updatingHumanise_, [this] { commitHumaniseKnob(); });
@@ -54,8 +53,39 @@ void DrumMachineComponent::setupGroove() {
 }
 
 //==============================================================================
-// The Swing knob reads 0% (straight, stored 0.5) to 100% (stored 0.75).
-void DrumMachineComponent::commitSwingKnob() { setSwing(percentToSwing(swingKnob_.getValue())); }
+// The Swing field reads 0% (straight, stored 0.5) to 100% (stored 0.75). Its steps only move the shown number; the
+// clip is written once when the gesture ends (a click, a hold, a drag, a key, a reset), so each is one undo step.
+void DrumMachineComponent::setupSwing() {
+    addAndMakeVisible(swingField_);
+    swingField_.setComponentID("drumSwing");
+    swingField_.setRange(static_cast<int>(kPercentMin), static_cast<int>(kPercentMax), 0);
+    swingField_.setWidestValueText("100%");
+    swingField_.setTypable(true);
+    swingField_.setTooltip("Swing: push every second step later (0% is straight). Click an arrow or press Up and "
+                           "Down to step, hold to repeat, drag the number (Shift for fine), double-click to type, "
+                           "Cmd-click to reset.");
+    swingField_.onGestureBegin = [this] { swingGesture_ = true; };
+    swingField_.onStep = [this](int) { swingField_.setValueText(juce::String(swingField_.getValue()) + "%"); };
+    swingField_.onGestureEnd = [this] {
+        swingGesture_ = false;
+        commitSwingField();
+    };
+    swingField_.onTypedValue = [this](const juce::String& text) {
+        if (text.containsAnyOf("0123456789"))
+            swingField_.setValue(juce::jlimit(0, 100, text.getIntValue()));
+        commitSwingField();
+        showSwing();
+    };
+    showSwing();
+}
+
+void DrumMachineComponent::commitSwingField() { setSwing(percentToSwing(swingField_.getValue())); }
+
+void DrumMachineComponent::showSwing() {
+    const int percent = juce::roundToInt(swingToPercent(swing_));
+    swingField_.setValue(percent);
+    swingField_.setValueText(juce::String(percent) + "%");
+}
 
 void DrumMachineComponent::setSwing(double swing) {
     const auto* c = clip();
@@ -82,17 +112,13 @@ void DrumMachineComponent::refreshGroove() {
     const auto* c = clip();
     swing_ = c != nullptr ? c->swing : synth::Clip::kStraightSwing;
     humanise_ = c != nullptr ? c->humanise : 0.0;
-    if (!swingDragging_) {
-        updatingKnob_ = true;
-        swingKnob_.setValue(swingToPercent(swing_), juce::dontSendNotification);
-        updatingKnob_ = false;
-    }
+    if (!swingGesture_)
+        showSwing();
     if (!humaniseDragging_) {
         updatingHumanise_ = true;
         humaniseKnob_.setValue(humanise_ * 100.0, juce::dontSendNotification);
         updatingHumanise_ = false;
     }
-    repaint(swingValueBounds_);
     repaint(humaniseValueBounds_);
     refreshLane();
 }

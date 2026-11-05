@@ -1,7 +1,8 @@
 // Concern: TimelineAutomationLanes' modulator row drag -- grabbing a row in the header column and either reordering it
 // among its lane's rows or dropping it on another lane to move the modulation there. The gesture is the shared
 // ReorderDragSession over the source lane's rows; the lifted row follows the pointer, a line marks the slot it would
-// take, and the drop is ONE undo step (the order write, or the host's move).
+// take, and the drop is ONE undo step (the order write, or the host's move). Over another lane the rows make room there
+// instead (TimelineAutomationLanesDragGap.cpp).
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 
 #include "UI/Layout/ReducedMotion.h"
@@ -93,7 +94,16 @@ void TimelineAutomationLanes::beginModulatorDrag(synth::LaneId lane, const Modul
     dragModGrab_ = pointer - slots[static_cast<size_t>(key)].start;
     dragModPointer_ = pointer;
     modDrop_ = {};
+    dragModIndex_ = key;
+    dragModHeight_ = modulatorRowHeightFor(lane, key) + trayExtentOf(lane, key);
+    for (const auto& slot : slots)
+        dragModRest_.push_back(slot.start);
     modDrag_.begin(slots, key, dragModGrab_, pointer);
+}
+
+// Where the animator rested the `key`th row when its slots were last handed over (press, release, settle).
+float TimelineAutomationLanes::dragModRestOf(int key) const {
+    return key >= 0 && key < (int)dragModRest_.size() ? dragModRest_[(size_t)key] : 0.0f;
 }
 
 // True once the pointer is really dragging the row (past the threshold, not cancelled by Esc).
@@ -104,6 +114,10 @@ bool TimelineAutomationLanes::dragModulator(int screenY) {
     if (!modDrag_.dragTo(dragModPointer_))
         return false;
     modDrop_ = modulatorDropAt(dragModPointer_);
+    dragFree_ = modDrop_.lane != dragModLane_;
+    if (dragFree_)
+        modDrag_.dragTo(pointerAtDragOrigin()); // the source keeps the row's own slot (its gap) while it is away
+    updateDragGaps();
     onModulatorDragFrame();
     return modDrag_.animator().isDragging();
 }
@@ -147,8 +161,9 @@ TimelineAutomationLanes::ModulatorDrop TimelineAutomationLanes::modulatorDropAt(
 }
 
 // How the layout poses the lane's `index`th row (resting at content y `restY`) while a drag is on: the dragged row
-// follows the pointer (clamped to its own lane while the drop is there, free over any other lane), the others take the
-// animator's slots, and the lifted row is drawn raised.
+// follows the pointer (clamped to its own lane while the drop is there, free over any other lane), the others move by
+// the animator's offsets alone (so a gap opening above the lane carries them with it), and the lifted row is drawn
+// raised.
 TimelineAutomationLanes::ModulatorDragPose TimelineAutomationLanes::modulatorDragPose(synth::LaneId lane, int index,
                                                                                       int restY) const {
     if (!modDrag_.isReordering() || lane != dragModLane_)
@@ -162,9 +177,10 @@ TimelineAutomationLanes::ModulatorDragPose TimelineAutomationLanes::modulatorDra
     const int key = static_cast<int>(at - dragModKeys_.begin());
     const auto& animator = modDrag_.animator();
     if (key != animator.getDraggedKey())
-        return {static_cast<int>(std::lround(animator.getLayoutStart(key))) - restY, 0.0f};
-    const bool free = animator.isDragging() && modDrop_.lane != dragModLane_;
-    const float y = free ? dragModPointer_ - dragModGrab_ : animator.getDraggedStart();
+        return {static_cast<int>(std::lround(animator.getLayoutStart(key) - dragModRestOf(key))), 0.0f};
+    if (!animator.isDragging()) // settling into its slot: relative, like its neighbours
+        return {static_cast<int>(std::lround(animator.getDraggedStart() - dragModRestOf(key))), animator.getLift()};
+    const float y = dragFree_ ? dragModPointer_ - dragModGrab_ : animator.getDraggedStart();
     return {static_cast<int>(std::lround(y)) - restY, animator.getLift()};
 }
 
@@ -174,6 +190,8 @@ void TimelineAutomationLanes::onModulatorDragFrame() {
     const bool dragging = modDrag_.animator().isDragging();
     if (auto* row = draggedModulatorRow())
         row->setAlpha(dragging && !modDrop_.valid ? kRefusedAlpha : 1.0f);
+    if (!dragging)
+        closeDragGaps();
     updateDropIndicator();
     if (onLayoutChanged)
         onLayoutChanged();
@@ -189,7 +207,8 @@ void TimelineAutomationLanes::updateDropIndicator() {
     }
     const float slotY = modDrop_.lane == dragModLane_
                             ? modDrag_.animator().getLayoutStart(modDrag_.animator().getDraggedKey())
-                            : modulatorSlotStart(modDrop_.lane, modDrop_.index);
+                            : modulatorSlotStart(modDrop_.lane, modDrop_.index) -
+                                  static_cast<float>(dragGapAt(modDrop_.lane, modDrop_.index)); // the gap's top
     const float y = slotY - static_cast<float>(kIndicatorHeight) * 0.5f;
     const int x = ModulatorRow::kIndent;
     const auto place = [this, x](float atY) {
@@ -244,19 +263,31 @@ void TimelineAutomationLanes::commitModulatorDrag() {
         return;
     }
     if (drop.lane != lane) {
+        // The moved row arrives in the gap the drag opened and its old gap stays as closed as it is: nothing jumps.
+        const auto gap = dragGaps_.find({drop.lane, drop.index});
+        landing_ = {drop.lane,
+                    gap != dragGaps_.end() ? gap->second.now : 0.0f,
+                    dragClosure_.now,
+                    static_cast<int>(std::lround(dragModPointer_ - dragModGrab_)),
+                    {},
+                    true};
         droppedRoutingKey_ = info.key();
         const bool moved = host_ != nullptr && host_->moveModulatorToLane(info, drop.lane, drop.index);
         droppedRoutingKey_.clear();
-        if (moved)
+        const auto landing = std::exchange(landing_, {});
+        if (moved) {
             discardModulatorDrag(); // the host's refresh rebuilt the rows; nothing of the gesture is left to settle
-        else
+            settleMovedRow(landing);
+        } else {
             modDrag_.abort();
+        }
         return;
     }
     if (insertion == dragged) {
         std::vector<float> starts;
         for (const auto& slot : modulatorSlotsFor(lane))
             starts.push_back(slot.start);
+        dragModRest_ = starts;
         modDrag_.release(starts);
         onModulatorDragFrame();
         return;
@@ -278,7 +309,11 @@ void TimelineAutomationLanes::commitModulatorDrag() {
         discardModulatorDrag();
         return;
     }
-    modDrag_.settleInto(modulatorSlotsFor(lane), static_cast<int>(at - dragModKeys_.begin()), droppedAt);
+    const auto slots = modulatorSlotsFor(lane);
+    dragModRest_.clear();
+    for (const auto& slot : slots)
+        dragModRest_.push_back(slot.start);
+    modDrag_.settleInto(slots, static_cast<int>(at - dragModKeys_.begin()), droppedAt);
     onModulatorDragFrame();
 }
 
@@ -293,9 +328,11 @@ void TimelineAutomationLanes::discardModulatorDrag(bool relayout) {
     modDrop_ = {};
     dragModLane_ = {};
     dragModInfo_ = {};
+    const bool hadGaps = !dragGaps_.empty() || dragClosure_.now != 0.0f;
+    clearDragGaps();
     if (dropFade_ != nullptr)
         dropFade_->setShown(false);
-    if (relayout && had && onLayoutChanged && doc_ != nullptr)
+    if (relayout && (had || hadGaps) && onLayoutChanged && doc_ != nullptr)
         onLayoutChanged();
 }
 

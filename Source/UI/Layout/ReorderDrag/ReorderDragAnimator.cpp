@@ -1,6 +1,7 @@
 // Concern: ReorderDragAnimator's insertion maths and tween bookkeeping.
 #include "ReorderDragAnimator.h"
 
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/UIAnimation.h"
 #include <algorithm>
 #include <cmath>
@@ -29,7 +30,9 @@ void ReorderDragAnimator::setClock(Clock clock) { clock_ = clock ? std::move(clo
 void ReorderDragAnimator::begin(const std::vector<Slot>& slots, int draggedKey, float grabOffset, float pointerAtPress,
                                 bool animate) {
     cancel();
-    animate_ = animate;
+    // Reduce Motion: a reorder is movement with no plain-fade form, so every list's make-room and settle land at once
+    // (the lifted row still follows the pointer, which is the user's own motion).
+    animate_ = animate && !prefersReducedMotion();
     if (draggedKey < 0 || draggedKey >= static_cast<int>(slots.size()))
         return;
     slots_ = slots;
