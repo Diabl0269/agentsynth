@@ -180,8 +180,6 @@ TEST(CardCallOutRelay, EveryRawCallOutLaunchIsRegisteredWithItsReason) {
         {"Source/UI/Layout/CardCallOut.cpp", 1, "launchCardCallOut itself"},
         {"Source/UI/Graph/ModuleComponent/ModuleComponentLayoutEditor.cpp", 1, kEditing},
         {"Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorPanel.cpp", 1, kEditing},
-        {"Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp", 1,
-         "macro prompt: answers a question about the canvas"},
         {"Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogInternal.h", 1, "inside a modal dialog"},
         {"Source/UI/Chrome/ColourPickerPopup.h", 1, "ColourPickerPopup::show: only the Appearance settings call it"},
     };

@@ -114,9 +114,12 @@ void PerNoteBar::refresh(const std::vector<ShapeItem>& shapes) {
     if (!dragging_)
         smoothness_.setValue(p.smoothness, juce::dontSendNotification);
     juce::StringArray names;
-    for (const auto& s : shapes)
+    std::vector<std::optional<juce::uint32>> colours;
+    for (const auto& s : shapes) {
         names.add(s.name.isEmpty() ? juce::String("unnamed") : s.name);
-    keys_.setKeys(p.keys, names);
+        colours.push_back(s.colour);
+    }
+    keys_.setKeys(p.keys, names, colours);
     showKeyRow(p.mode == Mode::ByHand);
     updateHint(p);
     refreshed_ = true;

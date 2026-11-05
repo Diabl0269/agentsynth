@@ -41,6 +41,7 @@ bool actsOnTheMainWindowOnly(juce::CommandID command) {
     case focusLibrary:
     case focusLibrarySearch:
     case openContextMenu:
+    case recolourFocusedItem:
     case locateMaster:
         return true;
     default:

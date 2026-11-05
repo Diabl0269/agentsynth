@@ -84,6 +84,8 @@ enum CommandIDs {
     focusLibrarySearch,
     // Opens the right-click menu of whatever holds keyboard focus.
     openContextMenu,
+    // Opens the colour picker of whatever holds keyboard focus (a track, a channel, a macro card, a morph dot).
+    recolourFocusedItem,
     // Selects Master (or Audio Output) and pans it into view.
     locateMaster,
     // Transport verbs as command targets; unbound by default.

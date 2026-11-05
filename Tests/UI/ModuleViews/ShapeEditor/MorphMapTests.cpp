@@ -196,7 +196,7 @@ TEST(MorphMap, RightClickOnADotOpensEditDuplicateRenameDeleteAndEachWorks) {
     const auto at = rig.map.getDotCentre(1);
 
     rig.map.mouseDown(curveRightClick(rig.map, at));
-    const std::vector<std::string> expected{"Edit", "Duplicate", "Rename", "Delete"};
+    const std::vector<std::string> expected{"Edit", "Duplicate", "Rename", "Colour...", "Delete"};
     EXPECT_EQ(rig.menu.items, expected);
 
     ASSERT_TRUE(rig.menu.run("Edit"));
@@ -220,7 +220,7 @@ TEST(MorphMap, DeleteInTheMenuIsDisabledOnTheLastShape) {
     EXPECT_FALSE(rig.menu.isEnabled("Delete"));
 }
 
-TEST(MorphMap, ReturnOnAFocusedDotAndTheMenusEditAskToEditIt) {
+TEST(MorphMap, ReturnOnAFocusedDotOpensItsMenuWithEditFirstAndEditAsksToEditIt) {
     MapRig rig;
     int edited = -1;
     rig.controller.onEdit = [&](int i) { edited = i; };
@@ -229,8 +229,15 @@ TEST(MorphMap, ReturnOnAFocusedDotAndTheMenusEditAskToEditIt) {
     ASSERT_TRUE(rig.menu.run("Edit"));
     EXPECT_EQ(edited, 2);
 
+    // Regression test for FRO1168: Return on a dot opened the editor straight away; it opens the menu the right-click
+    // does (Edit first), and a second Return on Edit edits. Nothing edits until the menu's item is chosen.
     edited = -1;
+    rig.menu.items.clear();
     EXPECT_TRUE(rig.map.getDotStop(1)->keyPressed(key(juce::KeyPress::returnKey)));
+    EXPECT_EQ(edited, -1) << "Return alone opens the menu, it does not also fire the edit";
+    ASSERT_FALSE(rig.menu.items.empty());
+    EXPECT_EQ(rig.menu.items.front(), "Edit");
+    ASSERT_TRUE(rig.menu.run("Edit"));
     EXPECT_EQ(edited, 1);
 
     edited = -1;
@@ -289,7 +296,7 @@ TEST(MorphMap, StopsAreNamedWithTheirValuesAndTooltipped) {
 
     EXPECT_EQ(rig.map.tooltipAt(rig.map.getCursorCentre().roundToInt()), "Morph cursor - drag to blend shapes");
     EXPECT_EQ(rig.map.tooltipAt(rig.map.getDotCentre(1).roundToInt()),
-              "ee - drag to move, double-click to delete, Return to edit");
+              "ee - drag to move, double-click to delete, Return for its menu");
     EXPECT_TRUE(rig.map.tooltipAt(rig.map.toPixels(0.95f, 0.05f).roundToInt()).startsWith("Morph map"));
     EXPECT_EQ(rig.map.getTitle(), "Morph map");
     for (auto* c : {rig.map.getDotStop(0), rig.map.getDotStop(1), rig.map.getCursorStop()}) {

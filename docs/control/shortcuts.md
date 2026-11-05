@@ -68,6 +68,7 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+Up | Focus Transport Bar (`focusTransportBar`) — from any view (canvas, library, timeline, piano roll, mixer, controllers) opens the Timeline first if it's closed and puts its top bar key ring on **Play**; Left/Right walk the transport (Record, Loop, Metronome, Count-in, Tempo, Time Signature, Key) and the rest of the top bar, Return presses the ringed control, Down or Escape leaves. Ctrl+Shift+Up off the Mac. Rebindable |
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
 | Shift+F10 | Open Context Menu (`openContextMenu`) — opens the right-click menu of whatever holds keyboard focus, anchored at that item. See [**Open Context Menu**](#open-context-menu) below. Rebindable |
+| Alt+C | Recolour Focused Item (`recolourFocusedItem`) — opens the colour picker of whatever holds keyboard focus: a timeline track row, a mixer strip, the selected macro card, a morph map dot. See [`recolour-focused-item.md`](recolour-focused-item.md). Rebindable |
 | Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation**](#library-keyboard-navigation) below |
 | Cmd+Shift+F | Send Feedback (`openFeedback`) — opens the Send feedback window from anywhere (canvas, timeline, mixer): the same action as the top bar's **Feedback** button, whose tooltip names the live chord. Rebindable. Cmd+Ctrl+F was the first ask but is macOS's Enter Full Screen; Cmd+F is Focus Library Search and bare F is Follow Playhead, so Cmd+Shift+F is free |
 | Cmd+T (macOS) / Ctrl+Alt+T (Windows, Linux) | Add Track (`openAddTrackMenu`) — shows the Timeline, focuses its **Add Track** button and opens the searchable Add Track picker with the search field ready; Enter adds the first match, Escape closes and focus stays on **Add Track**. On the Mac it moved from the physical Ctrl+T to Cmd+T (a saved Ctrl+T moves once, `migrateAddTrackCmdT`; a key you bound yourself stays), because Ctrl+T now inserts a point in a focused curve editor or automation lane ([`point-editing.md`](point-editing.md)); off the Mac Cmd is Ctrl, so it takes Ctrl+Alt+T. See [`timeline/add-track.md`](../timeline/add-track.md#the-picker) |
@@ -133,8 +134,7 @@ and the key share one function), never a second copy of the menu:
 | Module library | The keyboard-focused row's menu, at the row. Only snippet rows have one (Delete Snippet) |
 | MIDI Remote panel | The selected controller's menu (Rename, Export, Delete, feedback output), at its row in the Controllers list |
 
-A new surface opts in by implementing the provider on the component that is, or contains, the focused
-one; no per-surface key handling is needed.
+A new surface opts in by implementing the provider on the component that is, or contains, the focused one; no per-surface key handling is needed.
 
 ### Library keyboard navigation
 

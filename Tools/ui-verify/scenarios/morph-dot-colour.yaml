@@ -1,0 +1,65 @@
+# Bug: a morph dot could not be given its own colour, and none of the app's "Colour..." menu items had a key.
+# Now a dot's menu has "Colour..." and Alt+C (Recolour Focused Item) opens the same shared picker beside the focused dot.
+#
+# What a user does:
+#   1. Starts a new project, adds a Filter and sets its type to Custom (its card shows the morph map).
+#   2. Focuses the first dot and presses Alt+C: the colour picker opens beside the dot.
+#   3. Presses Escape: the picker closes, the dot keeps its colour and focus. Return then shows the dot menu with "Colour...".
+#   4. Alt+C again, picks the green favourite and clicks away: the dot wears green.
+record: true
+save_project: morph-dot-colour
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - click: {id: Auto Arrange}
+  - wait: {}
+  - key: {keys: cmd+-}                                       # zoom out so the whole card is in the window
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - wait: {}
+  - click: {id: window, x: 633, y: 363}                       # the Filter Type combo at this zoom
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: morphDot0, exists: true, within_ms: 5000}
+  - click: {id: morphDot0}                                    # a click on a dot gives it the keyboard
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
+  - screenshot: {id: window, name: 1-dot-focused}
+  - key: {keys: alt+c}
+  - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
+  - wait: {settleMs: 500}
+  - screenshot: {id: colourPickerPopup, name: 2-alt-c-opens-picker}
+  - key: {keys: escape}
+  - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
+  - screenshot: {id: window, name: 3-escape-keeps-original}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {id: menu, name: 4-menu-has-colour}
+  - key: {keys: escape}                                       # close the menu
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
+  - key: {keys: alt+c}
+  - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
+  - click: {id: colourPickerPopup, x: 70, y: 380}               # the green favourite
+  - wait: {settleMs: 500}
+  - click: {id: window, x: 1100, y: 200}                        # click away: the picker closes and keeps the colour
+  - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}
+  - wait: {settleMs: 500}
+  - screenshot: {id: window, name: 5-dot-wears-green}

@@ -63,11 +63,13 @@ bool NoteKeyStrip::isBlack(int semitone) noexcept {
     }
 }
 
-void NoteKeyStrip::setKeys(const std::array<int8_t, 128>& keys, const juce::StringArray& shapeNames) {
-    if (keys == keys_ && shapeNames == shapeNames_)
+void NoteKeyStrip::setKeys(const std::array<int8_t, 128>& keys, const juce::StringArray& shapeNames,
+                           const std::vector<std::optional<juce::uint32>>& shapeColours) {
+    if (keys == keys_ && shapeNames == shapeNames_ && shapeColours == shapeColours_)
         return;
     keys_ = keys;
     shapeNames_ = shapeNames;
+    shapeColours_ = shapeColours;
     updateKeyNames();
     repaint();
 }
@@ -168,7 +170,8 @@ void NoteKeyStrip::paint(juce::Graphics& g) {
             g.setColour(colors.border);
             g.drawRoundedRectangle(r, 2.0f, 1.0f);
             if (const int shape = keys_[(size_t)note]; shape >= 0 && shape < shapeNames_.size()) {
-                g.setColour(morphShapeColour(colors, shape));
+                g.setColour(morphShapeColour(
+                    colors, shape, (size_t)shape < shapeColours_.size() ? shapeColours_[(size_t)shape] : std::nullopt));
                 g.fillEllipse(r.getCentreX() - kDot * 0.5f, r.getBottom() - kDot - 6.0f, kDot, kDot);
             }
             if (!black && note % 12 == 0) {

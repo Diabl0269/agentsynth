@@ -8,6 +8,7 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace synth::ui {
@@ -25,9 +26,9 @@ class ReorderFramePump;
  *  A dot added or restored grows in and a removed one shrinks out, keyed by its name.
  *  Keyboard: the map, then each dot, then the cursor are Tab stops. On a dot or the cursor an arrow moves it one
  *  step (Shift for a bigger one); held, it glides on, slowly at first and faster the longer it is held (two arrows
- *  move diagonally, Shift is faster). Return on a dot edits it, Delete removes it and focuses the next dot, F2
- *  renames it, Shift+F10 opens its menu; Escape returns focus to the map. A key step or a whole hold is one gesture
- *  bracket, like a drag.
+ *  move diagonally, Shift is faster). Return on a dot opens its menu (Edit first), Delete removes it and focuses the
+ * next dot, F2 renames it, Shift+F10 opens its menu; Escape returns focus to the map. A key step or a whole hold is one
+ * gesture bracket, like a drag.
  *
  *  Sliders: a thin Morph X slider hugs the bottom edge and a Morph Y slider the left edge, each with its thumb at
  *  the cursor; the right edge is left empty for a future third axis. They are the cursor's other handles (the same
@@ -40,12 +41,14 @@ class ReorderFramePump;
 class MorphMap
     : public juce::Component
     , public juce::TooltipClient
-    , public KeyboardContextMenuProvider {
+    , public KeyboardContextMenuProvider
+    , public KeyboardColourProvider {
 public:
     struct Dot {
         juce::String name;
         float x = 0.5f;
         float y = 0.5f;
+        std::optional<juce::uint32> colour; ///< a colour picked for this dot; empty uses the palette by index
     };
     enum class Gesture { Dot, Cursor };
     enum class Axis { None, X, Y };
@@ -113,6 +116,16 @@ public:
     /** A short message about a key that did nothing (the last dot cannot insert, no room); unset says nothing. */
     std::function<void(const juce::String&)> onNotice;
     std::function<void(int, const juce::String&)> onRenameDot;
+    /** The colour picker of "Colour..." (and Alt+C) drags this dot's colour live: no undo step, the owner just shows
+     * it. */
+    std::function<void(int, juce::Colour)> onPreviewDotColour;
+    /** The picker closed. `original` is the colour the dot wore before (empty: its palette colour), `chosen` the final
+     *  pick, empty when the pick ended where it began. The owner puts `original` back and records ONE undo step to
+     *  `chosen`, or records nothing. */
+    std::function<void(int, std::optional<juce::uint32> original, std::optional<juce::uint32> chosen)>
+        onCommitDotColour;
+    /** Where the picker keeps its favourites; null keeps them for the one popup. */
+    juce::PropertiesFile* colourFavourites = nullptr;
     /** Shows a dot menu next to `screenArea` (screen coordinates); unset opens it as a real popup there. A test
      *  replaces it to inspect the menu and the area. */
     std::function<void(juce::PopupMenu&, juce::Rectangle<int> screenArea)> showMenu;
@@ -191,6 +204,8 @@ public:
     // ---------- actions the menu and keys share ----------
     void beginRename(int index);
     void showDotMenu(int index);
+    /** Opens the colour picker for dot `index` beside it. False when there is no such dot or no owner to record it. */
+    bool showDotColour(int index);
     void showStripMenu(Axis axis);
 
     // ---------- Component ----------
@@ -209,6 +224,7 @@ public:
     void focusLost(FocusChangeType cause) override;
     juce::String getTooltip() override;
     bool showContextMenuForKeyboardFocus() override;
+    bool openColourForKeyboardFocus() override;
 
 private:
     class Stop;

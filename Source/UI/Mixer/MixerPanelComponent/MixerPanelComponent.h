@@ -61,7 +61,8 @@ namespace synth::ui {
 class MixerPanelComponent
     : public juce::Component
     , public DockBackSlot
-    , public KeyboardContextMenuProvider {
+    , public KeyboardContextMenuProvider
+    , public KeyboardColourProvider {
 public:
     MixerPanelComponent();
     ~MixerPanelComponent() override;
@@ -397,6 +398,8 @@ public:
     void focusOfChildComponentChanged(FocusChangeType cause) override;
     /** Opens the focused column's header right-click menu, anchored at that column. False with no column focused. */
     bool showContextMenuForKeyboardFocus() override;
+    /** The focused strip's colour picker, as the colour key opens it. False on a column with nothing to recolour. */
+    bool openColourForKeyboardFocus() override { return openFocusedColour(); }
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 

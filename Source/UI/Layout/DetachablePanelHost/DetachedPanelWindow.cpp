@@ -170,6 +170,10 @@ bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {
             return synth::ui::openContextMenuForFocusedComponent(focusedComponentOverrideForTest_ != nullptr
                                                                      ? focusedComponentOverrideForTest_.getComponent()
                                                                      : juce::Component::getCurrentlyFocusedComponent());
+        if (synth::ui::isRecolourKeyPress(key, *shortcutManager_))
+            return synth::ui::openColourForFocusedComponent(focusedComponentOverrideForTest_ != nullptr
+                                                                ? focusedComponentOverrideForTest_.getComponent()
+                                                                : juce::Component::getCurrentlyFocusedComponent());
     }
     // Not a focus-cycle key -- give the app-wide shortcut dispatch a chance (Cmd+J, Cmd+1..9)
     // before giving up; see onAppShortcut's own comment.

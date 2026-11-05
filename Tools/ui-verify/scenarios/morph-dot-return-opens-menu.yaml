@@ -1,0 +1,54 @@
+# Bug: Return on a focused morph dot opened the shape editor straight away, so the keyboard had no way to reach the
+# dot's other actions (Duplicate, Rename, Delete) except Shift+F10. Return now opens the same menu the right-click does.
+#
+# What a user does:
+#   1. Starts a new project, adds a Filter and sets its type to Custom (its card shows the morph map).
+#   2. Focuses the first dot and presses Return: the dot's menu opens beside it (Edit, Duplicate, Rename, Delete).
+#   3. Presses Escape: the menu closes and the keyboard is still on the dot. A second Return opens it again.
+record: true
+save_project: morph-dot-menu
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - click: {id: Auto Arrange}
+  - wait: {}
+  - key: {keys: cmd+-}                                       # zoom out so the whole card is in the window
+  - key: {keys: cmd+-}
+  - key: {keys: cmd+-}
+  - wait: {}
+  - click: {id: window, x: 633, y: 363}                       # the Filter Type combo at this zoom
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: morphDot0, exists: true, within_ms: 5000}
+  - click: {id: morphDot0}                                    # a click on a dot gives it the keyboard
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
+  - screenshot: {id: window, name: 1-dot-focused}
+  - key: {keys: return}
+  - wait: {settleMs: 500}                                     # the menu fades in before it takes keys
+  - screenshot: {id: menu, name: 2-return-opens-menu}
+  - key: {keys: escape}
+  - wait: {settleMs: 500}
+  - expect: {id: morphDot0, hasFocus: true, within_ms: 2000}
+  - screenshot: {id: window, name: 3-focus-stays-on-dot}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {id: menu, name: 4-return-again-opens-it-again}
+  - key: {keys: escape}

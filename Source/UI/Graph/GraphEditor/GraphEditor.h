@@ -62,6 +62,7 @@ class GraphEditor
     , public juce::FileDragAndDropTarget
     , public juce::SettableTooltipClient
     , public synth::ui::KeyboardContextMenuProvider
+    , public synth::ui::KeyboardColourProvider
     , private GraphCanvasHost {
 public:
     GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr = nullptr);
@@ -295,10 +296,8 @@ public:
     /** The canvas's card keys (arrows, Alt+arrows, Return); install the ShortcutManager here. */
     CanvasCardKeyboard& getCardKeyboard() noexcept { return *cardKeyboard_; }
 
-    /** Async rename prompt for a macro with no card (e.g. the expanded hull menu). */
+    /** Async rename prompt for a macro with no card (e.g. the expanded hull menu); the hook swaps the modal. */
     void promptRenameMacro(const juce::String& macroId);
-
-    /** Test seam: replaces the real modal when set. Null in production. */
     std::function<void(const juce::String& macroId)> promptRenameMacroForTest;
     void promptRecolourMacro(const juce::String& macroId, juce::Rectangle<int> screenArea);
 
@@ -621,10 +620,10 @@ public:
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
     bool keyPressed(const juce::KeyPress& key) override;
-    /** With exactly one module card selected, opens that card's right-click menu at the card;
-     *  otherwise the canvas (background) menu at the middle of the view. False while keyboard focus
-     *  is inside the Mod Matrix, which has no menu of its own. */
+    /** One module card selected: its right-click menu at the card; else the canvas menu at the middle of the view.
+     *  False while keyboard focus is inside the Mod Matrix, which has no menu. */
     bool showContextMenuForKeyboardFocus() override;
+    bool openColourForKeyboardFocus() override;
     juce::AudioProcessorGraph::NodeID getAttenuverterNodeAt(juce::Point<float> localPos);
 
     // ---- Cables: one wire as the USER sees it, not a graph edge (see GraphEditorTypes.h) ----

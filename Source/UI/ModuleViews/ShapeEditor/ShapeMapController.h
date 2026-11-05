@@ -41,6 +41,7 @@ private:
     int addShapeAtIndex(float x, float y, int listIndex);
     juce::String uniqueName(const std::vector<ShapeItem>& shapes, const juce::String& wanted) const;
     void changed();
+    void commitDotColour(int index, std::optional<juce::uint32> original, std::optional<juce::uint32> chosen);
 
     bool restoreSince(RestoreWatch& watch) const;
 

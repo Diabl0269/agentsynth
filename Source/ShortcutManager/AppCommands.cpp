@@ -99,6 +99,7 @@ namespace AppCommands {
  *    ModuleLibraryComponent::focusSearchField and docs/control/shortcuts.md's Focus regions section
  *    for why those are two different destinations. Same General/command-dispatched treatment as the
  *    other three Focus* actions.
+ *  - recolourFocusedItem: opens the colour picker of whatever holds keyboard focus
  *  - openContextMenu: opens the right-click menu of whatever holds keyboard focus
  *    (KeyboardContextMenu.h).
  *  - locateMaster: selects Master (falling back to Audio Output when there is no Master yet) and
@@ -271,6 +272,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return focusLibrarySearch;
     if (actionId == "openContextMenu")
         return openContextMenu;
+    if (actionId == "recolourFocusedItem")
+        return recolourFocusedItem;
     if (actionId == "locateMaster")
         return locateMaster;
     if (actionId == "openAddTrackMenu")

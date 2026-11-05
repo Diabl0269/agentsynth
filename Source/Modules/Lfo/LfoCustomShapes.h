@@ -25,7 +25,7 @@ struct LfoCustomShapes {
 
     bool operator==(const LfoCustomShapes&) const;
     bool isDefault() const;
-    /** One unnamed shape at the map centre: the list needs no shape list in its JSON. */
+    /** One unnamed, uncoloured shape at the map centre: the list needs no shape list in its JSON. */
     bool isPlainSingle() const;
 
     /** A plain single shape saves as the bare LfoCustomWave JSON (`{"version":1,"points":[..]}`, what every LFO

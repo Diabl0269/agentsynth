@@ -38,8 +38,8 @@ std::vector<ShapeItem> LfoShapesAdapter::getShapes() const {
     std::vector<ShapeItem> out;
     int index = 1;
     for (const auto& shape : lfo_.getCustomShapes().shapes) {
-        out.push_back(
-            {shape.name.isEmpty() ? "Shape " + juce::String(index) : shape.name, shape.curve, shape.position});
+        out.push_back({shape.name.isEmpty() ? "Shape " + juce::String(index) : shape.name, shape.curve, shape.position,
+                       shape.colour});
         ++index;
     }
     return out;
@@ -50,7 +50,7 @@ std::vector<ShapeItem> LfoShapesAdapter::getShapes() const {
 void LfoShapesAdapter::setShapes(const std::vector<ShapeItem>& shapes) {
     LfoCustomShapes list;
     for (const auto& item : shapes)
-        list.shapes.push_back({item.name, item.curve, item.position});
+        list.shapes.push_back({item.name, item.curve, item.position, item.colour});
     lfo_.setCustomShapes(list);
 }
 

@@ -77,6 +77,10 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          [](MainComponent& m) {
              return synth::ui::openContextMenuForFocusedComponent(m.getFocusedComponentForMenu());
          }},
+        {AppCommands::recolourFocusedItem, "Recolour Focused Item",
+         "Open the colour picker of the item that has keyboard focus", "General", "recolourFocusedItem",
+         [](const MainComponent& m) { return m.isWelcomeScreenHidden(); },
+         [](MainComponent& m) { return synth::ui::openColourForFocusedComponent(m.getFocusedComponentForMenu()); }},
         // Opens the Timeline if needed (focusRegionById runs the region's open hook), then its "Add Track" picker once
         // the slide has settled.
         {AppCommands::openAddTrackMenu, "Add Track...", "Show the Timeline, focus Add Track and open its search",

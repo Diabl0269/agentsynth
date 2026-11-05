@@ -543,16 +543,17 @@ TEST(MorphMapMenu, TheDotMenuIsHandedADotSizedScreenAreaAroundTheDot) {
 TEST(MorphMapMenu, TheEditItemIsOfferedUnlessTheOwnerHidesIt) {
     MenuRig rig;
     rig.map.showDotMenu(0);
-    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Edit", "Duplicate", "Rename", "Delete"}));
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Edit", "Duplicate", "Rename", "Colour...", "Delete"}));
 
     rig.map.setEditItemShown(false);
     rig.map.showDotMenu(0);
-    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Duplicate", "Rename", "Delete"}));
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Duplicate", "Rename", "Colour...", "Delete"}));
 
     int edited = -1;
     rig.controller.onEdit = [&](int i) { edited = i; };
     EXPECT_TRUE(rig.map.getDotStop(1)->keyPressed(key(juce::KeyPress::returnKey)));
-    EXPECT_EQ(edited, 1) << "Return on a dot still edits it";
+    EXPECT_EQ(edited, -1) << "Return on a dot opens its menu; with Edit hidden nothing edits";
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Duplicate", "Rename", "Colour...", "Delete"}));
 }
 
 TEST(MorphMapMenu, ARightPressOnEachSliderAsksForItsMenuBesideTheLandingDot) {
@@ -604,7 +605,7 @@ TEST(MorphMapMenu, TheShapeWindowsDotMenuOpensBesideTheDotWithoutEdit) {
 
     map.mouseDown(rightPress(map, map.getDotCentre(dot)));
 
-    EXPECT_EQ(captured.items, (std::vector<std::string>{"Duplicate", "Rename", "Delete"}));
+    EXPECT_EQ(captured.items, (std::vector<std::string>{"Duplicate", "Rename", "Colour...", "Delete"}));
     EXPECT_TRUE(area.contains(map.localPointToGlobal(map.getDotCentre(dot)).roundToInt()));
     EXPECT_LT(area.getWidth(), map.getWidth() / 4) << "the old target was the whole map, under its bottom-left";
     EXPECT_EQ(editor.getSelected(), dot) << "the press selected the dot, so nothing is left for Edit to do";
