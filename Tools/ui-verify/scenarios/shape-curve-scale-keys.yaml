@@ -1,0 +1,65 @@
+# Feature: Ctrl+Alt+arrows scale the selected dots of a shape curve about their middle (Control+Option on a Mac): Up
+# spreads their levels apart, Down pulls them together, Left/Right do the same in time; one undo step per press.
+#
+# What a user does: opens the Filter's Edit shapes, picks the first dot of the shape curve and extends the selection to
+# three, presses Ctrl+Alt+Up six times (spread), Ctrl+Alt+Right six times (spread in time), Ctrl+Alt+Down four times (together), then Cmd+Z (back one step).
+record: true
+save_project: shape-curve-scale-keys
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - click: {id: window, x: 1044, y: 603}                       # the Filter Type combo (its label shares the title)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - key: {keys: right, target: Shape curve}
+  - key: {keys: shift+right}
+  - key: {keys: shift+right}
+  - wait: {}
+  - screenshot: {id: "Filter shapes: Filter", name: three-selected}
+  - key: {keys: ctrl+alt+up}
+  - key: {keys: ctrl+alt+up}
+  - key: {keys: ctrl+alt+up}
+  - key: {keys: ctrl+alt+up}
+  - key: {keys: ctrl+alt+up}
+  - key: {keys: ctrl+alt+up}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "Filter shapes: Filter", name: spread-twice}
+  - key: {keys: ctrl+alt+right}
+  - key: {keys: ctrl+alt+right}
+  - key: {keys: ctrl+alt+right}
+  - key: {keys: ctrl+alt+right}
+  - key: {keys: ctrl+alt+right}
+  - key: {keys: ctrl+alt+right}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "Filter shapes: Filter", name: spread-in-time}
+  - key: {keys: ctrl+alt+down}
+  - key: {keys: ctrl+alt+down}
+  - key: {keys: ctrl+alt+down}
+  - key: {keys: ctrl+alt+down}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "Filter shapes: Filter", name: pulled-together}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "Filter shapes: Filter", name: undone-one-step}

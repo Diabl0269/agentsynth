@@ -127,6 +127,7 @@ is drawn, plain under Reduce Motion, stopping when settled); Escape still fades 
 | Escape during the drag | Cancel: nothing changes and the editor consumes the key |
 | Alt+Shift+Left / Right | Move the right edge one grid step (a sixteenth with snap off) left or right: squeeze or stretch, one undo step per press |
 | Alt+Shift+Up / Down | Grow or shrink the selection's value range by 5% about its lowest value, one undo step per press |
+| Ctrl+Alt+arrows | Scale the selection about its middle, a tenth per press (Right / Up spread, Left / Down together; Shift: finer), in time or value, one undo step per press; time never passes or pushes an unselected point ([`control/point-editing.md`](../control/point-editing.md)) |
 
 The dragged EDGE snaps to the shared view-state snap (the others follow proportionally and are not snapped, so a
 stretch keeps the points' relative spacing); no beat goes below 0, and the closest two selected points never come nearer

@@ -169,6 +169,8 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
         pressNudge(key.getKeyCode(), dx, dy, fine);
         return true;
     }
+    case Kind::scale:
+        return scaleSelection(action.time, action.side, action.size == PointKeyAction::Size::fine);
     case Kind::value:
         // Plain Up/Down move the value like Alt+Up/Down; with nothing selected the key is left to the app.
         if (action.size != PointKeyAction::Size::normal || cursorIndex() < 0)

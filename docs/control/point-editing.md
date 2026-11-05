@@ -30,6 +30,7 @@ this point", "No room: the curve has the most points it can hold") in the shape 
 | Alt+Up / Alt+Down | Move the selection's value (holding glides, like Alt+Left / Right) |
 | Two arrows held | Diagonal: hold Alt+Right, then also Up, and time and value move at once; let one go and the other carries on alone. The whole hold, both keys, is one undo step (`KeyHold` glides each axis on its own) |
 | Alt+Shift+arrows | The fine move: a fifth of the step in the curve editor, a quarter in a lane, never snapped. In a lane with two or more points selected, Alt+Shift+arrows stretch or scale the selection instead ([`timeline/automation.md`](../timeline/automation-points.md#stretching-a-selection)) |
+| Ctrl+Alt+Left / Right, Ctrl+Alt+Up / Down | Scale the selection about its middle, a tenth per press: Right / Up spreads the dots apart, Left / Down pulls them together (Right / Left in time, Up / Down in value; Shift: a fiftieth). Needs two or more dots. In time the order is kept: the block stops at an unselected neighbour (never pushing it), at the start of the lane or curve, and before two dots would meet; in value each dot stops at its own range edge. One undo step per press; a press that changes nothing opens none. The Mac chord is Control+Option (plain Control+arrows belong to Mission Control); a Fixed curve scales values only |
 | Up / Down | Move the selection's value (the same step as Alt+Up / Down). A lane also takes Shift+Up / Down for a coarse step. With nothing selected the key is left to the app |
 | Cmd+A | Select every dot that can move |
 | Cmd+C / Cmd+V | Copy the selection; paste it at the cursor (the curve editor) or at the transport position (a lane) |
@@ -56,9 +57,10 @@ lands in both at once:
 
 | Part | File | What it owns |
 |---|---|---|
-| Keys | `PointEditorKeys.h` | `pointKeyAction` decodes a key press into one action of the map above (pick, extend, value, move, select all, copy, paste, duplicate, insert, remove, clear); `isInsertPointKey` holds the Ctrl+T rule |
+| Keys | `PointEditorKeys.h` | `pointKeyAction` decodes a key press into one action of the map above (pick, extend, value, move, scale, select all, copy, paste, duplicate, insert, remove, clear); `isInsertPointKey` holds the Ctrl+T rule |
 | Selection | `PointSelectionModel.{h,cpp}` | The selected set (ascending), the cursor and the anchor, keyed by node index in the curve editor and by beat in a lane, and what Left/Right, Shift+Left/Right and Cmd+A do to them |
 | Box select | `PointBoxSelect.{h,cpp}` | The press-drag-release rectangle on empty space, the additive flag, a bare click, and the marquee paint |
+| Scale | `PointScale.{h,cpp}` | The Ctrl+Alt+arrows maths: the step (`pointScaleFactor`), values scaled about the middle with a clamp per dot, positions scaled as one block that keeps its order and its neighbours (`scalePositionsAbout`). The curve editor's glue is `CurveEditorScale.cpp`, a lane's `AutomationLaneEditor::scaleKey` |
 | Group move | `PointGroupMove.{h,cpp}` | How far each moving dot may go (`roomWithin`, `roomBetweenNeighbours`) and the one delta the block moves by (`clampGroupDelta`) |
 | Clipboard | `PointClipboard.h` | The copy/paste/duplicate payload: one entry per dot as its offset from the earliest, its value and the editor's extra data (a curve bend, a lane point's tension and curve) |
 | Duplicate placement | `PointEditorDuplicate.{h,cpp}` (one level up, in `Layout/`) | Where Cmd+D puts the copies (the Duplicate points preference) |

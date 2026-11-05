@@ -68,6 +68,8 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // LFO (addRangeMenuItems): on empty space it is the whole menu, on a handle or segment it follows that menu's items.
 namespace synth::ui {
 
+struct PointKeyAction;
+
 class LaneToolCursors; // Source/UI/Timeline/AutomationLanes/LaneToolCursors.h
 
 class AutomationLaneEditor
@@ -367,6 +369,7 @@ private:
     void commitStretch();
     void cancelStretch();
     bool stretchKey(const juce::KeyPress& key);
+    bool scaleKey(const PointKeyAction& action);
     void commitStretchResult(const std::vector<LaneBreakpoint>& original, const StretchResult& result);
     void paintStretchBox(juce::Graphics& g);
     void trackStretchHover(juce::Point<int> pos);

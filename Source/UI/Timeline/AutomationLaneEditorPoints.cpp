@@ -251,6 +251,8 @@ bool AutomationLaneEditor::handleSelectionKey(const juce::KeyPress& key) {
         return action.plain && deleteSelectedPoints();
     if (keyHold_.active() && KeyHold::isArrow(key.getKeyCode()) && keyHold_.anyArrowDown())
         return true; // an arrow joining a running hold (or its auto-repeat): the hold reads it each frame
+    if (action.kind == Kind::scale)
+        return scaleKey(action);
     if (stretchKey(key))
         return true;
     if (action.kind == Kind::insert)

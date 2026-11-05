@@ -21,6 +21,19 @@ inline bool isInsertPointKey(const juce::KeyPress& key) {
     return upper == (juce::juce_wchar)'T';
 }
 
+/** True for the scale chord's modifiers: the physical Control key with Alt (Option), no Cmd on the Mac. Control+Option+
+ *  arrows are free on every platform (plain Control+arrows are Mission Control on the Mac, and Ctrl is Cmd elsewhere,
+ *  where Cmd+arrows glide the timeline). Shift is allowed: the fine step. */
+inline bool isScaleChord(const juce::ModifierKeys& mods) {
+    if (!mods.isAltDown() || !mods.isCtrlDown())
+        return false;
+#if JUCE_MAC
+    return !mods.isCommandDown();
+#else
+    return true;
+#endif
+}
+
 /** One press of the shared key map (docs/control/point-editing.md), decoded once for every point editor. Each editor
  *  switches on `kind` and consumes only the actions it supports; a new key is added here and in that switch. */
 struct PointKeyAction {
@@ -30,6 +43,7 @@ struct PointKeyAction {
         extend,    // Shift+Left / Shift+Right
         value,     // Up / Down (Shift: coarse)
         move,      // Alt+arrows (Alt+Shift: fine)
+        scale,     // Ctrl+Alt+arrows (plus Shift: fine): spread / pull together about the selection's middle
         selectAll, // Cmd+A
         copy,      // Cmd+C
         paste,     // Cmd+V
@@ -54,6 +68,17 @@ inline PointKeyAction pointKeyAction(const juce::KeyPress& key) {
     const bool alt = mods.isAltDown();
     PointKeyAction action;
     action.plain = !mods.isAnyModifierKeyDown();
+    if (isScaleChord(mods)) {
+        const int arrow = key.getKeyCode();
+        const bool horizontal = arrow == juce::KeyPress::leftKey || arrow == juce::KeyPress::rightKey;
+        if (horizontal || arrow == juce::KeyPress::upKey || arrow == juce::KeyPress::downKey) {
+            action.kind = K::scale;
+            action.time = horizontal;
+            action.side = arrow == juce::KeyPress::rightKey || arrow == juce::KeyPress::upKey ? 1 : -1;
+            action.size = shift ? S::fine : S::normal;
+        }
+        return action;
+    }
     if (mods.isCommandDown() || mods.isCtrlDown()) {
         if (shift || alt)
             return action;
