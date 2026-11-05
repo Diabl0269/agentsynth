@@ -240,6 +240,16 @@ audio device, which a stuck run can wedge for everyone.
   16-core machine: about twice as fast as a quarter of the cores for one gate and no slower for six. Every
   core made six gates 2-3x slower, and a load limit (`-l`) starved a gate whenever other sessions held the
   load above it.
+- **Builds are limited twice** (`scripts/lib/build-slots.sh`, tested by `scripts/tests/ci-local-build-slots.test.sh`).
+  One gate per build folder: it holds a non-blocking lock on `build-ci-local/.ci-local-build.lock` for the
+  whole build and test run, and a second run there exits at once with `another build is already running in
+  <dir> (pid N)`. And machine-wide build slots, shared by every worktree like the test slots: only a heavy compile
+  step holds one (more than `CI_LOCAL_SLOT_MIN_EDGES` build steps left per `ninja -n`, default 60; a small
+  incremental build starts at once, the folder lock still applies), the count is cores / jobs (2 on 16 cores at 8 jobs) and `CI_LOCAL_BUILD_SLOTS` overrides it.
+  With none free it prints `waiting for a build slot` once and polls every `CI_LOCAL_BUILD_POLL` seconds (default
+  3), giving up after `CI_LOCAL_BUILD_SLOT_TIMEOUT` (default 7200). Both are advisory locks, so a crashed run
+  frees them. Every build appends a line (time, worktree, steps, seconds waited, build seconds, slots in use)
+  to `ci-local-build-times.log` in the git common dir, for tuning the slot count. Without `flock` or `lockf` the gate warns and builds with no limit.
 
 Tests must not depend on the order they run in or on another test having run first: shards split the
 order, and a test's neighbours differ from one run to the next. Running the binary directly (a single
