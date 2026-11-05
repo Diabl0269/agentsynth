@@ -82,8 +82,9 @@ gesture (one undo step). A card fader (`CardFader`) is a slider too, with the sa
 fine step, Page Up/Down, Home/End) and its focus ring drawn round the cap by the fader painter. A
 segmented switch (`CardSegmentedSwitch`) is ONE Tab stop that Left/Right/Home/End move; to a screen reader it
 is a `group` named after the parameter holding one titled radio button per value, the selected one checked.
-A stepper (`CardStepper`) is two buttons, each a Tab stop titled after the parameter ("Octave down",
-"Octave up"), and the arrows step while either has focus. A composite control (the stepper) is registered for
+A stepper (`CardStepper`, the number field) is ONE Tab stop titled after the parameter ("Octave", "Steps", "Swing") with a
+focus ring; Up/Down (Left/Right in a row) step, Enter or a digit opens the type-in box (typable fields), and to a screen
+reader it is one element whose value is the value text. Its tooltip names the gestures. A composite control (the stepper) is registered for
 MIDI Learn as a whole: a right click on any part of it resolves to the registered ancestor
 (`ModuleComponent::mouseDown`). None of these keys is global, so none is a `ShortcutManager` action. The painted jacks get invisible, click-through, unfocusable stand-ins named
 "Audio L input" and so on, for the accessibility tree only; there is no keyboard cable creation.

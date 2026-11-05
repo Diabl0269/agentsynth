@@ -7,7 +7,7 @@ type Poly Sequencer size 560x482
   child 5 slider id="BPM" at 140,74 124x28 visible=1 title="BPM" tip="BPM" focusOrder=0 wantsFocus=1
   child 6 label id="" at 140,56 124x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 7 toggle id="Sync to Transport" at 76,67 60x24 visible=1 title="Sync" tip="Sync to Transport" focusOrder=0 wantsFocus=1
-  child 8 component id="Steps" at 378,76 104x24 visible=1 title="Steps" tip="Steps" focusOrder=0 wantsFocus=0
+  child 8 component id="Steps" at 378,76 83x24 visible=1 title="Steps" tip="Steps: click an arrow or press Up and Down to step, hold to repeat, drag the number (Shift for fine), double-click to type, Cmd-click to reset" focusOrder=0 wantsFocus=1
   child 9 label id="" at 378,58 104x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 10 combo id="" at 278,76 96x24 visible=1 title="Rate" tip="Rate" focusOrder=0 wantsFocus=1
   child 11 label id="" at 278,58 96x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

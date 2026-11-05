@@ -19,6 +19,7 @@ constexpr int kStepsComboWidth = 56;
 constexpr int kStepsCaptionWidth = 78;
 constexpr int kSwingCaptionWidth = 44;
 constexpr int kSwingKnobSize = 18;
+constexpr int kSwingFieldHeight = 18;
 constexpr int kSwingValueWidth = 34;
 constexpr int kHumaniseCaptionWidth = 62;
 constexpr int kIdeasWidth = 56;
@@ -41,12 +42,14 @@ constexpr double kMaxLineXMagnitude = 1.0e6;
 static_assert(DrumMachineComponent::kToolbarHeight == 20, "the toolbar matches the piano roll's header height");
 
 //==============================================================================
+int DrumMachineComponent::swingFieldWidth() const { return swingField_.getIdealWidth(kSwingFieldHeight); }
+
 void DrumMachineComponent::layoutToolbar() {
     auto header = getLocalBounds().removeFromTop(kToolbarHeight).reduced(kToolbarPad, 1);
     const int nameWidth =
         std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - kShowAllWidth - kStepsComboWidth -
-                        kStepsCaptionWidth - kSwingCaptionWidth - kSwingKnobSize - kSwingValueWidth -
-                        kHumaniseCaptionWidth - kSwingKnobSize - kSwingValueWidth - kIdeasWidth - 10 * kToolbarPad);
+                        kStepsCaptionWidth - kSwingCaptionWidth - swingFieldWidth() - kHumaniseCaptionWidth -
+                        kSwingKnobSize - kSwingValueWidth - kIdeasWidth - 10 * kToolbarPad);
     nameBounds_ = header.removeFromLeft(std::min(nameWidth, 220));
     header.removeFromLeft(kToolbarPad);
     viewSwitch_.setBounds(header.removeFromLeft(kSwitchWidth));
@@ -59,9 +62,8 @@ void DrumMachineComponent::layoutToolbar() {
     stepsCombo_.setBounds(header.removeFromLeft(kStepsComboWidth));
     header.removeFromLeft(kToolbarPad);
     swingCaptionBounds_ = header.removeFromLeft(kSwingCaptionWidth);
-    swingKnob_.setBounds(header.removeFromLeft(kSwingKnobSize).withSizeKeepingCentre(kSwingKnobSize, kSwingKnobSize));
-    header.removeFromLeft(kToolbarPad);
-    swingValueBounds_ = header.removeFromLeft(kSwingValueWidth);
+    swingField_.setBounds(
+        header.removeFromLeft(swingFieldWidth()).withSizeKeepingCentre(swingFieldWidth(), kSwingFieldHeight));
     header.removeFromLeft(kToolbarPad);
     humaniseCaptionBounds_ = header.removeFromLeft(kHumaniseCaptionWidth);
     humaniseKnob_.setBounds(
@@ -95,8 +97,6 @@ void DrumMachineComponent::paintToolbar(juce::Graphics& g) {
     g.drawText("Swing", swingCaptionBounds_, juce::Justification::centredRight, true);
     g.drawText("Humanise", humaniseCaptionBounds_, juce::Justification::centredRight, true);
     g.setColour(theme.colors.textPrimary);
-    g.drawText(juce::String(juce::roundToInt(swingKnob_.getValue())) + "%", swingValueBounds_,
-               juce::Justification::centredLeft, true);
     g.drawText(juce::String(juce::roundToInt(humaniseKnob_.getValue())) + "%", humaniseValueBounds_,
                juce::Justification::centredLeft, true);
 }

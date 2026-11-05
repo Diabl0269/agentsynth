@@ -574,7 +574,7 @@ TEST(DrumMachineMarksTest, RendersToPngForVisualInspection) {
 TEST(DrumMachineLanesTest, ANarrowHeaderKeepsTheKnobsAndTheIdeasButton) {
     GrooveFixture f;
     f.grid.setSize(800, 360);
-    for (const auto* c : {static_cast<juce::Component*>(&f.grid.getSwingKnob()),
+    for (const auto* c : {static_cast<juce::Component*>(&f.grid.getSwingField()),
                           static_cast<juce::Component*>(&f.grid.getHumaniseKnob()),
                           static_cast<juce::Component*>(&f.grid.getIdeasButton())})
         EXPECT_GE(c->getWidth(), 18) << c->getTitle() << " keeps room at 800 px";

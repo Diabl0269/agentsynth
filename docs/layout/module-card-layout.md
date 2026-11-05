@@ -319,7 +319,7 @@ envelope, LFO curve and threshold components plug in unchanged.
 | `segmented` | a choice with up to about 6 short values (waveform, filter family, clock source) | new; the ADSR MS/BPM control is the precedent; a bool parameter draws as two segments, its off and on texts (the ADSR's Tempo Sync reads "Time" and "Tempo") |
 | `choice` | longer choice lists | today's `ComboBox` |
 | `toggle` | booleans | today's toggle; footer toggles are the small pill |
-| `stepper` | a small integer with a musical reading (MIDI Keyboard octave) | new; − value + |
+| `stepper` | a small integer with a musical reading (MIDI Keyboard octave) | `CardStepper`, one number field: a bar with a range fill, `<` `>` arrows and the value centred, as wide as its widest value; click, hold, drag, type-in and Cmd-click reset ([module-card.md](module-card.md#faders-switches-and-steppers)) |
 
 `CardFader` is a `juce::Slider` in a linear style, painted by `AppLookAndFeel::drawLinearSlider`,
 with the shift-fine and reset gestures of `MixerFaderSlider` and **every** gesture `CardKnobSlider`
@@ -372,7 +372,7 @@ added.
 | Envelope Follower | Detection `segmented`; Attack, Release, Sensitivity; footer | — |
 | Voice Mixer | Level `faderH` | As built: no footer (the card has no Poly or Scope) |
 | Poly MIDI | Voice Steal `segmented`; footer: Velocity sets gate | As built: Voice Steal stays a combo, because "Round-Robin" is longer than a switch's 10 characters (the value strings are the patch contract) |
-| MIDI Keyboard | bespoke keys plus an Octave `stepper` row (the parameter exists today, with no control) | As built: the row sits above the keys (card 560x160), the stepper's two buttons are Tab stops titled "Octave down" and "Octave up", the card listens to them for the right-click and MIDI Learn menu; it is card code (`ModuleComponentMidiKeyboardCard.cpp`), not a layout entry |
+| MIDI Keyboard | bespoke keys plus an Octave `stepper` row (the parameter exists today, with no control) | As built: the row sits above the keys (card 560x160), the stepper is one Tab stop titled "Octave", the card listens to it for the right-click and MIDI Learn menu; it is card code (`ModuleComponentMidiKeyboardCard.cpp`), not a layout entry |
 | Math | Clip `segmented`; footer | — |
 | Comparator | unchanged (`threshold` view) | — |
 
@@ -761,7 +761,7 @@ tooltip naming the full parameter name when the label was shortened or renamed.
 - `segmented`: one Tab stop; Left/Right move the selection; role radio group; each segment titled.
 - `faderV` / `faderH`: arrow keys step, Shift+arrow fine, Home/End to range ends; value text as the
   accessible value.
-- `stepper`: − and + are separate buttons with titles ("Octave down", "Octave up").
+- `stepper`: ONE Tab stop titled after the parameter; Up/Down step; one element, value text as its value.
 - More row: a button titled "More controls (N)", Enter/Space unfolds it.
 - Tab strip (built): one Tab stop; Left/Right switch tabs and stop at the ends, Home/End jump to the
   first and last; the accent focus ring; titled "Control tabs" with a tooltip naming those keys; a

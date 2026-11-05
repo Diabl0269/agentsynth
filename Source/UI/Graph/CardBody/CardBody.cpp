@@ -15,6 +15,7 @@
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Graph/CardWidgets/CardStepper.h"
+#include "UI/Graph/CardWidgets/CardStepperBinding.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
@@ -503,34 +504,17 @@ void CardBody::createStepper(CardBodyItem& item, juce::AudioParameterInt& param)
     auto* stepper = new synth::ui::CardStepper(param.getName(100));
     widgets_.add(stepper);
     stepper->setComponentID(param.getName(100));
-    stepper->setTooltip(param.getName(100));
     card_.addAndMakeVisible(stepper);
     stepper->addMouseListener(&card_, true);
     card_.registerMidiLearnable(*stepper, &param);
     auto* attachment =
         paramAttachments_.add(new juce::ParameterAttachment(param, [stepper, &param, alive = widgetsAlive_](float) {
-            if (*alive)
-                stepper->setValueText(param.getCurrentValueAsText());
-        }));
-    stepper->onStep = [attachment, &param](int delta) {
-        const auto range = param.getRange();
-        const int next = juce::jlimit(range.getStart(), range.getEnd(), param.get() + delta);
-        if (next != param.get())
-            attachment->setValueAsCompleteGesture((float)next);
-    };
-    // A range too wide to walk one step at a time (the sequencers' Steps) can also be typed.
-    if (param.getRange().getLength() > 24) {
-        stepper->setTypable(true);
-        stepper->onTypedValue = [stepper, attachment, &param, alive = widgetsAlive_](const juce::String& text) {
             if (!*alive)
                 return;
-            const auto range = param.getRange();
-            const int typed = juce::jlimit(range.getStart(), range.getEnd(), text.getIntValue());
-            if (text.containsAnyOf("0123456789") && typed != param.get())
-                attachment->setValueAsCompleteGesture((float)typed);
+            stepper->setValue(param.get());
             stepper->setValueText(param.getCurrentValueAsText());
-        };
-    }
+        }));
+    synth::ui::bindStepperToParameter(*stepper, *attachment, param, widgetsAlive_);
     attachment->sendInitialUpdate();
     addCaption(item, param, juce::Justification::centredLeft);
     item.widget = stepper;

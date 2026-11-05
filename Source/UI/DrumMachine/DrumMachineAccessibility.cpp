@@ -73,7 +73,7 @@ void DrumMachineComponent::setupTabWalk() {
     tabWalk_->setShortcuts([this] { return shortcuts_; });
     tabWalk_->setStops([this] {
         return std::vector<juce::Component*>{&viewSwitch_, &playClipButton_, &showAllButton_, &stepsCombo_,
-                                             &swingKnob_,  &humaniseKnob_,   &ideasButton_};
+                                             &swingField_, &humaniseKnob_,   &ideasButton_};
     });
 }
 

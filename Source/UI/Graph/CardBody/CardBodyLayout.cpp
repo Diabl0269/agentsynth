@@ -8,6 +8,8 @@
 #include "CardBodyLayoutWalk.h"
 #include "CardBodyViews.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
+#include "UI/Graph/CardWidgets/CardStepper.h"
+#include <algorithm>
 #include <limits>
 
 namespace synth {
@@ -138,8 +140,14 @@ int layoutRunKind(Kind kind, const std::vector<cardbody::CaptionedWidget>& capti
         return cardbody::layoutCaptionedRows(captioned, cardbody::kFaderHHeight, true, y, g, apply);
     case Kind::Segmented:
         return cardbody::layoutCaptionedRows(captioned, cardbody::kRowHeight, true, y, g, apply);
-    case Kind::Stepper:
-        return cardbody::layoutCaptionedRows(captioned, cardbody::kRowHeight, false, y, g, apply);
+    case Kind::Stepper: {
+        const int end = cardbody::layoutCaptionedRows(captioned, cardbody::kRowHeight, false, y, g, apply);
+        if (apply)
+            for (const auto& row : captioned)
+                if (auto* stepper = dynamic_cast<synth::ui::CardStepper*>(row.first))
+                    stepper->setSize(std::min(stepper->getWidth(), stepper->getIdealWidth()), stepper->getHeight());
+        return end;
+    }
     case Kind::View:
         break;
     }

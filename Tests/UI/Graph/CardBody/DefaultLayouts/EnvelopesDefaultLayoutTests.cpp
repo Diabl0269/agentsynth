@@ -404,24 +404,21 @@ TEST(EnvelopesDefaultLayout, TheMidiKeyboardCardHasAnOctaveStepperRowAboveTheKey
     EXPECT_TRUE(card->getLocalBounds().contains(stepper->getBounds()));
     EXPECT_TRUE(card->getLocalBounds().contains(keys->getBounds()));
 
-    // Reachable and named: two Tab stops titled after the parameter, and a tooltip.
+    // Reachable and named: one Tab stop titled after the parameter, and a tooltip naming the gestures.
     EXPECT_EQ(stepper->getTitle(), "Octave");
-    EXPECT_EQ(stepper->getTooltip(), "Octave");
-    EXPECT_TRUE(stepper->getDownButton().getWantsKeyboardFocus());
-    EXPECT_TRUE(stepper->getUpButton().getWantsKeyboardFocus());
-    EXPECT_EQ(stepper->getDownButton().getTitle(), "Octave down");
-    EXPECT_EQ(stepper->getUpButton().getTitle(), "Octave up");
+    EXPECT_TRUE(stepper->getTooltip().startsWith("Octave: "));
+    EXPECT_TRUE(stepper->getWantsKeyboardFocus());
 
     // It drives the module's octave parameter, one change gesture per step, and follows external writes.
     auto* octave = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(canvas.processor(id), "octave"));
     ASSERT_NE(octave, nullptr);
     EXPECT_EQ(stepper->getValueText(), octave->getCurrentValueAsText());
-    stepper->getUpButton().onClick();
+    stepper->keyPressed(juce::KeyPress(juce::KeyPress::upKey));
     EXPECT_EQ(octave->get(), 1);
-    stepper->getUpButton().onClick();
-    stepper->getUpButton().onClick(); // clamped at the top of the range
+    stepper->keyPressed(juce::KeyPress(juce::KeyPress::upKey));
+    stepper->keyPressed(juce::KeyPress(juce::KeyPress::upKey)); // clamped at the top of the range
     EXPECT_EQ(octave->get(), 2);
-    stepper->getDownButton().onClick();
+    stepper->keyPressed(juce::KeyPress(juce::KeyPress::downKey));
     EXPECT_EQ(octave->get(), 1);
     EXPECT_EQ(stepper->getValueText(), octave->getCurrentValueAsText());
     setParam(*canvas.processor(id), "octave", -2.0f);
