@@ -196,7 +196,7 @@ TEST(DrumKitPadsCard, ThePadsAndTheirControlsHaveNamesAndTooltips) {
     const auto tabbable = scene.card().createKeyboardFocusTraverser()->getAllComponents(&scene.card());
     const auto at = [&](juce::Component* c) { return std::find(tabbable.begin(), tabbable.end(), c); };
     EXPECT_NE(at(&grid), tabbable.end());
-    EXPECT_LT(at(&scene.pads().stepper().getUpButton()), at(&grid)) << "the grid follows the stepper";
+    EXPECT_LT(at(&scene.pads().stepper()), at(&grid)) << "the grid follows the stepper";
     EXPECT_FALSE(scene.pads().stepper().getTooltip().isEmpty());
 
     scene.click(1, true);

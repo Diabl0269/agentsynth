@@ -58,6 +58,7 @@ const std::vector<Registered> kRegistered = {
     // No preview/commit split.
     {"RangeSlider", {"exempt: a slider that writes its value live while it drags"}},
     {"CardFader", {"exempt: a fader that writes its value live while it drags"}},
+    {"CardStepper", {"exempt: the value is written live inside one open gesture, the release only closes it"}},
     {"CardKnobSlider", {"exempt: a knob that writes its value live while it drags"}},
     {"MixerFaderSlider", {"exempt: a fader that writes its value live while it drags"}},
     {"ModCurveRangeHandle", {"exempt: the range is written live inside one open gesture, the release only closes it"}},

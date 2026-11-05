@@ -1,0 +1,55 @@
+# The drum machine's Swing is a number field in the header (a bar with < > arrows, the percent centred); each gesture
+# is one undo step on the clip.
+#
+# What a user does:
+#   1. Opens the project with a Drum Kit clip, presses the track's Drum machine button and looks at the header.
+#   2. Clicks the > arrow: Swing reads 1%. Holds it: it repeats after a pause. Drags the number up: 3 px a step.
+#   3. Double-clicks, types 50, presses Return: 50%. Cmd-clicks: back to 0%.
+#   4. Cmd+Z after a change brings back the value before it.
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+shift+t}
+  - wait: {}
+  - key: {keys: tab}
+  - key: {keys: tab}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 1500}
+  - expect: {id: "Swing state", value: 0, valueText: "0%"}
+  - screenshot: {id: timelineDrumMachine, name: 01-header}
+  - screenshot: {id: drumSwing, name: 02-field, scale: 4}
+  - getState: {id: "Swing state"}
+  - click: {id: drumSwing, x: 59, y: 9}
+  - wait: {}
+  - expect: {id: "Swing state", value: 1, valueText: "1%"}
+  - mouseDown: {id: drumSwing, x: 59, y: 9}
+  - expect: {id: "Swing state", repeating: true, within_ms: 1000}
+  - expect: {id: "Swing state", value: 6, within_ms: 3000}
+  - mouseUp: {id: drumSwing, x: 59, y: 9}
+  - wait: {}
+  - screenshot: {id: drumSwing, name: 03-after-hold, scale: 4}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "Swing state", value: 1}
+  - drag: {from: drumSwing, fromX: 33, fromY: 9, to: drumSwing, toX: 33, toY: -21}
+  - wait: {}
+  - expect: {id: "Swing state", value: 11}
+  - click: {id: drumSwing, clicks: 2}
+  - wait: {}
+  - expect: {id: "Swing state", editing: true, within_ms: 1000}
+  - screenshot: {id: drumSwing, name: 04-typing, scale: 4}
+  - type: {text: "50"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: "Swing state", value: 50, valueText: "50%"}
+  - screenshot: {id: timelineDrumMachine, name: 05-fifty}
+  - click: {id: drumSwing, mods: cmd}
+  - wait: {}
+  - expect: {id: "Swing state", value: 0}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "Swing state", value: 50}
+  - screenshot: {id: timelineDrumMachine, name: 06-undone}

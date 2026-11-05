@@ -4,5 +4,5 @@ type MidiKeyboard size 560x160
   child 2 drawableButton id="" at 534,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1
   child 3 component id="" at 10,60 540x90 visible=1 title="Keyboard" tip="" focusOrder=0 wantsFocus=1
   child 4 label id="" at 10,32 52x24 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
-  child 5 component id="Octave" at 62,32 132x24 visible=1 title="Octave" tip="Octave" focusOrder=0 wantsFocus=0
+  child 5 component id="Octave" at 62,32 88x24 visible=1 title="Octave" tip="Octave: click an arrow or press Up and Down to step, hold to repeat, drag the number (Shift for fine), double-click to type, Cmd-click to reset" focusOrder=0 wantsFocus=1
   child 6 component id="" at 544,32 12x12 visible=1 title="Midi output" tip="" focusOrder=0 wantsFocus=0

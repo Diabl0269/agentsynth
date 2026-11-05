@@ -7,7 +7,7 @@ opens the roll. It edits the same notes the roll shows, so a clip can be viewed 
 ## What it shows
 
 - A header strip: the clip name, a "Drum machine | Piano roll" switch, "Play clip", "Show all drums", the
-  Steps per bar dropdown (8, 16, 32, 64), the Swing and Humanise knobs and the Ideas button.
+  Steps per bar dropdown (8, 16, 32, 64), the Swing field, the Humanise knob and the Ideas button.
 - One row per drum: a coloured dot, the name (a button: click it to pick the row the lanes under the grid edit, drawn
   in the accent colour while picked, Kick at first), and Mute (M) and Solo (S) toggles. The default rows are Kick, Snare,
   Clap, Closed hat, Open hat, Tom, Cymbal, Cowbell; "Show all drums" adds the rest of the General MIDI drum map.
@@ -95,11 +95,16 @@ pitch is not. They never write `MidiNote::muted`, which stays the piano roll's p
 
 ## Swing
 
-The Swing knob in the header reads 0% (straight, stored `Clip::swing` 0.5) to 100% (the full shuffle, stored 0.75), so
-the stored value is `0.5 + percent / 400` and the knob shows `(swing - 0.5) * 400` (a clip stored at 0.66 reads 64%). It
-sets the clip's swing, one undo step per turn: a drag or key press commits on release, a double-click resets to 0%. A
-linked group shares it (`syncLinkedClips`); split, duplicate and copy/paste carry it. It is saved only when it is not 0.5.
-The knob's text, tooltip ("Swing: push every second step later (0% is straight)") and spoken value all use the percent.
+The Swing field in the header is a `CardStepper` number field (the horizontal "Look B" bar with a range fill, `<` `>`
+arrows and the percent centred; [module-card.md](../layout/module-card.md#faders-switches-and-steppers)). It reads 0%
+(straight, stored `Clip::swing` 0.5) to 100% (the full shuffle, stored 0.75), so the stored value is
+`0.5 + percent / 400` and the field shows `(swing - 0.5) * 400` (a clip stored at 0.66 reads 64%). It is one Tab stop:
+Up/Down or Left/Right step 1%, a click on an arrow steps, holding it repeats (0.4 s pause, then faster), dragging the
+number steps about every 3 px (Shift: fine), a double-click (or Enter, or a digit key) types the percent in place (Enter
+commits, Escape cancels) and Cmd-click resets to 0%. Each gesture (a click, a hold, a drag, a key press, a typed value, a
+reset) is one undo step, committed when it ends. A linked group shares it (`syncLinkedClips`); split, duplicate and
+copy/paste carry it. It is saved only when it is not 0.5. The tooltip names the gestures and the spoken value is the
+percent.
 
 Swing is applied in `TimelineSnapshot::buildFrom` and never written into the notes. The steps of the clip's grid are
 counted from 0; a note whose clip-relative start is on an ODD step (within 1e-6 of a step) starts later by
@@ -234,7 +239,7 @@ undo step with exactly the previewed length; dragging to or past the clip's end 
 256 steps stops at 256, the model's cap); Escape drops the drag. Right-clicking a row's name (or Shift+F10, the shared
 `openContextMenu` action, on a focused name or on the grid's focused row) opens a menu: Length (Clip length, then 1 step
 to the clip's step count, the current one ticked; the clip's own count is the same as Clip length), Swing (Clip swing,
-then 0% to 100% in tens, the same mapping as the Swing knob) and Reset (clears both, one undo step). Each choice is one
+then 0% to 100% in tens, the same mapping as the Swing field) and Reset (clears both, one undo step). Each choice is one
 undo step and is announced. A right-click on a name opens the menu without selecting the row.
 
 **Keys.** Four rebindable actions in the Drum Machine category act on the row of the focused name button, else the

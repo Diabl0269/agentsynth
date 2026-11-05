@@ -8,6 +8,7 @@
 #include "DrumRowLabels.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
+#include "UI/Graph/CardWidgets/CardStepper.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
@@ -189,7 +190,7 @@ public:
     /** The clip's humanise, 0 to 1; set through the clip, one undo step. The knob reads it as 0 to 100%. */
     double getHumanise() const noexcept { return humanise_; }
     void setHumanise(double amount);
-    CardKnobSlider& getSwingKnob() noexcept { return swingKnob_; }
+    CardStepper& getSwingField() noexcept { return swingField_; }
     CardKnobSlider& getHumaniseKnob() noexcept { return humaniseKnob_; }
     /** The knob positions (percent) of a clip's swing and back: 0.5 is 0%, 0.75 is 100%. */
     static double swingToPercent(double swing) noexcept { return (swing - synth::Clip::kStraightSwing) * 400.0; }
@@ -401,6 +402,7 @@ private:
     void paintPlayhead(juce::Graphics& g);
     void paintLaneCaption(juce::Graphics& g);
     void layoutToolbar();
+    int swingFieldWidth() const;
 
     // DrumMachineGroove.cpp
     void setupGroove();
@@ -408,7 +410,9 @@ private:
                           const juce::String& tooltip, const juce::Rectangle<int>& valueBounds, bool& dragging,
                           bool& updating, std::function<void()> commit);
     void refreshGroove();
-    void commitSwingKnob();
+    void setupSwing();
+    void commitSwingField();
+    void showSwing();
     void commitHumaniseKnob();
     void flushSwungFlashes(double relativeBeat);
     void flashStepHits(int step);
@@ -507,7 +511,7 @@ private:
     double swing_ = synth::Clip::kStraightSwing;
     int selectedPitch_ = kDefaultSelectedPitch;
     double humanise_ = 0.0;
-    bool swingDragging_ = false, updatingKnob_ = false;
+    bool swingGesture_ = false;
     bool humaniseDragging_ = false, updatingHumanise_ = false;
     std::vector<int> pendingSwung_; ///< swung steps the playhead entered whose hits have not reached their time yet
 
@@ -549,13 +553,13 @@ private:
     juce::TextButton showAllButton_{"Show all drums"};
     juce::TextButton playClipButton_{"Play clip"};
     juce::TextButton ideasButton_{"Ideas"};
-    CardKnobSlider swingKnob_;
+    CardStepper swingField_{"Swing"};
     CardKnobSlider humaniseKnob_;
     LaneChipRow chips_;
     std::unique_ptr<EditorTabWalk> tabWalk_; // UI/Layout/EditorTabWalk.h
     std::array<LaneBand, kDrumLaneKindCount> bands_;
     DrumRowLabels labels_;
-    juce::Rectangle<int> nameBounds_, stepsCaptionBounds_, swingCaptionBounds_, swingValueBounds_, forBounds_;
+    juce::Rectangle<int> nameBounds_, stepsCaptionBounds_, swingCaptionBounds_, forBounds_;
     juce::Rectangle<int> humaniseCaptionBounds_, humaniseValueBounds_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrumMachineComponent)

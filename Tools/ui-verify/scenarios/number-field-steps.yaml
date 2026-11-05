@@ -1,0 +1,84 @@
+# The sequencer's Steps is a number field: one Tab stop with < > arrows, a range fill and the value centred, and every
+# way to change it is one undo step.
+#
+# What a user does:
+#   1. Opens a project with a Sequencer card and looks at the Steps field (8 by default) (a narrow bar, the number vertically centred).
+#   2. Clicks the > arrow (Steps goes up by one) and the < arrow (back down).
+#   3. Holds the > arrow: after a short pause it repeats; letting go stops it.
+#   4. Drags the number upwards (about 2.4 px a step on its 1 to 128 range); Shift-drags it (finer).
+#   5. Double-clicks the number, types 12 and presses Return; double-clicks again, types 40 and presses Escape (cancelled).
+#   6. Cmd-clicks the number: back to the default (8).
+#   7. Focuses the field and presses Up and Down.
+#   8. Presses Cmd+Z: the last change is undone, one gesture at a time.
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
+  - wait: {}
+  - getState: {id: "card:Sequencer > Steps state"}
+  - expect: {id: "card:Sequencer > Steps state", value: 8, valueText: "8"}
+  - screenshot: {id: "card:Sequencer", name: 01-card}
+  - screenshot: {id: "card:Sequencer > Steps", name: 02-field, scale: 4}
+  # Click the arrows.
+  - click: {id: "card:Sequencer > Steps", x: 70, y: 12}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 9}
+  - click: {id: "card:Sequencer > Steps", x: 12, y: 12}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 8}
+  # Hold the up arrow: it repeats after the pause and stops on release.
+  - mouseDown: {id: "card:Sequencer > Steps", x: 70, y: 12}
+  - expect: {id: "card:Sequencer > Steps state", repeating: true, within_ms: 1000}
+  - expect: {id: "card:Sequencer > Steps state", value: 12, within_ms: 3000}
+  - mouseUp: {id: "card:Sequencer > Steps", x: 70, y: 12}
+  - getState: {id: "card:Sequencer > Steps state"}
+  - expect: {id: "card:Sequencer > Steps state", repeating: false}
+  - screenshot: {id: "card:Sequencer > Steps", name: 03-after-hold, scale: 4}
+  # Cmd-click resets, then drag the number up (10 steps), then down with Shift (fine).
+  - click: {id: "card:Sequencer > Steps", mods: cmd}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 8}
+  - drag: {from: "card:Sequencer > Steps", fromX: 41, fromY: 12, to: "card:Sequencer > Steps", toX: 41, toY: -12}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 18}
+  - screenshot: {id: "card:Sequencer > Steps", name: 04-after-drag, scale: 4}
+  - drag: {from: "card:Sequencer > Steps", fromX: 41, fromY: 12, to: "card:Sequencer > Steps", toX: 41, toY: 52, mods: shift}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 16}
+  # Type a value: Return commits, Escape cancels.
+  - click: {id: "card:Sequencer > Steps", clicks: 2}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", editing: true, within_ms: 1000}
+  - screenshot: {id: "card:Sequencer > Steps", name: 05-typing, scale: 4}
+  - type: {text: "12"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 12, editing: false}
+  - click: {id: "card:Sequencer > Steps", clicks: 2}
+  - wait: {}
+  - type: {text: "40"}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 12, editing: false}
+  # Keys (a press on the number only focuses it).
+  - click: {id: "card:Sequencer > Steps"}
+  - key: {keys: up}
+  - key: {keys: up}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 13}
+  - screenshot: {id: "card:Sequencer > Steps", name: 06-after-keys, scale: 4}
+  # Undo: each key press is its own step, then the typed value, then the drags.
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 14}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 13}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 12}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:Sequencer > Steps state", value: 16}
+  - screenshot: {id: "card:Sequencer", name: 07-undone}
