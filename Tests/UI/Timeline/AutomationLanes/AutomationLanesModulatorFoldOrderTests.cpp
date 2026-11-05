@@ -1,6 +1,6 @@
 // AutomationLanesModulatorFoldOrderTests.cpp -- the fold arrow on a modulator row (a real click, Return/Space,
 // Left/Right: one line tall, the band following, the controls hidden, the names following) and the order of a lane's
-// modulator rows (rows sorted by the order stored with the lane; Cmd+Alt+Up/Down through the row's, a control's and the
+// modulator rows (rows sorted by the order stored with the lane; Alt+Up/Down through the row's, a control's and the
 // band's key handlers moves a row one slot as one undo step and keeps the same row object). Against a stub host,
 // headless.
 
@@ -49,10 +49,7 @@ struct ModScene {
     const std::vector<juce::String>& stored(synth::LaneId lane) { return f().doc.getLane(lane)->modulatorOrder; }
 };
 
-juce::KeyPress commandAlt(int keyCode) {
-    return juce::KeyPress(keyCode,
-                          juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier), 0);
-}
+juce::KeyPress altArrow(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::altModifier, 0); }
 const juce::StringArray kOneTwoThree{"lfo-1", "lfo-2", "lfo-3"};
 } // namespace
 
@@ -222,14 +219,14 @@ TEST(AutomationLanesModulatorOrderTest, RowsFollowTheOrderStoredWithTheLaneListe
     EXPECT_EQ(s.stored(s.cutoff).size(), 3u) << "a stale key is ignored, not pruned on read";
 }
 
-TEST(AutomationLanesModulatorOrderTest, CmdAltDownOnTheRowMovesItOneSlotKeepsTheSameRowAndIsOneUndoStep) {
+TEST(AutomationLanesModulatorOrderTest, AltDownOnTheRowMovesItOneSlotKeepsTheSameRowAndIsOneUndoStep) {
     ModScene s;
     auto* moved = s.row(0);
     auto* movedBand = s.band(0);
     auto* other = s.row(1);
     const auto otherLane = s.sources(s.res);
 
-    EXPECT_TRUE(moved->keyPressed(commandAlt(juce::KeyPress::downKey)));
+    EXPECT_TRUE(moved->keyPressed(altArrow(juce::KeyPress::downKey)));
     EXPECT_EQ(s.sources(), (juce::StringArray{"lfo-2", "lfo-1", "lfo-3"}));
     EXPECT_EQ(s.row(1), moved) << "the same row object (and so its keyboard focus) took the new slot";
     EXPECT_EQ(s.band(1), movedBand);
@@ -250,8 +247,8 @@ TEST(AutomationLanesModulatorOrderTest, CmdAltDownOnTheRowMovesItOneSlotKeepsThe
 
 TEST(AutomationLanesModulatorOrderTest, TheFirstRowUpAndTheLastRowDownDoNothingButStillOwnTheKey) {
     ModScene s;
-    EXPECT_TRUE(s.row(0)->keyPressed(commandAlt(juce::KeyPress::upKey)));
-    EXPECT_TRUE(s.row(2)->keyPressed(commandAlt(juce::KeyPress::downKey)));
+    EXPECT_TRUE(s.row(0)->keyPressed(altArrow(juce::KeyPress::upKey)));
+    EXPECT_TRUE(s.row(2)->keyPressed(altArrow(juce::KeyPress::downKey)));
     EXPECT_EQ(s.sources(), kOneTwoThree);
     EXPECT_FALSE(s.f().undo.canUndo()) << "nothing moved, nothing recorded";
     EXPECT_TRUE(s.stored(s.cutoff).empty());
@@ -261,11 +258,11 @@ TEST(AutomationLanesModulatorOrderTest, TheKeyWorksFromARowsControlsAndFromItsBa
     ModScene s;
     auto* row = s.row(1);
     // A combo would take Up/Down itself: the row's key listener is offered the key first.
-    EXPECT_TRUE(row->keyPressed(commandAlt(juce::KeyPress::upKey), &row->getShapeCombo()));
+    EXPECT_TRUE(row->keyPressed(altArrow(juce::KeyPress::upKey), &row->getShapeCombo()));
     EXPECT_EQ(s.sources(), (juce::StringArray{"lfo-2", "lfo-1", "lfo-3"}));
     EXPECT_EQ(s.row(0), row);
 
-    EXPECT_TRUE(s.band(0)->keyPressed(commandAlt(juce::KeyPress::downKey)))
+    EXPECT_TRUE(s.band(0)->keyPressed(altArrow(juce::KeyPress::downKey)))
         << "from the band, where a bare Up/Down nudges the amount";
     EXPECT_EQ(s.sources(), kOneTwoThree);
 
@@ -279,7 +276,7 @@ TEST(AutomationLanesModulatorOrderTest, TheMoveKeysAreTheRebindableLaneMoveActio
     ShortcutManager shortcuts;
     s.f().panel.setShortcutManager(&shortcuts);
     shortcuts.setBinding("timelineMoveLaneDown", juce::KeyPress('j', juce::ModifierKeys::altModifier, 0));
-    EXPECT_FALSE(s.row(0)->keyPressed(commandAlt(juce::KeyPress::downKey))) << "the default no longer moves";
+    EXPECT_FALSE(s.row(0)->keyPressed(altArrow(juce::KeyPress::downKey))) << "the default no longer moves";
     EXPECT_TRUE(s.row(0)->keyPressed(juce::KeyPress('j', juce::ModifierKeys::altModifier, 0)));
     EXPECT_EQ(s.sources(), (juce::StringArray{"lfo-2", "lfo-1", "lfo-3"}));
     s.f().panel.setShortcutManager(nullptr);
@@ -289,7 +286,7 @@ TEST(AutomationLanesModulatorOrderTest, TheFoldStateTravelsWithTheRowWhenItMoves
     ModScene s;
     s.row(0)->keyPressed(juce::KeyPress(juce::KeyPress::leftKey));
     auto* folded = s.row(0);
-    folded->keyPressed(commandAlt(juce::KeyPress::downKey));
+    folded->keyPressed(altArrow(juce::KeyPress::downKey));
     EXPECT_EQ(s.row(1), folded);
     EXPECT_TRUE(s.f().panel.getAutomationLanes().isModulatorCollapsed(s.cutoff, 1));
     EXPECT_FALSE(s.f().panel.getAutomationLanes().isModulatorCollapsed(s.cutoff, 0));
@@ -337,7 +334,7 @@ TEST(AutomationLanesModulatorOrderTest,
         const int oldNeighbour = neighbour->getY();
         const int newMoved = oldNeighbour;
 
-        EXPECT_TRUE(moved->keyPressed(commandAlt(juce::KeyPress::downKey)));
+        EXPECT_TRUE(moved->keyPressed(altArrow(juce::KeyPress::downKey)));
         EXPECT_TRUE(lanes.isModulatorGlideAnimating());
         EXPECT_EQ(s.row(1), moved);
         EXPECT_EQ(moved->getY(), oldMoved) << "starts where it stood";
@@ -361,7 +358,7 @@ TEST(AutomationLanesModulatorOrderTest,
         ModScene s;
         auto* moved = s.row(0);
         const int newY = s.row(1)->getY();
-        EXPECT_TRUE(moved->keyPressed(commandAlt(juce::KeyPress::downKey)));
+        EXPECT_TRUE(moved->keyPressed(altArrow(juce::KeyPress::downKey)));
         EXPECT_FALSE(s.f().panel.getAutomationLanes().isModulatorGlideAnimating());
         EXPECT_EQ(moved->getY(), newY);
     }

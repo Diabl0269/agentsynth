@@ -282,7 +282,15 @@ void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::La
         band->setModulator(info, lane, parameterName);
         bodies_->addAndMakeVisible(*band);
         entry.bands.push_back(std::move(band));
-        if (known.count(info.key()) == 0) {
+        if (known.count(info.key()) == 0 && landing_.active && lane == landing_.lane && landing_.newKey.isEmpty()) {
+            // The row a drop or the keyboard moved here: the same row to the user, so it is drawn at once (no fade)
+            // and takes the slot the drag already opened for it, growing the rest of the way.
+            landing_.newKey = info.key();
+            if (growNewRows && canAnimateBlocks() && landing_.presence < 1.0f) {
+                arriving_[rowMotionKey(lane, info.key())] = {landing_.presence, 1.0f, landing_.presence};
+                startBlockMotion();
+            }
+        } else if (known.count(info.key()) == 0) {
             // A new routing's row and band come in with a fade, and grow from nothing in a lane already on screen; off
             // screen they simply land shown.
             if (growNewRows)
@@ -319,7 +327,10 @@ void TimelineAutomationLanes::retireModulatorRows(LaneModulators& entry, synth::
         leaving->lane = lane;
         leaving->slot = stayingAbove;
         leaving->height = modulatorRowHeightFor(lane, (int)i) + trayExtentOf(lane, (int)i);
-        leaving->presence = shrink ? FoldTween{1.0f, 0.0f, 1.0f} : FoldTween{0.0f, 0.0f, 0.0f};
+        // A row moved away by a drag left a gap the drag already closed part of: it closes from there.
+        const float open =
+            landing_.active && entry.infos[i].key() == droppedRoutingKey_ ? 1.0f - landing_.closure : 1.0f;
+        leaving->presence = shrink ? FoldTween{open, 0.0f, open} : FoldTween{0.0f, 0.0f, 0.0f};
         started = started || shrink;
         entry.rows[i]->setLift(0.0f);
         leaving->row = std::move(entry.rows[i]);

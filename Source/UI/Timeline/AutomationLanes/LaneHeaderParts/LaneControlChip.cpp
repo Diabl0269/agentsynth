@@ -176,7 +176,7 @@ void LaneControlChip::mouseUp(const juce::MouseEvent& e) {
 
 // Return and Space press at once (juce::Button posts Return's click to the message queue and has no Space handling).
 // In edit mode the strip takes Left/Right, Alt+Left/Right, Space and Esc first. Every other key (Up/Down,
-// Cmd+Alt+Up/Down) bubbles to the header.
+// Alt+Up/Down) bubbles to the header.
 bool LaneControlChip::keyPressed(const juce::KeyPress& key) {
     if (onEditKey && onEditKey(*this, key))
         return true;
