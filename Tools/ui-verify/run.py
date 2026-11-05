@@ -8,7 +8,7 @@ screenshots it takes, writes a JSON-lines run log and prints a summary. The exit
 failed. The format is described in docs/development/test-mode.md (Scenarios).
 
 A scenario file is either a list of steps or a mapping with `steps:` and optional `settings:` (values, with ${FIXTURES} and ${OUT} filled in, written to the
-instance's settings file before it first starts), `motion: true` (start with --automation-motion), `record: true` (<out>/<scenario>.mp4, no sound),
+instance's settings file before it first starts), `motion: true` (start with --automation-motion), `record: true` (<out>/<scenario>.mp4, no sound; `record_target: {id: <component id>, scale: N}` films that component instead of the window),
 `save_project: <name>` (<out>/<name>.agsproj, saved after the last step) and `stale_pixel_check: true` (after every step
 that can change the window, what the window shows must equal a full repaint; a mapping {ignore: [ids], settle_ms: N}
 masks components and sets how long paints may settle). One mapping per step, `- <command>: {args}`:
@@ -61,7 +61,7 @@ class ScenarioError(ValueError):
 
 class Scenario:
     def __init__(self, name, steps, settings, path=None, motion=False, record=False, save_project=None,
-                 stale_pixel_check=None):
+                 stale_pixel_check=None, record_target=None):
         self.name = name
         self.steps = steps  # [(command, args dict)]
         self.settings = settings  # {name: value}
@@ -70,6 +70,7 @@ class Scenario:
         self.record = record  # write <out>/<name>.mp4
         self.save_project = save_project  # write <out>/<save_project>.agsproj after the last step
         self.stale_pixel_check = stale_pixel_check  # None, or {"ignore": [ids], "settle_ms": N}
+        self.record_target = record_target  # None (the main window), or {"id": component id, "scale": N} to film one
 
 
 def _substitute(value, variables):
@@ -105,6 +106,16 @@ def _stale_pixel_option(value, name):
     return dict(value)
 
 
+def _record_target_option(value, name):
+    """`record_target: {id: <component id>, scale: N}`: film that component (a popover is a window of its own) instead of
+    the main window."""
+    if value is None:
+        return None
+    if not isinstance(value, dict) or not isinstance(value.get("id"), str):
+        raise ScenarioError("%s: `record_target` must be a mapping with an `id`" % name)
+    return {"id": value["id"], "scale": float(value.get("scale", 1))}
+
+
 def parse_scenario(text, name="scenario", path=None):
     """Parses scenario YAML. A step is a mapping with exactly one key (the command); its value is the args mapping."""
     import yaml
@@ -115,11 +126,12 @@ def parse_scenario(text, name="scenario", path=None):
         raise ScenarioError("%s: not valid YAML: %s" % (name, error))
     settings = {}
     motion = record = False
-    save_project = stale = None
+    save_project = stale = record_target = None
     if isinstance(document, dict):
         stale = _stale_pixel_option(document.get("stale_pixel_check"), name)
         motion = bool(document.get("motion"))
         record = bool(document.get("record"))
+        record_target = _record_target_option(document.get("record_target"), name)
         if document.get("save_project") is not None:
             save_project = _project_name(document["save_project"], name)
         settings = document.get("settings") or {}
@@ -138,7 +150,7 @@ def parse_scenario(text, name="scenario", path=None):
         if not isinstance(args, dict):
             raise ScenarioError("%s: step %d (%s) takes a mapping of arguments, got %r" % (name, index, command, args))
         steps.append((str(command), args))
-    return Scenario(name, steps, settings, path, motion, record, save_project, stale)
+    return Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target)
 
 
 def load_scenarios(target):
@@ -408,7 +420,7 @@ class Runner:
         if self.scenario.record:
             frames_dir = os.path.join(self.settings_dir, "video-frames")
             os.makedirs(frames_dir)
-            self.recorder = Recorder(frames_dir)
+            self.recorder = Recorder(frames_dir, self.scenario.record_target)
         try:
             passed, message = self._run_steps()
             # A failed run saves too: the project and the video are how someone looks at what went wrong.

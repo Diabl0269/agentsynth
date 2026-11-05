@@ -27,7 +27,7 @@ Contents, top to bottom:
   the new scale the clip's own key at the current root;
 - a **"Show only scale notes"** toggle — the same flag the roll's funnel chip drives, see **Show
   Only Scale Notes has one writer**;
-- a **Note range** picker (`Source/UI/Layout/NoteRangePicker/`, [note-range-picker.md](../layout/note-range-picker.md): a four-octave keyboard strip, drag an edge to add or remove notes, drag the middle to move the range; it follows the panel's scale, and its root: a change of root moves both ends by the nearest step,
+- a **Note range** picker (`Source/UI/Layout/NoteRangePicker/`, [note-range-picker.md](../layout/note-range-picker.md): a keyboard strip that scrolls over every note, drag an edge to add or remove notes, drag the middle to move the range, click empty keys to move it there; it follows the panel's scale, and its root: a change of root moves both ends by the nearest step,
 `synth::rangeFollowingRoot`, so C2 to C5, the default, reads D2 to D5 in D) plus a **Generate** button with an **"Add to existing"** toggle
   under it. The toggle sits under the button rather than beside it because at `kScalePanelWidth` a
   button-plus-checkbox row truncates the label the button's meaning depends on.

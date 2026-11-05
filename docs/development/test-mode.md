@@ -201,13 +201,14 @@ Two more scenario options leave what someone needs to look at a run in seconds, 
 
 ```yaml
 record: true          # <out>/<scenario>.mp4
+record_target: {id: randomizeRangePicker, scale: 4}   # optional: film this component (zoomed) instead of the main window
 save_project: end     # <out>/end.agsproj, saved after the last step
 steps: ...
 ```
 
 `record` takes a window `screenshot` after each step that can change the window, joined by ffmpeg, so it needs no Screen
 Recording permission and works on hidden windows. It has no sound: for an audio check, attach an offline render's WAV.
-Each frame holds 0.8 s. The protocol answers one command at a time, so a recorded `drag` is sent as `mouseDown`,
+`record_target` films one component instead (a popover is a window of its own, so the main window never shows it); `scale` renders it larger. Each frame holds 0.8 s. The protocol answers one command at a time, so a recorded `drag` is sent as `mouseDown`,
 `mouseMoveHeld` per step and `mouseUp` with a frame after each (0.1 s each, ten a second): the same gesture, only slower
 in real time. A drag with an end outside the main window stays one command and shows only its result. Without ffmpeg
 the run prints a warning and still passes. A failed scenario keeps both: they show what went wrong. `save_project` is a plain

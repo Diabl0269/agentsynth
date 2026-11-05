@@ -74,7 +74,7 @@ StepGridRandomizePanel::StepGridRandomizePanel(const sequencer_ops::RandomizeSet
     addAndMakeVisible(roll_);
 
     densityValue_.setText(juce::String(juce::roundToInt(settings_.density * 100.0f)) + "%", juce::dontSendNotification);
-    setSize(kWidth, 206);
+    setSize(kWidth, 172 + NoteRangePicker::kPreferredHeight);
     applyColours();
 }
 
