@@ -27,6 +27,7 @@ void MacroCardComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("collapsed", macro != nullptr && macro->collapsed);
     into.setProperty("members", macro != nullptr ? static_cast<int>(macro->members.size()) : 0);
     into.setProperty("renaming", isRenamingTitle());
+    into.setProperty("colour", macro != nullptr ? macro->colour.toDisplayString(false) : juce::String());
 }
 
 void MacroCardComponent::paint(juce::Graphics& g) {

@@ -228,6 +228,10 @@ public:
     std::function<bool(const juce::String& macroId, juce::Colour colour, const std::function<void()>& recolourMutation)>
         recordMacroColourHook;
     void setMacroColour(const juce::String& macroId, juce::Colour colour);
+    /** A macro's colour was written straight at the MacroSet (a live picker frame, a track mirror, a restore): re-syncs
+     *  and repaints every card so the canvas wears it on that frame. */
+    void refreshCardColours();
+    int getCardColourRefreshesForTest() const noexcept { return cardColourRefreshes_; }
     void deleteMacroAndMembers(const juce::String& macroId);
     /** The canvas menu's Delete Macro: `onDeleteMacrosRequested` gets first refusal, else deleteMacroAndMembers. */
     void requestDeleteMacro(const juce::String& macroId);
@@ -612,6 +616,7 @@ private:
     void routeFreshEdgesThroughMacroPorts(std::set<juce::AudioProcessorGraph::Connection> fresh,
                                           MacroPortShape stereoShape = MacroPortShape::Stereo);
     GraphCanvasHost& host_;
+    int cardColourRefreshes_ = 0;
     InsertGap insertGap_{host_, *this};
     JUCE_DECLARE_WEAK_REFERENCEABLE(MacroGroupController)
 

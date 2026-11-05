@@ -769,6 +769,14 @@ void MacroGroupController::setMacroColour(const juce::String& macroId, juce::Col
     host_.requestRepaint();
 }
 
+void MacroGroupController::refreshCardColours() {
+    ++cardColourRefreshes_;
+    host_.syncMacroCards();
+    for (auto* card : host_.macroCards())
+        card->repaint();
+    host_.requestRepaint();
+}
+
 namespace {
 // Every module a macro's card lists: its transitive members in stable order, minus port nodes.
 std::vector<juce::String> previewableMembers(const synth::MacroSet& macros, const juce::String& macroId) {

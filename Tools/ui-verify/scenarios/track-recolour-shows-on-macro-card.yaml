@@ -1,0 +1,29 @@
+# Bug: while the track colour picker was open, the track's channel macro card on the canvas lagged a frame behind (and the
+# other way round), so the two showed different colours.
+#
+# What a user does:
+#   1. Starts a new project, opens the bottom panel and adds an Oscillator track (its channel macro card is on the canvas).
+#   2. Clicks the track header and presses Alt+C (Recolour Focused Item): the colour picker opens.
+#   3. Picks the green favourite: the track header and the macro card turn green together.
+#   4. Clicks away to close the picker: the colour stays on both.
+record: true
+save_project: track-recolour-shows-on-macro-card
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - wait: {}
+  - screenshot: {id: window, name: 1-before}
+  - click: {id: window, x: 175, y: 760}                         # empty space in the track header: it takes the keyboard
+  - key: {keys: alt+c}
+  - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
+  - click: {id: colourPickerPopup, x: 70, y: 380}               # the green favourite
+  - wait: {settleMs: 500}
+  - screenshot: {id: window, name: 2-picked-green-live}
+  - click: {id: window, x: 900, y: 500}                         # click away: the picker closes and keeps the colour
+  - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}
+  - wait: {settleMs: 500}
+  - screenshot: {id: window, name: 3-closed-both-green}

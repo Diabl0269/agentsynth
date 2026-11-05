@@ -24,10 +24,12 @@
 #include "Modules/ChannelStripModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Mixer/MixerMeterScale.h"
 #include "UI/Theme/Theme.h"
 #include "UI/Timeline/ChannelChipComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackChannelLinkController.h"
 #include "UI/Timeline/TrackColourPicker.h"
@@ -181,6 +183,26 @@ struct LinkRigApp {
         patch.render(blocks);
     }
 };
+
+// The colour a macro card actually paints on its left border, read back from a software render of the card.
+juce::Colour cardBorderColour(GraphEditor& editor, const juce::String& macroId) {
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    if (card == nullptr || card->getWidth() <= 2 || card->getHeight() <= 2)
+        return juce::Colours::transparentBlack;
+    juce::Image img(juce::Image::ARGB, card->getWidth(), card->getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(img);
+    card->paintEntireComponent(g, false);
+    return img.getPixelAt(1, card->getHeight() / 2).withAlpha(1.0f);
+}
+
+// Pure red/green/blue: the dominant channel is what a user sees, whatever the border's antialiasing blends in.
+int dominantChannel(juce::Colour c) {
+    if (c.getRed() > c.getGreen() && c.getRed() > c.getBlue())
+        return 0;
+    if (c.getGreen() > c.getRed() && c.getGreen() > c.getBlue())
+        return 1;
+    return c.getBlue() > c.getRed() && c.getBlue() > c.getGreen() ? 2 : -1;
+}
 
 } // namespace
 
@@ -759,4 +781,59 @@ TEST_F(ChannelFlowTest, ABulkColourPickRecoloursEverySelectedTrackAndTheMacrosTh
     EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, originalLead);
     EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->colour, originalDrums);
     EXPECT_FALSE(rig.undo.canUndo()) << "one Cmd+Z undid every track and macro";
+}
+
+// Regression test for FRO1169: a track's recolour showed on its macro card only on the next edit, not on each picker
+// frame.
+TEST_F(ChannelFlowTest, TrackPickerPreviewRecoloursTheMacroCardOnEveryTick) {
+    LinkRigApp rig;
+    auto picker = rig.header(rig.lead).createColourPickerForTest();
+    ASSERT_NE(picker, nullptr);
+
+    const juce::Colour ticks[] = {juce::Colours::red, juce::Colours::green, juce::Colours::blue};
+    for (int i = 0; i < 3; ++i) {
+        const int before = rig.editor.getMacroController().getCardColourRefreshesForTest();
+        picker->setCurrentColourForTest(ticks[i]);
+        EXPECT_GT(rig.editor.getMacroController().getCardColourRefreshesForTest(), before)
+            << "the cards are re-synced on tick " << i;
+        EXPECT_EQ(dominantChannel(cardBorderColour(rig.editor, rig.leadMacroId)), i) << "tick " << i << " shows";
+    }
+}
+
+TEST_F(ChannelFlowTest, MacroPickerPreviewRecoloursTheTrackHeaderOnEveryTick) {
+    LinkRigApp rig;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&rig.doc);
+    panel.setTrackHeaderHost(&rig.host);
+    panel.setSize(900, 500);
+    auto* header = panel.getTrackHeaderAt(0); // Lead is the first track
+    ASSERT_NE(header, nullptr);
+    ASSERT_EQ(header->getTrackId().value, rig.lead.value);
+
+    auto picker = rig.editor.createMacroColourPickerForTest(rig.leadMacroId);
+    ASSERT_NE(picker, nullptr);
+    for (const auto colour : {juce::Colours::red, juce::Colours::green}) {
+        picker->setCurrentColourForTest(colour);
+        EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, colour.getARGB());
+        EXPECT_EQ(header->getResolvedColour().getARGB(), colour.getARGB()) << "the header swatch follows the tick";
+    }
+}
+
+TEST_F(ChannelFlowTest, UndoAfterAColourCommitRestoresTheCardAndTheHeader) {
+    LinkRigApp rig;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&rig.doc);
+    panel.setTrackHeaderHost(&rig.host);
+    panel.setSize(900, 500);
+    auto* header = panel.getTrackHeaderAt(0);
+    ASSERT_NE(header, nullptr);
+    const auto originalHeader = header->getResolvedColour();
+    const int originalCard = dominantChannel(cardBorderColour(rig.editor, rig.leadMacroId));
+
+    auto picker = rig.header(rig.lead).createColourPickerForTest();
+    picker->setCurrentColourForTest(juce::Colours::blue);
+    picker.reset(); // the commit
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_EQ(header->getResolvedColour(), originalHeader);
+    EXPECT_EQ(dominantChannel(cardBorderColour(rig.editor, rig.leadMacroId)), originalCard);
 }

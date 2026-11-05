@@ -191,6 +191,9 @@ the mixer column colour always match, because a channel's colour IS its macro's 
   every drag frame with no undo step; a close with no net change restores both; a commit is **one** graph +
   timeline + macro step, so one `Cmd+Z` restores both. The macro half joins `MacroGroupController`'s
   `makeMacroColourMirror` / `recordMacroColourHook`, the same way a rename joins `recordMacroRenameHook`.
+  Every write to a macro's colour that skips `setMacroColour` (a track-picker frame, a restore, the bulk pick) ends in
+  `MacroGroupController::refreshCardColours()`, which re-syncs and repaints every card, so the canvas card wears the colour
+  on that frame and not on the next edit.
 - **A shared macro follows its owning track.** When several tracks play one macro (Kick, Snare and Hats into one
   sampler) the owner is the **first track in timeline order**. Only the owner's picker touches the macro; the
   other tracks keep their own colour, and the macro never follows them.

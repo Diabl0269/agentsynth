@@ -221,7 +221,7 @@ TrackChannelLinkController::buildOwnedMacroColourPicker(synth::TrackId track, ju
         doc_.setTrackColour(track, c.getARGB());
         if (auto* m = macros().find(macroId))
             m->colour = c;
-        graphEditor_.repaint(); // MacroCardComponent paints name/colour straight off the MacroSet
+        graphEditor_.getMacroController().refreshCardColours(); // the card paints its colour straight off the MacroSet
     };
 
     return std::make_unique<ColourPickerPopup>(
@@ -233,7 +233,7 @@ TrackChannelLinkController::buildOwnedMacroColourPicker(synth::TrackId track, ju
                 applyBoth(juce::Colour(originalTrackColour));
                 if (auto* m = macros().find(macroId))
                     m->colour = originalMacroColour;
-                graphEditor_.repaint();
+                graphEditor_.getMacroController().refreshCardColours();
                 return;
             }
             // ONE undo step whose undo restores BOTH originals: silently put them back first
@@ -247,7 +247,7 @@ TrackChannelLinkController::buildOwnedMacroColourPicker(synth::TrackId track, ju
                 if (auto* m = macros().find(macroId))
                     m->colour = finalColour;
             });
-            graphEditor_.repaint();
+            graphEditor_.getMacroController().refreshCardColours();
         });
 }
 
@@ -266,12 +266,12 @@ void TrackChannelLinkController::setOwnedMacroColour(synth::TrackId track, juce:
         return;
     if (auto* m = macros().find(macro->id))
         m->colour = colour;
-    graphEditor_.repaint();
+    graphEditor_.getMacroController().refreshCardColours();
 }
 
 bool TrackChannelLinkController::recordColourEdit(const std::function<void()>& mutation) {
     undo_.recordGraphTimelineAndMacroChange(graph(), doc_, macros(), mutation);
-    graphEditor_.repaint();
+    graphEditor_.getMacroController().refreshCardColours();
     return true;
 }
 
@@ -323,7 +323,7 @@ void TrackChannelLinkController::syncMacroColoursToTracks() {
         }
     }
     if (changed)
-        graphEditor_.repaint();
+        graphEditor_.getMacroController().refreshCardColours();
 }
 
 // ---- (c) The track header's M/S drive the strip --------------------------------------------
