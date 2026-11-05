@@ -4,7 +4,8 @@
 # declare the same anonymous-namespace name fail and are named, a file in SYNTH_UNITY_SKIP is
 # ignored, legal repeats (identical aliases, overloads, named-namespace names) pass, and the baseline
 # ratchets (never adds, stale entries fail, --update drops them). Also: an anonymous-namespace name
-# that a header included by another source of the group declares in a named namespace (FRO1043 kGap).
+# that a header included by another source of the group declares in a named namespace (FRO1043 kGap), a
+# using-declaration there included.
 
 set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -41,6 +42,8 @@ add_library(Core STATIC
     Source/UI/Grid/GridModel.cpp
     Source/UI/Grid/GridLayout.cpp
     Source/UI/Grid/GridPolyHint.cpp
+    Source/UI/Grid/UseDeclUser.cpp
+    Source/UI/Grid/UseDeclAnon.cpp
 )
 include(cmake/Extra.cmake)
 synth_enable_unity(Core)
@@ -70,12 +73,19 @@ printf 'namespace synth::ui::grid {\nconstexpr int kGap = 4;\nconstexpr int kSam
 printf 'namespace synth::ui::grid {\nnamespace {\nconstexpr int kSame = 2;\n}\n}\n' >"$ROOT/Source/UI/Grid/GridSame.cpp"
 printf '#include "UI/Grid/GridModel.h"\nnamespace synth::ui::grid { int g() { return kGap + kSame; } }\n' >"$ROOT/Source/UI/Grid/GridModel.cpp"
 printf '#include "GridModel.h"\nnamespace synth::ui {\nusing namespace grid;\nint g2() { return 1; }\n}\n' >"$ROOT/Source/UI/Grid/GridLayout.cpp"
-printf 'namespace synth::ui {\nnamespace {\nconstexpr int kGap = 6;\nconstexpr int kUnrelated = 3;\nusing Id = int;\n}\n}\n' >"$ROOT/Source/UI/Grid/GridPolyHint.cpp"
+printf 'namespace synth::ui {\nnamespace {\nconstexpr int kGap = 7;\nconstexpr int kUnrelated = 3;\nusing Id = int;\n}\n}\n' >"$ROOT/Source/UI/Grid/GridPolyHint.cpp"
+
+# A using-declaration in a header's named namespace: `using synth::other::kRowH;`
+# in synth::ui::detail, reached through `using namespace detail;` in another source, against an anonymous kRowH.
+printf 'namespace synth::ui::detail {\nusing synth::other::kRowH;\n}\n' >"$ROOT/Source/UI/Grid/UseDecl.h"
+printf '#include "UI/Grid/UseDecl.h"\nnamespace synth::ui {\nusing namespace detail;\n}\n' >"$ROOT/Source/UI/Grid/UseDeclUser.cpp"
+printf 'namespace synth::ui {\nnamespace {\nconstexpr float kRowH = 16.0f;\n}\n}\n' >"$ROOT/Source/UI/Grid/UseDeclAnon.cpp"
 
 out="$(guard 2>&1)"
 check "a clash fails" test $? -ne 0
 check "an anonymous name against a header name under a using-directive is found (FRO1043 kGap)" grep -q "'synth::ui::(anon)::kGap' in an anonymous namespace in Source/UI/Grid/GridPolyHint.cpp is also declared in the header Source/UI/Grid/GridModel.h" <<<"$out"
 check "the same namespace needs no using-directive" grep -q "synth::ui::grid::(anon)::kSame' in an anonymous namespace in Source/UI/Grid/GridSame.cpp is also declared in the header" <<<"$out"
+check "an anonymous name against a header's using-declaration under a using-directive is found" grep -q "synth::ui::(anon)::kRowH' in an anonymous namespace in Source/UI/Grid/UseDeclAnon.cpp is also declared in the header Source/UI/Grid/UseDecl.h" <<<"$out"
 check "a header name in an unrelated namespace is not a clash" lacks kUnrelated "$out"
 check "an identical alias against the header alias is not a clash" lacks "::Id" "$out"
 check "the failure names the constant" grep -q "synth::ui::(anon)::kGlyphSize" <<<"$out"
@@ -86,7 +96,7 @@ check "a source added after synth_enable_unity is not named" lacks Late.cpp "$ou
 check "identical aliases, overloads and named-namespace names pass" lacks 'Ok.cpp\|AddedLater.cpp' "$out"
 check "a nested namespace a::b { namespace { k } } clash is found" grep -q "a::b::(anon)::k" <<<"$out"
 check "sources from an included cmake file resolve against --root, not the cwd" grep -q "(anon)::kViaInclude" <<<"$out"
-check "--list prints the clashes" test "$(guard --list | wc -l | tr -d ' ')" = 6
+check "--list prints the clashes" test "$(guard --list | wc -l | tr -d ' ')" = 7
 
 printf '%s\n' \
     'synth::ui::(anon)::kGlyphSize | Source/UI/A.cpp | Source/UI/B.cpp | old' \
@@ -94,7 +104,8 @@ printf '%s\n' \
     '(anon)::kViaInclude | Source/UI/E.cpp | Source/UI/F.cpp | old' \
     'a::b::(anon)::k | Source/UI/C.cpp | Source/UI/D.cpp | old' \
     'synth::ui::(anon)::kGap | Source/UI/Grid/GridPolyHint.cpp | Source/UI/Grid/GridModel.h | old' \
-    'synth::ui::grid::(anon)::kSame | Source/UI/Grid/GridSame.cpp | Source/UI/Grid/GridModel.h | old' >"$TMP/baseline.txt"
+    'synth::ui::grid::(anon)::kSame | Source/UI/Grid/GridSame.cpp | Source/UI/Grid/GridModel.h | old' \
+    'synth::ui::(anon)::kRowH | Source/UI/Grid/UseDeclAnon.cpp | Source/UI/Grid/UseDecl.h | old' >"$TMP/baseline.txt"
 guard >/dev/null 2>&1
 check "baselined clashes pass" test $? -eq 0
 
