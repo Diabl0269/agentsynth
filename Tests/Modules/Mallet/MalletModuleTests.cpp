@@ -25,13 +25,13 @@ std::unique_ptr<MalletModule> makeMallet(int material = 0, double rate = kRate) 
 
 } // namespace
 
-TEST(MalletModule, IsAMidiInstrumentWithAStereoOutAndNoInputs) {
+TEST(MalletModule, IsAMidiInstrumentWithAStereoOutAndOnlyTheLevelCableIn) {
     MalletModule m;
     EXPECT_EQ(m.getName(), "Mallet");
     EXPECT_TRUE(m.acceptsMidi());
     EXPECT_FALSE(m.producesMidi());
     EXPECT_EQ(m.getVisibleInputPortCount(), 0);
-    EXPECT_EQ(m.getTotalNumInputChannels(), 0);
+    EXPECT_EQ(m.getTotalNumInputChannels(), 1); // the Level knob's mod cable, no jack
     EXPECT_EQ(m.getTotalNumOutputChannels(), 2);
     EXPECT_EQ(m.getModuleType(), ModuleType::Mallet);
 }

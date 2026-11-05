@@ -30,13 +30,13 @@ std::unique_ptr<PluckModule> makeBareString(double rate = kRate) {
 
 } // namespace
 
-TEST(PluckModule, IsAMidiInstrumentWithAStereoOutAndNoInputs) {
+TEST(PluckModule, IsAMidiInstrumentWithAStereoOutAndOnlyTheLevelCableIn) {
     PluckModule m;
     EXPECT_EQ(m.getName(), "Pluck");
     EXPECT_TRUE(m.acceptsMidi());
     EXPECT_FALSE(m.producesMidi());
     EXPECT_EQ(m.getVisibleInputPortCount(), 0);
-    EXPECT_EQ(m.getTotalNumInputChannels(), 0);
+    EXPECT_EQ(m.getTotalNumInputChannels(), 1); // the Level knob's mod cable, no jack
     EXPECT_EQ(m.getTotalNumOutputChannels(), 2);
     EXPECT_EQ(m.getModuleType(), ModuleType::Pluck);
 }

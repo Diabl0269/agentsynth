@@ -707,7 +707,7 @@ layout's tab section never binds its jack, selected or not, so a tab switch neve
 
 - draws no gutter dot or label at all (`ModuleComponent::paint`'s input loop iterates
   `drawnInputJackIndices()`, not every visible index);
-- a target flagged `ModulationTarget::knobOnly` (the Filter's Custom CV, the LFO's Morph X/Y, the shared Level, Mix and Pan, the Voice Mixer's Level and the Oscillator's Fixed rate) is left out of that list even
+- a target flagged `ModulationTarget::knobOnly` (the Filter's Custom CV, the LFO's Morph X/Y, the shared Level, Mix and Pan, the Voice Mixer's Level, the Level of Drum Kit, Pluck and Mallet and the Oscillator's Fixed rate) is left out of that list even
   while its knob is hidden, so a mode that hides the knob never brings its jack back into the gutter;
 - is never hit-tested by `getPortForPoint` (same list), so a mouse-down there falls through to the
   knob's own gesture handling instead of starting a jack drag;
@@ -790,7 +790,8 @@ Delay's tempo sync and ping-pong are switches and have no jack) — see [`lfo.md
 [`modules.md#adsr-envelope-module`](modules.md#adsr-envelope-module) and
 [`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). A knob that takes no cable is listed with its reason in the test that sweeps every card
 (`ModuleComponentModDotEveryControlTests`): settings read once at note start or per sequencer step,
-modules with no inputs (Pluck, Mallet, Drum Kit), macro knobs, and the mixer modules (Channel Strip,
+the other live knobs of Pluck and Mallet (Body, Tremolo), the Wavetable's Unison (a whole voice count: a cable
+dropped on it is refused with a status message saying so), macro knobs, and the mixer modules (Channel Strip,
 Master), whose gain is driven by the mixer panel rather than by CV — deliberately out of scope for FRO314's sweep below, since Channel Strip's channel
 layout is frozen-once-set with fixed send legs (`Source/Modules/CLAUDE.md`).
 

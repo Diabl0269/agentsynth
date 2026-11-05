@@ -118,7 +118,9 @@ if (isMuted()) {
 
 **Exception:** modules with no dry audio path clear their output on bypass, because there is nothing to pass through. Two shapes qualify:
 
-- **Pure sources** — no audio *input* (e.g. `OscillatorModule`, `PolyMidiModule`).
+- **Pure sources** — no audio *input* (e.g. `OscillatorModule`, `PolyMidiModule`). A source whose only input is a
+  knob-only Level cable (Drum Kit, Pluck, Mallet) keeps that CV on ch0, shared with its audio output: it reads the
+  CV before the block writes audio there, so the CV never reaches the output.
 - **Audio-in / CV-out taps** — no audio *output* (e.g. `EnvelopeFollowerModule`, whose ch0 output is Env CV, and `ComparatorModule`, whose outputs are Gate / Inverse). Passing the dry signal through would push audio-rate samples into a CV destination, which is worse than emitting no modulation.
 
 Both still use two separate branches, never a fused `if (isBypassed() || isMuted())`, so the intent stays explicit.

@@ -108,6 +108,10 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
     grid_.onToggleShown = [this](int index) { setPadShown(index, !kit_.padShown(index)); };
     controls_.onShownChanged = [this](int index, bool shown) { setPadShown(index, shown); };
     controls_.onEscape = [this] { grid_.grabKeyboardFocus(); };
+    controls_.onKnobBound = [this](juce::Slider& knob, juce::RangedAudioParameter* param) {
+        if (host_.rebindLearnable)
+            host_.rebindLearnable(knob, param);
+    };
     host_.card->addAndMakeVisible(controls_);
     wireSoundControls();
 

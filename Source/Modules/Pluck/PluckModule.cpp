@@ -47,7 +47,7 @@ juce::AudioParameterFloat* PluckModule::addFloat(const char* id, const char* nam
 }
 
 PluckModule::PluckModule()
-    : ModuleBase("Pluck", 0, kNumChannels, StereoAudio::Declared) {
+    : ModuleBase("Pluck", 1, kNumChannels, StereoAudio::Declared) {
     tuneParam = addFloat("tune", "Tune", -24.0f, 24.0f, 0.0f);
     fineParam = addFloat("fine", "Fine", -100.0f, 100.0f, 0.0f);
     decayParam = addFloat("decay", "Decay", 0.1f, 20.0f, 3.0f, 0.4f);
@@ -146,6 +146,9 @@ void PluckModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     if (buffer.getNumChannels() == 0 || numSamples <= 0)
         return;
 
+    // The Level cable arrives on channel 0, which the render overwrites: read it before anything writes the buffer.
+    const float levelCv = blockCV(buffer, kLevelCvChannel);
+
     // A pure source has no dry signal to pass through, so bypass and mute both clear. They stay two
     // branches, and either one cuts every string that is still ringing.
     if (isBypassed()) {
@@ -159,7 +162,7 @@ void PluckModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mid
         return;
     }
 
-    smoothedLevel_.setTargetValue(levelParam->get());
+    smoothedLevel_.setTargetValue(modulateNormalised(*levelParam, levelParam->get(), levelCv));
     smoothedBody_.setTargetValue(bodyParam->get());
     float* left = buffer.getWritePointer(0);
     float* right = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;

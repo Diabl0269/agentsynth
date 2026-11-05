@@ -10,6 +10,7 @@
 
 #include "../../Timeline/TimelineOps.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace synth {
@@ -93,13 +94,30 @@ bool hasParameter(juce::AudioProcessor& processor, const juce::String& id) {
     return false;
 }
 
+// A channel that only a knob's mod cable reaches (Pluck's Level) is no signal input: an instrument whose every input is
+// one still has "audioIn": false, and its knob shows as "modulatable" instead.
+bool hasSignalInput(juce::AudioProcessor& processor) {
+    const int inputs = processor.getTotalNumInputChannels();
+    auto* mb = dynamic_cast<ModuleBase*>(&processor);
+    if (mb == nullptr)
+        return inputs > 0;
+    const auto targets = mb->getModulationTargets();
+    for (int ch = 0; ch < inputs; ++ch) {
+        const bool knobOnly = std::any_of(targets.begin(), targets.end(),
+                                          [ch](const auto& t) { return t.channelIndex == ch && t.knobOnly; });
+        if (!knobOnly)
+            return true;
+    }
+    return false;
+}
+
 juce::var moduleEntry(juce::AudioProcessor& processor) {
     juce::DynamicObject::Ptr entry = new juce::DynamicObject();
     if (auto* mb = dynamic_cast<ModuleBase*>(&processor))
         if (const char* category = categoryName(mb->getModulationCategory()))
             entry->setProperty("category", category);
     // "audio" here means any signal channel the module exposes (a CV jack counts), as the graph sees it.
-    entry->setProperty("audioIn", processor.getTotalNumInputChannels() > 0);
+    entry->setProperty("audioIn", hasSignalInput(processor));
     entry->setProperty("audioOut", processor.getTotalNumOutputChannels() > 0);
     entry->setProperty("params", parameterList(processor));
     return juce::var(entry.get());

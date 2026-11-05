@@ -176,6 +176,9 @@ public:
     static const juce::String* jackParamIds();
 
     std::vector<ModulationTarget> getModulationTargets() const override;
+    juce::String modulationRefusal(const juce::String& paramId) const override {
+        return paramId == "unison" ? "Unison takes no mod cable: it sets a whole number of voices" : juce::String();
+    }
 
     juce::String getInputPortLabel(int i) const override {
         return (i >= 0 && i < kNumJacks) ? jackLabels()[i] : ModuleBase::getInputPortLabel(i);

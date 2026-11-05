@@ -25,6 +25,8 @@ public:
         /** Drum Kit: hiding the pad on `note` named `padName`; runs `proceed` now, or after a confirmation when its
          *  drum has hits in a clip (empty: no question). */
         std::function<void(int note, const juce::String& padName, std::function<void()> proceed)> confirmHidePad;
+        /** Drum Kit: a picked-pad knob now drives `param`, so its right-click MIDI Learn targets that pad. */
+        std::function<void(juce::Component& knob, juce::RangedAudioParameter* param)> rebindLearnable;
     };
 
     virtual ~InstrumentChrome() = default;
@@ -37,6 +39,8 @@ public:
     virtual void poll() = 0;
     /** Re-reads the module (after a project's deferred loads landed). */
     virtual void refreshLoaded() = 0;
+    /** The module is already freed: give up any parameter attachment without touching its parameters (leaks it). */
+    virtual void releaseBindings() {}
 
     // ---- File drop and the Sampler's sample name: nothing for a chrome that has none ----
     virtual void refreshSampleLabel(const juce::String& /*fallbackMessage*/ = {}) {}

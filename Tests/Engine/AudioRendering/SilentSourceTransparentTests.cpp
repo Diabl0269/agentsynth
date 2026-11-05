@@ -79,7 +79,11 @@ const std::set<std::string>& notProcessors() {
 
 void setIfPresent(juce::AudioProcessor& p, const juce::String& id, float value) { setParamValue(&p, id, value); }
 
+// A knob-only target on `to`'s first channel (an instrument's Level) has no jack to cable notes onto.
 void connectJacks(juce::AudioProcessorGraph& graph, Node& from, Node& to) {
+    for (const auto& target : dynamic_cast<ModuleBase*>(to.getProcessor())->getModulationTargets())
+        if (target.knobOnly && target.channelIndex == 0)
+            return;
     const auto link = GraphEditor::resolvePolyLink(dynamic_cast<ModuleBase*>(from.getProcessor()), 0,
                                                    dynamic_cast<ModuleBase*>(to.getProcessor()), 0);
     for (int v = 0; v < link.voiceCount; ++v)

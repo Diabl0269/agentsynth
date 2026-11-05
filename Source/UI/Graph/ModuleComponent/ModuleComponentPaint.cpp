@@ -370,6 +370,28 @@ int ModuleComponent::hostedKnobSliderIndex(const juce::String& paramId) const {
     return -1;
 }
 
+// Read from the learnable registry, which holds every built-in card control with the parameter it drives, so a bespoke
+// card's knob answers as well as a generic one. Only a shown control counts: a hidden tab's knob keeps stale bounds.
+juce::String ModuleComponent::getModRefusalForPoint(juce::Point<int> localPoint) const {
+    auto* mod = dynamic_cast<ModuleBase*>(module);
+    if (mod == nullptr)
+        return {};
+    const auto shownOnCard = [this](const juce::Component* c) {
+        for (; c != nullptr && c != this; c = c->getParentComponent())
+            if (!c->isVisible())
+                return false;
+        return c == this;
+    };
+    for (const auto& entry : midiLearnableRegistry_.entries()) {
+        if (entry.hosted || !shownOnCard(entry.component))
+            continue;
+        if (getLocalArea(entry.component, entry.component->getLocalBounds()).contains(localPoint))
+            if (const auto why = mod->modulationRefusal(entry.paramId); why.isNotEmpty())
+                return why;
+    }
+    return {};
+}
+
 std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(juce::Point<int> localPoint) const {
     auto* mod = dynamic_cast<ModuleBase*>(module);
     if (mod == nullptr)

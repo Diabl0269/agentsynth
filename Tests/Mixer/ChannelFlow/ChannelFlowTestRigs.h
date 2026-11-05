@@ -161,7 +161,25 @@ public:
             return;
         }
         auto factory = it->second;
-        juce::MessageManager::callAsync([sharedCallback, factory] { (*sharedCallback)(factory(), juce::String()); });
+        auto complete = [sharedCallback, factory] { (*sharedCallback)(factory(), juce::String()); };
+        if (holdCompletions) {
+            heldCompletions.push_back(std::move(complete));
+            return;
+        }
+        juce::MessageManager::callAsync(std::move(complete));
+    }
+
+    // When set, a successful load's completion is parked instead of queued, so a test decides
+    // exactly when it lands relative to other message-loop work (e.g. after a document replace).
+    bool holdCompletions = false;
+    std::vector<std::function<void()>> heldCompletions;
+
+    // Queues every parked completion for delivery on the message loop and stops parking.
+    void releaseHeldCompletions() {
+        holdCompletions = false;
+        for (auto& complete : heldCompletions)
+            juce::MessageManager::callAsync(std::move(complete));
+        heldCompletions.clear();
     }
 };
 

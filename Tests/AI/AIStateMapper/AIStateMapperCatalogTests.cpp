@@ -77,6 +77,19 @@ TEST(AIStateMapperCatalogTest, CoversEffectsLfoAndDrumKit) {
     EXPECT_FALSE(findParam(modules.getProperty("Drum Kit", {}), "snareTone").isObject());
 }
 
+// Regression test for FRO1359: the instruments' Level took no mod cable, so the catalog listed it as not modulatable.
+TEST(AIStateMapperCatalogTest, InstrumentLevelIsModulatableWithoutAnAudioInput) {
+    const auto modules = parseCatalog().getProperty("modules", {});
+    for (const char* type : {"Drum Kit", "Pluck", "Mallet"}) {
+        const auto entry = modules.getProperty(type, {});
+        ASSERT_TRUE(entry.isObject()) << type;
+        EXPECT_FALSE((bool)entry.getProperty("audioIn", true)) << type << ": a knob's cable is no audio input";
+        EXPECT_TRUE((bool)findParam(entry, "level").getProperty("modulatable", false)) << type;
+    }
+    EXPECT_TRUE((bool)modules.getProperty("Delay", {}).getProperty("audioIn", false))
+        << "a module with audio inputs beside a knob-only one keeps audioIn";
+}
+
 TEST(AIStateMapperCatalogTest, DescribesInstrumentTracksAndTheirEnvelope) {
     const auto tracks = parseCatalog().getProperty("instrumentTracks", {});
     auto* instruments = tracks.getProperty("instruments", {}).getDynamicObject();

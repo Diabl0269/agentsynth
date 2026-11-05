@@ -447,6 +447,9 @@ TEST_F(ChannelFlowTest, PluginInstrumentLoadCompletingAfterNewPatchIsDroppedNotA
     backend.factories["Stub Synth"] = [] {
         return std::make_unique<synth::test::StubPluginInstance>(0, 2, "Stub Synth");
     };
+    // The completion is parked until after New Patch has run: left to the message loop it would be
+    // delivered ahead of New Patch's own queued command, i.e. before the document is replaced.
+    backend.holdCompletions = true;
     synth::HostedPluginBackend::ScopedDefault installed(&backend);
 
     MainComponent mc(std::make_unique<MockProviderCFT>());
@@ -464,19 +467,27 @@ TEST_F(ChannelFlowTest, PluginInstrumentLoadCompletingAfterNewPatchIsDroppedNotA
     // later message-loop turn) — nothing has touched the graph or doc yet, since
     // buildInstrumentTrackAndChain only ever runs once onLoadCompleted fires.
     ASSERT_TRUE(doc.getTracks().empty());
+    ASSERT_EQ(mc.getPendingInstrumentPluginLoadCountForTest(), 1);
 
     // New Patch — the REAL guarded flow (guardUnsavedChanges("New Patch", ...), same seam a menu
-    // click or Cmd+N goes through) — replaces the document WHILE that load is still pending. Let
-    // New Patch's OWN (unrelated) undo-tracked steps settle before touching the stale load at all,
-    // so the edit-serial comparison below isolates just the stale completion's effect.
+    // click or Cmd+N goes through) — replaces the document WHILE that load is still pending. The
+    // command is dispatched asynchronously, and New Patch's own graph-clear is an undo-tracked step
+    // that bumps the edit serial in one go, so wait for that serial move: a fixed pause could end
+    // before it, and the baseline below would then wrongly count New Patch's own steps against the
+    // stale load.
+    const int editSerialBeforeNewPatch = mc.getUndoManager().getEditSerial();
     mc.simulateNewPatchClick();
-    pumpUntilCFT([] { return false; }, 50);
+    ASSERT_TRUE(pumpUntilCFT([&] { return mc.getUndoManager().getEditSerial() != editSerialBeforeNewPatch; }, 4000))
+        << "New Patch never ran";
     const int editSerialAfterNewPatchSettled = mc.getUndoManager().getEditSerial();
 
-    // Now let the stale load's completion land. There is deliberately nothing to poll FOR beyond
-    // that: a correctly dropped completion has no observable side effect at all, which is exactly
-    // what this proves.
-    pumpUntilCFT([] { return false; }, 300);
+    // Now let the stale load's completion land: the pending-load count only returns to zero once
+    // the completion has been delivered and the dropped load released. A correctly dropped
+    // completion has no other observable side effect, which is exactly what this proves.
+    ASSERT_EQ(mc.getPendingInstrumentPluginLoadCountForTest(), 1) << "New Patch must not release the pending load";
+    backend.releaseHeldCompletions();
+    ASSERT_TRUE(pumpUntilCFT([&] { return mc.getPendingInstrumentPluginLoadCountForTest() == 0; }, 4000))
+        << "the stale load's completion was never delivered";
 
     EXPECT_TRUE(doc.getTracks().empty()) << "the stale load must not land a track in the fresh document";
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::HostedPlugin), 0)

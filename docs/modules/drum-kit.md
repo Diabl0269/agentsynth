@@ -62,7 +62,8 @@ of restarting each other, and the second one starts from a fresh voice instead o
 The card is 280 px wide. From the top:
 
 1. The kit picker.
-2. The master Level.
+2. The master Level. It takes a mod cable (an LFO or envelope dropped on the knob moves the whole kit's level live),
+   on the module's one input channel, which has no gutter jack.
 3. The **Pads** stepper:
    - "-" and "+", or Up/Down, Left/Right, + and -, step it by four.
    - Typing a number and Return sets it, rounded up to a multiple of four.
@@ -165,9 +166,11 @@ is named after the file and the caption says "Snare now plays kick.wav" for a mo
 insert gap on the canvas, so the card stays put while the pointer travels to the pads
 ([layout](../layout/layout.md#making-room-for-a-module-dropped-between-others)).
 
-Not built yet:
-
-- The panel knobs are not MIDI-learnable: the learnable registry binds one parameter per control and has no remove.
+The picked pad's Level, Tune, Decay and Start knobs are MIDI-learnable: right-click one and pick
+"MIDI Learn 'Pad 2 level'...". The learn is for the pad that was picked, so after learning Snare's Level and picking
+Kick, the controller still moves Snare's level and Kick's knob stays put. Each pick re-binds the four knobs'
+right-click and mapped badge to the picked pad (`ModuleComponent::rebindMidiLearnable`, fed by
+`DrumPadControls::onKnobBound`). The learn is saved with the project like any other.
 
 ## Hiding a pad
 

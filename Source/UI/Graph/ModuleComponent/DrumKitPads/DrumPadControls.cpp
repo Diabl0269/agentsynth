@@ -114,6 +114,13 @@ DrumPadControls::~DrumPadControls() { fade_.stop(); }
 
 // ---- Binding ----
 
+// An attachment removes its listener from the parameter it was made on; once the kit is freed that removal would lock
+// a freed parameter, so the attachments are given up without running it (the knobs die with the card).
+void DrumPadControls::releaseBindings() {
+    for (auto& attachment : attachments_)
+        (void)attachment.release();
+}
+
 // The knobs re-attach to the pad's own parameters, so a drag on them is the parameter's gesture: the card's
 // parameter listener makes it one undo step, like any card knob.
 void DrumPadControls::bind(int index) {
@@ -154,6 +161,9 @@ void DrumPadControls::refresh() {
         const juce::String name = juce::String(kFieldWords[f]) + ": " + pad.name;
         knobs_[f].setTitle(name);
         knobs_[f].setTooltip(name);
+        // After the tooltip, so the owner's MIDI Learn registry keeps it as the knob's own text.
+        if (onKnobBound)
+            onKnobBound(knobs_[f], kit_.padParameter(bound_, (PadParam)f));
     }
     refreshSoundRow(pad);
     // A recording plays out at its own length and an instrument shapes its own notes, so the Decay has nothing to

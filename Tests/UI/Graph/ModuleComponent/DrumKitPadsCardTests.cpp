@@ -267,3 +267,13 @@ TEST(DrumKitPadsCard, PadsPaintInEveryThemesColours) {
         grid.setLookAndFeel(nullptr);
     }
 }
+
+// Regression test for FRO1110: a card destroyed after its Drum Kit was freed removed the pad knobs' parameter
+// listeners from freed parameters. Windows faults taking the freed parameter's lock (0xc0000005); macOS, even under
+// ASAN, does not report it, so this fails on Windows only.
+TEST(DrumKitPadsCard, ACardDestroyedAfterItsKitWasFreedLeavesTheFreedPadsAlone) {
+    Scene scene;
+    scene.canvas.engine.getGraph().removeNode(scene.id);
+    scene.canvas.editor.updateComponents();
+    EXPECT_EQ(scene.canvas.card(scene.id), nullptr) << "the card of the freed kit is gone";
+}

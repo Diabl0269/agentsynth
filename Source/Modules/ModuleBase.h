@@ -576,14 +576,9 @@ public:
     void setSidechainConnected(bool connected) { sidechainConnected_.store(connected, std::memory_order_relaxed); }
     bool isSidechainConnected() const { return sidechainConnected_.load(std::memory_order_relaxed); }
 
-    // Opt-in output-level stage for modules whose output is audio.
-    //
-    // Deliberately NOT added in the ModuleBase ctor: parameter position is load-bearing
-    // for a few positional getParameters()[n] call sites, and "gain" is meaningless (or
-    // actively wrong) on pitch/gate CV outputs — scaling a V/oct pitch CV detunes, and
-    // scaling a gate drops it under the > 0.5f trigger threshold. Each module opts in,
-    // and MUST call this AFTER its own addParameter() calls so the new parameter lands
-    // last and existing positional lookups keep resolving to the same parameter.
+    // Opt-in output-level stage for modules whose output is audio. Not added in the ctor: scaling a pitch or gate CV
+    // output breaks it (detunes, drops a gate under 0.5). Call it AFTER the module's own addParameter() calls, so the
+    // new parameter lands last and positional getParameters()[n] lookups keep resolving to the same parameter.
     void addOutputLevelParameter(float defaultValue = 1.0f, int cvChannel = -1) {
         if (outputLevelParam)
             return;
@@ -741,6 +736,8 @@ public:
     const char* getNodeUuid() const noexcept { return nodeUuidSet_.load(std::memory_order_acquire) ? nodeUuid_ : ""; }
 
     virtual std::vector<ModulationTarget> getModulationTargets() const { return {}; }
+    /** Why the knob of `paramId` takes no mod cable, said when one is dropped on it; empty when nothing to say. */
+    virtual juce::String modulationRefusal(const juce::String& /*paramId*/) const { return {}; }
 
     /** The parameter a modulation target's knob is attached to: the one whose `paramID` equals
         `target.paramId` when that is set, else the one whose display name equals `target.name`.

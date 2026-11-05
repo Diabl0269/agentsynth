@@ -11,7 +11,7 @@ A note-on starts a string at the note's pitch (12-TET, A4 = 440 Hz, shifted by `
 
 | Parameter (id) | Range, default | What it does |
 | :-- | :-- | :-- |
-| `level` | 0..1, 0.8 | Output level (smoothed 10 ms) |
+| `level` | 0..1, 0.8 | Output level (smoothed 10 ms); takes a mod cable on its knob |
 | `tune`, `fine` | -24..24 st, 0; -100..100 cents, 0 | Pitch offset, read at note-on |
 | `decay` | 0.1..20 s, 3 | T60 of the fundamental while the key is held, at C3 |
 | `decayTrack` | 0..1, 0.7 | Decay tracking: how much shorter higher notes ring. The T60 is `decay * (f0 / 130.81 Hz)^-decayTrack` (at 0.5 a C5 rings half as long as a C3), floored at 0.05 s. Added after measuring against harp recordings, whose high notes die far sooner than their low ones; the default is the harp's best measured value |
@@ -24,6 +24,8 @@ A note-on starts a string at the note's pitch (12-TET, A4 = 440 Hz, shifted by `
 | `velBright` | 0..1, 0.5 | How much velocity opens the pick hardness and the brightness |
 
 Everything except `level` and `body` is read when a note starts (`release` when it ends), so a change lands on the next note.
+
+The Level knob takes a mod cable (drop an LFO or envelope output on it). The cable arrives on the module's one input channel, which has no gutter jack and does not count as an audio input, and moves the level live within the knob's range, the same way an effect's Level does ([modulation](modulation.md)). Body, Tremolo and the note-time settings take no cable.
 
 - **Algorithm**: an extended Karplus-Strong string, after the classic Karplus-Strong algorithm and its Jaffe-Smith extensions (written from the textbook description, no third-party code). Each voice is a circular delay line recirculating through a first-order allpass (fractional delay, for tuning), a one-pole lowpass (damping) and a chain of four first-order allpasses (stiffness dispersion), times a loop gain.
 - **Tuning**: the loop must last one period at the fundamental. At note-on the exact phase delay of the lowpass and of the dispersion allpass at the fundamental (`-arg(H(e^jw))/w`) is taken off the period, the integer part sets the delay-line length and the fractional part the tuning allpass (refined a few iterations until its phase delay at the fundamental is exact). That is why notes stay within 5 cents from E0 (20.6 Hz) to C7, at 44.1 to 96 kHz. Pitches below 20 Hz are held at 20 Hz; each delay line is sized for it in `prepareToPlay` (never on the audio thread).
@@ -42,7 +44,7 @@ A note-on strikes a bar at the note's pitch (12-TET, A4 = 440 Hz, shifted by `Tu
 
 | Parameter (id) | Range, default | What it does |
 | :-- | :-- | :-- |
-| `level` | 0..1, 0.8 | Output level (smoothed 10 ms) |
+| `level` | 0..1, 0.8 | Output level (smoothed 10 ms); takes a mod cable on its knob |
 | `material` | Marimba, Vibraphone, Xylophone, Glockenspiel, Bell; Marimba | Which partial ratios and gains the bar has |
 | `tune`, `fine` | -24..24 st, 0; -100..100 cents, 0 | Pitch offset, read at note-on |
 | `decay` | 0.05..10 s, 1.2 | T60 of the fundamental |
