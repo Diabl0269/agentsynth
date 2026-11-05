@@ -35,6 +35,13 @@ using namespace detail;
 void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("selected", owner.isNodeSelected(nodeId));
     into.setProperty("modHoverChip", synth::ui::modHoverChipShows(owner, nodeId));
+    juce::Array<juce::var> chipRows;
+    for (const auto& row :
+         synth::ui::modChipStack(owner, nodeId, dynamic_cast<ModuleBase*>(module), [this](const ModulationTarget& t) {
+             return sliderIndexForModTarget(t);
+         }).rows)
+        chipRows.add(row.text);
+    into.setProperty("modHoverChipRows", chipRows);
     into.setProperty("moduleType", module != nullptr ? module->getName() : juce::String());
     into.setProperty("title", cardTitle());
     into.setProperty("nodeId", static_cast<int>(nodeId.uid));

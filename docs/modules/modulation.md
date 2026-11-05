@@ -533,23 +533,29 @@ the ring/knob highlights the cable. The ring's highlight is `AppLookAndFeel::dra
 `hovered` flag — the stroke widens by `Theme::Metrics::modRingHoverWidthBoost` and the colour gets
 the same `brighter(0.3)` treatment a hovered cable already gets, no new colour token.
 
-While either side of that correlation is hovered, a small chip appears just under the knob's value
-box: `"<source module name> · <signed percent>"`, e.g. `"LFO · +63%"` or `"Env 2 · -40%"`. The
+While either side of that correlation is hovered, a stack of small chips appears just under the knob's value
+box, one row per modulation source on it: `"<source module name> · <signed percent>"`, e.g. `"LFO 1 · +63%"` then
+`"Env 2 · -40%"`, each row with a small swatch dot (`modRingPositive` or `modRingNegative` by the amount's sign). The
 percent is the attenuverter's `amount` (`ModulationDisplayInfo::amount`) rounded to the nearest
 whole number; the source name is the routing's source node's `getName()` (the same identity the mod
 matrix labels a source with, looking through macro ports: `synth::ui::knobModSources`, `UI/Graph/ModDot/KnobModSources.h`).
-When several sources land on the knob the chip names the one the dot drag adjusts (the
-[last-chosen source](#the-mod-dot-drag-an-amount-from-the-landing-dot)). Formatted by the free function `synth::ui::formatModHoverChipText`
-(`ModuleComponentModChip.h`, unit-tested in isolation the same way `modDepthBandRange` is), drawn in
-the knob-value-box mono font on a `surfaceHi` chip, clipped to the card.
+Bypassed sources and sources with no name are left out. The stack lists at most four sources and then one
+`"+N more"` row; the source the dot drag adjusts (the [last-chosen source](#the-mod-dot-drag-an-amount-from-the-landing-dot))
+is **bold** and always listed. Rows are formatted by `synth::ui::formatModHoverChipText` and chosen by
+`synth::ui::modHoverChipRows` (`ModuleComponentModChip.h`, unit-tested in isolation the same way `modDepthBandRange` is),
+drawn in the knob-value-box mono font on a `surfaceHi` chip each, clipped to the card (a stack under a knob on the card's
+bottom row is cut off by the card, never moved).
+
+The same stack is the mod dot's [drag readout](#the-mod-dot-drag-an-amount-from-the-landing-dot): during a dot drag or key
+step it shows under that knob even when the pointer is not on it, and the dragged source's row shows the live amount.
 
 ### The mod dot: drag an amount from the landing dot
 
 The small dot where a modulation cable lands on a knob or fader is a handle. Press it and drag up or
 down: the amount of the source chosen last changes live (up is more, down is less, one pixel is one
 percent, from where the press started, clamped to -100..+100 percent) and the ring and depth band
-follow. A small tooltip, `"LFO 1 · +42%"` with a colour swatch (`modRingPositive` or `modRingNegative` by
-sign), sits above-right of the knob, outside the knob's cell, and fades out when you let go. The value
+follow. The readout is the [chip stack under the knob](#hover-highlight-and-the-chip): the dragged source's row
+(bold, `"LFO 1 · +42%"` with its colour swatch) shows the live amount, and it fades out when you let go. The value
 stays; the whole drag is **one** undo step ("Change modulation amount", Cmd+Z). Esc during the drag
 puts the starting amount back and leaves no undo step. A press that moves under 3 px is a click, which
 opens the dot's panel ([below](#the-mod-dot-menu)) through `ModDotController::onModDotClicked`, and only that panel: the
@@ -567,8 +573,8 @@ on releases in its own space), so it can never also read it as a click on a jack
   source's amount by 1 percent, Shift by 10 percent, each key press one undo step with the same tooltip
   and a screen-reader announcement ("LFO 1, +42 percent", once per whole percent); Return and Space
   open the dot's panel like a click.
-* **Where it lives.** The tooltip is painted on the canvas above the cards
-  (`GraphContentComponent::paintOverChildren`, `ModDotTooltip`), so no card clips it. The gesture is a
+* **Where it lives.** `ModDotTooltip` holds the readout (which source, its live amount) and its fade; the card
+  paints it as the chip stack (`ModuleComponentModChip.cpp`), repainting as the amount and opacity change. The gesture is a
   third claim on `CardControlGestures` (`wantsModDotGesture`/`onModDotGesture`), asked after the
   ring-amount drag and before the cable pickup, wired in `ModuleComponent::wireCardControlGestures`;
   the behaviour is `ModDotController` (`Source/UI/Graph/ModDot/`), owned by `GraphEditor`.

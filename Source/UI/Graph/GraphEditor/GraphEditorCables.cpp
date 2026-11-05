@@ -893,9 +893,6 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     };
     paintDragWire();
 
-    // ---- Mod-dot tooltip: above the cards, so no card's clip cuts it ----
-    editor.getModDot().paintTooltip(g);
-
     // ---- Drag-preview landing ghost (on top of module cards) ----
     // A translucent rounded rect at the exact snapped+anti-overlapped landing position: one per card for a group drag
     // (where the whole group lands), else the single card's, which slides to where it is aimed.
