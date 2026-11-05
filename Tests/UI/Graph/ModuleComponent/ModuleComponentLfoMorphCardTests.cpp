@@ -223,7 +223,8 @@ TEST_F(ModuleComponentTest, LfoEditShapesButtonAndDoubleClicksOpenTheWindowOnThe
     WindowCapture capture;
     auto& map = rig.map();
 
-    ASSERT_TRUE(map.getDotStop(2)->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    ASSERT_TRUE(map.onEditDot);
+    map.onEditDot(2); // the dot menu's Edit item
     ASSERT_EQ(capture.opened.size(), 1u);
     EXPECT_EQ(capture.opened.back()->getSelected(), 2);
     EXPECT_EQ(capture.opened.back()->getWindowTitle(), "LFO shapes: " + rig.card->cardTitle());

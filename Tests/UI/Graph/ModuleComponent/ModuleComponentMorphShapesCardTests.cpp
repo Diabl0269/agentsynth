@@ -235,7 +235,8 @@ TEST_F(ModuleComponentTest, EditButtonDoubleClickOnADotAndOnTheResponseViewOpenT
     };
 
     auto& map = rig.map();
-    ASSERT_TRUE(map.getDotStop(1)->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    ASSERT_TRUE(map.onEditDot);
+    map.onEditDot(1); // the dot menu's Edit item
     ASSERT_EQ(opened.size(), 1u);
     EXPECT_EQ(opened.back()->getSelected(), 1);
     EXPECT_EQ(opened.back()->getWindowTitle(), "Filter shapes: " + rig.card->cardTitle());

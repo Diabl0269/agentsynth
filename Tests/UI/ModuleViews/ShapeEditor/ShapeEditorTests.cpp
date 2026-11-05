@@ -552,7 +552,8 @@ TEST(MorphMapMenu, TheEditItemIsOfferedUnlessTheOwnerHidesIt) {
     int edited = -1;
     rig.controller.onEdit = [&](int i) { edited = i; };
     EXPECT_TRUE(rig.map.getDotStop(1)->keyPressed(key(juce::KeyPress::returnKey)));
-    EXPECT_EQ(edited, 1) << "Return on a dot still edits it";
+    EXPECT_EQ(edited, -1) << "Return on a dot opens its menu; with Edit hidden nothing edits";
+    EXPECT_EQ(rig.menu.items, (std::vector<std::string>{"Duplicate", "Rename", "Delete"}));
 }
 
 TEST(MorphMapMenu, ARightPressOnEachSliderAsksForItsMenuBesideTheLandingDot) {

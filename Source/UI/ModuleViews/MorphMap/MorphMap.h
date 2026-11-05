@@ -25,9 +25,9 @@ class ReorderFramePump;
  *  A dot added or restored grows in and a removed one shrinks out, keyed by its name.
  *  Keyboard: the map, then each dot, then the cursor are Tab stops. On a dot or the cursor an arrow moves it one
  *  step (Shift for a bigger one); held, it glides on, slowly at first and faster the longer it is held (two arrows
- *  move diagonally, Shift is faster). Return on a dot edits it, Delete removes it and focuses the next dot, F2
- *  renames it, Shift+F10 opens its menu; Escape returns focus to the map. A key step or a whole hold is one gesture
- *  bracket, like a drag.
+ *  move diagonally, Shift is faster). Return on a dot opens its menu (Edit first), Delete removes it and focuses the
+ * next dot, F2 renames it, Shift+F10 opens its menu; Escape returns focus to the map. A key step or a whole hold is one
+ * gesture bracket, like a drag.
  *
  *  Sliders: a thin Morph X slider hugs the bottom edge and a Morph Y slider the left edge, each with its thumb at
  *  the cursor; the right edge is left empty for a future third axis. They are the cursor's other handles (the same

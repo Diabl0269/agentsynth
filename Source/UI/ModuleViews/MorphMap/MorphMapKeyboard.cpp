@@ -30,9 +30,10 @@ void MorphMap::refreshStopNames() {
     for (int i = 0; i < (int)dotStops_.size(); ++i) {
         const auto& dot = dots_[(size_t)i];
         const juce::String name = dot.name.isEmpty() ? "Shape " + juce::String(i + 1) : dot.name;
+        dotStops_[(size_t)i]->setComponentID("morphDot" + juce::String(i)); // test mode finds a dot by index
         dotStops_[(size_t)i]->setTitle(name + ", " + coordinateText(dot.x, dot.y));
         dotStops_[(size_t)i]->setDescription("Shape on the morph map");
-        dotStops_[(size_t)i]->setTooltip(name + " - drag to move, double-click to delete, Return to edit");
+        dotStops_[(size_t)i]->setTooltip(name + " - drag to move, double-click to delete, Return for its menu");
     }
     cursorStop_->setTitle("Morph cursor, " + coordinateText(cursor_.x, cursor_.y));
     cursorStop_->setDescription("Where the shapes are blended");
@@ -143,8 +144,7 @@ bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
 
     const int index = stop.getIndex();
     if (code == juce::KeyPress::returnKey && !mods.isShiftDown()) {
-        if (onEditDot)
-            onEditDot(index);
+        showDotMenu(index); // the right-click menu, Edit first: Return, Return still edits
         return true;
     }
     if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey) {
@@ -190,7 +190,11 @@ void MorphMap::showDotMenu(int index) {
     if (showMenu)
         showMenu(menu, area);
     else
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(area));
+        // A menu closed with Escape or a click away leaves the keyboard on the dot it was opened from.
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(area), [safe, index](int result) {
+            if (result == 0 && safe != nullptr && index < (int)safe->dotStops_.size() && safe->renameEditor_ == nullptr)
+                safe->dotStops_[(size_t)index]->grabKeyboardFocus();
+        });
 }
 
 /** A small screen area centred on a point of this map, which a menu opens beside. */
