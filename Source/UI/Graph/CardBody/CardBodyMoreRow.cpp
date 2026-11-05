@@ -12,7 +12,7 @@
 namespace synth {
 
 namespace {
-constexpr int kCableFoldGraceMs = 250;
+constexpr int kCableFoldGraceMs = 120;
 }
 
 CardMoreButton::CardMoreButton(int hiddenCount)

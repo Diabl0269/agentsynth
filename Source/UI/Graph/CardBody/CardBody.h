@@ -155,6 +155,7 @@ public:
     /** Test seams: the grace running, and its end run at once. */
     bool cableFoldGraceRunningForTest() const noexcept { return foldGrace_.isTimerRunning(); }
     void endCableFoldGraceForTest() { foldGrace_.expire(); }
+    int cableFoldGraceMsForTest() const noexcept { return foldGrace_.getTimerInterval(); }
 
     // ---- Teardown (the card's detachFromProcessor) -------------------------------------------------
     /** Destroys the views; they time against the module. */

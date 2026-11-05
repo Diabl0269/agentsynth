@@ -72,6 +72,8 @@ TEST(CableFold, HoverThenLeaveFoldsTheRowAfterAShortGrace) {
     EXPECT_TRUE(rig.body->isMoreUnfolded())
         << "the grace keeps it open a moment, so crossing the edge does not flicker";
     EXPECT_TRUE(rig.body->cableFoldGraceRunningForTest());
+    // Regression test for FRO1430: the row waited 250 ms after the cable left, which felt stuck.
+    EXPECT_EQ(rig.body->cableFoldGraceMsForTest(), 120) << "long enough to cross the edge, short enough to feel prompt";
 
     rig.moveTo(rig.overTitle());
     EXPECT_FALSE(rig.body->cableFoldGraceRunningForTest()) << "coming back cancels the fold";

@@ -164,7 +164,7 @@ layout (the node's `cardLayout` override, [module-card-layout.md](module-card-la
 - **Cables.** A modulation cable dragged over the folded row unfolds it, so a hidden parameter's knob
   can still take a new cable (`GraphEditor::dragConnection` asks each card under the cable). The cable only folds
   what it opened (`CardBody::isMoreOpenedByCableDrag`; a row opened by hand never folds): when the cable leaves the
-  card the row folds after a 250 ms grace, so crossing the edge does not flicker, and coming back cancels it; a
+  card the row folds after a 120 ms grace, so crossing the edge does not flicker, and coming back cancels it; a
   release anywhere but on one of the row's controls folds it, and so does Esc (`GraphEditor::keyPressed` ends the drag as a release over nothing; the canvas takes the keyboard
   for the drag and gives it back to what had it). A cable that lands on a hidden control keeps the row open and hands it to the person,
   so it then stays like a row they opened. The refold is the usual fade (above).
