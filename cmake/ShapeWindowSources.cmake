@@ -11,6 +11,8 @@ list(APPEND APPUI_SOURCES
     Source/UI/ModuleViews/ShapeEditor/ShapeSavePrompts.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeSavePrompts.h
     Source/UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h
+    Source/UI/Chrome/Badge/Badge.cpp
+    Source/UI/Chrome/Badge/Badge.h
 )
 # Keyboard point editing (shared with the automation lanes) keeps its own list; included here because CMakeLists.txt
 # is at the file-size cap.

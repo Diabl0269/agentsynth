@@ -101,8 +101,8 @@ juce::String ModuleLibraryComponent::descriptionFor(const juce::String& moduleNa
 }
 
 juce::String ModuleLibraryComponent::snippetDescription(const juce::String& name, int moduleCount) {
-    return "Snippet \"" + name + "\" - " + juce::String(moduleCount) + (moduleCount == 1 ? " module. " : " modules. ") +
-           "Drag onto the canvas to insert the whole group.";
+    return "Snippet \"" + name + "\" (Yours) - " + juce::String(moduleCount) +
+           (moduleCount == 1 ? " module. " : " modules. ") + "Drag onto the canvas to insert the whole group.";
 }
 
 juce::String ModuleLibraryComponent::pluginDescription(const juce::String& name, const juce::String& format) {

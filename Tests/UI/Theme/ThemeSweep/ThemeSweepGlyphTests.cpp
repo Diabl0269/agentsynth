@@ -4,6 +4,7 @@
 // keeps one size in all of them (docs/layout/theming.md, "Theme sweep guard").
 #include "ThemeSweepSupport.h"
 #include "ThemeSweepSurfaces.h"
+#include "UI/Chrome/Badge/Badge.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/ClipSizingButton.h"
 #include <algorithm>
@@ -64,5 +65,40 @@ TEST(ThemeSweepGlyphs, TheClipSizingFieldGlyphReadsInEveryThemeAndEveryModeDraws
                     << theme.id << ": " << synth::clipSizingModeKey(kModes[a]) << " and "
                     << synth::clipSizingModeKey(kModes[b]) << " look the same";
         field.setLookAndFeel(nullptr);
+    }
+}
+
+// The origin badge (Yours, Factory, Pack, Marketplace) in every built-in theme: its text reaches 4.5:1 against its own
+// fill composited over each surface it can sit on, and the strip of all four is written as a PNG to look at.
+TEST(ThemeSweepGlyphs, TheOriginBadgeTextReadsInEveryThemeOnEverySurface) {
+    juce::MessageManager::getInstance();
+    constexpr synth::ui::BadgeKind kinds[] = {synth::ui::BadgeKind::Yours, synth::ui::BadgeKind::Factory,
+                                              synth::ui::BadgeKind::Pack, synth::ui::BadgeKind::Marketplace};
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        SweepEnvironment env(theme);
+        for (const auto kind : kinds) {
+            const auto colours = synth::ui::badgeColours(theme, kind);
+            for (const auto surface : {theme.colors.bg0, theme.colors.bg1, theme.colors.surface}) {
+                const auto fill = surface.overlaidWith(colours.fill);
+                EXPECT_GE(contrastRatio(colours.text, fill), kMinTextContrast)
+                    << theme.id << " / " << synth::ui::badgeText(kind);
+            }
+        }
+        juce::Component strip;
+        strip.setLookAndFeel(&env.lookAndFeel());
+        strip.setOpaque(true);
+        int x = 8;
+        std::vector<std::unique_ptr<synth::ui::Badge>> badges;
+        for (const auto kind : kinds) {
+            auto badge = std::make_unique<synth::ui::Badge>(kind);
+            const auto ideal = badge->getIdealBounds();
+            badge->setBounds(x, 8, ideal.getWidth(), ideal.getHeight());
+            strip.addAndMakeVisible(*badge);
+            x += ideal.getWidth() + 8;
+            badges.push_back(std::move(badge));
+        }
+        strip.setSize(x, 32);
+        writeSweepPng("origin-badges", theme.id, renderToImage(strip));
+        strip.setLookAndFeel(nullptr);
     }
 }

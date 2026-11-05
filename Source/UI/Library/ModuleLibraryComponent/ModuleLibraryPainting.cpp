@@ -1,6 +1,20 @@
 // ModuleLibraryPainting.cpp -- paint(): rows, pinned chrome and the search-highlight /
 // chevron / category-icon drawing helpers it calls.
 #include "ModuleLibraryComponent.h"
+#include "UI/Chrome/Badge/Badge.h"
+
+namespace {
+// A snippet is always the user's own: its Yours badge sits left of the module count and the label stops before it.
+int snippetLabelWidth(int contentWidth, int badgeW) { return contentWidth - 60 - (badgeW > 0 ? badgeW + 6 : 0); }
+
+void paintSnippetBadge(juce::Graphics& g, const synth::theme::Theme& theme, int contentWidth, int rowY, int rowH) {
+    const int w = synth::ui::badgeWidth(synth::ui::BadgeKind::Yours);
+    synth::ui::paintBadge(g, theme, synth::ui::BadgeKind::Yours,
+                          juce::Rectangle<float>((float)(contentWidth - 44 - 4 - w),
+                                                 (float)rowY + (rowH - synth::ui::kBadgeHeight) * 0.5f, (float)w,
+                                                 (float)synth::ui::kBadgeHeight));
+}
+} // namespace
 
 void ModuleLibraryComponent::paint(juce::Graphics& g) {
     // Resolve theme tokens from the active LnF; fall back to plain colors when our LnF
@@ -134,10 +148,13 @@ void ModuleLibraryComponent::paint(juce::Graphics& g) {
             // Greyed out = already in the patch and not addable again.
             const juce::Colour labelColour = enabled ? itemColour : mutedColour.withAlpha(0.5f);
             const juce::Font itemFont(juce::FontOptions(16.0f));
-            synth::ui::drawSearchHighlightedText(g, entry.text, query, {20, row.y, contentWidth - 60, kItemHeight - 4},
+            const int badgeW = entry.kind == RowKind::Snippet ? synth::ui::badgeWidth(synth::ui::BadgeKind::Yours) : 0;
+            synth::ui::drawSearchHighlightedText(g, entry.text, query,
+                                                 {20, row.y, snippetLabelWidth(contentWidth, badgeW), kItemHeight - 4},
                                                  itemFont, labelColour, accentColour.withAlpha(0.28f), accentColour);
 
             if (entry.kind == RowKind::Snippet) {
+                paintSnippetBadge(g, synth::theme::themeOf(*this), contentWidth, row.y, kItemHeight - 4);
                 g.setColour(mutedColour);
                 g.setFont(juce::Font(juce::FontOptions(12.0f)));
                 g.drawText("(" + juce::String(entry.moduleCount) + ")", contentWidth - 44, row.y, 34, kItemHeight - 4,

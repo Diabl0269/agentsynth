@@ -3,6 +3,7 @@
 // are painted, not components, so the list carries the text itself, the way the piano roll does for
 // its focused note.
 #include "ModuleLibraryComponent.h"
+#include "UI/Chrome/Badge/Badge.h"
 
 #include "UI/Layout/TooltipHelpHandler.h"
 #include "UI/Library/ModuleLibraryAccessibilityText.h"
@@ -55,7 +56,10 @@ juce::String ModuleLibraryComponent::getAccessibilityValueText() const {
         if (index == keyboardFocusedIndex)
             position = count;
     }
-    return describeLibraryRowForAccessibility(focused.text, position, count, focused.section);
+    // A snippet is always the user's own; the badge on its row is spoken with its name.
+    const auto spoken =
+        focused.kind == RowKind::Snippet ? focused.text + ", " + badgeText(BadgeKind::Yours) : focused.text;
+    return describeLibraryRowForAccessibility(spoken, position, count, focused.section);
 }
 
 std::unique_ptr<juce::AccessibilityHandler> ModuleLibraryComponent::createAccessibilityHandler() {

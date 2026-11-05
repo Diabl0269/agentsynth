@@ -339,6 +339,14 @@ While a toggle has keyboard focus `AppLookAndFeel::paintToggleButton` (behind `d
 The box gives up size only when the row is too short for the ring to fit inside the component (under
 about 23 px). `FocusRing.h` is unchanged: every other ring in the app keeps its geometry.
 
+## Origin badge
+
+The pill saying where a library item came from (Yours, Factory, and later Pack and Marketplace) is the one `Badge`
+(`UI/Chrome/Badge/Badge.h`): `paintBadge` for a painted row, the `Badge` component elsewhere. It is never the only
+carrier of the origin: the row's accessible name includes the badge text ("mine, Yours"), and the badge itself is
+named by its kind. Its colours are theme tokens (accent, text-muted, hue-green, hue-amber) and its text keeps 4.5:1 on
+every surface in every built-in theme (`ThemeSweepGlyphs`).
+
 ## No all-caps UI text
 
 UI text is never written in ALL CAPS: not by typing it that way and not with `toUpperCase()`. Headers and

@@ -174,7 +174,7 @@ juce::String describeAddFolderForAccessibility(int position, int count) {
 
 juce::String describeShapeForAccessibility(const juce::String& name, const juce::String& kindWord, bool factory,
                                            int position, int count) {
-    return name + ", " + kindWord + " shape, " + (factory ? "built in" : "saved by you") + ", " +
+    return name + ", " + kindWord + " shape, " + (factory ? "Factory, built in" : "Yours, saved by you") + ", " +
            juce::String(position) + " of " + juce::String(count);
 }
 
