@@ -640,7 +640,7 @@ reference: [`lfo.md`](lfo.md).
 
 ## Poly Sequencer Module
 - **Source file**: `Source/Modules/PolySequencerModule.h` (same base as the Sequencer).
-- **Purpose**: polyphonic chord sequencer, 1 to 128 steps. Generates MIDI chord events — it does **not** output per-voice pitch CV channels, and sends no CC 74.
+- **Purpose**: polyphonic chord sequencer, 1 to 128 steps. Generates MIDI chord events — it does **not** output per-voice pitch CV channels, and sends no CC 74. Every chord note is its own note-on, so the module after it must be Poly to play them all; the card offers to turn Poly on when it is not ([sequencer-design.md](sequencer-design.md#poly-sequencer-chords)).
 - **Parameters**: exactly the Sequencer's (`run`, `bpm`, `syncToTransport`, `steps`, `rate`, `transpose`, `gate`, `velocity`, `chance`, `scaleRoot`, `scale`, `followSongKey`).
 - **State**: the same pattern; the per-step `chord` replaces `slide` and `filter`. The 25 chords are the old eight (Unison, Major, Minor, Maj7, Min7, 5ths, Octs, Random), six built from the scale at the snapped root (`Scale Triad`, `Scale Seventh`, `Scale Sus2`, `Scale Sus4`, `Scale Add9`, `Scale Sixth`; with no scale they use the Major scale at the root) and eleven fixed qualities (`Dom7`, `Dim`, `Aug`, `Sus2`, `Sus4`, `Sixth`, `Min6`, `Add9`, `Dim7`, `HalfDim7`, `MinMaj7`). The old and fixed chords stack their intervals on the snapped root unsnapped; Random picks its notes from the seed. Notes outside 0–127 are dropped. Default roots: C3 E3 G3 C4 C3 G3 E3 C4.
 - **Old files**: `Step N Root`, `Step N Chord` and `Gate N` are read once on load into the pattern.

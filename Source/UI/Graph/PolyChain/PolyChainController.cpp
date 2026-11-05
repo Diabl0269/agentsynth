@@ -4,6 +4,7 @@
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/ConnectionIndex.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -49,6 +50,23 @@ TrackPolyState PolyChainController::trackPolyState(NodeID trackSource) const {
     if (poly == 0 && mono == 0)
         return TrackPolyState::none;
     return mono == 0 ? TrackPolyState::poly : poly == 0 ? TrackPolyState::mono : TrackPolyState::mixed;
+}
+
+// Direct Midi cables only: a Poly MIDI node in between has no Poly switch, so a chain it feeds is the poly chain.
+std::optional<MonoNoteDestination> PolyChainController::monoNoteDestination(NodeID sequencer) const {
+    auto& graph = editor_.getAudioEngine().getGraph();
+    const synth::ConnectionIndex index(graph);
+    for (const auto& connection : index.outOf(sequencer)) {
+        if (connection.source.channelIndex != juce::AudioProcessorGraph::midiChannelIndex)
+            continue;
+        auto* node = graph.getNodeForId(connection.destination.nodeID);
+        if (node == nullptr)
+            continue;
+        auto* processor = node->getProcessor();
+        if (synth::hasPolyParameter(processor) && !synth::isProcessorPoly(processor))
+            return MonoNoteDestination{node->nodeID, processor->getName()};
+    }
+    return std::nullopt;
 }
 
 // `includeStart`: the clicked module is switched even when the plan leaves it out (a pill's own module). A track's

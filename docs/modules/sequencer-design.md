@@ -223,6 +223,15 @@ Built. A step stores a chord *type* (`SequencerChord`); its notes are built on t
   chips plays only the one the pointer settles on; leaving the chips, picking and closing end the sound. The chip light-up is
   unchanged. The picker reports the settled chip (`onAudition`); `StepGridComponent::auditionChord` turns it into
   `previewNotes` / `stopPreview` on the module. The audio side is the audition path under [Playback](#playback).
+- **A chord needs a poly chain after it.** The sequencer sends one note-on per chord note, but an Oscillator, Wavetable,
+  Filter, ADSR or VCA with its Poly switch off plays one note at a time, so only one note of a chord is heard. When a
+  Poly Sequencer's Midi output is cabled straight to such a module, the card says so in the page strip's row (all of it with one page, else the room between the last page bar and the Follow pill, shown only when the whole line fits):
+  "Next: Oscillator plays one note at a time" and a **Turn Poly on** link (`StepGridPolyHint`; the chord picker's footer
+  shows the same line while it is true). The link calls the same `PolyChainController::polyPillClicked` as the module's own
+  Poly pill, so the whole voice graph switches, a Poly MIDI node is inserted and it is ONE undo step. The card re-reads
+  `PolyChainController::monoNoteDestination` on its existing 15 Hz tick, so the line appears with the cable, goes when Poly
+  is on and returns on undo. The plain Sequencer has no chords and shows none. Chains built by hand or by the AI are
+  covered the same way, since the check reads the graph, not how it was made.
 - The contents and names are pure (`StepGridChords.{h,cpp}`) and unit-tested.
 
 ---
@@ -251,7 +260,8 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
   mini piano roll, a row of step pads, the lane chips ([lane-chips.md](../layout/lane-chips.md)) and the other lanes
   stacked under them. Steps past `steps` are dimmed, never removed.
   - **Pitch** shows each step as a bar at the pitch it plays (scale rows shaded, the key's root tinted, the note name or
-    chord label over the bar); when the scale moved the note, the written note is a dashed outline. A drag lands only on
+    chord label over the bar); when the scale moved the note, the written note is a solid 1.5 px outline in the text colour
+    (readable on a dark and a light theme), drawn the moment a Key or Scale change reaches the card tick. A drag lands only on
     scale notes (`MusicalScale::snapPitch`; chromatic with No scale); Shift moves by octaves; the written pitch is the
     played pitch minus Transpose. The rows are frozen while a drag is in progress.
   - **Pads** turn a step on or off; a stroke across them paints one state. **Gate, Velocity, Chance, Repeat, Nudge,

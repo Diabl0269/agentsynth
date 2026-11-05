@@ -1,5 +1,5 @@
 // StepGridPaint.cpp -- drawing the step grid: the gutter, the Pitch lane as a mini piano roll (scale rows shaded, the
-// key's root tinted, each bar at the pitch the step PLAYS with the written note dashed when scale snap moved it), the
+// key's root tinted, each bar at the pitch the step PLAYS with the written note outlined when scale snap moved it), the
 // bar lanes, the Slide links, the Condition cells, the pads, the playhead column and the dimming past Steps. Colours
 // are theme tokens. Nothing repaints per tick: the grid repaints when a value, the playhead or a motion changes.
 #include "Music/MusicalScale.h"
@@ -15,6 +15,7 @@ using namespace stepgrid;
 namespace {
 
 constexpr float kLabelFont = 9.5f;
+constexpr float kWrittenOutlineWidth = 1.5f; ///< The solid outline of a written note a scale moved.
 
 bool isBlackKey(int pitch) {
     const int pc = pitch % 12;
@@ -69,10 +70,12 @@ juce::Rectangle<float> StepGridComponent::pitchBarRect(int step, float played, j
     return {(float)columnLeft(step) + 2.0f, rowTop + rowH * 0.5f - barH * 0.5f, (float)columnWidth() - 4.0f, barH};
 }
 
-// Above the bar, or below it for the top row; as wide as the column plus a little. Drawn only in columns 22 px wide
-// or more.
-juce::Rectangle<float> StepGridComponent::chordLabelRect(const juce::Rectangle<float>& bar,
-                                                         juce::Rectangle<int> lane) const {
+// Above the bar, or below it for the top row; as wide as the column plus a little. A written-note outline beside the
+// bar counts as part of it, so the label never crosses the outline. Drawn only in columns 22 px wide or more.
+juce::Rectangle<float> StepGridComponent::chordLabelRect(const juce::Rectangle<float>& playedBar,
+                                                         juce::Rectangle<int> lane, int step) const {
+    const auto outline = writtenOutlineRect(step, lane);
+    const auto bar = outline.isEmpty() ? playedBar : playedBar.getUnion(outline);
     const float labelY = bar.getY() >= (float)lane.getY() + 11.0f ? bar.getY() - 11.0f : bar.getBottom();
     return {bar.getX() - 4.0f, labelY, bar.getWidth() + 8.0f, 11.0f};
 }
@@ -153,6 +156,23 @@ void StepGridComponent::paintColumnBackdrop(juce::Graphics& g, const StepGridLay
     }
 }
 
+// Where the note a step was written at sits when a scale moved it elsewhere; empty when nothing moved it or the
+// written row is not shown. The stroke is solid and centred on the returned rectangle, inset so it stays in its row.
+juce::Rectangle<float> StepGridComponent::writtenOutlineBounds(int step) const {
+    return writtenOutlineRect(step, currentLayout().lanes[(size_t)SequencerLane::Pitch]);
+}
+
+juce::Rectangle<float> StepGridComponent::writtenOutlineRect(int step, juce::Rectangle<int> lane) const {
+    const int written = module_.getPattern().steps[(size_t)juce::jlimit(0, kMaxSequencerSteps - 1, step)].pitch;
+    if (gliding_ || written == playedPitchOf(step) || written < pitchRange_.lo || written > pitchRange_.hi)
+        return {};
+    const float rowH = (float)lane.getHeight() / (float)pitchRange_.rows();
+    const float rowTop = (float)lane.getY() + ((float)pitchRange_.hi - (float)written) * rowH;
+    const float inset = kWrittenOutlineWidth * 0.5f + 0.5f;
+    const auto bar = pitchBarRect(step, (float)written, lane);
+    return bar.withY(rowTop + inset).withHeight(std::max(rowH - 2.0f * inset, 3.0f));
+}
+
 void StepGridComponent::paintPitchLane(juce::Graphics& g, juce::Rectangle<int> lane) {
     const auto& c = colorsOf(*this);
     const int rows = pitchRange_.rows();
@@ -188,23 +208,15 @@ void StepGridComponent::paintPitchLane(juce::Graphics& g, juce::Rectangle<int> l
     for (int s = first; s <= last; ++s) {
         const auto& entry = pattern.steps[(size_t)s];
         const float played = shownPitch(s);
-        const float barH = std::max(rowH - 1.0f, 5.0f);
         const auto bar = pitchBarRect(s, played, lane);
         g.setColour(entry.on ? c.accent : c.textDisabled);
         g.fillRoundedRectangle(bar, 2.0f);
         if (colW >= 22.0f)
-            paintStepLabel(g, s, juce::roundToInt(played), chordLabelRect(bar, lane));
-        const int written = entry.pitch;
-        if (!gliding_ && written != juce::roundToInt(played) && written >= pitchRange_.lo &&
-            written <= pitchRange_.hi) {
-            juce::Path outline;
-            outline.addRoundedRectangle(
-                juce::Rectangle<float>(bar.getX(), rowTop((float)written) + 0.5f, bar.getWidth(), barH), 2.0f);
-            juce::Path dashed;
-            const float dashes[] = {3.0f, 2.0f};
-            juce::PathStrokeType(1.0f).createDashedStroke(dashed, outline, dashes, 2);
-            g.setColour(c.textMuted);
-            g.fillPath(dashed);
+            paintStepLabel(g, s, juce::roundToInt(played), chordLabelRect(bar, lane, s));
+        const auto outline = writtenOutlineRect(s, lane);
+        if (!outline.isEmpty()) {
+            g.setColour(c.textPrimary);
+            g.drawRoundedRectangle(outline, 2.0f, kWrittenOutlineWidth);
         }
     }
 }
