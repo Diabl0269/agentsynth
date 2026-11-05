@@ -17,11 +17,11 @@
 void ModuleComponent::paintOverChildren(juce::Graphics& g) { paintModHoverChip(g); }
 
 namespace {
-constexpr float kRowHeight = 16.0f;
-constexpr float kRowStride = 17.0f;
-constexpr float kSwatchSize = 6.0f;
-constexpr float kSwatchGap = 4.0f;
-constexpr float kPadX = 6.0f;
+constexpr float kModChipRowHeight = 16.0f;
+constexpr float kModChipRowStride = 17.0f;
+constexpr float kModChipSwatchSize = 6.0f;
+constexpr float kModChipSwatchGap = 4.0f;
+constexpr float kModChipPadX = 6.0f;
 } // namespace
 
 namespace synth::ui {
@@ -74,11 +74,12 @@ void paintChipRow(juce::Graphics& g, const synth::theme::Theme& theme, const syn
     g.fillRoundedRectangle(bounds, theme.metrics.cornerRadiusSmall);
     auto textArea = bounds;
     if (!row.isMore) {
-        const auto swatch = juce::Rectangle<float>(kSwatchSize, kSwatchSize)
-                                .withCentre({bounds.getX() + kPadX + kSwatchSize * 0.5f, bounds.getCentreY()});
+        const auto swatch =
+            juce::Rectangle<float>(kModChipSwatchSize, kModChipSwatchSize)
+                .withCentre({bounds.getX() + kModChipPadX + kModChipSwatchSize * 0.5f, bounds.getCentreY()});
         g.setColour((row.positive ? colors.modRingPositive : colors.modRingNegative).withMultipliedAlpha(alpha));
         g.fillEllipse(swatch);
-        textArea = textArea.withTrimmedLeft(kPadX + kSwatchSize + kSwatchGap);
+        textArea = textArea.withTrimmedLeft(kModChipPadX + kModChipSwatchSize + kModChipSwatchGap);
     }
     g.setColour(colors.textPrimary.withMultipliedAlpha(alpha));
     g.setFont(font);
@@ -149,10 +150,10 @@ void ModuleComponent::paintModHoverChip(juce::Graphics& g) {
     float y = sliderBounds.getBottom() + 2.0f;
     for (const auto& row : stack.rows) {
         const auto& font = row.bold ? boldFont : plainFont;
-        const float width = juce::GlyphArrangement::getStringWidth(font, row.text) + kPadX * 2.0f +
-                            (row.isMore ? 0.0f : kSwatchSize + kSwatchGap);
-        paintChipRow(g, lf->getTheme(), row, {sliderBounds.getCentreX() - width * 0.5f, y, width, kRowHeight}, font,
-                     stack.alpha);
-        y += kRowStride;
+        const float width = juce::GlyphArrangement::getStringWidth(font, row.text) + kModChipPadX * 2.0f +
+                            (row.isMore ? 0.0f : kModChipSwatchSize + kModChipSwatchGap);
+        paintChipRow(g, lf->getTheme(), row, {sliderBounds.getCentreX() - width * 0.5f, y, width, kModChipRowHeight},
+                     font, stack.alpha);
+        y += kModChipRowStride;
     }
 }
