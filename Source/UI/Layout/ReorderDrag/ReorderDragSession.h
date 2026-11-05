@@ -3,6 +3,7 @@
 #include "ReorderCancelKey.h"
 #include "ReorderDragAnimator.h"
 #include "ReorderFramePump.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <functional>
 #include <vector>
 
@@ -43,7 +44,7 @@ public:
      *  dragged slot's start, both measured once in the owner's coordinates. */
     void begin(const std::vector<ReorderDragAnimator::Slot>& slots, int draggedKey, float grabOffset, float pointer) {
         discard();
-        animator_.begin(slots, draggedKey, grabOffset, pointer, owner_.isShowing());
+        animator_.begin(slots, draggedKey, grabOffset, pointer, animates());
     }
 
     /** Feeds the pointer; true once the drag is lifted, i.e. the owner should re-place its rows. */
@@ -85,10 +86,11 @@ public:
 
     /** For a drop whose commit already rebuilt the list (this session is on the NEW list): the list is
      *  laid out at its final `slots` and item `key` glides in from `fromStart`, where it was dropped.
-     *  The neighbours already sit in their final places. Lands at once when the owner is not showing. */
+     *  The neighbours already sit in their final places. Lands at once when the owner is not showing or Animations
+     *  is Off. */
     void settleInto(const std::vector<ReorderDragAnimator::Slot>& slots, int key, float fromStart) {
         discard();
-        animator_.begin(slots, key, 0.0f, fromStart - 2.0f * ReorderDragAnimator::kDragThresholdPx, owner_.isShowing());
+        animator_.begin(slots, key, 0.0f, fromStart - 2.0f * ReorderDragAnimator::kDragThresholdPx, animates());
         animator_.dragTo(fromStart);
         std::vector<float> finalStarts;
         for (const auto& slot : slots)
@@ -123,6 +125,10 @@ public:
     bool sendEscapeForTest() { return cancelKey_.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey), &owner_); }
 
 private:
+    // Off screen no VBlank arrives, and under Animations Off the frame pump lands at once: either way a tween timed on
+    // the real clock would never be seen to finish, so the gesture runs untimed and lands where it is released.
+    bool animates() const { return owner_.isShowing() && !animationsOff(); }
+
     void frame() {
         animator_.finishIfSettled();
         if (onFrame_)

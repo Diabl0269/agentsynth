@@ -111,6 +111,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesModulatorFoldOrderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesModulatorDragTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesCrossTrackMoveTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesDragMakeRoomTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesModulatorMoveMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesLaneMainTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesDockOpenScrollTests.cpp

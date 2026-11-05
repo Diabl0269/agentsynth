@@ -158,6 +158,26 @@ struct ShortcutManager::Migrations {
             manager.getConflictingAction("openAddTrackMenu", cmdT).isEmpty())
             manager.bindings["openAddTrackMenu"] = cmdT;
     }
+
+    /** One-shot: Move Lane Up/Down (lanes and modulator rows) moved from Cmd+Alt+Up/Down to Alt+Up/Down, the chord
+     *  every other "move this item one place" action uses. A saved install holds the old pair (saveToProperties()
+     *  persists every action), so each moves across only while it still holds exactly its old default and no other
+     *  action already holds the new chord; a user's own rebind stays. The flag stops it re-firing. */
+    static void migrateMoveLaneAltArrows(ShortcutManager& manager, juce::PropertiesFile& settings) {
+        constexpr auto flag = "shortcutMigration_moveLaneAltArrows";
+        if (settings.getBoolValue(flag, false))
+            return;
+        settings.setValue(flag, true);
+        const juce::ModifierKeys cmdAlt{juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier};
+        for (const auto& [action, code] :
+             {std::pair<const char*, int>{"timelineMoveLaneUp", juce::KeyPress::upKey},
+              std::pair<const char*, int>{"timelineMoveLaneDown", juce::KeyPress::downKey}}) {
+            const juce::KeyPress alt(code, juce::ModifierKeys::altModifier, 0);
+            if (manager.bindings[action] == juce::KeyPress(code, cmdAlt, 0) &&
+                manager.getConflictingAction(action, alt).isEmpty())
+                manager.bindings[action] = alt;
+        }
+    }
 };
 
 void ShortcutManager::loadFromProperties(juce::ApplicationProperties& props) {
@@ -178,6 +198,7 @@ void ShortcutManager::loadFromProperties(juce::ApplicationProperties& props) {
     Migrations::migrateTransportCtrlChords(*this, *settings);
     Migrations::migrateDockDigitKeys(*this, *settings);
     Migrations::migrateAddTrackCmdT(*this, *settings);
+    Migrations::migrateMoveLaneAltArrows(*this, *settings);
     Migrations::persistMigratedBindings(*this, *settings, loaded);
 }
 

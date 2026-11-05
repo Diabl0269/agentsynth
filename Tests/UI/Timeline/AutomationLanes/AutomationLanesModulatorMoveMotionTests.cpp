@@ -75,7 +75,7 @@ TEST_F(TimelinePanelIntegrationTest, ARowDroppedOnAnotherLaneGrowsInThereWhileIt
     EXPECT_TRUE(lanes.isBlockMotionAnimating());
     EXPECT_EQ(lanes.modulatorRowHeightFor(s.resLane, 0), 0) << "the moved row starts with no height in its new lane";
     EXPECT_EQ(s.resY(), resY) << "the gap it left still holds the Resonance lane where it was";
-    EXPECT_EQ(s.visibleRows(), 0) << "not drawn in its old place: it is the row growing in the new one";
+    EXPECT_EQ(s.visibleRows(), 1) << "drawn once: the moved row, gliding from where it was dropped, not a fading copy";
 
     lanes.stepBlockMotionForTest(0.5f);
     expectBetween(s.resY(), resY - full, resY, "the old gap is closing");

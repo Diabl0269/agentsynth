@@ -807,9 +807,18 @@ void AutomationLaneEditor::mouseDoubleClick(const juce::MouseEvent& e) {
 }
 
 //==============================================================================
+// Move Lane Up/Down and the point move share Alt+Up/Down by default: with points selected the points take the key
+// first (and the lane gets it only if they leave it), with none selected the lane does.
 bool AutomationLaneEditor::keyPressed(const juce::KeyPress& key) {
-    if (onLaneKey && onLaneKey(key))
+    const bool pointsFirst = !selection_.isEmpty();
+    if (!pointsFirst && onLaneKey && onLaneKey(key))
         return true;
+    if (handleEditorKey(key))
+        return true;
+    return pointsFirst && onLaneKey && onLaneKey(key);
+}
+
+bool AutomationLaneEditor::handleEditorKey(const juce::KeyPress& key) {
     syncToDoc();
     if (shapeGesture_.keyPressed(key))
         return true;

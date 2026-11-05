@@ -1,6 +1,6 @@
 // AutomationLanesReorderTests.cpp -- reordering lanes within their track: a real drag on a lane header through its own
 // mouse handlers (the other lanes slide aside, one undo step on the drop, Esc puts everything back, a click is still a
-// click), a lane never leaving its track, and Cmd+Alt+Up/Down through the focused header's and editor's key handlers.
+// click), a lane never leaving its track, and Alt+Up/Down through the focused header's and editor's key handlers.
 // Headless, so the glide lands at once (the owner is not showing); the glide itself is the shared
 // ReorderDragAnimator's.
 
@@ -184,11 +184,11 @@ TEST(AutomationLanesReorderTest, ADragDoesNotOpenTheNamePickerOnRelease) {
     EXPECT_EQ(capture.picker, nullptr);
 }
 
-TEST(AutomationLanesReorderTest, CmdAltDownAndUpOnTheFocusedHeaderMoveTheLaneOneSlotEachAsOneUndoStep) {
+TEST(AutomationLanesReorderTest, AltDownAndUpOnTheFocusedHeaderMoveTheLaneOneSlotEachAsOneUndoStep) {
     ReorderPanel f;
-    const juce::ModifierKeys commandAlt(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier);
-    const juce::KeyPress down(juce::KeyPress::downKey, commandAlt, 0);
-    const juce::KeyPress up(juce::KeyPress::upKey, commandAlt, 0);
+    const juce::ModifierKeys alt(juce::ModifierKeys::altModifier);
+    const juce::KeyPress down(juce::KeyPress::downKey, alt, 0);
+    const juce::KeyPress up(juce::KeyPress::upKey, alt, 0);
     auto& header = f.header(f.cutoff);
     const auto title = header.getTitle();
 
@@ -208,17 +208,39 @@ TEST(AutomationLanesReorderTest, CmdAltDownAndUpOnTheFocusedHeaderMoveTheLaneOne
     EXPECT_FALSE(f.undo.canUndo()) << "nothing moved, nothing recorded";
 }
 
-TEST(AutomationLanesReorderTest, CmdAltDownOnTheFocusedEditorMovesTheLaneAndKeepsPointKeysForThePoints) {
+TEST(AutomationLanesReorderTest, AltDownOnTheFocusedEditorMovesTheLaneAndKeepsPointKeysForThePoints) {
     ReorderPanel f;
-    const juce::ModifierKeys commandAlt(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier);
+    const juce::ModifierKeys alt(juce::ModifierKeys::altModifier);
     auto& editor = f.editor(f.res);
 
-    EXPECT_TRUE(editor.keyPressed(juce::KeyPress(juce::KeyPress::downKey, commandAlt, 0)));
+    EXPECT_TRUE(editor.keyPressed(juce::KeyPress(juce::KeyPress::downKey, alt, 0)));
     EXPECT_EQ(f.order(f.bass), (std::vector<synth::LaneId>{f.cutoff, f.detune, f.res}));
     EXPECT_EQ(f.onScreenOrder(f.bass), f.order(f.bass));
 
     EXPECT_FALSE(editor.keyPressed(juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys(), 0)))
         << "a bare arrow with no points selected is not the lane's";
+}
+
+// Regression test for FRO1480: Move Lane Up/Down and the point move now share Alt+Up/Down, so with points selected
+// the focused editor must still move the points, not the lane.
+TEST(AutomationLanesReorderTest, AltUpOnAnEditorWithAPointSelectedMovesThePointNotTheLane) {
+    ReorderPanel f;
+    auto& editor = f.editor(f.res);
+    editor.setTool(synth::ui::AutomationLaneEditor::Tool::Pointer);
+    f.doc.addBreakpoint(f.res, 2.0, 0.4);
+    editor.getPointSelection().setSelection({2.0});
+    editor.getPointSelection().setCursor(2.0);
+    const auto before = f.order(f.bass);
+
+    EXPECT_TRUE(editor.keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::altModifier, 0)));
+    EXPECT_EQ(f.order(f.bass), before) << "the lane stays in its slot";
+    const double value = f.doc.getLane(f.res)->points.front().value;
+    EXPECT_TRUE(value > 0.4 || editor.getPreviewValueForTest() > 0.4) << "the point moved up";
+
+    editor.getPointSelection().clear();
+    EXPECT_TRUE(editor.keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::altModifier, 0)));
+    EXPECT_EQ(f.order(f.bass), (std::vector<synth::LaneId>{f.res, f.cutoff, f.detune}))
+        << "with no point selected the same key moves the lane";
 }
 
 TEST(AutomationLanesReorderTest, ARebindOfMoveLaneUpIsHonoured) {
@@ -230,9 +252,7 @@ TEST(AutomationLanesReorderTest, ARebindOfMoveLaneUpIsHonoured) {
 
     EXPECT_TRUE(header.keyPressed(juce::KeyPress('k', juce::ModifierKeys::altModifier, 0)));
     EXPECT_EQ(f.order(f.bass), (std::vector<synth::LaneId>{f.res, f.cutoff, f.detune}));
-    EXPECT_FALSE(header.keyPressed(
-        juce::KeyPress(juce::KeyPress::upKey,
-                       juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier), 0)))
+    EXPECT_FALSE(header.keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::altModifier, 0)))
         << "the old key is free once it is rebound";
     f.panel.setShortcutManager(nullptr);
 }
