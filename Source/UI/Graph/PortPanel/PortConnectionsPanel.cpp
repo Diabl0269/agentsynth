@@ -41,7 +41,7 @@ PortConnectionsPanel::PortConnectionsPanel(GraphEditor& editor, PortPanelControl
     , port_(port)
     , holder_(std::make_unique<RowsHolder>())
     , split_(addConnectionHalf(), pickOnCanvasHalf(), "Add a connection")
-    , disconnectAll_("Disconnect all", "Disconnect all connections")
+    , disconnectAll_("Disconnect all", "Disconnect all connections", ModDotGlyph::Unlink)
     , deletePort_("Delete port", "Delete port")
     , searchPage_(std::make_unique<PortTargetSearchPage>(portTitle(editor, port)))
     , updater_(this)

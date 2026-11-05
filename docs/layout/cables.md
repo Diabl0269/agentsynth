@@ -261,7 +261,7 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
 - **Content.** The title reads "Module · port (N connections)" ("1 connection", "No connections yet"). One row per
   cable: a swatch in the cable's colour (`GraphEditor::colourForCable`), "other module · other port" and a remove button.
   A macro port reads as its own name; a cable landing on a knob names the knob's parameter. "Disconnect all" shows under
-  two or more. On a macro's port (a collapsed card's dot or an expanded macro's boundary port node) a **Delete port**
+  two or more, as a link button with a coloured unlink icon (`ModDotGlyph::Unlink`, the trash's danger colour) left of the label, like the Add connection icons; its title, tooltip, focus stop and focus ring are the plain link's. On a macro's port (a collapsed card's dot or an expanded macro's boundary port node) a **Delete port**
   link (tooltip "Delete this macro port") sits under the other buttons. The rows come from `listPortConnections`, a filter over `buildVisibleCables()` by the jack's visible index
   (a cable names raw channels, the card and the labels speak in visible jacks), never from graph edges. Zero and one
   connection still show the panel; with none, "Add connection" is its main action.
