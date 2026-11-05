@@ -131,6 +131,10 @@ look momentarily misleading during that window.
   | Linux | 2.0 to 2.5 s | 0.9 to 1.1 s | 578 MB | 100% hits, 63 s |
   | Windows | 2.7 to 4.3 s | 1.2 to 1.7 s | 199 MB | 100% hits, 211 s |
 
+  The Windows job builds with `/Z7` (`CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded`, the only debug-info form ccache
+  caches for MSVC) and links `Tests.exe` with `/DEBUG` (`AGENTSYNTH_TEST_PDB`), so the crash reporter in
+  `Tests/WindowsCrashReport.h` prints function names instead of `Tests.exe+0x...`. ccache `max_size` is 1500M there for the larger objects.
+
   Windows needs `/Brepro /experimental:deterministic` on the three targets. Without them the
   second build in the same job recompiled 1,101 of 1,242 files (11% hits), with the cache full
   and again with an empty 4 GB cache: MSVC writes a different `.pch` on every build (three files

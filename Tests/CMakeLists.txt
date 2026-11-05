@@ -934,6 +934,13 @@ if(WIN32)
     )
 endif()
 
+# Writes Tests.pdb (MSVC) so the in-process crash reporter (WindowsCrashReport.h) can print function names.
+# Off by default; the Windows CI job turns it on. /DEBUG turns off the linker's default /OPT, so restore it.
+option(AGENTSYNTH_TEST_PDB "Link Tests with /DEBUG so crash stacks are symbolized (MSVC)" OFF)
+if(MSVC AND AGENTSYNTH_TEST_PDB)
+    target_link_options(Tests PRIVATE /DEBUG /OPT:REF /OPT:ICF)
+endif()
+
 target_link_libraries(Tests PRIVATE
     GTest::gtest
     # AppUI links Core PUBLIC. Linking the library instead of recompiling its sources here halves
