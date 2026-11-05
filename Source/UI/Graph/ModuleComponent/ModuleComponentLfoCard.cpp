@@ -10,6 +10,7 @@
 #include "ModuleComponentInternal.h"
 #include "Modules/LFOModule.h"
 #include "Modules/Shapes/MorphShapes.h"
+#include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
@@ -318,6 +319,9 @@ void ModuleComponent::updateLfoWavePlayhead() {
 int ModuleComponent::layoutLfoCustomWaveSection(int y, int contentX, int contentW, bool apply) {
     if (lfoCurveEditor == nullptr || !lfoCurveEditor->isVisible())
         return y;
+
+    // The section fades with its gap under the body controls, so the toolbar never touches the Morph value boxes.
+    y += blockHeight(lfoFade_, synth::cardbody::gapUnderBodyControls(false));
 
     // Each part takes its height in step with the fade, so the rows under the section slide.
     if (apply) {
