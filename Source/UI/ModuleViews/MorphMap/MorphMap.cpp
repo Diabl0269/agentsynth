@@ -300,7 +300,18 @@ bool MorphMap::setDropHighlight(Axis axis) {
 // Pointer
 // ---------------------------------------------------------------------------------------------------------------
 
+void MorphMap::setCursorSelected(bool on) {
+    if (on == cursorSelected_)
+        return;
+    cursorSelected_ = on;
+    repaint();
+    if (onCursorSelected)
+        onCursorSelected(on);
+}
+
 void MorphMap::select(int index) {
+    if (index >= 0)
+        setCursorSelected(false);
     if (index == selected_)
         return;
     selected_ = index;
@@ -353,6 +364,7 @@ void MorphMap::mouseDown(const juce::MouseEvent& e) {
         drag_ = Drag::Cursor;
         grabOffset_ = getCursorCentre() - e.position;
         takeFocus(*cursorStop_);
+        setCursorSelected(true);
     } else if (dot >= 0) {
         drag_ = Drag::Dot;
         dragIndex_ = dot;

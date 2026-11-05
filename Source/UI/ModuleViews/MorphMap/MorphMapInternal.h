@@ -35,6 +35,8 @@ public:
         repaint();
         if (index_ >= 0)
             owner_.select(index_);
+        else if (index_ == -1)
+            owner_.setCursorSelected(true);
         owner_.repaint();
     }
     void focusLost(FocusChangeType) override { repaint(); }
