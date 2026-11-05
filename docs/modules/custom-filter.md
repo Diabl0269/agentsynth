@@ -369,6 +369,14 @@ slider drag is one undo step (the settings are part of the module's extra state)
   the toggle is on and the window is visible and repaints only the curve; with the toggle off there is no tick and the
   curve paints exactly as before (the LFO's window has no such toggle). Tab order: the map, the chips, Grid, Show
   spectrum, the curve, the buttons.
+- **The filter's response over the editor.** While the morph cursor (the dark main dot) is the selection in the map
+  (pressed, dragged or focused, until a shape dot is chosen), the window draws the filter's live frequency response
+  as an accent line over the curve: `customfilter::responseGridDb` with the morph cursor, Shift, Depth, Cutoff and
+  Resonance, the same curve as the card's Show response, on the curve's own log-frequency axis and dB range. It
+  follows Cutoff and the cursor live (the editor's tick re-reads it and repaints only on a change). Choosing a shape dot
+  hides it. It sits in the same backdrop painter as the spectrum, so both can show at once. A screen reader hears
+  "Showing the filter's current response" when it appears. The map keeps this selection (`MorphMap::isCursorSelected`,
+  `onCursorSelected`); the LFO's window has no response (`ShapeListAdapter::hasResponse`, true for the Filter only).
 - **Start from** stamps the vowel (ah, ee, oo, eh, ih) or animal (wolf, crow, frog) curve onto the selected shape. Its
   name and map position stay. The curves are `CustomFilterShapes::presetCurve`; a new Filter starts with the three
   vowels, which are the same curves. After the built-ins the menu lists **Your shapes** (the Filter shapes saved with
@@ -427,6 +435,14 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   cursor, the shapes and the knobs, and draws the cutoff marker (a thin vertical line) like the other types. Double-clicking it opens the shape editor on the shape nearest the cursor.
 - **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
   shape nearest the cursor.
+- **Curve view** (252 x 110, under the button, above the map; `MorphShapesCardCurve.cpp`): the shape under the morph
+  cursor on log-frequency and dB axes (`FilterShapesAdapter::getAxisGuides`). With the cursor on a dot (within 0.06
+  map units, or the only shape) it shows and edits that shape in place: a drag goes through the adapter's
+  `beginEdit` / `setShapes` / `endEdit`, so it is one undo step, the sound and the Edit shapes window follow, and
+  double-clicking empty space opens the window. **Between dots it shows the blend the cursor hears and is read-only**
+  (no pointer or keyboard editing; its screen-reader name says so). **Show Curve** is a footer pill like Show Morph
+  Map, remembered as `CardViewState::showCurveView` (`"cardView"."curveView"`); with no choice it shows from two shapes
+  up. The LFO card keeps its own in-card editor (`ModuleComponentLfoCard.cpp`).
 - **Morph map** (252 x 159, under the button) with thin **Morph X** (bottom edge) and **Morph Y** (left edge) sliders
   hugging it; the right edge is left free. The slider thumbs sit at the cursor; a drag, a click or the arrow keys set
   that one parameter (one host gesture and one undo step). **Show Morph Map** is a footer pill, shown only in Custom;

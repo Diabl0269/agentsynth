@@ -94,6 +94,9 @@ public:
     /** -1 for none. Moving it only repaints; it reports nothing. */
     void setSelected(int index);
     int getSelected() const noexcept { return selected_; }
+    /** The cursor (the dark main dot) is the thing the user is on: it was pressed, dragged or focused, and no dot has
+     *  been chosen since. Choosing a dot clears it. Reports through onCursorSelected. */
+    bool isCursorSelected() const noexcept { return cursorSelected_; }
     /** Draws each dot's name beside it (the large map). */
     void setShowLabels(bool show);
 
@@ -107,6 +110,8 @@ public:
     std::function<void(float, float)> onAddAt;
     /** The user chose this dot (click, focus). */
     std::function<void(int)> onSelect;
+    /** The cursor became (true) or stopped being (false) the selection. */
+    std::function<void(bool)> onCursorSelected;
     std::function<void(int)> onEditDot;
     std::function<void(int)> onDuplicateDot;
     std::function<void(int)> onDeleteDot;
@@ -278,6 +283,8 @@ private:
     bool showLabels_ = false;
     bool editItemShown_ = true;
     int selected_ = -1;
+    bool cursorSelected_ = false;
+    void setCursorSelected(bool on);
     Axis dropAxis_ = Axis::None;
     Axis hoverAxis_ = Axis::None;
     float landingDot_ = 7.0f;

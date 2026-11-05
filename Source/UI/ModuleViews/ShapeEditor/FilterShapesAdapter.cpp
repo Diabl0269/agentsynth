@@ -97,6 +97,14 @@ const std::vector<float>* FilterShapesAdapter::updateSpectrum() {
     return &spectrum_.getDb();
 }
 
+/** The card's Show response curve: the shapes blended at the morph cursor, shifted, scaled and given the resonant
+    bell, from the module's live (modulated) values. */
+std::vector<float> FilterShapesAdapter::responseDb() const {
+    return synth::customfilter::responseGridDb(
+        filter_.getCustomShapes(), filter_.getCurrentMorphX(), filter_.getCurrentMorphY(), filter_.getCurrentShift(),
+        filter_.getCurrentDepth(), filter_.getCurrentCutoff(), filter_.getModulatedResonance());
+}
+
 std::vector<ShapeStartFrom> FilterShapesAdapter::getStartFrom() const {
     std::vector<ShapeStartFrom> out;
     for (int i = 0; i < CustomFilterShapes::kNumPresets; ++i) {

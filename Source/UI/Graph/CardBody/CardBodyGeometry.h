@@ -26,6 +26,8 @@ inline constexpr int kPanelGap = 6;             // between the controls and a re
 inline constexpr int kSectionHeaderHeight = 18; // a titled section's header row
 inline constexpr int kTabStripGap = 8;          // above a tab strip, and between it and its tab's controls
 inline constexpr int kBottomPadding = 12;
+// The gap a block keeps under the body controls: kPanelGap unless a toggle row or another block sits above it.
+inline constexpr int gapUnderBodyControls(bool somethingAbove) { return somethingAbove ? 0 : kPanelGap; }
 // A port label box spans its jack centre +/- 10; clear it by a bit more before placing any content.
 inline constexpr int kPortLabelClearance = 15;
 inline constexpr int kFooterRowHeight = 28;  // one footer row: a horizontal fader's height

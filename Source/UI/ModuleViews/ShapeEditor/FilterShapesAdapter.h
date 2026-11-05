@@ -35,6 +35,8 @@ public:
     juce::String getPreferenceKind() const override { return "filter"; }
     bool hasSpectrum() const override { return true; }
     const std::vector<float>* updateSpectrum() override;
+    bool hasResponse() const override { return true; }
+    std::vector<float> responseDb() const override;
     std::vector<ShapeStartFrom> getStartFrom() const override;
     ShapeDrawRange getDrawRange() const override;
     juce::String getWindowTitle() const override;

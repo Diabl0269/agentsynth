@@ -154,6 +154,10 @@ private:
     void setSpectrumShown(bool shown);
     void updateSpectrumTimer();
     void paintSpectrum(juce::Graphics& g, const CurveEditorGeometry& geometry) const;
+    void paintResponse(juce::Graphics& g, const CurveEditorGeometry& geometry) const;
+    void updateBackdrop();
+    void pollResponse();
+    void onCursorSelectionChanged(bool selected);
 
     std::shared_ptr<ShapeListAdapter> adapter_;
     std::vector<ShapeItem> shapes_;
@@ -183,6 +187,7 @@ private:
     std::unique_ptr<juce::ToggleButton> spectrumToggle_;
     std::unique_ptr<SpectrumTicker> spectrumTicker_;
     std::vector<float> spectrumDb_;
+    std::vector<float> responseDb_; ///< the live response, kept only while the cursor is the selection
     juce::Rectangle<int> gridLabelArea_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShapeListEditor)

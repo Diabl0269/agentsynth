@@ -7,7 +7,9 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/CardBlockFade.h"
 #include "UI/Graph/CardWidgets/CardControlGestures.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Library/SoundBrowser/ShapeDropTarget.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ShapeEditor/ModuleShapesAdapter.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeMapController.h"
@@ -41,6 +43,7 @@ public:
         /** Where the shape window keeps its grid and spectrum choices; unset (or null) remembers nothing. */
         std::function<juce::ApplicationProperties*()> appProperties;
         float landingDotDiameter = 7.0f; ///< the dot the canvas paints where a cable lands on a slider
+        bool curveView = false;          ///< offers the small curve view of the shape under the cursor and its pill
     };
 
     /** The card, module and adapter must outlive this (detach() first). Message thread only for every member. */
@@ -91,6 +94,15 @@ public:
     /** The raw CV channel of the slider of `axis` (-1 for none). */
     int axisChannel(MorphMap::Axis axis) const noexcept;
 
+    /** The small curve view: the shape under the cursor, editable when the cursor is on a dot, else the blend it
+     *  hears, read-only. Present only when the Host asked for it. */
+    CurveEditorComponent& getCurveView() noexcept { return curveView_; }
+    juce::ToggleButton& getCurveToggle() noexcept { return curveToggle_; }
+    bool hasCurveView() const noexcept { return host_.curveView; }
+    bool isCurveViewShown() const;
+    /** The shape the curve view edits, or -1 while it shows the read-only blend (cursor between the dots). */
+    int curveViewShape() const noexcept { return curveShape_; }
+
     MorphMap& getMap() noexcept { return map_; }
     juce::TextButton& getEditButton() noexcept { return editButton_; }
     juce::ToggleButton& getToggle() noexcept { return toggle_; }
@@ -111,6 +123,12 @@ private:
     void openStripMenu(MorphMap::Axis axis, juce::Rectangle<int> screenArea);
     void pushStripModulation();
     juce::String stripTooltipAt(juce::Point<float> point) const;
+    // MorphShapesCardCurve.cpp
+    void setUpCurveView();
+    bool curveWanted() const;
+    void syncCurveView(bool force);
+    void writeCurveView();
+    void describeCurveView(int shape, int count);
 
     Host host_;
     ModuleBase& module_;
@@ -123,6 +141,14 @@ private:
     std::unique_ptr<ShapeMapController> controller_;
     synth::CardBlockFade editFade_;
     synth::CardBlockFade mapFade_;
+    synth::CardBlockFade curveFade_;
+    CurveEditorComponent curveView_;
+    juce::ToggleButton curveToggle_{"Show Curve"};
+    int curveShape_ = -1; ///< the shape the view edits; -1 while it shows the blend
+    int lastCurveGeneration_ = -1;
+    juce::Point<float> lastCurveCursor_{-1.0f, -1.0f};
+    bool curveGestureOpen_ = false;
+    RestoreWatch curveWatch_;
     StripGestures stripGestures_[2]; // X, Y
     int pressedStrip_ = -1;          // the strip whose gesture owns the press in flight
     juce::Component::SafePointer<juce::DialogWindow> window_;

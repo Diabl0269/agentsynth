@@ -99,6 +99,12 @@ public:
     /** Reads the newest audio and returns the smoothed spectrum (FilterSpectrumAnalyser's points, dB, log frequency
      *  from the curve's left edge to its right), or null when there is none. */
     virtual const std::vector<float>* updateSpectrum() { return nullptr; }
+    /** Whether the window can draw the filter's live frequency response over the curve while the morph cursor is the
+     *  selection (the Filter's). */
+    virtual bool hasResponse() const { return false; }
+    /** The response now, in dB on the curve's own log-frequency grid (point i of n is x = i / (n - 1)), with the
+     *  morph cursor, Shift, Depth, Cutoff and Resonance applied: the same curve as the card's Show response. */
+    virtual std::vector<float> responseDb() const { return {}; }
     virtual std::vector<ShapeStartFrom> getStartFrom() const { return {}; }
     virtual ShapeDrawRange getDrawRange() const { return {}; }
     virtual juce::String getWindowTitle() const = 0;

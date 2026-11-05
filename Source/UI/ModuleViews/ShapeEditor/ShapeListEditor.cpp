@@ -109,6 +109,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
         addAndMakeVisible(*perNote_);
     }
 
+    map_.onCursorSelected = [this](bool selected) { onCursorSelectionChanged(selected); };
     controller_.onSelect = [this](int index) { setSelected(index); };
     controller_.onEdit = [this](int index) { setSelected(index); };
     controller_.onChanged = [this] {
@@ -190,6 +191,7 @@ void ShapeListEditor::timerCallback() {
         statusClearsAtMs_ = 0;
         statusLabel_.setText({}, juce::dontSendNotification);
     }
+    pollResponse();
     if (curveGestureOpen_ || adapter_->getGeneration() == lastGeneration_)
         return;
     refresh();

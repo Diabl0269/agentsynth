@@ -2,6 +2,7 @@
 #include "MorphShapesCard.h"
 #include "Modules/Shapes/MorphShapes.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
@@ -12,6 +13,7 @@ namespace {
 constexpr int kMapWidth = 252;
 // 150 plus the 9 px the landing dots and modulation bars take from the plot, so the plot keeps its height.
 constexpr int kMapHeight = 159;
+constexpr int kCurveHeight = 110;
 
 int blockHeight(const synth::CardBlockFade& block, bool settling, int full) {
     return block.isAttached() ? block.height(full, settling) : full;
@@ -62,7 +64,13 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
                 host_.makeRoom();
             });
     };
-    attach(editFade_, {&editButton_, &toggle_});
+    if (host_.curveView) {
+        setUpCurveView();
+        attach(editFade_, {&editButton_, &toggle_, &curveToggle_});
+        attach(curveFade_, {&curveView_});
+    } else {
+        attach(editFade_, {&editButton_, &toggle_});
+    }
     attach(mapFade_, {&map_});
     lastGeneration_ = adapter_->getGeneration();
 }
@@ -75,6 +83,7 @@ void MorphShapesCard::detach() {
     window_ = nullptr;
     editFade_.reset();
     mapFade_.reset();
+    curveFade_.reset();
 }
 
 /** The remembered choice, else shown from two shapes up (one shape has nothing to arrange). */
@@ -93,6 +102,12 @@ void MorphShapesCard::sync() {
     toggle_.setToggleState(wanted, juce::dontSendNotification);
     editFade_.setShown(custom, *host_.settling, host_.relayout, host_.makeRoom);
     mapFade_.setShown(custom && wanted, *host_.settling, host_.relayout, host_.makeRoom);
+    if (host_.curveView) {
+        const bool curveWantedNow = curveWanted();
+        curveToggle_.setToggleState(curveWantedNow, juce::dontSendNotification);
+        curveFade_.setShown(custom && curveWantedNow, *host_.settling, host_.relayout, host_.makeRoom);
+        syncCurveView(true);
+    }
     host_.hideMorphKnobs(custom && wanted);
 }
 
@@ -110,6 +125,7 @@ void MorphShapesCard::poll() {
     }
     pushStripModulation();
     controller_->syncCursor();
+    syncCurveView(false);
 }
 
 int MorphShapesCard::layout(int y, int x, int width, bool apply, int topGap) {
@@ -122,6 +138,13 @@ int MorphShapesCard::layout(int y, int x, int width, bool apply, int topGap) {
         editButton_.setBounds(x + (width - w) / 2, y, w, blockHeight(editFade_, settling, synth::cardbody::kRowHeight));
     }
     y += blockHeight(editFade_, settling, synth::cardbody::kRowHeight + 2);
+    if (host_.curveView && curveFade_.isAttached() && curveView_.isVisible()) {
+        if (apply) {
+            const int w = juce::jmin(width, kMapWidth);
+            curveView_.setBounds(x + (width - w) / 2, y, w, blockHeight(curveFade_, settling, kCurveHeight));
+        }
+        y += blockHeight(curveFade_, settling, kCurveHeight + 8);
+    }
     if (mapFade_.isAttached() && map_.isVisible()) {
         if (apply) {
             const int w = juce::jmin(width, kMapWidth);

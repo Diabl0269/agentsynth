@@ -21,6 +21,9 @@ struct CardViewState {
     /** The morph map of the Filter's Custom type and the LFO's Custom shape: unset follows the card default, shown
      *  from two shapes up. */
     std::optional<bool> showMorphMap;
+    /** The Filter's Custom curve view (the shape under the morph cursor): unset follows the card default, shown from
+     *  two shapes up. */
+    std::optional<bool> showCurveView;
     /** Not a panel: the core pack sound ("core/flute") this module stands in for until the pack is installed. It rides
      *  here because this is the module's one saved non-parameter field that is neither a file nor model input. */
     juce::String pendingSound;
@@ -30,7 +33,7 @@ struct CardViewState {
 
     bool isDefault() const noexcept {
         return !showScope && !showResponse && !showSpectrum.has_value() && !showMorphMap.has_value() &&
-               pendingSound.isEmpty() && !stepGridLanes.has_value();
+               !showCurveView.has_value() && pendingSound.isEmpty() && !stepGridLanes.has_value();
     }
 
     /** A void var when everything is at its default, so an untouched card adds no JSON. */
@@ -46,6 +49,8 @@ struct CardViewState {
             obj->setProperty("spectrum", *showSpectrum);
         if (showMorphMap.has_value())
             obj->setProperty("morphMap", *showMorphMap);
+        if (showCurveView.has_value())
+            obj->setProperty("curveView", *showCurveView);
         if (pendingSound.isNotEmpty())
             obj->setProperty("pendingSound", pendingSound);
         if (stepGridLanes.has_value()) {
@@ -73,6 +78,9 @@ struct CardViewState {
             const auto morphMap = obj->getProperty("morphMap");
             if (morphMap.isBool())
                 out.showMorphMap = static_cast<bool>(morphMap);
+            const auto curveView = obj->getProperty("curveView");
+            if (curveView.isBool())
+                out.showCurveView = static_cast<bool>(curveView);
             out.pendingSound = obj->getProperty("pendingSound").toString();
             if (const auto* lanes = obj->getProperty("lanes").getArray()) {
                 std::uint16_t mask = 0;

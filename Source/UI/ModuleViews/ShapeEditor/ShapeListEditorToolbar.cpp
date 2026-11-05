@@ -1,5 +1,6 @@
 // ShapeListEditorToolbar.cpp -- the shape editor's row above the curve: the grid choice the curve snaps to and the
 // Filter's Show spectrum toggle, with the settings that remember them and the gated tick that feeds the spectrum.
+#include "Modules/Filter/CustomFilterShapes.h"
 #include "ShapeListEditor.h"
 #include "ShapeListEditorInternal.h"
 #include "ShapeWindowPrefs.h"
@@ -117,16 +118,90 @@ void ShapeListEditor::applyGridChoice(const juce::String& name, bool remember) {
 
 /** Off paints nothing extra: the curve editor has no backdrop painter and the tick is stopped. */
 void ShapeListEditor::setSpectrumShown(bool shown) {
-    if (shown) {
-        curve_.setBackdropPainter(
-            [this](juce::Graphics& g, const CurveEditorGeometry& geometry) { paintSpectrum(g, geometry); });
-    } else {
-        curve_.setBackdropPainter(nullptr);
+    if (!shown)
         spectrumDb_.clear();
-    }
+    updateBackdrop();
     updateSpectrumTimer();
     if (shown)
         pollSpectrum();
+}
+
+/** One painter behind the curve: the spectrum when it is on, then the filter's response while the cursor is the
+    selection. With neither, no painter at all. */
+void ShapeListEditor::updateBackdrop() {
+    const bool spectrum = spectrumToggle_ != nullptr && spectrumToggle_->getToggleState();
+    const bool response = adapter_->hasResponse() && map_.isCursorSelected();
+    if (!spectrum && !response) {
+        curve_.setBackdropPainter(nullptr);
+        responseDb_.clear();
+        return;
+    }
+    curve_.setBackdropPainter([this](juce::Graphics& g, const CurveEditorGeometry& geometry) {
+        paintSpectrum(g, geometry);
+        paintResponse(g, geometry);
+    });
+}
+
+/** The cursor became (or stopped being) the selection: the response appears or goes, and a screen reader hears it. */
+void ShapeListEditor::onCursorSelectionChanged(bool selected) {
+    if (!adapter_->hasResponse())
+        return;
+    responseDb_.clear();
+    if (selected)
+        responseDb_ = adapter_->responseDb();
+    updateBackdrop();
+    curve_.setDescription(selected ? "Showing the filter's current response behind the curve" : juce::String());
+    if (selected)
+        juce::AccessibilityHandler::postAnnouncement("Showing the filter's current response",
+                                                     juce::AccessibilityHandler::AnnouncementPriority::low);
+    curve_.repaint();
+}
+
+/** The response follows Cutoff, Shift, Depth and the cursor live: re-read it each tick, repaint on a change. */
+void ShapeListEditor::pollResponse() {
+    if (!map_.isCursorSelected() || !adapter_->hasResponse())
+        return;
+    auto now = adapter_->responseDb();
+    if (now != responseDb_) {
+        responseDb_ = std::move(now);
+        curve_.repaint();
+    }
+}
+
+/** The filter's response drawn as the card's Show response draws it: the accent gradient under a 2 px accent line,
+    dB mapped the way the curve's y is. Point i of n is x = i / (n - 1) across the log-frequency axis. */
+void ShapeListEditor::paintResponse(juce::Graphics& g, const CurveEditorGeometry& geometry) const {
+    const auto count = responseDb_.size();
+    if (count < 2 || !map_.isCursorSelected())
+        return;
+    const auto& model = curve_.getModel();
+    const double minX = model.getMinX();
+    const double maxX = model.getMaxX();
+    const float floorY = geometry.yForLevel(0.0f);
+    juce::Path line;
+    juce::Path fill;
+    for (size_t i = 0; i < count; ++i) {
+        const float x = geometry.xForTime(minX + (maxX - minX) * ((double)i / (double)(count - 1)));
+        const float level = juce::jlimit(0.0f, 1.0f, CustomFilterShapes::dbToY(responseDb_[i]));
+        const float y = geometry.yForLevel(level);
+        if (i == 0) {
+            line.startNewSubPath(x, y);
+            fill.startNewSubPath(x, floorY);
+            fill.lineTo(x, y);
+        } else {
+            line.lineTo(x, y);
+            fill.lineTo(x, y);
+        }
+    }
+    fill.lineTo(geometry.xForTime(maxX), floorY);
+    fill.closeSubPath();
+
+    const auto accent = synth::theme::themeOf(*this).colors.accent;
+    g.setGradientFill(juce::ColourGradient(accent.withAlpha(0.375f), 0.0f, geometry.yForLevel(1.0f),
+                                           accent.withAlpha(0.063f), 0.0f, floorY, false));
+    g.fillPath(fill);
+    g.setColour(accent);
+    g.strokePath(line, juce::PathStrokeType(2.0f));
 }
 
 void ShapeListEditor::updateSpectrumTimer() {

@@ -204,8 +204,8 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
     // The panels below fade in and out and take their height in step (blockHeight), so what is under them slides.
     // With a footer there is no toggle row above a block, so a gap keeps it off the knob value labels above; a block
     // under another block already has the gap that block leaves.
-    bool blockAbove = false;
-    const auto gapAfterControls = [&] { return footer && !blockAbove ? synth::cardbody::kPanelGap : 0; };
+    bool blockAbove = lfoCurveEditor != nullptr && lfoCurveEditor->isVisible();
+    const auto gapAfterControls = [&] { return synth::cardbody::gapUnderBodyControls(!footer || blockAbove); };
     if (freqResponseComponent && freqResponseComponent->isVisible()) {
         y += blockHeight(responseFade_, gapAfterControls());
         blockAbove = true;
@@ -245,8 +245,10 @@ int ModuleComponent::layoutChromeRows(int y, int contentX, int contentW, bool ap
 std::vector<juce::ToggleButton*> ModuleComponent::footerChromeToggles(bool visibleOnly) const {
     std::vector<juce::ToggleButton*> toggles;
     juce::ToggleButton* morphToggle = morphCard_ != nullptr ? &morphCard_->getToggle() : nullptr;
-    for (auto* toggle :
-         {envelopeGraphToggle.get(), freqResponseToggle.get(), spectrumToggle.get(), morphToggle, scopeToggle.get()})
+    juce::ToggleButton* curveToggle =
+        morphCard_ != nullptr && morphCard_->hasCurveView() ? &morphCard_->getCurveToggle() : nullptr;
+    for (auto* toggle : {envelopeGraphToggle.get(), freqResponseToggle.get(), spectrumToggle.get(), morphToggle,
+                         curveToggle, scopeToggle.get()})
         if (toggle != nullptr && (!visibleOnly || toggle->isVisible()))
             toggles.push_back(toggle);
     return toggles;

@@ -1,0 +1,42 @@
+# Feature: in the Filter's Edit shapes window, while the morph cursor (the dark main dot) is selected, the filter's live
+# frequency response is drawn over the curve editor (the same curve as the card's Show response). Selecting a shape
+# dot hides it again.
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes (a shape dot is selected: no response), clicks the
+# morph cursor (the response appears), then clicks the "ah" dot (it goes).
+record: true
+save_project: filter-shapes-response
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - click: {id: window, x: 1044, y: 603}                       # the Filter Type combo (its label shares the title)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - screenshot: {id: "Filter shapes: Filter", name: shapes-dot-selected}
+  - click: {id: "Filter shapes: Filter", x: 184, y: 174}       # the morph cursor in the window's map
+  - wait: {}
+  - screenshot: {id: "Filter shapes: Filter", name: shapes-cursor-selected}
+  - click: {id: "Filter shapes: Filter", x: 101, y: 99}        # the "ah" dot
+  - wait: {}
+  - screenshot: {id: "Filter shapes: Filter", name: shapes-dot-selected-again}
