@@ -10,7 +10,8 @@
 # StepGridModel.h, error C2872 'ambiguous symbol'). For each group the scan also reads the project
 # headers its sources #include DIRECTLY (one level, not their includes; resolved against Source/, the
 # source's folder and the repo root) for names declared at named-namespace scope (variables, functions,
-# types, enumerators, aliases). A source's anonymous-namespace name clashes with such a header name when
+# types, enumerators, aliases, and using-declarations such as `using synth::cardbody::kRowHeight;`).
+# A source's anonymous-namespace name clashes with such a header name when
 # another source of the group includes that header and the namespaces are the same, or the anonymous one
 # is an ancestor of the header's and some source of the group has `using namespace <header's namespace>;`
 # (the directive leaks across the merged file). Identical aliases pass. Reported as

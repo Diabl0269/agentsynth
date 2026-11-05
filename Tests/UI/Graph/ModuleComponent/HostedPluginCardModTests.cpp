@@ -6,6 +6,7 @@
 
 #include "../../../StubPluginInstance.h"
 #include "../CardBody/CardBodyTestHelpers.h"
+#include "AudioEngine/ModuleTitle.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
@@ -13,10 +14,13 @@
 #include "UI/Graph/GraphEditor/CableEndName.h"
 #include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModMatrixComponent.h"
+#include "UI/Graph/ModMatrixLists.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
 #include "UI/Graph/PluginKnobPicker/PluginTouchToAdd.h"
+#include "UI/Graph/PortPanel/PortConnectionList.h"
 #include <chrono>
+#include <set>
 
 using namespace cardbody_test;
 using synth::HostedPluginModule;
@@ -490,4 +494,71 @@ TEST(HostedPluginCardModTest, APluginKnobsModDotSitsWhereABuiltInKnobsDoes) {
     const auto builtIn = placeOf(*filterDot);
     EXPECT_NEAR(plugin.angle, builtIn.angle, 0.05f);
     EXPECT_NEAR(plugin.gap, builtIn.gap, 1.5f);
+}
+
+namespace {
+// The Mod Matrix's closed-box text for the routing a row stands for: its destination's "<card title> - <name>".
+juce::String matrixLabel(PluginCanvas& canvas, NodeID node, int rawChannel) {
+    synth::ui::ModMatrixLists lists(canvas.engine.getGraph());
+    return lists.destinationLabel((int)((node.uid << 8) | (juce::uint32)rawChannel));
+}
+} // namespace
+
+// Regression test for FRO1428: the connections panel named a plugin parameter "In 18" where the Mod Matrix says
+// "Serum 2 - Filter 1 Freq".
+TEST(HostedPluginCardModTest, ThePortPanelNamesAPluginParameterTheWayTheModMatrixDoes) {
+    PluginCanvas canvas;
+    canvas.dropCableAt(canvas.knobPoint("p2"));
+    const int channel = canvas.hosted->modChannelForParam("p2");
+    ASSERT_GE(channel, 0);
+    canvas.editor.updateComponents();
+
+    const auto rows = synth::ui::listPortConnections(canvas.editor, synth::ui::PortRef{canvas.lfoId, 0, false, false});
+    ASSERT_EQ(rows.size(), 1u);
+    EXPECT_EQ(rows[0].label, matrixLabel(canvas, canvas.pluginId, channel));
+    EXPECT_TRUE(rows[0].label.endsWith("Param 2")) << rows[0].label;
+    EXPECT_FALSE(rows[0].label.contains(" In ")) << rows[0].label;
+}
+
+// Kind jack-raw-mismatch: a row names a jack by what the card shows, the cable carries a raw channel. Every cable of a
+// small patch (a knob target, a plugin slot, a plain jack) must read the same in the panel as in the Mod Matrix
+// wherever the Mod Matrix lists that routing.
+TEST(HostedPluginCardModTest, EveryPortPanelRowNamesItsDestinationLikeTheModMatrixWhereItIsListed) {
+    PluginCanvas canvas;
+    canvas.dropCableAt(canvas.knobPoint("p2"));
+    const auto filterId = canvas.add(std::make_unique<FilterModule>(), 300, 400);
+    int cutoff = -1;
+    for (const auto& target : dynamic_cast<ModuleBase*>(canvas.processor(filterId))->getModulationTargets())
+        if (target.paramId == "cutoff")
+            cutoff = target.channelIndex;
+    ASSERT_GE(cutoff, 0);
+    canvas.engine.addModRouting(canvas.lfoId, 0, filterId, cutoff);
+    canvas.engine.getGraph().addConnection({{filterId, 0}, {canvas.pluginId, 0}}); // a plain jack
+    canvas.editor.updateComponents();
+
+    std::set<std::pair<juce::uint32, int>> seen;
+    int compared = 0;
+    int plain = 0;
+    for (const auto& cable : canvas.editor.buildVisibleCables()) {
+        auto* source = dynamic_cast<ModuleBase*>(canvas.processor(juce::AudioProcessorGraph::NodeID{cable.id.srcUid}));
+        ASSERT_NE(source, nullptr);
+        const synth::ui::PortRef port{juce::AudioProcessorGraph::NodeID{cable.id.srcUid},
+                                      source->mapOutputChannel(cable.id.srcPort).visibleJackIndex, false, false};
+        if (!seen.insert({port.node.uid, port.jack}).second)
+            continue; // one pass per source jack
+        for (const auto& row : synth::ui::listPortConnections(canvas.editor, port)) {
+            if (row.cable.kind == GraphEditor::VisibleCable::Kind::Direct) {
+                ++plain;
+                EXPECT_TRUE(row.label.isNotEmpty());
+                continue;
+            }
+            const auto listed =
+                matrixLabel(canvas, juce::AudioProcessorGraph::NodeID{row.cable.destNodeId}, row.farRawChannel);
+            ASSERT_TRUE(listed.isNotEmpty()) << row.label;
+            EXPECT_EQ(row.label.replace(juce::String::fromUTF8(" \xC2\xB7 "), " - "), listed);
+            ++compared;
+        }
+    }
+    EXPECT_EQ(compared, 2) << "the plugin slot and the Filter's Cutoff knob";
+    EXPECT_GE(plain, 1);
 }

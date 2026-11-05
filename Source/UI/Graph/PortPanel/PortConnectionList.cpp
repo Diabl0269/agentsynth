@@ -7,6 +7,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModDot/KnobModSources.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
 
 #include <algorithm>
 
@@ -53,6 +54,13 @@ juce::String endName(GraphEditor& editor, const GraphEditor::VisibleCable& cable
         return {};
     if (const auto owner = editor.getMacroController().macroPortOwnerFor(id); owner.port != nullptr)
         return owner.port->name;
+    // A plugin's parameter is named the way the Mod Matrix names it, card title included.
+    if (farIsDestination && cable.signal != CableSignal::Midi &&
+        cable.kind != GraphEditor::VisibleCable::Kind::Direct) {
+        const auto slot = hostedSlotLabel(editor.getAudioEngine().getGraph(), id, cable.destChannel);
+        if (slot.isNotEmpty())
+            return slot;
+    }
     juce::String port;
     if (cable.signal == CableSignal::Midi) {
         port = midiLabel(farIsDestination);

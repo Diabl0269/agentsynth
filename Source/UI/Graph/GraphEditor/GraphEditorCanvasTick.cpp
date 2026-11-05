@@ -6,6 +6,7 @@
 // this directory hold the rest of the class (docs/layout/rendering.md#per-frame-work-does-not-grow-with-the-patch).
 
 #include "AudioEngine/AudioEngine.h"
+#include "CableEndGlide.h"
 #include "GraphEditor.h"
 #include "GraphEditorPaintMemo.h"
 #include "Modules/ModuleBase.h"
@@ -18,11 +19,17 @@
 namespace graph_editor_paint {
 
 CanvasMemo::CanvasMemo(GraphEditor& editor)
-    : editor_(editor) {
+    : editor_(editor)
+    , glide_(std::make_unique<CableEndGlide>(
+          editor.vblankUpdater,
+          [&editor]() -> const std::vector<GraphEditor::VisibleCable>& { return editor.buildVisibleCables(); },
+          [&editor] { editor.repaintCanvas(); })) {
     editor_.audioEngine.getGraph().addChangeListener(this);
 }
 
 CanvasMemo::~CanvasMemo() { editor_.audioEngine.getGraph().removeChangeListener(this); }
+
+CanvasMemo* CanvasMemo::of(GraphEditor& editor) noexcept { return editor.canvasMemo_.get(); }
 
 void CanvasMemo::layoutChanged() noexcept {
     ++generation_;

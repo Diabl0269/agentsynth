@@ -6,6 +6,7 @@ juce::Colour modDotGlyphColour(const ModDotPalette& p, ModDotGlyph glyph, float 
     juce::Colour base = p.accent;
     switch (glyph) {
     case ModDotGlyph::Trash:
+    case ModDotGlyph::Unlink:
         base = p.negative;
         break;
     case ModDotGlyph::Timeline:
@@ -90,6 +91,25 @@ void paintModDotGlyph(juce::Graphics& g, ModDotGlyph glyph, juce::Rectangle<floa
         p.lineTo(at(0.08f, 0.58f));
         p.quadraticTo(at(0.14f, 0.50f), at(0.22f, 0.56f));
         p.lineTo(at(0.30f, 0.66f));
+        break;
+    }
+    case ModDotGlyph::Unlink: { // two chain links pulled apart along the diagonal, with a short tick at each broken end
+        const auto at = [&a](float fx, float fy) {
+            return juce::Point<float>(a.getX() + a.getWidth() * fx, a.getY() + a.getHeight() * fy);
+        };
+        const float linkLength = a.getWidth() * 0.42f;
+        const float linkWidth = a.getWidth() * 0.26f;
+        for (const auto centre : {at(0.28f, 0.72f), at(0.72f, 0.28f)}) {
+            juce::Path link;
+            link.addRoundedRectangle(-linkLength * 0.5f, -linkWidth * 0.5f, linkLength, linkWidth, linkWidth * 0.5f);
+            link.applyTransform(juce::AffineTransform::rotation(-juce::MathConstants<float>::pi * 0.25f)
+                                    .translated(centre.x, centre.y));
+            p.addPath(link);
+        }
+        p.startNewSubPath(at(0.5f, 0.36f));
+        p.lineTo(at(0.5f, 0.2f));
+        p.startNewSubPath(at(0.36f, 0.5f));
+        p.lineTo(at(0.2f, 0.5f));
         break;
     }
     case ModDotGlyph::Trash: {

@@ -7,6 +7,7 @@
 // GraphEditor*.cpp files in this directory hold the rest of the class.
 
 #include "AudioEngine/AudioEngine.h"
+#include "CableEndGlide.h"
 #include "GraphEditor.h"
 #include "GraphEditorCableCurveChips.h"
 #include "GraphEditorInternal.h"
@@ -190,9 +191,10 @@ const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() 
             const ModuleComponent::JackLayoutPass jackLayoutPass; // each card's jack column is worked out once
             cablesCache = rebuildVisibleCables();
         }
-        macroCrossingAnim_.applyTo(cablesCache); // cable-slide overlay, see MacroCrossingAnimator.h
-        cardGlide_.applyTo(cablesCache);         // endpoints follow gliding cards, see CardGlideAnimator.h
-        cardGlide_.fold().applyTo(cablesCache);  // an unfolding macro draws its modules' cables itself
+        macroCrossingAnim_.applyTo(cablesCache);           // cable-slide overlay, see MacroCrossingAnimator.h
+        canvasMemo_->cableEndGlide().applyTo(cablesCache); // ends gliding on a More toggle, see CableEndGlide.h
+        cardGlide_.applyTo(cablesCache);                   // endpoints follow gliding cards, see CardGlideAnimator.h
+        cardGlide_.fold().applyTo(cablesCache);            // an unfolding macro draws its modules' cables itself
         cablesCacheValid = true;
         ++cableRebuildCount;
     }
@@ -892,9 +894,6 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         }
     };
     paintDragWire();
-
-    // ---- Mod-dot tooltip: above the cards, so no card's clip cuts it ----
-    editor.getModDot().paintTooltip(g);
 
     // ---- Drag-preview landing ghost (on top of module cards) ----
     // A translucent rounded rect at the exact snapped+anti-overlapped landing position: one per card for a group drag

@@ -25,12 +25,13 @@ ModDotController::ModDotController(GraphEditor& editor, juce::Component& canvas)
     : editor_(editor)
     , tooltip_(canvas) {
     keyHideTimer_.fire = [this] { tooltip_.hide(); };
-    // The hover chip under the knob steps aside while the readout is up, so its card repaints when that changes.
-    tooltip_.onShownChanged = [this] {
-        if (const auto& hovered = editor_.getHoveredModTarget(); hovered.has_value())
-            for (auto* card : editor_.getModuleComponents())
-                if (card->getNodeId() == hovered->nodeId)
-                    card->repaint();
+    // The readout is the chip under the knob, so the card it is on repaints as the readout changes.
+    tooltip_.onChanged = [this](juce::AudioProcessorGraph::NodeID card) {
+        for (auto* comp : editor_.getModuleComponents())
+            if (comp->getNodeId() == card) {
+                comp->repaint();
+                break;
+            }
     };
     // A click on the dot of the panel that is already open closes it.
     onModDotClicked = [this](juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor) {
@@ -122,7 +123,7 @@ void ModDotController::dragged(const juce::MouseEvent& e) {
     }
     setAmount(g.attenuverter, g.startAmount + (g.startPos.y - e.position.y) * kAmountPerPixel);
     if (g.knob != nullptr)
-        showTooltip(g.card, g.destChannel, g.attenuverter, *g.knob);
+        showTooltip(g.card, g.destChannel, g.attenuverter);
 }
 
 void ModDotController::released(const juce::MouseEvent&) {
@@ -165,7 +166,7 @@ void ModDotController::cancel() {
     tooltip_.hide();
 }
 
-void ModDotController::step(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& knob,
+void ModDotController::step(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& /*knob*/,
                             float delta) {
     const auto attenuverter = chosenAttenuverter(card, destChannel);
     if (attenuverter.uid == 0)
@@ -174,17 +175,17 @@ void ModDotController::step(juce::AudioProcessorGraph::NodeID card, int destChan
     editor_.beginModAmountGesture();
     setAmount(attenuverter, current + delta);
     editor_.commitModAmountGesture();
-    showTooltip(card, destChannel, attenuverter, knob);
+    showTooltip(card, destChannel, attenuverter);
     scheduleKeyHide();
 }
 
 void ModDotController::showTooltip(juce::AudioProcessorGraph::NodeID card, int destChannel,
-                                   juce::AudioProcessorGraph::NodeID attenuverter, juce::Component& knob) {
+                                   juce::AudioProcessorGraph::NodeID attenuverter) {
     const auto sources = knobModSources(editor_, card, destChannel);
     const auto* source = findSource(sources, attenuverter);
     const float amount = attenuverterAmount(editor_.getAudioEngine().getGraph(), attenuverter);
     const juce::String name = source != nullptr ? source->sourceName : juce::String();
-    tooltip_.show(knob, name, amount);
+    tooltip_.show(card, destChannel, attenuverter, name, amount);
     announce(name, amount);
 }
 

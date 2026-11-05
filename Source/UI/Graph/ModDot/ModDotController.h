@@ -135,7 +135,6 @@ public:
 
     // ---- tooltip ----
     ModDotTooltip& getTooltip() noexcept { return tooltip_; }
-    void paintTooltip(juce::Graphics& g) { tooltip_.paint(g); }
 
 private:
     struct Gesture {
@@ -153,7 +152,7 @@ private:
     ModDotPanelFrame* launchPopoverFrame(std::unique_ptr<juce::Component> content, juce::Component& anchor);
     void setAmount(juce::AudioProcessorGraph::NodeID attenuverter, float target);
     void showTooltip(juce::AudioProcessorGraph::NodeID card, int destChannel,
-                     juce::AudioProcessorGraph::NodeID attenuverter, juce::Component& knob);
+                     juce::AudioProcessorGraph::NodeID attenuverter);
     void announce(const juce::String& name, float amount);
     void scheduleKeyHide();
 

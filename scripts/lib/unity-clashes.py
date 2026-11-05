@@ -4,7 +4,8 @@
 Used by scripts/check-unity-clashes.sh. Usage: unity-clashes.py <repo-root>
 Prints one "<key>\t<fileA>\t<fileB>\t<group>" line per clashing pair (files sorted), then exits 0.
 A second kind of line has a header as fileB: a source's anonymous-namespace name that a header another
-source of the group #includes (directly, one level) declares at named-namespace scope.
+source of the group #includes (directly, one level) declares at named-namespace scope, a using-declaration
+(`using synth::cardbody::kRowHeight;`) included: it brings the name into that namespace.
 
 Grouping mirrors synth_enable_unity in cmake/Pch.cmake: per target (Core, AppUI, Tests), the .cpp
 files not in SYNTH_UNITY_SKIP are counted per folder; a folder splits into count/SIZE+1 groups and a
@@ -167,8 +168,9 @@ def param_key(params):
     return ",".join(out)
 
 
-def declared_name(stmt, ended_by):
-    """Classifies one namespace-scope statement. Returns (kind, name, params) or None."""
+def declared_name(stmt, ended_by, named=False):
+    """Classifies one namespace-scope statement. Returns (kind, name, params) or None.
+    With named=True (a header) a using-declaration `using a::b::name;` declares `name` too."""
     stmt = strip_template_prefix(re.sub(r"\[\[[^\]]*\]\]", " ", stmt))
     stmt = re.sub(r"\s+", " ", stmt).strip()
     if not stmt:
@@ -177,6 +179,9 @@ def declared_name(stmt, ended_by):
     if first in ("using", "typedef"):
         if first == "using" and re.match(r"using\s+namespace\b", stmt):
             return None
+        m = re.match(r"using\s+(?:typename\s+)?(?:::)?\w+(?:::\w+)*::(\w+)$", stmt)
+        if m and named and ended_by == ";":
+            return ("alias", m.group(1), re.sub(r"\s+", "", stmt[len("using"):]))
         m = re.match(r"using\s+(\w+)\s*=\s*(.*)$", stmt)
         if m:
             target = re.sub(r"\b[a-z_]\w*::", "", m.group(2))
@@ -312,7 +317,7 @@ def declarations(text, named=False):
         if top_level and stack and in_anon_scope():
             if c == ";":
                 if stmt != "struct_tail":
-                    decl = declared_name(stmt, ";")
+                    decl = declared_name(stmt, ";", named)
                     if decl:
                         key = prefix() + decl[1] + ("(" + decl[2] + ")" if decl[0] == "func" else "")
                         found[key] = decl[2] if decl[0] == "alias" else None

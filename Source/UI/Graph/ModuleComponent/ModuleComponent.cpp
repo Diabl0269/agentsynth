@@ -20,7 +20,9 @@
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/ControlStyle/ControlStyleCards.h"
+#include "UI/Graph/GraphEditor/CableEndGlide.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
@@ -35,6 +37,13 @@ using namespace detail;
 void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("selected", owner.isNodeSelected(nodeId));
     into.setProperty("modHoverChip", synth::ui::modHoverChipShows(owner, nodeId));
+    juce::Array<juce::var> chipRows;
+    for (const auto& row :
+         synth::ui::modChipStack(owner, nodeId, dynamic_cast<ModuleBase*>(module), [this](const ModulationTarget& t) {
+             return sliderIndexForModTarget(t);
+         }).rows)
+        chipRows.add(row.text);
+    into.setProperty("modHoverChipRows", chipRows);
     into.setProperty("moduleType", module != nullptr ? module->getName() : juce::String());
     into.setProperty("title", cardTitle());
     into.setProperty("nodeId", static_cast<int>(nodeId.uid));
@@ -87,6 +96,21 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
                 cabledInputs.addIfNotAlreadyThere(base->getInputPortLabel(
                     base->mapInputChannel(connection.destination.channelIndex).visibleJackIndex));
     into.setProperty("cabledInputs", cabledInputs.joinIntoString(", "));
+    // Where the first cable landing on this card ends, relative to the card ("x y", "" when none), whether it ends on
+    // a knob's ring, and whether its end is gliding (a More row is folding or unfolding).
+    juce::String cableEnd;
+    bool cableEndOnKnob = false;
+    for (const auto& cable : owner.buildVisibleCables())
+        if (cable.destNodeId == nodeId.uid) {
+            const auto end = (cable.p2 - getPosition().toFloat()).roundToInt();
+            cableEnd = juce::String(end.x) + " " + juce::String(end.y);
+            cableEndOnKnob = cable.landsOnKnob;
+            break;
+        }
+    into.setProperty("cableEnd", cableEnd);
+    into.setProperty("cableEndOnKnob", cableEndOnKnob);
+    into.setProperty("cableEndGliding", graph_editor_paint::CanvasMemo::of(owner) != nullptr &&
+                                            graph_editor_paint::CanvasMemo::of(owner)->cableEndGlide().isLive());
 }
 
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {

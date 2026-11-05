@@ -117,7 +117,7 @@ void ModMatrixLists::buildDestinations() {
             if (dynamic_cast<HostedPluginModule*>(node->getProcessor()) != nullptr) {
                 for (const auto& target : modDestinationCandidates(static_cast<ModuleBase*>(node->getProcessor())))
                     hostedLabels.emplace_back((int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex),
-                                              title + " - " + target.name);
+                                              hostedSlotLabel(title, target.name));
                 continue;
             }
             for (const auto& target : modDestinationCandidates(static_cast<ModuleBase*>(node->getProcessor()))) {

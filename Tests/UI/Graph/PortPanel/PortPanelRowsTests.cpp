@@ -4,7 +4,10 @@
 
 #include "PortPanelTestFixture.h"
 
+#include "UI/Graph/ModDot/ModDotAddSourceParts.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
 
 namespace {
 
@@ -304,5 +307,53 @@ TEST_F(GraphEditorTest, ARowsSwatchIsItsCablesColour) {
                 found = true;
             }
         EXPECT_TRUE(found);
+    }
+}
+
+// Disconnect all carries an icon like Add connection, and keeps its name, tooltip and keyboard stop.
+TEST_F(GraphEditorTest, DisconnectAllIsAnIconButtonWithItsNameAndTooltipUnchanged) {
+    PortFixture f(3);
+    f.clickOscOutput();
+    auto* panel = f.panel();
+    ASSERT_NE(panel, nullptr);
+    auto& button = panel->disconnectAllButton();
+    const auto* link = dynamic_cast<synth::ui::ModDotLinkButton*>(&button);
+    ASSERT_NE(link, nullptr);
+    ASSERT_TRUE(link->glyph().has_value());
+    EXPECT_EQ(*link->glyph(), synth::ui::ModDotGlyph::Unlink);
+    EXPECT_EQ(button.getTitle(), "Disconnect all connections");
+    EXPECT_EQ(button.getTooltip(), "Remove every connection on this jack");
+    EXPECT_TRUE(button.getWantsKeyboardFocus());
+    EXPECT_GT(link->preferredWidth(), 60) << "room for the icon and the label";
+    clickNow(button);
+    EXPECT_EQ(f.totalOscCables(), 0) << "still disconnects every cable";
+}
+
+// The icon button paints under every built-in theme and puts its glyph's colour on the left of the label.
+TEST(PortPanelDisconnectAllButton, PaintsAnIconInEveryTheme) {
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lnf;
+        lnf.applyTheme(theme);
+        synth::ui::ModDotLinkButton button("Disconnect all", "Disconnect all connections",
+                                           synth::ui::ModDotGlyph::Unlink);
+        button.setLookAndFeel(&lnf);
+        button.setBounds(0, 0, button.preferredWidth(), 24);
+        juce::Image image(juce::Image::ARGB, button.getWidth(), button.getHeight(), true, juce::SoftwareImageType());
+        {
+            juce::Graphics g(image);
+            EXPECT_NO_THROW(button.paintEntireComponent(g, true)) << theme.name;
+        }
+        const auto glyphColour =
+            synth::ui::modDotGlyphColour(synth::ui::modDotPaletteFor(button), synth::ui::ModDotGlyph::Unlink);
+        bool inked = false;
+        for (int y = 0; y < image.getHeight() && !inked; ++y)
+            for (int x = 10; x < 24 && !inked; ++x) {
+                const auto px = image.getPixelAt(x, y);
+                inked = std::abs(px.getRed() - glyphColour.getRed()) < 40 &&
+                        std::abs(px.getGreen() - glyphColour.getGreen()) < 40 &&
+                        std::abs(px.getBlue() - glyphColour.getBlue()) < 40;
+            }
+        EXPECT_TRUE(inked) << theme.name;
+        button.setLookAndFeel(nullptr);
     }
 }

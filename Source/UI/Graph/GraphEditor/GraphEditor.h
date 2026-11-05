@@ -321,6 +321,7 @@ public:
 
     /** Status-bar surface for a refused macro action; the owner installs it (GraphEditor owns no status bar). */
     std::function<void(const juce::String&)> onStatusMessage;
+    std::function<void(const juce::String&)> onDropRefused; // why a refused cable drop made no cable
 
     // ---- Macro card drag (MacroCardComponent calls these; carries the hidden members along) ----
     void beginMacroCardDrag(const juce::String& macroId);
@@ -674,8 +675,7 @@ public:
 
     // ---- Zoom gesture (raster freeze) test seams ----
     bool isZoomGestureActive() const noexcept { return zoomGestureActive; }
-    // Ends the zoom gesture now, as the settle timer would.
-    void settleZoomNowForTest();
+    void settleZoomNowForTest(); // Ends the zoom gesture now, as the settle timer would.
 
     // ---- Macro-crossing animation test seams (MacroCrossingAnimator.h) -----------
     /** True while the finalizeMacroMembershipDrag cable-slide/flash tween is in flight. */

@@ -5,14 +5,16 @@
 // docs/layout/module-card.md#the-more-row.
 #include "CardBody.h"
 #include "CardBodyMoreButton.h"
+#include "UI/Graph/GraphEditor/CableEndGlide.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/FocusRing.h"
 
 namespace synth {
 
 namespace {
-constexpr int kCableFoldGraceMs = 250;
+constexpr int kCableFoldGraceMs = 120;
 }
 
 CardMoreButton::CardMoreButton(int hiddenCount)
@@ -78,6 +80,9 @@ juce::Button* CardBody::getMoreButton() const { return moreButton_.get(); }
 void CardBody::setMoreUnfolded(bool unfolded) {
     if (!hasMoreRow() || unfolded == moreUnfolded_)
         return;
+    if (moreFade_.isAttached())
+        if (auto* memo = graph_editor_paint::CanvasMemo::of(card_.owner))
+            memo->cableEndGlide().begin(card_, unfolded); // records the cable ends before the row changes
     moreUnfolded_ = unfolded;
     moreOpenedByDrag_ = false; // any other change is the person's or already settled
     foldGrace_.stopTimer();
@@ -126,6 +131,17 @@ void CardBody::cableDragEnded(bool keepOpen) {
         moreOpenedByDrag_ = false;
     else
         setMoreUnfolded(false);
+}
+
+// The row's state flips when it is toggled, but its controls stay visible until the fade has ended; a cable that
+// lands on one answers for the settled state at once, so its end glides to the More button over the fade.
+bool CardBody::isFoldingAway(const juce::Component& widget) const {
+    if (moreUnfolded_ || !moreFade_.isFading())
+        return false;
+    for (int i : plan_.more)
+        if (plan_.items[(size_t)i].widget == &widget)
+            return true;
+    return false;
 }
 
 bool CardBody::moreRowWidgetAt(juce::Point<int> cardLocal) const {

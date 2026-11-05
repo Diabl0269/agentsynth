@@ -12,6 +12,7 @@
 #include "UI/Layout/SearchMatch.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 
 namespace synth::ui {
 
@@ -251,18 +252,27 @@ private:
     ModDotHoverFade hover_;
 };
 
-/** "Expand all" / "Collapse all": accent text, no box. */
+/** "Expand all" / "Collapse all": accent text, no box. With a glyph (the port panel's "Disconnect all") it is drawn
+ *  like a half of the Add source split button: the coloured icon, then the label, on a hover fill. */
 class ModDotLinkButton final : public juce::Button {
 public:
-    ModDotLinkButton(const juce::String& text, const juce::String& name)
+    ModDotLinkButton(const juce::String& text, const juce::String& name,
+                     std::optional<ModDotGlyph> glyph = std::nullopt)
         : juce::Button(name)
-        , text_(text) {
+        , text_(text)
+        , glyph_(glyph)
+        , hover_(*this) {
         setTitle(name);
         setTooltip(name);
         setWantsKeyboardFocus(true);
         setMouseCursor(juce::MouseCursor::PointingHandCursor);
     }
+    std::optional<ModDotGlyph> glyph() const noexcept { return glyph_; }
     int preferredWidth() const {
+        if (glyph_.has_value())
+            return juce::roundToInt(
+                       juce::GlyphArrangement::getStringWidth(juce::Font(juce::FontOptions(12.5f)), text_)) +
+                   kGlyphSize + kGlyphGap + 2 * kGlyphPad;
         return juce::roundToInt(juce::GlyphArrangement::getStringWidth(juce::Font(juce::FontOptions(11.5f)), text_)) +
                12;
     }
@@ -273,8 +283,30 @@ public:
         }
         return false;
     }
-    void paintButton(juce::Graphics& g, bool over, bool) override {
+    void mouseEnter(const juce::MouseEvent& e) override {
+        juce::Button::mouseEnter(e);
+        hover_.setHovered(true);
+    }
+    void mouseExit(const juce::MouseEvent& e) override {
+        juce::Button::mouseExit(e);
+        hover_.setHovered(false);
+    }
+    void paintButton(juce::Graphics& g, bool over, bool down) override {
         const auto p = modDotPaletteFor(*this);
+        if (glyph_.has_value()) {
+            const auto area = getLocalBounds().toFloat().reduced(1.0f);
+            g.setColour(p.hover.withAlpha(down ? 1.0f : hover_.value()));
+            g.fillRoundedRectangle(area, 6.0f);
+            auto inner = getLocalBounds().reduced(kGlyphPad, 0);
+            paintModDotGlyph(g, *glyph_, inner.removeFromLeft(kGlyphSize).toFloat().withSizeKeepingCentre(14.0f, 14.0f),
+                             modDotGlyphColour(p, *glyph_, hover_.value()));
+            inner.removeFromLeft(kGlyphGap);
+            g.setColour(p.text);
+            g.setFont(juce::Font(juce::FontOptions(12.5f)));
+            g.drawText(text_, inner, juce::Justification::centredLeft, true);
+            paintFocusRing(g, area, *this, 6.0f);
+            return;
+        }
         g.setColour(over ? p.accent : p.accent.withAlpha(0.85f));
         g.setFont(juce::Font(juce::FontOptions(11.5f)));
         g.drawText(text_, getLocalBounds(), juce::Justification::centred);
@@ -282,7 +314,12 @@ public:
     }
 
 private:
+    static constexpr int kGlyphSize = 14;
+    static constexpr int kGlyphGap = 6;
+    static constexpr int kGlyphPad = 10;
     juce::String text_;
+    std::optional<ModDotGlyph> glyph_;
+    ModDotHoverFade hover_;
 };
 
 } // namespace synth::ui
