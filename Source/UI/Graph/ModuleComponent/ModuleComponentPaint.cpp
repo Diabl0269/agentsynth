@@ -494,6 +494,11 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
         // card's jack layout with it. Its jack stays in the gutter; a drop on the knob still lands.
         if (si < 0 || (cardBody_ != nullptr && cardBody_->isTabbed(*sliders[si])))
             return std::nullopt;
+        // A knob-only target in a More row that is fading out already answers for the folded row, so its cable heads
+        // for the More button at once (CableEndGlide). A target with a gutter jack keeps its knob until the fade ends,
+        // since its jack joins the gutter column only then.
+        if (target.knobOnly && cardBody_ != nullptr && cardBody_->isFoldingAway(*sliders[si]))
+            return std::nullopt;
         // CARD-local: sliders[si]->getBounds() is relative to this card (its parent), matching
         // this method's own CARD-local contract (see the declaration's comment).
         if (auto* fader = dynamic_cast<synth::ui::CardFader*>(sliders[si]))
@@ -618,7 +623,7 @@ const juce::Component* ModuleComponent::moreRowButtonForKnobOnlyJack(int index) 
         if (!target.knobOnly || mb->mapInputChannel(target.channelIndex).visibleJackIndex != index)
             continue;
         const int si = sliderIndexForModTarget(target);
-        if (si >= 0 && sliders[si]->isVisible())
+        if (si >= 0 && sliders[si]->isVisible() && !(cardBody_ != nullptr && cardBody_->isFoldingAway(*sliders[si])))
             return nullptr;
         auto* button = findChildWithID("cardMoreRow");
         return button != nullptr && button->isVisible() ? button : nullptr;

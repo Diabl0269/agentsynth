@@ -180,6 +180,21 @@ changes which knob is visible without moving or resizing the card, so it explici
 `GraphEditor::notifyModuleContentChanged()` (a public wrapper around the otherwise-private
 `repaintCanvas()`) to invalidate the memo too.
 
+## The end glides when the More row toggles
+
+Folding or unfolding a card's More row moves where a cable lands on a control in that row: between the knob's ring
+(`getModTargetKnobAnchor`) and the left edge of the More button (`moreRowButtonForKnobOnlyJack`). The end does not
+jump. `CardBody::setMoreUnfolded` asks `CableEndGlide` (`Source/UI/Graph/GraphEditor/CableEndGlide.{h,cpp}`, owned by
+`graph_editor_paint::CanvasMemo`) to record where each cable landing on the card is drawn, and for the row's fade time
+(160 ms in, 110 ms out) `buildVisibleCables()` moves `p2` from that old place to the live anchor
+(`easeOutCubic` opening, `easeInCubic` closing; a plain short linear move under Reduce Motion; at once under
+Animations Off or off screen). Only the drawn end moves, never a card's bounds. The old place is stored relative to
+its card, so a card the canvas pushes aside during the fade carries the end with it, and a toggle that reverses a
+glide in flight starts from where the end is on screen. A knob-only control (no gutter jack, like Pan) of a row that is fading out already answers for the folded row
+(`CardBody::isFoldingAway`), so its cable heads for the More button from the first frame and the landing dot goes with it.
+A control that also has a gutter jack keeps its knob until the fade ends, since the jack joins the gutter column only
+then, so that cable's end still lands at once. Each frame repaints the canvas and the glide stops repainting when it ends.
+
 ## Hit-testing
 
 `GraphEditor::getCableAt(canvasPos, tolerance)` returns the topmost cable within `tolerance` canvas

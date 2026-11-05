@@ -15,6 +15,7 @@
 class GraphEditor;
 class GraphCanvasHost;
 class ModuleComponent;
+class CableEndGlide;
 namespace synth {
 class MacroOwnerIndex;
 }
@@ -55,6 +56,10 @@ public:
     void tick();
     /** What the last tick() asked to repaint, in canvas coordinates. */
     juce::Rectangle<int> lastTickArea() const noexcept { return lastTickArea_; }
+    /** The cable-end glide on a More toggle (CableEndGlide.h). */
+    CableEndGlide& cableEndGlide() noexcept { return *glide_; }
+    /** `editor`'s memo; null while the editor is still being built. */
+    static CanvasMemo* of(GraphEditor& editor) noexcept;
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -68,6 +73,7 @@ private:
     juce::uint64 routingSignature_ = 0;
     juce::Rectangle<int> lastTickArea_;
     std::unordered_map<juce::String, juce::Rectangle<int>> hulls_;
+    std::unique_ptr<CableEndGlide> glide_;
 };
 
 /** Message thread only. While alive, MacroGroupController::macroHullBounds for `host` measures every border against
