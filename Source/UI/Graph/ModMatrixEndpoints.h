@@ -36,6 +36,13 @@ struct HostedDestination {
     juce::String label;    // "<card title> - <parameter name>"
     int boundChannel = -1; // its slot's raw channel when it is modulated; with no paramId, a slot of an unloaded plugin
 };
+/** How the Mod Matrix and the port connections panel name a plugin's modulated parameter: "<card title> - <slot name>".
+ */
+juce::String hostedSlotLabel(const juce::String& cardTitle, const juce::String& slotName);
+/** That label for the slot of raw channel `channel` on `node`; empty when `node` is not a hosted plugin or has no such
+ *  slot. Walks only the plugin's bound slots, not every parameter. */
+juce::String hostedSlotLabel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node, int channel);
+
 /** Picker row ids for HostedDestination start here, clear of the (node uid << 8 | channel) ids of the rest. */
 constexpr int kHostedDestinationIdBase = 0x7F000000;
 

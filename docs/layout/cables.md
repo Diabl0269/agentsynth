@@ -233,6 +233,10 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
   far jack, signal and kind into one row (`PortConnection::group` keeps every cable), so the list shows the Filter once;
   removing the row removes all of them as one undo step (`GraphEditor::disconnectCable`'s second argument). The canvas
   still draws every cable. Test: `PortPanelStereoPairRowsTests.cpp`.
+- **Row names.** A row reads "<card title> . <jack>", or "<card title> . <knob>" for a cable that lands on a knob. A
+  modulated plugin parameter (it has a modulation slot, no knob target and no named jack) reads exactly as the Mod
+  Matrix names it, "<card title> - <parameter>" (`hostedSlotLabel`, the one rule both lists call), never "In 18".
+  Test: `HostedPluginCardModTests.cpp` (every row against the Mod Matrix).
 - **Click.** A left press and release under 3 px apart that is the first click of its run. A drag from the jack still
   makes a cable and opens nothing; the right-click menu is unchanged. A second click on the same jack closes the panel.
 - **Double-click.** With *Double-click port to disconnect* on, a jack with exactly one cable waits one double-click

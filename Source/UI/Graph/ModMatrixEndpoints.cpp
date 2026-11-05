@@ -71,6 +71,21 @@ std::vector<ModulationTarget> modDestinationCandidates(ModuleBase* module) {
     return targets;
 }
 
+juce::String hostedSlotLabel(const juce::String& cardTitle, const juce::String& slotName) {
+    return cardTitle + " - " + slotName;
+}
+
+juce::String hostedSlotLabel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID node, int channel) {
+    auto* found = graph.getNodeForId(node);
+    auto* hosted = found != nullptr ? dynamic_cast<HostedPluginModule*>(found->getProcessor()) : nullptr;
+    if (hosted == nullptr)
+        return {};
+    for (const auto& target : modDestinationCandidates(hosted))
+        if (target.channelIndex == channel)
+            return hostedSlotLabel(synth::moduleTitle(*found), target.name);
+    return {};
+}
+
 // A plugin parameter has no CV input until a cable claims one, so it cannot be one of a module's modulation targets
 // yet; the destination picker lists them anyway, modulated or not (a plugin can have hundreds, so picker only) and a
 // pick claims the slot first. Built when the picker opens, from the live instances.
@@ -83,12 +98,12 @@ std::map<int, HostedDestination> hostedDestinations(juce::AudioProcessorGraph& g
             continue;
         const auto title = synth::moduleTitle(*node);
         for (const auto& param : hosted->getInstanceParameters())
-            out[nextId++] = {node->nodeID, param.paramId, title + " - " + param.displayName,
+            out[nextId++] = {node->nodeID, param.paramId, hostedSlotLabel(title, param.displayName),
                              hosted->modChannelForParam(param.paramId)};
         // A plugin that did not load keeps its routings: their slots stay listed, by the parameter id they saved.
         if (!hosted->hasInstance())
             for (const auto& target : hosted->getModulationTargets())
-                out[nextId++] = {node->nodeID, {}, title + " - " + target.name, target.channelIndex};
+                out[nextId++] = {node->nodeID, {}, hostedSlotLabel(title, target.name), target.channelIndex};
     }
     return out;
 }
