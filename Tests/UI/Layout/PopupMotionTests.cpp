@@ -278,6 +278,31 @@ TEST(PopupMotionAttach, AWindowDeletedWhileVisibleAndPeerlessIsDeletedCleanly) {
     SUCCEED();
 }
 
+// Regression test for FRO1467: the engine's listener freed itself on delete without unregistering, so a later
+// listener that removed a child of the dying window (the dialog tooltip does) called into freed memory. Whether the
+// stale call crashes depends on the allocator: an ASAN build reports it every time, and ModalCloseKeys crashed in a
+// release build once the dialog tooltip went in.
+TEST(PopupMotionAttach, ItsListenerIsGoneBeforeAnotherListenerChangesTheDyingWindowsChildren) {
+    struct RemovesChildOnDelete final : juce::ComponentListener {
+        juce::Component child;
+        void componentBeingDeleted(juce::Component& window) override {
+            window.removeComponentListener(this);
+            window.removeChildComponent(&child); // calls every listener still on the window
+        }
+    };
+    RemovesChildOnDelete before, after; // one on each side of the engine's listener, whatever order JUCE calls them
+    auto window = std::make_unique<juce::Component>();
+    window->setBounds(0, 0, 50, 50);
+    window->addChildComponent(before.child);
+    window->addChildComponent(after.child);
+    window->addComponentListener(&before);
+    PopupMotion::attach(*window);
+    window->addComponentListener(&after);
+    window.reset();
+    EXPECT_EQ(before.child.getParentComponent(), nullptr);
+    EXPECT_EQ(after.child.getParentComponent(), nullptr);
+}
+
 TEST(PopupMotionLookAndFeel, PopupMenuWindowHookAttachesAndKeepsAPeerlessMenuStill) {
     synth::theme::AppLookAndFeel laf;
     juce::Component menuWindow;

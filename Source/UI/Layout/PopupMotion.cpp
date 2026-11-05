@@ -337,6 +337,9 @@ public:
         if (window_->isVisible() && !ghosted_ && PopupMotion::isEnabled() && !animationsOff())
             startOut(/*fresh=*/false);
         registry().erase(window_);
+        // Unregistered here, not in the destructor: once window_ is cleared the destructor cannot, and a listener left
+        // on the dying window is called again if anything changes its children before it is gone.
+        window_->removeComponentListener(this);
         window_ = nullptr;
         delete this;
     }
