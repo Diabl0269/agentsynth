@@ -899,6 +899,14 @@ jobs:
     - name: Build
       run: cmake --build build --config Release
 
+    # The crash reporter can only name frames if the Tests link wrote its PDB (AGENTSYNTH_TEST_PDB above).
+    - name: Check test symbols
+      shell: bash
+      run: |
+        pdb=$(find build -name Tests.pdb -print -quit)
+        test -n "$pdb" || { echo "::error::Tests.pdb not found: Windows crash stacks would print no names"; exit 1; }
+        echo "symbols: $pdb"
+
     - name: Check Cache Health
       if: always()
       shell: bash
