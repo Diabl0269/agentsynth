@@ -10,6 +10,7 @@
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/RenameKey.h"
+#include "UI/Library/LibrarySidebarSwitch.h"
 #include "UI/Timeline/TimelineSnapNames.h"
 #include <algorithm>
 #include <iterator>

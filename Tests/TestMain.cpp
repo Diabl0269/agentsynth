@@ -2,6 +2,7 @@
 #include "Auth/KeychainTokenStore.h"
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
+#include "SilentLookAndFeel.h"
 #include "SoundPacks/SoundPackFetch.h"
 #include "TestMode/AutomationHiding.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -112,6 +113,8 @@ int main(int argc, char** argv) {
     if (visible == nullptr || std::string(visible) != "1")
         synth::testmode::hideAutomationWindows();
     ::testing::InitGoogleTest(&argc, argv);
+    synth::testmode::muteAlertSounds(); // an app look and feel in a test stays silent too
+    ::testing::UnitTest::GetInstance()->listeners().Append(new synth::tests::SilentAlertSoundsListener());
     ::testing::UnitTest::GetInstance()->listeners().Append(new MessageQueueDrainer());
     ::testing::UnitTest::GetInstance()->listeners().Append(new MotionSeamLeakCheck());
     ::testing::UnitTest::GetInstance()->listeners().Append(new DialogLeakCheck());

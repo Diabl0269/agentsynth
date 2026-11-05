@@ -3,6 +3,7 @@
 // panel and the Mod Matrix. Rebuilt on every detach, redock and main-view change.
 #include "MainComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Library/LibrarySidebarViews.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 
 void MainComponent::rebuildFocusRegions() {

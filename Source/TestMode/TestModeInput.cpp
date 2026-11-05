@@ -2,6 +2,8 @@
 
 #include "TestMode/TestModeInput.h"
 
+#include "UI/Layout/AppTooltipWindow.h"
+
 namespace synth::testmode {
 
 namespace {
@@ -99,6 +101,8 @@ bool sendMouse(const MouseStep& step, juce::String& error) {
         error = "the point is outside the window";
         return false;
     }
+    // JUCE places a tooltip at the OS cursor, which this input never moves: tell the tooltip where the pointer is.
+    synth::ui::AppTooltipWindow::setSyntheticPointer(peer->getComponent().localPointToGlobal(inPeer.roundToInt()));
     // JUCE reads the keyboard modifiers of a mouse event from this global, not from the event's own flags.
     const auto previous = juce::ModifierKeys::currentModifiers;
     juce::ModifierKeys::currentModifiers = step.keys.withoutMouseButtons();

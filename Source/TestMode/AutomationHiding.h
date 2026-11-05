@@ -21,4 +21,11 @@ bool appIsInFront();
  *  puts the real answer back. */
 void setAppInFrontForTest(std::optional<bool> inFront);
 
+/** Silences the system alert beep (juce::LookAndFeel::playAlertSound) for the rest of the process. An automation run
+ *  calls it so a test that presses outside a modal prompt does not beep at the developer's desk. */
+void muteAlertSounds();
+
+/** True once muteAlertSounds() has run (hideAutomationWindows() runs it). */
+bool alertSoundsAreMuted();
+
 } // namespace synth::testmode

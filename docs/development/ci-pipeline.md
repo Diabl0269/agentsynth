@@ -218,7 +218,11 @@ same name in an anonymous namespace. Rename it, or add the file to `cmake/UnityE
 folder, md5 of the path, `AGENTSYNTH_UNITY_GROUP_SIZE`, `SYNTH_UNITY_SKIP` left out; only sources added before the
 target's `synth_enable_unity` call), then scans each file for names declared in an anonymous namespace (variables,
 functions, types, enumerators, aliases) and prints each repeated name with both files. Identical `using` aliases and
-overloads are legal and pass. It is a text scan, so a clash it cannot see (macro-generated names) still shows on Windows.
+overloads are legal and pass. It also reads the project headers the group's sources `#include` directly (one level, not
+their own includes) for names at named-namespace scope, and reports a source's anonymous-namespace name that matches one
+when the namespaces are the same, or the anonymous one is an ancestor and a source of the group has a `using namespace`
+of the header's namespace (that is how `kGap` in `StepGridPolyHint.cpp` met `stepgrid::kGap`, C2872 ambiguous symbol).
+It is a text scan, so a clash it cannot see (macro-generated names) still shows on Windows.
 There are no clashes today, so the baseline file is absent; rename a new clash rather than baselining it (`*.txt` is git-ignored, so a baseline would have to be force-added).
 To try it on any machine: configure with `-DAGENTSYNTH_UNITY=ON` and build Core, AppUI and Tests.
 

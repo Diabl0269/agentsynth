@@ -149,3 +149,34 @@ TEST(AppTooltipWindowTest, AComponentIsAHelperTipOnlyOnceMarked) {
     synth::ui::markHelperTooltip(button);
     EXPECT_TRUE(synth::ui::isHelperTooltip(button));
 }
+
+// Regression test for FRO1499: under test mode a tip was placed at the user's own cursor (juce reads the OS cursor,
+// which synthetic input never moves), so a "Level" tip floated at the window's left edge, away from its control.
+TEST(AppTooltipWindowTest, UnderTestModeATipIsPlacedAtTheSyntheticPointerNotTheOsCursor) {
+    struct PointerGuard {
+        ~PointerGuard() { AppTooltipWindow::setSyntheticPointer(std::nullopt); }
+    } guard;
+    Hosted h;
+    const auto atScreen = [&](juce::Point<int> p) { return h.parent.getLocalPoint(nullptr, p); };
+
+    h.window->setLastTipForTest("Level");        // what getTipFor returned for the control, as the mouse timer does
+    h.window->displayTip({350, 250}, "Level");   // the OS cursor, far from the control
+    const auto osPlaced = h.window->getBounds(); // where juce puts it differs by platform: only "elsewhere" is checked
+
+    h.window->hideTip();
+    AppTooltipWindow::setSyntheticPointer(juce::Point<int>(60, 40));
+    h.window->displayTip({350, 250}, "Level");
+    EXPECT_NE(h.window->getBounds(), osPlaced);
+    EXPECT_TRUE(h.window->getBounds().expanded(40).contains(atScreen({60, 40})));
+    EXPECT_FALSE(h.window->getBounds().expanded(40).contains(atScreen({350, 250}))) << "not at the OS cursor";
+
+    juce::DynamicObject state;
+    h.window->addTestModeState(state);
+    EXPECT_EQ(state.getProperty("tipText").toString(), "Level");
+    EXPECT_TRUE(static_cast<bool>(state.getProperty("tipAtPointer")));
+
+    AppTooltipWindow::setSyntheticPointer(juce::Point<int>(390, 290)); // the pointer moved on; the tip did not
+    juce::DynamicObject moved;
+    h.window->addTestModeState(moved);
+    EXPECT_FALSE(static_cast<bool>(moved.getProperty("tipAtPointer")));
+}

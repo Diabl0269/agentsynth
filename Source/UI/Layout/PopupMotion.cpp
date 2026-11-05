@@ -1,6 +1,8 @@
 #include "UI/Layout/PopupMotion.h"
 
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/DialogMenuKeys.h"
+#include "UI/Layout/DialogTooltip.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -32,6 +34,8 @@ public:
     }
 
     bool keyPressed(const juce::KeyPress& key, juce::Component*) override {
+        if (dialog_menu_keys::handle(key, *window_))
+            return true;
         static const juce::KeyPress closeKey('w', juce::ModifierKeys::commandModifier, 0);
         if (key != juce::KeyPress(juce::KeyPress::escapeKey) && key != closeKey)
             return false;
@@ -82,6 +86,7 @@ PopupMotion::launchDialog(juce::DialogWindow::LaunchOptions& options,
     if (dialog != nullptr) {
         attach(*dialog, makeStyle(*dialog));
         new DialogCloseKeys(*dialog); // owns itself: deleted with the window
+        dialog_tooltip::attach(*dialog);
     }
     return dialog;
 }
@@ -562,8 +567,18 @@ private:
             return;
         ghosted_ = true;
         const int flags = window_->getPeer() != nullptr ? window_->getPeer()->getStyleFlags() : 0;
-        new Ghost(cache_, cacheBounds_.translated(slideOffset.x, slideOffset.y), flags, dir_, startAlpha,
-                  prefersReducedMotion()); // self-deleting
+        const auto bounds = cacheBounds_.translated(slideOffset.x, slideOffset.y);
+        if (fresh) {
+            new Ghost(cache_, bounds, flags, dir_, startAlpha, prefersReducedMotion()); // self-deleting
+            return;
+        }
+        // The window is inside ~Component: its native window is still up while its own members are gone. Opening
+        // another native window now makes the OS send activation and z-order messages to that half-destroyed peer
+        // (a Windows-only access violation), so the ghost opens one turn later, once the window is fully deleted.
+        juce::MessageManager::callAsync(
+            [picture = cache_, bounds, flags, dir = dir_, startAlpha, reduce = prefersReducedMotion()] {
+                new Ghost(picture, bounds, flags, dir, startAlpha, reduce); // self-deleting
+            });
     }
 
     juce::Component* window_;

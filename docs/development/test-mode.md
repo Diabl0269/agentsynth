@@ -63,6 +63,7 @@ thread is never blocked and timers and animations run in between.
 | `trackPresentedFrame` | `stop?` | `{following, width, height}`; starts (or stops) following what the main window shows, see [Stale pixels](#stale-pixels) |
 | `checkStalePixels` | `settleMs` (1500), `tolerance` (6), `ignore` (component ids), `dir?` | `{differing: 0, waitedMs, paints, wholeWindowPaints}` once what the window shows equals a full repaint; fails naming the pixel count and box, and writes `presented.png`, `full-repaint.png`, `differences.png` into `dir` |
 | `quit` | | quits at once, without the unsaved-changes prompt |
+| `requestQuit` | | what the Quit menu item (Cmd+Q) reaches: the app's own quit request, so with unsaved changes the Save / Discard / Cancel question appears first; the native menu and the key itself are not driven |
 
 ## Ids
 
@@ -78,6 +79,7 @@ A component with state worth reading implements `synth::testmode::StateSource` (
 (`selected`, `moduleType`, `nodeId`, `modHoverChip`: whether the chip under a hovered knob is drawn, `macro`: the name of the macro the module sits in, empty when none, `macroPath`: every macro around it, outermost first, as `Outer macro > Nested macro`, `cabledTargets`: the modulation targets with a cable on them, `audioFrom`: the titles of the cards feeding its audio inputs, sorted and comma-separated, `cabledInputs`: every input jack with a cable, by its label, `landingOutline`: the drag outline shown now as `x y w h`, empty when none, `canvasBounds`: its bounds in canvas coordinates) and
 `MacroCardComponent` (id `macroCard`, or `macroCard:<macro name>` for one card among several: `name`, `collapsed`, `members`, `renaming`: its name editor is open) and a hidden child of the mixer panel (id `mixerFocusedColumn`: `focusedColumn`, the title of the column whose focus outline shows, empty when none) and a hidden child of the mixer panel (id `mixerTopBarRing`: `topBarRing`, the name of the control its key ring is on, empty when off) and the same child of the timeline panel (id `timelineTopBarRing`) and `KeyPicker` (a 1x1 child, id `keyPicker`; the picker itself is `keyPickerPanel`, for screenshots: `auditioning`, `auditionKey`, `previewSoundShown`, `previewSound`, `fitProjectShown`, `fitProjectEnabled`) and a 1x1 child of the timeline's Sizing field (id `timelineClipSizingState`: `sizingMode`, `glyph`, `fieldWidth`) and a hidden child of the timeline's clip lane (id `timelineClipPitches`: `clipPitches`, every clip's note pitches as `Clip 1:60,64;Clip 2:61`; `clipAudio`, every audio clip as `name:assetRef,sourceStartSeconds,lengthBeats,stretchOrigin`; `clipLengths`, every clip as `name:lengthBeats`; `clipWaveform`, every audio clip as `name:none|summary|columns`, the waveform it is drawn with; `sizingReadout`, the percentage pill an edge drag shows, empty when none) do. `getState` also reports a component's `tooltip`
 when it has one, so a scenario can check the shortcut a button's tooltip names.
+The tooltip window (id `tooltipWindow`) reports `tipText` and `tipAtPointer`. juce places a tip at the OS cursor, which synthetic input never moves, so `click`/`drag` tell the window where the synthetic pointer is (`AppTooltipWindow::setSyntheticPointer`) and tips land beside it, not at the user's own cursor; a scenario that leaves a tip up can `expect: {id: tooltipWindow, tipAtPointer: true}`.
 
 ## Input
 
@@ -113,6 +115,8 @@ not hide anything (the flag is only set on macOS) and build and run as before.
 
 The `Tests` binary does the same right after JUCE starts (`Tests/TestMain.cpp`); `AGENTSYNTH_TESTS_VISIBLE=1` skips it.
 `Tools/ui-verify` is hidden by default and takes `--visible`.
+
+An automation run is also silent: `muteAlertSounds()` (called by `hideAutomationWindows()`) makes `AppLookAndFeel::playAlertSound()` a no-op, and the `Tests` binary installs a silent default look and feel before every test (`Tests/SilentLookAndFeel.h`), so a test that presses outside a modal prompt does not play the system beep. the `AlertSoundSilence` tests in `PopupDismissPathsTests.cpp` check both.
 
 ## Running in parallel
 
