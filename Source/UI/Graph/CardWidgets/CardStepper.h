@@ -58,6 +58,8 @@ public:
     Zone zoneAt(juce::Point<int> local) const;
     juce::Rectangle<int> zoneBounds(Zone zone) const;
     bool isRepeating() const noexcept { return holdZone_ != Zone::none; }
+    /** The hold timer's current interval in ms: the pause, then the repeat rate (0 when not holding). */
+    int holdTimerIntervalMs() const noexcept { return getTimerInterval(); }
     bool isEditing() const noexcept { return editing_; }
     juce::TextEditor& getTextEditor() noexcept { return editor_; }
     /** Opens the editor over the number. */

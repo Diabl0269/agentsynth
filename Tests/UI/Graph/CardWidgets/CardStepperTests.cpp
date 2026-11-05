@@ -104,14 +104,17 @@ TEST(CardStepper, AClickOnAnArrowStepsOnceAsOneGestureAndARightClickNever) {
 TEST(CardStepper, HoldingAnArrowRepeatsAfterThePauseAndStopsOnMouseUp) {
     Field f;
     const auto up = f.centre(CardStepper::Zone::up);
-    const auto pressedAt = juce::Time::getMillisecondCounter();
     f.stepper.mouseDown(pressAt(f.stepper, up));
     EXPECT_TRUE(f.stepper.isRepeating());
     EXPECT_EQ(f.steps.size(), 1u);
+    // The pause is the first timer interval; a wall-clock bound on when the repeat lands would test the timer
+    // thread's precision, which a loaded machine does not keep (it has fired 44 ms early on a busy CI runner).
+    EXPECT_EQ(f.stepper.holdTimerIntervalMs(), CardControlGestures::kHoldPauseMs)
+        << "the first repeat waits out the pause";
+    EXPECT_FALSE(synth::test::waitUntil([&] { return f.steps.size() > 1; }, CardControlGestures::kHoldPauseMs / 4))
+        << "no repeat straight away";
     synth::test::waitUntil([&] { return f.steps.size() > 1; });
     EXPECT_GT(f.steps.size(), 1u) << "repeating";
-    EXPECT_GE(juce::Time::getMillisecondCounter() - pressedAt, (juce::uint32)CardControlGestures::kHoldPauseMs - 30)
-        << "the first repeat waits out the pause";
     f.stepper.mouseUp(pressAt(f.stepper, up));
     const auto taken = f.steps.size();
     EXPECT_FALSE(f.stepper.isRepeating());
