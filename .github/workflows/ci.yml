@@ -870,8 +870,9 @@ jobs:
       run: |
         mkdir -p "$CCACHE_DIR"
         # Unity batches: fewer, larger objects. At 512M the separate-file build evicted its own entries,
-        # 72-84% hits on a PR against 96-99% on the other jobs.
-        ccache --set-config=max_size=1G
+        # 72-84% hits on a PR against 96-99% on the other jobs. 1500M since the objects carry /Z7 debug info (see
+        # Configure CMake), which makes them larger.
+        ccache --set-config=max_size=1500M
         ccache --set-config=compiler_check=content
         ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
@@ -881,16 +882,30 @@ jobs:
       run: |
         # No -DENABLE_AI_HARNESS here — same reasoning as the macOS job above. The Linux job keeps
         # building the harnesses for compile coverage.
+        # Symbols for Tests/WindowsCrashReport.h: /Z7 (Embedded, needs CMP0141 NEW since the project asks
+        # for CMake 3.22) puts debug info in the objects, the only form ccache caches for MSVC; the Tests
+        # link then writes Tests.pdb (AGENTSYNTH_TEST_PDB). Release objects are bigger, hence max_size above.
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
           -DAGENTSYNTH_PCH=ON \
           -DAGENTSYNTH_UNITY=ON \
+          -DAGENTSYNTH_TEST_PDB=ON \
+          -DCMAKE_POLICY_DEFAULT_CMP0141=NEW \
+          -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     - name: Build
       run: cmake --build build --config Release
+
+    # The crash reporter can only name frames if the Tests link wrote its PDB (AGENTSYNTH_TEST_PDB above).
+    - name: Check test symbols
+      shell: bash
+      run: |
+        pdb=$(find build -name Tests.pdb -print -quit)
+        test -n "$pdb" || { echo "::error::Tests.pdb not found: Windows crash stacks would print no names"; exit 1; }
+        echo "symbols: $pdb"
 
     - name: Check Cache Health
       if: always()
