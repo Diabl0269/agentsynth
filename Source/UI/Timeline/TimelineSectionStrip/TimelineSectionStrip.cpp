@@ -7,6 +7,7 @@
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 #include "AppUndoManager.h"
+#include "Timeline/TimelineDoc/SectionVariationLetter.h"
 #include "Transport/TransportService.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -114,6 +115,8 @@ std::vector<TimelineSectionStrip::Block> TimelineSectionStrip::buildBlocks() con
         block.lengthBeats = section->lengthBeats;
         block.ordinal = ordinal;
         block.count = total[placement.section.value];
+        block.variation = placement.variation;
+        block.variationCount = (int)section->variations.size();
         block.bounds = sectionstrip::blockRect((float)x0, (float)x1, getHeight());
         blocks.push_back(std::move(block));
     }
@@ -125,6 +128,14 @@ synth::PlacementId TimelineSectionStrip::blockAt(juce::Point<float> pos) const {
     for (auto it = blocks.rbegin(); it != blocks.rend(); ++it)
         if (it->bounds.contains(pos))
             return it->id;
+    return {};
+}
+
+synth::PlacementId TimelineSectionStrip::chipAt(juce::Point<float> pos) const {
+    const auto blocks = buildBlocks();
+    for (auto it = blocks.rbegin(); it != blocks.rend(); ++it)
+        if (it->bounds.contains(pos))
+            return sectionstrip::chipBounds(it->bounds).contains(pos) ? it->id : synth::PlacementId{};
     return {};
 }
 
@@ -145,7 +156,7 @@ void TimelineSectionStrip::resized() {
 // One block: the section's colour, a darker border, its name, and "2/3" when it plays more than once. `alpha` scales
 // all of it (a growing, moved or leaving block).
 void TimelineSectionStrip::paintBlock(juce::Graphics& g, const Block& block, juce::Rectangle<float> rect, float alpha,
-                                      const juce::Font& nameFont, const juce::Font& countFont) const {
+                                      const juce::Font& nameFont, const juce::Font& countFont, bool chipHot) const {
     g.setColour(block.colour.withAlpha(kBlockFillAlpha * alpha));
     g.fillRect(rect);
     g.setColour(block.colour.darker(0.5f).withAlpha(alpha));
@@ -155,6 +166,18 @@ void TimelineSectionStrip::paintBlock(juce::Graphics& g, const Block& block, juc
     if (text.getWidth() <= 4.0f)
         return;
     const auto ink = juce::Colours::black; // fixed black, like a clip's name: it sits on a section hue
+    // The variation chip: a pill at the right end holding the letter, on the block's colour darkened.
+    const auto chip = block.id.isValid() ? sectionstrip::chipBounds(rect) : juce::Rectangle<float>();
+    if (!chip.isEmpty()) {
+        g.setColour(block.colour.darker(chipHot ? 0.1f : 0.25f).withAlpha(alpha));
+        g.fillRoundedRectangle(chip, chip.getWidth() * 0.5f);
+        g.setColour(ink.withAlpha(alpha));
+        g.setFont(synth::theme::AppLookAndFeel::uiSemiBoldFont(kCountFontHeight));
+        g.drawText(synth::variationLetter(block.variation), chip.toNearestInt(), juce::Justification::centred, false);
+        text.setRight(chip.getX() - 2.0f);
+        if (text.getWidth() <= 4.0f)
+            return;
+    }
     if (block.count > 1 && text.getWidth() > sectionstrip::kCountReserve * 1.6f) {
         g.setColour(ink.withAlpha(0.75f * alpha));
         g.setFont(countFont);
@@ -199,7 +222,7 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
         }
         if (blockDragging_ && !dragCopy_ && block.id == pressedBlock_)
             alpha *= kMovedOriginalAlpha; // the block being moved stays as a faint mark of where it was
-        paintBlock(g, block, rect, alpha, nameFont, countFont);
+        paintBlock(g, block, rect, alpha, nameFont, countFont, hoveredChip_ && block.id == hovered_);
         if (block.id == selected_) {
             g.setColour(colors.accent);
             g.drawRect(rect.expanded(1.0f), 2.0f);

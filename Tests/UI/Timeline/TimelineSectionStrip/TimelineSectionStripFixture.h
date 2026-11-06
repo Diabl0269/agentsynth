@@ -17,10 +17,16 @@ public:
     using TimelineSectionStrip::TimelineSectionStrip;
     int blockMenus = 0;
     int stripMenus = 0;
+    int variationMenus = 0;
+    PlacementId lastVariationMenu;
 
 protected:
     void openSectionContextMenu(PlacementId) override { ++blockMenus; }
     void openStripContextMenu() override { ++stripMenus; }
+    void openVariationMenu(PlacementId id) override {
+        ++variationMenus;
+        lastVariationMenu = id;
+    }
 };
 
 struct StripFixture {

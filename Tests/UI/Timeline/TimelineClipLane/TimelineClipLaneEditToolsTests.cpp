@@ -352,3 +352,66 @@ TEST(TimelineClipLaneInteractionTest, RealRightClickOnAnUnselectedClipSelectsItA
     EXPECT_TRUE(f.selection.contains(third));
     EXPECT_EQ(f.fitAllItem(), nullptr);
 }
+
+//==============================================================================
+// "New variation of this part": the clip menu item that makes the clip's track its own in a new variation of the
+// section the clip is in.
+
+namespace {
+
+struct VariationPartFixture : ClipLaneFixture {
+    synth::TrackId lead;
+    synth::ClipId inFirst, inSecond;
+    synth::PlacementId second;
+    synth::PlacementId notified;
+    juce::String message;
+
+    VariationPartFixture() {
+        lead = doc.addTrack(TrackKind::Midi, "Lead");
+        inFirst = doc.addClip(lead, 0.0, 4.0, "L");
+        const auto section = doc.makeSection(0.0, 8.0, "Verse", 0xff56D4C0, 0.5);
+        doc.placeSection(section, 16.0, synth::SectionDropMode::MakeRoom, 0.5);
+        second = doc.getPlacements()[1].id;
+        for (const auto& c : doc.getTrack(lead)->clips)
+            if (c.startBeat == 16.0)
+                inSecond = c.id;
+        lane.onVariationAdded = [this](synth::PlacementId placement, const juce::String& text) {
+            notified = placement;
+            message = text;
+        };
+    }
+    bool menuHasNewVariation(synth::ClipId clip) {
+        auto menu = lane.buildClipContextMenu(clip, {0, 0});
+        juce::PopupMenu::MenuItemIterator it(menu);
+        while (it.next())
+            if (it.getItem().text == "New variation of this part")
+                return true;
+        return false;
+    }
+};
+
+} // namespace
+
+TEST(TimelineClipLaneEditToolsTest, NewVariationOfThisPartMakesTheTracksMusicTheVariationsOwnInOneUndoStep) {
+    VariationPartFixture f;
+    f.lane.applyClipContextChoice(f.inSecond, TimelineClipLaneArea::ClipContextChoice::NewVariationOfPart, 0.0);
+    EXPECT_EQ(f.doc.getPlacement(f.second)->variation, 1);
+    ASSERT_NE(f.doc.getVariation(f.doc.getPlacement(f.second)->section, 1), nullptr);
+    EXPECT_EQ(f.doc.getVariation(f.doc.getPlacement(f.second)->section, 1)->ownTracks.count(f.lead.value), 1u);
+    EXPECT_EQ(f.notified, f.second);
+    EXPECT_EQ(f.message, "Verse B: the Lead is its own now. Switch with the B chip.");
+    EXPECT_TRUE(f.undo.undo());
+    EXPECT_EQ(f.doc.getPlacement(f.second)->variation, 0);
+    EXPECT_EQ(f.doc.getSection(f.doc.getPlacement(f.second)->section)->variations.size(), 1u);
+}
+
+TEST(TimelineClipLaneEditToolsTest, NewVariationOfThisPartIsOfferedOnlyForAClipInsideAPlacement) {
+    VariationPartFixture f;
+    EXPECT_TRUE(f.menuHasNewVariation(f.inFirst));
+    const auto outside = f.doc.addClip(f.lead, 40.0, 4.0, "Outside");
+    EXPECT_FALSE(f.menuHasNewVariation(outside));
+    // Driven anyway, it changes nothing and says nothing.
+    f.lane.applyClipContextChoice(outside, TimelineClipLaneArea::ClipContextChoice::NewVariationOfPart, 0.0);
+    EXPECT_FALSE(f.notified.isValid());
+    EXPECT_FALSE(f.undo.canUndo());
+}

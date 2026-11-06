@@ -5,6 +5,7 @@
 // TimelineClipLaneArea.h; sibling TimelineClipLane*.cpp files in this directory hold the
 // rest of the class.
 
+#include "Timeline/TimelineDoc/SectionVariationLetter.h"
 #include "TimelineClipLaneArea.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 
@@ -476,6 +477,9 @@ juce::PopupMenu TimelineClipLaneArea::buildClipContextMenu(synth::ClipId id, juc
     menu.addItem(linkedDup);
     if (doc_->countLinkedClips(id) > 0)
         menu.addItem("Make unique", [this, id] { applyClipContextChoice(id, ClipContextChoice::MakeUnique, 0.0); });
+    if (doc_->placementForClip(id) != nullptr)
+        menu.addItem("New variation of this part",
+                     [this, id] { applyClipContextChoice(id, ClipContextChoice::NewVariationOfPart, 0.0); });
     // Greyed, not hidden, unless the clip is a MIDI clip with notes and a key (its own or the song's) to fit to.
     juce::PopupMenu::Item fitToKey("Fit to key");
     fitToKey.setEnabled(clip->assetRef.isEmpty() && !clip->notes.empty() && resolvedKeyFor(*clip).has_value());
@@ -586,6 +590,9 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
             mutate();
         break;
     }
+    case ClipContextChoice::NewVariationOfPart:
+        addVariationOfPart(id);
+        break;
     case ClipContextChoice::Delete: {
         auto mutate = [this, id] { doc_->removeClip(id); };
         if (undoManager_)
@@ -662,6 +669,30 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
     }
 
     repaint();
+}
+
+// The clip's track becomes its own in a new variation of the section, which this placement now plays. One undo step.
+// The host is told which placement and what to say, so the strip can outline it and a toast can name the new letter.
+void TimelineClipLaneArea::addVariationOfPart(synth::ClipId id) {
+    const auto* placement = doc_->placementForClip(id);
+    const auto* track = doc_->getTrackForClip(id);
+    const auto* section = placement != nullptr ? doc_->getSection(placement->section) : nullptr;
+    if (section == nullptr || track == nullptr)
+        return;
+    const auto placementId = placement->id;
+    const auto sectionName = section->name;
+    const auto trackName = track->name;
+    int letter = -1;
+    auto mutate = [this, id, &letter] { letter = doc_->addVariationForTrack(id); };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+    if (letter < 0 || !onVariationAdded)
+        return;
+    const auto name = synth::variationLetter(letter);
+    onVariationAdded(placementId, sectionName + " " + name + ": the " + trackName +
+                                      " is its own now. Switch with the " + name + " chip.");
 }
 
 } // namespace synth::ui

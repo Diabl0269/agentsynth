@@ -32,7 +32,7 @@ class ShortcutManager;
 // Split by concern: TimelineSectionStrip.cpp (state, painting, blocks), ...Mouse.cpp (make by drag, block drag and the
 // other pointer gestures), ...Menu.cpp (block and strip menus and their headless seams), ...Rename.cpp (the in-place
 // name editor), ...Accessibility.cpp (one proxy per block, tooltips, the test-mode probe), ...Keys.cpp (keyboard),
-// ...Motion.cpp (what animates).
+// ...Motion.cpp (what animates), ...Variations.cpp (the letter chip's menu and its edits).
 namespace synth::ui {
 
 class TimelineSectionStrip
@@ -67,13 +67,17 @@ public:
         juce::Colour colour;
         double startBeat = 0.0;
         double lengthBeats = 0.0;
-        int ordinal = 1; // 1-based position among the section's placements
-        int count = 1;   // how many times the section plays
+        int ordinal = 1;        // 1-based position among the section's placements
+        int count = 1;          // how many times the section plays
+        int variation = 0;      // the letter this placement plays
+        int variationCount = 1; // how many variations the section has
         juce::Rectangle<float> bounds;
     };
     // Every placement whose block intersects the visible strip, in doc order.
     std::vector<Block> buildBlocks() const;
     synth::PlacementId blockAt(juce::Point<float> pos) const;
+    // The block under `pos` when `pos` is on its variation chip, else an invalid id.
+    synth::PlacementId chipAt(juce::Point<float> pos) const;
 
     synth::PlacementId getSelectedPlacement() const noexcept { return selected_; }
     void selectPlacement(synth::PlacementId id);
@@ -104,6 +108,23 @@ public:
     bool applyStripMenuChoice(StripMenuChoice choice);
     // Whether the menu offers `choice` for `id` (Make unique needs a section that plays more than once).
     bool isSectionMenuChoiceEnabled(synth::PlacementId id, SectionMenuChoice choice) const;
+
+    // ---- Variations (TimelineSectionStripVariations.cpp) ----
+    enum class VariationChoice { Switch, NewVariation, PlayEverywhere, RemoveVariation };
+    /** Headless seam for the variation menu. `letter` is the target of Switch and is ignored by the others, which act
+     *  on the letter `id` plays now. Each applied choice is one undo step and outlines the rewritten placements. False
+     *  when it did nothing. */
+    bool applyVariationMenuChoice(synth::PlacementId id, VariationChoice choice, int letter = 0);
+    bool isVariationChoiceEnabled(synth::PlacementId id, VariationChoice choice) const;
+    /** The radio row for variation `letter` of `id`'s section: "B (Lead)" with the names of the tracks it owns, "B"
+     *  for A or a full copy. */
+    juce::String variationRowLabel(synth::PlacementId id, int letter) const;
+    /** The text of New / Play everywhere / Remove for `id` ("Play B in every Verse"); empty for Switch. */
+    juce::String variationChoiceLabel(synth::PlacementId id, VariationChoice choice) const;
+    // Adds the variation items to `menu` (the block menu's submenu and the chip's menu are the same list).
+    void addVariationItems(juce::PopupMenu& menu, synth::PlacementId id);
+    // Outlines these placements as an edit that rewrote them would (400 ms, 80 ms fade under Reduce Motion).
+    void outlinePlacements(const std::vector<synth::PlacementId>& placements);
 
     // ---- Renaming ----
     // Opens the in-place name editor over the block. No-op when the id does not resolve or the block is off screen.
@@ -163,10 +184,13 @@ protected:
     virtual void openSectionContextMenu(synth::PlacementId id);
     // The empty strip's menu (Make sections from markers); protected virtual for the same reason.
     virtual void openStripContextMenu();
+    // Opens the variation menu for the block, anchored at its chip; protected virtual for the same reason.
+    virtual void openVariationMenu(synth::PlacementId id);
 
 private:
     class BlockProxy : public juce::Component {
     public:
+        std::function<void()> showVariations; // the screen reader's "show menu" action
         std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
     };
     class Probe;
@@ -176,6 +200,8 @@ private:
     juce::Point<float> pressPos_;     // local mouse position at the press
     synth::PlacementId pressedBlock_; // the block under it (invalid on empty strip)
     bool blockDragging_ = false;      // set by dragPressedBlock once the pointer has passed kDragStartPx
+    bool pressedOnChip_ = false;      // the press landed on the variation chip; a release without a drag opens its menu
+    bool hoveredChip_ = false;        // the pointer is over the hovered block's chip
     // Called by mouseDrag / mouseUp while `pressedBlock_` is valid; they own the drag of a placed block.
     void dragPressedBlock(const juce::MouseEvent& e);
     void releasePressedBlock(const juce::MouseEvent& e);
@@ -198,7 +224,7 @@ private:
     void updateMakeDrag(const juce::MouseEvent& e);
     void endMakeDrag(bool commit);
     std::vector<sectionstrip::Span> blockSpans() const;
-    void setHoveredBlock(synth::PlacementId id);
+    void setHoveredBlock(synth::PlacementId id, bool overChip = false);
 
     // Keyboard (TimelineSectionStripKeys.cpp)
     bool matchesKey(const juce::String& actionId, const juce::KeyPress& fallback, const juce::KeyPress& key) const;
@@ -210,7 +236,7 @@ private:
     void trackChangesForMotion();
     std::optional<SectionStripMotion::Ghost> ghostOf(synth::PlacementId id) const;
     void paintBlock(juce::Graphics& g, const Block& block, juce::Rectangle<float> rect, float alpha,
-                    const juce::Font& nameFont, const juce::Font& countFont) const;
+                    const juce::Font& nameFont, const juce::Font& countFont, bool chipHot = false) const;
 
     // Menus (TimelineSectionStripMenu.cpp)
     void buildAndShowBlockMenu(synth::PlacementId id);
@@ -218,6 +244,7 @@ private:
     bool placeAgain(synth::PlacementId id, bool atEnd);
     bool makeUnique(synth::PlacementId id);
     bool selectClipsOf(synth::PlacementId id);
+    juce::PopupMenu::Options variationMenuOptions(synth::PlacementId id) const;
 
     // Rename (TimelineSectionStripRename.cpp)
     void finishRename(bool commit);

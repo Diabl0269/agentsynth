@@ -37,13 +37,32 @@ open in the piano roll, and by the Settings toggle below.
   Make unique (only when the section plays more than once), Select its clips, Remove (keep the music), Delete
   and bars. "Place again" makes room for the music after it, unless the cover setting is on. Each choice is
   one undo step. The headless seams are the protected `openSectionContextMenu` and the public
-  `applySectionMenuChoice`.
+  `applySectionMenuChoice`. A **Variation** submenu follows Make unique, with the same items as the chip's menu.
+- **Variation chip:** every block shows a rounded chip at its right end with the letter it plays (A, B...),
+  drawn on the block's colour darkened and brightened under the pointer. It is hidden when the block would leave
+  under 24 px for its name (the block menu still reaches every action). A click on the chip (not a drag, which
+  still moves the block) selects the block and opens the **variation menu** at the chip; V on a focused block
+  opens it too. The menu has one radio row per variation ("A", "B (Lead)", "C (Lead, Bass)": the tracks a
+  variation owns, at most three then "+N", none for A or a full copy; the placement's own is ticked) which
+  switches only this repeat, then "New variation (copy of B)", "Play B in every Verse" (only when the section
+  plays more than once and some repeat plays another letter) and "Remove variation B" (not on A). Each choice
+  is one undo step. Switching, playing everywhere, adding and removing outline the rewritten placements like a
+  stamp. The chip's tooltip reads "Variation B of Verse. Click to switch, add or play it everywhere." and a block
+  of a section with several variations adds " - variation B". Code: `TimelineSectionStripVariations.cpp`, seams
+  `applyVariationMenuChoice` and the protected `openVariationMenu`.
+- **Clip menu, New variation of this part:** on a clip that starts inside a placement, after Make unique. The
+  clip's track (and any the placement's variation already owns) becomes the placement's own in a new variation
+  and the placement plays it; one undo step, an outline on the placement and a toast such as "Verse B: the Lead
+  is its own now. Switch with the B chip." (`TimelineClipLaneArea::onVariationAdded`).
 - **Strip menu** (right-click empty strip): Make sections from markers.
 - **From a range:** with the Range tool, the range menu's **Make section** (after "Delete range and close
   gap") or Shift+Cmd+J (`timelineMakeSection`, rebindable) turns the range into a section.
 - **Clips follow:** a clip inside a section that plays more than once draws the link mark; its tooltip reads
   "Follows Chorus (plays 3 times). Edit any Chorus to change them all." and a screen reader adds ", follows
-  Chorus".
+  Chorus". A clip on a track its variation owns reads "Belongs to Verse B (plays 2 times). Edit any Verse B
+  to change them all." (plays: the placements on that variation; "Belongs to Verse B, the only one." when it plays
+  once, which draws no mark), a screen reader adds ", belongs to Verse B", and a shared track counts every
+  placement that shares it.
 - **Edge lines:** each block's start and end draw as a faint line down the lanes.
 - **Settings (Preferences > Timeline):** "show the Sections strip" (`timelineShowSectionsStrip`, default on) and
   "placing a section covers the music where it lands" (`timelineSectionsCoverOnDrop`, default off; Shift flips
@@ -56,9 +75,13 @@ open in the piano roll, and by the Settings toggle below.
   into an 80 ms fade, and the lift lands at once (a move has no fade form); Animations: Off, or a strip that is not
   on screen, starts nothing.
 - **Accessibility:** the strip is a group titled "Sections" described as "Sections, N sections"; each block is
-  a button titled like "Chorus, bars 13 to 20, 1 of 3". Block tooltips read "Chorus - 8 bars - plays 3 times".
+  a button titled like "Chorus, bars 13 to 20, 1 of 3" (", variation B" added when the section has more than one),
+  described with its tooltip and "Shift+F10: menu. V: variations." and offering the screen reader's show-menu action,
+  which opens the variation menu. The chip is not a separate focus stop. Block tooltips read "Chorus - 8 bars - plays 3 times".
 - **Test mode:** a `timelineSections` probe publishes `sections` (`name:start:length:ordinal/count`, joined
-  by `;`) and `selectedSection`.
+  by `;`) and `selectedSection`; `variations` lists the letter each placement plays (`A*;B*;A*`, the star only
+  when its section has more than one variation) and `sectionVariationCount` counts the selected block's section's
+  variations (0 with nothing selected).
 
 ## Model
 

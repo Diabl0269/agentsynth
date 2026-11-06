@@ -32,6 +32,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMouse.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripRename.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMenu.cpp
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripVariations.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripAccessibility.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripKeys.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMotion.cpp

@@ -25,6 +25,7 @@ void TimelineSectionStrip::mouseDown(const juce::MouseEvent& e) {
     finishRename(true);
     pressPos_ = e.position;
     pressedBlock_ = {};
+    pressedOnChip_ = false;
     blockDragging_ = false;
     dragCancelled_ = false;
     makeArmed_ = false;
@@ -46,6 +47,7 @@ void TimelineSectionStrip::mouseDown(const juce::MouseEvent& e) {
         grabKeyboardFocus(); // a press on a block always lands the keys here, whatever held focus before
         selectPlacement(id);
         pressedBlock_ = id;
+        pressedOnChip_ = chipAt(e.position) == id; // opens its menu on release, unless the press became a drag
         return;
     }
     makeArmed_ = true;
@@ -97,9 +99,14 @@ void TimelineSectionStrip::mouseDrag(const juce::MouseEvent& e) {
 
 void TimelineSectionStrip::mouseUp(const juce::MouseEvent& e) {
     if (pressedBlock_.isValid()) {
+        const auto id = pressedBlock_;
+        const bool chipClick = pressedOnChip_ && !blockDragging_ && !e.mouseWasDraggedSinceMouseDown();
         releasePressedBlock(e);
         pressedBlock_ = {};
+        pressedOnChip_ = false;
         blockDragging_ = false;
+        if (chipClick)
+            openVariationMenu(id);
         return;
     }
     if (makeDragging_) {
@@ -218,15 +225,23 @@ void TimelineSectionStrip::cancelBlockDrag() {
     repaint();
 }
 
-void TimelineSectionStrip::setHoveredBlock(synth::PlacementId id) {
-    if (id == hovered_)
+void TimelineSectionStrip::setHoveredBlock(synth::PlacementId id, bool overChip) {
+    if (id == hovered_ && overChip == hoveredChip_)
         return;
+    hoveredChip_ = overChip;
+    if (id == hovered_) {
+        repaint();
+        return;
+    }
     hovered_ = id;
     setMouseCursor(id.isValid() ? dragGrabCursor() : juce::MouseCursor::NormalCursor);
     repaint();
 }
 
-void TimelineSectionStrip::mouseMove(const juce::MouseEvent& e) { setHoveredBlock(blockAt(e.position)); }
+void TimelineSectionStrip::mouseMove(const juce::MouseEvent& e) {
+    const auto id = blockAt(e.position);
+    setHoveredBlock(id, id.isValid() && chipAt(e.position) == id);
+}
 
 void TimelineSectionStrip::mouseExit(const juce::MouseEvent&) { setHoveredBlock({}); }
 

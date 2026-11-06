@@ -10,6 +10,7 @@
 // another clip, Delete, undo) therefore ends keyboard mode without this file being told, and every
 // existing selection-based verb (copy, split, mute, loop the selection) acts on it unchanged.
 
+#include "Timeline/TimelineDoc/SectionVariationLetter.h"
 #include "TimelineClipLaneArea.h"
 
 #include "AppUndoManager.h"
@@ -68,8 +69,10 @@ juce::String TimelineClipLaneArea::getKeyboardClipAccessibilityText() const {
     const auto* track = doc_->getTrackForClip(id);
     if (clip == nullptr || track == nullptr)
         return {};
+    const auto follow = sectionFollowOf(*clip);
+    const auto belongsTo = follow.own ? follow.name + " " + synth::variationLetter(follow.letter) : juce::String();
     return describeClipForAccessibility(*clip, *track, currentBeatsPerBar(), doc_->countLinkedClips(id),
-                                        sectionFollowOf(*clip).name);
+                                        follow.own ? juce::String() : follow.name, belongsTo);
 }
 
 void TimelineClipLaneArea::setKeyboardClip(synth::ClipId id) {

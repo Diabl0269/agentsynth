@@ -26,9 +26,11 @@ inline juce::String describeBarPosition(double beat, double beatsPerBar) {
 /** The spoken description of `clip` on `track`: kind, name, track and bar span. A clip ending on
  *  a bar line reads "bars 5 to 9" (the end is the boundary where the next bar begins); a muted
  *  clip adds ", muted", a linked one ", linked with N other clips" (`linkedOthers` > 0), and one in a repeated
- *  section ", follows Chorus" (`followsSection` non-empty). */
+ *  section ", follows Chorus" (`followsSection` non-empty), or ", belongs to Chorus B" for a track its variation owns
+ *  (`belongsToVariation` non-empty, which wins). */
 inline juce::String describeClipForAccessibility(const synth::Clip& clip, const synth::Track& track, double beatsPerBar,
-                                                 int linkedOthers = 0, const juce::String& followsSection = {}) {
+                                                 int linkedOthers = 0, const juce::String& followsSection = {},
+                                                 const juce::String& belongsToVariation = {}) {
     const double bpb = beatsPerBar > 0.0 ? beatsPerBar : 4.0;
     const auto start = describeBarPosition(clip.startBeat, bpb);
     const auto end = describeBarPosition(clip.startBeat + clip.lengthBeats, bpb);
@@ -40,7 +42,9 @@ inline juce::String describeClipForAccessibility(const synth::Clip& clip, const 
         text += ", muted";
     if (linkedOthers > 0)
         text += ", linked with " + juce::String(linkedOthers) + (linkedOthers == 1 ? " other clip" : " other clips");
-    if (followsSection.isNotEmpty())
+    if (belongsToVariation.isNotEmpty())
+        text += ", belongs to " + belongsToVariation;
+    else if (followsSection.isNotEmpty())
         text += ", follows " + followsSection;
     return text;
 }

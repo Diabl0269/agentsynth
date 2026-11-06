@@ -64,6 +64,13 @@ TimelinePanelComponent::TimelinePanelComponent()
         clipSelection_.setSelection(ids);
         clipLaneArea_.repaint();
     };
+    // "New variation of this part": the placement flashes its outline and the toast names the new letter.
+    clipLaneArea_.onVariationAdded = [this](synth::PlacementId placement, const juce::String& message) {
+        sectionStrip_->refresh();
+        sectionStrip_->outlinePlacements({placement});
+        if (onShowMessage)
+            onShowMessage(message);
+    };
     // "Make section" from a range: the new block opens its name for typing.
     clipLaneArea_.onSectionMade = [this](double startBeat) {
         sectionStrip_->refresh();
