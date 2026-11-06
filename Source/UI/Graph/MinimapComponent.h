@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TestMode/TestModeStateSource.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
@@ -52,9 +53,13 @@ struct MinimapModel {
 
 class MinimapComponent
     : public juce::Component
-    , public juce::SettableTooltipClient {
+    , public juce::SettableTooltipClient
+    , public synth::testmode::StateSource {
 public:
     MinimapComponent();
+
+    /** Test mode (id "minimap"): `nodes` and `cables` drawn on the map right now. */
+    void addTestModeState(juce::DynamicObject& into) const override;
 
     /** Smallest map the owner draws (it is a quarter of the editor in each direction, so the floor
      *  below follows from these two). */

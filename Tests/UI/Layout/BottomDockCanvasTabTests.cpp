@@ -58,11 +58,10 @@ TEST_F(BottomDockCanvasTabTest, TheCanvasFillsTheTabBodyWhileItsTabShows) {
     ASSERT_TRUE(canvas().isVisible());
     const auto body = dock().getCanvasBodyBounds();
     EXPECT_FALSE(body.isEmpty());
-    // The canvas toolbar is the body's top row; the canvas takes the rest.
+    // The canvas toolbar shares the tab strip's row, so the canvas takes the whole body.
     const auto bodyInWindow = body + dock().getPosition();
-    EXPECT_EQ(canvas().getBounds(), bodyInWindow.withTrimmedTop(synth::ui::CanvasToolbar::kHeight));
-    EXPECT_EQ(canvas().getY(),
-              dock().getY() + BottomDockComponent::kTabStripHeight + synth::ui::CanvasToolbar::kHeight);
+    EXPECT_EQ(canvas().getBounds(), bodyInWindow);
+    EXPECT_EQ(canvas().getY(), dock().getY() + BottomDockComponent::kTabStripHeight);
     EXPECT_FALSE(dock().hitTest(body.getCentreX(), body.getCentreY())) << "clicks in the body belong to the canvas";
     EXPECT_EQ(dock().getDetachIcon(Tab::Canvas), nullptr) << "the canvas has no window to open into";
 }

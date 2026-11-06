@@ -6,8 +6,14 @@ namespace synth::ui {
 
 //==============================================================================
 MinimapComponent::MinimapComponent() {
+    setComponentID("minimap");
     setInterceptsMouseClicks(true, false);
     updateTooltip();
+}
+
+void MinimapComponent::addTestModeState(juce::DynamicObject& into) const {
+    into.setProperty("nodes", (int)model_.nodes.size());
+    into.setProperty("cables", (int)model_.cables.size());
 }
 
 void MinimapComponent::setShortcutHint(const juce::String& shortcutDisplay) {

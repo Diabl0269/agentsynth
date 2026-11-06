@@ -32,6 +32,8 @@ ToolbarChipSpec toolbarChipSpec(ToolbarButtonLayout layout) {
         return {30.0f, 24.0f, 7.0f, 19.0f, 11.5f, 1.0f, 6.0f, 4.0f};
     case ToolbarButtonLayout::InlineCompact:
         return {24.0f, 20.0f, 6.0f, 15.0f, 11.5f, 1.0f, 6.0f, 4.0f};
+    case ToolbarButtonLayout::InlineStrip:
+        return {24.0f, 17.0f, 5.0f, 13.0f, 11.0f, 1.0f, 5.0f, 4.0f};
     case ToolbarButtonLayout::Stacked:
         break;
     }

@@ -15,13 +15,17 @@ namespace {
 int canvasToolbarHeightIn(int available) { return juce::jmin(synth::ui::CanvasToolbar::kHeight, available / 2); }
 } // namespace
 
-// The canvas toolbar is the top row of whatever rectangle the canvas has: the main area, or the Canvas tab's body.
-// Cheap enough to run on every slide frame: GraphEditor::resized() re-fits the minimap, re-applies the content
-// transform and clips the card accessibility to the new viewport, which is the same work a window drag already does
-// on every frame.
+// The canvas toolbar is the top row of the main area when the canvas is the main view. As a panel tab it shares the
+// dock's tab strip instead (icon-only chips at the strip's right end), so the tabs and the canvas buttons are one
+// header and the canvas keeps the whole tab body. Cheap enough to run on every slide frame: GraphEditor::resized()
+// re-fits the minimap, re-applies the content transform and clips the card accessibility to the new viewport, which is
+// the same work a window drag already does on every frame.
 void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
     if (bottomDock.getMainView() == BottomDockComponent::Tab::Canvas) {
         const bool leavingDock = std::exchange(canvasInDockLayout_, false);
+        bottomDock.setStripAccessoryWidth(0);
+        if (canvasToolbar_.setInStrip(false))
+            applyToolbarLabels(toolbarNarrowMode_);
         canvasToolbar_.setVisible(true);
         canvasToolbar_.setBounds(mainArea.removeFromTop(canvasToolbarHeightIn(mainArea.getHeight())));
         graphEditor.setVisible(true);
@@ -38,9 +42,15 @@ void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
             canvasMainView_ = graphEditor.getViewDoc(); // still the main area's view: the bounds change below
         }
         if (showing) {
-            auto body = bottomDock.getCanvasBodyBounds() + bottomDock.getPosition();
-            canvasToolbar_.setBounds(body.removeFromTop(canvasToolbarHeightIn(body.getHeight())));
-            graphEditor.setBounds(body);
+            const bool enteringStrip = canvasToolbar_.setInStrip(true);
+            bottomDock.setStripAccessoryWidth(synth::ui::CanvasToolbar::stripWidth());
+            canvasToolbar_.setBounds(bottomDock.getStripAccessoryBounds() + bottomDock.getPosition());
+            graphEditor.setBounds(bottomDock.getCanvasBodyBounds() + bottomDock.getPosition());
+            raiseAboveBottomDock(canvasToolbar_);
+            if (enteringStrip)
+                applyToolbarLabels(toolbarNarrowMode_);
+        } else {
+            bottomDock.setStripAccessoryWidth(0);
         }
         canvasToolbar_.setVisible(showing);
         graphEditor.setVisible(showing);
@@ -51,6 +61,18 @@ void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
         }
     }
     refreshMinimapButton();
+}
+
+// A sibling of the dock paints under it, so the toolbar in the dock's tab strip goes directly above the dock (and under
+// everything that was above the dock before: the overlays, the AI panel's slide, the toasts).
+void MainComponent::raiseAboveBottomDock(juce::Component& c) {
+    const int dockIndex = getIndexOfChildComponent(&bottomDock);
+    if (getIndexOfChildComponent(&c) > dockIndex)
+        return;
+    if (auto* above = getChildComponent(dockIndex + 1); above != &c && above != nullptr)
+        c.toBehind(above);
+    else
+        c.toFront(false);
 }
 
 // A project's saved view belongs to the main area. While the canvas is in the panel it is kept for the canvas's

@@ -319,6 +319,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorDualIOFxRightLegTests.cpp
     UI/Graph/GraphEditor/GraphEditorIntegrationTests.cpp
     UI/Graph/GraphEditor/GraphEditorViewportTests.cpp
+    UI/Graph/MinimapSavedProjectTests.cpp
     UI/Graph/GraphEditor/GraphEditorMinimapSlideTests.cpp
     UI/Graph/GraphEditor/GraphEditorSmartConnectionTests.cpp
     UI/Graph/GraphEditor/GraphEditorSmartConnectionInsertTests.cpp
@@ -691,6 +692,7 @@ add_executable(Tests
     UI/Layout/BottomDockComponentTests.cpp
     UI/Layout/BottomDockTabModelTests.cpp
     UI/Layout/BottomDockCanvasTabTests.cpp
+    UI/Layout/MainViewSwapLayoutTests.cpp
     UI/Layout/BottomDockMainAreaTests.cpp
     UI/Layout/BottomDockMixerMainTests.cpp
     UI/Layout/BottomDockSwapIconTests.cpp

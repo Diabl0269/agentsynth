@@ -81,6 +81,12 @@ public:
      *  isCanvasBodyShowing(). The canvas itself is not a child of the dock, so MainComponent lays it into
      *  this rect and the dock lets mouse events through it. */
     juce::Rectangle<int> getCanvasBodyBounds() const;
+    /** Width kept free at the right end of the tab strip for the canvas's own buttons while the canvas body shows
+     *  (the tabs share what is left). 0 gives the strip back to the tabs. */
+    void setStripAccessoryWidth(int width);
+    /** That reserved end of the strip in this dock's own coordinates, below the resize handle; empty unless
+     *  isCanvasBodyShowing() and a width is set. */
+    juce::Rectangle<int> getStripAccessoryBounds() const;
     /** Fires after the canvas body appears or disappears (a tab switch or a main-view change), once the
      *  dock has laid out, so MainComponent can place the canvas. */
     std::function<void()> onCanvasBodyChanged;
@@ -638,6 +644,7 @@ private:
     std::optional<Tab> liftedTab_;
     // The strip area the tab buttons share, set by resized().
     juce::Rectangle<int> tabButtonsArea_;
+    int stripAccessoryWidth_ = 0;
     // The tabs offered when the press happened, in display order: the animator's item keys.
     std::vector<Tab> reorderTabs_;
     ReorderDragAnimator reorder_;
