@@ -721,7 +721,6 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/ModuleViewAccessibility.h
     Source/UI/ModuleViews/EQWindow.h
     Source/UI/ModuleViews/SampleWaveformComponent.h
-    # Reusable breakpoint curve editor (FRO111) -- not yet wired into any module card.
     Source/UI/ModuleViews/CurveEditor/CurveModel.h
     Source/UI/ModuleViews/CurveEditor/CurveModel.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.h
@@ -754,6 +753,7 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/CurveEditor/CurveEditorSelection.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorClipboard.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorPaint.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorGridLines.cpp
     Source/UI/ModuleViews/CurveEditor/CurveWaveConversion.h
     Source/UI/ModuleViews/CurveEditor/CurveWaveConversion.cpp
     Source/UI/ModuleViews/MorphMap/MorphMap.h

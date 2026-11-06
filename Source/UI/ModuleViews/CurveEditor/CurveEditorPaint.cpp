@@ -7,15 +7,42 @@ namespace {
 constexpr float kNodeRadius = 5.0f;
 constexpr float kBendHandleRadius = 4.0f;
 constexpr int kCurveStepsPerSegment = 24;
+constexpr float kLandmarkThickness = 1.5f;
+constexpr float kLandmarkAlpha = 0.55f;
+constexpr float kOutOfKeyAlphaScale = 0.5f;
+
+/** A full-length line at pixel `position`. A landmark is 1.5 px, centred on the pixel column it shares with a 1 px line
+ *  so the two stay comparable in a pixel test. */
+void drawGridLine(juce::Graphics& g, bool vertical, float position, float length, bool landmark) {
+    const int p = (int)position;
+    if (!landmark) {
+        vertical ? g.drawVerticalLine(p, 0.0f, length) : g.drawHorizontalLine(p, 0.0f, length);
+        return;
+    }
+    const float start = (float)p - (kLandmarkThickness - 1.0f) * 0.5f;
+    vertical ? g.fillRect(start, 0.0f, kLandmarkThickness, length)
+             : g.fillRect(0.0f, start, length, kLandmarkThickness);
+}
 } // namespace
 
 CurveEditorComponent::ThemeColours CurveEditorComponent::resolveThemeColours() const {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     if (lf != nullptr) {
         const auto& colors = lf->getTheme().colors;
-        return {colors.bg1, colors.border.withAlpha(0.4f), colors.textMuted, colors.accent};
+        const auto grid = colors.border.withAlpha(0.4f);
+        return {colors.bg1,
+                grid,
+                colors.textMuted,
+                colors.accent,
+                colors.textMuted.withAlpha(kLandmarkAlpha),
+                grid.withMultipliedAlpha(kOutOfKeyAlphaScale)};
     }
-    return {juce::Colour(0xff1a1a2e), juce::Colour(0xff2a2a3e), juce::Colour(0xff6a6a7e), juce::Colour(0xff00b4d8)};
+    return {juce::Colour(0xff1a1a2e),
+            juce::Colour(0xff2a2a3e),
+            juce::Colour(0xff6a6a7e),
+            juce::Colour(0xff00b4d8),
+            juce::Colour(0xff6a6a7e).withAlpha(kLandmarkAlpha),
+            juce::Colour(0xff2a2a3e).withMultipliedAlpha(kOutOfKeyAlphaScale)};
 }
 
 std::vector<double> CurveEditorComponent::gridXPositions() const {
@@ -36,7 +63,7 @@ std::vector<double> CurveEditorComponent::gridXPositions() const {
     return out;
 }
 
-// The grid's own lines, unlabelled: the vertical cells and the horizontal levels, the middle level brighter.
+// The grid's own lines, unlabelled: the vertical cells and the horizontal levels, the middle level a landmark.
 void CurveEditorComponent::paintGridLines(juce::Graphics& g, const CurveEditorGeometry& geometry,
                                           const ThemeColours& colours) const {
     const float h = (float)getHeight();
@@ -44,14 +71,13 @@ void CurveEditorComponent::paintGridLines(juce::Graphics& g, const CurveEditorGe
 
     g.setColour(colours.grid);
     for (const double t : gridXPositions())
-        g.drawVerticalLine((int)geometry.xForTime(t), 0.0f, h);
+        drawGridLine(g, true, geometry.xForTime(t), h, false);
     for (int i = 0; i <= yDiv; ++i) {
         const float y = geometry.yForLevel((float)i / (float)yDiv);
-        // The middle line (yDiv even) is the zero/centre reference -- drawn brighter so it
-        // stays visible even with Grid set to Off's own faint reference grid.
+        // The middle line (yDiv even) is the zero/centre reference: a landmark, so it stays visible among the rest.
         const bool isMiddle = (yDiv % 2 == 0) && (i == yDiv / 2);
-        g.setColour(isMiddle ? colours.grid.withAlpha(0.7f) : colours.grid);
-        g.drawHorizontalLine((int)y, 0.0f, (float)getWidth());
+        g.setColour(isMiddle ? colours.landmark : colours.grid);
+        drawGridLine(g, false, y, (float)getWidth(), isMiddle);
     }
 }
 
@@ -60,22 +86,25 @@ void CurveEditorComponent::paintGrid(juce::Graphics& g, const CurveEditorGeometr
     const float h = (float)getHeight();
 
     // guides_ set (the Filter shape editor): exactly its labelled lines, wherever the caller put them. While the
-    // editor snaps, the snap lines are drawn first, under the guides.
+    // editor snaps, the snap lines are drawn first, under the guides; the guides are the landmarks (a zero line, the
+    // labelled frequencies), and a switch hides them without touching the snap lines.
     if (guides_.has_value()) {
         if (grid_.has_value() && snapToGrid_)
             paintGridLines(g, geometry, colours);
+        if (!guidesVisible_)
+            return;
         g.setFont(juce::Font(9.0f));
         for (const auto& guide : guides_->x) {
             const int x = (int)geometry.xForTime(guide.position);
-            g.setColour(guide.emphasised ? colours.grid.withAlpha(0.7f) : colours.grid);
-            g.drawVerticalLine(x, 0.0f, h);
+            g.setColour(colours.landmark);
+            drawGridLine(g, true, (float)x, h, true);
             g.setColour(colours.mutedText);
             g.drawText(guide.label, x + 2, (int)h - 12, 48, 11, juce::Justification::left, false);
         }
         for (const auto& guide : guides_->y) {
             const int y = (int)geometry.yForLevel((float)guide.position);
-            g.setColour(guide.emphasised ? colours.grid.withAlpha(0.7f) : colours.grid);
-            g.drawHorizontalLine(y, 0.0f, (float)getWidth());
+            g.setColour(guide.emphasised ? colours.landmark : colours.grid);
+            drawGridLine(g, false, (float)y, (float)getWidth(), guide.emphasised);
             g.setColour(colours.mutedText);
             g.drawText(guide.label, 3, y - 12, 56, 11, juce::Justification::left, false);
         }
@@ -230,6 +259,7 @@ void CurveEditorComponent::paint(juce::Graphics& g) {
     if (backdrop_)
         backdrop_(g, geometry);
     paintGrid(g, geometry, colours);
+    paintLineHighlight(g, geometry, colours);
     paintCurve(g, geometry, colours);
     paintHandles(g, geometry, colours);
     paintPlayheadMarker(g, geometry, colours);

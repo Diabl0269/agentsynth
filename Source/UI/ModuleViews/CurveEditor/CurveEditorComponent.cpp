@@ -282,6 +282,10 @@ bool CurveEditorComponent::removeNode(int index) {
 }
 
 void CurveEditorComponent::updateHover(juce::Point<float> point) {
+    const auto lineBefore = highlightedLine(currentGeometry());
+    pointer_ = point;
+    if (lineBefore != highlightedLine(currentGeometry()))
+        repaint();
     const CurveHitResult hit = hitTest(point);
     if (hit.kind == hoveredKind_ && hit.index == hoveredIndex_)
         return;
@@ -406,6 +410,12 @@ void CurveEditorComponent::mouseUp(const juce::MouseEvent&) {
 void CurveEditorComponent::mouseMove(const juce::MouseEvent& e) { updateHover(e.position); }
 
 void CurveEditorComponent::mouseExit(const juce::MouseEvent&) {
+    if (pointer_.has_value()) {
+        const bool lit = highlightedLine(currentGeometry()).has_value();
+        pointer_.reset();
+        if (lit)
+            repaint();
+    }
     if (hoveredKind_ != CurveHitKind::None) {
         hoveredKind_ = CurveHitKind::None;
         hoveredIndex_ = -1;

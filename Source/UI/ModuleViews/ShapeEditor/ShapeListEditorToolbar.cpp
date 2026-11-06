@@ -12,15 +12,19 @@
 namespace synth::ui {
 
 namespace {
+constexpr int kToolbarGap = 8;
 constexpr int kGridLabelWidth = 34;
 constexpr int kSwitchWidth = 236;
 constexpr int kMinBoxWidth = 96;
 constexpr int kToggleWidth = 124;
+constexpr int kGuidesWidth = 84;
 constexpr float kSpectrumFillAlpha = 0.14f;
 constexpr float kSpectrumLineAlpha = 0.35f;
 } // namespace
 
-bool ShapeListEditor::hasToolbar() const { return gridOffer_.has_value() || spectrumToggle_ != nullptr; }
+bool ShapeListEditor::hasToolbar() const {
+    return gridOffer_.has_value() || guidesToggle_ != nullptr || spectrumToggle_ != nullptr;
+}
 
 juce::String ShapeListEditor::getGridName() const {
     if (gridBox_ != nullptr && gridBox_->getCurrentName().isNotEmpty())
@@ -67,6 +71,26 @@ void ShapeListEditor::buildToolbar(int& order) {
         applyGridChoice(startName, false);
     }
 
+    if (adapter_->getAxisGuides().has_value()) {
+        guidesToggle_ = std::make_unique<juce::ToggleButton>("Guides");
+        guidesToggle_->setTitle("Guides");
+        guidesToggle_->setTooltip("Guides: show the labelled reference lines (100, 1k, 10k and the dB levels). The "
+                                  "snapping lines of the grid stay");
+        guidesToggle_->setWantsKeyboardFocus(true);
+        guidesToggle_->setExplicitFocusOrder(order++);
+        setTogglePillStyle(*guidesToggle_, true);
+        guidesToggle_->onClick = [this] {
+            curve_.setGuidesVisible(guidesToggle_->getToggleState());
+            shapewindowprefs::saveText(adapter_->getApplicationProperties(),
+                                       shapewindowprefs::guidesKey(adapter_->getPreferenceKind()),
+                                       guidesToggle_->getToggleState() ? juce::String() : juce::String("0"));
+        };
+        addAndMakeVisible(*guidesToggle_);
+        const bool shown = shapewindowprefs::loadText(props, shapewindowprefs::guidesKey(kind)) != "0";
+        guidesToggle_->setToggleState(shown, juce::dontSendNotification);
+        curve_.setGuidesVisible(shown);
+    }
+
     if (adapter_->hasSpectrum()) {
         spectrumToggle_ = std::make_unique<juce::ToggleButton>("Show spectrum");
         spectrumToggle_->setTitle("Show spectrum");
@@ -94,6 +118,10 @@ void ShapeListEditor::layoutToolbar(juce::Rectangle<int> row) {
     gridLabelArea_ = {};
     if (spectrumToggle_ != nullptr)
         spectrumToggle_->setBounds(row.removeFromRight(kToggleWidth));
+    if (guidesToggle_ != nullptr) {
+        row.removeFromRight(kToolbarGap);
+        guidesToggle_->setBounds(row.removeFromRight(kGuidesWidth));
+    }
     if (gridBox_ != nullptr) {
         const int width = juce::jmax(kMinBoxWidth, synth::theme::AppLookAndFeel::comboBoxWidthToFitItems(*gridBox_));
         gridBox_->setBounds(row.removeFromLeft(width));

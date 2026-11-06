@@ -112,6 +112,8 @@ public:
     juce::String getGridName() const;
     /** Picks a grid choice by name as a click would; an unknown name changes nothing. */
     void setGridName(const juce::String& name);
+    /** The Guides toggle (the labelled reference lines); null unless the adapter has guides. */
+    juce::ToggleButton* getGuidesToggle() noexcept { return guidesToggle_.get(); }
     /** The Show spectrum toggle; null unless the adapter has a spectrum. */
     juce::ToggleButton* getSpectrumToggle() noexcept { return spectrumToggle_.get(); }
     /** Whether the spectrum timer is running: only while the toggle is on and the editor is visible. */
@@ -188,6 +190,7 @@ private:
     std::optional<ShapeGridOffer> gridOffer_;
     std::unique_ptr<NoteLengthBox> gridBox_;
     std::unique_ptr<CardSegmentedSwitch> gridSwitch_;
+    std::unique_ptr<juce::ToggleButton> guidesToggle_;
     std::unique_ptr<juce::ToggleButton> spectrumToggle_;
     std::unique_ptr<SpectrumTicker> spectrumTicker_;
     std::vector<float> spectrumDb_;
