@@ -101,6 +101,10 @@ public:
     bool applyPenToSelection();
     /** Runs one Ring helpers item on the selected shape, as one undo step. Needs the pitch rows (the Filter). */
     void applyRingHelper(ringhelpers::Helper helper);
+    /** Opens the Stack harmonics popover (the Ring helpers menu's item does this). */
+    void openStackPanel();
+    /** Stack harmonics with the panel's options, as one undo step. */
+    void applyStackHarmonics(const ringhelpers::StackOptions& options);
 
     // ---------- inspection ----------
     ShapeWindowMap& getMap() noexcept { return map_; }
@@ -143,6 +147,8 @@ public:
     juce::String getWindowTitle() const { return adapter_->getWindowTitle(); }
     /** The message under the map ("No room after this point"); empty once it has faded. */
     juce::String getStatusText() const { return statusLabel_.getText(); }
+    /** The colour the status line is drawn in: the error colour for a refusal, the muted one for a done note. */
+    juce::Colour getStatusColour() const { return statusLabel_.findColour(juce::Label::textColourId); }
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -211,6 +217,7 @@ private:
     ShapeDrawPenButton drawButton_{"Draw"};
     juce::TextButton saveShapeButton_{"Save shape"};
     juce::TextButton ringButton_{"Ring helpers"};
+    ringhelpers::StackOptions stackOptions_; ///< the Stack harmonics panel's last choices, for this window's life
     juce::TextButton doneButton_{"Done"};
     juce::Label statusLabel_;
     juce::uint32 statusClearsAtMs_ = 0;

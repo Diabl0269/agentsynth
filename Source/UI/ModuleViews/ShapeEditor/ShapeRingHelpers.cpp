@@ -31,6 +31,11 @@ std::vector<Peak> stackHarmonics(double rootHz, int count, float topDb, float st
     return peaks;
 }
 
+LfoCustomWave stackCurve(const StackOptions& options) {
+    return curveWithPeaks(stackHarmonics(options.rootHz, options.count, kTopDb, options.stepDb),
+                          options.halfWidthOctaves);
+}
+
 std::vector<Peak> chordPeaks(const std::optional<MusicalScale>& key) {
     const int root = key.has_value() ? key->rootPitchClass : 9;
     const auto has = [&](int interval) {

@@ -8,6 +8,7 @@
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/FollowKeyField.h"
+#include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -38,8 +39,13 @@ public:
     void setChoice(const pitchgrid::Choice& choice);
     /** The Notes key in force: the song key while following, else the own key (nullopt: every note). */
     std::optional<MusicalScale> activeKey() const;
-    /** The Harmonics root in hertz, resolved from the Root box. */
+    /** The Harmonics root in hertz, resolved from the Root box (where a glide is heading). */
     double rootHz() const;
+    /** The root the lines are drawn at: rootHz(), or where the played-note glide has got to. */
+    double shownRootHz() const { return glideHz_.value_or(rootHz()); }
+    /** The played-note line eases to a new note over this long (under Reduce Motion it jumps). */
+    static constexpr double kGlideMs = 160.0;
+    AnimationDriver& getGlide() noexcept { return glide_; }
 
     /** Root box entries besides the notes. */
     static constexpr int kRootPlaying = 1;
@@ -77,6 +83,10 @@ private:
     std::optional<MusicalScale> ownKey_;
     std::optional<MusicalScale> songKey_;
     float playedHz_ = 0.0f;
+    std::optional<double> glideHz_; ///< set while the played-note line is gliding
+    juce::VBlankAnimatorUpdater glideUpdater_{this};
+    AnimationDriver glide_;
+    void glideTo(double fromHz, double toHz);
 
     juce::Label gridLabel_, levelLabel_, stepsLabel_, keyLabel_, rootLabel_;
     CardSegmentedSwitch kind_;

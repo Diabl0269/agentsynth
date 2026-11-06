@@ -6,6 +6,7 @@
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <cmath>
 
 namespace synth::ui {
 
@@ -140,6 +141,8 @@ PitchGridRows::PitchGridRows(ShapeListAdapter& adapter)
         changed(true);
     };
     root_.onChange = [this] {
+        glide_.stop();
+        glideHz_.reset();
         updateRootTooltip();
         changed(true);
     };
@@ -241,7 +244,7 @@ double PitchGridRows::rootHz() const {
 }
 
 std::optional<CurveEditorComponent::CurveGrid> PitchGridRows::grid() const {
-    return pitchgrid::gridFor(choice_, {activeKey(), rootHz()});
+    return pitchgrid::gridFor(choice_, {activeKey(), shownRootHz()});
 }
 
 void PitchGridRows::poll() {
@@ -255,11 +258,37 @@ void PitchGridRows::poll() {
     }
     const float played = adapter_.getPlayedNoteHz();
     if (played > 0.0f && played != playedHz_) {
+        const double before = playedHz_ > 0.0f ? shownRootHz() : 0.0; // the first note ever heard just appears
         playedHz_ = played;
-        moved = moved || (choice_.kind == pitchgrid::Kind::harmonics && root_.getSelectedId() == kRootPlaying);
+        if (choice_.kind == pitchgrid::Kind::harmonics && root_.getSelectedId() == kRootPlaying) {
+            if (prefersReducedMotion() || before <= 0.0 || before == (double)played) {
+                glide_.stop();
+                glideHz_.reset();
+                moved = true;
+            } else {
+                glideTo(before, (double)played); // fires onGridChanged itself on every frame
+            }
+        }
     }
     if (moved && onGridChanged)
         onGridChanged();
+}
+
+// The line slides along the log axis, so it moves in even musical steps.
+void PitchGridRows::glideTo(double fromHz, double toHz) {
+    glideHz_ = fromHz;
+    glide_.start(
+        glideUpdater_, kGlideMs, easeOutCubic,
+        [this, fromHz, toHz](float t) {
+            glideHz_ = fromHz * std::pow(toHz / fromHz, (double)t);
+            if (onGridChanged)
+                onGridChanged();
+        },
+        [this] {
+            glideHz_.reset();
+            if (onGridChanged)
+                onGridChanged();
+        });
 }
 
 void PitchGridRows::refreshKeyField() { key_.setState(followSongKey_, songKey_, ownKey_); }

@@ -30,10 +30,23 @@ constexpr float kHarmonicStepDb = 2.0f;
 /** Half a peak's width at its foot, in octaves (a narrow peak: a sixth of an octave across). */
 constexpr double kHalfWidthOctaves = 1.0 / 12.0;
 constexpr double kBellHalfWidthOctaves = 1.0 / 24.0;
+/** The Stack harmonics panel's Width choices (Narrow, Medium, Wide), as the half width in octaves; Medium is the
+ *  default. */
+constexpr double kStackWidthOctaves[] = {1.0 / 24.0, kHalfWidthOctaves, 1.0 / 6.0};
+
+/** What the Stack harmonics panel asks for. The defaults are what the menu item used before it had a panel. */
+struct StackOptions {
+    double rootHz = 110.0;
+    int count = kHarmonics;
+    float stepDb = kHarmonicStepDb;
+    double halfWidthOctaves = kHalfWidthOctaves;
+};
 
 /** The first `count` multiples of `rootHz` inside the filter's range, each `stepDb` quieter than the one before. */
 std::vector<Peak> stackHarmonics(double rootHz, int count = kHarmonics, float topDb = kTopDb,
                                  float stepDb = kHarmonicStepDb);
+/** The curve for the panel's options: `options.count` harmonics of the root, each `stepDb` quieter. */
+LfoCustomWave stackCurve(const StackOptions& options);
 /** Root, third and fifth of `key` (A minor's are A, C, E) in the octaves of C3 and C4; no key: A major. The third is
  *  the key's (minor when it has a minor third and no major one). */
 std::vector<Peak> chordPeaks(const std::optional<MusicalScale>& key);

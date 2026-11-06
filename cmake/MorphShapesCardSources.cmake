@@ -10,4 +10,5 @@ list(APPEND APPUI_SOURCES
     Source/UI/ModuleViews/ShapeEditor/PitchGridRows.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeRingHelpers.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeListEditorRing.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeStackPanel.cpp
 )

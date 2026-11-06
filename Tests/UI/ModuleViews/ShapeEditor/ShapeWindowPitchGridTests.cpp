@@ -6,11 +6,14 @@
 #include "Modules/Filter/CustomFilterBlend.h"
 #include "Modules/Filter/CustomFilterShapes.h"
 #include "ShapeEditorTestHelpers.h"
+#include "UI/Layout/CardCallOut.h"
 #include "UI/ModuleViews/ShapeEditor/PitchGrid.h"
 #include "UI/ModuleViews/ShapeEditor/PitchGridRows.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeRingHelpers.h"
+#include "UI/ModuleViews/ShapeEditor/ShapeStackPanel.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace synth::ui;
 using namespace synth::ui::test;
@@ -219,11 +222,74 @@ TEST(ShapeWindowPitchGrid, ThePlayedNoteRootFollowsTheNoteHeardOnThePitchInput) 
     int changes = 0;
     rows.onGridChanged = [&changes] { ++changes; };
     rows.poll();
-    EXPECT_EQ(changes, 1);
+    EXPECT_GE(changes, 1);
     EXPECT_NEAR(rows.rootHz(), 196.0, 1e-3);
     const auto grid = rows.grid();
     ASSERT_TRUE(grid.has_value());
     EXPECT_NE(lineAt(*grid, 196.0 * 3), nullptr) << "the lines are G3's harmonics";
+}
+
+namespace {
+/** Sends `hz` into the Filter's Pitch input and polls the rows. */
+void playNote(ShapeRig& rig, PitchGridRows& rows, float hz) {
+    constexpr int kBlock = 64;
+    rig.filter->prepareToPlay(44100.0, kBlock);
+    juce::AudioBuffer<float> buffer(rig.filter->getTotalNumInputChannels(), kBlock);
+    buffer.clear();
+    for (int i = 0; i < kBlock; ++i)
+        buffer.setSample(FilterModule::kPitchBase, i, hz);
+    juce::MidiBuffer midi;
+    rig.filter->processBlock(buffer, midi);
+    rows.poll();
+}
+
+double firstHarmonicHz(const PitchGridRows& rows) {
+    const auto grid = rows.grid();
+    for (const auto& line : grid->xLines)
+        if (line.tier == GridLine::Tier::landmark)
+            return (double)CustomFilterShapes::xToHz((float)line.x);
+    return 0.0;
+}
+} // namespace
+
+TEST(ShapeWindowPitchGrid, ThePlayedNoteLineGlidesToANewNoteInsteadOfJumping) {
+    PitchKeysGuard keys;
+    setReducedMotionForTest(false);
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& rows = *editor.getPitchRows();
+    rows.setChoice(choiceOf(pitchgrid::Kind::harmonics));
+    rows.setRootId(PitchGridRows::kRootPlaying);
+    playNote(rig, rows, 110.0f);
+    rows.getGlide().completeForTest();
+    ASSERT_NEAR(firstHarmonicHz(rows), 110.0, 0.5);
+
+    playNote(rig, rows, 220.0f);
+    EXPECT_NEAR(rows.rootHz(), 220.0, 1e-3) << "the target is the new note at once";
+    EXPECT_TRUE(rows.getGlide().isRunning());
+    rows.getGlide().stepForTest(PitchGridRows::kGlideMs / 2);
+    const double mid = firstHarmonicHz(rows);
+    EXPECT_GT(mid, 111.0);
+    EXPECT_LT(mid, 219.0) << "mid-glide the line is between the two notes";
+    rows.getGlide().stepForTest(PitchGridRows::kGlideMs + 1);
+    EXPECT_NEAR(firstHarmonicHz(rows), 220.0, 0.5);
+    EXPECT_FALSE(rows.getGlide().isRunning());
+    setReducedMotionForTest(std::nullopt);
+}
+
+TEST(ShapeWindowPitchGrid, ThePlayedNoteLineJumpsUnderReducedMotion) {
+    PitchKeysGuard keys;
+    setReducedMotionForTest(true);
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    auto& rows = *editor.getPitchRows();
+    rows.setChoice(choiceOf(pitchgrid::Kind::harmonics));
+    rows.setRootId(PitchGridRows::kRootPlaying);
+    playNote(rig, rows, 110.0f);
+    playNote(rig, rows, 220.0f);
+    EXPECT_FALSE(rows.getGlide().isRunning());
+    EXPECT_NEAR(firstHarmonicHz(rows), 220.0, 0.5);
+    setReducedMotionForTest(std::nullopt);
 }
 
 TEST(ShapeWindowPitchGrid, TheChoiceIsRememberedAndTheOldOneRowChoiceMigrates) {
@@ -283,7 +349,17 @@ TEST(ShapeWindowPitchGrid, StackHarmonicsRingsAtTheRootsHarmonicsAsOneUndoStep) 
 
     const auto before = responseOf(rig);
     const int serial = rig.undo.getEditSerial();
+    std::unique_ptr<juce::Component> popover;
+    test_hooks::cardCallOutLauncherForTest() = [&popover](std::unique_ptr<juce::Component> c, juce::Rectangle<int>) {
+        popover = std::move(c);
+        return nullptr;
+    };
     ASSERT_TRUE(menu.run("Stack harmonics"));
+    test_hooks::cardCallOutLauncherForTest() = nullptr;
+    ASSERT_NE(popover, nullptr) << "Stack harmonics asks for its options first";
+    EXPECT_EQ(rig.undo.getEditSerial(), serial) << "nothing is changed until Stack is pressed";
+    auto& panel = static_cast<ShapeStackPanel&>(*popover);
+    panel.getStackButton().onClick();
     EXPECT_EQ(rig.undo.getEditSerial(), serial + 1) << "one undo step";
     const auto db = responseOf(rig);
     for (int n = 1; n <= ringhelpers::kHarmonics; ++n) {
@@ -295,6 +371,59 @@ TEST(ShapeWindowPitchGrid, StackHarmonicsRingsAtTheRootsHarmonicsAsOneUndoStep) 
     EXPECT_NEAR(responseAtHz(db, 5000.0), ringhelpers::kFloorDb, 0.5f);
     rig.undo.undo();
     EXPECT_EQ(responseOf(rig), before);
+}
+
+TEST(ShapeWindowPitchGrid, TheStackPanelsOptionsSetTheRootCountStepAndWidthOfThePeaks) {
+    PitchKeysGuard keys;
+    ShapeRig rig;
+    ShapeListEditor editor(rig.adapter, 0);
+    editor.getPitchRows()->setChoice(choiceOf(pitchgrid::Kind::harmonics));
+    editor.getPitchRows()->setRootId(PitchGridRows::rootIdOf(45)); // A2
+    std::unique_ptr<juce::Component> popover;
+    test_hooks::cardCallOutLauncherForTest() = [&popover](std::unique_ptr<juce::Component> c, juce::Rectangle<int>) {
+        popover = std::move(c);
+        return nullptr;
+    };
+    editor.openStackPanel();
+    test_hooks::cardCallOutLauncherForTest() = nullptr;
+    ASSERT_NE(popover, nullptr);
+    auto& panel = static_cast<ShapeStackPanel&>(*popover);
+
+    const auto defaults = panel.getOptions();
+    EXPECT_NEAR(defaults.rootHz, 110.0, 0.5);
+    EXPECT_EQ(defaults.count, ringhelpers::kHarmonics);
+    EXPECT_NEAR(defaults.stepDb, ringhelpers::kHarmonicStepDb, 1e-6f);
+
+    // Every control is named, has a tooltip and takes Tab focus.
+    for (juce::Component* c : std::initializer_list<juce::Component*>{
+             &panel.getRootBox(), &panel.getCountBox(), &panel.getStepBox(), &panel.getWidthSwitch(),
+             &panel.getCancelButton(), &panel.getStackButton()}) {
+        EXPECT_TRUE(c->getTitle().isNotEmpty() || c == &panel.getWidthSwitch()) << c->getTitle();
+        EXPECT_TRUE(c->getWantsKeyboardFocus());
+        if (auto* tip = dynamic_cast<juce::SettableTooltipClient*>(c))
+            EXPECT_TRUE(tip->getTooltip().isNotEmpty()) << c->getTitle();
+    }
+
+    panel.getRootBox().setSelectedId(1000 + 57, juce::sendNotificationSync); // A3
+    panel.getCountBox().setSelectedId(4, juce::sendNotificationSync);
+    panel.getStepBox().setSelectedId(1, juce::sendNotificationSync); // 0 dB
+    panel.getWidthSwitch().setSelectedIndex(2, juce::sendNotificationSync);
+    const auto chosen = panel.getOptions();
+    EXPECT_NEAR(chosen.rootHz, 220.0, 0.5);
+    EXPECT_EQ(chosen.count, 4);
+    EXPECT_EQ(chosen.stepDb, 0.0f);
+    EXPECT_GT(chosen.halfWidthOctaves, defaults.halfWidthOctaves);
+
+    const int serial = rig.undo.getEditSerial();
+    panel.getStackButton().onClick();
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
+    const auto db = responseOf(rig);
+    for (int n = 1; n <= 4; ++n)
+        EXPECT_NEAR(responseAtHz(db, 220.0 * n), ringhelpers::kTopDb, 2.5f) << "equal peaks at harmonic " << n;
+    EXPECT_NEAR(responseAtHz(db, 220.0 * 5.5), ringhelpers::kFloorDb, 0.5f) << "only four peaks";
+    EXPECT_EQ(editor.getStatusColour(), synth::theme::themeOf(editor).colors.textMuted)
+        << "a done message is not an error";
+    EXPECT_NE(editor.getStatusColour(), synth::theme::themeOf(editor).colors.error);
 }
 
 TEST(ShapeWindowPitchGrid, ChordPeaksAndOctaveBellsLandOnTheirNotes) {
