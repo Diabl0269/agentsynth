@@ -40,6 +40,20 @@ void AudioInputLayoutStore::touch(const juce::String& deviceType, const juce::St
     changed();
 }
 
+AudioInputLayoutStore::DeviceSettings AudioInputLayoutStore::deviceSettings(const juce::String& deviceType,
+                                                                            const juce::String& deviceName) const {
+    const auto* entry = find(deviceType, deviceName);
+    return entry != nullptr ? entry->settings : DeviceSettings{};
+}
+
+void AudioInputLayoutStore::setDeviceSettings(const juce::String& deviceType, const juce::String& deviceName,
+                                              const DeviceSettings& settings) {
+    if (deviceName.isEmpty() || deviceSettings(deviceType, deviceName) == settings)
+        return;
+    entryFor(deviceType, deviceName).settings = settings;
+    changed();
+}
+
 bool AudioInputLayoutStore::has(const juce::String& deviceType, const juce::String& deviceName) const {
     return find(deviceType, deviceName) != nullptr;
 }
@@ -140,6 +154,11 @@ juce::String AudioInputLayoutStore::toJson() const {
         for (const auto& [jack, name] : entry.names)
             names->setProperty(juce::Identifier(juce::String(jack)), name);
         item->setProperty("names", juce::var(names));
+        if (entry.settings.sampleRate > 0.0 && entry.settings.bufferSize > 0) {
+            item->setProperty("rate", entry.settings.sampleRate);
+            item->setProperty("buffer", entry.settings.bufferSize);
+            item->setProperty("outputs", (juce::int64)entry.settings.outputMask);
+        }
         interfaces.add(juce::var(item));
     }
     auto* root = new juce::DynamicObject();
@@ -169,6 +188,12 @@ void AudioInputLayoutStore::loadJson(const juce::String& json) {
             for (const auto& pair : *pairs)
                 if (pair.isInt() && (int)pair >= 0 && (int)pair < kMaxPairs)
                     entry.pairedPairs.insert((int)pair);
+        // A file from before settings were remembered has none of these, which reads as "never recorded".
+        const double rate = object->getProperty("rate");
+        const int buffer = object->getProperty("buffer");
+        const auto outputs = (juce::int64)object->getProperty("outputs");
+        if (rate > 0.0 && buffer > 0 && outputs > 0 && outputs <= (juce::int64)0xFFFFFFFF)
+            entry.settings = {rate, buffer, (juce::uint32)outputs};
         if (const auto* names = object->getProperty("names").getDynamicObject())
             for (const auto& property : names->getProperties()) {
                 const int jack = property.name.toString().getIntValue();

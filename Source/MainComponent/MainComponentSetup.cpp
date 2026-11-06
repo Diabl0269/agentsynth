@@ -808,6 +808,7 @@ bool MainComponent::initialiseAudioEngine() {
             // keeps the next launch on the inputs-off defaults.
             if (state == nullptr)
                 return;
+            audioEngine.rememberOpenDeviceSettings();
             appProperties.getUserSettings()->setValue("audioDeviceState",
                                                       state->toString(juce::XmlElement::TextFormat().singleLine()));
             appProperties.saveIfNeeded();

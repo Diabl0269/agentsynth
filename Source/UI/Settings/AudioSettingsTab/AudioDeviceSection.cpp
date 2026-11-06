@@ -84,15 +84,42 @@ void AudioDeviceSection::applyDeviceChoice(bool isInput) {
         if (!current->hasSeparateInputsAndOutputs())
             setup.inputDeviceName = inputsOn ? setup.outputDeviceName : juce::String();
     }
-    // A different device does not share the old device's rate and buffer size (Bluetooth outputs in particular), and
-    // a rejected open leaves the manager with no device; 0 asks the new device for its own defaults.
-    setup.sampleRate = 0.0;
-    setup.bufferSize = 0;
-    const auto error = deviceManager_.setAudioDeviceSetup(setup, true);
-    if (error.isNotEmpty())
-        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Audio device",
-                                               "Could not open \"" + chosen + "\": " + error);
+    const auto previous = deviceManager_.getAudioDeviceSetup();
+    const auto remembered = source_.layoutStore().deviceSettings(deviceManager_.getCurrentAudioDeviceType(), chosen);
+    const auto error = openPicked(setup, remembered, isInput);
+    if (error.isNotEmpty()) {
+        deviceManager_.setAudioDeviceSetup(previous, true);
+        if (onOpenFailed)
+            onOpenFailed(chosen, error);
+        else
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Audio device",
+                                                   "Could not open \"" + chosen + "\": " + error);
+    }
     populate();
+}
+
+// A different device does not share the old device's rate, buffer size or output channels (a Bluetooth output in
+// particular), so an output pick opens with what the user last had on that device, or with the device's own defaults
+// (0) when it is new or the remembered values no longer open. An input pick leaves the output channels as they are.
+// Returns JUCE's error, empty on success.
+juce::String AudioDeviceSection::openPicked(juce::AudioDeviceManager::AudioDeviceSetup setup,
+                                            const synth::AudioInputLayoutStore::DeviceSettings& remembered,
+                                            bool isInput) {
+    auto defaults = setup;
+    defaults.sampleRate = 0.0;
+    defaults.bufferSize = 0;
+    if (!isInput)
+        defaults.useDefaultOutputChannels = true;
+    if (!isInput && remembered.outputMask != 0 && remembered.sampleRate > 0.0 && remembered.bufferSize > 0) {
+        setup.sampleRate = remembered.sampleRate;
+        setup.bufferSize = remembered.bufferSize;
+        setup.outputChannels.clear();
+        setup.outputChannels.setBitRangeAsInt(0, 32, remembered.outputMask);
+        setup.useDefaultOutputChannels = false;
+        if (deviceManager_.setAudioDeviceSetup(setup, true).isEmpty())
+            return {};
+    }
+    return deviceManager_.setAudioDeviceSetup(defaults, true);
 }
 
 int AudioDeviceSection::visibleRows() const {

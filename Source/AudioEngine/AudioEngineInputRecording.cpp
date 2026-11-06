@@ -157,6 +157,17 @@ void AudioEngine::noteOpenInterface() {
     inputLayout_.touch(deviceManager.getCurrentAudioDeviceType(), info.deviceName);
 }
 
+// Saves the open output device's rate, buffer size and output channels for the next time the user picks it. Keyed by
+// the output device: the rate and the outputs belong to it, and a separate input device follows its rate.
+void AudioEngine::rememberOpenDeviceSettings() {
+    if (isHosted() || deviceManager.getCurrentAudioDevice() == nullptr)
+        return;
+    const auto setup = deviceManager.getAudioDeviceSetup();
+    inputLayout_.setDeviceSettings(
+        deviceManager.getCurrentAudioDeviceType(), setup.outputDeviceName,
+        {setup.sampleRate, setup.bufferSize, (juce::uint32)setup.outputChannels.getBitRangeAsInt(0, 32)});
+}
+
 // Returns JUCE's error text, empty on success. The device restarts with the new channel mask, which re-runs
 // audioDeviceAboutToStart (and so the input map and the format-change path) like any other device change.
 juce::String AudioEngine::applyInputEnabledSetup() {
