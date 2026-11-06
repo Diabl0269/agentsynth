@@ -104,7 +104,7 @@ inline juce::String barsPhrase(double startBeat, double lengthBeats, double beat
     const double bpb = beatsPerBar > 0.0 ? beatsPerBar : 4.0;
     const int first = (int)std::floor(startBeat / bpb + kBarEpsilon) + 1;
     const int last = std::max(first, (int)std::ceil((startBeat + lengthBeats) / bpb - kBarEpsilon));
-    return "bars " + juce::String(first) + " to " + juce::String(last);
+    return last == first ? "bar " + juce::String(first) : "bars " + juce::String(first) + " to " + juce::String(last);
 }
 
 /** "8 bars", "1 bar", "2.5 bars". */

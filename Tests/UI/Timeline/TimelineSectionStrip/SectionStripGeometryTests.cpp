@@ -28,6 +28,7 @@ TEST(SectionStripGeometryTest, DragStopsAtTheNeighbouringBlocks) {
 
 TEST(SectionStripGeometryTest, WordsReadBarsOneBasedAndEndInclusive) {
     EXPECT_EQ(barsPhrase(48.0, 32.0, 4.0), "bars 13 to 20");
+    EXPECT_EQ(barsPhrase(4.0, 4.0, 4.0), "bar 2");
     EXPECT_EQ(playsPhrase(1), "plays once");
     EXPECT_EQ(playsPhrase(3), "plays 3 times");
     EXPECT_EQ(blockTitle("Chorus", 48.0, 32.0, 4.0, 1, 3), "Chorus, bars 13 to 20, 1 of 3");
