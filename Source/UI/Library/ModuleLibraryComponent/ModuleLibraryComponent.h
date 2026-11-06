@@ -18,6 +18,9 @@
 #include <vector>
 
 class ShortcutManager;
+namespace synth::ui {
+struct AddListLibraryRow;
+}
 
 class ModuleLibraryComponent
     : public juce::Component
@@ -140,6 +143,11 @@ public:
      *  Module/Snippet row. No-op for anything else. Public so the behaviour is reachable without
      *  synthesising mouse events — this is also what keyPressed()'s Enter-to-insert calls. */
     void activateRow(int index);
+
+    /** The Add list's rows (see the definition). */
+    std::vector<synth::ui::AddListLibraryRow> getAddListRows() const;
+    /** Does for `row` what Return on it does; false when it is gone. */
+    bool activateAddListRow(const synth::ui::AddListLibraryRow& row);
 
     /** The identity a Plugin row stands for; an invalid identity for any other row. */
     synth::PluginIdentity getPluginIdentity(int index) const;

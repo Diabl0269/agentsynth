@@ -14,6 +14,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentTimelineOpsHost.cpp
     Source/MainComponent/MainComponentTimelineOpsHostSounds.cpp
     Source/MainComponent/MainComponentSetup.cpp
+    Source/MainComponent/MainComponentAddList.cpp
     Source/MainComponent/MainComponentSetupToolbar.cpp
     Source/MainComponent/MainComponentSetupTimeline.cpp
     Source/MainComponent/MainComponentCallbacks.cpp

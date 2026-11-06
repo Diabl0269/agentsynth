@@ -463,19 +463,18 @@ struct TrackHeaderHost {
      *  canSaveTrackPresetForTrack() is false. Non-pure no-op default. */
     virtual void setTrackPresetAsDefault(synth::TrackId track) { juce::ignoreUnused(track); }
 
-    /** The "Add Track" menu's grouped preset-list click: inserts the named saved preset as a new
-     *  track, independent of the per-type default. Non-pure no-op default. */
-    virtual void addTrackFromPreset(const juce::String& presetName, synth::TrackPresetKind kind) {
-        juce::ignoreUnused(presetName, kind);
-    }
+    /** A preset-list click in the Add menu: inserts the named saved preset as a new track. Non-pure no-op default. */
+    virtual void addTrackFromPreset(const juce::String&, synth::TrackPresetKind) {}
 
-    /** The "Add Track" menu's "Insert Track Preset from File..." entry: a native chooser filtered to
-     *  `*.agtrackpreset`, then the same insert path as addTrackFromPreset(). Non-pure no-op
-     *  default. */
+    /** The "Insert Track Preset from File..." entry: a native chooser for `*.agtrackpreset`, then the same insert path
+     *  as addTrackFromPreset(). Non-pure no-op default. */
     virtual void addTrackFromPresetFile() {}
 
     /** "Add Track" -> Bus submenu click. Non-pure no-op default. */
     virtual void addBusFromPreset(const juce::String& presetName) { juce::ignoreUnused(presetName); }
+
+    /** Opens the Add list under `anchor`; false when the host has none (the panel then opens its track picker). */
+    virtual bool openAddList(juce::Component&, bool /*fromKeyboard*/) { return false; }
 
     /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: everything the header needs about the
      * CHANNEL its track plays into -- the channel chip, and the linked-track name/colour/mute/solo fan-out. ONE

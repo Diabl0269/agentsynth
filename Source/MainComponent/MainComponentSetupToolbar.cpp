@@ -10,6 +10,7 @@
 #include "ShortcutManager/AppCommands.h"
 #include "SoundBrowser/LoopStretch.h"
 #include "Telemetry/UsageStatsChoice.h"
+#include "UI/AddList/AddList.h"
 #include "UI/Chrome/CanvasToolbar/ToolbarLabelsPreference.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -265,6 +266,12 @@ void MainComponent::addToolbarToggleButtons() {
     themeToggleButton.onClick = [this] { themeManager->toggleLightDarkMode(); };
 
     autoArrangeButton.onClick = [this] { graphEditor.autoArrange(); };
+    // The canvas toolbar's Add opens the list with modules first; a press with the toolbar's ring on it is a keyboard
+    // open, so focus comes back to the ring afterwards.
+    canvasToolbar_.addButton().onClick = [this] {
+        openAddList(synth::ui::AddListOrigin::Canvas, canvasToolbar_.addButton(),
+                    canvasToolbar_.hasKeyboardFocus(false));
+    };
 
     addAndMakeVisible(settingsButton);
     settingsButton.setComponentID("settingsButton");
@@ -294,6 +301,7 @@ void MainComponent::applyToolbarLabels(bool iconOnly) {
         {&feedbackButton, "Feedback"},
         {&undoButton, "Undo"},
         {&redoButton, "Redo"},
+        {&canvasToolbar_.addButton(), "Add"},
         {&autoArrangeButton, "Auto Arrange"},
         {&toggleMinimapButton, graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"},
         {&toggleModMatrixButton, graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix"},
@@ -374,6 +382,7 @@ void MainComponent::assembleToolbar() {
                          {&feedbackButton, "openFeedback"},
                          {&undoButton, "undo"},
                          {&redoButton, "redo"},
+                         {&canvasToolbar_.addButton(), "openAddTrackMenu"},
                          {&autoArrangeButton, "autoArrange"},
                          {&toggleMinimapButton, "toggleMinimap"},
                          {&toggleModMatrixButton, "toggleModMatrix"},

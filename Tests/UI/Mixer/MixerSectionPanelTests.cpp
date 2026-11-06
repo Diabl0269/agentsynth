@@ -647,7 +647,7 @@ TEST_F(MixerSectionPanelTest, ShowButtonLabelsReachesTheTimelineAndTheMixerLiveE
     openMixer(2);
     auto& toolbar = panel().getToolbarForTest();
     auto& timeline = mc->getTimelinePanel();
-    EXPECT_EQ(timeline.getAddTrackButton().getButtonText(), "Add Track");
+    EXPECT_EQ(timeline.getAddTrackButton().getButtonText(), "Add");
 
     setShowLabelsPreference(*mc, false);
     EXPECT_TRUE(timeline.getAddTrackButton().getButtonText().isEmpty());

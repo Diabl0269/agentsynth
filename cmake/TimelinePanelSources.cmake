@@ -23,4 +23,6 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAutomation.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelAddAutomation.cpp
     Source/UI/Timeline/TimelinePanelComponent/AddTrackPicker.cpp
+    Source/UI/AddList/AddList.h
+    Source/UI/AddList/AddList.cpp
 )

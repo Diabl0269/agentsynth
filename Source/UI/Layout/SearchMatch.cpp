@@ -106,7 +106,7 @@ std::vector<SearchSpan> searchHighlightSpans(const juce::String& text, const juc
 
 void drawSearchHighlightedText(juce::Graphics& g, const juce::String& text, const juce::String& query,
                                juce::Rectangle<int> bounds, const juce::Font& font, juce::Colour normal,
-                               juce::Colour highlightFill, juce::Colour highlightText,
+                               juce::Colour /*unusedFill*/, juce::Colour highlightText,
                                juce::Justification justification) {
     g.setFont(font);
     const auto spans = searchHighlightSpans(text, query);
@@ -116,23 +116,8 @@ void drawSearchHighlightedText(juce::Graphics& g, const juce::String& text, cons
         return;
     }
 
-    // Where the (unclipped) run starts, so the fills line up with the glyphs whatever the justification.
-    const float totalW = juce::GlyphArrangement::getStringWidth(font, text);
-    float baseX = (float)bounds.getX();
-    if (justification.testFlags(juce::Justification::right))
-        baseX = (float)bounds.getRight() - totalW;
-    else if (justification.testFlags(juce::Justification::horizontallyCentred))
-        baseX = (float)bounds.getCentreX() - totalW * 0.5f;
-
-    for (const auto& span : spans) {
-        const float preW = juce::GlyphArrangement::getStringWidth(font, text.substring(0, span.start));
-        const float matchW =
-            juce::GlyphArrangement::getStringWidth(font, text.substring(span.start, span.start + span.length));
-        g.setColour(highlightFill);
-        g.fillRoundedRectangle(baseX + preW - 1.0f, (float)bounds.getY() + 4.0f, matchW + 2.0f,
-                               juce::jmax(8.0f, (float)bounds.getHeight() - 8.0f), 2.0f);
-    }
-
+    // JUCE has no semi-bold: matched letters are bold and in the accent colour, with nothing drawn behind them.
+    const auto boldFont = font.boldened();
     juce::AttributedString as;
     as.setJustification(justification);
     as.setWordWrap(juce::AttributedString::none);
@@ -140,7 +125,7 @@ void drawSearchHighlightedText(juce::Graphics& g, const juce::String& text, cons
     for (const auto& span : spans) {
         if (span.start > pos)
             as.append(text.substring(pos, span.start), font, normal);
-        as.append(text.substring(span.start, span.start + span.length), font, highlightText);
+        as.append(text.substring(span.start, span.start + span.length), boldFont, highlightText);
         pos = span.start + span.length;
     }
     if (pos < text.length())

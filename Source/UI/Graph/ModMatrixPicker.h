@@ -49,6 +49,9 @@ public:
         // A row that creates something ("New LFO"): a green plus before the text and a "New" tag at the right. It
         // stays in the list whatever the search says, so a query that finds nothing can still create.
         bool isNew = false;
+        // A muted word at the row's right end naming what the row is ("Track", "Module"); searched like the text and
+        // announced after it. A `isNew` row shows its "New" tag instead.
+        juce::String tag;
         // What a screen reader announces for the row when it should say more than `text` (the add-automation picker
         // adds where the module lives). Empty = `text` (and `detail`).
         juce::String accessibleName;

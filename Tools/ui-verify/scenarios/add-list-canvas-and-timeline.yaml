@@ -1,0 +1,37 @@
+# The one searchable Add list: the canvas toolbar's Add opens it with modules first, the Timeline's Add with tracks first,
+# and a pick adds exactly what the sidebar's Return or the old Add Track picker added.
+#
+# What a user does:
+#   1. Starts a new project and presses Add on the canvas toolbar: the list opens with a module group first.
+#   2. Picks the Oscillator module: an Oscillator card appears on the canvas.
+#   3. Opens the bottom panel and presses Add on the Timeline: the list opens with "Tracks" first.
+#   4. Types "midi": tracks and modules that match stay, their matched letters in the accent colour.
+#   5. Picks MIDI Track: one more track header appears.
+record: true
+save_project: add-list
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - expect: {count: {prefix: "card:Oscillator", equals: 0}}
+  - click: {id: "canvasToolbar:add"}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - wait: {}
+  - screenshot: {id: modMatrixPicker, name: add-list-from-canvas}
+  - click: {id: "modMatrixPicker > Oscillator, Module"}
+  - wait: {}
+  - expect: {count: {prefix: "card:Oscillator", equals: 1}, within_ms: 2000}
+  - screenshot: {name: add-list-oscillator-added}
+  - key: {keys: cmd+j}                                       # the bottom panel
+  - wait: {}
+  - expect: {count: {prefix: "trackNameLabel", equals: 0}}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - wait: {}
+  - screenshot: {id: modMatrixPicker, name: add-list-from-timeline}
+  - type: {text: midi}                                       # matched letters: accent, bold, no fill
+  - wait: {}
+  - screenshot: {id: modMatrixPicker, name: add-list-search-midi}
+  - click: {id: "modMatrixPicker > MIDI Track, Track"}
+  - wait: {}
+  - expect: {count: {prefix: "trackNameLabel", equals: 1}, within_ms: 2000}
+  - screenshot: {name: add-list-track-added}

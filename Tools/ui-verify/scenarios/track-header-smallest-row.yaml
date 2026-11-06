@@ -15,7 +15,7 @@ steps:
   - wait: {}
   - click: {id: timelineAddTrackButton}
   - wait: {}
-  - click: {id: "modMatrixPicker > Oscillator"}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
   - wait: {}
   - expect: {id: trackVoiceToggle, bounds: {x: 71, y: 774, w: 20, h: 20}}
   - screenshot: {name: row-default}

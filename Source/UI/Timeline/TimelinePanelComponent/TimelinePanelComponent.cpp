@@ -358,7 +358,7 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
         }
     }
 
-    addTrackButton_.setTooltip(synth::ui::formatShortcutHint("Add Track: a track or marker; type to search",
+    addTrackButton_.setTooltip(synth::ui::formatShortcutHint("Add a track, module, preset or marker",
                                                              shortcutHintFor(shortcuts_, "openAddTrackMenu", {})));
 
     const auto selectKey =

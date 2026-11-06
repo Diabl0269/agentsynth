@@ -13,7 +13,7 @@ steps:
   - key: {keys: cmd+j}                                       # the bottom panel
   - click: {id: timelineAddTrackButton}
   - wait: {}
-  - click: {id: "modMatrixPicker > Oscillator"}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
   - wait: {}
   - click: {id: macroCard, clicks: 2}                        # open the track on the canvas
   - wait: {}

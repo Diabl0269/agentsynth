@@ -188,8 +188,9 @@ them. With labels off the tooltip still names the button ("Add Track: ...", "Sna
 
 ## Canvas toolbar
 
-Auto Arrange, Minimap and Matrix live in `synth::ui::CanvasToolbar` (`Source/UI/Chrome/CanvasToolbar/`), a strip on
-the canvas's own top row, wherever the canvas is. It owns the three `ToolbarButton`s (same icons, groups, captions,
+Add, Auto Arrange, Minimap and Matrix live in `synth::ui::CanvasToolbar` (`Source/UI/Chrome/CanvasToolbar/`), a strip on
+the canvas's own top row, wherever the canvas is. **Add** is the first button (the Timeline's new-track icon, amber): it
+opens the [Add list](../timeline/add-track.md#the-add-list) with module groups first. It owns the four `ToolbarButton`s (same icons, groups, captions,
 tooltips and keys as before; `MainComponent` wires their `onClick`, titles and tooltips in `applyToolbarIcons()`),
 is a `MainComponent` child like the canvas, and is laid out by `MainComponent::layoutCanvas()`: the top
 `CanvasToolbar::kHeight` (44 px, the top bar's height, so a captioned button gets the same room as on the top bar) of the main area when the
@@ -596,7 +597,7 @@ connections panel's Add connection page (`PortTargetSearchPage`: jacks, knobs an
   the text starts with it, `1` it starts a word, `2` it sits inside a word; the worst word sets the score.
   Pickers use it to pre-highlight the best row.
 - `searchHighlightSpans` + `drawSearchHighlightedText`: every hit of every word, sorted and overlap-merged,
-  drawn as a rounded accent fill behind accent-coloured letters. Static, so Reduce Motion needs nothing. A
+  drawn bold in the accent colour with nothing behind them. Static, so Reduce Motion needs nothing. A
   box that paints its own rows (library, pickers, action picker, mixer rows) uses the painter; one that only
   hides components (Preferences, Shortcuts) shares just the matcher.
 

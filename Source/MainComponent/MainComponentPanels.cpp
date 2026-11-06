@@ -525,6 +525,7 @@ void MainComponent::applyToolbarIcons() {
     feedbackButton.setIcon(Icon::ActionFeedback, Group::Feedback);
     undoButton.setIcon(Icon::ActionUndo, Group::Edit);
     redoButton.setIcon(Icon::ActionRedo, Group::Edit);
+    canvasToolbar_.addButton().setIcon(Icon::ToolbarAddTrack, Group::Edit);
     autoArrangeButton.setIcon(Icon::ActionAutoArrange, Group::Edit);
     toggleModMatrixButton.setIcon(Icon::ToggleMatrix, Group::View);
     toggleMinimapButton.setIcon(Icon::ToggleMinimap, Group::View);
@@ -561,6 +562,7 @@ void MainComponent::applyToolbarIcons() {
     feedbackButton.setTooltip(hint("Send feedback", "openFeedback"));
     undoButton.setTooltip(hint("Undo", "undo"));
     redoButton.setTooltip(hint("Redo", "redo"));
+    canvasToolbar_.addButton().setTooltip(hint("Add a track, module, preset or marker", "openAddTrackMenu"));
     autoArrangeButton.setTooltip(hint("Auto-arrange modules", "autoArrange"));
     themeToggleButton.setTooltip("Toggle light/dark mode");
 

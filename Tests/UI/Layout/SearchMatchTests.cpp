@@ -3,6 +3,7 @@
 
 #include "UI/Layout/SearchMatch.h"
 #include <gtest/gtest.h>
+#include <juce_graphics/juce_graphics.h>
 
 using synth::ui::searchHighlightSpans;
 using synth::ui::searchMatches;
@@ -94,4 +95,34 @@ TEST(SearchMatch, ModulesWithoutAliasesAndCustomTitlesGetNone) {
     EXPECT_TRUE(synth::ui::moduleSearchAliases("Reverb").isEmpty());
     EXPECT_TRUE(synth::ui::moduleSearchAliases("My lead envelope").isEmpty());
     EXPECT_TRUE(synth::ui::moduleSearchAliases({}).isEmpty());
+}
+
+// The matched letters change colour and weight only: nothing is painted behind them.
+TEST(SearchMatch, MatchedLettersAreDrawnInTheAccentWithNoFillBehindThem) {
+    const juce::Colour background(0xff101010);
+    const juce::Colour fill(0xffff0000);
+    const juce::Colour accent(0xff00ff00);
+    juce::Image image(juce::Image::ARGB, 200, 30, true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(image);
+        g.fillAll(background);
+        synth::ui::drawSearchHighlightedText(g, "Sampler", "sam", {0, 0, 200, 30}, juce::Font(juce::FontOptions(14.0f)),
+                                             juce::Colours::white, fill, accent);
+    }
+    // The old fill covered the rows 4..26 of the run; a pixel above the glyphs there is background now.
+    EXPECT_EQ(image.getPixelAt(3, 5), background);
+    EXPECT_EQ(image.getPixelAt(3, 25), background);
+
+    int accentPixels = 0;
+    int fillPixels = 0;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x) {
+            const auto c = image.getPixelAt(x, y);
+            if (c.getGreen() > c.getRed() + 60 && c.getGreen() > c.getBlue() + 60)
+                ++accentPixels;
+            if (c.getRed() > c.getGreen() + 60)
+                ++fillPixels;
+        }
+    EXPECT_GT(accentPixels, 10) << "the match letters take the accent colour";
+    EXPECT_EQ(fillPixels, 0) << "no fill is painted";
 }

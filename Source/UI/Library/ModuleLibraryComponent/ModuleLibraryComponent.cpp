@@ -2,6 +2,7 @@
 // plus the shared row-activation entry point (activateRow) and the enable/availability gate
 // (isEntryEnabled) that both the mouse and keyboard paths call through.
 #include "ModuleLibraryComponent.h"
+#include "UI/AddList/AddList.h"
 #include "UI/Layout/DialogKeyboard.h"
 
 ModuleLibraryComponent::ModuleLibraryComponent() {
@@ -115,6 +116,55 @@ void ModuleLibraryComponent::activateRow(int index) {
     }
     if (entry.kind == RowKind::Snippet && onSnippetActivated)
         onSnippetActivated(entry.text);
+}
+
+// Every Module, Plugin and Snippet row in display order, whatever the collapse state or search filter; read when the
+// Add list opens. Headers, sub-headers, the scan action and the empty hint are not things to add.
+std::vector<synth::ui::AddListLibraryRow> ModuleLibraryComponent::getAddListRows() const {
+    using synth::ui::AddListLibraryKind;
+    std::vector<synth::ui::AddListLibraryRow> rows;
+    for (int i = 0; i < (int)entries.size(); ++i) {
+        const auto& entry = entries[(size_t)i];
+        synth::ui::AddListLibraryRow row;
+        if (entry.kind == RowKind::Module)
+            row.kind = AddListLibraryKind::Module;
+        else if (entry.kind == RowKind::Plugin)
+            row.kind = AddListLibraryKind::Plugin;
+        else if (entry.kind == RowKind::Snippet)
+            row.kind = AddListLibraryKind::Snippet;
+        else
+            continue;
+        row.text = entry.text;
+        row.section = entry.section;
+        row.enabled = isEntryEnabled(i);
+        if (!row.enabled)
+            row.disabledReason = "Already in this patch";
+        if (entry.kind == RowKind::Plugin) {
+            row.format = entry.detail;
+            row.pluginUid = entry.pluginUid;
+        }
+        rows.push_back(std::move(row));
+    }
+    return rows;
+}
+
+// The entry list is rebuilt by a plugin scan or a snippet change, so an index taken when the Add list opened could
+// name a different row by the time of the pick; the row's identity (kind, name, format, uid) is searched for instead.
+bool ModuleLibraryComponent::activateAddListRow(const synth::ui::AddListLibraryRow& row) {
+    using synth::ui::AddListLibraryKind;
+    const auto wanted = row.kind == AddListLibraryKind::Module   ? RowKind::Module
+                        : row.kind == AddListLibraryKind::Plugin ? RowKind::Plugin
+                                                                 : RowKind::Snippet;
+    for (int i = 0; i < (int)entries.size(); ++i) {
+        const auto& entry = entries[(size_t)i];
+        if (entry.kind != wanted || entry.text != row.text)
+            continue;
+        if (wanted == RowKind::Plugin && (entry.detail != row.format || entry.pluginUid != row.pluginUid))
+            continue;
+        activateRow(i);
+        return true;
+    }
+    return false;
 }
 
 synth::PluginIdentity ModuleLibraryComponent::getPluginIdentity(int index) const {

@@ -370,3 +370,12 @@ TEST(ModMatrixPicker, TheLayoutPassSkipsACardWhoseNodeIsAlreadyGone) {
 
     EXPECT_FALSE(has());
 }
+
+// Regression test for the Add list: a picker whose first row sits under a category header opened scrolled past the
+// header and that row, because the highlight scrolled while the view still had no height.
+TEST(ModMatrixPicker, AFreshPickerOpensAtTheTopSoItsFirstHeaderAndRowAreInView) {
+    PickerFixture f;
+    ASSERT_NE(f.source, nullptr);
+    EXPECT_EQ(f.source->getViewTopForTest(), 0);
+    EXPECT_EQ(f.dest->getViewTopForTest(), 0);
+}
