@@ -149,6 +149,11 @@ The Device section is built on `AudioDeviceManager` and `AudioDeviceSetup` direc
 Bluetooth MIDI button, no input level meter beside the input device, no "Reset device" button, and outputs are one
 tick per channel instead of a channel-pair list.
 
+Picking an output or input device asks the new device for its own sample rate and buffer size (`0` in the setup)
+instead of re-using the old device's, which is what a Bluetooth output such as AirPods needs to open. If the open
+still fails, a dialog shows the error and the boxes re-read the real state, so "No device" is never shown without
+a reason.
+
 **Inputs table.** Columns Jacks, Pair, Name, Kind, Level, Use; one row per mono jack or per paired stereo input, up
 to 8 jacks. The chain button spans the two rows of a pair and joins them into one stereo input (a cyan bar marks a
 paired row) or splits them again; an odd last jack is mono only. The name field shows the jack name ("In 1") as its
