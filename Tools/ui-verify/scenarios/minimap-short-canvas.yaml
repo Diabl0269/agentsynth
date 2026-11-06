@@ -1,0 +1,27 @@
+# Check (FRO970): with the bottom panel dragged tall, the canvas pane is short but still above the minimap's size floor
+# (240 x 160), so the Minimap button stays enabled and the map is shown, smaller than usual. Hiding the panel gives the
+# canvas its full height back and the map is as before.
+#
+# What a user does: opens a project, shows the bottom panel, drags the bottom panel's top edge up until the canvas is short but not under the floor, looks at the canvas
+# corner and the Minimap button, then presses Hide Panel and looks again.
+motion: true
+record: true
+save_project: minimap-short-canvas
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - screenshot: {name: 1-before}
+  - expect: {id: toggleMinimap, enabled: true}
+  - expect: {id: minimap, showing: true}
+  - click: {id: Show Panel}
+  - wait: {settleMs: 600}
+  - drag: {from: dockResizeHandle, fromX: 200, fromY: 2, to: window, toX: 200, toY: 280, steps: 20}
+  - wait: {settleMs: 600}
+  - screenshot: {name: 2-panel-tall}
+  - expect: {id: toggleMinimap, enabled: true}
+  - expect: {id: minimap, showing: true}
+  - click: {id: Hide Panel}
+  - wait: {settleMs: 600}
+  - screenshot: {name: 3-panel-hidden}
+  - expect: {id: toggleMinimap, enabled: true}
+  - expect: {id: minimap, showing: true}
