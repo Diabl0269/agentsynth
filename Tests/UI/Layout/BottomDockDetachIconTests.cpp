@@ -204,6 +204,28 @@ TEST_F(BottomDockDetachIconTest, PlainReturnAndShiftReturnStillMeanWhatTheyDid) 
     EXPECT_NE(dock().getMainView(), Tab::Canvas) << "Shift+Return is still the swap";
 }
 
+// A real key's path from the focused control: each component's keyPressed, from the strip's focus leaf up through its
+// parents to the window, the first to use it ending the walk. The strip's own handler is never called directly.
+TEST_F(BottomDockDetachIconTest, OptionReturnOnTheFocusedStripDetachesTheActiveTabThroughTheRealKeyOrder) {
+    const juce::KeyPress optionReturn(juce::KeyPress::returnKey, kAlt, 0);
+    for (Tab view : {Tab::Timeline, Tab::Mixer, Tab::MidiRemote}) {
+        SCOPED_TRACE(BottomDockComponent::describeTab(view, Tab::Canvas).title);
+        dock().setActiveTab(view);
+        ASSERT_EQ(dock().getActiveTab(), view);
+        bool used = false;
+        juce::Component* usedBy = nullptr;
+        for (auto* target = static_cast<juce::Component*>(&dock().getTabStripFocus()); target != nullptr && !used;
+             target = target->getParentComponent()) {
+            used = target->keyPressed(optionReturn);
+            usedBy = used ? target : usedBy;
+        }
+        EXPECT_TRUE(used);
+        EXPECT_EQ(usedBy, &dock().getTabStripFocus()) << "the strip took the key, nothing above it ate it first";
+        EXPECT_TRUE(dock().hostForTab(view)->isDetached());
+        dock().hostForTab(view)->setDetached(false);
+    }
+}
+
 TEST_F(BottomDockDetachIconTest, TheTooltipAndTheScreenReaderNameNameTheTabAndTheKey) {
     struct Case {
         Tab tab;

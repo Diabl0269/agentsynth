@@ -166,7 +166,10 @@ enum CommandIDs {
     // Opens the Timeline if needed and puts its top bar ring on the transport's Play button.
     focusTransportBar,
     // Opens the command palette, the one search bar over actions, views, modules, tracks and settings.
-    openCommandPalette
+    openCommandPalette,
+    // Opens the view in the main area (Timeline, Mixer or Controllers) in its own window; active only while one is
+    // there.
+    detachMainView
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

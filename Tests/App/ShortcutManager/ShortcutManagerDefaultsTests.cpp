@@ -158,6 +158,7 @@ const juce::StringArray& intentionallyUnboundActionIds() {
         "swapMixerToMain",
         "swapMidiRemoteToMain",
         "swapCanvasToMain",
+        "detachMainView",
         "transportPlay",
         "transportStop",
         "transportToggleLoop",

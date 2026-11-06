@@ -163,8 +163,9 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
 #endif
         // Menu-only, always active, no chord. Opens the contribute page in the browser.
         {AppCommands::contribute,
-         "Contribute to Agent Synth...",
-         "Opens agentsynth.app/contribute in your browser: ways to help build Agent Synth.",
+         "Help build Agent Synth...",
+         "Agent Synth is free and open source, built by one person. Contributing helps me spend more time building it. "
+         "Opens agentsynth.app/contribute in your browser.",
          "Help",
          nullptr,
          {},

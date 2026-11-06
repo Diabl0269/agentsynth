@@ -185,7 +185,8 @@ void ShortcutManager::addGeneralDefaultBindings() {
     const char* const swapDockTabIds[] = {"swapDockTab1ToMain", "swapDockTab2ToMain", "swapDockTab3ToMain"};
     for (int i = 0; i < 3; ++i)
         bindings[swapDockTabIds[i]] = juce::KeyPress('1' + i, commandAlt, 0);
-    for (const char* id : {"swapTimelineToMain", "swapMixerToMain", "swapMidiRemoteToMain", "swapCanvasToMain"})
+    for (const char* id :
+         {"swapTimelineToMain", "swapMixerToMain", "swapMidiRemoteToMain", "swapCanvasToMain", "detachMainView"})
         bindings[id] = juce::KeyPress();
     // Cmd+Shift+B -- show or hide the active bottom-panel tab's side pane. Plain Cmd+B is the library
     // sidebar; the Shift chord is free on every platform.

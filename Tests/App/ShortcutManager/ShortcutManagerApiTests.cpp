@@ -235,3 +235,59 @@ TEST_F(ShortcutManagerTest, OnBindingsChangedSingleSlotStillFiresAlongsideTheBro
 
     manager.removeChangeListener(&listener);
 }
+
+// ---------------------------------------------------------------------------
+// keyPressToDisplayString names the keys that are not characters
+// ---------------------------------------------------------------------------
+
+// Regression test for FRO1202: Return, Escape, Tab, Backspace, Delete, Home, End, Page Up/Down and F1..F12 printed a
+// control character, so a hint read 'Alt + )' and the Settings search found nothing by the key's name.
+TEST(ShortcutDisplayNamesTest, NamedKeysReadAsWordsNotControlCharacters) {
+    using juce::KeyPress;
+    const std::pair<int, const char*> named[] = {
+        {KeyPress::returnKey, "Return"},
+        {KeyPress::escapeKey, "Escape"},
+        {KeyPress::tabKey, "Tab"},
+        {KeyPress::backspaceKey, "Backspace"},
+        {KeyPress::deleteKey, "Delete"},
+        {KeyPress::homeKey, "Home"},
+        {KeyPress::endKey, "End"},
+        {KeyPress::pageUpKey, "Page Up"},
+        {KeyPress::pageDownKey, "Page Down"},
+        {KeyPress::F1Key, "F1"},
+        {KeyPress::F2Key, "F2"},
+        {KeyPress::F3Key, "F3"},
+        {KeyPress::F4Key, "F4"},
+        {KeyPress::F5Key, "F5"},
+        {KeyPress::F6Key, "F6"},
+        {KeyPress::F7Key, "F7"},
+        {KeyPress::F8Key, "F8"},
+        {KeyPress::F9Key, "F9"},
+        {KeyPress::F10Key, "F10"},
+        {KeyPress::F11Key, "F11"},
+        {KeyPress::F12Key, "F12"},
+    };
+    for (const auto& [code, name] : named) {
+        EXPECT_EQ(ShortcutManager::keyPressToDisplayString(KeyPress(code)), name);
+        EXPECT_EQ(ShortcutManager::keyPressToDisplayString(KeyPress(code, juce::ModifierKeys::altModifier, 0)),
+                  juce::String("Alt + ") + name);
+    }
+    EXPECT_EQ(
+        ShortcutManager::keyPressToDisplayString(KeyPress(KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0)),
+        "Shift + Return");
+}
+
+// Every default binding is spelled with printable characters only, and a search by the key's name finds its row.
+TEST_F(ShortcutManagerTest, EveryDefaultBindingHasAPrintableDisplayName) {
+    for (const auto& id : manager.getActionIds()) {
+        const auto key = manager.getBinding(id);
+        if (!key.isValid())
+            continue;
+        const auto text = ShortcutManager::keyPressToDisplayString(key);
+        for (auto c = text.getCharPointer(); !c.isEmpty(); ++c)
+            EXPECT_GE(static_cast<int>(*c), 32) << id << ": '" << text << "'";
+        EXPECT_FALSE(text.endsWith(" + ")) << id;
+    }
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery(
+        "return", "Open", ShortcutManager::keyPressToDisplayString(juce::KeyPress(juce::KeyPress::returnKey))));
+}

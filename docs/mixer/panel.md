@@ -177,7 +177,7 @@ remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)). In 
   nothing. A plain click (under the threshold) still fires `onClick`; a drag does not.
 - **The swap icon.** Every offered tab, the Canvas tab included, ends in a 22 px `IconButton` (`Glyph::Swap`, the
   tab's full height) named "Show <View> in the main area" (View: Timeline, Mixer, Controllers,
-  Canvas); the tooltip adds its key, `Opt+Cmd+1`-`3` (`swapDockTab<N>ToMain`, by place). It sits in a right-aligned icon row inside the tab (the detach icon sits on its left), and the label
+  Canvas); the tooltip reads "Shift + Return or <bound key>" (Shift+Return on the focused strip; `Opt+Cmd+1`-`3` by default, `swapDockTab<N>ToMain`, by place). It sits in a right-aligned icon row inside the tab (the detach icon sits on its left), and the label
   ellipsises before the icon goes: the tab hands `AppLookAndFeel::kTextInsetRightProperty` the row's 24 px. A click is
   `swapTabToMain()`: `setMainView()`, then the view that went up is the active tab, and `onMainViewChanged` has
   `MainComponent` lay the main area out again. It is disabled ("<View> is open in its own window") while that view has
@@ -196,7 +196,7 @@ remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)). In 
   visibility is recomputed, so a detach (or `setMixerTabEnabled(false)`) never leaves the dock
   showing nothing. `MainComponent` hides the whole dock only once `hasAnyVisibleTab()` goes false and reopens it the
   moment a redock brings it back true (`bottomDockAutoHiddenByEmptyTabs_` marks that auto-hide, never a Cmd+J close).
-  The main view's own panel detaching suspends it: the Canvas takes the main area ([main view](../layout/chrome.md#the-main-view)).
+  The main view's own panel detaching suspends it: the Canvas takes the main area ([main view](../layout/chrome.md#the-main-view)); the **Detach Main View** command (`detachMainView()`) does it from the main area.
 - **App-wide shortcuts still reach a detached tab's own window.** `MainComponent::keyPressed` is otherwise
   unreachable from a separate top-level `DetachedPanelWindow` (see [**Per window keyboard focus**](#per-window-keyboard-focus));
   `DetachedPanelWindow::onAppShortcut`, wired through `DetachablePanelHost::onAppShortcutFallback`, retries them, with

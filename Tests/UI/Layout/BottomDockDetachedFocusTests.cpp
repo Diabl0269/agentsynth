@@ -132,3 +132,40 @@ TEST_F(BottomDockDetachedFocusTest, AWindowThatIsNotThereIsLeftAlone) {
     EXPECT_EQ(mainFocused_, Ids{"dockTabs"});
     EXPECT_FALSE(dock().isMixerMirrorOpen());
 }
+
+// Guard for the shortcut-relay kind: a window opened from the tab strip and one opened from the main area are both
+// panel windows that hand the app's shortcuts (undo, redo, Space) to the app.
+TEST_F(BottomDockDetachedFocusTest, EveryDetachedPanelWindowHandsAppShortcutsToTheAppFromBothPositions) {
+    const juce::KeyPress keys[] = {juce::KeyPress('z', kCmd, 0),
+                                   juce::KeyPress('z', kCmd | juce::ModifierKeys::shiftModifier, 0),
+                                   juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys(), ' ')};
+    for (const auto& row : kShowKeys) {
+        auto* host = dock().hostForTab(row.tab);
+        const auto appFallback = host->onAppShortcutFallback;
+        ASSERT_TRUE(appFallback) << "MainComponent wires the relay";
+        int relayed = 0;
+        host->onAppShortcutFallback = [&](const juce::KeyPress& key) {
+            ++relayed;
+            return appFallback(key);
+        };
+        for (const bool fromMainArea : {false, true}) {
+            SCOPED_TRACE(juce::String(row.digit) + (fromMainArea ? " from the main area" : " from the tab strip"));
+            if (const Tab want = fromMainArea ? row.tab : Tab::Canvas; dock().getStoredMainView() != want)
+                ASSERT_TRUE(mc_->setMainViewForTest(want));
+            if (fromMainArea)
+                ASSERT_TRUE(dock().detachMainView());
+            else
+                host->setDetached(true);
+            auto* window = host->getDetachedWindowForTest();
+            ASSERT_NE(window, nullptr);
+            relayed = 0;
+            for (const auto& key : keys)
+                EXPECT_TRUE(window->keyPressed(key)) << key.getTextDescription();
+            synth::test::flushMessageQueue();
+            EXPECT_EQ(relayed, 3);
+            host->setDetached(false);
+        }
+        host->onAppShortcutFallback = appFallback;
+        ASSERT_TRUE(mc_->setMainViewForTest(Tab::Canvas));
+    }
+}

@@ -106,6 +106,12 @@ public:
     /** The swap icon's action: setMainView(view), then the view that was in the main area becomes the active tab.
      *  False, and nothing changes, when setMainView() refuses. */
     bool swapTabToMain(Tab view);
+    /** True while a view other than the Canvas fills the main area, i.e. detachMainView() has something to detach. */
+    bool canDetachMainView() const noexcept { return hostInMain_ != nullptr; }
+    /** Opens the view in the main area in its own window. The Canvas then fills the main area for the session and the
+     *  view returns to it when its window is docked back. False, and nothing changes, when only the Canvas is there
+     *  (it has no window of its own). */
+    bool detachMainView();
     /** How many digit keys the dock owns: Cmd+1..3 show a tab and Opt+Cmd+1..3 swap it into the main area. */
     static constexpr int kKeyPositions = 3;
     /** The number of the key that opens `view`: its place, counting from 1, in the user's tab order among the three

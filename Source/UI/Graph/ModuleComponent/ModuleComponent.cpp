@@ -558,45 +558,29 @@ void ModuleComponent::timerCallback() {
     if (instrumentChrome_ != nullptr)
         instrumentChrome_->poll();
 
-    // Gate repaint: only invalidate the buffered image when something has
-    // visually changed.  Idle modules (no signal, no modulation) produce no
-    // repaint, so the parent content.repaint() from GraphEditor composites the
-    // cached image cheaply instead of re-running the expensive text layout.
-    bool needsRepaint = false;
+    // Gate repaint: only invalidate the buffered image when something has visually changed, and then only
+    // the part that changed. A whole-card repaint re-rasters every child (text layout, knobs, pads) into the
+    // card's cache; a kick drum crossing the RMS threshold, or a modulated knob, did that on every tick of a
+    // playing song and made the Drum Kit and Filter cards flicker
+    // (docs/layout/rendering.md#gated-timers-not-free-running-ones). Idle modules (no signal, no modulation) produce no
+    // repaint, so the parent content.repaint() from GraphEditor composites the cached image cheaply.
 
-    // 1. RMS changed meaningfully (activity glow / LED).
-    //    Threshold is deliberately coarse (0.05): a steady tone produces small
-    //    tick-to-tick RMS jitter from the sliding analysis window, and a tight
-    //    threshold (e.g. 0.002) treated that jitter as "activity changed" and
-    //    repainted every tick — invalidating the buffered image and re-running
-    //    the expensive text layout 30x/sec (the startup/preset-switch freeze).
-    if (std::abs(cachedRMS - lastPaintedRMS) > 0.05f)
-        needsRepaint = true;
-
-    // 2. Active modulation targeting this module (Serum mod rings). A knob's ring fades in with its first modulation
-    //    and out with its last (ModRingFades), so the fades follow the routings on this same tick.
-    ringFades_.sync(owner.getCachedModDisplayInfo(), nodeId);
-    if (!needsRepaint) {
-        const auto& modInfo = owner.getCachedModDisplayInfo();
-        for (const auto& info : modInfo) {
-            if (info.destNodeID == nodeId && std::abs(info.modSignalValue) > 0.001f) {
-                needsRepaint = true;
-                break;
-            }
-        }
-    }
-
-    // NOTE: condition #4 (visible animated children — scope/freqResponse/eqCurve) is
-    // intentionally omitted.  FrequencyResponseComponent, EQCurveComponent and ScopeComponent
-    // manage their own repaints via their own timers and only invalidate when their data
-    // changes.  Forcing a full parent repaint every tick because a child is visible caused a
-    // repaint storm on every Filter module (the response view used to be always-on; it is now
-    // opt-in via "Show Response", and its timer stops while hidden).
-
-    if (needsRepaint) {
+    // 1. RMS changed meaningfully: only the header's activity LED reads it. The threshold is deliberately coarse
+    //    (0.05): a steady tone's tick-to-tick jitter must not count as activity changing.
+    if (std::abs(cachedRMS - lastPaintedRMS) > 0.05f) {
         lastPaintedRMS = cachedRMS;
-        repaint();
+        repaint(detail::activityLedArea());
     }
+
+    // 2. Active modulation targeting this module (Serum mod rings): the driven controls only. A knob's ring
+    //    fades in with its first modulation and out with its last (ModRingFades), so the fades follow the
+    //    routings on this same tick.
+    ringFades_.sync(owner.getCachedModDisplayInfo(), nodeId);
+    repaintMovingModulation();
+
+    // NOTE: a visible animated child (scope/freqResponse/eqCurve) is intentionally not a repaint reason here.
+    // FrequencyResponseComponent, EQCurveComponent and ScopeComponent manage their own repaints via their own
+    // timers and only invalidate when their data changes.
 
     // MIDI-mapped badges (ONE query per module, repainting only on an actual change --
     // see refreshMidiLearnBadges' own comment) and, while a control on THIS card is armed, its

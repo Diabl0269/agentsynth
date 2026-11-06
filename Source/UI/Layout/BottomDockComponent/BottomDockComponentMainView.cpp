@@ -55,6 +55,18 @@ bool BottomDockComponent::changeMainView(Tab view, bool showLeavingView) {
     return true;
 }
 
+// The view in the main area has no tab, so this is its one way to a window. The host's own detach runs the same
+// callback as a tab's: refreshMainViewAvailability() suspends the stored choice (the Canvas takes the main area,
+// hostInMain_ clears as placeMainViewHost() hands the host back to the dock), then the strip and the owner's layout
+// follow. Docking the window back resumes the choice through the same path.
+bool BottomDockComponent::detachMainView() {
+    auto* host = hostInMain_;
+    if (host == nullptr)
+        return false;
+    host->setDetached(true);
+    return host->isDetached();
+}
+
 void BottomDockComponent::setResizeHandleActive(bool active) { resizeHandle_.setInterceptsMouseClicks(active, false); }
 
 // The digit keys follow the tab order: position N is the N-th view of the user's order that is not in the main

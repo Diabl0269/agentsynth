@@ -269,6 +269,8 @@ juce::String dockViewActionName(const juce::String& actionId) {
         return "Show Controllers in the Main Area";
     if (actionId == "swapCanvasToMain")
         return "Show Canvas in the Main Area";
+    if (actionId == "detachMainView")
+        return "Detach Main View";
     return {};
 }
 

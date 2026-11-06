@@ -10,6 +10,7 @@
 #include "Modules/LFOModule.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
 
@@ -196,4 +197,29 @@ TEST(LevelRingMoves, ACableOnAFoldedPanEndsAtTheMoreButton) {
     const auto end = f.card->getPortCenter(delay->mapInputChannel(pan).visibleJackIndex, true);
     EXPECT_EQ(end.y, more->getBounds().getCentreY());
     EXPECT_LE(end.x, more->getX());
+}
+
+// Regression test for FRO1142: a moving modulation used to repaint the whole card on every 15 Hz tick (the cache
+// re-rastered every child, and a card with a modulated Filter flickered under a playing song). Only the control the
+// routing drives needs it.
+TEST(LevelRingMoves, AMovingRoutingRepaintsOnlyTheControlItDrives) {
+    LevelRing f;
+    ASSERT_NE(f.fader, nullptr);
+    auto* cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(f.card->getCachedComponentImage());
+    ASSERT_NE(cache, nullptr);
+    f.process(20); // the LFO is off zero
+    juce::Image target(juce::Image::ARGB, f.card->getWidth(), f.card->getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(target);
+        cache->paint(g);
+    }
+    ASSERT_EQ(cache->getStaleAreaForTest(), 0);
+
+    f.process(21); // the next tick, the ring has moved
+    const int stale = cache->getStaleAreaForTest();
+    const int card = f.card->getWidth() * f.card->getHeight();
+    EXPECT_GT(stale, 0) << "the ring is repainted";
+    EXPECT_LT(stale, card / 4) << "but not the card";
+    const auto bounds = f.fader->getBounds().expanded(8);
+    EXPECT_LE(stale, bounds.getWidth() * bounds.getHeight()) << "only the driven fader's area";
 }

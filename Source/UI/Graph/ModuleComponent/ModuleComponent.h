@@ -774,8 +774,8 @@ private:
     // The drop-target ring and the live modulation rings on knobs, split out of paint() (function-size ceiling).
     void paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour);
     void paintModHoverChip(juce::Graphics& g); // ModuleComponentModChip.cpp
+    bool repaintMovingModulation();            // the controls a moving routing drives only; false when none moves
     static juce::String knobNameForModTarget(const ModuleBase* mod, const ModulationTarget& target);
-
     /** Right-click-any-knob menu: "Automate '<Param>'" plus the MIDI Learn block, through
      *  showContextMenuHook_ so a test can capture it headlessly. mouseDown() dispatches here for a
      *  generic slider (`sliders`, index-parallel to `sliderParams`); `screenAnchor` places the menu

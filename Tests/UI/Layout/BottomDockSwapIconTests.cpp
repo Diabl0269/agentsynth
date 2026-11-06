@@ -3,6 +3,7 @@
 // reader name, Shift+Return on the strip, and the label giving way before the icon on a narrow tab
 // (docs/mixer/panel.md#the-tab-strip).
 #include "BottomDockMainAreaFixture.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/IconButton.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
@@ -15,6 +16,14 @@ namespace {
 using synth::ui::BottomDockComponent;
 using synth::ui::IconButton;
 using Tab = BottomDockComponent::Tab;
+
+// juce gives no hover tip outside the foreground app, and a test process never is: a hidden automation process
+// counts as foreground, so the real tip path runs.
+struct TipsCountAsForeground {
+    TipsCountAsForeground() { juce::ComponentPeer::hideWindowsForAutomation = true; }
+    ~TipsCountAsForeground() { juce::ComponentPeer::hideWindowsForAutomation = previous; }
+    const bool previous = juce::ComponentPeer::hideWindowsForAutomation;
+};
 
 bool pressShiftReturn(BottomDockComponent& dock) {
     return dock.getTabStripFocus().keyPressed(
@@ -30,7 +39,7 @@ protected:
     juce::String tooltipWithKey(Tab view, const juce::String& name) {
         const auto key = ShortcutManager::keyPressToDisplayString(
             mc_->getShortcutManager().getBinding(dock().swapActionIdForTab(view)));
-        return synth::ui::formatShortcutHint(name, key);
+        return synth::ui::formatShortcutHint(name, key.isEmpty() ? "Shift + Return" : "Shift + Return or " + key);
     }
     void SetUp() override {
         BottomDockMainAreaTest::SetUp();
@@ -223,4 +232,43 @@ TEST(BottomDockSwapIconLabel, ALongLabelNeverPaintsIntoTheReservedEdge) {
                 textInsideLabelArea = true;
         }
     EXPECT_TRUE(textInsideLabelArea) << "the label is drawn in the area that is left";
+}
+
+// Regression test for FRO1202: the tooltip of the swap icon never showed. juce asks only the component under the
+// pointer for a tip (no walk up to the tab button), so the pointer's path must end on the icon itself and the window
+// must answer with the icon's text. Every icon of every tab, the Canvas tab's swap icon included.
+TEST_F(BottomDockSwapIconTest, HoveringAnIconOfATabShowsThatIconsTooltip) {
+    TipsCountAsForeground foreground;
+    synth::ui::AppTooltipWindow tips(mc_.get());
+    // The Canvas tab is only in the strip while another view fills the main area, so both layouts are walked.
+    for (const Tab inMain : {Tab::Canvas, Tab::Timeline}) {
+        if (dock().getStoredMainView() != inMain)
+            ASSERT_TRUE(mc_->setMainViewForTest(inMain));
+        mc_->resized();
+        for (Tab view : {Tab::Timeline, Tab::Mixer, Tab::MidiRemote, Tab::Canvas}) {
+            if (view == inMain)
+                continue;
+            std::vector<IconButton*> icons{&dock().getSwapIcon(view)};
+            if (auto* detach = dock().getDetachIcon(view))
+                icons.push_back(detach);
+            for (auto* icon : icons) {
+                SCOPED_TRACE(icon->getTitle());
+                ASSERT_TRUE(icon->isShowing() || icon->isVisible());
+                ASSERT_TRUE(icon->getTooltip().isNotEmpty());
+                const auto pointer = dock().getLocalPoint(icon, icon->getLocalBounds().getCentre());
+                auto* under = dock().getComponentAt(pointer);
+                EXPECT_EQ(under, icon) << "the icon is what the pointer is over";
+                if (under != nullptr)
+                    EXPECT_EQ(tips.getTipFor(*under), icon->getTooltip());
+            }
+        }
+    }
+}
+
+TEST_F(BottomDockSwapIconTest, TheSwapIconTooltipNamesTheStripKeyAndTheBoundKey) {
+    dock().setShortcutTextSource([](const juce::String&) { return juce::String("Opt + Cmd + 2"); });
+    EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(),
+              "Show Mixer in the main area  (Shift + Return or Opt + Cmd + 2)");
+    dock().setShortcutTextSource([](const juce::String&) { return juce::String(); });
+    EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(), "Show Mixer in the main area  (Shift + Return)");
 }
