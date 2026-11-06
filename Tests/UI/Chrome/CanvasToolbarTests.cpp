@@ -213,6 +213,8 @@ TEST_F(CanvasToolbarWindowTest, InTheTabStripItIsStillOneTabStopWithTheSameRingA
         EXPECT_GE(b.getWidth(), 24);
         EXPECT_GE(b.getHeight(), 17) << "a chip that fits the strip's row";
     }
+    EXPECT_EQ(strip().getFocusedSlot(), (int)CanvasToolbar::Add);
+    EXPECT_TRUE(press(strip(), juce::KeyPress::rightKey));
     EXPECT_TRUE(press(strip(), juce::KeyPress::rightKey));
     EXPECT_EQ(strip().getFocusedSlot(), (int)CanvasToolbar::Minimap);
     EXPECT_FALSE(strip().getFocusedButtonName().isEmpty());

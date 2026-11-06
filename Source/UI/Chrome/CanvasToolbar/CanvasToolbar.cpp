@@ -62,7 +62,7 @@ bool CanvasToolbar::setInStrip(bool inStrip) {
     if (inStrip_ == inStrip)
         return false;
     inStrip_ = inStrip;
-    for (auto* b : {&autoArrange_, &minimap_, &matrix_})
+    for (auto* b : {&add_, &autoArrange_, &minimap_, &matrix_})
         b->setLayout(inStrip ? ToolbarButtonLayout::InlineStrip : ToolbarButtonLayout::Stacked);
     resized();
     repaint();
