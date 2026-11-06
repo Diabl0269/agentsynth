@@ -18,6 +18,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineSnapshotDrumTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineMidiSource/TimelineMidiSourceDrumHitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineOpsDrumNoteTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineOpsSectionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineMidiSource/TimelineMidiSourcePreviewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineTransportBarReturnToStartTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationMarkerMainTests.cpp

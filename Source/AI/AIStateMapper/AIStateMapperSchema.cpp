@@ -146,7 +146,8 @@ juce::var timelineOpsArraySchema() {
             "type": "object",
             "properties": {
                 "op": {"type": "string", "enum": ["addTrack", "addInstrumentTrack", "placeClips", "writeLane",
-                                                        "placeMidiClip", "setTempo", "setSongKey", "addMarker"]},
+                                                        "placeMidiClip", "setTempo", "setSongKey", "addMarker",
+                                                        "makeSection", "placeSection"]},
                 "bpm": {"type": "number"},
                 "root": {"type": "string"},
                 "scale": {"type": "string"},
@@ -170,6 +171,7 @@ juce::var timelineOpsArraySchema() {
                     "tension": {"type": "number"}, "curve": {"type": "integer"}},
                     "required": ["beat", "value"]}},
                 "startBeat": {"type": "number"},
+                "endBeat": {"type": "number"},
                 "midBase64": {"type": "string"},
                 "instrument": {"type": "string"},
                 "poly": {"type": "boolean"},

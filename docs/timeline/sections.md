@@ -122,4 +122,14 @@ placement, overlap, a bad name, length or start, the caps and unknown keys insid
 `Sections (bars): "Intro" 1-4; "Verse" 5-12 (1 of 2); ...` one entry per placement, whole entries only, at
 most a quarter of the budget, with a `+K more` tail. Bars follow the transport's time signature.
 
-Tests: `Tests/Timeline/TimelineDoc/TimelineDocSectionsTests.cpp`, `TimelineDocSectionFileTests.cpp`.
+## AI songs
+
+A song build request carries `"sections": true`. The answer then makes real sections instead of markers: after
+the `placeClips` ops come `makeSection` (`name`, `startBeat`, `endBeat`: the bars that hold the section's clips,
+in the next palette colour from `SectionPalette.h`; a name the project already uses becomes "Chorus 2") and `placeSection` (`name`, `beat`: play it again, covering the empty bars), then any
+`writeLane` ops. Both run inside the batch's one undo step (`TimelineOpsSections.cpp`); a name made twice in the batch, a
+`placeSection` naming no section, an overlap or a cap rejects the whole batch. A `writeLane` that comes after is
+written over every bar, then the sync copies the first placement's points onto each repeat, so every repeat ends
+up with the automation of the first one. See [timeline ops](../ai/timeline-ops.md).
+
+Tests: `Tests/Timeline/TimelineOpsSectionTests.cpp`, `Tests/Timeline/TimelineDoc/TimelineDocSectionsTests.cpp`, `TimelineDocSectionFileTests.cpp`.

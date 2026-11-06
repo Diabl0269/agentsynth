@@ -124,6 +124,7 @@ TEST_F(SongStepsServiceTest, PlanThenBuildHappyPathAppliesTheEnvelopeAndKeepsThe
     ASSERT_TRUE(provider->lastPlanBody["instruments"].isArray());
     EXPECT_TRUE(provider->lastPlanBody["instruments"].getArray()->contains(juce::var("Noise")));
     EXPECT_TRUE((bool)provider->lastPlanBody["sounds"]) << "the plan may name core pack instruments";
+    EXPECT_TRUE((bool)provider->lastPlanBody["sections"]) << "the song may arrive as real sections";
 
     provider->lines = {R"({"type":"steps","steps":[{"id":"track:Kit","kind":"track","label":"Kit sound"}]})",
                        R"({"type":"step","id":"track:Kit","status":"running"})",
@@ -141,6 +142,7 @@ TEST_F(SongStepsServiceTest, PlanThenBuildHappyPathAppliesTheEnvelopeAndKeepsThe
     ASSERT_TRUE(provider->lastBuildBody["instruments"].isArray());
     EXPECT_TRUE(provider->lastBuildBody["instruments"].getArray()->contains(juce::var("Noise")));
     EXPECT_TRUE((bool)provider->lastBuildBody["sounds"]) << "the build may carry a sound per instrument track";
+    EXPECT_TRUE((bool)provider->lastBuildBody["sections"]) << "the build may make and place sections";
     EXPECT_EQ(provider->lastBuildBody["token"].toString(), juce::String("tok"));
     EXPECT_EQ(provider->lastBuildBody["plan"]["title"].toString(), juce::String("Dark drum and bass"));
     EXPECT_EQ(graph->getNumNodes(), 2) << "the envelope went through the ordinary apply path";
@@ -187,6 +189,33 @@ TEST_F(SongStepsServiceTest, ABuildWhoseEnvelopeAlreadySetsAKeyKeepsThatKey) {
     EXPECT_EQ(build().kind, AIIntegrationService::SongBuildOutcome::Kind::applied);
     ASSERT_EQ(host.songKeys.size(), 1u);
     EXPECT_TRUE(sameKey(host.songKeys[0], makeScale(2, scalePresetIndex("Dorian"))));
+}
+
+TEST_F(SongStepsServiceTest, ABuildEnvelopeWithSectionOpsArrivesAsRealSectionsInOneUndoStep) {
+    TimelineDoc doc;
+    PlanFakeHost host(doc, *graph);
+    service->setTimelineContext(&doc, nullptr);
+    service->setTimelineOpsHost(&host);
+    provider->lines = {
+        R"({"type":"done","envelope":{"mode":"merge","nodes":[],"timelineOps":[
+            {"op":"setTempo","bpm":120},
+            {"op":"addTrack","kind":"midi","name":"Lead"},
+            {"op":"placeClips","track":"Lead","clips":[{"startBeat":0,"lengthBeats":8,"name":"Hook",
+              "notes":[{"startBeat":0,"lengthBeats":1,"pitch":60,"velocity":100}]},
+              {"startBeat":8,"lengthBeats":8,"name":"Tail",
+              "notes":[{"startBeat":0,"lengthBeats":1,"pitch":65,"velocity":100}]}]},
+            {"op":"makeSection","name":"Intro","startBeat":0,"endBeat":8},
+            {"op":"makeSection","name":"Verse","startBeat":8,"endBeat":16},
+            {"op":"placeSection","name":"Intro","beat":16}]},"notes":[]})"};
+    const auto outcome = build();
+    ASSERT_EQ(outcome.kind, AIIntegrationService::SongBuildOutcome::Kind::applied) << outcome.message;
+    ASSERT_EQ(doc.getSections().size(), 2u);
+    EXPECT_EQ(doc.getSections()[0].name, juce::String("Intro"));
+    ASSERT_EQ(doc.getPlacements().size(), 3u);
+    EXPECT_DOUBLE_EQ(doc.getPlacements()[2].startBeat, 16.0);
+    ASSERT_EQ(doc.getTracks().size(), 1u);
+    EXPECT_EQ(doc.getTracks()[0].clips.size(), 3u) << "the repeat plays the Intro's clip again";
+    EXPECT_TRUE(doc.getMarkers().empty()) << "sections replace the markers";
 }
 
 TEST_F(SongStepsServiceTest, AnUnreadablePlanKeyLeavesTheKeyAlone) {
