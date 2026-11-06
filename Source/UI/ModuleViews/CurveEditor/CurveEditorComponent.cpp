@@ -27,6 +27,7 @@ CurveEditorGeometry CurveEditorComponent::currentGeometry() const {
 }
 
 void CurveEditorComponent::setModel(CurveModel model, bool glideMoved) {
+    draw_.cancel(); // a stroke in flight was drawn on the old curve
     const auto placesBefore = glideMoved ? nodePositions() : std::vector<juce::Point<float>>();
     const int oldNumNodes = model_.getNumNodes();
     const CurveMode oldMode = model_.getMode();
@@ -286,6 +287,8 @@ void CurveEditorComponent::updateHover(juce::Point<float> point) {
     pointer_ = point;
     if (lineBefore != highlightedLine(currentGeometry()))
         repaint();
+    if (draw_.getPen().has_value())
+        return; // the pen's crosshair stays; there are no points to hover
     const CurveHitResult hit = hitTest(point);
     if (hit.kind == hoveredKind_ && hit.index == hoveredIndex_)
         return;
@@ -298,6 +301,8 @@ void CurveEditorComponent::updateHover(juce::Point<float> point) {
 }
 
 void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
+    if (draw_.press(e))
+        return;
     const CurveHitResult hit = hitTest(e.position);
 
     // A right-click starts no drag and opens no gesture -- it either shows a context menu (if a
@@ -363,6 +368,8 @@ void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
 }
 
 void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
+    if (draw_.drag(e))
+        return;
     if (dragKind_ == DragKind::None) {
         dragBoxTo(e.position);
         return;
@@ -385,7 +392,9 @@ void CurveEditorComponent::mouseDrag(const juce::MouseEvent& e) {
     lastDragPos_ = e.position;
 }
 
-void CurveEditorComponent::mouseUp(const juce::MouseEvent&) {
+void CurveEditorComponent::mouseUp(const juce::MouseEvent& e) {
+    if (draw_.release(e))
+        return;
     endBox();
     if (!gestureActive_) {
         if (pendingToggleIndex_ >= 0)
@@ -425,6 +434,8 @@ void CurveEditorComponent::mouseExit(const juce::MouseEvent&) {
 }
 
 void CurveEditorComponent::mouseDoubleClick(const juce::MouseEvent& e) {
+    if (draw_.getPen().has_value())
+        return; // the pen draws; points are edited with it off
     const CurveHitResult hit = hitTest(e.position);
     if (hit.kind == CurveHitKind::BendHandle) {
         resetBend(hit.index);

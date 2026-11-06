@@ -136,6 +136,12 @@ void CurveEditorComponent::focusLost(FocusChangeType) {
 // the app, and takes Delete with any modifier but Cmd.
 bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
     using Kind = PointKeyAction::Kind;
+    if (draw_.isActive() && key == juce::KeyPress::escapeKey) {
+        draw_.cancel(); // Escape drops a stroke in flight and writes nothing
+        return true;
+    }
+    if (draw_.getPen().has_value() && key == juce::KeyPress::returnKey && onPenApply)
+        return onPenApply();
     const auto action = pointKeyAction(key);
     if (keyHold_.active() && KeyHold::isArrow(key.getKeyCode()) && keyHold_.anyArrowDown())
         return true; // an arrow joining a running hold (or its auto-repeat): the hold reads it each frame

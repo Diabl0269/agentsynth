@@ -76,15 +76,16 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
         startFromButton_,
         "Start from: pick a built-in, a saved shape or a factory shape from a list with a small picture of each, to "
         "replace the selected shape's curve");
-    styleButton(drawButton_, "Draw: replace the selected shape's curve with a line, sine, triangle, saw or square");
+    styleButton(drawButton_, "Draw");
     styleButton(saveShapeButton_,
                 "Save shape: keep the selected shape's curve under a name, in the Sounds tab's Shapes");
     styleButton(doneButton_, "Done: close this window (Esc)");
     int order = 3;
     buildToolbar(order);
     curve_.setExplicitFocusOrder(order++);
-    for (auto* b : {&addButton_, &duplicateButton_, &renameButton_, &startFromButton_, &drawButton_, &saveShapeButton_,
-                    &deleteButton_, &doneButton_}) {
+    for (juce::TextButton* b :
+         std::initializer_list<juce::TextButton*>{&addButton_, &duplicateButton_, &renameButton_, &startFromButton_,
+                                                  &drawButton_, &saveShapeButton_, &deleteButton_, &doneButton_}) {
         b->setExplicitFocusOrder(order++);
         addAndMakeVisible(*b);
     }
@@ -94,7 +95,16 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     deleteButton_.onClick = [this] { controller_.deleteShape(selected_); };
     renameButton_.onClick = [this] { map_.beginRename(selected_); };
     startFromButton_.onClick = [this] { openStartFromMenu(); };
-    drawButton_.onClick = [this] { openDrawFlyout(); };
+    drawButton_.onClick = [this] {
+        if (pen_.has_value())
+            setPen(std::nullopt); // pressing it again leaves draw mode
+        else
+            openDrawFlyout();
+    };
+    curve_.onDrawRefused = [this](const juce::String& why) { showStatus(why); };
+    curve_.onPenApply = [this] { return applyPenToSelection(); };
+    curve_.setDrawBand(adapter_->getDrawRange().lo, adapter_->getDrawRange().hi, adapter_->getDrawRange().cycles);
+    restorePen();
     saveShapeButton_.onClick = [this] { saveSelectedShape(); };
     doneButton_.onClick = [this] {
         if (onDone)
@@ -247,15 +257,6 @@ void ShapeListEditor::applyStartFrom(int index) {
     edit([&](std::vector<ShapeItem>& shapes) { shapes[(size_t)selected_].curve = curve; });
 }
 
-void ShapeListEditor::applyDrawShape(DrawShape shape) {
-    if (shape == DrawShape::Free || shapes_.empty())
-        return;
-    const auto range = adapter_->getDrawRange();
-    edit([&](std::vector<ShapeItem>& shapes) {
-        shapes[(size_t)selected_].curve = curveForDrawShape(shape, shapes[(size_t)selected_].curve, range);
-    });
-}
-
 void ShapeListEditor::showMenuNow(juce::PopupMenu& menu, juce::Component& target) {
     if (showMenu)
         showMenu(menu);
@@ -272,23 +273,6 @@ void ShapeListEditor::showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> sc
         showMenu(menu);
     else
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(screenArea));
-}
-
-/** The lane Draw tool's own flyout, so the six shapes, their icons and their order are the lane's. Headless tests
-    take the content through the lane's hook instead of a call-out. */
-void ShapeListEditor::openDrawFlyout() {
-    juce::Component::SafePointer<ShapeListEditor> safe(this);
-    auto flyout = std::make_unique<DrawShapeFlyout>(
-        DrawShape::Free, [](DrawShape) { return juce::String(); },
-        [safe](DrawShape shape) {
-            if (safe != nullptr)
-                safe->applyDrawShape(shape);
-        });
-    if (auto& hook = test_hooks::drawShapeFlyoutHookForTest()) {
-        hook(std::move(flyout));
-        return;
-    }
-    launchDrawShapeCallOut(std::move(flyout), drawButton_.getScreenBounds(), [] { return false; });
 }
 
 bool ShapeListEditor::keyPressed(const juce::KeyPress& key) {
@@ -348,7 +332,7 @@ void ShapeListEditor::resized() {
 
     // Delete is the destructive action: alone at the right end of the row, apart from the others.
     deleteButton_.setBounds(buttons.removeFromRight(64));
-    const int widths[] = {80, 88, 64, 88, 64, 92};
+    const int widths[] = {80, 88, 64, 88, 76, 92};
     juce::TextButton* order[] = {&addButton_,       &duplicateButton_, &renameButton_,
                                  &startFromButton_, &drawButton_,      &saveShapeButton_};
     for (int i = 0; i < 6; ++i) {

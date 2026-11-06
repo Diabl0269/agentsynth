@@ -1,0 +1,47 @@
+# Feature: the Draw tool in the shape window draws where you drag. Pick the Sine pen, drag across part of the curve:
+# a dashed box, the sine and a cycle chip show while dragging, and only that stretch changes on release.
+#
+# What a user does: opens Edit shapes, clicks Draw, picks Sine, drags across the middle of the curve.
+record: true
+save_project: filter-shapes-draw-pen
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: filter}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
+  - click: {id: window, x: 1044, y: 603}                       # the Filter Type combo (its label shares the title)
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - screenshot: {id: "Filter shapes: Filter", name: before-draw}
+  - click: {id: Draw}
+  - wait: {settleMs: 400}
+  - click: {id: Sine shape}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: pen-on}
+  - mouseDown: {id: Shape curve, x: 150, y: 100}
+  - mouseMoveHeld: {id: Shape curve, x: 200, y: 100}
+  - mouseMoveHeld: {id: Shape curve, x: 330, y: 100}
+  - wait: {settleMs: 300}
+  - screenshot: {id: "Filter shapes: Filter", name: mid-drag}
+  - mouseUp: {id: Shape curve, x: 330, y: 100}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: after-draw}

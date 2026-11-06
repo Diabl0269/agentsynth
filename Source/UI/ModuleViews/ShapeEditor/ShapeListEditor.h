@@ -2,6 +2,7 @@
 
 #include "Modules/Shapes/ShapeLibrary.h"
 #include "PerNoteBar.h"
+#include "ShapeDrawPenButton.h"
 #include "ShapeListAdapter.h"
 #include "ShapeMapController.h"
 #include "ShapeWindowMap.h"
@@ -86,8 +87,15 @@ public:
     /** Save shape: asks for a name (refusing an empty one), asks before replacing a saved shape, then writes the
      *  selected shape's curve to the library. */
     void saveSelectedShape();
-    /** Applies a draw shape to the selected shape's curve. Free only returns the editor to point editing. */
+    /** Applies a draw shape to the whole of the selected shape's curve (Free draws nothing here). */
     void applyDrawShape(DrawShape shape);
+    /** The Draw pen: while one is chosen a drag on the curve draws that stretch (CurveDrawGesture) instead of moving
+     *  points. Remembered per kind of list in the window's settings. None leaves draw mode. */
+    void setPen(std::optional<DrawShape> pen);
+    std::optional<DrawShape> getPen() const noexcept { return pen_; }
+    /** The keyboard route: with the pen chosen, applies it to the stretch between the selected curve points (the
+     *  whole curve when fewer than two are selected) as one undo step. True when it took the key. */
+    bool applyPenToSelection();
 
     // ---------- inspection ----------
     ShapeWindowMap& getMap() noexcept { return map_; }
@@ -99,6 +107,7 @@ public:
     juce::TextButton& getRenameButton() noexcept { return renameButton_; }
     juce::TextButton& getStartFromButton() noexcept { return startFromButton_; }
     juce::TextButton& getDrawButton() noexcept { return drawButton_; }
+    ShapeDrawPenButton& getDrawPenButton() noexcept { return drawButton_; }
     juce::TextButton& getSaveShapeButton() noexcept { return saveShapeButton_; }
     juce::TextButton& getDoneButton() noexcept { return doneButton_; }
     juce::Component* getChip(int index) const;
@@ -147,6 +156,8 @@ private:
     void writeShape(const juce::String& name, const LfoCustomWave& curve, bool replace);
     void openStartFromMenu();
     void openDrawFlyout();
+    void restorePen();
+    void updatePenButton();
     void showMenuNow(juce::PopupMenu& menu, juce::Component& target);
     void showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> screenArea);
     void syncAll();
@@ -171,6 +182,8 @@ private:
     int lastGeneration_ = -1;
     RestoreWatch curveWatch_;
     bool curveGestureOpen_ = false;
+    std::optional<DrawShape> pen_;
+    DrawShape lastPen_ = DrawShape::Free;
 
     ShapeWindowMap map_;
     ShapeMapController controller_;
@@ -181,7 +194,7 @@ private:
     juce::TextButton deleteButton_{"Delete"};
     juce::TextButton renameButton_{"Rename"};
     juce::TextButton startFromButton_{"Start from"};
-    juce::TextButton drawButton_{"Draw"};
+    ShapeDrawPenButton drawButton_{"Draw"};
     juce::TextButton saveShapeButton_{"Save shape"};
     juce::TextButton doneButton_{"Done"};
     juce::Label statusLabel_;
