@@ -107,6 +107,16 @@ public:
     // has actually been re-run into this image.
     int getRasterCountForTest() const noexcept { return rasterCount; }
     juce::Rectangle<int> getImageBoundsForTest() const noexcept { return image.getBounds(); }
+    /** Pixels (in the owner's own units) the next paint would re-raster: what a repaint since the last paint
+     *  invalidated. A whole-owner repaint makes this the owner's full area. */
+    int getStaleAreaForTest() const {
+        juce::RectangleList<int> stale(owner.getLocalBounds());
+        stale.subtract(validArea);
+        int area = 0;
+        for (const auto& r : stale)
+            area += r.getWidth() * r.getHeight();
+        return area;
+    }
 
 private:
     juce::Image image;

@@ -10,7 +10,9 @@
 #include "Modules/OscillatorModule.h"
 #include "Modules/Sampler/SoundPackLibrary.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Graph/ModuleComponent/ModuleComponentInternal.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace cardbody_test;
@@ -268,4 +270,29 @@ TEST(DrumKitCard, TheDrumMachineButtonOpensTheGridForThisKitWhenATrackPlaysIt) {
     EXPECT_TRUE(button.getWantsKeyboardFocus());
     button.onClick();
     EXPECT_EQ(opened, scene.id);
+}
+
+// Regression test for FRO1142: a kick that lifts the card's level past the LED threshold used to repaint the whole
+// card, so the cache re-rastered every pad, knob and label on each hit of a playing song and the card flickered. Only
+// the header's activity LED reads the level, so only it is repainted.
+TEST(DrumKitCard, AKickCrossingTheLevelThresholdRepaintsOnlyTheActivityLed) {
+    Scene scene;
+    scene.kit().enableVisualBuffer(true);
+    auto& card = scene.card();
+    auto* cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(card.getCachedComponentImage());
+    ASSERT_NE(cache, nullptr);
+    card.timerCallback(); // the first tick settles the card's own state
+    juce::Image target(juce::Image::ARGB, card.getWidth(), card.getHeight(), true, juce::SoftwareImageType());
+    {
+        juce::Graphics g(target);
+        cache->paint(g);
+    }
+    ASSERT_EQ(cache->getStaleAreaForTest(), 0);
+
+    scene.kit().getVisualBuffer()->pushConstant(0.5f, VisualBuffer::DEFAULT_SIZE); // the kick
+    card.timerCallback();
+
+    const int stale = cache->getStaleAreaForTest();
+    EXPECT_GT(stale, 0) << "the LED itself is repainted";
+    EXPECT_LE(stale, detail::activityLedArea().getWidth() * detail::activityLedArea().getHeight());
 }

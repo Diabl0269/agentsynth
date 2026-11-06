@@ -63,6 +63,29 @@ private:
 
 } // namespace
 
+bool ModuleComponent::repaintMovingModulation() {
+    auto* mod = dynamic_cast<ModuleBase*>(module);
+    bool moving = false;
+    for (const auto& info : owner.getCachedModDisplayInfo()) {
+        if (info.destNodeID != nodeId || std::abs(info.modSignalValue) <= 0.001f)
+            continue;
+        moving = true;
+        int si = -1;
+        if (mod != nullptr)
+            for (const auto& target : mod->getModulationTargets())
+                if (target.channelIndex == info.destChannelIndex) {
+                    si = sliderIndexForModTarget(target);
+                    break;
+                }
+        if (si < 0 || !sliders[si]->isVisible()) {
+            repaint(); // a driven control this card cannot place (a plugin knob, a swapped-in combo): be safe
+            return true;
+        }
+        repaint(sliders[si]->getBounds().expanded(8));
+    }
+    return moving;
+}
+
 // The pending-drop-target ring (a released cable would land on this knob, or an outline round a
 // fader's slot and bar) and the live modulation, both driven by ModuleBase::getModulationTargets().
 // `mod`/`jackAccentColour` are paint()'s own locals, computed once there.

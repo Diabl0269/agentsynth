@@ -18,6 +18,9 @@
 
 namespace detail {
 
+/** The header's activity LED (an 8 px dot at 6,8) with room for its soft edge: all the RMS tick repaints. */
+inline juce::Rectangle<int> activityLedArea() noexcept { return {4, 6, 12, 12}; }
+
 // ---- Modulation-ring geometry --------------------------------------------------------
 // The ONE place the ring/band centre and radius are computed from a knob's bounds -- shared by
 // paintModulationRings (ModuleComponentPaint.cpp), the drop-target ring, getModTargetKnobAnchor and

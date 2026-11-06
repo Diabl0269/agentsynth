@@ -151,7 +151,13 @@ Its audio-side counterpart, the per-block render cost of the same project, is `T
 
 - **`ModuleComponent::timerCallback` runs at 15 Hz** (`startTimerHz(15)`) and repaints only when the
   display needs to change: when RMS level changes, when active modulation routing changes, or when
-  the sequencer step index changes.
+  the sequencer step index changes. **It repaints only what changed, never the whole card**: an RMS
+  change repaints the header's activity LED (`detail::activityLedArea()`), a moving routing
+  repaints the knob or fader it drives (`repaintMovingModulation()`, the whole card only when the
+  driven control cannot be placed). A whole-card repaint re-rasters every child into the cache, so
+  a kick drum or a modulated Filter did it up to 15 times a second and the Drum Kit and Filter
+  cards flickered under a playing song. Guards: `DrumKitCard.AKickCrossingTheLevelThresholdRepaintsOnlyTheActivityLed`,
+  `LevelRingMoves.AMovingRoutingRepaintsOnlyTheControlItDrives` (read the cache's stale area).
 - **A theme switch is exactly one re-skin pass**: `AppLookAndFeel::applyTheme()` into
   `sendLookAndFeelChangeMessage()` into one `repaint()`. No timer is started and no continuous
   repaint is added during or after a theme switch.
