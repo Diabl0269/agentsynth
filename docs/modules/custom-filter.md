@@ -381,18 +381,45 @@ slider drag is one undo step (the settings are part of the module's extra state)
 - **Curve axes.** Across: 20 Hz to 20 kHz on a log axis, with 100, 1k and 10k labelled. Up: dB, with the 0 dB line
   (curve y = 0.8) drawn bright and +6, -12, -24 and -36 dB marked; the fill runs to the 0 dB line. A curve holds at most
   64 points.
-- **Grid.** A row above the curve starts with **Grid**, a segmented choice: Off (the default), 1 oct, 1/2 oct, 1/3 oct.
-  Off leaves points free. A choice snaps points when they are added, dragged or moved with Alt+arrows (Shift while
-  dragging bypasses it) to lines at every octave fraction counted from 1 kHz (so 1 oct has lines at 250, 500, 1k, 2k
-  and 4k Hz, not at a whole number of cells from 20 Hz) and to 6 dB steps in level (-48 to +12 dB, 0 dB is a line). The
-  lines are drawn faintly under the labelled guides. Line importance reads by brightness and width, not hue alone:
-  the labelled **guide** lines (100, 1k, 10k and the 0 dB line) are 1.5 px in a clearly brighter muted-text colour, the
-  **snap** lines 1 px in the faint grid colour. The line nearest the pointer (within 6 px) lights up in full accent
-  with a small label ("1.26 kHz", "-6 dB"), and while a point is dragged the line it snapped to lights up the same way.
-  A **Guides** toggle (on by default, remembered) in the same row hides the guide lines and their labels only; the snap
-  lines stay. The choice is remembered for Filter shapes across windows and
-  launches (a user setting, not part of the patch); the LFO's window remembers its own. The curve editor's
-  `CurveGrid` takes `xStep` and `xOrigin` for lines that do not divide the visible range evenly.
+- **Grid.** Two rows above the curve (`PitchGridRows`, the lines from `PitchGrid.h`). The first row: **Grid**, a
+  segmented choice of Off (the default), Octaves, Notes or Harmonics, with its **Snap** pill; then **Level**, Off, 12,
+  6, 3 or 1.5 dB, with its own **Snap** pill. The second row shows what the kind needs (it fades between them):
+  - **Octaves**: Steps of 1 oct, 1/2, 1/3, 1/4, 1/6 or 1/12, counted from 1 kHz (1 oct has lines at 250, 500, 1k, 2k
+    and 4k Hz).
+  - **Notes**: a line on every equal-tempered note (A4 = 440 Hz), each C a landmark labelled "C4". **Key** is the
+    shared Key field (`FollowKeyField`): it follows the song key by default or takes its own key. Notes outside the key
+    are drawn dotted and are never snapped to.
+  - **Harmonics**: lines on the multiples of a **Root**: a picked note (C1 to B6, A2 by default), the **Played note**
+    (the pitch last heard on the Filter's Pitch input, `FilterModule::getLastPlayedPitchHz`, a relaxed atomic written
+    on the audio thread; A2 until a note plays; the tooltip says when the Pitch input has no cable) or the **Song key
+    root** (in octave 2). The powers of two are landmarks; x1 to x16 are labelled.
+  A Snap pill off draws the lines but leaves that axis free; Level Off draws no level lines and leaves levels free.
+  Points snap when added, dragged or moved with Alt+arrows (Alt+arrow steps to the next line that snaps, so in a key it
+  skips the dotted notes); Shift while dragging bypasses it. The old one-row choice ("1/3 oct") is migrated to Octaves
+  at that step with 6 dB levels.
+  Line importance reads by brightness and width first, never hue alone: the **landmark** lines (C, the powers of two,
+  the labelled guides 100, 1k, 10k and 0 dB) are brighter and wider, the **snap** lines 1 px in the faint grid colour,
+  the **out-of-key** notes dotted. Kind hue is the second cue: note lines lean toward the accent, harmonic lines toward
+  the warning colour. Where lines fall closer than 5 px the fainter ones are not drawn (they still snap), and labels
+  that would touch are skipped. The line nearest the pointer (within 6 px) lights up in full accent with its name
+  ("A4 · 440 Hz", "x3 · 330 Hz", "-6 dB"), and while a point is dragged the line it snapped to lights up the same way.
+  A **Guides** toggle (on by default, remembered) at the right of the second row hides the guide lines and their
+  labels only. Every choice is remembered for Filter shapes across windows and launches (user settings, not the
+  patch); the LFO's window keeps its note-length grid. The curve editor's `CurveGrid` takes an explicit `xLines` list
+  (each line with a tier and a kind) for lines that are not even cells.
+- **Ring helpers.** A button after Draw opens a menu whose items rewrite the selected shape's curve, each as one undo
+  step: one click places dots at the harmonic ratios of a note, so a resonant filter rings at those pitches.
+  **Tune selected peak to a note** moves the selected point (or the highest one) to the nearest note, of the key when
+  there is one; **Stack harmonics** opens a small popover (Root note, Harmonics 2 to 16, Each quieter by 0 to 6 dB,
+  Width Narrow, Medium or Wide; Return stacks, Esc cancels) and puts that many peaks on the Root's harmonics over a
+  -12 dB floor (the defaults: eight, 2 dB quieter each, Medium); **Chord peaks from the key** puts peaks on the key's root, third and fifth in octaves 3
+  and 4; **Octave bells** puts thin peaks on the Root and its octaves up to 10 kHz. The Root and key are the grid
+  rows' (`ShapeRingHelpers.h`, `ShapeStackPanel.h`). With Root set to Playing note, the Harmonics lines glide to each
+  new note over 160 ms (they jump under Reduce Motion).
+- **Cutoff Snap to notes.** On the Custom type, a right-click on the card's Cutoff knob offers **Snap to notes**: Free
+  (the default), Notes (every semitone) or By key (the song key's notes). Snapped, the knob drags to notes, Up/Down
+  step one note, and it reads "A3 220 Hz". The choice is the card's view state (`"cardView"`), saved with the project
+  (`CutoffNoteSnap.h`).
 - **Show spectrum.** A toggle at the right end of the same row (off by default, remembered) draws the filter's live
   spectrum faintly behind the grid and the curve, on the curve's own log-frequency axis (level -80 to 0 dB over the
   full height). It is the reading the card's response view shows ([the card](#card)): the module's 4096-sample
@@ -401,8 +428,8 @@ slider drag is one undo step (the settings are part of the module's extra state)
   moves like a meter, timed in seconds rather than frames: it rises in about 10 ms and falls about 30 dB in the half
   second after a note stops (`kAttackSeconds`, `kReleaseSeconds`, both in the analyser). A 30 Hz tick runs only while
   the toggle is on and the window is visible and repaints only the curve; with the toggle off there is no tick and the
-  curve paints exactly as before (the LFO's window has no such toggle). Tab order: the map, the chips, Grid, Guides,
-  Show spectrum, the curve, the buttons.
+  curve paints exactly as before (the LFO's window has no such toggle). Tab order: the map, the chips, Grid, its Snap, Level,
+  its Snap, the second row (Steps, Key or Root), Guides, Show spectrum, the curve, the buttons (Ring helpers after Draw).
 - **The filter's response over the editor.** While the morph cursor (the dark main dot) is the selection in the map
   (pressed, dragged or focused, until a shape dot is chosen), the window draws the filter's live frequency response
   as an accent line over the curve: `customfilter::responseGridDb` with the morph cursor, Shift, Depth, Cutoff and

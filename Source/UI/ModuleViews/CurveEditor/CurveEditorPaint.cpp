@@ -1,5 +1,6 @@
 #include "CurveEditorComponent.h"
 #include "UI/Layout/FocusRing.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -10,6 +11,8 @@ constexpr int kCurveStepsPerSegment = 24;
 constexpr float kLandmarkThickness = 1.5f;
 constexpr float kLandmarkAlpha = 0.55f;
 constexpr float kOutOfKeyAlphaScale = 0.5f;
+constexpr float kKindHueShare = 0.35f;
+constexpr float kLabelGapPx = 3.0f;
 
 /** A full-length line at pixel `position`. A landmark is 1.5 px, centred on the pixel column it shares with a 1 px line
  *  so the two stay comparable in a pixel test. */
@@ -35,49 +38,124 @@ CurveEditorComponent::ThemeColours CurveEditorComponent::resolveThemeColours() c
                 colors.textMuted,
                 colors.accent,
                 colors.textMuted.withAlpha(kLandmarkAlpha),
-                grid.withMultipliedAlpha(kOutOfKeyAlphaScale)};
+                grid.withMultipliedAlpha(kOutOfKeyAlphaScale),
+                colors.accent,
+                colors.warning};
     }
     return {juce::Colour(0xff1a1a2e),
             juce::Colour(0xff2a2a3e),
             juce::Colour(0xff6a6a7e),
             juce::Colour(0xff00b4d8),
             juce::Colour(0xff6a6a7e).withAlpha(kLandmarkAlpha),
-            juce::Colour(0xff2a2a3e).withMultipliedAlpha(kOutOfKeyAlphaScale)};
+            juce::Colour(0xff2a2a3e).withMultipliedAlpha(kOutOfKeyAlphaScale),
+            juce::Colour(0xff00b4d8),
+            juce::Colour(0xffe0a33d)};
 }
 
-std::vector<double> CurveEditorComponent::gridXPositions() const {
-    std::vector<double> out;
-    if (!grid_.has_value())
-        return out;
-    const double minX = model_.getMinX();
-    const double maxX = model_.getMaxX();
-    if (grid_->xStep > 0.0) {
-        const double first = std::ceil((minX - grid_->xOrigin) / grid_->xStep - 1e-9);
-        for (double k = first; grid_->xOrigin + k * grid_->xStep <= maxX + 1e-9; k += 1.0)
-            out.push_back(grid_->xOrigin + k * grid_->xStep);
-        return out;
-    }
-    const int xDiv = juce::jmax(1, grid_->xDivisions);
-    for (int i = 0; i <= xDiv; ++i)
-        out.push_back(minX + (maxX - minX) * ((double)i / (double)xDiv));
-    return out;
-}
-
-// The grid's own lines, unlabelled: the vertical cells and the horizontal levels, the middle level a landmark.
+// The grid's own lines, unlabelled: the vertical cells (or the explicit lines) and the horizontal levels, one level a
+// landmark (the middle one, or the level the grid names).
 void CurveEditorComponent::paintGridLines(juce::Graphics& g, const CurveEditorGeometry& geometry,
                                           const ThemeColours& colours) const {
     const float h = (float)getHeight();
-    const int yDiv = juce::jmax(1, grid_->yDivisions);
-
-    g.setColour(colours.grid);
-    for (const double t : gridXPositions())
-        drawGridLine(g, true, geometry.xForTime(t), h, false);
+    if (!grid_->xLines.empty()) {
+        paintExplicitXLines(g, geometry, colours);
+    } else {
+        g.setColour(colours.grid);
+        for (const double t : gridXPositions())
+            drawGridLine(g, true, geometry.xForTime(t), h, false);
+    }
+    if (!gridHasY())
+        return;
+    const int yDiv = grid_->yDivisions;
     for (int i = 0; i <= yDiv; ++i) {
-        const float y = geometry.yForLevel((float)i / (float)yDiv);
-        // The middle line (yDiv even) is the zero/centre reference: a landmark, so it stays visible among the rest.
-        const bool isMiddle = (yDiv % 2 == 0) && (i == yDiv / 2);
-        g.setColour(isMiddle ? colours.landmark : colours.grid);
-        drawGridLine(g, false, y, (float)getWidth(), isMiddle);
+        const float level = (float)i / (float)yDiv;
+        const float y = geometry.yForLevel(level);
+        const bool landmark = grid_->yLandmark.has_value() ? std::abs(level - *grid_->yLandmark) < 1.0e-4f
+                                                           : (yDiv % 2 == 0) && (i == yDiv / 2);
+        g.setColour(landmark ? colours.landmark : colours.grid);
+        drawGridLine(g, false, y, (float)getWidth(), landmark);
+    }
+}
+
+// A note line leans toward the accent and a harmonic line toward the second hue by a fixed share, keeping its tier's
+// alpha, so brightness still says how important a line is and the hue only says what kind it is.
+juce::Colour CurveEditorComponent::gridLineColour(const ThemeColours& colours, GridLine::Tier tier,
+                                                  GridLine::Kind kind) const {
+    const auto base = tier == GridLine::Tier::landmark ? colours.landmark
+                      : tier == GridLine::Tier::snap   ? colours.grid
+                                                       : colours.outOfKey;
+    if (kind == GridLine::Kind::neutral)
+        return base;
+    const auto hue = kind == GridLine::Kind::note ? colours.noteHue : colours.harmonicHue;
+    return base.interpolatedWith(hue.withAlpha(base.getFloatAlpha()), kKindHueShare);
+}
+
+// Landmarks always draw; a fainter line closer than kMinLineGapPx to the last line drawn is skipped (it still snaps),
+// so a fine grid never turns into a solid wash. Out-of-key lines are dotted as well as dimmer: colour is never the
+// only cue.
+void CurveEditorComponent::paintExplicitXLines(juce::Graphics& g, const CurveEditorGeometry& geometry,
+                                               const ThemeColours& colours) const {
+    const float h = (float)getHeight();
+    const double minX = model_.getMinX();
+    const double maxX = model_.getMaxX();
+    std::vector<float> landmarks;
+    for (const auto& line : grid_->xLines)
+        if (line.tier == GridLine::Tier::landmark && line.x >= minX && line.x <= maxX)
+            landmarks.push_back(std::floor(geometry.xForTime(line.x)));
+    float lastDrawn = -1.0e9f;
+    std::size_t nextLandmark = 0;
+    for (const auto& line : grid_->xLines) {
+        if (line.x < minX - 1e-9 || line.x > maxX + 1e-9)
+            continue;
+        const float px = std::floor(geometry.xForTime(line.x));
+        const bool landmark = line.tier == GridLine::Tier::landmark;
+        while (nextLandmark < landmarks.size() && landmarks[nextLandmark] < px)
+            ++nextLandmark;
+        if (!landmark) {
+            const bool crowdsLast = px - lastDrawn < kMinLineGapPx;
+            const bool crowdsLandmark = nextLandmark < landmarks.size() && landmarks[nextLandmark] - px < kMinLineGapPx;
+            if (crowdsLast || crowdsLandmark)
+                continue;
+        }
+        g.setColour(gridLineColour(colours, line.tier, line.kind));
+        if (line.tier == GridLine::Tier::outOfKey) {
+            const float dashes[] = {2.0f, 3.0f};
+            g.drawDashedLine(juce::Line<float>(px + 0.5f, 0.0f, px + 0.5f, h), dashes, 2, 1.0f);
+        } else {
+            drawGridLine(g, true, px, h, landmark);
+        }
+        lastDrawn = px;
+    }
+}
+
+// The explicit lines' labels along the top: the landmarks' first, then the rest, each skipped when it would overlap a
+// label already placed or run off the edge.
+void CurveEditorComponent::paintGridLabels(juce::Graphics& g, const CurveEditorGeometry& geometry,
+                                           const ThemeColours& colours) const {
+    if (!grid_.has_value() || grid_->xLines.empty())
+        return;
+    const juce::Font font(juce::FontOptions(9.0f));
+    g.setFont(font);
+    g.setColour(colours.mutedText);
+    const float w = (float)getWidth();
+    std::vector<juce::Rectangle<float>> placed;
+    for (const bool landmarks : {true, false}) {
+        for (const auto& line : grid_->xLines) {
+            if (line.label.isEmpty() || (line.tier == GridLine::Tier::landmark) != landmarks)
+                continue;
+            if (line.x < model_.getMinX() || line.x > model_.getMaxX())
+                continue;
+            const float px = std::floor(geometry.xForTime(line.x));
+            const float textWidth = juce::GlyphArrangement::getStringWidth(font, line.label);
+            const juce::Rectangle<float> box(px + 2.0f, 2.0f, textWidth + 1.0f, 11.0f);
+            if (box.getRight() > w)
+                continue;
+            const auto padded = box.expanded(kLabelGapPx, 0.0f);
+            if (std::any_of(placed.begin(), placed.end(), [&](const auto& r) { return r.intersects(padded); }))
+                continue;
+            placed.push_back(box);
+            g.drawText(line.label, box, juce::Justification::left, false);
+        }
     }
 }
 
@@ -89,8 +167,10 @@ void CurveEditorComponent::paintGrid(juce::Graphics& g, const CurveEditorGeometr
     // editor snaps, the snap lines are drawn first, under the guides; the guides are the landmarks (a zero line, the
     // labelled frequencies), and a switch hides them without touching the snap lines.
     if (guides_.has_value()) {
-        if (grid_.has_value() && snapToGrid_)
+        if (grid_.has_value() && snapToGrid_) {
             paintGridLines(g, geometry, colours);
+            paintGridLabels(g, geometry, colours);
+        }
         if (!guidesVisible_)
             return;
         g.setFont(juce::Font(9.0f));

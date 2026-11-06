@@ -327,7 +327,8 @@ TEST(ShapeEditor, TabVisitsTheMapChipsGridGuidesSpectrumCurveButtonsAndDoneInVis
                                             "ah shape",
                                             "ee shape",
                                             "oo shape",
-                                            "Grid",
+                                            "Grid",  // its Snap pill is off (disabled) while Grid is Off
+                                            "Level", // likewise for Level Off
                                             "Guides",
                                             "Show spectrum",
                                             "Shape curve",
@@ -336,6 +337,7 @@ TEST(ShapeEditor, TabVisitsTheMapChipsGridGuidesSpectrumCurveButtonsAndDoneInVis
                                             "Rename",
                                             "Start from",
                                             "Draw",
+                                            "Ring helpers",
                                             "Save shape",
                                             "Delete",
                                             "Notes move the cursor",

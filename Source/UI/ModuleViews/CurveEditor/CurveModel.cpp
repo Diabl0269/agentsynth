@@ -1,4 +1,5 @@
 #include "CurveModel.h"
+#include "Modules/Envelope/EnvelopeGenerator.h"
 #include <algorithm>
 #include <stdexcept>
 

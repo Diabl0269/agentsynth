@@ -30,10 +30,13 @@ struct CardViewState {
     /** The sequencer step grid's shown lanes, one SequencerLane bit each; unset follows the card default
      *  (kDefaultSequencerLanes). */
     std::optional<std::uint16_t> stepGridLanes;
+    /** Not a panel: the Filter cutoff knob's Snap to notes, "notes" or "key"; empty is Free. */
+    juce::String cutoffSnap;
 
     bool isDefault() const noexcept {
         return !showScope && !showResponse && !showSpectrum.has_value() && !showMorphMap.has_value() &&
-               !showCurveView.has_value() && pendingSound.isEmpty() && !stepGridLanes.has_value();
+               !showCurveView.has_value() && pendingSound.isEmpty() && !stepGridLanes.has_value() &&
+               cutoffSnap.isEmpty();
     }
 
     /** A void var when everything is at its default, so an untouched card adds no JSON. */
@@ -60,6 +63,8 @@ struct CardViewState {
                     lanes.add(sequencerLaneId((SequencerLane)i));
             obj->setProperty("lanes", lanes);
         }
+        if (cutoffSnap.isNotEmpty())
+            obj->setProperty("cutoffSnap", cutoffSnap);
         return juce::var(obj);
     }
 
@@ -89,6 +94,8 @@ struct CardViewState {
                         mask = (std::uint16_t)(mask | sequencerLaneBit(*id));
                 out.stepGridLanes = mask;
             }
+            if (const auto snap = obj->getProperty("cutoffSnap").toString(); snap == "notes" || snap == "key")
+                out.cutoffSnap = snap;
         }
         return out;
     }

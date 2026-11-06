@@ -28,7 +28,7 @@ this point", "No room: the curve has the most points it can hold") in the shape 
 |---|---|
 | Left / Right | Pick the previous / next dot. The cursor and the selection move to it; nothing moves in time. With nothing picked, the first press lands on the nearest end |
 | Shift+Left / Shift+Right | Extend the selection one dot toward that side (the cursor moves with it) |
-| Alt+Left / Alt+Right | Move the selection in time (a grid step with snap on, else a small step: four pixels in a lane). Hold the key and it glides, one undo step ([`timeline/automation-points.md`](../timeline/automation-points.md#keyboard-moves)) |
+| Alt+Left / Alt+Right | Move the selection in time (a grid step with snap on, else a small step: four pixels in a lane; on a grid of explicit lines, such as the Filter shape window's Notes or Harmonics, the step goes to the next line that snaps, past the dotted out-of-key notes). Hold the key and it glides, one undo step ([`timeline/automation-points.md`](../timeline/automation-points.md#keyboard-moves)) |
 | Alt+Up / Alt+Down | Move the selection's value (holding glides, like Alt+Left / Right) |
 | Two arrows held | Diagonal: hold Alt+Right, then also Up, and time and value move at once; let one go and the other carries on alone. The whole hold, both keys, is one undo step (`KeyHold` glides each axis on its own) |
 | Alt+Shift+arrows | The fine move: a fifth of the step in the curve editor, a quarter in a lane, never snapped. In a lane with two or more points selected, Alt+Shift+arrows stretch or scale the selection instead ([`timeline/automation.md`](../timeline/automation-points.md#stretching-a-selection)) |

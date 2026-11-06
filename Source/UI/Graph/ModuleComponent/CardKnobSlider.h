@@ -24,9 +24,33 @@ class CardKnobSlider
 public:
     CardKnobSlider() { setWantsKeyboardFocus(true); }
 
+    /** A drag's value passes through it when set (the Filter cutoff's Snap to notes); unset keeps the drag's. */
+    std::function<double(double)> snapHook;
+    /** Asked first for Up/Right (+1) and Down/Left (-1) without modifiers: the value one step that way, or nullopt
+     *  for the usual step. */
+    std::function<std::optional<double>(double current, int direction)> stepHook;
+    /** The readout for a value when set and it answers; else the parameter's own text. */
+    std::function<std::optional<juce::String>(double)> readoutHook;
+
     /** Each press is one change gesture, the same begin/set/end a mouse drag makes. */
     bool keyPressed(const juce::KeyPress& key) override {
-        return cancelModDotOnEscape(key) || applyValueKey(*this, key);
+        if (cancelModDotOnEscape(key))
+            return true;
+        if (const int direction = stepDirection(key); direction != 0 && stepHook)
+            if (const auto target = stepHook(getValue(), direction))
+                return applyKeyTarget(*this, target);
+        return applyValueKey(*this, key);
+    }
+
+    double snapValue(double value, DragMode mode) override {
+        return snapHook ? snapHook(value) : juce::Slider::snapValue(value, mode);
+    }
+
+    juce::String getTextFromValue(double value) override {
+        if (readoutHook)
+            if (const auto text = readoutHook(value))
+                return *text;
+        return juce::Slider::getTextFromValue(value);
     }
 
     /** The value `key` would set, or nullopt when it is not a knob key. */
@@ -62,6 +86,17 @@ public:
     void mouseExit(const juce::MouseEvent& e) override {
         notifyHover(false);
         juce::Slider::mouseExit(e);
+    }
+
+private:
+    static int stepDirection(const juce::KeyPress& key) {
+        if (key.getModifiers().isAnyModifierKeyDown())
+            return 0;
+        if (key.isKeyCode(juce::KeyPress::upKey) || key.isKeyCode(juce::KeyPress::rightKey))
+            return 1;
+        if (key.isKeyCode(juce::KeyPress::downKey) || key.isKeyCode(juce::KeyPress::leftKey))
+            return -1;
+        return 0;
     }
 };
 

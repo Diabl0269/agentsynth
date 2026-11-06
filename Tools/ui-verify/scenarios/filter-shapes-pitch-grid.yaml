@@ -1,0 +1,46 @@
+# Feature: the Filter's Edit shapes window grids by pitch. Notes draws every note with each C named and the notes
+# outside the key dotted; Harmonics draws the root's multiples; the Ring helpers menu's Stack harmonics turns the
+# selected shape into peaks on those harmonics in one step (undone by one Cmd+Z).
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes, picks Grid Notes, then Harmonics, then Ring helpers >
+# Stack harmonics, and undoes it.
+record: true
+save_project: filter-shapes-pitch-grid
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - click: {id: Notes}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: notes-grid}
+  - click: {id: Harmonics}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: harmonics-grid}
+  - click: {id: Ring helpers}
+  - wait: {settleMs: 500} # the menu fades in before it takes keys
+  - screenshot: {id: menu, name: ring-helpers-menu}
+  # Arrow keys reach the popup (its items carry no ids): Tune selected peak, then Stack harmonics, which opens its panel.
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "Stack harmonics panel", name: stack-panel}
+  - click: {id: Stack}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: stacked-harmonics}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 400}
+  - screenshot: {id: "Filter shapes: Filter", name: after-undo}

@@ -88,7 +88,11 @@ public:
     /** Applies a value key as one change gesture (one undo step, one automation touch); false when
      *  `key` is not a value key, so Tab, Escape and Return stay with the card. */
     bool applyValueKey(juce::Slider& slider, const juce::KeyPress& key) {
-        const auto target = valueForKey(slider, key);
+        return applyKeyTarget(slider, valueForKey(slider, key));
+    }
+
+    /** applyValueKey for a target the control worked out itself (a stepped key); false when there is none. */
+    bool applyKeyTarget(juce::Slider& slider, std::optional<double> target) {
         if (!target.has_value())
             return false;
         if (refusesEdit && refusesEdit())

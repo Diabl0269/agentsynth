@@ -73,19 +73,42 @@ public:
      *  units, which aren't seconds). */
     void setTimeLabelFormatter(std::function<juce::String(double)> formatter);
 
+    /** One vertical line of an explicit grid (notes, harmonics: not a fixed step). */
+    struct GridLine {
+        /** How strongly it is drawn: landmark 1.5 px and bright, snap 1 px and faint, outOfKey dotted at about half
+         *  the snap alpha (never snapped to). */
+        enum class Tier { landmark, snap, outOfKey };
+        /** The second cue after brightness: note lines lean to the accent, harmonic lines to a second hue. */
+        enum class Kind { neutral, note, harmonic };
+        double x = 0.0;
+        Tier tier = Tier::snap;
+        Kind kind = Kind::neutral;
+        juce::String name;  ///< what the pointer label reads ("A4 . 440 Hz"); empty asks CurveGrid::xName
+        juce::String label; ///< drawn along the top while it does not collide with another label; may be empty
+    };
+
     /** `xDivisions`/`yDivisions`: how many even cells `paintGrid` draws when a grid is set (a
      *  vertical line at every `1/xDivisions` of the visible range, horizontal at every
-     *  `1/yDivisions` of the level range). A positive `xStep` replaces the even x cells with lines at
-     *  `xOrigin + k * xStep` in model units (a log axis whose octaves are not a whole number of cells). */
+     *  `1/yDivisions` of the level range); 0 draws no lines on that axis and leaves it free. A positive `xStep`
+     *  replaces the even x cells with lines at `xOrigin + k * xStep` in model units (a log axis whose octaves are not a
+     *  whole number of cells); a non-empty `xLines` replaces both. */
     struct CurveGrid {
         int xDivisions = 4;
         int yDivisions = 2;
         double xStep = 0.0;
         double xOrigin = 0.0;
+        std::vector<GridLine> xLines; ///< ascending x
+        /** Whether a drag or a key snaps along each axis; the lines are drawn either way. */
+        bool snapX = true;
+        bool snapY = true;
+        /** The level drawn as the landmark among the horizontal lines; unset: the middle line (yDivisions even). */
+        std::optional<float> yLandmark;
         /** What a line is called when the pointer is on it ("1.2 kHz"); empty draws no hover label. */
         std::function<juce::String(double x)> xName;
         std::function<juce::String(float level)> yName;
     };
+    /** Below this many pixels apart, the fainter of two lines is not drawn (it still snaps). */
+    static constexpr float kMinLineGapPx = 5.0f;
     /** `nullopt` (the default) draws today's nice-tick time grid instead -- an ordinary envelope
      *  card never calls this. */
     void setGrid(std::optional<CurveGrid> grid);
@@ -364,9 +387,20 @@ private:
         juce::Colour grid; ///< snap lines: steps, in-key notes, harmonics n >= 2
         juce::Colour mutedText;
         juce::Colour accent;
-        juce::Colour landmark; ///< the labelled guides and the centre line: clearly brighter than `grid`
-        juce::Colour outOfKey; ///< lines that do not snap: about half the snap lines' alpha
+        juce::Colour landmark;    ///< the labelled guides and the centre line: clearly brighter than `grid`
+        juce::Colour outOfKey;    ///< lines that do not snap: about half the snap lines' alpha
+        juce::Colour noteHue;     ///< the hue note lines lean to
+        juce::Colour harmonicHue; ///< the hue harmonic lines lean to
     };
+    juce::Colour gridLineColour(const ThemeColours& colours, GridLine::Tier tier, GridLine::Kind kind) const;
+    void paintExplicitXLines(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
+    void paintGridLabels(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
+    bool gridHasX() const;
+    bool gridHasY() const;
+    /** The nearest x a drag or key may land on along the grid, or `x` itself when the x axis does not snap. */
+    double snapGridX(double x) const;
+    /** With explicit lines that snap: the distance from `x` to the next snapping line on `side` (-1/+1). */
+    std::optional<double> explicitLineStep(double x, int side) const;
     ThemeColours resolveThemeColours() const;
     /** The nearest grid or guide line to `point` within kHoverLinePx, or none. */
     struct LineHit {

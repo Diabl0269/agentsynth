@@ -5,6 +5,7 @@
 // implementation (FilterShapesAdapter); another shape list (the LFO's custom wave) plugs in the same way.
 #include "Modules/Filter/CustomFilterPerNote.h"
 #include "Modules/Lfo/LfoCustomWave.h"
+#include "Music/MusicalScale.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
@@ -53,8 +54,9 @@ enum class PitchInput {
 
 /** The grid control a shape list offers above its curve. `names` are the choices, the first being Off. */
 struct ShapeGridOffer {
-    /** The shared note-length box, or a short row of segments for a small choice. */
-    enum class Control { noteLengthBox, segments };
+    /** The shared note-length box, a short row of segments for a small choice, or the frequency rows (kind, steps,
+     *  level, key, root: PitchGridRows), which build their own grid and leave `names` and `gridFor` unused. */
+    enum class Control { noteLengthBox, segments, pitchRows };
     Control control = Control::noteLengthBox;
     juce::StringArray names;
     juce::String title;
@@ -128,6 +130,11 @@ public:
         endEdit();
         return false;
     }
+    /** The song key the Notes grid follows; nullopt is No key (or no song). */
+    virtual std::optional<MusicalScale> getSongKey() const { return std::nullopt; }
+    /** The pitch of the note played last through the module, in hertz; 0 before any. */
+    virtual float getPlayedNoteHz() const { return 0.0f; }
+
     /** The curve y that is "no change" (a reference line the fill runs down to). */
     virtual float getReferenceLevel() const { return 0.5f; }
 };

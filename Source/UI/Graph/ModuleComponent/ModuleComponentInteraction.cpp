@@ -6,6 +6,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h" // kMaxModuleDisplayNameChars — one cap for typed and loaded titles
 #include "AudioEngine/AudioEngine.h"
 #include "AudioEngine/ModuleTitle.h"
+#include "CutoffNoteSnap.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "Modules/MacroControlModule.h"
@@ -83,9 +84,8 @@ void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* para
     if (param == nullptr)
         return;
 
-    // The popup's actions run asynchronously (showMenuAsync), so `this` must be re-checked rather
-    // than captured raw — the module (and its GraphEditor selection) could be gone by the time the
-    // user picks an item (a delete, an undo, a preset load while the menu is open).
+    // The popup's actions run asynchronously, so `this` is re-checked, never captured raw: the module (and its
+    // selection) may be gone by the time an item is picked (a delete, an undo, a preset load while the menu is open).
     juce::Component::SafePointer<ModuleComponent> safeThis(this);
     const auto nodeIdCopy = nodeId;
     const juce::String paramId = param->paramID;
@@ -98,10 +98,10 @@ void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* para
             safeThis->owner.onAutomateParameterRequested(nodeIdCopy, paramId);
     });
     appendMidiLearnMenuItems(menu, param);
+    synth::ui::cutoffsnap::appendMenuItems(menu, module, param, sliders[sliderParams.indexOf(param)]);
     synth::appendCardLayoutMenuItems(menu, owner, undoManager, nodeId, cardBody_.get(), paramId);
-    // Routed through showContextMenuHook_ (rather than a direct showMenuAsync) so a test can
-    // capture the built menu headlessly, the same seam buildModuleContextMenu()/
-    // buildMacroPortContextMenu() already use.
+    // Through showContextMenuHook_ (not a direct showMenuAsync) so a test can capture the built menu headlessly, the
+    // same seam buildModuleContextMenu()/buildMacroPortContextMenu() use.
     menuAnchor_ = screenAnchor;
     showContextMenuHook_(menu);
     menuAnchor_.reset();

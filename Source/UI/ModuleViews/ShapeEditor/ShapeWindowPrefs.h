@@ -15,6 +15,17 @@ inline juce::String guidesKey(const juce::String& kind) { return "shapeWindowGui
  *  none. */
 inline juce::String penKey(const juce::String& kind) { return "shapeWindowPen_" + kind; }
 
+/** The frequency rows (the Filter's grid): the kind ("Octaves"), the step ("1/3"), the level step ("6", "Off"), "0"
+ *  while a Snap pill is off, the own key ("" follows the song key) and the Root box's entry id. A missing kind reads
+ *  the old one-row gridKey once, so a choice made before the rows existed carries over. */
+inline juce::String gridKindKey(const juce::String& kind) { return "shapeWindowGridKind_" + kind; }
+inline juce::String gridStepsKey(const juce::String& kind) { return "shapeWindowGridSteps_" + kind; }
+inline juce::String gridLevelKey(const juce::String& kind) { return "shapeWindowGridLevel_" + kind; }
+inline juce::String snapAcrossKey(const juce::String& kind) { return "shapeWindowSnapAcross_" + kind; }
+inline juce::String snapLevelKey(const juce::String& kind) { return "shapeWindowSnapLevel_" + kind; }
+inline juce::String gridOwnKeyKey(const juce::String& kind) { return "shapeWindowGridKey_" + kind; }
+inline juce::String gridRootKey(const juce::String& kind) { return "shapeWindowGridRoot_" + kind; }
+
 inline juce::String loadText(juce::ApplicationProperties* props, const juce::String& key) {
     if (props == nullptr || props->getUserSettings() == nullptr)
         return {};

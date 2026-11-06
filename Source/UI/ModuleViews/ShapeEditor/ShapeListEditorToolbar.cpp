@@ -1,6 +1,7 @@
 // ShapeListEditorToolbar.cpp -- the shape editor's row above the curve: the grid choice the curve snaps to and the
 // Filter's Show spectrum toggle, with the settings that remember them and the gated tick that feeds the spectrum.
 #include "Modules/Filter/CustomFilterShapes.h"
+#include "PitchGridRows.h"
 #include "ShapeListEditor.h"
 #include "ShapeListEditorInternal.h"
 #include "ShapeWindowPrefs.h"
@@ -27,6 +28,8 @@ bool ShapeListEditor::hasToolbar() const {
 }
 
 juce::String ShapeListEditor::getGridName() const {
+    if (pitchRows_ != nullptr)
+        return pitchgrid::nameOf(pitchRows_->getChoice());
     if (gridBox_ != nullptr && gridBox_->getCurrentName().isNotEmpty())
         return gridBox_->getCurrentName();
     if (gridSwitch_ != nullptr && gridOffer_.has_value() && gridSwitch_->getSelectedIndex() >= 0)
@@ -35,6 +38,18 @@ juce::String ShapeListEditor::getGridName() const {
 }
 
 void ShapeListEditor::setGridName(const juce::String& name) {
+    if (pitchRows_ != nullptr) {
+        auto choice = pitchRows_->getChoice();
+        if (const auto legacy = pitchgrid::fromLegacyName(name)) {
+            choice = *legacy;
+        } else if (pitchgrid::kindNames().contains(name)) {
+            choice.kind = (pitchgrid::Kind)pitchgrid::kindNames().indexOf(name);
+        } else {
+            return;
+        }
+        pitchRows_->setChoice(choice);
+        return;
+    }
     if (gridBox_ != nullptr)
         gridBox_->setCurrentName(name, juce::sendNotificationSync);
     else if (gridSwitch_ != nullptr && gridOffer_.has_value() && gridOffer_->names.contains(name))
@@ -47,7 +62,13 @@ void ShapeListEditor::buildToolbar(int& order) {
     const auto kind = adapter_->getPreferenceKind();
     gridOffer_ = adapter_->getGridOffer();
 
-    if (gridOffer_.has_value()) {
+    if (gridOffer_.has_value() && gridOffer_->control == ShapeGridOffer::Control::pitchRows) {
+        pitchRows_ = std::make_unique<PitchGridRows>(*adapter_);
+        pitchRows_->setExplicitFocusOrder(order++);
+        pitchRows_->onGridChanged = [this] { applyCurveGrid(pitchRows_->grid()); };
+        addAndMakeVisible(*pitchRows_);
+        applyCurveGrid(pitchRows_->grid());
+    } else if (gridOffer_.has_value()) {
         const auto saved = shapewindowprefs::loadText(props, shapewindowprefs::gridKey(kind));
         const juce::String startName = gridOffer_->names.contains(saved) ? saved : gridOffer_->names[0];
         if (gridOffer_->control == ShapeGridOffer::Control::noteLengthBox) {
@@ -116,6 +137,12 @@ void ShapeListEditor::buildToolbar(int& order) {
 
 void ShapeListEditor::layoutToolbar(juce::Rectangle<int> row) {
     gridLabelArea_ = {};
+    if (pitchRows_ != nullptr) {
+        // Two rows: the grid's own across the whole width, its second row's free right end holding the toggles.
+        pitchRows_->setBounds(row);
+        row = row.withTrimmedTop(PitchGridRows::kRowHeight + PitchGridRows::kRowGap)
+                  .withTrimmedLeft(PitchGridRows::kSecondRowWidth);
+    }
     if (spectrumToggle_ != nullptr)
         spectrumToggle_->setBounds(row.removeFromRight(kToggleWidth));
     if (guidesToggle_ != nullptr) {
@@ -136,12 +163,16 @@ void ShapeListEditor::applyGridChoice(const juce::String& name, bool remember) {
     if (!gridOffer_.has_value() || !gridOffer_->gridFor)
         return;
     const auto grid = gridOffer_->gridFor(name);
-    curve_.setGrid(grid);
-    curve_.setSnapToGrid(grid.has_value());
+    applyCurveGrid(grid);
     if (remember)
         shapewindowprefs::saveText(adapter_->getApplicationProperties(),
                                    shapewindowprefs::gridKey(adapter_->getPreferenceKind()),
                                    grid.has_value() ? name : juce::String());
+}
+
+void ShapeListEditor::applyCurveGrid(const std::optional<CurveEditorComponent::CurveGrid>& grid) {
+    curve_.setGrid(grid);
+    curve_.setSnapToGrid(grid.has_value());
 }
 
 /** Off paints nothing extra: the curve editor has no backdrop painter and the tick is stopped. */

@@ -5,8 +5,9 @@
 // GUI, no locks, no allocation outside renderTable's own fixed-size out-param.
 #pragma once
 
-#include "Modules/Envelope/EnvelopeGenerator.h"
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <juce_core/juce_core.h>
 #include <vector>
 
