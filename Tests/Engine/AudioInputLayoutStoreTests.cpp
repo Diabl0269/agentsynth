@@ -175,3 +175,35 @@ TEST(DeviceInputEnableTest, ToggleOneJackKeepsTheOthersAsTheyWere) {
     EXPECT_FALSE(off.inputChannels[1]);
     EXPECT_TRUE(off.inputChannels[2]) << "a stereo input switches both jacks together";
 }
+
+TEST(AudioInputLayoutStoreTest, ADevicesRateBufferAndOutputsSurviveTheJsonRoundTrip) {
+    AudioInputLayoutStore store;
+    store.setDeviceSettings(kType, "AirPods Pro", {48000.0, 256, 0b11});
+    AudioInputLayoutStore loaded;
+    loaded.loadJson(store.toJson());
+    const auto settings = loaded.deviceSettings(kType, "AirPods Pro");
+    EXPECT_EQ(settings.sampleRate, 48000.0);
+    EXPECT_EQ(settings.bufferSize, 256);
+    EXPECT_EQ(settings.outputMask, 0b11u);
+}
+
+TEST(AudioInputLayoutStoreTest, ADeviceNeverRecordedHasNoSettingsAndAnOldFileLoadsWithoutThem) {
+    AudioInputLayoutStore store;
+    EXPECT_EQ(store.deviceSettings(kType, kVolt), AudioInputLayoutStore::DeviceSettings{});
+    store.loadJson(R"json({"version":1,"interfaces":[{"type":"CoreAudio","name":"Volt 2 (studio)","lastUsed":5,)json"
+                   R"json("paired":[0],"names":{"0":"Vocal"}}]})json");
+    ASSERT_TRUE(store.has(kType, kVolt));
+    EXPECT_EQ(store.deviceSettings(kType, kVolt), AudioInputLayoutStore::DeviceSettings{});
+    EXPECT_TRUE(store.isPaired(kType, kVolt, 0)) << "the old fields still load";
+}
+
+TEST(AudioInputLayoutStoreTest, RecordingTheSameSettingsAgainSavesNothingAndForgetDropsThem) {
+    AudioInputLayoutStore store;
+    int saves = 0;
+    store.onChange = [&] { ++saves; };
+    store.setDeviceSettings(kType, kVolt, {96000.0, 128, 0b1111});
+    store.setDeviceSettings(kType, kVolt, {96000.0, 128, 0b1111});
+    EXPECT_EQ(saves, 1);
+    store.forget(kType, kVolt);
+    EXPECT_EQ(store.deviceSettings(kType, kVolt), AudioInputLayoutStore::DeviceSettings{});
+}

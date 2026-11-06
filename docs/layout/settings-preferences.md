@@ -149,10 +149,13 @@ The Device section is built on `AudioDeviceManager` and `AudioDeviceSetup` direc
 Bluetooth MIDI button, no input level meter beside the input device, no "Reset device" button, and outputs are one
 tick per channel instead of a channel-pair list.
 
-Picking an output or input device asks the new device for its own sample rate and buffer size (`0` in the setup)
-instead of re-using the old device's, which is what a Bluetooth output such as AirPods needs to open. If the open
-still fails, a dialog shows the error and the boxes re-read the real state, so "No device" is never shown without
-a reason.
+**Switching device.** An output pick opens the device with what the user last had on it (sample rate, buffer size and
+output channels, saved per device by `AudioEngine::rememberOpenDeviceSettings` whenever the user's own setup changes,
+never for a change the system made). A device never used opens with its own defaults (`0` rate and buffer, default
+channels), which is what a Bluetooth output such as AirPods needs. Remembered values that no longer open fall back to
+the defaults; if the device still will not open, the previous device is opened again and `onOpenFailed` (an alert
+unless a test sets it) names the device and JUCE's error. An input pick keeps the outputs as they are. "No device"
+is therefore never shown without a reason.
 
 **Inputs table.** Columns Jacks, Pair, Name, Kind, Level, Use; one row per mono jack or per paired stereo input, up
 to 8 jacks. The chain button spans the two rows of a pair and joins them into one stereo input (a cyan bar marks a
@@ -167,7 +170,7 @@ in use ("in use · N inputs named"), a grey dot and "not connected · names kept
 each with a "Forget <name>" link except the one in use.
 
 **Where the layout lives.** `AudioInputLayoutStore` (Core, `Source/AudioEngine/`) is keyed by device type plus
-device name and holds pairs, names and last-used time. It is pure data with no JUCE audio calls; `MainComponent`
+device name and holds pairs, names, the device's last rate, buffer size and output channels, and last-used time. It is pure data with no JUCE audio calls; `MainComponent`
 persists it as JSON under the user setting `audioInputLayout` and republishes the timeline when it changes. An
 entry is never pruned except by Forget. The tab reads everything through the `AudioSettingsSource` seam
 (`AudioSettingsSource.h`); `MainComponentAudioSettingsSource` answers it from the engine, and tests use a fake.

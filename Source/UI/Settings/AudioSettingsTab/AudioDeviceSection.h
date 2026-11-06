@@ -2,6 +2,7 @@
 
 #include "UI/Settings/AudioSettingsTab/AudioSettingsSection.h"
 #include "UI/Settings/AudioSettingsTab/AudioSettingsSource.h"
+#include <functional>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <memory>
 
@@ -17,6 +18,9 @@ public:
     void refresh() override;
     void resized() override;
 
+    /** Called with the picked device's name and JUCE's error when it will not open; unset, an alert shows them. */
+    std::function<void(const juce::String& deviceName, const juce::String& error)> onOpenFailed;
+
     juce::ComboBox& getOutputBoxForTest() { return output_; }
     juce::ComboBox& getSampleRateBoxForTest() { return rate_; }
     juce::TextButton& getTestButtonForTest() { return test_; }
@@ -24,6 +28,8 @@ public:
 private:
     void populate();
     void applyDeviceChoice(bool isInput);
+    juce::String openPicked(juce::AudioDeviceManager::AudioDeviceSetup setup,
+                            const synth::AudioInputLayoutStore::DeviceSettings& remembered, bool isInput);
     int visibleRows() const;
 
     juce::AudioDeviceManager& deviceManager_;

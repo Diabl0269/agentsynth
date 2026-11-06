@@ -466,6 +466,8 @@ public:
     synth::AudioInputLayoutStore& getInputLayoutStore() noexcept { return inputLayout_; }
     // MESSAGE THREAD. Records the interface that is open now as used (a first sighting gets an empty entry).
     void noteOpenInterface();
+    // MESSAGE THREAD, Standalone only. Call for a setup the user chose, never for a change the system made.
+    void rememberOpenDeviceSettings();
     // Takes recorded straight from the input; their WAVs are finalised by shutdown().
     synth::InputTakeRecorder& getInputRecorder() noexcept { return inputRecorder_; }
 

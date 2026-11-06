@@ -30,11 +30,23 @@ public:
     static constexpr int kMaxJacks = 8;
     static constexpr int kMaxPairs = kMaxJacks / 2;
 
+    // What the user last had open on an output device. A zero field means "never recorded": the device then opens
+    // at its own default for it.
+    struct DeviceSettings {
+        double sampleRate = 0.0;
+        int bufferSize = 0;
+        juce::uint32 outputMask = 0; // bit c set = output channel c is on
+        bool operator==(const DeviceSettings& other) const noexcept {
+            return sampleRate == other.sampleRate && bufferSize == other.bufferSize && outputMask == other.outputMask;
+        }
+    };
+
     struct Entry {
         juce::String deviceType;
         juce::String deviceName;
         std::set<int> pairedPairs;         // pair p = jacks 2p and 2p+1
         std::map<int, juce::String> names; // by the input's first jack
+        DeviceSettings settings;
         juce::int64 lastUsedMs = 0;
     };
 
@@ -59,6 +71,11 @@ public:
     juce::String getName(const juce::String& deviceType, const juce::String& deviceName, int firstJack) const;
     void setName(const juce::String& deviceType, const juce::String& deviceName, int firstJack,
                  const juce::String& name);
+    /** All zero for a device never recorded. */
+    DeviceSettings deviceSettings(const juce::String& deviceType, const juce::String& deviceName) const;
+    /** Saves nothing and notifies nobody when the values are what is already stored. */
+    void setDeviceSettings(const juce::String& deviceType, const juce::String& deviceName,
+                           const DeviceSettings& settings);
     /** Removes only this interface; false when it was not there. */
     bool forget(const juce::String& deviceType, const juce::String& deviceName);
 
