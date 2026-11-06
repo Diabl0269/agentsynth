@@ -113,9 +113,10 @@ WelcomeScreenComponent::WelcomeScreenComponent() {
     contributeLabel.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.7f));
     addAndMakeVisible(contributeLabel);
 
-    contributeButton.setButtonText(juce::String(juce::CharPointer_UTF8("\xe2\x99\xa5 Contribute...")));
-    contributeButton.setTooltip("Opens agentsynth.app/contribute in your browser: ways to help build Agent Synth.");
-    contributeButton.setTitle("Contribute");
+    contributeButton.setButtonText(juce::String(juce::CharPointer_UTF8("\xe2\x99\xa5 Help build Agent Synth")));
+    contributeButton.setTooltip("Agent Synth is free and open source, built by one person. Contributing helps me spend "
+                                "more time building it. Opens agentsynth.app/contribute in your browser.");
+    contributeButton.setTitle("Help build Agent Synth");
     contributeButton.setDescription("Opens the Agent Synth contribute page in your browser");
     addAndMakeVisible(contributeButton);
     contributeButton.onClick = [this] {

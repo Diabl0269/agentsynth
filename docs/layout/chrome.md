@@ -550,7 +550,7 @@ toolbar and canvas hidden underneath. Reopening it from the Help menu focuses th
 Escape action only in the dismissible mode above; the launch screen has no cancel, only a choice of how to start.
 
 Between the Recent Projects list and the footer the card carries a low-key contribute line and a
-"Contribute..." button. It fires `onContributeRequested`, which `MainComponent` wires to
+"Help build Agent Synth" button. It fires `onContributeRequested`, which `MainComponent` wires to
 `openContributePage()` (the same `kContributeUrl` page as `AppCommands::contribute`) without hiding
 the overlay, and it shows whenever the overlay is shown.
 
