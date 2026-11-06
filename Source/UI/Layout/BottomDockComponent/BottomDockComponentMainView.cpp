@@ -173,6 +173,20 @@ juce::Rectangle<int> BottomDockComponent::getCanvasBodyBounds() const {
     return getLocalBounds().withTrimmedTop(kTabStripHeight);
 }
 
+// The tab strip's row under the resize handle, right-aligned: the tabs keep everything left of it.
+juce::Rectangle<int> BottomDockComponent::getStripAccessoryBounds() const {
+    if (!isCanvasBodyShowing() || stripAccessoryWidth_ <= 0)
+        return {};
+    auto row = getLocalBounds().removeFromTop(kTabStripHeight).withTrimmedTop(PanelResizeHandle::kHeight);
+    return row.removeFromRight(juce::jmin(stripAccessoryWidth_, row.getWidth()));
+}
+
+void BottomDockComponent::setStripAccessoryWidth(int width) {
+    width = juce::jmax(0, width);
+    if (std::exchange(stripAccessoryWidth_, width) != width)
+        resized();
+}
+
 // The canvas shows through the dock's body (it is a sibling underneath, not a child), so a click there
 // belongs to the canvas.
 bool BottomDockComponent::hitTest(int x, int y) { return !getCanvasBodyBounds().contains(x, y); }

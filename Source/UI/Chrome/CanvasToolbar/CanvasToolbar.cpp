@@ -14,6 +14,7 @@ constexpr int kButtonGap = 2;
 constexpr int kEdgeInset = 6;
 constexpr int kButtonInset = 0;
 constexpr int kRingOutset = 1;
+constexpr int kStripChipWidth = 28; // ToolbarButton::getPreferredWidth() of an InlineStrip button with no caption
 } // namespace
 
 CanvasToolbar::CanvasToolbar() {
@@ -57,9 +58,36 @@ void CanvasToolbar::setIconOnly(bool iconOnly) {
     resized();
 }
 
+bool CanvasToolbar::setInStrip(bool inStrip) {
+    if (inStrip_ == inStrip)
+        return false;
+    inStrip_ = inStrip;
+    for (auto* b : {&add_, &autoArrange_, &minimap_, &matrix_})
+        b->setLayout(inStrip ? ToolbarButtonLayout::InlineStrip : ToolbarButtonLayout::Stacked);
+    resized();
+    repaint();
+    return true;
+}
+
+int CanvasToolbar::stripWidth() noexcept {
+    return NumSlots * kStripChipWidth + (NumSlots - 1) * kButtonGap + kEdgeInset;
+}
+
 // Left-aligned in a row of fixed-width buttons. The width follows the caption mode, not the button text, so a
-// layout pass before the owner has set any text still lands where the final one will.
+// layout pass before the owner has set any text still lands where the final one will. In the dock's tab strip the
+// chips fill the row's height and the strip's own right edge inset trails them.
 void CanvasToolbar::resized() {
+    if (inStrip_) {
+        int sx = 0;
+        for (int slot = 0; slot < NumSlots; ++slot) {
+            auto& b = buttonAt((Slot)slot);
+            if (!b.isVisible())
+                continue;
+            b.setBounds(sx, 0, kStripChipWidth, getHeight());
+            sx += kStripChipWidth + kButtonGap;
+        }
+        return;
+    }
     const int width = iconOnly_ ? kIconOnlyWidth : kLabelledWidth;
     int x = kEdgeInset;
     for (int slot = 0; slot < NumSlots; ++slot) {
@@ -72,6 +100,8 @@ void CanvasToolbar::resized() {
 }
 
 void CanvasToolbar::paint(juce::Graphics& g) {
+    if (inStrip_)
+        return; // the dock's tab strip is the ground
     auto* lnf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     if (lnf == nullptr) {
         g.fillAll(juce::Colour(0xff0B0D10));

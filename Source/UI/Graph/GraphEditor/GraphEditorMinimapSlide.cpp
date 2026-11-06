@@ -1,8 +1,9 @@
 // GraphEditorMinimapSlide.cpp
 //
-// The mini map's show/hide: it fades in and slides out of its bottom-left corner, and fades back and
-// slides into it, through PanelSlide + AnimationDriver (docs/layout/animation.md). resized() and every
-// frame call layoutMinimap(), the single geometry authority, so a resize mid-slide stays correct.
+// The mini map's show/hide (what it draws is buildMinimapModel, in GraphEditorMacroCards.cpp): it fades in and slides
+// out of its bottom-left corner, and fades back and slides into it, through PanelSlide + AnimationDriver
+// (docs/layout/animation.md). resized() and every frame call layoutMinimap(), the single geometry authority, so a
+// resize mid-slide stays correct.
 
 #include "GraphEditor.h"
 #include "UI/Layout/ReducedMotion.h"

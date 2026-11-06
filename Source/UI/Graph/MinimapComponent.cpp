@@ -6,6 +6,7 @@ namespace synth::ui {
 
 //==============================================================================
 MinimapComponent::MinimapComponent() {
+    setComponentID("minimap");
     setInterceptsMouseClicks(true, false);
     updateTooltip();
 }

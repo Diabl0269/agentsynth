@@ -60,7 +60,7 @@ TEST_F(GraphEditorTest, SetMinimapVisibleFalseHidesChildComponent) {
     EXPECT_FALSE(editor.getMinimap().isVisible());
 }
 
-// Below the 480x360 auto-hide threshold the minimap child must not be visible even though the
+// Below the 240x160 auto-hide floor the minimap child must not be visible even though the
 // user preference is untouched; growing back above the threshold restores it.
 TEST_F(GraphEditorTest, MinimapAutoHidesBelowThresholdAndPreferenceSurvives) {
     AudioEngine engine;
@@ -68,7 +68,7 @@ TEST_F(GraphEditorTest, MinimapAutoHidesBelowThresholdAndPreferenceSurvives) {
     editor.setSize(800, 600);
     ASSERT_TRUE(editor.getMinimap().isVisible());
 
-    editor.setSize(400, 300); // below kMinEditorW/H
+    editor.setSize(200, 120); // below the floor
     EXPECT_TRUE(editor.isMinimapVisible()) << "preference must survive an auto-hide";
     EXPECT_FALSE(editor.getMinimap().isVisible());
 

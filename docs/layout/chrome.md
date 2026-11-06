@@ -194,15 +194,23 @@ opens the [Add list](../timeline/add-track.md#the-add-list) with module groups f
 tooltips and keys as before; `MainComponent` wires their `onClick`, titles and tooltips in `applyToolbarIcons()`),
 is a `MainComponent` child like the canvas, and is laid out by `MainComponent::layoutCanvas()`: the top
 `CanvasToolbar::kHeight` (44 px, the top bar's height, so a captioned button gets the same room as on the top bar) of the main area when the
-canvas is the main view, or of the Canvas tab body when it is a panel tab (the canvas there is 44 px shorter). In a rectangle so short that 44 px would be over half of it, the strip takes half, so the canvas never vanishes. It is
-visible exactly when the canvas is, so it moves with it in a swap and has no animation of its own. The strip is the
+canvas is the main view. In a rectangle so short that 44 px would be over half of it, the strip takes half, so the canvas never vanishes.
+**When the canvas is a panel tab there is one header, not two:** the three buttons shrink to caption-less
+`ToolbarButtonLayout::InlineStrip` chips (28 px each, names and shortcuts in the tooltips and screen-reader titles) and sit at the right end of the dock's tab
+strip, in the 19 px row under the resize handle (`CanvasToolbar::setInStrip`, `stripWidth()`). The dock reserves that end
+(`BottomDockComponent::setStripAccessoryWidth`, `getStripAccessoryBounds`: the tabs share what is left) and the canvas takes the
+whole tab body. The strip is raised directly above the dock in the child order (`raiseAboveBottomDock`) so the tab strip does not paint over it, and the strip draws no ground or rule of its own there.
+Swapping the canvas into the main area gives the captions and the 44 px row back (`applyToolbarLabels`). It is
+visible exactly when the canvas is, so it moves with it in a swap and has no animation of its own. Guard:
+`MainViewSwapLayoutTest.*` (`Tests/UI/Layout/BottomDockCanvasTabTests.cpp`) walks every main view x dock tab x window size and fails on any overlap between the canvas, its buttons, the tab buttons and the main-view holder. The strip is the
 same height with or without captions, so toggling Show button labels never moves the canvas. Buttons are left
 aligned, 84 px wide with captions and 32 px without.
 
 The canvas keys reveal a hidden canvas first: Cmd+L, Cmd+K and Cmd+M call `ensureCanvasShowing()` before acting
 (`MainComponentCommandTable.cpp`), and adding a module, plugin or snippet from the Library with a click or Return
 does the same (drags land on the canvas, so they already show it). The greyed-out Minimap keeps its
-"Needs a taller canvas" tooltip ([minimap](minimap.md#placement-sizing-and-auto-hide)).
+"Needs a taller canvas" tooltip, now only for a canvas under 240x160
+([minimap](minimap.md#placement-sizing-and-auto-hide)).
 
 **Keyboard.** The strip is one Tab stop, the "canvasToolbar" focus region (right before Canvas, wherever the canvas is: the main
 area or the bottom panel's Canvas tab; open while the strip is visible), with the same roving ring as the top bar: Left/Right/Home/End move across the visible, enabled

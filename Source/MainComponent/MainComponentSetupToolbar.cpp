@@ -314,6 +314,10 @@ void MainComponent::applyToolbarLabels(bool iconOnly) {
         button->setButtonText(iconOnly ? juce::String() : label);
     }
     canvasToolbar_.setIconOnly(iconOnly);
+    // In the dock's tab strip the row is too short for a caption: the chips alone, their names in the tooltips.
+    if (canvasToolbar_.isInStrip())
+        for (auto* button : {&autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton})
+            button->setButtonText({});
     // The Timeline and Mixer panels follow the preference alone: narrow mode is about the top bar's width. The mixer
     // is the same panel in the dock, its own panel or a detached window.
     timelinePanel.setToolbarLabelsShown(toolbarLabelsShown_);

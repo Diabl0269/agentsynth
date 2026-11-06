@@ -56,10 +56,15 @@ class MinimapComponent
 public:
     MinimapComponent();
 
-    /** False when an editor of this size is too small to show the map without swallowing the view:
-     *  the owner hides the map (its preference is untouched) and greys out the toggle. */
+    /** Smallest map the owner draws (it is a quarter of the editor in each direction, so the floor
+     *  below follows from these two). */
+    static constexpr int kMinMapWidth = 60;
+    static constexpr int kMinMapHeight = 40;
+
+    /** False only when an editor this small could not hold a legible map: the owner then hides the map
+     *  (its preference is untouched) and greys out the toggle. Anything bigger shrinks the map to fit. */
     static bool fitsEditor(int editorWidth, int editorHeight) noexcept {
-        return editorWidth >= 480 && editorHeight >= 360;
+        return editorWidth >= kMinMapWidth * 4 && editorHeight >= kMinMapHeight * 4;
     }
 
     /** Replaces the model. Repaints ONLY when the new model differs from the current one —

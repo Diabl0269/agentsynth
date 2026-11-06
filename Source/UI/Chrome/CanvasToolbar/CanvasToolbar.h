@@ -35,6 +35,14 @@ public:
     void setIconOnly(bool iconOnly);
     bool isIconOnly() const noexcept { return iconOnly_; }
 
+    // True while the strip sits in the dock's tab strip (the canvas is a panel tab): the buttons shrink to
+    // InlineStrip chips with no caption, the strip draws no ground or rule of its own, and it is only as wide as
+    // its buttons. Returns whether the mode changed; the owner then re-applies the captions (none in the strip).
+    bool setInStrip(bool inStrip);
+    bool isInStrip() const noexcept { return inStrip_; }
+    // The width the strip needs in the dock's tab strip: its three chips and a right edge inset.
+    static int stripWidth() noexcept;
+
     void resized() override;
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
@@ -65,6 +73,7 @@ private:
     ToolbarButton minimap_{"toggleMinimap"};
     ToolbarButton matrix_{"toggleMatrix"};
     bool iconOnly_ = false;
+    bool inStrip_ = false;
     int focusedSlot_ = -1;
 
     JUCE_LEAK_DETECTOR(CanvasToolbar)

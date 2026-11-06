@@ -1,0 +1,21 @@
+# Check: with the canvas as a bottom-panel tab, its three buttons (Auto-arrange, Minimap, Mod matrix) sit in the tab strip's
+# row, so the canvas shows one header, not a tab strip over a toolbar; swapped back into the main area, the captioned
+# toolbar row returns.
+#
+# What a user does: opens a project, presses Opt+Cmd+1 (Show Tab 1 in the Main Area: the Timeline takes the main area and
+# the canvas becomes a tab), looks at the Canvas tab, then presses Opt+Cmd+1 again to put the canvas back.
+motion: true
+record: true
+save_project: canvas-header-swap
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - screenshot: {name: 1-canvas-main}
+  - key: {keys: alt+cmd+1}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - screenshot: {name: 2-canvas-in-tab-strip}
+  - key: {keys: alt+cmd+1}
+  - wait: {}
+  - screenshot: {name: 3-canvas-main-again}

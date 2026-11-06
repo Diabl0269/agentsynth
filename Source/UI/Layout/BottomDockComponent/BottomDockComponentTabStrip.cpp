@@ -262,6 +262,7 @@ void BottomDockComponent::resized() {
     // (drag-to-reorder) strip order -- see layoutTabButtons(). A reorder in flight then shifts the
     // buttons to their animated places.
     tabButtonsArea_ = tabStrip;
+    tabButtonsArea_.removeFromRight(getStripAccessoryBounds().getWidth());
     stripFocus_.setBounds(tabButtonsArea_);
     layoutTabButtons();
     applyReorderOffsets();

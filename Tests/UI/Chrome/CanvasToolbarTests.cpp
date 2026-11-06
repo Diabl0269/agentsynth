@@ -184,8 +184,9 @@ TEST_F(CanvasToolbarWindowTest, ItTravelsWithTheCanvasIntoTheBottomPanel) {
     ASSERT_TRUE(canvas().isVisible());
     ASSERT_TRUE(strip().isVisible());
     const auto body = dock().getCanvasBodyBounds() + dock().getPosition();
-    EXPECT_EQ(strip().getBounds(), body.withHeight(CanvasToolbar::kHeight)) << "the body's top row";
-    EXPECT_EQ(canvas().getBounds(), body.withTrimmedTop(CanvasToolbar::kHeight));
+    EXPECT_EQ(strip().getBounds(), dock().getStripAccessoryBounds() + dock().getPosition()) << "the tab strip's end";
+    EXPECT_EQ(strip().getWidth(), CanvasToolbar::stripWidth());
+    EXPECT_EQ(canvas().getBounds(), body) << "the whole body: no second header row";
 
     dock().setActiveTab(Tab::Mixer);
     EXPECT_FALSE(strip().isVisible()) << "another tab: the canvas and its toolbar are both gone";
@@ -193,6 +194,34 @@ TEST_F(CanvasToolbarWindowTest, ItTravelsWithTheCanvasIntoTheBottomPanel) {
     mc_->setMainViewForTest(Tab::Canvas);
     EXPECT_TRUE(strip().isVisible());
     EXPECT_EQ(strip().getBottom(), canvas().getY());
+}
+
+TEST_F(CanvasToolbarWindowTest, InTheTabStripItIsStillOneTabStopWithTheSameRingAndNames) {
+    mc_->setMainViewForTest(Tab::Timeline);
+    mc_->ensureCanvasShowing();
+    ASSERT_TRUE(strip().isInStrip());
+    const auto* region = mc_->getFocusRegionsForTest().findById("canvasToolbar");
+    ASSERT_NE(region, nullptr);
+    EXPECT_EQ(region->root, &strip());
+    EXPECT_TRUE(region->isCurrentlyOpen());
+    EXPECT_TRUE(strip().getWantsKeyboardFocus());
+    for (int slot = 0; slot < CanvasToolbar::NumSlots; ++slot) {
+        auto& b = strip().buttonAt((CanvasToolbar::Slot)slot);
+        EXPECT_FALSE(b.getWantsKeyboardFocus()) << "the ring is the only stop";
+        EXPECT_FALSE(b.getTitle().isEmpty()) << "the chip keeps its screen-reader name";
+        EXPECT_FALSE(b.getTooltip().isEmpty()) << "the chip's tooltip names it, since it has no caption";
+        EXPECT_GE(b.getWidth(), 24);
+        EXPECT_GE(b.getHeight(), 17) << "a chip that fits the strip's row";
+    }
+    EXPECT_EQ(strip().getFocusedSlot(), (int)CanvasToolbar::Add);
+    EXPECT_TRUE(press(strip(), juce::KeyPress::rightKey));
+    EXPECT_TRUE(press(strip(), juce::KeyPress::rightKey));
+    EXPECT_EQ(strip().getFocusedSlot(), (int)CanvasToolbar::Minimap);
+    EXPECT_FALSE(strip().getFocusedButtonName().isEmpty());
+    int clicks = 0;
+    strip().minimapButton().onClick = [&] { ++clicks; };
+    EXPECT_TRUE(press(strip(), juce::KeyPress::returnKey));
+    EXPECT_EQ(clicks, 1) << "Return presses the ringed chip in the strip too";
 }
 
 TEST_F(CanvasToolbarWindowTest, TheCanvasKeysBringAHiddenCanvasIntoViewFirst) {
@@ -258,13 +287,23 @@ TEST_F(CanvasToolbarWindowTest, ANarrowWindowStaysIconOnlyWhateverThePreferenceS
     EXPECT_TRUE(strip().isIconOnly());
 }
 
-TEST_F(CanvasToolbarWindowTest, TheGreyedMinimapKeepsItsExplanationAndIsNotATabStop) {
+TEST_F(CanvasToolbarWindowTest, AShortCanvasKeepsTheMinimapButtonOn) {
     mc_->setMainViewForTest(Tab::Timeline);
     mc_->ensureCanvasShowing();
     dock().setActiveTab(Tab::Canvas);
     mc_->setSize(1400, 420);
-    if (!canvas().isMinimapSuppressedBySize())
-        GTEST_SKIP() << "the canvas is tall enough here to keep its minimap";
+    EXPECT_FALSE(canvas().isMinimapSuppressedBySize());
+    EXPECT_TRUE(strip().minimapButton().isEnabled());
+    EXPECT_TRUE(strip().minimapButton().getTooltip().contains("Minimap"));
+}
+
+TEST_F(CanvasToolbarWindowTest, TheGreyedMinimapKeepsItsExplanationAndIsNotATabStop) {
+    mc_->setMainViewForTest(Tab::Timeline);
+    mc_->ensureCanvasShowing();
+    dock().setActiveTab(Tab::Canvas);
+    mc_->setSize(300, 200);
+    ASSERT_TRUE(canvas().isMinimapSuppressedBySize())
+        << "canvas " << canvas().getWidth() << "x" << canvas().getHeight();
     EXPECT_FALSE(strip().minimapButton().isEnabled());
     EXPECT_EQ(strip().minimapButton().getTooltip(), "Needs a taller canvas");
     strip().focusSlot(CanvasToolbar::AutoArrange);

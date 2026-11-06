@@ -549,43 +549,6 @@ void GraphEditor::zoomAroundCentre(float wheelDelta) {
     applyZoomAt(wheelDelta, getLocalBounds().getCentre().toFloat());
 }
 
-synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
-    synth::ui::MinimapModel model;
-
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    static const synth::theme::Colors fallbackColors{};
-    const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
-
-    for (auto* comp : content.getModules()) {
-        if (comp == nullptr || comp->getModule() == nullptr)
-            continue;
-
-        // Per-category theme colour, the same source buildVisibleCables()/colourForCable() use for
-        // "By source module" cable colouring — there is no cheap per-instance colour on
-        // ModuleComponent itself, but category IS available cheaply via ModuleBase::getModuleType().
-        auto category = synth::ui::ModuleCategory::Utility;
-        if (auto* mb = dynamic_cast<ModuleBase*>(comp->getModule()))
-            category = synth::ui::categoryFor(mb->getModuleType());
-
-        synth::ui::MinimapModel::Node node;
-        node.bounds = comp->getBounds().toFloat();
-        node.colour = synth::ui::themeColourForCategory(colors, category);
-        node.selected = isNodeSelected(comp->getNodeId());
-        model.nodes.push_back(node);
-    }
-
-    for (const auto& cable : buildVisibleCables()) {
-        synth::ui::MinimapModel::Cable mc;
-        mc.p1 = cable.p1;
-        mc.p2 = cable.p2;
-        mc.colour = colourForCable(cable);
-        model.cables.push_back(mc);
-    }
-
-    model.viewport = getVisibleCanvasRect();
-    return model;
-}
-
 // Scroll + zoom the viewport so every module component is on-screen, clamped to the
 // same [0.1, 2.0] range as wheel zoom. Called after a patch is loaded so the just-loaded
 // modules are not left off-screen at their saved coordinates; a no-op when there are no

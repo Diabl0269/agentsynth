@@ -24,18 +24,22 @@ at startup) the toggle lands on its final state before it returns. Tests reach t
 
 ## Placement, sizing and auto-hide
 
-Positioned **bottom-left** with a 12 px margin, sized `min(220, w/4) x min(150, h/4)`.
+Positioned **bottom-left** with a 12 px margin, sized `min(220, w/4) x min(150, h/4)`: it shrinks with a short or
+narrow canvas (a quarter of each side), so the map stays useful exactly where the pane is too small to see the whole
+graph.
 
 **Bottom-left is deliberate**: the mod-matrix panel occupies the right-hand 600 px.
 
-Below a 480x360 editor the minimap auto-hides. `GraphEditor::resized()` recomputes
-`minimapVisible && fits` on every layout pass against **absolute floors** — a fraction-of-self test
-such as `w/4 * 2 <= w` is always true, so it would never actually hide anything. This never clobbers
-the user's preference: `minimapVisible` still records what they asked for, and the map reappears the
-moment the window grows back past the floor. `GraphEditor::isMinimapSuppressedBySize()` reports the floor
+Only below a 240x160 editor (the smallest legible map, `kMinMapWidth` x `kMinMapHeight` = 60x40, is a quarter of it)
+does the minimap auto-hide. `GraphEditor::resized()` recomputes `minimapVisible && fits` on every layout pass against
+**absolute floors** — a fraction-of-self test such as `w/4 * 2 <= w` is always true, so it would never actually hide
+anything. This never clobbers the user's preference: `minimapVisible` still records what they asked for, and the map
+reappears the moment the pane grows back past the floor. `GraphEditor::isMinimapSuppressedBySize()` reports the floor
 (`MinimapComponent::fitsEditor`): while it holds, the canvas toolbar's Minimap button is greyed out with the tooltip
 "Needs a taller canvas" (re-evaluated on every `MainComponent` layout pass), and is the normal toggle otherwise.
-The canvas can be that small when it is a bottom-panel tab.
+A short canvas (a tall bottom panel) is well above the floor, so there the button stays on and the map shows, smaller.
+Tests: `BottomDockCanvasTabTest.TheMinimapStaysAvailableInAShortCanvasAndShrinksToFit`, `MinimapFloor.*`,
+`CanvasToolbarWindowTest.AShortCanvasKeepsTheMinimapButtonOn`.
 
 ## What it draws
 

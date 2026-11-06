@@ -57,8 +57,9 @@ struct ToolbarIconArt {
 ToolbarIconArt splitToolbarIconArt(std::unique_ptr<juce::Drawable> icon);
 
 // Where a button puts its caption: Stacked is the top bar's (caption under the chip). The Inline layouts put it to
-// the chip's right and keep the button no taller than the chip; InlineCompact has the smaller chip of the mixer bar.
-enum class ToolbarButtonLayout { Stacked, Inline, InlineCompact };
+// the chip's right and keep the button no taller than the chip; InlineCompact has the smaller chip of the mixer bar;
+// InlineStrip is the smallest, for a row only 19 px tall (the dock tab strip under its resize handle).
+enum class ToolbarButtonLayout { Stacked, Inline, InlineCompact, InlineStrip };
 
 // The chip, its glyph and the inline caption's metrics for `layout`, in px.
 struct ToolbarChipSpec {
