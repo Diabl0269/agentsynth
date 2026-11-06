@@ -2,10 +2,11 @@
 //
 // The Sections strip's keyboard. The strip takes focus (a click, or Tab) and the selected block is the focused one:
 // Left/Right/Home/End walk the blocks, Return or the Rename key renames, Cmd+D places the section again after it,
-// Option+Left/Right (the clip move chord) moves it one section earlier or later, Delete or Backspace deletes it and its
-// bars, and the open-menu key (Shift+F10) opens its menu through KeyboardContextMenuProvider. Left/Right,
-// Option+Left/Right and Cmd+D are the same chords as the clip and track-row verbs, so they resolve through those
-// actions rather than a second binding that would read as a conflict. Esc cancels a drag in flight.
+// Option+Left/Right (the clip move chord) moves it one section earlier or later, V opens its variation menu, Delete or
+// Backspace deletes it and its bars, and the open-menu key (Shift+F10) opens its menu through
+// KeyboardContextMenuProvider. Left/Right, Option+Left/Right and Cmd+D are the same chords as the clip and track-row
+// verbs, so they resolve through those actions rather than a second binding that would read as a conflict. Esc cancels
+// a drag in flight.
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
@@ -124,6 +125,10 @@ bool TimelineSectionStrip::keyPressed(const juce::KeyPress& key) {
     if (renameKey) {
         beginRenameSection(selected_);
         return renameEditor_ != nullptr;
+    }
+    if (key == plain('v')) {
+        openVariationMenu(selected_);
+        return true;
     }
     if (matchesKey("timelineDuplicateFocusedTrack", juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0), key)) {
         applySectionMenuChoice(selected_, SectionMenuChoice::PlaceAgainAfter);

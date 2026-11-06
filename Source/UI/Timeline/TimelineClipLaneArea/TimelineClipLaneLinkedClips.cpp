@@ -10,6 +10,7 @@
 #include "TimelineClipLaneInternal.h"
 
 #include "AppUndoManager.h"
+#include "Timeline/TimelineDoc/SectionVariationLetter.h"
 #include <algorithm>
 
 namespace synth::ui {
@@ -47,17 +48,42 @@ void TimelineClipLaneArea::paintLinkMark(juce::Graphics& g, juce::Rectangle<int>
 
 juce::String TimelineClipLaneArea::getTooltip() { return linkTooltipAt(getMouseXYRelative()); }
 
-// Chorus, when `clip` starts inside a placement of a section that plays 3 times: such a clip is kept in step with the
-// other copies exactly like a linked one (docs/timeline/sections.md), so it draws the same mark.
+// Chorus, when `clip` starts inside a placement that shares this track's music with another placement of the section:
+// such a clip is kept in step with the other copies exactly like a linked one (docs/timeline/sections.md), so it
+// draws the same mark. A clip on a track its variation owns reports the variation instead (`own`), even when it plays
+// once.
 TimelineClipLaneArea::SectionFollow TimelineClipLaneArea::sectionFollowOf(const synth::Clip& clip) const {
     if (doc_ == nullptr)
         return {};
     const auto* placement = doc_->placementAt(clip.startBeat);
     const auto* section = placement != nullptr ? doc_->getSection(placement->section) : nullptr;
-    if (section == nullptr)
+    const auto* track = doc_->getTrackForClip(clip.id);
+    if (section == nullptr || track == nullptr)
         return {};
-    const int plays = (int)doc_->placementsOf(section->id).size();
+    const auto keyOf = [&](int letter) {
+        const auto* variation = doc_->getVariation(section->id, letter);
+        return letter != 0 && variation != nullptr && variation->ownTracks.count(track->id.value) != 0 ? letter : 0;
+    };
+    const int key = keyOf(placement->variation);
+    int plays = 0;
+    for (const auto id : doc_->placementsOf(section->id))
+        if (keyOf(doc_->getPlacement(id)->variation) == key)
+            ++plays;
+    if (key != 0)
+        return SectionFollow{section->name, plays, true, key};
     return plays > 1 ? SectionFollow{section->name, plays} : SectionFollow{};
+}
+
+juce::String TimelineClipLaneArea::sectionFollowTooltip(const SectionFollow& follow) {
+    if (follow.own) {
+        const auto name = follow.name + " " + synth::variationLetter(follow.letter);
+        if (follow.plays <= 1)
+            return "Belongs to " + name + ", the only one.";
+        return "Belongs to " + name + " (plays " + juce::String(follow.plays) + " times). Edit any " + name +
+               " to change them all.";
+    }
+    return "Follows " + follow.name + " (plays " + juce::String(follow.plays) + " times). Edit any " + follow.name +
+           " to change them all.";
 }
 
 juce::String TimelineClipLaneArea::linkTooltipAt(juce::Point<int> pos) const {
@@ -68,9 +94,8 @@ juce::String TimelineClipLaneArea::linkTooltipAt(juce::Point<int> pos) const {
         return {};
     // A clip in a repeated section says so first: that is the link the user can act on (it wins over the plain one).
     if (const auto* clip = doc_->getClip(hit->id)) {
-        if (const auto follow = sectionFollowOf(*clip); follow.plays > 1)
-            return "Follows " + follow.name + " (plays " + juce::String(follow.plays) + " times). Edit any " +
-                   follow.name + " to change them all.";
+        if (const auto follow = sectionFollowOf(*clip); follow.plays > 1 || follow.own)
+            return sectionFollowTooltip(follow);
     }
     const int others = doc_->countLinkedClips(hit->id);
     if (others <= 0)

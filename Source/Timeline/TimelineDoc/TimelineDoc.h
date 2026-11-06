@@ -230,12 +230,29 @@ struct Marker {
     juce::uint32 colourArgb = 0xffE0A33D; // amber; the editor overwrites this from the theme
 };
 
-// A named stretch of bars across every track. It plays at one or more placements; each placement holds the same music.
+// A placement's music, relative to its start and ignoring ids: clips by track, breakpoints by lane.
+struct PlacementContent {
+    std::map<std::int64_t, std::vector<Clip>> clips;
+    std::map<std::int64_t, std::vector<AutomationLane::Breakpoint>> points;
+};
+
+// One take of a section's music. Letter 0 (A) owns every track; any other variation holds only `ownTracks` itself
+// and shares every other track with A, so an edit to a shared track reaches every placement that shares it.
+// `stored` keeps the music while no placement plays the variation (all tracks for A, own tracks otherwise).
+struct SectionVariation {
+    int letter = 0;
+    std::set<std::int64_t> ownTracks;
+    PlacementContent stored;
+};
+
+// A named stretch of bars across every track. It plays at one or more placements; each placement plays one of the
+// section's variations, and placements that play the same variation hold the same music on the tracks it owns.
 struct Section {
     SectionId id;
     juce::String name;
     juce::uint32 colourArgb = 0xff4FC1FF;
     double lengthBeats = 16.0;
+    std::vector<SectionVariation> variations = std::vector<SectionVariation>(1); // never empty; [0] is letter 0
 };
 
 // One place a section plays: [startBeat, startBeat + the section's length). Placements never overlap.
@@ -243,16 +260,11 @@ struct SectionPlacement {
     PlacementId id;
     SectionId section;
     double startBeat = 0.0;
+    int variation = 0; // a letter present in its section
 };
 
 // What to do with the music already at a drop target.
 enum class SectionDropMode { MakeRoom, Cover };
-
-// A placement's music, relative to its start and ignoring ids: clips by track, breakpoints by lane.
-struct PlacementContent {
-    std::map<std::int64_t, std::vector<Clip>> clips;
-    std::map<std::int64_t, std::vector<AutomationLane::Breakpoint>> points;
-};
 
 // True when two clips hold the same music and settings, ignoring ids and link groups; startBeat is compared as given.
 bool sameClipContent(const Clip& a, const Clip& b);
@@ -288,6 +300,9 @@ public:
     static constexpr int kMaxMarkers = 1024;
     static constexpr int kMaxSections = 256;
     static constexpr int kMaxPlacements = 1024;
+    static constexpr int kMaxVariations = 26; // letters A..Z
+    // Clips held by variations no placement plays, across the whole document (they are not on any track).
+    static constexpr int kMaxStoredVariationClips = 100000;
     // Longest marker label the model holds. A label is a cue name, not a document: an over-long
     // one is REJECTED (by the mutation API, by fromVar and by synth::validateTimeline alike),
     // never truncated — truncating would silently store something other than what was asked for.
@@ -676,8 +691,8 @@ public:
     // Splits clips at both edges on every non-Automation track, then adds the section and its first placement.
     SectionId makeSection(double startBeat, double endBeat, const juce::String& name, juce::uint32 colourArgb,
                           double secondsPerBeat);
-    // Plays the section once more at atBeat with the same music as its first placement.
-    PlacementId placeSection(SectionId id, double atBeat, SectionDropMode mode, double secondsPerBeat);
+    // Plays the section once more at atBeat, playing variation `letter` (rejected when the section has none).
+    PlacementId placeSection(SectionId id, double atBeat, SectionDropMode mode, double secondsPerBeat, int letter = 0);
     // Moves a placement, music and all; the placement keeps its id.
     bool movePlacement(PlacementId id, double newStartBeat, SectionDropMode mode, double secondsPerBeat);
     // Removes the placement only; the section goes with its last placement.
@@ -688,6 +703,23 @@ public:
     SectionId makePlacementUnique(PlacementId id, const juce::String& newName, juce::uint32 newColourArgb);
     bool renameSection(SectionId id, const juce::String& name);
     bool setSectionColour(SectionId id, juce::uint32 colourArgb);
+    // Variations. A new one is a full copy of the placement's music that the placement then plays; returns its
+    // letter, or -1 on rejection (unknown placement, 26 variations).
+    int addVariation(PlacementId placement);
+    // Like addVariation, but the new variation owns only the placement's current own tracks plus the clip's track.
+    // -1 when the clip is in no placement.
+    int addVariationForTrack(ClipId clip);
+    // Rewrites only this placement's music to variation `letter`; false for the letter it already plays.
+    bool setPlacementVariation(PlacementId placement, int letter);
+    // setPlacementVariation on every placement of the section, as one mutation.
+    bool playVariationEverywhere(SectionId section, int letter);
+    // Placements playing it switch to A first. Rejected for A.
+    bool removeVariation(SectionId section, int letter);
+    const SectionVariation* getVariation(SectionId section, int letter) const;
+    // Calls `visit` for every clip held by a variation that no placement plays (its audio files must be kept).
+    void forEachStoredVariationClip(const std::function<void(const Clip&)>& visit) const;
+    // Rewrites the audio refs of those clips (and their stretch origins) through `rewrite`; false when none matched.
+    bool remapStoredAssetRefs(const std::map<juce::String, juce::String>& rewrite);
     // Turns each marker into a section up to the next marker (the last up to endBeat); returns placements made.
     int makeSectionsFromMarkers(double endBeat, const std::function<juce::uint32(int index)>& colourFor,
                                 double secondsPerBeat);
@@ -790,12 +822,21 @@ private:
     void dissolveLoneLinkGroups();
     void syncSections();
     void writeSections(juce::DynamicObject& root) const;
-    static bool readSections(const juce::DynamicObject& root, std::vector<Section>& sectionsOut,
-                             std::vector<SectionPlacement>& placementsOut, std::int64_t& nextIdOut);
+    static bool readSections(const juce::DynamicObject& root, const std::vector<Track>& parsedTracks,
+                             std::vector<Section>& sectionsOut, std::vector<SectionPlacement>& placementsOut,
+                             std::int64_t& nextIdOut);
     bool sectionsNeedSync() const;
     PlacementContent contentOf(double startBeat, double lengthBeats) const;
     double sectionLength(SectionId id) const;
     void stampContent(const PlacementContent& source, double targetStart, double length);
+    void stampTrack(Track& track, const PlacementContent& source, double targetStart, double length);
+    // Section variations (TimelineDocSectionVariations.cpp).
+    void refreshStoredVariations(Section& section);
+    PlacementContent variationContent(const Section& section, int letter) const;
+    bool switchPlacementVariation(PlacementId placement, int letter);
+    int newVariation(const SectionPlacement& placement, const std::set<std::int64_t>& ownTracks);
+    void forgetTrackInVariations(TrackId track);
+    void forgetLaneInVariations(LaneId lane);
     void eraseLanePoints(double startBeat, double endBeat);
     std::vector<TrackId> trackIds(bool includeAutomation) const;
     void removePlacementsOverlapping(double startBeat, double endBeat, PlacementId except);
@@ -817,6 +858,7 @@ private:
     int sectionSyncSuspended = 0;
     std::int64_t sectionStampCount = 0;
     std::vector<PlacementId> lastStampedPlacements;
+    std::set<std::int64_t> storedStale; // runtime only: sections whose variations' stored music needs a refresh
 
     std::int64_t nextTrackId = 1;
     std::int64_t nextClipId = 1;

@@ -16,6 +16,7 @@ target_sources(Core PRIVATE
     Source/Timeline/TimelineDoc/SectionPalette.h
     Source/Timeline/TimelineDoc/TimelineDocSections.cpp
     Source/Timeline/TimelineDoc/TimelineDocSectionSync.cpp
+    Source/Timeline/TimelineDoc/TimelineDocSectionVariations.cpp
     Source/Timeline/TimelineDoc/TimelineDocSectionSerialization.cpp
     Source/Timeline/TimelineValidatorSections.cpp
     Source/Timeline/TimelineValidatorSections.h

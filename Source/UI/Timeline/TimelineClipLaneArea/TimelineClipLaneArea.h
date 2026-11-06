@@ -334,6 +334,9 @@ public:
     // be unset, in which case the menu item is simply never offered (see showClipContextMenu). See
     // TimelineClipLaneEditTools.cpp for why this is a callback rather than a ClipContextChoice.
     std::function<void(synth::ClipId)> onRelinkAudioRequested;
+    // Fired after "New variation of this part" with the placement now playing the new variation and the message to
+    // show ("Verse B: Lead has its own part now. Switch with the B chip.").
+    std::function<void(synth::PlacementId, const juce::String&)> onVariationAdded;
 
     // ---- Render to audio track (see TimelineClipLaneRenderToAudio.cpp) ----
     // Which of these tracks have a mixer channel to render from. Unset means the menu items are never offered.
@@ -485,7 +488,8 @@ public:
         DuplicateLinked,
         MakeUnique,
         FitToKey,
-        FitSelectionToKey // every selected clip to its own key; the clicked clip alone when it is not in a selection
+        FitSelectionToKey, // every selected clip to its own key; the clicked clip alone when it is not in a selection
+        NewVariationOfPart // the clip's track becomes its own in a new variation of the section the clip is in
     };
 
     // The clip's context menu exactly as a right-click at `localPos` would show it (empty with no clip).
@@ -505,9 +509,13 @@ public:
     // The section a clip belongs to when that section plays more than once (the clip then draws the link mark).
     struct SectionFollow {
         juce::String name;
-        int plays = 0; // 0: the clip is in no repeated section
+        int plays = 0;    // placements that share this track's music; 0: the clip follows nothing
+        bool own = false; // the track belongs to the placement's variation (`letter`), not to every placement
+        int letter = 0;
     };
     SectionFollow sectionFollowOf(const synth::Clip& clip) const;
+    // "Follows Verse (plays 3 times). ..." or, for an owned track, "Belongs to Verse B (plays 2 times). ...".
+    static juce::String sectionFollowTooltip(const SectionFollow& follow);
     // Names the link mark under the pointer; empty anywhere else.
     juce::String getTooltip() override;
     juce::String linkTooltipAt(juce::Point<int> localPos) const;
@@ -518,6 +526,7 @@ public:
     // split case snaps it internally. One recordTimelineChange mutation, same as every other
     // doc-mutating gesture here.
     void applyClipContextChoice(synth::ClipId id, ClipContextChoice choice, double pointerBeat);
+    void addVariationOfPart(synth::ClipId id);
 
     // ---- Pure geometry (no doc, no component state) — what GeometryMapsBeatsAndRows tests ----
     // The clip rect for a known view state / track row / beat span. `rowHeight` is passed in

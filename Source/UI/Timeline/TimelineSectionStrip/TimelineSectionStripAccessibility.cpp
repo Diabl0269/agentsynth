@@ -8,6 +8,7 @@
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "TestMode/TestModeStateSource.h"
+#include "Timeline/TimelineDoc/SectionVariationLetter.h"
 #include <algorithm>
 #include <map>
 
@@ -19,7 +20,10 @@ constexpr int kMaxProxyCoordinate = 1'000'000;
 
 // A child of the strip that only answers test-mode getState, so the strip's own header stays out of
 // TestModeStateSource.h. `sections` lists every placement as "name:startBeat:lengthBeats:ordinal/count" joined by ";"
-// in placement order; `selectedSection` is the selected placement's start beat, or empty.
+// in placement order; `selectedSection` is the selected placement's start beat, or empty; `variations` is the letter
+// each placement plays in the same order, with a "*" after it when its section has more than one variation
+// (`A*;B*;A*`); `sectionVariationCount` is how many variations the selected placement's section has (0 with nothing
+// selected).
 class TimelineSectionStrip::Probe
     : public juce::Component
     , public synth::testmode::StateSource {
@@ -37,7 +41,13 @@ private:
 };
 
 std::unique_ptr<juce::AccessibilityHandler> TimelineSectionStrip::BlockProxy::createAccessibilityHandler() {
-    return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::button);
+    // "Show menu" reaches the variation menu; the press (rename) stays the default action.
+    juce::AccessibilityActions actions;
+    actions.addAction(juce::AccessibilityActionType::showMenu, [this] {
+        if (showVariations)
+            showVariations();
+    });
+    return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::button, std::move(actions));
 }
 
 std::unique_ptr<juce::AccessibilityHandler> TimelineSectionStrip::createAccessibilityHandler() {
@@ -59,7 +69,9 @@ TimelineSectionStrip::~TimelineSectionStrip() = default;
 void TimelineSectionStrip::addTestProbe() {
     probe_ = std::make_unique<Probe>([this](juce::DynamicObject& into) {
         juce::StringArray sections;
+        juce::StringArray variations;
         juce::String selected;
+        int selectedVariationCount = 0;
         if (doc_ != nullptr) {
             std::map<std::int64_t, int> total;
             for (const auto& placement : doc_->getPlacements())
@@ -73,12 +85,18 @@ void TimelineSectionStrip::addTestProbe() {
                              juce::String(section->lengthBeats, 3) + ":" +
                              juce::String(++seen[placement.section.value]) + "/" +
                              juce::String(total[placement.section.value]));
-                if (placement.id == selected_)
+                const bool several = section->variations.size() > 1;
+                variations.add(synth::variationLetter(placement.variation) + (several ? "*" : ""));
+                if (placement.id == selected_) {
                     selected = juce::String(placement.startBeat, 3);
+                    selectedVariationCount = (int)section->variations.size();
+                }
             }
         }
         into.setProperty("sections", sections.joinIntoString(";"));
         into.setProperty("selectedSection", selected);
+        into.setProperty("variations", variations.joinIntoString(";"));
+        into.setProperty("sectionVariationCount", selectedVariationCount);
     });
     probe_->setBounds(0, 0, 1, 1);
     addAndMakeVisible(*probe_);
@@ -87,10 +105,16 @@ void TimelineSectionStrip::addTestProbe() {
 //==============================================================================
 juce::String TimelineSectionStrip::tooltipAt(juce::Point<float> pos) const {
     if (doc_ != nullptr) {
-        for (const auto& block : buildBlocks())
-            if (block.bounds.contains(pos))
-                return sectionstrip::blockTooltip(block.name, block.lengthBeats, beatsPerBar(), block.count,
-                                                  platformCommandKeyName());
+        for (const auto& block : buildBlocks()) {
+            if (!block.bounds.contains(pos))
+                continue;
+            const auto letter = synth::variationLetter(block.variation);
+            if (sectionstrip::chipBounds(block.bounds).contains(pos))
+                return sectionstrip::chipTooltip(letter, block.name);
+            return sectionstrip::blockTooltip(block.name, block.lengthBeats, beatsPerBar(), block.count,
+                                              platformCommandKeyName(),
+                                              block.variationCount > 1 ? letter : juce::String());
+        }
     }
     const juce::KeyPress fallback('j', juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier, 0);
     const auto hint = shortcutHintFor(shortcuts_, "timelineMakeSection", fallback);
@@ -116,10 +140,12 @@ void TimelineSectionStrip::rebuildProxies() {
             if (section == nullptr)
                 continue;
             const int count = total[placement.section.value];
-            text.emplace_back(
-                sectionstrip::blockTitle(section->name, placement.startBeat, section->lengthBeats, bpb,
-                                         ++seen[placement.section.value], count),
-                sectionstrip::blockTooltip(section->name, section->lengthBeats, bpb, count, platformCommandKeyName()));
+            const auto letter =
+                section->variations.size() > 1 ? synth::variationLetter(placement.variation) : juce::String();
+            text.emplace_back(sectionstrip::blockTitle(section->name, placement.startBeat, section->lengthBeats, bpb,
+                                                       ++seen[placement.section.value], count, letter),
+                              sectionstrip::blockDescription(sectionstrip::blockTooltip(
+                                  section->name, section->lengthBeats, bpb, count, platformCommandKeyName(), letter)));
         }
     }
     setDescription("Sections, " + juce::String(sectionCount) + (sectionCount == 1 ? " section" : " sections"));
@@ -128,8 +154,15 @@ void TimelineSectionStrip::rebuildProxies() {
 
     proxyText_ = text;
     proxies_.clear();
+    juce::Component::SafePointer<TimelineSectionStrip> safeThis(this);
+    int index = 0;
     for (const auto& [title, description] : proxyText_) {
         auto proxy = std::make_unique<BlockProxy>();
+        proxy->showVariations = [safeThis, i = index++] {
+            auto* self = safeThis.getComponent();
+            if (self != nullptr && self->doc_ != nullptr && i < (int)self->doc_->getPlacements().size())
+                self->openVariationMenu(self->doc_->getPlacements()[(std::size_t)i].id);
+        };
         // An overlay purely for accessibility: mouseDown() above still owns every real click.
         proxy->setInterceptsMouseClicks(false, false);
         proxy->setTitle(title);

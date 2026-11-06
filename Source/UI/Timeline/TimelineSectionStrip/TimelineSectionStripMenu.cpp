@@ -247,6 +247,9 @@ void TimelineSectionStrip::buildAndShowBlockMenu(synth::PlacementId id) {
     add("Place again at the end", SectionMenuChoice::PlaceAgainAtEnd);
     menu.addSeparator();
     add("Make unique", SectionMenuChoice::MakeUnique);
+    juce::PopupMenu variations;
+    addVariationItems(variations, id);
+    menu.addSubMenu("Variation", variations);
     add("Select its clips", SectionMenuChoice::SelectClips);
     menu.addSeparator();
     add("Remove section, keep music", SectionMenuChoice::RemoveKeepMusic);

@@ -3,7 +3,7 @@
 A section (Intro, Verse, Chorus) is a named stretch of bars across every track. It plays at one or more
 **placements**, and every placement of one section holds the same music: edit a clip, a note or an
 automation point inside any placement and, in the same mutation, every other placement is rewritten to
-match. There are no variations. This page covers the document model and the Sections strip that shows it.
+match, unless the placement plays another variation (below). This page covers the document model and the Sections strip that shows it.
 
 ## What the user does
 
@@ -37,13 +37,32 @@ open in the piano roll, and by the Settings toggle below.
   Make unique (only when the section plays more than once), Select its clips, Remove (keep the music), Delete
   and bars. "Place again" makes room for the music after it, unless the cover setting is on. Each choice is
   one undo step. The headless seams are the protected `openSectionContextMenu` and the public
-  `applySectionMenuChoice`.
+  `applySectionMenuChoice`. A **Variation** submenu follows Make unique, with the same items as the chip's menu.
+- **Variation chip:** every block shows a rounded chip at its right end with the letter it plays (A, B...),
+  drawn on the block's colour darkened and brightened under the pointer. It is hidden when the block would leave
+  under 24 px for its name (the block menu still reaches every action). A click on the chip (not a drag, which
+  still moves the block) selects the block and opens the **variation menu** at the chip; V on a focused block
+  opens it too. The menu has one radio row per variation ("A", "B (Lead)", "C (Lead, Bass)": the tracks a
+  variation owns, at most three then "+N", none for A or a full copy; the placement's own is ticked) which
+  switches only this repeat, then "New variation (copy of B)", "Play B in every Verse" (only when the section
+  plays more than once and some repeat plays another letter) and "Remove variation B" (not on A). Each choice
+  is one undo step. Switching, playing everywhere, adding and removing outline the rewritten placements like a
+  stamp. The chip's tooltip reads "Variation B of Verse. Click to switch, add or play it everywhere." and a block
+  of a section with several variations adds " - variation B". Code: `TimelineSectionStripVariations.cpp`, seams
+  `applyVariationMenuChoice` and the protected `openVariationMenu`.
+- **Clip menu, New variation of this part:** on a clip that starts inside a placement, after Make unique. The
+  clip's track (and any the placement's variation already owns) becomes the placement's own in a new variation
+  and the placement plays it; one undo step, an outline on the placement and a toast such as "Verse B: Lead has
+  its own part now. Switch with the B chip." (`TimelineClipLaneArea::onVariationAdded`).
 - **Strip menu** (right-click empty strip): Make sections from markers.
 - **From a range:** with the Range tool, the range menu's **Make section** (after "Delete range and close
   gap") or Shift+Cmd+J (`timelineMakeSection`, rebindable) turns the range into a section.
 - **Clips follow:** a clip inside a section that plays more than once draws the link mark; its tooltip reads
   "Follows Chorus (plays 3 times). Edit any Chorus to change them all." and a screen reader adds ", follows
-  Chorus".
+  Chorus". A clip on a track its variation owns reads "Belongs to Verse B (plays 2 times). Edit any Verse B
+  to change them all." (plays: the placements on that variation; "Belongs to Verse B, the only one." when it plays
+  once, which draws no mark), a screen reader adds ", belongs to Verse B", and a shared track counts every
+  placement that shares it.
 - **Edge lines:** each block's start and end draw as a faint line down the lanes.
 - **Settings (Preferences > Timeline):** "show the Sections strip" (`timelineShowSectionsStrip`, default on) and
   "placing a section covers the music where it lands" (`timelineSectionsCoverOnDrop`, default off; Shift flips
@@ -56,13 +75,17 @@ open in the piano roll, and by the Settings toggle below.
   into an 80 ms fade, and the lift lands at once (a move has no fade form); Animations: Off, or a strip that is not
   on screen, starts nothing.
 - **Accessibility:** the strip is a group titled "Sections" described as "Sections, N sections"; each block is
-  a button titled like "Chorus, bars 13 to 20, 1 of 3". Block tooltips read "Chorus - 8 bars - plays 3 times".
+  a button titled like "Chorus, bars 13 to 20, 1 of 3" (", variation B" added when the section has more than one),
+  described with its tooltip and "Shift+F10: menu. V: variations." and offering the screen reader's show-menu action,
+  which opens the variation menu. The chip is not a separate focus stop. Block tooltips read "Chorus - 8 bars - plays 3 times".
 - **Test mode:** a `timelineSections` probe publishes `sections` (`name:start:length:ordinal/count`, joined
-  by `;`) and `selectedSection`.
+  by `;`) and `selectedSection`; `variations` lists the letter each placement plays (`A*;B*;A*`, the star only
+  when its section has more than one variation) and `sectionVariationCount` counts the selected block's section's
+  variations (0 with nothing selected).
 
 ## Model
 
-- `Section { id, name, colourArgb, lengthBeats }` and `SectionPlacement { id, section, startBeat }` live on
+- `Section { id, name, colourArgb, lengthBeats, variations }` and `SectionPlacement { id, section, startBeat, variation }` live on
   `TimelineDoc` (`getSections()`, `getPlacements()`). Sections are in creation order, placements sorted by
   `(startBeat, id)`. Section and placement ids share one counter (`nextSectionId`).
 - Names are trimmed, non-empty and at most `kMaxMarkerTextLength`. Caps: `kMaxSections` 256,
@@ -70,6 +93,52 @@ open in the piano roll, and by the Settings toggle below.
 - After every mutation and every load: lengths are finite and above 0, starts finite and at or above 0,
   placements never overlap (touching is fine), every placement names a section, and a section with no
   placement is removed (`finishMutation`, like the lone link groups).
+
+## Variations
+
+A section has variations A, B, C... (`Section::variations`, never empty, `[0]` is letter 0 = A, at most
+`kMaxVariations` 26, creation order). Each placement plays one (`SectionPlacement::variation`). Placements that
+play the same variation stay in step. A variation other than A records the tracks it owns (`ownTracks`); every
+other track is shared with A. So a Verse B whose only own track is the lead has the drums and bass of every
+Verse A, and an edit to those reaches all of them. A variation no placement plays keeps its music in
+`SectionVariation::stored` (all tracks for A, own tracks only otherwise); the sync refreshes `stored` from a
+placement that plays it after every change.
+
+**Sync key.** For placement P (variation v) and track T the key is `v` when v is not A and owns T, otherwise 0.
+Placements of one section with the same key for T form a group for T's clips and T's lanes' points
+(`variationKey`). The sync runs per (section, track, key) group with the rule above: the changed placement with
+the lowest start is stamped onto the rest of its group, on that track only. One mutation is still one revision,
+one notification and one undo step, and `getLastStampedPlacements()` lists a placement once however many tracks
+were rewritten.
+
+**Operations** (each validates first and changes nothing when it rejects):
+
+- `addVariation(placement)`: a full, independent copy of the placement's music (owns every non-Automation
+  track) that the placement then plays. Returns the lowest unused letter, or -1.
+- `addVariationForTrack(clip)`: "New variation of this part". Owns the placement's current own tracks plus the
+  clip's track; the placement plays it. -1 when the clip is in no placement or at 26.
+- `setPlacementVariation(placement, letter)`: rewrites only that placement, on each track whose key changes,
+  with the target's music (a live placement of the same key, else `stored`). The switch is not seen as an edit.
+- `playVariationEverywhere(section, letter)`: the same for every placement, as one mutation.
+- `removeVariation(section, letter)`: placements on it switch to A first; A cannot be removed.
+- `placeSection(..., letter)`: the new placement plays `letter`. `makePlacementUnique`: the new section's A is the
+  placement's current music; the old section keeps its variations.
+- Removing a track or lane erases it from every `ownTracks` and `stored`.
+- `getVariation(section, letter)`, `forEachStoredVariationClip(visit)` (clips of unplayed variations only).
+
+**Audio files.** An audio clip held only by an unplayed variation is on no track, so `AssetManager` visits
+`forEachStoredVariationClip` too when it collects unused files and when it adopts recordings; its files are kept.
+
+**File keys** (additive, `kFormatVersion` stays 1). A section with variations beyond A writes
+`"variations": [{"letter", "ownTracks": [ids], "stored"}]` for letters 1..25 (A is implied); `"stored"` is written
+only for a variation no placement plays, as `{"clips": {"<trackId>": [clip...]}, "points": {"<laneId>": [point...]}}`
+in the tracks' clip and breakpoint dialect. When no placement plays A, the section's own `"stored"` holds A's music.
+A placement writes `"variation": n` only when n is not 0. `fromVar` and `validateTimeline` reject a bad or repeated
+letter, letter 0 in the list, a placement naming an absent letter, an unknown key, an `ownTracks` or stored key
+naming a track or lane the file lacks (or that the variation does not own), a stored clip or point that fails the
+normal checks or starts outside the section, and more than `kMaxStoredVariationClips` stored clips. The validator
+also refuses a stored clip that names an audio asset and counts stored notes in the document budget. An unplayed
+variation without `"stored"` loads empty; an old file loads as A only.
 
 ## What a placement holds
 

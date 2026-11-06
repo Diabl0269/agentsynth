@@ -19,6 +19,10 @@ constexpr float kBlockPadX = 6.0f;     // name inset from the block's left edge
 constexpr float kCountReserve = 34.0f; // room kept for the "2/3" count when it is drawn
 constexpr float kDragStartPx = 3.0f;   // a press that moves less than this is a click
 constexpr double kBarEpsilon = 1e-9;
+constexpr float kChipMinWidth = 16.0f;    // the variation chip's width: the letter and a little air
+constexpr float kChipInsetRight = 4.0f;   // gap between the chip and the block's right edge
+constexpr float kChipVerticalTrim = 6.0f; // the chip is this much shorter than its block
+constexpr float kChipNameRoom = 24.0f;    // the name keeps at least this much width, or the chip is not drawn
 
 struct Span {
     double start = 0.0;
@@ -30,6 +34,17 @@ struct Span {
 inline juce::Rectangle<float> blockRect(float xStart, float xEnd, int stripHeight) noexcept {
     const float height = std::max(0.0f, (float)stripHeight - 2.0f * kBlockInsetY);
     return {xStart, kBlockInsetY, std::max(kMinBlockWidth, xEnd - xStart), height};
+}
+
+/** The variation chip's rect inside a block: a pill at the right end, 4 px in, 6 px shorter than the block. Empty when
+ *  the block would leave under kChipNameRoom for its name beside the chip (the block menu still reaches every action).
+ */
+inline juce::Rectangle<float> chipBounds(juce::Rectangle<float> block) noexcept {
+    const float taken = kChipMinWidth + kChipInsetRight;
+    if (block.getWidth() - kBlockPadX - taken < kChipNameRoom || block.getHeight() <= kChipVerticalTrim)
+        return {};
+    return {block.getRight() - taken, block.getY() + kChipVerticalTrim * 0.5f, kChipMinWidth,
+            block.getHeight() - kChipVerticalTrim};
 }
 
 inline double floorToBar(double beat, double beatsPerBar) noexcept {
@@ -125,17 +140,28 @@ inline juce::String playsPhrase(int count) {
 
 /** The screen-reader title of one block: "Chorus, bars 13 to 20, 1 of 3". */
 inline juce::String blockTitle(const juce::String& name, double startBeat, double lengthBeats, double beatsPerBar,
-                               int ordinal, int count) {
+                               int ordinal, int count, const juce::String& variation = {}) {
     return name + ", " + barsPhrase(startBeat, lengthBeats, beatsPerBar) + ", " + juce::String(ordinal) + " of " +
-           juce::String(count);
+           juce::String(count) + (variation.isEmpty() ? juce::String() : ", variation " + variation);
 }
 
-/** The tooltip over one block. */
+/** The tooltip over one block; `variation` (a letter) is named only when the section has more than one. */
 inline juce::String blockTooltip(const juce::String& name, double lengthBeats, double beatsPerBar, int count,
-                                 const juce::String& commandKey) {
-    return name + juce::String::fromUTF8(" \xC2\xB7 ") + lengthPhrase(lengthBeats, beatsPerBar) +
+                                 const juce::String& commandKey, const juce::String& variation = {}) {
+    return name + (variation.isEmpty() ? juce::String() : " - variation " + variation) +
+           juce::String::fromUTF8(" \xC2\xB7 ") + lengthPhrase(lengthBeats, beatsPerBar) +
            juce::String::fromUTF8(" \xC2\xB7 ") + playsPhrase(count) + ". Drag to move, Option-drag to place again (" +
            commandKey + " + D)";
+}
+
+/** The tooltip over a block's variation chip. */
+inline juce::String chipTooltip(const juce::String& letter, const juce::String& sectionName) {
+    return "Variation " + letter + " of " + sectionName + ". Click to switch, add or play it everywhere.";
+}
+
+/** The screen-reader description of one block: its tooltip and the keys that reach its menus. */
+inline juce::String blockDescription(const juce::String& tooltip) {
+    return tooltip + ". Shift+F10: menu. V: variations.";
 }
 
 /** The name for a section made unique from `name`: its base (a trailing " 2", " 3"... dropped) with the first number

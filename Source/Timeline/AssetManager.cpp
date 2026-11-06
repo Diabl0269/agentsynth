@@ -122,14 +122,19 @@ juce::StringArray AssetManager::collectUnusedAssets(const TimelineDoc& doc, cons
         return unused;
 
     std::set<juce::String> referenced;
+    const auto reference = [&](const Clip& clip) {
+        if (clip.assetRef.isNotEmpty()) {
+            referenced.insert(clip.assetRef);
+            // A stretched clip keeps its original: the next stretch and undo both read it.
+            if (clip.stretchOrigin)
+                referenced.insert(clip.stretchOrigin->assetRef);
+        }
+    };
     for (const auto& track : doc.getTracks())
         for (const auto& clip : track.clips)
-            if (clip.assetRef.isNotEmpty()) {
-                referenced.insert(clip.assetRef);
-                // A stretched clip keeps its original: the next stretch and undo both read it.
-                if (clip.stretchOrigin)
-                    referenced.insert(clip.stretchOrigin->assetRef);
-            }
+            reference(clip);
+    // A section variation no placement plays keeps its music off the tracks; its files are still in use.
+    doc.forEachStoredVariationClip(reference);
 
     for (const auto& file : audioDir.findChildFiles(juce::File::findFiles, false)) {
         const juce::String ref = juce::String(ProjectBundle::kAudioSubdirName) + "/" + file.getFileName();
@@ -165,11 +170,15 @@ int AssetManager::adoptRecordingsAssets(TimelineDoc& doc, const juce::File& reco
     std::vector<juce::String> oldRefs;
     {
         std::set<juce::String> seen;
+        const auto collect = [&](const Clip& clip) {
+            for (const auto* ref : {&clip.assetRef, clip.stretchOrigin ? &clip.stretchOrigin->assetRef : nullptr})
+                if (ref != nullptr && ref->startsWith(prefix) && seen.insert(*ref).second)
+                    oldRefs.push_back(*ref);
+        };
         for (const auto& track : doc.getTracks())
             for (const auto& clip : track.clips)
-                for (const auto* ref : {&clip.assetRef, clip.stretchOrigin ? &clip.stretchOrigin->assetRef : nullptr})
-                    if (ref != nullptr && ref->startsWith(prefix) && seen.insert(*ref).second)
-                        oldRefs.push_back(*ref);
+                collect(clip);
+        doc.forEachStoredVariationClip(collect);
     }
     if (oldRefs.empty())
         return 0;
@@ -241,6 +250,7 @@ int AssetManager::adoptRecordingsAssets(TimelineDoc& doc, const juce::File& reco
         doc.setClipAsset(update.id, update.newRef, update.sourceStartSeconds);
         doc.setClipStretchOrigin(update.id, update.origin); // setClipAsset forgot it
     }
+    doc.remapStoredAssetRefs(rewrite);
 
     return (int)rewrite.size();
 }
