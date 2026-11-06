@@ -1,6 +1,7 @@
 // Topic: envelope and LFO modulation shaping the rendered signal.
 
 #include "AudioRenderingTestHelpers.h"
+#include "Modules/LFOModule.h"
 
 // ===========================================================================
 // Test 9: ADSR envelope shape (attack/sustain/release phases)

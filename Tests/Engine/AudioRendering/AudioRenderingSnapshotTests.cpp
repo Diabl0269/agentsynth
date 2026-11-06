@@ -1,6 +1,7 @@
 // Topic: golden-file snapshot/reference regression tests for module and modulation chains.
 
 #include "AudioRenderingTestHelpers.h"
+#include "Modules/LFOModule.h"
 
 // ===========================================================================
 // Snapshot/Reference Tests

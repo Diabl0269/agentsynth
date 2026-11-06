@@ -110,6 +110,13 @@ ProjectEditResult rejected(const juce::String& message) {
     return result;
 }
 
+// The tracks a new track is appended after: the Automation track is kept last, so a new track lands before it.
+int nonAutomationTrackCount(const TimelineDoc& doc) {
+    const auto& tracks = doc.getTracks();
+    return static_cast<int>(
+        std::count_if(tracks.begin(), tracks.end(), [](const auto& t) { return t.kind != TrackKind::Automation; }));
+}
+
 } // namespace
 
 // The preview mutates nothing live: the live graph is trusted-replayed into a scratch (exactly as
@@ -119,7 +126,8 @@ ProjectEditResult rejected(const juce::String& message) {
 // of an instrument track cannot be dry-run; every other check is the real one.
 ProjectEditResult AIIntegrationService::previewProjectEdit(const juce::var& root) const {
     projectedit::Plan plan;
-    if (const auto error = projectedit::readPlan(root, liveNodeUids(audioGraph), plan, lastUserRequest(chatHistory));
+    if (const auto error = projectedit::readPlan(root, liveNodeUids(audioGraph), plan, lastUserRequest(chatHistory),
+                                                 timelineDoc != nullptr ? nonAutomationTrackCount(*timelineDoc) : 0);
         error.isNotEmpty())
         return rejected(error);
     const bool carriesOps = !plan.trackOps.isVoid() || !plan.otherOps.isVoid();
@@ -170,7 +178,8 @@ ProjectEditResult AIIntegrationService::applyProjectEdit(const juce::var& root) 
         return preview;
     projectedit::Plan plan;
     const auto uidsBefore = liveNodeUids(audioGraph);
-    if (const auto error = projectedit::readPlan(root, uidsBefore, plan, lastUserRequest(chatHistory));
+    if (const auto error =
+            projectedit::readPlan(root, uidsBefore, plan, lastUserRequest(chatHistory), nonAutomationTrackCount(*doc));
         error.isNotEmpty())
         return rejected(error);
 

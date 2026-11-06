@@ -315,7 +315,7 @@ juce::var repairSequencerWiring(const juce::var& response, juce::StringArray& no
     return fixed;
 }
 
-juce::var dropDoubledClipNotes(const juce::var& response, juce::StringArray& notes) {
+juce::var dropDoubledClipNotes(const juce::var& response, juce::StringArray& notes, int existingTrackCount) {
     const auto driven = sequencerDrivenTrackNames(response);
     if (driven.empty())
         return response;
@@ -323,13 +323,42 @@ juce::var dropDoubledClipNotes(const juce::var& response, juce::StringArray& not
     auto* ops = fixed.getProperty("timelineOps", {}).getArray();
     if (ops == nullptr)
         return response;
-    std::set<juce::String> fixedTracks;
-    for (auto& op : *ops) {
-        if (op.getProperty("op", {}).toString() != "placeClips")
+    // The applier runs every track-adding op before any clip op, and each appends one track after the existing
+    // ones (an Automation track stays last, so the count excludes it): a new track's index is the count before it,
+    // and an op that targets { "index": N } reaches a new track when N lands on one of them.
+    std::map<int, juce::String> newTrackAt;
+    int trackCount = std::max(0, existingTrackCount);
+    for (const auto& op : *ops)
+        if (const auto opName = op.getProperty("op", {}).toString();
+            opName == "addTrack" || opName == "addInstrumentTrack")
+            newTrackAt[trackCount++] = op.getProperty("name", {}).toString();
+    std::set<juce::String> fixedTracks, droppedMidiTracks;
+    juce::Array<int> midiClipOps;
+    for (int i = 0; i < ops->size(); ++i) {
+        auto& op = ops->getReference(i);
+        const juce::String opName = op.getProperty("op", {}).toString();
+        if (opName != "placeClips" && opName != "placeMidiClip")
             continue;
-        const juce::String track = op.getProperty("track", {}).toString();
+        juce::String track;
+        const juce::var selector = op.getProperty("track", {});
+        if (selector.isString()) {
+            track = selector.toString();
+        } else if (selector.getDynamicObject() != nullptr && selector.hasProperty("index")) {
+            const juce::var index = selector.getProperty("index", {});
+            if (index.isInt() || index.isInt64()) {
+                if (const auto found = newTrackAt.find(static_cast<int>(index)); found != newTrackAt.end())
+                    track = found->second;
+            }
+        }
+        if (driven.count(track) == 0)
+            continue;
+        if (opName == "placeMidiClip") {
+            midiClipOps.add(i);
+            droppedMidiTracks.insert(track);
+            continue;
+        }
         auto* clips = op.getProperty("clips", {}).getArray();
-        if (clips == nullptr || driven.count(track) == 0)
+        if (clips == nullptr)
             continue;
         for (auto& clip : *clips)
             if (auto* clipObject = clip.getDynamicObject(); clipObject != nullptr && clipObject->hasProperty("notes")) {
@@ -339,11 +368,17 @@ juce::var dropDoubledClipNotes(const juce::var& response, juce::StringArray& not
                 clipObject->removeProperty("notes");
             }
     }
-    if (fixedTracks.empty())
+    if (fixedTracks.empty() && midiClipOps.isEmpty())
         return response;
+    for (int k = midiClipOps.size(); --k >= 0;)
+        ops->remove(midiClipOps[k]);
     for (const auto& track : fixedTracks)
         notes.add("Track \"" + track +
                   "\" has a sequencer and clip notes for the same part, so the clip notes were left "
+                  "out and the sequencer plays it once");
+    for (const auto& track : droppedMidiTracks)
+        notes.add("Track \"" + track +
+                  "\" has a sequencer and a MIDI clip for the same part, so the MIDI clip was left "
                   "out and the sequencer plays it once");
     return fixed;
 }

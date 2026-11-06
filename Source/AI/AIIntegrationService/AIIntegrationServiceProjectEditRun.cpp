@@ -213,7 +213,7 @@ juce::String readMode(const juce::var& root, Plan& out) {
 } // namespace
 
 juce::String readPlan(const juce::var& rawRoot, const std::set<juce::uint32>& liveIds, Plan& out,
-                      const juce::String& request) {
+                      const juce::String& request, int existingTrackCount) {
     if (rawRoot.getDynamicObject() == nullptr)
         return "The response is not a JSON object.";
 
@@ -222,7 +222,7 @@ juce::String readPlan(const juce::var& rawRoot, const std::set<juce::uint32>& li
     // apply both see the repaired plan.
     juce::StringArray doubled;
     const juce::var rewired = soundshape::repairSequencerWiring(rawRoot, doubled);
-    const juce::var root = soundshape::dropDoubledClipNotes(rewired, doubled);
+    const juce::var root = soundshape::dropDoubledClipNotes(rewired, doubled, existingTrackCount);
     for (const auto& line : doubled)
         out.notes.push_back({PlanNote::Kind::Repaired, {}, line});
     if (const auto accents = soundshape::checkAccents(rawRoot, request); !accents.pass)

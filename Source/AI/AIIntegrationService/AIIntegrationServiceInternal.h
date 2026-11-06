@@ -65,9 +65,10 @@ struct Plan {
 };
 
 /** Reads `root` into `out`; empty on success, else the rejection. `liveIds` = every node uid now live. `request` is
- * the user's words, read only to judge whether accents were asked for. */
+ * the user's words, read only to judge whether accents were asked for. `existingTrackCount` = the timeline's
+ * tracks other than Automation, so a `{"index": N}` track selector is matched to the tracks the plan adds. */
 juce::String readPlan(const juce::var& root, const std::set<juce::uint32>& liveIds, Plan& out,
-                      const juce::String& request = {});
+                      const juce::String& request = {}, int existingTrackCount = 0);
 
 /** What one run of the three phases produced. */
 struct RunResult {
