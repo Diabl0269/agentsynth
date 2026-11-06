@@ -217,3 +217,66 @@ TEST_F(ModalCloseKeys, EscapeInATextEditorDoesNotCloseTheDialog) {
     EXPECT_TRUE(dispatchKey(*dialog, content.editor, escapeKey())) << "the editor itself uses it";
     EXPECT_TRUE(dialog->isVisible());
 }
+
+namespace {
+
+// Paints a window's content into a software bitmap, as the screen would, and moves a band so its curve repaints.
+void paintContent(juce::Component& content) {
+    juce::Image img(juce::Image::ARGB, std::max(1, content.getWidth()), std::max(1, content.getHeight()), true,
+                    juce::SoftwareImageType());
+    juce::Graphics g(img);
+    content.paintEntireComponent(g, false);
+}
+
+void feedAudio(ParametricEQModule& eq) {
+    eq.prepareToPlay(48000.0, 512);
+    juce::AudioBuffer<float> audio(2, 512);
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            audio.setSample(ch, i, 0.5f * std::sin(0.05f * (float)i));
+    juce::MidiBuffer midi;
+    eq.processBlock(audio, midi);
+}
+
+} // namespace
+
+// Regression test for FRO1296: an EQ window opened on a module that already had one open and closed crashed in paint
+TEST_F(ModalCloseKeys, AnEQWindowOpenedAgainOnTheSameModuleClosesPaintsAndEdits) {
+    ParametricEQModule eq;
+    feedAudio(eq);
+    const DialogsDeletedFirst dialogsFirst;
+    for (int round = 0; round < 4; ++round) {
+        juce::DialogWindow::LaunchOptions options;
+        auto* window = new EQWindow(eq);
+        options.content.setOwned(window);
+        options.dialogTitle = "EQ";
+        options.useNativeTitleBar = true;
+        juce::Component::SafePointer<juce::DialogWindow> dialog(PopupMotion::launchDialog(options));
+        ASSERT_NE(dialog.getComponent(), nullptr);
+        window->getCurve().addPointAt({100.0f + 20.0f * (float)round, 80.0f});
+        feedAudio(eq);
+        window->getCurve().timerCallback();
+        paintContent(*window);
+        if (round % 2 == 0) { // alternate: closed by key, and deleted while still shown
+            EXPECT_TRUE(dispatchKey(*dialog.getComponent(), window->getCurve(), escapeKey()));
+            EXPECT_FALSE(dialog->isVisible());
+        }
+        deleteNow(dialog);
+    }
+}
+
+TEST_F(ModalCloseKeys, AShapeEditorWindowOpenedAgainOnTheSameModuleClosesAndPaints) {
+    ShapeRig rig;
+    const DialogsDeletedFirst dialogsFirst;
+    for (int round = 0; round < 4; ++round) {
+        juce::Component::SafePointer<juce::DialogWindow> dialog(openShapeEditorWindow(rig.adapter, 0, nullptr));
+        ASSERT_NE(dialog.getComponent(), nullptr);
+        paintContent(*dialog->getContentComponent());
+        if (round % 2 == 0) { // alternate: closed by key, and deleted while still shown
+            auto* stop = focusableDescendants(*dialog.getComponent())[0];
+            EXPECT_TRUE(dispatchKey(*dialog.getComponent(), *stop, escapeKey()));
+            EXPECT_FALSE(dialog->isVisible());
+        }
+        deleteNow(dialog);
+    }
+}
