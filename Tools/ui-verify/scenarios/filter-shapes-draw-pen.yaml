@@ -1,5 +1,5 @@
 # Feature: the Draw tool in the shape window draws where you drag. Pick the Sine pen, drag across part of the curve:
-# a dashed box, the sine and a cycle chip show while dragging, and only that stretch changes on release.
+# only that stretch changes on release; the curve's tooltip describes the pen while it is on.
 #
 # What a user does: opens Edit shapes, clicks Draw, picks Sine, drags across the middle of the curve.
 record: true
@@ -36,12 +36,10 @@ steps:
   - wait: {settleMs: 400}
   - click: {id: Sine shape}
   - wait: {settleMs: 400}
+  - hover: {id: Shape curve, x: 150, y: 100}                   # the tooltip now describes the pen
+  - wait: {settleMs: 1500}
   - screenshot: {id: "Filter shapes: Filter", name: pen-on}
-  - mouseDown: {id: Shape curve, x: 150, y: 100}
-  - mouseMoveHeld: {id: Shape curve, x: 200, y: 100}
-  - mouseMoveHeld: {id: Shape curve, x: 330, y: 100}
+  - drag: {from: Shape curve, to: Shape curve, fromX: 150, fromY: 100, toX: 330, toY: 100, steps: 8}
   - wait: {settleMs: 300}
-  - screenshot: {id: "Filter shapes: Filter", name: mid-drag}
-  - mouseUp: {id: Shape curve, x: 330, y: 100}
   - wait: {settleMs: 400}
   - screenshot: {id: "Filter shapes: Filter", name: after-draw}

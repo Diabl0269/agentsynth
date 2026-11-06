@@ -129,6 +129,19 @@ class RecordingTests(unittest.TestCase):
         self.assertTrue(all(c[1]["id"] == "window" and c[1]["mods"] == "shift" for c in mouse))
         self.assertEqual(encoded, [7])  # the launch, the press, four moves, the end of the step
 
+    def test_a_recorded_drag_inside_one_component_is_sent_to_that_component_in_its_own_coordinates(self):
+        # Regression test for FRO1192: a component in its own native window (a shape window) was dragged through
+        # the main window's coordinates, so the recorded drag pressed somewhere else and drew nothing.
+        app = DrawingApp(self.STATES)
+        text = "record: true\nsteps:\n  - drag: {from: a, to: a, fromX: 5, fromY: 6, toX: 45, toY: 6, steps: 4}\n"
+        with tempfile.TemporaryDirectory() as out:
+            (ok, _), _ = self.run_scenario(text, app, out)
+        self.assertTrue(ok)
+        mouse = [c for c in app.calls if c[0].startswith("mouse")]
+        self.assertEqual([c[0] for c in mouse], ["mouseDown"] + ["mouseMoveHeld"] * 4 + ["mouseUp"])
+        self.assertTrue(all(c[1]["id"] == "a" for c in mouse))
+        self.assertEqual([(c[1]["x"], c[1]["y"]) for c in (mouse[0], mouse[-1])], [(5, 6), (45, 6)])
+
     def test_a_drag_leaving_the_main_window_stays_one_command(self):
         app = DrawingApp(self.STATES)
         with tempfile.TemporaryDirectory() as out:

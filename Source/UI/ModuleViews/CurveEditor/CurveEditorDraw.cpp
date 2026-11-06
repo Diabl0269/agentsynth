@@ -4,12 +4,24 @@
 #include "CurveDrawGesture.h"
 #include "CurveEditorComponent.h"
 #include "CurveWaveConversion.h"
+#include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
 #include <cmath>
 
 namespace synth::ui {
 
 void CurveEditorComponent::setDrawPen(std::optional<DrawShape> pen) {
     draw_.setPen(pen);
+    // While a pen is on, the tooltip describes the pen, not the point editing it replaces; the host's text returns
+    // when the pen goes off.
+    if (pen.has_value()) {
+        if (!tooltipBeforePen_.has_value())
+            tooltipBeforePen_ = getTooltip();
+        setTooltip("Drag to draw a " + juce::String(drawShapeName(*pen)) +
+                   " here; Esc cancels; Shift ignores the grid");
+    } else if (tooltipBeforePen_.has_value()) {
+        setTooltip(*tooltipBeforePen_);
+        tooltipBeforePen_.reset();
+    }
     setMouseCursor(pen.has_value() ? juce::MouseCursor::CrosshairCursor : juce::MouseCursor::NormalCursor);
     repaint();
 }

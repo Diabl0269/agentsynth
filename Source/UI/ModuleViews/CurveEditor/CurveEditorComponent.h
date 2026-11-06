@@ -434,6 +434,7 @@ private:
     juce::String announcedValueText_;
 
     CurveDrawGesture draw_{*this};
+    std::optional<juce::String> tooltipBeforePen_;
     KeyedPointTween pointTween_{*this};
     KeyHold keyHold_{*this};
     struct KeyDrag {
