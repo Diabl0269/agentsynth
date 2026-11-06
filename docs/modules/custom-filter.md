@@ -376,7 +376,12 @@ slider drag is one undo step (the settings are part of the module's extra state)
   Off leaves points free. A choice snaps points when they are added, dragged or moved with Alt+arrows (Shift while
   dragging bypasses it) to lines at every octave fraction counted from 1 kHz (so 1 oct has lines at 250, 500, 1k, 2k
   and 4k Hz, not at a whole number of cells from 20 Hz) and to 6 dB steps in level (-48 to +12 dB, 0 dB is a line). The
-  lines are drawn faintly under the labelled guides. The choice is remembered for Filter shapes across windows and
+  lines are drawn faintly under the labelled guides. Line importance reads by brightness and width, not hue alone:
+  the labelled **guide** lines (100, 1k, 10k and the 0 dB line) are 1.5 px in a clearly brighter muted-text colour, the
+  **snap** lines 1 px in the faint grid colour. The line nearest the pointer (within 6 px) lights up in full accent
+  with a small label ("1.26 kHz", "-6 dB"), and while a point is dragged the line it snapped to lights up the same way.
+  A **Guides** toggle (on by default, remembered) in the same row hides the guide lines and their labels only; the snap
+  lines stay. The choice is remembered for Filter shapes across windows and
   launches (a user setting, not part of the patch); the LFO's window remembers its own. The curve editor's
   `CurveGrid` takes `xStep` and `xOrigin` for lines that do not divide the visible range evenly.
 - **Show spectrum.** A toggle at the right end of the same row (off by default, remembered) draws the filter's live
@@ -384,8 +389,8 @@ slider drag is one undo step (the settings are part of the module's extra state)
   full height). It is the reading the card's response view shows ([the card](#card)): the module's visual buffer,
   transformed and smoothed by `FilterSpectrumAnalyser`, one class shared by both views. A 30 Hz tick runs only while
   the toggle is on and the window is visible and repaints only the curve; with the toggle off there is no tick and the
-  curve paints exactly as before (the LFO's window has no such toggle). Tab order: the map, the chips, Grid, Show
-  spectrum, the curve, the buttons.
+  curve paints exactly as before (the LFO's window has no such toggle). Tab order: the map, the chips, Grid, Guides,
+  Show spectrum, the curve, the buttons.
 - **The filter's response over the editor.** While the morph cursor (the dark main dot) is the selection in the map
   (pressed, dragged or focused, until a shape dot is chosen), the window draws the filter's live frequency response
   as an accent line over the curve: `customfilter::responseGridDb` with the morph cursor, Shift, Depth, Cutoff and

@@ -9,6 +9,22 @@ namespace {
 using synth::CustomFilterShape;
 using synth::CustomFilterShapes;
 
+/** "440 Hz", "82.4 Hz", "1.26 kHz": three significant figures, as the pointer label reads. */
+juce::String formatHz(double hz) {
+    if (hz >= 1000.0)
+        return juce::String(hz / 1000.0, hz >= 10000.0 ? 1 : 2).trimCharactersAtEnd("0").trimCharactersAtEnd(".") +
+               " kHz";
+    return juce::String(hz, hz >= 100.0 ? 0 : 1) + " Hz";
+}
+
+/** "-6 dB", "+1.5 dB", "0 dB". */
+juce::String formatDb(float level) {
+    const float db = CustomFilterShapes::yToDb(level);
+    const float rounded = std::round(db * 10.0f) / 10.0f;
+    const juce::String number = rounded == std::floor(rounded) ? juce::String((int)rounded) : juce::String(rounded, 1);
+    return (rounded > 0.0f ? "+" : "") + number + " dB";
+}
+
 ShapeItem toItem(const CustomFilterShape& shape) {
     return {shape.name, shape.curve, shape.position, shape.colour, shape.colourIndex};
 }
@@ -85,6 +101,8 @@ std::optional<ShapeGridOffer> FilterShapesAdapter::getGridOffer() const {
         grid.yDivisions = kLevelCells;
         grid.xStep = std::log(2.0) / std::log((double)CustomFilterShapes::kMaxHz / CustomFilterShapes::kMinHz) / parts;
         grid.xOrigin = CustomFilterShapes::hzToX(1000.0f);
+        grid.xName = [](double x) { return formatHz(CustomFilterShapes::xToHz((float)x)); };
+        grid.yName = &formatDb;
         return grid;
     };
     return offer;

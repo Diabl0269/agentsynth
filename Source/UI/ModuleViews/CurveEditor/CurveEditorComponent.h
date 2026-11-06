@@ -77,6 +77,9 @@ public:
         int yDivisions = 2;
         double xStep = 0.0;
         double xOrigin = 0.0;
+        /** What a line is called when the pointer is on it ("1.2 kHz"); empty draws no hover label. */
+        std::function<juce::String(double x)> xName;
+        std::function<juce::String(float level)> yName;
     };
     /** `nullopt` (the default) draws today's nice-tick time grid instead -- an ordinary envelope
      *  card never calls this. */
@@ -85,6 +88,14 @@ public:
      *  range and y to the nearest `1/yDivisions`, unless the gesture's own bypass flag (Shift) is
      *  set. Never affects a bend drag. Off by default. */
     void setSnapToGrid(bool enabled);
+
+    /** Draws or hides the labelled guide lines (setAxisGuides) and their labels; the grid's own snap lines stay. On
+     *  by default. */
+    void setGuidesVisible(bool visible);
+    bool areGuidesVisible() const noexcept { return guidesVisible_; }
+
+    /** The line the pointer is on (or the dragged point snapped to), as the name it shows: empty when none. */
+    juce::String getHighlightedLineName() const;
 
     /** One labelled guide line: `position` is in model units along x, or a level in [0, 1] along y. */
     struct AxisGuide {
@@ -221,6 +232,8 @@ public:
     juce::String getAccessibilityValueText() const;
 
     static constexpr float kBendSensitivityPx = 150.0f;
+    /** How near the pointer must be to a line for it to light up. */
+    static constexpr float kHoverLinePx = 6.0f;
 
     // ---------- mouse ----------
     void mouseDown(const juce::MouseEvent& e) override;
@@ -320,11 +333,23 @@ private:
     // CurveEditorPaint.cpp
     struct ThemeColours {
         juce::Colour background;
-        juce::Colour grid;
+        juce::Colour grid; ///< snap lines: steps, in-key notes, harmonics n >= 2
         juce::Colour mutedText;
         juce::Colour accent;
+        juce::Colour landmark; ///< the labelled guides and the centre line: clearly brighter than `grid`
+        juce::Colour outOfKey; ///< lines that do not snap: about half the snap lines' alpha
     };
     ThemeColours resolveThemeColours() const;
+    /** The nearest grid or guide line to `point` within kHoverLinePx, or none. */
+    struct LineHit {
+        bool vertical = true;
+        float pixel = 0.0f;
+        juce::String name;
+        bool operator==(const LineHit& o) const { return vertical == o.vertical && pixel == o.pixel && name == o.name; }
+    };
+    std::optional<LineHit> lineNear(const CurveEditorGeometry& geometry, juce::Point<float> point) const;
+    std::optional<LineHit> highlightedLine(const CurveEditorGeometry& geometry) const;
+    void paintLineHighlight(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
     void paintGrid(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
     void paintGridLines(juce::Graphics& g, const CurveEditorGeometry& geometry, const ThemeColours& colours) const;
     /** The x of every vertical grid line, in model units. */
@@ -339,6 +364,8 @@ private:
 
     std::optional<CurveGrid> grid_;
     std::optional<AxisGuides> guides_;
+    bool guidesVisible_ = true;
+    std::optional<juce::Point<float>> pointer_; ///< where the mouse is over the editor, for the line highlight
     BackdropPainter backdrop_;
     bool snapToGrid_ = false;
     float fillBaselineLevel_ = 0.0f;

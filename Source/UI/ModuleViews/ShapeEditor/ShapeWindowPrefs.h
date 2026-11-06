@@ -9,6 +9,8 @@ namespace synth::ui::shapewindowprefs {
 
 inline juce::String gridKey(const juce::String& kind) { return "shapeWindowGrid_" + kind; }
 inline juce::String spectrumKey(const juce::String& kind) { return "shapeWindowSpectrum_" + kind; }
+/** Holds "0" while the labelled guide lines are hidden; a missing value shows them. */
+inline juce::String guidesKey(const juce::String& kind) { return "shapeWindowGuides_" + kind; }
 
 inline juce::String loadText(juce::ApplicationProperties* props, const juce::String& key) {
     if (props == nullptr || props->getUserSettings() == nullptr)
