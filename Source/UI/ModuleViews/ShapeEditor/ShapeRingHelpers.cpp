@@ -1,6 +1,7 @@
 // ShapeRingHelpers.cpp -- the peaks each Ring helper places and the curve that draws them.
 #include "ShapeRingHelpers.h"
 #include "Modules/Filter/CustomFilterShapes.h"
+#include "Modules/Lfo/LfoCustomWave.h"
 #include <algorithm>
 #include <cmath>
 

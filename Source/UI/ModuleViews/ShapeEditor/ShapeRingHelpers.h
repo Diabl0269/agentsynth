@@ -3,10 +3,13 @@
 // ShapeRingHelpers.h -- the curves the Ring helpers menu stamps on a Filter shape: narrow, tall peaks on the harmonics
 // of a note, on the notes of a chord, or an octave apart, over a low floor, so a resonant filter rings at those
 // pitches. Pure data: the shape window turns each into one undo step.
-#include "Modules/Lfo/LfoCustomWave.h"
 #include "Music/MusicalScale.h"
 #include <optional>
 #include <vector>
+
+namespace synth {
+struct LfoCustomWave;
+}
 
 namespace synth::ui::ringhelpers {
 

@@ -9,6 +9,7 @@
 #include "ModuleComponentTestFixture.h"
 
 #include "Modules/ADSRModule.h"
+#include "Modules/Envelope/EnvelopeGenerator.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"

@@ -1,4 +1,5 @@
 #include "LfoCustomWave.h"
+#include "Modules/Envelope/EnvelopeGenerator.h"
 #include <algorithm>
 #include <cmath>
 

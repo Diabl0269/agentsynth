@@ -5,6 +5,7 @@
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "Modules/Filter/CustomFilterBlend.h"
 #include "Modules/Filter/CustomFilterShapes.h"
+#include "Modules/Lfo/LfoCustomWave.h"
 #include "ShapeEditorTestHelpers.h"
 #include "UI/Layout/CardCallOut.h"
 #include "UI/ModuleViews/ShapeEditor/PitchGrid.h"
