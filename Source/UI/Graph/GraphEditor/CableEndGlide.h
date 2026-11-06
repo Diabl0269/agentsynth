@@ -12,6 +12,7 @@
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 #include <vector>
 
 class ModuleComponent;
@@ -44,6 +45,9 @@ private:
         juce::Component::SafePointer<ModuleComponent> card;
         graph_editor_types::CableId id;
         juce::Point<float> oldRelative; // the end's old place, relative to its card, so a moving card carries it
+        // Where a cable on a knob that also has a gutter jack ends up when its row folds (card-relative): the glide
+        // runs to it, since the jack only rejoins the gutter when the fade ends.
+        std::optional<juce::Point<float>> foldedRelative;
     };
 
     juce::VBlankAnimatorUpdater& updater_;

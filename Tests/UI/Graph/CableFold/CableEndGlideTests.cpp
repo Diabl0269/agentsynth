@@ -8,8 +8,10 @@
 #include "../CardBody/CardCanvas.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
+#include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/CableEndGlide.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
+#include "UI/Layout/FadeVisibility.h"
 
 using namespace cardbody_test;
 using synth::ui::AnimationMode;
@@ -23,17 +25,23 @@ struct GlideRig {
     ModuleComponent* osc = nullptr;
     synth::CardBody* body = nullptr;
 
-    // A Pan cable on a Filter whose Pan knob sits in the More row, with the row open.
-    GlideRig() {
-        FilterModule probe;
+    // A Pan cable on a Filter whose Pan knob (knob-only, no gutter jack) sits in the More row, with the row open; or,
+    // `withJack`, a Level cable on an Oscillator whose Level knob also has a gutter jack.
+    explicit GlideRig(bool withJack = false) {
+        FilterModule filterProbe;
+        OscillatorModule oscProbe;
         lfoId = canvas.add(std::make_unique<LFOModule>(), 0, 0);
-        oscId = canvas.add(std::make_unique<FilterModule>(), 600, 0, automaticLayoutHiding(probe, {"pan"}));
+        oscId =
+            withJack
+                ? canvas.add(std::make_unique<OscillatorModule>(), 600, 0, automaticLayoutHiding(oscProbe, {"level"}))
+                : canvas.add(std::make_unique<FilterModule>(), 600, 0, automaticLayoutHiding(filterProbe, {"pan"}));
         canvas.editor.updateComponents();
         lfo = canvas.card(lfoId);
         osc = canvas.card(oscId);
         body = osc->getCardBody();
         body->setMoreUnfolded(true);
-        const auto knob = osc->localPointToGlobal(body->findWidget("pan")->getBounds().getCentre());
+        const auto knob =
+            osc->localPointToGlobal(body->findWidget(withJack ? "level" : "pan")->getBounds().getCentre());
         canvas.editor.beginConnectionDrag(lfo, 0, false, false, lfo->localPointToGlobal(juce::Point<int>(0, 0)));
         canvas.editor.dragConnection(knob);
         canvas.editor.endConnectionDrag(knob);
@@ -136,5 +144,36 @@ TEST(CableEndGlide, UnderReduceMotionItIsAPlainLinearMove) {
     ASSERT_TRUE(rig.glide().isLive());
     rig.glide().completeForTest();
     EXPECT_GT(distance(rig.end(), onKnob), 5.0f);
+    EXPECT_FALSE(rig.glide().isLive());
+}
+
+// Regression test for FRO1509: a knob that also has a gutter jack kept its end on the knob for the whole fade and
+// jumped to the jack when the fade ended.
+TEST(CableEndGlide, AKnobWithAGutterJackGlidesToTheJackWhenTheRowFolds) {
+    GlideRig rig(true);
+    ASSERT_TRUE(rig.cable().has_value());
+    ASSERT_TRUE(rig.cable()->landsOnKnob);
+    const auto onKnob = rig.end();
+
+    FadeAnimateGuard guard;
+    rig.body->setMoreUnfolded(false);
+    ASSERT_TRUE(rig.glide().isLive());
+    rig.glide().advanceForTest(0.5f);
+    const auto mid = rig.end();
+    rig.glide().advanceForTest(0.999f);
+    const auto nearEnd = rig.end();
+    synth::ui::FadeVisibility::stepAllForTest(1.0f); // the row's own fade ends: the jack rejoins the gutter
+    rig.glide().completeForTest();
+    const auto onJack = rig.end();
+
+    EXPECT_FALSE(rig.cable()->landsOnKnob);
+    EXPECT_GT(distance(onKnob, onJack), 5.0f) << "the knob and the gutter jack are different places";
+    EXPECT_LT(distance(mid, onKnob + (onJack - onKnob) * 0.5f), 0.5f) << "halfway through, halfway to the jack";
+    EXPECT_LT(distance(nearEnd, onJack), 2.0f) << "it arrives at the jack, so the end of the fade is no jump";
+    auto* module = dynamic_cast<ModuleBase*>(rig.osc->getModule());
+    ASSERT_NE(module, nullptr);
+    const auto jack = rig.osc->getPosition().toFloat() +
+                      rig.osc->getPortCenter(module->mapInputChannel(5).visibleJackIndex, true).toFloat();
+    EXPECT_LT(distance(onJack, jack), 0.5f) << "the end rests on the card's own gutter jack";
     EXPECT_FALSE(rig.glide().isLive());
 }

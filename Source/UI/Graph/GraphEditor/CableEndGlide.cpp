@@ -24,19 +24,21 @@ void CableEndGlide::begin(ModuleComponent& card, bool unfolding) {
     }
     const auto& drawn = cablesNow_();
     std::vector<Entry> next;
-    const auto record = [&](ModuleComponent& owner, const VisibleCable& cable) {
-        next.push_back({&owner, cable.id, cable.p2 - owner.getPosition().toFloat()});
+    const auto record = [&](ModuleComponent& owner, const VisibleCable& cable,
+                            std::optional<juce::Point<float>> folded) {
+        next.push_back({&owner, cable.id, cable.p2 - owner.getPosition().toFloat(), folded});
     };
     for (const auto& old : entries_)
         if (old.card != nullptr && old.card.getComponent() != &card)
             for (const auto& cable : drawn)
                 if (cable.id == old.id) {
-                    record(*old.card, cable);
+                    record(*old.card, cable, old.foldedRelative);
                     break;
                 }
     for (const auto& cable : drawn)
         if (cable.destNodeId == card.getNodeId().uid)
-            record(card, cable);
+            record(card, cable,
+                   !unfolding && cable.landsOnKnob ? card.foldedJackCentre(cable.destChannel) : std::nullopt);
     if (next.empty()) {
         finish();
         return;
@@ -68,7 +70,8 @@ void CableEndGlide::begin(ModuleComponent& card, bool unfolding) {
 }
 
 // The live anchor is the settled one (the row's state flips at once, see ModuleComponent::shownRingSliderIndex), so
-// the end runs from the old place to wherever the cable lands now; a moving card carries both ends.
+// the end runs from the old place to wherever the cable lands now; a moving card carries both ends. A folding knob that
+// also has a gutter jack still reads as the knob until the fade ends, so its end runs to the jack's recorded place.
 void CableEndGlide::applyTo(std::vector<VisibleCable>& cables) const {
     if (entries_.empty())
         return;
@@ -79,7 +82,9 @@ void CableEndGlide::applyTo(std::vector<VisibleCable>& cables) const {
             if (cable.id != entry.id || cable.destNodeId != entry.card->getNodeId().uid)
                 continue;
             const auto from = entry.card->getPosition().toFloat() + entry.oldRelative;
-            cable.p2 = from + (cable.p2 - from) * progress_;
+            const auto to =
+                entry.foldedRelative ? entry.card->getPosition().toFloat() + *entry.foldedRelative : cable.p2;
+            cable.p2 = from + (to - from) * progress_;
             break;
         }
     }

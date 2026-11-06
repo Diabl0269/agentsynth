@@ -1,0 +1,64 @@
+# A cable on a More-row knob that also has a jack at the card's edge (an Oscillator's Level) stayed on the knob while
+# the row folded and jumped to the edge jack when the fade ended.
+#
+# What a user does:
+#   1. Starts a new project, adds an Oscillator and an LFO, hides the Oscillator's Level into the More row (right-click,
+#      Hide from card) and opens the row.
+#   2. Drags the LFO's output onto the Oscillator's Level: the cable ends on the knob's ring.
+#   3. Folds the row: the cable end glides up to the card's edge jack over the fade and rests there, with no jump
+#      when the fade ends; no animation is left running.
+#   4. Unfolds the row: the end glides back to the knob.
+# The glide is a tenth of a second, too short for a scripted step to catch mid-way; CableEndGlideTests step it frame
+# by frame. The scenario checks both resting places and records the toggle for the pictures.
+# Needs the app to be the active application (the library search field must have keyboard focus).
+motion: true
+record: true
+save_project: cable-end-glide-jack
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: oscillator}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: "card:Oscillator > Level", button: right}   # Level has a jack of its own; hide it into the More row
+  - wait: {settleMs: 500}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}                                          # "Hide from card"
+  - key: {keys: return}
+  - wait: {settleMs: 500}
+  - click: {id: "card:Oscillator > cardMoreRow"}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Oscillator > Level"}
+  - wait: {}
+  - expect: {id: "card:Oscillator", contains: {cabledTargets: Level}, within_ms: 3000}
+  - expect: {id: "card:Oscillator", contains: {cableEndOnKnob: "true", cableEndGliding: "false"}, within_ms: 3000}
+  - screenshot: {id: "card:Oscillator", name: row-open-cable-on-knob}
+  - click: {id: "card:Oscillator > cardMoreRow"}
+  - expect: {id: "card:Oscillator", contains: {cableEndGliding: "false"}, within_ms: 2000}
+  - expect: {id: "card:Oscillator", contains: {cableEndOnKnob: "false"}}
+  - screenshot: {id: "card:Oscillator", name: row-folded-cable-on-gutter-jack}
+  - screenshot: {name: row-folded-canvas}
+  - click: {id: "card:Oscillator > cardMoreRow"}
+  - expect: {id: "card:Oscillator", contains: {cableEndGliding: "false"}, within_ms: 2000}
+  - expect: {id: "card:Oscillator", contains: {cableEndOnKnob: "true"}}
+  - screenshot: {id: "card:Oscillator", name: row-unfolded-again}

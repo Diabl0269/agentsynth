@@ -103,6 +103,11 @@ TEST(ShapeEditorKeyboardReach, CtrlTOnAMapDotAddsAShapeHalfwayToTheNextDotAsOneU
     EXPECT_EQ(rig.editor.getSelected(), 1);
     EXPECT_EQ(rig.editor.getMap().getNumDots(), 4);
     EXPECT_EQ(rig.editor.getStatusText(), "");
+    // Regression test for FRO1297: every dot's spoken name is renumbered when one is inserted.
+    for (int i = 0; i < 4; ++i)
+        EXPECT_TRUE(
+            rig.dot(i).getTitle().startsWith("Dot " + juce::String(i + 1) + " of 4, shape " + after[(size_t)i].name))
+            << rig.dot(i).getTitle();
     ASSERT_TRUE(rig.shapes.undo.undo());
     EXPECT_EQ(rig.numShapes(), 3);
 }
