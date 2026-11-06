@@ -20,8 +20,8 @@ bool LfoCustomShapes::isPlainSingle() const {
     if (shapes.size() != 1)
         return false;
     const auto& s = shapes.front();
-    return s.name.isEmpty() && !s.colour.has_value() && s.position.size() == (size_t)morph::kMapDimensions &&
-           s.position[0] == 0.5f && s.position[1] == 0.5f;
+    return s.name.isEmpty() && !s.colour.has_value() && s.colourIndex <= 0 &&
+           s.position.size() == (size_t)morph::kMapDimensions && s.position[0] == 0.5f && s.position[1] == 0.5f;
 }
 
 juce::var LfoCustomShapes::toVar() const {

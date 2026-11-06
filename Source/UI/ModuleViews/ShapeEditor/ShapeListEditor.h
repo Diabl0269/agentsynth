@@ -4,6 +4,7 @@
 #include "PerNoteBar.h"
 #include "ShapeListAdapter.h"
 #include "ShapeMapController.h"
+#include "ShapeWindowMap.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
@@ -79,6 +80,9 @@ public:
     bool acceptsLibraryShape(synth::shapes::ShapeKind kind) const { return libraryKind() == kind; }
     /** Replaces shape `index`'s curve with the library shape's, as one undo step. */
     void stampLibraryShape(int index, const synth::shapes::LibraryShape& shape);
+    /** A library shape dropped on the map: on dot `dot` it stamps that shape; on empty space (-1) it adds a shape
+     *  named after it at map position `at`, selected, as one undo step, or says there is no room. */
+    void dropLibraryShape(const synth::shapes::LibraryShape& shape, int dot, juce::Point<float> at);
     /** Save shape: asks for a name (refusing an empty one), asks before replacing a saved shape, then writes the
      *  selected shape's curve to the library. */
     void saveSelectedShape();
@@ -86,7 +90,7 @@ public:
     void applyDrawShape(DrawShape shape);
 
     // ---------- inspection ----------
-    MorphMap& getMap() noexcept { return map_; }
+    ShapeWindowMap& getMap() noexcept { return map_; }
     CurveEditorComponent& getCurveEditor() noexcept { return curve_; }
     ShapeMapController& getController() noexcept { return controller_; }
     juce::TextButton& getAddButton() noexcept { return addButton_; }
@@ -166,7 +170,7 @@ private:
     RestoreWatch curveWatch_;
     bool curveGestureOpen_ = false;
 
-    MorphMap map_;
+    ShapeWindowMap map_;
     ShapeMapController controller_;
     std::unique_ptr<ChipStrip> chips_;
     CurveEditorComponent curve_;

@@ -21,9 +21,13 @@ struct ShapeItem {
     std::vector<float> position; // map x, map y
     /** The ARGB the user gave this shape's dot and chip; empty wears the palette colour its index gives. */
     std::optional<juce::uint32> colour;
+    /** The palette slot its dot and chip wear without a picked colour; kept when other shapes come and go. -1 wears
+     *  the slot of its list index. */
+    int colourIndex = -1;
 
     bool operator==(const ShapeItem& other) const {
-        return name == other.name && curve == other.curve && position == other.position && colour == other.colour;
+        return name == other.name && curve == other.curve && position == other.position && colour == other.colour &&
+               colourIndex == other.colourIndex;
     }
 };
 

@@ -34,7 +34,8 @@ void MorphMap::paint(juce::Graphics& g) {
     g.setFont(juce::Font(10.0f));
     for (int i = 0; i < (int)dots_.size(); ++i) {
         const auto c = toPixels(getDrawnDot(i).x, getDrawnDot(i).y);
-        const auto colour = morphShapeColour(colors, i, dots_[(size_t)i].colour);
+        const auto& dot = dots_[(size_t)i];
+        const auto colour = morphShapeColour(colors, morphColourSlot(dot.colourSlot, i), dot.colour);
         const float scale = getDotScale(i);
         const float alpha = getDotAlpha(i) * moveTween_.alphaFor(i);
         const float r = kDotRadius * scale;

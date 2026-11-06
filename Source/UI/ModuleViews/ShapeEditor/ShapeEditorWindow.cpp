@@ -2,6 +2,7 @@
 #include "ShapeEditorWindow.h"
 #include "ShapeEditorAppShortcuts.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/Library/SoundBrowser/SoundDragState.h"
 
 namespace synth::ui {
 
@@ -40,6 +41,63 @@ popup_motion::Style motionStyle(juce::Component::SafePointer<juce::Component> an
     };
     return style;
 }
+
+/** The shape editor's window. It is not modal, so a shape can be dragged onto it from the Sounds view; it owns
+    itself and is deleted one turn after it closes (Esc, Cmd+W, Done, the title bar's close button), by the card that
+    opened it (MorphShapesCard::detach), or by deleteOpenModalDialogs() on quit. */
+class ShapeEditorDialog final
+    : public juce::DialogWindow
+    , private SoundDragState::Listener {
+public:
+    ShapeEditorDialog(juce::DialogWindow::LaunchOptions& options)
+        : juce::DialogWindow(
+              options.dialogTitle, options.dialogBackgroundColour, false, true,
+              options.componentToCentreAround != nullptr
+                  ? juce::Component::getApproximateScaleFactorForComponent(options.componentToCentreAround)
+                  : 1.0f) {
+        setContentOwned(options.content.release(), true);
+        centreAroundComponent(options.componentToCentreAround, getWidth(), getHeight());
+        setResizable(options.resizable, options.useBottomRightCornerResizer);
+        setUsingNativeTitleBar(options.useNativeTitleBar);
+        SoundDragState::addListener(this);
+    }
+
+    ~ShapeEditorDialog() override { SoundDragState::removeListener(this); }
+
+    /** The title bar's button fades the window out first; a close that already faded it (closeHostingWindow calls
+        this from its fade's end) hides it at once. */
+    void closeButtonPressed() override {
+        if (PopupMotion::isDismissing(*this)) {
+            finishClose();
+            return;
+        }
+        PopupMotion::dismiss(*this, [safe = juce::Component::SafePointer<ShapeEditorDialog>(this)] {
+            if (safe != nullptr)
+                safe->finishClose();
+        });
+    }
+
+private:
+    // Deleting now would pull the window out from under the key or click handler that is closing it.
+    void finishClose() {
+        if (closing_)
+            return;
+        closing_ = true;
+        setVisible(false);
+        juce::MessageManager::callAsync(
+            [safe = juce::Component::SafePointer<ShapeEditorDialog>(this)] { delete safe.getComponent(); });
+    }
+
+    // A drag hit-tests the windows in the order they were last brought forward, and a press in the main window to
+    // start the drag brings that one forward under this one: raised again (without the keyboard), a drop over this
+    // window lands here.
+    void soundDragChanged() override {
+        if (SoundDragState::isShapeActive() && isVisible() && !closing_)
+            toFront(false);
+    }
+
+    bool closing_ = false;
+};
 } // namespace
 
 namespace test_hooks {
@@ -71,10 +129,10 @@ juce::DialogWindow* openShapeEditorWindow(std::shared_ptr<ShapeListAdapter> adap
     options.componentToCentreAround = anchor != nullptr ? anchor->getTopLevelComponent() : nullptr;
     options.useNativeTitleBar = true;
     options.resizable = true;
-    auto* dialog = PopupMotion::launchDialog(
-        options, [anchor](juce::DialogWindow& window) { return motionStyle(anchor, &window); });
-    if (dialog == nullptr)
-        return nullptr;
+    popup_motion::applyThemedBackground(options);
+    auto* dialog = PopupMotion::launchNonModalDialog(
+        *new ShapeEditorDialog(options), anchor,
+        [anchor](juce::DialogWindow& window) { return motionStyle(anchor, &window); });
     // A window that has only just been launched may not be showing yet, and focus can only land on a showing
     // component, so the focus is given one turn later (the window may also be gone by then).
     juce::MessageManager::callAsync([window = juce::Component::SafePointer<juce::DialogWindow>(dialog)] {

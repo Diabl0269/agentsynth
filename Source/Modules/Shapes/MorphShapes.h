@@ -19,6 +19,9 @@ struct Shape {
     std::vector<float> position;
     /** An ARGB the user picked for this dot; empty keeps the palette colour its index gives. */
     std::optional<juce::uint32> colour;
+    /** The palette slot the shape wears when it has no picked colour; it stays with the shape when others are added,
+     *  inserted or removed. -1 wears the slot of its list index (a list saved without slots). */
+    int colourIndex = -1;
 
     bool operator==(const Shape&) const;
 };
@@ -61,7 +64,7 @@ bool isFiniteNumber(const juce::var& v);
 bool hasReadableCurve(const juce::var& v);
 
 /** `{"name":..,"position":[..],"curve":{LfoCustomWave::toVar}}`, plus `"colour"` (an ARGB integer) only when the
- *  shape has one. */
+ *  shape has one and `"colourIndex"` only when it has a slot. */
 juce::var shapeToVar(const Shape& shape);
 
 /** The shapes of a JSON list. A shape whose curve is unreadable gets `unreadableCurve`; a non-object entry is dropped;
@@ -71,8 +74,33 @@ juce::var shapeToVar(const Shape& shape);
 std::vector<Shape> shapesFromVar(const juce::var& list, const LfoCustomWave& unreadableCurve, bool untrusted);
 
 /** Caps the count at kMaxShapes, trims and caps names at kMaxNameLength, sanitises each curve, pads every position
- *  with 0.5 up to kMapDimensions and clamps every coordinate to [0, 1] (non-finite centred). Leaves an empty list
- *  empty: the owner decides its default. */
+ *  with 0.5 up to kMapDimensions and clamps every coordinate to [0, 1] (non-finite centred). A list where any shape has
+ *  a colour slot ends with a distinct slot on every shape (assignColourSlots); a list with none keeps none. Leaves an
+ * empty list empty: the owner decides its default. */
 void sanitiseShapes(std::vector<Shape>& shapes);
+
+/** Gives every shape a distinct colour slot (`colourIndex`) in [0, kMaxShapes): the first shape holding a valid slot
+ *  keeps it; every other one takes the lowest free slot, in list order, so a list with no slots gets 0..n-1. `Shapes`
+ *  is any list of records with an int `colourIndex` (morph::Shape, the editor's ShapeItem). */
+template <class Shapes>
+void assignColourSlots(Shapes& shapes) {
+    std::vector<bool> taken((size_t)kMaxShapes, false);
+    for (auto& shape : shapes) {
+        if (shape.colourIndex >= 0 && shape.colourIndex < kMaxShapes && !taken[(size_t)shape.colourIndex])
+            taken[(size_t)shape.colourIndex] = true;
+        else
+            shape.colourIndex = -2; // needs one; -2 so a repeat of a taken slot is not mistaken for its first holder
+    }
+    size_t next = 0;
+    for (auto& shape : shapes) {
+        if (shape.colourIndex != -2)
+            continue;
+        while (next < taken.size() && taken[next])
+            ++next;
+        shape.colourIndex = next < taken.size() ? (int)next : (int)taken.size() - 1;
+        if (next < taken.size())
+            taken[next] = true;
+    }
+}
 
 } // namespace synth::morph

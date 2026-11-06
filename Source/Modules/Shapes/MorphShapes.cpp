@@ -16,7 +16,8 @@ bool isFiniteNumber(const juce::var& v) {
 }
 
 bool Shape::operator==(const Shape& other) const {
-    return name == other.name && curve == other.curve && position == other.position && colour == other.colour;
+    return name == other.name && curve == other.curve && position == other.position && colour == other.colour &&
+           colourIndex == other.colourIndex;
 }
 
 void blendWeights(const float* xs, const float* ys, int count, float x, float y, float* out) noexcept {
@@ -50,6 +51,8 @@ juce::var shapeToVar(const Shape& shape) {
     so->setProperty("curve", shape.curve.toVar());
     if (shape.colour.has_value())
         so->setProperty("colour", (juce::int64)*shape.colour);
+    if (shape.colourIndex >= 0)
+        so->setProperty("colourIndex", shape.colourIndex);
     return juce::var(so);
 }
 
@@ -75,6 +78,9 @@ std::vector<Shape> shapesFromVar(const juce::var& list, const LfoCustomWave& unr
         if (const auto colour = so->getProperty("colour"); !untrusted && isFiniteNumber(colour))
             if (const double argb = (double)colour; argb >= 0.0 && argb <= 4294967295.0)
                 shape.colour = (juce::uint32)(juce::int64)argb;
+        if (const auto slot = so->getProperty("colourIndex"); !untrusted && isFiniteNumber(slot))
+            if (const double v = (double)slot; v >= 0.0 && v < (double)kMaxShapes)
+                shape.colourIndex = (int)v;
         const juce::var curve = so->getProperty("curve");
         shape.curve = hasReadableCurve(curve) ? LfoCustomWave::fromVar(curve) : unreadableCurve;
         const juce::var pos = so->getProperty("position");
@@ -102,6 +108,8 @@ void sanitiseShapes(std::vector<Shape>& shapes) {
         for (auto& c : shape.position)
             c = std::isfinite(c) ? juce::jlimit(0.0f, 1.0f, c) : 0.5f;
     }
+    if (std::any_of(shapes.begin(), shapes.end(), [](const Shape& s) { return s.colourIndex >= 0; }))
+        assignColourSlots(shapes);
 }
 
 } // namespace synth::morph

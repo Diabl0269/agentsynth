@@ -122,6 +122,17 @@ knobs and sliders, so a stock control needs nothing. A custom-painted control ca
 6. A command action also needs its `AppCommands.h` enumerator and `getCommandForAction` mapping, and a row
    in `MainComponentCommandTable.cpp` (the row-order pin is `MainComponentCommandTableTests.cpp`).
 
+## formatShortcutHint
+
+```cpp
+juce::String formatShortcutHint(const juce::String& base,
+                                const juce::String& shortcutDisplay);
+```
+
+Composes tooltip text with an optional keyboard shortcut hint appended in `[brackets]`. An empty
+`shortcutDisplay` omits the hint. Used by feature controls to produce consistent `setTooltip()`
+strings.
+
 ## The coverage test and its baseline
 
 `Tests/UI/Accessibility/AccessibilityCoverageTests.cpp` audits every visible, accessible interactive
@@ -219,7 +230,8 @@ next dot (the last shape stays), F2 renames it, the open-context-menu key opens 
 (`KeyboardContextMenuProvider`), Ctrl+T adds a dot halfway to the next one (the last dot has none; a full list has no
 room; both say so in a line under the map and to a screen reader). Escape is not used by the map: it closes the window. In the window Tab continues through the shape chips
 (named "<name> shape"), the curve editor ("Shape curve", its own keys above) and the buttons to Done; Escape closes the
-window with the shared fade (`closeHostingWindow`); the window opens with focus on the map, and the app shortcuts that make
+window with the shared fade (`closeHostingWindow`); the window is not modal, so a click in the main window moves the
+keyboard there and a click back in the window returns it; the window opens with focus on the map, and the app shortcuts that make
 sense there (Space, undo, redo) still work from it (`ShapeEditorAppShortcuts`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
 
 ## Verifying for real

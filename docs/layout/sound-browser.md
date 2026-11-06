@@ -128,6 +128,7 @@ Drag a Shape row (past 4 px) and the same name chip follows the pointer, carried
 | Drop on | What happens | Undo |
 | --- | --- | --- |
 | A chip in a Filter shapes window / an LFO shapes window | Replaces that shape's curve with the dragged one, when the kinds match; the chip is outlined while the pointer is over it and its tooltip reads "Drop to stamp ah onto oo". | one step |
+| The morph map of a shapes window (`ShapeWindowMap`) | Over a dot: replaces that dot's curve (its name and place stay). Over empty space: adds a shape at that point with the dragged curve, named after it, selected; at the shape cap nothing is added and "No room for another shape" shows under the map. The map is outlined faintly while a matching shape is dragged; over it a ring marks the dot (or a ghost dot the point) and a label reads "Drop to stamp eh onto ah" or "Drop to add eh here". The window is not modal, so the drag starts in the main window; when a shape drag starts the window is raised (without the keyboard), because a drag finds its target in the order the windows were last brought forward. | one step |
 | A Filter card on its Custom type / an LFO card whose shape is Custom | Replaces the curve of the shape nearest the morph cursor (the one the card's curve editor shows). The card shows a faint outline while a matching shape is dragged, and the full highlight with the label "Stamp ah here" while the pointer is over it. | one step |
 
 A shape of the other kind, and a card that is not on Custom, are refused (no outline, no drop).

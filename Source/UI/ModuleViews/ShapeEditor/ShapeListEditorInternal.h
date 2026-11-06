@@ -60,10 +60,11 @@ public:
     }
 
     int getIndex() const noexcept { return index_; }
-    void setColour(const std::optional<juce::uint32>& colour) {
-        if (colour_ == colour)
+    void setColour(const std::optional<juce::uint32>& colour, int slot) {
+        if (colour_ == colour && slot_ == slot)
             return;
         colour_ = colour;
+        slot_ = slot;
         repaint();
     }
     int getIdealWidth() const {
@@ -82,7 +83,7 @@ public:
             g.drawRoundedRectangle(bounds, bounds.getHeight() * 0.5f, dropOver_ ? 2.0f : 1.0f);
         }
         const float dot = 10.0f;
-        g.setColour(morphShapeColour(colors, index_, colour_));
+        g.setColour(morphShapeColour(colors, slot_, colour_));
         g.fillEllipse(bounds.getX() + 9.0f, bounds.getCentreY() - dot * 0.5f, dot, dot);
         g.setColour(colors.textPrimary);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
@@ -110,6 +111,7 @@ private:
 
     int index_;
     std::optional<juce::uint32> colour_;
+    int slot_ = 0;
     DropHooks hooks_;
     bool dropOver_ = false;
 };
@@ -129,7 +131,7 @@ public:
             same = chips_[i]->getButtonText() == shapes[i].name;
         if (same) {
             for (size_t i = 0; i < shapes.size(); ++i)
-                chips_[i]->setColour(shapes[i].colour);
+                chips_[i]->setColour(shapes[i].colour, morphColourSlot(shapes[i].colourIndex, (int)i));
             return;
         }
         chips_.clear();
@@ -138,7 +140,7 @@ public:
             hooks.accepts = [this](synth::shapes::ShapeKind kind) { return owner_.acceptsLibraryShape(kind); };
             hooks.dropped = [this, i](const synth::shapes::LibraryShape& shape) { owner_.stampLibraryShape(i, shape); };
             auto chip = std::make_unique<Chip>(i, shapes[(size_t)i].name, std::move(hooks));
-            chip->setColour(shapes[(size_t)i].colour);
+            chip->setColour(shapes[(size_t)i].colour, morphColourSlot(shapes[(size_t)i].colourIndex, i));
             chip->onClick = [this, i] { owner_.setSelected(i); };
             addAndMakeVisible(*chip);
             chips_.push_back(std::move(chip));

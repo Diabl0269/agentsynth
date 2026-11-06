@@ -101,6 +101,22 @@ void ShapeListEditor::stampLibraryShape(int index, const LibraryShape& shape) {
     setSelected(index);
 }
 
+// The new shape takes the dropped curve and the library shape's name in the add's own undo step.
+void ShapeListEditor::dropLibraryShape(const LibraryShape& shape, int dot, juce::Point<float> at) {
+    if (!acceptsLibraryShape(shape.kind))
+        return;
+    if (dot >= 0) {
+        stampLibraryShape(dot, shape);
+        return;
+    }
+    const int added = controller_.addShapeAt(at.x, at.y, [&shape](ShapeItem& item) {
+        item.curve = shape.curve;
+        item.name = shape.name;
+    });
+    if (added < 0)
+        showStatus("No room for another shape");
+}
+
 void ShapeListEditor::saveSelectedShape() {
     if (shapes_.empty() || !libraryKind().has_value())
         return;

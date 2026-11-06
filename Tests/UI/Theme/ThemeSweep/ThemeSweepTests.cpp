@@ -220,9 +220,10 @@ TEST(ThemeSweep, EveryDialogCallSiteIsRegistered) {
         ++windows[s.sourceFile];
         EXPECT_NE(s.swept, !s.exemptReason.empty()) << s.name << ": either swept or an exemption reason";
     }
-    expectRegistered("PopupMotion::launchDialog",
-                     countCallSites(std::regex(R"(PopupMotion::launchDialog\s*\()"), "Source/UI/Layout/PopupMotion."),
-                     dialogs);
+    expectRegistered(
+        "PopupMotion::launchDialog",
+        countCallSites(std::regex(R"(PopupMotion::launch(?:NonModal)?Dialog\s*\()"), "Source/UI/Layout/PopupMotion."),
+        dialogs);
     expectRegistered("DocumentWindow", countCallSites(std::regex(R"(\bDocumentWindow\s*\()"), ""), windows);
 }
 

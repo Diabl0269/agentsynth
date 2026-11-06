@@ -112,11 +112,60 @@ TEST(ShapeEditorKeyboardReach, CtrlTOnAMapDotAddsAShapeHalfwayToTheNextDotAsOneU
     EXPECT_EQ(rig.numShapes(), 3);
 }
 
-TEST(ShapeEditorKeyboardReach, CtrlTOnTheLastMapDotSaysSo) {
+// Regression test for FRO1336: Ctrl+T on the last map dot only said "This is the last dot", so a map could not grow
+// from the keyboard there
+TEST(ShapeEditorKeyboardReach, CtrlTOnTheLastMapDotAddsAShapeInAFreeSpotAsOneUndoStep) {
     Rig rig;
+    const auto before = rig.shapes.adapter->getShapes();
+    const int serial = rig.shapes.undo.getEditSerial();
+
     EXPECT_TRUE(dispatchKey(rig.dot(2), withMods('T', kCtrl)));
+
+    ASSERT_EQ(rig.numShapes(), 4);
+    const auto after = rig.shapes.adapter->getShapes();
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(after[(size_t)i].name, before[(size_t)i].name);
+        EXPECT_NE(after[3].position, after[(size_t)i].position) << "never stacked on a dot";
+    }
+    EXPECT_EQ(rig.editor.getSelected(), 3);
+    EXPECT_EQ(rig.editor.getStatusText(), "");
+    EXPECT_EQ(rig.shapes.undo.getEditSerial(), serial + 1);
+    ASSERT_TRUE(rig.shapes.undo.undo());
     EXPECT_EQ(rig.numShapes(), 3);
-    EXPECT_EQ(rig.editor.getStatusText(), "This is the last dot");
+}
+
+// Regression test for FRO1336: Cmd+D did nothing on a map dot (only the menu's Duplicate copied a shape)
+TEST(ShapeEditorKeyboardReach, CmdDOnAMapDotDuplicatesItOnceAndSelectsTheCopy) {
+    Rig rig;
+    int reached = 0;
+    rig.editor.onAppShortcut = [&](const juce::KeyPress&) {
+        ++reached;
+        return true;
+    };
+    const auto before = rig.shapes.adapter->getShapes();
+    const int serial = rig.shapes.undo.getEditSerial();
+
+    EXPECT_TRUE(dispatchKey(rig.dot(0), withMods('D', juce::ModifierKeys::commandModifier)));
+
+    ASSERT_EQ(rig.numShapes(), 4) << "one copy, not two";
+    const auto after = rig.shapes.adapter->getShapes();
+    EXPECT_EQ(after[1].curve, before[0].curve);
+    EXPECT_EQ(after[1].name, before[0].name + " copy");
+    EXPECT_EQ(rig.editor.getSelected(), 1);
+    EXPECT_EQ(reached, 0) << "the key never also reaches the app's own Duplicate";
+    EXPECT_EQ(rig.shapes.undo.getEditSerial(), serial + 1);
+}
+
+TEST(ShapeEditorKeyboardReach, CmdDOnAMapDotWithAFullListSaysThereIsNoRoom) {
+    Rig rig;
+    while (rig.numShapes() < rig.shapes.adapter->getMaxShapes())
+        ASSERT_GE(rig.editor.getController().addShapeInFreeSpot(), 0);
+    const int full = rig.numShapes();
+
+    EXPECT_TRUE(dispatchKey(rig.dot(0), withMods('D', juce::ModifierKeys::commandModifier)));
+
+    EXPECT_EQ(rig.numShapes(), full);
+    EXPECT_EQ(rig.editor.getStatusText(), "No room for another shape");
 }
 
 TEST(ShapeEditorKeyboardReach, CtrlTOnAMapDotWithAFullListSaysThereIsNoRoom) {

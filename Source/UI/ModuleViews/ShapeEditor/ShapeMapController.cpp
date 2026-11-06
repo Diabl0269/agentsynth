@@ -1,5 +1,6 @@
 // ShapeMapController.cpp -- map gestures as undoable shape-list edits.
 #include "ShapeMapController.h"
+#include "Modules/Shapes/MorphShapes.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -18,6 +19,17 @@ void setPosition(ShapeItem& shape, float x, float y) {
 
 float positionOf(const ShapeItem& shape, int axis) {
     return (int)shape.position.size() > axis ? shape.position[(size_t)axis] : 0.5f;
+}
+
+// A shape's colour belongs to the shape, not to its place in the list: before the list changes, every shape that
+// still wears its index's colour is given that slot for good, and a shape that arrives takes the lowest free slot.
+void keepColourSlots(std::vector<ShapeItem>& shapes) { synth::morph::assignColourSlots(shapes); }
+
+void insertWithFreshSlot(std::vector<ShapeItem>& shapes, int index, ShapeItem shape) {
+    keepColourSlots(shapes);
+    shape.colourIndex = -1;
+    shapes.insert(shapes.begin() + index, std::move(shape));
+    keepColourSlots(shapes);
 }
 } // namespace
 
@@ -86,7 +98,7 @@ bool ShapeMapController::restoreSince(RestoreWatch& watch) const {
 void ShapeMapController::refresh() {
     std::vector<MorphMap::Dot> dots;
     for (const auto& shape : adapter_.getShapes())
-        dots.push_back({shape.name, positionOf(shape, 0), positionOf(shape, 1), shape.colour});
+        dots.push_back({shape.name, positionOf(shape, 0), positionOf(shape, 1), shape.colour, shape.colourIndex});
     map_.setDots(std::move(dots), restoreSince(shapesWatch_));
     map_.setCursorVisible(adapter_.hasCursor());
     syncCursor();
@@ -126,18 +138,25 @@ juce::String ShapeMapController::uniqueName(const std::vector<ShapeItem>& shapes
 
 int ShapeMapController::addShapeAt(float x, float y) { return addShapeAtIndex(x, y, (int)adapter_.getShapes().size()); }
 
+int ShapeMapController::addShapeAt(float x, float y, const std::function<void(ShapeItem&)>& customise) {
+    return addShapeAtIndex(x, y, (int)adapter_.getShapes().size(), customise);
+}
+
 /** The shape lands at `listIndex` in the list (the end for a click), one undo step, selected. */
-int ShapeMapController::addShapeAtIndex(float x, float y, int listIndex) {
+int ShapeMapController::addShapeAtIndex(float x, float y, int listIndex,
+                                        const std::function<void(ShapeItem&)>& customise) {
     auto shapes = adapter_.getShapes();
     if ((int)shapes.size() >= adapter_.getMaxShapes())
         return -1;
     adapter_.beginEdit();
     ShapeItem shape = adapter_.makeShapeAt(clamp01(x), clamp01(y));
+    if (customise)
+        customise(shape);
     shape.name =
         uniqueName(shapes, shape.name.isEmpty() ? "Shape " + juce::String((int)shapes.size() + 1) : shape.name);
     setPosition(shape, x, y);
     const int index = juce::jlimit(0, (int)shapes.size(), listIndex);
-    shapes.insert(shapes.begin() + index, std::move(shape));
+    insertWithFreshSlot(shapes, index, std::move(shape));
     adapter_.setShapes(shapes);
     adapter_.endEdit();
     changed();
@@ -175,7 +194,7 @@ int ShapeMapController::duplicateShape(int index) {
     ShapeItem copy = shapes[(size_t)index];
     copy.name = uniqueName(shapes, copy.name + " copy");
     setPosition(copy, positionOf(copy, 0) + kDuplicateOffset, positionOf(copy, 1) + kDuplicateOffset);
-    shapes.insert(shapes.begin() + index + 1, std::move(copy));
+    insertWithFreshSlot(shapes, index + 1, std::move(copy));
     adapter_.setShapes(shapes);
     adapter_.endEdit();
     changed();
@@ -185,10 +204,13 @@ int ShapeMapController::duplicateShape(int index) {
     return index + 1;
 }
 
+/** Halfway to the next shape; the last shape has no next one, so the new one goes where the Add button puts it. */
 int ShapeMapController::insertShapeAfter(int index) {
     const auto shapes = adapter_.getShapes();
-    if (index < 0 || index + 1 >= (int)shapes.size())
+    if (index < 0 || index >= (int)shapes.size())
         return -1;
+    if (index + 1 == (int)shapes.size())
+        return addShapeInFreeSpot();
     const auto& from = shapes[(size_t)index];
     const auto& to = shapes[(size_t)index + 1];
     return addShapeAtIndex((positionOf(from, 0) + positionOf(to, 0)) * 0.5f,
@@ -201,6 +223,7 @@ bool ShapeMapController::deleteShape(int index) {
     if (shapes.size() <= 1 || index < 0 || index >= (int)shapes.size())
         return false;
     adapter_.beginEdit();
+    keepColourSlots(shapes);
     shapes.erase(shapes.begin() + index);
     adapter_.setShapes(shapes);
     adapter_.endEdit();

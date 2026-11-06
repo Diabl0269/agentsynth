@@ -1,0 +1,45 @@
+# Feature: in the Filter's Edit shapes window, Ctrl+T on the last morph-map dot adds a shape in a free spot (it used to
+# only say "This is the last dot"), Cmd+D on a dot duplicates it, and no dot changes colour when another one is added,
+# inserted, duplicated or deleted (colours used to follow the list position).
+#
+# What a user does: sets a Filter to Custom, opens Edit shapes (ah blue, ee amber, oo green), presses Ctrl+T on the
+# last dot oo, Ctrl+T on ah (a dot halfway to ee), Cmd+D on ee, then deletes the inserted dot. ah, ee and oo keep
+# blue, amber and green throughout.
+settings:
+  librarySidebarView: sounds
+record: true
+save_project: filter-shapes-map-add-keys
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
+  - wait: {settleMs: 600}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - key: {keys: return, target: Edit shapes}
+  - wait: {settleMs: 800}
+  - expect: {id: Shape curve, exists: true, within_ms: 3000}
+  - screenshot: {id: "Filter shapes: Filter", name: three-shapes}
+  - key: {keys: ctrl+t, target: "Filter shapes: Filter > morphDot2"}   # the last dot, oo
+  - wait: {settleMs: 600}
+  - expect: {id: "Filter shapes: Filter > morphDot3", exists: true}
+  - screenshot: {id: "Filter shapes: Filter", name: ctrl-t-on-the-last-dot-adds-one}
+  - key: {keys: ctrl+t, target: "Filter shapes: Filter > morphDot0"}   # ah: a dot halfway to ee
+  - wait: {settleMs: 600}
+  - expect: {id: "Filter shapes: Filter > morphDot4", exists: true}
+  - screenshot: {id: "Filter shapes: Filter", name: ctrl-t-in-the-middle-keeps-colours}
+  - key: {keys: cmd+d, target: "Filter shapes: Filter > morphDot2"}    # ee
+  - wait: {settleMs: 600}
+  - expect: {id: "Filter shapes: Filter > morphDot5", exists: true}
+  - screenshot: {id: "Filter shapes: Filter", name: cmd-d-duplicates-ee}
+  - key: {keys: delete, target: "Filter shapes: Filter > morphDot1"}   # the dot Ctrl+T inserted
+  - wait: {settleMs: 600}
+  - expect: {id: "Filter shapes: Filter > morphDot5", exists: false}
+  - screenshot: {id: "Filter shapes: Filter", name: delete-in-the-middle-keeps-colours}

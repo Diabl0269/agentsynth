@@ -535,7 +535,12 @@ earliest look-and-feel call that receives it, before it is first shown
   `Style` that points at the window, resize limits that must hold on frame 0) uses
   `launchDialog(options, makeStyle)`: `makeStyle(dialog)` runs once the window exists and before the
   first frame, so the window never shows unstyled. `launchDialog` also sets the themed window
-  background ([theming](theming.md#themed-widgets)), never JUCE's light grey.
+  background ([theming](theming.md#themed-widgets)), never JUCE's light grey. A tool window that must
+  not be modal (the shape editor, so a shape can be dragged onto it from the main window) builds its
+  own `juce::DialogWindow` subclass that deletes itself on close and shows it with
+  `PopupMotion::launchNonModalDialog(dialog, owner, makeStyle)`: the same motion, close keys and
+  tooltips, kept above `owner`'s window (a child window on macOS, always-on-top elsewhere), and
+  deleted by `deleteOpenModalDialogs()` on quit if it is still open.
 
 `attach` installs one self-deleting listener per window. It starts the slide the moment the window
 becomes visible (frame 0 is applied before the first VBlank, a watchdog timer finishes the move if
@@ -845,17 +850,6 @@ duration that branches on the mode (full, reduced, or 0 under Off). Off is insta
 automation marker fade) land at once. A new non-essential animation asks `prefersReducedMotion()` before it starts, uses
 `AnimationDriver` or `motionMs` for its duration, and lands on its final state at once under Off.
 Tests: `setAnimationMode` sets the mode (restore `followSystem` afterwards); `setReducedMotionForTest` forces the OS's answer. The test run itself pins the OS's answer to off (`setSystemReducedMotionForTest(false)` in `Tests/TestMain.cpp`), so no test reads the machine's own Reduce Motion setting, which differs between CI runners and developer Macs; a test that wants it on forces it.
-
-## formatShortcutHint
-
-```cpp
-juce::String formatShortcutHint(const juce::String& base,
-                                const juce::String& shortcutDisplay);
-```
-
-Composes tooltip text with an optional keyboard shortcut hint appended in `[brackets]`. An empty
-`shortcutDisplay` omits the hint. Used by feature controls to produce consistent `setTooltip()`
-strings.
 
 ## What moves, and how
 

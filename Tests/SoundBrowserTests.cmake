@@ -7,6 +7,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/ShapeLibraryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/ShapesPlaceTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeLibraryWindowTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/ShapeEditor/ShapeWindowDropTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundIndexTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundListsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/SoundBrowser/SoundNameGuessTests.cpp

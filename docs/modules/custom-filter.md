@@ -277,7 +277,7 @@ defaults, so projects that never use Custom save exactly as before. Otherwise:
   "curve": {"version": 1, "points": [{"x": 0, "y": 0.3, "bend": 0}, {"x": 1, "y": 0.13, "bend": 0}]}}]}
 ```
 
-A shape the user recoloured also has `"colour"`, an ARGB integer (absent: the palette colour by shape index; the LFO's list stores it the same way, and an unnamed centre shape with a colour saves as a list, not the bare curve). Model-authored lists never carry one.
+Each shape also stores `"colourIndex"`, its palette slot: a shape keeps its slot when others are added, inserted, duplicated or deleted, and a new shape takes the lowest free one, so no dot changes colour because another one came or went. A list saved without slots wears the slots of its order (0..n-1) until its first add or delete writes them; a repeated or out-of-range slot is replaced by the lowest free one on load, and model-authored lists never carry one. A shape the user recoloured also has `"colour"`, an ARGB integer (absent: the palette colour by its slot; the LFO's list stores it the same way, and an unnamed centre shape with a colour saves as a list, not the bare curve). Model-authored lists never carry one.
 
 Per-note settings other than the defaults add a `"perNote"` object beside `"shapes"` (the outer `version` stays 1,
 so an older build still reads the shapes and ignores it):
@@ -340,7 +340,12 @@ tooltip and the shared focus ring.
 
 The big editor for the drawn shapes, `Source/UI/ModuleViews/ShapeEditor/`. It is a window titled "Filter shapes:
 <module name>" that grows out of the card's centre and shrinks back into it
-([animation](../layout/animation.md#popup-windows)); Esc or Done closes it, and the keyboard focus starts on the map (Tab works at once; asking for the window again
+([animation](../layout/animation.md#popup-windows)). It is not modal: the main window keeps working beside it, and
+it stays above the main window (a child window on macOS). Esc, Cmd+W, Done or its close button closes it, and it is
+deleted a turn later (also when its card goes away, and on quit). A shape dragged from the Sounds view's Shapes onto
+its map stamps the dot under the pointer (curve only: the name and place stay) or, over empty space, adds a new shape
+there named after it, selected; each is one undo step, and a full list says "No room for another shape"
+([sound browser](../layout/sound-browser.md#dragging-a-shape)). The keyboard focus starts on the map (Tab works at once; asking for the window again
 brings it back with the focus there). It is its own top-level window, so a key it does not use (Space, Cmd+Z, Cmd+Shift+Z, the
 transport and panel shortcuts) is handed to the main window, which performs it a turn later
 ([shortcuts](../control/shortcuts.md#open-context-menu)); Delete, Backspace, the arrows, Tab and the canvas-selection
@@ -412,7 +417,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
 
 ## Morph map
 
-One dot per shape, coloured by shape index unless you gave it a colour (**Colour...** in its menu, or Alt+C on a focused dot: the picker previews live, one undo step; the chip and the per-note key dots wear it too), and a dark cursor at (Morph X, Morph Y). Drag a dot to move the shape,
+One dot per shape, coloured by its own palette slot (kept for the shape when others come and go, see [Saved state](#saved-state)) unless you gave it a colour (**Colour...** in its menu, or Alt+C on a focused dot: the picker previews live, one undo step; the chip and the per-note key dots wear it too), and a dark cursor at (Morph X, Morph Y). Drag a dot to move the shape,
 drag the cursor to set Morph X and Y (one host gesture and one undo step per drag, so automation records it), double-click
 empty space to add a shape there that copies the current blend (the blended dB curve at the cursor sampled back into at most 16
 points placed on its shape: both ends, every prominent peak with its dip and flanks, then a point wherever the straight segments still miss the blend by more than half a dB, so narrow formants survive and a flat or straight blend is two points; a single click adds nothing, and the new dot takes keyboard focus so Delete or Backspace removes it at once),

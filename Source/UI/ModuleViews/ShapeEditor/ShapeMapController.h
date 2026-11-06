@@ -27,18 +27,21 @@ public:
     /** Pushes only the cursor (a glide after an undo or redo, otherwise at once). */
     void syncCursor();
 
-    /** Each is one undo step. Add and duplicate return the new index, or -1 at the shape cap. */
+    /** Each is one undo step. Add and duplicate return the new index, or -1 at the shape cap. The new shape takes a
+     *  free colour slot; every other shape keeps its own. */
     int addShapeAt(float x, float y);
+    /** addShapeAt whose new shape `customise` adjusts (its curve, its name) before it is added, in the same step. */
+    int addShapeAt(float x, float y, const std::function<void(ShapeItem&)>& customise);
     int addShapeInFreeSpot();
     int duplicateShape(int index);
-    /** A new shape halfway between shape `index` and the next one, listed after `index`. -1 at the shape cap or when
-     *  there is no next shape. */
+    /** A new shape halfway between shape `index` and the next one, listed after `index`; after the last shape, one in
+     *  a free spot (addShapeInFreeSpot). -1 at the shape cap. */
     int insertShapeAfter(int index);
     bool deleteShape(int index);
     void renameShape(int index, const juce::String& name);
 
 private:
-    int addShapeAtIndex(float x, float y, int listIndex);
+    int addShapeAtIndex(float x, float y, int listIndex, const std::function<void(ShapeItem&)>& customise = {});
     juce::String uniqueName(const std::vector<ShapeItem>& shapes, const juce::String& wanted) const;
     void changed();
     void commitDotColour(int index, std::optional<juce::uint32> original, std::optional<juce::uint32> chosen);

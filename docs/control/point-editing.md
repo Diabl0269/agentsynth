@@ -14,9 +14,11 @@ on the piano roll. Shortcut table of the app-level commands: [`shortcuts.md`](sh
 **The exception: the morph map.** It is a 2D map with no left-to-right order, so it keeps its own keys: the arrows move
 the focused dot (Shift: a bigger step; held, they glide on; two held at once move it diagonally), and Tab steps to the
 next dot. Ctrl+T on a dot adds a shape
-halfway between it and the next dot in the list (one undo step; the new dot is selected and focused). On the last dot,
-or with the shape list full, nothing is added and the window says so under the map ("This is the last dot", "No room for
-another shape"). The same goes for a curve: a Ctrl+T it cannot act on says why ("Pick a point first", "No room after
+halfway between it and the next dot in the list; on the last dot, which has no next one, it adds a shape in the
+emptiest spot, as the Add shape button does. Cmd+D on a dot duplicates its shape next to it. Each is one undo step and
+the new dot is selected and focused; with the shape list full nothing is added and the window says so under the map
+("No room for another shape"). Every other dot keeps its colour: a shape's colour belongs to the shape, not to its
+place in the list. The same goes for a curve: a Ctrl+T it cannot act on says why ("Pick a point first", "No room after
 this point", "No room: the curve has the most points it can hold") in the shape window. See
 [`modules/custom-filter.md`](../modules/custom-filter.md).
 
@@ -34,7 +36,7 @@ this point", "No room: the curve has the most points it can hold") in the shape 
 | Up / Down | Move the selection's value (the same step as Alt+Up / Down). A lane also takes Shift+Up / Down for a coarse step. With nothing selected the key is left to the app |
 | Cmd+A | Select every dot that can move |
 | Cmd+C / Cmd+V | Copy the selection; paste it at the cursor (the curve editor) or at the transport position (a lane) |
-| Cmd+D | Duplicate the selection; the copies become the selection. Where they start is the Timeline preference Duplicate points: right after the last dot (default, one tick past it), one dot-spacing after, or the next grid line after the selection ([`timeline/automation-points.md`](../timeline/automation-points.md#duplicating)) |
+| Cmd+D | Duplicate the selection; the copies become the selection (on the morph map: the focused dot's shape). Where they start is the Timeline preference Duplicate points: right after the last dot (default, one tick past it), one dot-spacing after, or the next grid line after the selection ([`timeline/automation-points.md`](../timeline/automation-points.md#duplicating)) |
 | Ctrl+T | Insert a new dot halfway between the cursor dot and the next one (value: the midpoint of the two); the new dot becomes the selection and the cursor. A curve's last dot has no room after it (the range ends there) and a lane's last point has no next one, so the key does nothing there |
 | Delete / Backspace | Remove the selection |
 | Cmd+Z | Undo. Every press above that changes something is exactly one undo step; a press that changes nothing (a clamped end, a pinned axis, a full curve) opens none |
