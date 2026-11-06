@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CurveDrawGesture.h"
 #include "CurveEditorGeometry.h"
 #include "CurveModel.h"
 #include "UI/Layout/KeyGlide/KeyHold.h"
@@ -13,6 +14,10 @@
 #include <memory>
 #include <optional>
 #include <vector>
+
+namespace synth {
+struct LfoCustomWave;
+}
 
 namespace synth::ui {
 
@@ -235,6 +240,28 @@ public:
     /** How near the pointer must be to a line for it to light up. */
     static constexpr float kHoverLinePx = 6.0f;
 
+    // ---------- the pen (CurveEditorDraw.cpp, CurveDrawGesture.h) ----------
+    /** A chosen pen turns presses into strokes: drag a span and the shape replaces only that stretch of the curve.
+     *  None (the default) edits points as usual. */
+    void setDrawPen(std::optional<DrawShape> pen);
+    std::optional<DrawShape> getDrawPen() const noexcept;
+    /** The band and cycle count a periodic shape draws with by default. */
+    void setDrawBand(float lo, float hi, int cycles);
+    bool isDrawing() const noexcept;
+    CurveDrawGesture& getDrawGesture() noexcept { return draw_; }
+    /** A stroke the curve could not take (too many points) says why here. */
+    std::function<void(const juce::String& why)> onDrawRefused;
+    /** Enter with a pen chosen: the owner applies the pen to the selected stretch (the keyboard route). Returns
+     *  whether it took the key. */
+    std::function<bool()> onPenApply;
+    /** What the gesture asks for: a pixel as a model point (rounded to the grid unless `bypassSnap`), a model point as
+     *  a pixel, one grid cell's width (0 without a grid), the curve `wave` as a path, and the one commit. */
+    juce::Point<double> drawPointAt(juce::Point<float> pixel, bool bypassSnap) const;
+    juce::Point<float> pixelForDrawPoint(juce::Point<double> point) const;
+    double drawCellWidth() const;
+    juce::Path drawPreviewPath(const LfoCustomWave& wave) const;
+    void commitDrawnCurve(const LfoCustomWave& wave);
+
     // ---------- mouse ----------
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
@@ -246,6 +273,7 @@ public:
     // ---------- Component ----------
     void resized() override;
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
 
     // ---------- keyboard and screen reader (CurveEditorKeyboard.cpp) ----------
     bool keyPressed(const juce::KeyPress& key) override;
@@ -405,6 +433,8 @@ private:
     int pendingCollapseIndex_ = -1;
     juce::String announcedValueText_;
 
+    CurveDrawGesture draw_{*this};
+    std::optional<juce::String> tooltipBeforePen_;
     KeyedPointTween pointTween_{*this};
     KeyHold keyHold_{*this};
     struct KeyDrag {

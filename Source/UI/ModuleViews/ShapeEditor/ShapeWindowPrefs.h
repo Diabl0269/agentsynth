@@ -11,6 +11,9 @@ inline juce::String gridKey(const juce::String& kind) { return "shapeWindowGrid_
 inline juce::String spectrumKey(const juce::String& kind) { return "shapeWindowSpectrum_" + kind; }
 /** Holds "0" while the labelled guide lines are hidden; a missing value shows them. */
 inline juce::String guidesKey(const juce::String& kind) { return "shapeWindowGuides_" + kind; }
+/** The Draw pen: a shape name ("Sine") while draw mode is on, "off:Sine" when it was left (the shape is kept), else
+ *  none. */
+inline juce::String penKey(const juce::String& kind) { return "shapeWindowPen_" + kind; }
 
 inline juce::String loadText(juce::ApplicationProperties* props, const juce::String& key) {
     if (props == nullptr || props->getUserSettings() == nullptr)

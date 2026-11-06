@@ -190,7 +190,7 @@ TEST(ShapeEditor, StartFromListsTheBuiltInsThenTheFactoryShapesAndStampsTheCurve
     EXPECT_TRUE(rig.filter->getCustomShapes().isDefault());
 }
 
-TEST(ShapeEditor, TheLaneDrawFlyoutShapesTheSelectedCurve) {
+TEST(ShapeEditor, TheLaneDrawFlyoutPicksThePenAndTheKeyboardRouteShapesTheSelectedCurve) {
     ShapeRig rig;
     ShapeListEditor editor(rig.adapter, 0);
     std::unique_ptr<DrawShapeFlyout> flyout;
@@ -201,6 +201,10 @@ TEST(ShapeEditor, TheLaneDrawFlyoutShapesTheSelectedCurve) {
     ASSERT_NE(flyout, nullptr);
 
     flyout->pick(DrawShape::Sine);
+    EXPECT_EQ(editor.getPen(), DrawShape::Sine) << "a pick chooses the pen; the drag draws";
+    EXPECT_TRUE(rig.filter->getCustomShapes().isDefault());
+    editor.getCurveEditor().setModel(editor.getCurveEditor().getModel()); // nothing selected: the whole curve
+    ASSERT_TRUE(editor.getCurveEditor().keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     const auto drawn = rig.filter->getCustomShapes().shapes[0].curve;
     const auto range = rig.adapter->getDrawRange();
     EXPECT_GT(drawn.points.size(), 20u) << "a sine across the audible range has many points";

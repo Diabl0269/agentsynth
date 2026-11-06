@@ -423,9 +423,20 @@ slider drag is one undo step (the settings are part of the module's extra state)
 - **Save shape** (right of Draw) saves the selected shape's curve to the [shape library](#shape-library) under a name
   typed in the usual alert prompt (it starts from the shape's name, is cut to 24 characters and refuses an empty
   name by asking again). A name already saved asks "Replace it?" first. A Tab stop named "Save shape" with a tooltip.
-- **Draw** opens the automation lane's own shape flyout (`DrawShapeFlyout`) and applies the pick to the curve through
-  `LaneShapeGenerator`'s points, so a sine here is a lane's sine: Free changes nothing, Line joins the first and last
-  levels, Sine, Triangle, Saw and Square repeat three times between -18 and +6 dB (a hold becomes a vertical step).
+- **Draw** works like the timeline's Draw tool: pick a pen, then drag on the curve. The button opens the automation lane's own
+  shape flyout (`DrawShapeFlyout`); a pick turns draw mode on and the button shows that pen's icon (`DrawShapeIcons`) and
+  lights; pressing it again leaves draw mode. While a pen is on, a press on the curve starts a stroke instead of moving a
+  point: **Sine, Triangle, Saw and Square** grow a dashed preview and a chip ("2 cycles") with the drag and fill only the
+  dragged stretch with whole cycles (one per grid cell while a Grid is chosen, else three across the full width; fewer
+  when more would not fit the shape's 64 points) between the default band (-18 and +6 dB for the Filter); **Line**
+  ramps from the press to the release; **Free** follows the mouse and is thinned on release with the Pencil's rule
+  (`AutomationRecorder::thinPoints`). Only the points inside the stretch are replaced. The stretch's ends snap to the
+  Grid unless Shift is held. Escape during a drag cancels it. One stroke is one undo step. The pen is remembered per kind
+  of list in the window settings (`shapeWindowPen_<kind>`). Code: `CurveDrawGesture` (in the curve editor) hands its
+  stroke to `drawOnCurve` (`ShapeDrawing.cpp`), the one function both the preview and the commit call, which builds the
+  points with `LaneShapeGenerator` so a sine here is a lane's sine. Keyboard route: with a pen on and the curve focused,
+  **Enter** applies the pen to the stretch between the first and last selected points (the whole curve when fewer than
+  two are selected) as one undo step; Free has no keyboard route and says so. The LFO's window works the same way.
 - **Live and undoable.** Every curve change goes to the module at once (the engine renders a new table; the audio
   thread picks it up at the next block), and each drag, button or menu pick is one undo step recorded as the module's
   extra state. The window follows changes made elsewhere (undo, the card's map, gliding the curve's points when an undo or redo moved them) by polling

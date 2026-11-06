@@ -318,20 +318,29 @@ class Runner:
     def _recorded_drag(self, args):
         """The `drag` command's own press, moves and release, one command each so a frame fits between them. A drag
         with an end outside the main window (a popup) stays one command and shows only its result."""
-        start = self._point(args["from"], args.get("fromX"), args.get("fromY"))
-        end = self._point(args["to"], args.get("toX"), args.get("toY"))
-        if start is None or end is None:
-            return self.app.call("drag", **args)
+        if args["from"] == args["to"]:
+            # One component: its own local coordinates, sent to it, so it lands on the component's own native
+            # window (a shape window is not the main window, whose coordinates the path below uses).
+            target = args["from"]
+            bounds = self.app.call("getState", id=target)["bounds"]
+            start = (args.get("fromX", bounds["w"] // 2), args.get("fromY", bounds["h"] // 2))
+            end = (args.get("toX", bounds["w"] // 2), args.get("toY", bounds["h"] // 2))
+        else:
+            target = "window"
+            start = self._point(args["from"], args.get("fromX"), args.get("fromY"))
+            end = self._point(args["to"], args.get("toX"), args.get("toY"))
+            if start is None or end is None:
+                return self.app.call("drag", **args)
         steps = max(2, args.get("steps", 12))
         mods = {"mods": args["mods"]} if "mods" in args else {}
-        self.app.call("mouseDown", id="window", x=start[0], y=start[1], **mods)
+        self.app.call("mouseDown", id=target, x=start[0], y=start[1], **mods)
         self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
         for index in range(1, steps + 1):
             x = round(start[0] + (end[0] - start[0]) * index / steps)
             y = round(start[1] + (end[1] - start[1]) * index / steps)
-            self.app.call("mouseMoveHeld", id="window", x=x, y=y, **mods)
+            self.app.call("mouseMoveHeld", id=target, x=x, y=y, **mods)
             self.recorder.frame(self.app, DRAG_HOLD_SECONDS)
-        self.app.call("mouseUp", id="window", x=end[0], y=end[1], **mods)
+        self.app.call("mouseUp", id=target, x=end[0], y=end[1], **mods)
         return {"from": args["from"], "to": args["to"]}
 
     def _step(self, index, command, args):

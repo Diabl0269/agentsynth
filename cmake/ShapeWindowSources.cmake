@@ -8,6 +8,12 @@ list(APPEND APPUI_SOURCES
     Source/UI/ModuleViews/FilterSpectrumAnalyser.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeListEditorToolbar.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeListEditorLibrary.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeListEditorDraw.cpp
+    Source/UI/ModuleViews/ShapeEditor/ShapeDrawPenButton.h
+    Source/UI/ModuleViews/ShapeEditor/ShapeDrawStroke.h
+    Source/UI/ModuleViews/CurveEditor/CurveDrawGesture.h
+    Source/UI/ModuleViews/CurveEditor/CurveDrawGesture.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorDraw.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.h
     Source/UI/ModuleViews/ShapeEditor/ShapeWindowMap.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeSavePrompts.cpp

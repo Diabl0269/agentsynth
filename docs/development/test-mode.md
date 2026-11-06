@@ -211,7 +211,7 @@ steps: ...
 Recording permission and works on hidden windows. It has no sound: for an audio check, attach an offline render's WAV.
 `record_target` films one component instead (a popover is a window of its own, so the main window never shows it); `scale` renders it larger. Each frame holds 0.8 s. The protocol answers one command at a time, so a recorded `drag` is sent as `mouseDown`,
 `mouseMoveHeld` per step and `mouseUp` with a frame after each (0.1 s each, ten a second): the same gesture, only slower
-in real time. A drag with an end outside the main window stays one command and shows only its result. Without ffmpeg
+in real time. A drag whose two ends are the same component is sent to that component in its own coordinates (so it also works in a window of its own, such as a shape window). A drag with an end outside the main window stays one command and shows only its result. Without ffmpeg
 the run prints a warning and still passes. A failed scenario keeps both: they show what went wrong. `save_project` is a plain
 name (it cannot leave `<out>`), overwrites the last run's bundle and fails the scenario if the save fails.
 

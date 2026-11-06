@@ -115,6 +115,14 @@ and along the glide of a step, undo or redo, never at the old place. A lane take
 (`AutomationLaneEditorDrawnPoints.cpp`); the guard is `PointMarkersFollowTheDot` (`Tests/UI/Layout/PointMarkers/`),
 which records every marker painted and fails one left off the dot.
 
+### Draw tools in the shape windows
+
+The Filter's and the LFO's shape windows add a pen to the curve editor (the Draw button,
+[custom-filter.md](../modules/custom-filter.md#shape-editor-window)). With a pen chosen, a press on the curve is a
+stroke (`CurveDrawGesture`), not a point drag: the double-click add and the hover handles are off, and everything else
+(arrows, Ctrl+T, Delete, Cmd+C/V/D) still edits points from the keyboard. Escape during a drag cancels it; Enter applies
+the pen to the selected stretch.
+
 ## Adding a new point editor
 
 1. Order the dots along one axis; if they have none (a 2D map), say so here and keep the arrows for moving.

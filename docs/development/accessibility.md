@@ -229,7 +229,7 @@ held, and the whole hold is one undo step), Return on a dot opens its menu (Edit
 next dot (the last shape stays), F2 renames it, the open-context-menu key opens its menu
 (`KeyboardContextMenuProvider`), Ctrl+T adds a dot halfway to the next one (the last dot has none; a full list has no
 room; both say so in a line under the map and to a screen reader). Escape is not used by the map: it closes the window. In the window Tab continues through the shape chips
-(named "<name> shape"), the curve editor ("Shape curve", its own keys above) and the buttons to Done; Escape closes the
+(named "<name> shape"), the curve editor ("Shape curve", its own keys above) and the buttons to Done. The Draw button is named "Draw" (or "Draw, Sine pen on" with a pen chosen) and its tooltip says what Shift, Escape and Enter do; the pen has a keyboard route: Draw opens the flyout (Up/Down/Return pick), then with the curve focused Enter applies the pen to the selected stretch of points (the whole curve when fewer than two are selected), announced like any edit; a pen choice is announced ("Sine pen on", "Draw mode off"); Escape closes the
 window with the shared fade (`closeHostingWindow`); the window is not modal, so a click in the main window moves the
 keyboard there and a click back in the window returns it; the window opens with focus on the map, and the app shortcuts that make
 sense there (Space, undo, redo) still work from it (`ShapeEditorAppShortcuts`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
