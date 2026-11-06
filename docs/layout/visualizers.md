@@ -20,7 +20,8 @@ dB step, label set, and whether the 0 dB line is emphasised.
 ## FrequencyResponseComponent
 
 `Source/UI/ModuleViews/FrequencyResponseComponent.h`. A frequency-response curve with an optional
-FFT spectrum overlay (`FilterSpectrumAnalyser`, shared with the Custom shape window), used by `FilterModule` cards. **Hidden by default** on the card — a "Show
+FFT spectrum overlay (`FilterSpectrumAnalyser`, shared with the Custom shape window: a 4096-point FFT of the
+module's spectrum buffer, with meter-like rise and fall timed in seconds), used by `FilterModule` cards. **Hidden by default** on the card — a "Show
 Response" toggle reveals it, the same opt-in pattern as "Show Scope" — and the nested "Show
 Spectrum" control appears only while the response view is open. The open panels (scope, response, spectrum) are
 remembered on the module and saved in the project as the node's `"cardView"`

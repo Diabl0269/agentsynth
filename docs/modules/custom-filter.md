@@ -385,8 +385,11 @@ slider drag is one undo step (the settings are part of the module's extra state)
   `CurveGrid` takes `xStep` and `xOrigin` for lines that do not divide the visible range evenly.
 - **Show spectrum.** A toggle at the right end of the same row (off by default, remembered) draws the filter's live
   spectrum faintly behind the grid and the curve, on the curve's own log-frequency axis (level -80 to 0 dB over the
-  full height). It is the reading the card's response view shows ([the card](#card)): the module's visual buffer,
-  transformed and smoothed by `FilterSpectrumAnalyser`, one class shared by both views. A 30 Hz tick runs only while
+  full height). It is the reading the card's response view shows ([the card](#card)): the module's 4096-sample
+  spectrum buffer, transformed by `FilterSpectrumAnalyser`, one class shared by both views. Each point takes the
+  loudest bin under it (bass points between bins interpolate by power), so a sine shows its true level. The trace
+  moves like a meter, timed in seconds rather than frames: it rises in about 10 ms and falls about 30 dB in the half
+  second after a note stops (`kAttackSeconds`, `kReleaseSeconds`, both in the analyser). A 30 Hz tick runs only while
   the toggle is on and the window is visible and repaints only the curve; with the toggle off there is no tick and the
   curve paints exactly as before (the LFO's window has no such toggle). Tab order: the map, the chips, Grid, Show
   spectrum, the curve, the buttons.

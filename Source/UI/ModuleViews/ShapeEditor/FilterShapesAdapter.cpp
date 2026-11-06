@@ -88,12 +88,9 @@ std::optional<ShapeGridOffer> FilterShapesAdapter::getGridOffer() const {
     return offer;
 }
 
-/** The same reading the card's response view shows: the module's visual buffer. */
+/** The same reading the card's response view shows: the module's spectrum buffer. */
 const std::vector<float>* FilterShapesAdapter::updateSpectrum() {
-    const auto* buffer = filter_.getVisualBuffer();
-    if (buffer == nullptr)
-        return nullptr;
-    spectrum_.analyse(*buffer, filter_.getLastSampleRate());
+    spectrum_.analyse(filter_.getSpectrumBuffer(), filter_.getLastSampleRate());
     return &spectrum_.getDb();
 }
 

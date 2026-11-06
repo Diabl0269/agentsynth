@@ -184,6 +184,7 @@ public:
         if (auto* vb = getVisualBuffer()) {
             vb->pushBlock(buffer.getReadPointer(0), numSamples);
         }
+        spectrumBuffer.pushBlock(buffer.getReadPointer(0), numSamples);
 
         // Clear CV channels to prevent leaking to downstream modules. Bounded at kRightBase: the
         // Audio R block sits above the CV inputs, so running to getNumChannels() would erase the
@@ -372,6 +373,11 @@ public:
         return modulateNormalised(*depthParam, depthParam->get(), depthCV.load(std::memory_order_relaxed));
     }
     double getLastSampleRate() const { return lastSampleRate; }
+
+    /** The newest kSpectrumSamples of the output (voice 0, left), for the spectrum views; the scope keeps reading the
+     *  shorter visual buffer. Audio thread writes, message thread reads. */
+    static constexpr int kSpectrumSamples = 4096;
+    VisualBuffer& getSpectrumBuffer() { return spectrumBuffer; }
 
     /** Message thread only: the Custom type's drawn shapes. */
     const synth::CustomFilterShapes& getCustomShapes() const { return customEngine.getShapes(); }
@@ -794,4 +800,5 @@ private:
     std::atomic<float> shiftCV{0.0f};
     std::atomic<float> depthCV{0.0f};
     std::atomic<float> keyTrackShift{0.0f};
+    VisualBuffer spectrumBuffer{kSpectrumSamples}; // one FFT frame for the spectrum views
 };

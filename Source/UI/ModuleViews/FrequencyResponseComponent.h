@@ -109,8 +109,8 @@ public:
         }
 
         // Update spectrum from audio data
-        if (showSpectrum && filterModule.getVisualBuffer()) {
-            spectrum.analyse(*filterModule.getVisualBuffer(), filterModule.getLastSampleRate());
+        if (showSpectrum) {
+            spectrum.analyse(filterModule.getSpectrumBuffer(), filterModule.getLastSampleRate());
             repaint();
         }
     }
@@ -318,6 +318,7 @@ private:
     // Spectrum analyzer
     bool showSpectrum = false;
     synth::ui::FilterSpectrumAnalyser spectrum;
+    static_assert(FilterModule::kSpectrumSamples == synth::ui::FilterSpectrumAnalyser::kFftSize);
 
     float indexToFreq(int i) const { return synth::ui::FrequencyGrid::indexToFreq(i, numPoints); }
 
