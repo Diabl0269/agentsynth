@@ -816,7 +816,7 @@ private:
     std::atomic<float> shiftCV{0.0f};
     std::atomic<float> depthCV{0.0f};
     std::atomic<float> keyTrackShift{0.0f};
-    VisualBuffer spectrumBuffer{kSpectrumSamples}; // one FFT frame for the spectrum views
+    VisualBuffer spectrumBuffer{kSpectrumSamples};  // one FFT frame for the spectrum views
     std::array<float, kNumVoices> voicePitchSeen{}; // audio thread
     std::atomic<float> lastPlayedPitchHz{0.0f};
 };
