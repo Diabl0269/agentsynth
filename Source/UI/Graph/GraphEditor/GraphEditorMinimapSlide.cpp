@@ -1,13 +1,12 @@
 // GraphEditorMinimapSlide.cpp
 //
-// The mini map: what it draws (buildMinimapModel) and its show/hide: it fades in and slides out of its bottom-left
-// corner, and fades back and slides into it, through PanelSlide + AnimationDriver (docs/layout/animation.md). resized()
-// and every frame call layoutMinimap(), the single geometry authority, so a resize mid-slide stays correct.
+// The mini map's show/hide (what it draws is buildMinimapModel, in GraphEditorMacroCards.cpp): it fades in and slides
+// out of its bottom-left corner, and fades back and slides into it, through PanelSlide + AnimationDriver
+// (docs/layout/animation.md). resized() and every frame call layoutMinimap(), the single geometry authority, so a
+// resize mid-slide stays correct.
 
 #include "GraphEditor.h"
 #include "UI/Layout/ReducedMotion.h"
-#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
-#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace {
 constexpr double kMinimapInMs = 160.0;     // small reveal in (Motion rules)
@@ -88,53 +87,3 @@ void GraphEditor::advanceMinimapSlideForTest(float t) {
 }
 
 void GraphEditor::finishMinimapSlideForTest() { finishMinimapSlide(); }
-
-synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
-    synth::ui::MinimapModel model;
-
-    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    static const synth::theme::Colors fallbackColors{};
-    const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
-
-    // The map draws what the canvas draws: a folded macro hides its members (setVisible(false) in syncMacroCards) and
-    // stands in as its own card, so a hidden member would be a card on the map under the view box with nothing
-    // behind it on the canvas.
-    for (auto* comp : content.getModules()) {
-        if (comp == nullptr || comp->getModule() == nullptr || !comp->isVisible())
-            continue;
-
-        // Per-category theme colour, the same source buildVisibleCables()/colourForCable() use for
-        // "By source module" cable colouring — there is no cheap per-instance colour on
-        // ModuleComponent itself, but category IS available cheaply via ModuleBase::getModuleType().
-        auto category = synth::ui::ModuleCategory::Utility;
-        if (auto* mb = dynamic_cast<ModuleBase*>(comp->getModule()))
-            category = synth::ui::categoryFor(mb->getModuleType());
-
-        synth::ui::MinimapModel::Node node;
-        node.bounds = comp->getBounds().toFloat();
-        node.colour = synth::ui::themeColourForCategory(colors, category);
-        node.selected = isNodeSelected(comp->getNodeId());
-        model.nodes.push_back(node);
-    }
-
-    for (auto* card : content.getMacroCards()) {
-        if (card == nullptr || !card->isVisible())
-            continue;
-        synth::ui::MinimapModel::Node node;
-        node.bounds = card->getBounds().toFloat();
-        node.colour = colors.accent;
-        node.selected = macroController_.isMacroSelected(card->getMacroId());
-        model.nodes.push_back(node);
-    }
-
-    for (const auto& cable : buildVisibleCables()) {
-        synth::ui::MinimapModel::Cable mc;
-        mc.p1 = cable.p1;
-        mc.p2 = cable.p2;
-        mc.colour = colourForCable(cable);
-        model.cables.push_back(mc);
-    }
-
-    model.viewport = getVisibleCanvasRect();
-    return model;
-}
