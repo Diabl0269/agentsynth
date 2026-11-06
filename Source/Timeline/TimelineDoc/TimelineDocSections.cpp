@@ -158,14 +158,15 @@ SectionId TimelineDoc::makeSection(double startBeat, double endBeat, const juce:
     });
 }
 
-PlacementId TimelineDoc::placeSection(SectionId id, double atBeat, SectionDropMode mode, double secondsPerBeat) {
+PlacementId TimelineDoc::placeSection(SectionId id, double atBeat, SectionDropMode mode, double secondsPerBeat,
+                                      int letter) {
     const auto ids = placementsOf(id);
     if (ids.empty() || !isFiniteAtOrAfterZero(atBeat) || !isFinitePositive(secondsPerBeat) ||
-        static_cast<int>(placements.size()) >= kMaxPlacements)
+        static_cast<int>(placements.size()) >= kMaxPlacements || getVariation(id, letter) == nullptr)
         return {};
 
     const double length = sectionLength(id);
-    const auto content = contentOf(getPlacement(ids.front())->startBeat, length);
+    const auto content = variationContent(*getSection(id), letter);
 
     SectionEditScope scope(*this);
     if (mode == SectionDropMode::MakeRoom) {
@@ -177,7 +178,7 @@ PlacementId TimelineDoc::placeSection(SectionId id, double atBeat, SectionDropMo
     }
     return applyMutation([&] {
         const PlacementId placementId{nextSectionId++};
-        insertPlacementSorted({placementId, id, atBeat});
+        insertPlacementSorted({placementId, id, atBeat, letter});
         stampContent(content, atBeat, length);
         return placementId;
     });
@@ -215,7 +216,7 @@ bool TimelineDoc::movePlacement(PlacementId id, double newStartBeat, SectionDrop
         applyMutation([&] { eraseLanePoints(target, target + length); });
     }
     applyMutation([&] {
-        insertPlacementSorted({id, old.section, target});
+        insertPlacementSorted({id, old.section, target, old.variation});
         stampContent(content, target, length);
     });
     return true;
@@ -253,9 +254,12 @@ SectionId TimelineDoc::makePlacementUnique(PlacementId id, const juce::String& n
         section.colourArgb = newColourArgb;
         section.lengthBeats = sectionLength(placement->section);
         sections.push_back(section);
+        storedStale.insert(section.id.value); // its A is what the placement plays now
         for (auto& p : placements)
-            if (p.id == id)
+            if (p.id == id) {
                 p.section = section.id;
+                p.variation = 0;
+            }
         return section.id;
     });
 }

@@ -86,6 +86,7 @@ bool TimelineDoc::removeLane(LaneId id) {
         return false;
 
     return applyMutation([&] {
+        forgetLaneInVariations(id);
         owner->lanes.erase(owner->lanes.begin() + (lane - owner->lanes.data()));
         return true;
     });

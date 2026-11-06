@@ -703,7 +703,14 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
         }
     }
 
-    if (const auto result = validateTimelineSections(*rootObj); !result.ok)
+    // A variation's stored clips pass the same clip checks as a track's (so a stored clip never names an asset); their
+    // ids only need to be unique within the clip, since a stored copy is re-issued ids when it is played.
+    const StoredClipValidator storedClipValidator = [](const juce::var& clip, const juce::String& where,
+                                                       std::int64_t& notes) {
+        std::set<std::int64_t> clipIds, noteIds;
+        return validateClip(clip, where, clipIds, noteIds, notes);
+    };
+    if (const auto result = validateTimelineSections(*rootObj, storedClipValidator, totalNotes); !result.ok)
         return result;
 
     // The whole-document note budget, checked after the per-clip caps so the more specific

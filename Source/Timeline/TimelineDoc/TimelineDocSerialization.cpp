@@ -493,6 +493,153 @@ bool readMarkers(const juce::DynamicObject& rootObj, std::vector<Marker>& out) {
 
 } // namespace
 
+// ---------------------------------------------------------- clip and breakpoint --
+
+namespace detail {
+
+juce::var writeClipVar(const Clip& clip) {
+    juce::DynamicObject::Ptr c = new juce::DynamicObject();
+    c->setProperty("id", static_cast<juce::int64>(clip.id.value));
+    c->setProperty("name", clip.name);
+    if (clip.linkGroup != 0) // optional: absent loads as 0 (not linked)
+        c->setProperty("linkGroup", static_cast<juce::int64>(clip.linkGroup));
+    c->setProperty("startBeat", clip.startBeat);
+    c->setProperty("lengthBeats", clip.lengthBeats);
+    // Additive, same "written ALWAYS" rule as the audio fields below: a reader that
+    // predates it ignores the key, and one that has it gets a single shape to parse.
+    c->setProperty("muted", clip.muted);
+    // Audio fields, written ALWAYS (not only when non-default): a reader that
+    // predates them ignores unknown keys, and a reader that has them gets one shape to
+    // parse rather than two. Additive - kFormatVersion stays 1.
+    c->setProperty("assetRef", clip.assetRef);
+    c->setProperty("gainDb", clip.gainDb);
+    c->setProperty("fadeInBeats", clip.fadeInBeats);
+    c->setProperty("fadeOutBeats", clip.fadeOutBeats);
+    c->setProperty("sourceStartSeconds", clip.sourceStartSeconds);
+    writeClipDrumFields(*c, clip);
+    writeClipScaleFields(*c, clip);
+    writeClipStretchOrigin(*c, clip);
+
+    juce::Array<juce::var> noteVars;
+    for (const auto& note : clip.notes) {
+        juce::DynamicObject::Ptr n = new juce::DynamicObject();
+        n->setProperty("id", static_cast<juce::int64>(note.id.value));
+        n->setProperty("startBeat", note.startBeat);
+        n->setProperty("lengthBeats", note.lengthBeats);
+        n->setProperty("pitch", note.pitch);
+        n->setProperty("velocity", note.velocity);
+        n->setProperty("channel", note.channel);
+        n->setProperty("muted", note.muted); // additive; absent loads as false
+        writeNoteDrumFields(*n, note);
+        noteVars.add(juce::var(n.get()));
+    }
+    c->setProperty("notes", noteVars);
+    return juce::var(c.get());
+}
+
+bool readClipVar(const juce::var& clipVar, Clip& clip, std::set<std::int64_t>& seenClipIds,
+                 std::set<std::int64_t>& seenNoteIds) {
+    auto* cObj = clipVar.getDynamicObject();
+    if (cObj == nullptr)
+        return false;
+
+    std::int64_t clipIdValue = 0;
+    if (!readId(cObj->getProperty("id"), clipIdValue) || !seenClipIds.insert(clipIdValue).second)
+        return false;
+    clip.id = ClipId{clipIdValue};
+
+    // `muted` is optional like the rest: a file written before per-clip mute existed
+    // simply has no key, and the struct default (false - audible) is what it meant.
+    if (!readOptionalString(cObj->getProperty("name"), clip.name) ||
+        !readOptionalLinkGroup(cObj->getProperty("linkGroup"), clip.linkGroup) ||
+        !readOptionalDouble(cObj->getProperty("startBeat"), clip.startBeat) ||
+        !readOptionalDouble(cObj->getProperty("lengthBeats"), clip.lengthBeats) ||
+        !readOptionalBool(cObj->getProperty("muted"), clip.muted))
+        return false;
+    if (!isFiniteAtOrAfterZero(clip.startBeat) || !isFinitePositive(clip.lengthBeats))
+        return false;
+
+    // Audio fields. All optional - absent means the struct default, which is
+    // what an older clip with no audio fields loads as. A PRESENT but illegal
+    // value is malformed, not something to clamp: `assetRef` is the security rule
+    // (see isValidAssetRefString - a hand-edited bundle must not be the way around
+    // setClipAsset's check), and a NaN fade would poison the renderer downstream.
+    if (!readOptionalString(cObj->getProperty("assetRef"), clip.assetRef) ||
+        !readOptionalDouble(cObj->getProperty("gainDb"), clip.gainDb) ||
+        !readOptionalDouble(cObj->getProperty("fadeInBeats"), clip.fadeInBeats) ||
+        !readOptionalDouble(cObj->getProperty("fadeOutBeats"), clip.fadeOutBeats) ||
+        !readOptionalDouble(cObj->getProperty("sourceStartSeconds"), clip.sourceStartSeconds))
+        return false;
+    if (!clipAudioFieldsValid(clip) || !readClipDrumFields(*cObj, clip) || !readClipScaleFields(*cObj, clip))
+        return false;
+
+    const juce::Array<juce::var>* noteList = nullptr;
+    if (!readOptionalArray(cObj->getProperty("notes"), noteList))
+        return false;
+    if (noteList == nullptr)
+        return true;
+    if (noteList->size() > TimelineDoc::kMaxNotesPerClip)
+        return false;
+    clip.notes.reserve(static_cast<size_t>(noteList->size()));
+
+    for (const auto& noteVar : *noteList) {
+        auto* nObj = noteVar.getDynamicObject();
+        if (nObj == nullptr)
+            return false;
+        MidiNote note;
+        std::int64_t noteIdValue = 0;
+        // Required, not optional: the dialect never shipped without note ids,
+        // so a file missing one is malformed, not old-format.
+        if (!readId(nObj->getProperty("id"), noteIdValue) || !seenNoteIds.insert(noteIdValue).second)
+            return false;
+        note.id = NoteId{noteIdValue};
+        if (!readOptionalDouble(nObj->getProperty("startBeat"), note.startBeat) ||
+            !readOptionalDouble(nObj->getProperty("lengthBeats"), note.lengthBeats) ||
+            !readOptionalInt(nObj->getProperty("pitch"), note.pitch) ||
+            !readOptionalInt(nObj->getProperty("velocity"), note.velocity) ||
+            !readOptionalInt(nObj->getProperty("channel"), note.channel) || !readNoteFlags(*nObj, note))
+            return false;
+        if (!isValidNote(note))
+            return false;
+        clip.notes.push_back(note);
+    }
+    // Repaired, not trusted: a hand-edited file must not be able to hand a
+    // reader an unsorted note list.
+    std::stable_sort(clip.notes.begin(), clip.notes.end(), noteLess);
+    return true;
+}
+
+juce::var writeBreakpointVar(const AutomationLane::Breakpoint& point) {
+    juce::DynamicObject::Ptr p = new juce::DynamicObject();
+    p->setProperty("beat", point.beat);
+    p->setProperty("value", point.value);
+    p->setProperty("tension", static_cast<double>(point.tension));
+    p->setProperty("curve", point.curve);
+    return juce::var(p.get());
+}
+
+bool readBreakpointVar(const juce::var& pointVar, const AutomationLane::RangeSnapshot& range,
+                       AutomationLane::Breakpoint& out) {
+    auto* pObj = pointVar.getDynamicObject();
+    if (pObj == nullptr)
+        return false;
+    double beat = 0.0;
+    double value = 0.0;
+    float tension = 0.0f;
+    int curve = static_cast<int>(BreakpointCurve::Linear);
+    if (!readOptionalDouble(pObj->getProperty("beat"), beat) ||
+        !readOptionalDouble(pObj->getProperty("value"), value) ||
+        !readOptionalFloat(pObj->getProperty("tension"), tension) ||
+        !readOptionalInt(pObj->getProperty("curve"), curve))
+        return false;
+    if (!isFiniteAtOrAfterZero(beat) || !std::isfinite(value) || !isValidCurve(curve))
+        return false;
+    out = makeBreakpoint(range, beat, value, tension, curve);
+    return true;
+}
+
+} // namespace detail
+
 // -------------------------------------------------------------- serialisation --
 
 juce::var TimelineDoc::toVar() const {
@@ -531,43 +678,7 @@ juce::var TimelineDoc::toVar() const {
 
         juce::Array<juce::var> clipVars;
         for (const auto& clip : track.clips) {
-            juce::DynamicObject::Ptr c = new juce::DynamicObject();
-            c->setProperty("id", static_cast<juce::int64>(clip.id.value));
-            c->setProperty("name", clip.name);
-            if (clip.linkGroup != 0) // optional: absent loads as 0 (not linked)
-                c->setProperty("linkGroup", static_cast<juce::int64>(clip.linkGroup));
-            c->setProperty("startBeat", clip.startBeat);
-            c->setProperty("lengthBeats", clip.lengthBeats);
-            // Additive, same "written ALWAYS" rule as the audio fields below: a reader that
-            // predates it ignores the key, and one that has it gets a single shape to parse.
-            c->setProperty("muted", clip.muted);
-            // Audio fields, written ALWAYS (not only when non-default): a reader that
-            // predates them ignores unknown keys, and a reader that has them gets one shape to
-            // parse rather than two. Additive — kFormatVersion stays 1.
-            c->setProperty("assetRef", clip.assetRef);
-            c->setProperty("gainDb", clip.gainDb);
-            c->setProperty("fadeInBeats", clip.fadeInBeats);
-            c->setProperty("fadeOutBeats", clip.fadeOutBeats);
-            c->setProperty("sourceStartSeconds", clip.sourceStartSeconds);
-            writeClipDrumFields(*c, clip);
-            writeClipScaleFields(*c, clip);
-            writeClipStretchOrigin(*c, clip);
-
-            juce::Array<juce::var> noteVars;
-            for (const auto& note : clip.notes) {
-                juce::DynamicObject::Ptr n = new juce::DynamicObject();
-                n->setProperty("id", static_cast<juce::int64>(note.id.value));
-                n->setProperty("startBeat", note.startBeat);
-                n->setProperty("lengthBeats", note.lengthBeats);
-                n->setProperty("pitch", note.pitch);
-                n->setProperty("velocity", note.velocity);
-                n->setProperty("channel", note.channel);
-                n->setProperty("muted", note.muted); // additive; absent loads as false
-                writeNoteDrumFields(*n, note);
-                noteVars.add(juce::var(n.get()));
-            }
-            c->setProperty("notes", noteVars);
-            clipVars.add(juce::var(c.get()));
+            clipVars.add(writeClipVar(clip));
         }
         t->setProperty("clips", clipVars);
 
@@ -595,12 +706,7 @@ juce::var TimelineDoc::toVar() const {
 
             juce::Array<juce::var> pointVars;
             for (const auto& point : lane.points) {
-                juce::DynamicObject::Ptr p = new juce::DynamicObject();
-                p->setProperty("beat", point.beat);
-                p->setProperty("value", point.value);
-                p->setProperty("tension", static_cast<double>(point.tension));
-                p->setProperty("curve", point.curve);
-                pointVars.add(juce::var(p.get()));
+                pointVars.add(writeBreakpointVar(point));
             }
             l->setProperty("points", pointVars);
             laneVars.add(juce::var(l.get()));
@@ -700,77 +806,9 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                 track.clips.reserve(static_cast<size_t>(clipList->size()));
 
                 for (const auto& clipVar : *clipList) {
-                    auto* cObj = clipVar.getDynamicObject();
-                    if (cObj == nullptr)
-                        return false;
-
                     Clip clip;
-                    std::int64_t clipIdValue = 0;
-                    if (!readId(cObj->getProperty("id"), clipIdValue) || !seenClipIds.insert(clipIdValue).second)
+                    if (!readClipVar(clipVar, clip, seenClipIds, seenNoteIds))
                         return false;
-                    clip.id = ClipId{clipIdValue};
-
-                    // `muted` is optional like the rest: a file written before per-clip mute existed
-                    // simply has no key, and the struct default (false — audible) is what it meant.
-                    if (!readOptionalString(cObj->getProperty("name"), clip.name) ||
-                        !readOptionalLinkGroup(cObj->getProperty("linkGroup"), clip.linkGroup) ||
-                        !readOptionalDouble(cObj->getProperty("startBeat"), clip.startBeat) ||
-                        !readOptionalDouble(cObj->getProperty("lengthBeats"), clip.lengthBeats) ||
-                        !readOptionalBool(cObj->getProperty("muted"), clip.muted))
-                        return false;
-                    if (!isFiniteAtOrAfterZero(clip.startBeat) || !isFinitePositive(clip.lengthBeats))
-                        return false;
-
-                    // Audio fields. All optional — absent means the struct default, which is
-                    // what an older clip with no audio fields loads as. A PRESENT but illegal
-                    // value is malformed, not something to clamp: `assetRef` is the security rule
-                    // (see isValidAssetRefString — a hand-edited bundle must not be the way around
-                    // setClipAsset's check), and a NaN fade would poison the renderer downstream.
-                    if (!readOptionalString(cObj->getProperty("assetRef"), clip.assetRef) ||
-                        !readOptionalDouble(cObj->getProperty("gainDb"), clip.gainDb) ||
-                        !readOptionalDouble(cObj->getProperty("fadeInBeats"), clip.fadeInBeats) ||
-                        !readOptionalDouble(cObj->getProperty("fadeOutBeats"), clip.fadeOutBeats) ||
-                        !readOptionalDouble(cObj->getProperty("sourceStartSeconds"), clip.sourceStartSeconds))
-                        return false;
-                    if (!clipAudioFieldsValid(clip) || !readClipDrumFields(*cObj, clip) ||
-                        !readClipScaleFields(*cObj, clip))
-                        return false;
-
-                    const juce::Array<juce::var>* noteList = nullptr;
-                    if (!readOptionalArray(cObj->getProperty("notes"), noteList))
-                        return false;
-                    if (noteList != nullptr) {
-                        if (noteList->size() > kMaxNotesPerClip)
-                            return false;
-                        clip.notes.reserve(static_cast<size_t>(noteList->size()));
-
-                        for (const auto& noteVar : *noteList) {
-                            auto* nObj = noteVar.getDynamicObject();
-                            if (nObj == nullptr)
-                                return false;
-                            MidiNote note;
-                            std::int64_t noteIdValue = 0;
-                            // Required, not optional: the dialect never shipped without note ids,
-                            // so a file missing one is malformed, not old-format.
-                            if (!readId(nObj->getProperty("id"), noteIdValue) ||
-                                !seenNoteIds.insert(noteIdValue).second)
-                                return false;
-                            note.id = NoteId{noteIdValue};
-                            if (!readOptionalDouble(nObj->getProperty("startBeat"), note.startBeat) ||
-                                !readOptionalDouble(nObj->getProperty("lengthBeats"), note.lengthBeats) ||
-                                !readOptionalInt(nObj->getProperty("pitch"), note.pitch) ||
-                                !readOptionalInt(nObj->getProperty("velocity"), note.velocity) ||
-                                !readOptionalInt(nObj->getProperty("channel"), note.channel) ||
-                                !readNoteFlags(*nObj, note))
-                                return false;
-                            if (!isValidNote(note))
-                                return false;
-                            clip.notes.push_back(note);
-                        }
-                        // Repaired, not trusted: a hand-edited file must not be able to hand a
-                        // reader an unsorted note list.
-                        std::stable_sort(clip.notes.begin(), clip.notes.end(), noteLess);
-                    }
                     track.clips.push_back(std::move(clip));
                 }
                 std::stable_sort(track.clips.begin(), track.clips.end(), clipLess);
@@ -840,21 +878,10 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                         lane.points.reserve(static_cast<size_t>(pointList->size()));
 
                         for (const auto& pointVar : *pointList) {
-                            auto* pObj = pointVar.getDynamicObject();
-                            if (pObj == nullptr)
+                            AutomationLane::Breakpoint point;
+                            if (!readBreakpointVar(pointVar, lane.range, point))
                                 return false;
-                            double beat = 0.0;
-                            double value = 0.0;
-                            float tension = 0.0f;
-                            int curve = static_cast<int>(BreakpointCurve::Linear);
-                            if (!readOptionalDouble(pObj->getProperty("beat"), beat) ||
-                                !readOptionalDouble(pObj->getProperty("value"), value) ||
-                                !readOptionalFloat(pObj->getProperty("tension"), tension) ||
-                                !readOptionalInt(pObj->getProperty("curve"), curve))
-                                return false;
-                            if (!isFiniteAtOrAfterZero(beat) || !std::isfinite(value) || !isValidCurve(curve))
-                                return false;
-                            lane.points.push_back(makeBreakpoint(lane.range, beat, value, tension, curve));
+                            lane.points.push_back(point);
                         }
                         std::stable_sort(lane.points.begin(), lane.points.end(),
                                          [](const AutomationLane::Breakpoint& a, const AutomationLane::Breakpoint& b) {
@@ -885,7 +912,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
     std::vector<Section> parsedSections;
     std::vector<SectionPlacement> parsedPlacements;
     std::int64_t parsedNextSectionId = 1;
-    if (!readSections(*rootObj, parsedSections, parsedPlacements, parsedNextSectionId))
+    if (!readSections(*rootObj, parsed, parsedSections, parsedPlacements, parsedNextSectionId))
         return false;
 
     // Counters are floored at one past the highest id actually present: a hand-edited file that

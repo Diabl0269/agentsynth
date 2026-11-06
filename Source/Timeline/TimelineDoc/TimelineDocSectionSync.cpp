@@ -2,10 +2,11 @@
 //
 // A placement holds every clip whose startBeat is in [start, end) (a clip may run past the end and still
 // belongs to it) and every automation breakpoint whose beat is in that span. Content is compared relative to the
-// placement's start and ignores ids and link groups. finishMutation calls syncSections(): when exactly the
-// edited placement of a section differs from what it held after the previous mutation, it is stamped onto its
-// siblings inside the same mutation, so one edit is one revision and one undo step. When several placements of
-// one section changed at once, the one with the lowest start wins. A freshly loaded document is cached without
+// placement's start and ignores ids and link groups. finishMutation calls syncSections(): placements are grouped
+// per track by the variation that track belongs to (variationKey); when a placement of a group differs on that
+// track from what it held after the previous mutation, its clips and lanes on that track are stamped onto the rest
+// of the group inside the same mutation, so one edit is one revision and one undo step. When several placements of
+// one group changed at once, the one with the lowest start wins. A freshly loaded document is cached without
 // stamping, so a file whose repeats differ keeps them until one is edited.
 #include "TimelineDoc.h"
 #include "TimelineDocInternal.h"
@@ -140,35 +141,66 @@ const SectionPlacement* TimelineDoc::placementForClip(ClipId id) const {
 
 // ------------------------------------------------------------------ content --
 
+namespace detail {
+
+void appendTrackContent(const Track& track, double startBeat, double lengthBeats, PlacementContent& out) {
+    const double endBeat = startBeat + lengthBeats;
+    std::vector<Clip> held;
+    const auto first = std::lower_bound(track.clips.begin(), track.clips.end(), startBeat,
+                                        [](const Clip& c, double beat) { return c.startBeat < beat; });
+    for (auto it = first; it != track.clips.end() && it->startBeat < endBeat; ++it) {
+        Clip copy = *it;
+        copy.startBeat -= startBeat;
+        held.push_back(std::move(copy));
+    }
+    if (!held.empty())
+        out.clips[track.id.value] = std::move(held);
+
+    for (const auto& lane : track.lanes) {
+        std::vector<AutomationLane::Breakpoint> heldPoints;
+        const auto pFirst =
+            std::lower_bound(lane.points.begin(), lane.points.end(), startBeat,
+                             [](const AutomationLane::Breakpoint& p, double beat) { return p.beat < beat; });
+        for (auto it = pFirst; it != lane.points.end() && it->beat < endBeat; ++it) {
+            auto copy = *it;
+            copy.beat -= startBeat;
+            heldPoints.push_back(copy);
+        }
+        if (!heldPoints.empty())
+            out.points[lane.id.value] = std::move(heldPoints);
+    }
+}
+
+void eraseTrackSlice(const Track& track, PlacementContent& content) {
+    content.clips.erase(track.id.value);
+    for (const auto& lane : track.lanes)
+        content.points.erase(lane.id.value);
+}
+
+void copyTrackSlice(const Track& track, const PlacementContent& from, PlacementContent& to) {
+    eraseTrackSlice(track, to);
+    if (const auto it = from.clips.find(track.id.value); it != from.clips.end())
+        to.clips[track.id.value] = it->second;
+    for (const auto& lane : track.lanes)
+        if (const auto it = from.points.find(lane.id.value); it != from.points.end())
+            to.points[lane.id.value] = it->second;
+}
+
+int variationKey(const Section& section, int letter, std::int64_t trackId) {
+    if (letter == 0)
+        return 0;
+    for (const auto& variation : section.variations)
+        if (variation.letter == letter)
+            return variation.ownTracks.count(trackId) != 0 ? letter : 0;
+    return 0;
+}
+
+} // namespace detail
+
 PlacementContent TimelineDoc::contentOf(double startBeat, double lengthBeats) const {
     PlacementContent content;
-    const double endBeat = startBeat + lengthBeats;
-    for (const auto& track : tracks) {
-        std::vector<Clip> held;
-        const auto first = std::lower_bound(track.clips.begin(), track.clips.end(), startBeat,
-                                            [](const Clip& c, double beat) { return c.startBeat < beat; });
-        for (auto it = first; it != track.clips.end() && it->startBeat < endBeat; ++it) {
-            Clip copy = *it;
-            copy.startBeat -= startBeat;
-            held.push_back(std::move(copy));
-        }
-        if (!held.empty())
-            content.clips[track.id.value] = std::move(held);
-
-        for (const auto& lane : track.lanes) {
-            std::vector<AutomationLane::Breakpoint> held2;
-            const auto pFirst =
-                std::lower_bound(lane.points.begin(), lane.points.end(), startBeat,
-                                 [](const AutomationLane::Breakpoint& p, double beat) { return p.beat < beat; });
-            for (auto it = pFirst; it != lane.points.end() && it->beat < endBeat; ++it) {
-                auto copy = *it;
-                copy.beat -= startBeat;
-                held2.push_back(copy);
-            }
-            if (!held2.empty())
-                content.points[lane.id.value] = std::move(held2);
-        }
-    }
+    for (const auto& track : tracks)
+        appendTrackContent(track, startBeat, lengthBeats, content);
     return content;
 }
 
@@ -190,85 +222,162 @@ void TimelineDoc::eraseLanePoints(double startBeat, double endBeat) {
                               lane.points.end());
 }
 
-// Writes `source` (relative content) over the span at targetStart. Raw edits only: the
+// Writes `source` (relative content) over the span at targetStart on one track and its lanes. Raw edits only: the
 // caller is inside a mutation.
-void TimelineDoc::stampContent(const PlacementContent& source, double targetStart, double length) {
+void TimelineDoc::stampTrack(Track& track, const PlacementContent& source, double targetStart, double length) {
     const double targetEnd = targetStart + length;
-    for (auto& track : tracks) {
-        std::vector<Clip> empty;
-        const auto found = source.clips.find(track.id.value);
-        const auto& wanted = found != source.clips.end() ? found->second : empty;
+    std::vector<Clip> empty;
+    const auto found = source.clips.find(track.id.value);
+    const auto& wanted = found != source.clips.end() ? found->second : empty;
 
-        std::vector<size_t> held;
-        for (size_t i = 0; i < track.clips.size(); ++i)
-            if (track.clips[i].startBeat >= targetStart && track.clips[i].startBeat < targetEnd)
-                held.push_back(i);
+    std::vector<size_t> held;
+    for (size_t i = 0; i < track.clips.size(); ++i)
+        if (track.clips[i].startBeat >= targetStart && track.clips[i].startBeat < targetEnd)
+            held.push_back(i);
 
-        const auto fresh = [&](Clip copy) {
-            copy.startBeat += targetStart;
-            for (auto& note : copy.notes)
-                note.id = NoteId{nextNoteId++};
-            return copy;
-        };
+    const auto fresh = [&](Clip copy) {
+        copy.startBeat += targetStart;
+        for (auto& note : copy.notes)
+            note.id = NoteId{nextNoteId++};
+        return copy;
+    };
 
-        if (held.size() == wanted.size()) {
-            for (size_t i = 0; i < held.size(); ++i) {
-                const auto keepId = track.clips[held[i]].id;
-                track.clips[held[i]] = fresh(wanted[i]);
-                track.clips[held[i]].id = keepId;
-            }
-        } else {
-            // Past the per-track cap a copy cannot be added; leave this track as it is.
-            if (static_cast<int>(track.clips.size() - held.size() + wanted.size()) > kMaxClipsPerTrack)
-                continue;
-            for (auto it = held.rbegin(); it != held.rend(); ++it)
-                track.clips.erase(track.clips.begin() + static_cast<std::ptrdiff_t>(*it));
-            for (const auto& clip : wanted) {
-                auto copy = fresh(clip);
-                copy.id = ClipId{nextClipId++};
-                track.clips.push_back(std::move(copy));
-            }
+    if (held.size() == wanted.size()) {
+        for (size_t i = 0; i < held.size(); ++i) {
+            const auto keepId = track.clips[held[i]].id;
+            track.clips[held[i]] = fresh(wanted[i]);
+            track.clips[held[i]].id = keepId;
         }
-        std::stable_sort(track.clips.begin(), track.clips.end(), clipLess);
-
-        for (auto& lane : track.lanes) {
-            lane.points.erase(std::remove_if(lane.points.begin(), lane.points.end(),
-                                             [&](const AutomationLane::Breakpoint& p) {
-                                                 return p.beat >= targetStart && p.beat < targetEnd;
-                                             }),
-                              lane.points.end());
-            const auto pts = source.points.find(lane.id.value);
-            if (pts != source.points.end())
-                for (auto point : pts->second) {
-                    point.beat += targetStart;
-                    lane.points.push_back(point);
-                }
-            std::stable_sort(lane.points.begin(), lane.points.end(),
-                             [](const AutomationLane::Breakpoint& a, const AutomationLane::Breakpoint& b) {
-                                 return a.beat < b.beat;
-                             });
+    } else if (static_cast<int>(track.clips.size() - held.size() + wanted.size()) <= kMaxClipsPerTrack) {
+        // Past the per-track cap a copy cannot be added; the clips are left as they are.
+        for (auto it = held.rbegin(); it != held.rend(); ++it)
+            track.clips.erase(track.clips.begin() + static_cast<std::ptrdiff_t>(*it));
+        for (const auto& clip : wanted) {
+            auto copy = fresh(clip);
+            copy.id = ClipId{nextClipId++};
+            track.clips.push_back(std::move(copy));
         }
+    }
+    std::stable_sort(track.clips.begin(), track.clips.end(), clipLess);
+
+    for (auto& lane : track.lanes) {
+        lane.points.erase(std::remove_if(lane.points.begin(), lane.points.end(),
+                                         [&](const AutomationLane::Breakpoint& p) {
+                                             return p.beat >= targetStart && p.beat < targetEnd;
+                                         }),
+                          lane.points.end());
+        const auto pts = source.points.find(lane.id.value);
+        if (pts != source.points.end())
+            for (auto point : pts->second) {
+                point.beat += targetStart;
+                lane.points.push_back(point);
+            }
+        std::stable_sort(
+            lane.points.begin(), lane.points.end(),
+            [](const AutomationLane::Breakpoint& a, const AutomationLane::Breakpoint& b) { return a.beat < b.beat; });
     }
 }
 
+void TimelineDoc::stampContent(const PlacementContent& source, double targetStart, double length) {
+    for (auto& track : tracks)
+        stampTrack(track, source, targetStart, length);
+}
+
 // ----------------------------------------------------------------- the sync --
+
+namespace {
+
+// A track's clips and lanes in `a` and `b` (a missing entry is empty) differ.
+bool trackSliceDiffers(const PlacementContent& a, const PlacementContent& b, const Track& track) {
+    static const std::vector<Clip> noClips;
+    static const std::vector<AutomationLane::Breakpoint> noPoints;
+    const auto clipsOf = [&](const PlacementContent& c) -> const std::vector<Clip>& {
+        const auto it = c.clips.find(track.id.value);
+        return it != c.clips.end() ? it->second : noClips;
+    };
+    const auto& clipsA = clipsOf(a);
+    const auto& clipsB = clipsOf(b);
+    if (clipsA.size() != clipsB.size())
+        return true;
+    for (size_t i = 0; i < clipsA.size(); ++i)
+        if (!sameClipContent(clipsA[i], clipsB[i]))
+            return true;
+    for (const auto& lane : track.lanes) {
+        const auto pa = a.points.find(lane.id.value);
+        const auto pb = b.points.find(lane.id.value);
+        const auto& pointsA = pa != a.points.end() ? pa->second : noPoints;
+        const auto& pointsB = pb != b.points.end() ? pb->second : noPoints;
+        if (pointsA.size() != pointsB.size())
+            return true;
+        for (size_t i = 0; i < pointsA.size(); ++i)
+            if (!samePoint(pointsA[i], pointsB[i]))
+                return true;
+    }
+    return false;
+}
+
+// One track of one group of placements: `source` changed and is stamped onto `targets`.
+struct StampJob {
+    const Track* track;
+    PlacementId source;
+    std::vector<PlacementId> targets;
+};
+
+using ContentById = std::map<std::int64_t, PlacementContent>;
+
+// Per track, the placements sharing a variationKey form a group; in each group of two or more the changed placement
+// with the lowest start (members are in start order) is the source.
+std::vector<StampJob> findStampJobs(const std::vector<Track>& tracks, const Section& section,
+                                    const std::vector<const SectionPlacement*>& members, const ContentById& cache,
+                                    const ContentById& now) {
+    std::vector<StampJob> jobs;
+    for (const auto& track : tracks) {
+        std::map<int, std::vector<const SectionPlacement*>> groups;
+        for (const auto* member : members)
+            groups[variationKey(section, member->variation, track.id.value)].push_back(member);
+        for (const auto& [key, group] : groups) {
+            if (group.size() < 2)
+                continue;
+            const SectionPlacement* source = nullptr;
+            for (const auto* member : group) {
+                const auto cached = cache.find(member->id.value);
+                if (cached != cache.end() && trackSliceDiffers(cached->second, now.at(member->id.value), track)) {
+                    source = member;
+                    break;
+                }
+            }
+            if (source == nullptr)
+                continue;
+            StampJob job{&track, source->id, {}};
+            for (const auto* member : group)
+                if (member != source)
+                    job.targets.push_back(member->id);
+            jobs.push_back(std::move(job));
+        }
+    }
+    return jobs;
+}
+
+} // namespace
 
 bool TimelineDoc::sectionsNeedSync() const {
     for (const auto& placement : placements)
         if (getSection(placement.section) == nullptr)
             return true;
     for (const auto& section : sections) {
-        const auto ids = placementsOf(section.id);
-        if (ids.empty())
+        std::vector<const SectionPlacement*> members;
+        for (const auto& placement : placements)
+            if (placement.section == section.id)
+                members.push_back(&placement);
+        if (members.empty())
             return true;
-        if (ids.size() < 2)
+        if (members.size() < 2)
             continue;
-        for (const auto id : ids) {
-            const auto cached = sectionContentCache.find(id.value);
-            if (cached != sectionContentCache.end() &&
-                !samePlacementContent(cached->second, contentOf(getPlacement(id)->startBeat, section.lengthBeats)))
-                return true;
-        }
+        ContentById now;
+        for (const auto* member : members)
+            now[member->id.value] = contentOf(member->startBeat, section.lengthBeats);
+        if (!findStampJobs(tracks, section, members, sectionContentCache, now).empty())
+            return true;
     }
     return false;
 }
@@ -286,37 +395,47 @@ void TimelineDoc::syncSections() {
         sections.end());
     for (auto it = sectionContentCache.begin(); it != sectionContentCache.end();)
         it = getPlacement(PlacementId{it->first}) == nullptr ? sectionContentCache.erase(it) : std::next(it);
+    for (auto it = storedStale.begin(); it != storedStale.end();)
+        it = getSection(SectionId{*it}) == nullptr ? storedStale.erase(it) : std::next(it);
 
-    for (const auto& section : sections) {
-        const auto ids = placementsOf(section.id);
-        if (ids.size() < 2)
-            continue;
-        const SectionPlacement* source = nullptr; // placements are sorted by start: the first changed one is lowest
-        for (const auto id : ids) {
-            const auto* placement = getPlacement(id);
-            const auto cached = sectionContentCache.find(id.value);
-            if (cached != sectionContentCache.end() &&
-                !samePlacementContent(cached->second, contentOf(placement->startBeat, section.lengthBeats))) {
-                source = placement;
-                break;
+    for (auto& section : sections) {
+        std::vector<const SectionPlacement*> members;
+        for (const auto& placement : placements)
+            if (placement.section == section.id)
+                members.push_back(&placement);
+        ContentById now;
+        for (const auto* member : members)
+            now[member->id.value] = contentOf(member->startBeat, section.lengthBeats);
+
+        const auto jobs = findStampJobs(tracks, section, members, sectionContentCache, now);
+        std::set<std::int64_t> rewritten;
+        for (const auto& job : jobs) {
+            auto* track = findTrack(job.track->id);
+            for (const auto target : job.targets) {
+                stampTrack(*track, now.at(job.source.value), getPlacement(target)->startBeat, section.lengthBeats);
+                rewritten.insert(target.value);
+                if (std::find(lastStampedPlacements.begin(), lastStampedPlacements.end(), target) ==
+                    lastStampedPlacements.end())
+                    lastStampedPlacements.push_back(target);
             }
         }
-        if (source == nullptr)
-            continue;
-        const double sourceStart = source->startBeat;
-        const auto sourceId = source->id;
-        const auto content = contentOf(sourceStart, section.lengthBeats);
-        for (const auto id : ids) {
-            if (id == sourceId)
-                continue;
-            stampContent(content, getPlacement(id)->startBeat, section.lengthBeats);
-            lastStampedPlacements.push_back(id);
-        }
-        ++sectionStampCount;
-    }
+        if (!jobs.empty())
+            ++sectionStampCount;
+        for (const auto id : rewritten)
+            now[id] = contentOf(getPlacement(PlacementId{id})->startBeat, section.lengthBeats);
 
-    for (const auto& placement : placements)
-        sectionContentCache[placement.id.value] = contentOf(placement.startBeat, sectionLength(placement.section));
+        bool changed = !jobs.empty() || storedStale.count(section.id.value) != 0;
+        for (const auto* member : members) {
+            auto& fresh = now[member->id.value];
+            const auto cached = sectionContentCache.find(member->id.value);
+            changed |= cached == sectionContentCache.end() || !samePlacementContent(cached->second, fresh);
+            sectionContentCache[member->id.value] = std::move(fresh);
+        }
+        if (changed) {
+            refreshStoredVariations(section);
+            storedStale.erase(section.id.value);
+        }
+    }
 }
 
 // ---------------------------------------------------------------- the scope --

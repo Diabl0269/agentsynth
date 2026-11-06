@@ -3,7 +3,7 @@
 A section (Intro, Verse, Chorus) is a named stretch of bars across every track. It plays at one or more
 **placements**, and every placement of one section holds the same music: edit a clip, a note or an
 automation point inside any placement and, in the same mutation, every other placement is rewritten to
-match. There are no variations. This page covers the document model and the Sections strip that shows it.
+match, unless the placement plays another variation (below). This page covers the document model and the Sections strip that shows it.
 
 ## What the user does
 
@@ -62,7 +62,7 @@ open in the piano roll, and by the Settings toggle below.
 
 ## Model
 
-- `Section { id, name, colourArgb, lengthBeats }` and `SectionPlacement { id, section, startBeat }` live on
+- `Section { id, name, colourArgb, lengthBeats, variations }` and `SectionPlacement { id, section, startBeat, variation }` live on
   `TimelineDoc` (`getSections()`, `getPlacements()`). Sections are in creation order, placements sorted by
   `(startBeat, id)`. Section and placement ids share one counter (`nextSectionId`).
 - Names are trimmed, non-empty and at most `kMaxMarkerTextLength`. Caps: `kMaxSections` 256,
@@ -70,6 +70,52 @@ open in the piano roll, and by the Settings toggle below.
 - After every mutation and every load: lengths are finite and above 0, starts finite and at or above 0,
   placements never overlap (touching is fine), every placement names a section, and a section with no
   placement is removed (`finishMutation`, like the lone link groups).
+
+## Variations
+
+A section has variations A, B, C... (`Section::variations`, never empty, `[0]` is letter 0 = A, at most
+`kMaxVariations` 26, creation order). Each placement plays one (`SectionPlacement::variation`). Placements that
+play the same variation stay in step. A variation other than A records the tracks it owns (`ownTracks`); every
+other track is shared with A. So a Verse B whose only own track is the lead has the drums and bass of every
+Verse A, and an edit to those reaches all of them. A variation no placement plays keeps its music in
+`SectionVariation::stored` (all tracks for A, own tracks only otherwise); the sync refreshes `stored` from a
+placement that plays it after every change.
+
+**Sync key.** For placement P (variation v) and track T the key is `v` when v is not A and owns T, otherwise 0.
+Placements of one section with the same key for T form a group for T's clips and T's lanes' points
+(`variationKey`). The sync runs per (section, track, key) group with the rule above: the changed placement with
+the lowest start is stamped onto the rest of its group, on that track only. One mutation is still one revision,
+one notification and one undo step, and `getLastStampedPlacements()` lists a placement once however many tracks
+were rewritten.
+
+**Operations** (each validates first and changes nothing when it rejects):
+
+- `addVariation(placement)`: a full, independent copy of the placement's music (owns every non-Automation
+  track) that the placement then plays. Returns the lowest unused letter, or -1.
+- `addVariationForTrack(clip)`: "New variation of this part". Owns the placement's current own tracks plus the
+  clip's track; the placement plays it. -1 when the clip is in no placement or at 26.
+- `setPlacementVariation(placement, letter)`: rewrites only that placement, on each track whose key changes,
+  with the target's music (a live placement of the same key, else `stored`). The switch is not seen as an edit.
+- `playVariationEverywhere(section, letter)`: the same for every placement, as one mutation.
+- `removeVariation(section, letter)`: placements on it switch to A first; A cannot be removed.
+- `placeSection(..., letter)`: the new placement plays `letter`. `makePlacementUnique`: the new section's A is the
+  placement's current music; the old section keeps its variations.
+- Removing a track or lane erases it from every `ownTracks` and `stored`.
+- `getVariation(section, letter)`, `forEachStoredVariationClip(visit)` (clips of unplayed variations only).
+
+**Audio files.** An audio clip held only by an unplayed variation is on no track, so `AssetManager` visits
+`forEachStoredVariationClip` too when it collects unused files and when it adopts recordings; its files are kept.
+
+**File keys** (additive, `kFormatVersion` stays 1). A section with variations beyond A writes
+`"variations": [{"letter", "ownTracks": [ids], "stored"}]` for letters 1..25 (A is implied); `"stored"` is written
+only for a variation no placement plays, as `{"clips": {"<trackId>": [clip...]}, "points": {"<laneId>": [point...]}}`
+in the tracks' clip and breakpoint dialect. When no placement plays A, the section's own `"stored"` holds A's music.
+A placement writes `"variation": n` only when n is not 0. `fromVar` and `validateTimeline` reject a bad or repeated
+letter, letter 0 in the list, a placement naming an absent letter, an unknown key, an `ownTracks` or stored key
+naming a track or lane the file lacks (or that the variation does not own), a stored clip or point that fails the
+normal checks or starts outside the section, and more than `kMaxStoredVariationClips` stored clips. The validator
+also refuses a stored clip that names an audio asset and counts stored notes in the document budget. An unplayed
+variation without `"stored"` loads empty; an old file loads as A only.
 
 ## What a placement holds
 

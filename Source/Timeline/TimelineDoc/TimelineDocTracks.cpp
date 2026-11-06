@@ -47,6 +47,9 @@ bool TimelineDoc::removeEmptyAutomationTracks() {
     if (std::none_of(tracks.begin(), tracks.end(), isEmptyAutomation))
         return false;
     return applyMutation([&] {
+        for (const auto& t : tracks)
+            if (isEmptyAutomation(t))
+                forgetTrackInVariations(t.id);
         tracks.erase(std::remove_if(tracks.begin(), tracks.end(), isEmptyAutomation), tracks.end());
         return true;
     });
@@ -58,6 +61,7 @@ bool TimelineDoc::removeTrack(TrackId id) {
         return false;
 
     return applyMutation([&] {
+        forgetTrackInVariations(id);
         tracks.erase(tracks.begin() + (track - tracks.data()));
         return true;
     });

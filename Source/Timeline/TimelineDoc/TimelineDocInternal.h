@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <vector>
 
 namespace synth {
@@ -151,6 +152,30 @@ inline AutomationLane::Breakpoint makeBreakpoint(const AutomationLane::RangeSnap
     point.curve = curve;
     return point;
 }
+
+// -- section content slices (TimelineDocSectionSync.cpp) ---------------------------
+// Adds the track's clips starting in [startBeat, startBeat + lengthBeats) and its lanes' points in that span to `out`,
+// relative to startBeat; nothing is added for an empty one.
+void appendTrackContent(const Track& track, double startBeat, double lengthBeats, PlacementContent& out);
+// Removes the track's clips and its lanes' points from `content`.
+void eraseTrackSlice(const Track& track, PlacementContent& content);
+// Replaces the track's slice of `to` with its slice of `from`.
+void copyTrackSlice(const Track& track, const PlacementContent& from, PlacementContent& to);
+// The variation (letter) whose copy of `trackId` a placement playing `letter` holds: the letter itself when that
+// variation owns the track, otherwise 0 (shared with A).
+int variationKey(const Section& section, int letter, std::int64_t trackId);
+
+// -- clip and breakpoint JSON (TimelineDocSerialization.cpp) --------------------
+// The one clip and breakpoint dialect, shared by a track's lists and a variation's stored music. The readers
+// enforce the loader rule (absent = default, present but malformed fails); readClipVar also records the clip's and its
+// notes' ids in the sets, failing on a repeat.
+juce::var writeClipVar(const Clip& clip);
+bool readClipVar(const juce::var& clipVar, Clip& clip, std::set<std::int64_t>& seenClipIds,
+                 std::set<std::int64_t>& seenNoteIds);
+juce::var writeBreakpointVar(const AutomationLane::Breakpoint& point);
+// Clamps the value into `range`, like a second addBreakpoint would.
+bool readBreakpointVar(const juce::var& pointVar, const AutomationLane::RangeSnapshot& range,
+                       AutomationLane::Breakpoint& out);
 
 // -- clip stretch origin (TimelineDocStretchOriginSerialization.cpp) -------------
 // A stretch origin the format accepts: a non-empty bundle-relative ref (the same rule as Clip::assetRef), a finite
