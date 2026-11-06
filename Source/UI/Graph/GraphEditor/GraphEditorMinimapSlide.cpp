@@ -5,7 +5,6 @@
 // and every frame call layoutMinimap(), the single geometry authority, so a resize mid-slide stays correct.
 
 #include "GraphEditor.h"
-#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
