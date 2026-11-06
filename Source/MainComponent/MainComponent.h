@@ -275,17 +275,14 @@ public:
     void maybeStartEagerPluginScan();
     /** The status-bar progress reporter both scan triggers post while a scan runs. */
     synth::PluginScanService::ProgressFn makePluginScanProgressReporter();
-    /** Writes the scan list into appProperties under kPluginScanListKey. */
-    void savePluginScanList();
-    /** Pushes the scan list into the library sidebar's Plugins section. */
-    void refreshPluginLibrary();
+    void savePluginScanList();   // writes the scan list into appProperties under kPluginScanListKey
+    void refreshPluginLibrary(); // pushes the scan list into the library sidebar's Plugins section
     /** Shared with the plugin processor, which restores the same list. */
     static constexpr const char* kPluginScanListKey = synth::kPluginScanListSettingKey;
 
     // ---- Recent projects ----
     synth::RecentProjects& getRecentProjects() noexcept { return recentProjects; }
-    /** Writes the recent-projects list into appProperties under kRecentProjectsKey. */
-    void saveRecentProjects();
+    void saveRecentProjects(); // writes the recent-projects list into appProperties under kRecentProjectsKey
     static constexpr const char* kRecentProjectsKey = synth::kRecentProjectsSettingKey;
 
     void rebuildGraphForLatencyChange();
@@ -667,8 +664,9 @@ private:
     void promptRelinkClipAsset(synth::ClipId id);
     void relinkClipAsset(synth::ClipId id, const juce::File& chosenFile);
     void importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile);
-    friend struct MainComponentAudioImport;   // audio import and the Sounds view's load
-    friend struct MainComponentRenderToAudio; // Render to audio track: the offline render and its one undo step
+    friend struct MainComponentAudioImport;    // audio import and the Sounds view's load
+    friend struct MainComponentRenderToAudio;  // Render to audio track: the offline render and its one undo step
+    friend struct MainComponentCommandPalette; // Cmd+K: finds and runs actions, views, modules, tracks and settings
     int cleanUnusedAssets();
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;
     /** The node a track's "module" is: its instrument when it has one, else its bound node; null when unbound. */
@@ -849,6 +847,7 @@ private:
     synth::ui::ToolbarButton toggleLibraryButton{"toggleLibrary"};
     synth::ui::ToolbarButton toggleBottomPanelButton{"toggleBottomPanel"};
     synth::ui::ToolbarButton themeToggleButton{"toggleTheme"};
+    synth::ui::ToolbarButton searchButton{"search"}; // opens the command palette
 
     std::unique_ptr<juce::FileChooser> fileChooser;
     juce::ApplicationProperties appProperties; // declared before aiChatComponent, whose ctor reads it
@@ -991,6 +990,7 @@ private:
     void setAlignmentGuidesEnabled(bool enabled);
 
     std::unique_ptr<synth::ui::ToastComponent> toast_; // transient message + Undo; a child laid out by resized()
+    std::unique_ptr<struct MainComponentCommandPalette> commandPalette_; // Cmd+K (MainComponentCommandPalette.cpp)
 
     // Constructed last so all child components exist. Do NOT set tooltips here.
     std::unique_ptr<juce::Component> shortcutHints_; // Cmd-hold shortcut hints overlay

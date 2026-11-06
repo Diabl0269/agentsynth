@@ -6,10 +6,26 @@ namespace synth::ui {
 
 namespace {
 
+bool isLetterDigitSeam(juce::juce_wchar before, juce::juce_wchar after) {
+    using CF = juce::CharacterFunctions;
+    return (CF::isLetter(before) && CF::isDigit(after)) || (CF::isDigit(before) && CF::isLetter(after));
+}
+
+// A run of letters and a run of digits typed together are two words, so "lfo6" finds "LFO 6" as "lfo 6" would.
 juce::StringArray queryWords(const juce::String& query) {
+    juce::StringArray tokens;
+    tokens.addTokens(query, " \t\r\n", "");
+    tokens.removeEmptyStrings();
     juce::StringArray words;
-    words.addTokens(query, " \t\r\n", "");
-    words.removeEmptyStrings();
+    for (const auto& token : tokens) {
+        int start = 0;
+        for (int i = 1; i < token.length(); ++i)
+            if (isLetterDigitSeam(token[i - 1], token[i])) {
+                words.add(token.substring(start, i));
+                start = i;
+            }
+        words.add(token.substring(start));
+    }
     return words;
 }
 

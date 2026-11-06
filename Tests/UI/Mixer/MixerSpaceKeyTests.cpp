@@ -86,8 +86,10 @@ TEST(MixerSpaceKeyTest, EveryFocusableMixerButtonConsumesSpaceAndClicksOnce) {
     panel.setSize(1400, 700);
     panel.resized();
 
-    // Let every pending rebuild and fade land, or a column is replaced under a button mid-press. A fixed wait lost
-    // this race on a loaded machine, so wait until the set of buttons has held still for a while.
+    // Let every pending rebuild and fade land, or a column is replaced under a button mid-press. The undo manager's
+    // change message that rebuilds the mixer can sit behind a deep queue, so drain the queue first, then wait until
+    // the set of buttons has held still for a while.
+    synth::test::flushMessageQueue();
     const auto snapshot = [&panel] {
         std::vector<juce::Component::SafePointer<juce::Button>> found;
         collectButtons(panel, panel, found);
@@ -113,10 +115,18 @@ TEST(MixerSpaceKeyTest, EveryFocusableMixerButtonConsumesSpaceAndClicksOnce) {
     collectButtons(panel, panel, buttons);
     // Toolbar toggles + add bus + reset meters + chips + dots + icon buttons + rows' bypass: well over a dozen.
     ASSERT_GT(buttons.size(), 12u);
+    const size_t buttonCount = buttons.size();
 
     const juce::KeyPress space(juce::KeyPress::spaceKey);
     int colourDots = 0;
-    for (auto& pointer : buttons) {
+    for (size_t index = 0; index < buttonCount; ++index) {
+        // A press can legitimately make the mixer rebuild a moment later (a toggle's state change reaches the undo
+        // manager's queued change message), which replaces the columns; walk by position in the current tree, not
+        // by pointers taken before the walk.
+        buttons.clear();
+        collectButtons(panel, panel, buttons);
+        ASSERT_EQ(buttons.size(), buttonCount) << "the mixer's buttons changed while the walk was running";
+        auto& pointer = buttons[index];
         ASSERT_NE(pointer.getComponent(), nullptr);
         // Count the click instead of running the button's action (a section toggle would rebuild the panel).
         int clicks = 0;
@@ -129,12 +139,14 @@ TEST(MixerSpaceKeyTest, EveryFocusableMixerButtonConsumesSpaceAndClicksOnce) {
         const bool consumed = static_cast<juce::Component&>(*pointer).keyPressed(space);
         // Button::triggerClick posts the click as a command message; run it before counting.
         synth::test::flushMessageQueue();
-        ASSERT_NE(pointer.getComponent(), nullptr) << label << " was destroyed by its own press";
         EXPECT_EQ(consumed, !leavesSpace)
             << label << (leavesSpace ? " claims Space" : " lets Space bubble to the window");
         EXPECT_EQ(clicks, expectedClicks) << label;
-        pointer->onClick = nullptr;
+        if (pointer != nullptr)
+            pointer->onClick = nullptr;
+        // Let whatever the press set off settle, so the next button is looked up in the rebuilt panel.
         juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+        synth::test::flushMessageQueue();
     }
     EXPECT_GT(colourDots, 0) << "the walk reached no colour dot, so the exception is untested";
 }

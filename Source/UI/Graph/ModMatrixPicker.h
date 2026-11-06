@@ -4,9 +4,11 @@
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/NavigationSearchField.h"
 #include "UI/Layout/SearchMatch.h"
+#include "UI/Theme/IconLibrary.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace synth::ui {
@@ -24,7 +26,8 @@ namespace synth::ui {
  *  components, so a list of thousands opens and filters at once. The
  *  highlighted row on a query is the best match (synth::ui::searchScore), the first among equals. The popup's height is
  * fixed by the full list, so it never resizes under the cursor while filtering. Up/Down move the highlight, Return
- *  picks it (the first match until moved), Escape closes.
+ *  picks it (the first match until moved), Escape closes; Tab steps onto a row's action button, if it has one.
+ *  It can also sit in a caller's own panel (the command palette), which then closes it through onDismissRequested.
  *
  *  Styling is self-contained (opaque themed panel, explicit colours), like MidiDestinationPicker: a
  *  parentless CallOutBox is a new top-level window that does not inherit the app's LookAndFeel. */
@@ -32,6 +35,13 @@ class ModMatrixPicker
     : public juce::Component
     , public AppUndoAware {
 public:
+    /** A small icon button at a row's right end ("Show plugin window"). `title` is what a screen reader says. */
+    struct RowAction {
+        juce::String title;
+        juce::String tooltip;
+        synth::theme::Icon icon = synth::theme::Icon::ActionDetachWindow;
+    };
+
     struct Item {
         int id = 0;
         juce::String category; // header this row sits under; empty = no header (a flat list)
@@ -55,6 +65,18 @@ public:
         // What a screen reader announces for the row when it should say more than `text` (the add-automation picker
         // adds where the module lives). Empty = `text` (and `detail`).
         juce::String accessibleName;
+        // A muted note at the right, before the tag, that the search does not read (an action's key).
+        juce::String hint;
+        // Set = an on/off row showing this state: a pick flips it in place and the list stays open.
+        std::optional<bool> switchOn;
+        // Set = the row has an icon button at its right end; pressing it reports the id through onRowAction.
+        std::optional<RowAction> action;
+    };
+
+    /** The rows one query shows, for a caller that finds and orders them itself (setRowSource). */
+    struct QueryRows {
+        std::vector<Item> items;
+        juce::String highlight; // the words whose matched letters are drawn bold
     };
 
     ModMatrixPicker(juce::String what, std::vector<Item> items, int selectedId, std::function<void(int)> onChoose);
@@ -63,6 +85,10 @@ public:
     /** Runs once from the destructor, however the picker closed (a pick, Escape, a click away): the launcher's cue
      *  to hand keyboard focus back. After a pick it runs after `onChoose`. */
     std::function<void()> onClosed;
+    /** A row's action button was pressed (by click, or Tab then Return); the picker closes first, as on a pick. */
+    std::function<void(int)> onRowAction;
+    /** How a picker that is not inside a CallOutBox closes (Escape, a pick); a CallOutBox closes itself. */
+    std::function<void()> onDismissRequested;
 
     void resized() override;
     void paint(juce::Graphics& g) override;
@@ -78,6 +104,10 @@ public:
     /** The search field's placeholder, for a picker that also creates ("Search or create a source"); the default is
      *  "Search <what>s...". */
     void setSearchPlaceholder(const juce::String& text);
+
+    /** From now on each edit asks `rowsFor` for the whole list and shows every row it returns, in order, with the
+     *  first pickable one highlighted; the picker's own filter is off. Runs it once at once. */
+    void setRowSource(std::function<QueryRows(const juce::String& query)> rowsFor);
 
     /** Replaces the rows (the list can fill after a download); the new rows fade in and the search text stays. */
     void setItems(std::vector<Item> items);
@@ -115,6 +145,12 @@ public:
     /** Sends a key to the search field, as typing would. */
     bool sendKeyForTest(const juce::KeyPress& key);
     int getHighlightedItemIndexForTest() const noexcept { return highlighted_; }
+    /** Whether Tab moved the highlight onto the highlighted row's action button. */
+    bool isActionSelectedForTest() const noexcept { return actionSelected_; }
+    /** The on/off state of the nth visible item row (nothing for a plain row). */
+    std::optional<bool> getVisibleItemSwitchForTest(int index) const;
+    /** The nth visible item's action button component, while its row has one in view (else null). */
+    juce::Component* getVisibleItemActionButtonForTest(int index) const;
     int getHeightForTest() const noexcept { return getHeight(); }
     juce::TextEditor& getSearchEditorForTest() noexcept;
     /** The column the rows live in, and whether any row is still fading in or out of the filter. */
@@ -166,6 +202,11 @@ private:
     void hoverEntry(int entryIndex);
     void chooseEntry(int entryIndex);
     void chooseHighlighted();
+    void pressAction(int entryIndex);
+    bool selectAction(bool on);
+    void buildEntries();
+    void applySourceRows();
+    const juce::String& displayQuery() const noexcept { return rowSource_ ? sourceHighlight_ : query_; }
     void applyColours();
     int preferredHeight() const;
     const Item& itemAtVisible(int visibleIndex) const;
@@ -191,7 +232,10 @@ private:
     bool laidOut_ = false;
     bool markGutter_ = false; // some row carries a tick or a new mark, so every row leaves room for one
     bool syncing_ = false;
+    bool actionSelected_ = false; // Tab put the highlight on the highlighted row's action button
     int rowsSteered_ = 0;
+    std::function<QueryRows(const juce::String&)> rowSource_;
+    juce::String sourceHighlight_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModMatrixPicker)
 };

@@ -32,7 +32,7 @@ here. See [animation](animation.md#panelslide).
 
 - Left group: Library, New, Save, Load, Settings, Feedback, Undo, Redo
 - Flex spacer (`withFlex(1.0f)`) filling the gap
-- Right group: ToggleAiPanel, ToggleBottomPanel, ToggleTheme
+- Right group: Search, ToggleAiPanel, ToggleBottomPanel, ToggleTheme
 
 Auto Arrange, Minimap and Matrix are not here: they sit on the [canvas toolbar](#canvas-toolbar).
 
@@ -42,10 +42,13 @@ hardcoded colour `0xff0B0D10`.
 
 **Narrow mode** fires when `bounds.getWidth() <= Metrics::minWindowWidth` (480 px): every button's
 `prefWidth` becomes 32 (icon-only). In wide mode each button has a labelled preferred width —
-Library 96, New 88, Save 112, Load 116, Settings 96, Undo 72, Redo 72, ToggleAiPanel 92, ToggleBottomPanel 100,
+Library 96, New 88, Save 112, Load 116, Settings 96, Undo 72, Redo 72, Search 88, ToggleAiPanel 92, ToggleBottomPanel 100,
 ToggleTheme 110. Feedback sits in the same sub-group as Settings (`groupOf()` returns the same id
 for both, so no separator is drawn between them; its tooltip and Cmd-hold key-cap name Cmd+Shift+F, `openFeedback`) and is 84 px wide, enough for its "Feedback" caption
-at full size.
+at full size. **Search** opens the [command palette](command-palette.md): a magnifier (`Icon::ToolbarSearch`, view
+group, the handle nudges out on hover) captioned "Search", a sub-group of its own at the start of the right section; its
+tooltip reads "Search everything (type + to add)" with the `openCommandPalette` key (Cmd+K), which its Cmd-hold
+key-cap shows too. Pressed while the palette is open, it closes it.
 
 **Sub-group visual grouping.** `ToolbarComponent`'s local `groupOf(slot)` helper maps each `Slot`
 to its sub-group, `layoutButtons()` inserts a 12 px spacer `FlexItem` at every sub-group boundary
@@ -70,7 +73,7 @@ other `DrawableButton`s in the app (the mixer's icon buttons, detach buttons) ke
 
 - **Groups and colours.** `applyToolbarIcons()` gives each button its icon and colour group
   (`ToolbarButton::setIcon(icon, group)`; `toolbarGroupHue()` resolves the token): **file** (New,
-  Save, Load) `hueGreen`; **edit** (Undo, Redo, Auto Arrange) `hueAmber`; **view** (Library,
+  Save, Load) `hueGreen`; **edit** (Undo, Redo, Auto Arrange) `hueAmber`; **view** (Library, Search,
   Minimap, Matrix, Panel) `accent`; **AI** `hueRose`; **housekeeping** (Settings, Light mode)
   `hueViolet`; **Feedback** sits beside Settings but has its own group, `hueGreen`.
 - **Chip.** The icon sits on a 30 x 24 chip, radius 7, 4 px from the top of the button: the group
@@ -206,7 +209,7 @@ visible exactly when the canvas is, so it moves with it in a swap and has no ani
 same height with or without captions, so toggling Show button labels never moves the canvas. Buttons are left
 aligned, 84 px wide with captions and 32 px without.
 
-The canvas keys reveal a hidden canvas first: Cmd+L, Cmd+K and Cmd+M call `ensureCanvasShowing()` before acting
+The canvas keys reveal a hidden canvas first: Cmd+L, Opt+Cmd+K and Cmd+M call `ensureCanvasShowing()` before acting
 (`MainComponentCommandTable.cpp`), and adding a module, plugin or snippet from the Library with a click or Return
 does the same (drags land on the canvas, so they already show it). The greyed-out Minimap keeps its
 "Needs a taller canvas" tooltip, now only for a canvas under 240x160
@@ -594,12 +597,13 @@ when it appears, and takes no clicks, so its z-order never matters at rest. Rule
 
 Every search or filter box matches and highlights the same way, through `Source/UI/Layout/SearchMatch.h`
 (namespace `synth::ui`): the module library, the Mod Matrix / add-automation / add-modulator pickers
-(`ModMatrixPicker`), the Preferences and Keyboard Shortcuts filters, the MIDI Remote action picker, the
+(`ModMatrixPicker`, which the [command palette](command-palette.md) also hosts), the Preferences and Keyboard Shortcuts filters, the MIDI Remote action picker, the
 Mixer zones channel filter, the MIDI destination picker, the card layout editor's control search and the port
 connections panel's Add connection page (`PortTargetSearchPage`: jacks, knobs and "New <module>" rows).
 
-- `searchMatches(text, query)`: the query is split on whitespace; every word must appear in the text,
-  ignoring case, in any order (`"osc 8"` finds `"Oscillator 8"`). A blank query matches everything, so a box
+- `searchMatches(text, query)`: the query is split on whitespace, and a run of letters typed against a run of digits
+  splits too (`"lfo6"` is `"lfo 6"`); every word must appear in the text, ignoring case, in any order (`"osc 8"`
+  finds `"Oscillator 8"`). A blank query matches everything, so a box
   that must treat a blank query differently (the library hides no section for it) guards at its call site.
 - `searchScore(text, query)`: `-1` no match, else lower is better. Per word the best occurrence counts: `0`
   the text starts with it, `1` it starts a word, `2` it sits inside a word; the worst word sets the score.

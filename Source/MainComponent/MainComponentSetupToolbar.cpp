@@ -6,6 +6,7 @@
 #include "Branding.h"
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
+#include "MainComponentCommandPalette.h"
 #include "MainComponentShortcutHints.h"
 #include "ShortcutManager/AppCommands.h"
 #include "SoundBrowser/LoopStretch.h"
@@ -280,6 +281,10 @@ void MainComponent::addToolbarToggleButtons() {
     addAndMakeVisible(feedbackButton);
     feedbackButton.setComponentID("feedbackButton");
     feedbackButton.onClick = [this]() { launchSettingsWindow("Feedback"); };
+
+    addAndMakeVisible(searchButton);
+    searchButton.setComponentID("searchButton");
+    searchButton.onClick = [this] { MainComponentCommandPalette::toggle(*this); };
 }
 
 // The visible text of a toggle says what a press does ("Hide Library" / "Show Library"), so that same
@@ -301,6 +306,7 @@ void MainComponent::applyToolbarLabels(bool iconOnly) {
         {&feedbackButton, "Feedback"},
         {&undoButton, "Undo"},
         {&redoButton, "Redo"},
+        {&searchButton, "Search"},
         {&canvasToolbar_.addButton(), "Add"},
         {&autoArrangeButton, "Auto Arrange"},
         {&toggleMinimapButton, graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"},
@@ -368,7 +374,8 @@ void MainComponent::assembleToolbar() {
     // resized() -> layoutButtons() pass finds the registered buttons and positions them.
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &feedbackButton,
-                        &undoButton, &redoButton, &toggleAiPanelButton, &toggleBottomPanelButton, &themeToggleButton});
+                        &undoButton, &redoButton, &searchButton, &toggleAiPanelButton, &toggleBottomPanelButton,
+                        &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.
@@ -386,6 +393,7 @@ void MainComponent::assembleToolbar() {
                          {&feedbackButton, "openFeedback"},
                          {&undoButton, "undo"},
                          {&redoButton, "redo"},
+                         {&searchButton, "openCommandPalette"},
                          {&canvasToolbar_.addButton(), "openAddTrackMenu"},
                          {&autoArrangeButton, "autoArrange"},
                          {&toggleMinimapButton, "toggleMinimap"},

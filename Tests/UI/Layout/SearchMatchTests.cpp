@@ -126,3 +126,23 @@ TEST(SearchMatch, MatchedLettersAreDrawnInTheAccentWithNoFillBehindThem) {
     EXPECT_GT(accentPixels, 10) << "the match letters take the accent colour";
     EXPECT_EQ(fillPixels, 0) << "no fill is painted";
 }
+
+// Regression test for FRO733: "lfo6" found nothing, because the module is named "LFO 6" with a space.
+TEST(SearchMatch, LettersAndDigitsTypedTogetherAreSeparateWords) {
+    EXPECT_TRUE(searchMatches("LFO 6", "lfo6"));
+    EXPECT_TRUE(searchMatches("Oscillator 12", "osc12"));
+    EXPECT_TRUE(searchMatches("LFO 6", "6lfo"));
+    EXPECT_FALSE(searchMatches("LFO 5", "lfo6"));
+    EXPECT_TRUE(searchMatches("LFO6", "lfo6")) << "the glued name still matches";
+    EXPECT_LT(searchScore("LFO 6", "lfo6"), searchScore("LFO 16", "lfo6")) << "a whole 6 beats one inside 16";
+    EXPECT_EQ(searchScore("LFO 6", "lfo6"), searchScore("LFO 6", "lfo 6"));
+}
+
+TEST(SearchMatch, SplitWordsHighlightEachRun) {
+    const auto spans = searchHighlightSpans("LFO 6", "lfo6");
+    ASSERT_EQ(spans.size(), 2u);
+    EXPECT_EQ(spans[0].start, 0);
+    EXPECT_EQ(spans[0].length, 3);
+    EXPECT_EQ(spans[1].start, 4);
+    EXPECT_EQ(spans[1].length, 1);
+}

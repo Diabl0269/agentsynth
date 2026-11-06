@@ -105,10 +105,10 @@ TEST_F(MainComponentTest, ToolbarSkipsTheDisabledUndoAndRedoButtons) {
     auto& toolbar = mc.getToolbar();
     ASSERT_FALSE(findToolbarButton(mc, "undoButton")->isEnabled());
 
-    // Library -> New, Save, Load, Settings, Feedback, then straight past Undo/Redo to the AI panel toggle.
+    // Library -> New, Save, Load, Settings, Feedback, then straight past Undo/Redo to Search.
     for (int i = 0; i < 5; ++i)
         toolbar.keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
     ASSERT_EQ(toolbar.getFocusedSlot(), (int)ToolbarComponent::Feedback);
     toolbar.keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
-    EXPECT_EQ(toolbar.getFocusedSlot(), (int)ToolbarComponent::ToggleAiPanel);
+    EXPECT_EQ(toolbar.getFocusedSlot(), (int)ToolbarComponent::Search);
 }

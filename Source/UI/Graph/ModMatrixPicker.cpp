@@ -1,6 +1,7 @@
 #include "ModMatrixPicker.h"
 
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -24,6 +25,10 @@ constexpr float kHeaderFontSize = 11.0f;
 constexpr int kGlyphGutter = 16; // before the text of every row when any row has a tick or a plus
 constexpr float kTagFontSize = 9.0f;
 constexpr int kOverscan = 4 * kRowHeight; // rows kept past each edge of the view, so a scroll never shows a gap
+constexpr int kActionSize = 20;           // a row's action button, square
+constexpr float kHintFontSize = 11.0f;
+constexpr int kSwitchWidth = 26;
+constexpr int kSwitchHeight = 14;
 
 struct Palette {
     juce::Colour panel = juce::Colours::darkgrey.darker(0.4f);
@@ -56,6 +61,77 @@ Palette paletteFor(juce::Component& comp) {
 
 } // namespace
 
+// A row's action button: a small icon at the row's right end. Keyboard focus stays in the search field, so the ring it
+// paints follows the picker's own selection (Tab), not real focus.
+class RowActionButton
+    : public juce::Component
+    , public juce::SettableTooltipClient {
+public:
+    std::function<void()> onPress;
+
+    void bind(const ModMatrixPicker::RowAction& action) {
+        setTitle(action.title);
+        setTooltip(action.tooltip);
+        if (icon_ != action.icon) {
+            icon_ = action.icon;
+            drawable_.reset();
+        }
+        repaint();
+    }
+    void setSelected(bool on) {
+        if (selected_ != on) {
+            selected_ = on;
+            repaint();
+        }
+    }
+    void setColours(juce::Colour muted, juce::Colour accent) {
+        muted_ = muted;
+        accent_ = accent;
+        repaint();
+    }
+
+    void paint(juce::Graphics& g) override {
+        const auto area = getLocalBounds().toFloat();
+        if (hover_ || selected_) {
+            g.setColour(accent_.withAlpha(0.2f));
+            g.fillRoundedRectangle(area.reduced(1.0f), 4.0f);
+        }
+        const auto glyph = area.reduced(4.0f);
+        if (drawable_ == nullptr)
+            if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+                drawable_ = lf->getIcon(icon_); // the theme's tinted copy; a theme switch drops it
+        if (drawable_ != nullptr) {
+            drawable_->drawWithin(g, glyph, juce::RectanglePlacement::centred, 1.0f);
+        } else {
+            // No themed icon (headless, or no assets): a plain window outline with its title bar.
+            g.setColour(selected_ ? accent_ : muted_);
+            g.drawRoundedRectangle(glyph.reduced(0.5f), 2.0f, 1.2f);
+            g.drawLine(glyph.getX(), glyph.getY() + 3.5f, glyph.getRight(), glyph.getY() + 3.5f, 1.2f);
+        }
+        if (selected_)
+            synth::ui::paintFocusRingAlways(g, area, *this, 4.0f);
+    }
+    void lookAndFeelChanged() override { drawable_.reset(); }
+    void mouseEnter(const juce::MouseEvent&) override { setHover(true); }
+    void mouseExit(const juce::MouseEvent&) override { setHover(false); }
+    void mouseUp(const juce::MouseEvent& e) override {
+        if (getLocalBounds().contains(e.getPosition()) && onPress)
+            onPress();
+    }
+
+private:
+    void setHover(bool on) {
+        hover_ = on;
+        repaint();
+    }
+    synth::theme::Icon icon_ = synth::theme::Icon::ActionDetachWindow;
+    std::unique_ptr<juce::Drawable> drawable_;
+    juce::Colour muted_ = juce::Colours::grey;
+    juce::Colour accent_ = juce::Colours::lightblue;
+    bool selected_ = false;
+    bool hover_ = false;
+};
+
 // One header or item line in view: a recycled component bound to an entry of the list. It keeps the fade the filter
 // steers, and reports a click and its own hover by entry so the picker keeps the highlight.
 class ModMatrixPicker::Row
@@ -65,7 +141,15 @@ public:
     explicit Row(ModMatrixPicker& owner)
         : owner_(owner) {
         fade.onFrame = [this] { owner_.onRowFadeFrame(); };
+        actionButton_.setComponentID("rowAction");
+        addChildComponent(actionButton_);
+        actionButton_.onPress = [this] {
+            if (entry_ >= 0 && !header_)
+                owner_.pressAction(entry_);
+        };
     }
+
+    RowActionButton* actionButton() noexcept { return actionButton_.isVisible() ? &actionButton_ : nullptr; }
 
     FadeVisibility fade{this};
 
@@ -78,6 +162,9 @@ public:
         detail_ = {};
         tag_ = {};
         isCurrent_ = ticked_ = isNew_ = gutter_ = false;
+        hint_ = {};
+        switchOn_.reset();
+        actionButton_.setVisible(false);
         setTitle(text);
         setTooltip({});
         setEnabled(true);
@@ -95,9 +182,15 @@ public:
         ticked_ = item.ticked;
         isNew_ = item.isNew;
         tag_ = item.tag;
+        hint_ = item.hint;
+        switchOn_ = item.switchOn;
         gutter_ = gutter;
+        actionButton_.setVisible(item.action.has_value());
+        if (item.action)
+            actionButton_.bind(*item.action);
         const auto spoken = detail_.isNotEmpty() ? text_ + ", " + detail_ : text_;
-        const auto announced = tag_.isNotEmpty() ? spoken + ", " + tag_ : spoken;
+        const auto tagged = tag_.isNotEmpty() ? spoken + ", " + tag_ : spoken;
+        const auto announced = switchOn_ ? tagged + (*switchOn_ ? ", on" : ", off") : tagged;
         setTitle(item.accessibleName.isNotEmpty() ? item.accessibleName : announced);
         setTooltip(spoken);
         setEnabled(item.enabled);
@@ -112,9 +205,15 @@ public:
             repaint();
         }
     }
+    void setActionSelected(bool on) { actionButton_.setSelected(on); }
     void setPalette(const Palette& p) {
         palette_ = p;
+        actionButton_.setColours(p.muted, p.accent);
         repaint();
+    }
+    void resized() override {
+        auto content = getLocalBounds().reduced(12, 0);
+        actionButton_.setBounds(content.removeFromRight(kActionSize).withSizeKeepingCentre(kActionSize, kActionSize));
     }
     // The (trimmed) search query whose matched letters this row paints highlighted.
     void setQuery(const juce::String& query) {
@@ -144,10 +243,16 @@ public:
         if (gutter_) {
             paintMark(g, content.removeFromLeft(kGlyphGutter));
         }
+        if (actionButton_.isVisible())
+            content.removeFromRight(kActionSize + 6);
         if (isNew_)
             paintTag(g, content, "New");
         else if (tag_.isNotEmpty())
             paintTag(g, content, tag_);
+        if (switchOn_)
+            paintSwitch(g, content);
+        if (hint_.isNotEmpty())
+            paintHint(g, content);
         if (detail_.isEmpty()) {
             drawSearchHighlightedText(g, text_, query_, content, rowFont, textColour, fill, palette_.accent);
             return;
@@ -190,6 +295,39 @@ public:
         g.drawText(label, tag, juce::Justification::centred, false);
     }
 
+    // An on/off row's switch, before its tag: the accent pill with the knob right when on, an outline when off.
+    void paintSwitch(juce::Graphics& g, juce::Rectangle<int>& content) const {
+        const auto pill = content.removeFromRight(kSwitchWidth).withSizeKeepingCentre(kSwitchWidth, kSwitchHeight);
+        content.removeFromRight(8);
+        const auto area = pill.toFloat();
+        const float radius = area.getHeight() * 0.5f;
+        const bool on = *switchOn_;
+        if (on) {
+            g.setColour(palette_.accent);
+            g.fillRoundedRectangle(area, radius);
+        } else {
+            g.setColour(palette_.muted);
+            g.drawRoundedRectangle(area.reduced(0.5f), radius, 1.0f);
+        }
+        const float knob = area.getHeight() - 4.0f;
+        const float x = on ? area.getRight() - 2.0f - knob : area.getX() + 2.0f;
+        g.setColour(on ? palette_.panel : palette_.muted);
+        g.fillEllipse(x, area.getY() + 2.0f, knob, knob);
+    }
+
+    // A muted note (an action's key) right-aligned before the tag; it never squeezes the row's own text below half.
+    void paintHint(juce::Graphics& g, juce::Rectangle<int>& content) const {
+        const juce::Font font{juce::FontOptions(kHintFontSize)};
+        juce::GlyphArrangement glyphs;
+        glyphs.addLineOfText(font, hint_, 0.0f, 0.0f);
+        const int width =
+            juce::jmin((int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth()) + 2, content.getWidth() / 2);
+        g.setColour(palette_.muted);
+        g.setFont(font);
+        g.drawText(hint_, content.removeFromRight(width), juce::Justification::centredRight, true);
+        content.removeFromRight(8);
+    }
+
     void mouseEnter(const juce::MouseEvent&) override {
         if (entry_ >= 0 && !header_)
             owner_.hoverEntry(entry_);
@@ -210,7 +348,10 @@ private:
     juce::String text_;
     juce::String detail_;
     juce::String tag_;
+    juce::String hint_;
     juce::String query_;
+    std::optional<bool> switchOn_;
+    RowActionButton actionButton_;
     bool isCurrent_ = false;
     bool ticked_ = false;
     bool isNew_ = false;
@@ -251,9 +392,20 @@ ModMatrixPicker::ModMatrixPicker(juce::String what, std::vector<Item> items, int
             return true;
         }
         if (key == juce::KeyPress::returnKey) {
-            chooseHighlighted();
+            if (actionSelected_ && !visibleItems_.empty())
+                pressAction(visibleItems_[(size_t)highlighted_]);
+            else
+                chooseHighlighted();
             return true;
         }
+        // Tab (or Right at the end of the text) steps onto the highlighted row's action button; Shift+Tab or Left
+        // steps back. A row with no button lets Tab do what it always does.
+        const bool atEnd = searchEditor_->getCaretPosition() >= searchEditor_->getTotalNumChars();
+        if (key == juce::KeyPress(juce::KeyPress::tabKey) || (key == juce::KeyPress::rightKey && atEnd))
+            return selectAction(true);
+        if (key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0) ||
+            (key == juce::KeyPress::leftKey && actionSelected_))
+            return selectAction(false);
         if (key == juce::KeyPress::escapeKey) {
             dismiss();
             return true;
@@ -279,6 +431,11 @@ ModMatrixPicker::~ModMatrixPicker() {
 }
 
 void ModMatrixPicker::rebuildRows() {
+    buildEntries();
+    applyFilter();
+}
+
+void ModMatrixPicker::buildEntries() {
     for (auto& entry : entries_)
         if (entry.row != nullptr)
             releaseRow(entry);
@@ -306,7 +463,6 @@ void ModMatrixPicker::rebuildRows() {
         entry.haystack = item.text + " " + item.detail + " " + item.searchText + " " + item.tag;
         entries_.push_back(std::move(entry));
     }
-    applyFilter();
 }
 
 // Takes a free component (or makes one) for the entry. Its fade is left landed on hidden; the caller decides.
@@ -327,10 +483,12 @@ ModMatrixPicker::Row& ModMatrixPicker::acquireRow(int entryIndex) {
         row->bindItem(entryIndex, item, item.id == selectedId_, markGutter_);
     }
     row->setPalette(paletteFor(*this));
-    row->setQuery(query_);
-    row->setHighlighted(!entry.header && !visibleItems_.empty() &&
-                        visibleItems_[(size_t)juce::jlimit(0, (int)visibleItems_.size() - 1, highlighted_)] ==
-                            entryIndex);
+    row->setQuery(displayQuery());
+    const bool highlighted =
+        !entry.header && !visibleItems_.empty() &&
+        visibleItems_[(size_t)juce::jlimit(0, (int)visibleItems_.size() - 1, highlighted_)] == entryIndex;
+    row->setHighlighted(highlighted);
+    row->setActionSelected(highlighted && actionSelected_);
     return *row;
 }
 
@@ -345,6 +503,10 @@ void ModMatrixPicker::releaseRow(Entry& entry) {
 // here (see preferredHeight), so the popup keeps its size while the list shrinks.
 void ModMatrixPicker::applyFilter() {
     query_ = searchEditor_->getText().trim();
+    if (rowSource_) {
+        applySourceRows();
+        return;
+    }
     const auto words = searchQueryWords(query_);
     visibleItems_.clear();
     Entry* pendingHeader = nullptr;
@@ -387,6 +549,28 @@ void ModMatrixPicker::applyFilter() {
     setHighlight(query_.isNotEmpty() && bestIndex >= 0 ? bestIndex : nextPickable(-1, 1));
 }
 
+// The caller found and ordered the rows: every one shows, and the highlight starts on the first that can be picked.
+void ModMatrixPicker::applySourceRows() {
+    auto rows = rowSource_(query_);
+    items_ = std::move(rows.items);
+    sourceHighlight_ = rows.highlight;
+    buildEntries();
+    markGutter_ = false; // a ranked list has no current row, and its switches sit at the right
+    visibleItems_.clear();
+    for (size_t i = 0; i < entries_.size(); ++i)
+        if (!entries_[i].header)
+            visibleItems_.push_back((int)i);
+    actionSelected_ = false;
+    steerRows();
+    laidOut_ = true;
+    setHighlight(nextPickable(-1, 1));
+}
+
+void ModMatrixPicker::setRowSource(std::function<QueryRows(const juce::String&)> rowsFor) {
+    rowSource_ = std::move(rowsFor);
+    applyFilter();
+}
+
 // A filter pass restarts the list at the top. Only what lands in that first screenful is animated: a row with a
 // component follows the filter from its current opacity, a row newly shown there fades in, and everything further down
 // just takes its new state. Nothing here costs more than the screenful, whatever the list's length.
@@ -400,7 +584,7 @@ void ModMatrixPicker::steerRows() {
         const bool inWindow = targetY < bottom;
         if (entry.row != nullptr) {
             ++rowsSteered_;
-            entry.row->setQuery(query_);
+            entry.row->setQuery(displayQuery());
             if (inWindow && laidOut_)
                 entry.row->fade.setShown(entry.shown);
             else
@@ -423,7 +607,6 @@ void ModMatrixPicker::steerRows() {
 // A row the filter is taking out keeps a slot squeezed to its fade's progress, so the rows below slide up while it goes
 // and one that comes back opens its slot the same way. Plain arithmetic over the list: only bound rows are components.
 void ModMatrixPicker::layoutEntries() {
-    const int width = juce::jmax(0, viewport_.getMaximumVisibleWidth());
     int y = 0;
     for (auto& entry : entries_) {
         const bool fading = entry.row != nullptr && entry.row->fade.isFading();
@@ -431,12 +614,23 @@ void ModMatrixPicker::layoutEntries() {
                          : entry.shown ? entry.height
                                        : 0;
         entry.y = y;
-        if (entry.row != nullptr)
-            entry.row->setBounds(0, y, width, slot);
         y += slot;
     }
     const bool wasSyncing = std::exchange(syncing_, true); // a shrinking column moves the view: one sync, by the caller
+    // Size the column first: its height decides whether the vertical scrollbar shows, and that decides the width every
+    // row (including the ones laid out before the scrollbar appeared) takes.
+    rowColumn_.setSize(juce::jmax(0, viewport_.getMaximumVisibleWidth()), juce::jmax(y, 1));
+    const int width = juce::jmax(0, viewport_.getMaximumVisibleWidth());
     rowColumn_.setSize(width, juce::jmax(y, 1));
+    for (auto& entry : entries_) {
+        if (entry.row == nullptr)
+            continue;
+        const bool fading = entry.row->fade.isFading();
+        const int slot = fading        ? juce::roundToInt((float)entry.height * entry.row->fade.progress())
+                         : entry.shown ? entry.height
+                                       : 0;
+        entry.row->setBounds(0, entry.y, width, slot);
+    }
     syncing_ = wasSyncing;
 }
 
@@ -567,10 +761,15 @@ void ModMatrixPicker::setHighlight(int visibleItemIndex) {
         highlighted_ = 0;
         return;
     }
-    highlighted_ = juce::jlimit(0, (int)visibleItems_.size() - 1, visibleItemIndex);
+    const int next = juce::jlimit(0, (int)visibleItems_.size() - 1, visibleItemIndex);
+    if (next != highlighted_)
+        actionSelected_ = false; // the action selection belongs to the row it was made on
+    highlighted_ = next;
     const int target = visibleItems_[(size_t)highlighted_];
-    for (const auto& row : pool_)
+    for (const auto& row : pool_) {
         row->setHighlighted(row->entry() == target);
+        row->setActionSelected(row->entry() == target && actionSelected_);
+    }
 
     // Keep the highlighted row inside the viewport; the move gives it a component if it had none.
     const auto& entry = entries_[(size_t)target];
@@ -617,14 +816,54 @@ void ModMatrixPicker::chooseHighlighted() {
 // Reports the pick, then closes. The callback is copied first: closing is asynchronous, but nothing
 // here may depend on that.
 void ModMatrixPicker::chooseEntry(int entryIndex) {
-    const auto& item = items_[(size_t)entries_[(size_t)entryIndex].item];
+    auto& item = items_[(size_t)entries_[(size_t)entryIndex].item];
     if (!item.enabled)
         return;
     const int id = item.id;
     auto callback = onChoose_;
+    if (item.switchOn) {
+        // An on/off row flips where it is and the list stays open; the callback applies the new state.
+        item.switchOn = !*item.switchOn;
+        if (auto* row = entries_[(size_t)entryIndex].row)
+            row->bindItem(entryIndex, item, item.id == selectedId_, markGutter_);
+        juce::AccessibilityHandler::postAnnouncement(item.text + (*item.switchOn ? ", on" : ", off"),
+                                                     juce::AccessibilityHandler::AnnouncementPriority::medium);
+        if (callback)
+            callback(id);
+        return;
+    }
     dismiss();
     if (callback)
         callback(id);
+}
+
+// The row's action button, by click or by Tab then Return: closes like a pick, then reports the row.
+void ModMatrixPicker::pressAction(int entryIndex) {
+    const auto& item = items_[(size_t)entries_[(size_t)entryIndex].item];
+    if (!item.enabled || !item.action)
+        return;
+    const int id = item.id;
+    auto callback = onRowAction;
+    dismiss();
+    if (callback)
+        callback(id);
+}
+
+// Puts the highlight on (or takes it off) the highlighted row's action button. False when there is nothing to do, so
+// the key keeps its usual meaning.
+bool ModMatrixPicker::selectAction(bool on) {
+    if (visibleItems_.empty() || on == actionSelected_)
+        return false;
+    const int target = visibleItems_[(size_t)highlighted_];
+    const auto& item = items_[(size_t)entries_[(size_t)target].item];
+    if (on && (!item.action || !item.enabled))
+        return false;
+    actionSelected_ = on;
+    if (auto* row = entries_[(size_t)target].row)
+        row->setActionSelected(on);
+    juce::AccessibilityHandler::postAnnouncement(on ? item.action->title : item.text,
+                                                 juce::AccessibilityHandler::AnnouncementPriority::low);
+    return true;
 }
 
 void ModMatrixPicker::setAccessibleNames(const juce::String& pickerTitle, const juce::String& searchTitle) {
@@ -640,6 +879,8 @@ void ModMatrixPicker::setSearchPlaceholder(const juce::String& text) {
 void ModMatrixPicker::dismiss() {
     if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
         synth::ui::PopupMotion::dismissCallOut(*box);
+    else if (onDismissRequested)
+        onDismissRequested();
 }
 
 // ---- Test seams ----
@@ -676,7 +917,7 @@ std::vector<juce::String> ModMatrixPicker::getVisibleItemDetailsForTest() const 
 std::vector<std::vector<SearchSpan>> ModMatrixPicker::getVisibleItemHighlightSpansForTest() const {
     std::vector<std::vector<SearchSpan>> spans;
     for (int i = 0; i < (int)visibleItems_.size(); ++i)
-        spans.push_back(searchHighlightSpans(itemAtVisible(i).text, query_));
+        spans.push_back(searchHighlightSpans(itemAtVisible(i).text, displayQuery()));
     return spans;
 }
 
@@ -704,6 +945,19 @@ bool ModMatrixPicker::isVisibleItemPickableForTest(int index) const {
 void ModMatrixPicker::chooseVisibleItemForTest(int index) {
     if (index >= 0 && index < (int)visibleItems_.size())
         chooseEntry(visibleItems_[(size_t)index]);
+}
+
+std::optional<bool> ModMatrixPicker::getVisibleItemSwitchForTest(int index) const {
+    if (index < 0 || index >= (int)visibleItems_.size())
+        return std::nullopt;
+    return itemAtVisible(index).switchOn;
+}
+
+juce::Component* ModMatrixPicker::getVisibleItemActionButtonForTest(int index) const {
+    if (index < 0 || index >= (int)visibleItems_.size())
+        return nullptr;
+    auto* row = entries_[(size_t)visibleItems_[(size_t)index]].row;
+    return row != nullptr ? row->actionButton() : nullptr;
 }
 
 bool ModMatrixPicker::sendKeyForTest(const juce::KeyPress& key) { return searchEditor_->keyPressed(key); }

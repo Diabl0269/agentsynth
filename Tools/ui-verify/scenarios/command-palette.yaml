@@ -1,0 +1,69 @@
+# The command palette: Cmd+K (or the top bar's Search button) opens one search bar over actions, views, modules,
+# tracks, markers and settings; "+" narrows it to the Add list.
+#
+# What a user does:
+#   1. Starts a new project and adds an LFO through the canvas toolbar's Add list.
+#   2. Presses Cmd+K, types "lfo": the LFO card is the top match (a lone LFO is titled "LFO", no number). Return selects and centres that card.
+#   3. Presses Cmd+K, types "timeline", Return: the Timeline shows.
+#   4. Presses Cmd+K, types "+ osc": only Add list rows, the Oscillator module first.
+#   5. Presses Cmd+K with nothing typed: recent picks first, then the views.
+#   6. Closes it with Escape, opens it with the Search button, and closes it again with Escape.
+#   7. Switches to light mode, opens it and types "lfo": text, tags, focus ring and matched letters read on the light theme.
+record: true
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - click: {id: "canvasToolbar:add"}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: return}
+  - expect: {count: {prefix: "card:LFO", equals: 1}, within_ms: 2000}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: lfo}
+  - wait: {}
+  - screenshot: {id: commandPalette, name: palette-lfo}
+  - key: {keys: return}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}  # freed once it fades out
+  - wait: {}
+  - screenshot: {name: palette-lfo-card-selected}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: timeline}
+  - wait: {}
+  - screenshot: {id: commandPalette, name: palette-timeline-query}
+  - key: {keys: return}
+  - expect: {id: timelinePanel, showing: true, within_ms: 3000}
+  - wait: {}
+  - screenshot: {name: palette-timeline-shown}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: "+ osc"}
+  - wait: {}
+  - screenshot: {id: commandPalette, name: palette-plus-osc}
+  - key: {keys: escape}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}  # freed once it fades out
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - wait: {}
+  - screenshot: {id: commandPalette, name: palette-empty-recents}
+  - key: {keys: escape}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}  # freed once it fades out
+  - click: {id: searchButton}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - wait: {}
+  - screenshot: {name: palette-from-search-button}
+  - key: {keys: escape}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}  # freed once it fades out
+  - click: {id: themeToggle}                                 # light mode
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: lfo}
+  - wait: {}
+  - screenshot: {id: commandPalette, name: palette-light}
+  - key: {keys: escape}
+  - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}  # freed once it fades out
+  - click: {id: themeToggle}                                 # back to dark mode
+  - wait: {}

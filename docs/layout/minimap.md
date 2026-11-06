@@ -11,7 +11,7 @@ the small map area with `computeWorldToMap()`.
 
 ## Show and hide motion
 
-Toggling the map (top-bar button, Cmd+K) fades it and slides it 12 px out of, or back into, its
+Toggling the map (top-bar button, Opt+Cmd+K) fades it and slides it 12 px out of, or back into, its
 bottom-left corner: 160 ms `easeOutCubic` in, 110 ms `easeInCubic` out. It uses the shared
 `PanelSlide` + `AnimationDriver` ([animation](animation.md#panelslide)), in
 `GraphEditorMinimapSlide.cpp`; `layoutMinimap()` derives bounds and alpha from the fraction, on every
@@ -74,7 +74,7 @@ helper, `applyZoomAt(wheelDelta, screenAnchor)`: the canvas anchors on the mouse
 minimap on the visible area's centre, but the zoom curve and the `[0.1, 2.0]` clamp are identical.
 
 Hovering the map shows a tooltip that leads with the show/hide shortcut, the same way the toolbar
-buttons read: `"Hide Minimap  (Cmd+K)  - click or drag to navigate, scroll to zoom"`. **The binding
+buttons read: `"Hide Minimap  (Opt+Cmd+K)  - click or drag to navigate, scroll to zoom"`. **The binding
 is rebindable, so `MinimapComponent` does not depend on `ShortcutManager`**: it exposes
 `setShortcutHint(displayString)` and `MainComponent::applyToolbarIcons()` resolves the current
 binding and pushes it down alongside the toolbar tooltips. Because tooltips embed the resolved
@@ -120,6 +120,6 @@ off-screen also removes it and its children from the accessibility tree, not jus
 ## Toolbar, shortcut and persistence
 
 A toggle on the [canvas toolbar](chrome.md#canvas-toolbar) (not the top bar) and the
-**Cmd+K** shortcut (action id `toggleMinimap`, see [shortcuts](../control/shortcuts.md)) both call
+**Opt+Cmd+K** shortcut (action id `toggleMinimap`, see [shortcuts](../control/shortcuts.md)) both call
 `GraphEditor::toggleMinimapVisibility()`. Visibility persists under the `minimapVisible` key in
 `juce::ApplicationProperties`, defaulting to `true`.

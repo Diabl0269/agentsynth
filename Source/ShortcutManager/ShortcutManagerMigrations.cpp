@@ -178,6 +178,23 @@ struct ShortcutManager::Migrations {
                 manager.bindings[action] = alt;
         }
     }
+
+    /** One-shot: the minimap toggle moved from Cmd+K to Opt+Cmd+K so Cmd+K can open the command palette. A saved
+     *  install holds the old default (saveToProperties() persists every action), so move it across -- but only
+     *  when it still holds exactly Cmd+K and no other action already holds Opt+Cmd+K; any other binding is the
+     *  user's choice and stays. The palette's own action is new, so it is absent from every saved file and takes
+     *  Cmd+K from the defaults. The flag stops it re-firing if they later bind Cmd+K to the minimap on purpose. */
+    static void migrateMinimapOptCmdK(ShortcutManager& manager, juce::PropertiesFile& settings) {
+        constexpr auto flag = "shortcutMigration_minimapOptCmdK";
+        if (settings.getBoolValue(flag, false))
+            return;
+        settings.setValue(flag, true);
+        const juce::KeyPress cmdK('k', juce::ModifierKeys::commandModifier, 0);
+        const juce::KeyPress optCmdK('k', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+        if (manager.bindings["toggleMinimap"] == cmdK &&
+            manager.getConflictingAction("toggleMinimap", optCmdK).isEmpty())
+            manager.bindings["toggleMinimap"] = optCmdK;
+    }
 };
 
 void ShortcutManager::loadFromProperties(juce::ApplicationProperties& props) {
@@ -199,6 +216,7 @@ void ShortcutManager::loadFromProperties(juce::ApplicationProperties& props) {
     Migrations::migrateDockDigitKeys(*this, *settings);
     Migrations::migrateAddTrackCmdT(*this, *settings);
     Migrations::migrateMoveLaneAltArrows(*this, *settings);
+    Migrations::migrateMinimapOptCmdK(*this, *settings);
     Migrations::persistMigratedBindings(*this, *settings, loaded);
 }
 

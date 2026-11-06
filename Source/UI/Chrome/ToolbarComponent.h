@@ -21,9 +21,9 @@ public:
     ToolbarComponent();
 
     // Logical slot order — matches the left group [Library..Redo] + right group
-    // [ToggleAiPanel, ToggleBottomPanel, ToggleTheme]. (Auto Arrange, Minimap and Matrix sit on the canvas's own
-    // toolbar, not here.) NumSlots is the array size. Feedback sits immediately after Settings (same group — icon-only,
-    // visually paired with the settings gear rather than a new standalone cluster).
+    // [Search, ToggleAiPanel, ToggleBottomPanel, ToggleTheme]. (Auto Arrange, Minimap and Matrix sit on the canvas's
+    // own toolbar, not here.) NumSlots is the array size. Feedback sits immediately after Settings (same group —
+    // icon-only, visually paired with the settings gear rather than a new standalone cluster).
     enum Slot {
         Library = 0,
         New,
@@ -33,6 +33,8 @@ public:
         Feedback,
         Undo,
         Redo,
+        // Opens the command palette; the right section's first button, a group of its own.
+        Search,
         ToggleAiPanel,
         // The ONE bottom-dock open/close toggle, right before the theme toggle -- replaces
         // the former separate ToggleTimeline/ToggleMidiRemote slots.

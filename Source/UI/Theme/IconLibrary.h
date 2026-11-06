@@ -93,6 +93,8 @@ enum class Icon : int {
     MixerEq,
     MixerResetMeters,
     MixerAddBus,
+    // The top bar's Search button (the command palette) -- appended, as above.
+    ToolbarSearch,
     kCount
 };
 

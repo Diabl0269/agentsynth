@@ -1,6 +1,7 @@
 // DrumKitChrome.cpp -- the Drum Kit card's picker row: which kits it offers and what its caption says.
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentChoices.h"
 
 namespace synth::ui {
 

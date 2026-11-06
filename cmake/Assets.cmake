@@ -100,6 +100,8 @@ juce_add_binary_data(Assets SOURCES
     ${CMAKE_SOURCE_DIR}/assets/icons/mixer-eq.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/mixer-reset-meters.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/mixer-add-bus.svg
+    # The top bar's Search button (a magnifier). BinaryData symbol: toolbarsearch_svg.
+    ${CMAKE_SOURCE_DIR}/assets/icons/toolbar-search.svg
     # FRO134/FRO143 (docs/control/midi-remote-ui.md#templates-and-importexport): controller
     # templates (generic + vendor), enumerated via BinaryData::namedResourceList by id, not name.
     ${CMAKE_SOURCE_DIR}/assets/midi-remote-templates/template-8-knobs.json

@@ -2,6 +2,7 @@
 #include "AI/AIProviderRegistry.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
+#include "MainComponentCommandPalette.h" // commandPalette_ is destroyed here
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Telemetry/TelemetryService.h"

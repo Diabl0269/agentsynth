@@ -2,6 +2,7 @@
 // MainComponent command table (MainComponentCommandTable.cpp appends them in menu order).
 #include "Branding.h"
 #include "MainComponent.h"
+#include "MainComponentCommandPalette.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/AddList/AddList.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -120,6 +121,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          [](MainComponent& m) {
              if (m.feedbackButton.onClick)
                  m.feedbackButton.onClick();
+             return true;
+         }},
+        // The same action as the top bar's Search button; pressed again while the palette is open, it closes it.
+        {AppCommands::openCommandPalette,
+         "Search Everything...",
+         "Open the command palette: find and run any action, view, module, track, marker or setting",
+         "General",
+         "openCommandPalette",
+         {},
+         [](MainComponent& m) {
+             MainComponentCommandPalette::toggle(m);
              return true;
          }},
         // Registered unconditionally (unlike checkForUpdates below) -- neither command needs OS

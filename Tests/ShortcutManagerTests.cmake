@@ -3,6 +3,7 @@
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerActionRegressionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerAddTrackKeyTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerCommandPaletteKeyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerMoveItemKeyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerApiTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/ShortcutManager/ShortcutManagerBottomPanelMigrationTests.cpp
