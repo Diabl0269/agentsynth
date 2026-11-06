@@ -86,7 +86,11 @@ TEST(MixerSpaceKeyTest, EveryFocusableMixerButtonConsumesSpaceAndClicksOnce) {
     panel.setSize(1400, 700);
     panel.resized();
 
-    // Let every pending rebuild and fade land, or a column is replaced under a button mid-press.
+    // Let every pending rebuild and fade land, or a column is replaced under a button mid-press. The undo manager's
+    // change broadcast (posted by every edit above) reaches the window as a queued message, and its handler rebuilds
+    // a stale mixer, so drain the queue first: a fixed pump alone ends before that message when the queue is deep,
+    // and the rebuild then lands inside the walk.
+    ASSERT_TRUE(synth::test::flushMessageQueue());
     juce::MessageManager::getInstance()->runDispatchLoopUntil(400);
     std::vector<juce::Component::SafePointer<juce::Button>> buttons;
     collectButtons(panel, panel, buttons);
