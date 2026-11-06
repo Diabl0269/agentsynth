@@ -34,5 +34,8 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMenu.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripAccessibility.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripKeys.cpp
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMotion.cpp
+    Source/UI/Timeline/TimelineSectionStrip/SectionStripMotion.cpp
+    Source/UI/Timeline/TimelineSectionStrip/SectionStripMotion.h
     Source/UI/Timeline/SectionColours.h
 )

@@ -50,6 +50,7 @@ TimelineSectionStrip::TimelineSectionStrip(TimelineViewState& viewState)
     setComponentID("timelineSectionStrip");
     setTitle("Sections");
     setDescription("Sections, 0 sections");
+    setWantsKeyboardFocus(true); // a click focuses it (JUCE's default), Tab reaches it; its keys are in Keys.cpp
     addTestProbe();
 }
 
@@ -91,7 +92,7 @@ juce::String TimelineSectionStrip::tooltipAt(juce::Point<float> pos) const {
                 return sectionstrip::blockTooltip(block.name, block.lengthBeats, beatsPerBar(), block.count,
                                                   platformCommandKeyName());
     }
-    const juce::KeyPress fallback('s', juce::ModifierKeys::altModifier | juce::ModifierKeys::commandModifier, 0);
+    const juce::KeyPress fallback('j', juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier, 0);
     const auto hint = shortcutHintFor(shortcuts_, "timelineMakeSection", fallback);
     return "Drag across bars to make a section" + (hint.isEmpty() ? juce::String() : " (" + hint + ")");
 }

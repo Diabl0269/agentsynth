@@ -2,11 +2,15 @@
 
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripGeometry.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionStripMotion.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
+#include <set>
 #include <vector>
 
 namespace synth {
@@ -25,14 +29,16 @@ class ShortcutManager;
 // Like the ruler it owns nothing and never listens to the doc: TimelinePanelComponent::timelineChanged calls
 // refresh(), and an edit made here refreshes itself too. No timer, no polling.
 //
-// Split by concern: TimelineSectionStrip.cpp (state, painting, blocks), ...Mouse.cpp (make by drag and the other
-// pointer gestures), ...Menu.cpp (block and strip menus and their headless seams), ...Rename.cpp (the in-place name
-// editor), ...Accessibility.cpp (one proxy per block, tooltips, the test-mode probe), ...Keys.cpp (keyboard).
+// Split by concern: TimelineSectionStrip.cpp (state, painting, blocks), ...Mouse.cpp (make by drag, block drag and the
+// other pointer gestures), ...Menu.cpp (block and strip menus and their headless seams), ...Rename.cpp (the in-place
+// name editor), ...Accessibility.cpp (one proxy per block, tooltips, the test-mode probe), ...Keys.cpp (keyboard),
+// ...Motion.cpp (what animates).
 namespace synth::ui {
 
 class TimelineSectionStrip
     : public juce::Component
-    , public juce::TooltipClient {
+    , public juce::TooltipClient
+    , public KeyboardContextMenuProvider {
 public:
     explicit TimelineSectionStrip(TimelineViewState& viewState);
     ~TimelineSectionStrip() override;
@@ -126,6 +132,10 @@ public:
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
     bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(FocusChangeType) override { repaint(); }
+    void focusLost(FocusChangeType) override { repaint(); }
+    // Shift+F10 / the menu key: the selected block's menu. False when no block is selected.
+    bool showContextMenuForKeyboardFocus() override;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     // ---- Tooltips and accessibility ----
@@ -140,6 +150,11 @@ public:
     bool isMakeDraggingForTest() const noexcept { return makeDragging_; }
     // The span a make-drag in flight would commit, when one is in flight.
     sectionstrip::Span getMakeDragSpanForTest() const noexcept { return makeDragSpan_; }
+    bool isBlockDraggingForTest() const noexcept { return blockDragging_; }
+    bool isBlockDragCopyForTest() const noexcept { return dragCopy_; }
+    // The beat a block drag in flight would drop its start on (what the accent drop line shows).
+    double getBlockDragTargetBeatForTest() const noexcept { return dragTargetBeat_; }
+    SectionStripMotion& getMotionForTest() noexcept { return motion_; }
 
 protected:
     /** Opens the block's right-click menu. A protected virtual for the reason TimelineRulerComponent::
@@ -165,6 +180,9 @@ private:
     void dragPressedBlock(const juce::MouseEvent& e);
     void releasePressedBlock(const juce::MouseEvent& e);
     void cancelBlockDrag(); // Esc mid-drag: no doc change
+    void beginBlockDrag(const juce::MouseEvent& e);
+    void updateBlockDrag(const juce::MouseEvent& e);
+    void paintBlockDrag(juce::Graphics& g) const;
     // Abandons any gesture in flight (Esc): the make-drag outline and a block drag. True when one was.
     bool cancelGesture();
 
@@ -181,6 +199,18 @@ private:
     void endMakeDrag(bool commit);
     std::vector<sectionstrip::Span> blockSpans() const;
     void setHoveredBlock(synth::PlacementId id);
+
+    // Keyboard (TimelineSectionStripKeys.cpp)
+    bool matchesKey(const juce::String& actionId, const juce::KeyPress& fallback, const juce::KeyPress& key) const;
+    void selectNeighbour(int step);
+    void selectEnd(bool last);
+    bool moveSelectedBlock(int step);
+
+    // Motion (TimelineSectionStripMotion.cpp)
+    void trackChangesForMotion();
+    std::optional<SectionStripMotion::Ghost> ghostOf(synth::PlacementId id) const;
+    void paintBlock(juce::Graphics& g, const Block& block, juce::Rectangle<float> rect, float alpha,
+                    const juce::Font& nameFont, const juce::Font& countFont) const;
 
     // Menus (TimelineSectionStripMenu.cpp)
     void buildAndShowBlockMenu(synth::PlacementId id);
@@ -213,6 +243,24 @@ private:
     bool makeDragging_ = false;
     double makeAnchorBeat_ = 0.0;
     sectionstrip::Span makeDragSpan_;
+
+    // Block drag (move, or Option-drag to place again): `dragBlock_` is the pressed block as it was at drag start.
+    Block dragBlock_;
+    bool dragCopy_ = false;
+    bool dragCancelled_ = false;
+    bool dragOutside_ = false; // the pointer is above the strip: a release there cancels
+    double dragTargetBeat_ = 0.0;
+    float dragGrabOffsetPx_ = 0.0f;
+    float dragGhostX_ = 0.0f;  // where the ghost's left edge was at the last drag event
+    float dragSettleX_ = 0.0f; // where the ghost settles to once released
+
+    // What trackChangesForMotion compared last: the placements seen, the doc's replace count and stamp revision.
+    std::set<std::int64_t> knownPlacements_;
+    std::int64_t lastReplaceCount_ = 0;
+    std::int64_t lastStampRevision_ = 0;
+    bool motionPrimed_ = false;
+    bool growFromRight_ = false; // set by a make-drag that started on the span's right half
+    SectionStripMotion motion_{*this, [this] { repaint(); }};
 
     std::unique_ptr<juce::TextEditor> renameEditor_;
     synth::PlacementId renamingPlacement_;

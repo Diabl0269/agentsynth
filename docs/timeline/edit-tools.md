@@ -117,7 +117,7 @@ starts "Clip sizing: <full mode name>", explains Option and ends with the Select
 
 ## Range menu
 
-Right-clicking inside a Range tool selection opens its menu: **Split at range edges**, **Delete range**, **Delete range and close gap**, **Make section** (Option+Cmd+S, `timelineMakeSection`; see [sections](sections.md)) and **Render to audio track** (Shift+Cmd+R, `timelineRenderToAudioTrack`, rebindable; greyed with "(no mixer channel)" in its text when no covered track reaches a mixer channel). The render is described in [`render-to-audio.md`](render-to-audio.md).
+Right-clicking inside a Range tool selection opens its menu: **Split at range edges**, **Delete range**, **Delete range and close gap**, **Make section** (Shift+Cmd+J, `timelineMakeSection`; see [sections](sections.md)) and **Render to audio track** (Shift+Cmd+R, `timelineRenderToAudioTrack`, rebindable; greyed with "(no mixer channel)" in its text when no covered track reaches a mixer channel). The render is described in [`render-to-audio.md`](render-to-audio.md).
 
 ## Tool cursors
 

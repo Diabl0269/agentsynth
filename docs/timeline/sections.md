@@ -14,9 +14,25 @@ open in the piano roll, and by the Settings toggle below.
 
 - **Make a section:** drag across bars on the empty strip. The span snaps outward to whole bars, is at least
   one bar and stops at neighbouring blocks. Release makes "Section N" in the next palette colour as one undo
-  step (clips are split at both edges) and opens its name for typing. There is no grow animation.
+  step (clips are split at both edges) and opens its name for typing. The new block grows in from the side the
+  drag started on.
 - **Rename:** double-click a block or press the menu's Rename. Return or focus-lost commits, Esc cancels, an
   empty or unchanged name records nothing.
+- **Move or place again by dragging:** press a block and drag past 4 px. It lifts (a ghost follows the pointer at
+  the grab offset, with a 2 px raise and a shadow) and an accent line shows where it will land. Holding Option when
+  the drag starts makes it a copy (copy cursor; the original stays and the drop calls `placeSection`), otherwise it
+  moves (`movePlacement`). The drop beat snaps to whole bars, or to a neighbour's start or end (the dragged block's
+  own edge or its far edge) when within 12 px; a drop strictly inside another block goes to that block's nearer
+  edge (`sectionstrip::dropBeat`). The mode is make-room unless the cover setting is on; holding Shift at release
+  flips it for that drop. Esc, or releasing above the strip, cancels with nothing written. One drop is one undo
+  step, and the ghost settles into place (or back) over 140 ms.
+- **Keyboard:** the strip takes focus on a click or Tab and the selected block carries the accent focus ring.
+  Left/Right (the `timelineClipPrevious` / `timelineClipNext` actions, shared with the clip lane) and Home/End move
+  between blocks; Return or the Rename key renames; Cmd+D (the `timelineDuplicateFocusedTrack` chord, shared with
+  the track row) places the section again after it; Option+Left/Right (`timelineClipMoveEarlier` /
+  `timelineClipMoveLater`, the move-this-item chord) move it one section earlier or later with make-room; Delete or Backspace deletes it
+  and its bars; Shift+F10 opens its menu (the strip is a `KeyboardContextMenuProvider`). With no block selected
+  Return starts nothing. Esc cancels a drag in flight.
 - **Block menu** (right-click a block): Rename, Change colour, Place again after this, Place again at the end,
   Make unique (only when the section plays more than once), Select its clips, Remove (keep the music), Delete
   and bars. "Place again" makes room for the music after it, unless the cover setting is on. Each choice is
@@ -24,7 +40,7 @@ open in the piano roll, and by the Settings toggle below.
   `applySectionMenuChoice`.
 - **Strip menu** (right-click empty strip): Make sections from markers.
 - **From a range:** with the Range tool, the range menu's **Make section** (after "Delete range and close
-  gap") or Option+Cmd+S (`timelineMakeSection`, rebindable) turns the range into a section.
+  gap") or Shift+Cmd+J (`timelineMakeSection`, rebindable) turns the range into a section.
 - **Clips follow:** a clip inside a section that plays more than once draws the link mark; its tooltip reads
   "Follows Chorus (plays 3 times). Edit any Chorus to change them all." and a screen reader adds ", follows
   Chorus".
@@ -32,6 +48,13 @@ open in the piano roll, and by the Settings toggle below.
 - **Settings (Preferences > Timeline):** "show the Sections strip" (`timelineShowSectionsStrip`, default on) and
   "placing a section covers the music where it lands" (`timelineSectionsCoverOnDrop`, default off; Shift flips
   it for one drop).
+- **Motion** (`SectionStripMotion`, one `AnimationDriver` per effect, nothing running at rest): a new block grows
+  in over 160 ms; a deleted block's picture shrinks toward its centre over 180 ms; a dragged block lifts over 100 ms
+  and settles over 140 ms; when `getSectionStampRevision()` changes, every placement in
+  `getLastStampedPlacements()` shows a 1 px accent outline that fades over 400 ms. Undo of a delete grows the block
+  back; a project load grows nothing. Reduce Motion turns the grow and shrink into an 80 ms fade and the outline
+  into an 80 ms fade, and the lift lands at once (a move has no fade form); Animations: Off, or a strip that is not
+  on screen, starts nothing.
 - **Accessibility:** the strip is a group titled "Sections" described as "Sections, N sections"; each block is
   a button titled like "Chorus, bars 13 to 20, 1 of 3". Block tooltips read "Chorus - 8 bars - plays 3 times".
 - **Test mode:** a `timelineSections` probe publishes `sections` (`name:start:length:ordinal/count`, joined

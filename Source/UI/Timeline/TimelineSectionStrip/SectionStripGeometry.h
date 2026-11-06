@@ -62,6 +62,38 @@ inline Span makeDragSpan(double anchorBeat, double currentBeat, double beatsPerB
     return span;
 }
 
+constexpr double kBoundarySnapPx = 12.0; // a dragged block's edge this close to another block's edge snaps to it
+
+inline double nearestBar(double beat, double beatsPerBar) noexcept {
+    return std::max(0.0, std::round(beat / beatsPerBar) * beatsPerBar);
+}
+
+/** Where a dragged block of `lengthBeats` lands when its left edge is over `rawStart`. Its start or end snaps to a
+ *  neighbour's edge (the closest of every start and end in `others`) when within kBoundarySnapPx, else to the nearest
+ *  whole bar; a result strictly inside one of `others` goes to that block's nearer edge (the later one on a tie). */
+inline double dropBeat(double rawStart, double lengthBeats, double beatsPerBar, double pixelsPerBeat,
+                       const std::vector<Span>& others) {
+    const double bpb = beatsPerBar > 0.0 ? beatsPerBar : 4.0;
+    const double snapBeats = pixelsPerBeat > 0.0 ? kBoundarySnapPx / pixelsPerBeat : 0.0;
+    double best = nearestBar(rawStart, bpb);
+    double bestDistance = snapBeats + 1.0;
+    for (const auto& other : others) {
+        const double candidates[] = {other.start, other.end, other.start - lengthBeats, other.end - lengthBeats};
+        for (const double candidate : candidates) {
+            const double distance = std::abs(candidate - rawStart);
+            if (candidate >= 0.0 && distance <= snapBeats && distance < bestDistance) {
+                best = candidate;
+                bestDistance = distance;
+            }
+        }
+    }
+    for (const auto& other : others) {
+        if (best > other.start + kBarEpsilon && best < other.end - kBarEpsilon)
+            return (best - other.start < other.end - best) ? other.start : other.end;
+    }
+    return best;
+}
+
 /** Whether a span is long enough to become a section: one whole bar or more. */
 inline bool spansAtLeastOneBar(const Span& span, double beatsPerBar) noexcept {
     return span.length() >= beatsPerBar - kBarEpsilon;

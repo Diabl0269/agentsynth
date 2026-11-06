@@ -8,6 +8,7 @@
 
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/SectionColours.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
@@ -23,6 +24,7 @@ constexpr float kBlockFillAlpha = 1.0f;
 constexpr float kEdgeLineAlpha = 0.40f; // the same as the marker stems the panel draws through the lanes
 constexpr float kEdgeLineWidth = 2.0f;
 constexpr float kHintAlpha = 0.85f;
+constexpr float kMovedOriginalAlpha = 0.35f;
 constexpr double kFallbackBpm = 120.0;
 const char* const kHintText = "Drag across bars to make a section";
 } // namespace
@@ -34,6 +36,8 @@ void TimelineSectionStrip::setTimelineDoc(synth::TimelineDoc* doc) {
     endMakeDrag(false);
     pressedBlock_ = {};
     blockDragging_ = false;
+    motion_.stopAll();
+    motionPrimed_ = false;
     selected_ = {};
     hovered_ = {};
     doc_ = doc;
@@ -47,6 +51,7 @@ void TimelineSectionStrip::refresh() {
         hovered_ = {};
     if (renamingPlacement_.isValid() && (doc_ == nullptr || doc_->getPlacement(renamingPlacement_) == nullptr))
         finishRename(false);
+    trackChangesForMotion();
     rebuildProxies();
     repaint();
 }
@@ -137,6 +142,31 @@ void TimelineSectionStrip::resized() {
     layoutProxies();
 }
 
+// One block: the section's colour, a darker border, its name, and "2/3" when it plays more than once. `alpha` scales
+// all of it (a growing, moved or leaving block).
+void TimelineSectionStrip::paintBlock(juce::Graphics& g, const Block& block, juce::Rectangle<float> rect, float alpha,
+                                      const juce::Font& nameFont, const juce::Font& countFont) const {
+    g.setColour(block.colour.withAlpha(kBlockFillAlpha * alpha));
+    g.fillRect(rect);
+    g.setColour(block.colour.darker(0.5f).withAlpha(alpha));
+    g.drawRect(rect, 1.0f);
+
+    auto text = rect.reduced(sectionstrip::kBlockPadX, 0.0f);
+    if (text.getWidth() <= 4.0f)
+        return;
+    const auto ink = juce::Colours::black; // fixed black, like a clip's name: it sits on a section hue
+    if (block.count > 1 && text.getWidth() > sectionstrip::kCountReserve * 1.6f) {
+        g.setColour(ink.withAlpha(0.75f * alpha));
+        g.setFont(countFont);
+        const auto countArea = text.removeFromRight(sectionstrip::kCountReserve);
+        g.drawText(juce::String(block.ordinal) + "/" + juce::String(block.count), countArea.toNearestInt(),
+                   juce::Justification::centredRight, false);
+    }
+    g.setColour(ink.withAlpha(alpha));
+    g.setFont(nameFont);
+    g.drawText(block.name, text.toNearestInt(), juce::Justification::centredLeft, true);
+}
+
 void TimelineSectionStrip::paint(juce::Graphics& g) {
     const auto& colors = synth::theme::themeOf(*this).colors;
     const auto bounds = getLocalBounds();
@@ -160,31 +190,36 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
     const juce::Font countFont(
         juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), kCountFontHeight, juce::Font::plain));
     for (const auto& block : blocks) {
-        const auto rect = block.bounds;
-        const bool lifted = blockDragging_ && block.id == pressedBlock_;
-        g.setColour(block.colour.withAlpha(lifted ? 0.45f : kBlockFillAlpha));
-        g.fillRect(rect);
-        g.setColour(block.colour.darker(0.5f));
-        g.drawRect(rect, 1.0f);
-
-        auto text = rect.reduced(sectionstrip::kBlockPadX, 0.0f);
-        if (text.getWidth() > 4.0f) {
-            const auto ink = juce::Colours::black; // fixed black, like a clip's name: it sits on a section hue
-            if (block.count > 1 && text.getWidth() > sectionstrip::kCountReserve * 1.6f) {
-                g.setColour(ink.withAlpha(0.75f));
-                g.setFont(countFont);
-                const auto countArea = text.removeFromRight(sectionstrip::kCountReserve);
-                g.drawText(juce::String(block.ordinal) + "/" + juce::String(block.count), countArea.toNearestInt(),
-                           juce::Justification::centredRight, false);
-            }
-            g.setColour(ink);
-            g.setFont(nameFont);
-            g.drawText(block.name, text.toNearestInt(), juce::Justification::centredLeft, true);
+        auto rect = block.bounds;
+        float alpha = motion_.growAlpha(block.id);
+        const float scale = motion_.growScale(block.id);
+        if (scale < 1.0f) {
+            const float width = rect.getWidth() * scale;
+            rect = motion_.growsFromRight() ? rect.withLeft(rect.getRight() - width) : rect.withWidth(width);
         }
+        if (blockDragging_ && !dragCopy_ && block.id == pressedBlock_)
+            alpha *= kMovedOriginalAlpha; // the block being moved stays as a faint mark of where it was
+        paintBlock(g, block, rect, alpha, nameFont, countFont);
         if (block.id == selected_) {
             g.setColour(colors.accent);
             g.drawRect(rect.expanded(1.0f), 2.0f);
+            paintFocusRing(g, rect.expanded(3.0f), *this);
         }
+        if (motion_.isOutlined(block.id)) {
+            g.setColour(colors.accent.withAlpha(motion_.outlineAlpha()));
+            g.drawRect(rect, 1.0f);
+        }
+    }
+
+    if (motion_.hasExitGhost()) {
+        const auto& ghost = motion_.exitGhost();
+        const float scale = motion_.exitScale();
+        const auto rect =
+            ghost.bounds.withSizeKeepingCentre(ghost.bounds.getWidth() * scale, ghost.bounds.getHeight() * scale);
+        Block shell;
+        shell.name = ghost.name;
+        shell.colour = ghost.colour;
+        paintBlock(g, shell, rect, motion_.exitAlpha(), nameFont, countFont);
     }
 
     if (makeDragging_) {
@@ -200,6 +235,7 @@ void TimelineSectionStrip::paint(juce::Graphics& g) {
         g.drawDashedLine(juce::Line<float>(outline.getTopLeft(), outline.getBottomLeft()), dash, 2, 1.5f);
         g.drawDashedLine(juce::Line<float>(outline.getTopRight(), outline.getBottomRight()), dash, 2, 1.5f);
     }
+    paintBlockDrag(g);
 }
 
 // A thin vertical line in each section's colour at every placement start, through the lanes. The panel calls this

@@ -266,9 +266,9 @@ public:
     enum class RangeChoice { SplitAtEdges, Delete, DeleteCloseGap, MakeSection };
     // Applies one verb as ONE recordTimelineChange. False when there is no range or nothing changed.
     bool applyRangeChoice(RangeChoice choice);
-    // Option+Cmd+S: the shipped binding of "timelineMakeSection" (the fallback when no manager is set).
+    // Shift+Cmd+J: the shipped binding of "timelineMakeSection" (the fallback when no manager is set).
     static juce::KeyPress sectionKey() {
-        return juce::KeyPress('s', juce::ModifierKeys::altModifier | juce::ModifierKeys::commandModifier, 0);
+        return juce::KeyPress('j', juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier, 0);
     }
     // The union of the range's painted row rects, or an empty rect (test hook).
     juce::Rectangle<int> getRangeRectForTest() const { return rangeRect(); }
