@@ -1,6 +1,7 @@
 // ShapeListEditorRing.cpp -- the Filter shape window's Ring helpers menu: each item rewrites the selected shape's
 // curve into peaks at the pitches the grid rows name (the Harmonics root, the Notes key), as one undo step.
 #include "PitchGrid.h"
+#include "PitchGridRows.h"
 #include "ShapeListEditor.h"
 #include "ShapeRingHelpers.h"
 

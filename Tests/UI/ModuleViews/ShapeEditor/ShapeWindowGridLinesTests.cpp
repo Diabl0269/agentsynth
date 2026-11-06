@@ -4,6 +4,7 @@
 #include "../../../TestSettingsHelpers.h"
 #include "../../Theme/ThemeSweep/ThemeSweepSupport.h"
 #include "ShapeEditorTestHelpers.h"
+#include "UI/ModuleViews/ShapeEditor/PitchGridRows.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"

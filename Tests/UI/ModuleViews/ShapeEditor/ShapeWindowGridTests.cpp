@@ -9,6 +9,7 @@
 #include "UI/ModuleViews/CurveEditor/CurveGridNoteLength.h"
 #include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
 #include "UI/ModuleViews/ShapeEditor/PitchGrid.h"
+#include "UI/ModuleViews/ShapeEditor/PitchGridRows.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h"
 

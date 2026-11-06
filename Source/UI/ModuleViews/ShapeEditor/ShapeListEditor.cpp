@@ -1,6 +1,7 @@
 // ShapeListEditor.cpp -- the shape editor window's content: layout, selection, the curve editor wiring and the
 // buttons. The chips are in ShapeListEditorInternal.h.
 #include "ShapeListEditor.h"
+#include "PitchGridRows.h"
 #include "ShapeDrawing.h"
 #include "ShapeListEditorInternal.h"
 #include "UI/Layout/DialogKeyboard.h"

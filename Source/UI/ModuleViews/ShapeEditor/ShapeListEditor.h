@@ -3,7 +3,6 @@
 #include "Modules/Shapes/ShapeLibrary.h"
 #include "PerNoteBar.h"
 #include "ShapeDrawPenButton.h"
-#include "PitchGridRows.h"
 #include "ShapeListAdapter.h"
 #include "ShapeMapController.h"
 #include "ShapeRingHelpers.h"
@@ -20,6 +19,8 @@
 #include <vector>
 
 namespace synth::ui {
+
+class PitchGridRows;
 
 /** The content of the shape editor window: a large morph map on the left; on the right a row of shape chips, the
  *  curve editor for the selected shape and the buttons that act on it (Add shape, Duplicate, Delete, Rename,

@@ -1,6 +1,7 @@
 // ShapeListEditorToolbar.cpp -- the shape editor's row above the curve: the grid choice the curve snaps to and the
 // Filter's Show spectrum toggle, with the settings that remember them and the gated tick that feeds the spectrum.
 #include "Modules/Filter/CustomFilterShapes.h"
+#include "PitchGridRows.h"
 #include "ShapeListEditor.h"
 #include "ShapeListEditorInternal.h"
 #include "ShapeWindowPrefs.h"
