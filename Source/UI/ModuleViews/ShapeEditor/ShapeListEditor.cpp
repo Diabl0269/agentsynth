@@ -186,14 +186,15 @@ void ShapeListEditor::focusFirstControl() {
         map_.grabKeyboardFocus();
 }
 
-/** Picks up a change made elsewhere (undo, redo, the card's map, a preset load). Our own writes update
-    lastGeneration_ as they go, and nothing is reloaded while a curve gesture is open. */
+/** Picks up a change made elsewhere (undo, redo, the card's map, a preset load, modulation of the cursor). Our own
+   writes update lastGeneration_ as they go, and nothing is reloaded while a curve gesture is open. */
 void ShapeListEditor::timerCallback() {
     if (statusClearsAtMs_ != 0 && (juce::int32)(juce::Time::getMillisecondCounter() - statusClearsAtMs_) >= 0) {
         statusClearsAtMs_ = 0;
         statusLabel_.setText({}, juce::dontSendNotification);
     }
     pollResponse();
+    controller_.syncCursor(); // the map's cursor follows Morph X/Y modulation
     if (curveGestureOpen_ || adapter_->getGeneration() == lastGeneration_)
         return;
     refresh();

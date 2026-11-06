@@ -385,7 +385,9 @@ slider drag is one undo step (the settings are part of the module's extra state)
   (pressed, dragged or focused, until a shape dot is chosen), the window draws the filter's live frequency response
   as an accent line over the curve: `customfilter::responseGridDb` with the morph cursor, Shift, Depth, Cutoff and
   Resonance, the same curve as the card's Show response, on the curve's own log-frequency axis and dB range. It
-  follows Cutoff and the cursor live (the editor's tick re-reads it and repaints only on a change). Choosing a shape dot
+  follows Cutoff, the cursor and their modulation live (the editor's tick re-reads it and repaints only on a change);
+  the map's cursor follows Morph X/Y modulation the same way, on the card and in the window, while a drag or an arrow
+  key still sets the knobs. Choosing a shape dot
   hides it. It sits in the same backdrop painter as the spectrum, so both can show at once. A screen reader hears
   "Showing the filter's current response" when it appears. The map keeps this selection (`MorphMap::isCursorSelected`,
   `onCursorSelected`); the LFO's window has no response (`ShapeListAdapter::hasResponse`, true for the Filter only).
@@ -445,7 +447,7 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   a cable dropped on a knob lands on its ring. Every other type has exactly its old card.
 - **Response view** ("Show Response", closed until opened): draws the blended curve at the cursor with Shift, Cutoff,
   Depth and Resonance applied (`customfilter::responseGridDb`, the numbers the kernel is designed from), follows the
-  cursor, the shapes and the knobs, and draws the cutoff marker (a thin vertical line) like the other types. Double-clicking it opens the shape editor on the shape nearest the cursor.
+  cursor, the shapes, the knobs and their modulation (each control's CV as the last audio block applied it), and draws the cutoff marker (a thin vertical line) like the other types. Double-clicking it opens the shape editor on the shape nearest the cursor.
 - **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
   shape nearest the cursor.
 - **Curve view** (252 x 110, under the button, above the map; `MorphShapesCardCurve.cpp`): the shape under the morph

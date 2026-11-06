@@ -81,18 +81,20 @@ public:
     static constexpr float maxDb = 50.0f;
 
     void timerCallback() override {
+        // Every value is the modulated one (knob plus the last block's CV), so the curve shows what the filter does
+        // now.
         float cutoff = filterModule.getCurrentCutoff();
-        float resonance = filterModule.getCurrentResonance();
-        float drive = filterModule.getCurrentDrive();
+        float resonance = filterModule.getModulatedResonance();
+        float drive = filterModule.getModulatedDrive();
         int filterType = filterModule.getCurrentFilterType();
 
         const bool custom = filterType == FilterModule::kCustomTypeIndex;
-        const CustomState customNow{filterModule.getCurrentMorphX(),
-                                    filterModule.getCurrentMorphY(),
-                                    filterModule.getCurrentShift(),
-                                    filterModule.getCurrentDepth(),
+        const CustomState customNow{filterModule.getModulatedMorphX(),
+                                    filterModule.getModulatedMorphY(),
+                                    filterModule.getModulatedShift(),
+                                    filterModule.getModulatedDepth(),
                                     cutoff,
-                                    filterModule.getModulatedResonance(),
+                                    resonance,
                                     filterModule.getCustomShapesGeneration()};
         if (cutoff != lastCutoff || resonance != lastResonance || drive != lastDrive || filterType != lastFilterType ||
             (custom && !(customNow == lastCustom))) {
@@ -102,6 +104,7 @@ public:
             lastFilterType = filterType;
             lastCustom = customNow;
             recomputeMagnitudes();
+            ++recomputeCount;
             repaint();
         }
 
@@ -120,6 +123,8 @@ public:
     }
     /** The smoothed spectrum points (1024 values in dB), for tests. */
     const std::vector<float>& getSpectrumDbForTest() const { return spectrum.getDb(); }
+    /** How many times the curve was recomputed (and repainted for it), for tests. */
+    int getRecomputeCountForTest() const { return recomputeCount; }
     /** The plotted dB at curve point `index` (of 1024), for tests. */
     float getMagnitudeDbForTest(int index) const { return magnitudes[(size_t)index]; }
 
@@ -297,11 +302,13 @@ private:
     FilterModule& filterModule;
     std::vector<float> magnitudes;
     static constexpr int numPoints = 1024;
+    static constexpr int kNotchTypeIndex = 6;
 
     float lastCutoff = 0.0f;
     float lastResonance = 0.0f;
     float lastDrive = 0.0f;
     int lastFilterType = -1;
+    int recomputeCount = 0;
     struct CustomState {
         float morphX = -1.0f, morphY = -1.0f, shift = 0.0f, depth = 0.0f, cutoff = 0.0f, resonance = 0.0f;
         int generation = -1;
@@ -339,11 +346,14 @@ private:
             cutoff = 20.0f;
 
         float Q = 0.707f + resonance * 15.0f;
+        // The ladder types (all but Notch) raise their level with Drive below the saturation; Notch ignores it.
+        const float driveDb =
+            filterType == kNotchTypeIndex ? 0.0f : 20.0f * std::log10(synth::ladderDriveGain(lastDrive));
 
         for (int i = 0; i < numPoints; ++i) {
             float freq = indexToFreq(i);
             float mag = computeMagnitude(freq, cutoff, Q, filterType);
-            float db = 20.0f * std::log10(std::max(mag, 0.0001f));
+            float db = 20.0f * std::log10(std::max(mag, 0.0001f)) + driveDb;
             magnitudes[i] = plotDb(db);
         }
     }

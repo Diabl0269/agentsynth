@@ -89,6 +89,19 @@ float ladderHeadroomForDrive(float drive) noexcept {
     return kCleanHeadroom + (1.0f - kCleanHeadroom) * t;
 }
 
+namespace {
+// The JUCE ladder's input gain for a drive: falls as drive rises, so the saturation is driven harder without the
+// level rising by the full drive factor.
+float ladderInputGain(float drive) noexcept { return std::pow(drive, -2.642f) * 0.6103f + 0.3903f; }
+} // namespace
+
+/** Below the saturation (tanh(x) ~ x) the input stage is a plain gain of input gain x drive; the headroom scales in and
+    out again, so it cancels. The response view lifts the ladder types' curve by this. */
+float ladderDriveGain(float drive) noexcept {
+    const float d = juce::jlimit(1.0f, 10.0f, drive);
+    return d * ladderInputGain(d);
+}
+
 ResonantLadder::ResonantLadder()
     : state_(2) {
     setSampleRate(1000.0f);
@@ -161,9 +174,9 @@ void ResonantLadder::setResonance(float resonanceKnob) noexcept {
 
 void ResonantLadder::setDrive(float drive) noexcept {
     drive_ = juce::jlimit(1.0f, 10.0f, drive);
-    gain_ = std::pow(drive_, -2.642f) * 0.6103f + 0.3903f;
+    gain_ = ladderInputGain(drive_);
     drive2_ = drive_ * 0.04f + 0.96f;
-    gain2_ = std::pow(drive2_, -2.642f) * 0.6103f + 0.3903f;
+    gain2_ = ladderInputGain(drive2_);
     // The stages hold the signal at headroom scale, so a changed headroom rescales them with it: the output
     // (stage x 1 / headroom) stays continuous while Drive is swept.
     const float newHeadroom = ladderHeadroomForDrive(drive_);
