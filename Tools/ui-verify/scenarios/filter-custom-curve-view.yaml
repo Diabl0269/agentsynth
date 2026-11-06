@@ -6,19 +6,9 @@
 record: true
 save_project: filter-curve-view
 steps:
-  - click: {id: New empty project}
-  - wait: {}
-  - key: {keys: cmd+f}
-  - wait: {}
-  - key: {keys: cmd+a}
-  - type: {text: filter}
-  - wait: {}
-  - key: {keys: down}
-  - key: {keys: down}
-  - key: {keys: return}
-  - wait: {}
-  - expect: {count: {prefix: "card:Filter", equals: 1}, within_ms: 1500}
-  - click: {id: window, x: 1044, y: 603}                       # the Filter Type combo (its label shares the title)
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}   # a Filter card at a known place; its Type combo sits at x 1019, y 411
+  - wait: {settleMs: 600}
+  - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo (its label shares the title, so no id)
   - wait: {settleMs: 600}
   - key: {keys: down}
   - key: {keys: down}

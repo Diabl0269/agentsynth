@@ -240,7 +240,8 @@ the shared Key field (its picker opens on Return or Down) or the Root box ("Root
 saying what it does; the Root's says when the Played note needs a Pitch cable. Grid lines never rely on hue: a
 landmark is brighter and wider than a snap line, and an out-of-key note is dotted; the kind hue (accent for notes,
 warning for harmonics) only adds to that. **Ring helpers** is a button after Draw (Return or Space opens its menu, the
-arrows pick an item). On the card, the Custom type's Cutoff knob menu (right-click or the open-context-menu key)
+arrows pick an item; Stack harmonics opens a popover whose Root, Harmonics, Each quieter by, Width, Cancel and
+Stack are each a named, tooltipped Tab stop, Return stacks, Esc closes). On the card, the Custom type's Cutoff knob menu (right-click or the open-context-menu key)
 holds **Snap to notes**; snapped, Up/Down step one note and the knob's value reads "A3 220 Hz".
 
 ## Verifying for real

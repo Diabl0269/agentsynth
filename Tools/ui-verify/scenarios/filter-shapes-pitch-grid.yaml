@@ -32,10 +32,13 @@ steps:
   - click: {id: Ring helpers}
   - wait: {settleMs: 500} # the menu fades in before it takes keys
   - screenshot: {id: menu, name: ring-helpers-menu}
-  # Arrow keys reach the popup (its items carry no ids): Tune selected peak, then Stack harmonics.
+  # Arrow keys reach the popup (its items carry no ids): Tune selected peak, then Stack harmonics, which opens its panel.
   - key: {keys: down}
   - key: {keys: down}
   - key: {keys: return}
+  - wait: {settleMs: 500}
+  - screenshot: {id: "Stack harmonics panel", name: stack-panel}
+  - click: {id: Stack}
   - wait: {settleMs: 400}
   - screenshot: {id: "Filter shapes: Filter", name: stacked-harmonics}
   - key: {keys: cmd+z}

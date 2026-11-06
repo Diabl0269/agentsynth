@@ -410,10 +410,12 @@ slider drag is one undo step (the settings are part of the module's extra state)
 - **Ring helpers.** A button after Draw opens a menu whose items rewrite the selected shape's curve, each as one undo
   step: one click places dots at the harmonic ratios of a note, so a resonant filter rings at those pitches.
   **Tune selected peak to a note** moves the selected point (or the highest one) to the nearest note, of the key when
-  there is one; **Stack harmonics** puts eight narrow peaks on the Root's harmonics, each 2 dB quieter than the one
-  before, over a -12 dB floor; **Chord peaks from the key** puts peaks on the key's root, third and fifth in octaves 3
+  there is one; **Stack harmonics** opens a small popover (Root note, Harmonics 2 to 16, Each quieter by 0 to 6 dB,
+  Width Narrow, Medium or Wide; Return stacks, Esc cancels) and puts that many peaks on the Root's harmonics over a
+  -12 dB floor (the defaults: eight, 2 dB quieter each, Medium); **Chord peaks from the key** puts peaks on the key's root, third and fifth in octaves 3
   and 4; **Octave bells** puts thin peaks on the Root and its octaves up to 10 kHz. The Root and key are the grid
-  rows' (`ShapeRingHelpers.h`).
+  rows' (`ShapeRingHelpers.h`, `ShapeStackPanel.h`). With Root set to Playing note, the Harmonics lines glide to each
+  new note over 160 ms (they jump under Reduce Motion).
 - **Cutoff Snap to notes.** On the Custom type, a right-click on the card's Cutoff knob offers **Snap to notes**: Free
   (the default), Notes (every semitone) or By key (the song key's notes). Snapped, the knob drags to notes, Up/Down
   step one note, and it reads "A3 220 Hz". The choice is the card's view state (`"cardView"`), saved with the project
