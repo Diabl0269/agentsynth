@@ -80,10 +80,19 @@ voice, per-note mode included. They are not Key Track targets.
 
 - **Cutoff** adds `12 × log2(cutoff / 440)` semitones to Shift (and Key Track). The designer applies it, so
   `CustomFilterKernelDesigner::design(grid, shift, depth, resonance, cutoffHz, out)` is the whole recipe.
-- **Resonance** adds, after Depth, `18 × resonance²` dB at the cutoff frequency itself (the bell is not moved by the
-  shift Cutoff causes): a Gaussian in log frequency whose standard deviation falls from one octave at resonance 0 to a
-  sixth of an octave at 1. The default 0.1 adds 0.18 dB, which is nothing audible; Depth 0 with resonance up still
-  gives a peak on a flat response, like a resonant filter.
+- **Resonance** adds, after Depth, a resonant peak at the cutoff frequency itself (the bell is not moved by the
+  shift Cutoff causes). Its height is `customfilter::resonancePeakDb`: about 20 dB per unit of Resonance up to 0.5,
+  then steeper (1.7 dB at 0.1, 4.4 at 0.25, 10 at 0.5, 17.8 at 0.75, 24.9 at 0.9), held to 32 dB at 1. Its shape is
+  the gain a resonant two-pole low-pass of that Q has over one of Q 1, so it is symmetric in octaves and its -3 dB
+  width is about 1.44 / Q octaves (1.56 octaves at 0.25, 0.51 at 0.5, 0.19 at 0.75, 0.083 at 0.9). Both were fitted
+  to an offline measurement of a commercial analogue-style low-pass (12 and 24 dB per octave behave the same) at a
+  1 kHz cutoff; `CustomFilterResonanceLawTests` holds the measured table and checks the law against it (peak within
+  1 dB, width within 12 % from 0.5 up; below that the measured width is set by the low-pass's own skirt). That filter
+  self-oscillates at Resonance 1, and a 2048-tap kernel cannot hold a ring that narrow, so ours stops at 32 dB (the
+  same synth's morphing 12 dB type reaches 33.6 dB there). Even so, at 1 the heard peak is about 1.5 dB under the
+  drawn one at a 1 kHz cutoff, and more at lower cutoffs, because the ring outlasts the kernel; up to 0.9 the two
+  agree within 1 dB. The default 0.1 adds about 1.7 dB. Depth 0 with resonance up still gives a peak on a flat
+  response, like a resonant filter, and a dip drawn at the cutoff lowers the peak by the same dB.
 - **One definition.** `customfilter::cutoffShiftSemitones`, `cutoffX` and `resonanceBellDb`
   (`CustomFilterCutoff.h`) are the only definitions; the designer and `customfilter::responseGridDb(shapes, x, y, shift,
   depth, cutoffHz, resonance)` (the card's response view) both call them, so the curve drawn is the curve designed. At

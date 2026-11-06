@@ -135,15 +135,12 @@ TEST(CustomFilterCutoff, TotalShiftIsTwelveLog2OfCutoffOverTheReference) {
     EXPECT_NEAR(cutoffX(20000.0f), 1.0f, 1e-6);
 }
 
-TEST(CustomFilterCutoff, TheBellPeaksAtEighteenTimesResonanceSquaredAndNarrowsAsResonanceRises) {
-    EXPECT_NEAR(resonanceBellDb(1.0f, 0.0f), 18.0f, 1e-4);
-    EXPECT_NEAR(resonanceBellDb(0.5f, 0.0f), 4.5f, 1e-4);
-    EXPECT_NEAR(resonanceBellDb(0.1f, 0.0f), 0.18f, 1e-4);
+TEST(CustomFilterCutoff, TheBellPeaksAtResonancePeakDbAndNarrowsAsResonanceRises) {
+    for (float r : {0.1f, 0.5f, 1.0f})
+        EXPECT_NEAR(resonanceBellDb(r, 0.0f), resonancePeakDb(r), 1e-3) << r;
     EXPECT_FLOAT_EQ(resonanceBellDb(0.0f, 0.0f), 0.0f);
-    EXPECT_FLOAT_EQ(resonanceBellDb(7.0f, 0.0f), 18.0f) << "held to 1";
     EXPECT_GT(halfPeakOctaves(0.3f), halfPeakOctaves(0.6f));
     EXPECT_GT(halfPeakOctaves(0.6f), halfPeakOctaves(1.0f));
-    EXPECT_NEAR(halfPeakOctaves(1.0f), 1.1774f / 6.0f, 0.01f) << "a sixth of an octave sigma at resonance 1";
 }
 
 TEST(CustomFilterCutoff, TheResponseGridAtTheReferenceCutoffAndNoResonanceIsTheOldGridExactly) {
@@ -154,7 +151,7 @@ TEST(CustomFilterCutoff, TheResponseGridAtTheReferenceCutoffAndNoResonanceIsTheO
             << shift;
 }
 
-TEST(CustomFilterCutoff, CutoffMovesTheGridByItsSemitonesAndResonanceOneAddsAnEighteenDbPeakAtTheCutoff) {
+TEST(CustomFilterCutoff, CutoffMovesTheGridByItsSemitonesAndResonanceOneAddsTheFullPeakAtTheCutoff) {
     const auto shapes = onePeakShape();
     EXPECT_EQ(responseGridDb(shapes, 0.5f, 0.5f, 5.0f, 1.0f, 1760.0f, 0.0f),
               responseGridDb(shapes, 0.5f, 0.5f, 29.0f, 1.0f));
@@ -164,12 +161,13 @@ TEST(CustomFilterCutoff, CutoffMovesTheGridByItsSemitonesAndResonanceOneAddsAnEi
         const int expectedIndex = (int)std::lround(cutoffX(cutoff) * (float)(kGridSize - 1));
         const int peakIndex = (int)(std::max_element(flat.begin(), flat.end()) - flat.begin());
         EXPECT_NEAR(peakIndex, expectedIndex, 1) << cutoff << " Hz: the bell follows the cutoff";
-        EXPECT_NEAR(flat[(size_t)peakIndex], 18.0f, 0.1f);
+        EXPECT_NEAR(flat[(size_t)peakIndex], kMaxResonancePeakDb, 0.5f) << "the grid may straddle the top";
     }
-    // Narrower at resonance 1 than at 0.7: count grid points above 3 dB.
+    // Narrower at resonance 1 than at 0.8: count grid points within 3 dB of the peak.
     auto above = [&](float r) {
         const auto g = responseGridDb(flatShape(), 0.5f, 0.5f, 0.0f, 0.0f, 1000.0f, r);
-        return (int)std::count_if(g.begin(), g.end(), [](float v) { return v > 3.0f; });
+        const float top = *std::max_element(g.begin(), g.end());
+        return (int)std::count_if(g.begin(), g.end(), [top](float v) { return v > top - 3.0f; });
     };
     EXPECT_LT(above(1.0f), above(0.8f));
 }
@@ -197,14 +195,14 @@ TEST(CustomFilterCutoff, TheKernelPeakFollowsTheCutoffByTwoOctavesForTwentyFourS
     EXPECT_NEAR(peak(up) / peak(base), 4.0f, 0.15f);
 }
 
-TEST(CustomFilterCutoff, ResonanceOneRaisesTheKernelByEighteenDbAtTheCutoffAndLeavesTheRestAlone) {
+TEST(CustomFilterCutoff, HighResonanceRaisesTheKernelByItsPeakAtTheCutoffAndLeavesTheRestAlone) {
     CustomFilterEngine engine;
     engine.setShapes(flatShape());
     CustomFilterEngine::Controls c;
     c.cutoffHz = 2000.0f;
-    c.resonance = 1.0f;
+    c.resonance = 0.9f; // at 1 the ring outlasts the kernel: CustomFilterResonanceLawTests
     const auto ir = renderImpulse(engine, c);
-    EXPECT_NEAR(magnitudeDb(ir, 2000.0f), 18.0f, 1.0f);
+    EXPECT_NEAR(magnitudeDb(ir, 2000.0f), resonancePeakDb(0.9f), 1.0f);
     EXPECT_NEAR(magnitudeDb(ir, 500.0f), 0.0f, 0.5f);
     EXPECT_NEAR(magnitudeDb(ir, 8000.0f), 0.0f, 0.5f);
     c.resonance = 0.0f;
