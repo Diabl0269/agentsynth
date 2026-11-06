@@ -944,8 +944,6 @@ private:
     void raiseMainWindow(); // toFront(true); counted for tests
     // Greys out the Minimap toggle (tooltip "Needs a taller canvas") while the canvas is under the size floor.
     void refreshMinimapButton();
-    // Puts `c` directly above the bottom dock in the stacking order (it paints over the dock's tab strip).
-    void raiseAboveBottomDock(juce::Component& c);
     // Restores the zoom and pan the canvas had in the main area (see canvasMainView_).
     void restoreCanvasMainView();
     // Applies a loaded project's canvas view; while the canvas sits in the panel it becomes the main-area view.

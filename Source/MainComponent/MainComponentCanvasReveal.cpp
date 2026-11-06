@@ -13,6 +13,17 @@ namespace {
 // The strip's height in a rectangle `available` px tall: the full strip, or half the rectangle when that is all
 // there is, so the canvas under it never vanishes in a very short panel.
 int canvasToolbarHeightIn(int available) { return juce::jmin(synth::ui::CanvasToolbar::kHeight, available / 2); }
+// A sibling of the dock paints under it, so the toolbar in the dock's tab strip goes directly above the dock (and under
+// everything that was above the dock before: the overlays, the AI panel's slide, the toasts).
+void raiseAboveBottomDock(juce::Component& parent, juce::Component& dock, juce::Component& c) {
+    const int dockIndex = parent.getIndexOfChildComponent(&dock);
+    if (parent.getIndexOfChildComponent(&c) > dockIndex)
+        return;
+    if (auto* above = parent.getChildComponent(dockIndex + 1); above != &c && above != nullptr)
+        c.toBehind(above);
+    else
+        c.toFront(false);
+}
 } // namespace
 
 // The canvas toolbar is the top row of the main area when the canvas is the main view. As a panel tab it shares the
@@ -46,7 +57,7 @@ void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
             bottomDock.setStripAccessoryWidth(synth::ui::CanvasToolbar::stripWidth());
             canvasToolbar_.setBounds(bottomDock.getStripAccessoryBounds() + bottomDock.getPosition());
             graphEditor.setBounds(bottomDock.getCanvasBodyBounds() + bottomDock.getPosition());
-            raiseAboveBottomDock(canvasToolbar_);
+            raiseAboveBottomDock(*this, bottomDock, canvasToolbar_);
             if (enteringStrip)
                 applyToolbarLabels(toolbarNarrowMode_);
         } else {
@@ -61,18 +72,6 @@ void MainComponent::layoutCanvas(juce::Rectangle<int> mainArea) {
         }
     }
     refreshMinimapButton();
-}
-
-// A sibling of the dock paints under it, so the toolbar in the dock's tab strip goes directly above the dock (and under
-// everything that was above the dock before: the overlays, the AI panel's slide, the toasts).
-void MainComponent::raiseAboveBottomDock(juce::Component& c) {
-    const int dockIndex = getIndexOfChildComponent(&bottomDock);
-    if (getIndexOfChildComponent(&c) > dockIndex)
-        return;
-    if (auto* above = getChildComponent(dockIndex + 1); above != &c && above != nullptr)
-        c.toBehind(above);
-    else
-        c.toFront(false);
 }
 
 // A project's saved view belongs to the main area. While the canvas is in the panel it is kept for the canvas's
