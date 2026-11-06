@@ -4,11 +4,14 @@
 // implementation lives in the sibling ModuleComponent*.cpp units.
 #include "AudioEngine/AudioEngine.h"
 #include "AudioEngine/ConnectionIndex.h"
+#include "CardKnobSlider.h"
+#include "CutoffNoteSnap.h"
 #include "Mixer/ChannelFlows/UpstreamPitchSource.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentModBand.h"
 #include "Modules/LFOModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
+#include "Transport/TransportService.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -182,6 +185,12 @@ void ModuleComponent::createMorphShapesCard() {
         auto adapter =
             std::make_shared<synth::ui::FilterShapesAdapter>(*filter, undoManager, graph, nodeId, cardTitle());
         adapter->setPitchHooks(filterPitchHooks(owner, graph, nodeId, *filter));
+        auto& transport = owner.getAudioEngine().getTransport();
+        const auto songKey = [&transport] { return transport.getDocumentState().songKey; };
+        adapter->setSongKeySource(songKey);
+        if (auto* cutoff = dynamic_cast<synth::ui::CardKnobSlider*>(sliders[sliderParams.indexOf(
+                dynamic_cast<juce::RangedAudioParameter*>(findParameterByID(module, "cutoff")))]))
+            synth::ui::cutoffsnap::wire(*cutoff, *filter, songKey);
         morphCard_ = std::make_unique<synth::ui::MorphShapesCard>(std::move(host), *filter, std::move(adapter),
                                                                   FilterModule::kMorphXCVChannel,
                                                                   FilterModule::kMorphYCVChannel);
