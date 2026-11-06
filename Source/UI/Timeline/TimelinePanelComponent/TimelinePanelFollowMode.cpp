@@ -4,6 +4,7 @@
 // view move itself. The on/off flag and its persistence live in TimelinePanelLayout.cpp.
 
 #include "TimelinePanelComponent.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
 
@@ -36,6 +37,7 @@ void TimelinePanelComponent::followViewToBeat(double beat) {
         return;
     viewState_.firstVisibleBeat = origin;
     ruler_.repaint();
+    sectionStrip_->repaint();
     repaint();
 }
 

@@ -117,6 +117,8 @@ void TimelineDoc::removeListener(Listener* listener) {
 }
 
 void TimelineDoc::finishMutation() {
+    lastStampedPlacements.clear();
+    syncSections();           // every placement of a section holds the same music (TimelineDocSectionSync.cpp)
     dissolveLoneLinkGroups(); // every mutation ends with no link group of fewer than two clips
     ++revision;
     listeners.call([this](Listener& l) { l.timelineChanged(*this); });
@@ -254,11 +256,13 @@ const Marker* TimelineDoc::getMarker(MarkerId id) const { return const_cast<Time
 // ----------------------------------------------------------------- doc-level --
 
 void TimelineDoc::clear() {
-    if (tracks.empty() && markers.empty())
+    if (tracks.empty() && markers.empty() && sections.empty())
         return;
     applyMutation([&] {
         tracks.clear();
         markers.clear();
+        sections.clear();
+        placements.clear();
     });
 }
 

@@ -85,6 +85,8 @@ bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
         applyRangeChoice(mods.isShiftDown() ? RangeChoice::DeleteCloseGap : RangeChoice::Delete);
         return true;
     }
+    if (getRangeSpan() && matchesClipAction(key, "timelineMakeSection", sectionKey()))
+        return applyRangeChoice(RangeChoice::MakeSection) || true;
     if (key == juce::KeyPress::escapeKey && range_.isActive()) {
         clearRange();
         return true;

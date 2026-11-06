@@ -54,7 +54,8 @@ namespace ui {
 class DrumMachineComponent;
 class KeyRing; // Forward declaration (Source/UI/Layout/KeyRing.h): kept out of this widely included header
 struct DrumMachineHost;
-class ModMatrixPicker; // Forward declaration (Source/UI/Graph/ModMatrixPicker.h): the add-automation picker
+class ModMatrixPicker;      // Forward declaration (Source/UI/Graph/ModMatrixPicker.h): the add-automation picker
+class TimelineSectionStrip; // Forward declaration (Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h)
 } // namespace ui
 } // namespace synth
 
@@ -74,8 +75,8 @@ class ModMatrixPicker; // Forward declaration (Source/UI/Graph/ModMatrixPicker.h
 //     selector and synth::ui::TimelineTransportBar (play/stop/record/loop + BPM/time-sig editors
 //     + the bar:beat readout), left-aligned in the rest.
 //   - track-header column   (left,   Metrics::timelineTrackHeaderWidth)
-//   - lanes/ruler area      (remainder) — TimelineRulerComponent (Metrics::timelineRulerHeight)
-//     docked at its top, a bar/beat grid painted directly by this component below it.
+//   - lanes/ruler area      (remainder) — TimelineSectionStrip (Metrics::timelineSectionStripHeight) and
+//     TimelineRulerComponent (Metrics::timelineRulerHeight) docked at its top, a bar/beat grid painted directly below.
 //
 // The panel has no resize affordance of its own: the bottom dock's top-edge handle resizes the whole dock.
 // The single TimelineViewState (beat<->pixel mapping — zoom, scroll, snap) is owned here and shared by reference
@@ -384,6 +385,9 @@ public:
 
     TimelineViewState& getViewState() noexcept { return viewState_; }
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
+    TimelineSectionStrip& getSectionStrip() noexcept; // defined in the .cpp: the strip header stays out of here
+    // Re-reads the "show the Sections strip" setting and re-lays out when the strip's height must change.
+    void refreshSectionsStripSetting();
     TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
     NoteLengthBox& getSnapCombo() noexcept { return snapCombo_; }
     ToolbarButton& getSnapToggleButton() noexcept { return snapToggleButton_; }
@@ -801,6 +805,10 @@ private:
     // relationship it has with viewState_ below).
     synth::ui::ClipSelectionModel clipSelection_;
     TimelineRulerComponent ruler_{viewState_};
+    // Above the ruler, same x origin; 0 px while the piano roll or drum editor is open or the setting is off.
+    std::unique_ptr<TimelineSectionStrip>
+        sectionStrip_; // built in the constructor; forward-declared to keep header reach low
+    int sectionStripHeight() const;
     // Over gridLanesBounds_, the rect this panel's paint() fills with the grid; a child added before playhead_, so
     // z-order reads grid -> clips -> playhead with no second place ever painting the grid.
     synth::ui::TimelineClipLaneArea clipLaneArea_{viewState_, clipSelection_};
@@ -859,11 +867,8 @@ private:
     juce::ApplicationProperties* appProperties_ = nullptr;
     synth::TimelineDoc* doc_ = nullptr;
     TrackHeaderHost* trackHeaderHost_ = nullptr;
-    // Non-owning, set by setTransport() alongside the sub-component forwards it already
-    // does. Every other consumer of the transport reads it from its OWN copy (ruler_/playhead_/
-    // transportBar_/clipLaneArea_/pianoRoll_/automationLanes_); this is the one operation the
-    // panel itself performs directly against it — reading the CURRENT position/time-signature at
-    // paste time (see pasteClipsAtPlayhead()).
+    // Non-owning, set by setTransport(). Every other consumer reads its OWN copy; the panel itself only reads the
+    // CURRENT position/time-signature from it at paste time (see pasteClipsAtPlayhead()).
     synth::TransportService* transport_ = nullptr;
 
     // ---- Cursor glide (TimelinePanelCursorGlide.cpp) ----
@@ -928,9 +933,7 @@ private:
     // branches in mouseWheelMove XOR this against synth::ui::wheelGestureIsUpward(wheel).
     bool zoomScrollInverted_ = false;
 
-    // Non-owning, may stay null (see setShortcutManager). Expected to outlive this component --
-    // see the destructor's definition in TimelinePanelComponent.cpp for the lifetime contract and
-    // why the destructor itself does not trust this pointer directly.
+    // Non-owning, may stay null (see setShortcutManager); the destructor's definition has the lifetime contract.
     ShortcutManager* shortcuts_ = nullptr;
     // Mirrors `shortcuts_` (set together in setShortcutManager), used ONLY by the destructor.
     // Automatically null once the referenced ShortcutManager is destroyed, unlike `shortcuts_`
@@ -941,10 +944,7 @@ private:
     // Rebuilds every dynamic shortcut-hint tooltip this panel owns -- see its definition in
     // TimelinePanelComponent.cpp for the full call-site list.
     void refreshShortcutTooltips();
-    // True when `key` is what the user has bound to `actionId`. With no manager installed this is
-    // `key == fallback`; with one installed the fallback is not consulted at all. See its
-    // definition in TimelinePanelShortcuts.cpp for why this duplicates PianoRollComponent's own
-    // copy rather than sharing it.
+    // True when `key` is what the user has bound to `actionId`; the fallback applies only with no manager installed.
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
     // Pushes trackScrollY into the header viewport and repaints the lanes — the ONE place the two
     // columns are brought back in step after any scroll/zoom writer.

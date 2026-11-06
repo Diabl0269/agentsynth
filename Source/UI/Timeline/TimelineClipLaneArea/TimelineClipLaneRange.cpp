@@ -20,8 +20,10 @@
 #include "UI/Layout/ContextMenuPlacement.h"
 
 #include "AppUndoManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/SectionColours.h"
 #include <algorithm>
 #include <cmath>
 
@@ -224,6 +226,10 @@ bool TimelineClipLaneArea::applyRangeChoice(RangeChoice choice) {
         case RangeChoice::DeleteCloseGap:
             doc_->deleteRange(span->tracks, span->startBeat, span->endBeat, true, spb);
             break;
+        case RangeChoice::MakeSection:
+            doc_->makeSection(span->startBeat, span->endBeat, "Section " + juce::String(doc_->getSections().size() + 1),
+                              sectionColourFor((int)doc_->getSections().size()), spb);
+            break;
         }
     };
     if (undoManager_)
@@ -232,7 +238,10 @@ bool TimelineClipLaneArea::applyRangeChoice(RangeChoice choice) {
         mutate();
 
     repaint();
-    return doc_->getRevision() != revisionBefore;
+    const bool changed = doc_->getRevision() != revisionBefore;
+    if (changed && choice == RangeChoice::MakeSection && onSectionMade)
+        onSectionMade(span->startBeat);
+    return changed;
 }
 
 // The menu itself, apart from showing it, so a test can walk the real items without the display a shown menu needs.
@@ -243,6 +252,10 @@ juce::PopupMenu TimelineClipLaneArea::buildRangeContextMenu() {
     menu.addItem("Split at range edges", [this] { applyRangeChoice(RangeChoice::SplitAtEdges); });
     menu.addItem("Delete range", [this] { applyRangeChoice(RangeChoice::Delete); });
     menu.addItem("Delete range and close gap", [this] { applyRangeChoice(RangeChoice::DeleteCloseGap); });
+    juce::PopupMenu::Item makeSection("Make section");
+    makeSection.setAction([this] { applyRangeChoice(RangeChoice::MakeSection); });
+    makeSection.shortcutKeyDescription = shortcutHintFor(shortcuts_, "timelineMakeSection", sectionKey());
+    menu.addItem(makeSection);
     addRenderToAudioItem(menu, renderSpansForRange());
     return menu;
 }

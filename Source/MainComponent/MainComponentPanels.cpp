@@ -903,6 +903,7 @@ void MainComponent::applyTimelineTransportPreferences() {
         timelinePanel.setFollowPointPercent(
             settings->getIntValue(synth::ui::kFollowPointPercentKey, timelinePanel.getFollowPointPercent()));
         timelinePanel.refreshTransportTooltips();
+        timelinePanel.refreshSectionsStripSetting(); // the Sections strip toggle (Preferences > Timeline)
         // Where Cmd+D puts copies of points (Preferences > Timeline), applied at launch and on every change.
         synth::ui::setDuplicatePlacement(synth::ui::duplicatePlacementFromString(
             settings->getValue(synth::ui::kDuplicatePlacementKey, "afterLast")));

@@ -685,6 +685,7 @@ TEST(ThemeMetricsTest, MetricsCodeOnlyFieldsHaveExpectedDefaults) {
     // 30, up from 24: the ruler strip tiles a bar/beat numbers row and a marker band, and 24 left
     // the marker flag too small to read (see docs/timeline/ruler.md#the-marker-band).
     EXPECT_EQ(m.timelineRulerHeight, 30);
+    EXPECT_EQ(m.timelineSectionStripHeight, 24) << "the Sections strip above the ruler";
     EXPECT_EQ(m.timelineTrackRowHeight, 56);
 }
 
@@ -710,6 +711,7 @@ TEST(ThemeLoaderTest, MetricsCodeOnlyFieldsNotInJSON) {
     EXPECT_FALSE(jsonStr.contains("timelineTrackHeaderWidth"));
     EXPECT_FALSE(jsonStr.contains("timelineTransportBarHeight"));
     EXPECT_FALSE(jsonStr.contains("timelineRulerHeight"));
+    EXPECT_FALSE(jsonStr.contains("timelineSectionStripHeight"));
     EXPECT_FALSE(jsonStr.contains("timelineTrackRowHeight"));
 }
 

@@ -47,12 +47,31 @@ void TimelineClipLaneArea::paintLinkMark(juce::Graphics& g, juce::Rectangle<int>
 
 juce::String TimelineClipLaneArea::getTooltip() { return linkTooltipAt(getMouseXYRelative()); }
 
+// Chorus, when `clip` starts inside a placement of a section that plays 3 times: such a clip is kept in step with the
+// other copies exactly like a linked one (docs/timeline/sections.md), so it draws the same mark.
+TimelineClipLaneArea::SectionFollow TimelineClipLaneArea::sectionFollowOf(const synth::Clip& clip) const {
+    if (doc_ == nullptr)
+        return {};
+    const auto* placement = doc_->placementAt(clip.startBeat);
+    const auto* section = placement != nullptr ? doc_->getSection(placement->section) : nullptr;
+    if (section == nullptr)
+        return {};
+    const int plays = (int)doc_->placementsOf(section->id).size();
+    return plays > 1 ? SectionFollow{section->name, plays} : SectionFollow{};
+}
+
 juce::String TimelineClipLaneArea::linkTooltipAt(juce::Point<int> pos) const {
     if (doc_ == nullptr)
         return {};
     const auto hit = hitTestClip(pos);
     if (!hit.has_value() || !linkMarkBounds(hit->rect).contains(pos))
         return {};
+    // A clip in a repeated section says so first: that is the link the user can act on (it wins over the plain one).
+    if (const auto* clip = doc_->getClip(hit->id)) {
+        if (const auto follow = sectionFollowOf(*clip); follow.plays > 1)
+            return "Follows " + follow.name + " (plays " + juce::String(follow.plays) + " times). Edit any " +
+                   follow.name + " to change them all.";
+    }
     const int others = doc_->countLinkedClips(hit->id);
     if (others <= 0)
         return {};

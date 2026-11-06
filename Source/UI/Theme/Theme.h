@@ -190,6 +190,9 @@ struct Metrics {
     // to be squeezed to 9 px, which is where "the flag is barely visible" came from; 30 gives the
     // numbers 17 px and the flags 13. Code-only; not parsed from user JSON.
     int timelineRulerHeight{30};
+    // The Sections strip above the ruler: one row of section blocks (3 px inset above and below, so an 18 px block).
+    // Code-only, like the ruler's height; not parsed from user JSON.
+    int timelineSectionStripHeight{24};
     // The row height BOTH the track-header column and the clip-lane area lay their rows
     // out at — the single source that keeps header rows and clip rows aligned. Replaces what used
     // to be TimelineTrackHeaderComponent::kRowHeight's exclusive say in the matter; that constant

@@ -368,6 +368,10 @@ signature, 4 beats with no transport), auto-named `"Clip N"` from the row's clip
 and then fired through the SAME `onClipDoubleClicked` hook a clip double-click uses, so the user
 lands straight in the piano roll ready to draw notes.
 
+**Two Sections preferences** sit beside it (Preferences > Timeline), both read at use time: `timelineShowSectionsStrip`
+(default on) shows the [Sections strip](sections.md), and `timelineSectionsCoverOnDrop` (default off) makes placing a
+section cover the music where it lands instead of making room.
+
 **Except when it spans the loop locators.** `locatorSpanForDoubleClick(clickedBeat)` is the pure
 rule: when the `timelineDoubleClickSpansLocators` preference is on (**default ON**), a transport is
 installed, the locators define a real span (`loopEnd > loopStart`) AND the clicked beat falls inside

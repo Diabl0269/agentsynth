@@ -118,6 +118,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineClipMoveLater",
         "timelineClipDuplicateLinked",
         "timelineRenderToAudioTrack",
+        "timelineMakeSection", // TimelineClipLaneArea::keyPressed, with a live range
         // AutomationLaneEditor / AutomationLaneHeaderComponent, through TimelineAutomationLanes
         "timelineMoveLaneUp",
         "timelineMoveLaneDown",

@@ -2,6 +2,7 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 #include "UI/Timeline/FollowPlayhead.h"
+#include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"
 
 // Concern: timeline/piano-roll editing preferences — loop-selection-arms, double-click-spans-
 // locators, natural scrolling, wheel-zoom direction, piano-roll key-label density, and
@@ -27,6 +28,27 @@ void PreferencesSettingsTab::persistDoubleClickSpansLocators(bool enabled) {
     // Nothing live to push: TimelineClipLaneArea reads this key at use time (on the next
     // double-click), the same way the row above it is read by the timeline's P handler.
     appProperties.getUserSettings()->setValue(kTimelineDoubleClickSpansLocatorsKey, enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+}
+
+bool PreferencesSettingsTab::isShowSectionsStripEnabled() const { return showSectionsStripToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setShowSectionsStripEnabled(bool enabled) {
+    showSectionsStripToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistSectionsSetting(synth::ui::kTimelineShowSectionsStripKey, enabled);
+}
+
+bool PreferencesSettingsTab::isSectionsCoverOnDropEnabled() const { return sectionsCoverOnDropToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setSectionsCoverOnDropEnabled(bool enabled) {
+    sectionsCoverOnDropToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistSectionsSetting(synth::ui::kTimelineSectionsCoverOnDropKey, enabled);
+}
+
+void PreferencesSettingsTab::persistSectionsSetting(const char* key, bool enabled) {
+    // The strip's visibility is pushed live by MainComponent's settings listener (applyTimelineTransportPreferences);
+    // the cover-or-make-room choice is read at use time, on the next place or move.
+    appProperties.getUserSettings()->setValue(key, enabled ? "1" : "0");
     appProperties.getUserSettings()->saveIfNeeded();
 }
 
@@ -62,6 +84,28 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
         "get one bar.");
     doubleClickSpansLocatorsToggle.onClick = [this] {
         persistDoubleClickSpansLocators(doubleClickSpansLocatorsToggle.getToggleState());
+    };
+
+    contentHost.addAndMakeVisible(showSectionsStripToggle);
+    showSectionsStripToggle.setToggleState(synth::ui::sectionsStripShown(appProperties.getUserSettings()),
+                                           juce::dontSendNotification);
+    showSectionsStripToggle.setTooltip(
+        "When on (the default), the Sections strip sits above the timeline ruler: drag across bars to make a section, "
+        "then place it again anywhere. Turn it off to hide the strip; your sections stay in the song and play as "
+        "before.");
+    showSectionsStripToggle.onClick = [this] {
+        persistSectionsSetting(synth::ui::kTimelineShowSectionsStripKey, showSectionsStripToggle.getToggleState());
+    };
+
+    contentHost.addAndMakeVisible(sectionsCoverOnDropToggle);
+    sectionsCoverOnDropToggle.setToggleState(synth::ui::sectionsCoverOnDrop(appProperties.getUserSettings()),
+                                             juce::dontSendNotification);
+    sectionsCoverOnDropToggle.setTooltip(
+        "When off (the default), placing or moving a section makes room: the music after it shifts later. Turn it on "
+        "to "
+        "cover the music where the section lands instead. Holding Shift while you drop does the other one.");
+    sectionsCoverOnDropToggle.onClick = [this] {
+        persistSectionsSetting(synth::ui::kTimelineSectionsCoverOnDropKey, sectionsCoverOnDropToggle.getToggleState());
     };
 
     contentHost.addAndMakeVisible(askBeforeRemovingLfoToggle);
@@ -269,7 +313,8 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
     enterCategory(Category::Timeline, y);
     // Group 5: the two loop-locator toggles and the LFO-removal and track-delete questions (no divider between them).
     {
-        const std::initializer_list<juce::Component*> rows{&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle,
+        const std::initializer_list<juce::Component*> rows{&loopSelectionArmsToggle,    &doubleClickSpansLocatorsToggle,
+                                                           &showSectionsStripToggle,    &sectionsCoverOnDropToggle,
                                                            &askBeforeRemovingLfoToggle, &askBeforeDeletingTrackToggle};
         const bool visible = groupMatches(rows);
         setGroupVisible(rows, visible);
@@ -278,6 +323,10 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
             loopSelectionArmsToggle.setBounds({0, y, contentWidth, 24});
             y += 34;
             doubleClickSpansLocatorsToggle.setBounds({0, y, contentWidth, 24});
+            y += 34;
+            showSectionsStripToggle.setBounds({0, y, contentWidth, 24});
+            y += 34;
+            sectionsCoverOnDropToggle.setBounds({0, y, contentWidth, 24});
             y += 34;
             askBeforeRemovingLfoToggle.setBounds({0, y, contentWidth, 24});
             y += 34;

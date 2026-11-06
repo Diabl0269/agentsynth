@@ -1,0 +1,87 @@
+# Sections: make one by dragging on the strip, name it, place it again, edit a clip in one copy and see the others
+# follow, move a placement with make-room, delete one.
+#
+# What a user does: starts a new project, adds an Oscillator track and a one-bar clip, drags across the first bar of the
+# Sections strip (a dashed outline follows the pointer) and types "Chorus" for its name. Cmd+D places the section again
+# after it, an Option-drag places it a third time; the strip then shows "1/3", "2/3" and "3/3". Dragging the right edge
+# of the clip in the second Chorus shorter changes the clip in all three (they flash an outline), and Cmd+Z puts them
+# all back. Dragging the first Chorus onto the second makes room: the others move later. Delete removes a Chorus and
+# its bars.
+record: true
+save_project: sections-make-place-edit
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator"}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 50, y: 28, clicks: 2}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000", within_ms: 2000}
+  # The double-click opened the piano roll (which hides the strip); Esc goes back to the clip lane.
+  - key: {keys: escape}
+  - wait: {}
+  - screenshot: {name: 1-clip-and-empty-strip}
+  # Make a section: drag across the first bar (96 px at this zoom) of the strip.
+  - mouseDown: {id: timelineSectionStrip, x: 5, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 50, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 90, y: 12}
+  - screenshot: {name: 2-make-drag-outline}
+  - mouseUp: {id: timelineSectionStrip, x: 90, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 1:0.000:4.000:1/1", within_ms: 2000}
+  # Its name is open for typing.
+  - type: {text: "Chorus"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Chorus:0.000:4.000:1/1", within_ms: 2000}
+  - screenshot: {name: 3-named}
+  # Cmd+D on the selected block places it again after itself.
+  - click: {id: timelineSectionStrip, x: 40, y: 12}
+  - key: {keys: cmd+d}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Chorus:0.000:4.000:1/2;Chorus:4.000:4.000:2/2", within_ms: 2000}
+  # An Option-drag places it a third time, at bar 3 (grab 40 px into the block, drop 192 px along).
+  - mouseDown: {id: timelineSectionStrip, x: 40, y: 12, mods: alt}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 130, y: 12, mods: alt}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 232, y: 12, mods: alt}
+  - screenshot: {name: 4-option-drag}
+  - mouseUp: {id: timelineSectionStrip, x: 232, y: 12, mods: alt}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Chorus:0.000:4.000:1/3;Chorus:4.000:4.000:2/3;Chorus:8.000:4.000:3/3", within_ms: 2000}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000;Clip 1:4.000", within_ms: 2000}
+  - screenshot: {name: 5-three-placements}
+  # Make the clip in the second Chorus one beat shorter (right edge at beat 8 = x 192): all three follow.
+  - mouseDown: {id: timelineClipLaneArea, x: 191, y: 50}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 180, y: 50}
+  - mouseMoveHeld: {id: timelineClipLaneArea, x: 167, y: 50}
+  - mouseUp: {id: timelineClipLaneArea, x: 167, y: 50}
+  - wait: {}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:3.000;Clip 1:3.000;Clip 1:3.000", within_ms: 2000}
+  - screenshot: {name: 6-edit-followed}
+  - key: {keys: cmd+z}
+  - expect: {id: timelineClipPitches, clipLengths: "Clip 1:4.000;Clip 1:4.000;Clip 1:4.000", within_ms: 2000}
+  # A second section after the three Choruses, so a move is visible; drag it to the front, make-room pushes the others later.
+  - mouseDown: {id: timelineSectionStrip, x: 293, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 340, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 380, y: 12}
+  - mouseUp: {id: timelineSectionStrip, x: 380, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Chorus:0.000:4.000:1/3;Chorus:4.000:4.000:2/3;Chorus:8.000:4.000:3/3;Section 2:12.000:4.000:1/1", within_ms: 2000}
+  - key: {keys: escape}
+  - mouseDown: {id: timelineSectionStrip, x: 336, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 150, y: 12}
+  - mouseMoveHeld: {id: timelineSectionStrip, x: 20, y: 12}
+  - screenshot: {name: 7-move-drag}
+  - mouseUp: {id: timelineSectionStrip, x: 20, y: 12}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Section 2:0.000:4.000:1/1;Chorus:4.000:4.000:1/3;Chorus:8.000:4.000:2/3;Chorus:12.000:4.000:3/3", within_ms: 2000}
+  - screenshot: {name: 8-moved}
+  - expect: {id: timelineSections, selectedSection: "0.000", within_ms: 500}
+  # Delete the selected Chorus and its bars.
+  - key: {keys: delete}
+  - wait: {}
+  - expect: {id: timelineSections, sections: "Chorus:0.000:4.000:1/3;Chorus:4.000:4.000:2/3;Chorus:8.000:4.000:3/3", within_ms: 2000}
+  - screenshot: {name: 9-deleted}

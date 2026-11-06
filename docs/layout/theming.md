@@ -159,6 +159,7 @@ rather than repeating it.
 | `timelineTrackHeaderWidth` | `200` | Timeline track-header column width (px) — wide enough that the M/S/R/A toggle row does not crush the name label when a track's automation button is visible |
 | `timelineTransportBarHeight` | `34` | Timeline transport-bar strip height (px) — sized so `TimelineTransportBar`'s 26 px glyph buttons are not clamped back down by the strip |
 | `timelineRulerHeight` | `30` | Timeline ruler strip height, top of the lanes region (px) — the strip carries TWO tiled rows, the bar/beat numbers (17 px) and the marker band (13 px); at 24 the marker flag was squeezed to 9 px |
+| `timelineSectionStripHeight` | `24` | The Sections strip above the timeline ruler (px); 0 when the strip is hidden. Code-only, not in the theme JSON ([sections](../timeline/sections.md)) |
 | `timelineTrackRowHeight` | `56` | The row height BOTH the track-header column and the clip-lane area lay their rows out at — the single source keeping header rows and clip rows aligned. `TimelineTrackHeaderComponent::kRowHeight` is only the headless literal fallback and is kept equal to this default. |
 | `timelineAutomationLaneRowHeight` | `40` | One automation lane row folded out under its track (px), scaled by the vertical zoom like `timelineTrackRowHeight` ([automation](../timeline/automation.md#lane-rows)) |
 

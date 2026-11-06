@@ -68,7 +68,8 @@ juce::String TimelineClipLaneArea::getKeyboardClipAccessibilityText() const {
     const auto* track = doc_->getTrackForClip(id);
     if (clip == nullptr || track == nullptr)
         return {};
-    return describeClipForAccessibility(*clip, *track, currentBeatsPerBar(), doc_->countLinkedClips(id));
+    return describeClipForAccessibility(*clip, *track, currentBeatsPerBar(), doc_->countLinkedClips(id),
+                                        sectionFollowOf(*clip).name);
 }
 
 void TimelineClipLaneArea::setKeyboardClip(synth::ClipId id) {

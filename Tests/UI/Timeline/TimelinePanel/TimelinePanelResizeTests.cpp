@@ -40,7 +40,7 @@ TEST(TimelinePanelToolbarButtonsTest, AddTrackAndSnapShowTheirNameBesideTheIconA
     EXPECT_EQ(panel.getTransportBarBounds().getHeight(), 34);
     EXPECT_LE(snap.getHeight(), 34);
     const int stripHeight = panel.getTrackHeaderViewport().getY() - panel.getTrackHeaderBounds().getY();
-    EXPECT_EQ(stripHeight, 30) << "the Add Track strip is as tall as the ruler";
+    EXPECT_EQ(stripHeight, 24 + 30) << "the Add Track strip is as tall as the Sections strip plus the ruler";
     EXPECT_LE(addTrack.getHeight(), stripHeight);
     EXPECT_TRUE(juce::Rectangle<int>(0, 0, panel.getTrackHeaderBounds().getWidth(), stripHeight)
                     .contains(addTrack.getBounds().translated(-panel.getTrackHeaderBounds().getX(),
@@ -65,7 +65,7 @@ TEST(TimelinePanelToolbarButtonsTest, WithLabelsOffTheButtonsAreIconsOnlyAndTheB
     EXPECT_LT(snap.getWidth(), labelledSnapWidth);
     EXPECT_EQ(panel.getTransportBarBounds().getHeight(), 34);
     EXPECT_LE(snap.getHeight(), 34);
-    EXPECT_EQ(panel.getTrackHeaderViewport().getY() - panel.getTrackHeaderBounds().getY(), 30);
+    EXPECT_EQ(panel.getTrackHeaderViewport().getY() - panel.getTrackHeaderBounds().getY(), 24 + 30);
 
     panel.setToolbarLabelsShown(true);
     EXPECT_EQ(panel.getSnapToggleButton().getButtonText(), "Snap");
@@ -107,7 +107,8 @@ TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
     // The clip lanes still fill the lanes region below the 30 px ruler — the rect the grid is
     // painted into, so clips stay aligned with it at any height. (30, up from 24: the strip now
     // tiles a numbers row and a marker band — see Theme::Metrics::timelineRulerHeight.)
-    EXPECT_EQ(panel.getClipLaneArea().getBounds(), lanes.withTrimmedTop(30));
+    EXPECT_EQ(panel.getClipLaneArea().getBounds(), lanes.withTrimmedTop(24 + 30))
+        << "the 24 px Sections strip, then the ruler";
     // The ROLL shares the same rect, except for how much of the ruler band it claims: it owns the
     // vertical run above the ruler when its chip toolbar is showing, so that top edge belongs to
     // PianoRollComponent's own layout and is asserted in its own tests. What must hold HERE is that
@@ -117,7 +118,7 @@ TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
     EXPECT_EQ(roll.getWidth(), lanes.getWidth());
     EXPECT_EQ(roll.getBottom(), lanes.getBottom());
     EXPECT_GE(roll.getY(), lanes.getY());
-    EXPECT_LE(roll.getY(), lanes.getY() + 30);
+    EXPECT_LE(roll.getY(), lanes.getY() + 24 + 30);
     // The header list fills the taller viewport even with no tracks (no gap under the last row).
     ASSERT_NE(panel.getTrackHeaderViewport().getViewedComponent(), nullptr);
     EXPECT_GE(panel.getTrackHeaderViewport().getViewedComponent()->getHeight(),

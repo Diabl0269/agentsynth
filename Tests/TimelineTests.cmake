@@ -11,6 +11,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadShownTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumIdeasPanelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/ClipSwingTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocSectionsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocSectionFileTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocRowHeightTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/DrumLaneModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineSnapshotDrumTests.cpp
@@ -65,6 +67,11 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneSoundDropTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneEditToolsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneLinkedClipsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/SectionStripGeometryTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripDragTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripKeysTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneMouseTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLanePaintingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineClipLane/TimelineClipLaneSizingTests.cpp

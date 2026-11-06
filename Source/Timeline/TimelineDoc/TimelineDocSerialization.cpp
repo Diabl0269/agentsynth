@@ -450,6 +450,47 @@ bool readTrackFields(const juce::DynamicObject& tObj, Track& track) {
     return readTrackMidiInput(tObj, track) && readTrackAudioInput(tObj, track) && readTrackMonitorMode(tObj, track);
 }
 
+// Markers. Absent (every file written before they existed) means none; a present list must be well-typed and in
+// range, and the sort order is repaired rather than trusted.
+bool readMarkers(const juce::DynamicObject& rootObj, std::vector<Marker>& out) {
+    std::set<std::int64_t> seen;
+    const juce::Array<juce::var>* markerList = nullptr;
+    if (!readOptionalArray(rootObj.getProperty("markers"), markerList))
+        return false;
+    if (markerList != nullptr) {
+        if (markerList->size() > TimelineDoc::kMaxMarkers)
+            return false;
+        out.reserve(static_cast<size_t>(markerList->size()));
+
+        for (const auto& markerVar : *markerList) {
+            auto* mObj = markerVar.getDynamicObject();
+            if (mObj == nullptr)
+                return false;
+
+            Marker marker;
+            std::int64_t markerIdValue = 0;
+            if (!readId(mObj->getProperty("id"), markerIdValue) || !seen.insert(markerIdValue).second)
+                return false;
+            marker.id = MarkerId{markerIdValue};
+
+            std::int64_t colourValue = static_cast<std::int64_t>(marker.colourArgb);
+            if (!readOptionalDouble(mObj->getProperty("beat"), marker.beat) ||
+                !readOptionalString(mObj->getProperty("text"), marker.text) ||
+                !readOptionalInt64(mObj->getProperty("colourArgb"), colourValue))
+                return false;
+            if (!isFiniteAtOrAfterZero(marker.beat) || !isValidMarkerText(marker.text))
+                return false;
+            if (colourValue < 0 || colourValue > 0xffffffffLL)
+                return false;
+            marker.colourArgb = static_cast<juce::uint32>(colourValue);
+
+            out.push_back(std::move(marker));
+        }
+        std::stable_sort(out.begin(), out.end(), markerLess);
+    }
+    return true;
+}
+
 } // namespace
 
 // -------------------------------------------------------------- serialisation --
@@ -582,6 +623,7 @@ juce::var TimelineDoc::toVar() const {
         markerVars.add(juce::var(m.get()));
     }
     root->setProperty("markers", markerVars);
+    writeSections(*root);
 
     return juce::var(root.get());
 }
@@ -619,7 +661,6 @@ bool TimelineDoc::fromVar(const juce::var& state) {
     std::set<std::int64_t> seenClipIds;
     std::set<std::int64_t> seenLaneIds;
     std::set<std::int64_t> seenNoteIds;
-    std::set<std::int64_t> seenMarkerIds;
     std::set<std::pair<juce::String, juce::String>> seenLaneParams;
 
     if (trackList != nullptr) {
@@ -838,44 +879,14 @@ bool TimelineDoc::fromVar(const juce::var& state) {
         }
     }
 
-    // Markers. Absent (every file written before they existed) means none — additive, so no
-    // version bump. Same loader rule as everything above: an absent field takes its default, a
-    // present one must be well-typed AND in range, and the sort order is repaired rather than
-    // trusted.
-    const juce::Array<juce::var>* markerList = nullptr;
-    if (!readOptionalArray(rootObj->getProperty("markers"), markerList))
+    if (!readMarkers(*rootObj, parsedMarkers))
         return false;
-    if (markerList != nullptr) {
-        if (markerList->size() > kMaxMarkers)
-            return false;
-        parsedMarkers.reserve(static_cast<size_t>(markerList->size()));
 
-        for (const auto& markerVar : *markerList) {
-            auto* mObj = markerVar.getDynamicObject();
-            if (mObj == nullptr)
-                return false;
-
-            Marker marker;
-            std::int64_t markerIdValue = 0;
-            if (!readId(mObj->getProperty("id"), markerIdValue) || !seenMarkerIds.insert(markerIdValue).second)
-                return false;
-            marker.id = MarkerId{markerIdValue};
-
-            std::int64_t colourValue = static_cast<std::int64_t>(marker.colourArgb);
-            if (!readOptionalDouble(mObj->getProperty("beat"), marker.beat) ||
-                !readOptionalString(mObj->getProperty("text"), marker.text) ||
-                !readOptionalInt64(mObj->getProperty("colourArgb"), colourValue))
-                return false;
-            if (!isFiniteAtOrAfterZero(marker.beat) || !isValidMarkerText(marker.text))
-                return false;
-            if (colourValue < 0 || colourValue > 0xffffffffLL)
-                return false;
-            marker.colourArgb = static_cast<juce::uint32>(colourValue);
-
-            parsedMarkers.push_back(std::move(marker));
-        }
-        std::stable_sort(parsedMarkers.begin(), parsedMarkers.end(), markerLess);
-    }
+    std::vector<Section> parsedSections;
+    std::vector<SectionPlacement> parsedPlacements;
+    std::int64_t parsedNextSectionId = 1;
+    if (!readSections(*rootObj, parsedSections, parsedPlacements, parsedNextSectionId))
+        return false;
 
     // Counters are floored at one past the highest id actually present: a hand-edited file that
     // lowers a counter must not be able to make the doc hand out an id it's already using.
@@ -895,6 +906,10 @@ bool TimelineDoc::fromVar(const juce::var& state) {
     return applyMutation([&] {
         tracks = automationTracksLast(std::move(parsed)); // an older file may list it anywhere
         markers = std::move(parsedMarkers);
+        sections = std::move(parsedSections);
+        placements = std::move(parsedPlacements);
+        sectionContentCache.clear(); // a load never stamps: the cache is rebuilt from what was loaded
+        nextSectionId = parsedNextSectionId;
         nextTrackId = parsedNextTrackId;
         nextClipId = parsedNextClipId;
         nextLaneId = parsedNextLaneId;

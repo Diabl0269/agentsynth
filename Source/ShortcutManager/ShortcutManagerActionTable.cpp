@@ -8,13 +8,15 @@
 
 namespace {
 
-// Render to audio track (Shift+Cmd+R) sits after the linked-duplicate row; TimelineClipLaneArea resolves it.
+// Render to audio track (Shift+Cmd+R) and Make section (Shift+Cmd+J) sit after the linked-duplicate row;
+// TimelineClipLaneArea resolves it.
 template <class Entry>
 void spliceRenderRow(std::vector<Entry>& rows) {
     const auto at = std::find_if(rows.begin(), rows.end(), [](const Entry& row) {
         return std::string_view(row.id) == "timelineClipDuplicateLinked";
     });
-    rows.insert(at + 1, Entry{"timelineRenderToAudioTrack", ShortcutCategory::Timeline});
+    rows.insert(at + 1, {Entry{"timelineRenderToAudioTrack", ShortcutCategory::Timeline},
+                         Entry{"timelineMakeSection", ShortcutCategory::Timeline}}); // Shift+Cmd+J, with a live range
 }
 
 // The grid commands follow the other Timeline rows: the straight values, the triplet and dotted ones, then the cycle.

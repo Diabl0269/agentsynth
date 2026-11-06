@@ -408,6 +408,10 @@ void ShortcutManager::addTimelineDefaultBindings() {
     // Shift+Cmd+D: Duplicate's Cmd+D plus Shift, bound nowhere else in any category.
     bindings["timelineClipDuplicateLinked"] =
         juce::KeyPress('d', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    // Shift+Cmd+J: bound nowhere else. The obvious Option+Cmd+S is Save Snippet, an Edit-menu command whose native key
+    // equivalent fires before the timeline sees the key; Cmd+J is the bottom panel, so this is its Shift variant.
+    bindings["timelineMakeSection"] =
+        juce::KeyPress('j', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     // Shift+Cmd+R: Repeat's Cmd+R plus Shift, free on the Mac. Off the Mac Ctrl+Shift+R is Repeat and Ctrl+Alt+R is
     // Replace, so Render takes Ctrl+Alt+Shift+R there.
     bindings["timelineRenderToAudioTrack"] =

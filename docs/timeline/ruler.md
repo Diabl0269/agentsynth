@@ -1,7 +1,8 @@
 # Timeline Ruler and Markers
 
 `Source/UI/Timeline/TimelineRulerComponent.h/.cpp` (`synth::ui::TimelineRulerComponent`) is a thin
-strip (`Metrics::timelineRulerHeight` = 30) docked at the top of the lanes region: bar and beat
+strip (`Metrics::timelineRulerHeight` = 30) docked at the top of the lanes region, under the 24 px [Sections strip](sections.md) (the strip and
+the ruler share one x and width): bar and beat
 ticks, the loop brace, marker flags, and the two drag gestures that seek the playhead and set the
 loop range.
 
