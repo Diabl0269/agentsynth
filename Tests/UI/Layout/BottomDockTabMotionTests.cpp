@@ -301,5 +301,6 @@ TEST_F(BottomDockTabMotionDockTest, ASwapToTheMainAreaPlaysTheSameMotion) {
     dock().stepTabMotionForTest(1.0e6);
     EXPECT_FALSE(tabButton(Tab::Mixer).isVisible());
     EXPECT_TRUE(tabButton(Tab::Canvas).isVisible()) << "and the Canvas tab has grown in";
-    EXPECT_NEAR(tabWidth(Tab::Canvas), dock().getWidth() / 3, 1);
+    // The canvas buttons take the strip row's right end while the canvas is a tab; the tabs share the rest.
+    EXPECT_NEAR(tabWidth(Tab::Canvas), (dock().getWidth() - dock().getStripAccessoryBounds().getWidth()) / 3, 1);
 }
