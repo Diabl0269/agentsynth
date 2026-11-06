@@ -1,5 +1,5 @@
 # The timelineOps tools (validate, preview, apply): the op batch, the addInstrumentTrack field reader, and the
-# setTempo / addMarker readers. Split out of the root list to keep CMakeLists.txt under the file-size cap.
+# setTempo / addMarker readers, and the sections units (model ops, sync, file format, validator). Split out of the root list to keep CMakeLists.txt under the file-size cap.
 target_sources(Core PRIVATE
     Source/Timeline/InstrumentTrackOpReader.cpp
     Source/Timeline/InstrumentTrackOpReader.h
@@ -11,4 +11,9 @@ target_sources(Core PRIVATE
     Source/Timeline/TimelineOpsNotes.h
     Source/Timeline/TimelineOpsTempoMarkers.cpp
     Source/Timeline/TimelineOpsTempoMarkers.h
+    Source/Timeline/TimelineDoc/TimelineDocSections.cpp
+    Source/Timeline/TimelineDoc/TimelineDocSectionSync.cpp
+    Source/Timeline/TimelineDoc/TimelineDocSectionSerialization.cpp
+    Source/Timeline/TimelineValidatorSections.cpp
+    Source/Timeline/TimelineValidatorSections.h
 )

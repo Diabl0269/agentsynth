@@ -1,5 +1,6 @@
 #include "ArrangementContext.h"
 #include "AudioEngine/ModuleTitle.h"
+#include <algorithm>
 #include <cmath>
 #include <unordered_map>
 
@@ -172,11 +173,49 @@ juce::String buildMarkersLine(const std::vector<Marker>& markers, int maxChars) 
     return line;
 }
 
+// The sections on one line, `Sections (bars): "Intro" 1-4; "Verse" 5-12 (1 of 2)`: one entry per placement, with
+// "(k of n)" when the section plays more than once. Whole entries only, up to a quarter of the budget, with a "+K
+// more" tail. A beat counts in quarter notes; a bar is the time signature's numerator over its denominator.
+juce::String buildSectionsLine(const TimelineDoc& doc, const TransportService::PositionSnapshot& transport,
+                               int maxChars) {
+    const auto& placements = doc.getPlacements();
+    if (placements.empty())
+        return {};
+    const double barBeats = transport.timeSigDenominator > 0
+                                ? 4.0 * static_cast<double>(transport.timeSigNumerator) / transport.timeSigDenominator
+                                : 4.0;
+    const juce::String prefix = "Sections (bars): ";
+    juce::String line = prefix;
+    int included = 0;
+    for (const auto& placement : placements) {
+        const auto* section = doc.getSection(placement.section);
+        if (section == nullptr)
+            continue;
+        const int first = static_cast<int>(std::floor(placement.startBeat / barBeats + 1e-9)) + 1;
+        const int last = std::max(
+            first, static_cast<int>(std::ceil((placement.startBeat + section->lengthBeats) / barBeats - 1e-9)));
+        const int total = static_cast<int>(doc.placementsOf(section->id).size());
+        juce::String item = "\"" + section->name.replaceCharacters("\r\n", "  ") + "\" " + juce::String(first) + "-" +
+                            juce::String(last);
+        if (total > 1)
+            item += " (" + juce::String(doc.placementOrdinal(placement.id)) + " of " + juce::String(total) + ")";
+        const juce::String candidate = line + (included > 0 ? "; " : "") + item;
+        if (included > 0 && candidate.length() > maxChars / 4)
+            break;
+        line = candidate;
+        ++included;
+    }
+    const int remaining = static_cast<int>(placements.size()) - included;
+    if (remaining > 0)
+        line += "; +" + juce::String(remaining) + " more";
+    return line;
+}
+
 } // namespace
 
 juce::String ArrangementContext::summarize(const TimelineDoc& doc, const juce::AudioProcessorGraph& graph,
                                            const TransportService::PositionSnapshot& transport, int maxChars) {
-    if (doc.isEmpty() && doc.getMarkers().empty())
+    if (doc.isEmpty() && doc.getMarkers().empty() && doc.getPlacements().empty())
         return {};
 
     const auto& tracks = doc.getTracks();
@@ -185,6 +224,8 @@ juce::String ArrangementContext::summarize(const TimelineDoc& doc, const juce::A
     juce::String result = buildHeader(tracks.size(), transport);
     if (const auto markers = buildMarkersLine(doc.getMarkers(), maxChars); markers.isNotEmpty())
         result += "\n" + markers;
+    if (const auto sections = buildSectionsLine(doc, transport, maxChars); sections.isNotEmpty())
+        result += "\n" + sections;
 
     int includedTracks = 0;
     for (const auto& track : tracks) {

@@ -96,6 +96,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/timeline/render-to-audio.md`](timeline/render-to-audio.md) — render a range or clips to a new audio track: which tracks, what is heard, the files, the one undo step
 - [`docs/timeline/clips.md`](timeline/clips.md) — clip lanes: selection, drag/trim, edge auto-scroll, authoring and audio import
 - [`docs/timeline/linked-clips.md`](timeline/linked-clips.md) — linked clips: Duplicate linked, Make unique, what a link shares and which edits end it
+- [`docs/timeline/sections.md`](timeline/sections.md) — sections in the timeline model: placements that hold the same music, the sync rule, time edits, file format, AI context line
 - [`docs/timeline/remove-last-modulator.md`](timeline/remove-last-modulator.md) — Remove LFO / Keep module / Remember my choice when a removal would delete the LFO, and its reset
 - [`docs/layout/mod-ring-fade.md`](layout/mod-ring-fade.md) — a knob's modulation ring fading in and out
 - [`docs/timeline/automation-points.md`](timeline/automation-points.md) — selecting, moving (mouse, key taps and holds), duplicating and stretching an automation lane's points

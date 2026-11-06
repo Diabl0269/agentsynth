@@ -119,8 +119,39 @@ struct Case {
     std::function<void(juce::var&)> breakIt; // mutates (or replaces) the valid document
 };
 
+// One section named "S" with the given placement starts, all of length 4 beats.
+juce::var sectionsVar(std::initializer_list<double> starts, int firstId = 1) {
+    juce::DynamicObject::Ptr section = new juce::DynamicObject();
+    section->setProperty("id", firstId);
+    section->setProperty("name", "S");
+    section->setProperty("lengthBeats", 4.0);
+    juce::Array<juce::var> placements;
+    int id = firstId;
+    for (const double start : starts) {
+        juce::DynamicObject::Ptr p = new juce::DynamicObject();
+        p->setProperty("id", ++id);
+        p->setProperty("startBeat", start);
+        placements.add(juce::var(p.get()));
+    }
+    section->setProperty("placements", placements);
+    juce::Array<juce::var> list;
+    list.add(juce::var(section.get()));
+    return juce::var(list);
+}
+
 std::vector<Case> makeCases() {
     return {
+        {TimelineValidationError::SectionOverlap, "two placements of a section overlap",
+         [](juce::var& root) { obj(root).setProperty("sections", sectionsVar({0.0, 2.0})); }},
+
+        {TimelineValidationError::TooManySections, "one section over kMaxSections",
+         [](juce::var& root) {
+             auto list = sectionsVar({0.0});
+             while (list.getArray()->size() <= TimelineDoc::kMaxSections)
+                 list.getArray()->add(list.getArray()->getFirst());
+             obj(root).setProperty("sections", list);
+         }},
+
         {TimelineValidationError::MalformedRoot, "root is a JSON array, not an object",
          [](juce::var& root) { root = juce::JSON::parse(R"([1,2,3])"); }},
 

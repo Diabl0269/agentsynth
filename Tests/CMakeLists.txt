@@ -117,6 +117,8 @@ add_executable(Tests
     Timeline/TimelineDoc/TimelineDocLaneOrderTests.cpp
     Timeline/TimelineDoc/TimelineDocSerializationTests.cpp
     Timeline/TimelineDoc/TimelineDocMarkersTests.cpp
+    Timeline/TimelineDoc/TimelineDocSectionsTests.cpp
+    Timeline/TimelineDoc/TimelineDocSectionFileTests.cpp
     Timeline/TimelineDoc/TimelineDocRangesTests.cpp
     Timeline/TimelineDoc/ClipStretchOriginTests.cpp
     Timeline/TimelineClipEditing/TimelineClipEditingNotesTests.cpp

@@ -47,8 +47,9 @@ struct MidiNote {
     int condOf = 1;
 };
 
-// Notes stay sorted by (startBeat, pitch, id). One Clip type covers MIDI and audio; the track's TrackKind says
-// which half a player reads. Audio fields are additive.
+// Notes stay sorted by (startBeat, pitch, id). A new field must be added to sameClipContent
+// (TimelineDocSectionSync.cpp), or sections will not notice it changed. One Clip type covers MIDI and audio; the
+// track's TrackKind says which half a player reads. Audio fields are additive.
 struct Clip {
     ClipId id;
     juce::String name;
@@ -229,7 +230,36 @@ struct Marker {
     juce::uint32 colourArgb = 0xffE0A33D; // amber; the editor overwrites this from the theme
 };
 
-// The timeline's message-thread document model: tracks, clips, notes, automation lanes and markers.
+// A named stretch of bars across every track. It plays at one or more placements; each placement holds the same music.
+struct Section {
+    SectionId id;
+    juce::String name;
+    juce::uint32 colourArgb = 0xff4FC1FF;
+    double lengthBeats = 16.0;
+};
+
+// One place a section plays: [startBeat, startBeat + the section's length). Placements never overlap.
+struct SectionPlacement {
+    PlacementId id;
+    SectionId section;
+    double startBeat = 0.0;
+};
+
+// What to do with the music already at a drop target.
+enum class SectionDropMode { MakeRoom, Cover };
+
+// A placement's music, relative to its start and ignoring ids: clips by track, breakpoints by lane.
+struct PlacementContent {
+    std::map<std::int64_t, std::vector<Clip>> clips;
+    std::map<std::int64_t, std::vector<AutomationLane::Breakpoint>> points;
+};
+
+// True when two clips hold the same music and settings, ignoring ids and link groups; startBeat is compared as given.
+bool sameClipContent(const Clip& a, const Clip& b);
+// True when two contents are equal as above.
+bool samePlacementContent(const PlacementContent& a, const PlacementContent& b);
+
+// The timeline's message-thread document model: tracks, clips, notes, automation lanes, markers and sections.
 class TimelineDoc {
 public:
     TimelineDoc() = default;
@@ -256,6 +286,8 @@ public:
     static constexpr int kMaxLanesPerTrack = 512;
     static constexpr int kMaxBreakpointsPerLane = 16384;
     static constexpr int kMaxMarkers = 1024;
+    static constexpr int kMaxSections = 256;
+    static constexpr int kMaxPlacements = 1024;
     // Longest marker label the model holds. A label is a cue name, not a document: an over-long
     // one is REJECTED (by the mutation API, by fromVar and by synth::validateTimeline alike),
     // never truncated — truncating would silently store something other than what was asked for.
@@ -639,6 +671,56 @@ public:
     const Marker* getMarker(MarkerId id) const;
     const std::vector<Marker>& getMarkers() const noexcept { return markers; }
 
+    // -- Sections -------------------------------------------------------------
+    // Every op validates first and changes nothing when it rejects. `secondsPerBeat` must be finite and > 0.
+    // Splits clips at both edges on every non-Automation track, then adds the section and its first placement.
+    SectionId makeSection(double startBeat, double endBeat, const juce::String& name, juce::uint32 colourArgb,
+                          double secondsPerBeat);
+    // Plays the section once more at atBeat with the same music as its first placement.
+    PlacementId placeSection(SectionId id, double atBeat, SectionDropMode mode, double secondsPerBeat);
+    // Moves a placement, music and all; the placement keeps its id.
+    bool movePlacement(PlacementId id, double newStartBeat, SectionDropMode mode, double secondsPerBeat);
+    // Removes the placement only; the section goes with its last placement.
+    bool removePlacementKeepMusic(PlacementId id);
+    // Removes the placement and its bars, closing the gap on every track.
+    bool deletePlacementAndBars(PlacementId id, double secondsPerBeat);
+    // Moves the placement to a new section of the same length. Rejected for a section's only placement.
+    SectionId makePlacementUnique(PlacementId id, const juce::String& newName, juce::uint32 newColourArgb);
+    bool renameSection(SectionId id, const juce::String& name);
+    bool setSectionColour(SectionId id, juce::uint32 colourArgb);
+    // Turns each marker into a section up to the next marker (the last up to endBeat); returns placements made.
+    int makeSectionsFromMarkers(double endBeat, const std::function<juce::uint32(int index)>& colourFor,
+                                double secondsPerBeat);
+    // Whole-song time edits on every track, lane, marker and placement.
+    bool insertTime(double atBeat, double lengthBeats, double secondsPerBeat);
+    bool deleteTime(double startBeat, double endBeat, double secondsPerBeat);
+
+    const std::vector<Section>& getSections() const noexcept { return sections; }
+    const std::vector<SectionPlacement>& getPlacements() const noexcept { return placements; }
+    const Section* getSection(SectionId id) const;
+    const SectionPlacement* getPlacement(PlacementId id) const;
+    const SectionPlacement* placementAt(double beat) const;
+    std::vector<PlacementId> placementsOf(SectionId id) const;
+    // 1-based position of the placement among its section's placements; 0 when unknown.
+    int placementOrdinal(PlacementId id) const;
+    const SectionPlacement* placementForClip(ClipId id) const;
+    // Runtime only: counts syncs that rewrote a placement, and names the placements the last mutation rewrote.
+    std::int64_t getSectionStampRevision() const noexcept { return sectionStampCount; }
+    const std::vector<PlacementId>& getLastStampedPlacements() const noexcept { return lastStampedPlacements; }
+
+    // While one is alive, edits do not copy between placements; the last one to end runs a single sync, and only
+    // when it would change something.
+    class SectionEditScope {
+    public:
+        explicit SectionEditScope(TimelineDoc& d);
+        ~SectionEditScope();
+        SectionEditScope(const SectionEditScope&) = delete;
+        SectionEditScope& operator=(const SectionEditScope&) = delete;
+
+    private:
+        TimelineDoc& doc;
+    };
+
     // -- Document-level --------------------------------------------------------
     // Drops every track AND every marker. Id counters are NOT reset — ids stay unique for the
     // doc's lifetime. No-op (and no notification) on an already-empty doc.
@@ -706,6 +788,18 @@ private:
     ClipId duplicateClipImpl(ClipId id, bool linked);
     void syncLinkedClips(const Clip& source);
     void dissolveLoneLinkGroups();
+    void syncSections();
+    void writeSections(juce::DynamicObject& root) const;
+    static bool readSections(const juce::DynamicObject& root, std::vector<Section>& sectionsOut,
+                             std::vector<SectionPlacement>& placementsOut, std::int64_t& nextIdOut);
+    bool sectionsNeedSync() const;
+    PlacementContent contentOf(double startBeat, double lengthBeats) const;
+    double sectionLength(SectionId id) const;
+    void stampContent(const PlacementContent& source, double targetStart, double length);
+    void eraseLanePoints(double startBeat, double endBeat);
+    std::vector<TrackId> trackIds(bool includeAutomation) const;
+    void removePlacementsOverlapping(double startBeat, double endBeat, PlacementId except);
+    void insertPlacementSorted(const SectionPlacement& placement);
 
     Track* findTrack(TrackId id);
     const Track* findTrack(TrackId id) const;
@@ -717,12 +811,19 @@ private:
 
     std::vector<Track> tracks;
     std::vector<Marker> markers;
+    std::vector<Section> sections;                                // creation order
+    std::vector<SectionPlacement> placements;                     // sorted by (startBeat, id)
+    std::map<std::int64_t, PlacementContent> sectionContentCache; // runtime only, by placement id
+    int sectionSyncSuspended = 0;
+    std::int64_t sectionStampCount = 0;
+    std::vector<PlacementId> lastStampedPlacements;
 
     std::int64_t nextTrackId = 1;
     std::int64_t nextClipId = 1;
     std::int64_t nextLaneId = 1;
     std::int64_t nextNoteId = 1;
     std::int64_t nextMarkerId = 1;
+    std::int64_t nextSectionId = 1; // one counter for section and placement ids
     std::int64_t revision = 0;
     std::int64_t replaceCount = 0;
 

@@ -1,6 +1,7 @@
 #include "TimelineValidator.h"
 
 #include "AutomationBinding.h"
+#include "TimelineValidatorSections.h"
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -595,6 +596,10 @@ juce::String timelineValidationErrorName(TimelineValidationError error) {
         return "TooManyMarkers";
     case TimelineValidationError::MarkerTextTooLong:
         return "MarkerTextTooLong";
+    case TimelineValidationError::TooManySections:
+        return "TooManySections";
+    case TimelineValidationError::SectionOverlap:
+        return "SectionOverlap";
     case TimelineValidationError::BeatOutOfBounds:
         return "BeatOutOfBounds";
     case TimelineValidationError::NoteOutOfRange:
@@ -645,10 +650,12 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
     for (int i = 0; i < rootObj->getProperties().size(); ++i) {
         const juce::String key = rootObj->getProperties().getName(i).toString();
         if (key != "version" && key != "tracks" && key != "markers" && key != "nextTrackId" && key != "nextClipId" &&
-            key != "nextLaneId" && key != "nextNoteId" && key != "nextMarkerId")
-            return fail(Error::MalformedRoot, "Unknown top-level timeline key \"" + key +
-                                                  "\". Only \"version\", \"tracks\", \"markers\" and the next-id "
-                                                  "counters are accepted.");
+            key != "nextLaneId" && key != "nextNoteId" && key != "nextMarkerId" && key != "sections" &&
+            key != "nextSectionId")
+            return fail(Error::MalformedRoot,
+                        "Unknown top-level timeline key \"" + key +
+                            "\". Only \"version\", \"tracks\", \"markers\", \"sections\" and the next-id "
+                            "counters are accepted.");
     }
 
     const auto graphByUuid = indexGraphByUuid(graph);
@@ -695,6 +702,9 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
                 return result;
         }
     }
+
+    if (const auto result = validateTimelineSections(*rootObj); !result.ok)
+        return result;
 
     // The whole-document note budget, checked after the per-clip caps so the more specific
     // message wins when a single clip is the culprit.

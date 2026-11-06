@@ -34,6 +34,8 @@ struct ClipIdTag {};
 struct LaneIdTag {};
 struct NoteIdTag {};
 struct MarkerIdTag {};
+struct SectionIdTag {};
+struct PlacementIdTag {};
 
 } // namespace detail
 
@@ -42,6 +44,8 @@ using ClipId = detail::TimelineId<detail::ClipIdTag>;
 using LaneId = detail::TimelineId<detail::LaneIdTag>;
 using NoteId = detail::TimelineId<detail::NoteIdTag>;
 using MarkerId = detail::TimelineId<detail::MarkerIdTag>;
+using SectionId = detail::TimelineId<detail::SectionIdTag>;
+using PlacementId = detail::TimelineId<detail::PlacementIdTag>;
 
 // Serialised as an int, so these numbers are format. Values 3..15 are reserved for future
 // kinds; a file carrying one is rejected by fromVar rather than coerced into a kind this
