@@ -5,6 +5,7 @@
 #include "InstrumentTrackOpReader.h"
 #include "MidiClipFile.h"
 #include "TimelineOpsNotes.h"
+#include "TimelineOpsSections.h"
 #include "TimelineOpsTempoMarkers.h"
 #include "TimelineValidator.h"
 
@@ -793,6 +794,7 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
 
     juce::StringArray parts;
     std::vector<MarkerOpFields> markers;
+    SectionOpsProgress sectionOps;
     std::int64_t totalNotes = 0;
 
     for (int i = 0; i < ops.size(); ++i) {
@@ -824,10 +826,15 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
             result = hostOp(where, applySetSongKeyOp(*opObj, host, applyHost, parts));
         else if (opName == "addMarker")
             result = runAddMarker(where, *opObj, doc, markers);
+        else if (opName == "makeSection")
+            result = hostOp(where, runMakeSectionOp(*opObj, doc, sectionOps));
+        else if (opName == "placeSection")
+            result = hostOp(where, runPlaceSectionOp(*opObj, doc, sectionOps));
         else
             result = fail(index + " asks for unknown operation \"" + opName +
                           "\". The operations are \"addTrack\", \"addInstrumentTrack\", \"placeClips\", \"writeLane\", "
-                          "\"placeMidiClip\", \"setTempo\", \"setSongKey\" and \"addMarker\".");
+                          "\"placeMidiClip\", \"setTempo\", \"setSongKey\", \"addMarker\", \"makeSection\" and "
+                          "\"placeSection\".");
 
         if (!result.ok)
             return result;
@@ -835,6 +842,10 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
 
     if (const auto markerText = describeMarkers(markers); markerText.isNotEmpty())
         parts.add(markerText);
+    if (const auto madeText = describeMadeSections(sectionOps.made); madeText.isNotEmpty())
+        parts.add(madeText);
+    if (const auto placedText = describePlacedSections(sectionOps.placed); placedText.isNotEmpty())
+        parts.add(placedText);
 
     // Sentence-cased once at the end rather than per part, so the parts read as one sentence
     // ("Adds midi track \"Bass\"; places 1 clip …") however they are combined.
@@ -883,6 +894,8 @@ TimelineOpsResult TimelineOps::validate(const juce::var& envelope, const Timelin
 //    "Import MIDI…" menu item uses.
 //  - setTempo / setSongKey (applySetTempoOp / applySetSongKeyOp) set the transport tempo or key through the host,
 //    which records it in the batch's undo step; addMarker (runAddMarker) adds a named marker to the document.
+//  - makeSection / placeSection (runMakeSectionOp / runPlaceSectionOp, TimelineOpsSections.cpp) turn bars that
+//    already hold clips into a named section and play it again elsewhere, both inside the batch's one undo step.
 TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc,
                                      const juce::AudioProcessorGraph& graph, AppUndoManager& undo,
                                      TimelineOpsHost* host) {

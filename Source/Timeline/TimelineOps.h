@@ -94,7 +94,7 @@ struct TimelineOpsHost {
 /**
  * @brief The app-side timeline tools: discrete, validated, previewable operations a model
  *        may ask for (addTrack, addInstrumentTrack, placeClips, writeLane, placeMidiClip, setTempo, setSongKey,
- * addMarker), applied as ONE undo step.
+ * addMarker, makeSection, placeSection), applied as ONE undo step.
  *
  * A **sibling** of a patch suggestion, never nested inside one — `"timelineOps"` is a distinct
  * envelope key from `"timeline"`, so a response may legitimately carry both side by side. Trust

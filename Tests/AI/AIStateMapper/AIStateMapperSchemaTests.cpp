@@ -98,3 +98,26 @@ TEST(AIStateMapperTest, TimelineOpsGrammarAllowsSetTempoAndAddMarker) {
     EXPECT_EQ(opProperties->getProperty("bpm").getProperty("type", {}).toString(), "number");
     EXPECT_EQ(opProperties->getProperty("beat").getProperty("type", {}).toString(), "number");
 }
+
+// makeSection and placeSection are expressible through the local grammar: both ops in the enum, with the
+// "endBeat" field they add typed ("name", "startBeat" and "beat" are shared with other ops).
+TEST(AIStateMapperTest, TimelineOpsGrammarAllowsMakeSectionAndPlaceSection) {
+    const juce::var schema = synth::AIStateMapper::getPatchSchemaWithTimelineOps();
+    auto* opProperties = schema.getDynamicObject()
+                             ->getProperty("properties")
+                             .getDynamicObject()
+                             ->getProperty("timelineOps")
+                             .getDynamicObject()
+                             ->getProperty("items")
+                             .getDynamicObject()
+                             ->getProperty("properties")
+                             .getDynamicObject();
+    ASSERT_NE(opProperties, nullptr);
+    auto* ops = opProperties->getProperty("op").getProperty("enum", {}).getArray();
+    ASSERT_NE(ops, nullptr);
+    EXPECT_TRUE(ops->contains("makeSection"));
+    EXPECT_TRUE(ops->contains("placeSection"));
+    for (const char* field : {"startBeat", "endBeat", "beat"})
+        EXPECT_EQ(opProperties->getProperty(field).getProperty("type", {}).toString(), "number") << field;
+    EXPECT_EQ(opProperties->getProperty("name").getProperty("type", {}).toString(), "string");
+}
