@@ -335,7 +335,7 @@ public:
     // TimelineClipLaneEditTools.cpp for why this is a callback rather than a ClipContextChoice.
     std::function<void(synth::ClipId)> onRelinkAudioRequested;
     // Fired after "New variation of this part" with the placement now playing the new variation and the message to
-    // show ("Verse B: the lead is its own now. Switch with the B chip.").
+    // show ("Verse B: Lead has its own part now. Switch with the B chip.").
     std::function<void(synth::PlacementId, const juce::String&)> onVariationAdded;
 
     // ---- Render to audio track (see TimelineClipLaneRenderToAudio.cpp) ----

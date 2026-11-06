@@ -52,8 +52,8 @@ open in the piano roll, and by the Settings toggle below.
   `applyVariationMenuChoice` and the protected `openVariationMenu`.
 - **Clip menu, New variation of this part:** on a clip that starts inside a placement, after Make unique. The
   clip's track (and any the placement's variation already owns) becomes the placement's own in a new variation
-  and the placement plays it; one undo step, an outline on the placement and a toast such as "Verse B: the Lead
-  is its own now. Switch with the B chip." (`TimelineClipLaneArea::onVariationAdded`).
+  and the placement plays it; one undo step, an outline on the placement and a toast such as "Verse B: Lead has
+  its own part now. Switch with the B chip." (`TimelineClipLaneArea::onVariationAdded`).
 - **Strip menu** (right-click empty strip): Make sections from markers.
 - **From a range:** with the Range tool, the range menu's **Make section** (after "Delete range and close
   gap") or Shift+Cmd+J (`timelineMakeSection`, rebindable) turns the range into a section.

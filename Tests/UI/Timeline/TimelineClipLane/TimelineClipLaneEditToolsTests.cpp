@@ -399,7 +399,7 @@ TEST(TimelineClipLaneEditToolsTest, NewVariationOfThisPartMakesTheTracksMusicThe
     ASSERT_NE(f.doc.getVariation(f.doc.getPlacement(f.second)->section, 1), nullptr);
     EXPECT_EQ(f.doc.getVariation(f.doc.getPlacement(f.second)->section, 1)->ownTracks.count(f.lead.value), 1u);
     EXPECT_EQ(f.notified, f.second);
-    EXPECT_EQ(f.message, "Verse B: the Lead is its own now. Switch with the B chip.");
+    EXPECT_EQ(f.message, "Verse B: Lead has its own part now. Switch with the B chip.");
     EXPECT_TRUE(f.undo.undo());
     EXPECT_EQ(f.doc.getPlacement(f.second)->variation, 0);
     EXPECT_EQ(f.doc.getSection(f.doc.getPlacement(f.second)->section)->variations.size(), 1u);

@@ -691,8 +691,8 @@ void TimelineClipLaneArea::addVariationOfPart(synth::ClipId id) {
     if (letter < 0 || !onVariationAdded)
         return;
     const auto name = synth::variationLetter(letter);
-    onVariationAdded(placementId, sectionName + " " + name + ": the " + trackName +
-                                      " is its own now. Switch with the " + name + " chip.");
+    onVariationAdded(placementId, sectionName + " " + name + ": " + trackName +
+                                      " has its own part now. Switch with the " + name + " chip.");
 }
 
 } // namespace synth::ui
