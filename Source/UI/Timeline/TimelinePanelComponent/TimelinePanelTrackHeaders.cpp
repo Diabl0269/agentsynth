@@ -295,18 +295,24 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
 // Protected virtual for the same display-less-runner reason as
 // `TimelineRulerComponent::openMarkerContextMenu`: opening a call-out needs a display to be positioned
 // on. Tests reach the picker through addTrackPickerHookForTest() instead.
-void TimelinePanelComponent::openAddTrackMenu() { showAddTrackPickerFor(isAddTrackButtonFocused()); }
+void TimelinePanelComponent::openAddTrackMenu() {
+    const bool fromKeyboard = isAddTrackButtonFocused();
+    if (trackHeaderHost_ != nullptr && trackHeaderHost_->openAddList(addTrackButton_, fromKeyboard))
+        return;
+    showAddTrackPickerFor(fromKeyboard);
+}
 
-// The shortcut lands focus on "Add Track" first, then opens the picker as a keyboard open. Focus is passed on
-// explicitly because a real grab may not have taken effect by the time the picker is built.
+// The shortcut lands focus on "Add" first, then opens the list as a keyboard open. Focus is passed on
+// explicitly because a real grab may not have taken effect by the time the list is built.
 void TimelinePanelComponent::openAddTrackMenuFromShortcut() {
     focusAddTrackButton();
+    if (trackHeaderHost_ != nullptr && trackHeaderHost_->openAddList(addTrackButton_, true))
+        return;
     showAddTrackPickerFor(true);
 }
 
-// Builds the menu (the one source of the entries and of the build-time snapshots), adds "Create Channels", and shows
-// it flattened as a searchable picker. A pick resolves by the menu item's id, exactly as a menu click did.
-void TimelinePanelComponent::showAddTrackPickerFor(bool fromKeyboard) {
+// The add menu with "Create Channels", the one source of the track rows and of the build-time snapshots.
+juce::PopupMenu TimelinePanelComponent::buildAddMenuWithChannels() {
     juce::PopupMenu menu = buildAddTrackMenu();
 
     // docs/mixer/mixer.md#creating-channels-in-an-existing-project: disabled rather than hidden when
@@ -315,6 +321,13 @@ void TimelinePanelComponent::showAddTrackPickerFor(bool fromKeyboard) {
     menu.addSeparator();
     const bool canCreateChannels = trackHeaderHost_ != nullptr && trackHeaderHost_->hasTracksNeedingChannels();
     menu.addItem(kCreateChannelsMenuId, "Create Channels", canCreateChannels);
+    return menu;
+}
+
+// Shows the add menu flattened as a searchable track-only picker. A pick resolves by the menu item's id, exactly as a
+// menu click did.
+void TimelinePanelComponent::showAddTrackPickerFor(bool fromKeyboard) {
+    juce::PopupMenu menu = buildAddMenuWithChannels();
 
     juce::Component::SafePointer<TimelinePanelComponent> safeThis(this);
     // finishAddTrackMenu hands focus back after a pick; a close without one (Escape, a click away) does it here.

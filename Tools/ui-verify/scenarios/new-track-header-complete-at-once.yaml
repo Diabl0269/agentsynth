@@ -17,7 +17,7 @@ steps:
   - wait: {}
   - click: {id: timelineAddTrackButton}
   - wait: {}
-  - click: {id: "modMatrixPicker > Oscillator"}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
   - expect: {id: trackVoiceToggle, bounds: {x: 71, y: 774, w: 20, h: 20}, within_ms: 1}
   - expect: {id: trackChannelChip, bounds: {x: 94, y: 773, w: 80, h: 23}, within_ms: 1}
   - expect: {id: trackShowModuleButton, bounds: {x: 177, y: 774, w: 20, h: 20}, within_ms: 1}

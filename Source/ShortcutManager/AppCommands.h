@@ -119,7 +119,7 @@ enum CommandIDs {
     collectAndArchive,
     // Folds every selected macro and, with the "pack" preference on, tidies their cards into a grid.
     foldAndPackMacros,
-    // Shows the Timeline, focuses "Add Track" and opens its searchable menu.
+    // Opens the Add list: from the canvas toolbar when the canvas has focus, else via the Timeline's Add button.
     openAddTrackMenu,
     // On the one selected module card: opens the inline title editor / the "Replace with..." search.
     renameSelectedModule,

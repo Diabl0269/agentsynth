@@ -5,9 +5,9 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // CanvasToolbar (docs/layout/chrome.md#canvas-toolbar): the small strip on the canvas's own top row holding
-// Auto Arrange, Minimap and Matrix. The owner lays it out as the top row of whatever rectangle the canvas
+// Add, Auto Arrange, Minimap and Matrix. The owner lays it out as the top row of whatever rectangle the canvas
 // has (the main area, or the bottom panel's Canvas tab body) and hides it with the canvas, so it always
-// travels with the canvas. It owns its three ToolbarButtons; the owner wires their onClick, titles, tooltips
+// travels with the canvas. It owns its four ToolbarButtons; the owner wires their onClick, titles, tooltips
 // and icons, as it does for the top bar's buttons.
 //
 // One Tab stop: while it holds focus, Left/Right/Home/End move a ring across the visible, enabled buttons
@@ -16,13 +16,14 @@ namespace synth::ui {
 
 class CanvasToolbar : public juce::Component {
 public:
-    enum Slot { AutoArrange = 0, Minimap, Matrix, NumSlots };
+    enum Slot { Add = 0, AutoArrange, Minimap, Matrix, NumSlots };
 
     // The strip's height in px: the ToolbarButton's chip, a one-line caption and a 1 px inset above and below.
     static constexpr int kHeight = 44;
 
     CanvasToolbar();
 
+    ToolbarButton& addButton() noexcept { return add_; }
     ToolbarButton& autoArrangeButton() noexcept { return autoArrange_; }
     ToolbarButton& minimapButton() noexcept { return minimap_; }
     ToolbarButton& matrixButton() noexcept { return matrix_; }
@@ -47,6 +48,8 @@ public:
     int getFocusedSlot() const;
     // The spoken name of that button; empty when there is none.
     juce::String getFocusedButtonName() const;
+    // Puts the ring on `slot` (when it is navigable) and takes keyboard focus. Message thread only.
+    void focusSlot(Slot slot);
 
 protected:
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
@@ -57,6 +60,7 @@ private:
     int navigableSlotFrom(int from, int step) const;
     void setFocusedSlot(int slot);
 
+    ToolbarButton add_{"canvasAdd"};
     ToolbarButton autoArrange_{"autoArrange"};
     ToolbarButton minimap_{"toggleMinimap"};
     ToolbarButton matrix_{"toggleMatrix"};

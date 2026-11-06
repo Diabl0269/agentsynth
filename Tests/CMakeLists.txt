@@ -843,6 +843,8 @@ add_executable(Tests
     UI/PianoRoll/PianoRollFocusedNoteTests.cpp
     UI/PianoRoll/PianoRollKeyboardReachTests.cpp
     UI/Chrome/CanvasToolbarTests.cpp
+    UI/AddList/AddListTests.cpp
+    UI/AddList/AddListMainComponentTests.cpp
     UI/Chrome/ToolbarKeyboardTests.cpp
     UI/Chrome/ToolbarTitlesTests.cpp
     UI/Chrome/ToolbarButton/ToolbarButtonPaintTests.cpp

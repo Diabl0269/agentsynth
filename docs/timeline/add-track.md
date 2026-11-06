@@ -2,15 +2,35 @@
 
 The `"Add Track"` button at the top of the timeline panel's header column, and every flow it starts. The button is an
 amber icon chip with its name beside it (the chip alone when Show button labels is off; [inline
-buttons](../layout/chrome.md#inline-buttons)); its screen-reader name is "Add Track" either way.
+buttons](../layout/chrome.md#inline-buttons)); its label and screen-reader name are "Add" either way.
 The header rows it creates are [tracks](tracks.md); the channel chains it builds are
 [`docs/mixer/mixer.md`](../mixer/mixer.md#building-a-channel).
 
+## The Add list
+
+The button opens the **Add list**: one searchable list of tracks, modules, presets, snippets and markers, the same list
+the canvas toolbar's **Add** button opens. Each row ends with a muted kind word (Track, Module, Track preset, Bus preset,
+Snippet, Marker) that the search also matches, so "track sam" leaves only the Sampler track; a screen reader reads it
+after the name ("Sampler, Track"). Opened from the Timeline the track groups come first, from the canvas the module
+groups; More (Insert Track Preset from File..., Add Marker, Create Channels) is always last.
+
+- A track or marker row does what the picker below did: the Timeline is shown if it is not, then `finishAddTrackMenu(id)`.
+- A module, plugin card or snippet row does what Return on that row in the library sidebar does
+  (`ModuleLibraryComponent::activateAddListRow`): the canvas shows and the card goes after the one selected card, or at
+  the view centre. A module already on the canvas that allows only one (Audio Input/Output) stays greyed with its reason.
+
+`AddList.h` (`Source/UI/AddList/`) orders and tags the rows: track rows keep their menu ids, library rows get
+`kAddListLibraryIdBase + index`. `MainComponent::openAddList(origin, anchor, fromKeyboard)` builds them (the library
+rows are read once when the list opens and found again by identity at pick time, like the plugin snapshot below),
+and the Timeline reaches it through `TrackHeaderHost::openAddList`; with no host (tests) its own track-only picker
+opens. Cmd+T opens the list from the canvas toolbar's Add button when the canvas or its toolbar has keyboard focus,
+otherwise from the Timeline's. After a keyboard open focus goes back to the button that opened it.
+
 ## The picker
 
-`"Add Track"` is the first keyboard stop of the header column: Down from the bottom-panel tab strip (Timeline selected) or from the Timeline region root lands on it
+`"Add"` is the first keyboard stop of the header column: Down from the bottom-panel tab strip (Timeline selected) or from the Timeline region root lands on it
 and Down again on the first track; it is also the stop below the last track (the arrow-key table is in
-[shortcuts](../control/shortcuts.md#timeline)). Its tooltip names the live **Add Track...** shortcut (Cmd+T on
+[shortcuts](../control/shortcuts.md#timeline)). Its tooltip names the live **Add...** shortcut (Cmd+T on
 macOS, Ctrl+Alt+T elsewhere, rebindable). Pressing it, or the shortcut, opens a **searchable picker** in a call-out
 under the button: the same shared list as a module card's "Replace with..." (`synth::ui::ModMatrixPicker`). The search
 field has focus, so typing filters at once (all words, any order); Up/Down move, Return picks the first match until

@@ -86,8 +86,29 @@ TEST(MixerSpaceKeyTest, EveryFocusableMixerButtonConsumesSpaceAndClicksOnce) {
     panel.setSize(1400, 700);
     panel.resized();
 
-    // Let every pending rebuild and fade land, or a column is replaced under a button mid-press.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(400);
+    // Let every pending rebuild and fade land, or a column is replaced under a button mid-press. A fixed wait lost
+    // this race on a loaded machine, so wait until the set of buttons has held still for a while.
+    const auto snapshot = [&panel] {
+        std::vector<juce::Component::SafePointer<juce::Button>> found;
+        collectButtons(panel, panel, found);
+        std::vector<const juce::Button*> raw;
+        for (auto& b : found)
+            raw.push_back(b.getComponent());
+        return raw;
+    };
+    auto last = snapshot();
+    auto stableSince = juce::Time::getMillisecondCounter();
+    ASSERT_TRUE(synth::test::waitUntil(
+        [&] {
+            auto now = snapshot();
+            if (now != last) {
+                last = std::move(now);
+                stableSince = juce::Time::getMillisecondCounter();
+            }
+            return juce::Time::getMillisecondCounter() - stableSince >= 400;
+        },
+        10000, 20))
+        << "the mixer's buttons kept being rebuilt";
     std::vector<juce::Component::SafePointer<juce::Button>> buttons;
     collectButtons(panel, panel, buttons);
     // Toolbar toggles + add bus + reset meters + chips + dots + icon buttons + rows' bypass: well over a dozen.

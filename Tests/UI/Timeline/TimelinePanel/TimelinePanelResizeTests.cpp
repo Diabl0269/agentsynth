@@ -14,7 +14,7 @@
 
 TEST(TimelinePanelComponentTest, AddTrackButtonCarriesATooltip) {
     synth::ui::TimelinePanelComponent panel;
-    EXPECT_EQ(panel.getAddTrackButton().getTooltip(), "Add Track: a track or marker; type to search");
+    EXPECT_EQ(panel.getAddTrackButton().getTooltip(), "Add a track, module, preset or marker");
 }
 
 // ============================================================================
@@ -27,7 +27,7 @@ TEST(TimelinePanelToolbarButtonsTest, AddTrackAndSnapShowTheirNameBesideTheIconA
     auto& addTrack = panel.getAddTrackButton();
     auto& snap = panel.getSnapToggleButton();
 
-    EXPECT_EQ(addTrack.getButtonText(), "Add Track");
+    EXPECT_EQ(addTrack.getButtonText(), "Add");
     EXPECT_EQ(snap.getButtonText(), "Snap");
     for (auto* b : {&addTrack, &snap}) {
         EXPECT_TRUE(b->isInline()) << b->getName();
@@ -57,9 +57,9 @@ TEST(TimelinePanelToolbarButtonsTest, WithLabelsOffTheButtonsAreIconsOnlyAndTheB
     auto& snap = panel.getSnapToggleButton();
     EXPECT_TRUE(addTrack.getButtonText().isEmpty());
     EXPECT_TRUE(snap.getButtonText().isEmpty());
-    EXPECT_EQ(addTrack.getTitle(), "Add Track") << "the screen-reader name stays the full name";
+    EXPECT_EQ(addTrack.getTitle(), "Add") << "the screen-reader name stays the full name";
     EXPECT_EQ(snap.getTitle(), "Snap");
-    EXPECT_TRUE(addTrack.getTooltip().containsIgnoreCase("Add Track")) << addTrack.getTooltip();
+    EXPECT_TRUE(addTrack.getTooltip().containsIgnoreCase("Add a track")) << addTrack.getTooltip();
     EXPECT_TRUE(snap.getTooltip().containsIgnoreCase("Snap on/off")) << snap.getTooltip();
     EXPECT_TRUE(snap.getTooltip().contains("(j)")) << "the shortcut stays in the tooltip";
     EXPECT_LT(snap.getWidth(), labelledSnapWidth);

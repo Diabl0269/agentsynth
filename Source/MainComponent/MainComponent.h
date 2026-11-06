@@ -85,6 +85,7 @@ class TelemetryService; // Telemetry/TelemetryService.h
 namespace ui {
 class LibrarySidebarViews;    // UI/Library/LibrarySidebarViews.h
 enum class SidebarView : int; // UI/Library/LibrarySidebarSwitch.h
+enum class AddListOrigin;     // UI/AddList/AddList.h
 class ProjectLoadPipeline;    // UI/Graph/ProjectLoad/ProjectLoadPipeline.h
 } // namespace ui
 } // namespace synth
@@ -206,6 +207,8 @@ public:
     /** Makes the canvas visible before something selects or frames a card on it: a no-op while the canvas is the
      *  main view, else opens the dock on its Canvas tab. */
     void ensureCanvasShowing();
+    /** Opens the Add list (tracks, modules, presets) under `anchor`; a pick adds as the row's own button would. */
+    void openAddList(synth::ui::AddListOrigin origin, juce::Component& anchor, bool fromKeyboard);
     /** The id of the focus region of the view in the main area ("canvas", "timeline", "mixer", "midiRemote"). */
     juce::String getMainViewFocusRegionId() const;
     /** Opens the dock unless `view` is in the main area (where it shows whether or not the dock is open). */
@@ -534,6 +537,7 @@ private:
     };
 
     // ---- TrackHeaderHost ----
+    bool openAddList(juce::Component& anchor, bool fromKeyboard) override;
     std::vector<BindingOption> getAvailableTrackInNodes(synth::TrackId forTrack) override;
     juce::String getNodeDisplayName(const juce::String& uuid) override;
     juce::String getParameterDisplayName(const juce::String& uuid, const juce::String& paramId) override;

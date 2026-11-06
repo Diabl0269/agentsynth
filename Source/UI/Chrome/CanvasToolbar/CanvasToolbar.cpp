@@ -21,10 +21,11 @@ CanvasToolbar::CanvasToolbar() {
     // buttons below give up focus of their own so the roving ring is the only indicator.
     setWantsKeyboardFocus(true);
     setTitle("Canvas toolbar");
-    for (auto* b : {&autoArrange_, &minimap_, &matrix_}) {
+    for (auto* b : {&add_, &autoArrange_, &minimap_, &matrix_}) {
         addAndMakeVisible(*b);
         b->setWantsKeyboardFocus(false);
     }
+    add_.setComponentID("canvasToolbar:add");
     autoArrange_.setComponentID("autoArrangeButton");
     minimap_.setComponentID("toggleMinimap");
     matrix_.setComponentID("toggleModMatrix");
@@ -32,6 +33,8 @@ CanvasToolbar::CanvasToolbar() {
 
 ToolbarButton& CanvasToolbar::buttonAt(Slot slot) noexcept {
     switch (slot) {
+    case Add:
+        return add_;
     case AutoArrange:
         return autoArrange_;
     case Minimap:
@@ -124,6 +127,12 @@ juce::String CanvasToolbar::getFocusedButtonName() const {
         return {};
     const auto& b = buttonAt((Slot)slot);
     return b.getTitle().isNotEmpty() ? b.getTitle() : b.getButtonText();
+}
+
+void CanvasToolbar::focusSlot(Slot slot) {
+    if (isNavigable(slot))
+        setFocusedSlot(slot);
+    grabKeyboardFocus();
 }
 
 void CanvasToolbar::setFocusedSlot(int slot) {

@@ -76,6 +76,7 @@ public:
         header_ = true;
         text_ = text;
         detail_ = {};
+        tag_ = {};
         isCurrent_ = ticked_ = isNew_ = gutter_ = false;
         setTitle(text);
         setTooltip({});
@@ -93,9 +94,11 @@ public:
         isCurrent_ = isCurrent;
         ticked_ = item.ticked;
         isNew_ = item.isNew;
+        tag_ = item.tag;
         gutter_ = gutter;
         const auto spoken = detail_.isNotEmpty() ? text_ + ", " + detail_ : text_;
-        setTitle(item.accessibleName.isNotEmpty() ? item.accessibleName : spoken);
+        const auto announced = tag_.isNotEmpty() ? spoken + ", " + tag_ : spoken;
+        setTitle(item.accessibleName.isNotEmpty() ? item.accessibleName : announced);
         setTooltip(spoken);
         setEnabled(item.enabled);
         setInterceptsMouseClicks(true, true);
@@ -140,9 +143,11 @@ public:
         auto content = bounds.reduced(12, 0);
         if (gutter_) {
             paintMark(g, content.removeFromLeft(kGlyphGutter));
-            if (isNew_)
-                paintNewTag(g, content);
         }
+        if (isNew_)
+            paintTag(g, content, "New");
+        else if (tag_.isNotEmpty())
+            paintTag(g, content, tag_);
         if (detail_.isEmpty()) {
             drawSearchHighlightedText(g, text_, query_, content, rowFont, textColour, fill, palette_.accent);
             return;
@@ -171,18 +176,18 @@ public:
         }
     }
 
-    // The "New" tag at the row's right edge, which takes that width off `content`.
-    void paintNewTag(juce::Graphics& g, juce::Rectangle<int>& content) const {
+    // A tag ("New", or the row's kind word) at the row's right edge, which takes that width off `content`.
+    void paintTag(juce::Graphics& g, juce::Rectangle<int>& content, const juce::String& label) const {
         const juce::Font font(juce::FontOptions(kTagFontSize, juce::Font::bold));
         juce::GlyphArrangement glyphs;
-        glyphs.addLineOfText(font, "New", 0.0f, 0.0f);
+        glyphs.addLineOfText(font, label, 0.0f, 0.0f);
         const int width = (int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth()) + 10;
         const auto tag = content.removeFromRight(width).withSizeKeepingCentre(width, 14).toFloat();
         content.removeFromRight(6);
         g.setColour(palette_.muted);
         g.drawRoundedRectangle(tag.reduced(0.5f), 4.0f, 1.0f);
         g.setFont(font);
-        g.drawText("New", tag, juce::Justification::centred, false);
+        g.drawText(label, tag, juce::Justification::centred, false);
     }
 
     void mouseEnter(const juce::MouseEvent&) override {
@@ -204,6 +209,7 @@ private:
     bool header_ = false;
     juce::String text_;
     juce::String detail_;
+    juce::String tag_;
     juce::String query_;
     bool isCurrent_ = false;
     bool ticked_ = false;
@@ -297,7 +303,7 @@ void ModMatrixPicker::rebuildRows() {
         Entry entry;
         entry.item = (int)i;
         entry.height = item.detail.isNotEmpty() ? kDetailRowHeight : kRowHeight;
-        entry.haystack = item.text + " " + item.detail + " " + item.searchText;
+        entry.haystack = item.text + " " + item.detail + " " + item.searchText + " " + item.tag;
         entries_.push_back(std::move(entry));
     }
     applyFilter();
@@ -569,6 +575,8 @@ void ModMatrixPicker::setHighlight(int visibleItemIndex) {
     // Keep the highlighted row inside the viewport; the move gives it a component if it had none.
     const auto& entry = entries_[(size_t)target];
     const auto view = viewport_.getViewArea();
+    if (view.isEmpty())
+        return; // not laid out yet (the constructor): a zero-height view would scroll the first rows out of sight
     if (entry.y < view.getY())
         viewport_.setViewPosition(0, entry.y);
     else if (entry.y + entry.height > view.getBottom())

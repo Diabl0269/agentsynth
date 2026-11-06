@@ -98,6 +98,8 @@ theme was active before that, so without this the field showed stale colours unt
 switch. `parentHierarchyChanged()` fires when `MainComponent::initialiseCommon()` calls
 `addAndMakeVisible(moduleLibrary)`, which always runs after that ctor-body `applyTheme()` call.
 
+The [Add list](../timeline/add-track.md#the-add-list) reads the same catalogue (`getAddListRows()`): every module, plugin card and snippet, whatever the collapse state or filter, and a pick runs the same path as Return on the row.
+
 ## Screen reader
 
 The rows are painted, not components, so the library is one accessibility element: a **list** titled

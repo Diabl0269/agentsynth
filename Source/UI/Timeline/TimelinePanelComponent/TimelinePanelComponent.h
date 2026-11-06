@@ -431,8 +431,7 @@ public:
     void selectAllTracks(); // Cmd+A on a track row: every track, focus stays on the focused one
 
     // ---- Track headers ----
-    // Menu ids for the "Add Track" button's menu. Numbered from 1 because juce::PopupMenu reserves 0
-    // for "dismissed".
+    // Menu ids for the Add menu; from 1 because juce::PopupMenu reserves 0 for "dismissed".
     static constexpr int kAddMidiTrackMenuId = 1;
     static constexpr int kAddAudioTrackMenuId = 2;
     // Below a separator, because a marker is NOT a track: it adds no header row and no graph node.
@@ -571,6 +570,8 @@ public:
      *  submenus). Triggers ensureInstrumentPluginsScanned() on the host first (openAddTrackMenu()'s
      *  own contract), so the Plugin submenu this builds reflects a scan that has at least started. */
     juce::PopupMenu buildAddTrackMenu();
+    /** buildAddTrackMenu() plus the "Create Channels" row: every track row the Add list offers. */
+    juce::PopupMenu buildAddMenuWithChannels();
 
     /** The Instrument submenu's "Plugin" sub-submenu options, re-collected fresh on every call --
      *  see kAddInstrumentPluginNoneMenuId's comment for why applyAddTrackMenuChoice resolves a
@@ -579,10 +580,8 @@ public:
     std::vector<synth::PluginIdentity> collectInstrumentPluginMenuOptions() const;
 
 protected:
-    /** Opens the "Add Track" button's searchable picker (MIDI Track / Audio Track / Instrument Tracks / plugins /
-     *  presets / Add Marker). The default implementation launches a call-out. Protected virtual so a
-     *  headless test can override it rather than crash on the display-less window -- see its
-     *  definition in TimelinePanelTrackHeaders.cpp. */
+    /** Opens the Add button's list: the host's (tracks, modules, presets) when it offers one, else the track-only
+     *  picker. Protected virtual so a headless test can override it rather than crash on the display-less window. */
     virtual void openAddTrackMenu();
 
 private:
@@ -882,7 +881,7 @@ private:
     synth::TrackId auditionTrackLatch_;
 
     // The button opens a MIDI/Audio menu rather than adding a MIDI track outright.
-    ToolbarButton addTrackButton_{"Add Track"};
+    ToolbarButton addTrackButton_{"Add"};
     EdgeResizeHandle trackHeaderWidthHandle_{EdgeResizeHandle::Axis::Horizontal};
     int trackHeaderWidth_ = 0; // 0 = the themed default
     int trackHeaderWidthAtPress_ = 0;

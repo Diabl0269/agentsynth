@@ -41,6 +41,8 @@ protected:
 } // namespace
 
 TEST_F(CanvasToolbarKeysTest, TheRingStartsOnTheFirstButtonAndArrowsMoveItWithoutWrapping) {
+    EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::Add);
+    EXPECT_TRUE(press(toolbar_, juce::KeyPress::rightKey));
     EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::AutoArrange);
     EXPECT_TRUE(press(toolbar_, juce::KeyPress::rightKey));
     EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::Minimap);
@@ -49,14 +51,15 @@ TEST_F(CanvasToolbarKeysTest, TheRingStartsOnTheFirstButtonAndArrowsMoveItWithou
     EXPECT_TRUE(press(toolbar_, juce::KeyPress::rightKey));
     EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::Matrix) << "no wrap at the right end";
     EXPECT_TRUE(press(toolbar_, juce::KeyPress::homeKey));
-    EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::AutoArrange);
+    EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::Add);
     EXPECT_TRUE(press(toolbar_, juce::KeyPress::leftKey));
-    EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::AutoArrange) << "no wrap at the left end";
+    EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::Add) << "no wrap at the left end";
     EXPECT_TRUE(press(toolbar_, juce::KeyPress::endKey));
     EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::Matrix);
 }
 
 TEST_F(CanvasToolbarKeysTest, SpaceAndReturnPressTheRingedButton) {
+    press(toolbar_, juce::KeyPress::rightKey);
     press(toolbar_, juce::KeyPress::rightKey);
     EXPECT_TRUE(press(toolbar_, juce::KeyPress::returnKey));
     EXPECT_TRUE(press(toolbar_, juce::KeyPress::spaceKey));
@@ -65,6 +68,7 @@ TEST_F(CanvasToolbarKeysTest, SpaceAndReturnPressTheRingedButton) {
 
 TEST_F(CanvasToolbarKeysTest, ADisabledButtonIsSkippedAndModifiedChordsBubbleUp) {
     toolbar_.minimapButton().setEnabled(false);
+    toolbar_.focusSlot(CanvasToolbar::AutoArrange);
     press(toolbar_, juce::KeyPress::rightKey);
     EXPECT_EQ(toolbar_.getFocusedSlot(), (int)CanvasToolbar::Matrix) << "the greyed Minimap is not a stop";
     EXPECT_FALSE(press(toolbar_, juce::KeyPress::leftKey, juce::ModifierKeys::commandModifier));
@@ -85,6 +89,27 @@ TEST_F(CanvasToolbarKeysTest, IconOnlyNarrowsTheButtons) {
     EXPECT_LT(toolbar_.autoArrangeButton().getWidth(), labelled);
     toolbar_.setIconOnly(false);
     EXPECT_EQ(toolbar_.autoArrangeButton().getWidth(), labelled);
+}
+
+TEST_F(CanvasToolbarKeysTest, AddIsTheFirstOfFourSlots) {
+    EXPECT_EQ((int)CanvasToolbar::NumSlots, 4);
+    EXPECT_EQ((int)CanvasToolbar::Add, 0);
+    EXPECT_EQ(&toolbar_.buttonAt(CanvasToolbar::Add), &toolbar_.addButton());
+    EXPECT_EQ(toolbar_.addButton().getComponentID(), "canvasToolbar:add");
+    EXPECT_LT(toolbar_.addButton().getX(), toolbar_.autoArrangeButton().getX());
+}
+
+TEST_F(CanvasToolbarKeysTest, IconOnlyLaysFourButtonsOutWithoutOverlap) {
+    for (const bool iconOnly : {false, true}) {
+        toolbar_.setIconOnly(iconOnly);
+        for (int a = 0; a + 1 < CanvasToolbar::NumSlots; ++a) {
+            const auto left = toolbar_.buttonAt((CanvasToolbar::Slot)a).getBounds();
+            const auto right = toolbar_.buttonAt((CanvasToolbar::Slot)(a + 1)).getBounds();
+            EXPECT_FALSE(left.getWidth() == 0) << a;
+            EXPECT_LE(left.getRight(), right.getX()) << "slot " << a << " iconOnly " << iconOnly;
+        }
+        EXPECT_LE(toolbar_.matrixButton().getRight(), toolbar_.getWidth());
+    }
 }
 
 // ---- Inside the window ---------------------------------------------------------------------------------------------
@@ -134,8 +159,8 @@ protected:
 
 } // namespace
 
-TEST_F(CanvasToolbarWindowTest, TheThreeButtonsAreOnTheCanvasToolbarAndNotOnTheTopBar) {
-    for (const char* id : {"autoArrangeButton", "toggleMinimap", "toggleModMatrix"}) {
+TEST_F(CanvasToolbarWindowTest, TheFourButtonsAreOnTheCanvasToolbarAndNotOnTheTopBar) {
+    for (const char* id : {"canvasToolbar:add", "autoArrangeButton", "toggleMinimap", "toggleModMatrix"}) {
         EXPECT_NE(strip().findChildWithID(id), nullptr) << id << " is on the canvas toolbar";
         EXPECT_EQ(mc_->findChildWithID(id), nullptr) << id << " left the window's own children";
     }
@@ -202,7 +227,7 @@ TEST_F(CanvasToolbarWindowTest, TurningOffShowButtonLabelsLeavesEveryTopBarAndCa
     mc_->setSize(1600, 900);
     ASSERT_FALSE(mc_->getToolbar().isNarrowMode());
     const auto buttons = everyButton();
-    ASSERT_EQ(buttons.size(), 14) << "eleven on the top bar, three on the canvas toolbar";
+    ASSERT_EQ(buttons.size(), 15) << "eleven on the top bar, four on the canvas toolbar";
     for (auto* b : buttons)
         EXPECT_FALSE(b->getButtonText().isEmpty()) << b->getComponentID() << " starts with a caption";
     const int labelledWidth = strip().autoArrangeButton().getWidth();
@@ -242,6 +267,7 @@ TEST_F(CanvasToolbarWindowTest, TheGreyedMinimapKeepsItsExplanationAndIsNotATabS
         GTEST_SKIP() << "the canvas is tall enough here to keep its minimap";
     EXPECT_FALSE(strip().minimapButton().isEnabled());
     EXPECT_EQ(strip().minimapButton().getTooltip(), "Needs a taller canvas");
+    strip().focusSlot(CanvasToolbar::AutoArrange);
     press(strip(), juce::KeyPress::rightKey);
     EXPECT_NE(strip().getFocusedSlot(), (int)CanvasToolbar::Minimap);
 }

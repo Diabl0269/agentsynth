@@ -47,9 +47,9 @@ struct SearchSpan {
  *  hits merged. Empty for a blank query or empty text. */
 std::vector<SearchSpan> searchHighlightSpans(const juce::String& text, const juce::String& query);
 
-/** Draws `text` in `normal` inside `bounds`; the letters `query` matched get a rounded `highlightFill`
- *  behind them and are drawn in `highlightText`. With no match it is a plain ellipsised drawText. This
- *  fill-plus-colour look is THE search highlight; no animation is involved. */
+/** Draws `text` in `normal` inside `bounds`; the letters `query` matched are drawn bold in
+ *  `highlightText` with no fill behind them (`highlightFill` is kept for the callers' sake and ignored). With no
+ *  match it is a plain ellipsised drawText. This is THE search highlight; no animation is involved. */
 void drawSearchHighlightedText(juce::Graphics& g, const juce::String& text, const juce::String& query,
                                juce::Rectangle<int> bounds, const juce::Font& font, juce::Colour normal,
                                juce::Colour highlightFill, juce::Colour highlightText,

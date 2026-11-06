@@ -3,6 +3,8 @@
 #include "Branding.h"
 #include "MainComponent.h"
 #include "ShortcutManager/AppCommands.h"
+#include "UI/AddList/AddList.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/KeyboardContextMenu.h"
 #include "UI/Library/LibrarySidebarViews.h"
 
@@ -81,13 +83,25 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
          "Open the colour picker of the item that has keyboard focus", "General", "recolourFocusedItem",
          [](const MainComponent& m) { return m.isWelcomeScreenHidden(); },
          [](MainComponent& m) { return synth::ui::openColourForFocusedComponent(m.getFocusedComponentForMenu()); }},
-        // Opens the Timeline if needed (focusRegionById runs the region's open hook), then its "Add Track" picker once
-        // the slide has settled.
-        {AppCommands::openAddTrackMenu, "Add Track...", "Show the Timeline, focus Add Track and open its search",
-         "General", "openAddTrackMenu", [](const MainComponent& m) { return m.isWelcomeScreenHidden(); },
+        // With keyboard focus on the canvas (or its toolbar) it opens the Add list from the canvas toolbar's Add
+        // button.
+        // Otherwise it opens the Timeline if needed (focusRegionById runs the region's open hook), then the list from
+        // the Timeline's Add button once the slide has settled.
+        {AppCommands::openAddTrackMenu, "Add...",
+         "Open the Add list of tracks, modules and presets from the focused view's Add button", "General",
+         "openAddTrackMenu", [](const MainComponent& m) { return m.isWelcomeScreenHidden(); },
          [](MainComponent& m) {
+             const auto* focused = m.getFocusedComponentForMenu();
+             const auto holdsFocus = [focused](const juce::Component& c) {
+                 return focused != nullptr && (focused == &c || c.isParentOf(focused));
+             };
+             if ((holdsFocus(m.graphEditor) || holdsFocus(m.canvasToolbar_)) && m.canvasToolbar_.isVisible()) {
+                 m.canvasToolbar_.focusSlot(synth::ui::CanvasToolbar::Add);
+                 m.openAddList(synth::ui::AddListOrigin::Canvas, m.canvasToolbar_.addButton(), true);
+                 return true;
+             }
              m.focusRegions_.focusRegionById("timeline");
-             // The picker anchors under "+ Track", which has no place until the show slide lands.
+             // The list anchors under the Timeline's Add button, which has no place until the show slide lands.
              m.timelineSlide_.whenSettled(
                  [safe = juce::Component::SafePointer<MainComponent>(&m), sliding = m.timelineSlide_.isMoving()] {
                      // A slide closed again before it landed leaves nothing to anchor to.
