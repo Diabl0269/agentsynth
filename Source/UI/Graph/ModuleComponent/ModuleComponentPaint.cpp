@@ -653,6 +653,56 @@ const juce::Component* ModuleComponent::moreRowButtonForKnobOnlyJack(int index) 
     return nullptr;
 }
 
+// The gutter place of input jack `clamped` when the jacks in `drawn` (packed, ascending) are the ones drawn. Shared by
+// getPortCenter and foldedJackCentre, so a jack's place after a fold is the one it takes when the fold has ended.
+juce::Point<int> ModuleComponent::gutterInputJackCentre(const std::vector<int>& drawn, int clamped) const {
+    constexpr int yStep = 20;
+    const int headerHeight = kPortGutterHeaderHeight;
+    const int portOffset = module->producesMidi() ? 20 : 0; // clears MIDI Out at (getWidth() - 10, 38)
+    int packedIndex = 0;
+    for (int d : drawn) {
+        if (d == clamped)
+            break;
+        ++packedIndex;
+    }
+    const int drawnCount = (int)drawn.size();
+
+    // Multi-column gutter: a 16-jack stack in one column costs ~390px of card height before a
+    // single control is placed. Both columns stay on the LEFT: inputs-left / outputs-right is
+    // the convention that makes signal flow read left to right, and splitting inputs across
+    // both edges costs more in comprehension than the height saves. The interior column being
+    // partly covered by its own module while you drag a cable at it is solved by dropping
+    // straight onto the destination knob instead (see GraphEditor's mod-drop).
+    const int columns = getInputPortColumns();
+    if (columns > 1 && drawnCount > 0) {
+        const int rows = (drawnCount + columns - 1) / columns;
+        const int col = packedIndex / rows;
+        const int row = packedIndex % rows;
+        return {10 + col * kPortColumnStride, headerHeight + portOffset + row * yStep + 20};
+    }
+    return {10, headerHeight + portOffset + packedIndex * yStep + 20}; // Left side, apply offset
+}
+
+// A cable landing on a knob whose jack has a gutter row of its own (not knob-only): where that row is once the knob
+// no longer shows, i.e. the drawn column with this jack added back. Null when the cable lands on no such knob.
+std::optional<juce::Point<float>> ModuleComponent::foldedJackCentre(int destChannel) const {
+    auto* mb = dynamic_cast<ModuleBase*>(module);
+    if (mb == nullptr)
+        return std::nullopt;
+    for (const auto& target : mb->getModulationTargets()) {
+        if (target.channelIndex != destChannel)
+            continue;
+        const int visible = mb->getVisibleInputPortCount();
+        const int jack = mb->mapInputChannel(destChannel).visibleJackIndex;
+        if (target.knobOnly || jack < 0 || jack >= visible || !isInputJackKnobBound(jack))
+            return std::nullopt;
+        auto drawn = drawnInputJackIndices();
+        drawn.insert(std::lower_bound(drawn.begin(), drawn.end(), jack), jack);
+        return gutterInputJackCentre(drawn, jack).toFloat();
+    }
+    return std::nullopt;
+}
+
 juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
     if (module == nullptr)
         return {0, 0};
@@ -722,29 +772,7 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         // Not knob-bound: its drawn ROW is its rank among the other non-knob-bound jacks, not its
         // raw visible index -- a knob-bound jack ahead of it in the index order takes no row, so
         // the column packs with no gap where that jack would have sat.
-        const auto drawn = drawnInputJackIndices();
-        int packedIndex = 0;
-        for (int d : drawn) {
-            if (d == clamped)
-                break;
-            ++packedIndex;
-        }
-        const int drawnCount = (int)drawn.size();
-
-        // Multi-column gutter: a 16-jack stack in one column costs ~390px of card height before a
-        // single control is placed. Both columns stay on the LEFT: inputs-left / outputs-right is
-        // the convention that makes signal flow read left to right, and splitting inputs across
-        // both edges costs more in comprehension than the height saves. The interior column being
-        // partly covered by its own module while you drag a cable at it is solved by dropping
-        // straight onto the destination knob instead (see GraphEditor's mod-drop).
-        const int columns = getInputPortColumns();
-        if (columns > 1 && drawnCount > 0) {
-            const int rows = (drawnCount + columns - 1) / columns;
-            const int col = packedIndex / rows;
-            const int row = packedIndex % rows;
-            return {10 + col * kPortColumnStride, headerHeight + portOffset + row * yStep + 20};
-        }
-        return {10, headerHeight + portOffset + packedIndex * yStep + 20}; // Left side, apply offset
+        return gutterInputJackCentre(drawnInputJackIndices(), clamped);
     } else {
         // No additional midiOffset for outputs here, as MIDI out is now fixed.
         return {getWidth() - 10, headerHeight + portOffset + clamped * yStep + 20}; // Right side, apply offset

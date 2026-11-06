@@ -216,11 +216,14 @@ public:
 
     /** True when visible input `index` renders as a knob's landing dot, not a gutter jack. See .cpp. */
     bool isInputJackKnobBound(int index) const;
+    /** Card-LOCAL gutter place `destChannel`'s jack takes once its knob is hidden, or nullopt. See .cpp. */
+    std::optional<juce::Point<float>> foldedJackCentre(int destChannel) const;
 
 private:
     /** Visible input `index`: its knob's anchor, or nullopt; the More button when a knob-only one is folded. */
     std::optional<juce::Point<float>> knobAnchorForVisibleInputJack(int index) const;
     const juce::Component* moreRowButtonForKnobOnlyJack(int index) const;
+    juce::Point<int> gutterInputJackCentre(const std::vector<int>& drawn, int clamped) const;
 
 public:
     /** Fixed MIDI jack anchor, in local coordinates — MIDI In sits top-left, MIDI Out top-right,

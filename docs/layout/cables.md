@@ -193,7 +193,9 @@ its card, so a card the canvas pushes aside during the fade carries the end with
 glide in flight starts from where the end is on screen. A knob-only control (no gutter jack, like Pan) of a row that is fading out already answers for the folded row
 (`CardBody::isFoldingAway`), so its cable heads for the More button from the first frame and the landing dot goes with it.
 A control that also has a gutter jack keeps its knob until the fade ends, since the jack joins the gutter column only
-then, so that cable's end still lands at once. Each frame repaints the canvas and the glide stops repainting when it ends.
+then, so when a fold begins `CableEndGlide::begin` asks the card where that jack will sit (`ModuleComponent::foldedJackCentre`:
+the drawn column with the jack added back, by the same math as `getPortCenter`) and the end glides to that place, so it
+does not jump when the fade ends. Each frame repaints the canvas and the glide stops repainting when it ends.
 
 ## Hit-testing
 
