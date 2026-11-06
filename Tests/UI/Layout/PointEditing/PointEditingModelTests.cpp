@@ -122,4 +122,16 @@ TEST(PointEditorKeys, EveryKeyOfTheMapDecodesOnce) {
     EXPECT_TRUE(decode(juce::KeyPress::escapeKey).plain);
     EXPECT_FALSE(decode(juce::KeyPress::escapeKey, shift).plain);
     EXPECT_EQ(decode(juce::KeyPress::leftKey, cmd).kind, Kind::none);
+    constexpr int scale = juce::ModifierKeys::ctrlModifier | alt;
+    const auto spread = decode(juce::KeyPress::upKey, scale);
+    EXPECT_EQ(spread.kind, Kind::scale);
+    EXPECT_EQ(spread.side, 1);
+    EXPECT_FALSE(spread.time);
+    EXPECT_TRUE(decode(juce::KeyPress::leftKey, scale).time);
+    EXPECT_EQ(decode(juce::KeyPress::leftKey, scale).side, -1);
+    EXPECT_EQ(decode(juce::KeyPress::downKey, scale | shift).size, PointKeyAction::Size::fine);
+    EXPECT_EQ(decode(juce::KeyPress::upKey, alt).kind, Kind::move) << "Alt alone still moves";
+#if JUCE_MAC
+    EXPECT_EQ(decode(juce::KeyPress::upKey, cmd | alt).kind, Kind::none) << "Cmd+Option is not the scale chord";
+#endif
 }

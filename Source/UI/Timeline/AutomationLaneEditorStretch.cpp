@@ -2,8 +2,11 @@
 // LanePointStretch (box, handles, preview math). The class is declared in AutomationLaneEditor.h.
 
 #include "AutomationLaneEditor.h"
+#include "UI/Layout/PointEditing/PointEditorKeys.h"
+#include "UI/Layout/PointEditing/PointScale.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include <algorithm>
+#include <limits>
 #include <map>
 
 namespace synth::ui {
@@ -218,6 +221,62 @@ bool AutomationLaneEditor::stretchKey(const juce::KeyPress& key) {
         const double factor = 1.0 + (key.getKeyCode() == K::upKey ? kKeyValueScale : -kKeyValueScale);
         result.moved = scaleValues(picked, StretchHandle::Top, lowest + (highest - lowest) * factor, range.minValue,
                                    range.maxValue);
+    }
+    commitStretchResult(picked, result);
+    return true;
+}
+
+// Ctrl+Alt+arrows (the shared key map, PointEditorKeys.h): scale the selection about its middle by a tenth a press, in
+// time (Left/Right) or value (Up/Down), as ONE edit. Time keeps the order (an unselected point is never passed) and
+// stops at beat 0; value clamps each point to the lane's range. Two selected points are needed; a press that changes
+// nothing opens no undo step.
+bool AutomationLaneEditor::scaleKey(const PointKeyAction& action) {
+    const auto* points = lanePoints();
+    if (points == nullptr || selection_.size() < 2 || doc_->getLane(laneId_) == nullptr)
+        return false;
+    const auto picked = selection_.selectedPoints(*points);
+    if (picked.size() < 2)
+        return false;
+    const double factor = pointScaleFactor(action.side, action.size == PointKeyAction::Size::fine);
+
+    StretchResult result;
+    result.moved = picked;
+    if (action.time) {
+        std::vector<double> beats;
+        std::vector<ScaleLimits> limits;
+        double before = -kStretchMinGapBeats; // the nearest unselected beat to the left (the lane starts at 0)
+        std::size_t next = 0;
+        for (std::size_t i = 0; i < points->size() && next < picked.size(); ++i) {
+            if ((*points)[i].beat != picked[next].beat) {
+                before = (*points)[i].beat;
+                continue;
+            }
+            beats.push_back(picked[next].beat);
+            limits.push_back({before + kStretchMinGapBeats, std::numeric_limits<double>::infinity()});
+            ++next;
+        }
+        // The right limit of each selected point: the first unselected beat after it.
+        double after = std::numeric_limits<double>::infinity();
+        next = picked.size();
+        for (std::size_t i = points->size(); i-- > 0 && next > 0;) {
+            if ((*points)[i].beat != picked[next - 1].beat) {
+                after = (*points)[i].beat - kStretchMinGapBeats;
+                continue;
+            }
+            limits[--next].hi = after;
+        }
+        const auto scaled = scalePositionsAbout(beats, limits, kStretchMinGapBeats, factor);
+        for (std::size_t i = 0; i < scaled.size(); ++i)
+            result.moved[i].beat = scaled[i];
+    } else {
+        const auto& range = doc_->getLane(laneId_)->range;
+        std::vector<double> values;
+        for (const auto& p : picked)
+            values.push_back(p.value);
+        const auto scaled =
+            scaleValuesAbout(values, std::vector<ScaleLimits>(values.size(), {range.minValue, range.maxValue}), factor);
+        for (std::size_t i = 0; i < scaled.size(); ++i)
+            result.moved[i].value = scaled[i];
     }
     commitStretchResult(picked, result);
     return true;

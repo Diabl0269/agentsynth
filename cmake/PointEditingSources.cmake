@@ -20,7 +20,10 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/PointEditing/PointBoxSelect.h
     Source/UI/Layout/PointEditing/PointBoxSelect.cpp
     Source/UI/Layout/PointEditing/PointGroupMove.cpp
+    Source/UI/Layout/PointEditing/PointScale.h
+    Source/UI/Layout/PointEditing/PointScale.cpp
     Source/UI/ModuleViews/CurveEditor/CurveEditorBoxSelect.cpp
+    Source/UI/ModuleViews/CurveEditor/CurveEditorScale.cpp
     Source/UI/Layout/PointEditing/PointClipboard.h
     Source/UI/Layout/PointEditing/PointEditorKeys.h
     Source/UI/Layout/PointEditorDuplicate.h
