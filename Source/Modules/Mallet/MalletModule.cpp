@@ -22,7 +22,7 @@ juce::AudioParameterFloat* MalletModule::addFloat(const char* id, const char* na
 }
 
 MalletModule::MalletModule()
-    : ModuleBase("Mallet", 1, kNumChannels, StereoAudio::Declared) {
+    : ModuleBase("Mallet", 2, kNumChannels, StereoAudio::Declared) {
     addParameter(materialParam = new juce::AudioParameterChoice(
                      "material", "Material",
                      juce::StringArray{"Marimba", "Vibraphone", "Xylophone", "Glockenspiel", "Bell"}, 0));
@@ -114,8 +114,10 @@ void MalletModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     if (buffer.getNumChannels() == 0 || numSamples <= 0)
         return;
 
-    // The Level cable arrives on channel 0, which the render overwrites: read it before anything writes the buffer.
+    // The cables arrive on channels 0 and 1, which the render overwrites: read them before anything writes the buffer.
+    // blockCV reads 0 when a layout has no such channel.
     const float levelCv = blockCV(buffer, kLevelCvChannel);
+    const float tremoloCv = blockCV(buffer, kTremoloCvChannel);
 
     // A pure source has no dry signal to pass through, so bypass and mute both clear. They stay two
     // branches, and either one cuts every bar that is still ringing.
@@ -131,7 +133,7 @@ void MalletModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     }
 
     smoothedLevel_.setTargetValue(modulateNormalised(*levelParam, levelParam->get(), levelCv));
-    smoothedTremolo_.setTargetValue(tremoloParam->get());
+    smoothedTremolo_.setTargetValue(modulateNormalised(*tremoloParam, tremoloParam->get(), tremoloCv));
     float* left = buffer.getWritePointer(0);
     float* right = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 

@@ -23,6 +23,7 @@ class PluckModule
 public:
     static constexpr int kNumChannels = 2;
     static constexpr int kLevelCvChannel = 0;             // the Level knob's cable; no gutter jack
+    static constexpr int kBodyCvChannel = 1;              // the Body knob's cable; no gutter jack
     static constexpr double kDecayReferenceHz = 130.8128; // C3: where Decay is exactly the T60
 
     PluckModule();
@@ -34,14 +35,14 @@ public:
         return isDualIO() ? (i == 1 ? "Audio R" : "Audio L") : "Audio";
     }
     int getVisibleInputPortCount() const override { return 0; }
-    juce::String getInputPortLabel(int) const override { return "Level"; }
+    juce::String getInputPortLabel(int i) const override { return i == kBodyCvChannel ? "Body" : "Level"; }
     LogicalPort mapInputChannel(int raw) const override {
         auto port = ModuleBase::mapInputChannel(raw);
         port.role = PortRole::ModCV;
         return port;
     }
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Level", kLevelCvChannel, "level", true}};
+        return {{"Level", kLevelCvChannel, "level", true}, {"Body", kBodyCvChannel, "body", true}};
     }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
     bool acceptsMidi() const override { return true; }

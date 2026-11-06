@@ -31,7 +31,7 @@ TEST(MalletModule, IsAMidiInstrumentWithAStereoOutAndOnlyTheLevelCableIn) {
     EXPECT_TRUE(m.acceptsMidi());
     EXPECT_FALSE(m.producesMidi());
     EXPECT_EQ(m.getVisibleInputPortCount(), 0);
-    EXPECT_EQ(m.getTotalNumInputChannels(), 1); // the Level knob's mod cable, no jack
+    EXPECT_EQ(m.getTotalNumInputChannels(), 2); // the Level and Tremolo knobs' mod cables, no jack
     EXPECT_EQ(m.getTotalNumOutputChannels(), 2);
     EXPECT_EQ(m.getModuleType(), ModuleType::Mallet);
 }

@@ -41,12 +41,10 @@ const std::set<std::pair<juce::String, juce::String>> kControlsWithoutCable = []
     add("Oscillator", {"phase", "randomPhase"});
     // A whole number of voices, not a plain amount: a cable dropped on it is refused with a status message saying so.
     add("Wavetable", {"unison"});
-    // Read when a note starts (Release when it ends). Level takes a cable; Body and Tremolo are live but take none:
-    // each would add a channel of its own, and only Level was decided.
-    add("Pluck", {"tune", "fine", "decay", "decayTrack", "brightness", "pickPosition", "pickHardness", "body",
-                  "stiffness", "release", "velBright"});
-    add("Mallet",
-        {"tune", "fine", "decay", "damping", "brightness", "hardness", "resonator", "tremolo", "release", "velBright"});
+    // Read when a note starts (Release when it ends). Level, Body and Tremolo are live and take cables.
+    add("Pluck", {"tune", "fine", "decay", "decayTrack", "brightness", "pickPosition", "pickHardness", "stiffness",
+                  "release", "velBright"});
+    add("Mallet", {"tune", "fine", "decay", "damping", "brightness", "hardness", "resonator", "release", "velBright"});
     // Read per step by the sequencer's own clock, not continuously.
     for (const auto* sequencer : {"Sequencer", "Poly Sequencer"})
         add(sequencer, {"bpm", "transpose", "gate", "velocity", "chance"});

@@ -86,6 +86,8 @@ TEST(AIStateMapperCatalogTest, InstrumentLevelIsModulatableWithoutAnAudioInput) 
         EXPECT_FALSE((bool)entry.getProperty("audioIn", true)) << type << ": a knob's cable is no audio input";
         EXPECT_TRUE((bool)findParam(entry, "level").getProperty("modulatable", false)) << type;
     }
+    EXPECT_TRUE((bool)findParam(modules.getProperty("Pluck", {}), "body").getProperty("modulatable", false));
+    EXPECT_TRUE((bool)findParam(modules.getProperty("Mallet", {}), "tremolo").getProperty("modulatable", false));
     EXPECT_TRUE((bool)modules.getProperty("Delay", {}).getProperty("audioIn", false))
         << "a module with audio inputs beside a knob-only one keeps audioIn";
 }
