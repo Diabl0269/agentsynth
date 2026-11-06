@@ -56,12 +56,12 @@ void spliceTimelineRows(std::vector<Entry>& rows) {
 
 // The positional dock keys sit right before the per-view show actions they replace as the digit owners: show the tab
 // at a place of the tab order (default Cmd+1/2/3, so a reorder re-keys them), focus the main view (Cmd+0), and swap
-// the tab at a place into the main area (default Opt+Cmd+1..3).
+// the tab at a place into the main area (default Opt+Cmd+1..3), and detach the view in the main area (unbound).
 template <class Entry>
 void spliceDockKeyRows(std::vector<Entry>& rows) {
     std::vector<Entry> dockRows;
     for (const char* id : {"showDockTab1", "showDockTab2", "showDockTab3", "focusMainView", "swapDockTab1ToMain",
-                           "swapDockTab2ToMain", "swapDockTab3ToMain"})
+                           "swapDockTab2ToMain", "swapDockTab3ToMain", "detachMainView"})
         dockRows.push_back({id, ShortcutCategory::General});
     const auto at = std::find_if(rows.begin(), rows.end(),
                                  [](const Entry& row) { return std::string_view(row.id) == "toggleTimelinePanel"; });

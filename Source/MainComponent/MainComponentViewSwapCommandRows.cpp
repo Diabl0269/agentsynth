@@ -107,5 +107,13 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildViewSwapCommandRows(
          "swapCanvasToMain",
          {},
          swapTo(Tab::Canvas)},
+        {AppCommands::detachMainView, "Detach Main View",
+         "Open the view in the main area (Timeline, Mixer or Controllers) in its own window; the canvas fills the main "
+         "area until the window is docked back",
+         "View", "detachMainView", [](const MainComponent& m) { return m.bottomDock.canDetachMainView(); },
+         [](MainComponent& m) {
+             m.bottomDock.detachMainView();
+             return true;
+         }},
     };
 }

@@ -211,6 +211,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return swapMidiRemoteToMain;
     if (actionId == "swapCanvasToMain")
         return swapCanvasToMain;
+    if (actionId == "detachMainView")
+        return detachMainView;
     if (actionId == "showDockTab1")
         return showDockTab1;
     if (actionId == "showDockTab2")

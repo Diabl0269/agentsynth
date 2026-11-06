@@ -1,0 +1,37 @@
+# A view swapped into the main area had no tab and so no way to open in its own window; the swap icon showed no tooltip.
+# "Detach Main View" (View menu, command palette) opens the main-area view in its own window and the canvas takes the
+# main area again; the tab icons show their tooltips on hover.
+#
+# What a user does:
+#   1. Opens a project, presses Opt+Cmd+1 (the Timeline takes the main area), opens the bottom panel with Cmd+J.
+#   2. Rests the pointer on the Mixer tab's swap icon: its tooltip reads "Show Mixer in the main area (Shift + Return or ...)".
+#   3. Presses Cmd+K, types "detach main", Return: the Timeline opens in its own window, the Canvas fills the main area
+#      and the bottom panel offers Mixer and Controllers.
+# The state is read from the window's components (a hidden automation window has no screen to look at), the pictures
+# are saved beside it.
+record: true
+save_project: dock-detach-main-view
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - key: {keys: alt+cmd+1}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - screenshot: {name: 1-timeline-in-main}
+  - expect: {id: "Show Canvas in the main area", showing: true}   # the canvas is a tab while the Timeline fills the main area
+  - hover: {id: "Show Mixer in the main area"}
+  - expect: {id: "Show Mixer in the main area", contains: {tooltip: "Shift + Return"}}
+  - screenshot: {name: 2-swap-icon-tooltip}
+  - hover: {id: "Detach Mixer to its own window"}
+  - expect: {id: "Detach Mixer to its own window", contains: {tooltip: "Alt + Return"}}
+  - screenshot: {name: 3-detach-icon-tooltip}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: detach main}
+  - wait: {}
+  - screenshot: {id: commandPalette, name: 4-palette-detach-main-view}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: "Show Canvas in the main area", showing: false, within_ms: 2000}   # the canvas is the main view again
+  - screenshot: {name: 5-timeline-detached-canvas-back}

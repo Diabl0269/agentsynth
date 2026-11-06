@@ -145,6 +145,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::swapMixerToMain,
     AppCommands::swapMidiRemoteToMain,
     AppCommands::swapCanvasToMain,
+    AppCommands::detachMainView,
 };
 
 } // namespace

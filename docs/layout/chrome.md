@@ -431,7 +431,9 @@ no header of its own, so it cannot be detached from there. The Mixer goes to mai
 `growHost` and `fitMixerHostToSections()` do nothing, so the shared panel height never changes), its `mixer` focus
 region is open, and the "both places" mirror is not reachable from it (a tab's detach icon is not reachable from it;
 a mirror already open closes without detaching the host). The user puts a view there with the swap icon on its tab
-([the tab strip](../mixer/panel.md#the-tab-strip)); the icon on the Canvas tab puts the canvas back. A swap
+([the tab strip](../mixer/panel.md#the-tab-strip)); the icon on the Canvas tab puts the canvas back. The view in the main area has no tab, so it detaches through the **Detach Main View** command
+(`BottomDockComponent::detachMainView()`; View menu, command palette, rebindable, enabled only while a view other than the Canvas fills the main
+area). The Canvas tab's icon never detaches the canvas, and the panels carry no extra toolbar button for it. A swap
 relays the main area out through `BottomDockComponent::onMainViewChanged`, which also rebuilds the focus regions
 so Tab follows the new layout. The same swap has a key per strip place, Opt+Cmd+1..3 (`swapDockTab<N>ToMain`, [shortcuts](../control/shortcuts.md)); a successful swap, by icon or key, is announced to screen
 readers once ("Timeline in the main area"), and a refused one is silent.
@@ -493,8 +495,8 @@ Clicking a tab does not give the strip focus.
 and mutually exclusive item, named "Timeline", "Mixer", "Controllers" or "Canvas", with the selected state
 following the active tab and a press that selects it (`BottomDockComponent::describeTab` is the data both the
 handler and the tests use). Inside it is the swap icon, a button named "Show Mixer in the main
-area" (its tooltip adds the key, Opt+Cmd+1-3); it is not a Tab stop, and it shows the focus ring while Shift is held on the focused strip (the moment
-Return presses it). Left of it every tab but Canvas has a detach icon named "Detach Mixer to its own window" (its tooltip names Option+Return); a click detaches that tab's panel, and its ring shows while Option is held. In its own window Esc or Cmd+W returns the panel to the dock, and Cmd+1/2/3 raise and focus that window. The strip itself is a group named "Panel tabs" whose value is the selected tab.
+area" (its tooltip names Shift+Return, which works on the focused tab strip, and the key bound to the tab, Opt+Cmd+1-3 by default); it is not a Tab stop, and it shows the focus ring while Shift is held on the focused strip (the moment
+Return presses it). Left of it every tab but Canvas has a detach icon named "Detach Mixer to its own window" (its tooltip names Option+Return, which works on the focused tab strip); a click detaches that tab's panel, and its ring shows while Option is held. In its own window Esc or Cmd+W returns the panel to the dock, and Cmd+1/2/3 raise and focus that window. The strip itself is a group named "Panel tabs" whose value is the selected tab.
 
 ## Welcome screen overlay
 

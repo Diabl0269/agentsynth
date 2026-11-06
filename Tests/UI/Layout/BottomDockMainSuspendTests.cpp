@@ -3,6 +3,7 @@
 // stays, and the stored view comes back when its panel is docked again (docs/layout/chrome.md#the-main-view,
 // docs/mixer/panel.md).
 #include "BottomDockMainAreaFixture.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerPlacementController.h"
 #include <gtest/gtest.h>
@@ -216,4 +217,103 @@ TEST_F(BottomDockMainSuspendTest, TheBothPlacesMirrorLeavesTheMainAreaAlone) {
     EXPECT_EQ(dock().getMixerHost().getParentComponent(), &holder());
     settings->setValue("detachedPanelBothPlaces", "move");
     dock().applyDetachBothPlacesPreference();
+}
+
+namespace {
+
+synth::ui::DetachablePanelHost& hostOf(BottomDockComponent& dock, Tab view) {
+    return view == Tab::Timeline ? dock.getTimelineHost()
+           : view == Tab::Mixer  ? dock.getMixerHost()
+                                 : dock.getMidiRemoteHost();
+}
+
+} // namespace
+
+// Regression test for FRO971: the view in the main area had no tab and so no way to open in its own window.
+TEST_F(BottomDockMainSuspendTest, DetachingTheMainViewPutsTheCanvasBackAndRedockingBringsTheViewBack) {
+    ASSERT_TRUE(mc_->setMainViewForTest(Tab::Timeline));
+    mainViewChanges_ = 0;
+    ASSERT_TRUE(dock().canDetachMainView());
+
+    ASSERT_TRUE(dock().detachMainView());
+
+    EXPECT_TRUE(dock().getTimelineHost().isDetached());
+    EXPECT_EQ(dock().getMainView(), Tab::Canvas);
+    EXPECT_EQ(dock().getStoredMainView(), Tab::Timeline) << "the choice waits for the panel";
+    EXPECT_EQ(savedMainView(), "timeline");
+    EXPECT_FALSE(dock().isInMainArea(Tab::Timeline));
+    EXPECT_FALSE(dock().canDetachMainView()) << "no stale host is left behind in the main area";
+    EXPECT_EQ(holder().getNumChildComponents(), 0);
+    EXPECT_NE(dock().getTimelineHost().getParentComponent(), &holder());
+    EXPECT_TRUE(mc_->getGraphEditor().isVisible());
+    EXPECT_EQ(mainViewChanges_, 1);
+    EXPECT_EQ(stripNames(), (Names{"Mixer", "Controllers"})) << "the dock shows its normal tabs again";
+    EXPECT_FALSE(dock().detachMainView()) << "the Canvas has no window of its own";
+
+    dock().getTimelineHost().setDetached(false);
+
+    EXPECT_EQ(dock().getMainView(), Tab::Timeline);
+    EXPECT_TRUE(dock().isInMainArea(Tab::Timeline));
+    EXPECT_EQ(dock().getTimelineHost().getParentComponent(), &holder());
+    EXPECT_EQ(stripNames(), (Names{"Canvas", "Mixer", "Controllers"}));
+}
+
+TEST_F(BottomDockMainSuspendTest, DetachingNeedsAViewInTheMainAreaAndTheCanvasNeverDetaches) {
+    EXPECT_FALSE(dock().canDetachMainView());
+    EXPECT_FALSE(dock().detachMainView());
+    for (Tab view : {Tab::Timeline, Tab::Mixer, Tab::MidiRemote})
+        EXPECT_FALSE(hostOf(dock(), view).isDetached());
+    EXPECT_EQ(dock().getDetachIcon(Tab::Canvas), nullptr);
+}
+
+// Guard for the sibling-gap kind: every detachable view in every position (tab strip, main area) detaches and
+// docks back, with the main area and the strip following each step.
+TEST_F(BottomDockMainSuspendTest, EveryDetachableViewDetachesAndDocksBackFromEveryPosition) {
+    for (Tab view : {Tab::Timeline, Tab::Mixer, Tab::MidiRemote}) {
+        auto& host = hostOf(dock(), view);
+        const juce::String name = BottomDockComponent::describeTab(view, Tab::Canvas).title;
+        for (const bool inMainArea : {false, true}) {
+            SCOPED_TRACE(name + (inMainArea ? " in the main area" : " in the tab strip"));
+            if (const Tab want = inMainArea ? view : Tab::Canvas; dock().getStoredMainView() != want)
+                ASSERT_TRUE(mc_->setMainViewForTest(want));
+            if (inMainArea) {
+                ASSERT_TRUE(dock().detachMainView());
+            } else {
+                ASSERT_NE(dock().getDetachIcon(view), nullptr);
+                dock().getDetachIcon(view)->onClick();
+            }
+            EXPECT_TRUE(host.isDetached());
+            EXPECT_EQ(dock().getMainView(), Tab::Canvas);
+            EXPECT_FALSE(dock().isInMainArea(view));
+            for (const auto& tab : dock().getStripTabs())
+                EXPECT_NE(tab.name, name) << "a detached view has no tab";
+            EXPECT_TRUE(mainAreaHasAView());
+
+            host.setDetached(false);
+
+            EXPECT_FALSE(host.isDetached());
+            EXPECT_EQ(dock().getMainView(), inMainArea ? view : Tab::Canvas);
+            EXPECT_EQ(dock().isInMainArea(view), inMainArea);
+            bool inStrip = false;
+            for (const auto& tab : dock().getStripTabs())
+                inStrip = inStrip || tab.name == name;
+            EXPECT_EQ(inStrip, !inMainArea);
+        }
+        ASSERT_TRUE(mc_->setMainViewForTest(Tab::Canvas));
+    }
+}
+
+TEST_F(BottomDockMainSuspendTest, TheDetachMainViewCommandIsActiveOnlyWhileAViewFillsTheMainArea) {
+    EXPECT_FALSE(commandActive(AppCommands::detachMainView));
+    ASSERT_TRUE(mc_->setMainViewForTest(Tab::MidiRemote));
+    EXPECT_TRUE(commandActive(AppCommands::detachMainView));
+
+    EXPECT_TRUE(mc_->getCommandManager().invokeDirectly(AppCommands::detachMainView, false));
+
+    EXPECT_TRUE(dock().getMidiRemoteHost().isDetached());
+    EXPECT_EQ(dock().getMainView(), Tab::Canvas);
+    EXPECT_FALSE(commandActive(AppCommands::detachMainView)) << "the canvas is back and has no window";
+    EXPECT_EQ(mc_->getShortcutManager().getBinding("detachMainView"), juce::KeyPress())
+        << "unbound until the user binds it";
+    EXPECT_EQ(ShortcutManager::getActionDescription("detachMainView"), "Detach Main View");
 }
