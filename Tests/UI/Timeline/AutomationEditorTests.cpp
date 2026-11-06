@@ -27,6 +27,7 @@
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include "UserSettings.h"
 #include <cmath>

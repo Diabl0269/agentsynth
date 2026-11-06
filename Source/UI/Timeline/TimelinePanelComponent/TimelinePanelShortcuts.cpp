@@ -10,6 +10,7 @@
 #include "UI/Layout/KeyRing.h"
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
 
@@ -153,7 +154,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         const auto snap = transport_->getPositionSnapshot();
         transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, !snap.looping);
         ruler_.repaint();
-        sectionStrip_.repaint();
+        sectionStrip_->repaint();
         return true;
     }
 
@@ -225,7 +226,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
             arm = appProperties_->getUserSettings()->getBoolValue(kTimelineLoopSelectionArmsPropertyKey, true);
         transport_->setLoop(span->first, span->second, arm || transport_->getPositionSnapshot().looping);
         ruler_.repaint();
-        sectionStrip_.repaint();
+        sectionStrip_->repaint();
         return true;
     }
 

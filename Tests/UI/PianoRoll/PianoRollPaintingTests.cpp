@@ -10,6 +10,7 @@
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Theme/Theme.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace {
 // WCAG relative luminance / contrast ratio — same formula NoteColourTests.cpp uses, duplicated

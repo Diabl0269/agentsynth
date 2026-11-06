@@ -13,6 +13,7 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ScrollPolicy.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
 
@@ -73,7 +74,7 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     clipSizingButton_.setApplicationProperties(props); // the clip edge sizing mode, kept across projects
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr) {
         ruler_.setPropertiesFile(nullptr);
-        sectionStrip_.setPropertiesFile(nullptr);
+        sectionStrip_->setPropertiesFile(nullptr);
         refreshSectionsStripSetting();
         return;
     }
@@ -81,7 +82,7 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     // Where the marker colour picker's favourites shelf persists to — the same shelf the track
     // header's swatch uses, so a colour saved from one is offered by the other.
     ruler_.setPropertiesFile(appProperties_->getUserSettings());
-    sectionStrip_.setPropertiesFile(appProperties_->getUserSettings());
+    sectionStrip_->setPropertiesFile(appProperties_->getUserSettings());
     refreshSectionsStripSetting();
 
     int saved = appProperties_->getUserSettings()->getIntValue(kTimelineSnapPropertyKey, (int)viewState_.snap);
@@ -193,7 +194,7 @@ void TimelinePanelComponent::setSnapEnabled(bool enabled) {
     persistSnapChoice();
     snapToggleButton_.setToggleState(enabled, juce::dontSendNotification);
     ruler_.repaint();
-    sectionStrip_.repaint();
+    sectionStrip_->repaint();
     repaint();
 }
 
@@ -344,7 +345,7 @@ void TimelinePanelComponent::applyWheelScroll(int axis, double amount) {
         setFollowPlayheadEnabled(false);
     viewState_.scrollBeats(amount);
     ruler_.repaint();
-    sectionStrip_.repaint();
+    sectionStrip_->repaint();
     repaint(gridLanesBounds_);
 }
 
@@ -372,7 +373,7 @@ void TimelinePanelComponent::zoomHorizontalAroundX(double factor, double anchorX
         return;
     viewState_.zoomAroundX(factor, anchorX);
     ruler_.repaint();
-    sectionStrip_.repaint();
+    sectionStrip_->repaint();
     repaint();
 }
 
@@ -487,8 +488,8 @@ void TimelinePanelComponent::resized() {
     // The Sections strip sits directly above the ruler; 0 px (and hidden) while an editor covers the lanes or the
     // setting is off. `rulerHeight` stays the ruler's own height everywhere below.
     const int stripHeight = sectionStripHeight();
-    sectionStrip_.setBounds(lanes.removeFromTop(stripHeight));
-    sectionStrip_.setVisible(stripHeight > 0);
+    sectionStrip_->setBounds(lanes.removeFromTop(stripHeight));
+    sectionStrip_->setVisible(stripHeight > 0);
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
 
@@ -610,7 +611,7 @@ int TimelinePanelComponent::sectionStripHeight() const {
 
 // The Preferences toggle reaches a live panel through MainComponent's settings-change dispatch, which calls this.
 void TimelinePanelComponent::refreshSectionsStripSetting() {
-    if (sectionStrip_.getHeight() == sectionStripHeight())
+    if (sectionStrip_->getHeight() == sectionStripHeight())
         return;
     resized();
     repaint();
@@ -805,13 +806,13 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
     }
 
     // ---- The Sections strip's row in the header column, and its placement-start lines through the lanes ----
-    if (sectionStrip_.isVisible()) {
+    if (sectionStrip_->isVisible()) {
         g.setColour(synth::theme::themeOf(*this).colors.textMuted);
         g.setFont(juce::Font(juce::FontOptions(11.0f)));
         g.drawText("Sections",
-                   trackHeaderBounds_.withHeight(sectionStrip_.getHeight()).withTrimmedLeft(8).withTrimmedRight(4),
+                   trackHeaderBounds_.withHeight(sectionStrip_->getHeight()).withTrimmedLeft(8).withTrimmedRight(4),
                    juce::Justification::centredLeft, true);
-        sectionStrip_.paintLaneEdges(g, gridLanesBounds_);
+        sectionStrip_->paintLaneEdges(g, gridLanesBounds_);
     }
 
     // ---- Marker stems through the lanes ----

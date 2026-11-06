@@ -31,7 +31,6 @@
 #include "UI/Timeline/TimelineRoutingPane/TimelineRoutingPane.h"
 #include "UI/Timeline/TimelineRowLayout.h"
 #include "UI/Timeline/TimelineRulerComponent.h"
-#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
 #include "UI/Timeline/TimelineViewState.h"
@@ -55,7 +54,8 @@ namespace ui {
 class DrumMachineComponent;
 class KeyRing; // Forward declaration (Source/UI/Layout/KeyRing.h): kept out of this widely included header
 struct DrumMachineHost;
-class ModMatrixPicker; // Forward declaration (Source/UI/Graph/ModMatrixPicker.h): the add-automation picker
+class ModMatrixPicker;      // Forward declaration (Source/UI/Graph/ModMatrixPicker.h): the add-automation picker
+class TimelineSectionStrip; // Forward declaration (Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h)
 } // namespace ui
 } // namespace synth
 
@@ -385,7 +385,7 @@ public:
 
     TimelineViewState& getViewState() noexcept { return viewState_; }
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
-    TimelineSectionStrip& getSectionStrip() noexcept { return sectionStrip_; }
+    TimelineSectionStrip& getSectionStrip() noexcept; // defined in the .cpp: the strip header stays out of here
     // Re-reads the "show the Sections strip" setting and re-lays out when the strip's height must change.
     void refreshSectionsStripSetting();
     TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
@@ -806,7 +806,8 @@ private:
     synth::ui::ClipSelectionModel clipSelection_;
     TimelineRulerComponent ruler_{viewState_};
     // Above the ruler, same x origin; 0 px while the piano roll or drum editor is open or the setting is off.
-    TimelineSectionStrip sectionStrip_{viewState_};
+    std::unique_ptr<TimelineSectionStrip>
+        sectionStrip_; // built in the constructor; forward-declared to keep header reach low
     int sectionStripHeight() const;
     // Over gridLanesBounds_, the rect this panel's paint() fills with the grid; a child added before playhead_, so
     // z-order reads grid -> clips -> playhead with no second place ever painting the grid.

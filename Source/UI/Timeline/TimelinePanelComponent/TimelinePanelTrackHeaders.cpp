@@ -13,6 +13,7 @@
 #include "AppUndoManager.h"
 #include "UI/Layout/KeyRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -380,7 +381,7 @@ void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     // lanes rect goes with it, because this component paints each marker's stem down through the
     // clips (see paint()); bounded to that rect rather than the whole panel.
     ruler_.repaint();
-    sectionStrip_.refresh(); // its blocks come off the doc too
+    sectionStrip_->refresh(); // its blocks come off the doc too
     if (!gridLanesBounds_.isEmpty())
         repaint(gridLanesBounds_);
     // If the roll is open on a clip this mutation just removed, refreshFromDoc() closes it

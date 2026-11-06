@@ -14,6 +14,7 @@
 #include "Transport/TransportService.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
 #include "UI/Layout/KeyRing.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include <algorithm>
 #include <cmath>
 
@@ -54,20 +55,21 @@ TimelinePanelComponent::TimelinePanelComponent()
     // itself rather than wherever positional descent happened to end up.
     setWantsKeyboardFocus(true);
 
+    sectionStrip_ = std::make_unique<TimelineSectionStrip>(viewState_);
     addAndMakeVisible(ruler_);
-    addAndMakeVisible(sectionStrip_);
+    addAndMakeVisible(*sectionStrip_);
     // "Select its clips": the panel owns the selection, and a selection never coexists with a Range-tool range.
-    sectionStrip_.onSelectClips = [this](const std::vector<synth::ClipId>& ids) {
+    sectionStrip_->onSelectClips = [this](const std::vector<synth::ClipId>& ids) {
         clipLaneArea_.clearRange();
         clipSelection_.setSelection(ids);
         clipLaneArea_.repaint();
     };
     // "Make section" from a range: the new block opens its name for typing.
     clipLaneArea_.onSectionMade = [this](double startBeat) {
-        sectionStrip_.refresh();
+        sectionStrip_->refresh();
         if (const auto* placement = doc_ != nullptr ? doc_->placementAt(startBeat) : nullptr) {
-            sectionStrip_.selectPlacement(placement->id);
-            sectionStrip_.beginRenameSection(placement->id);
+            sectionStrip_->selectPlacement(placement->id);
+            sectionStrip_->beginRenameSection(placement->id);
         }
     };
 
@@ -166,7 +168,7 @@ TimelinePanelComponent::TimelinePanelComponent()
     // seam every other viewState_ scroll/zoom writer in this class already uses.
     clipLaneArea_.onViewScrolledByDrag = [this] {
         ruler_.repaint();
-        sectionStrip_.repaint();
+        sectionStrip_->repaint();
         repaint();
     };
 
@@ -204,7 +206,7 @@ TimelinePanelComponent::TimelinePanelComponent()
         persistSnapChoice();
         snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
         ruler_.repaint();
-        sectionStrip_.repaint();
+        sectionStrip_->repaint();
         repaint();
     };
     // NOTE AUDITION. The roll emits a pitch + on/off edge and knows nothing about the graph; the
@@ -296,6 +298,8 @@ void TimelinePanelComponent::auditionClipNote(synth::ClipId clip, int pitch, flo
     trackHeaderHost_->auditionTrackNote(track->id, pitch, velocity, true);
 }
 
+TimelineSectionStrip& TimelinePanelComponent::getSectionStrip() noexcept { return *sectionStrip_; }
+
 TimelinePanelComponent::~TimelinePanelComponent() {
     if (doc_ != nullptr)
         doc_->removeListener(this);
@@ -321,8 +325,8 @@ void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
         shortcuts_->removeChangeListener(this);
     shortcuts_ = manager;
     shortcutsWeak_ = manager;
-    automationLanes_.setShortcuts(manager);    // Move Lane Up/Down read their bindings through it
-    sectionStrip_.setShortcutManager(manager); // the Make Section tooltip names the live key
+    automationLanes_.setShortcuts(manager);     // Move Lane Up/Down read their bindings through it
+    sectionStrip_->setShortcutManager(manager); // the Make Section tooltip names the live key
     if (shortcuts_ != nullptr)
         shortcuts_->addChangeListener(this);
     refreshShortcutTooltips();
@@ -427,7 +431,7 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
 void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
     transport_ = transport; // this panel's own copy — see the member's comment
     ruler_.setTransport(transport);
-    sectionStrip_.setTransport(transport);
+    sectionStrip_->setTransport(transport);
     playhead_.setTransport(transport);
     transportBar_.setTransport(transport);
     clipLaneArea_.setTransport(transport);
@@ -522,7 +526,7 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     // The ruler draws (and edits) the doc's MARKERS — see TimelineRulerComponent's class comment
     // for why it never listens to the doc itself: this panel's timelineChanged() repaints it.
     ruler_.setTimelineDoc(doc_);
-    sectionStrip_.setTimelineDoc(doc_);
+    sectionStrip_->setTimelineDoc(doc_);
     syncAutomationLanes();
 }
 
@@ -537,7 +541,7 @@ void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     automationLanes_.setUndoManager(undoManager);
     // Marker drag/rename/recolour/delete are real edits and belong on the same one undo stack.
     ruler_.setUndoManager(undoManager);
-    sectionStrip_.setUndoManager(undoManager); // making, moving and deleting sections are edits on the same stack
+    sectionStrip_->setUndoManager(undoManager); // making, moving and deleting sections are edits on the same stack
 }
 
 } // namespace synth::ui
