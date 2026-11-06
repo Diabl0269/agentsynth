@@ -12,8 +12,11 @@ constexpr int kStackPad = 10;
 constexpr int kStackGap = 8;
 constexpr int kStackRowHeight = 24;
 constexpr int kStackLabelWidth = 96;
-constexpr int kStackFirstNote = 24; // C1
-constexpr int kStackLastNote = 95;  // B6
+constexpr int kStackButtonHeight = 28; // the footer buttons: a little taller than the rows, wide enough to read
+constexpr int kStackButtonWidth = 80;
+constexpr int kStackPillHeight = 18; // segment text is height - 6: 12 pt, the size of the grid rows' labels
+constexpr int kStackFirstNote = 24;  // C1
+constexpr int kStackLastNote = 95;   // B6
 constexpr int kStackMinCount = 2;
 constexpr int kStackMaxCount = 16;
 constexpr float kStackSteps[] = {0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 6.0f};
@@ -130,17 +133,18 @@ void ShapeStackPanel::resized() {
     const auto row = [&](juce::Label& label, juce::Component& control) {
         auto r = area.removeFromTop(kStackRowHeight);
         label.setBounds(r.removeFromLeft(kStackLabelWidth));
-        control.setBounds(r);
+        // The segmented pills are as short as the toolbar's (their text scales with the height), centred in the row.
+        control.setBounds(&control == &width_ ? r.withSizeKeepingCentre(r.getWidth(), kStackPillHeight) : r);
         area.removeFromTop(kStackGap);
     };
     row(rootLabel_, root_);
     row(countLabel_, count_);
     row(stepLabel_, step_);
     row(widthLabel_, width_);
-    auto buttons = area.removeFromTop(kStackRowHeight);
-    stack_.setBounds(buttons.removeFromRight(70));
+    auto buttons = area.removeFromTop(kStackButtonHeight);
+    stack_.setBounds(buttons.removeFromRight(kStackButtonWidth));
     buttons.removeFromRight(kStackGap);
-    cancel_.setBounds(buttons.removeFromRight(70));
+    cancel_.setBounds(buttons.removeFromRight(kStackButtonWidth));
 }
 
 bool ShapeStackPanel::keyPressed(const juce::KeyPress& key) {

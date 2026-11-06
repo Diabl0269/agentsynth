@@ -15,7 +15,7 @@ namespace synth::ui {
 class ShapeStackPanel : public juce::Component {
 public:
     static constexpr int kWidth = 270;
-    static constexpr int kHeight = 188;
+    static constexpr int kHeight = 192;
 
     /** `initial.rootHz` is shown as the nearest note of the Root box. */
     explicit ShapeStackPanel(const ringhelpers::StackOptions& initial);
