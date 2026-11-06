@@ -189,6 +189,43 @@ void ShortcutManager::resetToDefaults() {
     addLayoutEditorDefaultBindings();
 }
 
+// The non-character keys named in words: their key codes are control characters (Return is 13, Escape 27) or sit
+// above 0x10000, so charToString would draw a stray glyph and the Settings search would match nothing readable.
+// Empty for a key without a name here.
+static juce::String namedKeyLabel(int keyCode) {
+    struct Named {
+        int code;
+        const char* label;
+    };
+    static const Named named[] = {
+        {juce::KeyPress::returnKey, "Return"},
+        {juce::KeyPress::escapeKey, "Escape"},
+        {juce::KeyPress::tabKey, "Tab"},
+        {juce::KeyPress::backspaceKey, "Backspace"},
+        {juce::KeyPress::deleteKey, "Delete"},
+        {juce::KeyPress::homeKey, "Home"},
+        {juce::KeyPress::endKey, "End"},
+        {juce::KeyPress::pageUpKey, "Page Up"},
+        {juce::KeyPress::pageDownKey, "Page Down"},
+        {juce::KeyPress::F1Key, "F1"},
+        {juce::KeyPress::F2Key, "F2"},
+        {juce::KeyPress::F3Key, "F3"},
+        {juce::KeyPress::F4Key, "F4"},
+        {juce::KeyPress::F5Key, "F5"},
+        {juce::KeyPress::F6Key, "F6"},
+        {juce::KeyPress::F7Key, "F7"},
+        {juce::KeyPress::F8Key, "F8"},
+        {juce::KeyPress::F9Key, "F9"},
+        {juce::KeyPress::F10Key, "F10"},
+        {juce::KeyPress::F11Key, "F11"},
+        {juce::KeyPress::F12Key, "F12"},
+    };
+    for (const auto& entry : named)
+        if (entry.code == keyCode)
+            return entry.label;
+    return {};
+}
+
 juce::String ShortcutManager::keyPressToDisplayString(const juce::KeyPress& key) {
     juce::String result;
     auto mods = key.getModifiers();
@@ -244,6 +281,8 @@ juce::String ShortcutManager::keyPressToDisplayString(const juce::KeyPress& key)
         result += "Up";
     else if (keyCode == juce::KeyPress::downKey)
         result += "Down";
+    else if (const auto label = namedKeyLabel(keyCode); label.isNotEmpty())
+        result += label;
     else
         result += juce::String::charToString(static_cast<juce::juce_wchar>(keyCode));
 

@@ -2,6 +2,7 @@
 // screen-reader access.
 #include "BottomDockComponent.h"
 
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReadOnlyTextValue.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
@@ -368,6 +369,8 @@ synth::ui::IconButton& BottomDockComponent::getSwapIcon(Tab tab) noexcept { retu
 // in its own window cannot go to the main area (setMainView refuses it), so its icon is disabled and the tooltip
 // says why; such a tab is not in the strip at all while its window is open, so this is what a redock starts from.
 void BottomDockComponent::refreshSwapIcons() {
+    static const auto pressKey = ShortcutManager::keyPressToDisplayString(
+        juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0));
     for (Tab t : tabModel_.getOrder()) {
         auto& icon = getSwapIcon(t);
         const auto* host = hostForTab(t);
@@ -375,8 +378,10 @@ void BottomDockComponent::refreshSwapIcons() {
         const juce::String title = describeTab(t, activeTab_).swapTitle;
         icon.setEnabled(!inOwnWindow);
         icon.setTitle(title);
-        icon.setTooltip(inOwnWindow ? juce::String(nameForTab(t)) + " is open in its own window"
-                                    : formatShortcutHint(title, shortcutTextFor(swapActionIdForTab(t))));
+        const auto boundKey = shortcutTextFor(swapActionIdForTab(t));
+        icon.setTooltip(inOwnWindow
+                            ? juce::String(nameForTab(t)) + " is open in its own window"
+                            : formatShortcutHint(title, boundKey.isEmpty() ? pressKey : pressKey + " or " + boundKey));
     }
 }
 

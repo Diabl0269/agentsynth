@@ -137,7 +137,8 @@ TEST_F(BottomDockSwapKeysTest, TheSwapIconTooltipNamesTheKeyAndFollowsARebind) {
     const auto tooltipFor = [&](Tab view, const char* name) {
         const auto key =
             ShortcutManager::keyPressToDisplayString(shortcuts.getBinding(dock().swapActionIdForTab(view)));
-        return synth::ui::formatShortcutHint(juce::String("Show ") + name + " in the main area", key);
+        return synth::ui::formatShortcutHint(juce::String("Show ") + name + " in the main area",
+                                             key.isEmpty() ? "Shift + Return" : "Shift + Return or " + key);
     };
     for (const auto& [view, name] : {std::pair{Tab::Mixer, "Mixer"}, std::pair{Tab::MidiRemote, "Controllers"},
                                      std::pair{Tab::Canvas, "Canvas"}}) {
@@ -156,7 +157,7 @@ TEST_F(BottomDockSwapKeysTest, TheSwapIconTooltipNamesTheKeyAndFollowsARebind) {
     EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(), tooltipFor(Tab::Mixer, "Mixer"));
     shortcuts.setBinding("swapDockTab2ToMain", juce::KeyPress());
     shortcuts.onBindingsChanged();
-    EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(), "Show Mixer in the main area")
+    EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(), "Show Mixer in the main area  (Shift + Return)")
         << "an unbound key is not named";
     shortcuts.resetToDefaults();
 }
