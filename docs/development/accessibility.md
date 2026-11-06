@@ -234,6 +234,15 @@ window with the shared fade (`closeHostingWindow`); the window is not modal, so 
 keyboard there and a click back in the window returns it; the window opens with focus on the map, and the app shortcuts that make
 sense there (Space, undo, redo) still work from it (`ShapeEditorAppShortcuts`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
 
+The Filter window's grid rows are ordinary Tab stops in visual order: Grid (a segmented switch titled "Grid"), its Snap
+pill ("Snap across"), Level ("Level"), its Snap pill ("Snap level"), then the second row's one visible control: Steps,
+the shared Key field (its picker opens on Return or Down) or the Root box ("Root"), and Guides. Each has a tooltip
+saying what it does; the Root's says when the Played note needs a Pitch cable. Grid lines never rely on hue: a
+landmark is brighter and wider than a snap line, and an out-of-key note is dotted; the kind hue (accent for notes,
+warning for harmonics) only adds to that. **Ring helpers** is a button after Draw (Return or Space opens its menu, the
+arrows pick an item). On the card, the Custom type's Cutoff knob menu (right-click or the open-context-menu key)
+holds **Snap to notes**; snapped, Up/Down step one note and the knob's value reads "A3 220 Hz".
+
 ## Verifying for real
 
 The test proves names exist, not that they read well or that Tab reaches them. Run the app, Tab
