@@ -408,6 +408,10 @@ void ShortcutManager::addTimelineDefaultBindings() {
     // Shift+Cmd+D: Duplicate's Cmd+D plus Shift, bound nowhere else in any category.
     bindings["timelineClipDuplicateLinked"] =
         juce::KeyPress('d', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    // Option+Cmd+S: "S" for section; Cmd+S is Save and Cmd+Shift+S is Save As. The Graph's Save Snippet shares the
+    // chord but lives in another category and surface, and the Graph and the timeline never both own the key.
+    bindings["timelineMakeSection"] =
+        juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
     // Shift+Cmd+R: Repeat's Cmd+R plus Shift, free on the Mac. Off the Mac Ctrl+Shift+R is Repeat and Ctrl+Alt+R is
     // Replace, so Render takes Ctrl+Alt+Shift+R there.
     bindings["timelineRenderToAudioTrack"] =

@@ -1,11 +1,10 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **135 actions** across six categories —
-**General** (55, app-wide or routed per focused editor), **Graph** (15), **Timeline** (34),
-**Piano Roll** (14), **Mixer** (5) and **Layout Editor** (12) — every one of them rebindable, including keys that used to be hardcoded:
-nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool
-digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **136 actions** across six categories —
+**General** (55, app-wide or routed per focused editor), **Graph** (15), **Timeline** (35), **Piano Roll** (14),
+**Mixer** (5) and **Layout Editor** (12) — every one rebindable, including keys that used to be hardcoded:
+nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
 held that key. The tab groups rows into one collapsible section per category with a search box
 above them (matches against both the action's description and its current binding text — "cmd"
@@ -529,6 +528,7 @@ header's Right, `TimelineTrackHeaderComponent::keyPressed`). See
 | Return | Open Clip in Editor (`timelineClipOpen`) — the same hook a double-click on the clip fires (the piano roll for a MIDI clip) |
 | Alt+← / Alt+→ | Move Clip Earlier / Later by One Grid Step (`timelineClipMoveEarlier` / `timelineClipMoveLater`) — one grid division (the chosen Snap division even with the snap switch off; one beat with Snap Off), one undo step, clamped at beat 0 |
 | Shift+Cmd+D | Duplicate Selected Clips as Linked Copies (`timelineClipDuplicateLinked`) — every selected MIDI clip gets a copy linked to it, the copies tiled after the selection as one block, one undo step (audio clips are skipped). Also "Duplicate linked" in the clip's menu ([linked clips](../timeline/linked-clips.md)) |
+| Option+Cmd+S | Make Section from Range (`timelineMakeSection`) — the live Range tool selection becomes a named section on the Sections strip above the ruler, one undo step, its name open for typing. Also "Make section" in the range menu ([sections](../timeline/sections.md)). The Graph's Save Snippet shares the chord; the two surfaces never both own the key |
 | Shift+Cmd+R (Ctrl+Alt+Shift+R off the Mac) | Render Range or Selected Clips to Audio Track (`timelineRenderToAudioTrack`) — the live Range tool selection, else the selected clips, rendered to new audio tracks ([render to audio track](../timeline/render-to-audio.md)). Also in the range menu and the clip menu |
 | Alt+↑ / Alt+↓ | Move Automation Lane Up / Down (`timelineMoveLaneUp` / `timelineMoveLaneDown`) — the lane whose header controls or curve editor hold focus swaps with its neighbour within its track, one undo step ([automation](../timeline/automation.md#reordering-lanes)). The same chord as every other "move this item one place" key (a canvas card, a mixer row). In a curve editor with points selected it moves the points instead; with none selected, the lane. An install that saved the old Cmd+Alt+↑/↓ moves to it once, unless it was rebound. On a focused modulator row it moves the row within its lane, and past the lane's end into the next lane on screen that can take it, across tracks, focus following it |
 | Esc | Back to the clip's track header. Fixed, like Delete (not in the action table); the clip stays selected |
@@ -821,7 +821,7 @@ which closes it; in the on-card editor Escape ends a drag, else cancels the sess
 
 ## Command vs surface actions
 
-The 135 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 136 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
 - **Command-dispatched** (71 actions) — every General action (including the transport family

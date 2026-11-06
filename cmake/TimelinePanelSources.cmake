@@ -25,4 +25,14 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelinePanelComponent/AddTrackPicker.cpp
     Source/UI/AddList/AddList.h
     Source/UI/AddList/AddList.cpp
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h
+    Source/UI/Timeline/TimelineSectionStrip/SectionStripGeometry.h
+    Source/UI/Timeline/TimelineSectionStrip/SectionStripSettings.h
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.cpp
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMouse.cpp
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripRename.cpp
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMenu.cpp
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripAccessibility.cpp
+    Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripKeys.cpp
+    Source/UI/Timeline/SectionColours.h
 )

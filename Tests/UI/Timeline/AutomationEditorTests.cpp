@@ -389,7 +389,8 @@ TEST(TimelinePanelAutomationLanesTest, ShowAutomationLaneOpensTheTrackAndAddsThe
     ASSERT_NE(panel.laneEditorForTest(laneId), nullptr);
     EXPECT_EQ(panel.laneEditorForTest(laneId)->getActiveLane(), laneId);
     EXPECT_GT(panel.getClipLaneArea().getRowLayout().totalHeight(), totalBefore) << "the lane row adds height";
-    EXPECT_EQ(panel.getClipLaneArea().getHeight(), panel.getLanesBounds().getHeight() - panel.getRuler().getHeight())
+    EXPECT_EQ(panel.getClipLaneArea().getHeight(),
+              panel.getLanesBounds().getHeight() - panel.getRuler().getHeight() - panel.getSectionStrip().getHeight())
         << "nothing is carved off the bottom of the lanes any more";
 
     panel.setTrackAutomationExpanded(trackId, false);

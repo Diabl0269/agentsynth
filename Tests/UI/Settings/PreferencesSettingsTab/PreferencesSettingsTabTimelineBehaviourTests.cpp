@@ -404,3 +404,21 @@ TEST_F(PreferencesSettingsTabTest, PlayScaleWhenBrowsingKeysDefaultsOnPersistsAn
     tab.setPlayScaleOnBrowseEnabled(true);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("playScaleWhenBrowsingKeys"), "1");
 }
+
+// The two Sections preferences: the strip shows by default, a drop makes room by default; each persists under its own
+// key and the panel reads them at use time.
+TEST_F(PreferencesSettingsTabTest, SectionsPreferencesDefaultAndRoundTrip) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isShowSectionsStripEnabled());
+        EXPECT_FALSE(tab.isSectionsCoverOnDropEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("timelineShowSectionsStrip"));
+        tab.setShowSectionsStripEnabled(false);
+        tab.setSectionsCoverOnDropEnabled(true);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineShowSectionsStrip"), "0");
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineSectionsCoverOnDrop"), "1");
+    }
+    PreferencesSettingsTab again(appProperties);
+    EXPECT_FALSE(again.isShowSectionsStripEnabled());
+    EXPECT_TRUE(again.isSectionsCoverOnDropEnabled());
+}

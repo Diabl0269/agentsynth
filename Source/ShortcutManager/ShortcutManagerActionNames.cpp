@@ -307,6 +307,8 @@ juce::String clipKeyboardActionName(const juce::String& actionId) {
         return "Move Clip Later by One Grid Step";
     if (actionId == "timelineClipDuplicateLinked")
         return "Duplicate Selected Clips as Linked Copies";
+    if (actionId == "timelineMakeSection")
+        return "Make Section from Range";
     if (actionId == "timelineRenderToAudioTrack")
         return "Render Range or Selected Clips to Audio Track";
     return {};

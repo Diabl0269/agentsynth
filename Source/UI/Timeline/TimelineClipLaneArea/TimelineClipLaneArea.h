@@ -263,9 +263,13 @@ public:
     // Seconds per beat at the transport's tempo (120 bpm with no transport) — what range edits pass the doc.
     double secondsPerBeat() const;
     // The range verbs the context menu and Delete/Shift+Delete apply.
-    enum class RangeChoice { SplitAtEdges, Delete, DeleteCloseGap };
+    enum class RangeChoice { SplitAtEdges, Delete, DeleteCloseGap, MakeSection };
     // Applies one verb as ONE recordTimelineChange. False when there is no range or nothing changed.
     bool applyRangeChoice(RangeChoice choice);
+    // Option+Cmd+S: the shipped binding of "timelineMakeSection" (the fallback when no manager is set).
+    static juce::KeyPress sectionKey() {
+        return juce::KeyPress('s', juce::ModifierKeys::altModifier | juce::ModifierKeys::commandModifier, 0);
+    }
     // The union of the range's painted row rects, or an empty rect (test hook).
     juce::Rectangle<int> getRangeRectForTest() const { return rangeRect(); }
     bool isRangeDragActiveForTest() const noexcept { return dragMode_ == DragMode::Range; }
@@ -381,6 +385,8 @@ public:
     // TimelinePanelComponent::timelineChanged() calls on every subsequent doc notification.
     void setTimelineDoc(synth::TimelineDoc* doc);
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
+    // Fired with the start beat after "Make section" (menu or key) made one from the range: the panel opens its name.
+    std::function<void(double startBeat)> onSectionMade;
 
     // Non-owning; may be null (no undo manager -> mutations apply directly, uncommitted to any
     // undo stack — the same degrade-gracefully contract TimelineTrackHeaderComponent::performEdit
@@ -496,6 +502,12 @@ public:
     bool matchesRenderToAudioKey(const juce::KeyPress& key) const;
     // Linked copies of the selected MIDI clips, tiled after the selection as one undo step; false if none.
     bool duplicateLinkedSelection();
+    // The section a clip belongs to when that section plays more than once (the clip then draws the link mark).
+    struct SectionFollow {
+        juce::String name;
+        int plays = 0; // 0: the clip is in no repeated section
+    };
+    SectionFollow sectionFollowOf(const synth::Clip& clip) const;
     // Names the link mark under the pointer; empty anywhere else.
     juce::String getTooltip() override;
     juce::String linkTooltipAt(juce::Point<int> localPos) const;

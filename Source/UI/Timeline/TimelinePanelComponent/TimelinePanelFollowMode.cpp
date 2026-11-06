@@ -36,6 +36,7 @@ void TimelinePanelComponent::followViewToBeat(double beat) {
         return;
     viewState_.firstVisibleBeat = origin;
     ruler_.repaint();
+    sectionStrip_.repaint();
     repaint();
 }
 

@@ -75,3 +75,6 @@ serialisation and the lone-member load);
 `Tests/UI/Timeline/TimelineClipLane/TimelineClipLaneLinkedClipsTests.cpp` (the real context menu,
 the key and its rebind, the link mark's pixels and tooltip, the screen-reader text);
 `Tests/Timeline/ArrangementContextTests.cpp` (`LinkedClipsAreMarked`).
+
+A clip inside a section that plays more than once draws the same mark and says "Follows Chorus" in its tooltip and
+screen-reader text; see [sections](sections.md).

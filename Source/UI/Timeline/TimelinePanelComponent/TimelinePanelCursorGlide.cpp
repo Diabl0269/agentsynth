@@ -72,6 +72,7 @@ void TimelinePanelComponent::pageViewToShowBeat(double beat) {
         return;
     viewState_.firstVisibleBeat = std::max(0.0, beat - 0.1 * visibleBeats);
     ruler_.repaint();
+    sectionStrip_.repaint();
     repaint();
 }
 

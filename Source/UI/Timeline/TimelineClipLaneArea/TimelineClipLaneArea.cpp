@@ -514,7 +514,8 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     }
 
     const auto group = linkGroupSizes_.find(clip.linkGroup);
-    const bool linked = clip.linkGroup != 0 && group != linkGroupSizes_.end() && group->second > 1;
+    const bool linked =
+        (clip.linkGroup != 0 && group != linkGroupSizes_.end() && group->second > 1) || sectionFollowOf(clip).plays > 1;
     const auto markBounds = linked ? linkMarkBounds(rect) : juce::Rectangle<int>();
     if (rect.getWidth() > kMinWidthForName && clip.name.isNotEmpty()) {
         // Fixed black, not a theme token, for the same reason as the note-preview lines above: the

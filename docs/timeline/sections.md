@@ -1,9 +1,41 @@
-# Sections (model)
+# Sections
 
 A section (Intro, Verse, Chorus) is a named stretch of bars across every track. It plays at one or more
 **placements**, and every placement of one section holds the same music: edit a clip, a note or an
 automation point inside any placement and, in the same mutation, every other placement is rewritten to
-match. There are no variations. This page is the document model only; no UI draws it yet.
+match. There are no variations. This page covers the document model and the Sections strip that shows it.
+
+## What the user does
+
+The **Sections strip** is a 24 px row (`Metrics::timelineSectionStripHeight`) above the ruler, over the same
+bars, with a "Sections" label above the track headers. Code: `Source/UI/Timeline/TimelineSectionStrip/`. The
+strip never listens to the doc; the panel's `timelineChanged` calls `refresh()`. It is hidden while a clip is
+open in the piano roll, and by the Settings toggle below.
+
+- **Make a section:** drag across bars on the empty strip. The span snaps outward to whole bars, is at least
+  one bar and stops at neighbouring blocks. Release makes "Section N" in the next palette colour as one undo
+  step (clips are split at both edges) and opens its name for typing. There is no grow animation.
+- **Rename:** double-click a block or press the menu's Rename. Return or focus-lost commits, Esc cancels, an
+  empty or unchanged name records nothing.
+- **Block menu** (right-click a block): Rename, Change colour, Place again after this, Place again at the end,
+  Make unique (only when the section plays more than once), Select its clips, Remove (keep the music), Delete
+  and bars. "Place again" makes room for the music after it, unless the cover setting is on. Each choice is
+  one undo step. The headless seams are the protected `openSectionContextMenu` and the public
+  `applySectionMenuChoice`.
+- **Strip menu** (right-click empty strip): Make sections from markers.
+- **From a range:** with the Range tool, the range menu's **Make section** (after "Delete range and close
+  gap") or Option+Cmd+S (`timelineMakeSection`, rebindable) turns the range into a section.
+- **Clips follow:** a clip inside a section that plays more than once draws the link mark; its tooltip reads
+  "Follows Chorus (plays 3 times). Edit any Chorus to change them all." and a screen reader adds ", follows
+  Chorus".
+- **Edge lines:** each block's start and end draw as a faint line down the lanes.
+- **Settings (Preferences > Timeline):** "show the Sections strip" (`timelineShowSectionsStrip`, default on) and
+  "placing a section covers the music where it lands" (`timelineSectionsCoverOnDrop`, default off; Shift flips
+  it for one drop).
+- **Accessibility:** the strip is a group titled "Sections" described as "Sections, N sections"; each block is
+  a button titled like "Chorus, bars 13 to 20, 1 of 3". Block tooltips read "Chorus - 8 bars - plays 3 times".
+- **Test mode:** a `timelineSections` probe publishes `sections` (`name:start:length:ordinal/count`, joined
+  by `;`) and `selectedSection`.
 
 ## Model
 

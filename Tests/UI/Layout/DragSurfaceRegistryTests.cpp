@@ -41,6 +41,8 @@ const char* const kOnCardRows = "test:OnCardEditorRows.TheCommittedLayoutEqualsT
 const std::vector<Registered> kRegistered = {
     // Preview and commit checked by a shared guard.
     {"TimelineClipLaneArea", {"clip-edge"}},
+    {"TimelineSectionStrip",
+     {"exempt: the make drag commits the very span it draws (makeDragSpan); the block-move drag gets its own guard"}},
     {"CurveEditorComponent", {"undo-glide:Curve editor point", "point-markers:Curve editor point"}},
     {"MorphMap", {"undo-glide:Morph map dot", "point-markers:Morph map dot"}},
     {"AutomationLaneEditor", {"undo-glide:Automation lane point", "point-markers:Automation lane point"}},
