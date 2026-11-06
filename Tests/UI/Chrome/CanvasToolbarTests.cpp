@@ -258,13 +258,23 @@ TEST_F(CanvasToolbarWindowTest, ANarrowWindowStaysIconOnlyWhateverThePreferenceS
     EXPECT_TRUE(strip().isIconOnly());
 }
 
-TEST_F(CanvasToolbarWindowTest, TheGreyedMinimapKeepsItsExplanationAndIsNotATabStop) {
+TEST_F(CanvasToolbarWindowTest, AShortCanvasKeepsTheMinimapButtonOn) {
     mc_->setMainViewForTest(Tab::Timeline);
     mc_->ensureCanvasShowing();
     dock().setActiveTab(Tab::Canvas);
     mc_->setSize(1400, 420);
-    if (!canvas().isMinimapSuppressedBySize())
-        GTEST_SKIP() << "the canvas is tall enough here to keep its minimap";
+    EXPECT_FALSE(canvas().isMinimapSuppressedBySize());
+    EXPECT_TRUE(strip().minimapButton().isEnabled());
+    EXPECT_TRUE(strip().minimapButton().getTooltip().contains("Minimap"));
+}
+
+TEST_F(CanvasToolbarWindowTest, TheGreyedMinimapKeepsItsExplanationAndIsNotATabStop) {
+    mc_->setMainViewForTest(Tab::Timeline);
+    mc_->ensureCanvasShowing();
+    dock().setActiveTab(Tab::Canvas);
+    mc_->setSize(300, 200);
+    ASSERT_TRUE(canvas().isMinimapSuppressedBySize())
+        << "canvas " << canvas().getWidth() << "x" << canvas().getHeight();
     EXPECT_FALSE(strip().minimapButton().isEnabled());
     EXPECT_EQ(strip().minimapButton().getTooltip(), "Needs a taller canvas");
     strip().focusSlot(CanvasToolbar::AutoArrange);

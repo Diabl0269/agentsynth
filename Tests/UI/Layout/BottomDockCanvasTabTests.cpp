@@ -164,19 +164,31 @@ TEST_F(BottomDockCanvasTabTest, TheMainViewKeepsItsFocusRegionName) {
     EXPECT_EQ(mc_->getMainViewFocusRegionId(), "midiRemote");
 }
 
-TEST_F(BottomDockCanvasTabTest, TheMinimapToggleIsGreyedOutUnderTheSizeFloor) {
+TEST_F(BottomDockCanvasTabTest, TheMinimapStaysAvailableInAShortCanvasAndShrinksToFit) {
     auto* button = minimapButton();
     ASSERT_NE(button, nullptr);
     EXPECT_FALSE(canvas().isMinimapSuppressedBySize());
     EXPECT_TRUE(button->isEnabled());
-    EXPECT_TRUE(button->getTooltip().contains("Minimap"));
+    const int tallH = canvas().getMinimap().getHeight();
 
-    mc_->setSize(640, 420); // the library sidebar leaves the canvas under 480 wide
-    EXPECT_TRUE(canvas().isMinimapSuppressedBySize());
-    EXPECT_FALSE(button->isEnabled());
-    EXPECT_EQ(button->getTooltip(), "Needs a taller canvas");
+    mc_->setSize(640, 420); // the library sidebar leaves the canvas under 480 wide: no longer a reason to hide it
+    EXPECT_FALSE(canvas().isMinimapSuppressedBySize());
+    EXPECT_TRUE(button->isEnabled());
+    EXPECT_TRUE(button->getTooltip().contains("Minimap"));
+    EXPECT_TRUE(canvas().getMinimap().isVisible());
+    EXPECT_GE(canvas().getMinimap().getWidth(), synth::ui::MinimapComponent::kMinMapWidth);
+    EXPECT_GE(canvas().getMinimap().getHeight(), synth::ui::MinimapComponent::kMinMapHeight);
+    EXPECT_LE(canvas().getMinimap().getHeight(), tallH);
+    EXPECT_LE(canvas().getMinimap().getBottom(), canvas().getHeight());
 
     mc_->setSize(1400, 900);
     EXPECT_TRUE(button->isEnabled());
-    EXPECT_TRUE(button->getTooltip().contains("Minimap"));
+}
+
+TEST(MinimapFloor, OnlyAnEditorTooSmallForALegibleMapSuppressesIt) {
+    using synth::ui::MinimapComponent;
+    EXPECT_TRUE(MinimapComponent::fitsEditor(600, 200));
+    EXPECT_TRUE(MinimapComponent::fitsEditor(240, 160));
+    EXPECT_FALSE(MinimapComponent::fitsEditor(239, 400));
+    EXPECT_FALSE(MinimapComponent::fitsEditor(800, 159));
 }
