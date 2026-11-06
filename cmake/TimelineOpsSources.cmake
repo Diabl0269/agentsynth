@@ -13,6 +13,7 @@ target_sources(Core PRIVATE
     Source/Timeline/TimelineOpsSections.h
     Source/Timeline/TimelineOpsTempoMarkers.cpp
     Source/Timeline/TimelineOpsTempoMarkers.h
+    Source/Timeline/TimelineDoc/SectionPalette.h
     Source/Timeline/TimelineDoc/TimelineDocSections.cpp
     Source/Timeline/TimelineDoc/TimelineDocSectionSync.cpp
     Source/Timeline/TimelineDoc/TimelineDocSectionSerialization.cpp

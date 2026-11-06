@@ -1,10 +1,11 @@
 // Concern: reading, describing and applying the timelineOps `makeSection` and `placeSection` ops.
 #include "TimelineOpsSections.h"
 
+#include "TimelineDoc/SectionPalette.h"
 #include "TimelineDoc/TimelineDoc.h"
 #include "TimelineOpsTempoMarkers.h"
 #include "TimelineValidator.h"
-#include "UI/Timeline/SectionColours.h"
+#include "UniqueTrackName.h"
 
 #include <cmath>
 #include <initializer_list>
@@ -128,20 +129,23 @@ juce::String runMakeSectionOp(juce::DynamicObject& op, TimelineDoc& doc, Section
     MakeSectionOpFields fields;
     if (const auto error = readMakeSectionOp(op, fields); error.isNotEmpty())
         return error;
-    int matches = 0;
-    uniqueSectionNamed(doc, fields.name, matches);
-    if (matches > 0 || madeInBatch(progress, fields.name))
-        return "names \"" + fields.name + "\", which is already a section. Section names must be different.";
+    if (madeInBatch(progress, fields.name))
+        return "names \"" + fields.name + "\" twice. Each makeSection in a batch needs its own name.";
     if (static_cast<int>(doc.getSections().size()) >= TimelineDoc::kMaxSections)
         return "would take the timeline past its limit of " + juce::String(TimelineDoc::kMaxSections) + " sections.";
     if (static_cast<int>(doc.getPlacements().size()) >= TimelineDoc::kMaxPlacements)
         return "would take the timeline past its limit of " + juce::String(TimelineDoc::kMaxPlacements) +
                " section placements.";
-    if (!doc.makeSection(fields.startBeat, fields.endBeat, fields.name,
-                         ui::sectionColourFor(static_cast<int>(doc.getSections().size())), kSplitSecondsPerBeat)
-             .isValid())
+    std::vector<juce::String> taken;
+    for (const auto& section : doc.getSections())
+        taken.push_back(section.name);
+    const auto made =
+        doc.makeSection(fields.startBeat, fields.endBeat, uniqueNameAmong(fields.name, taken),
+                        sectionColourFor(static_cast<int>(doc.getSections().size())), kSplitSecondsPerBeat);
+    if (!made.isValid())
         return "asks for bars that overlap another section.";
     progress.made.push_back(fields);
+    progress.madeIds[fields.name] = made;
     return {};
 }
 
@@ -149,8 +153,12 @@ juce::String runPlaceSectionOp(juce::DynamicObject& op, TimelineDoc& doc, Sectio
     PlaceSectionOpFields fields;
     if (const auto error = readPlaceSectionOp(op, fields); error.isNotEmpty())
         return error;
-    int matches = 0;
-    const SectionId id = uniqueSectionNamed(doc, fields.name, matches);
+    int matches = 1;
+    SectionId id;
+    if (const auto madeHere = progress.madeIds.find(fields.name); madeHere != progress.madeIds.end())
+        id = madeHere->second;
+    else
+        id = uniqueSectionNamed(doc, fields.name, matches);
     if (matches == 0)
         return "names section \"" + fields.name + "\", which no makeSection op made and the timeline does not have.";
     if (matches > 1)

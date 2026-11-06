@@ -5,6 +5,7 @@
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
 #include "Timeline/ArrangementContext.h"
+#include "Timeline/TimelineDoc/SectionPalette.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineOps.h"
 #include "Timeline/TimelineValidator.h"
@@ -125,10 +126,40 @@ TEST_F(TimelineOpsSectionTest, ASectionNameCannotBeMadeTwiceOrOverlapAnother) {
         << "touching is fine";
 }
 
-TEST_F(TimelineOpsSectionTest, AnExistingSectionCanBePlacedByNameButNotMadeAgain) {
+TEST_F(TimelineOpsSectionTest, AnExistingSectionCanBePlacedByNameWhenTheBatchMadeNone) {
     ASSERT_TRUE(apply(songOps()).ok);
     EXPECT_TRUE(validate(R"([{"op": "placeSection", "name": "Chorus", "beat": 48}])").ok);
-    EXPECT_FALSE(validate(R"([{"op": "makeSection", "name": "Chorus", "startBeat": 64, "endBeat": 80}])").ok);
+}
+
+TEST_F(TimelineOpsSectionTest, ASectionNamedLikeOneInTheDocumentGetsAFreeNameAndTheBatchPlacesItsOwn) {
+    TimelineDoc& d = doc;
+    const auto lead = d.addTrack(synth::TrackKind::Midi, "Old");
+    d.addClip(lead, 64.0, 16.0, "old");
+    const auto old = d.makeSection(64.0, 80.0, "Chorus", 0, 0.5);
+    ASSERT_TRUE(old.isValid());
+    const auto result = apply(songOps());
+    ASSERT_TRUE(result.ok) << result.message;
+    ASSERT_EQ(doc.getSections().size(), 2u);
+    EXPECT_EQ(doc.getSections()[0].name, "Chorus");
+    EXPECT_EQ(doc.getSections()[1].name, "Chorus 2");
+    EXPECT_EQ(doc.placementsOf(old).size(), 1u) << "the old Chorus is untouched";
+    EXPECT_EQ(doc.placementsOf(doc.getSections()[1].id).size(), 2u) << "the batch placed the section it made";
+}
+
+TEST_F(TimelineOpsSectionTest, AnAmbiguousDocumentNameCannotBePlacedButABatchNameIsNeverAmbiguous) {
+    doc.addTrack(synth::TrackKind::Midi, "Old");
+    ASSERT_TRUE(doc.makeSection(64.0, 80.0, "Chorus", 0, 0.5).isValid());
+    ASSERT_TRUE(doc.makeSection(80.0, 96.0, "Chorus", 0, 0.5).isValid());
+    EXPECT_FALSE(validate(R"([{"op": "placeSection", "name": "Chorus", "beat": 200}])").ok);
+    EXPECT_TRUE(validate(juce::String("[") + kPlaceLead +
+                         R"(, {"op": "makeSection", "name": "Chorus", "startBeat": 0, "endBeat": 16},
+                            {"op": "placeSection", "name": "Chorus", "beat": 200}])")
+                    .ok);
+}
+
+TEST_F(TimelineOpsSectionTest, TheSectionPaletteIsTheTimelineModelsAndWraps) {
+    EXPECT_EQ(synth::sectionColourFor(0), synth::kSectionColours[0]);
+    EXPECT_EQ(synth::sectionColourFor(8), synth::kSectionColours[0]);
 }
 
 TEST_F(TimelineOpsSectionTest, TheSectionLimitsRejectTheBatch) {
