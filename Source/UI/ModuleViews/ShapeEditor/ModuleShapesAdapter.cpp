@@ -1,5 +1,6 @@
 // ModuleShapesAdapter.cpp -- the undo bracket and the morph cursor every module's shape list adapter shares.
 #include "ModuleShapesAdapter.h"
+#include "Modules/FilterModule.h"
 
 namespace synth::ui {
 
@@ -38,7 +39,11 @@ void ModuleShapesAdapter::endEdit() {
         undo_->recordNodeExtraStateChange(graph_, nodeId_, before_, module_.getExtraState());
 }
 
+/** Where the morph cursor is now: on a Filter the knobs plus their CV (so the map follows modulation), elsewhere the
+    knobs. setCursor writes the knobs only. */
 juce::Point<float> ModuleShapesAdapter::getCursor() const {
+    if (const auto* filter = dynamic_cast<const FilterModule*>(&module_))
+        return {filter->getModulatedMorphX(), filter->getModulatedMorphY()};
     return {readParameter(module_, kCursorIds[0]), readParameter(module_, kCursorIds[1])};
 }
 

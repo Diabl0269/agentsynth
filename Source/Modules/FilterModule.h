@@ -159,7 +159,6 @@ public:
         applyFilterType(filterTypeParam->getIndex());
 
         modulatedCutoff.store(*cutoffParam, std::memory_order_relaxed);
-        modulatedResonance.store(*resonanceParam, std::memory_order_relaxed);
 
         int numChannels = buffer.getNumChannels();
         int numSamples = buffer.getNumSamples();
@@ -185,6 +184,7 @@ public:
         if (auto* vb = getVisualBuffer()) {
             vb->pushBlock(buffer.getReadPointer(0), numSamples);
         }
+        spectrumBuffer.pushBlock(buffer.getReadPointer(0), numSamples);
 
         // Clear CV channels to prevent leaking to downstream modules. Bounded at kRightBase: the
         // Audio R block sits above the CV inputs, so running to getNumChannels() would erase the
@@ -344,7 +344,6 @@ public:
 
     float getCurrentCutoff() const { return modulatedCutoff.load(std::memory_order_relaxed); }
     float getCurrentResonance() const { return *resonanceParam; }
-    float getModulatedResonance() const { return modulatedResonance.load(std::memory_order_relaxed); }
     float getCurrentDrive() const { return *driveParam; }
     int getCurrentFilterType() const { return filterTypeParam->getIndex(); }
     /** The Custom controls as set on their knobs (no CV): morph cursor, shift in semitones, depth. */
@@ -352,7 +351,33 @@ public:
     float getCurrentMorphY() const { return morphYParam->get(); }
     float getCurrentShift() const { return shiftParam->get(); }
     float getCurrentDepth() const { return depthParam->get(); }
+    /** Message thread: each knob plus what the last processed block's CV added to it (Shift: and Key Track), so a
+        knob turn shows at once and modulation shows while audio runs. Custom ignores Drive. */
+    float getModulatedResonance() const {
+        return juce::jlimit(0.0f, 1.0f, resonanceParam->get() + resonanceCV.load(std::memory_order_relaxed));
+    }
+    float getModulatedDrive() const {
+        return juce::jlimit(1.0f, 10.0f, driveParam->get() + 9.0f * driveCV.load(std::memory_order_relaxed));
+    }
+    float getModulatedMorphX() const {
+        return modulateNormalised(*morphXParam, morphXParam->get(), morphXCV.load(std::memory_order_relaxed));
+    }
+    float getModulatedMorphY() const {
+        return modulateNormalised(*morphYParam, morphYParam->get(), morphYCV.load(std::memory_order_relaxed));
+    }
+    float getModulatedShift() const {
+        return modulateNormalised(*shiftParam, shiftParam->get(), shiftCV.load(std::memory_order_relaxed)) +
+               keyTrackShift.load(std::memory_order_relaxed);
+    }
+    float getModulatedDepth() const {
+        return modulateNormalised(*depthParam, depthParam->get(), depthCV.load(std::memory_order_relaxed));
+    }
     double getLastSampleRate() const { return lastSampleRate; }
+
+    /** The newest kSpectrumSamples of the output (voice 0, left), for the spectrum views; the scope keeps reading the
+     *  shorter visual buffer. Audio thread writes, message thread reads. */
+    static constexpr int kSpectrumSamples = 4096;
+    VisualBuffer& getSpectrumBuffer() { return spectrumBuffer; }
 
     /** Message thread only: the Custom type's drawn shapes. */
     const synth::CustomFilterShapes& getCustomShapes() const { return customEngine.getShapes(); }
@@ -415,19 +440,13 @@ private:
         auto* audioData = buffer.getWritePointer(0);
 
         bool cutoffCVActive = false;
-        bool resCVActive = false;
         if (cvCutoffCh) {
             float rms = 0.0f;
             for (int i = 0; i < numSamples; ++i)
                 rms += cvCutoffCh[i] * cvCutoffCh[i];
             cutoffCVActive = (rms / numSamples) > 1e-6f;
         }
-        if (cvResCh) {
-            float rms = 0.0f;
-            for (int i = 0; i < numSamples; ++i)
-                rms += cvResCh[i] * cvResCh[i];
-            resCVActive = (rms / numSamples) > 1e-6f;
-        }
+        float lastResMod = 0.0f, lastDriveMod = 0.0f;
 
         for (int i = 0; i < numSamples; ++i) {
             float baseCutoff = smoothedCutoff.getNextValue();
@@ -453,13 +472,13 @@ private:
             float totalResMod = cvResCh ? cvResCh[i] : 0.0f;
             totalResMod = juce::jlimit(-1.0f, 1.0f, totalResMod);
             float res = juce::jlimit(0.0f, 1.0f, baseRes + totalResMod);
-            if (resCVActive)
-                modulatedResonance.store(res, std::memory_order_relaxed);
+            lastResMod = totalResMod;
             ladderSetters[0][0].setResonance(ladders[0][0], res);
 
             float totalDriveMod = cvDriveCh ? cvDriveCh[i] : 0.0f;
             totalDriveMod = juce::jlimit(-1.0f, 1.0f, totalDriveMod);
             float drive = juce::jlimit(1.0f, 10.0f, baseDrive + (totalDriveMod * 9.0f));
+            lastDriveMod = totalDriveMod;
             ladderSetters[0][0].setDrive(ladders[0][0], drive);
 
             // Stash the coefficients this sample resolved to so the right leg gets the identical
@@ -484,6 +503,10 @@ private:
                 ladders[0][0].process(context);
             }
         }
+
+        // Once per block, after the loop, so the response view never reads a half-written state.
+        resonanceCV.store(lastResMod, std::memory_order_relaxed);
+        driveCV.store(lastDriveMod, std::memory_order_relaxed);
 
         // Right leg: same coefficients, its own filter state. Skipped entirely when nothing is
         // patched into Audio R, so a mono insert pays for one leg only.
@@ -571,8 +594,8 @@ private:
         float drive = juce::jlimit(1.0f, 10.0f, baseDrive + (cvDrv * 9.0f));
 
         modulatedCutoff.store(keyTrackedCutoff(f, keyTrack, blockEndPitch(buffer, 0)), std::memory_order_relaxed);
-        modulatedResonance.store(res, std::memory_order_relaxed);
-        modulatedDrive.store(drive, std::memory_order_relaxed);
+        resonanceCV.store(cvRes, std::memory_order_relaxed);
+        driveCV.store(cvDrv, std::memory_order_relaxed);
 
         // Process only active voices (skip silent channels to save CPU). Both legs fan eight wide:
         // the right leg is its own poly head at kRightBase, not voice 1 relabelled.
@@ -634,18 +657,18 @@ private:
         c.shiftSemitones = modulateNormalised(*shiftParam, shiftParam->get(), blockCV(buffer, kShiftCVChannel));
         c.depth = modulateNormalised(*depthParam, depthParam->get(), blockCV(buffer, kDepthCVChannel));
         const float cutoffCV = juce::jlimit(-1.0f, 1.0f, blockCV(buffer, cvChannelFor(0, poly)));
-        const float resonanceCV = blockCV(buffer, cvChannelFor(1, poly));
+        const float resCV = blockCV(buffer, cvChannelFor(1, poly));
         c.cutoffHz = sweepCutoff(smoothedCutoff.getCurrentValue(), cutoffCV);
-        c.resonance = juce::jlimit(0.0f, 1.0f, smoothedResonance.getCurrentValue() + resonanceCV);
+        c.resonance = juce::jlimit(0.0f, 1.0f, smoothedResonance.getCurrentValue() + resCV);
         smoothedCutoff.skip(numSamples);
         smoothedResonance.skip(numSamples);
-        modulatedCutoff.store(c.cutoffHz, std::memory_order_relaxed);
-        modulatedResonance.store(c.resonance, std::memory_order_relaxed);
         const float keyTrack =
             0.01f * modulateNormalised(*keyTrackParam, keyTrackParam->get(), blockCV(buffer, kKeyTrackCVChannel));
         const float pitch = blockEndPitch(buffer, 0);
-        if (!poly && keyTrack > 0.0f && pitch > 0.0f)
-            c.shiftSemitones += 12.0f * keyTrack * std::log2(pitch / kKeyTrackRefHz);
+        const float keyTrackSemitones =
+            (!poly && keyTrack > 0.0f && pitch > 0.0f) ? 12.0f * keyTrack * std::log2(pitch / kKeyTrackRefHz) : 0.0f;
+        c.shiftSemitones += keyTrackSemitones;
+        storeCustomModulation(buffer, c.cutoffHz, resCV, keyTrackSemitones);
 
         const int voices = poly ? kNumVoices : 1;
         std::array<float*, synth::CustomFilterEngine::kMaxChannels> channels{};
@@ -655,6 +678,20 @@ private:
                     channels[(size_t)(leg * kNumVoices + v)] = buffer.getWritePointer(ch);
         readVoiceInputs(buffer, numSamples, voices);
         customEngine.process(channels.data(), (int)channels.size(), numSamples, c, voiceInputs.data(), voices);
+    }
+
+    /** Publishes what this block's CV added to each Custom control, for the response view and the map cursor: one
+        relaxed store each, no lock, read on the message thread through the getModulated* getters. */
+    void storeCustomModulation(const juce::AudioBuffer<float>& buffer, float cutoffHz, float resCV,
+                               float keyTrackSemitones) {
+        modulatedCutoff.store(cutoffHz, std::memory_order_relaxed);
+        resonanceCV.store(resCV, std::memory_order_relaxed);
+        driveCV.store(0.0f, std::memory_order_relaxed); // Custom ignores Drive
+        morphXCV.store(blockCV(buffer, kMorphXCVChannel), std::memory_order_relaxed);
+        morphYCV.store(blockCV(buffer, kMorphYCVChannel), std::memory_order_relaxed);
+        shiftCV.store(blockCV(buffer, kShiftCVChannel), std::memory_order_relaxed);
+        depthCV.store(blockCV(buffer, kDepthCVChannel), std::memory_order_relaxed);
+        keyTrackShift.store(keyTrackSemitones, std::memory_order_relaxed);
     }
 
     /** What the per-note modes need from each of the first `voices` voices before filtering: its Pitch at the
@@ -753,7 +790,15 @@ private:
     static constexpr float kVoiceAudibleLevel = 1.0e-4f;
     bool customWasActive = false; // audio thread
     bool customWasPoly = false;   // audio thread
+    // Audio thread writes (relaxed, once per block), message thread reads: the swept cutoff, and what the CV adds to
+    // each other knob (normalised units; Drive in -1..1 of its 1..10 travel; Key Track's Custom shift in semitones).
     std::atomic<float> modulatedCutoff{440.0f};
-    std::atomic<float> modulatedResonance{0.1f};
-    std::atomic<float> modulatedDrive{1.0f};
+    std::atomic<float> resonanceCV{0.0f};
+    std::atomic<float> driveCV{0.0f};
+    std::atomic<float> morphXCV{0.0f};
+    std::atomic<float> morphYCV{0.0f};
+    std::atomic<float> shiftCV{0.0f};
+    std::atomic<float> depthCV{0.0f};
+    std::atomic<float> keyTrackShift{0.0f};
+    VisualBuffer spectrumBuffer{kSpectrumSamples}; // one FFT frame for the spectrum views
 };

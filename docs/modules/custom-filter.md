@@ -80,10 +80,19 @@ voice, per-note mode included. They are not Key Track targets.
 
 - **Cutoff** adds `12 × log2(cutoff / 440)` semitones to Shift (and Key Track). The designer applies it, so
   `CustomFilterKernelDesigner::design(grid, shift, depth, resonance, cutoffHz, out)` is the whole recipe.
-- **Resonance** adds, after Depth, `18 × resonance²` dB at the cutoff frequency itself (the bell is not moved by the
-  shift Cutoff causes): a Gaussian in log frequency whose standard deviation falls from one octave at resonance 0 to a
-  sixth of an octave at 1. The default 0.1 adds 0.18 dB, which is nothing audible; Depth 0 with resonance up still
-  gives a peak on a flat response, like a resonant filter.
+- **Resonance** adds, after Depth, a resonant peak at the cutoff frequency itself (the bell is not moved by the
+  shift Cutoff causes). Its height is `customfilter::resonancePeakDb`: about 20 dB per unit of Resonance up to 0.5,
+  then steeper (1.7 dB at 0.1, 4.4 at 0.25, 10 at 0.5, 17.8 at 0.75, 24.9 at 0.9), held to 32 dB at 1. Its shape is
+  the gain a resonant two-pole low-pass of that Q has over one of Q 1, so it is symmetric in octaves and its -3 dB
+  width is about 1.44 / Q octaves (1.56 octaves at 0.25, 0.51 at 0.5, 0.19 at 0.75, 0.083 at 0.9). Both were fitted
+  to an offline measurement of a commercial analogue-style low-pass (12 and 24 dB per octave behave the same) at a
+  1 kHz cutoff; `CustomFilterResonanceLawTests` holds the measured table and checks the law against it (peak within
+  1 dB, width within 12 % from 0.5 up; below that the measured width is set by the low-pass's own skirt). That filter
+  self-oscillates at Resonance 1, and a 2048-tap kernel cannot hold a ring that narrow, so ours stops at 32 dB (the
+  same synth's morphing 12 dB type reaches 33.6 dB there). Even so, at 1 the heard peak is about 1.5 dB under the
+  drawn one at a 1 kHz cutoff, and more at lower cutoffs, because the ring outlasts the kernel; up to 0.9 the two
+  agree within 1 dB. The default 0.1 adds about 1.7 dB. Depth 0 with resonance up still gives a peak on a flat
+  response, like a resonant filter, and a dip drawn at the cutoff lowers the peak by the same dB.
 - **One definition.** `customfilter::cutoffShiftSemitones`, `cutoffX` and `resonanceBellDb`
   (`CustomFilterCutoff.h`) are the only definitions; the designer and `customfilter::responseGridDb(shapes, x, y, shift,
   depth, cutoffHz, resonance)` (the card's response view) both call them, so the curve drawn is the curve designed. At
@@ -381,8 +390,11 @@ slider drag is one undo step (the settings are part of the module's extra state)
   `CurveGrid` takes `xStep` and `xOrigin` for lines that do not divide the visible range evenly.
 - **Show spectrum.** A toggle at the right end of the same row (off by default, remembered) draws the filter's live
   spectrum faintly behind the grid and the curve, on the curve's own log-frequency axis (level -80 to 0 dB over the
-  full height). It is the reading the card's response view shows ([the card](#card)): the module's visual buffer,
-  transformed and smoothed by `FilterSpectrumAnalyser`, one class shared by both views. A 30 Hz tick runs only while
+  full height). It is the reading the card's response view shows ([the card](#card)): the module's 4096-sample
+  spectrum buffer, transformed by `FilterSpectrumAnalyser`, one class shared by both views. Each point takes the
+  loudest bin under it (bass points between bins interpolate by power), so a sine shows its true level. The trace
+  moves like a meter, timed in seconds rather than frames: it rises in about 10 ms and falls about 30 dB in the half
+  second after a note stops (`kAttackSeconds`, `kReleaseSeconds`, both in the analyser). A 30 Hz tick runs only while
   the toggle is on and the window is visible and repaints only the curve; with the toggle off there is no tick and the
   curve paints exactly as before (the LFO's window has no such toggle). Tab order: the map, the chips, Grid, Show
   spectrum, the curve, the buttons.
@@ -390,7 +402,9 @@ slider drag is one undo step (the settings are part of the module's extra state)
   (pressed, dragged or focused, until a shape dot is chosen), the window draws the filter's live frequency response
   as an accent line over the curve: `customfilter::responseGridDb` with the morph cursor, Shift, Depth, Cutoff and
   Resonance, the same curve as the card's Show response, on the curve's own log-frequency axis and dB range. It
-  follows Cutoff and the cursor live (the editor's tick re-reads it and repaints only on a change). Choosing a shape dot
+  follows Cutoff, the cursor and their modulation live (the editor's tick re-reads it and repaints only on a change);
+  the map's cursor follows Morph X/Y modulation the same way, on the card and in the window, while a drag or an arrow
+  key still sets the knobs. Choosing a shape dot
   hides it. It sits in the same backdrop painter as the spectrum, so both can show at once. A screen reader hears
   "Showing the filter's current response" when it appears. The map keeps this selection (`MorphMap::isCursorSelected`,
   `onCursorSelected`); the LFO's window has no response (`ShapeListAdapter::hasResponse`, true for the Filter only).
@@ -450,7 +464,7 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   a cable dropped on a knob lands on its ring. Every other type has exactly its old card.
 - **Response view** ("Show Response", closed until opened): draws the blended curve at the cursor with Shift, Cutoff,
   Depth and Resonance applied (`customfilter::responseGridDb`, the numbers the kernel is designed from), follows the
-  cursor, the shapes and the knobs, and draws the cutoff marker (a thin vertical line) like the other types. Double-clicking it opens the shape editor on the shape nearest the cursor.
+  cursor, the shapes, the knobs and their modulation (each control's CV as the last audio block applied it), and draws the cutoff marker (a thin vertical line) like the other types. Double-clicking it opens the shape editor on the shape nearest the cursor.
 - **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
   shape nearest the cursor.
 - **Curve view** (252 x 110, under the button, above the map; `MorphShapesCardCurve.cpp`): the shape under the morph

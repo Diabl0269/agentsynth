@@ -26,6 +26,9 @@ float ladderFeedbackCeiling(float cutoffOverSampleRate) noexcept;
 /** Gain applied to the signal before the ladder's saturation (and undone after it) for a Drive knob value in 1..10. */
 float ladderHeadroomForDrive(float drive) noexcept;
 
+/** The ladder's small-signal level change for a Drive knob value in 1..10, as a linear gain (about 1 at Drive 1). */
+float ladderDriveGain(float drive) noexcept;
+
 /** A four-stage resonant ladder (low-, high- and band-pass, 12 and 24 dB): the structure of juce::dsp::LadderFilter
     with the Resonance knob's own curve and a clean signal path at Drive 1. Same calls as the JUCE class, so
     LadderCoefficientSetter drives either. `setResonance` takes the knob value; `process` handles any channel count

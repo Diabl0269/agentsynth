@@ -44,8 +44,8 @@ int FilterShapesAdapter::getMaxShapes() const { return CustomFilterShapes::kMaxS
 /** A copy of the blend the cursor is on, kept to the points it needs (at most 16), so the new shape sounds as the
  * filter does now. */
 ShapeItem FilterShapesAdapter::makeShapeAt(float x, float y) const {
-    const auto blend =
-        customfilter::blendedGridDb(filter_.getCustomShapes(), filter_.getCurrentMorphX(), filter_.getCurrentMorphY());
+    const auto blend = customfilter::blendedGridDb(filter_.getCustomShapes(), filter_.getModulatedMorphX(),
+                                                   filter_.getModulatedMorphY());
     ShapeItem item;
     item.curve = customfilter::curveFromGridDb(blend, 16);
     item.position = {x, y};
@@ -90,21 +90,19 @@ std::optional<ShapeGridOffer> FilterShapesAdapter::getGridOffer() const {
     return offer;
 }
 
-/** The same reading the card's response view shows: the module's visual buffer. */
+/** The same reading the card's response view shows: the module's spectrum buffer. */
 const std::vector<float>* FilterShapesAdapter::updateSpectrum() {
-    const auto* buffer = filter_.getVisualBuffer();
-    if (buffer == nullptr)
-        return nullptr;
-    spectrum_.analyse(*buffer, filter_.getLastSampleRate());
+    spectrum_.analyse(filter_.getSpectrumBuffer(), filter_.getLastSampleRate());
     return &spectrum_.getDb();
 }
 
 /** The card's Show response curve: the shapes blended at the morph cursor, shifted, scaled and given the resonant
     bell, from the module's live (modulated) values. */
 std::vector<float> FilterShapesAdapter::responseDb() const {
-    return synth::customfilter::responseGridDb(
-        filter_.getCustomShapes(), filter_.getCurrentMorphX(), filter_.getCurrentMorphY(), filter_.getCurrentShift(),
-        filter_.getCurrentDepth(), filter_.getCurrentCutoff(), filter_.getModulatedResonance());
+    return synth::customfilter::responseGridDb(filter_.getCustomShapes(), filter_.getModulatedMorphX(),
+                                               filter_.getModulatedMorphY(), filter_.getModulatedShift(),
+                                               filter_.getModulatedDepth(), filter_.getCurrentCutoff(),
+                                               filter_.getModulatedResonance());
 }
 
 std::vector<ShapeStartFrom> FilterShapesAdapter::getStartFrom() const {

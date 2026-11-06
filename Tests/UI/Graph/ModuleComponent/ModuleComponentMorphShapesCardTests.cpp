@@ -296,7 +296,7 @@ TEST_F(ModuleComponentTest, ResponseViewDrawsTheCutoffMoveAndTheResonanceBell) {
     processBlocks(filter);
     view.timerCallback();
     const int atCutoff = (int)std::lround(synth::customfilter::cutoffX(1760.0f) * 1023.0f);
-    EXPECT_NEAR(view.getMagnitudeDbForTest(atCutoff), 18.0f, 0.5f);
+    EXPECT_NEAR(view.getMagnitudeDbForTest(atCutoff), synth::customfilter::kMaxResonancePeakDb, 0.5f);
     EXPECT_LT(view.getMagnitudeDbForTest(atCutoff - 300), 1.0f);
 }
 

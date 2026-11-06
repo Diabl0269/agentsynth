@@ -33,42 +33,6 @@ int gridIndexFor(float hz) {
             (FilterSpectrumAnalyser::kNumPoints - 1));
 }
 
-/** The reading the Filter's response view computed inline before the analyser was shared: the reference. */
-std::vector<float> referenceSpectrum(const std::vector<float>& samples, int passes) {
-    constexpr int fftSize = 1024;
-    juce::dsp::FFT fft{10};
-    juce::dsp::WindowingFunction<float> window{fftSize, juce::dsp::WindowingFunction<float>::hann};
-    std::vector<float> fftData(fftSize * 2, 0.0f);
-    std::vector<float> magnitudes(1024, -80.0f);
-    for (int pass = 0; pass < passes; ++pass) {
-        std::fill(fftData.begin(), fftData.end(), 0.0f);
-        const int copySize = std::min((int)samples.size(), fftSize);
-        for (int i = 0; i < copySize; ++i)
-            fftData[(size_t)i] = samples[(size_t)i];
-        window.multiplyWithWindowingTable(fftData.data(), fftSize);
-        fft.performFrequencyOnlyForwardTransform(fftData.data());
-        const float binWidth = static_cast<float>(kRate) / static_cast<float>(fftSize);
-        const float normFactor = 2.0f / static_cast<float>(fftSize);
-        for (int i = 0; i < 1024; ++i) {
-            const float freq = FrequencyGrid::indexToFreq(i, 1024);
-            const float exactBin = freq / binWidth;
-            const int bin0 = static_cast<int>(exactBin);
-            const int bin1 = bin0 + 1;
-            const float frac = exactBin - static_cast<float>(bin0);
-            float mag = 0.0f;
-            if (bin0 >= 0 && bin1 < fftSize / 2)
-                mag = fftData[(size_t)bin0] * (1.0f - frac) + fftData[(size_t)bin1] * frac;
-            else if (bin0 >= 0 && bin0 < fftSize / 2)
-                mag = fftData[(size_t)bin0];
-            mag *= normFactor;
-            const float db = 20.0f * std::log10(std::max(mag, 0.00001f));
-            const float target = juce::jlimit(-80.0f, 0.0f, db);
-            magnitudes[(size_t)i] += 0.3f * (target - magnitudes[(size_t)i]);
-        }
-    }
-    return magnitudes;
-}
-
 juce::Image render(juce::Component& c) {
     juce::Image image(juce::Image::ARGB, c.getWidth(), c.getHeight(), true, juce::SoftwareImageType());
     juce::Graphics g(image);
@@ -93,43 +57,56 @@ struct SpectrumKeysGuard {
 } // namespace
 
 TEST(FilterSpectrumAnalyser, ASineAt1kHzPeaksAtTheThousandHertzGridPoint) {
-    FilterSpectrumAnalyser analyser(1.0f);
-    const auto samples = sine(1000.0, 1024);
-    analyser.analyse(samples.data(), (int)samples.size(), kRate);
+    FilterSpectrumAnalyser analyser;
+    const auto samples = sine(1000.0, FilterSpectrumAnalyser::kFftSize);
+    analyser.analyse(samples.data(), (int)samples.size(), kRate, FilterSpectrumAnalyser::kMaxStepSeconds);
     EXPECT_NEAR(peakIndex(analyser.getDb()), gridIndexFor(1000.0f), 4);
     EXPECT_GT(analyser.getDb()[(size_t)peakIndex(analyser.getDb())], -12.0f);
     EXPECT_LT(analyser.getDb()[(size_t)gridIndexFor(100.0f)], -40.0f);
 }
 
-TEST(FilterSpectrumAnalyser, StartsAtTheFloorAndSmoothsTowardTheReading) {
+TEST(FilterSpectrumAnalyser, StartsAtTheFloorAndMovesTowardTheReadingWithTime) {
     FilterSpectrumAnalyser analyser;
     EXPECT_EQ(analyser.getDb().size(), (size_t)FilterSpectrumAnalyser::kNumPoints);
     EXPECT_FLOAT_EQ(analyser.getDb()[100], FilterSpectrumAnalyser::kMinDb);
-    const auto samples = sine(1000.0, 1024);
-    analyser.analyse(samples.data(), (int)samples.size(), kRate);
+    const auto samples = sine(1000.0, FilterSpectrumAnalyser::kFftSize);
+    analyser.analyse(samples.data(), (int)samples.size(), kRate, 0.002);
     const float once = analyser.getDb()[(size_t)gridIndexFor(1000.0f)];
-    analyser.analyse(samples.data(), (int)samples.size(), kRate);
+    EXPECT_GT(once, FilterSpectrumAnalyser::kMinDb);
+    analyser.analyse(samples.data(), (int)samples.size(), kRate, 0.002);
     EXPECT_GT(analyser.getDb()[(size_t)gridIndexFor(1000.0f)], once);
+    analyser.analyse(samples.data(), (int)samples.size(), kRate, 0.0);
     analyser.reset();
     EXPECT_FLOAT_EQ(analyser.getDb()[(size_t)gridIndexFor(1000.0f)], FilterSpectrumAnalyser::kMinDb);
 }
 
-TEST(FilterSpectrumAnalyser, TheResponseViewStillShowsTheSpectrumItShowedBeforeTheAnalyserWasShared) {
-    FilterModule filter;
-    const auto samples = sine(1000.0, 1024);
-    filter.getVisualBuffer()->pushBlock(samples.data(), (int)samples.size());
-    FrequencyResponseComponent view(filter);
-    view.setShowSpectrum(true);
-    for (int i = 0; i < 3; ++i)
-        view.timerCallback();
+namespace {
+double fixedClockSeconds = 0.0;
+double fixedClock() { return fixedClockSeconds; }
+} // namespace
 
-    std::vector<float> stored(1024);
-    filter.getVisualBuffer()->copyTo(stored);
-    const auto reference = referenceSpectrum(stored, 3);
-    const auto& actual = view.getSpectrumDbForTest();
-    ASSERT_EQ(actual.size(), reference.size());
-    for (size_t i = 0; i < actual.size(); ++i)
-        ASSERT_NEAR(actual[i], reference[i], 1e-4f) << "point " << i;
+// The card's Show Spectrum and the shape window read one analyser class over one buffer: same samples, same times,
+// same trace.
+TEST(FilterSpectrumAnalyser, TheCardAndTheShapeWindowShowTheSameSpectrum) {
+    FilterSpectrumAnalyser::setClockForTest(&fixedClock);
+    ShapeRig rig;
+    const auto samples = sine(440.0, FilterModule::kSpectrumSamples);
+    rig.filter->getSpectrumBuffer().pushBlock(samples.data(), (int)samples.size());
+    FrequencyResponseComponent view(*rig.filter);
+    view.setShowSpectrum(true);
+    for (int i = 0; i < 4; ++i) {
+        fixedClockSeconds = i / 30.0;
+        view.timerCallback();
+        rig.adapter->updateSpectrum();
+    }
+    const auto* window = rig.adapter->updateSpectrum();
+    FilterSpectrumAnalyser::setClockForTest(nullptr);
+    ASSERT_NE(window, nullptr);
+    const auto& card = view.getSpectrumDbForTest();
+    ASSERT_EQ(card.size(), window->size());
+    for (size_t i = 0; i < card.size(); ++i)
+        ASSERT_NEAR(card[i], (*window)[i], 1e-4f) << "point " << i;
+    EXPECT_GT(card[(size_t)gridIndexFor(440.0f)], -20.0f);
 }
 
 TEST(ShapeWindowSpectrum, OnlyTheFilterWindowOffersTheToggleAndItStartsOff) {
@@ -175,8 +152,8 @@ TEST(ShapeWindowSpectrum, TheTimerRunsOnlyWhileTheToggleIsOnAndTheWindowIsVisibl
 TEST(ShapeWindowSpectrum, ThePaintedSpectrumAppearsWithTheToggleAndLeavesNoTraceWhenOff) {
     SpectrumKeysGuard keys;
     ShapeRig rig;
-    const auto samples = sine(1000.0, 1024);
-    rig.filter->getVisualBuffer()->pushBlock(samples.data(), (int)samples.size());
+    const auto samples = sine(1000.0, FilterModule::kSpectrumSamples);
+    rig.filter->getSpectrumBuffer().pushBlock(samples.data(), (int)samples.size());
     ShapeListEditor editor(rig.adapter, 0);
     auto& curve = editor.getCurveEditor();
     const auto before = render(curve);
