@@ -2,6 +2,7 @@
 // the keyboard stops, menu, rename and screen-reader names are MorphMapKeyboard.cpp.
 #include "MorphMap.h"
 #include "MorphMapInternal.h"
+#include "MorphMapPalette.h"
 #include "UI/Layout/ControlMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/ReorderDrag/ReorderFramePump.h"
@@ -554,7 +555,7 @@ void MorphMap::startDotMotion(const std::vector<Dot>& before) {
     motion.id = dot.name;
     motion.leaving = removed;
     motion.dot = dot;
-    motion.colourIndex = (int)at;
+    motion.colourIndex = morphColourSlot(dot.colourSlot, (int)at);
     motions_.push_back(std::move(motion));
 
     motionLastMs_ = 0.0;

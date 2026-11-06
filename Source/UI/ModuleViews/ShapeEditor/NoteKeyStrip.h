@@ -30,9 +30,11 @@ public:
     /** Fired with the note and its new shape (-1 = none) when the user changes a key. */
     std::function<void(int note, int shape)> onKeyChanged;
 
-    /** `keys` is one entry per MIDI note (a shape index or -1); `shapeNames` names the shapes, in order. */
+    /** `keys` is one entry per MIDI note (a shape index or -1); `shapeNames` names the shapes, in order;
+     *  `shapeSlots` gives each shape's palette slot (missing ones use the shape's index). */
     void setKeys(const std::array<int8_t, 128>& keys, const juce::StringArray& shapeNames,
-                 const std::vector<std::optional<juce::uint32>>& shapeColours = {});
+                 const std::vector<std::optional<juce::uint32>>& shapeColours = {},
+                 const std::vector<int>& shapeSlots = {});
     int getShapeFor(int note) const noexcept { return note >= 0 && note < 128 ? keys_[(size_t)note] : -1; }
 
     /** The lowest note shown, a C; clamped to kLowestBase..kHighestBase. */
@@ -68,6 +70,7 @@ private:
     std::array<int8_t, 128> keys_{};
     juce::StringArray shapeNames_;
     std::vector<std::optional<juce::uint32>> shapeColours_; ///< per shape; short or empty means palette colours
+    std::vector<int> shapeSlots_;                           ///< per shape palette slot; short or empty: the index
     int base_ = kDefaultBase;
     int focused_ = 0; // 0..kNumKeys-1
     juce::OwnedArray<KeyButton> buttons_;

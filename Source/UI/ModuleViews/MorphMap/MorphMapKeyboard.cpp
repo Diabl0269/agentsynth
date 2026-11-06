@@ -119,14 +119,9 @@ void MorphMap::deleteDotAndRefocus(int index) {
         safe->takeFocus(*safe->dotStops_[(size_t)juce::jmin(index, (int)safe->dotStops_.size() - 1)]);
 }
 
-/** Ctrl+T: the new dot is the owner's to make (halfway to the next one), and takes focus. The last dot has no next
-    one, and a full map has no room; each says so through `onNotice`. */
+/** Ctrl+T: the new dot is the owner's to make (halfway to the next one, or somewhere free after the last), and takes
+    focus. A full map has no room and says so through `onNotice`. */
 bool MorphMap::insertAfterDot(int index) {
-    if (index + 1 >= (int)dots_.size()) {
-        if (onNotice)
-            onNotice("This is the last dot");
-        return true;
-    }
     juce::Component::SafePointer<MorphMap> safe(this);
     const int added = onInsertAfterDot(index);
     if (safe == nullptr)
@@ -140,9 +135,28 @@ bool MorphMap::insertAfterDot(int index) {
     return true;
 }
 
+/** Cmd+D: the owner adds the copy and selects it; the focus follows the selection. A full map says so. */
+bool MorphMap::duplicateDotAndFocus(int index) {
+    juce::Component::SafePointer<MorphMap> safe(this);
+    const auto before = dots_.size();
+    onDuplicateDot(index);
+    if (safe == nullptr)
+        return true;
+    if (dots_.size() == before) {
+        if (onNotice)
+            onNotice("No room for another shape");
+    } else if (selected_ >= 0 && selected_ < (int)dotStops_.size()) {
+        takeFocus(*dotStops_[(size_t)selected_]);
+    }
+    return true;
+}
+
 bool MorphMap::handleStopKey(Stop& stop, const juce::KeyPress& key) {
     if (isInsertPointKey(key) && onInsertAfterDot && !stop.isCursor() && !stop.isStrip())
         return insertAfterDot(stop.getIndex());
+    if (pointKeyAction(key).kind == PointKeyAction::Kind::duplicate && onDuplicateDot && !stop.isCursor() &&
+        !stop.isStrip())
+        return duplicateDotAndFocus(stop.getIndex());
     const auto mods = key.getModifiers();
     if (mods.isCommandDown() || mods.isCtrlDown() || mods.isAltDown())
         return false;
@@ -291,7 +305,8 @@ bool MorphMap::showDotColour(int index) {
         return false;
     const auto& colors = synth::theme::themeOf(*this).colors;
     const std::optional<juce::uint32> original = dots_[(size_t)index].colour;
-    const juce::Colour shown = morphShapeColour(colors, index, original);
+    const juce::Colour shown =
+        morphShapeColour(colors, morphColourSlot(dots_[(size_t)index].colourSlot, index), original);
     juce::Component::SafePointer<MorphMap> safe(this);
     auto popup = std::make_unique<ColourPickerPopup>(
         shown, colourFavourites,

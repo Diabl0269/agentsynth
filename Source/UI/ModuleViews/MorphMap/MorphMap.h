@@ -48,7 +48,8 @@ public:
         juce::String name;
         float x = 0.5f;
         float y = 0.5f;
-        std::optional<juce::uint32> colour; ///< a colour picked for this dot; empty uses the palette by index
+        std::optional<juce::uint32> colour; ///< a colour picked for this dot; empty uses the palette by slot
+        int colourSlot = -1;                ///< the shape's palette slot; -1 uses the dot's index
     };
     enum class Gesture { Dot, Cursor };
     enum class Axis { None, X, Y };
@@ -113,12 +114,13 @@ public:
     /** The cursor became (true) or stopped being (false) the selection. */
     std::function<void(bool)> onCursorSelected;
     std::function<void(int)> onEditDot;
+    /** The Duplicate menu item and Cmd+D on dot `index`; the owner selects the copy, which then takes the focus. */
     std::function<void(int)> onDuplicateDot;
     std::function<void(int)> onDeleteDot;
-    /** Ctrl+T on dot `index`: add a dot halfway to the next one. Returns the new dot's index, or -1 when refused.
-     *  Unset: the key is not used. */
+    /** Ctrl+T on dot `index`: add a dot (halfway to the next one; the owner places one after the last). Returns the new
+     *  dot's index, or -1 when refused. Unset: the key is not used. */
     std::function<int(int)> onInsertAfterDot;
-    /** A short message about a key that did nothing (the last dot cannot insert, no room); unset says nothing. */
+    /** A short message about a key that did nothing (no room for another shape); unset says nothing. */
     std::function<void(const juce::String&)> onNotice;
     std::function<void(int, const juce::String&)> onRenameDot;
     /** The colour picker of "Colour..." (and Alt+C) drags this dot's colour live: no undo step, the owner just shows
@@ -263,6 +265,7 @@ private:
     void takeFocus(juce::Component& target);
     void deleteDotAndRefocus(int index);
     bool insertAfterDot(int index);
+    bool duplicateDotAndFocus(int index);
     void startDotMotion(const std::vector<Dot>& before);
     void motionFrame(double elapsedMs);
     void endMotion();

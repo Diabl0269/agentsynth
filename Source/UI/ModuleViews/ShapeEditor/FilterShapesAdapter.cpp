@@ -9,7 +9,9 @@ namespace {
 using synth::CustomFilterShape;
 using synth::CustomFilterShapes;
 
-ShapeItem toItem(const CustomFilterShape& shape) { return {shape.name, shape.curve, shape.position, shape.colour}; }
+ShapeItem toItem(const CustomFilterShape& shape) {
+    return {shape.name, shape.curve, shape.position, shape.colour, shape.colourIndex};
+}
 } // namespace
 
 FilterShapesAdapter::FilterShapesAdapter(FilterModule& module, AppUndoManager* undo, juce::AudioProcessorGraph& graph,
@@ -31,7 +33,7 @@ std::vector<ShapeItem> FilterShapesAdapter::getShapes() const {
 void FilterShapesAdapter::setShapes(const std::vector<ShapeItem>& shapes) {
     CustomFilterShapes list;
     for (const auto& item : shapes)
-        list.shapes.push_back({item.name, item.curve, item.position, item.colour});
+        list.shapes.push_back({item.name, item.curve, item.position, item.colour, item.colourIndex});
     filter_.setCustomShapes(list);
 }
 
