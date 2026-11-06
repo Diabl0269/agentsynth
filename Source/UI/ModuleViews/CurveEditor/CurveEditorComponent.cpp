@@ -129,22 +129,12 @@ juce::Point<double> CurveEditorComponent::snapModelPoint(const CurveEditorGeomet
                                                          bool bypassSnap) const {
     if (!snapToGrid_ || !grid_.has_value() || bypassSnap)
         return point;
-
-    const double minX = model_.getMinX();
-    const double maxX = model_.getMaxX();
-    const double xDiv = (double)juce::jmax(1, grid_->xDivisions);
-    const double yDiv = (double)juce::jmax(1, grid_->yDivisions);
-
-    double x = point.x;
-    if (grid_->xStep > 0.0) {
-        const double origin = grid_->xOrigin;
-        x = juce::jlimit(minX, maxX, origin + std::round((x - origin) / grid_->xStep) * grid_->xStep);
-    } else if (maxX > minX) {
-        const double frac = juce::jlimit(0.0, 1.0, (x - minX) / (maxX - minX));
-        x = minX + (std::round(frac * xDiv) / xDiv) * (maxX - minX);
+    double y = point.y;
+    if (gridHasY() && grid_->snapY) {
+        const double yDiv = (double)grid_->yDivisions;
+        y = std::round(juce::jlimit(0.0, 1.0, point.y) * yDiv) / yDiv;
     }
-    const double y = std::round(juce::jlimit(0.0, 1.0, point.y) * yDiv) / yDiv;
-    return {x, y};
+    return {snapGridX(point.x), y};
 }
 
 int CurveEditorComponent::dragNodeTo(int index, juce::Point<float> point, bool bypassSnap) {

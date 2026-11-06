@@ -110,7 +110,7 @@ bool CurveEditorComponent::duplicateSelection() {
     DuplicateSteps steps;
     steps.singleStep = range * kPasteGapFraction;
     steps.tick = range * tickBeats();
-    if (snapToGrid_ && grid_.has_value())
+    if (snapToGrid_ && grid_.has_value() && gridHasX() && grid_->xLines.empty())
         steps.grid = grid_->xStep > 0.0 ? grid_->xStep : range / (double)juce::jmax(1, grid_->xDivisions);
     return insertClip(clip, duplicateAnchor(duplicatePlacement(), xs, steps));
 }

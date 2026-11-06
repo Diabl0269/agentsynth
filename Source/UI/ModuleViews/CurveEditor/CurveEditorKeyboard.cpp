@@ -23,13 +23,23 @@ constexpr double kFineDivisor = 5.0;
 } // namespace
 
 juce::Point<double> CurveEditorComponent::keyboardStep() const {
-    if (snapToGrid_ && grid_.has_value()) {
-        const double xDiv = (double)juce::jmax(1, grid_->xDivisions);
-        const double yDiv = (double)juce::jmax(1, grid_->yDivisions);
-        const double xStep = grid_->xStep > 0.0 ? grid_->xStep : (model_.getMaxX() - model_.getMinX()) / xDiv;
-        return {xStep, 1.0 / yDiv};
+    juce::Point<double> step{currentGeometry().getVisibleRange() * kTimeStepFraction, kLevelStep};
+    if (!snapToGrid_ || !grid_.has_value())
+        return step;
+    if (gridHasX() && grid_->snapX) {
+        if (!grid_->xLines.empty()) {
+            const int cursor = cursorIndex();
+            if (cursor >= 0 && cursor < model_.getNumNodes())
+                if (const auto next = explicitLineStep(model_.getNode(cursor).x, 1))
+                    step.x = *next;
+        } else {
+            step.x =
+                grid_->xStep > 0.0 ? grid_->xStep : (model_.getMaxX() - model_.getMinX()) / (double)grid_->xDivisions;
+        }
     }
-    return {currentGeometry().getVisibleRange() * kTimeStepFraction, kLevelStep};
+    if (gridHasY() && grid_->snapY)
+        step.y = 1.0 / (double)grid_->yDivisions;
+    return step;
 }
 
 bool CurveEditorComponent::nudgeSelectedNode(double dx, float dy, bool bypassSnap) {
@@ -170,7 +180,11 @@ bool CurveEditorComponent::keyPressed(const juce::KeyPress& key) {
         const auto step = keyboardStep();
         const bool fine = action.size == PointKeyAction::Size::fine;
         const double scale = fine ? 1.0 / kFineDivisor : 1.0;
-        const double dx = action.time ? action.side * step.x * scale : 0.0;
+        double dx = action.time ? action.side * step.x * scale : 0.0;
+        // Lines that are not a fixed step (notes in a key, harmonics): a press goes to the next line on that side.
+        if (action.time && !fine && snapToGrid_ && grid_.has_value() && cursorIndex() >= 0)
+            if (const auto next = explicitLineStep(model_.getNode(cursorIndex()).x, action.side))
+                dx = action.side * *next;
         const double dy = action.time ? 0.0 : action.side * step.y * scale;
         pressNudge(key.getKeyCode(), dx, dy, fine);
         return true;

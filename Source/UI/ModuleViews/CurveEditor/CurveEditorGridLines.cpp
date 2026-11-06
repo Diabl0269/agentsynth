@@ -1,5 +1,6 @@
-// CurveEditorGridLines.cpp -- the grid's reading aids: the guides switch and the line the pointer (or the dragged
-// point) is on, lit in the accent with its name so the exact line is easy to find.
+// CurveEditorGridLines.cpp -- where the grid's lines are and what snaps to them (even cells, a fixed step or an
+// explicit list), and the grid's reading aids: the guides switch and the line the pointer (or the dragged point) is
+// on, lit in the accent with its name so the exact line is easy to find.
 #include "CurveEditorComponent.h"
 
 namespace synth::ui {
@@ -9,6 +10,77 @@ constexpr float kHighlightThickness = 2.0f;
 constexpr float kLabelHeight = 16.0f;
 constexpr float kLabelPad = 6.0f;
 } // namespace
+
+bool CurveEditorComponent::gridHasX() const {
+    return grid_.has_value() && (!grid_->xLines.empty() || grid_->xStep > 0.0 || grid_->xDivisions > 0);
+}
+
+bool CurveEditorComponent::gridHasY() const { return grid_.has_value() && grid_->yDivisions > 0; }
+
+std::vector<double> CurveEditorComponent::gridXPositions() const {
+    std::vector<double> out;
+    if (!gridHasX())
+        return out;
+    const double minX = model_.getMinX();
+    const double maxX = model_.getMaxX();
+    if (!grid_->xLines.empty()) {
+        for (const auto& line : grid_->xLines)
+            if (line.x >= minX - 1e-9 && line.x <= maxX + 1e-9)
+                out.push_back(line.x);
+        return out;
+    }
+    if (grid_->xStep > 0.0) {
+        const double first = std::ceil((minX - grid_->xOrigin) / grid_->xStep - 1e-9);
+        for (double k = first; grid_->xOrigin + k * grid_->xStep <= maxX + 1e-9; k += 1.0)
+            out.push_back(grid_->xOrigin + k * grid_->xStep);
+        return out;
+    }
+    const int xDiv = grid_->xDivisions;
+    for (int i = 0; i <= xDiv; ++i)
+        out.push_back(minX + (maxX - minX) * ((double)i / (double)xDiv));
+    return out;
+}
+
+// Explicit lines: the nearest one that snaps (an out-of-key line never does); none in range leaves x alone.
+double CurveEditorComponent::snapGridX(double x) const {
+    if (!gridHasX() || !grid_->snapX)
+        return x;
+    const double minX = model_.getMinX();
+    const double maxX = model_.getMaxX();
+    if (!grid_->xLines.empty()) {
+        std::optional<double> best;
+        for (const auto& line : grid_->xLines) {
+            if (line.tier == GridLine::Tier::outOfKey || line.x < minX - 1e-9 || line.x > maxX + 1e-9)
+                continue;
+            if (!best.has_value() || std::abs(line.x - x) < std::abs(*best - x))
+                best = line.x;
+        }
+        return best.value_or(x);
+    }
+    if (grid_->xStep > 0.0) {
+        const double origin = grid_->xOrigin;
+        return juce::jlimit(minX, maxX, origin + std::round((x - origin) / grid_->xStep) * grid_->xStep);
+    }
+    if (maxX <= minX)
+        return x;
+    const double xDiv = (double)grid_->xDivisions;
+    const double frac = juce::jlimit(0.0, 1.0, (x - minX) / (maxX - minX));
+    return minX + (std::round(frac * xDiv) / xDiv) * (maxX - minX);
+}
+
+std::optional<double> CurveEditorComponent::explicitLineStep(double x, int side) const {
+    if (!grid_.has_value() || grid_->xLines.empty() || !grid_->snapX || side == 0)
+        return std::nullopt;
+    std::optional<double> best;
+    for (const auto& line : grid_->xLines) {
+        if (line.tier == GridLine::Tier::outOfKey || line.x < model_.getMinX() || line.x > model_.getMaxX())
+            continue;
+        const double distance = (line.x - x) * (double)side;
+        if (distance > 1e-9 && (!best.has_value() || distance < *best))
+            best = distance;
+    }
+    return best;
+}
 
 void CurveEditorComponent::setGuidesVisible(bool visible) {
     if (guidesVisible_ == visible)
@@ -34,11 +106,19 @@ std::optional<CurveEditorComponent::LineHit> CurveEditorComponent::lineNear(cons
     };
     const bool gridDrawn = grid_.has_value() && (snapToGrid_ || !guides_.has_value());
     if (gridDrawn) {
-        if (grid_->xName)
+        if (!grid_->xLines.empty()) {
+            for (const auto& line : grid_->xLines)
+                if (line.x >= model_.getMinX() && line.x <= model_.getMaxX())
+                    consider(true, std::floor(geometry.xForTime(line.x)),
+                             line.name.isNotEmpty() ? line.name
+                             : grid_->xName         ? grid_->xName(line.x)
+                                                    : juce::String());
+        } else if (grid_->xName) {
             for (const double t : gridXPositions())
                 consider(true, std::floor(geometry.xForTime(t)), grid_->xName(t));
-        if (grid_->yName) {
-            const int yDiv = juce::jmax(1, grid_->yDivisions);
+        }
+        if (grid_->yName && gridHasY()) {
+            const int yDiv = grid_->yDivisions;
             for (int i = 0; i <= yDiv; ++i) {
                 const float level = (float)i / (float)yDiv;
                 consider(false, std::floor(geometry.yForLevel(level)), grid_->yName(level));

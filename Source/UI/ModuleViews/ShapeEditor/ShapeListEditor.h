@@ -3,8 +3,10 @@
 #include "Modules/Shapes/ShapeLibrary.h"
 #include "PerNoteBar.h"
 #include "ShapeDrawPenButton.h"
+#include "PitchGridRows.h"
 #include "ShapeListAdapter.h"
 #include "ShapeMapController.h"
+#include "ShapeRingHelpers.h"
 #include "ShapeWindowMap.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
@@ -96,6 +98,8 @@ public:
     /** The keyboard route: with the pen chosen, applies it to the stretch between the selected curve points (the
      *  whole curve when fewer than two are selected) as one undo step. True when it took the key. */
     bool applyPenToSelection();
+    /** Runs one Ring helpers item on the selected shape, as one undo step. Needs the pitch rows (the Filter). */
+    void applyRingHelper(ringhelpers::Helper helper);
 
     // ---------- inspection ----------
     ShapeWindowMap& getMap() noexcept { return map_; }
@@ -109,6 +113,8 @@ public:
     juce::TextButton& getDrawButton() noexcept { return drawButton_; }
     ShapeDrawPenButton& getDrawPenButton() noexcept { return drawButton_; }
     juce::TextButton& getSaveShapeButton() noexcept { return saveShapeButton_; }
+    /** The Ring helpers button; shown only with the pitch rows. */
+    juce::TextButton& getRingButton() noexcept { return ringButton_; }
     juce::TextButton& getDoneButton() noexcept { return doneButton_; }
     juce::Component* getChip(int index) const;
     /** The per-note settings in the bottom bar; null when the adapter has none. */
@@ -117,9 +123,12 @@ public:
      *  no grid). */
     NoteLengthBox* getGridBox() noexcept { return gridBox_.get(); }
     CardSegmentedSwitch* getGridSwitch() noexcept { return gridSwitch_.get(); }
+    /** The Filter's two grid rows (kind, steps, level, key, root); null for a grid offered another way. */
+    PitchGridRows* getPitchRows() noexcept { return pitchRows_.get(); }
     /** The chosen grid name ("Off" when free or when there is no grid control). */
     juce::String getGridName() const;
-    /** Picks a grid choice by name as a click would; an unknown name changes nothing. */
+    /** Picks a grid choice by name as a click would; an unknown name changes nothing. The frequency rows also take
+     *  the old one-row names ("1/3 oct": Octaves at 1/3 with 6 dB levels) and a kind ("Notes"). */
     void setGridName(const juce::String& name);
     /** The Guides toggle (the labelled reference lines); null unless the adapter has guides. */
     juce::ToggleButton* getGuidesToggle() noexcept { return guidesToggle_.get(); }
@@ -158,16 +167,20 @@ private:
     void openDrawFlyout();
     void restorePen();
     void updatePenButton();
+    // ShapeListEditorRing.cpp
+    void openRingMenu();
     void showMenuNow(juce::PopupMenu& menu, juce::Component& target);
     void showMenuNow(juce::PopupMenu& menu, juce::Rectangle<int> screenArea);
     void syncAll();
-    void showStatus(const juce::String& text);
+    void showStatus(const juce::String& text, bool refused = true);
     void updateButtonStates();
     // ShapeListEditorToolbar.cpp
     bool hasToolbar() const;
     void buildToolbar(int& focusOrder);
     void layoutToolbar(juce::Rectangle<int> row);
     void applyGridChoice(const juce::String& name, bool remember);
+    void applyCurveGrid(const std::optional<CurveEditorComponent::CurveGrid>& grid);
+    int toolbarHeight() const;
     void setSpectrumShown(bool shown);
     void updateSpectrumTimer();
     void paintSpectrum(juce::Graphics& g, const CurveEditorGeometry& geometry) const;
@@ -196,6 +209,7 @@ private:
     juce::TextButton startFromButton_{"Start from"};
     ShapeDrawPenButton drawButton_{"Draw"};
     juce::TextButton saveShapeButton_{"Save shape"};
+    juce::TextButton ringButton_{"Ring helpers"};
     juce::TextButton doneButton_{"Done"};
     juce::Label statusLabel_;
     juce::uint32 statusClearsAtMs_ = 0;
@@ -203,6 +217,7 @@ private:
     std::optional<ShapeGridOffer> gridOffer_;
     std::unique_ptr<NoteLengthBox> gridBox_;
     std::unique_ptr<CardSegmentedSwitch> gridSwitch_;
+    std::unique_ptr<PitchGridRows> pitchRows_;
     std::unique_ptr<juce::ToggleButton> guidesToggle_;
     std::unique_ptr<juce::ToggleButton> spectrumToggle_;
     std::unique_ptr<SpectrumTicker> spectrumTicker_;

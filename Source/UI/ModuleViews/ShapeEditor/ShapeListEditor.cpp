@@ -79,13 +79,19 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     styleButton(drawButton_, "Draw");
     styleButton(saveShapeButton_,
                 "Save shape: keep the selected shape's curve under a name, in the Sounds tab's Shapes");
+    styleButton(ringButton_, "Ring helpers: one click places dots at the harmonic ratios of a note, so a resonant "
+                             "filter rings at those pitches");
     styleButton(doneButton_, "Done: close this window (Esc)");
     int order = 3;
     buildToolbar(order);
     curve_.setExplicitFocusOrder(order++);
-    for (juce::TextButton* b :
-         std::initializer_list<juce::TextButton*>{&addButton_, &duplicateButton_, &renameButton_, &startFromButton_,
-                                                  &drawButton_, &saveShapeButton_, &deleteButton_, &doneButton_}) {
+    std::vector<juce::TextButton*> buttons{&addButton_, &duplicateButton_, &renameButton_, &startFromButton_,
+                                           &drawButton_};
+    if (pitchRows_ != nullptr)
+        buttons.push_back(&ringButton_);
+    for (auto* b : {&saveShapeButton_, &deleteButton_, &doneButton_})
+        buttons.push_back(b);
+    for (auto* b : buttons) {
         b->setExplicitFocusOrder(order++);
         addAndMakeVisible(*b);
     }
@@ -105,6 +111,7 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     curve_.onPenApply = [this] { return applyPenToSelection(); };
     curve_.setDrawBand(adapter_->getDrawRange().lo, adapter_->getDrawRange().hi, adapter_->getDrawRange().cycles);
     restorePen();
+    ringButton_.onClick = [this] { openRingMenu(); };
     saveShapeButton_.onClick = [this] { saveSelectedShape(); };
     doneButton_.onClick = [this] {
         if (onDone)
@@ -155,6 +162,8 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
 }
 
 ShapeListEditor::~ShapeListEditor() { stopTimer(); }
+
+int ShapeListEditor::toolbarHeight() const { return pitchRows_ != nullptr ? PitchGridRows::kHeight : kToolbarHeight; }
 
 juce::Component* ShapeListEditor::getChip(int index) const { return chips_->getChip(index); }
 
@@ -209,14 +218,18 @@ void ShapeListEditor::timerCallback() {
     }
     pollResponse();
     controller_.syncCursor(); // the map's cursor follows Morph X/Y modulation
+    if (pitchRows_ != nullptr)
+        pitchRows_->poll();
     if (curveGestureOpen_ || adapter_->getGeneration() == lastGeneration_)
         return;
     refresh();
 }
 
-/** A refused key says why under the map, and to a screen reader, instead of doing nothing. */
-void ShapeListEditor::showStatus(const juce::String& text) {
-    statusLabel_.setColour(juce::Label::textColourId, synth::theme::themeOf(*this).colors.error);
+/** A refused key says why under the map, and to a screen reader, instead of doing nothing; a done note (refused
+    false) reads in the muted text colour so it does not look like an error. */
+void ShapeListEditor::showStatus(const juce::String& text, bool refused) {
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    statusLabel_.setColour(juce::Label::textColourId, refused ? colors.error : colors.textMuted);
     statusLabel_.setText(text, juce::dontSendNotification);
     statusClearsAtMs_ = juce::Time::getMillisecondCounter() + kStatusShowMs;
     juce::AccessibilityHandler::postAnnouncement(text, juce::AccessibilityHandler::AnnouncementPriority::medium);
@@ -322,7 +335,7 @@ void ShapeListEditor::resized() {
     chips_->setBounds(area.removeFromTop(chips_->getRequiredHeight(area.getWidth())));
     area.removeFromTop(kGap);
     if (hasToolbar()) {
-        layoutToolbar(area.removeFromTop(kToolbarHeight));
+        layoutToolbar(area.removeFromTop(toolbarHeight()));
         area.removeFromTop(kGap);
     }
 
@@ -330,14 +343,19 @@ void ShapeListEditor::resized() {
     area.removeFromBottom(kGap);
     curve_.setBounds(area);
 
-    // Delete is the destructive action: alone at the right end of the row, apart from the others.
-    deleteButton_.setBounds(buttons.removeFromRight(64));
-    const int widths[] = {80, 88, 64, 88, 76, 92};
-    juce::TextButton* order[] = {&addButton_,       &duplicateButton_, &renameButton_,
-                                 &startFromButton_, &drawButton_,      &saveShapeButton_};
-    for (int i = 0; i < 6; ++i) {
-        order[i]->setBounds(buttons.removeFromLeft(widths[i]));
-        buttons.removeFromLeft(kGap);
+    // Delete is the destructive action: alone at the right end of the row, apart from the others. With Ring helpers
+    // the row holds one more button, so every button and gap is a little narrower.
+    const bool ring = pitchRows_ != nullptr;
+    deleteButton_.setBounds(buttons.removeFromRight(ring ? 56 : 64));
+    juce::TextButton* order[] = {&addButton_,  &duplicateButton_, &renameButton_,   &startFromButton_,
+                                 &drawButton_, &ringButton_,      &saveShapeButton_};
+    const int widths[] = {80, 88, 64, 88, 76, 0, 92};
+    const int ringWidths[] = {72, 72, 58, 76, 64, 88, 80};
+    for (int i = 0; i < 7; ++i) {
+        if (!ring && order[i] == &ringButton_)
+            continue;
+        order[i]->setBounds(buttons.removeFromLeft(ring ? ringWidths[i] : widths[i]));
+        buttons.removeFromLeft(ring ? kGap / 2 : kGap);
     }
 }
 

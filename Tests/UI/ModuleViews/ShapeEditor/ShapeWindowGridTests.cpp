@@ -8,6 +8,7 @@
 #include "ShapeEditorTestHelpers.h"
 #include "UI/ModuleViews/CurveEditor/CurveGridNoteLength.h"
 #include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
+#include "UI/ModuleViews/ShapeEditor/PitchGrid.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeWindowPrefs.h"
 
@@ -58,14 +59,17 @@ bool hasNodeAt(const CurveEditorComponent& curve, double x, float y, double tole
 }
 
 struct GridKeysGuard {
-    synth::test::PersistedKeysGuard guard{juce::StringArray{shapewindowprefs::gridKey("lfo"),
-                                                            shapewindowprefs::gridKey("filter"),
-                                                            shapewindowprefs::spectrumKey("filter")}};
+    synth::test::PersistedKeysGuard guard{
+        juce::StringArray{shapewindowprefs::gridKey("lfo"), shapewindowprefs::gridKey("filter"),
+                          shapewindowprefs::spectrumKey("filter"), shapewindowprefs::gridKindKey("filter"),
+                          shapewindowprefs::gridStepsKey("filter"), shapewindowprefs::gridLevelKey("filter"),
+                          shapewindowprefs::snapAcrossKey("filter"), shapewindowprefs::snapLevelKey("filter"),
+                          shapewindowprefs::gridOwnKeyKey("filter"), shapewindowprefs::gridRootKey("filter")}};
 };
 
 } // namespace
 
-TEST(ShapeWindowGrid, TheLfoOffersTheNoteLengthBoxAndTheFilterOffersOctaveSegments) {
+TEST(ShapeWindowGrid, TheLfoOffersTheNoteLengthBoxAndTheFilterOffersThePitchRows) {
     LfoRig lfo;
     ShapeListEditor lfoEditor(lfo.adapter, 0);
     ASSERT_NE(lfoEditor.getGridBox(), nullptr);
@@ -75,9 +79,10 @@ TEST(ShapeWindowGrid, TheLfoOffersTheNoteLengthBoxAndTheFilterOffersOctaveSegmen
 
     ShapeRig filter;
     ShapeListEditor filterEditor(filter.adapter, 0);
-    ASSERT_NE(filterEditor.getGridSwitch(), nullptr);
+    EXPECT_EQ(filterEditor.getGridSwitch(), nullptr);
     EXPECT_EQ(filterEditor.getGridBox(), nullptr);
-    EXPECT_EQ(filterEditor.getGridSwitch()->getNumSegments(), 4);
+    ASSERT_NE(filterEditor.getPitchRows(), nullptr);
+    EXPECT_EQ(filterEditor.getPitchRows()->getKindSwitch().getNumSegments(), 4);
     EXPECT_EQ(filterEditor.getGridName(), "Off");
 }
 
@@ -199,6 +204,20 @@ TEST(ShapeWindowGrid, TheGridControlsAreNamedTooltippedTabStops) {
 
     ShapeRig filter;
     ShapeListEditor filterEditor(filter.adapter, 0);
-    EXPECT_FALSE(filterEditor.getGridSwitch()->getTooltip().isEmpty());
-    EXPECT_TRUE(filterEditor.getGridSwitch()->getWantsKeyboardFocus());
+    auto& rows = *filterEditor.getPitchRows();
+    pitchgrid::Choice notes;
+    notes.kind = pitchgrid::Kind::notes;
+    notes.levelDb = 6.0f;
+    rows.setChoice(notes); // a Snap pill is disabled while its axis is Off
+    for (juce::Component* c : std::initializer_list<juce::Component*>{
+             &rows.getKindSwitch(), &rows.getStepsSwitch(), &rows.getLevelSwitch(), &rows.getSnapAcross(),
+             &rows.getSnapLevel(), &rows.getKeyField(), &rows.getRootBox(), &filterEditor.getRingButton()}) {
+        EXPECT_FALSE(c->getTitle().isEmpty()) << c->getName();
+        auto* tip = dynamic_cast<juce::TooltipClient*>(c);
+        ASSERT_NE(tip, nullptr) << c->getTitle();
+        EXPECT_FALSE(tip->getTooltip().isEmpty()) << c->getTitle();
+    }
+    EXPECT_TRUE(rows.getKindSwitch().getWantsKeyboardFocus());
+    EXPECT_TRUE(rows.getSnapAcross().getWantsKeyboardFocus());
+    EXPECT_TRUE(rows.getSnapLevel().getWantsKeyboardFocus());
 }

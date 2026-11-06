@@ -47,13 +47,19 @@ public:
     bool setPerNoteConnectingPitch(const CustomFilterPerNote& perNote) override;
     float getReferenceLevel() const override;
 
+    std::optional<MusicalScale> getSongKey() const override { return songKey_ ? songKey_() : std::nullopt; }
+    float getPlayedNoteHz() const override;
+
     void setPitchHooks(PitchHooks hooks) { hooks_ = std::move(hooks); }
+    /** Where the song key is read (the app's transport); unset reads No key. */
+    void setSongKeySource(std::function<std::optional<MusicalScale>()> source) { songKey_ = std::move(source); }
 
 private:
     FilterModule& filter_;
     AppUndoManager* undo_;
     juce::AudioProcessorGraph& graph_;
     PitchHooks hooks_;
+    std::function<std::optional<MusicalScale>()> songKey_;
     FilterSpectrumAnalyser spectrum_;
 };
 

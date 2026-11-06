@@ -132,7 +132,7 @@ TEST(ShapeWindowGridLines, PointingAtALineLightsItInTheAccentWithItsName) {
         const int column = columnOf(curve, hz);
         EXPECT_EQ(curve.getHighlightedLineName(), "");
 
-        const juce::Point<float> pointer((float)column + 2.0f, (float)kProbeRow + 40.0f);
+        const juce::Point<float> pointer((float)column + 2.0f, (float)kProbeRow + 60.0f); // between level lines
         curve.mouseMove(makeCurveMouseEvent(curve, pointer, {}, false, pointer));
         EXPECT_EQ(curve.getHighlightedLineName(), "1.26 kHz");
         const auto image = synth::test::theme_sweep::renderToImage(curve);
@@ -165,4 +165,90 @@ TEST(ShapeWindowGridLines, ADraggedPointLightsTheLineItSnappedToAndALevelLineIsN
     EXPECT_TRUE(curve.getHighlightedLineName() == "1 kHz" || curve.getHighlightedLineName() == "-6 dB")
         << curve.getHighlightedLineName();
     curve.mouseUp(curveLeftDrag(curve, to, from));
+}
+
+namespace {
+
+/** The strongest difference from column `bgX` over the rows between the labels and the curve's top. */
+float peakOver(const juce::Image& image, int x, int bgX) {
+    float best = 0.0f;
+    for (int row = 16; row < 26; ++row)
+        best = std::max(best, std::abs(image.getPixelAt(x, row).getPerceivedBrightness() -
+                                       image.getPixelAt(bgX, row).getPerceivedBrightness()));
+    return best;
+}
+
+/** The summed per-channel distance between two colours. */
+float colourDistance(juce::Colour a, juce::Colour b) {
+    return std::abs(a.getFloatRed() - b.getFloatRed()) + std::abs(a.getFloatGreen() - b.getFloatGreen()) +
+           std::abs(a.getFloatBlue() - b.getFloatBlue());
+}
+
+/** The brightest of the three pixels around column `x` on row 20 (a line may straddle two columns). */
+juce::Colour brightestNear(const juce::Image& image, int x) {
+    auto best = image.getPixelAt(x, 20);
+    for (const int dx : {-1, 1})
+        if (image.getPixelAt(x + dx, 20).getPerceivedBrightness() > best.getPerceivedBrightness())
+            best = image.getPixelAt(x + dx, 20);
+    return best;
+}
+
+double noteHz(int midi) { return 440.0 * std::pow(2.0, (midi - 69) / 12.0); }
+
+} // namespace
+
+TEST(ShapeWindowGridLines, TheNotesGridReadsCThenNotesThenDottedOutOfKeyNotesInEveryTheme) {
+    juce::MessageManager::getInstance();
+    GuidesKeysGuard keys;
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        ThemedEditor themed(theme);
+        auto& rows = *themed.editor->getPitchRows();
+        rows.getKeyField().onPickOwn(synth::MusicalScale{0, 0xAB5, "Major"});
+        themed.editor->setGridName("Notes");
+        auto& curve = themed.editor->getCurveEditor();
+        const auto image = synth::test::theme_sweep::renderToImage(curve);
+        synth::test::theme_sweep::writeSweepPng("shape-grid-notes", theme.id, image);
+
+        // Around C6 the semitones are far enough apart to all be drawn.
+        const int bg = columnOf(curve, (float)(noteHz(84) * std::pow(2.0, 0.5 / 12.0)));
+        const float c = peakOver(image, columnOf(curve, (float)noteHz(84)), bg);
+        const float d = peakOver(image, columnOf(curve, (float)noteHz(86)), bg);
+        const float dSharp = peakOver(image, columnOf(curve, (float)noteHz(87)), bg);
+        EXPECT_GT(dSharp, 0.0f) << theme.name << ": the out-of-key note is still drawn";
+        EXPECT_GT(d, dSharp) << theme.name << ": an in-key note outshines an out-of-key one";
+        EXPECT_GT(c, d + 0.04f) << theme.name << ": the C is the landmark, by brightness";
+    }
+}
+
+TEST(ShapeWindowGridLines, TheHarmonicsGridLightsThePowersOfTwoAndLeansToTheWarningHue) {
+    juce::MessageManager::getInstance();
+    GuidesKeysGuard keys;
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        ThemedEditor themed(theme);
+        themed.editor->setGridName("Harmonics");
+        themed.editor->getPitchRows()->setRootId(PitchGridRows::rootIdOf(45)); // A2
+        auto& curve = themed.editor->getCurveEditor();
+        const auto image = synth::test::theme_sweep::renderToImage(curve);
+        synth::test::theme_sweep::writeSweepPng("shape-grid-harmonics", theme.id, image);
+
+        const int bg = columnOf(curve, 110.0f * 3.5f);
+        const float x4 = peakOver(image, columnOf(curve, 440.0f), bg);
+        const float x3 = peakOver(image, columnOf(curve, 330.0f), bg);
+        EXPECT_GT(x3, 0.0f) << theme.name;
+        EXPECT_GT(x4, x3 + 0.04f) << theme.name << ": x4 is a landmark, by brightness";
+
+        // Hue is the second cue: of two landmarks, the harmonic one leans toward the warning colour, the note one
+        // toward the accent.
+        const auto& colours = themed.lookAndFeel.getTheme().colors;
+        const auto harmonic = brightestNear(image, columnOf(curve, 440.0f)); // x4, a landmark
+        themed.editor->setGridName("Notes");
+        const auto notes = synth::test::theme_sweep::renderToImage(curve);
+        const auto note = brightestNear(notes, columnOf(curve, (float)noteHz(84))); // C6, a landmark
+        const auto lean = [&](juce::Colour c) {
+            return colourDistance(c, colours.warning) - colourDistance(c, colours.accent);
+        };
+        if (colours.accent == colours.warning)
+            continue; // a theme whose accent is its warning colour (Warm Console) has brightness and width only
+        EXPECT_GT(lean(note), lean(harmonic)) << theme.name;
+    }
 }

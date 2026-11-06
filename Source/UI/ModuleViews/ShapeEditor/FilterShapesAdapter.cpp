@@ -1,6 +1,7 @@
 // FilterShapesAdapter.cpp -- the Filter's Custom shapes behind the generic shape list interface.
 #include "FilterShapesAdapter.h"
 #include "Modules/Filter/CustomFilterBlend.h"
+#include "PitchGrid.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -8,22 +9,6 @@ namespace synth::ui {
 namespace {
 using synth::CustomFilterShape;
 using synth::CustomFilterShapes;
-
-/** "440 Hz", "82.4 Hz", "1.26 kHz": three significant figures, as the pointer label reads. */
-juce::String formatHz(double hz) {
-    if (hz >= 1000.0)
-        return juce::String(hz / 1000.0, hz >= 10000.0 ? 1 : 2).trimCharactersAtEnd("0").trimCharactersAtEnd(".") +
-               " kHz";
-    return juce::String(hz, hz >= 100.0 ? 0 : 1) + " Hz";
-}
-
-/** "-6 dB", "+1.5 dB", "0 dB". */
-juce::String formatDb(float level) {
-    const float db = CustomFilterShapes::yToDb(level);
-    const float rounded = std::round(db * 10.0f) / 10.0f;
-    const juce::String number = rounded == std::floor(rounded) ? juce::String((int)rounded) : juce::String(rounded, 1);
-    return (rounded > 0.0f ? "+" : "") + number + " dB";
-}
 
 ShapeItem toItem(const CustomFilterShape& shape) {
     return {shape.name, shape.curve, shape.position, shape.colour, shape.colourIndex};
@@ -82,31 +67,18 @@ std::optional<CurveEditorComponent::AxisGuides> FilterShapesAdapter::getAxisGuid
     return guides;
 }
 
-/** Frequency is a log axis, so the choices are fractions of an octave counted from 1 kHz (a line at every octave of
-    1 kHz, not at a whole number of cells from 20 Hz), and the level axis steps 6 dB from -48 to +12 dB (0 dB is a
-   line). */
+/** The Filter's grid is the frequency rows: Octaves, Notes or Harmonics across and its own Level step
+    (PitchGrid.h builds the lines). */
 std::optional<ShapeGridOffer> FilterShapesAdapter::getGridOffer() const {
     ShapeGridOffer offer;
-    offer.control = ShapeGridOffer::Control::segments;
-    offer.names = {"Off", "1 oct", "1/2 oct", "1/3 oct"};
-    offer.title = "Shape grid";
-    offer.tooltip = "Grid: snap points to octave lines across frequency and 6 dB steps in level (Off: free)";
-    offer.gridFor = [](const juce::String& name) -> std::optional<CurveEditorComponent::CurveGrid> {
-        const int parts = name == "1 oct" ? 1 : name == "1/2 oct" ? 2 : name == "1/3 oct" ? 3 : 0;
-        if (parts == 0)
-            return std::nullopt;
-        constexpr int kLevelCells = (int)((CustomFilterShapes::kMaxDb - CustomFilterShapes::kMinDb) / 6.0f);
-        CurveEditorComponent::CurveGrid grid;
-        grid.xDivisions = kLevelCells;
-        grid.yDivisions = kLevelCells;
-        grid.xStep = std::log(2.0) / std::log((double)CustomFilterShapes::kMaxHz / CustomFilterShapes::kMinHz) / parts;
-        grid.xOrigin = CustomFilterShapes::hzToX(1000.0f);
-        grid.xName = [](double x) { return formatHz(CustomFilterShapes::xToHz((float)x)); };
-        grid.yName = &formatDb;
-        return grid;
-    };
+    offer.control = ShapeGridOffer::Control::pitchRows;
+    offer.names = pitchgrid::kindNames();
+    offer.title = "Grid";
+    offer.tooltip = "Grid: what the curve snaps to across frequency (Off: free)";
     return offer;
 }
+
+float FilterShapesAdapter::getPlayedNoteHz() const { return filter_.getLastPlayedPitchHz(); }
 
 /** The same reading the card's response view shows: the module's spectrum buffer. */
 const std::vector<float>* FilterShapesAdapter::updateSpectrum() {

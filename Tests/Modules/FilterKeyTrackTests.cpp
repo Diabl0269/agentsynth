@@ -317,3 +317,18 @@ TEST(FilterKeyTrack, KeyTrackIsAModulationTargetInBothVoiceModes) {
         EXPECT_EQ(f.parameterForModTarget(targets[3])->paramID, "keyTrack");
     }
 }
+
+TEST(FilterKeyTrack, TheLastPlayedPitchFollowsTheNoteOnThePitchInput) {
+    FilterModule m;
+    EXPECT_EQ(m.getLastPlayedPitchHz(), 0.0f) << "no note yet";
+    Drive d;
+    d.pitchHz = 220.0f;
+    runMono(m, d, 2);
+    EXPECT_FLOAT_EQ(m.getLastPlayedPitchHz(), 220.0f);
+    d.pitchHz = 0.0f;
+    runMono(m, d, 2);
+    EXPECT_FLOAT_EQ(m.getLastPlayedPitchHz(), 220.0f) << "a released note keeps the last pitch";
+    d.pitchHz = 330.0f;
+    runMono(m, d, 2);
+    EXPECT_FLOAT_EQ(m.getLastPlayedPitchHz(), 330.0f);
+}

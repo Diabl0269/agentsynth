@@ -164,6 +164,7 @@ public:
         int numSamples = buffer.getNumSamples();
         if (numChannels == 0 || numSamples == 0)
             return;
+        notePlayedPitch(buffer);
 
         if (filterTypeParam->getIndex() == kCustomTypeIndex) {
             processCustomMode(buffer, numSamples);
@@ -343,6 +344,9 @@ public:
     }
 
     float getCurrentCutoff() const { return modulatedCutoff.load(std::memory_order_relaxed); }
+    /** The pitch in hertz of the note heard most recently through the Pitch input (a voice whose pitch moved to a new
+     *  value); 0 before any. Any thread. */
+    float getLastPlayedPitchHz() const { return lastPlayedPitchHz.load(std::memory_order_relaxed); }
     float getCurrentResonance() const { return *resonanceParam; }
     float getCurrentDrive() const { return *driveParam; }
     int getCurrentFilterType() const { return filterTypeParam->getIndex(); }
@@ -738,6 +742,18 @@ private:
                    : 0.0f;
     }
 
+    // A voice whose Pitch input ends the block on a new value has started (or moved to) a note: that pitch is the one
+    // played last. Relaxed: the shape window only reads it to place grid lines.
+    void notePlayedPitch(const juce::AudioBuffer<float>& buffer) {
+        const int voices = polyParam->get() ? kNumVoices : 1;
+        for (int v = 0; v < voices; ++v) {
+            const float hz = blockEndPitch(buffer, v);
+            if (hz > 0.0f && hz != voicePitchSeen[(size_t)v])
+                lastPlayedPitchHz.store(hz, std::memory_order_relaxed);
+            voicePitchSeen[(size_t)v] = hz;
+        }
+    }
+
     void applyFilterType(int typeIndex) {
         if (typeIndex >= 0 && typeIndex <= 5) {
             isNotchMode = false;
@@ -801,4 +817,6 @@ private:
     std::atomic<float> depthCV{0.0f};
     std::atomic<float> keyTrackShift{0.0f};
     VisualBuffer spectrumBuffer{kSpectrumSamples}; // one FFT frame for the spectrum views
+    std::array<float, kNumVoices> voicePitchSeen{}; // audio thread
+    std::atomic<float> lastPlayedPitchHz{0.0f};
 };
