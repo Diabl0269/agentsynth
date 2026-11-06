@@ -11,11 +11,6 @@ MinimapComponent::MinimapComponent() {
     updateTooltip();
 }
 
-void MinimapComponent::addTestModeState(juce::DynamicObject& into) const {
-    into.setProperty("nodes", (int)model_.nodes.size());
-    into.setProperty("cables", (int)model_.cables.size());
-}
-
 void MinimapComponent::setShortcutHint(const juce::String& shortcutDisplay) {
     if (shortcutDisplay_ == shortcutDisplay)
         return;

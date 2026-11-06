@@ -202,7 +202,7 @@ strip, in the 19 px row under the resize handle (`CanvasToolbar::setInStrip`, `s
 whole tab body. The strip is raised directly above the dock in the child order (`raiseAboveBottomDock`) so the tab strip does not paint over it, and the strip draws no ground or rule of its own there.
 Swapping the canvas into the main area gives the captions and the 44 px row back (`applyToolbarLabels`). It is
 visible exactly when the canvas is, so it moves with it in a swap and has no animation of its own. Guard:
-`MainViewSwapLayoutTest.*` (`Tests/UI/Layout/MainViewSwapLayoutTests.cpp`) walks every main view x dock tab x window size and fails on any overlap between the canvas, its buttons, the tab buttons and the main-view holder. The strip is the
+`MainViewSwapLayoutTest.*` (`Tests/UI/Layout/BottomDockCanvasTabTests.cpp`) walks every main view x dock tab x window size and fails on any overlap between the canvas, its buttons, the tab buttons and the main-view holder. The strip is the
 same height with or without captions, so toggling Show button labels never moves the canvas. Buttons are left
 aligned, 84 px wide with captions and 32 px without.
 
