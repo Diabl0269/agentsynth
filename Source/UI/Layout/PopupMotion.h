@@ -230,9 +230,18 @@ public:
      */
     static juce::DialogWindow* launchDialog(juce::DialogWindow::LaunchOptions& options,
                                             const std::function<popup_motion::Style(juce::DialogWindow&)>& makeStyle);
+
+    /** launchDialog() for a window that stays non-modal, so the main window behind it keeps taking clicks and drags:
+     *  shows `dialog` (created by the caller, on the desktop) with the same motion, close keys and tooltips, and keeps
+     *  it above `owner`'s window (null: no owner). The dialog must delete itself when closed; until then
+     *  deleteOpenModalDialogs() deletes it too. */
+    static juce::DialogWindow*
+    launchNonModalDialog(juce::DialogWindow& dialog, juce::Component* owner,
+                         const std::function<popup_motion::Style(juce::DialogWindow&)>& makeStyle);
 };
 
-/** Deletes every dialog window that is open and modal; call it before the objects the dialogs use are destroyed. */
+/** Deletes every dialog window that is open and modal, and every one launchNonModalDialog() showed that is still
+ *  alive; call it before the objects the dialogs use are destroyed. */
 void deleteOpenModalDialogs();
 
 } // namespace synth::ui

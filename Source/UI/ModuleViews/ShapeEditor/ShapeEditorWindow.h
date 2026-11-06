@@ -8,9 +8,11 @@
 
 namespace synth::ui {
 
-/** Opens a window titled by `adapter->getWindowTitle()` on shape `selected`, centred on `anchor`'s window. Returns it,
- *  or null when a test hook took the content instead. Escape or Done closes it. `onStripMenu` is set on the editor (a
- *  right-click on its Morph X / Y slider). Message thread only. */
+/** Opens a window titled by `adapter->getWindowTitle()` on shape `selected`, centred on `anchor`'s window and kept
+ *  above it. Returns it, or null when a test hook took the content instead. The window is not modal: the main window
+ *  keeps working beside it. Escape, Done or its close button closes it, and it deletes itself a turn later (hold it
+ *  in a SafePointer; deleting it before then is fine). `onStripMenu` is set on the editor (a right-click on its
+ *  Morph X / Y slider). Message thread only. */
 juce::DialogWindow* openShapeEditorWindow(std::shared_ptr<ShapeListAdapter> adapter, int selected,
                                           juce::Component* anchor,
                                           std::function<void(MorphMap::Axis, juce::Rectangle<int>)> onStripMenu = {});

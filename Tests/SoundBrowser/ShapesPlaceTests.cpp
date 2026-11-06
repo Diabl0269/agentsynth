@@ -90,6 +90,19 @@ TEST(ShapesPlaceTest, ItListsFilterShapesThenLfoShapesWithTheUsersFirstInEach) {
     EXPECT_EQ(f.view->getPathText(), "Places > Shapes");
 }
 
+// Regression test for FRO1198: the newer vowels must be draggable from the list like the others
+TEST(ShapesPlaceTest, TheFilterShapesListTheVowelsEhAndIhAmongTheFactoryShapes) {
+    ShapesFixture f;
+    f.openShapes();
+    for (const char* vowel : {"ah", "ee", "oo", "eh", "ih"}) {
+        const int row = f.rowOf(vowel);
+        ASSERT_GE(row, 0) << vowel;
+        ASSERT_TRUE(f.view->getRows()[(size_t)row].shape.has_value());
+        EXPECT_EQ(f.view->getRows()[(size_t)row].shape->kind, ShapeKind::Filter) << vowel;
+        EXPECT_TRUE(f.view->getRows()[(size_t)row].shape->factory) << vowel;
+    }
+}
+
 TEST(ShapesPlaceTest, EveryShapeRowPaintsAThumbnailOfItsCurve) {
     ShapesFixture f;
     f.openShapes();

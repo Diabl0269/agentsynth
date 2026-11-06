@@ -152,6 +152,8 @@ public:
     juce::Point<float> toPixels(float x, float y) const;
     juce::Point<float> toMap(juce::Point<float> pixels) const;
     juce::Point<float> getDotCentre(int index) const;
+    /** The dot a press at `point` (this component's coordinates) would take, or -1 for none. */
+    int dotAt(juce::Point<float> point) const;
     juce::Point<float> getCursorCentre() const;
     /** The slider strip of `axis` (this component's coordinates); empty for Axis::None. */
     juce::Rectangle<float> getStripBounds(Axis axis) const;
@@ -235,7 +237,6 @@ private:
     class Stop;
     enum class Drag { None, Dot, Cursor, Strip, Empty };
 
-    int dotAt(juce::Point<float> point) const;
     bool cursorAt(juce::Point<float> point) const;
     void rebuildStops();
     void layoutStops();

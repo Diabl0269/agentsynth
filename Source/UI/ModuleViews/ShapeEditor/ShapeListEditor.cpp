@@ -120,6 +120,10 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
         syncAll();
     };
     map_.onNotice = [this](const juce::String& text) { showStatus(text); };
+    map_.dropHooks.accepts = [this](synth::shapes::ShapeKind kind) { return acceptsLibraryShape(kind); };
+    map_.dropHooks.dropped = [this](const synth::shapes::LibraryShape& shape, int dot, juce::Point<float> at) {
+        dropLibraryShape(shape, dot, at);
+    };
     statusLabel_.setJustificationType(juce::Justification::topLeft);
     statusLabel_.setInterceptsMouseClicks(false, false);
     statusLabel_.setAccessible(false); // the message is announced when it appears

@@ -418,7 +418,7 @@ TEST_F(ModuleComponentTest, SliderRightClickOnTheCardAndInTheWindowOpenTheSameKn
     rig.custom().openEditor(0);
     test_hooks::shapeEditorWindowHookForTest() = nullptr;
     ASSERT_EQ(opened.size(), 1u);
-    auto& windowMap = opened.back()->getMap();
+    MorphMap& windowMap = opened.back()->getMap();
     const auto rightClick = [](juce::Component& c, juce::Point<float> p) { return curveRightClick(c, p); };
 
     for (const auto& [axis, id] : {std::pair{MorphMap::Axis::X, "morphX"}, std::pair{MorphMap::Axis::Y, "morphY"}}) {

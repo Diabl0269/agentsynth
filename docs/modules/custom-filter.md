@@ -340,7 +340,12 @@ tooltip and the shared focus ring.
 
 The big editor for the drawn shapes, `Source/UI/ModuleViews/ShapeEditor/`. It is a window titled "Filter shapes:
 <module name>" that grows out of the card's centre and shrinks back into it
-([animation](../layout/animation.md#popup-windows)); Esc or Done closes it, and the keyboard focus starts on the map (Tab works at once; asking for the window again
+([animation](../layout/animation.md#popup-windows)). It is not modal: the main window keeps working beside it, and
+it stays above the main window (a child window on macOS). Esc, Cmd+W, Done or its close button closes it, and it is
+deleted a turn later (also when its card goes away, and on quit). A shape dragged from the Sounds view's Shapes onto
+its map stamps the dot under the pointer (curve only: the name and place stay) or, over empty space, adds a new shape
+there named after it, selected; each is one undo step, and a full list says "No room for another shape"
+([sound browser](../layout/sound-browser.md#dragging-a-shape)). The keyboard focus starts on the map (Tab works at once; asking for the window again
 brings it back with the focus there). It is its own top-level window, so a key it does not use (Space, Cmd+Z, Cmd+Shift+Z, the
 transport and panel shortcuts) is handed to the main window, which performs it a turn later
 ([shortcuts](../control/shortcuts.md#open-context-menu)); Delete, Backspace, the arrows, Tab and the canvas-selection

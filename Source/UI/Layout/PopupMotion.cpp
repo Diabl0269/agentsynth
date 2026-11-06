@@ -7,6 +7,7 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace synth::ui {
@@ -91,6 +92,29 @@ PopupMotion::launchDialog(juce::DialogWindow::LaunchOptions& options,
     return dialog;
 }
 
+static std::vector<juce::Component::SafePointer<juce::DialogWindow>>& nonModalDialogs() {
+    static std::vector<juce::Component::SafePointer<juce::DialogWindow>> dialogs;
+    return dialogs;
+}
+
+static void keepAboveOwner(juce::Component& window, juce::Component* owner);
+
+/** Shown and raised before it is attached, as launchAsync() leaves a modal dialog. */
+juce::DialogWindow*
+PopupMotion::launchNonModalDialog(juce::DialogWindow& dialog, juce::Component* owner,
+                                  const std::function<popup_motion::Style(juce::DialogWindow&)>& makeStyle) {
+    auto& open = nonModalDialogs();
+    std::erase_if(open, [](const auto& d) { return d == nullptr; });
+    open.emplace_back(&dialog);
+    dialog.setVisible(true);
+    dialog.toFront(true);
+    keepAboveOwner(dialog, owner);
+    attach(dialog, makeStyle(dialog));
+    new DialogCloseKeys(dialog); // owns itself: deleted with the window
+    dialog_tooltip::attach(dialog);
+    return &dialog;
+}
+
 std::vector<juce::DialogWindow*> PopupMotion::openDialogsForTest() {
     std::vector<juce::DialogWindow*> windows;
     for (auto* listener : closeKeyListeners())
@@ -132,6 +156,21 @@ static void keepAboveWindowBehind([[maybe_unused]] juce::Component& window) {
     if (owner == nullptr || owner == &window || owner->getPeer() == nullptr || window.getPeer() == nullptr)
         return;
     keepNativeWindowAbove(window.getPeer()->getNativeHandle(), owner->getPeer()->getNativeHandle());
+#endif
+}
+
+// A non-modal tool window stays above the window it belongs to while that one is clicked. On macOS it becomes a child
+// window, which keeps the order inside the app only; elsewhere it is always-on-top.
+static void keepAboveOwner(juce::Component& window, juce::Component* owner) {
+    if (owner == nullptr)
+        return;
+    auto* top = owner->getTopLevelComponent();
+#if JUCE_MAC
+    if (top != nullptr && top != &window && top->getPeer() != nullptr && window.getPeer() != nullptr)
+        keepNativeWindowAbove(window.getPeer()->getNativeHandle(), top->getPeer()->getNativeHandle());
+#else
+    if (top != nullptr && top != &window && top->isOnDesktop())
+        window.setAlwaysOnTop(true);
 #endif
 }
 
@@ -688,6 +727,10 @@ void deleteOpenModalDialogs() {
         if (auto* dialog = dynamic_cast<juce::DialogWindow*>(manager->getModalComponent(i)))
             dialogs.emplace_back(dialog);
     for (auto& dialog : dialogs)
+        if (dialog != nullptr)
+            delete dialog.getComponent();
+    const auto nonModal = std::exchange(nonModalDialogs(), {});
+    for (const auto& dialog : nonModal)
         if (dialog != nullptr)
             delete dialog.getComponent();
 }

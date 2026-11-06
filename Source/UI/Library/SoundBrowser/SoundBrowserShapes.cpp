@@ -128,7 +128,9 @@ juce::String SoundBrowserComponent::shapeTooltip(const Row& row) const {
     const bool filter = row.shape->kind == synth::shapes::ShapeKind::Filter;
     const juce::String target = filter ? "Filter" : "LFO";
     auto text = row.text + ", " + shapeKindAndSource(*row.shape) + ". Drag it onto a " + target +
-                "'s shape chip or Custom card. Or select a " + target +
+                "'s Custom card, or onto a shape window's map (a dot takes its curve, empty space adds a shape) or "
+                "chip. Or select a " +
+                target +
                 " set to Custom and press Return to stamp it; "
                 "Return needs that card selected. F adds it to Favourites.";
     if (!row.shape->factory)

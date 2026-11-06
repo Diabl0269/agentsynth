@@ -168,6 +168,8 @@ int MorphShapesCard::layout(int y, int x, int width, bool apply, int topGap) {
 
 /** One window per card; asking again selects the shape in the open one. The adapter's title follows a rename. */
 juce::DialogWindow* MorphShapesCard::openEditor(int shapeIndex) {
+    if (window_ != nullptr && !window_->isVisible())
+        delete window_.getComponent(); // closed, and only waiting for its own deletion
     if (window_ != nullptr) {
         focusShapeEditorWindow(*window_);
         if (auto* editor = dynamic_cast<ShapeListEditor*>(window_->getContentComponent()))

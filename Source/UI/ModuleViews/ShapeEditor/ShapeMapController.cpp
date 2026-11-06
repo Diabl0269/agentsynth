@@ -126,13 +126,20 @@ juce::String ShapeMapController::uniqueName(const std::vector<ShapeItem>& shapes
 
 int ShapeMapController::addShapeAt(float x, float y) { return addShapeAtIndex(x, y, (int)adapter_.getShapes().size()); }
 
+int ShapeMapController::addShapeAt(float x, float y, const std::function<void(ShapeItem&)>& customise) {
+    return addShapeAtIndex(x, y, (int)adapter_.getShapes().size(), customise);
+}
+
 /** The shape lands at `listIndex` in the list (the end for a click), one undo step, selected. */
-int ShapeMapController::addShapeAtIndex(float x, float y, int listIndex) {
+int ShapeMapController::addShapeAtIndex(float x, float y, int listIndex,
+                                        const std::function<void(ShapeItem&)>& customise) {
     auto shapes = adapter_.getShapes();
     if ((int)shapes.size() >= adapter_.getMaxShapes())
         return -1;
     adapter_.beginEdit();
     ShapeItem shape = adapter_.makeShapeAt(clamp01(x), clamp01(y));
+    if (customise)
+        customise(shape);
     shape.name =
         uniqueName(shapes, shape.name.isEmpty() ? "Shape " + juce::String((int)shapes.size() + 1) : shape.name);
     setPosition(shape, x, y);
