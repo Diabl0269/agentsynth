@@ -314,9 +314,9 @@ TEST(ShapeEditor, TabVisitsTheMapChipsGridSpectrumCurveButtonsAndDoneInVisualOrd
     for (auto* c : walk.forward)
         names.push_back(c->getTitle().toStdString());
     const std::vector<std::string> expected{"Morph map",
-                                            "ah, X 0.20, Y 0.25",
-                                            "ee, X 0.80, Y 0.25",
-                                            "oo, X 0.50, Y 0.80",
+                                            "Dot 1 of 3, shape ah, position X 20%, Y 25%",
+                                            "Dot 2 of 3, shape ee, position X 80%, Y 25%",
+                                            "Dot 3 of 3, shape oo, position X 50%, Y 80%",
                                             "Morph cursor, X 0.50, Y 0.50",
                                             "Morph X, 0.50",
                                             "Morph Y, 0.50",

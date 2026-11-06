@@ -16,6 +16,14 @@ constexpr int kRenameWidth = 96;
 constexpr int kRenameHeight = 22;
 
 juce::String coordinateText(float x, float y) { return "X " + juce::String(x, 2) + ", Y " + juce::String(y, 2); }
+
+int percent(float v) { return juce::roundToInt(v * 100.0f); }
+
+/** "Dot 2 of 4, shape Saw, position X 30%, Y 25%": where the dot is in the list and on the map, in words. */
+juce::String dotTitle(int index, int count, const juce::String& shape, float x, float y) {
+    return "Dot " + juce::String(index + 1) + " of " + juce::String(count) + ", shape " + shape + ", position X " +
+           juce::String(percent(x)) + "%, Y " + juce::String(percent(y)) + "%";
+}
 } // namespace
 
 juce::Component* MorphMap::getDotStop(int index) const {
@@ -28,14 +36,15 @@ juce::Component* MorphMap::getStripStop(Axis axis) const {
     return axis == Axis::X ? stripStops_[0].get() : axis == Axis::Y ? stripStops_[1].get() : nullptr;
 }
 
-/** The names carry the values ("Morph cursor, X 0.40, Y 0.62"): the stop is a plain focusable element, so its
-    title is what a screen reader speaks when focus lands on it and after each key step. */
+/** The names carry the values ("Dot 2 of 4, shape Saw, position X 30%, Y 25%", "Morph cursor, X 0.40, Y 0.62"): the
+    stop is a plain focusable element, so its title is what a screen reader speaks when focus lands on it and after
+    each key step. This runs on every move, insert, removal and rename, so the index and count never go stale. */
 void MorphMap::refreshStopNames() {
     for (int i = 0; i < (int)dotStops_.size(); ++i) {
         const auto& dot = dots_[(size_t)i];
         const juce::String name = dot.name.isEmpty() ? "Shape " + juce::String(i + 1) : dot.name;
         dotStops_[(size_t)i]->setComponentID("morphDot" + juce::String(i)); // test mode finds a dot by index
-        dotStops_[(size_t)i]->setTitle(name + ", " + coordinateText(dot.x, dot.y));
+        dotStops_[(size_t)i]->setTitle(dotTitle(i, (int)dots_.size(), name, dot.x, dot.y));
         dotStops_[(size_t)i]->setDescription("Shape on the morph map");
         dotStops_[(size_t)i]->setTooltip(name + " - drag to move, double-click to delete, Return for its menu");
     }

@@ -532,6 +532,7 @@ add_executable(Tests
     UI/ModuleViews/CurveEditor/CurveEditorPaintTests.cpp
     UI/ModuleViews/CurveEditor/CurveEditorGridSnapTests.cpp
     UI/ModuleViews/ShapeEditor/ShapeEditorTests.cpp
+    UI/ModuleViews/ShapeEditor/MorphMapNamesTests.cpp
     UI/ModuleViews/ShapeEditor/MorphMapTests.cpp
     UI/ModuleViews/ShapeEditor/PerNoteBarTests.cpp
     UI/ModuleViews/ShapeEditor/LfoShapesWindowTests.cpp

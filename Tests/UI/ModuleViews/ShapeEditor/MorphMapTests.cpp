@@ -290,7 +290,7 @@ TEST(MorphMap, StopsAreNamedWithTheirValuesAndTooltipped) {
     MapRig rig;
     rig.filter->setCustomShapes(rig.filter->getCustomShapes());
     EXPECT_EQ(rig.map.getCursorStop()->getTitle(), "Morph cursor, X 0.50, Y 0.50");
-    EXPECT_EQ(rig.map.getDotStop(0)->getTitle(), "ah, X 0.20, Y 0.25");
+    EXPECT_EQ(rig.map.getDotStop(0)->getTitle(), "Dot 1 of 3, shape ah, position X 20%, Y 25%");
     rig.map.getCursorStop()->keyPressed(key(juce::KeyPress::rightKey));
     EXPECT_EQ(rig.map.getCursorStop()->getTitle(), "Morph cursor, X 0.52, Y 0.50");
 
@@ -468,7 +468,7 @@ TEST(MorphMapKeyboard, AStopSurvivesARefreshWithTheSameCountAndTheNamesFollowThe
     ASSERT_NE(first.getComponent(), nullptr);
     ASSERT_NE(last.getComponent(), nullptr);
     EXPECT_EQ(map.getDotStop(2), last.getComponent());
-    EXPECT_TRUE(map.getDotStop(0)->getTitle().startsWith("renamed"));
+    EXPECT_EQ(map.getDotStop(0)->getTitle(), "Dot 1 of 3, shape renamed, position X 20%, Y 25%");
 
     editor.getController().addShapeInFreeSpot();
     EXPECT_EQ(map.getDotStop(0), first.getComponent()) << "a new dot adds a stop; the others stay";

@@ -209,7 +209,8 @@ The Filter card (Custom type), the LFO card (Custom shape) and the shape editor 
 them as the `MorphShapesCard` (both cards) and `ShapeEditorWindow` surfaces (no baseline gaps). The map is a Tab stop with the soft region
 outline, and each dot, the cursor and the two edge sliders is a transparent, mouse-inert stop over the painted thing
 (the `PianoRollHeaderChip` idea) with the solid focus ring: Tab goes map, dots, cursor, Morph X, Morph Y. Names carry
-values and are re-set on every change ("ah, X 0.20, Y 0.25", "Morph cursor, X 0.40, Y 0.62", "Morph X, 0.40"); tooltips
+values and are re-set on every change, including a move, an insert and a removal: a dot reads its place in the list, its
+shape and its position ("Dot 2 of 4, shape ah, position X 20%, Y 25%"), the rest "Morph cursor, X 0.40, Y 0.62", "Morph X, 0.40"; tooltips
 read "<name> - drag to move, double-click to delete, Return for its menu", "Morph cursor - drag to blend shapes". Keys, all inside the
 focused stop and therefore not rebindable actions (the native-control exception in [the rule](#the-rule)): the arrows
 move the focused dot, cursor or slider (Shift for a bigger step; held, they glide on, speeding up the longer they are
