@@ -72,8 +72,10 @@ ShapeListEditor::ShapeListEditor(std::shared_ptr<ShapeListAdapter> adapter, int 
     styleButton(duplicateButton_, "Duplicate: a copy of the selected shape");
     styleButton(deleteButton_, "Delete: remove the selected shape (one always stays)");
     styleButton(renameButton_, "Rename: name the selected shape");
-    styleButton(startFromButton_,
-                "Start from: replace the selected shape's curve with a built-in, a saved shape or a factory shape");
+    styleButton(
+        startFromButton_,
+        "Start from: pick a built-in, a saved shape or a factory shape from a list with a small picture of each, to "
+        "replace the selected shape's curve");
     styleButton(drawButton_, "Draw: replace the selected shape's curve with a line, sine, triangle, saw or square");
     styleButton(saveShapeButton_,
                 "Save shape: keep the selected shape's curve under a name, in the Sounds tab's Shapes");

@@ -2,6 +2,7 @@
 // two shapes up, its sliders and cursor driven by real mouse events, where a Morph X / Y cable lands, the Edit shapes
 // button and the double-clicks opening the shape editor, the curve editor following the shape nearest the cursor, and
 // the shared fade path. The Filter's card is covered in ModuleComponentMorphShapesCardTests.cpp.
+#include "../../../TestWait.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "../../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "ModuleComponentTestFixture.h"
@@ -11,6 +12,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
+#include "UI/ModuleViews/ShapeEditor/ShapePicker.h"
 
 using namespace synth::ui;
 using namespace synth::ui::test;
@@ -343,4 +345,140 @@ TEST_F(ModuleComponentTest, LfoSliderRightClickOnTheCardAndInTheWindowOpenTheSam
     rig.map().mouseDown(rightClick(rig.map(), rig.map().getDotCentre(0)));
     ASSERT_FALSE(captured.items.empty());
     EXPECT_EQ(captured.items.front(), "Edit") << "the card's dot menu keeps Edit";
+}
+
+using namespace synth::ui;
+using namespace synth::ui::test;
+using synth::shapes::ShapeKind;
+using synth::shapes::ShapeLibrary;
+
+namespace {
+
+struct TempLibrary {
+    juce::File dir = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                         .getChildFile("shape-picker-" + juce::Uuid().toDashedString());
+    TempLibrary() { ShapeLibrary::shared().setRootForTest(dir); }
+    ~TempLibrary() {
+        ShapeLibrary::shared().setRootForTest({});
+        dir.deleteRecursively();
+    }
+};
+
+struct PickerRig {
+    AudioEngine engine;
+    juce::AudioProcessorGraph::Node::Ptr node;
+    GraphEditor editor{engine};
+    AppUndoManager undo;
+    std::unique_ptr<ModuleComponent> card;
+    CapturedMenu captured;
+
+    MorphShapesCard& morph() { return *card->getMorphCard(); }
+
+    void captureMenus() {
+        card->setShowContextMenuHookForTest([this](juce::PopupMenu& m) { captured.capture(m); });
+    }
+    /** The menu item whose text is `title`, or null. */
+    bool hasThumbnail(const juce::String& title) {
+        juce::PopupMenu::MenuItemIterator it(captured.menu, false);
+        while (it.next())
+            if (it.getItem().text == title)
+                return it.getItem().customComponent != nullptr;
+        return false;
+    }
+};
+
+struct FilterPickerRig : PickerRig {
+    FilterModule* filter = nullptr;
+    FilterPickerRig() {
+        filter = new FilterModule();
+        node = engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(filter));
+        *dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(filter, "filterType")) =
+            FilterModule::kCustomTypeIndex;
+        card = std::make_unique<ModuleComponent>(filter, node->nodeID, editor, &undo);
+        card->timerCallback();
+        captureMenus();
+    }
+};
+
+struct LfoPickerRig : PickerRig {
+    LFOModule* lfo = nullptr;
+    LfoPickerRig() {
+        lfo = new LFOModule();
+        node = engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(lfo));
+        synth::LfoCustomShapes list;
+        for (int i = 0; i < 3; ++i) {
+            const float t = (float)i / 2.0f;
+            list.shapes.push_back({"s" + juce::String(i),
+                                   synth::LfoCustomWave::preset(synth::LfoCustomWave::Preset::Triangle),
+                                   {t * 0.8f + 0.1f, t * 0.8f + 0.1f}});
+        }
+        lfo->setCustomShapes(list);
+        card = std::make_unique<ModuleComponent>(lfo, node->nodeID, editor, &undo);
+        *dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(lfo, "shape")) = LFOModule::kCustomShapeIndex;
+        card->timerCallback();
+        card->getCardBody()->flushPendingConditionUpdate();
+        captureMenus();
+    }
+};
+
+} // namespace
+
+TEST_F(ModuleComponentTest, PickShapeOnTheFilterCardListsEveryShapeWithAThumbnailAndStampsTheOneNearestTheCursor) {
+    TempLibrary library;
+    ASSERT_EQ(ShapeLibrary::shared().save(ShapeKind::Filter, "mine",
+                                          synth::LfoCustomWave::preset(synth::LfoCustomWave::Preset::RampUp)),
+              ShapeLibrary::SaveResult::Saved);
+    FilterPickerRig rig;
+    auto& pick = rig.morph().getPickButton();
+    ASSERT_TRUE(pick.isVisible());
+    EXPECT_EQ(pick.getTitle(), "Pick shape");
+    EXPECT_FALSE(pick.getTooltip().isEmpty());
+    EXPECT_TRUE(pick.getWantsKeyboardFocus());
+    EXPECT_FALSE(pick.getBounds().intersects(rig.morph().getEditButton().getBounds()));
+
+    pick.onClick();
+    ASSERT_FALSE(rig.captured.items.empty());
+    EXPECT_TRUE(rig.hasThumbnail("mine, Yours")) << "a saved shape is a thumbnail row badged Yours";
+    EXPECT_TRUE(rig.hasThumbnail("low-pass ramp, Factory"));
+    EXPECT_TRUE(rig.hasThumbnail("double peak, Factory"));
+
+    const auto nearest = (size_t)rig.morph().nearestShapeToCursor();
+    const auto before = rig.filter->getCustomShapes();
+    const int serial = rig.undo.getEditSerial();
+    ASSERT_TRUE(rig.captured.run("low-pass ramp, Factory"));
+    const auto expected = ShapeLibrary::shared().find(ShapeKind::Filter, true, "low-pass ramp")->curve;
+    EXPECT_EQ(rig.filter->getCustomShapes().shapes[nearest].curve, expected);
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1) << "one undo step";
+    rig.undo.undo();
+    EXPECT_EQ(rig.filter->getCustomShapes(), before);
+}
+
+TEST_F(ModuleComponentTest, PickShapeOpensFromTheKeyboardWithReturn) {
+    TempLibrary library;
+    FilterPickerRig rig;
+    auto& pick = rig.morph().getPickButton();
+    EXPECT_TRUE(pick.getWantsKeyboardFocus()) << "a Tab stop";
+    EXPECT_TRUE(static_cast<juce::Component&>(pick).keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    EXPECT_TRUE(synth::test::waitUntil([&] { return !rig.captured.items.empty(); }, 2000))
+        << "Return on the focused button opens the picker";
+}
+
+TEST_F(ModuleComponentTest, PickShapeOnTheLfoCardOffersTheLfoShapesNotTheFilterOnes) {
+    TempLibrary library;
+    LfoPickerRig rig;
+    rig.morph().getPickButton().onClick();
+    ASSERT_FALSE(rig.captured.items.empty());
+    EXPECT_TRUE(rig.hasThumbnail("heartbeat, Factory"));
+    EXPECT_TRUE(rig.hasThumbnail("ramp up, Factory"));
+    EXPECT_FALSE(rig.hasThumbnail("low-pass ramp, Factory"));
+
+    const int serial = rig.undo.getEditSerial();
+    const auto nearest = (size_t)rig.morph().nearestShapeToCursor();
+    ASSERT_TRUE(rig.captured.run("heartbeat, Factory"));
+    EXPECT_EQ(rig.lfo->getCustomShapes().shapes[nearest].curve,
+              ShapeLibrary::shared().find(ShapeKind::Lfo, true, "heartbeat")->curve);
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
+    rig.undo.undo();
+    EXPECT_EQ(rig.lfo->getCustomShapes().shapes[nearest].curve,
+              synth::LfoCustomWave::preset(synth::LfoCustomWave::Preset::Triangle));
 }

@@ -1,6 +1,7 @@
 // ShapeListEditorLibrary.cpp -- how the shape window meets the shape library: the Start from menu that lists it, a
 // library shape dropped on a chip, and Save shape.
 #include "ShapeListEditor.h"
+#include "ShapePicker.h"
 #include "ShapeSavePrompts.h"
 #include <algorithm>
 
@@ -39,29 +40,31 @@ std::vector<ShapeStartFrom> ShapeListEditor::startFromEntries(int* builtInCount,
     return entries;
 }
 
-// Each item carries its curve, so a library that changes while the menu is open cannot shift what an item stamps.
+// Each row carries its curve, so a library that changes while the menu is open cannot shift what a row stamps. The
+// rows are the shared shape picker's: a thumbnail, the name and a badge (Yours for a saved shape, Factory otherwise).
 void ShapeListEditor::openStartFromMenu() {
     juce::PopupMenu menu;
     juce::Component::SafePointer<ShapeListEditor> safe(this);
     int builtIn = 0;
-    int saved = 0;
-    const auto entries = startFromEntries(&builtIn, &saved);
+    int savedCount = 0;
+    const auto entries = startFromEntries(&builtIn, &savedCount);
     for (int i = 0; i < (int)entries.size(); ++i) {
-        if (i == builtIn && saved > 0) {
+        if (i == builtIn && savedCount > 0) {
             menu.addSeparator();
             menu.addSectionHeader("Your shapes");
-        } else if (i == builtIn + saved && i < (int)entries.size() && i > 0 && libraryKind().has_value()) {
+        } else if (i == builtIn + savedCount && i > 0 && libraryKind().has_value()) {
             menu.addSeparator();
             menu.addSectionHeader("Factory shapes");
         }
-        const bool saved = i >= builtIn && i < builtIn + saved;
-        menu.addItem(entries[(size_t)i].name,
-                     [safe, saved, name = entries[(size_t)i].name, curve = entries[(size_t)i].curve] {
-                         if (safe == nullptr)
-                             return;
-                         safe->stampCurveOnSelected(curve);
-                         safe->noteStartFromUsed(name, curve, saved);
-                     });
+        const bool isSaved = i >= builtIn && i < builtIn + savedCount;
+        const ShapePickerEntry row{entries[(size_t)i].name, entries[(size_t)i].curve,
+                                   isSaved ? BadgeKind::Yours : BadgeKind::Factory, std::nullopt};
+        addShapePickerItem(menu, row, [safe, isSaved](const ShapePickerEntry& picked) {
+            if (safe == nullptr)
+                return;
+            safe->stampCurveOnSelected(picked.curve);
+            safe->noteStartFromUsed(picked.name, picked.curve, isSaved);
+        });
     }
     showMenuNow(menu, startFromButton_);
 }

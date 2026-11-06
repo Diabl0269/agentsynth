@@ -185,7 +185,7 @@ TEST(ShapeLibraryTest, UserShapesAreListedBeforeTheFactorySetAndRemoveForgetsOne
     ASSERT_EQ(t.library.save(ShapeKind::Lfo, "zebra", sampleCurve()), ShapeLibrary::SaveResult::Saved);
     ASSERT_EQ(t.library.save(ShapeKind::Lfo, "alpha", sampleCurve()), ShapeLibrary::SaveResult::Saved);
     const auto all = t.library.allShapes(ShapeKind::Lfo);
-    ASSERT_EQ(all.size(), 10u);
+    ASSERT_EQ(all.size(), 18u);
     EXPECT_EQ(all[0].name, "alpha");
     EXPECT_EQ(all[1].name, "zebra");
     EXPECT_TRUE(all[2].factory);
@@ -208,15 +208,19 @@ TEST(ShapeLibraryTest, ListenersHearASaveAndARemove) {
     EXPECT_EQ(counter.calls, 2);
 }
 
-TEST(ShapeFactoryTest, EachKindShipsEightShapesWithTheRightNamesAndKinds) {
+TEST(ShapeFactoryTest, EachKindShipsSixteenShapesWithTheRightNamesAndKinds) {
     const auto filter = ShapeLibrary::factoryShapes(ShapeKind::Filter);
     const auto lfo = ShapeLibrary::factoryShapes(ShapeKind::Lfo);
-    const juce::StringArray filterNames{"ah", "ee", "oo", "eh", "ih", "telephone band", "comb", "tilt"};
-    const juce::StringArray lfoNames{"ramp up", "ramp down",        "exponential decay", "sidechain duck",
-                                     "bounce",  "4-step staircase", "smooth random",     "1/16 gate"};
-    ASSERT_EQ(filter.size(), 8u);
-    ASSERT_EQ(lfo.size(), 8u);
-    for (size_t i = 0; i < 8; ++i) {
+    const juce::StringArray filterNames{
+        "ah",   "ee",    "oo",           "eh",        "ih",     "telephone band", "comb",  "tilt", "low-pass ramp",
+        "band", "notch", "two formants", "wide comb", "stairs", "double peak",    "seesaw"};
+    const juce::StringArray lfoNames{
+        "ramp up",       "ramp down", "exponential decay", "sidechain duck", "bounce", "4-step staircase",
+        "smooth random", "1/16 gate", "triangle",          "soft sine",      "square", "pulse",
+        "double bump",   "heartbeat", "stutter ramp",      "wobble steps"};
+    ASSERT_EQ(filter.size(), 16u);
+    ASSERT_EQ(lfo.size(), 16u);
+    for (size_t i = 0; i < 16; ++i) {
         EXPECT_EQ(filter[i].name, filterNames[(int)i]);
         EXPECT_EQ(filter[i].kind, ShapeKind::Filter);
         EXPECT_TRUE(filter[i].factory);
@@ -347,4 +351,47 @@ TEST(ShapeLibraryTest, RenameMovesTheFileRefusesATakenNameAndAllowsACaseChange) 
 TEST(ShapeLibraryTest, ShapeIdIsTheDragPayloadSpelling) {
     EXPECT_EQ(synth::shapes::shapeId(ShapeKind::Lfo, true, "ramp up"), "shape:lfo:factory:ramp up");
     EXPECT_EQ(synth::shapes::shapeId(ShapeKind::Filter, false, "mine"), "shape:filter:user:mine");
+}
+
+TEST(ShapeFactoryTest, TheStarterFilterShapesDoWhatTheirNamesSay) {
+    const auto shapes = ShapeLibrary::factoryShapes(ShapeKind::Filter);
+    const auto named = [&](const char* name) -> const synth::LfoCustomWave& {
+        for (const auto& shape : shapes)
+            if (shape.name == name)
+                return shape.curve;
+        ADD_FAILURE() << name;
+        return shapes.front().curve;
+    };
+    const auto& ramp = named("low-pass ramp");
+    EXPECT_NEAR(dbAtHz(ramp, 200.0f), 0.0f, 0.5f);
+    EXPECT_LT(dbAtHz(ramp, 8000.0f), -25.0f);
+    const auto& band = named("band");
+    EXPECT_NEAR(dbAtHz(band, 1000.0f), 0.0f, 0.5f);
+    EXPECT_LT(dbAtHz(band, 60.0f), -30.0f);
+    EXPECT_LT(dbAtHz(band, 12000.0f), -30.0f);
+    const auto& notch = named("notch");
+    EXPECT_NEAR(dbAtHz(notch, 100.0f), 0.0f, 0.5f);
+    EXPECT_LT(dbAtHz(notch, 1000.0f), -30.0f);
+    const auto& peaks = named("double peak");
+    EXPECT_GT(dbAtHz(peaks, 500.0f), dbAtHz(peaks, 1000.0f) + 20.0f);
+    EXPECT_GT(dbAtHz(peaks, 2500.0f), dbAtHz(peaks, 1000.0f) + 20.0f);
+    const auto& stairs = named("stairs");
+    EXPECT_GT(dbAtHz(stairs, 100.0f), dbAtHz(stairs, 500.0f));
+    EXPECT_GT(dbAtHz(stairs, 500.0f), dbAtHz(stairs, 1500.0f));
+    EXPECT_GT(dbAtHz(stairs, 1500.0f), dbAtHz(stairs, 8000.0f));
+}
+
+TEST(ShapeFactoryTest, TheStarterLfoShapesStayInRangeAndEachLooksDifferent) {
+    const auto lfo = ShapeLibrary::factoryShapes(ShapeKind::Lfo);
+    for (size_t i = 8; i < lfo.size(); ++i) {
+        SCOPED_TRACE(lfo[i].name.toStdString());
+        for (const auto& p : lfo[i].curve.points) {
+            EXPECT_GE(p.y, 0.0f);
+            EXPECT_LE(p.y, 1.0f);
+        }
+        for (size_t j = 0; j < i; ++j)
+            EXPECT_FALSE(lfo[i].curve == lfo[j].curve) << lfo[j].name.toStdString();
+    }
+    EXPECT_GT(lfo[13].curve.evaluate(0.06f), 0.95f); // heartbeat: the strong beat
+    EXPECT_LT(lfo[13].curve.evaluate(0.7f), 0.05f);  // and rest
 }

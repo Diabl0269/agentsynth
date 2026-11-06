@@ -9,6 +9,7 @@ namespace {
 constexpr float kLineWidth = 1.8f;
 constexpr float kInset = 6.0f;
 constexpr float kCornerRadius = 4.0f;
+constexpr float kThumbLineWidth = 1.4f;
 } // namespace
 
 juce::Path makeShapeCurvePath(const synth::LfoCustomWave& curve, juce::Rectangle<float> box, int samples) {
@@ -23,6 +24,18 @@ juce::Path makeShapeCurvePath(const synth::LfoCustomWave& curve, juce::Rectangle
             line.lineTo(box.getX() + x * box.getWidth(), y);
     }
     return line;
+}
+
+void paintShapeThumbnail(juce::Graphics& g, const synth::theme::Theme& theme, const synth::LfoCustomWave& curve,
+                         juce::Rectangle<float> box) {
+    g.setColour(theme.colors.bg1);
+    g.fillRoundedRectangle(box, 3.0f);
+    g.setColour(theme.colors.border);
+    g.drawRoundedRectangle(box, 3.0f, 1.0f);
+    const auto inner = box.reduced(3.0f, 3.0f);
+    g.setColour(theme.colors.accent);
+    g.strokePath(makeShapeCurvePath(curve, inner, juce::jmax(2, (int)inner.getWidth())),
+                 juce::PathStrokeType(kThumbLineWidth));
 }
 
 ShapeCurveView::ShapeCurveView() {

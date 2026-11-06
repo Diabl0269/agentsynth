@@ -2,6 +2,7 @@
 
 #include "Modules/Shapes/ShapeLibrary.h"
 #include "UI/Layout/UIAnimation.h"
+#include "UI/Theme/Theme.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 
@@ -9,6 +10,11 @@ namespace synth::ui {
 
 /** The curve of a shape as a polyline across `box` (the caller insets it), `samples` points wide. */
 juce::Path makeShapeCurvePath(const synth::LfoCustomWave& curve, juce::Rectangle<float> box, int samples);
+
+/** The small framed picture of a shape's curve a list row or picker entry shows: `box` filled with the page colour,
+ *  a hairline border and the curve in the accent colour. The one thumbnail painter. */
+void paintShapeThumbnail(juce::Graphics& g, const synth::theme::Theme& theme, const synth::LfoCustomWave& curve,
+                         juce::Rectangle<float> box);
 
 /** The footer's picture of the selected shape: its curve in the accent colour in a framed box, drawn in from the left
  *  over 190 ms (a fade over 80 ms under Reduce Motion, at once with Animations off). Not a focus stop. */

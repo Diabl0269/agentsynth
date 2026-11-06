@@ -137,6 +137,11 @@ void ModuleComponent::createMorphShapesCard() {
     host.makeRoom = [this] { owner.handleModuleResized(this); };
     host.settling = &settlingFootprint_;
     host.showMenu = [this](juce::PopupMenu& menu) { showContextMenuHook_(menu); };
+    host.showMenuAt = [this](juce::PopupMenu& menu, juce::Rectangle<int> screenArea) {
+        menuAnchor_ = screenArea;
+        showContextMenuHook_(menu);
+        menuAnchor_.reset();
+    };
     // A map slider's right-click (card or window) opens the usual knob menu of the hidden Morph knob it stands in for.
     host.stripMenu = [this](int channel, juce::Rectangle<int> screenArea) {
         auto* param =

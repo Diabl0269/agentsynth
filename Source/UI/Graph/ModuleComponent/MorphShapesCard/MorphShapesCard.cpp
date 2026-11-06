@@ -4,6 +4,7 @@
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
+#include "UI/ModuleViews/ShapeEditor/ShapePicker.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 
@@ -14,6 +15,8 @@ constexpr int kMapWidth = 252;
 // 150 plus the 9 px the landing dots and modulation bars take from the plot, so the plot keeps its height.
 constexpr int kMapHeight = 159;
 constexpr int kCurveHeight = 110;
+constexpr int kPickButtonWidth = 84; // "Pick shape", beside Edit shapes
+constexpr int kPickButtonGap = 4;
 
 int blockHeight(const synth::CardBlockFade& block, bool settling, int full) {
     return block.isAttached() ? block.height(full, settling) : full;
@@ -46,6 +49,10 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
     editButton_.setTooltip("Edit shapes: open the shape editor window");
     editButton_.setTitle("Edit shapes");
     editButton_.onClick = [this] { openEditor(nearestShapeToCursor()); };
+    pickButton_.setTooltip("Pick shape: choose a saved or factory shape from a list with a small picture of each; the "
+                           "shape nearest the cursor takes its curve (Cmd+Z undoes it)");
+    pickButton_.setTitle("Pick shape");
+    pickButton_.onClick = [this] { openPicker(); };
     toggle_.setTooltip("Show Morph Map: the map of shapes and the morph cursor " + host_.mapPlace);
     toggle_.onClick = [this] {
         const bool show = toggle_.getToggleState();
@@ -53,7 +60,7 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
         sync();
     };
     for (juce::Component* part : {static_cast<juce::Component*>(&map_), static_cast<juce::Component*>(&editButton_),
-                                  static_cast<juce::Component*>(&toggle_)})
+                                  static_cast<juce::Component*>(&pickButton_), static_cast<juce::Component*>(&toggle_)})
         host_.card->addChildComponent(part);
 
     auto attach = [this](synth::CardBlockFade& fade, std::vector<juce::Component*> targets) {
@@ -66,10 +73,10 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
     };
     if (host_.curveView) {
         setUpCurveView();
-        attach(editFade_, {&editButton_, &toggle_, &curveToggle_});
+        attach(editFade_, {&editButton_, &pickButton_, &toggle_, &curveToggle_});
         attach(curveFade_, {&curveView_});
     } else {
-        attach(editFade_, {&editButton_, &toggle_});
+        attach(editFade_, {&editButton_, &pickButton_, &toggle_});
     }
     attach(mapFade_, {&map_});
     lastGeneration_ = adapter_->getGeneration();
@@ -135,7 +142,11 @@ int MorphShapesCard::layout(int y, int x, int width, bool apply, int topGap) {
     y += blockHeight(editFade_, settling, topGap);
     if (apply) {
         const int w = juce::jmin(width, synth::cardbody::kNarrowContentWidth);
-        editButton_.setBounds(x + (width - w) / 2, y, w, blockHeight(editFade_, settling, synth::cardbody::kRowHeight));
+        const int h = blockHeight(editFade_, settling, synth::cardbody::kRowHeight);
+        const int left = x + (width - w) / 2;
+        const int pickW = juce::jmin(kPickButtonWidth, w / 2);
+        editButton_.setBounds(left, y, w - pickW - kPickButtonGap, h);
+        pickButton_.setBounds(left + w - pickW, y, pickW, h);
     }
     y += blockHeight(editFade_, settling, synth::cardbody::kRowHeight + 2);
     if (host_.curveView && curveFade_.isAttached() && curveView_.isVisible()) {
@@ -300,7 +311,9 @@ void MorphShapesCard::shapeDragOver(bool over, const juce::String& name) {
 }
 
 // The shape under the cursor is the one the card's curve editor shows, so that is the one the drop replaces.
-void MorphShapesCard::shapeDropped(const synth::shapes::LibraryShape& shape) {
+void MorphShapesCard::shapeDropped(const synth::shapes::LibraryShape& shape) { applyPickedShape(shape); }
+
+void MorphShapesCard::applyPickedShape(const synth::shapes::LibraryShape& shape) {
     auto shapes = adapter_->getShapes();
     if (shapes.empty() || !acceptsShapeDrop(shape.kind))
         return;
@@ -311,6 +324,26 @@ void MorphShapesCard::shapeDropped(const synth::shapes::LibraryShape& shape) {
     adapter_->endEdit();
     if (host_.card != nullptr)
         host_.card->repaint();
+}
+
+// The library shapes of this module's kind, each with its picture and badge. A pick is one undo step and counts as a
+// use, like a drop, so Used recently lists it.
+void MorphShapesCard::openPicker() {
+    const auto kind = synth::shapes::kindFromWord(adapter_->getPreferenceKind());
+    if (!kind.has_value() || !(host_.customActive && host_.customActive()))
+        return;
+    juce::Component::SafePointer<juce::Component> card(host_.card);
+    auto menu = makeShapePickerMenu(libraryPickerEntries(synth::shapes::ShapeLibrary::shared(), *kind),
+                                    [this, card](const ShapePickerEntry& entry) {
+                                        if (card == nullptr || !entry.libraryShape.has_value())
+                                            return;
+                                        applyPickedShape(*entry.libraryShape);
+                                        synth::shapes::ShapeLibrary::shared().noteUsed(*entry.libraryShape);
+                                    });
+    if (host_.showMenuAt)
+        host_.showMenuAt(menu, pickButton_.getScreenBounds());
+    else if (host_.showMenu)
+        host_.showMenu(menu);
 }
 
 void MorphShapesCard::paintShapeDropHint(juce::Graphics& g, juce::Rectangle<float> bounds) const {

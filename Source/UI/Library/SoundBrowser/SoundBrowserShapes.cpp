@@ -2,6 +2,7 @@
 // with a small curve thumbnail, shapes in Favourites and Used recently, and dragging one out to a shape window chip or
 // a card. Deleting, renaming and Return are in SoundBrowserShapeActions.cpp.
 #include "SoundBrowser/SoundSearch.h"
+#include "UI/Chrome/Badge/Badge.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Library/SoundBrowser/ShapeCurveView.h"
 #include "UI/Library/SoundBrowser/ShapeDragPayload.h"
@@ -17,7 +18,6 @@ namespace {
 constexpr int kThumbWidth = 44;
 constexpr int kThumbHeight = 18;
 constexpr int kThumbGap = 10;
-constexpr float kThumbLineWidth = 1.4f;
 
 const char* groupTitle(synth::shapes::ShapeKind kind) {
     return kind == synth::shapes::ShapeKind::Filter ? "Filter shapes" : "LFO shapes";
@@ -90,8 +90,8 @@ SoundBrowserComponent::Row SoundBrowserComponent::makeShapeRow(const synth::shap
     Row row;
     row.kind = RowKind::Shape;
     row.text = shape.name;
-    const juce::String origin = shape.factory ? juce::String() : juce::String("yours");
-    row.detail = !inMixedList ? origin : kindName(shape.kind) + (origin.isEmpty() ? juce::String() : ", " + origin);
+    // The origin is a badge painted at the right of the row; a mixed list adds the kind as text beside it.
+    row.detail = inMixedList ? kindName(shape.kind) : juce::String();
     row.shape = shape;
     return row;
 }
@@ -148,20 +148,20 @@ void SoundBrowserComponent::paintShapeRow(juce::Graphics& g, const Row& row, juc
     const int side = kSoundRowSideMargin;
     const auto box = juce::Rectangle<float>((float)(area.getX() + side), (float)area.getCentreY() - kThumbHeight * 0.5f,
                                             (float)kThumbWidth, (float)kThumbHeight);
-    g.setColour(c.bg1);
-    g.fillRoundedRectangle(box, 3.0f);
-    g.setColour(c.border);
-    g.drawRoundedRectangle(box, 3.0f, 1.0f);
-    const auto line = makeShapeCurvePath(row.shape->curve, box.reduced(3.0f, 3.0f), kThumbWidth - 6);
-    g.setColour(c.accent);
-    g.strokePath(line, juce::PathStrokeType(kThumbLineWidth));
+    paintShapeThumbnail(g, synth::theme::themeOf(*this), row.shape->curve, box);
+    const auto& shape = *row.shape;
 
+    const auto& theme = synth::theme::themeOf(*this);
+    const auto badgeKind = shape.factory ? BadgeKind::Factory : BadgeKind::Yours;
+    const int badgeW = badgeWidth(badgeKind);
     const juce::Font detailFont(juce::FontOptions(12.0f));
     const int detailWidth =
         row.detail.isEmpty() ? 0 : (int)std::ceil(juce::GlyphArrangement::getStringWidth(detailFont, row.detail));
     const int nameLeft = area.getX() + side + kThumbWidth + kThumbGap;
-    int nameRight = area.getRight() - side - (detailWidth > 0 ? detailWidth + 8 : 0);
-    if (lists_.isFavourite(synth::shapes::shapeId(row.shape->kind, row.shape->factory, row.shape->name))) {
+    const int badgeLeft = area.getRight() - side - badgeW;
+    const int detailRight = badgeLeft - (detailWidth > 0 ? 8 : 0);
+    int nameRight = detailRight - (detailWidth > 0 ? detailWidth + 8 : 4);
+    if (lists_.isFavourite(synth::shapes::shapeId(shape.kind, shape.factory, shape.name))) {
         juce::Path star;
         star.addStar({(float)nameRight - 7.0f, (float)area.getCentreY()}, 5, 2.6f, 5.4f);
         g.setColour(c.accent);
@@ -175,9 +175,12 @@ void SoundBrowserComponent::paintShapeRow(juce::Graphics& g, const Row& row, juc
     if (detailWidth > 0) {
         g.setColour(c.textMuted);
         g.setFont(detailFont);
-        g.drawText(row.detail, area.getRight() - side - detailWidth, area.getY(), detailWidth, area.getHeight(),
+        g.drawText(row.detail, detailRight - detailWidth, area.getY(), detailWidth, area.getHeight(),
                    juce::Justification::centredRight);
     }
+    paintBadge(g, theme, badgeKind,
+               juce::Rectangle<float>((float)badgeLeft, (float)area.getCentreY() - kBadgeHeight * 0.5f, (float)badgeW,
+                                      (float)kBadgeHeight));
 }
 
 bool SoundBrowserComponent::beginShapeDrag(int index) {

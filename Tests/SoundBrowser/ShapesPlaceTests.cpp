@@ -57,7 +57,7 @@ TEST(ShapesPlaceTest, ThePlacesListHasAShapesPlaceNextToFavouritesAndUsedRecentl
     EXPECT_EQ(f.view->getRows()[0].text, "Favourites");
     EXPECT_EQ(f.view->getRows()[1].text, "Used recently");
     EXPECT_EQ(f.view->getRows()[2].text, "Shapes");
-    EXPECT_EQ(f.view->getRows()[2].detail, "18") << "16 factory shapes and the 2 saved ones";
+    EXPECT_EQ(f.view->getRows()[2].detail, "34") << "32 factory shapes and the 2 saved ones";
 
     f.view->setShapeLibrary(nullptr);
     EXPECT_EQ(f.rowOf("Shapes"), -1);
@@ -80,11 +80,11 @@ TEST(ShapesPlaceTest, ItListsFilterShapesThenLfoShapesWithTheUsersFirstInEach) {
     ASSERT_EQ(heads.size(), 2u);
     EXPECT_EQ(heads[0], "Filter shapes");
     EXPECT_EQ(heads[1], "LFO shapes");
-    ASSERT_EQ(filterNames.size(), 9u);
-    ASSERT_EQ(lfoNames.size(), 9u);
+    ASSERT_EQ(filterNames.size(), 17u);
+    ASSERT_EQ(lfoNames.size(), 17u);
     EXPECT_EQ(filterNames[0], "zz mine") << "a saved shape comes before the factory set, whatever its name";
     EXPECT_EQ(filterNames[1], "ah");
-    EXPECT_EQ(filterNames.back(), "tilt");
+    EXPECT_EQ(filterNames.back(), "seesaw");
     EXPECT_EQ(lfoNames[0], "my wobble");
     EXPECT_EQ(lfoNames[1], "ramp up");
     EXPECT_EQ(f.view->getPathText(), "Places > Shapes");
@@ -124,13 +124,13 @@ TEST(ShapesPlaceTest, ASavedShapeAppearsInTheOpenListAtOnce) {
 
 TEST(ShapesPlaceTest, TheSpokenRowSaysWhichKindAndWhereItCameFrom) {
     EXPECT_EQ(synth::ui::describeShapeForAccessibility("ah", "filter", true, 3, 20),
-              "ah, filter shape, built in, 3 of 20");
+              "ah, filter shape, Factory, built in, 3 of 20");
     EXPECT_EQ(synth::ui::describeShapeForAccessibility("mine", "lfo", false, 1, 9),
-              "mine, lfo shape, saved by you, 1 of 9");
+              "mine, lfo shape, Yours, saved by you, 1 of 9");
     ShapesFixture f;
     f.openShapes();
     f.view->selectRow(f.rowOf("ah"));
-    EXPECT_NE(f.view->getAccessibilityValueText().indexOf("ah, filter shape, built in"), -1);
+    EXPECT_NE(f.view->getAccessibilityValueText().indexOf("ah, filter shape, Factory, built in"), -1);
 }
 
 TEST(ShapesPlaceTest, DraggingAShapeRowStartsAShapeDragAndEndsItOnRelease) {
