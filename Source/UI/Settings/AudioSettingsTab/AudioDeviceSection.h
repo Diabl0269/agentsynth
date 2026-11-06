@@ -17,6 +17,7 @@ public:
     void refresh() override;
     void resized() override;
 
+    juce::ComboBox& getOutputBoxForTest() { return output_; }
     juce::ComboBox& getSampleRateBoxForTest() { return rate_; }
     juce::TextButton& getTestButtonForTest() { return test_; }
 

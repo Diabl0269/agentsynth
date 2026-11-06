@@ -84,7 +84,15 @@ void AudioDeviceSection::applyDeviceChoice(bool isInput) {
         if (!current->hasSeparateInputsAndOutputs())
             setup.inputDeviceName = inputsOn ? setup.outputDeviceName : juce::String();
     }
-    deviceManager_.setAudioDeviceSetup(setup, true);
+    // A different device does not share the old device's rate and buffer size (Bluetooth outputs in particular), and
+    // a rejected open leaves the manager with no device; 0 asks the new device for its own defaults.
+    setup.sampleRate = 0.0;
+    setup.bufferSize = 0;
+    const auto error = deviceManager_.setAudioDeviceSetup(setup, true);
+    if (error.isNotEmpty())
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Audio device",
+                                               "Could not open \"" + chosen + "\": " + error);
+    populate();
 }
 
 int AudioDeviceSection::visibleRows() const {
