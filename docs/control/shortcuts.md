@@ -1,10 +1,9 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **136 actions** across six categories —
-**General** (55, app-wide or routed per focused editor), **Graph** (15), **Timeline** (35), **Piano Roll** (14),
-**Mixer** (5) and **Layout Editor** (12) — every one rebindable, including keys that used to be hardcoded:
-nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **137 actions** across six categories —
+**General** (56, app-wide or routed per focused editor), **Graph** (15), **Timeline** (35), **Piano Roll** (14),
+**Mixer** (5) and **Layout Editor** (12) — every one rebindable, including keys that used to be hardcoded: nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the seven tool digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
 held that key. The tab groups rows into one collapsible section per category with a search box
 above them (matches against both the action's description and its current binding text — "cmd"
@@ -38,7 +37,8 @@ when reasoning about a key that "does nothing."
 | Cmd+Z | Undo — the project history, or the controller edit history while the Controllers panel holds focus (see [`midi-remote.md`](midi-remote.md#undo)) |
 | Cmd+Shift+Z | Redo — routed the same way as Undo |
 | Cmd+M (macOS) / Ctrl+Alt+M (Windows, Linux) | Toggle Mod Matrix — off the Mac Cmd is Ctrl, and Ctrl+M belongs to Toggle Metronome |
-| Cmd+K | Toggle Minimap |
+| Cmd+K | Search Everything (`openCommandPalette`) — opens the [command palette](../layout/command-palette.md), one search over every action, view, module, track, marker, on/off setting, recent project and preset; type + to add a track, module or preset. A second press closes it. The top bar's Search button runs the same action |
+| Opt+Cmd+K | Toggle Minimap — moved off Cmd+K for the palette; a saved Cmd+K moves here once (`migrateMinimapOptCmdK`, only while it still holds exactly Cmd+K and nothing else holds Opt+Cmd+K; a user's own key stays) |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B, Cmd+Opt+B | Toggle Module Library / Sound Browser: the sidebar's two views ([states](../layout/sound-browser.md#shortcuts)) |
 | Cmd+J | Toggle Bottom Panel (`toggleBottomPanel`) — the ONE show/hide toggle for the whole bottom-docked panel; reopens on whichever tab was last active, and closing it hides the Canvas too while that is a tab. A press that opens the pane leaves keyboard focus on its tab strip; one that closes it while focus was inside moves focus to the view in the main area. Cmd+T is released (a saved Cmd+T moves to Cmd+J once, see below). See [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) |

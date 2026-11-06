@@ -5,6 +5,7 @@
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentChoices.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerPackOffer.h"
 #include "UI/Layout/CardCallOut.h"
 
@@ -20,11 +21,12 @@ std::function<void(std::unique_ptr<ModMatrixPicker>)>& InstrumentPickerRow::pick
 }
 
 InstrumentPickerRow::InstrumentPickerRow(const InstrumentChrome::Host& host, ModuleBase& module,
-                                         synth::sampler::InstrumentHost& instruments, InstrumentChoiceOptions options)
+                                         synth::sampler::InstrumentHost& instruments,
+                                         const InstrumentChoiceOptions& options)
     : host_(host)
     , module_(module)
     , instruments_(instruments)
-    , options_(std::move(options)) {
+    , options_(std::make_unique<const InstrumentChoiceOptions>(options)) {
     caption_.setJustificationType(juce::Justification::centredLeft);
     caption_.setFont(juce::Font(juce::FontOptions(kCaptionFontSize)));
     caption_.setMinimumHorizontalScale(0.7f);
@@ -61,7 +63,7 @@ juce::String InstrumentPickerRow::currentPackKey() const {
 }
 
 void InstrumentPickerRow::openPicker() {
-    auto options = options_;
+    auto options = *options_;
     options.noKitLoaded = instruments_.getInstrumentName().isEmpty();
     auto choices = std::make_shared<InstrumentChoices>(collectInstrumentChoices(currentPackKey(), options));
     juce::WeakReference<InstrumentPickerRow> weak(this);

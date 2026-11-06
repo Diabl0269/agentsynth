@@ -325,6 +325,8 @@ juce::CommandID getCommandForAction(const juce::String& actionId) {
         return selectNextTrack;
     if (actionId == "selectPreviousTrack")
         return selectPreviousTrack;
+    if (actionId == "openCommandPalette")
+        return openCommandPalette;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }

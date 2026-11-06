@@ -6,7 +6,6 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/Sampler/SamplerInstrumentHost.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/InstrumentChrome.h"
-#include "UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentChoices.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentPicker.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -15,6 +14,8 @@
 namespace synth::ui {
 
 class ModMatrixPicker;
+struct InstrumentChoice;
+struct InstrumentChoiceOptions;
 
 class InstrumentPickerRow {
 public:
@@ -24,7 +25,7 @@ public:
     /** `module` and `instruments` are one object; both must outlive this. The components join `host.card` (hidden)
      *  when the owner calls the two add functions, so it sets their order among its own children. */
     InstrumentPickerRow(const InstrumentChrome::Host& host, ModuleBase& module,
-                        synth::sampler::InstrumentHost& instruments, InstrumentChoiceOptions options);
+                        synth::sampler::InstrumentHost& instruments, const InstrumentChoiceOptions& options);
     ~InstrumentPickerRow();
 
     void addPickerToCard();
@@ -67,7 +68,7 @@ private:
     InstrumentChrome::Host host_;
     ModuleBase& module_;
     synth::sampler::InstrumentHost& instruments_;
-    InstrumentChoiceOptions options_;
+    std::unique_ptr<const InstrumentChoiceOptions> options_;
     SamplerInstrumentPicker picker_;
     juce::Label caption_{"Instrument caption", juce::String()};
     std::unique_ptr<juce::FileChooser> chooser_;

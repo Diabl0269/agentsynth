@@ -85,6 +85,10 @@ std::array<ToolbarPartMotion, 2> toolbarIconMotion(Icon icon) {
     case Icon::TogglePanel: // the panel rises
         m[0].dy = -1.5f;
         break;
+    case Icon::ToolbarSearch: // the handle nudges out, as if the glass were sweeping
+        m[0].dx = 1.0f;
+        m[0].dy = 1.0f;
+        break;
     case Icon::ToggleLibrary: // the leaning book tips further, on its bottom corner
         m[0].degrees = -10.0f;
         m[0].pivot = {0.15f, 1.0f};

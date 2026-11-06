@@ -10,7 +10,8 @@ namespace synth::ui {
 // Mixer zones, MIDI destination picker). A box must not roll its own containsIgnoreCase: that is what
 // made "osc 8" find "Oscillator 8" in one box and nothing in another.
 //
-// A query is split on whitespace into words. A text matches when EVERY word appears in it, ignoring
+// A query is split on whitespace into words, and a word typed as letters then digits (or digits then letters) splits
+// there too, so "lfo6" is "lfo 6" and finds "LFO 6". A text matches when EVERY word appears in it, ignoring
 // case, in any order. A blank query matches everything (a box that wants "blank = no filter" gets it
 // for free; one that wants "blank = show nothing extra" guards on the query itself).
 

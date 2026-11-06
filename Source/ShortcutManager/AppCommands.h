@@ -164,7 +164,9 @@ enum CommandIDs {
     // Opens the community Discord page (branding::kDiscordUrl) in the default browser. Menu-only.
     joinDiscord,
     // Opens the Timeline if needed and puts its top bar ring on the transport's Play button.
-    focusTransportBar
+    focusTransportBar,
+    // Opens the command palette, the one search bar over actions, views, modules, tracks and settings.
+    openCommandPalette
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears

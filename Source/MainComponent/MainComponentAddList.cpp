@@ -1,7 +1,9 @@
 // MainComponentAddList.cpp -- the one searchable "Add" list: tracks, modules, presets, snippets and markers together.
 // The Timeline supplies the track rows and the module library the library rows (AddList.h orders and tags them); a
-// pick runs the same code the Timeline's Add Track picker or Return on a sidebar row runs.
+// pick runs the same code the Timeline's Add Track picker or Return on a sidebar row runs
+// (MainComponentCommandPalette::runAddListPick, which the command palette's "+" rows run too).
 #include "MainComponent.h"
+#include "MainComponentCommandPalette.h"
 #include "UI/AddList/AddList.h"
 #include "UI/Timeline/TimelinePanelComponent/AddTrackPicker.h"
 #include <memory>
@@ -40,30 +42,9 @@ void MainComponent::openAddList(synth::ui::AddListOrigin origin, juce::Component
     };
     auto onPick = [safe, picked, libraryRows, fromKeyboard, fromCanvas, handBackFocus](int id) {
         *picked = true;
-        if (safe == nullptr)
-            return;
-        if (const auto index = libraryIndexForAddListId(id)) {
-            if (*index < (int)libraryRows->size())
-                safe->moduleLibrary.activateAddListRow((*libraryRows)[(size_t)*index]);
-            if (fromKeyboard && !fromCanvas)
-                safe->focusRegions_.focusRegionById("canvas");
-            else
-                handBackFocus();
-            return;
-        }
-        auto addTrack = [safe, id, fromKeyboard, fromCanvas] {
-            if (safe == nullptr)
-                return;
-            safe->timelinePanel.finishAddTrackMenu(id, fromKeyboard && !fromCanvas);
-            if (fromKeyboard && fromCanvas)
-                safe->canvasToolbar_.focusSlot(CanvasToolbar::Add);
-        };
-        if (safe->isViewOnScreen(BottomDockComponent::Tab::Timeline)) {
-            addTrack();
-            return;
-        }
-        safe->showBottomDockTab(BottomDockComponent::Tab::Timeline);
-        safe->timelineSlide_.whenSettled(addTrack);
+        if (safe != nullptr)
+            MainComponentCommandPalette::runAddListPick(*safe, *libraryRows, id, fromKeyboard, fromCanvas,
+                                                        handBackFocus);
     };
     auto onClosed = [picked, handBackFocus] {
         if (!*picked)

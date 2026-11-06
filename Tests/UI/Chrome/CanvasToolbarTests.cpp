@@ -229,7 +229,7 @@ TEST_F(CanvasToolbarWindowTest, TheCanvasKeysBringAHiddenCanvasIntoViewFirst) {
         juce::CommandID command;
         const char* name;
     };
-    for (const auto& key : {Key{AppCommands::autoArrange, "Cmd+L"}, Key{AppCommands::toggleMinimap, "Cmd+K"},
+    for (const auto& key : {Key{AppCommands::autoArrange, "Cmd+L"}, Key{AppCommands::toggleMinimap, "Opt+Cmd+K"},
                             Key{AppCommands::toggleModMatrix, "Cmd+M"}}) {
         mc_->setMainViewForTest(Tab::Timeline);
         if (mc_->isBottomDockConfiguredVisible())
@@ -256,7 +256,7 @@ TEST_F(CanvasToolbarWindowTest, TurningOffShowButtonLabelsLeavesEveryTopBarAndCa
     mc_->setSize(1600, 900);
     ASSERT_FALSE(mc_->getToolbar().isNarrowMode());
     const auto buttons = everyButton();
-    ASSERT_EQ(buttons.size(), 15) << "eleven on the top bar, four on the canvas toolbar";
+    ASSERT_EQ(buttons.size(), 16) << "twelve on the top bar, four on the canvas toolbar";
     for (auto* b : buttons)
         EXPECT_FALSE(b->getButtonText().isEmpty()) << b->getComponentID() << " starts with a caption";
     const int labelledWidth = strip().autoArrangeButton().getWidth();

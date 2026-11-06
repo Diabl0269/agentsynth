@@ -2,6 +2,7 @@
 // file drop are in SamplerChromeLoad.cpp; the picker, its choosers and the undo step in InstrumentPickerRow.cpp.
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerChrome.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentChoices.h"
 
 namespace synth::ui {
 

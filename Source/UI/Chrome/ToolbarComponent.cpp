@@ -29,7 +29,7 @@ void ToolbarComponent::setButtons(std::array<juce::DrawableButton*, NumSlots> bt
 // Sub-group membership per Slot, used both to space groups apart in layoutButtons() and to
 // find the group boundaries paint() draws separator hairlines at. Matches the Slot enum's
 // documented grouping (ToolbarComponent.h): left [Library]|[New,Save,Load]|
-// [Settings,Feedback]|[Undo,Redo]; right [ToggleAiPanel,ToggleBottomPanel]|[ToggleTheme].
+// [Settings,Feedback]|[Undo,Redo]; right [Search]|[ToggleAiPanel,ToggleBottomPanel]|[ToggleTheme].
 namespace {
 int groupOf(int slot) {
     switch (slot) {
@@ -50,6 +50,8 @@ int groupOf(int slot) {
         return 4;
     case ToolbarComponent::ToggleTheme:
         return 5;
+    case ToolbarComponent::Search:
+        return 6;
     default:
         return -1;
     }
@@ -73,6 +75,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
         84.0f,  // Feedback — wide enough for its caption at full size
         72.0f,  // Undo
         72.0f,  // Redo
+        88.0f,  // Search
         92.0f,  // ToggleAiPanel
         100.0f, // ToggleBottomPanel ("Hide Panel"/"Show Panel")
         110.0f  // ToggleTheme
@@ -106,9 +109,9 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     // Flexible spacer pushes the right group to the far edge.
     fb.items.add(juce::FlexItem().withFlex(1.0f));
 
-    // Right group: ToggleAiPanel, ToggleBottomPanel, ToggleTheme.
+    // Right group: Search, ToggleAiPanel, ToggleBottomPanel, ToggleTheme.
     lastGroup = -1;
-    for (int slot = ToggleAiPanel; slot <= ToggleTheme; ++slot)
+    for (int slot = Search; slot <= ToggleTheme; ++slot)
         if (buttons_[(size_t)slot] != nullptr && buttons_[(size_t)slot]->isVisible()) {
             if (lastGroup != -1 && groupOf(slot) != lastGroup)
                 fb.items.add(juce::FlexItem().withWidth(kGroupGap));
@@ -145,7 +148,7 @@ void ToolbarComponent::paint(juce::Graphics& g) {
     g.setColour(lnf->getTheme().colors.border.withAlpha(0.45f));
 
     // Sections match the two layoutButtons() loops (left: Library..Redo, right:
-    // ToggleAiPanel..ToggleTheme) — the boundary BETWEEN sections is the existing withFlex(1.0f)
+    // Search..ToggleTheme) — the boundary BETWEEN sections is the existing withFlex(1.0f)
     // spacer, not a sub-group gap, so it is deliberately excluded here.
     auto sectionOf = [](int slot) { return slot <= Redo ? 0 : 1; };
 

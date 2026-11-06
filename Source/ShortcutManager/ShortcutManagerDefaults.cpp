@@ -38,9 +38,11 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // the matrix takes Ctrl+Alt+M there.
     bindings["toggleModMatrix"] = isMac ? juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0)
                                         : juce::KeyPress('m', otherPlatformModMatrixModifiers(), 0);
-    // 'k' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M
-    // / A / L / B, Shift+A, Shift+S) — safe to claim for the minimap toggle.
-    bindings["toggleMinimap"] = juce::KeyPress('k', juce::ModifierKeys::commandModifier, 0);
+    // Cmd+K is the command palette, the chord most apps give their "search everything" bar; the minimap toggle
+    // sits beside it on Opt+Cmd+K (nothing else binds K with Opt).
+    bindings["openCommandPalette"] = juce::KeyPress('k', juce::ModifierKeys::commandModifier, 0);
+    bindings["toggleMinimap"] =
+        juce::KeyPress('k', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
     // The platform-standard Select All owns the bare Cmd+A chord (every DAW reads it that
     // way), so the AI panel moves off it. On macOS it takes a REAL Ctrl+A — Ctrl is a distinct
     // physical modifier there, so the chord is free. On Windows/Linux JUCE's commandModifier
@@ -153,7 +155,7 @@ void ShortcutManager::addGeneralDefaultBindings() {
     bindings["transportRecord"] = juce::KeyPress('r', juce::ModifierKeys::ctrlModifier, 0);
     bindings["transportToggleMetronome"] = juce::KeyPress('m', juce::ModifierKeys::ctrlModifier, 0);
     bindings["transportReturnToStart"] = juce::KeyPress();
-    // Shift+Cmd+K: Cmd+K is the minimap and nothing else binds K.
+    // Shift+Cmd+K: Cmd+K is the command palette and Opt+Cmd+K the minimap.
     bindings["setSongKey"] =
         juce::KeyPress('k', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     // Cursor moves and loop jumps -- same unbound-by-default reasoning as above.

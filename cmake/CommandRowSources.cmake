@@ -5,3 +5,4 @@ list(APPEND APPUI_SOURCES
     Source/MainComponent/MainComponentTransportCommandRows.cpp
     Source/MainComponent/MainComponentViewSwapCommandRows.cpp
 )
+include(cmake/CommandPaletteSources.cmake)

@@ -76,6 +76,7 @@ const std::vector<Registered> kRegistered = {
     {"MinimapComponent", {"exempt: scrolls the view, nothing to commit"}},
     {"ControllerSurfaceComponent", {"exempt: a selection marquee, nothing to commit"}},
     {"TopBar", {"exempt: moves the help window, nothing to commit"}},
+    {"CommandPaletteComponent", {"exempt: moves the search bar, the release only stores the position shown"}},
     {"ModuleLibraryComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},
     {"SoundBrowserComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},
     {"DrawPenButton", {"exempt: a drag only cancels the press-and-hold timer"}},

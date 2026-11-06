@@ -280,6 +280,8 @@ juce::String addRenameReplaceActionName(const juce::String& actionId) {
         return "Add...";
     if (actionId == "openFeedback")
         return "Send Feedback";
+    if (actionId == "openCommandPalette")
+        return "Search Everything";
     if (actionId == "renameSelectedModule")
         return "Rename";
     if (actionId == "renameSelectedModuleAlt")

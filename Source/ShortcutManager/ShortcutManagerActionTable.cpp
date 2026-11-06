@@ -95,8 +95,17 @@ void spliceMixerColumnRows(std::vector<Entry>& rows) {
     rows.insert(at + 1, columnRows.begin(), columnRows.end());
 }
 
+// Search Everything (the command palette) follows Send Feedback, the last of the General app verbs.
+template <class Entry>
+void spliceCommandPaletteRow(std::vector<Entry>& rows) {
+    const auto at = std::find_if(rows.begin(), rows.end(),
+                                 [](const Entry& row) { return std::string_view(row.id) == "openFeedback"; });
+    rows.insert(at + 1, Entry{"openCommandPalette", ShortcutCategory::General});
+}
+
 template <class Entry>
 void spliceRows(std::vector<Entry>& rows) {
+    spliceCommandPaletteRow(rows);
     spliceFocusTransportRow(rows);
     spliceMixerColumnRows(rows);
     spliceTimelineRows(rows);

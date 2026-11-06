@@ -123,6 +123,11 @@ inline constexpr const char* kSoundBrowserFolderNamesSettingKey = "soundBrowserF
 inline constexpr const char* kSoundBrowserFavouritesSettingKey = "soundBrowserFavourites";
 inline constexpr const char* kSoundBrowserRecentSettingKey = "soundBrowserRecent";
 
+/** The command palette's recent picks (row keys, one per line, newest first) and where its bar was last dragged
+ *  ("x,y" in the main window). */
+inline constexpr const char* kCommandPaletteRecentSettingKey = "commandPaletteRecent";
+inline constexpr const char* kCommandPalettePositionSettingKey = "commandPalettePosition";
+
 /** Which view the left sidebar shows: "modules" (default) or "sounds". Persisted next to librarySidebarVisible. */
 inline constexpr const char* kLibrarySidebarViewSettingKey = "librarySidebarView";
 

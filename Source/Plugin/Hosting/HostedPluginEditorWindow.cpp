@@ -20,6 +20,8 @@ HostedPluginEditorWindow::HostedPluginEditorWindow(HostedPluginModule& module, j
     // never creates a native peer. Only HostedPluginWindowManager::openEditorFor's later
     // addToDesktop() call does that (gated on setCreatesNativeWindows(true), for real use — see
     // HostedPluginWindowManager.h's class comment).
+    // A stable id for test mode: the plugin's name alone also names its card and track.
+    setComponentID("hostedPluginWindow:" + titleFor(module));
     setUsingNativeTitleBar(true);
 
     // The seam this window reacts to for the rest of its life — see the class comment.

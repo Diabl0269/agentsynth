@@ -49,6 +49,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/layout/cables.md`](layout/cables.md) — a cable is not a graph edge: enumeration, hit-testing, hover, the menu, and colour resolution
 - [`docs/layout/smart-connections.md`](layout/smart-connections.md) — cables suggested while dragging, side-by-side insert in series (Ctrl optional), double-click a port to disconnect
 - [`docs/layout/minimap.md`](layout/minimap.md) — the graph overview overlay
+- [`docs/layout/command-palette.md`](layout/command-palette.md) — the Cmd+K search bar: what it finds, how it ranks, "+" for the Add list, on/off rows, the plugin window button, dragging and focus
 - [`docs/layout/rendering.md`](layout/rendering.md) — repaint discipline: the zoom-frozen card cache, the one canvas invalidation seam, gated timers
 - [`docs/layout/side-pane.md`](layout/side-pane.md) — the reusable left side pane of a bottom-panel tab: `SidePane`, its toggle button, per-tab persisted width and open state, the 160/110 ms tween and the Cmd+Shift+B shortcut
 - [`docs/layout/note-length-menu.md`](layout/note-length-menu.md) — the shared note-length menu (S / T / D and chips) every rate box opens, its box, popup, keys, motion and the triplet and dotted name lists

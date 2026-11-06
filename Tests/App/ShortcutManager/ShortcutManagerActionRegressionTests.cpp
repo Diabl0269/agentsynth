@@ -9,13 +9,13 @@
 // Minimap toggle
 // ---------------------------------------------------------------------------
 
-// Default binding for the minimap toggle must be Cmd+K, with no extra modifiers.
-TEST_F(ShortcutManagerTest, ToggleMinimapDefaultBindingIsCmdK) {
+// Default binding for the minimap toggle is Opt+Cmd+K: plain Cmd+K opens the command palette.
+TEST_F(ShortcutManagerTest, ToggleMinimapDefaultBindingIsOptCmdK) {
     const auto kp = manager.getBinding("toggleMinimap");
     EXPECT_EQ(kp.getKeyCode(), 'k');
     EXPECT_TRUE(kp.getModifiers().isCommandDown());
     EXPECT_FALSE(kp.getModifiers().isShiftDown());
-    EXPECT_FALSE(kp.getModifiers().isAltDown());
+    EXPECT_TRUE(kp.getModifiers().isAltDown());
 }
 
 // AppCommands::getCommandForAction must resolve "toggleMinimap" to the real command ID.
