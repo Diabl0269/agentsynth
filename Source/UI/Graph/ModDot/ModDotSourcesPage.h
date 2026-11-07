@@ -1,9 +1,11 @@
 #pragma once
 
-// The panel's top part: one row per source on the knob and the "Add source" split button (source list, pick on canvas).
-// Edits go straight to the graph (amount drags and typed amounts are one undo step each); rows follow the graph while
-// the panel is open. A removed row shrinks toward its centre and the rows below then close the gap; an undo makes room,
-// grows the row back and fades an outline around it (ExitEnterTimeline.h); a source the user adds grows in at once.
+// The panel's top part: one row per source on the knob, the "Add source" split button (source list, pick on canvas)
+// and, at the right of the title row over the remove column, an icon-only "Disconnect all" button while there are two
+// or more sources (one ModDotController::removeAllSources call: one undo step). Edits go straight to the graph (amount
+// drags and typed amounts are one undo step each); rows follow the graph while the panel is open. A removed row shrinks
+// toward its centre and the rows below then close the gap; an undo makes room, grows the row back and fades an outline
+// around it (ExitEnterTimeline.h); a source the user adds grows in at once.
 // docs/modules/modulation.md#the-mod-dot-menu.
 
 #include "KnobModSources.h"
@@ -20,6 +22,7 @@ class GraphEditor;
 namespace synth::ui {
 
 class ModDotController;
+class ModDotLinkButton; // ModDotAddSourceParts.h
 
 class ModDotSourcesPage final : public ModDotPage {
 public:
@@ -53,6 +56,8 @@ public:
     SplitButton& splitButton() noexcept { return split_; }
     juce::Button& addButton() noexcept { return split_.leftHalf(); }
     juce::String titleText() const;
+    juce::Button& disconnectAllButton() noexcept;
+    bool isDisconnectAllShown() const noexcept { return disconnectFade_.to > 0.0f; }
     bool isAnimating() const noexcept { return anim_.isRunning(); }
     /** Test seam: animate even though the page is not showing. */
     void setForceAnimateForTest(bool on) noexcept { forceAnimate_ = on; }
@@ -74,6 +79,12 @@ private:
     struct Entry : ExitEnterSlot {
         std::unique_ptr<ModDotSourceRow> row;
     };
+    // The "Disconnect all" icon's opacity: it fades in and out as the count crosses two, with the row motion.
+    struct Fade {
+        float from = 0.0f;
+        float to = 0.0f;
+        float current = 0.0f;
+    };
 
     void wireRow(ModDotSourceRow& row);
     void animateLayout();
@@ -85,6 +96,8 @@ private:
     int restoreSerial() const;
     bool followsSameSources(const std::vector<KnobModSource>& sources) const;
     void navigate(juce::Component* from, int step);
+    void disconnectEverything();
+    float disconnectTarget() const;
     void applyAmount(ModDotSourceRow& row, float amount);
 
     GraphEditor& editor_;
@@ -94,6 +107,8 @@ private:
     KnobModTarget target_;
     std::vector<Entry> entries_;
     SplitButton split_;
+    std::unique_ptr<ModDotLinkButton> disconnectAll_;
+    Fade disconnectFade_;
     juce::VBlankAnimatorUpdater updater_;
     AnimationDriver anim_;
     int dividerY_ = 0;

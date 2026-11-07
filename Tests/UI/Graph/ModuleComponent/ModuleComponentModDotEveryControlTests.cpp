@@ -87,18 +87,21 @@ juce::String widgetKind(const juce::Component& control) {
     return "other control";
 }
 
-} // namespace
+// One control with a painted dot on a default card, as the walk below hands it over.
+struct DotControl {
+    juce::String typeName, targetName, kind, geometry;
+    ModuleComponent* card = nullptr;
+    GraphEditor* editor = nullptr;
+    juce::Component* hit = nullptr; // what sits under the dot on the canvas; null when nothing does
+    juce::Point<int> local;         // the dot, in `hit`'s coordinates
+    int channel = 0;
+    juce::AudioProcessorGraph::NodeID node;
+    juce::Point<float> anchor;
+};
 
-TEST_F(ModuleComponentTest, APressOnTheDotOfEveryModulatedControlOnEveryDefaultCardOpensItsPanel) {
-    // The app's look: a fader's travel starts where the painter puts it, which decides where its dot sits.
-    synth::theme::AppLookAndFeel lookAndFeel;
-    juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel);
-    const struct Restore {
-        ~Restore() { juce::LookAndFeel::setDefaultLookAndFeel(nullptr); }
-    } restore;
-    std::map<juce::String, int> pressedPerKind;
-    std::vector<juce::String> unclaimed;
-
+// Builds every module type's default card, routes an LFO to every modulation target, and calls `visit` for each
+// control that paints a dot, with the component a press at that dot would reach.
+void forEachDotControl(const std::function<void(const DotControl&)>& visit) {
     for (const auto& typeName : synth::AIStateMapper::moduleFactoryTypeNames()) {
         if (kNoModulatedControls.count(typeName) > 0)
             continue;
@@ -131,57 +134,135 @@ TEST_F(ModuleComponentTest, APressOnTheDotOfEveryModulatedControlOnEveryDefaultC
                 continue; // a module drawn without a card (the Attenuverter's knob is the cable's midpoint)
             ASSERT_NE(content, nullptr);
 
-            std::vector<std::pair<int, juce::String>> clicked; // (channel, node) the dot's click hook reported
-            editor.getModDot().onModDotClicked = [&](juce::AudioProcessorGraph::NodeID node, int channel,
-                                                     juce::Component&) {
-                if (node == moduleNode->nodeID)
-                    clicked.emplace_back(channel, juce::String());
-            };
-
             for (const auto& target : mb->getModulationTargets()) {
                 auto* button = card->getModDotButton(target.channelIndex);
                 const auto anchor = card->getModTargetKnobAnchor(target.channelIndex);
                 if (button == nullptr || button->getKnob() == nullptr || !anchor.has_value() ||
                     button->getKnob()->getBounds().isEmpty() || !button->getKnob()->isVisible())
                     continue; // no dot is drawn: a hidden page, a tabbed knob, a control the card does not show
-                const auto kind = widgetKind(*button->getKnob());
+                DotControl dot;
+                dot.typeName = typeName;
+                dot.targetName = target.name;
+                dot.kind = widgetKind(*button->getKnob());
+                dot.card = card;
+                dot.editor = &editor;
+                dot.channel = target.channelIndex;
+                dot.node = moduleNode->nodeID;
+                dot.anchor = *anchor;
                 const auto where = content->getLocalPoint(card, anchor->roundToInt());
-                auto* hit = content->getComponentAt(where);
-                const auto geometry = juce::String(" dot ") + anchor->toString() + " control " +
-                                      button->getKnob()->getBounds().toString() + " card " +
-                                      card->getLocalBounds().toString();
-                if (hit == nullptr) {
-                    unclaimed.push_back(typeName + " / " + target.name + " (" + kind + "): nothing under the dot," +
-                                        geometry);
-                    continue;
-                }
-
-                clicked.clear();
-                const auto local = hit->getLocalPoint(content, where);
-                hit->mouseDown(makeModuleClickWithMods(*hit, local, plainLeftClick()));
-                hit->mouseUp(makeModuleClickWithMods(*hit, local, plainLeftClick()));
-
-                // Two modes of one card may share a cell (the Sampler's swapped knobs): the press then reaches the
-                // control on top, and the dot it opens is the one painted at the same spot.
-                const bool sharesTheSpot =
-                    clicked.size() == 1 && card->getModTargetKnobAnchor(clicked.front().first).has_value() &&
-                    card->getModTargetKnobAnchor(clicked.front().first)->getDistanceFrom(*anchor) < 1.0f;
-                if (clicked.size() == 1 && (clicked.front().first == target.channelIndex || sharesTheSpot))
-                    ++pressedPerKind[kind];
-                else
-                    unclaimed.push_back(typeName + " / " + target.name + " (" + kind + ", pressed " +
-                                        juce::String(typeid(*hit).name()) + ")," + geometry + ", clicks " +
-                                        juce::String((int)clicked.size()));
+                dot.hit = content->getComponentAt(where);
+                if (dot.hit != nullptr)
+                    dot.local = dot.hit->getLocalPoint(content, where);
+                dot.geometry = juce::String(" dot ") + anchor->toString() + " control " +
+                               button->getKnob()->getBounds().toString() + " card " + card->getLocalBounds().toString();
+                visit(dot);
             }
         }
         engine.shutdown();
     }
+}
+
+// What a press at the dot sets off: the control's own handler, then the card's listener on that control (a plain
+// juce::Component is its own MouseListener; JUCE's dispatch runs both for a real click).
+void pressAt(const DotControl& dot, juce::ModifierKeys mods) {
+    const auto event = makeModuleClickWithMods(*dot.hit, dot.local, mods);
+    dot.hit->mouseDown(event);
+    if (dynamic_cast<juce::Slider*>(dot.hit) != nullptr)
+        dot.card->mouseDown(event);
+    dot.hit->mouseUp(makeModuleClickWithMods(*dot.hit, dot.local, mods));
+}
+
+} // namespace
+
+TEST_F(ModuleComponentTest, APressOnTheDotOfEveryModulatedControlOnEveryDefaultCardOpensItsPanel) {
+    // The app's look: a fader's travel starts where the painter puts it, which decides where its dot sits.
+    synth::theme::AppLookAndFeel lookAndFeel;
+    juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel);
+    const struct Restore {
+        ~Restore() { juce::LookAndFeel::setDefaultLookAndFeel(nullptr); }
+    } restore;
+    std::map<juce::String, int> pressedPerKind;
+    std::vector<juce::String> unclaimed;
+
+    forEachDotControl([&](const DotControl& dot) {
+        if (dot.hit == nullptr) {
+            unclaimed.push_back(dot.typeName + " / " + dot.targetName + " (" + dot.kind + "): nothing under the dot," +
+                                dot.geometry);
+            return;
+        }
+        std::vector<int> clicked; // the channel the dot's click hook reported
+        dot.editor->getModDot().onModDotClicked = [&](juce::AudioProcessorGraph::NodeID node, int channel,
+                                                      juce::Component&) {
+            if (node == dot.node)
+                clicked.push_back(channel);
+        };
+        dot.hit->mouseDown(makeModuleClickWithMods(*dot.hit, dot.local, plainLeftClick()));
+        dot.hit->mouseUp(makeModuleClickWithMods(*dot.hit, dot.local, plainLeftClick()));
+
+        // Two modes of one card may share a cell (the Sampler's swapped knobs): the press then reaches the
+        // control on top, and the dot it opens is the one painted at the same spot.
+        const bool sharesTheSpot =
+            clicked.size() == 1 && dot.card->getModTargetKnobAnchor(clicked.front()).has_value() &&
+            dot.card->getModTargetKnobAnchor(clicked.front())->getDistanceFrom(dot.anchor) < 1.0f;
+        if (clicked.size() == 1 && (clicked.front() == dot.channel || sharesTheSpot))
+            ++pressedPerKind[dot.kind];
+        else
+            unclaimed.push_back(dot.typeName + " / " + dot.targetName + " (" + dot.kind + ", pressed " +
+                                juce::String(typeid(*dot.hit).name()) + ")," + dot.geometry + ", clicks " +
+                                juce::String((int)clicked.size()));
+    });
 
     EXPECT_GT(pressedPerKind["knob"], 0) << "the sweep must reach knobs";
     EXPECT_GT(pressedPerKind["horizontal fader"], 0) << "the sweep must reach horizontal faders";
     EXPECT_GT(pressedPerKind["vertical fader"], 0) << "the sweep must reach vertical faders";
     EXPECT_TRUE(unclaimed.empty()) << "presses on a painted mod dot that no gesture claimed:\n"
                                    << juce::StringArray(unclaimed.data(), (int)unclaimed.size()).joinIntoString("\n");
+}
+
+// Guard for the bug kind "one press claimed by two gestures": a right press (and a Ctrl-click, which macOS reports as
+// one) on a painted dot belongs to the card's context menu alone, and a left press to the dot's panel alone.
+TEST_F(ModuleComponentTest, ARightPressOnTheDotOfEveryModulatedControlOpensOneMenuAndNoPanel) {
+    synth::theme::AppLookAndFeel lookAndFeel;
+    juce::LookAndFeel::setDefaultLookAndFeel(&lookAndFeel);
+    const struct Restore {
+        ~Restore() { juce::LookAndFeel::setDefaultLookAndFeel(nullptr); }
+    } restore;
+    const juce::ModifierKeys rightButton(juce::ModifierKeys::rightButtonModifier);
+    const juce::ModifierKeys ctrlClick(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::ctrlModifier);
+    std::vector<juce::String> wrong;
+    int rightPresses = 0, leftPresses = 0;
+
+    forEachDotControl([&](const DotControl& dot) {
+        if (dot.hit == nullptr)
+            return;
+        int panels = 0, menus = 0;
+        dot.editor->getModDot().onModDotClicked = [&](juce::AudioProcessorGraph::NodeID, int, juce::Component&) {
+            ++panels;
+        };
+        dot.card->setShowContextMenuHookForTest([&](juce::PopupMenu&) { ++menus; });
+        const auto check = [&](const char* what, juce::ModifierKeys mods, int wantMenus, int wantPanels) {
+            panels = menus = 0;
+            pressAt(dot, mods);
+            if (menus != wantMenus || panels != wantPanels)
+                wrong.push_back(dot.typeName + " / " + dot.targetName + " (" + dot.kind + ") " + what + ": " +
+                                juce::String(menus) + " menus, " + juce::String(panels) + " panels");
+        };
+        // Only a control the card's context menu reaches is asked for its menu: a morph strip has its own.
+        const bool cardMenuReachesIt = dynamic_cast<juce::Slider*>(dot.hit) != nullptr;
+        check("right press", rightButton, cardMenuReachesIt ? 1 : 0, 0);
+        // Only macOS reports a Ctrl-click as a popup-menu press; elsewhere Ctrl is the control's own drag modifier.
+        if (ctrlClick.isPopupMenu())
+            check("ctrl press", ctrlClick, cardMenuReachesIt ? 1 : 0, 0);
+        check("left press", juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0, 1);
+        rightPresses += cardMenuReachesIt ? 1 : 0;
+        ++leftPresses;
+        dot.card->setShowContextMenuHookForTest(nullptr);
+    });
+
+    EXPECT_GT(rightPresses, 50) << "the sweep must reach the cards' knobs and faders";
+    EXPECT_GT(leftPresses, rightPresses - 1);
+    EXPECT_TRUE(wrong.empty()) << "presses on a painted mod dot that did not open exactly the expected pop-ups:\n"
+                               << juce::StringArray(wrong.data(), (int)wrong.size()).joinIntoString("\n");
 }
 
 // The converse of the test above: that one presses the dots that exist, so a control with no modulation target never

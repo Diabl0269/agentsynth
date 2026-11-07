@@ -37,13 +37,20 @@ using namespace detail;
 void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("selected", owner.isNodeSelected(nodeId));
     into.setProperty("modHoverChip", synth::ui::modHoverChipShows(owner, nodeId));
+    const auto chipStack =
+        synth::ui::modChipStack(owner, nodeId, dynamic_cast<ModuleBase*>(module),
+                                [this](const ModulationTarget& t) { return sliderIndexForModTarget(t); });
     juce::Array<juce::var> chipRows;
-    for (const auto& row :
-         synth::ui::modChipStack(owner, nodeId, dynamic_cast<ModuleBase*>(module), [this](const ModulationTarget& t) {
-             return sliderIndexForModTarget(t);
-         }).rows)
+    for (const auto& row : chipStack.rows)
         chipRows.add(row.text);
     into.setProperty("modHoverChipRows", chipRows);
+    // Where each row is painted ("x,y,w,h", card coordinates), so a scenario can see the stack stays inside the card.
+    juce::Array<juce::var> chipRects;
+    for (const auto& r : synth::ui::modHoverChipRects(
+             *this, chipStack,
+             chipStack.sliderIndex < 0 ? juce::Rectangle<int>() : sliders[chipStack.sliderIndex]->getBounds()))
+        chipRects.add(r.toString());
+    into.setProperty("modHoverChipRects", chipRects);
     into.setProperty("moduleType", module != nullptr ? module->getName() : juce::String());
     into.setProperty("title", cardTitle());
     into.setProperty("nodeId", static_cast<int>(nodeId.uid));

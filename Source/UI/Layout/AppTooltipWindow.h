@@ -31,6 +31,11 @@ public:
     /** juce's tip for `c`, or empty when it is an info tooltip and the preference is off. */
     juce::String getTipFor(juce::Component& c) override;
 
+    /** Component property (the control's name): its name is drawn beside it, so the hover tip leaves the name out and
+     *  keeps only what follows it (a MIDI mapping, "Automated: ..."); a tip that is only the name shows nothing. */
+    static inline const juce::Identifier kNameDrawnBeside{"nameDrawnBeside"};
+    static juce::String withoutDrawnName(const juce::Component& c, const juce::String& tip);
+
     /** While anything has hover tips blocked, getTipFor answers empty, so no tip appears and one showing goes. Counted:
      *  every block(true) needs its block(false). The mod dot's readout blocks them while it is up, so one gesture
      *  never shows two readouts. */

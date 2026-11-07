@@ -543,8 +543,11 @@ Bypassed sources and sources with no name are left out. The stack lists at most 
 `"+N more"` row; the source the dot drag adjusts (the [last-chosen source](#the-mod-dot-drag-an-amount-from-the-landing-dot))
 is **bold** and always listed. Rows are formatted by `synth::ui::formatModHoverChipText` and chosen by
 `synth::ui::modHoverChipRows` (`ModuleComponentModChip.h`, unit-tested in isolation the same way `modDepthBandRange` is),
-drawn in the knob-value-box mono font on a `surfaceHi` chip each, clipped to the card (a stack under a knob on the card's
-bottom row is cut off by the card, never moved).
+drawn in the knob-value-box mono font on a `surfaceHi` chip each. The stack is never clipped: it hangs under the knob
+when it fits inside the card, flips above the knob when the knob is in the card's last row, and as a last resort is pushed
+up (or left) just far enough to stay whole (`synth::ui::modChipRowRects`, `synth::ui::modHoverChipRects`). While the
+knob's own sources panel is open the stack is not drawn: the panel lists the same sources, and the chip would peek out
+from under it (`synth::ui::modHoverChipShows`).
 
 The same stack is the mod dot's [drag readout](#the-mod-dot-drag-an-amount-from-the-landing-dot): during a dot drag or key
 step it shows under that knob even when the pointer is not on it, and the dragged source's row shows the live amount.
@@ -573,6 +576,9 @@ on releases in its own space), so it can never also read it as a click on a jack
   source's amount by 1 percent, Shift by 10 percent, each key press one undo step with the same tooltip
   and a screen-reader announcement ("LFO 1, +42 percent", once per whole percent); Return and Space
   open the dot's panel like a click.
+* **Right-click.** A right press (or Ctrl-click) on the dot opens only the knob's own menu (Automate, MIDI learn), never the
+  panel and never a cable pickup: `CardControlGestures::claimMouseDown` declines every claim on a popup-menu press.
+  The guard test is `ARightPressOnTheDotOfEveryModulatedControlOpensOneMenuAndNoPanel`.
 * **Where it lives.** `ModDotTooltip` holds the readout (which source, its live amount) and its fade; the card
   paints it as the chip stack (`ModuleComponentModChip.cpp`), repainting as the amount and opacity change. The gesture is a
   third claim on `CardControlGestures` (`wantsModDotGesture`/`onModDotGesture`), asked after the
@@ -611,6 +617,10 @@ the arrows keep working.
   one step, Esc cancels) is one step too. Clicking a row, or focusing it, selects it (a 10 percent accent tint) and
   calls `ModDotController::setLastChosen`, so a dot drag edits that source next; the chosen source's row is selected
   when the panel opens.
+* **Disconnect all** is one icon-only button (the unlink glyph, name and tooltip "Disconnect all connections") at the
+  right end of the panel's title row, shown from two sources up and aligned with the rows' remove column. It removes every
+  source of the knob as one undo step through `ModDotController::removeAllSources`; the source modules stay and no "Remove
+  LFO" question is asked, like the port panel's Disconnect all. It is a focus stop after the Add source split button.
 * **Add source** is a split button under the rows, after a divider (`SplitButton`, `Source/UI/Layout/SplitButton.h`, shared with the hosted plugin card's add-controls button). The left half (list icon,
   "Add source", tooltip "Add source from a list") unfolds the source list in the same panel, directly under the rows,
   which stay visible above it; a second click or Esc folds it back. The right half (crosshair icon, "Pick on canvas")

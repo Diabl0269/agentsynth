@@ -277,16 +277,19 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
   press that becomes a drag moves the card as before. With *Double-click port to disconnect* on, a double-click on a port
   dot with exactly one cable disconnects it (`MacroCardComponent::disconnectOnlyCableAt`, one undo step) and the macro
   stays closed; with none or several cables, or anywhere else on the card, it still expands the macro. Either way the
-  card's own panel or a deferred open is folded away first. Remove, Disconnect all, Add connection
-  and Pick on canvas behave as for any jack; the Add connection preview starts at the card's dot, and the cable
+  card's own panel or a deferred open is folded away first. Remove, Disconnect all, Add destination
+  and Pick on canvas behave as for any jack; the Add destination preview starts at the card's dot, and the cable
   highlight matches the cables drawn to the card by id.
 - **Content.** The title reads "Module · port (N connections)" ("1 connection", "No connections yet"). One row per
   cable: a swatch in the cable's colour (`GraphEditor::colourForCable`), "other module · other port" and a remove button.
-  A macro port reads as its own name; a cable landing on a knob names the knob's parameter. "Disconnect all" shows under
-  two or more, as a link button with a coloured unlink icon (`ModDotGlyph::Unlink`, the trash's danger colour) left of the label, like the Add connection icons; its title, tooltip, focus stop and focus ring are the plain link's. On a macro's port (a collapsed card's dot or an expanded macro's boundary port node) a **Delete port**
+  A macro port reads as its own name; a cable landing on a knob names the knob's parameter. "Disconnect all" shows at
+  two or more as one icon-only button at the right end of the title row (a 24 px `ModDotLinkButton::IconOnly` with the coloured
+  unlink glyph, `ModDotGlyph::Unlink`), centred in the row and aligned with the rows' remove column; there is no footer
+  row. Its name and tooltip are "Disconnect all connections", it is a focus stop with the accent focus ring, and it fades
+  in and out with the rows (instant under Reduce Motion). The mod dot's sources panel has the same button in its title row. On a macro's port (a collapsed card's dot or an expanded macro's boundary port node) a **Delete port**
   link (tooltip "Delete this macro port") sits under the other buttons. The rows come from `listPortConnections`, a filter over `buildVisibleCables()` by the jack's visible index
   (a cable names raw channels, the card and the labels speak in visible jacks), never from graph edges. Zero and one
-  connection still show the panel; with none, "Add connection" is its main action.
+  connection still show the panel; with none, "Add destination" is its main action.
 - **Edits.** Remove is `GraphEditor::disconnectCable` (one undo step, the cable retracts; an attenuverter chain goes
   through `removeModulationChain`), "Disconnect all" is `GraphEditor::disconnectPort` (one undo step), "Delete port" is
   `MacroGroupController::deleteMacroPortManually` (one undo step, the cables retract; the node is gone, so the panel
@@ -295,8 +298,8 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
 - **Canvas highlight.** Hovering a row, or keyboard-focusing its remove button, draws that cable as hovered and dims
   every other cable to 35%, wire, glow, casing, travelling dots and knob landing dot alike (`PortPanelController::highlightedCable`, read by the canvas cable paint); it clears when the
   pointer or focus leaves the row, the row goes, or the panel closes.
-- **Add connection.** Under the rows (above "Disconnect all") sits a split button in the mod dot's look
-  (`SplitButton`): **Add connection** and **Pick on canvas**. Add connection swaps the list for a search page in the
+- **Add destination.** Under the rows sits a split button in the mod dot's look
+  (`SplitButton`): **Add destination** and **Pick on canvas**. Add destination swaps the list for a search page in the
   same panel, a cross-fade (the list's alpha 1 to 0, the page's 0 to 1) while the panel's height settles to the
   page's: 160 ms ease-out going in, 110 ms ease-in coming back; under Reduce Motion an 80 ms fade with the height
   changing at once. Focus lands in the search field. A **Back** link, Esc (after the search is cleared) or a pick

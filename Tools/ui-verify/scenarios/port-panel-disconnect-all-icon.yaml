@@ -1,8 +1,8 @@
-# "Disconnect all" in the port connections panel carries an unlink icon, like the Add connection buttons.
+# "Disconnect all" in the port connections panel is an icon-only button in the panel title row.
 #
 # What a user does:
 #   1. Opens a project where the Oscillator's output feeds three cards.
-#   2. Clicks the Oscillator's output jack: the panel lists three connections; "Disconnect all" under them has an icon.
+#   2. Clicks the Oscillator's output jack: the panel lists three connections; "Disconnect all" is the icon ending the title row.
 #   3. Clicks "Disconnect all": every cable goes and the panel stays open with no connections.
 motion: true
 steps:

@@ -27,6 +27,9 @@ void paintModDotChevron(juce::Graphics& g, juce::Rectangle<float> area, float pr
 class ModDotGlyphButton final : public juce::Button {
 public:
     static constexpr int kSize = 24;
+    /** How far the right edge of a row's remove button sits from the row's right edge; the panels' "Disconnect all"
+     *  icon, over that column, uses the same inset. */
+    static constexpr int kRowEdgeInset = 6;
 
     static constexpr double kPulseMs = 420.0;
 

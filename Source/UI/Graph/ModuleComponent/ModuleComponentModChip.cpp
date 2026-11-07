@@ -10,6 +10,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/ModDot/ModDotPopover.h"
 #include "UI/Graph/ModDot/ModDotTooltip.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -33,9 +34,17 @@ const ModDotReadout* readoutOn(GraphEditor& editor, juce::AudioProcessorGraph::N
 }
 } // namespace
 
+// The knob's own sources panel lists the same rows, so the chip steps aside while that panel is open rather than
+// peeking out from under it.
 bool modHoverChipShows(GraphEditor& editor, juce::AudioProcessorGraph::NodeID card) {
     const auto& hovered = editor.getHoveredModTarget();
-    return (hovered.has_value() && hovered->nodeId == card) || readoutOn(editor, card) != nullptr;
+    const auto* readout = readoutOn(editor, card);
+    const bool hoveredHere = hovered.has_value() && hovered->nodeId == card;
+    if (!hoveredHere && readout == nullptr)
+        return false;
+    const int channel = readout != nullptr ? readout->destChannel : hovered->channel;
+    const auto* panel = editor.getModDot().getPopover();
+    return panel == nullptr || panel->card() != card || panel->destChannel() != channel;
 }
 
 // Capped so a heavily patched knob's stack never grows past the card; the chosen source stays visible.
@@ -129,6 +138,57 @@ ModChipStack modChipStack(GraphEditor& owner, juce::AudioProcessorGraph::NodeID 
 }
 } // namespace synth::ui
 
+namespace {
+float chipRowWidth(const juce::Font& font, const synth::ui::ModChipRow& row) {
+    return juce::GlyphArrangement::getStringWidth(font, row.text) + kModChipPadX * 2.0f +
+           (row.isMore ? 0.0f : kModChipSwatchSize + kModChipSwatchGap);
+}
+
+juce::Font chipFont(const synth::theme::AppLookAndFeel& lf, bool bold) {
+    return juce::Font(
+        juce::FontOptions(lf.getTheme().type.monoFamily, 11.0f, bold ? juce::Font::bold : juce::Font::plain));
+}
+} // namespace
+
+namespace synth::ui {
+// A stack under the knob is clipped by the card's bottom edge when the knob sits in the last row, so it flips above
+// the knob, and when the card is too short for that too it takes the lowest position that still fits.
+std::vector<juce::Rectangle<float>> modChipRowRects(juce::Rectangle<float> knob, const std::vector<float>& widths,
+                                                    juce::Rectangle<float> card) {
+    std::vector<juce::Rectangle<float>> rects;
+    if (widths.empty())
+        return rects;
+    const float height =
+        kModChipRowStride * static_cast<float>(widths.size()) - (kModChipRowStride - kModChipRowHeight);
+    float top = knob.getBottom() + 2.0f;
+    if (top + height > card.getBottom()) {
+        const float above = knob.getY() - 2.0f - height;
+        top = above >= card.getY() ? above : juce::jmax(card.getY(), card.getBottom() - height);
+    }
+    float y = top;
+    for (const float width : widths) {
+        const float x = juce::jlimit(card.getX(), juce::jmax(card.getX(), card.getRight() - width),
+                                     knob.getCentreX() - width * 0.5f);
+        rects.emplace_back(x, y, width, kModChipRowHeight);
+        y += kModChipRowStride;
+    }
+    return rects;
+}
+} // namespace synth::ui
+
+namespace synth::ui {
+std::vector<juce::Rectangle<float>> modHoverChipRects(const juce::Component& card, const ModChipStack& stack,
+                                                      juce::Rectangle<int> knob) {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&card.getLookAndFeel());
+    if (lf == nullptr || stack.rows.empty() || stack.sliderIndex < 0)
+        return {};
+    std::vector<float> widths;
+    for (const auto& row : stack.rows)
+        widths.push_back(chipRowWidth(chipFont(*lf, row.bold), row));
+    return modChipRowRects(knob.toFloat(), widths, card.getLocalBounds().toFloat());
+}
+} // namespace synth::ui
+
 void ModuleComponent::paintModHoverChip(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     if (lf == nullptr)
@@ -136,24 +196,12 @@ void ModuleComponent::paintModHoverChip(juce::Graphics& g) {
     const auto stack =
         synth::ui::modChipStack(owner, nodeId, dynamic_cast<ModuleBase*>(module),
                                 [this](const ModulationTarget& t) { return sliderIndexForModTarget(t); });
-    if (stack.rows.empty() || stack.alpha <= 0.0f || stack.sliderIndex < 0)
+    if (stack.alpha <= 0.0f)
         return;
-
-    const auto sliderBounds = sliders[stack.sliderIndex]->getBounds().toFloat();
-    const auto& type = lf->getTheme().type;
-    const juce::Font plainFont(juce::FontOptions(type.monoFamily, 11.0f, juce::Font::plain));
-    const juce::Font boldFont(juce::FontOptions(type.monoFamily, 11.0f, juce::Font::bold));
-
-    // Clipped to the card, never squashed or re-centred.
-    juce::Graphics::ScopedSaveState clipScope(g);
-    g.reduceClipRegion(getLocalBounds());
-    float y = sliderBounds.getBottom() + 2.0f;
-    for (const auto& row : stack.rows) {
-        const auto& font = row.bold ? boldFont : plainFont;
-        const float width = juce::GlyphArrangement::getStringWidth(font, row.text) + kModChipPadX * 2.0f +
-                            (row.isMore ? 0.0f : kModChipSwatchSize + kModChipSwatchGap);
-        paintChipRow(g, lf->getTheme(), row, {sliderBounds.getCentreX() - width * 0.5f, y, width, kModChipRowHeight},
-                     font, stack.alpha);
-        y += kModChipRowStride;
+    const auto rects = synth::ui::modHoverChipRects(
+        *this, stack, stack.sliderIndex < 0 ? juce::Rectangle<int>() : sliders[stack.sliderIndex]->getBounds());
+    for (size_t i = 0; i < rects.size(); ++i) {
+        const auto& row = stack.rows[i];
+        paintChipRow(g, lf->getTheme(), row, rects[i], chipFont(*lf, row.bold), stack.alpha);
     }
 }

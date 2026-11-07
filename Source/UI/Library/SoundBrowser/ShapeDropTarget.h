@@ -1,7 +1,12 @@
 #pragma once
 
-#include "Modules/Shapes/ShapeLibrary.h"
 #include <juce_core/juce_core.h>
+
+// Declared, not included: ShapeLibrary.h pulls in the curve type, and this header reaches most of the app.
+namespace synth::shapes {
+enum class ShapeKind;
+struct LibraryShape;
+} // namespace synth::shapes
 
 namespace synth::ui {
 

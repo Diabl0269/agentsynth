@@ -1,6 +1,6 @@
 // PortConnectionsPanelMotion.cpp -- the panel's row motion: a removed row shrinks away and the rows below close the
 // gap; a row an undo brings back is made room for, grows and gets a fading outline (the shared ExitEnterTimeline, one
-// phase after another). The "Disconnect all" footer opens and closes its slot with the gap phase. Everything lands at
+// phase after another). The "Disconnect all" icon fades in and out with the gap phase. Everything lands at
 // once when the panel is not on screen. docs/layout/animation.md#delete-and-undo-animation.
 
 #include "PortConnectionsPanel.h"
@@ -12,7 +12,7 @@ namespace synth::ui {
 
 void PortConnectionsPanel::animateLayout() {
     const bool changing =
-        footer_.current != footer_.to ||
+        disconnectFade_.current != disconnectFade_.to ||
         std::any_of(entries_.begin(), entries_.end(), [](const Entry& e) { return e.leaving || e.restored; });
     if (changing)
         startRemovalMotion();
@@ -28,7 +28,7 @@ void PortConnectionsPanel::startRemovalMotion() {
             e.row->setInterceptsMouseClicks(false, false);
         }
     }
-    footer_.from = footer_.current;
+    disconnectFade_.from = disconnectFade_.current;
     if (!(isShowing() || forceAnimate_)) {
         landMotion();
         return;
@@ -47,7 +47,8 @@ void PortConnectionsPanel::applyTimelineAtMs(double elapsedMs) {
     if (!motionActive_)
         return;
     exit_enter_slots::apply(entries_, timeline_, elapsedMs, reducedMotion_);
-    footer_.current = footer_.from + (footer_.to - footer_.from) * timeline_.at(elapsedMs).gap;
+    disconnectFade_.current =
+        disconnectFade_.from + (disconnectFade_.to - disconnectFade_.from) * timeline_.at(elapsedMs).gap;
     layoutRows();
     repaint();
 }
@@ -55,13 +56,13 @@ void PortConnectionsPanel::applyTimelineAtMs(double elapsedMs) {
 // Every row at its final place and look: the rows that left are gone, the ones that came back are ordinary rows.
 void PortConnectionsPanel::landMotion() {
     const bool wasActive =
-        motionActive_ || footer_.current != footer_.to ||
+        motionActive_ || disconnectFade_.current != disconnectFade_.to ||
         std::any_of(entries_.begin(), entries_.end(), [](const Entry& e) { return e.leaving || e.restored; });
     if (!wasActive)
         return;
     motionActive_ = false;
     exit_enter_slots::land(entries_, (float)PortConnectionRow::kHeight);
-    footer_.current = footer_.to;
+    disconnectFade_.current = disconnectFade_.to;
     finishLeaving();
     layoutRows();
     repaint();

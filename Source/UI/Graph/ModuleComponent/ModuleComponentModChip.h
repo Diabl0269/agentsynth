@@ -55,6 +55,17 @@ struct ModChipStack {
 std::vector<ModChipRow> modHoverChipRows(const std::vector<KnobModSource>& sources,
                                          juce::AudioProcessorGraph::NodeID chosen, int maxRows = 4);
 
+/** Where each row of a stack goes, in card coordinates: `widths` are the rows' widths, centred on `knob` (the control
+ *  they hang under) and kept inside `card`. The stack sits below the knob; when that would run past the card's bottom
+ *  edge it sits above the knob, and when the card is too short for that too it is pushed up to fit. */
+std::vector<juce::Rectangle<float>> modChipRowRects(juce::Rectangle<float> knob, const std::vector<float>& widths,
+                                                    juce::Rectangle<float> card);
+
+/** The rows of `stack` as `card` paints them, in card coordinates, hung under `knob` (the stack's slider's bounds):
+ *  `modChipRowRects` with the rows' widths in the theme's chip font; empty with no rows or no app look and feel. */
+std::vector<juce::Rectangle<float>> modHoverChipRects(const juce::Component& card, const ModChipStack& stack,
+                                                      juce::Rectangle<int> knob);
+
 /** The stack `card` paints now: empty unless its routing is hover-correlated or a dot readout is up on it. A dragged
  *  source shows the readout's live amount. `mod` is the card's module; `sliderFor` maps one of its modulation targets
  * to the index of the slider the rows hang under (-1: none). */

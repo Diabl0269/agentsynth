@@ -1,0 +1,37 @@
+# One icon-only "Disconnect all" button sits in the title row of the port panel and of the mod dot sources panel.
+#
+# What a user does:
+#   1. Opens a project where the Oscillator's output feeds three cards and clicks that jack: the panel title row
+#      ends with an unlink icon.
+#   2. Clicks it: every cable goes. Cmd+Z brings them all back.
+#   3. Opens the sources panel of the Filter's Cutoff (two LFOs): the same icon is in its title row; clicking it
+#      removes both sources.
+motion: true
+record: true
+save_project: disconnect-all-both-panels
+steps:
+  - openProject: {path: "${FIXTURES}/osc-three-cables.agsproj"}
+  - wait: {}
+  - click: {id: "card:Oscillator", x: 268, y: 56}
+  - wait: {}
+  - expect: {id: "Disconnect all connections", within_ms: 3000}
+  - wait: {}
+  - screenshot: {id: portConnectionsPanel, name: port-panel-title-row-icon}
+  - mark: {check: 1, name: port-panel-title-row-icon}  # the icon ends the title row
+  - click: {id: "Disconnect all connections"}
+  - wait: {}
+  - screenshot: {id: portConnectionsPanel, name: port-panel-emptied}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - screenshot: {id: portConnectionsPanel, name: port-panel-undone}
+  - saveProject: {path: "${OUT}/port-panel-undone.agsproj"}   # leaves no unsaved changes, so the next open goes through
+  - openProject: {path: "${FIXTURES}/mod-dot-two-lfos.agsproj"}
+  - wait: {}
+  - click: {id: "Cutoff modulation, 2 sources"}
+  - expect: {id: modDotPopover, exists: true, within_ms: 1500}
+  - wait: {}
+  - screenshot: {id: modDotPopover, name: sources-panel-title-row-icon}
+  - mark: {check: 2, name: sources-panel-title-row-icon}  # the same icon in the sources panel
+  - click: {id: "Disconnect all connections"}
+  - wait: {}
+  - screenshot: {id: modDotPopover, name: sources-panel-emptied}

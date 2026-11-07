@@ -601,7 +601,7 @@ Every search or filter box matches and highlights the same way, through `Source/
 (namespace `synth::ui`): the module library, the Mod Matrix / add-automation / add-modulator pickers
 (`ModMatrixPicker`, which the [command palette](command-palette.md) also hosts), the Preferences and Keyboard Shortcuts filters, the MIDI Remote action picker, the
 Mixer zones channel filter, the MIDI destination picker, the card layout editor's control search and the port
-connections panel's Add connection page (`PortTargetSearchPage`: jacks, knobs and "New <module>" rows).
+connections panel's Add destination page (`PortTargetSearchPage`: jacks, knobs and "New <module>" rows).
 
 - `searchMatches(text, query)`: the query is split on whitespace, and a run of letters typed against a run of digits
   splits too (`"lfo6"` is `"lfo 6"`); every word must appear in the text, ignoring case, in any order (`"osc 8"`
@@ -620,7 +620,7 @@ connections panel's Add connection page (`PortTargetSearchPage`: jacks, knobs an
   the Filter, `amp` the VCA). It is keyed on the module's own name (a number suffix is ignored), so a renamed
   card still matches. The module library, the mod dot's Add source page (`ModSourceItem::searchText`) and the
   Mod Matrix source picker (`Item::searchText`) match on name plus aliases; the painter still highlights only
-  the visible name, so an alias-only hit shows the row without a highlight. The port panel's Add connection page
+  the visible name, so an alias-only hit shows the row without a highlight. The port panel's Add destination page
   does the same: a grouped row paints only its port, the module's name is searched but not painted.
 
 A new search box must use these; do not call `containsIgnoreCase` on the query.

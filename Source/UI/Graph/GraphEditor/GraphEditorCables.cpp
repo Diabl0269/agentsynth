@@ -958,7 +958,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
 
     paintSmartConnectionPreviewCables(g, editor, getLookAndFeel());
 
-    editor.getPortPanel().paintPreview(g); // the cable a row of the port panel's Add connection page would make
+    editor.getPortPanel().paintPreview(g); // the cable a row of the port panel's Add destination page would make
 
     // ---- Macro-crossing module flash ------------
     // A fading ring over the module that just joined/left an expanded macro's hull, on top of its

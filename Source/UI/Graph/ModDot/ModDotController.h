@@ -87,6 +87,10 @@ public:
     void popoverClosed(ModDotPopover* popover);
     void removeSource(juce::AudioProcessorGraph::NodeID card, int destChannel,
                       juce::AudioProcessorGraph::NodeID attenuverterId);
+    /** The panel's "Disconnect all": every source on the knob goes, in ONE undo step (the host's removal for each, so a
+     *  source's amount lane goes with it). Only the cables go: no source is deleted and nothing is asked, as the jack
+     *  panel's Disconnect all. */
+    void removeAllSources(juce::AudioProcessorGraph::NodeID card, int destChannel);
     /** The one way a modulation chain is removed by a person (the panel's remove button, a double-click on the dot or
      * on the cable): the app window's `host.removeModulator`, so each asks the same first-time question; the
      * editor-only fallback when the chain is unknown to it. */

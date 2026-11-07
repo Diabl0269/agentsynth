@@ -1,4 +1,4 @@
-// PortTargetSearchPage.cpp -- the port panel's "Add connection" page: groups, rows, search, keys.
+// PortTargetSearchPage.cpp -- the port panel's "Add destination" page: groups, rows, search, keys.
 // docs/layout/cables.md#port-connections-panel.
 
 #include "PortTargetSearchPage.h"

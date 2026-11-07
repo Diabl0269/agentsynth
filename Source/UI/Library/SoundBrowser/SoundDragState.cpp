@@ -1,5 +1,6 @@
 // SoundDragState.cpp -- the one app-wide "a sound is being dragged" flag and its listeners.
 #include "UI/Library/SoundBrowser/SoundDragState.h"
+#include "Modules/Shapes/ShapeLibrary.h"
 
 namespace synth::ui {
 

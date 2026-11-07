@@ -252,10 +252,15 @@ private:
     ModDotHoverFade hover_;
 };
 
-/** "Expand all" / "Collapse all": accent text, no box. With a glyph (the port panel's "Disconnect all") it is drawn
- *  like a half of the Add source split button: the coloured icon, then the label, on a hover fill. */
+/** "Expand all" / "Collapse all": accent text, no box. With a glyph (the Back link) it is drawn like a half of the Add
+ *  source split button: the coloured icon, then the label, on a hover fill. Icon-only (the panels' "Disconnect all"):
+ *  a square kIconSide button showing just the coloured glyph on the hover fill; `name` is its screen-reader title and
+ *  tooltip. */
 class ModDotLinkButton final : public juce::Button {
 public:
+    struct IconOnly {};
+    static constexpr int kIconSide = 24;
+
     ModDotLinkButton(const juce::String& text, const juce::String& name,
                      std::optional<ModDotGlyph> glyph = std::nullopt)
         : juce::Button(name)
@@ -267,8 +272,15 @@ public:
         setWantsKeyboardFocus(true);
         setMouseCursor(juce::MouseCursor::PointingHandCursor);
     }
+    ModDotLinkButton(IconOnly, const juce::String& name, ModDotGlyph glyph)
+        : ModDotLinkButton(juce::String(), name, glyph) {
+        iconOnly_ = true;
+    }
     std::optional<ModDotGlyph> glyph() const noexcept { return glyph_; }
+    bool isIconOnly() const noexcept { return iconOnly_; }
     int preferredWidth() const {
+        if (iconOnly_)
+            return kIconSide;
         if (glyph_.has_value())
             return juce::roundToInt(
                        juce::GlyphArrangement::getStringWidth(juce::Font(juce::FontOptions(12.5f)), text_)) +
@@ -297,6 +309,12 @@ public:
             const auto area = getLocalBounds().toFloat().reduced(1.0f);
             g.setColour(p.hover.withAlpha(down ? 1.0f : hover_.value()));
             g.fillRoundedRectangle(area, 6.0f);
+            if (iconOnly_) {
+                paintModDotGlyph(g, *glyph_, getLocalBounds().toFloat().withSizeKeepingCentre(14.0f, 14.0f),
+                                 modDotGlyphColour(p, *glyph_, hover_.value()));
+                paintFocusRing(g, area, *this, 6.0f);
+                return;
+            }
             auto inner = getLocalBounds().reduced(kGlyphPad, 0);
             paintModDotGlyph(g, *glyph_, inner.removeFromLeft(kGlyphSize).toFloat().withSizeKeepingCentre(14.0f, 14.0f),
                              modDotGlyphColour(p, *glyph_, hover_.value()));
@@ -319,6 +337,7 @@ private:
     static constexpr int kGlyphPad = 10;
     juce::String text_;
     std::optional<ModDotGlyph> glyph_;
+    bool iconOnly_ = false;
     ModDotHoverFade hover_;
 };
 
