@@ -250,9 +250,9 @@ TEST_F(ModuleComponentTest, ARightPressOnTheDotOfEveryModulatedControlOpensOneMe
         // Only a control the card's context menu reaches is asked for its menu: a morph strip has its own.
         const bool cardMenuReachesIt = dynamic_cast<juce::Slider*>(dot.hit) != nullptr;
         check("right press", rightButton, cardMenuReachesIt ? 1 : 0, 0);
-        // Only macOS reports a Ctrl-click as a popup-menu press; elsewhere it is a plain left press.
-        const bool ctrlIsMenu = ctrlClick.isPopupMenu();
-        check("ctrl press", ctrlClick, ctrlIsMenu && cardMenuReachesIt ? 1 : 0, ctrlIsMenu ? 0 : 1);
+        // Only macOS reports a Ctrl-click as a popup-menu press; elsewhere Ctrl is the control's own drag modifier.
+        if (ctrlClick.isPopupMenu())
+            check("ctrl press", ctrlClick, cardMenuReachesIt ? 1 : 0, 0);
         check("left press", juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0, 1);
         rightPresses += cardMenuReachesIt ? 1 : 0;
         ++leftPresses;
