@@ -42,8 +42,12 @@ constexpr int kLargeMinHeight = 40;
 Metrics metricsFor(bool vertical, int width, int height);
 
 // Distance from the slider's end to the cap centre at value 0 / 1: half the cap's length along the
-// travel plus a 2 px margin, so the cap is never clipped. Feeds getSliderThumbRadius().
+// travel plus a margin (2 px; 6 px for a horizontal fader, the focus ring and a gap), so the cap is never clipped
+// and a horizontal fader's ring stays clear of the value box beside it. Feeds getSliderThumbRadius().
 int thumbRadiusFor(bool vertical, int width, int height);
+
+// The cap rectangle for a cap centre `sliderPos` along `travel` (the same value paint() draws it at).
+juce::Rectangle<float> capBounds(juce::Rectangle<float> travel, float sliderPos, bool vertical, const Metrics&);
 
 // Paints the fader. `travel` is the rectangle juce::Slider hands drawLinearSlider (already inset by
 // thumbRadiusFor()); `sliderSize` is the whole slider's width / height, which picks the size;
