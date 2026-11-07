@@ -154,10 +154,10 @@ public:
 
     void modalStateFinished(int) override {}
 
-    // A popover must not outlive the app being in front.
+    // A popover must not outlive the app being in front; it leaves through the same fade as every other close.
     void timerCallback() override {
         if (!synth::testmode::appIsInFront())
-            box_.dismiss();
+            PopupMotion::dismissCallOut(box_);
     }
 
     PopoverBox& box() { return box_; }
