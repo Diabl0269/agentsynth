@@ -57,12 +57,12 @@ void ModuleComponent::showModuleOnCanvas(GraphEditor& editor, juce::AudioProcess
         if (macro->collapsed)
             collapsed = macro;
     if (collapsed != nullptr) {
-        editor.centreViewOn(collapsed->bounds.toFloat().getCentre());
+        editor.flyViewTo(collapsed->bounds.toFloat().getCentre());
         return;
     }
     for (auto* comp : editor.getModuleComponents())
         if (comp != nullptr && comp->getNodeId() == id) {
-            editor.centreViewOn(comp->getBounds().toFloat().getCentre());
+            editor.flyViewTo(comp->getBounds().toFloat().getCentre());
             comp->grabKeyboardFocus();
         }
 }

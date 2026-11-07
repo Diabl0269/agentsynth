@@ -10,6 +10,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerSendList.h"
@@ -223,6 +224,36 @@ TEST(MixerRowRevealTest, AModuleInsideACollapsedMacroUnfoldsItFirst) {
     rig.panel().revealModuleOnCanvas(uuid);
     EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed) << "unfolded so the module has a card";
     ASSERT_EQ(editor.getSelectedNodes().size(), 1u);
+}
+
+// Regression test for FRO1204: the view flew only after the unfold had settled (a jump), instead of flying while the
+// macro opens. The fly starts in the call that starts the unfold, from the old view, to the module's final centre.
+TEST(MixerRowRevealTest, ACollapsedMacroUnfoldsWhileTheViewAlreadyFliesToTheModule) {
+    MoveRig rig;
+    auto& editor = rig.mc.getGraphEditor();
+    editor.setSize(1000, 700);
+    editor.viewFlyForTest().setAnimateOffScreenForTest(true);
+    synth::ui::setReducedMotionForTest(false);
+    const auto uuid = rig.column().getInsertList().getRowUuid(0);
+    const auto macroId = editor.getMacros().findByMember(uuid)->id;
+    editor.getMacroController().setMacroCollapsed(macroId, true);
+    editor.centreViewOn({9000.0f, 9000.0f});
+    const auto before = editor.getVisibleCanvasRect().getCentre();
+
+    rig.panel().revealModuleOnCanvas(uuid);
+
+    EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed) << "the unfold has begun";
+    EXPECT_TRUE(editor.viewFlyForTest().isActive()) << "and so has the fly, in the same call";
+    EXPECT_LT(editor.getVisibleCanvasRect().getCentre().getDistanceFrom(before), 1.0f) << "from the old view";
+    editor.viewFlyForTest().stepForTest(1000.0);
+    synth::ui::setReducedMotionForTest(std::nullopt);
+    ASSERT_EQ(editor.getSelectedNodes().size(), 1u);
+    for (auto* card : editor.getModuleComponents())
+        if (card != nullptr && card->getNodeId() == editor.getSelectedNodes().front()) {
+            const auto centre = editor.getLocalArea(card, card->getLocalBounds()).getCentre();
+            EXPECT_NEAR(centre.x, editor.getLocalBounds().getCentreX(), 3);
+            EXPECT_NEAR(centre.y, editor.getLocalBounds().getCentreY(), 3);
+        }
 }
 
 /** The row menu a single click on a send row's name opens, captured through the menu hook instead of a real popup. */

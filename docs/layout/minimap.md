@@ -113,7 +113,8 @@ off-screen also removes it and its children from the accessibility tree, not jus
 | `isMinimapVisible()` | The user preference, not the fits-adjusted effective visibility |
 | `getMinimap()` | Direct access to the `MinimapComponent` |
 | `getVisibleCanvasRect()` | The canvas rect currently visible — the inverse of the content transform applied to `getLocalBounds()` |
-| `centreViewOn(canvasPoint)` | Pans so `canvasPoint` is centred; zoom unchanged |
+| `centreViewOn(canvasPoint)` | Pans so `canvasPoint` is centred at once; zoom unchanged (the minimap's drag) |
+| `flyViewTo(canvasPoint)` | The same pan as a 200 ms fly, for anything that shows something on the canvas; at once under Reduce Motion, Animations Off or off screen ([animation](animation.md#motion-rules)) |
 | `zoomAroundCentre(wheelDelta)` | `applyZoomAt` anchored on the visible area's centre |
 | `buildMinimapModel()` | Walks every module, and reuses the `buildVisibleCables()` memo (no separate enumeration walk) for the cable list, into a `MinimapModel` snapshot |
 

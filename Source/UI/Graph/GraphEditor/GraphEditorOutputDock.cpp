@@ -135,5 +135,5 @@ void GraphEditor::frameOutputDock() {
         if (auto* comp = moduleComponentFor(node->nodeID))
             frame = frame.isEmpty() ? comp->getBounds() : frame.getUnion(comp->getBounds());
     if (!frame.isEmpty())
-        centreViewOn(frame.toFloat().getCentre());
+        flyViewTo(frame.toFloat().getCentre());
 }

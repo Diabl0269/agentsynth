@@ -214,12 +214,12 @@ void MixerPanelComponent::revealOnCanvas(const juce::String& targetId) {
         return;
     if (target->macroId.isNotEmpty()) {
         if (const auto* macro = macros_->find(target->macroId))
-            graphEditor_->centreViewOn(macro->bounds.toFloat().getCentre());
+            graphEditor_->flyViewTo(macro->bounds.toFloat().getCentre());
         return;
     }
     for (auto* comp : graphEditor_->getModuleComponents())
         if (comp != nullptr && comp->getNodeId() == target->nodeId)
-            graphEditor_->centreViewOn(comp->getBounds().toFloat().getCentre());
+            graphEditor_->flyViewTo(comp->getBounds().toFloat().getCentre());
 }
 
 // Unlike revealOnCanvas, the target is the module itself even when a channel macro boxes it. A module inside a
@@ -246,17 +246,28 @@ void MixerPanelComponent::revealModuleOnCanvas(const juce::String& moduleUuid) {
         graphEditor_->getMacroController().setMacroCollapsed(id, false);
     graphEditor_->selectModule(nodeId, false);
 
-    auto centre = [safe = juce::Component::SafePointer<MixerPanelComponent>(this), nodeId] {
+    // Card bounds are final the moment the unfold starts (only the drawing glides), so the view flies to the module
+    // now and the macro opens while it travels. A module whose bounds still move once the unfold settles gets one
+    // retarget there.
+    auto moduleCentre = [safe = juce::Component::SafePointer<MixerPanelComponent>(this),
+                         nodeId]() -> std::optional<juce::Point<float>> {
         if (safe == nullptr || safe->graphEditor_ == nullptr)
-            return;
+            return std::nullopt;
         for (auto* comp : safe->graphEditor_->getModuleComponents())
             if (comp != nullptr && comp->getNodeId() == nodeId)
-                safe->graphEditor_->centreViewOn(comp->getBounds().toFloat().getCentre());
+                return comp->getBounds().toFloat().getCentre();
+        return std::nullopt;
     };
+    const auto flownTo = moduleCentre();
+    if (flownTo)
+        graphEditor_->flyViewTo(*flownTo);
     if (graphEditor_->getCardGlide().fold().isLive())
-        graphEditor_->getCardGlide().fold().whenSettled(centre);
-    else
-        centre();
+        graphEditor_->getCardGlide().fold().whenSettled(
+            [safe = juce::Component::SafePointer<MixerPanelComponent>(this), moduleCentre, flownTo] {
+                const auto now = moduleCentre();
+                if (safe != nullptr && safe->graphEditor_ != nullptr && now && now != flownTo)
+                    safe->graphEditor_->flyViewTo(*now);
+            });
 }
 
 namespace {

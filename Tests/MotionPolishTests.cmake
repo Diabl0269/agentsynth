@@ -7,4 +7,5 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/MotionPolish/HelpPopoverAndDetachedWindowMotionTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/MotionPolish/CanvasHintAndPickOutlineFadeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabChromeFadeTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorViewFlyTests.cpp
 )
