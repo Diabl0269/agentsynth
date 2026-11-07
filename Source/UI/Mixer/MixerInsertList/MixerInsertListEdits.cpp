@@ -262,15 +262,40 @@ bool MixerInsertList::inSameRun(int row, int other) const {
     return true;
 }
 
+// Whether the front row of the chain is one of `from` / `to` and generates the signal rather than processing it (an
+// instrument, fed only note data): it stays first and nothing moves above it.
+bool MixerInsertList::headIsSoundSource(int from, int to) const {
+    if (juce::jmin(from, to) != 0)
+        return false;
+    const auto* head = entryForRow(0);
+    const auto* node = head != nullptr && head->kind == Kind::Module ? graph_->getNodeForId(head->nodeId) : nullptr;
+    const auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+    if (module == nullptr)
+        return false;
+    switch (module->getModuleType()) {
+    case ModuleType::Oscillator:
+    case ModuleType::Wavetable:
+    case ModuleType::Noise:
+    case ModuleType::Pluck:
+    case ModuleType::Mallet:
+    case ModuleType::Sampler:
+    case ModuleType::DrumKit:
+        return true;
+    default:
+        return false;
+    }
+}
+
 // Whether moving the module at `from` to `to`'s place is a move the graph will take: on a straight chain any place
-// but the front of a bus's own chain (nothing feeds it, so there is nothing to splice against there); on a split
-// chain's run only where the module it lands beside has one signal neighbour on that side. The list shows only the
-// moves this allows, so a drag's preview is always what the drop commits.
+// but the front of a bus's own chain (nothing feeds it, so there is nothing to splice against there) and any place
+// that moves a sound source at the head of the chain, or moves a row above it (nothing feeds it, so it stays first);
+// on a split chain's run only where the module it lands beside has one signal neighbour on that side. The list shows
+// only the moves this allows, so a drag's preview is always what the drop commits.
 bool MixerInsertList::moveFeasible(int from, int to) const {
     if (from == to || !isEditable() || animatingSplit_ >= 0 || !inSameRun(from, to))
         return false;
     if (!hasSplits_)
-        return isSet(sourceNodeId_) || (from != 0 && to != 0);
+        return (isSet(sourceNodeId_) || (from != 0 && to != 0)) && !(graph_ != nullptr && headIsSoundSource(from, to));
     if (graph_ == nullptr)
         return false;
     const auto node = entryForRow(from)->nodeId;

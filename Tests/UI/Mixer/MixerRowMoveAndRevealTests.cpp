@@ -17,6 +17,7 @@
 #include "UI/Mixer/MixerInsertList/MixerInsertList.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerSendList.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -141,6 +142,26 @@ TEST(MixerRowMoveTest, TheAddRowIsReachableByDownFromTheLastInsertAndIsNotMovabl
     EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, addRow}));
     EXPECT_TRUE(rig.panel().keyPressed(altUp()));
     EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, addRow}));
+}
+
+// A sound source (an instrument at the head of the chain, nothing feeding it) stays first: it cannot move, and no row
+// moves above it.
+TEST(MixerRowMoveTest, AnInstrumentRowAtTheHeadOfTheChainCannotMoveAndNothingMovesAboveIt) {
+    MoveRig rig;
+    rig.mc.simulateAddInstrumentTrackClick(synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId);
+    rig.panel().rebuild();
+    auto& list = rig.panel().getStripColumnForTest(2)->getInsertList();
+    ASSERT_GE(list.getAddRowIndex(), 2) << "the instrument and at least one more module";
+    std::vector<juce::String> order;
+    for (int row = 0; row < list.getAddRowIndex(); ++row)
+        order.push_back(list.getRowUuid(row));
+
+    EXPECT_FALSE(list.canMoveRowForTest(0, 1)) << "the sound source does not move down";
+    EXPECT_FALSE(list.canMoveRowForTest(1, -1)) << "nothing moves above the sound source";
+    EXPECT_FALSE(list.moveRowTo(0, 1));
+    EXPECT_FALSE(list.moveRowTo(1, 0));
+    for (int row = 0; row < list.getAddRowIndex(); ++row)
+        EXPECT_EQ(list.getRowUuid(row), order[(size_t)row]);
 }
 
 TEST(MixerRowMoveTest, AltDownMovesTheFocusedSendAndTheFocusFollowsIt) {

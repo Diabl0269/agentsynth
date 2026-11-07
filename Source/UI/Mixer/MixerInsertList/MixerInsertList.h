@@ -262,6 +262,7 @@ private:
     juce::String splitTooltip(int entryIndex) const;
     juce::Rectangle<int> splitIconBounds(int rowIndex) const;
     bool canMoveRow(int rowIndex, int delta) const;
+    bool headIsSoundSource(int from, int to) const;
     bool inSameRun(int row, int other) const;
     bool moveFeasible(int from, int to) const;
     /** The rows `rowIndex` can trade places with: its run of modules, as first/last row indices. A row outside any

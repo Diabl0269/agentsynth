@@ -14,6 +14,7 @@ A drag-reorder or Alt+Up/Down move of an insert is the same shape as a send's: `
 from where it was let go (`pendingInsertSettle_`, played on the rebuilt column's list). A dry row has the key
 `dry:<fork uuid>:<path>`, so adding a module to that path animates as an ordinary row add. See
 [Reordering inserts](mixer.md#reordering-inserts).
+A sound source at the head of a chain (an instrument, with nothing feeding it) cannot move, and no row moves above it (`MixerInsertList::moveFeasible`).
 
 ## The canvas follows a reorder
 
