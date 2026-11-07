@@ -5,12 +5,14 @@
 // units next to this one.
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
+#include "Modules/FilterModule.h"
 #include "Modules/MacroControlModule.h"
 #include "Modules/ModuleBase.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/LayoutUtil.h"
+#include "UI/ModuleViews/FrequencyResponseComponent.h"
 
 using namespace detail;
 

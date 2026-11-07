@@ -4,8 +4,10 @@
 // implementation lives in the sibling ModuleComponent*.cpp units.
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
+#include "Modules/FilterModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/ModuleViews/FrequencyResponseComponent.h"
 
 using namespace detail;
 

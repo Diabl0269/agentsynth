@@ -3,6 +3,7 @@
 // closes (Esc, Done, its close button, the card going away, quit) deletes it with nothing left pointing at it.
 #include "../../../TestWait.h"
 #include "../../Layout/NativeWindowTestGuard.h"
+#include "Modules/FilterModule.h"
 #include "ShapeEditorTestHelpers.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"

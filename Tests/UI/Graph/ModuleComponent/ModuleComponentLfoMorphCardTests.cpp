@@ -6,6 +6,7 @@
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "../../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "ModuleComponentTestFixture.h"
+#include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
