@@ -34,8 +34,9 @@ struct KnownGap {
 
 // Tool windows that do not relay yet.
 const std::vector<KnownGap> kKnownGaps = {
-    {"Sampler map / Cmd+Z", "FRO1036"}, {"Sampler map / Cmd+Shift+Z", "FRO1036"}, {"Sampler map / Space", "FRO1036"},
-    {"EQ window / Cmd+Z", "FRO1309"},   {"EQ window / Cmd+Shift+Z", "FRO1309"},   {"EQ window / Space", "FRO1309"},
+    {"Sampler map / Cmd+Z", "FRO1036"},
+    {"Sampler map / Cmd+Shift+Z", "FRO1036"},
+    {"Sampler map / Space", "FRO1036"},
 };
 
 struct Sample {

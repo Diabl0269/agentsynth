@@ -20,6 +20,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapView.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerMapWindow.h"
+#include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
@@ -193,7 +194,9 @@ juce::DialogWindow* openSamplerMap(SweepEnvironment& env) {
 juce::DialogWindow* openEq(SweepEnvironment& env) {
     auto eq = std::make_shared<ParametricEQModule>();
     env.keepAlive(eq);
-    return launch(env, new EQWindow(*eq), "EQ", true);
+    auto* content = new EQWindow(*eq);
+    content->onAppShortcut = synth::ui::makeAppShortcutRelay(&env.appAnchor());
+    return launch(env, content, "EQ", true);
 }
 
 juce::DialogWindow* openRenderProgress(SweepEnvironment& env) {
