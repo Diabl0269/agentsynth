@@ -250,6 +250,7 @@ audio device, which a stuck run can wedge for everyone.
   3), giving up after `CI_LOCAL_BUILD_SLOT_TIMEOUT` (default 7200). Both are advisory locks, so a crashed run
   frees them. Every build appends a line (time, worktree, steps, seconds waited, build seconds, slots in use)
   to `ci-local-build-times.log` in the git common dir, for tuning the slot count. Without `flock` or `lockf` the gate warns and builds with no limit.
+  Every run, passed or failed, also appends one JSON line to `ci-local-runs.jsonl` in the git common dir (run log for timing history): `at`, `name` (always `ci-local`), `worktree`, `branch`, `sha`, `ok`, `seconds`, `flags` (the arguments) and `steps` (seconds per step, keyed by step name).
 
 Tests must not depend on the order they run in or on another test having run first: shards split the
 order, and a test's neighbours differ from one run to the next. Running the binary directly (a single
