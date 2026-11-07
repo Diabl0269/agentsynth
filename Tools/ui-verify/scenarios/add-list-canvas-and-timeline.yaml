@@ -16,6 +16,9 @@ steps:
   - click: {id: "canvasToolbar:add"}
   - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
   - wait: {}
+  - expect: {id: "modMatrixPicker > Oscillator, Module", exists: true}        # a Module tag on each module row
+  - expect: {id: "modMatrixPicker > LFO, Module", exists: true}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: false}        # no track group above the modules
   - screenshot: {id: modMatrixPicker, name: add-list-from-canvas}
   - click: {id: "modMatrixPicker > Oscillator, Module"}
   - wait: {}
@@ -30,6 +33,11 @@ steps:
   - screenshot: {id: modMatrixPicker, name: add-list-from-timeline}
   - type: {text: midi}                                       # matched letters: accent, bold, no fill
   - wait: {}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true}
+  - expect: {id: "modMatrixPicker > MidiKeyboard, Module", exists: true}
+  - expect: {id: "modMatrixPicker > Poly MIDI, Module", exists: true}
+  - expect: {id: "modMatrixPicker > External MIDI, Module", exists: true}
+  - expect: {id: "modMatrixPicker > Audio Track, Track", exists: false}
   - screenshot: {id: modMatrixPicker, name: add-list-search-midi}
   - click: {id: "modMatrixPicker > MIDI Track, Track"}
   - wait: {}
