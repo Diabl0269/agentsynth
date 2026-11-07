@@ -1,14 +1,15 @@
 #pragma once
 
 // The panel a plain click on a jack opens: the cables on that jack, one row each (PortConnectionRow), an "Add
-// connection | Pick on canvas" split button under them, a "Disconnect all" button under two or more, and the title
-// that counts them. It is the content of a ModDotPanelFrame window, built from the mod dot panel's parts (palette,
-// rows, remove glyph, motion). Edits go straight to the graph through GraphEditor (one undo step each); the list
-// follows the graph while open. A removed row shrinks toward its centre and the rows below close the gap; an undo
-// makes room, grows the row back and fades an outline around it (ExitEnterRowSlots.h); the panel's height follows
-// frame by frame. Removing the last connection keeps the panel open showing "No connections yet".
+// destination | Pick on canvas" split button under them, and the title that counts them, with an icon-only
+// "Disconnect all" button at the right of the title row (over the remove column) while there are two or more. It is the
+// content of a ModDotPanelFrame window, built from the mod dot panel's parts (palette, rows, remove glyph, motion).
+// Edits go straight to the graph through GraphEditor (one undo step each); the list follows the graph while open. A
+// removed row shrinks toward its centre and the rows below close the gap; an undo makes room, grows the row back and
+// fades an outline around it (ExitEnterRowSlots.h); the panel's height follows frame by frame. Removing the last
+// connection keeps the panel open showing "No connections yet".
 //
-// "Add connection" swaps the list for the search page (PortTargetSearchPage) in the SAME panel: the two pages
+// "Add destination" swaps the list for the search page (PortTargetSearchPage) in the SAME panel: the two pages
 // cross-fade while the height settles to the new page's (160 ms ease-out going in, 110 ms ease-in coming back; under
 // Reduce Motion an 80 ms fade with the height changing at once). A pick connects, goes back to the list and the new
 // row grows in. "Pick on canvas" (ModDotCanvasPicker's jack mode) connects to the jack or knob clicked on the canvas.
@@ -38,10 +39,9 @@ class PortConnectionsPanel final
     , private juce::Timer {
 public:
     static constexpr int kTitleHeight = 30;
-    static constexpr int kFooterHeight = 32;
     static constexpr int kBottomPad = 6;
     static constexpr int kScrollBar = 10;
-    static constexpr int kSplitRowHeight = 32;  // the Add connection | Pick on canvas row
+    static constexpr int kSplitRowHeight = 32;  // the Add destination | Pick on canvas row
     static constexpr int kDeleteRowHeight = 32; // the "Delete port" row, only on a macro's port
     static constexpr double kPageInMs = 160.0;  // list -> search page
     static constexpr double kPageOutMs = 110.0;
@@ -65,7 +65,7 @@ public:
     void dismiss();
     std::function<void()> onDismiss;
 
-    // ---- Add connection ----
+    // ---- Add destination ----
     /** Swaps to the search page (focus in its field) or back to the list, cross-fading and settling the height. */
     void setSearchOpen(bool open);
     bool isSearchOpen() const noexcept { return searchOpen_; }
@@ -94,7 +94,7 @@ public:
     PortConnectionRow* rowFor(const GraphEditor::CableId& id) const;
     juce::String titleText() const;
     juce::Button& disconnectAllButton() noexcept { return disconnectAll_; }
-    bool isDisconnectAllShown() const noexcept { return footer_.to > 0.0f; }
+    bool isDisconnectAllShown() const noexcept { return disconnectFade_.to > 0.0f; }
     /** "Delete port": shown when the jack is a macro's port (collapsed card or expanded boundary node). */
     juce::Button& deletePortButton() noexcept { return deletePort_; }
     bool isDeletePortShown() const noexcept { return isMacroPort_; }
@@ -119,7 +119,8 @@ private:
     struct Entry : ExitEnterSlot {
         std::unique_ptr<PortConnectionRow> row;
     };
-    struct Footer {
+    // The "Disconnect all" icon's opacity: it fades in and out as the count crosses two, on the row motion's gap phase.
+    struct Fade {
         float from = 0.0f;
         float to = 0.0f;
         float current = 0.0f;
@@ -152,7 +153,7 @@ private:
     juce::String ownTitle_;
     std::vector<Entry> entries_;
     std::unique_ptr<RowsHolder> holder_;
-    juce::Component listLayer_; // the list page: title area, rows, split button and footer, faded as one
+    juce::Component listLayer_; // the list page: title area, rows and split button, faded as one
     juce::Viewport viewport_;
     SplitButton split_;
     ModDotLinkButton disconnectAll_;
@@ -163,7 +164,7 @@ private:
     std::unique_ptr<ModDotCanvasPicker> picker_;
     std::unique_ptr<ModDotCanvasPicker> retiredPicker_; // parked: stopPick can run inside the layer's own handler
     std::vector<PortTargetModule> pickTargets_;
-    Footer footer_;
+    Fade disconnectFade_;
     int maxHeight_ = 0;
     int rowsTotal_ = 0;
     int desiredHeight_ = kTitleHeight + kSplitRowHeight + kBottomPad; // the list page's own height

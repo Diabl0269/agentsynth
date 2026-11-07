@@ -160,12 +160,24 @@ void AppTooltipWindow::blockHoverTips(bool block) noexcept {
 
 bool AppTooltipWindow::hoverTipsBlocked() noexcept { return hoverTipBlocks() > 0; }
 
+juce::String AppTooltipWindow::withoutDrawnName(const juce::Component& c, const juce::String& tip) {
+    const auto name = c.getProperties()[kNameDrawnBeside].toString();
+    if (name.isEmpty() || !tip.startsWith(name))
+        return tip;
+    auto rest = tip.substring(name.length());
+    if (rest.startsWith(" - "))
+        return rest.substring(3);
+    if (rest.startsWith("\n"))
+        return rest.substring(1);
+    return rest.isEmpty() ? juce::String() : tip;
+}
+
 // juce hides a tip on a press, but a pointer that moves on over another component during a held drag within half a
 // second of the press gets that component's tip at once; with a gesture's own readout up, that is a second readout.
 juce::String AppTooltipWindow::getTipFor(juce::Component& c) {
     if (hoverTipsBlocked())
         return {};
-    auto tip = juce::TooltipWindow::getTipFor(c);
+    auto tip = withoutDrawnName(c, juce::TooltipWindow::getTipFor(c));
     if (tip.isEmpty())
         return tip;
     if (suppresses(c))

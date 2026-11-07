@@ -7,7 +7,6 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kPad = 8;
 constexpr int kSwatch = 10;
 constexpr int kNameWidth = 56;
 constexpr int kAmountWidth = 44;
@@ -158,7 +157,7 @@ void ModDotSourceRow::resized() {
     // Left to right: swatch, name, fader, amount, curve, timeline, remove, each group a theme spacing unit from the
     // next so the icons never touch the fader or the amount.
     const int gap = modDotPaletteFor(*this).space;
-    auto r = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(kPad - 2, 0);
+    auto r = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
     removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)
                                 .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
     r.removeFromRight(kIconGap);

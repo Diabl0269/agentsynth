@@ -11,7 +11,7 @@ namespace synth::ui {
 
 namespace {
 SplitButtonHalfSpec addConnectionHalf() {
-    return {ModDotGlyph::List, "Add connection", "Add connection", "Add connection, search open",
+    return {ModDotGlyph::List, "Add destination", "Add destination", "Add destination, search open",
             "Search for a jack or knob to connect to"};
 }
 SplitButtonHalfSpec pickOnCanvasHalf() {
@@ -41,7 +41,7 @@ PortConnectionsPanel::PortConnectionsPanel(GraphEditor& editor, PortPanelControl
     , port_(port)
     , holder_(std::make_unique<RowsHolder>())
     , split_(addConnectionHalf(), pickOnCanvasHalf(), "Add a connection")
-    , disconnectAll_("Disconnect all", "Disconnect all connections", ModDotGlyph::Unlink)
+    , disconnectAll_(ModDotLinkButton::IconOnly{}, "Disconnect all connections", ModDotGlyph::Unlink)
     , deletePort_("Delete port", "Delete port")
     , searchPage_(std::make_unique<PortTargetSearchPage>(portTitle(editor, port)))
     , updater_(this)
@@ -59,7 +59,6 @@ PortConnectionsPanel::PortConnectionsPanel(GraphEditor& editor, PortPanelControl
     listLayer_.addAndMakeVisible(split_);
     split_.leftHalf().onClick = [this] { setSearchOpen(true); };
     split_.rightHalf().onClick = [this] { togglePick(); };
-    disconnectAll_.setTooltip("Remove every connection on this jack");
     disconnectAll_.onClick = [this] { disconnectEverything(); };
     listLayer_.addChildComponent(disconnectAll_);
     if (const auto owner = editor_.getMacroController().macroPortOwnerFor(port_.node);
@@ -87,7 +86,7 @@ PortConnectionsPanel::PortConnectionsPanel(GraphEditor& editor, PortPanelControl
         holder_->addAndMakeVisible(*entry.row);
         entries_.push_back(std::move(entry));
     }
-    footer_.current = footer_.to = entries_.size() >= 2 ? (float)kFooterHeight : 0.0f;
+    disconnectFade_.current = disconnectFade_.to = entries_.size() >= 2 ? 1.0f : 0.0f;
     layoutRows();
 }
 
@@ -252,7 +251,7 @@ void PortConnectionsPanel::sync() {
         }
         entries_.insert(at, std::move(entry));
     }
-    footer_.to = list.size() >= 2 ? (float)kFooterHeight : 0.0f;
+    disconnectFade_.to = list.size() >= 2 ? 1.0f : 0.0f;
     animateLayout();
     ensureFocusInside(); // a removed row must not leave the keyboard with nothing
 }
@@ -280,12 +279,10 @@ void PortConnectionsPanel::layoutRows() {
     int natural = 0;
     for (const auto& e : entries_)
         natural += juce::roundToInt(e.current);
-    const int footerHeight = juce::roundToInt(footer_.current);
     const int deleteHeight = isMacroPort_ ? kDeleteRowHeight : 0;
-    const int room =
-        maxHeight_ > 0
-            ? juce::jmax(0, maxHeight_ - kTitleHeight - kSplitRowHeight - footerHeight - deleteHeight - kBottomPad)
-            : natural;
+    const int room = maxHeight_ > 0
+                         ? juce::jmax(0, maxHeight_ - kTitleHeight - kSplitRowHeight - deleteHeight - kBottomPad)
+                         : natural;
     const int viewHeight = juce::jmin(natural, room);
     const int rowWidth = natural > viewHeight ? kWidth - kScrollBar : kWidth;
     int y = 0;
@@ -298,7 +295,7 @@ void PortConnectionsPanel::layoutRows() {
     rowsTotal_ = y;
     holder_->setSize(rowWidth, rowsTotal_);
     holder_->repaint();
-    desiredHeight_ = kTitleHeight + viewHeight + kSplitRowHeight + footerHeight + deleteHeight + kBottomPad;
+    desiredHeight_ = kTitleHeight + viewHeight + kSplitRowHeight + deleteHeight + kBottomPad;
     listLayer_.setSize(kWidth, desiredHeight_);
     arrange();
     applyPages();
@@ -308,21 +305,21 @@ void PortConnectionsPanel::resized() { arrange(); }
 
 // The list page is laid out at its own height inside listLayer_, whatever height the panel has while the pages swap.
 void PortConnectionsPanel::arrange() {
-    const int footerHeight = juce::roundToInt(footer_.current);
     const int deleteHeight = isMacroPort_ ? kDeleteRowHeight : 0;
-    const int viewHeight =
-        juce::jmax(0, desiredHeight_ - kTitleHeight - kSplitRowHeight - footerHeight - deleteHeight - kBottomPad);
+    const int viewHeight = juce::jmax(0, desiredHeight_ - kTitleHeight - kSplitRowHeight - deleteHeight - kBottomPad);
     viewport_.setBounds(0, kTitleHeight, kWidth, viewHeight);
     split_.setBounds(6, kTitleHeight + viewHeight + 3, kWidth - 12, SplitButton::kHeight);
     const int footerY = kTitleHeight + viewHeight + kSplitRowHeight;
-    disconnectAll_.setVisible(footerHeight > 0 && footer_.to > 0.0f);
-    disconnectAll_.setAlpha(footer_.to > 0.0f ? juce::jlimit(0.0f, 1.0f, footer_.current / (float)kFooterHeight)
-                                              : 1.0f);
-    const int w = disconnectAll_.preferredWidth();
-    disconnectAll_.setBounds((kWidth - w) / 2, footerY + 4, w, kFooterHeight - 8);
+    // The icon sits in the title row, centred vertically, its right edge on the remove column's (the rows' own edge).
+    const int side = disconnectAll_.preferredWidth();
+    disconnectAll_.setBounds(holder_->getWidth() - ModDotGlyphButton::kRowEdgeInset - side, (kTitleHeight - side) / 2,
+                             side, side);
+    disconnectAll_.setVisible(disconnectFade_.current > 0.0f);
+    disconnectAll_.setAlpha(juce::jlimit(0.0f, 1.0f, disconnectFade_.current));
+    disconnectAll_.setInterceptsMouseClicks(disconnectFade_.to > 0.0f, false);
     if (isMacroPort_) {
         const int dw = deletePort_.preferredWidth();
-        deletePort_.setBounds((kWidth - dw) / 2, footerY + footerHeight + 4, dw, kDeleteRowHeight - 8);
+        deletePort_.setBounds((kWidth - dw) / 2, footerY + 4, dw, kDeleteRowHeight - 8);
     }
 }
 
@@ -333,21 +330,21 @@ void PortConnectionsPanel::paint(juce::Graphics& g) {
         return;
     g.setColour(p.text.withMultipliedAlpha(listAlpha));
     g.setFont(juce::Font(juce::FontOptions(12.5f, juce::Font::bold)));
-    g.drawText(titleText(), juce::Rectangle<int>(0, 0, getWidth(), kTitleHeight).reduced(12, 0),
+    // The title stops short of the "Disconnect all" icon at the right.
+    g.drawText(titleText(),
+               juce::Rectangle<int>(0, 0, getWidth(), kTitleHeight)
+                   .reduced(12, 0)
+                   .withTrimmedRight(ModDotLinkButton::kIconSide + ModDotGlyphButton::kRowEdgeInset),
                juce::Justification::centredLeft, true);
     const int deleteHeight = isMacroPort_ ? kDeleteRowHeight : 0;
     if (isMacroPort_) { // a rule above the destructive action
         g.setColour(p.border.withAlpha(listAlpha));
         g.fillRect(juce::Rectangle<int>(8, desiredHeight_ - kBottomPad - deleteHeight, kWidth - 16, 1));
     }
-    const int footerTop = desiredHeight_ - kBottomPad - deleteHeight - juce::roundToInt(footer_.current);
-    if (footer_.current > 1.0f) {
-        g.setColour(p.border.withAlpha(listAlpha * juce::jlimit(0.0f, 1.0f, footer_.current / (float)kFooterHeight)));
-        g.fillRect(juce::Rectangle<int>(8, footerTop, kWidth - 16, 1));
-    }
     if (rowsTotal_ > 0) { // a rule between the connections and the actions under them
         g.setColour(p.border.withAlpha(listAlpha));
-        g.fillRect(juce::Rectangle<int>(8, footerTop - kSplitRowHeight, kWidth - 16, 1));
+        g.fillRect(
+            juce::Rectangle<int>(8, desiredHeight_ - kBottomPad - deleteHeight - kSplitRowHeight, kWidth - 16, 1));
     }
 }
 
@@ -366,8 +363,8 @@ void PortConnectionsPanel::focusEntry() {
     split_.leftHalf().grabKeyboardFocus(); // nothing to remove: adding one is the main action
 }
 
-// Up/Down walk the rows' remove buttons, then the Add connection | Pick on canvas buttons, and end on "Disconnect all"
-// when it is showing, then "Delete port" on a macro's port.
+// Up/Down walk the rows' remove buttons, then the Add destination | Pick on canvas buttons, then "Disconnect all" when
+// it is showing, then "Delete port" on a macro's port.
 void PortConnectionsPanel::navigate(juce::Component* from, int step) {
     struct Stop {
         juce::Component* control;
@@ -378,7 +375,7 @@ void PortConnectionsPanel::navigate(juce::Component* from, int step) {
         if (!e.leaving)
             stops.push_back({&e.row->removeButton(), e.row.get()});
     stops.push_back({&split_.leftHalf(), &split_});
-    if (footer_.to > 0.0f)
+    if (disconnectFade_.to > 0.0f)
         stops.push_back({&disconnectAll_, &disconnectAll_});
     if (isMacroPort_)
         stops.push_back({&deletePort_, &deletePort_});

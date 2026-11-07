@@ -3,6 +3,7 @@
 // timeline), with their hooks and fallbacks. docs/modules/modulation.md#the-mod-dot-menu.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "ModDotController.h"
 #include "ModDotPanelFrame.h"
@@ -147,18 +148,40 @@ void ModDotController::popoverClosed(ModDotPopover* popover) {
         popover_ = nullptr;
 }
 
-void ModDotController::removeSource(juce::AudioProcessorGraph::NodeID card, int destChannel,
-                                    juce::AudioProcessorGraph::NodeID attenuverterId) {
-    const auto target = knobModTarget(editor_, card, destChannel);
-    for (const auto& source : knobModSources(editor_, card, destChannel, true)) {
+namespace {
+// One source of a knob, removed as the host does; `bulk` keeps the source module and asks nothing.
+void removeOneSource(GraphEditor& editor, const ModDotController::Host& host, juce::AudioProcessorGraph::NodeID card,
+                     int destChannel, juce::AudioProcessorGraph::NodeID attenuverterId, bool bulk) {
+    const auto target = knobModTarget(editor, card, destChannel);
+    for (const auto& source : knobModSources(editor, card, destChannel, true)) {
         if (source.attenuverterId != attenuverterId)
             continue;
-        if (host.removeModulator && target.valid())
-            host.removeModulator(modulatorInfoFor(editor_, card, destChannel, source, target));
-        else
-            editor_.removeModulationChain(attenuverterId);
+        if (host.removeModulator && target.valid()) {
+            auto info = modulatorInfoFor(editor, card, destChannel, source, target);
+            info.keepSource = bulk;
+            host.removeModulator(info);
+        } else {
+            editor.removeModulationChain(attenuverterId);
+        }
         return;
     }
+}
+} // namespace
+
+void ModDotController::removeSource(juce::AudioProcessorGraph::NodeID card, int destChannel,
+                                    juce::AudioProcessorGraph::NodeID attenuverterId) {
+    removeOneSource(editor_, host, card, destChannel, attenuverterId, false);
+}
+
+void ModDotController::removeAllSources(juce::AudioProcessorGraph::NodeID card, int destChannel) {
+    std::vector<juce::AudioProcessorGraph::NodeID> chains;
+    for (const auto& source : knobModSources(editor_, card, destChannel, true))
+        chains.push_back(source.attenuverterId);
+    std::optional<AppUndoManager::ScopedUndoGroup> oneStep;
+    if (auto* undo = editor_.getUndoManager())
+        oneStep.emplace(*undo);
+    for (const auto id : chains)
+        removeOneSource(editor_, host, card, destChannel, id, true);
 }
 
 // The chain is named by its attenuverter; the knob it lands on (macro ports looked through) is read from the live

@@ -5,7 +5,6 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kPad = 8;
 constexpr int kSwatch = 10;
 constexpr float kFont = 12.5f;
 } // namespace
@@ -82,7 +81,7 @@ void PortConnectionRow::resized() {
     // Laid out for the full row height whatever height the panel has given it: a row growing in or shrinking out is
     // revealed and hidden, never squashed.
     const int gap = modDotPaletteFor(*this).space;
-    auto r = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(kPad - 2, 0);
+    auto r = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
     removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)
                                 .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
     r.removeFromRight(gap);

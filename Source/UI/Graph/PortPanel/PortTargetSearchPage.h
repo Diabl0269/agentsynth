@@ -1,6 +1,6 @@
 #pragma once
 
-// The search page of the port connections panel ("Add connection"): a search box and every module the jack can be
+// The search page of the port connections panel ("Add destination"): a search box and every module the jack can be
 // connected to, nearest first. A module with exactly one compatible target is ONE row ("Filter 1 . In 1"); a module
 // with several is a foldable group with its targets underneath (a jack is a row, a knob of a modulation output is a
 // row too). A target already wired to the jack is shown greyed with "Connected" and cannot be picked. Typing filters

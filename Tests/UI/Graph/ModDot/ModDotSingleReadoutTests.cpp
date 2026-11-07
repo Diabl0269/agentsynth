@@ -40,6 +40,7 @@ int visibleReadouts(Fixture& f, AppTooltipWindow& window) {
 TEST_F(ModuleComponentTest, DraggingTheDotShowsExactlyOneReadoutAndTheKnobsOwnTipComesBack) {
     CountsAsForeground foreground;
     Fixture f;
+    f.gainKnob->setTooltip("Scales the signal"); // the caption already names the knob, so give it a tip of its own
     ASSERT_NE(f.gainKnob, nullptr);
     AppTooltipWindow window(f.editor.get());
     ASSERT_TRUE(window.getTipFor(*f.gainKnob).isNotEmpty()) << "the knob has a hover tip when nothing else is up";
@@ -74,6 +75,7 @@ std::vector<juce::String> chipRows(ModuleComponent& card) {
 // source's live amount, and it is gone when the readout is.
 TEST_F(ModuleComponentTest, TheDotReadoutIsTheChipUnderTheKnobWithTheLiveAmount) {
     Fixture f;
+    f.gainKnob->setTooltip("Scales the signal"); // the caption already names the knob, so give it a tip of its own
     ASSERT_NE(f.gainKnob, nullptr);
     EXPECT_FALSE(synth::ui::modHoverChipShows(*f.editor, f.vcaId));
     EXPECT_TRUE(chipRows(*f.vcaCard).empty());
@@ -102,6 +104,7 @@ TEST_F(ModuleComponentTest, TheDotReadoutIsTheChipUnderTheKnobWithTheLiveAmount)
 // With two sources on the knob the dragged one is the live row; hovering lists both either way.
 TEST_F(ModuleComponentTest, HoveringAKnobListsEveryModulationOnItAndADragKeepsTheOthers) {
     Fixture f;
+    f.gainKnob->setTooltip("Scales the signal"); // the caption already names the knob, so give it a tip of its own
     ASSERT_NE(f.gainKnob, nullptr);
     f.addSecondLfo();
     f.editor->setHoveredModTarget(graph_editor_types::HoveredModTarget{f.vcaId, f.gainChannel});
@@ -124,6 +127,7 @@ TEST_F(ModuleComponentTest, HoveringAKnobListsEveryModulationOnItAndADragKeepsTh
 // Five sources on a knob paint four rows and "+1 more" inside the card (clipped to it, never moved).
 TEST_F(ModuleComponentTest, TheStackStaysInsideTheCardWhateverTheKnobIsNear) {
     Fixture f;
+    f.gainKnob->setTooltip("Scales the signal"); // the caption already names the knob, so give it a tip of its own
     ASSERT_NE(f.gainKnob, nullptr);
     synth::theme::AppLookAndFeel lnf;
     f.vcaCard->setLookAndFeel(&lnf);
@@ -155,6 +159,7 @@ TEST_F(ModuleComponentTest, TheStackStaysInsideTheCardWhateverTheKnobIsNear) {
 TEST_F(ModuleComponentTest, SteppingTheDotWithTheKeyboardShowsExactlyOneReadout) {
     CountsAsForeground foreground;
     Fixture f;
+    f.gainKnob->setTooltip("Scales the signal"); // the caption already names the knob, so give it a tip of its own
     auto* button = f.vcaCard->getModDotButton(f.gainChannel);
     ASSERT_NE(button, nullptr);
     AppTooltipWindow window(f.editor.get());

@@ -1,4 +1,4 @@
-// PortConnectionsPanelPages.cpp -- the panel's second page and what feeds it: "Add connection" swaps the list for the
+// PortConnectionsPanelPages.cpp -- the panel's second page and what feeds it: "Add destination" swaps the list for the
 // search page (a cross-fade while the height settles), a pick connects, "Pick on canvas" picks a jack or knob on the
 // canvas. docs/layout/cables.md#port-connections-panel.
 

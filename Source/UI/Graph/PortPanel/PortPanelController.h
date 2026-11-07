@@ -12,7 +12,7 @@
 //    several cables opens at once, and a double-click on one with several keeps the panel instead of disconnecting.
 //  * Hovering or keyboard-focusing a row highlights that cable on the canvas and dims all others (the canvas paint
 //    reads highlightedCable()).
-//  * The panel's Add connection page: a hovered or focused target previews a dashed cable from the jack to it
+//  * The panel's Add destination page: a hovered or focused target previews a dashed cable from the jack to it
 //    (paintPreview(), drawn by the canvas), and a pick goes through connect() -> PortConnector.
 //
 // docs/layout/cables.md#port-connections-panel.

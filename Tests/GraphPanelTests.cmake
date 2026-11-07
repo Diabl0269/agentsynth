@@ -5,6 +5,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotGestureTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotOnlyOwnPanelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotSingleReadoutTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotSourcesDisconnectAllTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotChipAndTooltipTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotRemoveRoutingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModRingFadeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/KnobModSourcesTests.cpp
@@ -23,6 +25,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/NoiseLevelModTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelClickTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelRowsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelDisconnectAllTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroGroupController/MacroMultiSelectTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorDropRebuildTests.cpp

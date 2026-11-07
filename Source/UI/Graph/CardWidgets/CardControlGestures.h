@@ -153,6 +153,11 @@ protected:
 
     /** True when a card gesture took this press; the control skips its own handling then. */
     bool claimMouseDown(const juce::MouseEvent& e) {
+        modAmountActive_ = modDotActive_ = pickupActive_ = false;
+        modDotClaimedLastPress_ = false;
+        // A right press (Ctrl-click on macOS too) belongs to the card's context menu alone.
+        if (e.mods.isPopupMenu())
+            return false;
         modAmountActive_ = wantsModAmountGesture && wantsModAmountGesture(e);
         if (modAmountActive_) {
             if (onModAmountGesture)

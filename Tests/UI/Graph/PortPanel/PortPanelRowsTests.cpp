@@ -245,7 +245,8 @@ TEST_F(GraphEditorTest, EscapeClosesThePanel) {
     EXPECT_EQ(f.panel(), nullptr);
 }
 
-TEST_F(GraphEditorTest, TabReachesEveryRowsRemoveButtonThenTheSplitButtonThenDisconnectAll) {
+// Tab follows the visual order (the title row's Disconnect all icon first); Up/Down end on it, after the buttons.
+TEST_F(GraphEditorTest, TabReachesDisconnectAllInTheTitleRowThenEveryRowsRemoveButtonThenTheSplitButton) {
     PortFixture f(3);
     f.clickOscOutput();
     auto* panel = f.panel();
@@ -255,11 +256,11 @@ TEST_F(GraphEditorTest, TabReachesEveryRowsRemoveButtonThenTheSplitButtonThenDis
         if (c->getWantsKeyboardFocus() && c != panel)
             stops.push_back(c);
     ASSERT_EQ(stops.size(), 6u);
+    EXPECT_EQ(stops[0], &panel->disconnectAllButton());
     for (int i = 0; i < 3; ++i)
-        EXPECT_EQ(stops[(size_t)i], &panel->rowAt(i)->removeButton()) << "stop " << i;
-    EXPECT_EQ(stops[3], &panel->splitButton().leftHalf()) << "Add connection";
-    EXPECT_EQ(stops[4], &panel->splitButton().rightHalf()) << "Pick on canvas";
-    EXPECT_EQ(stops[5], &panel->disconnectAllButton());
+        EXPECT_EQ(stops[(size_t)i + 1], &panel->rowAt(i)->removeButton()) << "stop " << i;
+    EXPECT_EQ(stops[4], &panel->splitButton().leftHalf()) << "Add destination";
+    EXPECT_EQ(stops[5], &panel->splitButton().rightHalf()) << "Pick on canvas";
 }
 
 TEST_F(GraphEditorTest, ReturnAndSpaceRemoveAConnectionFromTheKeyboard) {
@@ -310,7 +311,7 @@ TEST_F(GraphEditorTest, ARowsSwatchIsItsCablesColour) {
     }
 }
 
-// Disconnect all carries an icon like Add connection, and keeps its name, tooltip and keyboard stop.
+// Disconnect all is an icon-only button; its name and tooltip say what it does and it keeps its keyboard stop.
 TEST_F(GraphEditorTest, DisconnectAllIsAnIconButtonWithItsNameAndTooltipUnchanged) {
     PortFixture f(3);
     f.clickOscOutput();
@@ -322,22 +323,23 @@ TEST_F(GraphEditorTest, DisconnectAllIsAnIconButtonWithItsNameAndTooltipUnchange
     ASSERT_TRUE(link->glyph().has_value());
     EXPECT_EQ(*link->glyph(), synth::ui::ModDotGlyph::Unlink);
     EXPECT_EQ(button.getTitle(), "Disconnect all connections");
-    EXPECT_EQ(button.getTooltip(), "Remove every connection on this jack");
+    EXPECT_EQ(button.getTooltip(), "Disconnect all connections");
     EXPECT_TRUE(button.getWantsKeyboardFocus());
-    EXPECT_GT(link->preferredWidth(), 60) << "room for the icon and the label";
+    EXPECT_TRUE(link->isIconOnly());
+    EXPECT_EQ(link->preferredWidth(), synth::ui::ModDotLinkButton::kIconSide) << "a square icon, no label";
     clickNow(button);
     EXPECT_EQ(f.totalOscCables(), 0) << "still disconnects every cable";
 }
 
-// The icon button paints under every built-in theme and puts its glyph's colour on the left of the label.
+// The icon button paints under every built-in theme and shows its glyph's colour in the middle.
 TEST(PortPanelDisconnectAllButton, PaintsAnIconInEveryTheme) {
     for (const auto& theme : synth::theme::builtInThemes()) {
         synth::theme::AppLookAndFeel lnf;
         lnf.applyTheme(theme);
-        synth::ui::ModDotLinkButton button("Disconnect all", "Disconnect all connections",
+        synth::ui::ModDotLinkButton button(synth::ui::ModDotLinkButton::IconOnly{}, "Disconnect all connections",
                                            synth::ui::ModDotGlyph::Unlink);
         button.setLookAndFeel(&lnf);
-        button.setBounds(0, 0, button.preferredWidth(), 24);
+        button.setBounds(0, 0, button.preferredWidth(), button.preferredWidth());
         juce::Image image(juce::Image::ARGB, button.getWidth(), button.getHeight(), true, juce::SoftwareImageType());
         {
             juce::Graphics g(image);
@@ -347,7 +349,7 @@ TEST(PortPanelDisconnectAllButton, PaintsAnIconInEveryTheme) {
             synth::ui::modDotGlyphColour(synth::ui::modDotPaletteFor(button), synth::ui::ModDotGlyph::Unlink);
         bool inked = false;
         for (int y = 0; y < image.getHeight() && !inked; ++y)
-            for (int x = 10; x < 24 && !inked; ++x) {
+            for (int x = 5; x < 19 && !inked; ++x) {
                 const auto px = image.getPixelAt(x, y);
                 inked = std::abs(px.getRed() - glyphColour.getRed()) < 40 &&
                         std::abs(px.getGreen() - glyphColour.getGreen()) < 40 &&

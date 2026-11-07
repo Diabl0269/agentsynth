@@ -466,7 +466,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 const int dstJack = dragSourceIsInput ? dragSourceChannel : port->index;
 
                 // The drop rules (poly fan, MIDI, attenuverter for mono CV, macro auto ports, a Track In's auto
-                // channel) live in PortConnector, shared with the port connections panel's Add connection so they
+                // channel) live in PortConnector, shared with the port connections panel's Add destination so they
                 // cannot drift.
                 synth::ui::PortConnector::connectJacks(*this, realSrc->nodeID, srcJack, realDst->nodeID, dstJack,
                                                        dragSourceIsMidi, /*recordUndo=*/true,

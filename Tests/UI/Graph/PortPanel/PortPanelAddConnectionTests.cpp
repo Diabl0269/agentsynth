@@ -1,4 +1,4 @@
-// PortPanelAddConnectionTests.cpp: the port connections panel's "Add connection": the search page that replaces the
+// PortPanelAddConnectionTests.cpp: the port connections panel's "Add destination": the search page that replaces the
 // list (and Esc back), the compatible targets it lists, the shared search on them, picking one (a jack, a knob, a new
 // module; one undo step each), the dashed preview cable, Pick on canvas, and the page swap's motion.
 // docs/layout/cables.md#port-connections-panel.
@@ -642,7 +642,7 @@ TEST_F(GraphEditorTest, WithNoConnectionsAddConnectionIsTheMainAction) {
     EXPECT_TRUE(panel->titleText().contains("No connections yet"));
     EXPECT_TRUE(panel->addConnectionButton().isVisible());
     EXPECT_FALSE(panel->isDisconnectAllShown());
-    panel->focusEntry(); // nothing to remove, so the keys go to Add connection
+    panel->focusEntry(); // nothing to remove, so the keys go to Add destination
     EXPECT_EQ(panel->getHeight(), panel->settledHeight(false));
 }
 

@@ -23,6 +23,7 @@ struct ModulatorInfo {
     juce::String paramId;          // the lane's parameter
     int targetChannel = 0;         // raw CV channel on the target
     juce::Colour colour = synth::theme::Theme{}.colors.modWire; // the modulation wire's resolved colour
+    bool keepSource = false; // a bulk removal (Disconnect all): only the cable goes, the source stays, nothing is asked
 
     /** What identifies the routing across refreshes (values and titles may change, this may not). */
     juce::String key() const {

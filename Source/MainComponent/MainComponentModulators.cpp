@@ -376,6 +376,10 @@ void MainComponent::removeModulator(const synth::ui::ModulatorInfo& modulator) {
     auto* target = findNodeByUuid(modulator.targetUuid);
     auto* lfo = modulator.isLfo ? findNodeByUuid(modulator.sourceUuid) : nullptr;
     auto* settings = appProperties.getUserSettings();
+    if (modulator.keepSource) { // Disconnect all: the cable goes, the source stays, nothing to ask
+        performRemoveModulator(modulator, /*deleteLonelyLfo=*/false);
+        return;
+    }
     if (target == nullptr || lfo == nullptr || lfoMovesMoreThanOneRouting(lfo->nodeID)) {
         performRemoveModulator(modulator);
         return;

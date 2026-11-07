@@ -1,0 +1,18 @@
+# The hover chip on a knob in a card's last row lists every modulation and stays inside the card.
+#
+# What a user does:
+#   1. Opens a project with three LFOs modulating the Filter's Pan knob, which sits in the card's bottom row.
+#   2. Rests the pointer on the Pan knob: one chip row per LFO shows, flipped above the knob, none cut off.
+motion: true
+record: true
+save_project: mod-dot-hover-chip-all-mods
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot-three-on-pan.agsproj"}
+  - wait: {}
+  - hover: {id: Pan}
+  - expect: {id: "card:Filter", modHoverChip: true, within_ms: 3000}
+  - expect: {id: "card:Filter", contains: {modHoverChipRows: "+50%"}}
+  - expect: {id: "card:Filter", contains: {modHoverChipRows: "-25%"}}
+  - expect: {id: "card:Filter", contains: {modHoverChipRows: "+75%"}}
+  - screenshot: {id: "card:Filter", name: chip-all-three-mods}
+  - mark: {check: 1, name: chip-all-three-mods}  # all three rows are visible while the pointer rests
