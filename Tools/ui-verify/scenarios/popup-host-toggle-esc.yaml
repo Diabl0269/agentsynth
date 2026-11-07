@@ -14,15 +14,15 @@ steps:
   - click: {id: Randomize notes in the scale}
   - wait: {}
   - expect: {id: randomizeRangePicker, showing: true, within_ms: 2000}
-  - mark: {check: 1, name: popover-open}
+  - mark: {check: 1, name: randomize-open}
   - click: {id: Randomize notes in the scale}
   - wait: {}
   - expect: {id: randomizeRangePicker, showing: false, within_ms: 2000}
-  - mark: {check: 2, name: trigger-closes}
+  - mark: {check: 2, name: randomize-second-click-closes}
   - click: {id: Randomize notes in the scale}
   - wait: {}
   - expect: {id: randomizeRangePicker, showing: true, within_ms: 2000}
   - key: {keys: escape}
   - wait: {}
   - expect: {id: randomizeRangePicker, showing: false, within_ms: 2000}
-  - mark: {check: 3, name: esc-closes}
+  - mark: {check: 3, name: randomize-esc}

@@ -13,6 +13,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridCardTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridToolsTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridRandomizeToggleTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridWrittenOutlineTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridPolyHintTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/ModuleViews/StepGrid/StepGridChordPickerTests.cpp
