@@ -1,5 +1,6 @@
 // SoundBrowserPainting.cpp -- paint(): the path bar, the painted rows (and the slide or fade between two lists), the
 // footer. Every colour comes from the theme's tokens.
+#include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/SearchMatch.h"
@@ -232,6 +233,71 @@ void SoundBrowserComponent::paintRows(juce::Graphics& g, int width) const {
     }
 }
 
+// The list while the Get more packs open or shut. Everything up to and including the heading paints as at rest. The
+// rows below it paint in the open layout, shifted up by the share of the pack block that is still hidden, and clipped
+// to the area under the heading, so the packs come out from under it (or go back under it) and the rows after the
+// block follow without a jump. Under Reduce Motion nothing moves and only the packs fade.
+SoundBrowserComponent::FoldLayout SoundBrowserComponent::foldLayout() const {
+    FoldLayout layout;
+    if (foldMode_ == FoldMode::None || (foldMode_ == FoldMode::Slide && !getMoreTurn_->isTurning()))
+        return layout;
+    const auto headingAt =
+        std::find_if(rows_.begin(), rows_.end(), [](const Row& row) { return row.kind == RowKind::PackHeading; });
+    if (headingAt == rows_.end())
+        return layout;
+    layout.heading = (int)(headingAt - rows_.begin());
+    int inRows = 0;
+    while (layout.heading + 1 + inRows < (int)rows_.size() &&
+           rows_[(size_t)(layout.heading + 1 + inRows)].kind == RowKind::GetPack)
+        ++inRows;
+    layout.closing = inRows == 0;
+    layout.packs = layout.closing ? (int)foldPacks_.size() : inRows;
+    if (foldMode_ == FoldMode::Slide)
+        layout.shift = (int)std::lround((1.0f - getMoreTurn_->openness()) * (float)(layout.packs * kRowHeight));
+    return layout;
+}
+
+void SoundBrowserComponent::paintFoldedRows(juce::Graphics& g, int width) const {
+    const auto layout = foldLayout();
+    if (layout.heading < 0) {
+        paintRows(g, width);
+        return;
+    }
+    const int heading = layout.heading;
+    const int packs = layout.packs;
+    const bool closing = layout.closing;
+    const int shift = layout.shift;
+    const int total = (int)rows_.size() + (closing ? packs : 0);
+    const int viewport = listArea().getHeight();
+    const bool slide = foldMode_ == FoldMode::Slide;
+    const float packAlpha = slide ? 1.0f : (closing ? 1.0f - foldFade_ : foldFade_);
+    // The packs of a closing fold are not in rows_ and take an index no selection or hover can match.
+    const auto paintAt = [&](int k, int dy) {
+        const bool pack = k > heading && k <= heading + packs;
+        const Row& row = pack && closing ? foldPacks_[(size_t)(k - heading - 1)]
+                                         : rows_[(size_t)(closing && k > heading + packs ? k - packs : k)];
+        const int index = pack && closing ? -2 : (closing && k > heading + packs ? k - packs : k);
+        const int y = k * kRowHeight - scrollOffset_ - dy;
+        if (y < viewport && y + kRowHeight > 0)
+            paintRow(g, row, index, {0, y, width, kRowHeight});
+    };
+    for (int k = 0; k <= heading; ++k)
+        paintAt(k, 0);
+    const int top = (heading + 1) * kRowHeight - scrollOffset_;
+    juce::Graphics::ScopedSaveState below(g);
+    if (!g.reduceClipRegion(juce::Rectangle<int>(0, top, width, viewport - top)))
+        return;
+    const bool layer = packAlpha < 1.0f;
+    if (layer)
+        g.beginTransparencyLayer(packAlpha);
+    for (int k = heading + 1; k <= heading + packs; ++k)
+        paintAt(k, shift);
+    if (layer)
+        g.endTransparencyLayer();
+    for (int k = heading + packs + 1; k < total; ++k)
+        paintAt(k, shift);
+}
+
 // Where the sound lives, led by the key line and then by what Match key will do, so the part that matters most is the
 // last to be cut when the line is ellipsised.
 juce::String SoundBrowserComponent::soundFooterLine(const synth::soundbrowser::SoundEntry& entry) const {
@@ -318,11 +384,16 @@ void SoundBrowserComponent::paint(juce::Graphics& g) {
         g.reduceClipRegion(area);
         const int width = contentWidth();
         const bool moving = listMotion_ < 1.0f && !previousList_.isNull();
+        if (foldMode_ == FoldMode::Slide && !getMoreTurn_->isTurning())
+            endFold();
         const bool slide = moving && motionDirection_ != 0 && !prefersReducedMotion();
         if (!moving) {
             juce::Graphics::ScopedSaveState rows(g);
             g.setOrigin(area.getPosition());
-            paintRows(g, width);
+            if (foldMode_ != FoldMode::None)
+                paintFoldedRows(g, width);
+            else
+                paintRows(g, width);
         } else if (slide) {
             const int w = area.getWidth();
             const int oldX = (int)std::lround(-(float)motionDirection_ * listMotion_ * (float)w);

@@ -713,6 +713,14 @@ openness (0 folded, 1 open, the number `paintDisclosureChevron` takes), tweens i
 retargets from the current openness. The Preferences and Keyboard Shortcuts section headers use it. Under Reduce Motion,
 with Animations Off, or off screen the arrow lands at once (a restored fold starts where it belongs); frames run only while it turns.
 
+The Library's Places "Get more" heading uses the same clock for its packs: the rows above and including the heading
+paint unchanged (no picture, no alpha), and only the rows below it slide, offset by `(1 - openness)` of the pack block's
+height and clipped to the area under the heading, so opening brings the packs out from under it and closing takes them
+back, with the rows after the block following the same offset (`SoundBrowserComponent::paintFoldedRows`). Under Reduce
+Motion nothing moves: only the packs fade (80 ms, the rows above stay solid). With Animations Off, or off screen, the list
+changes at once, and a restored choice never animates. A folder change or a search keeps the whole-list slide or
+cross-fade.
+
 ### Bottom dock tabs
 
 A tab leaves the strip when its panel opens in its own window or goes to the main area, and comes back when it docks again.

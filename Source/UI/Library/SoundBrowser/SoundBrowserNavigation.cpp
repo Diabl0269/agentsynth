@@ -288,13 +288,18 @@ bool SoundBrowserComponent::goUp() {
     return true;
 }
 
-// Pictures the list as it is now (a motion in flight is landed first), so the change that follows can slide or fade
-// away from it.
-void SoundBrowserComponent::capturePreviousList() {
+void SoundBrowserComponent::landListMotion() {
     if (vblank_.has_value())
         listAnim_.stop(*vblank_);
     listMotion_ = 1.0f;
     previousList_ = {};
+    endFold();
+}
+
+// Pictures the list as it is now (a motion in flight is landed first), so the change that follows can slide or fade
+// away from it.
+void SoundBrowserComponent::capturePreviousList() {
+    landListMotion();
     const auto area = listArea();
     if ((!isShowing() && !animateOffscreenForTest_) || area.isEmpty())
         return;
@@ -306,7 +311,7 @@ void SoundBrowserComponent::capturePreviousList() {
 
 // Carries the picture away: a slide (new list in from the right going into a folder, from the left going up) or, for
 // a search and under Reduce Motion, a fade.
-void SoundBrowserComponent::playListMotion(int direction, bool fold) {
+void SoundBrowserComponent::playListMotion(int direction) {
     if (previousList_.isNull()) {
         listMotion_ = 1.0f;
         return;
@@ -315,7 +320,7 @@ void SoundBrowserComponent::playListMotion(int direction, bool fold) {
     if (!vblank_.has_value())
         vblank_.emplace(this);
     listMotion_ = 0.0f;
-    const double ms = direction == 0 && !fold ? motionMs(120.0, 80.0) : motionMs(190.0, 80.0);
+    const double ms = direction == 0 ? motionMs(120.0, 80.0) : motionMs(190.0, 80.0);
     listAnim_.start(
         *vblank_, ms, easeOutCubic,
         [this](float t) {
