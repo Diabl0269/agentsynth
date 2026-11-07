@@ -552,6 +552,11 @@ shortcut.
   note on the individual animation); a change with no reason written down is a bug.
 - **Undo and redo.** Anything that glides forward glides on undo and redo; a new move surface adds its entry to the
   checklist in `Tests/UI/Layout/UndoGlideSurfaces.h` ([undo-glide.md](undo-glide.md)).
+- **View jumps animate.** Showing something on the canvas (a mixer insert or column, Go to Output, a card the arrow
+  keys step to, a dropped card that landed off screen) flies the view with `GraphEditor::flyViewTo` (200 ms
+  `easeOutCubic`, the wheel pan's `ScrollTweenRunner`), never `centreViewOn`, which stays for the minimap's drag. At
+  once under Reduce Motion, Animations Off or off screen; any user pan, drag or zoom cancels it. A target in a collapsed
+  macro flies while the macro unfolds. Guard: `ViewFlyRegistry.*` (`GraphEditorViewFlyTests.cpp`).
 - **Durations.** Hover state 80–120 ms. A small reveal or tooltip 160 ms in, 110 ms out. Menus,
   call-outs and dialogs: see [Popup windows](#popup-windows). Reorder
   make-room 160 ms, settle 140 ms. Panel slides are unchanged (190 ms, `easeInOutCubic`).

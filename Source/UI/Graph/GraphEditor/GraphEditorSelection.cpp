@@ -133,7 +133,7 @@ bool GraphEditor::selectAdjacentModule(int direction) {
     selectModule(target, /*additive=*/false);
     for (const auto& m : modules) {
         if (m.id == target && !getVisibleCanvasRect().contains(m.bounds))
-            centreViewOn(m.bounds.getCentre());
+            flyViewTo(m.bounds.getCentre());
     }
     return true;
 }

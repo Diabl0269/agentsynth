@@ -105,6 +105,8 @@ public:
 
     juce::Rectangle<float> getVisibleCanvasRect() const;
     void centreViewOn(juce::Point<float> canvasPoint);
+    void flyViewTo(juce::Point<float> canvasPoint); // centreViewOn, eased; GraphEditorViewFly.cpp
+    synth::ui::ScrollTweenRunner& viewFlyForTest() noexcept { return wheelPanTween_; }
     void fitViewToModules();
     void zoomAroundCentre(float wheelDelta);
     /** The canvas zoom and pan as they are now; `applyViewDoc` clamps to the wheel-zoom range. Message thread. */
@@ -227,7 +229,6 @@ public:
 
     bool isMacroChipDragActive() const { return macroChipDragId.isNotEmpty(); } // test accessor
     void cancelLiveDragGestures();
-
     // ---- Cmd-drag macro reparent (docs/macros/menu-and-membership.md) ----
     /** The macro a live reparent drag would leave if released now, empty for none. */
     juce::String getMacroDragLeaveId() const noexcept override { return macroDragLeaveId_; }

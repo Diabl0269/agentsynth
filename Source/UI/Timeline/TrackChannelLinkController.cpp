@@ -435,7 +435,7 @@ void TrackChannelLinkController::revealChannelForTrack(synth::TrackId track) {
         const auto cardCentre = macro->bounds.toFloat().getCentre();
         graphEditor_.getMacroController().selectMacro(macro->id, /*additive=*/false);
         if (collapsed) {
-            graphEditor_.centreViewOn(cardCentre);
+            graphEditor_.flyViewTo(cardCentre);
             return;
         }
     } else {
@@ -444,7 +444,7 @@ void TrackChannelLinkController::revealChannelForTrack(synth::TrackId track) {
 
     for (auto* comp : graphEditor_.getModuleComponents()) {
         if (comp != nullptr && comp->getNodeId() == info.stripId) {
-            graphEditor_.centreViewOn(comp->getBounds().toFloat().getCentre());
+            graphEditor_.flyViewTo(comp->getBounds().toFloat().getCentre());
             return;
         }
     }

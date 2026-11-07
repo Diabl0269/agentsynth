@@ -105,7 +105,7 @@ A **track strip** column (a strip some track feeds) is dragged by its header, ex
 at the spot it was grabbed, lifted (raised wash, 1 px `accent` border, soft shadow), the other track
 columns glide aside, and the columns viewport autoscrolls when the pointer nears its left or right
 edge (`MixerPanelColumnDrag.cpp`). Under 4 px of travel the press is an ordinary header click
-(select on canvas, double-click the name to rename); a drag's release is never also a click.
+(select on canvas, the view [flying](edit-on-canvas.md) to it; double-click the name to rename); a drag's release is never also a click.
 
 The mixer lists track strips in timeline track order, so a drop **reorders the timeline's tracks
 too**: `MixerPanelComponent::onMoveTrack` moves the dragged strip's *first* feeding track to the

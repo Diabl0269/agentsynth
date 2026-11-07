@@ -518,12 +518,12 @@ void MainComponent::showNodeOnCanvas(const juce::String& uuid) {
         if (macro->collapsed)
             collapsedCard = macro;
     if (collapsedCard != nullptr) {
-        graphEditor.centreViewOn(collapsedCard->bounds.toFloat().getCentre());
+        graphEditor.flyViewTo(collapsedCard->bounds.toFloat().getCentre());
         return;
     }
     for (auto* comp : graphEditor.getModuleComponents())
         if (comp != nullptr && comp->getNodeId() == node->nodeID)
-            graphEditor.centreViewOn(comp->getBounds().toFloat().getCentre());
+            graphEditor.flyViewTo(comp->getBounds().toFloat().getCentre());
 }
 
 //==============================================================================

@@ -441,7 +441,7 @@ future "Mixer-focus" shortcut before this (see the Focus regions section above);
 that same "find the mix bus" need in its interim, pre-panel form, so it claims the chord now rather
 than leaving it idle. Reuses the same select-by-NodeID path `MainComponent::selectNodeInGraph`
 already uses for the timeline binding chip (`GraphEditor::selectModule`) plus the same pan
-primitive the minimap's own click-to-navigate uses (`GraphEditor::centreViewOn`) — no new
+primitive the minimap's own click-to-navigate uses (`GraphEditor::centreViewOn`, now flown by `flyViewTo`) — no new
 selection or pan mechanism was added.
 
 ## Timeline

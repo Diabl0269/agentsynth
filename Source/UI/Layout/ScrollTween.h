@@ -18,6 +18,9 @@ namespace synth::ui {
 class ScrollTween {
 public:
     static constexpr int kAxes = 2;
+    // A view stored in floats moves by a rounded delta (a pan of -400.3 asked as 12.7 lands 12.69998): that is not a
+    // clamp. Less than this much short of the ask is the float rounding; more is a clamp that ends the axis.
+    static constexpr double kClampSlackPx = 1.0e-2;
     bool isActive() const noexcept { return active_; }
     void stop() noexcept { active_ = false; }
 
@@ -45,7 +48,7 @@ public:
             const double want = target - a.current;
             if (want != 0.0) {
                 const double got = apply(i, want);
-                if (std::abs(got - want) > 1.0e-9 * std::max(1.0, std::abs(want)))
+                if (std::abs(got - want) > kClampSlackPx)
                     a.to = a.from = a.current += got; // clamped: nothing further to travel
                 else
                     a.current = target;
@@ -95,6 +98,30 @@ public:
         return true;
     }
 
+    // Flies the view by (dx, dy) from where it is now over `durationMs` (easeOutCubic), replacing any tween running.
+    // The same external-move rule ends it: a pan, drag or zoom that moves the view mid-flight wins. False means "not
+    // flown, apply it yourself" (host not showing and no test opt-in).
+    bool flyBy(juce::Component& host, double dx, double dy, double durationMs, Read read, Scroll scroll) {
+        if (!host.isShowing() && !animateOffScreenForTest_) {
+            stop();
+            return false;
+        }
+        stop();
+        for (int i = 0; i < ScrollTween::kAxes; ++i)
+            last_[(size_t)i] = read(i);
+        tween_.retarget(0, dx);
+        tween_.retarget(1, dy);
+        if (!updater_.has_value())
+            updater_.emplace(&host);
+        auto frame = [this, read, scroll](float t) { step(t, read, scroll); };
+        anim_.start(*updater_, durationMs, easeOutCubic, frame, [frame] { frame(1.0f); });
+        return true;
+    }
+
+    /** Test seams: let flyBy run off screen, and step it by hand (`ms` after its first frame). */
+    void setAnimateOffScreenForTest(bool on) noexcept { animateOffScreenForTest_ = on; }
+    void stepForTest(double ms) { anim_.stepForTest(ms); }
+
     // Idempotent; call before any direct scroll, zoom, clip change or drag start.
     void stop() {
         tween_.stop();
@@ -129,6 +156,7 @@ private:
     }
 
     ScrollTween tween_;
+    bool animateOffScreenForTest_ = false;
     std::array<double, ScrollTween::kAxes> last_{};
     synth::ui::AnimationDriver anim_;
     std::optional<juce::VBlankAnimatorUpdater> updater_;

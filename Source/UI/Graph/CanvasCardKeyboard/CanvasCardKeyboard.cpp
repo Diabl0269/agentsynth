@@ -104,7 +104,7 @@ bool CanvasCardKeyboard::selectInDirection(CardDirection direction) {
                                                      juce::AccessibilityHandler::AnnouncementPriority::medium);
     for (const auto& c : cards)
         if (c.id == target && !editor_.getVisibleCanvasRect().contains(c.bounds))
-            editor_.centreViewOn(c.bounds.getCentre());
+            editor_.flyViewTo(c.bounds.getCentre());
     return true;
 }
 

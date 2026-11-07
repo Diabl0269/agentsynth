@@ -276,7 +276,7 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             // a card that landed below the window would look like the drop did nothing: bring it into view.
             const auto landed = juce::Rectangle<int>(toPos.x, toPos.y, newComp->getWidth(), newComp->getHeight());
             if (!getVisibleCanvasRect().contains(landed.getCentre().toFloat()))
-                centreViewOn(landed.getCentre().toFloat());
+                flyViewTo(landed.getCentre().toFloat());
 
             // Persist the final position immediately so it survives reload even if the
             // animation is still in-flight when the user saves.

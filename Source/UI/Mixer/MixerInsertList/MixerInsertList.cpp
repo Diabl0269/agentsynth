@@ -35,7 +35,10 @@ juce::Colour pathColour(const synth::theme::Theme& theme, int path) {
 
 void MixerInsertList::resetSplitOpenStateForTest() { openSplits().clear(); }
 
-MixerInsertList::MixerInsertList() { setInterceptsMouseClicks(true, false); }
+MixerInsertList::MixerInsertList() {
+    setComponentID("mixerInsertList");
+    setInterceptsMouseClicks(true, false);
+}
 
 MixerInsertList::~MixerInsertList() { foldAnimation_.stop(vblank_); }
 
