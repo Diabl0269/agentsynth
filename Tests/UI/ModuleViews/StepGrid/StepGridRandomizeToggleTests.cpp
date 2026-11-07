@@ -3,6 +3,7 @@
 // panel opens in a real pop-up window here, as a click on the button does.
 #include "../../Layout/NativeWindowTestGuard.h"
 #include "../../Layout/PopupAlphaTrace.h"
+#include "../../Layout/PopupTestCleanup.h"
 #include "StepGridCardFixture.h"
 #include "TestMode/AutomationHiding.h"
 #include "UI/Layout/PopupMotion.h"
@@ -50,11 +51,7 @@ protected:
         synth::testmode::setAppInFrontForTest(true);
         PopupMotion::setAnimateOffScreenForTest(true);
     }
-    void TearDown() override {
-        pumpFor([] { return PopupMotion::getNumLeavingGhosts() == 0 && openBoxes().empty(); });
-        PopupMotion::setAnimateOffScreenForTest(false);
-        synth::testmode::setAppInFrontForTest(std::nullopt);
-    }
+    void TearDown() override { synth::test::finishPopupTest(); }
 
     void click() { card.grid->getTools().getButton(Tool::Randomize).onClick(); }
 

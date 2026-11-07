@@ -9,6 +9,7 @@
 #include "NativeWindowTestGuard.h"
 #include "PopoverRegistry.h"
 #include "PopupAlphaTrace.h"
+#include "PopupTestCleanup.h"
 #include "TestMode/AutomationHiding.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/DrumMachine/DrumIdeasPanel.h"
@@ -213,10 +214,7 @@ protected:
     }
     void TearDown() override {
         drainMessageQueue();
-        pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0 && callOutBoxesOnDesktop() == 0; });
-        PopupMotion::setAnimateOffScreenForTest(false);
-        synth::testmode::setAppInFrontForTest(std::nullopt);
-        test_hooks::popoverMouseForTest() = std::nullopt;
+        synth::test::finishPopupTest();
     }
 
     // Opens `entry` through a slot and records the arrival's frames; null when it did not open.

@@ -6,6 +6,7 @@
 #include "../../TestWait.h"
 #include "../Layout/NativeWindowTestGuard.h"
 #include "../Layout/PopupAlphaTrace.h"
+#include "../Layout/PopupTestCleanup.h"
 #include "TestMode/AutomationHiding.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/PopupHost.h"
@@ -140,9 +141,7 @@ protected:
     }
     void TearDown() override {
         drain();
-        pumpUntil([] { return PopupMotion::getNumLeavingGhosts() == 0 && callOutBoxes() == 0; });
-        PopupMotion::setAnimateOffScreenForTest(false);
-        synth::testmode::setAppInFrontForTest(std::nullopt);
+        synth::test::finishPopupTest();
     }
 
     PopoverSlot::Result openPicker(PopoverSlot& slot, const std::shared_ptr<Seen>& seen) {
