@@ -1,5 +1,5 @@
-// CutoffNoteSnap.cpp -- the Filter cutoff knob's Snap to notes: the snapping, the note steps, the readout and the
-// knob menu's three choices.
+// CutoffNoteSnap.cpp -- the Filter cutoff knob's Snap to notes: the snapping, the note steps, the readout ("A3 220":
+// the note and the whole hertz, short enough for the card's value box) and the knob menu's three choices.
 #include "CutoffNoteSnap.h"
 #include "CardKnobSlider.h"
 #include "Modules/FilterModule.h"
@@ -61,8 +61,10 @@ double stepHz(double hz, int direction, Mode mode, const std::optional<MusicalSc
 }
 
 juce::String readout(double hz) {
-    return pitchgrid::noteName((int)std::lround(pitchgrid::midiOf(hz))) + " " + pitchgrid::formatHz(hz);
+    return pitchgrid::noteName((int)std::lround(pitchgrid::midiOf(hz))) + " " + juce::String((int)std::lround(hz));
 }
+
+juce::String spokenReadout(double hz) { return readout(hz) + " hertz"; }
 
 void wire(CardKnobSlider& knob, FilterModule& filter, std::function<std::optional<MusicalScale>()> songKey) {
     auto* f = &filter;
@@ -78,6 +80,13 @@ void wire(CardKnobSlider& knob, FilterModule& filter, std::function<std::optiona
             return std::nullopt;
         return readout(hz);
     };
+    knob.spokenHook = [f](double hz) -> std::optional<juce::String> {
+        if (liveMode(*f) == Mode::free)
+            return std::nullopt;
+        return spokenReadout(hz);
+    };
+    knob.invalidateAccessibilityHandler();
+    knob.setValueBoxMinimumScale(kValueBoxMinimumScale);
 }
 
 // The pick re-snaps the current cutoff at once, as one change gesture, so the knob never sits between notes in a

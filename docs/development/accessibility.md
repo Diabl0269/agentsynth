@@ -242,7 +242,7 @@ landmark is brighter and wider than a snap line, and an out-of-key note is dotte
 warning for harmonics) only adds to that. **Ring helpers** is a button after Draw (Return or Space opens its menu, the
 arrows pick an item; Stack harmonics opens a popover whose Root, Harmonics, Each quieter by, Width, Cancel and
 Stack are each a named, tooltipped Tab stop, Return stacks, Esc closes). On the card, the Custom type's Cutoff knob menu (right-click or the open-context-menu key)
-holds **Snap to notes**; snapped, Up/Down step one note and the knob's value reads "A3 220 Hz".
+holds **Snap to notes**; snapped, Up/Down step one note and the knob's value reads "A3 220" (the note and the whole hertz; a screen reader hears "A3 220 hertz").
 
 ## Verifying for real
 

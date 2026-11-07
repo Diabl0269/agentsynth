@@ -418,7 +418,7 @@ slider drag is one undo step (the settings are part of the module's extra state)
   new note over 160 ms (they jump under Reduce Motion).
 - **Cutoff Snap to notes.** On the Custom type, a right-click on the card's Cutoff knob offers **Snap to notes**: Free
   (the default), Notes (every semitone) or By key (the song key's notes). Snapped, the knob drags to notes, Up/Down
-  step one note, and it reads "A3 220 Hz". The choice is the card's view state (`"cardView"`), saved with the project
+  step one note, and it reads "A3 220" (the note and the whole hertz, no unit, to fit the knob's value box). The choice is the card's view state (`"cardView"`), saved with the project
   (`CutoffNoteSnap.h`).
 - **Show spectrum.** A toggle at the right end of the same row (off by default, remembered) draws the filter's live
   spectrum faintly behind the grid and the curve, on the curve's own log-frequency axis (level -80 to 0 dB over the

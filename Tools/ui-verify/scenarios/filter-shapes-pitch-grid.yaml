@@ -2,12 +2,26 @@
 # outside the key dotted; Harmonics draws the root's multiples; the Ring helpers menu's Stack harmonics turns the
 # selected shape into peaks on those harmonics in one step (undone by one Cmd+Z).
 #
-# What a user does: sets a Filter to Custom, opens Edit shapes, picks Grid Notes, then Harmonics, then Ring helpers >
+# What a user does: sets the song key to C Major, sets a Filter to Custom, opens Edit shapes, picks Grid Notes, then Harmonics, then Ring helpers >
 # Stack harmonics, and undoes it.
 record: true
+record_target: {id: "Filter shapes: Filter", scale: 1}   # the shape window is a window of its own: film it, not the main window
 save_project: filter-shapes-pitch-grid
 steps:
   - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {settleMs: 600}
+  # A song key, so the Notes grid has notes outside it to dim: C Major from the timeline's Song key field.
+  - key: {keys: cmd+j}
+  - wait: {settleMs: 400}
+  - click: {id: Show Timeline in the main area}
+  - wait: {settleMs: 600}
+  - expect: {id: timelineTransportSongKey, showing: true, within_ms: 2000}
+  - click: {id: timelineTransportSongKey}
+  - expect: {id: keyPicker, showing: true, within_ms: 2000}
+  - click: {id: "C Major, C D E F G A B"}
+  - expect: {id: keyPicker, exists: false, within_ms: 2000}
+  - expect: {id: timelineTransportSongKey, text: C Major, within_ms: 2000}
+  - click: {id: Show Canvas in the main area}   # back to the graph
   - wait: {settleMs: 600}
   - click: {id: window, x: 1019, y: 411}                       # the Filter Type combo
   - wait: {settleMs: 600}
@@ -29,6 +43,7 @@ steps:
   - click: {id: Harmonics}
   - wait: {settleMs: 400}
   - screenshot: {id: "Filter shapes: Filter", name: harmonics-grid}
+  - screenshot: {id: Shape curve, name: curve-before-stack}   # the undo check compares this with curve-after-undo (the curve exposes no point count)
   - click: {id: Ring helpers}
   - wait: {settleMs: 500} # the menu fades in before it takes keys
   - screenshot: {id: menu, name: ring-helpers-menu}
@@ -44,3 +59,4 @@ steps:
   - key: {keys: cmd+z}
   - wait: {settleMs: 400}
   - screenshot: {id: "Filter shapes: Filter", name: after-undo}
+  - screenshot: {id: Shape curve, name: curve-after-undo}
