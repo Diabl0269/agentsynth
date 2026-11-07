@@ -322,6 +322,10 @@ precompiled header carries its build directory's absolute path, so one served fr
 worktree's build fails every compile that uses it. `cmake/Pch.cmake` refuses to configure with
 the option on while `base_dir` is set. See [ci-pipeline.md](ci-pipeline.md#optimizations).
 
+## Build commit
+
+Every macOS build of `AgentSynth` writes the key `BuildCommit` into the bundle's `Contents/Info.plist` as a `POST_BUILD` step (`cmake/BuildCommit.cmake`, `scripts/write-build-commit.sh`, before dev-signing so the signature covers it): the full `git rev-parse HEAD` of the source tree, `-dirty` appended when tracked files differ from HEAD, `unknown` outside git. Read it with `/usr/libexec/PlistBuddy -c "Print :BuildCommit" "<app>/Contents/Info.plist"`.
+
 ## Dev-signing
 
 `scripts/dev-sign-app.sh` re-signs the built bundle with a stable **Apple Development** identity
