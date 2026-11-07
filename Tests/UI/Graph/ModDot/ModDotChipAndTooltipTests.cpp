@@ -82,8 +82,9 @@ TEST_F(ModuleComponentTest, ThreeModsOnAKnobInTheCardsOnlyRowAreAllInsideTheCard
 TEST_F(ModuleComponentTest, AKnobWithItsNameDrawnBesideItShowsNoNameTipButKeepsItsScreenReaderNameAndTooltip) {
     Fixture f;
     ASSERT_NE(f.gainKnob, nullptr);
-    synth::ui::AppTooltipWindow window(f.editor.get());
-    EXPECT_TRUE(window.getTipFor(*f.gainKnob).isEmpty()) << window.getTipFor(*f.gainKnob);
+    using synth::ui::AppTooltipWindow;
+    const auto tip = AppTooltipWindow::withoutDrawnName(*f.gainKnob, f.gainKnob->getTooltip());
+    EXPECT_TRUE(tip.isEmpty()) << tip;
     EXPECT_TRUE(f.gainKnob->getTooltip().isNotEmpty()) << "the tooltip stays for the coverage rules";
     EXPECT_TRUE(f.gainKnob->getTitle().isNotEmpty());
 }
@@ -93,8 +94,9 @@ TEST_F(ModuleComponentTest, AControlWithNoVisibleNameKeepsItsTooltip) {
     ASSERT_NE(f.vcaCard, nullptr);
     auto* bypass = drawableButtonNamed(*f.vcaCard, "Bypass");
     ASSERT_NE(bypass, nullptr);
-    synth::ui::AppTooltipWindow window(f.editor.get());
-    EXPECT_TRUE(window.getTipFor(*bypass).isNotEmpty());
+    // juce's own getTipFor is empty unless the app is in front (never on a headless runner), so ask the name rule.
+    using synth::ui::AppTooltipWindow;
+    EXPECT_TRUE(AppTooltipWindow::withoutDrawnName(*bypass, bypass->getTooltip()).isNotEmpty());
 }
 
 TEST(AppTooltipWindowDrawnName, ATipKeepsOnlyWhatFollowsTheNameDrawnBesideTheControl) {
