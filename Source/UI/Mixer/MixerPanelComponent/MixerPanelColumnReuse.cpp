@@ -124,6 +124,7 @@ std::unique_ptr<MixerColumnComponent> MixerPanelComponent::buildStripColumn(cons
     widget->setHeaderContextMenu([this, channelId](const juce::MouseEvent&) { showChannelMenu(channelId); });
     widget->setColourEditable(state.colourEditable, colourShortcutText());
     widget->setPanShortcutText(panShortcutText());
+    widget->setFaderShortcutText(faderShortcutText());
     widget->onColourPickRequested = [this, uuid = column.uuid](juce::Rectangle<int> dotScreenBounds) {
         openColourPicker(uuid, dotScreenBounds);
     };

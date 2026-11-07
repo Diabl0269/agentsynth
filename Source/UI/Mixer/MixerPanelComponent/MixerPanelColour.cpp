@@ -109,7 +109,10 @@ void MixerPanelComponent::refreshShortcutHints() {
         if (const auto state = stripColumnState_.find(column); state != stripColumnState_.end())
             column->setColourEditable(state->second.colourEditable, colourShortcutText());
         column->setPanShortcutText(panShortcutText());
+        column->setFaderShortcutText(faderShortcutText());
     }
+    if (masterColumn_ != nullptr)
+        masterColumn_->setFaderShortcutText(faderShortcutText());
 }
 
 // Both pan keys, for the pan knobs' tooltips.
@@ -118,6 +121,14 @@ juce::String MixerPanelComponent::panShortcutText() const {
         return "Shift+Left / Shift+Right";
     return ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerPanLeft")) + " / " +
            ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerPanRight"));
+}
+
+// Both fader nudge keys, for the faders' tooltips.
+juce::String MixerPanelComponent::faderShortcutText() const {
+    if (shortcuts_ == nullptr)
+        return "Shift + Up / Shift + Down";
+    return ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerNudgeFaderUp")) + " / " +
+           ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerNudgeFaderDown"));
 }
 
 // The row bypass buttons' tooltips name the key; the default letter stands in when no ShortcutManager is installed.

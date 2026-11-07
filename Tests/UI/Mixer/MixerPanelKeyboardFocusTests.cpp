@@ -54,6 +54,11 @@ juce::KeyPress leftKey() { return juce::KeyPress(juce::KeyPress::leftKey, juce::
 juce::KeyPress rightKey() { return juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::noModifiers, 0); }
 juce::KeyPress upKey() { return juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0); }
 juce::KeyPress shiftUpKey() { return juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0); }
+juce::KeyPress shiftDownKey() { return juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0); }
+juce::KeyPress altShiftUpKey() {
+    return juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier | juce::ModifierKeys::altModifier,
+                          0);
+}
 juce::KeyPress returnKey() { return juce::KeyPress(juce::KeyPress::returnKey, juce::ModifierKeys::noModifiers, 0); }
 juce::KeyPress mKey() { return juce::KeyPress('m', juce::ModifierKeys::noModifiers, 0); }
 juce::KeyPress sKey() { return juce::KeyPress('s', juce::ModifierKeys::noModifiers, 0); }
@@ -175,13 +180,15 @@ TEST(MixerPanelKeyboardFocusTest, ArrowWalkPointsAccessibilityFocusAtEachColumns
         << "Master's own fader, same as a strip";
 }
 
-TEST(MixerPanelKeyboardFocusTest, UpNudgesFocusedFaderByOneDbAsOneUndoStep) {
+TEST(MixerPanelKeyboardFocusTest, ShiftUpNudgesFocusedFaderByOneDbAsOneUndoStep) {
     PanelFixture f;
     f.panel->keyPressed(rightKey()); // focus strip 0
     const auto nodeId = f.panel->getStripColumnForTest(0)->getNodeId();
     const float before = gainOf(f.mc, nodeId);
 
-    EXPECT_TRUE(f.panel->keyPressed(upKey()));
+    EXPECT_TRUE(f.panel->keyPressed(upKey())) << "plain Up is swallowed on a column";
+    EXPECT_NEAR(gainOf(f.mc, nodeId), before, 1.0e-3f) << "plain Up no longer moves the fader";
+    EXPECT_TRUE(f.panel->keyPressed(shiftUpKey()));
     EXPECT_NEAR(gainOf(f.mc, nodeId), before + 1.0f, 1.0e-3f);
 
     ASSERT_TRUE(f.mc.getUndoManager().canUndo());
@@ -189,14 +196,37 @@ TEST(MixerPanelKeyboardFocusTest, UpNudgesFocusedFaderByOneDbAsOneUndoStep) {
     EXPECT_NEAR(gainOf(f.mc, nodeId), before, 1.0e-3f) << "one undo must restore the pre-nudge gain";
 }
 
-TEST(MixerPanelKeyboardFocusTest, ShiftUpNudgesByPointOneDb) {
+TEST(MixerPanelKeyboardFocusTest, AltShiftUpNudgesByPointOneDbAndShiftDownLowers) {
     PanelFixture f;
     f.panel->keyPressed(rightKey());
     const auto nodeId = f.panel->getStripColumnForTest(0)->getNodeId();
     const float before = gainOf(f.mc, nodeId);
 
-    EXPECT_TRUE(f.panel->keyPressed(shiftUpKey()));
+    EXPECT_TRUE(f.panel->keyPressed(altShiftUpKey()));
     EXPECT_NEAR(gainOf(f.mc, nodeId), before + 0.1f, 1.0e-3f);
+    EXPECT_TRUE(f.panel->keyPressed(shiftDownKey()));
+    EXPECT_NEAR(gainOf(f.mc, nodeId), before - 0.9f, 1.0e-3f);
+    EXPECT_FALSE(f.panel->getFocusedRowForTest().has_value()) << "Shift+Down nudges, it never enters the rows";
+}
+
+TEST(MixerPanelKeyboardFocusTest, TheFaderNudgeKeysAreRebindableAndTheTooltipNamesThem) {
+    PanelFixture f;
+    ShortcutManager shortcuts;
+    f.panel->setShortcutManager(&shortcuts);
+    f.panel->keyPressed(rightKey());
+    auto& slider = f.panel->getStripColumnForTest(0)->getFaderForTest().getSlider();
+    EXPECT_TRUE(slider.getTooltip().contains("Shift + Up")) << slider.getTooltip();
+    const auto nodeId = f.panel->getStripColumnForTest(0)->getNodeId();
+    const float before = gainOf(f.mc, nodeId);
+
+    shortcuts.setBinding("mixerNudgeFaderUp", juce::KeyPress('u', juce::ModifierKeys::noModifiers, 0));
+    f.panel->refreshShortcutHints();
+    EXPECT_TRUE(slider.getTooltip().contains("U /")) << slider.getTooltip();
+    f.panel->keyPressed(shiftUpKey());
+    EXPECT_NEAR(gainOf(f.mc, nodeId), before, 1.0e-3f) << "the old chord no longer nudges";
+    EXPECT_TRUE(f.panel->keyPressed(juce::KeyPress('u', juce::ModifierKeys::noModifiers, 0)));
+    EXPECT_NEAR(gainOf(f.mc, nodeId), before + 1.0f, 1.0e-3f);
+    f.panel->setShortcutManager(nullptr);
 }
 
 TEST(MixerPanelKeyboardFocusTest, UpIsANoOpOnTheDirectColumn) {
@@ -204,7 +234,7 @@ TEST(MixerPanelKeyboardFocusTest, UpIsANoOpOnTheDirectColumn) {
     f.panel->keyPressed(rightKey()); // -> strip0
     f.panel->keyPressed(rightKey()); // -> Direct
     ASSERT_TRUE(f.panel->getDirectColumnForTest()->isKeyboardFocusedForTest());
-    EXPECT_FALSE(f.panel->keyPressed(upKey()));
+    EXPECT_FALSE(f.panel->keyPressed(shiftUpKey())) << "Direct has no fader";
 }
 
 TEST(MixerPanelKeyboardFocusTest, EnterSelectsTheFocusedColumnsMacroOnCanvas) {

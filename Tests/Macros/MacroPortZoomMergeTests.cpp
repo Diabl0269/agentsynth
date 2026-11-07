@@ -2,6 +2,7 @@
 // narrows to a rail (docs/macros/ports.md#how-a-port-is-drawn). Canvas geometry (hull, widget bounds) never moves;
 // only the interior jack's position, the painted strip and the cables anchored on that jack follow the zoom.
 
+#include "Modules/FilterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"

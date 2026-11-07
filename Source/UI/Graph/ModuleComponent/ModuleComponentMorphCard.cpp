@@ -9,6 +9,7 @@
 #include "Mixer/ChannelFlows/UpstreamPitchSource.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentModBand.h"
+#include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Transport/TransportService.h"
@@ -16,6 +17,7 @@
 #include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/ModuleViews/ShapeEditor/FilterShapesAdapter.h"
 #include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
 

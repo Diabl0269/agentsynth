@@ -48,7 +48,7 @@ name the keys and follow a rebind.
 
 ## Test mode
 
-`getState` on `mixerFocusedColumn` (a hidden child of the panel) reports `focusedColumn`, the title of the column whose outline shows (empty when none).
+`getState` on `mixerFocusedColumn` (a hidden child of the panel) reports `focusedColumn`, the title of the column whose outline shows (empty when none), and `focusedRow` / `focusedRowIndex`, the focused row's screen-reader text and index (empty and -1 in column mode).
 `Tools/ui-verify/scenarios/mixer-strip-click-focus.yaml` clicks a strip, duplicates it three times, clicks the canvas
 and presses Cmd+Up; `Tests/UI/Mixer/MixerPanelKeyboardFocusTests.cpp` drives the same through the real ComponentPeer.
 `mixer-colour-key.yaml` opens the picker with C and with Return on the dot; `MixerColourDotTests.cpp` pins the keys.

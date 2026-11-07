@@ -2,6 +2,7 @@
 // (one undo step per drag), between dots it shows the blend and refuses edits, and the Show Curve pill is remembered.
 #include "../../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "ModuleComponentTestFixture.h"
+#include "Modules/FilterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"

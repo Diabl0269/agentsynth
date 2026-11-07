@@ -10,6 +10,7 @@
 #include "ModuleComponentModChip.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ExternalMidiModule.h"
+#include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "MorphShapesCard/MorphShapesCard.h"
@@ -28,6 +29,7 @@
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
+#include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <cmath>

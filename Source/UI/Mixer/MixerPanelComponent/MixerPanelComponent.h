@@ -421,6 +421,7 @@ private:
     bool panFocused(float delta);
     bool hideFocusedChannel();
     juce::String panShortcutText() const;
+    juce::String faderShortcutText() const;
     static constexpr float kPanStep = 0.1f; // a tenth of the way to one side
     void wireSectionLayout();
     void onSectionGeometryChanged();
@@ -500,6 +501,8 @@ private:
     juce::String sectionToggleShortcutText(MixerSection section) const;
     bool moveFocus(int direction);
     bool nudgeFocusedFader(float deltaDb);
+    /** The dB step the fader nudge keys give `key`: +-1 dB, +-0.1 dB with Alt added, else 0. */
+    float faderNudgeFor(const juce::KeyPress& key) const;
     bool selectFocusedOnCanvas();
     bool toggleFocusedMuted();
     bool toggleFocusedSoloed();
@@ -518,6 +521,7 @@ private:
     MixerSendList* focusedSendList() const;
     /** The focused column's rows in walk order: its inserts, then its sends. */
     std::vector<MixerRowRef> focusedRows() const;
+    MixerColumnComponent* focusedEqColumn() const;
     bool enterRows();
     void exitRows();
     bool handleRowKey(const juce::KeyPress& key);

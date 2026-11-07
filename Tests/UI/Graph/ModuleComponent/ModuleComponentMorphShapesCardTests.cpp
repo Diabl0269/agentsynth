@@ -5,11 +5,13 @@
 #include "../../ModuleViews/ShapeEditor/ShapeEditorTestHelpers.h"
 #include "ModuleComponentTestFixture.h"
 #include "Modules/Filter/CustomFilterCutoff.h"
+#include "Modules/FilterModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
+#include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 
 using namespace synth::ui;

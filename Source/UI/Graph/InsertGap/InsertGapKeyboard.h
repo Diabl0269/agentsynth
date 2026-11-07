@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <vector>
 
 class AppUndoManager;
 class GraphEditor;
@@ -30,5 +31,11 @@ juce::AudioProcessorGraph::NodeID
 insertModuleAfterNode(GraphEditor& editor, AppUndoManager& undoManager, MacroSet& macros, const juce::String& name,
                       juce::AudioProcessorGraph::NodeID anchor,
                       const std::function<bool(juce::AudioProcessorGraph::NodeID)>& wire);
+
+/** A mixer insert reorder's canvas follow-up (docs/mixer/row-motion.md#the-canvas-follows-a-reorder): `before` and
+ *  `after` are one run of the chain in its old and new order; when their cards sit on one row in the old order, they
+ *  trade places along it (gliding). Call it inside the reorder's undo record. Message thread only. */
+void followReorderOnCanvas(GraphEditor& editor, const std::vector<juce::AudioProcessorGraph::NodeID>& before,
+                           const std::vector<juce::AudioProcessorGraph::NodeID>& after);
 
 } // namespace synth

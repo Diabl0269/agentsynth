@@ -106,6 +106,8 @@ public:
 
     /** The fader nudged one undo step, or false when nothing is bound. */
     bool nudgeFader(float deltaDb) { return fader_.nudge(deltaDb); }
+    /** The fader nudge keys' text for the fader's tooltip. */
+    void setFaderShortcutText(const juce::String& keys) { fader_.setNudgeShortcutText(keys); }
 
     void setKeyboardFocused(bool focused);
     bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }

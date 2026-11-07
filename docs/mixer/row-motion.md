@@ -14,6 +14,19 @@ A drag-reorder or Alt+Up/Down move of an insert is the same shape as a send's: `
 from where it was let go (`pendingInsertSettle_`, played on the rebuilt column's list). A dry row has the key
 `dry:<fork uuid>:<path>`, so adding a module to that path animates as an ordinary row add. See
 [Reordering inserts](mixer.md#reordering-inserts).
+A sound source at the head of a chain (an instrument, with nothing feeding it) cannot move, and no row moves above it (`MixerInsertList::moveFeasible`).
+
+## The canvas follows a reorder
+
+When an insert moves (Alt+Up/Down on a focused row, or a drag), the moved modules' cards trade places on the canvas
+too, so the patch reads in the new chain order. `synth::followReorderOnCanvas` (`UI/Graph/InsertGap/InsertGapKeyboard.cpp`, called from `MixerInsertList::moveRowTo`)
+takes the run of rows the move rotated and deals its cards into the slots they held: the first card's left edge, then
+each gap between neighbours, so cards of different widths never overlap. It runs only when every card in the run is on
+screen, in one container (the root or one macro), on one row (tops within 8 px) and left to right in the old chain
+order; otherwise the user laid the cards out by hand and they stay put while the chain still reorders. The positions
+land through the canvas's own card move in one `CardGlideAnimator::Scope`, so cards and cables glide, and inside the
+reorder's own undo record, so one Cmd+Z restores the chain order and both positions. Tests:
+`MixerInsertCardSwapTest` in `Tests/UI/Mixer/MixerRowMoveAndRevealTests.cpp`.
 
 ## Column motion
 

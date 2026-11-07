@@ -1,7 +1,6 @@
 #pragma once
 
 #include "AppUndoManager.h"
-#include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/CardBody/CardBlockFade.h"
@@ -16,7 +15,6 @@
 #include "UI/Library/SoundBrowser/SoundDropAdapter.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
-#include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/ModuleViews/ScopeComponent.h"
 #include "UI/ModuleViews/ThresholdControlComponent.h"
 #include "UI/ModuleViews/WavetableDisplayComponent.h"
@@ -30,8 +28,9 @@
 #include <vector>
 
 class AudioEngine;
-class GraphEditor;        // Forward declaration
-class ExternalMidiModule; // Forward declaration — see Modules/ExternalMidiModule.h
+class GraphEditor;                // Forward declaration
+class FrequencyResponseComponent; // Forward declaration — see UI/ModuleViews/FrequencyResponseComponent.h
+class ExternalMidiModule;         // Forward declaration — see Modules/ExternalMidiModule.h
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 class CardControlGestures;   // Forward declaration — see UI/Graph/CardWidgets/CardControlGestures.h

@@ -262,11 +262,15 @@ private:
     juce::String splitTooltip(int entryIndex) const;
     juce::Rectangle<int> splitIconBounds(int rowIndex) const;
     bool canMoveRow(int rowIndex, int delta) const;
+    bool headIsSoundSource(int from, int to) const;
     bool inSameRun(int row, int other) const;
     bool moveFeasible(int from, int to) const;
     /** The rows `rowIndex` can trade places with: its run of modules, as first/last row indices. A row outside any
      *  movable run (a split, a dry path, a one-row run, a bus's fixed first insert) gets {-1, -1}. */
     std::pair<int, int> moveRunOf(int rowIndex) const;
+    /** The node ids of rows fromRow..toRow in chain order, before and after moving `fromRow` to `toRow`. */
+    std::pair<std::vector<juce::AudioProcessorGraph::NodeID>, std::vector<juce::AudioProcessorGraph::NodeID>>
+    runOrderAround(int fromRow, int toRow) const;
     bool isNameArea(juce::Point<int> position) const;
     void updateHoverCursor(juce::Point<int> position);
     float rowDrawTop(int rowIndex) const;

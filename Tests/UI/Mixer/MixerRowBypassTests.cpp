@@ -37,7 +37,7 @@ bool sendBypassed(HeaderRig& rig) { return rig.strip(rig.firstColumn().getNodeId
 /** Right once: focus on the first column; Tab: into its rows (the first row is the first insert). */
 void enterRows(HeaderRig& rig) {
     ASSERT_TRUE(rig.panel().keyPressed(key(juce::KeyPress::rightKey)));
-    ASSERT_TRUE(rig.panel().keyPressed(key(juce::KeyPress::tabKey)));
+    ASSERT_TRUE(rig.panel().keyPressed(key(juce::KeyPress::downKey)));
 }
 
 void stepToSendRow(HeaderRig& rig) {

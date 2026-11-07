@@ -69,6 +69,8 @@ public:
     /** "<channel name> fader" (e.g. "Lead 1 fader") -- the accessible name VoiceOver reads
      *  ahead of the slider's own value text below. */
     void setChannelName(const juce::String& name);
+    /** The nudge keys the tooltip names ("Shift + Up / Shift + Down"). */
+    void setNudgeShortcutText(const juce::String& keys);
 
     /** Moves REAL accessibility focus (not keyboard focus) to the fader slider's
      *  handler when the column it belongs to becomes the panel's keyboard-walked focus. Safe to
@@ -88,6 +90,7 @@ private:
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
 
     MixerFaderSlider slider_;
+    juce::String nudgeShortcutText_ = "Shift + Up / Shift + Down";
     juce::Label readout_;
     std::unique_ptr<juce::SliderParameterAttachment> attachment_;
 

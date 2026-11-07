@@ -4,6 +4,7 @@
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "Modules/FilterModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
