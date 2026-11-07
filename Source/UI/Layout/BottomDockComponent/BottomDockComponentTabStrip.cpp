@@ -96,7 +96,8 @@ void BottomDockComponent::beginTabDrag(Tab tab, const juce::MouseEvent& e) {
         return;
     }
     const float pointer = pointerXInDock(e);
-    reorder_.begin(slots, pressedKey, pointer - slots[static_cast<size_t>(pressedKey)].start, pointer, isShowing());
+    reorder_.begin(slots, pressedKey, pointer - slots[static_cast<size_t>(pressedKey)].start, pointer,
+                   isShowing() || reorderAnimateOffScreenForTest_);
 }
 
 void BottomDockComponent::dragTab(const juce::MouseEvent& e) {
@@ -222,6 +223,14 @@ void BottomDockComponent::cancelTabDrag() {
     onReorderFrame();
 }
 
+namespace {
+bool sameTabSet(std::vector<BottomDockComponent::Tab> a, std::vector<BottomDockComponent::Tab> b) {
+    std::sort(a.begin(), a.end());
+    std::sort(b.begin(), b.end());
+    return a == b;
+}
+} // namespace
+
 // Splits tabButtonsArea_ between the tabs currently offered (isTabOfferedInStrip -- skips a Mixer
 // disabled by placement AND any detached tab); the last one absorbs the rounding remainder. A tab
 // not offered is hidden outright -- it has left the strip.
@@ -229,7 +238,10 @@ void BottomDockComponent::layoutTabButtons() {
     const auto offered = offeredTabs();
     if (tabMotion_.isRunning() && offered != tabMotion_.getTarget())
         finishTabMotion(); // the set changed again mid-motion: land that one, then move on from there
-    if (!tabMotion_.isRunning() && offered != laidOutTabs_ && !laidOutTabs_.empty() && !tabButtonsArea_.isEmpty() &&
+    // A pure reorder (same tabs, new order) is no change of the set: the drag's own release glide moves the
+    // buttons from where they were let go, and a tab motion here would first put them back in the old order.
+    const bool setChanged = !sameTabSet(offered, laidOutTabs_);
+    if (!tabMotion_.isRunning() && setChanged && !laidOutTabs_.empty() && !tabButtonsArea_.isEmpty() &&
         FadeVisibility::canAnimateIn(this))
         startTabMotion(laidOutTabs_, offered);
     if (tabMotion_.isRunning()) {

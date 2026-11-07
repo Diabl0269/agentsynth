@@ -414,6 +414,13 @@ public:
      *  end), since no VBlank reaches an off-screen strip. */
     void stepTabMotionForTest(double elapsedMs);
     bool isTabMotionRunningForTest() const noexcept { return tabMotion_.isRunning(); }
+    /** Test seam: lets an off-screen strip run the drag's glides on `clock` (ms), stepped by hand with
+     *  stepReorderFrameForTest(), since no VBlank reaches it. */
+    void setReorderAnimationForTest(bool animate, ReorderDragAnimator::Clock clock) {
+        reorderAnimateOffScreenForTest_ = animate;
+        reorder_.setClock(std::move(clock));
+    }
+    void stepReorderFrameForTest() { onReorderFrame(); }
     /** Test seam: the host component of `tab` (its alpha and visibility show a tab cross-fade); never Canvas. */
     juce::Component& getTabHostForTest(Tab tab) noexcept { return *hostForTab(tab); }
     /** Test seam: the left edge (dock coordinates) the lifted tab is drawn at. */
@@ -445,7 +452,8 @@ private:
             , owner_(owner)
             , tab_(tab) {
             setTitle(text);
-            setWantsKeyboardFocus(false); // the strip's one Tab stop is stripFocus_
+            setComponentID("dockTab:" + text); // how a test-mode scenario finds the tab
+            setWantsKeyboardFocus(false);      // the strip's one Tab stop is stripFocus_
             addAndMakeVisible(swapIcon_);
             swapIcon_.setWantsKeyboardFocus(false);
             swapIcon_.onClick = [this] { owner_.swapTabToMain(tab_); };
@@ -654,6 +662,7 @@ private:
     // The tabs offered when the press happened, in display order: the animator's item keys.
     std::vector<Tab> reorderTabs_;
     ReorderDragAnimator reorder_;
+    bool reorderAnimateOffScreenForTest_ = false;
     ReorderFramePump reorderFrames_{*this};
     // Tabs coming and going: the offered set the buttons were last laid out for, and the move to a new one.
     BottomDockTabMotion tabMotion_;

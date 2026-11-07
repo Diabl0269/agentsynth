@@ -2,6 +2,7 @@
 // own window) and when it comes back: the leaving tab shrinks and its neighbours close up, the returning tab opens a
 // gap and grows (docs/layout/animation.md#bottom-dock-tabs). The first group pins the pure placement maths, the
 // second the dock itself: real detach and redock, stepped by hand since no VBlank reaches an off-screen strip.
+#include "../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "BottomDockMainAreaFixture.h"
 #include "FadeVisibilityTestGuard.h"
 #include "UI/Layout/BottomDockComponent/BottomDockTabMotion.h"
@@ -303,4 +304,52 @@ TEST_F(BottomDockTabMotionDockTest, ASwapToTheMainAreaPlaysTheSameMotion) {
     EXPECT_TRUE(tabButton(Tab::Canvas).isVisible()) << "and the Canvas tab has grown in";
     // The canvas buttons take the strip row's right end while the canvas is a tab; the tabs share the rest.
     EXPECT_NEAR(tabWidth(Tab::Canvas), (dock().getWidth() - dock().getStripAccessoryBounds().getWidth()) / 3, 1);
+}
+
+// ---- A dropped tab glides from the mouse to its slot; the old order never flashes back (the drop's rebuild
+// reads a pure reorder as a changed tab set and used to start a tab motion that re-placed the old order) ------
+
+TEST_F(BottomDockTabMotionDockTest, ADroppedTabGlidesFromWhereItWasLetGoAndNoTabMotionPutsTheOldOrderBack) {
+    FadeAnimateGuard guard;
+    double now = 0.0;
+    dock().setReorderAnimationForTest(true, [&now] { return now; });
+    auto* grabbed = &tabButton(Tab::Timeline); // dragged to the far end
+    const int lastCentre = tabButton(Tab::MidiRemote).getBounds().getCentreX();
+
+    grabbed->mouseDown(makeClickEvent(*grabbed, {10.0f, 8.0f}));
+    grabbed->mouseDrag(makeDragEvent(*grabbed, {10.0f + 40.0f, 8.0f}, {10.0f, 8.0f}));
+    const float far = static_cast<float>(lastCentre - grabbed->getX());
+    now = 500.0; // the neighbours have made room
+    grabbed->mouseDrag(makeDragEvent(*grabbed, {far, 8.0f}, {10.0f, 8.0f}));
+    now = 1000.0;
+    dock().stepReorderFrameForTest();
+    const int oldMixerSlot = tabWidth(Tab::Timeline); // the slots at rest: Timeline, Mixer, Controllers
+    const int mixerBefore = tabButton(Tab::Mixer).getX();
+    ASSERT_LT(mixerBefore, oldMixerSlot) << "the Mixer tab made room, left of its old slot";
+
+    grabbed->mouseUp(makeClickEvent(*grabbed, {far, 8.0f}));
+
+    EXPECT_FALSE(dock().isTabMotionRunningForTest()) << "a reorder is not a change of the tab set";
+    EXPECT_EQ(tabButton(Tab::Mixer).getX(), mixerBefore) << "first frame after the drop: no jump back to the old slot";
+    EXPECT_EQ(dock().getTabOrderForTest(), (Tabs{Tab::Mixer, Tab::MidiRemote, Tab::Timeline, Tab::Canvas}));
+
+    now = 1000.0 + 70.0;
+    dock().stepReorderFrameForTest();
+    EXPECT_FALSE(dock().isTabMotionRunningForTest());
+    now = 1000.0 + 500.0;
+    dock().stepReorderFrameForTest();
+    EXPECT_EQ(tabButton(Tab::Mixer).getX(), 0);
+    EXPECT_EQ(tabButton(Tab::MidiRemote).getX(), tabButton(Tab::Mixer).getRight());
+    EXPECT_EQ(tabButton(Tab::Timeline).getX(), tabButton(Tab::MidiRemote).getRight());
+}
+
+TEST_F(BottomDockTabMotionDockTest, ARealChangeOfTheTabSetStillRunsTabMotionAfterAReorder) {
+    FadeAnimateGuard guard;
+    dock().reorderTabsForTest(Tab::Timeline, Tab::MidiRemote);
+    EXPECT_FALSE(dock().isTabMotionRunningForTest());
+    dock().getMixerHost().setDetached(true);
+    EXPECT_TRUE(dock().isTabMotionRunningForTest());
+    dock().stepTabMotionForTest(1.0e6);
+    dock().getMixerHost().setDetached(false);
+    EXPECT_TRUE(dock().isTabMotionRunningForTest()) << "a tab coming back";
 }
