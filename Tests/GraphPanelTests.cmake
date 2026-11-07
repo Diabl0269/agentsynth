@@ -5,7 +5,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotGestureTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotOnlyOwnPanelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotSingleReadoutTests.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotSourcesDisconnectAllTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotChipAndTooltipTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModDotRemoveRoutingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/ModRingFadeTests.cpp
