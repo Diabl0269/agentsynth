@@ -470,5 +470,74 @@ class StalePixelCheckTests(unittest.TestCase):
                                                      "checkStalePixels"])
 
 
+class ShotLoggingApp(DrawingApp):
+    def call(self, cmd, timeout_ms=None, **args):
+        if cmd == "screenshot":
+            self.calls.append((cmd, args))
+        return super().call(cmd, timeout_ms=timeout_ms, **args)
+
+
+class ProofMarkTests(unittest.TestCase):
+    def run_scenario(self, text, out):
+        app = ShotLoggingApp({})
+        runner = run.Runner(None, out, run.parse_scenario(text, "demo"), app_factory=lambda *a, **k: app)
+        return runner, app, runner.run()
+
+    def test_a_record_frame_is_the_screen_unless_a_target_is_given(self):
+        with tempfile.TemporaryDirectory() as out:
+            _, app, (ok, _) = self.run_scenario("record: true\nsteps:\n  - wait: {}\n", out)
+            self.assertTrue(ok)
+            self.assertEqual({c[1]["id"] for c in app.calls if c[0] == "screenshot"}, {"screen"})
+            _, app, _ = self.run_scenario("record: true\nrecord_target: {id: picker, scale: 2}\nsteps:\n  - wait: {}\n", out)
+            self.assertEqual({c[1]["id"] for c in app.calls if c[0] == "screenshot"}, {"picker"})
+
+    def test_a_mark_saves_the_still_and_cuts_a_clip_around_it(self):
+        text = "record: true\nsteps:\n  - wait: {}\n  - mark: {check: 3, name: picker-open}\n  - wait: {}\n"
+        with tempfile.TemporaryDirectory() as out:
+            runner, _, (ok, message) = self.run_scenario(text, out)
+            self.assertTrue(ok, message)
+            still = os.path.join(out, "proof", "picker-open.png")
+            self.assertTrue(os.path.getsize(still) > 0)
+            entry = [e for e in runner.log if e["cmd"] == "mark"][0]
+            self.assertEqual((entry["reply"]["check"], entry["reply"]["name"], entry["reply"]["still"]),
+                             (3, "picker-open", still))
+            if recording.find_ffmpeg() is None:
+                self.skipTest("no ffmpeg, so no clip")
+            clip = os.path.join(out, "demo-picker-open.mp4")
+            self.assertTrue(os.path.getsize(clip) > 0)
+            self.assertEqual(entry["reply"]["clip"], clip)
+
+    def test_a_mark_without_record_still_saves_the_still_and_no_clip(self):
+        with tempfile.TemporaryDirectory() as out:
+            runner, _, (ok, _) = self.run_scenario("steps:\n  - mark: {check: 1, name: only-still}\n", out)
+            self.assertTrue(ok)
+            self.assertTrue(os.path.isfile(os.path.join(out, "proof", "only-still.png")))
+            self.assertEqual([f for f in os.listdir(out) if f.endswith(".mp4")], [])
+            self.assertIsNone(runner.marks[0]["reply"]["clip"])
+
+    def test_malformed_marks_are_refused_at_parse_time(self):
+        good = "check: 1, name: a-b"
+        bad = ["{name: a}", "{check: 1}", "{check: x, name: a}", "{check: 0, name: a}", "{check: 1.5, name: a}",
+               "{check: true, name: a}", "{check: 1, name: Upper}", "{check: 1, name: has_underscore}",
+               "{check: 1, name: ''}", "{check: 1, name: a, extra: 1}"]
+        run.parse_scenario("steps:\n  - mark: {%s}\n" % good, "x")
+        for args in bad:
+            with self.assertRaises(run.ScenarioError, msg=args):
+                run.parse_scenario("steps:\n  - mark: %s\n" % args, "x")
+        with self.assertRaises(run.ScenarioError):  # a name is used once per scenario
+            run.parse_scenario("steps:\n  - mark: {%s}\n  - mark: {check: 2, name: a-b}\n" % good, "x")
+
+    def test_the_clip_window_is_two_and_a_half_before_to_three_after_within_four_to_six_seconds(self):
+        recorder = recording.Recorder("unused")
+        recorder.frames = [("f", 1.0)] * 40  # 39 s and the last frame's hold
+        start, length = recorder.clip_window(20.0)
+        self.assertEqual((start, length), (17.5, 5.5))
+        start, length = recorder.clip_window(0.5)  # near the start: clamped, still four seconds
+        self.assertEqual((start, length), (0.0, 4.0))
+        start, length = recorder.clip_window(39.0)  # near the end: slides back to keep four seconds
+        self.assertEqual(round(start + length, 3), round(recorder.duration(), 3))
+        self.assertGreaterEqual(length, 4.0)
+
+
 if __name__ == "__main__":
     unittest.main()

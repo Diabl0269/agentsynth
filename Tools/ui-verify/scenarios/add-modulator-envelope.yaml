@@ -36,6 +36,7 @@ steps:
   - wait: {}
   - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
   - screenshot: {id: modMatrixPicker, name: picker-list}
+  - mark: {check: 1, name: add-modulator-list}  # the list stays open across the mark
   - type: {text: adsr}
   - wait: {}
   - screenshot: {id: modMatrixPicker, name: picker-adsr}
