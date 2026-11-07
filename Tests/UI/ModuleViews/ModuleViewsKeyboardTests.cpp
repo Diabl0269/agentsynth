@@ -504,6 +504,9 @@ EQWindow* findEqWindow() {
 } // namespace
 
 TEST(EQWindowAppShortcut, TheCardsEqWindowHandsUndoRedoAndSpaceToTheAppAndKeepsEditingKeys) {
+    // A headless runner has no display, and opening the window there ends the process (SIGSEGV in JUCE's X11 code).
+    if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
+        GTEST_SKIP() << "needs a display";
     if (nativeWindowsAbortHere())
         GTEST_SKIP() << "needs a native window";
     AudioEngine engine;
