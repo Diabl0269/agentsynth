@@ -2,14 +2,18 @@
 // key ring entered with Cmd+Up from the panel, which keeps real focus. Drives a real, off-screen MainComponent through
 // MixerPanelComponent::keyPressed, like MixerPanelKeyboardFocusTests.cpp.
 #include "../../TestWait.h"
+#include "../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "AI/AIProvider.h"
+#include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "MixerZonesTestRig.h"
 #include "Modules/ChannelStripModule.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerMasterColumn.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
+#include "UI/Mixer/MixerSendList.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 
@@ -189,4 +193,89 @@ TEST(MixerTopBarRingTest, TheScreenReaderValueNamesTheRingedControlAndChangesWit
     EXPECT_EQ(value(), "Sends");
     f.panel->keyPressed(plain(juce::KeyPress::escapeKey));
     EXPECT_TRUE(value().isEmpty());
+}
+
+// ---- MixerMouseDragUndoTests ----
+// MixerMouseDragUndoTests.cpp: a mouse drag of a mixer strip's knobs is one undo step, like the key nudge beside it.
+// The knobs are attached to their parameters (the attachment brackets the parameter gesture but records nothing), so
+// each test drives the real mouse handlers of the slider (press, several moves, release) and then undoes once.
+
+namespace {
+
+// One drag of a rotary knob upwards: press at the centre, move in steps, release.
+void dragUp(juce::Slider& knob, int pixels) {
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    const auto start = knob.getLocalBounds().getCentre().toFloat();
+    knob.mouseDown(makeClickEvent(knob, start, mods));
+    for (int y = 1; y <= pixels; y += 4)
+        knob.mouseDrag(makeDragEvent(knob, start.translated(0.0f, (float)-y), start, mods));
+    knob.mouseUp(makeDragEvent(knob, start.translated(0.0f, (float)-pixels), start));
+}
+
+} // namespace
+
+// Dragging a strip's pan knob with the mouse is one undo step, and one Cmd+Z restores the old pan.
+TEST(MixerMouseDragUndo, APanKnobDragIsOneUndoStepAndUndoRestoresThePan) {
+    MixerZonesRig r(1);
+    auto* column = r.panel->getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    auto& pan = column->getPanSliderForTest();
+    ASSERT_NEAR(pan.getValue(), 0.0, 1.0e-6);
+
+    r.mc.getUndoManager().clearUndoHistory();
+    dragUp(pan, 24);
+    EXPECT_TRUE(r.mc.getUndoManager().canUndo()) << "the drag recorded a step";
+    const double dragged = pan.getValue();
+    EXPECT_GT(std::abs(dragged), 0.05) << "the drag moved the pan";
+
+    ASSERT_TRUE(r.mc.getUndoManager().undo()) << "the drag recorded a step";
+    column = r.panel->getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    EXPECT_NEAR(column->getPanSliderForTest().getValue(), 0.0, 1.0e-4) << "one undo takes the whole drag back";
+}
+
+TEST(MixerMouseDragUndo, APressOnThePanKnobWithoutMovingRecordsNothing) {
+    MixerZonesRig r(1);
+    auto* column = r.panel->getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    auto& undo = r.mc.getUndoManager();
+    const bool couldUndoBefore = undo.canUndo();
+    auto& pan = column->getPanSliderForTest();
+    const auto at = pan.getLocalBounds().getCentre().toFloat();
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    pan.mouseDown(makeClickEvent(pan, at, mods));
+    pan.mouseUp(makeClickEvent(pan, at));
+    EXPECT_EQ(undo.canUndo(), couldUndoBefore) << "no change, no undo step";
+}
+
+// The send rows' level and pan knobs: a drag is one undo step too.
+TEST(MixerMouseDragUndo, ASendKnobDragIsOneUndoStepAndUndoRestoresIt) {
+    MixerZonesRig r(1);
+    const auto bus = r.panel->createBus();
+    r.panel->rebuild();
+    auto* column = r.panel->getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    column->getSendListForTest().addSendTo(bus);
+    r.panel->rebuild();
+
+    for (const bool pan : {false, true}) {
+        column = r.panel->getStripColumnForTest(0);
+        ASSERT_NE(column, nullptr);
+        auto& sends = column->getSendListForTest();
+        auto* knob = pan ? sends.getPanKnobForTest(0) : sends.getKnobForTest(0);
+        ASSERT_NE(knob, nullptr);
+        const double before = knob->getValue();
+
+        r.mc.getUndoManager().clearUndoHistory();
+        dragUp(*knob, 24);
+        EXPECT_NE(knob->getValue(), before) << (pan ? "send pan" : "send level") << " moved";
+
+        ASSERT_TRUE(r.mc.getUndoManager().undo()) << (pan ? "send pan" : "send level") << " drag recorded a step";
+        column = r.panel->getStripColumnForTest(0);
+        ASSERT_NE(column, nullptr);
+        auto* restored =
+            pan ? column->getSendListForTest().getPanKnobForTest(0) : column->getSendListForTest().getKnobForTest(0);
+        ASSERT_NE(restored, nullptr);
+        EXPECT_NEAR(restored->getValue(), before, 1.0e-3) << (pan ? "send pan" : "send level");
+    }
 }

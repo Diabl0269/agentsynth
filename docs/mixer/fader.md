@@ -152,3 +152,9 @@ slider or the taper at all, so keyboard Up and Down behaviour is independent of 
 - [`docs/mixer/mixer.md`](mixer.md) — the `gain` parameter's range and the strip it belongs to.
 - [`docs/development/test-patterns.md`](../development/test-patterns.md) — the real-mouse-path testing
   convention.
+
+## Knob drags
+
+Dragging the strip's pan knob, or a send's level or pan knob, with the mouse is one undo step: a press that moves
+nothing records nothing, and one Cmd+Z puts the old value back (`Tests/UI/Mixer/MixerTopBarRingTests.cpp`). The key
+nudges record their own step.
