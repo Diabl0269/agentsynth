@@ -24,6 +24,7 @@ steps:
   - key: {keys: cmd+z}
   - wait: {}
   - screenshot: {id: portConnectionsPanel, name: port-panel-undone}
+  - saveProject: {path: "${OUT}/port-panel-undone.agsproj"}   # leaves no unsaved changes, so the next open goes through
   - openProject: {path: "${FIXTURES}/mod-dot-two-lfos.agsproj"}
   - wait: {}
   - click: {id: "Cutoff modulation, 2 sources"}

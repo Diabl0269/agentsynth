@@ -10,6 +10,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotController.h"
+#include "UI/Graph/ModDot/ModDotPopover.h"
 #include "UI/Graph/ModDot/ModDotTooltip.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
@@ -33,9 +34,17 @@ const ModDotReadout* readoutOn(GraphEditor& editor, juce::AudioProcessorGraph::N
 }
 } // namespace
 
+// The knob's own sources panel lists the same rows, so the chip steps aside while that panel is open rather than
+// peeking out from under it.
 bool modHoverChipShows(GraphEditor& editor, juce::AudioProcessorGraph::NodeID card) {
     const auto& hovered = editor.getHoveredModTarget();
-    return (hovered.has_value() && hovered->nodeId == card) || readoutOn(editor, card) != nullptr;
+    const auto* readout = readoutOn(editor, card);
+    const bool hoveredHere = hovered.has_value() && hovered->nodeId == card;
+    if (!hoveredHere && readout == nullptr)
+        return false;
+    const int channel = readout != nullptr ? readout->destChannel : hovered->channel;
+    const auto* panel = editor.getModDot().getPopover();
+    return panel == nullptr || panel->card() != card || panel->destChannel() != channel;
 }
 
 // Capped so a heavily patched knob's stack never grows past the card; the chosen source stays visible.

@@ -188,3 +188,16 @@ TEST(AppTooltipWindowBlock, BlocksAreCountedSoTwoReadoutsNeedTwoReleases) {
     EXPECT_TRUE(AppTooltipWindow::hoverTipsBlocked());
     AppTooltipWindow::blockHoverTips(false);
 }
+
+// The knob's sources panel lists the same rows, so the hover chip is not drawn under it while it is open.
+TEST_F(ModuleComponentTest, TheHoverChipStepsAsideWhileTheKnobsSourcesPanelIsOpen) {
+    Fixture f;
+    f.editor->setHoveredModTarget(GraphEditor::HoveredModTarget{f.vcaId, f.gainChannel});
+    EXPECT_TRUE(synth::ui::modHoverChipShows(*f.editor, f.vcaId));
+    ASSERT_NE(f.clickDot(), nullptr);
+    ASSERT_EQ(f.editor->getModDot().getPopover(), f.popover());
+    f.editor->setHoveredModTarget(GraphEditor::HoveredModTarget{f.vcaId, f.gainChannel});
+    EXPECT_FALSE(synth::ui::modHoverChipShows(*f.editor, f.vcaId)) << "the open panel already lists the sources";
+    f.held.reset();
+    EXPECT_TRUE(synth::ui::modHoverChipShows(*f.editor, f.vcaId)) << "back once the panel has closed";
+}

@@ -545,7 +545,9 @@ is **bold** and always listed. Rows are formatted by `synth::ui::formatModHoverC
 `synth::ui::modHoverChipRows` (`ModuleComponentModChip.h`, unit-tested in isolation the same way `modDepthBandRange` is),
 drawn in the knob-value-box mono font on a `surfaceHi` chip each. The stack is never clipped: it hangs under the knob
 when it fits inside the card, flips above the knob when the knob is in the card's last row, and as a last resort is pushed
-up (or left) just far enough to stay whole (`synth::ui::modChipRowRects`, `ModuleComponent::modHoverChipRects`).
+up (or left) just far enough to stay whole (`synth::ui::modChipRowRects`, `synth::ui::modHoverChipRects`). While the
+knob's own sources panel is open the stack is not drawn: the panel lists the same sources, and the chip would peek out
+from under it (`synth::ui::modHoverChipShows`).
 
 The same stack is the mod dot's [drag readout](#the-mod-dot-drag-an-amount-from-the-landing-dot): during a dot drag or key
 step it shows under that knob even when the pointer is not on it, and the dragged source's row shows the live amount.
