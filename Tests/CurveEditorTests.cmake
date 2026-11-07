@@ -32,6 +32,8 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupDismissPathsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupOwnPathTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupHostBehaviourTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/ColourPickerKeyboardTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/ColourPickerEscapeTests.cpp
 )
 
 # Tests/CMakeLists.txt is at the file-size cap, so the modulation curve tests are pulled in from here.

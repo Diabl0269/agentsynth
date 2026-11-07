@@ -1,5 +1,6 @@
 #pragma once
 
+#include "UI/Chrome/ColourPickerFields.h"
 #include "UI/Layout/ColourSwatchButton.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopoverContent.h"
@@ -20,9 +21,10 @@
 // CallOutBox pattern, generalised into its own component so both callers share one popup rather
 // than two near-identical ad hoc ColourSelectors.
 //
-// Keyboard: Tab visits the colour sliders, the hex field, the add-to-favourites star and each
-// favourite swatch (Space or Return applies it); Escape puts the colour back to what it was when
-// the popup opened and closes the popup.
+// Keyboard: Tab visits the saturation/brightness square (Left/Right = saturation, Up/Down = brightness), the hue
+// bar (arrows = hue), each colour slider (arrows, Home, End) and its hex value box, the add-to-favourites star and
+// each favourite swatch (Space or Return applies it); Shift makes an arrow step ten. Escape puts the colour back to
+// what it was when the popup opened and closes the popup.
 //
 // Favourites persist across sessions via a caller-owned juce::PropertiesFile (nullptr means
 // "in-memory only for this popup instance", which is what keeps this class usable from a headless
@@ -128,6 +130,14 @@ public:
         selector_.addChangeListener(this);
         nameSelectorSliders();
 
+        addAndMakeVisible(saturationBrightness_);
+        addAndMakeVisible(hueBar_);
+        saturationBrightness_.setExplicitFocusOrder(1);
+        hueBar_.setExplicitFocusOrder(2);
+        saturationBrightness_.onChange = [this](const Hsb& hsb) { applyFieldEdit(hsb); };
+        hueBar_.onChange = [this](const Hsb& hsb) { applyFieldEdit(hsb); };
+        followColour(initial);
+
         addAndMakeVisible(addFavouriteButton_);
         addFavouriteButton_.setComponentID("colourPickerAddFavourite");
         addFavouriteButton_.setButtonText(juce::CharPointer_UTF8("\xE2\x98\x85")); // filled star
@@ -140,7 +150,7 @@ public:
         };
 
         rebuildFavouriteButtons();
-        setSize(280, 400);
+        setSize(280, kFieldsHeight + 112 + kFavouritesAreaHeight);
     }
 
     ~ColourPickerPopup() override {
@@ -154,10 +164,7 @@ public:
     /** An undo or redo is about to run while the popup is open: the colour dragged so far is only a live preview (no
      *  undo step yet), so it goes back to the colour the popup opened with, as Escape does, and the undo then works on
      *  the project as it was. */
-    void appAboutToUndoOrRedo() override {
-        selector_.setCurrentColour(initial_, juce::dontSendNotification);
-        previewNow(initial_);
-    }
+    void appAboutToUndoOrRedo() override { restoreInitial(); }
     /** The undo or redo has run. The colour the owner remembered when the popup opened may no longer be the one in
      *  the project, so the popup closes without applying or putting back anything: the project keeps what the undo
      *  gave it. */
@@ -181,18 +188,21 @@ public:
 
     void resized() override {
         auto bounds = getLocalBounds();
-        selector_.setBounds(bounds.removeFromTop(bounds.getHeight() - kFavouritesAreaHeight));
+        auto favArea = bounds.removeFromBottom(kFavouritesAreaHeight);
+        auto fields = bounds.removeFromTop(kFieldsHeight).reduced(kFieldsMargin, kFieldsMargin);
+        hueBar_.setBounds(fields.removeFromRight(kHueBarWidth));
+        fields.removeFromRight(kFieldsMargin);
+        saturationBrightness_.setBounds(fields);
+        // The selector lays itself out for a taller box than it needs when it has no colour square: it keeps the
+        // tall height so its colour swatch and sliders get their full rows, and the part past the bottom is clipped.
+        selector_.setBounds(0, kFieldsHeight, getWidth(), kSelectorHeight);
 
-        auto favArea = bounds;
         addFavouriteButton_.setBounds(favArea.removeFromLeft(kSwatchSize).reduced(2));
         layoutFavouriteButtons(favArea);
     }
 
     /** Escape: put the colour back (the live preview and the commit both see the original); the popover then closes. */
-    void onPopoverCancel() override {
-        selector_.setCurrentColour(initial_, juce::dontSendNotification);
-        previewNow(initial_);
-    }
+    void onPopoverCancel() override { restoreInitial(); }
 
     // ---- Test seams (no CallOutBox involved) -----------------------------------------------
     juce::Colour getCurrentColourForTest() const { return lastColour_; }
@@ -202,6 +212,7 @@ public:
     // The production path never hits this because a user drags one slider at a time.
     void setCurrentColourForTest(juce::Colour c) {
         selector_.setCurrentColour(c, juce::dontSendNotification);
+        followColour(c);
         previewNow(c);
     }
     // Mirrors what a REAL slider drag or hex-field edit does to the selector: both commit through
@@ -247,6 +258,43 @@ public:
 private:
     static constexpr int kSwatchSize = 28;
     static constexpr int kFavouritesAreaHeight = 40;
+    static constexpr int kFieldsHeight = 156;
+    static constexpr int kFieldsMargin = 8;
+    static constexpr int kHueBarWidth = 22;
+    static constexpr int kSelectorHeight = 240;
+
+    void restoreInitial() {
+        selector_.setCurrentColour(initial_, juce::dontSendNotification);
+        followColour(initial_);
+        previewNow(initial_);
+    }
+
+    // The square and the hue bar show `colour`. A grey, a black or a white has no hue of its own (JUCE reads it as
+    // 0), so the hue the user chose stays unless the colour is not the one the fields themselves made.
+    void followColour(juce::Colour colour) {
+        if (colour != hsb_.toColour()) {
+            const auto next = Hsb::fromColour(colour);
+            const bool hueless = next.saturation < 0.002f || next.brightness < 0.002f;
+            hsb_ = next;
+            if (hueless)
+                hsb_.hue = hueKept_;
+        }
+        hueKept_ = hsb_.hue;
+        saturationBrightness_.setHsb(hsb_);
+        hueBar_.setHsb(hsb_);
+    }
+
+    // A key or drag on the square or the hue bar: the selector shows the colour and the preview goes out, the same
+    // path a slider takes.
+    void applyFieldEdit(const Hsb& hsb) {
+        hsb_ = hsb;
+        hueKept_ = hsb_.hue;
+        saturationBrightness_.setHsb(hsb_);
+        hueBar_.setHsb(hsb_);
+        const auto colour = hsb_.toColour();
+        selector_.setCurrentColour(colour, juce::dontSendNotification);
+        previewNow(colour);
+    }
 
     // The selector's own sliders carry only a lower-case component name: give each a screen-reader
     // title and a tooltip, and its editable value box (the Tab stop, since the slider itself takes no
@@ -258,6 +306,7 @@ private:
                 const auto initial = name.substring(0, 1).toUpperCase(); // not-ui-text: first letter only
                 const auto channel = initial + name.substring(1);
                 slider->setTitle(channel);
+                slider->setWantsKeyboardFocus(true);
                 slider->setTooltip(channel + " amount of the colour, 0 to 255");
                 for (auto* part : slider->getChildren())
                     if (auto* valueBox = dynamic_cast<juce::Label*>(part)) {
@@ -271,6 +320,7 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override {
         if (source != &selector_)
             return;
+        followColour(selector_.getCurrentColour());
         previewNow(selector_.getCurrentColour());
     }
 
@@ -317,6 +367,7 @@ private:
             button->onClick = [this, colour] {
                 lastColour_ = colour;
                 selector_.setCurrentColour(colour, juce::dontSendNotification);
+                followColour(colour);
                 if (onPreview_)
                     onPreview_(colour);
             };
@@ -351,8 +402,13 @@ private:
     juce::Colour initial_; // what the popup opened with: Escape restores it
     bool committed_ = false;
 
-    juce::ColourSelector selector_{juce::ColourSelector::showColourAtTop | juce::ColourSelector::showSliders |
-                                   juce::ColourSelector::showColourspace};
+    // Without juce::ColourSelector's own colour square and hue bar (private classes with no focus or keys): the two
+    // fields above stand in for them.
+    juce::ColourSelector selector_{juce::ColourSelector::showColourAtTop | juce::ColourSelector::showSliders};
+    SaturationBrightnessField saturationBrightness_;
+    HueBar hueBar_;
+    Hsb hsb_;
+    float hueKept_ = 0.0f;
     juce::TextButton addFavouriteButton_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ColourPickerPopup)

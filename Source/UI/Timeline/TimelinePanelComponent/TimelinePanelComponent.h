@@ -51,7 +51,7 @@ class TransportService;
 class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 namespace ui {
 class ClipSizingButton; // Forward declaration (Source/UI/Timeline/ClipSizingButton.h)
-class PopoverSlot; // Forward declaration (Source/UI/Layout/PopupHost.h)
+class PopoverSlot;      // Forward declaration (Source/UI/Layout/PopupHost.h)
 class DrumMachineComponent;
 class KeyRing; // Forward declaration (Source/UI/Layout/KeyRing.h): kept out of this widely included header
 struct DrumMachineHost;

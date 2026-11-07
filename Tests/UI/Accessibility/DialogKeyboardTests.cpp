@@ -287,13 +287,18 @@ TEST(DialogKeyboard, ColourPickerTabOrderAndCancelRestoresTheOriginalColour) {
     synth::ui::ColourPickerPopup popup(juce::Colours::red, nullptr, [&](juce::Colour c) { lastPreview = c; }, {});
     const auto walk = walkTabOrder(popup);
     const auto stops = walk.names();
-    ASSERT_GE(stops.size(), 5);
+    ASSERT_GE(stops.size(), 9);
     EXPECT_TRUE(walk.isCompleteCycle());
-    EXPECT_EQ(stops[0], "Red value");
-    EXPECT_EQ(stops[1], "Green value");
-    EXPECT_EQ(stops[2], "Blue value");
-    EXPECT_EQ(stops[3], "Add to favourites");
-    EXPECT_TRUE(stops[4].startsWith("Favourite colour ")) << stops[4];
+    EXPECT_EQ(stops[0], "Saturation and brightness");
+    EXPECT_EQ(stops[1], "Hue");
+    EXPECT_EQ(stops[2], "Red");
+    EXPECT_EQ(stops[3], "Red value");
+    EXPECT_EQ(stops[4], "Green");
+    EXPECT_EQ(stops[5], "Green value");
+    EXPECT_EQ(stops[6], "Blue");
+    EXPECT_EQ(stops[7], "Blue value");
+    EXPECT_EQ(stops[8], "Add to favourites");
+    EXPECT_TRUE(stops[9].startsWith("Favourite colour ")) << stops[9];
 
     popup.setCurrentColourForTest(juce::Colours::blue);
     popup.onPopoverCancel(); // what the popover host runs on Escape

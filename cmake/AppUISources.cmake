@@ -93,7 +93,6 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.h
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.cpp
     Source/UI/Timeline/TrackChannelLinkSurface.h
-    Source/UI/Chrome/ColourPickerPopupShow.cpp
     Source/UI/Timeline/TrackColourPicker.h
     Source/UI/Timeline/TrackColourPicker.cpp
     Source/UI/Timeline/CursorGlide/TimelineCursorGlide.h

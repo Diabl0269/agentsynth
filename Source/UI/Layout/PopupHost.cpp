@@ -58,7 +58,7 @@ juce::Point<int> pointerPosition() {
 
 // The call-out every popover opens in. Escape and a press outside are decided here, once, for every content:
 //   - Escape (from the box, or from a text field inside it) lets the content put things back, then fades the live
-//     window out. A second Escape while it fades does nothing.
+//     window out, and the keyboard goes back to the trigger. A second Escape while it fades does nothing.
 //   - A press on the trigger or on the area the box points at closes it through the fade and is consumed: the box stays
 //     modal while it fades, so the press never reaches the button and re-opens the popover.
 //   - A press anywhere else closes it the way JUCE does, so that press still lands where it was aimed; the leaving
@@ -71,7 +71,8 @@ public:
         : juce::CallOutBox(content, area, nullptr)
         , content_(content)
         , area_(area)
-        , options_(std::move(options)) {
+        , options_(std::move(options))
+        , triggerToFocus_(options_.trigger) {
         // The look and feel has already attached the call-out with the shared style from its constructor.
         auto style = options_.style;
         if (!style.anchor)
@@ -80,7 +81,16 @@ public:
         juce::Desktop::getInstance().addFocusChangeListener(this);
     }
 
-    ~PopoverBox() override { juce::Desktop::getInstance().removeFocusChangeListener(this); }
+    ~PopoverBox() override {
+        juce::Desktop::getInstance().removeFocusChangeListener(this);
+        for (auto& editor : labelEditors_)
+            if (editor != nullptr)
+                editor->removeKeyListener(&labelEscape_);
+        // Escape puts the keyboard back where the user was: on the button that opened the popover.
+        if (closedByEscape_ && triggerToFocus_ != nullptr && triggerToFocus_->getWantsKeyboardFocus() &&
+            triggerToFocus_->isShowing())
+            triggerToFocus_->grabKeyboardFocus();
+    }
 
     bool keyPressed(const juce::KeyPress& key) override {
         if (key.isKeyCode(juce::KeyPress::escapeKey)) {
@@ -111,13 +121,23 @@ private:
             return;
         if (auto* cancellable = dynamic_cast<PopoverContent*>(&content_))
             cancellable->onPopoverCancel();
+        closedByEscape_ = true;
         PopupMotion::dismissCallOut(*this);
     }
 
     // A juce::TextEditor swallows Escape; sent up instead, it reaches this box. An editor with its own Escape stays.
+    // A label's editor (a slider's value box) cannot bubble: the label deletes the editor on Escape before the editor's
+    // own hook runs. A key listener sees the key first, so the box closes at the same moment the label cancels its
+    // edit.
     void letEscapeReachBoxFrom(juce::Component& root) {
-        if (auto* editor = dynamic_cast<juce::TextEditor*>(&root); editor != nullptr && !editor->onEscapeKey)
-            bubbleEscapeToParents(*editor);
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(&root); editor != nullptr && !editor->onEscapeKey) {
+            if (dynamic_cast<juce::Label*>(editor->getParentComponent()) != nullptr) {
+                editor->addKeyListener(&labelEscape_);
+                labelEditors_.add(editor);
+            } else {
+                bubbleEscapeToParents(*editor);
+            }
+        }
         for (auto* child : root.getChildren())
             letEscapeReachBoxFrom(*child);
     }
@@ -133,9 +153,24 @@ private:
             letEscapeReachBoxFrom(*focused);
     }
 
+    struct LabelEscape final : juce::KeyListener {
+        explicit LabelEscape(PopoverBox& boxToClose)
+            : box(boxToClose) {}
+        bool keyPressed(const juce::KeyPress& key, juce::Component*) override {
+            if (key.isKeyCode(juce::KeyPress::escapeKey))
+                box.escape();
+            return false; // the label still cancels its own edit
+        }
+        PopoverBox& box;
+    };
+
     juce::Component& content_;
     juce::Rectangle<int> area_;
     PopoverOptions options_;
+    LabelEscape labelEscape_{*this};
+    juce::Array<juce::Component::SafePointer<juce::TextEditor>> labelEditors_;
+    juce::Component::SafePointer<juce::Component> triggerToFocus_;
+    bool closedByEscape_ = false;
 };
 
 // Owns the content and the box; JUCE's modal manager deletes this callback (and with it both) once the box leaves

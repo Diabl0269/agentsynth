@@ -57,7 +57,7 @@ const std::vector<Opener> kRegistered = {
       "test:PopupDismissPaths.TheNoteLengthPopupFadesOnAClickOutside",
       "test:PopupDismissPaths.TheNoteLengthPopupFadesWhenTheAppIsDeactivated"}},
     {"Source/UI/Layout/PopupHost.cpp",
-     3,
+     4,
      {"test:PopupHostBehaviour.EveryContentFadesInOnceAndLandsWholeInEachMode",
       "test:PopupHostBehaviour.EscapeFadesItOutOnceFromTheBoxAndFromATextFieldInside",
       "test:PopupHostBehaviour.APressOnTheTriggerOrItsAreaClosesItThroughOneFadeAndIsConsumed",

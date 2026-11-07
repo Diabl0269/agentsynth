@@ -32,7 +32,18 @@ that list modules, tracks or destinations (`ModMatrixPicker`, `KeyPicker`, `Midi
 closes without applying or restoring anything. Content that shows nothing from the project (the MIDI Remote popovers,
 the shape flyout, the help popover) stays open; the Randomize panel re-syncs as below.
 
+## Escape gives the keyboard back
+
+Escape closes the popover through the live fade and then gives keyboard focus back to `PopoverOptions::trigger` when
+it takes focus. A content that returns focus itself (the mixer picker, the morph map) does so after the box is gone and
+wins. `ColourPickerEscapeTests` sends Escape from every control of the colour picker and records the alpha frames: one
+fall, no leaving picture on top of the live fade, the colour put back, focus on the opener.
+
 ## Randomize panel
+
+The Randomize button owns a `PopoverSlot` (`StepGridComponent::randomizeSlot_`), so it toggles the panel: a press while it
+is open closes it through one fade, one while it fades does nothing, and the keyboard shortcut that opens Randomize
+toggles it the same way (`StepGridRandomizeToggleTests`, `randomize-toggle.yaml`).
 
 Undo and redo move the range while the panel stays open: the card tells its open panel (`syncOpenRandomizePanel`) to
 show the range the pattern now has.
@@ -47,4 +58,4 @@ colour swatch, the transport Key field, the mixer colour dot and "+ Insert" row,
 popover that would be stale closes. `PopupOwnPathTests` fails by name when a file opens a call-out outside `PopupHost`, or opens a popover that
 `PopoverRegistry.h` does not list; `PopupHostBehaviourTests` opens every popover content in Full, Reduce Motion and
 Animations Off and checks it fades in and out once, toggles on its button, closes on Esc and on a click away, and never
-flickers. The scenario `Tools/ui-verify/scenarios/main-popover-undo.yaml` shows it in the app. `popup-host-toggle-esc.yaml` shows the toggle and Esc.
+flickers. The scenario `Tools/ui-verify/scenarios/main-popover-undo.yaml` shows it in the app. `popup-host-toggle-esc.yaml` and `randomize-toggle.yaml` show the toggle and Esc.
