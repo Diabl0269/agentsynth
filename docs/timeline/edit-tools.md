@@ -95,25 +95,30 @@ tool buttons go through, so its lit and unlit fills equal theirs in every built-
 
 ## The Sizing field
 
-`ClipSizingButton` (`Source/UI/Timeline/ClipSizingButton.h`), right of the tool buttons: a `juce::TextButton`
-`ClipSizingButton::kWidth` (36 px) wide in every mode that paints the mode's glyph and the app's combo chevron instead of
-its text. The glyphs are `Glyph::SizingTrim` (a clip edge cutting a note, the part past it faded), `SizingCarry` (one
-arrow over the notes and the edge: they travel together) and `SizingStretch` (a double arrow between two edges), drawn by
-`paintGlyph` (`Source/UI/Theme/IconGlyphs.h`) in the theme's primary ink, the way Cubase badges its sizing modes on the
-selection tool. The glyph is the state: the fill is the plain button fill in every mode (it is never lit), so Trim never
-looks switched off and stepping the mode never shifts the strip. The button text keeps the short name ("Trim", "Carry",
-"Stretch") for test mode only. A click (or Space while it has focus) opens a menu of the three modes, each its full name and one short
+`ClipSizingButton` (`Source/UI/Timeline/ClipSizingButton.h`), right of the tool buttons: a `ToolbarButton` (Edit group,
+`ToolbarButtonLayout::Inline`) like Add Track and Snap, so it has their chip, caption, hover tween and focus ring. Its
+icon is the mode: `Icon::ClipSizingTrim` (a clip edge cutting a note, the part past it faded), `ClipSizingCarry` (one
+arrow over the notes and the edge: they travel together) and `ClipSizingStretch` (a double arrow between two edges),
+the way Cubase badges its sizing modes on the selection tool. With "Show button labels" on (`setToolbarLabelsShown`) the
+caption is the short mode name ("Trim", "Carry", "Stretch"); off, the button is the chip alone. Either way its width is
+`getFixedWidth()`: the widest caption's width (just the chip with labels off), so choosing a mode never resizes it or moves its
+neighbours. The icon is the state: the chip is the same in every mode (it is never lit), so Trim never looks switched off.
+A click (or Space while it has focus) opens a menu of the three modes, each its full name and one short
 clause on what it does to the clip ("Stretch to fit: notes and audio scale"), and a closing tip about Option. The menu is as wide as its longest row,
 so every row stays short: `TimelineClipSizingFieldTest.TheMenuStaysNarrowAndTheModesKeepTheirFullNames` caps each row
 at 40 characters and the widest at 340 px, measured with `getIdealPopupMenuItemSize` as JUCE sizes the menu. The Select
 key pressed again while Select is the tool steps Trim -> Carry contents -> Stretch to fit -> Trim, as in Cubase; it
 follows a rebind of `timelineToolSelect`. The choice is the user setting `timelineClipSizingMode` and is pushed into the
-clip lanes ([clips](clips.md#edge-sizing)). Like the snap toggle it is a Tab stop that a click never focuses, with the
-accent focus ring of `drawButtonBackground`; its screen-reader name is "Clip sizing, <full mode name>", and its tooltip
-starts "Clip sizing: <full mode name>", explains Option and ends with the Select key that steps it (`(1)` by default,
-`setStepKeyHint`). Test mode reads `sizingMode`, `glyph` and `fieldWidth` from its 1x1 child `timelineClipSizingState` (scenario
-`clip-sizing-field.yaml`);
-`ThemeSweepGlyphs` checks the glyphs in every theme.
+clip lanes ([clips](clips.md#edge-sizing)). Like the snap toggle it is a Tab stop that a click never focuses; its
+screen-reader title is "Clip sizing" and its description the full mode name (VoiceOver reads "Clip sizing, Carry contents"),
+and its tooltip (the only name with labels off) starts "Clip sizing: <full mode name>", explains Option and ends with the Select key that steps it (`(1)` by default,
+`setStepKeyHint`). Test mode reads `sizingMode`, `glyph`, `caption` and `fieldWidth` from its 1x1 child `timelineClipSizingState` (scenario
+`clip-sizing-field.yaml`); `ThemeSweepGlyphs` checks the icons in every theme.
+
+Both bars are built of `ToolbarButton`s: `TimelineTopBarRingTests` walks the Timeline transport row and the
+Mixer toolbar and fails on any visible `juce::TextButton` outside a short allow-list of controls that are not toolbar
+buttons. The follow-playhead button and the edit tools are icon-only `DrawableButton`s with their own painting (the
+follow button's right-click mode menu, the tools' lit fill), left as they are.
 
 ## Range menu
 

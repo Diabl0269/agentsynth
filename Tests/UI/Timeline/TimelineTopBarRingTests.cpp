@@ -4,12 +4,16 @@
 // handed to handleRootFocusKey and the rest go through the panel's own keyPressed.
 #include "../../TestWait.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
+#include "../Mixer/MixerZonesTestRig.h"
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include "UI/Layout/KeyRing.h"
+#include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>
+#include <set>
 
 namespace {
 
@@ -179,4 +183,73 @@ TEST(TimelineTopBarRingTest, TheScreenReaderValueNamesTheRingedControlAndChanges
     EXPECT_NE(value(), nameOf(stops[0]));
     ASSERT_TRUE(f.panel.keyPressed(key(juce::KeyPress::downKey)));
     EXPECT_TRUE(value().isEmpty()) << "back on the panel";
+}
+
+// ---- ToolbarBarsUseToolbarButtonTests ----
+// ToolbarBarsUseToolbarButtonTests.cpp: the guard for the sibling-gap kind "a button on a toolbar that is not a
+// ToolbarButton". The Timeline's transport row and the Mixer's toolbar are built of ToolbarButtons, which carry the
+// bar's chip, icon, caption, "Show button labels" behaviour, hover tween and focus ring. A plain juce::TextButton in
+// either bar misses all of that (the clip sizing control was one, with a text-only look and a width of its own), so
+// the walk fails on any visible TextButton outside a short allow-list of controls that are deliberately not toolbar
+// buttons.
+
+namespace {
+
+// Controls that sit in a bar but are not toolbar buttons, with the reason each stays a TextButton.
+struct Allowed {
+    const char* typeName; // part of typeid(...).name()
+    const char* reason;
+};
+const std::vector<Allowed> kAllowed = {};
+
+bool isAllowed(const juce::Component& c) {
+    const juce::String type(typeid(c).name());
+    for (const auto& allowed : kAllowed)
+        if (type.contains(allowed.typeName))
+            return true;
+    return false;
+}
+
+juce::String describe(const juce::Component& c) {
+    return juce::String(typeid(c).name()) + " \"" + c.getComponentID() + "\" " + c.getTitle() + " " +
+           c.getBounds().toString();
+}
+
+// Every visible TextButton under `root` (at any depth) whose bounds sit inside `area` (root's own coordinates).
+void collectTextButtons(juce::Component& root, juce::Rectangle<int> area, std::vector<juce::Component*>& found) {
+    for (auto* child : root.getChildren()) {
+        if (!child->isVisible())
+            continue;
+        if (dynamic_cast<juce::TextButton*>(child) != nullptr && area.contains(child->getBounds().getCentre()))
+            found.push_back(child);
+        collectTextButtons(*child, area.translated(-child->getX(), -child->getY()), found);
+    }
+}
+
+} // namespace
+
+TEST(ToolbarBarsUseToolbarButton, TheTimelineTransportRowHasNoPlainTextButton) {
+    BottomDockActiveTabResetGuardMDT resetGuard;
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1600, 400);
+    panel.setTimelineDoc(&doc);
+
+    std::vector<juce::Component*> found;
+    collectTextButtons(panel, panel.getTransportBarBounds(), found);
+    for (auto* button : found)
+        EXPECT_TRUE(isAllowed(*button)) << "a plain TextButton in the Timeline transport row, use ToolbarButton: "
+                                        << describe(*button);
+    EXPECT_NE(dynamic_cast<synth::ui::ToolbarButton*>(&panel.getClipSizingButton()), nullptr);
+    EXPECT_NE(dynamic_cast<synth::ui::ToolbarButton*>(&panel.getSnapToggleButton()), nullptr);
+}
+
+TEST(ToolbarBarsUseToolbarButton, TheMixerToolbarHasNoPlainTextButton) {
+    MixerZonesRig r(1);
+    auto& toolbar = r.panel->getToolbarForTest();
+    std::vector<juce::Component*> found;
+    collectTextButtons(toolbar, toolbar.getLocalBounds(), found);
+    for (auto* button : found)
+        EXPECT_TRUE(isAllowed(*button)) << "a plain TextButton in the Mixer toolbar, use ToolbarButton: "
+                                        << describe(*button);
 }

@@ -7,7 +7,8 @@
 // the envelope graph) and checked once its fades have settled (off screen every change lands before the call returns).
 // A card's width is fixed by its type, so there is no narrower width to try. Regression test for FRO1060: the Edit
 // shapes button touched the Morph knob labels with Show Response off. Regression test for FRO1335: the LFO Custom
-// Grid/Shapes/Tools row touched the Morph value boxes.
+// Grid/Shapes/Tools row touched the Morph value boxes. Regression test for FRO1211: a horizontal fader at its
+// maximum drew its cap over the value text.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
@@ -16,6 +17,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardWidgets/CardFader.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
@@ -23,8 +25,11 @@
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/ModuleViews/ScopeComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeelFader.h"
 #include <gtest/gtest.h>
 #include <set>
+#include <typeinfo>
 
 namespace {
 
@@ -191,4 +196,94 @@ TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
             checkCard(card, type + ": " + state.describe());
         }
     }
+}
+
+namespace {
+
+void collectFaders(juce::Component& root, std::vector<synth::ui::CardFader*>& out) {
+    for (auto* child : root.getChildren()) {
+        if (auto* fader = dynamic_cast<synth::ui::CardFader*>(child); fader != nullptr && !fader->isVerticalFader())
+            out.push_back(fader);
+        collectFaders(*child, out);
+    }
+}
+
+juce::Label* valueBox(juce::Slider& slider) {
+    for (auto* child : slider.getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(child))
+            return label;
+    return nullptr;
+}
+
+// How far the focus ring reaches past the cap (its gap and its stroke), and the clear space the ring keeps from the
+// value box beside it.
+constexpr float kFocusRingReach = 4.0f;
+constexpr float kRingToBoxGap = 2.0f;
+
+float textWidthOf(const juce::Label& label) {
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(label.getFont(), label.getText(), 0.0f, 0.0f);
+    return glyphs.getBoundingBox(0, -1, true).getWidth();
+}
+
+} // namespace
+
+// The painted cap and the value text box of every horizontal card fader stay apart at the lowest, default and
+// highest value (with its focus ring), at the width the card lays it out at and at a narrower one; the text also fits
+// its box.
+TEST(CardBodyOverlap, AHorizontalFadersCapNeverTouchesItsValueText) {
+    // The app's look-and-feel is the default for every card, as in the running app (the Tests binary's own default
+    // is a plain JUCE one with a different thumb radius).
+    synth::theme::AppLookAndFeel appLookAndFeel;
+    struct DefaultLookAndFeelScope {
+        explicit DefaultLookAndFeelScope(juce::LookAndFeel& l)
+            : previous(&juce::LookAndFeel::getDefaultLookAndFeel()) {
+            juce::LookAndFeel::setDefaultLookAndFeel(&l);
+        }
+        ~DefaultLookAndFeelScope() { juce::LookAndFeel::setDefaultLookAndFeel(previous); }
+        juce::LookAndFeel* previous;
+    } defaultLookAndFeel(appLookAndFeel);
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ModuleLibraryComponent library;
+    auto types = library.getDraggableModuleNames();
+    for (const char* extra : {"Track In", "Rec Tap", "Track Audio", "Channel Strip", "Master", "Amp Env", "Filter Env"})
+        types.addIfNotAlreadyThere(extra);
+
+    int checked = 0;
+    for (const auto& type : types) {
+        auto processor = synth::AIStateMapper::createModule(type);
+        if (dynamic_cast<ModuleBase*>(processor.get()) == nullptr)
+            continue;
+        ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+        std::vector<synth::ui::CardFader*> faders;
+        collectFaders(card, faders);
+        for (auto* fader : faders) {
+            auto* box = valueBox(*fader);
+            ASSERT_NE(box, nullptr) << type;
+            const int laidOutWidth = fader->getWidth();
+            const double original = fader->getValue();
+            for (const int width : {laidOutWidth, juce::jmin(laidOutWidth, 100)}) {
+                fader->setSize(width, fader->getHeight());
+                for (const double value :
+                     {fader->getMinimum(), fader->getDoubleClickReturnValue(), fader->getMaximum()}) {
+                    fader->setValue(value, juce::sendNotificationSync);
+                    const auto m = synth::theme::fader::metricsFor(false, fader->getWidth(), fader->getHeight());
+                    const auto cap = synth::theme::fader::capBounds(fader->travelBounds(),
+                                                                    fader->getPositionOfValue(value), false, m);
+                    const auto textBox = box->getBounds().toFloat();
+                    const float textWidth = textWidthOf(*box);
+                    const juce::String context = type + " " + fader->getComponentID() + " width " +
+                                                 juce::String(width) + " value " + juce::String(value) + " text \"" +
+                                                 box->getText() + "\" textWidth " + juce::String(textWidth);
+                    EXPECT_FALSE(cap.expanded(kFocusRingReach + kRingToBoxGap).intersects(textBox))
+                        << context << "\n  cap " << cap.toString() << "\n  box " << textBox.toString();
+                    EXPECT_LE(textWidth, (float)box->getWidth()) << context << " does not fit its box";
+                    ++checked;
+                }
+            }
+            fader->setValue(original, juce::sendNotificationSync);
+        }
+    }
+    EXPECT_GT(checked, 0);
 }

@@ -1,7 +1,8 @@
 #pragma once
 
-// ShapeEditorAppShortcuts.h -- lets the app's shortcuts (Space, Cmd+Z, ...) work while the shape editor window has the
-// keyboard. The window is its own top-level window, so a key it does not use never reaches the main window.
+// AppShortcutRelay.h -- lets the app's shortcuts (Space, Cmd+Z, ...) work while a tool window (shape editor, EQ,
+// modulation curve) has the keyboard. The window is its own top-level window, so a key it does not use never
+// reaches the main window.
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 

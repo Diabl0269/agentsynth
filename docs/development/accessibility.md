@@ -232,7 +232,7 @@ room; both say so in a line under the map and to a screen reader). Escape is not
 (named "<name> shape"), the curve editor ("Shape curve", its own keys above) and the buttons to Done. The Draw button is named "Draw" (or "Draw, Sine pen on" with a pen chosen) and its tooltip says what Shift, Escape and Enter do; the pen has a keyboard route: Draw opens the flyout (Up/Down/Return pick), then with the curve focused Enter applies the pen to the selected stretch of points (the whole curve when fewer than two are selected), announced like any edit; a pen choice is announced ("Sine pen on", "Draw mode off"); Escape closes the
 window with the shared fade (`closeHostingWindow`); the window is not modal, so a click in the main window moves the
 keyboard there and a click back in the window returns it; the window opens with focus on the map, and the app shortcuts that make
-sense there (Space, undo, redo) still work from it (`ShapeEditorAppShortcuts`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
+sense there (Space, undo, redo) still work from it (`AppShortcutRelay`). Pinned by `Tests/UI/ModuleViews/ShapeEditor/`.
 
 The Filter window's grid rows are ordinary Tab stops in visual order: Grid (a segmented switch titled "Grid"), its Snap
 pill ("Snap across"), Level ("Level"), its Snap pill ("Snap level"), then the second row's one visible control: Steps,

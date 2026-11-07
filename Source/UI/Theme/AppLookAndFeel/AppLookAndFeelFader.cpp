@@ -148,13 +148,6 @@ void drawSlotAndFill(juce::Graphics& g, const Theme& theme, juce::Rectangle<floa
     drawSolidFill(g, colour, slot, sliderPos, vertical);
 }
 
-juce::Rectangle<float> capBounds(juce::Rectangle<float> travel, float sliderPos, bool vertical, const Metrics& m) {
-    const auto centre = travel.getCentre();
-    const juce::Point<float> at =
-        vertical ? juce::Point<float>(centre.x, sliderPos) : juce::Point<float>(sliderPos, centre.y);
-    return juce::Rectangle<float>(m.capW, m.capH).withCentre(at);
-}
-
 juce::Colour capOutline(const Theme& theme, const State& state, juce::Colour restColour) {
     return state.dragging ? theme.colors.accent : state.hover ? theme.colors.textMuted : restColour;
 }
@@ -234,6 +227,13 @@ void drawFocusRing(juce::Graphics& g, const Theme& theme, juce::Rectangle<float>
 
 } // namespace
 
+juce::Rectangle<float> capBounds(juce::Rectangle<float> travel, float sliderPos, bool vertical, const Metrics& m) {
+    const auto centre = travel.getCentre();
+    const juce::Point<float> at =
+        vertical ? juce::Point<float>(centre.x, sliderPos) : juce::Point<float>(sliderPos, centre.y);
+    return juce::Rectangle<float>(m.capW, m.capH).withCentre(at);
+}
+
 Metrics metricsFor(bool vertical, int width, int height) {
     if (!vertical)
         return {4.0f, 10.0f, fit(18.0f, height - 2), 3.0f, 10.0f};
@@ -245,7 +245,10 @@ Metrics metricsFor(bool vertical, int width, int height) {
 int thumbRadiusFor(bool vertical, int width, int height) {
     const auto m = metricsFor(vertical, width, height);
     const float along = vertical ? m.capH : m.capW;
-    return (int)std::ceil(along * 0.5f) + 2;
+    // A horizontal fader sits beside its value box: its cap and focus ring (kFocusRingGap + half its stroke beyond the
+    // cap) end a clear gap before the box, so the ring never touches the text at the maximum.
+    const float margin = vertical ? 2.0f : kFocusRingGap + kFocusRingWidth * 0.5f + 2.0f;
+    return (int)std::ceil(along * 0.5f + margin);
 }
 
 void paint(juce::Graphics& g, const Theme& theme, juce::Rectangle<int> travelBounds, juce::Point<int> sliderSize,

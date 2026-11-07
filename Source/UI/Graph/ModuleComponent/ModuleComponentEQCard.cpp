@@ -5,6 +5,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/PopupMotion.h"
 
 namespace eqCard {
@@ -169,6 +170,8 @@ void ModuleComponent::openEqWindow() {
             if (safeThis != nullptr && safeThis->undoManager != nullptr && safeThis->module != nullptr)
                 safeThis->undoManager->pushSnapshotFromCapture(safeThis->owner.getAudioEngine().getGraph());
         });
+
+    content->onAppShortcut = synth::ui::makeAppShortcutRelay(this);
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(content.release());

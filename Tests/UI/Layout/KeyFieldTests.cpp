@@ -161,6 +161,8 @@ TEST(KeyFieldTest, ASecondClickWhileAPickerIsOpenStillShowsOnePicker) {
         held = std::move(picker);
     };
     clickAndSettle(field);
+    // The open is an asynchronous message queued behind whatever an earlier test left pending, so wait for it.
+    synth::test::waitUntil([&] { return launched == 1; });
     clickAndSettle(field);
     EXPECT_EQ(launched, 1);
     EXPECT_NE(field.getOpenPicker(), nullptr);

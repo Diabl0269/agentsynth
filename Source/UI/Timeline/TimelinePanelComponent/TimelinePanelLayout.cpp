@@ -11,6 +11,7 @@
 
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/ScrollPolicy.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripSettings.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
@@ -55,7 +56,6 @@ constexpr int kSnapComboWidth = 90;
 // locate the marker against the arrangement without competing with the clips for attention.
 constexpr float kMarkerLaneStemAlpha = 0.40f;
 constexpr int kFollowPlayheadButtonWidth = 30;
-constexpr int kClipSizingButtonWidth = ClipSizingButton::kWidth + 4; // the field, inset 2 px on each side
 } // namespace
 
 // Restores/persists the snap-selector choice under the "timelineSnap" key, same pattern as
@@ -71,7 +71,7 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     // only" / "read the default" rather than needing one, and the early return below would
     // otherwise leave them holding a stale pointer.
     clipLaneArea_.setApplicationProperties(props);
-    clipSizingButton_.setApplicationProperties(props); // the clip edge sizing mode, kept across projects
+    clipSizingButton_->setApplicationProperties(props); // the clip edge sizing mode, kept across projects
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr) {
         ruler_.setPropertiesFile(nullptr);
         sectionStrip_->setPropertiesFile(nullptr);
@@ -556,14 +556,15 @@ void TimelinePanelComponent::resized() {
     layoutTransportRow();
 }
 
-// The Add Track and Snap buttons share the "Show button labels" preference with the top bar. The names stay their
-// screen-reader titles either way; icon-only, the tooltips carry them.
+// The Add Track, Snap and clip sizing buttons share the "Show button labels" preference with the top bar. The names
+// stay their screen-reader titles either way; icon-only, the tooltips carry them.
 void TimelinePanelComponent::setToolbarLabelsShown(bool shown) {
     for (auto* button : {&addTrackButton_, &snapToggleButton_}) {
         button->setLayout(ToolbarButtonLayout::Inline);
         button->setContentCentred(button == &addTrackButton_);
         button->setLabel(button->getName(), shown);
     }
+    clipSizingButton_->setCaptionShown(shown);
     layoutTransportRow();
 }
 
@@ -582,7 +583,7 @@ void TimelinePanelComponent::layoutTransportRow() {
     // The Sizing field, then the tool strip, sit immediately left of the snap controls: all are "how the next edit
     // behaves" chrome, so they read as one group, and none pushes the transport controls off their left-aligned
     // home. The tools are laid out left-to-right in EditTool order (1, 2, 3, 4, 5, 7, 8).
-    clipSizingButton_.setBounds(transportBar.removeFromRight(kClipSizingButtonWidth).reduced(2));
+    clipSizingButton_->setBounds(transportBar.removeFromRight(clipSizingButton_->getFixedWidth() + 4).reduced(2));
     auto toolStrip = transportBar.removeFromRight(kEditToolButtonWidth * (int)kAllEditTools.size());
     for (auto tool : kAllEditTools)
         if (auto* button = getToolButton(tool))

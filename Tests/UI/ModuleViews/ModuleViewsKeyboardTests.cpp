@@ -3,13 +3,24 @@
 // curve's band keys, the curve editor's point keys (including that one key press is one undo gesture),
 // the threshold control's slider, and the names and tooltips of the read-only visualizers.
 
+#include "../../TestWait.h"
+#include "../Graph/GraphEditor/GraphEditorTestHelpers.h"
+#include "../Layout/NativeWindowTestGuard.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "AppUndoManager.h"
+#include "AudioEngine/AudioEngine.h"
 #include "CurveEditor/CurveEditorTestHelpers.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/SamplerModule.h"
 #include "Modules/VisualBuffer.h"
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
+#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
+#include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
 #include "UI/ModuleViews/SampleWaveformComponent.h"
@@ -457,4 +468,69 @@ TEST(ModuleViewsReadOnly, EveryVisualizerHasANameADescriptionAndATooltipAndIsNot
         ASSERT_NE(tip, nullptr);
         EXPECT_TRUE(tip->getTooltip().isNotEmpty());
     }
+}
+
+// ---- EQWindowAppShortcutTests ----
+// The Parametric EQ card's pop-out window passes undo, redo and play/stop to the app, so Cmd+Z works with the window
+// in front, and a band edit made in it is one undo step.
+// Regression test for FRO1309: the EQ window swallowed every key it did not use, so Cmd+Z did nothing there.
+
+using namespace synth::ui;
+
+namespace {
+
+struct RecordingTarget
+    : juce::Component
+    , juce::ApplicationCommandTarget {
+    std::vector<juce::KeyPress> received;
+    bool keyPressed(const juce::KeyPress& k) override {
+        received.push_back(k);
+        return true;
+    }
+    ApplicationCommandTarget* getNextCommandTarget() override { return nullptr; }
+    void getAllCommands(juce::Array<juce::CommandID>&) override {}
+    void getCommandInfo(juce::CommandID, juce::ApplicationCommandInfo&) override {}
+    bool perform(const InvocationInfo&) override { return false; }
+};
+
+EQWindow* findEqWindow() {
+    for (int i = 0; i < juce::TopLevelWindow::getNumTopLevelWindows(); ++i)
+        if (auto* dialog = dynamic_cast<juce::DialogWindow*>(juce::TopLevelWindow::getTopLevelWindow(i)))
+            if (auto* eq = dynamic_cast<EQWindow*>(dialog->getContentComponent()))
+                return eq;
+    return nullptr;
+}
+
+} // namespace
+
+TEST(EQWindowAppShortcut, TheCardsEqWindowHandsUndoRedoAndSpaceToTheAppAndKeepsEditingKeys) {
+    // A headless runner has no display, and opening the window there ends the process (SIGSEGV in JUCE's X11 code).
+    if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
+        GTEST_SKIP() << "needs a display";
+    if (nativeWindowsAbortHere())
+        GTEST_SKIP() << "needs a native window";
+    AudioEngine engine;
+    AppUndoManager undo;
+    RecordingTarget target;
+    GraphEditor editor(engine, &undo);
+    ShortcutManager shortcuts;
+    editor.getCardKeyboard().setShortcutManager(&shortcuts);
+    target.addAndMakeVisible(editor);
+    auto node = engine.getGraph().addNode(synth::AIStateMapper::createModule("Parametric EQ"));
+    editor.updateComponents();
+    auto* card = findModuleComp(editor, node->getProcessor());
+    ASSERT_NE(card, nullptr);
+
+    card->openEqWindow();
+    auto* window = findEqWindow();
+    ASSERT_NE(window, nullptr);
+    const auto cmd = juce::ModifierKeys::commandModifier;
+    EXPECT_TRUE(window->keyPressed(juce::KeyPress(' ', juce::ModifierKeys(), ' ')));
+    EXPECT_TRUE(window->keyPressed(juce::KeyPress('z', juce::ModifierKeys(cmd), 0)));
+    EXPECT_FALSE(window->keyPressed(juce::KeyPress('a', juce::ModifierKeys(cmd), 0)))
+        << "select all stays with the canvas";
+    synth::test::waitUntil([&] { return target.received.size() == 2u; });
+    EXPECT_EQ(target.received.size(), 2u);
+
+    delete window->getParentComponent();
 }

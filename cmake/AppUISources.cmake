@@ -268,6 +268,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/ProgressStrip.h
     Source/UI/Layout/CalloutReveal.h
     Source/UI/Layout/CalloutReveal.cpp
+    Source/UI/Layout/AppShortcutRelay.h
+    Source/UI/Layout/AppShortcutRelay.cpp
     Source/UI/Layout/CardCallOut.cpp
     Source/UI/Layout/SplitButton.h
     Source/UI/Layout/SplitButton.cpp
@@ -783,8 +785,6 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/ShapeEditor/FilterShapesAdapter.cpp
     Source/UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h
     Source/UI/ModuleViews/ShapeEditor/LfoShapesAdapter.cpp
-    Source/UI/ModuleViews/ShapeEditor/ShapeEditorAppShortcuts.h
-    Source/UI/ModuleViews/ShapeEditor/ShapeEditorAppShortcuts.cpp
     Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h
     Source/UI/ModuleViews/ShapeEditor/ShapeEditorWindow.cpp
     Source/UI/ModuleViews/WavetableDisplayComponent.h

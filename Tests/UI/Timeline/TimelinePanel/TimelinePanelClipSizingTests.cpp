@@ -1,9 +1,10 @@
-// TimelinePanelClipSizingTests.cpp — the edit-tool strip's Sizing field: the menu, its glyph and size, the Select key
-// pressed again, the user setting and what reaches the clip lanes.
+// TimelinePanelClipSizingTests.cpp — the Timeline bar's clip sizing button: the menu, its icon, caption and size, the
+// Select key pressed again, the user setting and what reaches the clip lanes.
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -41,8 +42,9 @@ TEST(TimelineClipSizingFieldTest, StartsOnTrimNamedWithItsGlyph) {
     EXPECT_EQ(f.field().getMode(), ClipSizingMode::Trim);
     EXPECT_FALSE(f.field().getToggleState());
     EXPECT_EQ(f.field().getButtonText(), "Trim");
-    EXPECT_EQ(synth::ui::ClipSizingButton::glyphFor(ClipSizingMode::Trim), synth::theme::Glyph::SizingTrim);
-    EXPECT_EQ(f.field().getTitle(), "Clip sizing, Trim");
+    EXPECT_EQ(f.field().getIcon(), synth::theme::Icon::ClipSizingTrim);
+    EXPECT_EQ(f.field().getTitle(), "Clip sizing");
+    EXPECT_EQ(f.field().getDescription(), "Trim") << "the screen reader says: Clip sizing, Trim";
     EXPECT_TRUE(f.field().getTooltip().startsWith("Clip sizing: Trim")) << f.field().getTooltip();
     EXPECT_TRUE(f.field().getTooltip().contains("Option")) << f.field().getTooltip();
     EXPECT_TRUE(f.field().getTooltip().endsWith("(1)")) << "names the key that steps it: " << f.field().getTooltip();
@@ -72,7 +74,8 @@ TEST(TimelineClipSizingFieldTest, TheMenuListsTheThreeModesAndPickingOneReachesT
     EXPECT_EQ(f.panel.getClipLaneArea().getClipSizingMode(), ClipSizingMode::Stretch);
     EXPECT_FALSE(f.field().getToggleState()) << "the glyph is the state; no mode is lit";
     EXPECT_TRUE(f.field().getTooltip().startsWith("Clip sizing: Stretch to fit"));
-    EXPECT_EQ(f.field().getTitle(), "Clip sizing, Stretch to fit");
+    EXPECT_EQ(f.field().getTitle(), "Clip sizing");
+    EXPECT_EQ(f.field().getDescription(), "Stretch to fit");
     EXPECT_EQ(f.props.getUserSettings()->getValue("timelineClipSizingMode"), "stretch");
 }
 
@@ -101,42 +104,85 @@ TEST(TimelineClipSizingFieldTest, TheMenuStaysNarrowAndTheModesKeepTheirFullName
     }
     EXPECT_LE(widest, kMaxRowWidthPx) << "widest row: " << widestText;
 
-    for (const auto& [mode, name] : {std::pair{ClipSizingMode::Trim, "Clip sizing, Trim"},
-                                     std::pair{ClipSizingMode::CarryContents, "Clip sizing, Carry contents"},
-                                     std::pair{ClipSizingMode::Stretch, "Clip sizing, Stretch to fit"}}) {
+    for (const auto& [mode, name] :
+         {std::pair{ClipSizingMode::Trim, "Trim"}, std::pair{ClipSizingMode::CarryContents, "Carry contents"},
+          std::pair{ClipSizingMode::Stretch, "Stretch to fit"}}) {
         f.field().choose(mode);
-        EXPECT_EQ(f.field().getTitle(), name) << "the screen-reader name keeps the full mode name";
+        EXPECT_EQ(f.field().getTitle(), "Clip sizing");
+        EXPECT_EQ(f.field().getDescription(), name) << "the screen-reader value keeps the full mode name";
     }
 }
 
 // Regression test for FRO1408: the field was lit for Carry and Stretch but not Trim, and its text changed length with
-// the mode, so the strip shifted. Each mode now has its own glyph in one fixed-width button, never lit.
-TEST(TimelineClipSizingFieldTest, TheFieldKeepsOneSizeInEveryMode) {
+// the mode, so the strip shifted. Each mode has its own icon in one fixed-width button, never lit: the width is the
+// same in every mode with the captions shown (the widest one) and with labels off.
+TEST(TimelineClipSizingFieldTest, TheFieldKeepsOneSizeInEveryModeWithLabelsShownAndOff) {
     SizingPanelFixture f;
-    const auto bounds = f.field().getBounds();
-    EXPECT_EQ(bounds.getWidth(), synth::ui::ClipSizingButton::kWidth);
-    std::set<synth::theme::Glyph> glyphs;
-    const auto check = [&](ClipSizingMode expected, const char* how) {
-        EXPECT_EQ(f.field().getMode(), expected) << how;
-        EXPECT_EQ(f.field().getBounds(), bounds) << how << ": the field keeps one size";
-        EXPECT_FALSE(f.field().getToggleState()) << how << ": no mode is lit";
-        glyphs.insert(synth::ui::ClipSizingButton::glyphFor(expected));
-    };
-    f.panel.keyPressed(juce::KeyPress('1'));
-    check(ClipSizingMode::CarryContents, "key 1 once");
-    f.panel.keyPressed(juce::KeyPress('1'));
-    check(ClipSizingMode::Stretch, "key 1 twice");
-    f.panel.keyPressed(juce::KeyPress('1'));
-    check(ClipSizingMode::Trim, "key 1 three times");
-    EXPECT_EQ(glyphs.size(), 3u) << "one distinct glyph per mode";
+    for (const bool labels : {true, false}) {
+        f.panel.setToolbarLabelsShown(labels);
+        const auto bounds = f.field().getBounds();
+        EXPECT_EQ(bounds.getWidth(), f.field().getFixedWidth()) << "laid out at its fixed width";
+        const auto neighbour = f.panel.getSnapToggleButton().getBounds();
+        std::set<synth::theme::Icon> icons;
+        const auto check = [&](ClipSizingMode expected, const char* how) {
+            EXPECT_EQ(f.field().getMode(), expected) << how;
+            EXPECT_EQ(f.field().getBounds(), bounds) << how << " (labels " << labels << "): one size, one place";
+            EXPECT_EQ(f.panel.getSnapToggleButton().getBounds(), neighbour) << how << ": the neighbour never moves";
+            EXPECT_FALSE(f.field().getToggleState()) << how << ": no mode is lit";
+            icons.insert(f.field().getIcon());
+            EXPECT_EQ(f.field().getButtonText().isEmpty(), !labels) << how;
+        };
+        f.field().choose(ClipSizingMode::Trim);
+        check(ClipSizingMode::Trim, "Trim");
+        f.panel.keyPressed(juce::KeyPress('1'));
+        check(ClipSizingMode::CarryContents, "key 1 once");
+        f.panel.keyPressed(juce::KeyPress('1'));
+        check(ClipSizingMode::Stretch, "key 1 twice");
+        f.panel.keyPressed(juce::KeyPress('1'));
+        check(ClipSizingMode::Trim, "key 1 three times");
+        EXPECT_EQ(icons.size(), 3u) << "one distinct icon per mode";
 
-    juce::PopupMenu captured;
-    f.field().showMenuHook = [&captured](juce::PopupMenu& menu) { captured = menu; };
-    for (const auto mode : {ClipSizingMode::Stretch, ClipSizingMode::CarryContents, ClipSizingMode::Trim}) {
-        f.field().clicked();
-        f.field().choose(mode); // what picking the menu row runs
-        check(mode, "the menu");
+        juce::PopupMenu captured;
+        f.field().showMenuHook = [&captured](juce::PopupMenu& menu) { captured = menu; };
+        for (const auto mode : {ClipSizingMode::Stretch, ClipSizingMode::CarryContents, ClipSizingMode::Trim}) {
+            f.field().clicked();
+            f.field().choose(mode); // what picking the menu row runs
+            check(mode, "the menu");
+        }
     }
+}
+
+TEST(TimelineClipSizingFieldTest, EveryModeHasItsOwnIconAndTheCaptionNeverOutgrowsTheFixedWidth) {
+    SizingPanelFixture f;
+    f.panel.setToolbarLabelsShown(true);
+    std::set<synth::theme::Icon> icons;
+    const int labelled = f.field().getFixedWidth();
+    for (const auto mode : {ClipSizingMode::Trim, ClipSizingMode::CarryContents, ClipSizingMode::Stretch}) {
+        icons.insert(synth::ui::ClipSizingButton::iconFor(mode));
+        EXPECT_LE(f.field().getPreferredWidthFor(synth::ui::ClipSizingButton::captionFor(mode)), labelled);
+    }
+    EXPECT_EQ(icons.size(), 3u);
+    f.panel.setToolbarLabelsShown(false);
+    EXPECT_LT(f.field().getFixedWidth(), labelled) << "icon only is narrower";
+}
+
+TEST(TimelineClipSizingFieldTest, LabelsOffLeavesTheIconAndTheTooltipNamesTheMode) {
+    SizingPanelFixture f;
+    f.panel.setToolbarLabelsShown(false);
+    f.field().choose(ClipSizingMode::CarryContents);
+    EXPECT_TRUE(f.field().getButtonText().isEmpty());
+    EXPECT_EQ(f.field().getIcon(), synth::theme::Icon::ClipSizingCarry);
+    EXPECT_TRUE(f.field().getTooltip().startsWith("Clip sizing: Carry contents")) << f.field().getTooltip();
+    EXPECT_EQ(f.field().getTitle(), "Clip sizing");
+    EXPECT_EQ(f.field().getDescription(), "Carry contents");
+    f.panel.setToolbarLabelsShown(true);
+    EXPECT_EQ(f.field().getButtonText(), "Carry");
+}
+
+TEST(TimelineClipSizingFieldTest, ItIsATabStopThatAClickNeverFocuses) {
+    SizingPanelFixture f;
+    EXPECT_TRUE(f.field().getWantsKeyboardFocus());
+    EXPECT_FALSE(f.field().getMouseClickGrabsKeyboardFocus());
 }
 
 TEST(TimelineClipSizingFieldTest, TheSavedModeIsRestoredIntoAFreshPanel) {

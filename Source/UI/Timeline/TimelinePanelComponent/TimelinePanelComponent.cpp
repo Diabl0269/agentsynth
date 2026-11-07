@@ -14,6 +14,7 @@
 #include "Transport/TransportService.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
 #include "UI/Layout/KeyRing.h"
+#include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include <algorithm>
 #include <cmath>
@@ -46,7 +47,8 @@ void TimelinePanelComponent::wirePianoRollLoopRequest() {
 }
 
 TimelinePanelComponent::TimelinePanelComponent()
-    : topBarKeys_(std::make_unique<KeyRing>(*this, [this] { return topBarStops(); })) {
+    : clipSizingButton_(std::make_unique<ClipSizingButton>())
+    , topBarKeys_(std::make_unique<KeyRing>(*this, [this] { return topBarStops(); })) {
     // Makes grabKeyboardFocus() on THIS component (the "timeline" focus region's root)
     // succeed deterministically, rather than depending on JUCE's position-ordered descent into
     // children finding a focus-wanting one. This is deliberately separate from the clip-lane-area
@@ -142,8 +144,8 @@ TimelinePanelComponent::TimelinePanelComponent()
     initDrawShapes();
 
     // The Sizing field sits right of the tools: it says what the Select tool's edge drags do to the notes.
-    addAndMakeVisible(clipSizingButton_);
-    clipSizingButton_.onModeChanged = [this](synth::ClipSizingMode mode) { clipLaneArea_.setClipSizingMode(mode); };
+    addAndMakeVisible(*clipSizingButton_);
+    clipSizingButton_->onModeChanged = [this](synth::ClipSizingMode mode) { clipLaneArea_.setClipSizingMode(mode); };
 
     // The snap toggle lives in the transport bar so grid magnetism is discoverable without opening
     // a clip — the same switch the piano roll's header "Q" and the panel-wide Q key flip.
@@ -252,7 +254,7 @@ TimelinePanelComponent::TimelinePanelComponent()
     for (juce::Component* chrome :
          {static_cast<juce::Component*>(&addTrackButton_), static_cast<juce::Component*>(&snapToggleButton_),
           static_cast<juce::Component*>(&followPlayheadButton_), static_cast<juce::Component*>(&snapCombo_),
-          static_cast<juce::Component*>(&clipSizingButton_)})
+          static_cast<juce::Component*>(clipSizingButton_.get())})
         chrome->setMouseClickGrabsKeyboardFocus(false);
 
     // Added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
@@ -392,7 +394,7 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
 
     const auto selectKey =
         shortcutHintFor(shortcuts_, "timelineToolSelect", juce::KeyPress('1', juce::ModifierKeys::noModifiers, 0));
-    clipSizingButton_.setStepKeyHint(selectKey);
+    clipSizingButton_->setStepKeyHint(selectKey);
 
     snapToggleButton_.setTooltip(synth::ui::formatShortcutHint(
         "Snap on/off",

@@ -1,5 +1,6 @@
 // Concern: which controls the Timeline's top-bar key ring (synth::ui::KeyRing) stops on.
 #include "UI/Layout/KeyRing.h"
+#include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 
 namespace synth::ui {
@@ -21,8 +22,8 @@ bool TimelinePanelComponent::focusTransportBar() {
 // Every control of the top bar. Add Track is not here: it is the first stop of the track column below, reached with
 // Down.
 std::vector<juce::Component*> TimelinePanelComponent::topBarStops() {
-    std::vector<juce::Component*> stops{&sidePaneButton_, &clipSizingButton_,     &snapToggleButton_,
-                                        &snapCombo_,      &followPlayheadButton_, dockBack_};
+    std::vector<juce::Component*> stops{&sidePaneButton_, clipSizingButton_.get(), &snapToggleButton_,
+                                        &snapCombo_,      &followPlayheadButton_,  dockBack_};
     for (auto tool : kAllEditTools)
         stops.push_back(getToolButton(tool));
     stops.insert(stops.end(),

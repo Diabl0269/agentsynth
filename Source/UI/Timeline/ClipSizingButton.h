@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Timeline/TimelineDoc/ClipEdgeSizing.h"
-#include "UI/Theme/IconGlyphs.h"
+#include "UI/Chrome/ToolbarButton/ToolbarButton.h"
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -9,9 +9,10 @@
 
 namespace synth::ui {
 
-// The edit-tool strip's Sizing field: one fixed-width button showing the mode's glyph and a menu chevron; a click
-// opens a menu of the three modes. The mode is a user setting, the same in every project.
-class ClipSizingButton : public juce::TextButton {
+// The Timeline bar's clip sizing control: a toolbar button whose glyph (and caption, when labels are shown) names the
+// mode, at one width in every mode; a click opens a menu of the three modes. The mode is a user setting, the same in
+// every project.
+class ClipSizingButton : public ToolbarButton {
 public:
     ClipSizingButton();
 
@@ -22,6 +23,11 @@ public:
     void setApplicationProperties(juce::ApplicationProperties* props);
     // The key that steps the mode while Select is the tool, named in the tooltip; empty when it has none.
     void setStepKeyHint(const juce::String& key);
+    // Shows the mode's short name beside the glyph (true) or the glyph alone; the width follows.
+    void setCaptionShown(bool shown);
+    bool isCaptionShown() const noexcept { return captionShown_; }
+    // The width the control needs: the same in every mode, so choosing one never moves its neighbours.
+    int getFixedWidth() const;
 
     std::function<void(synth::ClipSizingMode)> onModeChanged;
     // A test replaces the real popup with a capture of the menu.
@@ -31,22 +37,19 @@ public:
     void showMenu();
     void clicked() override;
 
-    static synth::theme::Glyph glyphFor(synth::ClipSizingMode mode) noexcept;
-    // Where the glyph is drawn, in the button's own coordinates.
-    juce::Rectangle<float> glyphBounds() const noexcept;
+    static synth::theme::Icon iconFor(synth::ClipSizingMode mode) noexcept;
+    // The caption shown beside the glyph: "Trim", "Carry" or "Stretch".
+    static juce::String captionFor(synth::ClipSizingMode mode);
 
-    static constexpr int kWidth = 36;          // the field's width in every mode
     static constexpr int kFirstModeItemId = 1; // + the mode's index
     static constexpr const char* kPropertyKey = "timelineClipSizingMode";
-
-protected:
-    void paintButton(juce::Graphics& g, bool over, bool down) override;
 
 private:
     void show(synth::ClipSizingMode mode);
     void refreshTooltip();
 
     synth::ClipSizingMode mode_ = synth::ClipSizingMode::Trim;
+    bool captionShown_ = true;
     juce::ApplicationProperties* props_ = nullptr;
     juce::String stepKey_;
     std::unique_ptr<juce::Component> stateProbe_; // test mode's "timelineClipSizingState"

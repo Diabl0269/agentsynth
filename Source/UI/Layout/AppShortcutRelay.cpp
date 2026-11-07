@@ -1,5 +1,5 @@
-// ShapeEditorAppShortcuts.cpp -- which keys the shape editor window passes on to the app, and how.
-#include "ShapeEditorAppShortcuts.h"
+// AppShortcutRelay.cpp -- which keys a tool window passes on to the app, and how.
+#include "AppShortcutRelay.h"
 #include "ShortcutManager/AppCommands.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"

@@ -1,6 +1,6 @@
 // ShapeEditorWindow.cpp -- the shape editor's window and its grow-out-of-the-card motion.
 #include "ShapeEditorWindow.h"
-#include "ShapeEditorAppShortcuts.h"
+#include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Library/SoundBrowser/SoundDragState.h"
 

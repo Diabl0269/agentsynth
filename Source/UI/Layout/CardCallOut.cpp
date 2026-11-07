@@ -1,8 +1,8 @@
 // CardCallOut.cpp -- opens a card's popover and relays the app's shortcuts out of it.
 #include "CardCallOut.h"
+#include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/DialogKeyboard.h"
-#include "UI/ModuleViews/ShapeEditor/ShapeEditorAppShortcuts.h"
 #include <map>
 
 namespace synth::ui {

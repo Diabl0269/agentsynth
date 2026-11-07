@@ -2,9 +2,9 @@
 
 #include "ModCurveChip.h"
 #include "UI/Graph/ModDot/ModDotPalette.h"
+#include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopupMotion.h"
-#include "UI/ModuleViews/ShapeEditor/ShapeEditorAppShortcuts.h"
 
 namespace synth::ui {
 

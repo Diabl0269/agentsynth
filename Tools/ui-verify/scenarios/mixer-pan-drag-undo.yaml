@@ -1,0 +1,26 @@
+# Dragging a mixer strip's pan knob with the mouse is one undo step: Cmd+Z puts the pan back.
+#
+# What a user does: opens the Mixer, drags the Oscillator 1 strip's pan knob upward with the mouse, then presses Cmd+Z.
+# The pan goes back to centre in one step. The proof still is the knob right after that Cmd+Z.
+record: true
+save_project: mixer-pan-drag-undo
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - click: {id: timelineAddTrackButton}
+  - wait: {}
+  - click: {id: "modMatrixPicker > Oscillator, Track"}
+  - wait: {}
+  - click: {id: Mixer}
+  - wait: {settleMs: 800}
+  - expect: {id: "mixerPan:Oscillator 1", value: 0.0, within_ms: 3000}
+  - drag: {from: "mixerPan:Oscillator 1", to: "mixerPan:Oscillator 1", fromX: 14, fromY: 22, toX: 14, toY: 2, steps: 12}
+  - wait: {settleMs: 600}
+  - screenshot: {id: "mixerPan:Oscillator 1", name: pan-dragged}
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 600}
+  - expect: {id: "mixerPan:Oscillator 1", value: 0.0, within_ms: 2000}
+  - mark: {check: 1, name: pan-undo}
+  - wait: {settleMs: 1000}
+  - screenshot: {id: "mixerPan:Oscillator 1", name: pan-back}

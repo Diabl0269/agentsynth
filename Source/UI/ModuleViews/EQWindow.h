@@ -2,6 +2,7 @@
 
 #include "EQCurveComponent.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 /** Dialog content for the pop-out Parametric EQ editor.
@@ -21,6 +22,7 @@ class EQWindow : public juce::Component {
 public:
     explicit EQWindow(ParametricEQModule& eq) {
         curve = std::make_unique<EQCurveComponent>(eq);
+        curve->setComponentID("eqWindowCurve");
         addAndMakeVisible(*curve);
 
         spectrumToggle.setButtonText("Show Spectrum");
@@ -52,9 +54,12 @@ public:
      *  content. */
     std::function<void()> onRequestClose;
 
+    /** Hands a key this window does not use (undo, redo, play/stop) to the app; see makeAppShortcutRelay. */
+    std::function<bool(const juce::KeyPress&)> onAppShortcut;
+
     bool keyPressed(const juce::KeyPress& key) override {
         if (key != juce::KeyPress::escapeKey)
-            return false;
+            return onAppShortcut && onAppShortcut(key);
         if (onRequestClose)
             onRequestClose();
         else
