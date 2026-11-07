@@ -26,6 +26,7 @@ steps:
   - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
   - expect: {id: modMatrixPicker, contains: {title: "Change source of LFO 1 on Cutoff"}}
   - screenshot: {id: modMatrixPicker, name: source-picker}
+  - mark: {check: 1, name: change-source-picker}  # the picker stays open across the mark
   - type: {text: "new env"}
   - key: {keys: return}
   - wait: {}

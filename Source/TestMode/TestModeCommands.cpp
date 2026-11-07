@@ -6,6 +6,7 @@
 #include "TestMode/TestModeComponents.h"
 #include "TestMode/TestModeInput.h"
 #include "TestMode/TestModePresentedFrame.h"
+#include "TestMode/TestModeScreenFrame.h"
 #include <cmath>
 #if JUCE_WINDOWS
 #include <process.h>
@@ -259,7 +260,30 @@ StepResult cmdGetState(const juce::var& args, Scratch&, int) {
                                       : StepResult::failed(found.error);
 }
 
+// The "screen" id: the main window with every other window of the app and the pointer, as a user sees it.
+StepResult screenFrameShot(const juce::String& path, float scale) {
+    juce::String error;
+    const auto frame = captureScreenFrame(scale, error);
+    if (!frame)
+        return StepResult::failed(error);
+    const juce::File file(path);
+    file.getParentDirectory().createDirectory();
+    file.deleteFile();
+    juce::FileOutputStream stream(file);
+    if (!stream.openedOk() || !juce::PNGImageFormat().writeImageToStream(frame->image, stream))
+        return StepResult::failed("could not write " + path);
+    return StepResult::done(describeScreenFrame(*frame, path));
+}
+
 StepResult cmdScreenshot(const juce::var& args, Scratch&, int) {
+    if (args.getProperty("id", {}).toString() == "screen") {
+        const auto screenPath = args.getProperty("path", {}).toString();
+        if (screenPath.isEmpty() || !juce::File::isAbsolutePath(screenPath))
+            return StepResult::failed("\"path\" must be an absolute file path");
+        const float screenScale =
+            args.hasProperty("scale") ? static_cast<float>(static_cast<double>(args["scale"])) : 1.0f;
+        return screenFrameShot(screenPath, screenScale);
+    }
     const auto found = findComponent(args.hasProperty("id") ? args["id"].toString() : juce::String("window"));
     if (found.component == nullptr)
         return StepResult::failed(found.error);

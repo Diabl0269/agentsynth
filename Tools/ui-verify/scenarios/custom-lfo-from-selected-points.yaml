@@ -26,6 +26,7 @@ steps:
   - expect: {id: automationLaneState, cursor: tool}
   - expect: {id: modulatorBandState, cursor: tool}
   - screenshot: {name: range-tool-lane}
+  - mark: {check: 1, name: range-cursor}  # the pointer still rests on the lane with the Range tool
   - click: {id: timelineToolSelect}
   - expect: {id: automationLaneState, cursor: arrow}
   - expect: {id: modulatorBandState, cursor: arrow}

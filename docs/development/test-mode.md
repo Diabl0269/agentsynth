@@ -56,7 +56,7 @@ thread is never blocked and timers and animations run in between.
 | `drag` | `from`, `to`, `fromX?`, `fromY?`, `toX?`, `toY?`, `steps` (12), `mods` | `{from, to}` |
 | `key` | `keys` (`cmd+z`, `space`, `shift+tab`, `escape`, `up` ...), `target?` | `{handled}` |
 | `getState` | `id` | the `list` fields plus `enabled`, `hasFocus`, and per type: Button `text`/`toggleState`, Label `text`, Slider `value`/`min`/`max`, ComboBox `text`/`selectedId`, TextEditor `text`; a module card adds `selected`, `moduleType`, `title`, `nodeId` |
-| `screenshot` | `id` or `window`, `path` (absolute), `scale` (1) | `{path, width, height}`; parent folders are created |
+| `screenshot` | `id` or `window`, `path` (absolute), `scale` (1) | `{path, width, height}`; parent folders are created. `id: "screen"` is what a user sees (see [Screen frame](#screen-frame)) and also answers `windows` and `pointer` |
 | `openProject` | `path` (a `.agsproj` bundle) | `{name}` once it has loaded; refused while the open project has unsaved changes or the bundle has an autosave sidecar, because opening would ask first |
 | `saveProject` | `path` (ends in `.agsproj`) | `{path}` once written; what the Save dialog runs, without the dialog |
 | `waitForIdle` | `timeoutMs` (5000), `settleMs` (100) | `{waitedMs}` once no component animation has run for `settleMs` |
@@ -81,6 +81,20 @@ A component with state worth reading implements `synth::testmode::StateSource` (
 when it has one, so a scenario can check the shortcut a button's tooltip names.
 The minimap has the id `minimap` (a scenario clicks it by that id).
 The tooltip window (id `tooltipWindow`) reports `tipText` and `tipAtPointer`. juce places a tip at the OS cursor, which synthetic input never moves, so `click`/`drag` tell the window where the synthetic pointer is (`AppTooltipWindow::setSyntheticPointer`) and tips land beside it, not at the user's own cursor; a scenario that leaves a tip up can `expect: {id: tooltipWindow, tipAtPointer: true}`.
+
+## Screen frame
+
+`screenshot` with `id: "screen"` paints the main window and every other visible top-level component of the app (pop-up
+menus, call-out boxes, pickers, tooltips, the shape editor window) and composites each at its screen position. The frame
+is the union of the main window's bounds and the other windows' bounds cut to the main window's display. Each window is
+rendered offscreen like any other screenshot, since the windows are invisible in a hidden run and the OS compositor would
+show nothing. The pointer is drawn at the last synthetic mouse position (`click`, `hover`, `drag`, `mouseDown` ...): the
+image of the cursor the component under it shows when that is a custom image cursor (the tool cursors built by
+`makeToolCursor`, which keeps the picture in a small registry because a `juce::MouseCursor` cannot be read back), else a
+white arrow with a dark outline. The reply is `{path, width, height, windows: [{id,x,y,width,height}], pointer: {x,y,kind}}`
+with positions in the frame's own coordinates and `kind` `arrow` or the cursor's name (`tool:range`). Code:
+`Source/TestMode/TestModeScreenFrame.*`. `Tools/ui-verify` films this frame by default and `mark` saves it as proof, see
+[Video and saved project](#video-and-saved-project).
 
 ## Input
 
@@ -186,6 +200,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `expect: {id, contains: {field: text}}` | case-insensitive substring |
 | `expect: {id, exists: false}` | the component is not there |
 | `expect: {count: {prefix, field?, equals}}` | how many ids (or `title`s) in `list` start with the prefix |
+| `mark: {check, name}` | proof for one check, see [Proof marks](#proof-marks) |
 
 `stale_pixel_check: true` (or `{ignore: [ids], settle_ms: 1500}`) follows the window from launch and runs
 `checkStalePixels` after every step that can change it (not after `wait`, `expect`, `getState`, `list`, `screenshot`, or
@@ -207,13 +222,22 @@ save_project: end     # <out>/end.agsproj, saved after the last step
 steps: ...
 ```
 
-`record` takes a window `screenshot` after each step that can change the window, joined by ffmpeg, so it needs no Screen
+`record` takes a [screen frame](#screen-frame) (the main window, every other window of the app and the pointer) after each step that can change the window, joined by ffmpeg, so it needs no Screen
 Recording permission and works on hidden windows. It has no sound: for an audio check, attach an offline render's WAV.
-`record_target` films one component instead (a popover is a window of its own, so the main window never shows it); `scale` renders it larger. Each frame holds 0.8 s. The protocol answers one command at a time, so a recorded `drag` is sent as `mouseDown`,
+`record_target` films one component instead; `scale` renders it larger. Each frame holds 0.8 s. The protocol answers one command at a time, so a recorded `drag` is sent as `mouseDown`,
 `mouseMoveHeld` per step and `mouseUp` with a frame after each (0.1 s each, ten a second): the same gesture, only slower
 in real time. A drag whose two ends are the same component is sent to that component in its own coordinates (so it also works in a window of its own, such as a shape window). A drag with an end outside the main window stays one command and shows only its result. Without ffmpeg
 the run prints a warning and still passes. A failed scenario keeps both: they show what went wrong. `save_project` is a plain
 name (it cannot leave `<out>`), overwrites the last run's bundle and fails the scenario if the save fails.
+
+### Proof marks
+
+`- mark: {check: N, name: <slug>}` (N an integer of 1 or more, `name` lower-case letters, digits and dashes, unique in the
+scenario; anything else is refused when the file is read) is the moment a check's claim is on screen: put it while the menu,
+picker or hover it shows is still open. It takes one screen frame held 1.5 s, saves it as `<out>/proof/<name>.png` (also
+with `record` off) and, once the video is written, cuts `<out>/<scenario>-<name>.mp4` from 2.5 s before the frame to 3 s
+after it (4 to 6 s when the video allows; needs ffmpeg). The run log gets a `mark` line with the still and clip, and the
+summary lists both.
 
 To add one: copy the closest file, start the file with a comment naming the bug and the steps a user takes, and give each
 check an id from `list` (add a `setComponentID` or a `StateSource` field where the component has none, never rename an

@@ -3,6 +3,9 @@
 # keychain (the saved sign-in token) and the microphone on every launch. Must be included after
 # the POST_BUILD step that embeds Sparkle, so the signature covers it. No-ops on CI and on
 # machines without a dev identity (see docs/development/local-ci.md#dev-signing).
+# The build commit goes into Info.plist first, so the signature below covers it.
+include(${CMAKE_CURRENT_LIST_DIR}/BuildCommit.cmake)
+
 if(NOT DEFINED ENV{CI})
     # Local builds also keep their own keychain sign-in item (KeychainTokenStore.cpp, in Core),
     # apart from the release app's, which this signature is not trusted to read.
