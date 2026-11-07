@@ -609,7 +609,7 @@ shortcut.
 
 ## Fading things in and out
 
-`synth::ui::ShownFade` (`Source/UI/Layout/UIAnimation.h`) is the one fade for a floating label that is a component's alpha (the mod dot tooltip): `fadeTo(shown)` runs 160 ms in and 110 ms out, 80 ms under Reduce Motion, and lands at once when its host is not showing or Animations are Off.
+`synth::ui::ShownFade` (`Source/UI/Layout/UIAnimation.h`) is the one fade for a floating label that is a component's alpha (the mod dot tooltip, and the mod hover chip under a knob through `synth::ui::ModChipFade`, which keeps the last rows through the fade-out and repaints only the card): `fadeTo(shown)` runs 160 ms in and 110 ms out, 80 ms under Reduce Motion, and lands at once when its host is not showing or Animations are Off.
 
 Anything that appears or disappears in place (not a popup window, which is [PopupMotion](#popup-windows)) uses one
 helper, `synth::ui::FadeVisibility` (`Source/UI/Layout/FadeVisibility.h`), never a bare `setVisible()`:
@@ -748,7 +748,7 @@ does not show anywhere else and keeps showing: mark its component with `synth::u
 preference's own toggle, so it can always say how to bring tips back. The window reads the setting each time it is
 asked for a tip (`AppTooltipWindow::getTipFor`), so a toggle applies at once in every window with no push. The mod-dot
 readout is painted on the canvas, not a hover tooltip; while it shows it blocks hover tips (`blockHoverTips`), as juce shows a
-changed tip at once within 500 ms of the last. Tests: `AppTooltipWindowTests.cpp`, `ModDot/ModDotSingleReadoutTests.cpp`.
+changed tip at once within 500 ms of the last. The mod hover chip under a hovered knob uses the same box (`synth::theme::paintTooltipBox`) and the same 160/110 ms `ShownFade`. Tests: `AppTooltipWindowTests.cpp`, `ModDot/ModDotSingleReadoutTests.cpp`.
 
 A window can opt into a different look by passing a `popup_motion::Style` to `PopupMotion::attach`:
 the slide distances, `overshoot` (the arrival eases with `easeOutBackSoft`, peaking 3% past rest

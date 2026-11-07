@@ -482,7 +482,7 @@ public:
     ~ShownFade() { driver_.stop(vblank_); }
 
     void fadeTo(float target, double fullMs, std::function<float(float)> easing) {
-        if (!host_.isShowing() || animationsOff()) {
+        if ((!host_.isShowing() && !animateOffScreen()) || animationsOff()) {
             jumpTo(target);
             return;
         }
@@ -505,9 +505,19 @@ public:
     float alpha() const noexcept { return alpha_; }
     bool isRunning() const noexcept { return driver_.isRunning(); }
 
+    /** Test seams: animate although the host is not on screen, and advance the running fade to `ms` after its start
+     *  (no vblank reaches an off-screen component). */
+    static void setAnimateOffScreenForTest(bool animate) { animateOffScreen() = animate; }
+    void stepForTest(double ms) { driver_.stepForTest(ms); }
+
     std::function<void()> onFrame;
 
 private:
+    static bool& animateOffScreen() {
+        static bool animate = false;
+        return animate;
+    }
+
     void set(float value) {
         alpha_ = juce::jlimit(0.0f, 1.0f, value);
         if (onFrame)

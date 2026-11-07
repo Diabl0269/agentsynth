@@ -5,13 +5,16 @@
 #   1. Opens a project with two LFOs modulating the Filter's Cutoff.
 #   2. Rests the pointer on the Cutoff knob: a row for each LFO shows under it.
 #   3. Presses the dot and drags up: the first source's row shows its live amount, the other row stays.
+#   4. Moves the pointer off the knob: the rows fade out with their text. The marks sit right after the hover starts
+#      and right after it ends, where the fade shows in the recording.
 motion: true
 record: true
-save_project: mod-chip-lists-every-source
+save_project: mod-chip-fade
 steps:
   - openProject: {path: "${FIXTURES}/mod-dot-two-lfos.agsproj"}
   - wait: {}
   - hover: {id: Cutoff}
+  - mark: {check: 1, name: chip-fade-in}
   - expect: {id: "card:Filter", modHoverChip: true, within_ms: 3000}
   - expect: {id: "card:Filter", contains: {modHoverChipRows: "+50%"}}
   - expect: {id: "card:Filter", contains: {modHoverChipRows: "-25%"}}
@@ -22,3 +25,6 @@ steps:
   - expect: {id: "card:Filter", contains: {modHoverChipRows: "-25%"}}
   - screenshot: {id: "card:Filter", name: chip-stack-while-dragging}
   - mouseUp: {id: "Cutoff modulation, 2 sources", x: 3, y: -20}
+  - hover: {id: "card:Filter", x: 8, y: 8}
+  - mark: {check: 2, name: chip-fade-out}
+  - expect: {id: "card:Filter", modHoverChip: false, within_ms: 3000}

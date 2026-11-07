@@ -543,7 +543,7 @@ Bypassed sources and sources with no name are left out. The stack lists at most 
 `"+N more"` row; the source the dot drag adjusts (the [last-chosen source](#the-mod-dot-drag-an-amount-from-the-landing-dot))
 is **bold** and always listed. Rows are formatted by `synth::ui::formatModHoverChipText` and chosen by
 `synth::ui::modHoverChipRows` (`ModuleComponentModChip.h`, unit-tested in isolation the same way `modDepthBandRange` is),
-drawn in the knob-value-box mono font on a `surfaceHi` chip each. The stack is never clipped: it hangs under the knob
+drawn in the knob-value-box mono font, each row on the tooltip's own box (`synth::theme::paintTooltipBox`, the painter `drawTooltip` uses: opaque `surfaceHi`, `border`, radius 5). The stack fades in over 160 ms and out over 110 ms with the shared `ShownFade` (`synth::ui::ModChipFade`), keeping its last rows through the fade-out so it fades with its text; Reduce Motion makes it the plain 80 ms fade and Animations Off lands it at once. The stack is never clipped: it hangs under the knob
 when it fits inside the card, flips above the knob when the knob is in the card's last row, and as a last resort is pushed
 up (or left) just far enough to stay whole (`synth::ui::modChipRowRects`, `synth::ui::modHoverChipRects`). While the
 knob's own sources panel is open the stack is not drawn: the panel lists the same sources, and the chip would peek out

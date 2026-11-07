@@ -8,6 +8,7 @@
 // ModuleComponentModBand.h's modDepthBandRange.
 
 #include "UI/Graph/ModDot/KnobModSources.h"
+#include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -71,5 +72,30 @@ std::vector<juce::Rectangle<float>> modHoverChipRects(const juce::Component& car
  * to the index of the slider the rows hang under (-1: none). */
 ModChipStack modChipStack(GraphEditor& editor, juce::AudioProcessorGraph::NodeID card, ModuleBase* mod,
                           const std::function<int(const ModulationTarget&)>& sliderFor);
+
+/** The chip's own shown-fade: 160 ms in, 110 ms out (a plain fade under Reduce Motion, instant with Animations Off).
+ *  It keeps the last stack's rows through the fade-out so the chip fades with its text, and repaints `card` on every
+ *  frame. */
+class ModChipFade {
+public:
+    static constexpr double kFadeInMs = 160.0;
+    static constexpr double kFadeOutMs = 110.0;
+
+    explicit ModChipFade(juce::Component& card);
+
+    /** Takes what the card should show now (`now`, as modChipStack gives it) and returns what to paint: `now` at the
+     *  fade's opacity while it shows, the last rows fading out once it does not. Rows are empty once faded out. */
+    ModChipStack follow(const ModChipStack& now);
+
+    float alpha() const noexcept { return fade_.alpha(); }
+    /** Test seam: advances the running fade to `ms` after its start. */
+    void stepForTest(double ms) { fade_.stepForTest(ms); }
+
+private:
+    ShownFade fade_;
+    ModChipStack last_;
+    float lastNowAlpha_ = 1.0f;
+    bool shown_ = false;
+};
 
 } // namespace synth::ui

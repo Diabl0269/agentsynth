@@ -120,13 +120,17 @@ juce::Rectangle<int> AppLookAndFeel::getTooltipBounds(const juce::String& tipTex
     return juce::Rectangle<int>(x, y, w, h).constrainedWithin(parentArea);
 }
 
+void paintTooltipBox(juce::Graphics& g, juce::Rectangle<float> bounds, const Theme& theme, float alpha) {
+    constexpr float kTooltipRadius = 5.0f;
+    g.setColour(theme.colors.surfaceHi.withMultipliedAlpha(alpha));
+    g.fillRoundedRectangle(bounds, kTooltipRadius);
+    g.setColour(theme.colors.border.withMultipliedAlpha(alpha));
+    g.drawRoundedRectangle(bounds.reduced(0.5f), kTooltipRadius, theme.metrics.borderWidth);
+}
+
 void AppLookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& text, int width, int height) {
     const auto& c = theme.colors;
-    auto bounds = juce::Rectangle<float>(0, 0, (float)width, (float)height);
-    g.setColour(c.surfaceHi);
-    g.fillRoundedRectangle(bounds, 5.0f);
-    g.setColour(c.border);
-    g.drawRoundedRectangle(bounds.reduced(0.5f), 5.0f, theme.metrics.borderWidth);
+    paintTooltipBox(g, juce::Rectangle<float>(0, 0, (float)width, (float)height), theme);
 
     g.setColour(c.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(theme.type.label + 1.0f)));

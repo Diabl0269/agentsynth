@@ -15,6 +15,10 @@ class ToolbarButton;
 
 namespace synth::theme {
 
+/** The box every tooltip is drawn on (fill, border, corner radius): the hover tooltip and the mod chip rows call this
+ *  one painter so they cannot drift. `alpha` scales the whole box. */
+void paintTooltipBox(juce::Graphics& g, juce::Rectangle<float> bounds, const Theme& theme, float alpha = 1.0f);
+
 // Paints a synth::ui::IconButton (background for its style, glyph, focus ring) from `theme`.
 // AppLookAndFeel::drawIconButton calls it with its own theme; IconButton calls it with a default
 // Theme when it sits outside any AppLookAndFeel.

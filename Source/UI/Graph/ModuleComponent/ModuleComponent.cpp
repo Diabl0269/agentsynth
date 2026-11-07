@@ -46,6 +46,7 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     for (const auto& row : chipStack.rows)
         chipRows.add(row.text);
     into.setProperty("modHoverChipRows", chipRows);
+    into.setProperty("modHoverChipAlpha", ringFades_.chip().alpha());
     // Where each row is painted ("x,y,w,h", card coordinates), so a scenario can see the stack stays inside the card.
     juce::Array<juce::var> chipRects;
     for (const auto& r : synth::ui::modHoverChipRects(
