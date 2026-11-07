@@ -96,6 +96,8 @@ public:
     float getInlineContentOffset() const;
     // The width an Inline layout needs for its current caption (just the chip when it has none).
     int getPreferredWidth() const;
+    // The same for `caption` in place of the current one (a control whose caption changes sizes itself to its widest).
+    int getPreferredWidthFor(const juce::String& caption) const;
 
     synth::theme::Icon getIcon() const noexcept { return icon_; }
     ToolbarGroup getGroup() const noexcept { return group_; }

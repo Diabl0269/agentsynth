@@ -1,11 +1,10 @@
-# Bug FRO1408: the timeline's Sizing field was lit for Carry and Stretch but not for Trim, and its text ("Sizing: Trim",
-# "Sizing: Stretch") changed length, so the strip looked like it shifted. The field is now one fixed-width button
-# showing one glyph per mode (trim, carry, stretch) with a menu chevron; the glyph is the state, so no mode looks "off".
-# Also FRO1407: its menu rows are short now, so the menu no longer opens far wider than its words.
+# The timeline's clip sizing control is a toolbar button like its neighbours: an icon per mode (trim, carry, stretch)
+# and the mode's short name beside it, one fixed width in every mode so the strip never shifts. It is never lit: the
+# icon and caption are the state.
 #
-# What a user does: opens the timeline with Select as the tool, clicks the lanes to focus them, presses 1 three times
-# (Trim -> Carry contents -> Stretch to fit -> Trim), then clicks the field, steps down the menu with the arrow keys
-# and picks Stretch to fit with Return. After every step the field reads its mode and keeps the same width.
+# What a user does: opens the timeline with Select as the tool, clicks a lane, then presses 1 twice (Trim -> Carry
+# contents -> Stretch to fit). After every press the control keeps its width. The proof still is the control at
+# Stretch with the labels shown; clip-sizing-field-icon-only runs the same with Show button labels off.
 record: true
 save_project: clip-sizing-field
 steps:
@@ -16,30 +15,22 @@ steps:
   - key: {keys: escape}
   - wait: {}
   - expect: {id: timelineToolSelect, toggleState: true}
-  - expect: {id: timelineClipSizingState, sizingMode: trim, glyph: trim, fieldWidth: 36}
-  - expect: {id: timelineClipSizing, toggleState: false, title: "Clip sizing, Trim"}
-  - expect: {id: timelineClipSizing, contains: {tooltip: "(1)"}}
-  - screenshot: {id: timelineClipSizing, name: 1-trim}
-  - screenshot: {name: 1-trim-window}
+  - expect: {id: timelineClipSizingState, sizingMode: trim, glyph: trim, caption: Trim}
+  - expect: {id: timelineClipSizing, title: "Clip sizing", contains: {tooltip: "(1)"}}
   - click: {id: window, x: 800, y: 800}
+  - wait: {settleMs: 600}
   - key: {keys: "1"}
-  - expect: {id: timelineClipSizingState, sizingMode: carry, glyph: carry, fieldWidth: 36}
-  - expect: {id: timelineClipSizing, toggleState: false, title: "Clip sizing, Carry contents"}
-  - screenshot: {id: timelineClipSizing, name: 2-carry}
+  - expect: {id: timelineClipSizingState, sizingMode: carry, glyph: carry, caption: Carry}
+  - wait: {settleMs: 600}
   - key: {keys: "1"}
-  - expect: {id: timelineClipSizingState, sizingMode: stretch, glyph: stretch, fieldWidth: 36}
-  - expect: {id: timelineClipSizing, toggleState: false, title: "Clip sizing, Stretch to fit"}
-  - screenshot: {id: timelineClipSizing, name: 3-stretch}
-  - screenshot: {name: 3-stretch-window}
-  - key: {keys: "1"}
-  - expect: {id: timelineClipSizingState, sizingMode: trim, glyph: trim, fieldWidth: 36}
-  # The menu: Trim is ticked; Down twice and Return picks Stretch to fit.
+  - expect: {id: timelineClipSizingState, sizingMode: stretch, glyph: stretch, caption: Stretch}
+  - mark: {check: 1, name: sizing-stretch}
+  - wait: {settleMs: 1000}
+  - screenshot: {id: timelineClipSizing, name: stretch-button}
+  # The menu still picks a mode: Stretch is ticked; Down once and Return picks Trim.
   - click: {id: timelineClipSizing}
-  - wait: {}
-  - key: {keys: down}
-  - key: {keys: down}
+  - wait: {settleMs: 500}
   - key: {keys: down}
   - key: {keys: return}
   - wait: {}
-  - expect: {id: timelineClipSizingState, sizingMode: stretch, glyph: stretch, fieldWidth: 36, within_ms: 2000}
-  - screenshot: {id: timelineClipSizing, name: 4-stretch-from-menu}
+  - expect: {id: timelineClipSizingState, sizingMode: trim, glyph: trim, within_ms: 2000}

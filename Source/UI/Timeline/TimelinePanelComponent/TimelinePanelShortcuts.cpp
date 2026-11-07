@@ -10,6 +10,7 @@
 #include "UI/Layout/KeyRing.h"
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
@@ -102,7 +103,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
 
     // The Select key while Select is already the tool steps the clip edge Sizing mode, as in Cubase.
     if (activeTool_ == EditTool::Select && isSelectToolKey(shortcuts_, key)) {
-        clipSizingButton_.choose(synth::nextClipSizingMode(clipSizingButton_.getMode()));
+        clipSizingButton_->choose(synth::nextClipSizingMode(clipSizingButton_->getMode()));
         return true;
     }
 

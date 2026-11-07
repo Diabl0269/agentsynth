@@ -21,7 +21,6 @@
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 #include "UI/Timeline/AutomationLanes/TimelineAutomationLanes/TimelineAutomationLanes.h"
 #include "UI/Timeline/ClipSelectionModel.h"
-#include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/CursorGlide/TimelineCursorGlide.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/FollowPlayheadButton.h"
@@ -51,6 +50,7 @@ namespace synth {
 class TransportService;
 class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 namespace ui {
+class ClipSizingButton; // Forward declaration (Source/UI/Timeline/ClipSizingButton.h)
 class DrumMachineComponent;
 class KeyRing; // Forward declaration (Source/UI/Layout/KeyRing.h): kept out of this widely included header
 struct DrumMachineHost;
@@ -408,7 +408,9 @@ public:
     std::function<void(const juce::String&)> onShowMessage;
     /** Test seam: a test drives the click via `getFollowPlayheadButtonForTest().onClick()`. */
     FollowPlayheadButton& getFollowPlayheadButtonForTest() noexcept { return followPlayheadButton_; }
-    ClipSizingButton& getClipSizingButton() noexcept { return clipSizingButton_; } // the edit-tool strip's Sizing field
+    ClipSizingButton& getClipSizingButton() noexcept {
+        return *clipSizingButton_;
+    } // the edit-tool strip's Sizing field
 
     /** How many times updateFromTransport() has run; proves the 10 Hz poll never reaches a hidden panel. */
     int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
@@ -827,7 +829,7 @@ private:
     // Toggles TimelineViewState::snapEnabled; its state mirrors the shared flag via setSnapEnabled(), never owns it.
     // Named "Snap", not by its key (stale on a rebind): the live key is in the tooltip (synth::shortcutHintFor).
     ToolbarButton snapToggleButton_{"Snap"};
-    ClipSizingButton clipSizingButton_;
+    std::unique_ptr<ClipSizingButton> clipSizingButton_;
     // The one writer for the snap switch: flips the flag, persists, lights the button, repaints every grid painter.
     void setSnapEnabled(bool enabled);
     // Left-aligned in the transport-bar strip, the snap combo stays right of it.

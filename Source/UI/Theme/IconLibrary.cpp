@@ -202,6 +202,10 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::mixeraddbus_svg, BinaryData::mixeraddbus_svgSize},
         // The top bar's Search button (appended after Icon::MixerAddBus).
         {BinaryData::toolbarsearch_svg, BinaryData::toolbarsearch_svgSize},
+        // The clip sizing control's glyphs (appended after Icon::ToolbarSearch).
+        {BinaryData::toolbarsizingtrim_svg, BinaryData::toolbarsizingtrim_svgSize},
+        {BinaryData::toolbarsizingcarry_svg, BinaryData::toolbarsizingcarry_svgSize},
+        {BinaryData::toolbarsizingstretch_svg, BinaryData::toolbarsizingstretch_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount - update binaryDataForIcon lookup table");

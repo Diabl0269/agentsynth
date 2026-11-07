@@ -75,9 +75,10 @@ void ToolbarButton::setLabel(const juce::String& name, bool captionShown) {
     repaint();
 }
 
-int ToolbarButton::getPreferredWidth() const {
+int ToolbarButton::getPreferredWidth() const { return getPreferredWidthFor(getButtonText()); }
+
+int ToolbarButton::getPreferredWidthFor(const juce::String& text) const {
     const auto spec = toolbarChipSpec(layout_);
-    const auto text = getButtonText();
     if (text.isEmpty() || !isInline())
         return (int)std::ceil(spec.chipWidth) + 4;
     const auto font = synth::theme::AppLookAndFeel::uiSemiBoldFont(spec.captionSize);

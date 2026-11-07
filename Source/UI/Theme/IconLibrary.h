@@ -95,6 +95,10 @@ enum class Icon : int {
     MixerAddBus,
     // The top bar's Search button (the command palette) -- appended, as above.
     ToolbarSearch,
+    // The Timeline bar's clip sizing control, one glyph per mode -- appended, as above.
+    ClipSizingTrim,
+    ClipSizingCarry,
+    ClipSizingStretch,
     kCount
 };
 

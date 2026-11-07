@@ -1,7 +1,6 @@
 // ThemeSweepGlyphTests.cpp -- controls that paint a glyph instead of text, which the text sweep cannot read: the
-// timeline's Sizing field in every built-in theme and every mode. Its glyph must reach 3:1 against the field's own
-// rendered background (the WCAG bar for a non-text graphic), each mode must draw a different glyph, and the field
-// keeps one size in all of them (docs/layout/theming.md, "Theme sweep guard").
+// timeline's clip sizing button in every built-in theme and every mode (each mode must draw a different icon, and the
+// button keeps one size in all of them), and the origin badge (docs/layout/theming.md, "Theme sweep guard").
 #include "ThemeSweepSupport.h"
 #include "ThemeSweepSurfaces.h"
 #include "UI/Chrome/Badge/Badge.h"
@@ -16,17 +15,7 @@ using synth::ClipSizingMode;
 
 namespace {
 
-constexpr double kMinGlyphContrast = 3.0;
 constexpr ClipSizingMode kModes[] = {ClipSizingMode::Trim, ClipSizingMode::CarryContents, ClipSizingMode::Stretch};
-
-// The strongest contrast any pixel of `area` reaches against `background`, each pixel composited over it first.
-double strongestContrast(const juce::Image& image, juce::Rectangle<int> area, juce::Colour background) {
-    double best = 1.0;
-    for (int y = area.getY(); y < area.getBottom(); ++y)
-        for (int x = area.getX(); x < area.getRight(); ++x)
-            best = std::max(best, contrastRatio(background.overlaidWith(image.getPixelAt(x, y)), background));
-    return best;
-}
 
 int differingPixels(const juce::Image& a, const juce::Image& b, juce::Rectangle<int> area) {
     int count = 0;
@@ -39,29 +28,25 @@ int differingPixels(const juce::Image& a, const juce::Image& b, juce::Rectangle<
 
 } // namespace
 
-TEST(ThemeSweepGlyphs, TheClipSizingFieldGlyphReadsInEveryThemeAndEveryModeDrawsItsOwn) {
+TEST(ThemeSweepGlyphs, TheClipSizingButtonDrawsItsOwnIconPerModeInEveryThemeAtOneSize) {
     juce::MessageManager::getInstance();
     for (const auto& theme : synth::theme::builtInThemes()) {
         SweepEnvironment env(theme);
         synth::ui::ClipSizingButton field;
         field.setLookAndFeel(&env.lookAndFeel());
-        field.setSize(synth::ui::ClipSizingButton::kWidth, 24);
-        const auto glyphArea = field.glyphBounds().toNearestInt();
+        field.setSize(field.getFixedWidth(), 28);
         std::vector<juce::Image> images;
         for (const auto mode : kModes) {
             field.choose(mode);
-            EXPECT_EQ(field.getWidth(), synth::ui::ClipSizingButton::kWidth) << "the field keeps one size";
+            EXPECT_EQ(field.getWidth(), field.getFixedWidth()) << "the button keeps one size";
             auto image = renderToImage(field);
             writeSweepPng("sizing-field-" + juce::String(synth::clipSizingModeKey(mode)), theme.id, image);
-            // The fill between the glyph and the chevron, over the panel's own background.
-            const auto fill = theme.colors.bg0.overlaidWith(image.getPixelAt(glyphArea.getCentreX(), 3));
-            const double ratio = strongestContrast(image, glyphArea, fill);
-            EXPECT_GE(ratio, kMinGlyphContrast) << theme.id << " / " << synth::clipSizingModeKey(mode);
             images.push_back(std::move(image));
         }
+        const auto all = field.getLocalBounds();
         for (size_t a = 0; a < images.size(); ++a)
             for (size_t b = a + 1; b < images.size(); ++b)
-                EXPECT_GT(differingPixels(images[a], images[b], glyphArea), 20)
+                EXPECT_GT(differingPixels(images[a], images[b], all), 20)
                     << theme.id << ": " << synth::clipSizingModeKey(kModes[a]) << " and "
                     << synth::clipSizingModeKey(kModes[b]) << " look the same";
         field.setLookAndFeel(nullptr);

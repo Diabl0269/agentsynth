@@ -37,10 +37,6 @@ enum class Glyph {
     Swap,           // two opposite arrows: two views trade places
     Detach,         // a window with an arrow leaving its corner: a view opens in its own window
     Link,           // two linked chain rings: two things joined into one (a stereo pair)
-    // The clip edge Sizing modes, each a clip edge (a vertical bar) and what happens to the notes inside it.
-    SizingTrim,    // the edge cuts a note: the part past it fades out, the notes stay put
-    SizingCarry,   // an arrow over the notes and the edge: they travel together
-    SizingStretch, // a double arrow between two edges: the contents scale to fit
     // The brand marks of the welcome screen's social links, the same drawings as the website's.
     SocialDiscord,  // a chat bubble with two eyes
     SocialYouTube,  // a rounded screen with a play triangle
