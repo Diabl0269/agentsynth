@@ -10,6 +10,7 @@
 #   6. Closes it with Escape, opens it with the Search button, and closes it again with Escape.
 #   7. Switches to light mode, opens it and types "lfo": text, tags, focus ring and matched letters read on the light theme.
 record: true
+save_project: palette
 steps:
   - click: {id: New empty project}                           # the welcome screen
   - wait: {}
@@ -19,10 +20,38 @@ steps:
   - wait: {}
   - key: {keys: return}
   - expect: {count: {prefix: "card:LFO", equals: 1}, within_ms: 2000}
+  - click: {id: "canvasToolbar:add"}                         # FRO733: a second LFO, so "lfo" has a Modules section too
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: return}
+  - expect: {count: {prefix: "card:LFO", equals: 2}, within_ms: 2000}
+  - key: {keys: cmd+j}                                       # FRO733: a track named "LFO Bass", so "lfo" has a Tracks section
+  - wait: {}
+  - click: {id: timelineAddTrackButton}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: midi}
+  - wait: {}
+  - key: {keys: return}
+  - expect: {count: {prefix: "trackNameLabel", equals: 1}, within_ms: 2000}
+  - click: {id: trackNameLabel}
+  - key: {keys: alt+r}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "LFO Bass"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: trackNameLabel, contains: {text: "LFO Bass"}}
+  - screenshot: {name: palette-setup-track-renamed}
   - key: {keys: cmd+k}
   - expect: {id: commandPalette, showing: true, within_ms: 2000}
   - type: {text: lfo}
   - wait: {}
+  - expect: {id: "modMatrixPicker > Top match", exists: true}
+  - expect: {id: "modMatrixPicker > Modules", exists: true}
+  - expect: {id: "modMatrixPicker > Tracks", exists: true}
+  - expect: {id: "modMatrixPicker > LFO 2, Module", exists: true}
+  - expect: {id: "modMatrixPicker > LFO Bass, Track", exists: true}
   - screenshot: {id: commandPalette, name: palette-lfo}
   - key: {keys: return}
   - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}  # freed once it fades out
@@ -41,12 +70,18 @@ steps:
   - expect: {id: commandPalette, showing: true, within_ms: 2000}
   - type: {text: "+ osc"}
   - wait: {}
+  - expect: {id: "modMatrixPicker > Top match", exists: true}
+  - expect: {id: "modMatrixPicker > Oscillator, Track", exists: true}
+  - expect: {id: "modMatrixPicker > Oscillator, Module", exists: true}
   - screenshot: {id: commandPalette, name: palette-plus-osc}
   - key: {keys: escape}
   - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}  # freed once it fades out
   - key: {keys: cmd+k}
   - expect: {id: commandPalette, showing: true, within_ms: 2000}
   - wait: {}
+  - expect: {id: "modMatrixPicker > Recent", exists: true}
+  - expect: {id: "modMatrixPicker > Views", exists: true}
+  - expect: {id: "modMatrixPicker > Timeline, View", exists: true}
   - screenshot: {id: commandPalette, name: palette-empty-recents}
   - key: {keys: escape}
   - expect: {count: {prefix: commandPalette, equals: 0}, within_ms: 2000}  # freed once it fades out

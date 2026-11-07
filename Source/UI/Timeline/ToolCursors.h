@@ -2,8 +2,54 @@
 
 #include "EditTool.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 namespace synth::ui {
+
+/** The picture behind one custom tool cursor: a juce::MouseCursor cannot be read back, so test mode's screen frame
+ *  (docs/development/test-mode.md) draws the pointer from the image `makeToolCursor` kept here. */
+struct ToolCursorImage {
+    juce::MouseCursor cursor;
+    juce::String name; // "tool:range", "tool:draw" ...
+    juce::Image image;
+    juce::Point<int> hotspot;
+};
+
+/** The registered image of `cursor`, or null when it is a stock cursor or was not built by makeToolCursor. */
+inline const ToolCursorImage* findToolCursorImage(const juce::MouseCursor& cursor);
+
+namespace detail {
+inline std::vector<ToolCursorImage>& toolCursorImages() {
+    static std::vector<ToolCursorImage> images;
+    return images;
+}
+inline const char* toolCursorName(EditTool tool) {
+    switch (tool) {
+    case EditTool::Select:
+        return "tool:select";
+    case EditTool::Range:
+        return "tool:range";
+    case EditTool::Split:
+        return "tool:split";
+    case EditTool::Glue:
+        return "tool:glue";
+    case EditTool::Erase:
+        return "tool:erase";
+    case EditTool::Mute:
+        return "tool:mute";
+    case EditTool::Draw:
+        return "tool:draw";
+    }
+    return "tool";
+}
+} // namespace detail
+
+inline const ToolCursorImage* findToolCursorImage(const juce::MouseCursor& cursor) {
+    for (const auto& entry : detail::toolCursorImages())
+        if (entry.cursor == cursor)
+            return &entry;
+    return nullptr;
+}
 
 /**
  * @brief Builds the custom mouse cursor shown while a timeline edit tool (Select / Range / Split /
@@ -57,19 +103,19 @@ inline juce::MouseCursor makeToolCursor(EditTool tool, const juce::Drawable* ico
     icon->drawWithin(g, juce::Rectangle<float>(0.0f, 0.0f, (float)kSize, (float)kSize),
                      juce::RectanglePlacement::centred, 1.0f);
 
-    switch (tool) {
-    case EditTool::Select:
-        return juce::MouseCursor(image, 4, 2); // arrow tip
-    case EditTool::Draw:
-        return juce::MouseCursor(image, 3, 21); // pencil tip
-    case EditTool::Range:
-    case EditTool::Split:
-    case EditTool::Glue:
-    case EditTool::Erase:
-    case EditTool::Mute:
-        return juce::MouseCursor(image, 12, 12); // icon centre
-    }
-    return juce::MouseCursor(image, 12, 12);
+    juce::Point<int> hotspot(12, 12); // icon centre
+    if (tool == EditTool::Select)
+        hotspot = {4, 2}; // arrow tip
+    else if (tool == EditTool::Draw)
+        hotspot = {3, 21}; // pencil tip
+    const juce::MouseCursor cursor(image, hotspot.x, hotspot.y);
+    // A theme change rebuilds the cursors, so the oldest pictures are dropped to keep the list small.
+    auto& images = detail::toolCursorImages();
+    constexpr std::size_t kMaxImages = 64;
+    if (images.size() >= kMaxImages)
+        images.erase(images.begin());
+    images.push_back({cursor, detail::toolCursorName(tool), image, hotspot});
+    return cursor;
 }
 
 } // namespace synth::ui

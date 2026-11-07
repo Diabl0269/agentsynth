@@ -1,0 +1,15 @@
+# The Welcome screen's button under the recents reads "Help build Agent Synth" and opens agentsynth.app/contribute.
+# Test mode has no seam for the URL opener (a click would launch the real browser), so this scenario does not click:
+# it shows the screen and checks the button's text and tooltip. The URL itself is asserted in
+# Tests/UI/Chrome/WelcomeScreenTests.cpp (EXPECT_EQ opened[0] == branding::kContributeUrl, https://agentsynth.app/contribute).
+#
+# What a user does: starts the app with no project; the Welcome screen shows the button under "Recent Projects".
+record: true
+steps:
+  - wait: {}
+  - expect: {id: New empty project, showing: true, within_ms: 3000}
+  - expect: {id: Help build Agent Synth, showing: true}
+  - expect: {id: Help build Agent Synth, contains: {text: Help build Agent Synth}}
+  - hover: {id: Help build Agent Synth}
+  - expect: {id: Help build Agent Synth, contains: {tooltip: agentsynth.app/contribute}}
+  - screenshot: {name: 1-welcome-help-build}

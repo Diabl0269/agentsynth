@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 
 // TestModeInput.h: synthetic mouse and keyboard input for the test-mode server. Everything goes through the target's
 // ComponentPeer (the same entry the OS uses), never into a component's mouseDown() directly and never through the OS
@@ -39,6 +40,9 @@ bool click(juce::Component& target, juce::Point<int> local, Button button, int c
 /** Sends a key through the peer of `target`, which delivers it to the focused component (or the window). `handled`
  *  reports whether anything consumed it. False (with `error`) when the target is not on a native window. */
 bool pressKey(juce::Component& target, const juce::KeyPress& key, bool& handled, juce::String& error);
+
+/** Where the last synthetic mouse event put the pointer, in screen coordinates; empty before the first one. */
+std::optional<juce::Point<int>> lastPointerScreenPoint();
 
 /** The centre of a component, in its own coordinates. */
 juce::Point<int> centreOf(const juce::Component& c);

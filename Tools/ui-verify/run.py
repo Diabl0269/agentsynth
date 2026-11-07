@@ -8,7 +8,7 @@ screenshots it takes, writes a JSON-lines run log and prints a summary. The exit
 failed. The format is described in docs/development/test-mode.md (Scenarios).
 
 A scenario file is either a list of steps or a mapping with `steps:` and optional `settings:` (values, with ${FIXTURES} and ${OUT} filled in, written to the
-instance's settings file before it first starts), `motion: true` (start with --automation-motion), `record: true` (<out>/<scenario>.mp4, no sound; `record_target: {id: <component id>, scale: N}` films that component instead of the window),
+instance's settings file before it first starts), `motion: true` (start with --automation-motion), `record: true` (<out>/<scenario>.mp4, no sound, filmed from the `screen` frame: the main window, every other window of the app and the pointer; `record_target: {id: <component id>, scale: N}` films that component instead),
 `save_project: <name>` (<out>/<name>.agsproj, saved after the last step) and `stale_pixel_check: true` (after every step
 that can change the window, what the window shows must equal a full repaint; a mapping {ignore: [ids], settle_ms: N}
 masks components and sets how long paints may settle). One mapping per step, `- <command>: {args}`:
@@ -24,6 +24,13 @@ masks components and sets how long paints may settle). One mapping per step, `- 
     - expect: {id: timelineTransportRecord, contains: {tooltip: "Ctrl+R"}}
     - expect: {id: "card:LFO 1", exists: false}
     - expect: {count: {prefix: "card:", equals: 3}}     # list ids (or field: title) starting with the prefix
+    - mark: {check: 2, name: picker-open}               # proof for check 2, see below
+
+`mark: {check: N, name: <slug>}` (N an integer >= 1, name [a-z0-9-]+, unique in the scenario) is the moment a check's
+claim is on screen. It takes one frame held 1.5 s, saves that image as `<out>/proof/<name>.png` (also without `record`)
+and, once the video is written, cuts `<out>/<scenario>-<name>.mp4` from 2.5 s before the mark to 3 s after (4 to 6 s
+long when the video allows). Put it while the popup or hover it shows is still open; the summary lists the stills and
+clips.
 
 `${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string.
 `- copyFixture: {name: x.agsproj}` copies `${FIXTURES}/x.agsproj` into `${SCRATCH}/x.agsproj` for a scenario that
@@ -44,14 +51,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from agentsynth_testmode import TestModeApp, TestModeError  # noqa: E402
-from recording import DRAG_HOLD_SECONDS, Recorder  # noqa: E402
+from recording import DEFAULT_TARGET, DRAG_HOLD_SECONDS, MARK_HOLD_SECONDS, Recorder  # noqa: E402
 
 FIXTURES = os.path.join(HERE, "fixtures")
 DEFAULT_OUT = os.path.join(HERE, "out")
 SETTINGS_FILE = "Agent Synth.settings"
 EXPECT_KEYS = {"id", "contains", "exists", "count", "within_ms"}
-RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture"}
-UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture"}  # no video frame after these
+RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture", "mark"}
+MARK_NAME = re.compile(r"^[a-z0-9-]+$")
+UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark"}  # no video frame after these
 NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld"}  # no stale-pixel check
 
 
@@ -116,6 +124,21 @@ def _record_target_option(value, name):
     return {"id": value["id"], "scale": float(value.get("scale", 1))}
 
 
+def _check_mark(args, index, name, seen):
+    """A `mark` step: {check: int >= 1, name: [a-z0-9-]+}, the name unique in the scenario."""
+    where = "%s: step %d (mark)" % (name, index)
+    if set(args) != {"check", "name"}:
+        raise ScenarioError("%s takes exactly `check` and `name`, got %r" % (where, sorted(args)))
+    check, mark_name = args["check"], args["name"]
+    if isinstance(check, bool) or not isinstance(check, int) or check < 1:
+        raise ScenarioError("%s: `check` must be an integer of 1 or more, got %r" % (where, check))
+    if not isinstance(mark_name, str) or not MARK_NAME.match(mark_name):
+        raise ScenarioError("%s: `name` must be lower-case letters, digits and dashes, got %r" % (where, mark_name))
+    if mark_name in seen:
+        raise ScenarioError("%s: the name %r is already used by an earlier mark" % (where, mark_name))
+    seen.add(mark_name)
+
+
 def parse_scenario(text, name="scenario", path=None):
     """Parses scenario YAML. A step is a mapping with exactly one key (the command); its value is the args mapping."""
     import yaml
@@ -141,6 +164,7 @@ def parse_scenario(text, name="scenario", path=None):
     if not isinstance(document, list) or not document:
         raise ScenarioError("%s: expected a non-empty list of steps" % name)
     steps = []
+    mark_names = set()
     for index, raw in enumerate(document, 1):
         if not isinstance(raw, dict) or len(raw) != 1:
             raise ScenarioError("%s: step %d must be a mapping with one command, got %r" % (name, index, raw))
@@ -149,6 +173,8 @@ def parse_scenario(text, name="scenario", path=None):
             args = {}
         if not isinstance(args, dict):
             raise ScenarioError("%s: step %d (%s) takes a mapping of arguments, got %r" % (name, index, command, args))
+        if command == "mark":
+            _check_mark(args, index, name, mark_names)
         steps.append((str(command), args))
     return Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target)
 
@@ -269,6 +295,7 @@ class Runner:
         self.settings_dir = None
         self.recorder = None
         self.held = False
+        self.marks = []  # [{check, name, still, clip, start}] in step order; `clip` fills in once the video is written
         self.variables = {"FIXTURES": FIXTURES, "OUT": out_dir}
 
     def _launch(self):
@@ -343,6 +370,23 @@ class Runner:
         self.app.call("mouseUp", id=target, x=end[0], y=end[1], **mods)
         return {"from": args["from"], "to": args["to"]}
 
+    def _mark(self, args):
+        """The still (and the frame the clip is cut around) for one check. Raises TestModeError when no frame came."""
+        still = os.path.join(self.out_dir, "proof", args["name"] + ".png")
+        start = None
+        if self.recorder is not None:
+            start = self.recorder.frame(self.app, MARK_HOLD_SECONDS, copy_to=still)
+        else:
+            target = self.scenario.record_target or DEFAULT_TARGET
+            os.makedirs(os.path.dirname(still), exist_ok=True)
+            self.app.call("screenshot", id=target["id"], scale=target["scale"], path=still)
+        if not os.path.isfile(still):
+            raise TestModeError("mark %s: no frame could be taken" % args["name"])
+        reply = {"check": args["check"], "name": args["name"], "still": still, "clip": None}
+        self.marks.append(dict(reply, start=start))
+        self.marks[-1]["reply"] = reply  # the run log's entry, completed when the clip is cut
+        return reply
+
     def _step(self, index, command, args):
         """Runs one step. Returns (ok, error message)."""
         app = self.app
@@ -370,6 +414,8 @@ class Runner:
             args.setdefault("id", "window")
             args["path"] = os.path.join(self.out_dir, name + ".png")
             reply = app.call("screenshot", **args)
+        elif command == "mark":
+            reply = self._mark(args)
         elif command == "drag" and self.recorder is not None:
             reply = self._recorded_drag(args)
         else:
@@ -402,6 +448,17 @@ class Runner:
         self._record(0, "record", {"path": video}, {"frames": len(self.recorder.frames)}, ok, None if ok else message)
         if not ok:
             print("ui-verify: %s: no video: %s" % (self.scenario.name, message), file=sys.stderr)
+            return
+        for mark in self.marks:
+            if mark["start"] is None:
+                continue
+            clip = os.path.join(self.out_dir, "%s-%s.mp4" % (self.scenario.name, mark["name"]))
+            cut, clip_message = self.recorder.cut_clip(video, mark["start"], clip)
+            if cut:
+                mark["reply"]["clip"] = clip
+            else:
+                print("ui-verify: %s: no clip for %s: %s" % (self.scenario.name, mark["name"], clip_message),
+                      file=sys.stderr)
 
     def _run_steps(self):
         self._launch()
@@ -449,6 +506,12 @@ class Runner:
                     handle.write(json.dumps(entry) + "\n")
 
 
+def _print_proof(runner):
+    for mark in runner.marks:
+        print("  check %d %s: still %s%s" % (mark["check"], mark["name"], mark["still"],
+                                             ", clip %s" % mark["reply"]["clip"] if mark["reply"]["clip"] else ""))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("target", help="a scenario .yaml file, or a directory of them")
@@ -467,15 +530,18 @@ def main(argv=None):
         out_dir = base if options.out and len(scenarios) == 1 else os.path.join(base, scenario.name)
         started = time.time()
         try:
-            passed, message = Runner(options.app, out_dir, scenario, visible=options.visible).run()
+            runner = Runner(options.app, out_dir, scenario, visible=options.visible)
+            passed, message = runner.run()
         except TestModeError as error:
             passed, message = False, "could not run: %s" % error
         seconds = time.time() - started
         if passed:
             print("PASS %s (%d steps, %.1fs) -> %s" % (scenario.name, len(scenario.steps), seconds, out_dir))
+            _print_proof(runner)
         else:
             failures += 1
             print("FAIL %s (%.1fs): %s -> %s" % (scenario.name, seconds, message, out_dir))
+            _print_proof(runner)
     print("%d passed, %d failed" % (len(scenarios) - failures, failures))
     return 1 if failures else 0
 

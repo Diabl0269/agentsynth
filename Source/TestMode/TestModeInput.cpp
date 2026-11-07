@@ -21,7 +21,14 @@ juce::String normalisedKeyName(const juce::String& raw) {
     return name;
 }
 
+std::optional<juce::Point<int>>& lastPointer() {
+    static std::optional<juce::Point<int>> point;
+    return point;
+}
+
 } // namespace
+
+std::optional<juce::Point<int>> lastPointerScreenPoint() { return lastPointer(); }
 
 juce::ModifierKeys modifiersFromNames(const juce::StringArray& names, juce::String& error) {
     int flags = 0;
@@ -102,7 +109,9 @@ bool sendMouse(const MouseStep& step, juce::String& error) {
         return false;
     }
     // JUCE places a tooltip at the OS cursor, which this input never moves: tell the tooltip where the pointer is.
-    synth::ui::AppTooltipWindow::setSyntheticPointer(peer->getComponent().localPointToGlobal(inPeer.roundToInt()));
+    const auto screenPoint = peer->getComponent().localPointToGlobal(inPeer.roundToInt());
+    synth::ui::AppTooltipWindow::setSyntheticPointer(screenPoint);
+    lastPointer() = screenPoint;
     // JUCE reads the keyboard modifiers of a mouse event from this global, not from the event's own flags.
     const auto previous = juce::ModifierKeys::currentModifiers;
     juce::ModifierKeys::currentModifiers = step.keys.withoutMouseButtons();
