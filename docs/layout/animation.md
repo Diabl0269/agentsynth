@@ -783,7 +783,9 @@ A tab leaves the strip when its panel opens in its own window or goes to the mai
 The leaving tab shrinks about its slot's centre (180 ms), then the others close the gap (200 ms); an arriving tab opens the
 gap, then grows (180 ms): the shared `ExitEnterTimeline` slots (`BottomDockTabMotion`), frames from `ReorderFramePump`, no
 Timer, nothing repaints once settled. Reduce Motion fades the tab instead; Animations Off or an off-screen strip lands at once;
-a change mid-motion retargets from the current slots, and a leaving tab takes no click.
+a change mid-motion retargets from the current slots, and a leaving tab takes no click. Only a change of the tab
+*set* starts this motion: a drag-reorder's drop (same tabs, new order) does not, so the tabs glide from where the
+mouse let go to their slots and never flash back to the old order first.
 
 ## Tooltips
 
