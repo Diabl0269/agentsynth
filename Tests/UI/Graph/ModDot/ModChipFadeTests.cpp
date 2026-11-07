@@ -27,7 +27,7 @@ struct OffScreenFades {
 
 ModChipStack someStack() {
     ModChipStack stack;
-    stack.rows.push_back({"LFO 1 \xC2\xB7 +50%", false, true, false});
+    stack.rows.push_back({juce::String::fromUTF8("LFO 1 \xC2\xB7 +50%"), false, true, false});
     stack.sliderIndex = 0;
     return stack;
 }

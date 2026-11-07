@@ -1,8 +1,15 @@
 // ModRingFades.cpp -- the per-channel fade of a card's modulation rings, on the shared FadeAmount (160 ms in, 110 ms
 // out, 80 ms under Reduce Motion, none under Animations Off). docs/layout/mod-ring-fade.md.
 #include "ModRingFades.h"
+#include "UI/Graph/ModuleComponent/ModChipFade.h"
 
 namespace synth::ui {
+
+ModRingFades::ModRingFades(juce::Component& owner)
+    : owner_(owner)
+    , chip_(std::make_unique<ModChipFade>(owner)) {}
+
+ModRingFades::~ModRingFades() = default;
 
 // A channel is "modulated" while it has a routing that is not bypassed: that is what the ring shows. The fade is
 // per channel, so a second routing on a ringed knob keeps the ring where it is. The first sync snaps, so a project

@@ -928,6 +928,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardWidgets/CardStepper.h
     Source/UI/Graph/CardWidgets/CardTogglePill.h
     Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp
+    Source/UI/Graph/ModuleComponent/ModChipFade.h
     Source/UI/Graph/ModuleComponent/ModRingFades.cpp
     Source/UI/Graph/ModuleComponent/ModRingFades.h
     Source/UI/Graph/CardBody/ModuleCardLayoutBinding.cpp

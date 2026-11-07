@@ -4,6 +4,7 @@
 // selector's sliders take the arrows too. Every stop has a screen-reader name, a value and a tooltip.
 #include "../../TestWait.h"
 #include "../Accessibility/TabOrderHelpers.h"
+#include "UI/Chrome/ColourPickerFields.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/FocusRing.h"
 #include <gtest/gtest.h>

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "UI/Chrome/ColourPickerFields.h"
 #include "UI/Layout/ColourSwatchButton.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/PopoverContent.h"
@@ -12,6 +11,7 @@
 // juce::ColourSelector lives in juce_gui_extra, not juce_gui_basics — without this include the
 // class fails to parse and every juce::Component base call below cascades into bogus errors.
 #include <juce_gui_extra/juce_gui_extra.h>
+#include <memory>
 #include <vector>
 
 // ColourPickerPopup — a full colour picker (juce::ColourSelector + a favourites shelf) used
@@ -109,6 +109,10 @@ inline void saveFavouriteColours(juce::PropertiesFile* props, const std::vector<
 //==============================================================================
 // ColourPickerPopup
 //==============================================================================
+struct Hsb;
+class SaturationBrightnessField;
+class HueBar;
+
 class ColourPickerPopup
     : public juce::Component
     , public AppUndoAware
@@ -116,50 +120,9 @@ class ColourPickerPopup
     , private juce::ChangeListener {
 public:
     ColourPickerPopup(juce::Colour initial, juce::PropertiesFile* props, std::function<void(juce::Colour)> onPreview,
-                      std::function<void(juce::Colour)> onCommit)
-        : props_(props)
-        , favourites_(loadFavouriteColours(props))
-        , onPreview_(std::move(onPreview))
-        , onCommit_(std::move(onCommit))
-        , lastColour_(initial)
-        , initial_(initial) {
-        setComponentID("colourPickerPopup");
+                      std::function<void(juce::Colour)> onCommit);
 
-        addAndMakeVisible(selector_);
-        selector_.setCurrentColour(initial, juce::dontSendNotification);
-        selector_.addChangeListener(this);
-        nameSelectorSliders();
-
-        addAndMakeVisible(saturationBrightness_);
-        addAndMakeVisible(hueBar_);
-        saturationBrightness_.setExplicitFocusOrder(1);
-        hueBar_.setExplicitFocusOrder(2);
-        saturationBrightness_.onChange = [this](const Hsb& hsb) { applyFieldEdit(hsb); };
-        hueBar_.onChange = [this](const Hsb& hsb) { applyFieldEdit(hsb); };
-        followColour(initial);
-
-        addAndMakeVisible(addFavouriteButton_);
-        addFavouriteButton_.setComponentID("colourPickerAddFavourite");
-        addFavouriteButton_.setButtonText(juce::CharPointer_UTF8("\xE2\x98\x85")); // filled star
-        addFavouriteButton_.setTitle("Add to favourites");
-        addFavouriteButton_.setTooltip("Add the current colour to favourites");
-        addFavouriteButton_.onClick = [this] {
-            addFavourite(favourites_, lastColour_);
-            saveFavouriteColours(props_, favourites_);
-            rebuildFavouriteButtons();
-        };
-
-        rebuildFavouriteButtons();
-        setSize(280, kFieldsHeight + 112 + kFavouritesAreaHeight);
-    }
-
-    ~ColourPickerPopup() override {
-        selector_.removeChangeListener(this);
-        commitOnce(); // the callout closing (or this component being torn down any other way)
-                      // is the ONE close event — fire the deferred commit here if it never fired.
-        if (onClosed)
-            onClosed();
-    }
+    ~ColourPickerPopup() override;
 
     /** An undo or redo is about to run while the popup is open: the colour dragged so far is only a live preview (no
      *  undo step yet), so it goes back to the colour the popup opened with, as Escape does, and the undo then works on
@@ -186,20 +149,7 @@ public:
         });
     }
 
-    void resized() override {
-        auto bounds = getLocalBounds();
-        auto favArea = bounds.removeFromBottom(kFavouritesAreaHeight);
-        auto fields = bounds.removeFromTop(kFieldsHeight).reduced(kFieldsMargin, kFieldsMargin);
-        hueBar_.setBounds(fields.removeFromRight(kHueBarWidth));
-        fields.removeFromRight(kFieldsMargin);
-        saturationBrightness_.setBounds(fields);
-        // The selector lays itself out for a taller box than it needs when it has no colour square: it keeps the
-        // tall height so its colour swatch and sliders get their full rows, and the part past the bottom is clipped.
-        selector_.setBounds(0, kFieldsHeight, getWidth(), kSelectorHeight);
-
-        addFavouriteButton_.setBounds(favArea.removeFromLeft(kSwatchSize).reduced(2));
-        layoutFavouriteButtons(favArea);
-    }
+    void resized() override;
 
     /** Escape: put the colour back (the live preview and the commit both see the original); the popover then closes. */
     void onPopoverCancel() override { restoreInitial(); }
@@ -271,30 +221,11 @@ private:
 
     // The square and the hue bar show `colour`. A grey, a black or a white has no hue of its own (JUCE reads it as
     // 0), so the hue the user chose stays unless the colour is not the one the fields themselves made.
-    void followColour(juce::Colour colour) {
-        if (colour != hsb_.toColour()) {
-            const auto next = Hsb::fromColour(colour);
-            const bool hueless = next.saturation < 0.002f || next.brightness < 0.002f;
-            hsb_ = next;
-            if (hueless)
-                hsb_.hue = hueKept_;
-        }
-        hueKept_ = hsb_.hue;
-        saturationBrightness_.setHsb(hsb_);
-        hueBar_.setHsb(hsb_);
-    }
+    void followColour(juce::Colour colour);
 
     // A key or drag on the square or the hue bar: the selector shows the colour and the preview goes out, the same
     // path a slider takes.
-    void applyFieldEdit(const Hsb& hsb) {
-        hsb_ = hsb;
-        hueKept_ = hsb_.hue;
-        saturationBrightness_.setHsb(hsb_);
-        hueBar_.setHsb(hsb_);
-        const auto colour = hsb_.toColour();
-        selector_.setCurrentColour(colour, juce::dontSendNotification);
-        previewNow(colour);
-    }
+    void applyFieldEdit(const Hsb& hsb);
 
     // The selector's own sliders carry only a lower-case component name: give each a screen-reader
     // title and a tooltip, and its editable value box (the Tab stop, since the slider itself takes no
@@ -405,9 +336,9 @@ private:
     // Without juce::ColourSelector's own colour square and hue bar (private classes with no focus or keys): the two
     // fields above stand in for them.
     juce::ColourSelector selector_{juce::ColourSelector::showColourAtTop | juce::ColourSelector::showSliders};
-    SaturationBrightnessField saturationBrightness_;
-    HueBar hueBar_;
-    Hsb hsb_;
+    std::unique_ptr<SaturationBrightnessField> saturationBrightness_;
+    std::unique_ptr<HueBar> hueBar_;
+    std::unique_ptr<Hsb> hsb_;
     float hueKept_ = 0.0f;
     juce::TextButton addFavouriteButton_;
 

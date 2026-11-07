@@ -1,7 +1,6 @@
 #pragma once
 
 #include "AudioEngine/ModulationRoutingTypes.h"
-#include "UI/Graph/ModuleComponent/ModuleComponentModChip.h"
 #include "UI/Layout/FadeAmount.h"
 #include <map>
 #include <memory>
@@ -10,6 +9,8 @@
 // docs/layout/mod-ring-fade.md
 
 namespace synth::ui {
+
+class ModChipFade;
 
 /** The fades of a card's modulation overlays. The rings: a knob's ring fades in when it gets its first modulation and
  *  out when its last is removed, and a second modulation on a ringed knob changes nothing. The chip: see chip().
@@ -23,13 +24,12 @@ public:
     };
 
     /** `owner` is the card; it is repainted on every frame of a fade. */
-    explicit ModRingFades(juce::Component& owner)
-        : owner_(owner)
-        , chip_(owner) {}
+    explicit ModRingFades(juce::Component& owner);
+    ~ModRingFades();
 
     /** The fade of the mod hover chip the card paints under a knob. */
-    ModChipFade& chip() noexcept { return chip_; }
-    const ModChipFade& chip() const noexcept { return chip_; }
+    ModChipFade& chip() noexcept { return *chip_; }
+    const ModChipFade& chip() const noexcept { return *chip_; }
 
     /** Reads the routings now on `node` and starts the fade of every channel that gained or lost its modulation.
      *  A card that has never synced shows what it finds at once. */
@@ -50,7 +50,7 @@ private:
     };
 
     juce::Component& owner_;
-    ModChipFade chip_;
+    std::unique_ptr<ModChipFade> chip_;
     std::map<int, Entry> entries_;
     bool synced_ = false;
 };
