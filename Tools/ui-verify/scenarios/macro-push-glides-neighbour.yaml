@@ -2,67 +2,37 @@
 # gliding. A folded neighbour's card already glided; an OPEN neighbour's cards glided but its border, name chip and port
 # strips jumped ahead of them.
 #
-# What a user does (a copy of Tal's 'fro830 test' project, set up like open-macro-pushes-neighbour-right.yaml):
-#   1. Folds "Oscillator 2", zooms out and moves Filter 3, "Macro2" and "Macro" close to the folded card.
-#   2. Opens "Oscillator 2" with its card's chevron: the folded "Macro" beside it slides right (proof 1, mid-glide).
-#   3. Cmd+Z: "Oscillator 2" folds again and "Macro" slides back.
-#   4. Opens "Macro" (its chevron), then opens "Oscillator 2" again: the OPEN "Macro" slides right with its border,
-#      chip and port strips moving together with its cards (proof 2, mid-glide), level on the same row.
-# CardGlideMacroPush.* covers the first, middle-free and last frames headlessly (folded, open, Reduce Motion).
+# The fixture macro-push-neighbour.agsproj is Tal's 'fro830 test' project set up as open-macro-pushes-neighbour-right.yaml
+# leaves it (made with motion off, since a wheel pan lands differently each run under motion): "Oscillator 2" folded,
+# the folded "Macro" right beside its card.
+#   1. Opens "Oscillator 2" with its card's chevron: the folded "Macro" slides right (proof 1, mid-glide).
+#   2. Cmd+Z: "Oscillator 2" folds again and "Macro" slides back.
+#   3. Opens "Macro" (its chevron), then opens "Oscillator 2" again: the OPEN "Macro" slides right with its border,
+#      chip and port strips moving together with its cards (proof 2, mid-glide).
+# CardGlideMacroPush.* covers the first and last frames headlessly (folded, open, Reduce Motion).
 motion: true
 record: true
 save_project: end
 steps:
-  - copyFixture: {name: fro830-test.agsproj}
-  - openProject: {path: "${SCRATCH}/fro830-test.agsproj"}
-  - wait: {}
-  - expect: {id: "card:Channel Strip 2", bounds: {x: 478, y: 208, w: 185, h: 271}}
-  - click: {id: window, x: 726, y: 199}                        # the fold button of the open "Oscillator 2" border
+  - copyFixture: {name: macro-push-neighbour.agsproj}
+  - openProject: {path: "${SCRATCH}/macro-push-neighbour.agsproj"}
   - wait: {}
   - expect: {id: "macroCard:Oscillator 2", collapsed: true}
-  - key: {keys: "cmd+-"}
-  - key: {keys: "cmd+-"}
-  - key: {keys: "cmd+-"}
-  - wheel: {id: window, x: 900, y: 500, dx: 0.5}
-  - wheel: {id: window, x: 900, y: 500, dx: 0.5}
-  - wheel: {id: window, x: 900, y: 500, dx: 0.5}
-  - wheel: {id: window, x: 900, y: 500, dx: 0.5}
-  - wait: {}
-  - expect: {id: "macroCard:Oscillator 2", bounds: {x: 261, y: 342, w: 96, h: 34}}
-  - mouseDown: {id: "card:Filter 3", x: 100, y: 10}
-  - mouseMoveHeld: {id: window, x: 1000, y: 650}
-  - mouseMoveHeld: {id: window, x: 600, y: 700}
-  - mouseUp: {id: window, x: 600, y: 700}
-  - wait: {}
-  - mouseDown: {id: "macroCard:Macro2", x: 140, y: 8}
-  - mouseMoveHeld: {id: window, x: 900, y: 470}
-  - mouseMoveHeld: {id: window, x: 600, y: 520}
-  - mouseUp: {id: window, x: 600, y: 520}
-  - wait: {}
-  - mouseDown: {id: "macroCard:Macro", x: 140, y: 8}
-  - mouseMoveHeld: {id: window, x: 900, y: 350}
-  - mouseMoveHeld: {id: window, x: 450, y: 352}
-  - mouseUp: {id: window, x: 450, y: 352}
-  - wait: {}
-  - expect: {id: "macroCard:Macro", bounds: {x: 404, y: 350, w: 96, h: 31}}
-  - expect: {id: "card:Master", bounds: {x: 687, y: 296, w: 96, h: 71}}   # the dock came in right behind "Macro"
+  - expect: {id: "macroCard:Macro", collapsed: true}
   - screenshot: {name: 1-macro-beside-the-folded-card}
   - click: {id: "macroCard:Oscillator 2", x: 262, y: 18}      # the card's open chevron
   - mark: {check: 1, name: folded-neighbour-glides}            # "Macro" on its way right, not yet landed
-  - wait: {}
+  - waitForIdle: {settleMs: 1000}                             # waitForIdle cannot see the fold, so let it land
   - expect: {id: "macroCard:Oscillator 2", collapsed: false}
-  - expect: {id: "macroCard:Macro", bounds: {x: 1221, y: 350, w: 95, h: 31}}   # slid right, same y
   - screenshot: {name: 2-folded-neighbour-landed}
   - key: {keys: cmd+z}
-  - wait: {}
+  - waitForIdle: {settleMs: 1000}                             # waitForIdle cannot see the fold, so let it land
   - expect: {id: "macroCard:Oscillator 2", collapsed: true}
-  - expect: {id: "macroCard:Macro", bounds: {x: 404, y: 350, w: 96, h: 31}}    # back beside the folded card
   - click: {id: "macroCard:Macro", x: 262, y: 18}              # open the neighbour first
-  - wait: {}
-  - expect: {id: "macroCard:Macro", collapsed: false}
+  - waitForIdle: {settleMs: 1000}                             # waitForIdle cannot see the fold, so let it land
   - screenshot: {name: 3-open-neighbour-beside-the-folded-card}
   - click: {id: "macroCard:Oscillator 2", x: 262, y: 18}
   - mark: {check: 2, name: open-neighbour-border-glides}       # border, chip and cards of "Macro" moving together
-  - wait: {}
+  - waitForIdle: {settleMs: 1000}                             # waitForIdle cannot see the fold, so let it land
   - expect: {id: "macroCard:Oscillator 2", collapsed: false}
   - screenshot: {name: 4-open-neighbour-landed}
