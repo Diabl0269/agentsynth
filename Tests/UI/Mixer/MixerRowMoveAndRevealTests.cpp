@@ -6,12 +6,15 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Mixer/MixerSends/MixerSends.h"
+#include "MixerZonesTestRig.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerInsertList/MixerInsertList.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerSendList.h"
 #include <gtest/gtest.h>
@@ -85,7 +88,7 @@ struct MoveRig {
 
     void enterRows() {
         ASSERT_TRUE(panel().keyPressed(key(juce::KeyPress::rightKey)));
-        ASSERT_TRUE(panel().keyPressed(key(juce::KeyPress::tabKey)));
+        ASSERT_TRUE(panel().keyPressed(key(juce::KeyPress::downKey)));
     }
 
     int insertRows() { return column().getInsertList().getRowCount(); }
@@ -336,4 +339,163 @@ TEST(MixerRowRevealTest, AnInsertRowsShowAndBypassButtonsDoNotOverlap) {
         EXPECT_LE(bypass->getRight(), inserts.getWidth());
     }
     EXPECT_GE(checked, 1);
+}
+
+// The canvas follows a reorder (docs/mixer/row-motion.md#the-canvas-follows-a-reorder): a keyboard reorder of a
+// focused insert (Alt+Down) also trades the two modules' cards along their row on the canvas, with the card glide, and
+// ONE undo restores the chain order and both card positions. Cards that do not sit on one row stay where they are.
+// Drives a real off-screen MainComponent, so every edit goes through the real undo and rebuild path.
+namespace {
+
+using NodeID = juce::AudioProcessorGraph::NodeID;
+using synth::ui::MixerRowKind;
+using synth::ui::MixerRowRef;
+using synth::ui::MixerSection;
+
+struct SwapRig {
+    MixerZonesRig r{1};
+    GraphEditor& editor = r.mc.getGraphEditor();
+    synth::ui::MixerPanelComponent& panel = *r.panel;
+
+    SwapRig() {
+        for (const auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
+            panel.getSectionLayout().setHidden(section, false);
+        panel.setSize(1400, 700);
+        panel.resized();
+        editor.setSize(1600, 900);
+        openEveryMacro();
+        editor.getCardGlideForTest().setForceAnimateForTest(true);
+    }
+
+    // A new track's channel macro starts folded; opened (as a double-click does), its member cards show.
+    void openEveryMacro() {
+        std::vector<juce::String> ids;
+        for (const auto& macro : editor.getMacros().getAll())
+            ids.push_back(macro.id);
+        for (const auto& id : ids)
+            editor.getMacroController().setMacroCollapsed(id, false);
+        editor.updateComponents();
+    }
+
+    synth::ui::MixerInsertList& inserts() { return panel.getStripColumnForTest(0)->getInsertList(); }
+    juce::String uuidAt(int row) { return inserts().getRowUuid(row); }
+
+    ModuleComponent* card(const juce::String& uuid) {
+        for (auto* c : editor.getModuleComponents())
+            if (c != nullptr && c->getModule() != nullptr) {
+                auto* node = r.mc.getAudioEngine().getGraph().getNodeForId(c->getNodeId());
+                if (node != nullptr && node->properties["uuid"].toString() == uuid)
+                    return c;
+            }
+        return nullptr;
+    }
+
+    // Puts the cards of `a` and `b` on one row, `gap` apart, through the canvas's own position write.
+    void lineUp(ModuleComponent& a, ModuleComponent& b, int x, int y, int gap) {
+        a.setTopLeftPosition(x, y);
+        editor.updateModulePosition(&a);
+        b.setTopLeftPosition(a.getRight() + gap, y);
+        editor.updateModulePosition(&b);
+    }
+
+    juce::Point<int> storedPosition(const juce::String& uuid) {
+        for (auto* node : r.mc.getAudioEngine().getGraph().getNodes())
+            if (node->properties["uuid"].toString() == uuid)
+                return {(int)node->properties["x"], (int)node->properties["y"]};
+        return {-1, -1};
+    }
+
+    void enterFirstInsert() {
+        ASSERT_TRUE(panel.keyPressed(key(juce::KeyPress::rightKey)));
+        ASSERT_TRUE(panel.keyPressed(key(juce::KeyPress::downKey)));
+        ASSERT_EQ(panel.getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, 0}));
+    }
+};
+
+} // namespace
+
+TEST(MixerInsertCardSwapTest, AltDownSwapsTheTwoCardsAlongTheirRowAndOneUndoRestoresOrderAndPositions) {
+    SwapRig rig;
+    const auto first = rig.uuidAt(0);
+    const auto second = rig.uuidAt(1);
+    ASSERT_FALSE(first.isEmpty());
+    ASSERT_FALSE(second.isEmpty());
+    auto* a = rig.card(first);
+    auto* b = rig.card(second);
+    ASSERT_NE(a, nullptr);
+    ASSERT_NE(b, nullptr);
+    ASSERT_TRUE(a->isVisible() && b->isVisible()) << "the channel's macro is open, so its cards show";
+    rig.lineUp(*a, *b, 200, 300, 40);
+    const auto aBefore = a->getPosition();
+    const auto bBefore = b->getPosition();
+    rig.enterFirstInsert();
+
+    ASSERT_TRUE(rig.panel.keyPressed(key(juce::KeyPress::downKey, juce::ModifierKeys::altModifier)));
+    EXPECT_EQ(rig.uuidAt(0), second);
+    EXPECT_EQ(rig.uuidAt(1), first);
+    EXPECT_EQ(rig.panel.getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, 1})) << "the focus stays on it";
+
+    a = rig.card(first);
+    b = rig.card(second);
+    ASSERT_NE(a, nullptr);
+    ASSERT_NE(b, nullptr);
+    EXPECT_EQ(b->getPosition(), aBefore) << "the new first card takes the first slot";
+    EXPECT_EQ(a->getPosition(), juce::Point<int>(aBefore.x + b->getWidth() + 40, aBefore.y))
+        << "the moved card follows it, the gap kept";
+    EXPECT_EQ(rig.storedPosition(second), aBefore) << "the move is in the graph, not only on screen";
+    EXPECT_TRUE(rig.editor.getCardGlideForTest().isLive()) << "the cards glide to their new places";
+    rig.editor.finishCardGlideForTest();
+
+    ASSERT_TRUE(rig.r.mc.getUndoManager().undo());
+    rig.editor.finishCardGlideForTest();
+    EXPECT_EQ(rig.uuidAt(0), first) << "one undo restores the chain order";
+    EXPECT_EQ(rig.uuidAt(1), second);
+    EXPECT_EQ(rig.storedPosition(first), aBefore) << "and both card positions";
+    EXPECT_EQ(rig.storedPosition(second), bBefore);
+    a = rig.card(first);
+    b = rig.card(second);
+    ASSERT_NE(a, nullptr);
+    ASSERT_NE(b, nullptr);
+    EXPECT_EQ(a->getPosition(), aBefore);
+    EXPECT_EQ(b->getPosition(), bBefore);
+}
+
+TEST(MixerInsertCardSwapTest, CardsNotOnOneRowStayWhereTheUserPutThem) {
+    SwapRig rig;
+    const auto first = rig.uuidAt(0);
+    const auto second = rig.uuidAt(1);
+    auto* a = rig.card(first);
+    auto* b = rig.card(second);
+    ASSERT_NE(a, nullptr);
+    ASSERT_NE(b, nullptr);
+    rig.lineUp(*a, *b, 200, 300, 40);
+    b->setTopLeftPosition(b->getX(), b->getY() + 250); // the second card on a row of its own
+    rig.editor.updateModulePosition(b);
+    const auto aBefore = rig.storedPosition(first);
+    const auto bBefore = rig.storedPosition(second);
+    rig.enterFirstInsert();
+
+    ASSERT_TRUE(rig.panel.keyPressed(key(juce::KeyPress::downKey, juce::ModifierKeys::altModifier)));
+    EXPECT_EQ(rig.uuidAt(0), second) << "the chain still reorders";
+    EXPECT_EQ(rig.storedPosition(first), aBefore) << "but neither card moves";
+    EXPECT_EQ(rig.storedPosition(second), bBefore);
+}
+
+TEST(MixerInsertCardSwapTest, CardsLaidOutAgainstTheChainOrderStayToo) {
+    SwapRig rig;
+    const auto first = rig.uuidAt(0);
+    const auto second = rig.uuidAt(1);
+    auto* a = rig.card(first);
+    auto* b = rig.card(second);
+    ASSERT_NE(a, nullptr);
+    ASSERT_NE(b, nullptr);
+    rig.lineUp(*b, *a, 200, 300, 40); // the downstream card already sits on the left
+    const auto aBefore = rig.storedPosition(first);
+    const auto bBefore = rig.storedPosition(second);
+    rig.enterFirstInsert();
+
+    ASSERT_TRUE(rig.panel.keyPressed(key(juce::KeyPress::downKey, juce::ModifierKeys::altModifier)));
+    EXPECT_EQ(rig.uuidAt(0), second);
+    EXPECT_EQ(rig.storedPosition(first), aBefore);
+    EXPECT_EQ(rig.storedPosition(second), bBefore);
 }

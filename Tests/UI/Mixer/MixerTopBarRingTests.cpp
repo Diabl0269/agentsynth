@@ -136,7 +136,7 @@ TEST(MixerTopBarRingTest, ReturnOnAddBusAddsABus) {
     EXPECT_EQ(f.panel->getColumnCount(), before + 1);
 }
 
-TEST(MixerTopBarRingTest, DownLeavesAndUpNudgesTheFaderAgain) {
+TEST(MixerTopBarRingTest, DownLeavesAndShiftUpNudgesTheFaderAgain) {
     RingFixture f;
     f.panel->keyPressed(plain(juce::KeyPress::rightKey)); // focus strip 0
     const auto nodeId = f.panel->getStripColumnForTest(0)->getNodeId();
@@ -149,7 +149,7 @@ TEST(MixerTopBarRingTest, DownLeavesAndUpNudgesTheFaderAgain) {
     EXPECT_FALSE(f.ring().isActive());
     EXPECT_NEAR(gainOf(f.mc, nodeId), before, 1.0e-3f);
 
-    EXPECT_TRUE(f.panel->keyPressed(plain(juce::KeyPress::upKey)));
+    EXPECT_TRUE(f.panel->keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0)));
     EXPECT_NEAR(gainOf(f.mc, nodeId), before + 1.0f, 1.0e-3f);
 }
 

@@ -5,6 +5,7 @@
 #include "AppUndoManager.h"
 #include "MixerDbAccessibilityText.h"
 #include "MixerFaderTaper.h"
+#include "UI/Layout/UIAnimation.h"
 #include <cmath>
 
 namespace synth::ui {
@@ -127,8 +128,14 @@ bool MixerFader::nudge(float deltaDb) {
 
 void MixerFader::setChannelName(const juce::String& name) {
     slider_.setTitle(name.isEmpty() ? juce::String("Fader") : name + " fader");
-    slider_.setTooltip("Channel level: drag, or Up and Down on the focused channel (Shift for 0.1 dB)");
+    setNudgeShortcutText(nudgeShortcutText_);
     readout_.setTitle(name.isEmpty() ? juce::String("Fader level") : name + " fader level");
+}
+
+// The keys nudge the focused channel by 1 dB; the same chord with Alt added nudges 0.1 dB.
+void MixerFader::setNudgeShortcutText(const juce::String& keys) {
+    nudgeShortcutText_ = keys;
+    slider_.setTooltip(formatShortcutHint("Channel level: drag to change (Alt with the keys for 0.1 dB)", keys));
 }
 
 void MixerFader::grabAccessibilityFocus() {

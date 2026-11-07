@@ -301,12 +301,20 @@ bool MixerInsertList::moveRowTo(int fromRow, int toRow) {
     if (!moveFeasible(fromRow, toRow))
         return false;
     const auto nodeId = entryForRow(fromRow)->nodeId;
+    // The cards follow the new order inside the same undo record, so one undo restores the chain and the canvas.
+    const auto [runBefore, runAfter] = runOrderAround(fromRow, toRow);
+    const auto andFollow = [this, before = runBefore, after = runAfter](bool moved) {
+        if (moved)
+            if (graphEditor_ != nullptr)
+                synth::followReorderOnCanvas(*graphEditor_, before, after);
+        return moved;
+    };
     if (hasSplits_) {
         const auto targetId = entryForRow(toRow)->nodeId;
         return mutateAndNotify(
             [&] {
-                return toRow < fromRow ? synth::moveInsertBefore(*graph_, nodeId, targetId, stripNodeId_)
-                                       : synth::moveInsertAfter(*graph_, nodeId, targetId, stripNodeId_);
+                return andFollow(toRow < fromRow ? synth::moveInsertBefore(*graph_, nodeId, targetId, stripNodeId_)
+                                                 : synth::moveInsertAfter(*graph_, nodeId, targetId, stripNodeId_));
             },
             true);
     }
@@ -319,7 +327,8 @@ bool MixerInsertList::moveRowTo(int fromRow, int toRow) {
     const auto predecessorId = insertAt == 0 ? sourceNodeId_ : without[(size_t)insertAt - 1].nodeId;
     const auto successorId = insertAt >= (int)without.size() ? stripNodeId_ : without[(size_t)insertAt].nodeId;
     return mutateAndNotify(
-        [&] { return synth::reorderInsert(*graph_, nodeId, predecessorId, successorId, stripNodeId_); }, true);
+        [&] { return andFollow(synth::reorderInsert(*graph_, nodeId, predecessorId, successorId, stripNodeId_)); },
+        true);
 }
 
 // spliceOutInsert bridges every predecessor to every successor, so a split's fork or merge module, or a module on a
@@ -500,6 +509,23 @@ void MixerInsertList::addModuleAt(const juce::String& moduleTypeName, AddTarget 
         });
     if (isSet(added) && alive != nullptr && onMutated)
         onMutated();
+}
+
+// The rows lo..hi of one run, in chain order before and after a move of `fromRow` to `toRow`.
+std::pair<std::vector<juce::AudioProcessorGraph::NodeID>, std::vector<juce::AudioProcessorGraph::NodeID>>
+MixerInsertList::runOrderAround(int fromRow, int toRow) const {
+    std::vector<juce::AudioProcessorGraph::NodeID> before;
+    for (int row = juce::jmin(fromRow, toRow); row <= juce::jmax(fromRow, toRow); ++row)
+        if (const auto* entry = entryForRow(row))
+            before.push_back(entry->nodeId);
+    auto after = before;
+    if (after.size() > 1) {
+        if (toRow > fromRow)
+            std::rotate(after.begin(), after.begin() + 1, after.end());
+        else
+            std::rotate(after.rbegin(), after.rbegin() + 1, after.rend());
+    }
+    return {before, after};
 }
 
 } // namespace synth::ui

@@ -115,6 +115,10 @@ public:
     bool nudgePan(float delta);
     /** The pan keys' text for the pan knob's tooltip, e.g. "Shift+Left / Shift+Right"; empty names none. */
     void setPanShortcutText(const juce::String& keys);
+    /** The fader nudge keys' text for the fader's tooltip. */
+    void setFaderShortcutText(const juce::String& keys) { fader_.setNudgeShortcutText(keys); }
+    /** The EQ curve, a keyboard row of the panel's row walk while it shows an EQ. */
+    const MixerEqThumbnail& getEqThumbnail() const noexcept { return eqThumbnail_; }
 
     MixerFader& getFaderForTest() noexcept { return fader_; }
     juce::Slider& getPanSliderForTest() noexcept { return panSlider_; }

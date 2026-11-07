@@ -231,7 +231,7 @@ What each surface does:
 | Graph | Copies the selected modules (unchanged) | Pastes at the next cascade position | Copies the selection one step down-right, clipboard untouched | Composed from Copy + Delete (`copySelection()` then `deleteSelection()`), one undo step | **Inactive** — a spatial canvas has no time axis to tile copies along; Duplicate is the graph's equivalent gesture (see below) |
 | TimelineClips | Serialises the selected clips — notes (each with its own muted flag), name, length, muted flag and every audio field (`assetRef`, gain, both fades, `sourceStartSeconds`) — into the panel's own clip clipboard, starts relative to the earliest selected clip. With a live **Range** tool range it copies the range instead: each clip's part inside it (`TimelineDoc::clipToRange`), starts relative to the range start — see [clips](../timeline/clips.md#range-tool) | Re-inserts every clipboard clip onto **its original track**, re-based so the earliest clip lands at the transport's current position (snapped to the view-state's snap setting); the track fallback is **kind-aware** — a clip lands back only on a track that still plays its payload (audio → `TrackKind::Audio`, MIDI → `TrackKind::Midi`), else the doc's first track of the required kind, else the clip is skipped. Audio fields go back through `setClipAsset`/`setClipGainDb`/`setClipFades` (never a raw struct write), so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's — a clipboard is only as trustworthy as whatever filled it. One undo step for the whole paste; the pasted clips end up selected. | `repeatSelectedClips(1)`: one copy of the whole selection, starting where the selection ends (so adjacent clips never overlap their copies), one undo step; the new clips end up selected | `TimelinePanelComponent::cutSelectedClips()` — copy, then delete the selection, as ONE `recordTimelineChange` (so undo restores it in a single step); with a live range, `cutRange()` — the range copy, then the lanes' own range Delete, also one step | `repeatSelectedClips(count)` — `count` back-to-back copies of the selection's own span (`max end - min start`, not each clip's own length, so a multi-clip rhythm tiles intact), the first starting one span-length after the selection's start. One undo step; every created clip ends up selected. |
 | PianoRoll | Copies the selected notes (each field, `muted` included) into the roll's OWN note clipboard, offsets stored relative to the earliest selected note — the clipboard is a member of the roll, so it survives switching clips (`openClip`), and a block copied in one clip pastes into another | `pasteNotesAtPlayhead()` anchors the block at the **snapped, clip-relative playhead position** when that lands inside `[0, clip length)`, else at 0.0; `MainComponent::perform` primes the playhead from the live transport (`setPlayheadBeat(transport.getPositionSnapshot().ppq)`) immediately before pasting, so a paste with the transport stopped still lands under the position the user can see rather than wherever a stale internal beat was left. Notes at/after the clip's end are skipped, an overrunning note's length is clamped to the clip's end. One undo step; the pasted notes end up selected. | Copies the selection to immediately after its own span (same pitches), one undo step, selects the copies — does NOT touch the clipboard (duplicating isn't copying, and silently stomping a clipboard the user filled deliberately would be a surprise) | `cutSelectedNotes()` — copy then delete, one undo step (fills the clipboard first, so a cut is always paste-able) | `repeatSelectedNotes(count)` — `count` copies of the selection block, each one span further along, **clipped at the clip's end**: placement stops at the first block that would fall entirely outside the clip rather than piling every remaining copy onto the last beat. One undo step; every created note ends up selected. |
-| Mixer | **Inactive** — the mixer has no clipboard model of its own; its own keyboard verbs (Left/Right column walk, Up/Down fader nudge, Enter select-on-canvas, M/S/R) are resolved directly by `MixerPanelComponent::keyPressed`, not routed through `resolveEditSurface()` | **Inactive** | **Inactive** | **Inactive** | **Inactive** — same "no time axis to tile along" reasoning as Graph, with no equivalent gesture at all |
+| Mixer | **Inactive** — the mixer has no clipboard model of its own; its own keyboard verbs (Left/Right column walk, Down into the rows, Shift+Up/Down fader nudge, Enter select-on-canvas, M/S/R) are resolved directly by `MixerPanelComponent::keyPressed`, not routed through `resolveEditSurface()` | **Inactive** | **Inactive** | **Inactive** | **Inactive** — same "no time axis to tile along" reasoning as Graph, with no equivalent gesture at all |
 
 `getCommandInfo` marks Paste active only when the **surface-matching** clipboard has something in
 it — the Graph clipboard, the TimelineClips clipboard and the PianoRoll's note clipboard are three
@@ -557,9 +557,9 @@ thickness the same way a track-header row does. Clicks focus a column too: [stri
 | Shortcut | Action |
 |----------|--------|
 | Left / Right | Move focus to the previous/next column (strips, then Direct, then Master), clamped at either end — never wraps. From nothing focused, either direction seeds column 0. Auto-scrolls the focused column into view |
-| Up / Down | Nudge the focused fader by 1.0 dB, or 0.1 dB with Shift, the gain parameter's own interval (undo: one step, the same `parameterGestureChanged` bracket a mouse drag uses). No-op on Direct (no fader) or with nothing focused |
+| Shift+Up / Shift+Down | Nudge the focused fader by 1.0 dB, or 0.1 dB with Alt added, the gain parameter's own interval (`mixerNudgeFaderUp` / `mixerNudgeFaderDown`, rebindable; the fader's tooltip names them; undo: one step, the same `parameterGestureChanged` bracket a mouse drag uses). No-op on Direct (no fader) or with nothing focused. Plain Up on a column does nothing |
 | Enter | Select the focused column's macro (or bare node, if unboxed) on the canvas — mirrors clicking the column |
-| Tab | Move into the focused column's send and insert rows (`mixerEnterRows`) — see [Mixer row navigation](#mixer-row-navigation). With no column focused, or nothing to enter, the key is left unhandled and the app-wide region cycle gets it |
+| Down | Move into the focused column's insert, send and EQ rows (`mixerEnterRows`) — see [Mixer row navigation](#mixer-row-navigation). With no column focused, or nothing to enter, the key is left unhandled. Tab stays the app-wide region cycle |
 | E | Open the focused strip's EQ window (`mixerOpenEq`) — only while the EQ section is shown and the strip has a Parametric EQ insert |
 | C, Shift+Left / Shift+Right, H | The focused strip's colour picker (`mixerOpenColour`), its pan a tenth left or right per press, one undo step each (`mixerPanLeft`, `mixerPanRight`), and hiding the column, the focus moving to its neighbour (`mixerToggleChannelHidden`; in the side pane's list H shows or hides the cursor row); [strip focus](../mixer/strip-focus.md#colour) |
 | M | Mute Focused Track (`timelineMuteFocusedTrack`) — same action id and `performTrackEdit`-equivalent undo bracket the Timeline row's M key uses; Master has its own mute, Direct has none |
@@ -580,24 +580,24 @@ rather than a toggle.
 
 ### Mixer row navigation
 
-With the Inserts or Sends section shown, **Tab** (`mixerEnterRows`, Mixer category) moves keyboard focus from the
+With the Inserts, Sends or EQ section shown, **Down** (`mixerEnterRows`, Mixer category) moves keyboard focus from the
 focused column into its rows. Row focus is state of the panel (`MixerPanelComponent::rowFocus_`, a kind and an
 index, like `focusedColumnIndex_`), never real focus on a child, so the panel stays the single focusable leaf.
-Rows walk in layout order: the insert rows, then the send rows. The focused row is drawn with
+Rows walk in layout order: the insert rows, the send rows, then the strip's EQ curve (one row, while it has an EQ). The focused row is drawn with
 `synth::ui::paintFocusRing` and scrolled into its section's frame, and the panel's accessibility description
 announces it ("Send to Reverb Bus, -6.0 dB", "Insert 2, Compressor").
 
 | Shortcut | Action in row mode |
 |----------|--------------------|
-| Up / Down | Previous / next row, clamped at either end |
+| Up / Down | Previous / next row, clamped at the bottom; Up on the first row returns to the column |
 | Left / Right | Lower / raise the focused send's level by 1.0 dB (Shift: 0.1 dB); one undo step per press, through the parameter's change gesture. No-op on an insert row (the arrows never walk columns while rows hold the keys) |
-| Return | On an insert, select its channel on the canvas, exactly what the EQ thumbnail's click does |
+| Return | On an insert, select its module on the canvas; on the EQ row, select the EQ, exactly what the curve's click does |
 | Delete / Backspace | Remove the focused send or insert through the same path its menu uses; one undo step. A branching insert chain is read-only and keeps its rows. Focus moves to a surviving row, or back to the column when none is left |
 | B | Bypass the focused row (`mixerToggleRowBypass`): an insert's module, or the send's own bypass. One undo step; B again toggles it back. Claimed only in row mode |
-| Alt+Up / Alt+Down | Move the focused insert or send up or down one place (`mixerMoveRowUp` / `mixerMoveRowDown`, rebindable); one undo step, focus follows the row. Swallowed where the drag would refuse (split and dry rows, across paths, front of a bus chain) |
+| Alt+Up / Alt+Down | Move the focused insert or send up or down one place (`mixerMoveRowUp` / `mixerMoveRowDown`, rebindable); one undo step, focus follows the row, and the moved inserts' cards trade places on the canvas ([row motion](../mixer/row-motion.md#the-canvas-follows-a-reorder)). Swallowed where the drag would refuse (split and dry rows, across paths, front of a bus chain) and on the EQ row |
 | Esc | Back to column mode |
 
-Tab never traps: claimed only when a focused column has rows shown, else the region cycle gets it. Row mode ends when the panel loses focus.
+Down is claimed only when a focused column has rows shown. Row mode ends when the panel loses focus.
 
 **Why E and not Return opens the EQ.** Return already selects the focused column on the canvas, so the EQ action
 defaults to a bare E (Ctrl+E, the section toggle, is unaffected). It does what the card's "Open EQ Window" button
@@ -787,10 +787,10 @@ name the current binding ("Hide Sends  (Ctrl+S)") and follow a rebind. The other
 | Ctrl+I | Ctrl+Alt+I | Show or Hide Mixer Inserts (`mixerToggleInserts`) |
 | Ctrl+S | Ctrl+Alt+S | Show or Hide Mixer Sends (`mixerToggleSends`) |
 | Ctrl+E | Ctrl+Alt+E | Show or Hide Mixer EQ (`mixerToggleEq`) |
-| Tab | Tab | Enter Mixer Send and Insert Rows (`mixerEnterRows`) |
+| Down | Down | Enter Mixer Insert, Send and EQ Rows (`mixerEnterRows`; an install that kept the old Tab moves to Down once) |
+| Shift+Up / Shift+Down | same | Raise / Lower Mixer Fader (`mixerNudgeFaderUp`, `mixerNudgeFaderDown`); Alt added: 0.1 dB |
 | E / C / H, Shift+Left / Shift+Right | same | Open Mixer EQ (`mixerOpenEq`) / Change Mixer Channel Colour (`mixerOpenColour`) / Hide or Show Mixer Channel (`mixerToggleChannelHidden`), Pan Mixer Channel Left / Right (`mixerPanLeft`, `mixerPanRight`) |
-| B | B | Bypass Mixer Send or Insert (`mixerToggleRowBypass`) |
-| Alt+Up / Alt+Down | Alt+Up / Alt+Down | Move Mixer Row Up / Down (`mixerMoveRowUp`, `mixerMoveRowDown`) |
+| B, Alt+Up / Alt+Down | same | Bypass Mixer Send or Insert (`mixerToggleRowBypass`), Move Mixer Row Up / Down (`mixerMoveRowUp`, `mixerMoveRowDown`) |
 | Cmd+Up | Ctrl+Up | Focus the Mixer Top Bar (`mixerFocusTopBar`): a key ring over the toolbar buttons, the side pane's filter and chips and the master pan law ([top bar keys](../mixer/top-bar-keys.md)) |
 
 **Real Control on macOS, Ctrl+Alt elsewhere.** Cmd+S is Save and Cmd+I / Cmd+E are taken, so macOS uses

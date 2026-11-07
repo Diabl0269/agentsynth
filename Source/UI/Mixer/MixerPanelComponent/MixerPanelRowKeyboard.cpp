@@ -1,4 +1,4 @@
-// Concern: MixerPanelComponent's keyboard walk through a column's send and insert rows -- entering
+// Concern: MixerPanelComponent's keyboard walk through a column's insert, send and EQ rows -- entering
 // them, stepping, nudging a send level, removing a row, opening it, leaving -- plus the focused row's
 // ring and its screen-reader text. Row focus is state of the panel (like focusedColumnIndex_), never
 // real focus on a child, so the panel stays the mixer's single focusable leaf.
@@ -41,6 +41,19 @@ MixerSendList* MixerPanelComponent::focusedSendList() const {
     return &static_cast<MixerColumnComponent*>(entry.component)->getSendList();
 }
 
+// A strip column whose EQ section is shown and holds an EQ curve; Master and Direct have no EQ row.
+MixerColumnComponent* MixerPanelComponent::focusedEqColumn() const {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size() ||
+        sectionLayout_.isHidden(MixerSection::Eq))
+        return nullptr;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    if (entry.kind != ColumnEntry::Kind::Strip)
+        return nullptr;
+    auto* column = static_cast<MixerColumnComponent*>(entry.component);
+    return column->getEqNodeUuid().isNotEmpty() ? column : nullptr;
+}
+
+// Top to bottom as the column draws them: the inserts, the sends, then the EQ curve.
 std::vector<MixerRowRef> MixerPanelComponent::focusedRows() const {
     std::vector<MixerRowRef> rows;
     if (const auto* inserts = focusedInsertList())
@@ -49,11 +62,12 @@ std::vector<MixerRowRef> MixerPanelComponent::focusedRows() const {
     if (const auto* sends = focusedSendList())
         for (int i = 0; i < sends->getRowCount(); ++i)
             rows.push_back({MixerRowKind::Send, i});
+    if (focusedEqColumn() != nullptr)
+        rows.push_back({MixerRowKind::Eq, 0});
     return rows;
 }
 
-// Left unhandled (false) with no column focused or nothing to enter, so Tab still reaches the
-// app-wide region cycle in those cases.
+// Left unhandled (false) with no column focused or nothing to enter, so the key goes on to the window.
 bool MixerPanelComponent::enterRows() {
     if (rowFocus_.has_value())
         return false;
@@ -104,11 +118,11 @@ bool MixerPanelComponent::handleRowKey(const juce::KeyPress& key) {
     return false;
 }
 
-// Clamped at either end, like the column walk.
+// Up from the first row goes back to the column (the way Down came in); Down clamps at the last row.
 bool MixerPanelComponent::stepRow(int direction) {
     const auto rows = focusedRows();
     const auto at = rowFocus_.has_value() ? std::find(rows.begin(), rows.end(), *rowFocus_) : rows.end();
-    if (rows.empty() || at == rows.end()) {
+    if (rows.empty() || at == rows.end() || (at == rows.begin() && direction < 0)) {
         exitRows();
         return true;
     }
@@ -145,8 +159,8 @@ bool MixerPanelComponent::foldFocusedRow(bool open) {
 // which normally rebuilds the mixer and destroys that list, so nothing may touch it afterwards. A
 // branching insert chain is read-only and keeps its rows.
 bool MixerPanelComponent::removeFocusedRow() {
-    if (!rowFocus_.has_value())
-        return true;
+    if (!rowFocus_.has_value() || rowFocus_->kind == MixerRowKind::Eq)
+        return true; // the EQ is removed as an insert
     const auto row = *rowFocus_;
     if (row.kind == MixerRowKind::Send) {
         if (auto* sends = focusedSendList())
@@ -162,8 +176,8 @@ bool MixerPanelComponent::removeFocusedRow() {
 // triggers destroys that list, so nothing may touch it afterwards; reconcileRowFocus() re-derives the row (and so its
 // screen-reader text, which now says "bypassed") from the new lists.
 bool MixerPanelComponent::toggleFocusedRowBypass() {
-    if (!rowFocus_.has_value())
-        return true;
+    if (!rowFocus_.has_value() || rowFocus_->kind == MixerRowKind::Eq)
+        return true; // the EQ is bypassed from its insert row
     const auto row = *rowFocus_;
     if (row.kind == MixerRowKind::Send) {
         if (auto* sends = focusedSendList())
@@ -180,7 +194,7 @@ bool MixerPanelComponent::toggleFocusedRowBypass() {
 // list says where it may go), a send within the sends. The move is one undo step through the list's own path, so it
 // settles like a drop; a move that cannot happen is swallowed rather than walking anything else.
 bool MixerPanelComponent::moveFocusedRow(int delta) {
-    if (!rowFocus_.has_value())
+    if (!rowFocus_.has_value() || rowFocus_->kind == MixerRowKind::Eq)
         return true;
     const auto row = *rowFocus_;
     bool moved = false;
@@ -211,8 +225,14 @@ bool MixerPanelComponent::moveFocusedRow(int delta) {
 }
 
 // An insert opens the way the EQ thumbnail's click does -- it selects the module's channel on the
-// canvas; a split row opens or folds its paths, and "+ Insert" opens the effect picker. A send has nothing to open.
+// canvas; a split row opens or folds its paths, and "+ Insert" opens the effect picker. The EQ row does what a click on
+// the curve does: it selects the EQ on the canvas. A send has nothing to open.
 bool MixerPanelComponent::openFocusedRow() {
+    if (rowFocus_.has_value() && rowFocus_->kind == MixerRowKind::Eq) {
+        if (auto* column = focusedEqColumn())
+            selectOnCanvas(column->getEqNodeUuid());
+        return true;
+    }
     if (rowFocus_.has_value() && rowFocus_->kind == MixerRowKind::Insert)
         if (auto* inserts = focusedInsertList()) {
             const int row = rowFocus_->index;
@@ -330,7 +350,10 @@ void MixerPanelComponent::syncRowVisuals() {
 void MixerPanelComponent::refreshRowAccessibility() {
     juce::String text;
     if (rowFocus_.has_value()) {
-        if (rowFocus_->kind == MixerRowKind::Insert) {
+        if (rowFocus_->kind == MixerRowKind::Eq) {
+            if (const auto* column = focusedEqColumn())
+                text = column->getEqThumbnail().getTitle();
+        } else if (rowFocus_->kind == MixerRowKind::Insert) {
             if (const auto* inserts = focusedInsertList())
                 text = inserts->describeRow(rowFocus_->index);
         } else if (const auto* sends = focusedSendList()) {
@@ -351,6 +374,13 @@ void MixerPanelComponent::refreshRowAccessibility() {
 juce::Rectangle<int> MixerPanelComponent::focusedRowBounds() const {
     if (!rowFocus_.has_value())
         return {};
+    if (rowFocus_->kind == MixerRowKind::Eq) {
+        const auto* column = focusedEqColumn();
+        if (column == nullptr)
+            return {};
+        const auto& curve = column->getEqThumbnail();
+        return getLocalArea(&curve, curve.getLocalBounds()).getIntersection(getLocalBounds());
+    }
     juce::Component* list = nullptr;
     juce::Rectangle<int> row;
     if (rowFocus_->kind == MixerRowKind::Insert) {

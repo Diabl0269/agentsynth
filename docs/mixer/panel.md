@@ -810,9 +810,8 @@ bypass button on every insert and send row (each a Tab stop with a name, a toolt
 
 - **Left and Right** walk `focusedColumnIndex_` across the columns in the order they are laid out (left
   zone, scrolling, right zone), clamped, never wrapping; a hidden channel has no column, so it is skipped.
-- **Up and Down** nudge the focused fader 1.0 dB, or 0.1 dB with Shift, as one undo step via
-  `MixerFader::nudge()` (begin and end change gesture bracketing a single `setValueNotifyingHost`,
-  like a real drag).
+- **Shift+Up and Shift+Down** (`mixerNudgeFaderUp` / `mixerNudgeFaderDown`, rebindable; Alt added: 0.1 dB) nudge the focused fader 1.0 dB as one undo step via
+  `MixerFader::nudge()` (a change gesture around one `setValueNotifyingHost`, like a drag); the fader's tooltip names the keys. Plain Up on a column does nothing.
 - **Enter** selects the focused column's macro or node on canvas.
 - **A click in a column** focuses it, and **Cmd+D** copies the focused strip's track: [strip focus](strip-focus.md).
 - **M, S and R** resolve the SAME rebindable `timelineMuteFocusedTrack`,
@@ -822,9 +821,9 @@ bypass button on every insert and send row (each a Tab stop with a name, a toolt
   extracted from the M and S buttons' own `onClick` so a keypress and a real click can never diverge,
   plus an `onArmTrack` callback routed through `MainComponent::performTrackEdit`.
 - **C**, **Shift+Left/Right** and **H** (rebindable) open the colour picker, pan and hide: [strip focus](strip-focus.md#colour).
-- **Tab** (`mixerEnterRows`, rebindable, Mixer category) moves into the focused column's rows --
+- **Down** (`mixerEnterRows`, rebindable, Mixer category) moves into the focused column's rows --
   [below](#keyboard-walk-through-the-send-and-insert-rows). With no column focused, or no rows to
-  enter, `keyPressed()` returns false so the app-wide Tab region cycle still gets the key.
+  enter, `keyPressed()` returns false. Tab is never claimed: it stays the app-wide region cycle.
 - **Cmd+Up** (`mixerFocusTopBar`, rebindable) puts a key ring on the top bar: [top bar keys](top-bar-keys.md).
 - **E** (`mixerOpenEq`, rebindable) opens the focused strip's EQ window while the EQ section is shown. It
   is E rather than Return because Return already selects the focused column on the canvas. The window is the
@@ -835,11 +834,10 @@ bypass button on every insert and send row (each a Tab stop with a name, a toolt
 
 Row focus is panel state (`MixerPanelComponent::rowFocus_`, a `MixerRowRef` of kind and index, in
 `MixerRowFocus.h`), not real focus on a child, so the panel stays the single focusable leaf.
-`MixerPanelRowKeyboard.cpp` owns it. Rows walk in layout order -- the focused column's insert rows, then
-its send rows -- and only for sections that are shown: hiding Inserts or Sends moves the focus to a row of
-the other section, or back to column mode when none is left. Master has insert rows only; Direct has none.
+`MixerPanelRowKeyboard.cpp` owns it. Rows walk in layout order -- inserts, sends, then the EQ curve (one `MixerRowKind::Eq` row while the strip has an EQ: its ring is the curve, its text the curve's title, Return selects the EQ on the canvas as a click does, and B, Delete and Alt+arrows do nothing there) -- and only for sections that are shown: hiding
+a section moves the focus to a row of another, or back to column mode when none is left. Master has insert rows only; Direct has none.
 
-- **Up and Down** step rows, clamped at either end. **Left and Right** lower and raise the focused
+- **Up and Down** step rows, clamped at the bottom; Up on the first row returns to the column. **Left and Right** lower and raise the focused
   send's level by 1.0 dB (Shift: 0.1 dB) through `MixerSendList::nudgeLevel()`, one undo step per press:
   `captureBeforeState`, then the parameter's begin-gesture, set and end-gesture (what a knob drag produces),
   then `pushSnapshotFromCapture`. On an insert split row Right opens its paths and Left folds them; Left on a
@@ -847,7 +845,7 @@ the other section, or back to column mode when none is left. Master has insert r
   the arrows do nothing on an insert row, and never walk columns.
 - **B** (`mixerToggleRowBypass`, rebindable, Mixer category, default bare B) bypasses the focused row -- see
   [Bypassing a row](#bypassing-a-row).
-- **Return** on an insert selects its channel on the canvas, the same `selectOnCanvas` the EQ thumbnail's
+- **Return** on an insert selects its module on the canvas, the same `selectOnCanvas` the EQ thumbnail's
   click and the header's "Edit on canvas" button use; on a split row it opens or folds the paths, and on the
   last insert row, "+ Insert", it opens the effect picker ([adding an insert](mixer.md#adding-an-insert)). **Delete** or **Backspace** removes the send or
   insert through `MixerSendList::removeRow()` / `MixerInsertList::removeRow()` -- the paths their menus

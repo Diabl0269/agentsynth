@@ -101,7 +101,7 @@ juce::String mixerActionName(const juce::String& actionId) {
     if (actionId == "mixerToggleEq")
         return "Show or Hide Mixer EQ";
     if (actionId == "mixerEnterRows")
-        return "Enter Mixer Send and Insert Rows";
+        return "Enter Mixer Insert, Send and EQ Rows";
     if (actionId == "mixerOpenEq")
         return "Open Mixer EQ";
     if (actionId == "mixerOpenColour")
@@ -120,6 +120,10 @@ juce::String mixerActionName(const juce::String& actionId) {
         return "Move Mixer Send or Insert Down";
     if (actionId == "mixerFocusTopBar")
         return "Focus the Mixer Top Bar";
+    if (actionId == "mixerNudgeFaderUp")
+        return "Raise Mixer Fader";
+    if (actionId == "mixerNudgeFaderDown")
+        return "Lower Mixer Fader";
     return {};
 }
 

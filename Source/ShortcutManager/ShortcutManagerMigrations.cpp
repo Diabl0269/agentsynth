@@ -184,6 +184,20 @@ struct ShortcutManager::Migrations {
      *  when it still holds exactly Cmd+K and no other action already holds Opt+Cmd+K; any other binding is the
      *  user's choice and stays. The palette's own action is new, so it is absent from every saved file and takes
      *  Cmd+K from the defaults. The flag stops it re-firing if they later bind Cmd+K to the minimap on purpose. */
+    /** One-shot: Enter Mixer Rows moved from Tab (the app's region cycle, which it shadowed whenever a focused column
+     *  had rows) to Down. A saved install holds Tab (saveToProperties() persists every action), so it moves across
+     *  only while it still holds exactly Tab and no other action holds Down; a user's own rebind stays. */
+    static void migrateMixerEnterRowsDown(ShortcutManager& manager, juce::PropertiesFile& settings) {
+        constexpr auto flag = "shortcutMigration_mixerEnterRowsDown";
+        if (settings.getBoolValue(flag, false))
+            return;
+        settings.setValue(flag, true);
+        const juce::KeyPress tab(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
+        const juce::KeyPress down(juce::KeyPress::downKey, juce::ModifierKeys::noModifiers, 0);
+        if (manager.bindings["mixerEnterRows"] == tab && manager.getConflictingAction("mixerEnterRows", down).isEmpty())
+            manager.bindings["mixerEnterRows"] = down;
+    }
+
     static void migrateMinimapOptCmdK(ShortcutManager& manager, juce::PropertiesFile& settings) {
         constexpr auto flag = "shortcutMigration_minimapOptCmdK";
         if (settings.getBoolValue(flag, false))
@@ -217,6 +231,7 @@ void ShortcutManager::loadFromProperties(juce::ApplicationProperties& props) {
     Migrations::migrateAddTrackCmdT(*this, *settings);
     Migrations::migrateMoveLaneAltArrows(*this, *settings);
     Migrations::migrateMinimapOptCmdK(*this, *settings);
+    Migrations::migrateMixerEnterRowsDown(*this, *settings);
     Migrations::persistMigratedBindings(*this, *settings, loaded);
 }
 

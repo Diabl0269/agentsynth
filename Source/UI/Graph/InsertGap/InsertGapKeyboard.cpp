@@ -120,4 +120,47 @@ insertModuleAfterNode(GraphEditor& editor, AppUndoManager& undoManager, MacroSet
     return added;
 }
 
+// A mixer reorder's canvas follow-up (docs/mixer/row-motion.md#the-canvas-follows-a-reorder), run inside the reorder's
+// own undo record. The cards keep the slots they had (the first card's left edge, then each gap between neighbours) and
+// are dealt into them in the new chain order, so two neighbours of different widths swap without overlapping or opening
+// a hole. Only when every card is on screen, in one container (the root, or one macro), on one row and left to right in
+// the old chain order: anywhere else the user laid the cards out by hand and they stay put. The positions land through
+// the canvas's own card move (setTopLeftPosition + updateModulePosition) in one CardGlideAnimator::Scope, as Auto
+// Arrange and an insert's make-room do, so the cards and their cables glide, and an undo of the record glides them
+// back.
+void followReorderOnCanvas(GraphEditor& editor, const std::vector<juce::AudioProcessorGraph::NodeID>& before,
+                           const std::vector<juce::AudioProcessorGraph::NodeID>& after) {
+    // How far apart two card tops may be and still count as one row on the canvas.
+    constexpr int kSameRowTolerance = 8;
+    if (before.size() < 2 || before.size() != after.size())
+        return;
+    CardGlideAnimator::Scope glide(editor.getCardGlide());
+    editor.updateComponents(); // the cards the reorder rewired, before their bounds are read
+    std::vector<ModuleComponent*> cards;
+    const auto* container = editor.getMacroController().macroForNode(before.front());
+    for (const auto id : before) {
+        auto* card = cardFor(editor, id);
+        if (card == nullptr || !card->isVisible() || editor.isOutputDockNode(id) ||
+            editor.getMacroController().macroForNode(id) != container)
+            return;
+        if (!cards.empty() && (std::abs(card->getY() - cards.front()->getY()) > kSameRowTolerance ||
+                               card->getX() <= cards.back()->getRight()))
+            return;
+        cards.push_back(card);
+    }
+    std::vector<int> gaps;
+    for (size_t i = 0; i + 1 < cards.size(); ++i)
+        gaps.push_back(cards[i + 1]->getX() - cards[i]->getRight());
+    int x = cards.front()->getX();
+    for (size_t i = 0; i < after.size(); ++i) {
+        auto* card = cardFor(editor, after[i]);
+        if (card == nullptr)
+            return;
+        card->setTopLeftPosition(x, card->getY());
+        editor.updateModulePosition(card);
+        x += card->getWidth() + (i < gaps.size() ? gaps[i] : 0);
+    }
+    editor.notifyModuleContentChanged();
+}
+
 } // namespace synth

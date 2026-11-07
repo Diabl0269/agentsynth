@@ -1,7 +1,7 @@
 # Mixer top bar keys
 
 The mixer panel keeps real focus on its root (it is the region's one focusable leaf, [panel](panel.md#keyboard-navigation-and-accessibility)),
-and plain Up and Down nudge the focused fader. **Cmd+Up** (`mixerFocusTopBar`, rebindable, Mixer category; Ctrl+Up off
+and Down walks into the focused column's rows. **Cmd+Up** (`mixerFocusTopBar`, rebindable, Mixer category; Ctrl+Up off
 the Mac, where Cmd is Ctrl) puts a painted ring on the first stop of the top bar instead. It is checked before the
 arrows and the row keys, so it also works from row mode (which it leaves). Cmd+Shift+Up (`focusTransportBar`)
 is the app's key for the timeline's transport bar: the mixer's arrows ignore Cmd, Ctrl and Alt chords, so it bubbles

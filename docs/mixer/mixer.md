@@ -413,7 +413,7 @@ name is "Path N: dry, no effects".
 A module row reorders three ways, all through `MixerInsertList::moveRowTo` and ONE undo step: drag it by its name
 (the grab cursor shows there), Move Up / Move Down in its right-click menu, or, with the row focused in the
 panel's row walk, **Alt+Up / Alt+Down** (`mixerMoveRowUp` / `mixerMoveRowDown`, rebindable, Mixer category;
-Tab, `mixerEnterRows`, enters a column's rows). The drag is the shared `Layout/ReorderDrag/` helper exactly as
+Down, `mixerEnterRows`, enters a column's rows; the moved modules' cards follow on the canvas, see [row motion](row-motion.md#the-canvas-follows-a-reorder)). The drag is the shared `Layout/ReorderDrag/` helper exactly as
 the send list uses it: siblings make room, Esc puts everything back, and the dropped row settles from where it was
 let go (`pendingInsertSettle_`, played on the rebuilt column; see [row motion](row-motion.md)). The commit holds
 the panel's rebuild (`rebuildHoldDepth_`) around the undo step and lets `onMutated()` do the one rebuild.

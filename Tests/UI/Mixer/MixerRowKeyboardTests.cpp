@@ -1,5 +1,5 @@
-// MixerRowKeyboardTests.cpp -- the mixer panel's keyboard walk through a column's insert and send rows
-// ("mixerEnterRows"), the EQ key ("mixerOpenEq") and the header controls as Tab stops. Every key goes
+// MixerRowKeyboardTests.cpp -- the mixer panel's keyboard walk through a column's insert, send and EQ rows
+// ("mixerEnterRows", Down), the EQ key ("mixerOpenEq") and the header controls as Tab stops. Every key goes
 // through MixerPanelComponent::keyPressed with a real juce::KeyPress, on a real off-screen
 // MainComponent, the same rig style MixerPanelKeyboardFocusTests.cpp uses.
 #include "../../TestSettingsHelpers.h"
@@ -7,15 +7,21 @@
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
+#include "MixerKeyWalk.h"
+#include "MixerNativeHost.h"
+#include "MixerZonesTestRig.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/ModuleBase.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/BottomDockComponent/BottomDockComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
+#include "UI/Mixer/MixerEqThumbnail.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Mixer/MixerSendList.h"
 #include <gtest/gtest.h>
+#include <iostream>
+#include <map>
 
 namespace {
 
@@ -116,15 +122,17 @@ struct RowRig {
         level->setValueNotifyingHost(level->getNormalisableRange().convertTo0to1(db));
     }
 
-    /** Right once: focus on the first column; Tab: into its rows (first row is the first insert). */
+    /** Right once: focus on the first column; Down: into its rows (first row is the first insert). */
     void enterFirstColumnRows() {
         ASSERT_TRUE(panel().keyPressed(rightKey()));
-        ASSERT_TRUE(panel().keyPressed(tabKey()));
+        ASSERT_TRUE(panel().keyPressed(downKey()));
     }
 
-    /** Down until the send row (after the insert rows). */
+    /** Down until the first send row (after the insert rows, before the EQ row). */
     void stepToSendRow() {
-        for (int i = 0; i < insertCount(); ++i)
+        for (int i = 0; i <= insertCount() && (!panel().getFocusedRowForTest().has_value() ||
+                                               panel().getFocusedRowForTest()->kind == MixerRowKind::Insert);
+             ++i)
             panel().keyPressed(downKey());
         ASSERT_EQ(panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Send, 0}));
     }
@@ -132,48 +140,54 @@ struct RowRig {
 
 } // namespace
 
-TEST(MixerRowKeyboardTest, TabEntersTheFocusedColumnsRowsInsertsFirst) {
+TEST(MixerRowKeyboardTest, DownEntersTheFocusedColumnsRowsInsertsFirst) {
     RowRig rig;
     ASSERT_TRUE(rig.panel().keyPressed(rightKey()));
     EXPECT_FALSE(rig.panel().getFocusedRowForTest().has_value());
 
-    EXPECT_TRUE(rig.panel().keyPressed(tabKey()));
+    EXPECT_TRUE(rig.panel().keyPressed(downKey()));
     EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, 0}));
 }
 
-TEST(MixerRowKeyboardTest, TabWithNoColumnFocusedFallsThroughToTheRegionCycle) {
+TEST(MixerRowKeyboardTest, TabNeverEntersTheRowsSoTheRegionCycleAlwaysGetsIt) {
     RowRig rig;
+    rig.panel().keyPressed(rightKey());
     EXPECT_FALSE(rig.panel().keyPressed(tabKey())) << "unhandled, so the app-wide region cycle still gets it";
     EXPECT_FALSE(rig.panel().getFocusedRowForTest().has_value());
 }
 
-TEST(MixerRowKeyboardTest, TabFallsThroughWhenTheSectionsHoldingRowsAreHidden) {
+TEST(MixerRowKeyboardTest, DownFallsThroughWhenTheSectionsHoldingRowsAreHidden) {
     RowRig rig;
     rig.panel().keyPressed(rightKey());
-    rig.panel().getSectionLayout().setHidden(synth::ui::MixerSection::Inserts, true);
-    rig.panel().getSectionLayout().setHidden(synth::ui::MixerSection::Sends, true);
-    EXPECT_FALSE(rig.panel().keyPressed(tabKey()));
+    for (const auto section :
+         {synth::ui::MixerSection::Inserts, synth::ui::MixerSection::Sends, synth::ui::MixerSection::Eq})
+        rig.panel().getSectionLayout().setHidden(section, true);
+    EXPECT_FALSE(rig.panel().keyPressed(downKey()));
 
     rig.panel().getSectionLayout().setHidden(synth::ui::MixerSection::Sends, false);
-    EXPECT_TRUE(rig.panel().keyPressed(tabKey())) << "a shown section with rows is enough";
+    EXPECT_TRUE(rig.panel().keyPressed(downKey())) << "a shown section with rows is enough";
     EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Send, 0}));
 }
 
-TEST(MixerRowKeyboardTest, TabFallsThroughOnAColumnWithNoRows) {
+TEST(MixerRowKeyboardTest, DownFallsThroughOnAColumnWithNoRows) {
     RowRig rig;
     rig.panel().keyPressed(rightKey());
     rig.panel().keyPressed(rightKey()); // the second track: inserts, but no sends
     ASSERT_EQ(rig.panel().getFocusedColumnIndexForTest(), 1);
     ASSERT_EQ(rig.panel().getStripColumnForTest(1)->getSendList().getRowCount(), 0);
     rig.panel().getSectionLayout().setHidden(synth::ui::MixerSection::Inserts, true);
-    EXPECT_FALSE(rig.panel().keyPressed(tabKey()));
+    rig.panel().getSectionLayout().setHidden(synth::ui::MixerSection::Eq, true);
+    EXPECT_FALSE(rig.panel().keyPressed(downKey()));
 }
 
-TEST(MixerRowKeyboardTest, UpAndDownStepRowsClampedAtBothEnds) {
+TEST(MixerRowKeyboardTest, UpAndDownStepInsertsThenSendsThenTheEqAndUpAtTheTopLeaves) {
     RowRig rig;
+    ASSERT_FALSE(rig.firstColumn().getEqNodeUuid().isEmpty()) << "a default track has an EQ insert";
     rig.enterFirstColumnRows();
     EXPECT_TRUE(rig.panel().keyPressed(upKey()));
-    EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, 0})) << "clamped at the top";
+    EXPECT_FALSE(rig.panel().getFocusedRowForTest().has_value()) << "Up at the top returns to the column";
+    EXPECT_EQ(rig.panel().getFocusedColumnIndexForTest(), 0);
+    ASSERT_TRUE(rig.panel().keyPressed(downKey()));
     EXPECT_TRUE(rig.panel().keyPressed(downKey()));
     EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, 1}));
     for (int i = 2; i < rig.insertCount(); ++i)
@@ -181,7 +195,13 @@ TEST(MixerRowKeyboardTest, UpAndDownStepRowsClampedAtBothEnds) {
     EXPECT_TRUE(rig.panel().keyPressed(downKey()));
     EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Send, 0})) << "inserts, then sends";
     EXPECT_TRUE(rig.panel().keyPressed(downKey()));
-    EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Send, 0})) << "clamped at the bottom";
+    EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Eq, 0})) << "then the EQ";
+    EXPECT_TRUE(rig.panel().getFocusedRowDescriptionForTest().contains("EQ curve"));
+    EXPECT_FALSE(rig.panel().getFocusedRowBoundsForTest().isEmpty()) << "the EQ row gets the focus ring";
+    EXPECT_TRUE(rig.panel().keyPressed(downKey()));
+    EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Eq, 0})) << "clamped at the bottom";
+    EXPECT_TRUE(rig.panel().keyPressed(upKey()));
+    EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Send, 0})) << "and back the same way";
     EXPECT_EQ(rig.panel().getFocusedColumnIndexForTest(), 0) << "stepping rows never walks columns";
 }
 
@@ -277,7 +297,7 @@ TEST(MixerRowKeyboardTest, DeletingTheLastSendLandsOnPlusInsert) {
         rig.panel().rebuild();
     }
     rig.panel().keyPressed(rightKey());
-    ASSERT_TRUE(rig.panel().keyPressed(tabKey()));
+    ASSERT_TRUE(rig.panel().keyPressed(downKey()));
     ASSERT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Insert, 0})) << "+ Insert";
     ASSERT_EQ(rig.firstColumn().getInsertList().getAddRowIndex(), 0);
     ASSERT_TRUE(rig.panel().keyPressed(downKey())) << "the send row is still there";
@@ -391,6 +411,8 @@ TEST(MixerRowKeyboardTest, HidingTheFocusedRowsSectionMovesTheFocusToTheOtherSec
     rig.panel().getSectionLayout().setHidden(synth::ui::MixerSection::Inserts, true);
     EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Send, 0}));
     rig.panel().getSectionLayout().setHidden(synth::ui::MixerSection::Sends, true);
+    EXPECT_EQ(rig.panel().getFocusedRowForTest(), (MixerRowRef{MixerRowKind::Eq, 0})) << "the EQ row is still shown";
+    rig.panel().getSectionLayout().setHidden(synth::ui::MixerSection::Eq, true);
     EXPECT_FALSE(rig.panel().getFocusedRowForTest().has_value());
 }
 
@@ -409,16 +431,16 @@ TEST(MixerRowKeyboardTest, EnterRowsIsRebindable) {
     shortcuts.setBinding("mixerEnterRows", letterKey('w'));
     rig.panel().keyPressed(rightKey());
 
-    EXPECT_FALSE(rig.panel().keyPressed(tabKey())) << "Tab no longer enters the rows";
+    EXPECT_FALSE(rig.panel().keyPressed(downKey())) << "Down no longer enters the rows";
     EXPECT_TRUE(rig.panel().keyPressed(letterKey('w')));
     EXPECT_TRUE(rig.panel().getFocusedRowForTest().has_value());
     rig.panel().setShortcutManager(nullptr);
 }
 
-TEST(MixerRowKeyboardTest, EnterRowsDefaultsToTabInTheMixerCategory) {
+TEST(MixerRowKeyboardTest, EnterRowsDefaultsToDownInTheMixerCategory) {
     ShortcutManager shortcuts;
     EXPECT_EQ(ShortcutManager::getCategory("mixerEnterRows"), ShortcutCategory::Mixer);
-    EXPECT_EQ(shortcuts.getBinding("mixerEnterRows"), tabKey());
+    EXPECT_EQ(shortcuts.getBinding("mixerEnterRows"), downKey());
     EXPECT_NE(ShortcutManager::getActionDescription("mixerEnterRows"), juce::String("mixerEnterRows"));
 }
 
@@ -569,4 +591,167 @@ TEST(MixerHeaderControlsTest, HeaderButtonsAlsoActOnSpace) {
                             synth::ui::MixerZonesPane::Chip::Buses})
         EXPECT_TRUE(
             static_cast<juce::Component&>(rig.panel().getZonesPaneForTest().getChipForTest(chip)).keyPressed(space));
+}
+
+// Keyboard reach (docs/mixer/panel.md#keyboard-navigation-and-accessibility): every control a click can
+// operate in the Mixer region is reached with the region's own keys, delivered the way the OS delivers them (the real
+// ComponentPeer of a native window holding the panel of an off-screen MainComponent). A column is reached with
+// Left/Right, its insert, send and EQ rows with Down from it, the top bar with Cmd+Up then Right along its ring, and
+// the side pane's channel list with Down once Cmd+Shift+B has opened it.
+namespace {
+
+using namespace synth::test::mixer;
+using synth::ui::MixerRowKind;
+using synth::ui::MixerSection;
+
+// A track with a send (so there are send rows), a bus, every section shown, on a native window holding the keyboard.
+struct ReachRig {
+    MixerZonesRig r{2};
+    NativeHost host{*r.panel};
+    int unhandled = 0;
+
+    ReachRig() {
+        host.onUnhandledKey = [this](const juce::KeyPress&) {
+            ++unhandled;
+            return true;
+        };
+        const auto bus = r.panel->createBus();
+        r.panel->rebuild();
+        r.panel->getStripColumnForTest(0)->getSendList().addSendTo(bus);
+        r.panel->rebuild();
+        for (const auto section : {MixerSection::Inserts, MixerSection::Sends, MixerSection::Eq})
+            r.panel->getSectionLayout().setHidden(section, false);
+        r.panel->setSize(1400, 700);
+        host.setSize(1400, 780);
+        r.panel->resized();
+        r.panel->grabKeyboardFocus();
+    }
+    bool hasKeyboard() const { return r.panel->hasKeyboardFocus(true); }
+    KeyPresser presser() {
+        return [this](const juce::KeyPress& key) { return pressThroughPeer(host, key); };
+    }
+};
+
+bool onScreenInside(juce::Component& c, const juce::Component& root) {
+    for (auto* p = &c; p != nullptr; p = p->getParentComponent()) {
+        if (!p->isVisible() || p->getAlpha() <= 0.0f || p->getWidth() <= 0 || p->getHeight() <= 0)
+            return false;
+        if (p == &root)
+            return true;
+    }
+    return false;
+}
+
+// What a click can operate: buttons, sliders, text fields, combo boxes and the EQ curve (a clickable painted control).
+bool isOperable(juce::Component& c) {
+    bool self = true, children = true;
+    c.getInterceptsMouseClicks(self, children);
+    if (!self || !c.isEnabled())
+        return false;
+    return dynamic_cast<juce::Button*>(&c) != nullptr || dynamic_cast<juce::Slider*>(&c) != nullptr ||
+           dynamic_cast<juce::TextEditor*>(&c) != nullptr || dynamic_cast<juce::ComboBox*>(&c) != nullptr ||
+           dynamic_cast<synth::ui::MixerEqThumbnail*>(&c) != nullptr;
+}
+
+void collect(juce::Component& root, juce::Component& node, std::vector<juce::Component*>& out) {
+    for (auto* child : node.getChildren()) {
+        if (!onScreenInside(*child, root))
+            continue;
+        if (isOperable(*child)) {
+            out.push_back(child);
+            continue;
+        }
+        collect(root, *child, out);
+    }
+}
+
+std::string nameOf(juce::Component& c) {
+    if (c.getTitle().isNotEmpty())
+        return c.getTitle().toStdString();
+    if (auto* b = dynamic_cast<juce::Button*>(&c); b != nullptr && b->getButtonText().isNotEmpty())
+        return b->getButtonText().toStdString();
+    return "unnamed";
+}
+
+// The controls a focused column's own keys operate (fader nudge, pan, M, S, C, Return): reached once the column is.
+// The sources badge's own action (select the channel on the canvas) is the column's Return.
+bool isColumnKeyControl(juce::Component& c) {
+    const auto title = c.getTitle();
+    return title.endsWith(" fader") || title.endsWith(" colour") || title.endsWith(" pan") || title.contains(" mute") ||
+           title.contains(" solo") || title.startsWith("Plays into this channel") ||
+           (title.startsWith("Edit ") && title.endsWith(" on canvas"));
+}
+
+} // namespace
+
+// The guard for the keyboard-reach kind in the Mixer: every operable control is walked to with real key dispatch.
+TEST(MixerKeyboardReachTest, EveryMixerControlIsReachedWithTheRegionsOwnKeysThroughTheRealDispatch) {
+    if (nativeWindowsUnavailable())
+        GTEST_SKIP() << "needs a display for a native window";
+    ReachRig rig;
+    if (!rig.hasKeyboard())
+        GTEST_SKIP() << "this machine would not give a temporary window the keyboard";
+    auto& panel = *rig.r.panel;
+    const auto press = rig.presser();
+
+    std::vector<juce::Component*> controls;
+    collect(panel, panel, controls);
+    ASSERT_GT(controls.size(), 20u);
+
+    std::map<std::string, int> how;
+    for (auto* control : controls) {
+        juce::Component::SafePointer<juce::Component> alive(control);
+        const char* way = nullptr;
+        if (walkTopBarTo(panel, *control, press))
+            way = "top bar ring (Cmd+Up, Right)";
+        else if (isColumnKeyControl(*control) && walkColumnsTo(panel, *control, press))
+            way = "column keys (Left/Right)";
+        else if (walkRowsTo(panel, *control, press))
+            way = "rows (Down)";
+        else if (walkZonesListTo(panel, *control, press))
+            way = "side pane list (Cmd+Shift+B, Down)";
+        leaveToColumn(panel, press);
+        ASSERT_NE(alive.getComponent(), nullptr) << "a walk rebuilt the mixer";
+        EXPECT_NE(way, nullptr) << "no key reaches " << nameOf(*control);
+        if (way != nullptr)
+            ++how[way];
+        std::cout << "[ mixer reach ] " << nameOf(*control) << ": " << (way != nullptr ? way : "UNREACHED") << "\n";
+    }
+    EXPECT_GT(how["rows (Down)"], 0);
+    EXPECT_GT(how["top bar ring (Cmd+Up, Right)"], 0);
+    EXPECT_GT(how["column keys (Left/Right)"], 0);
+    EXPECT_GT(how["side pane list (Cmd+Shift+B, Down)"], 0);
+}
+
+// Every row kind is a stop of the walk, in drawing order, and Up retraces it back to the column.
+TEST(MixerKeyboardReachTest, DownWalksInsertsThenSendsThenTheEqAndUpWalksBackToTheColumn) {
+    if (nativeWindowsUnavailable())
+        GTEST_SKIP() << "needs a display for a native window";
+    ReachRig rig;
+    if (!rig.hasKeyboard())
+        GTEST_SKIP() << "this machine would not give a temporary window the keyboard";
+    auto& panel = *rig.r.panel;
+    const auto press = rig.presser();
+    homeColumn(panel, press);
+    ASSERT_EQ(panel.getFocusedColumnIndexForTest(), 0);
+
+    std::vector<MixerRowKind> kinds;
+    ASSERT_TRUE(press(walkKey(juce::KeyPress::downKey)));
+    for (int guard = 0; guard < 64 && panel.getFocusedRowForTest().has_value(); ++guard) {
+        const auto row = *panel.getFocusedRowForTest();
+        if (kinds.empty() || kinds.back() != row.kind)
+            kinds.push_back(row.kind);
+        EXPECT_FALSE(panel.getFocusedRowBoundsForTest().isEmpty()) << "every row shows its focus ring";
+        EXPECT_FALSE(panel.getFocusedRowDescriptionForTest().isEmpty()) << "every row is named for a screen reader";
+        press(walkKey(juce::KeyPress::downKey));
+        if (panel.getFocusedRowForTest() == row)
+            break;
+    }
+    EXPECT_EQ(kinds, (std::vector<MixerRowKind>{MixerRowKind::Insert, MixerRowKind::Send, MixerRowKind::Eq}));
+
+    for (int guard = 0; guard < 64 && panel.getFocusedRowForTest().has_value(); ++guard)
+        press(walkKey(juce::KeyPress::upKey));
+    EXPECT_FALSE(panel.getFocusedRowForTest().has_value()) << "Up from the first row is the column again";
+    EXPECT_EQ(panel.getFocusedColumnIndexForTest(), 0);
+    EXPECT_EQ(rig.unhandled, 0);
 }

@@ -1,5 +1,5 @@
-// Concern: MixerPanelComponent's keyboard dispatch (Left/Right column walk, Up/Down
-// fader nudge, Enter select-on-canvas, the rebindable M/S/R actions) and the focus-outline
+// Concern: MixerPanelComponent's keyboard dispatch (Left/Right column walk, Down into the rows,
+// Shift+Up/Down fader nudge, Enter select-on-canvas, the rebindable M/S/R actions) and the focus-outline
 // painting/visual sync that goes with it. MixerPanelComponent.h's own class comment explains why
 // the panel, not a per-column leaf, is the single focusable region root (the keyboard-focus trap
 // docs/control/shortcuts.md documents: a focused Slider/TextButton eats the very keys this file resolves).
@@ -42,16 +42,22 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
         return panFocused(kPanStep);
     if (matchesAction(key, "mixerToggleChannelHidden", juce::KeyPress('h', juce::ModifierKeys::noModifiers, 0)))
         return hideFocusedChannel();
+    if (const float delta = faderNudgeFor(key); delta != 0.0f)
+        return nudgeFocusedFader(delta);
+    // Rebindable, Mixer category: into the focused column's insert, send and EQ rows (Down by default; with nothing to
+    // enter it is left unhandled). See MixerPanelRowKeyboard.cpp.
+    if (matchesAction(key, "mixerEnterRows",
+                      juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::noModifiers, 0)))
+        return enterRows();
     const auto mods = key.getModifiers();
     const bool arrowIsOurs = !mods.isCommandDown() && !mods.isCtrlDown() && !mods.isAltDown();
     if (arrowIsOurs && key.isKeyCode(juce::KeyPress::leftKey))
         return moveFocus(-1);
     if (arrowIsOurs && key.isKeyCode(juce::KeyPress::rightKey))
         return moveFocus(1);
-    if (arrowIsOurs && key.isKeyCode(juce::KeyPress::upKey))
-        return nudgeFocusedFader(mods.isShiftDown() ? 0.1f : 1.0f);
-    if (arrowIsOurs && key.isKeyCode(juce::KeyPress::downKey))
-        return nudgeFocusedFader(mods.isShiftDown() ? -0.1f : -1.0f);
+    // A plain Up on a column has nothing above it (the top bar is Cmd+Up): swallowed so it never reaches the window.
+    if (!mods.isAnyModifierKeyDown() && key.isKeyCode(juce::KeyPress::upKey))
+        return focusedColumnIndex_ >= 0;
     if (key.isKeyCode(juce::KeyPress::returnKey))
         return selectFocusedOnCanvas();
 
@@ -74,12 +80,7 @@ bool MixerPanelComponent::keyPressed(const juce::KeyPress& key) {
     if (matchesAction(key, "timelineArmFocusedTrack", juce::KeyPress('r', juce::ModifierKeys::noModifiers, 0)))
         return armFocusedTrack();
 
-    // Rebindable, Mixer category: into the focused column's send / insert rows (Tab by default; with
-    // nothing to enter it is left unhandled, so the app-wide region cycle still gets it), and the
-    // focused column's EQ window. See MixerPanelRowKeyboard.cpp.
-    if (matchesAction(key, "mixerEnterRows",
-                      juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0)))
-        return enterRows();
+    // Rebindable, Mixer category: the focused column's EQ window and colour picker.
     if (matchesAction(key, "mixerOpenEq", juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0)))
         return openFocusedEq();
     if (matchesAction(key, "mixerOpenColour", juce::KeyPress('c', juce::ModifierKeys::noModifiers, 0)))
@@ -138,6 +139,24 @@ bool MixerPanelComponent::moveFocus(int direction) {
     const int newIndex = focusedColumnIndex_ < 0 ? 0 : juce::jlimit(0, count - 1, focusedColumnIndex_ + direction);
     setFocusedColumnIndex(newIndex);
     return true;
+}
+
+// The fader nudge keys (Shift+Up / Shift+Down by default) move 1 dB; the same chord with Alt added moves 0.1 dB, so a
+// rebind carries its fine step along. Zero for any other key.
+float MixerPanelComponent::faderNudgeFor(const juce::KeyPress& key) const {
+    const auto fallbackFor = [](int code) { return juce::KeyPress(code, juce::ModifierKeys::shiftModifier, 0); };
+    const auto mods = key.getModifiers();
+    const juce::KeyPress withoutAlt(key.getKeyCode(), mods.withoutFlags(juce::ModifierKeys::altModifier),
+                                    key.getTextCharacter());
+    for (const auto& [actionId, code, sign] :
+         {std::tuple<const char*, int, float>{"mixerNudgeFaderUp", juce::KeyPress::upKey, 1.0f},
+          std::tuple<const char*, int, float>{"mixerNudgeFaderDown", juce::KeyPress::downKey, -1.0f}}) {
+        if (matchesAction(key, actionId, fallbackFor(code)))
+            return sign;
+        if (mods.isAltDown() && matchesAction(withoutAlt, actionId, fallbackFor(code)))
+            return sign * 0.1f;
+    }
+    return 0.0f;
 }
 
 bool MixerPanelComponent::nudgeFocusedFader(float deltaDb) {
@@ -212,6 +231,10 @@ void MixerPanelComponent::fillFocusedColumnState(juce::DynamicObject& into) cons
     const bool shown = !keyboardAway_ && juce::isPositiveAndBelow(focusedColumnIndex_, (int)columnEntries_.size());
     into.setProperty("focusedColumn",
                      shown ? columnEntries_[(size_t)focusedColumnIndex_].component->getTitle() : juce::String());
+    // The row the keys are on (empty in column mode): its index and the text a screen reader reads for it.
+    const bool inRows = shown && rowFocus_.has_value();
+    into.setProperty("focusedRow", inRows ? getDescription() : juce::String());
+    into.setProperty("focusedRowIndex", inRows ? rowFocus_->index : -1);
 }
 
 // Direct and Master have no name to edit, so the key falls through there.

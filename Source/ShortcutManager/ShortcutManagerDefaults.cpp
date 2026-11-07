@@ -558,10 +558,10 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     bindings["mixerToggleSends"] = juce::KeyPress('s', mixerSectionMods, 0);
     bindings["mixerToggleEq"] = juce::KeyPress('e', mixerSectionMods, 0);
 
-    // Tab moves from the focused column into its send / insert rows (it falls through to the
-    // app-wide region cycle when there is nothing to enter); bare E opens the focused column's EQ.
-    // Return is not free for the EQ: it already selects the focused column on the canvas.
-    bindings["mixerEnterRows"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
+    // Down moves from the focused column into its insert, send and EQ rows (Tab is the app-wide region cycle, so it
+    // stays free); bare E opens the focused column's EQ. Return is not free for the EQ: it already selects the focused
+    // column on the canvas.
+    bindings["mixerEnterRows"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::noModifiers, 0);
     bindings["mixerOpenEq"] = juce::KeyPress('e', juce::ModifierKeys::noModifiers, 0);
     // Bare C opens the focused column's colour picker, the keyboard twin of a click on its colour dot.
     bindings["mixerOpenColour"] = juce::KeyPress('c', juce::ModifierKeys::noModifiers, 0);
@@ -576,9 +576,12 @@ void ShortcutManager::addPianoRollDefaultBindings() {
     // different focus region, so the two never meet).
     bindings["mixerMoveRowUp"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::altModifier, 0);
     bindings["mixerMoveRowDown"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::altModifier, 0);
-    // Cmd+Up (Ctrl+Up off the Mac, where Cmd is Ctrl) climbs from the focused column to the top bar's key ring; plain
-    // Up and Down stay on the fader.
+    // Cmd+Up (Ctrl+Up off the Mac, where Cmd is Ctrl) climbs from the focused column to the top bar's key ring.
     bindings["mixerFocusTopBar"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0);
+    // Shift+Up / Shift+Down nudge the focused fader 1 dB (Alt added: 0.1 dB); plain Down goes into the rows and Cmd+Up
+    // is the top bar, so the fader takes Shift.
+    bindings["mixerNudgeFaderUp"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0);
+    bindings["mixerNudgeFaderDown"] = juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0);
 }
 
 // The card layout editor's list keys: Space shows or hides the focused control, Cmd+Up/Down moves it
