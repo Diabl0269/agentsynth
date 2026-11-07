@@ -52,6 +52,7 @@ Fast checks first, so a lint failure does not wait on a full build.
    that sets `pipefail`: grep exits at its first match, the writer dies of SIGPIPE, and pipefail turns the
    match into a failure only on a busy machine, so script tests pass text to grep as a here-string
    (`grep -qF "text" <<<"$output"`).
+   `no-bare-array-expansion.test.sh` scans `scripts/` for a bare `"${NAME[@]}"` in a script that sets `-u`: bash 3.2 (macOS `/bin/bash`) treats an empty array as unbound there, so scripts write `${NAME[@]+"${NAME[@]}"}`.
    `check-ui-caps.test.sh` likewise scans `Source/UI/` for all-caps UI text
    ([rule](accessibility.md#no-all-caps-ui-text)) and for the default theme's accent and text colours
    written as literals outside `Source/UI/Theme/` ([rule](../layout/theming.md#themed-widgets)).
@@ -250,6 +251,7 @@ audio device, which a stuck run can wedge for everyone.
   3), giving up after `CI_LOCAL_BUILD_SLOT_TIMEOUT` (default 7200). Both are advisory locks, so a crashed run
   frees them. Every build appends a line (time, worktree, steps, seconds waited, build seconds, slots in use)
   to `ci-local-build-times.log` in the git common dir, for tuning the slot count. Without `flock` or `lockf` the gate warns and builds with no limit.
+  Every run, passed or failed, also appends one JSON line to `ci-local-runs.jsonl` in the git common dir (run log for timing history): `at`, `name` (always `ci-local`), `worktree`, `branch`, `sha`, `ok`, `seconds`, `flags` (the arguments) and `steps` (seconds per step, keyed by step name).
 
 Tests must not depend on the order they run in or on another test having run first: shards split the
 order, and a test's neighbours differ from one run to the next. Running the binary directly (a single

@@ -195,7 +195,7 @@ list_scanned_paths() {
         if [ "$base" = "CMakeLists.txt" ]; then
             is_match=1
         elif [ "$ext" != "$path" ]; then
-            for e in "${EXTENSIONS[@]}"; do
+            for e in ${EXTENSIONS[@]+"${EXTENSIONS[@]}"}; do
                 if [ "$ext" = "$e" ]; then
                     is_match=1
                     break
@@ -205,7 +205,7 @@ list_scanned_paths() {
         [ "$is_match" -eq 1 ] || continue
 
         excluded=0
-        for prefix in "${EXCLUDED_PREFIXES[@]}"; do
+        for prefix in ${EXCLUDED_PREFIXES[@]+"${EXCLUDED_PREFIXES[@]}"}; do
             case "$path" in
                 "$prefix"*)
                     excluded=1
@@ -214,7 +214,7 @@ list_scanned_paths() {
             esac
         done
         if [ "$excluded" -eq 0 ]; then
-            for exact in "${EXCLUDED_FILES[@]}"; do
+            for exact in ${EXCLUDED_FILES[@]+"${EXCLUDED_FILES[@]}"}; do
                 if [ "$path" = "$exact" ]; then
                     excluded=1
                     break

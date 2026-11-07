@@ -207,7 +207,7 @@ for i in 1 2 3 4 5 6; do
     ) &
     pids+=("$!")
 done
-wait "${pids[@]}"
+wait ${pids[@]+"${pids[@]}"}
 all_ok=0
 for i in 1 2 3 4 5 6; do [ "$(cat "$TMPROOT/par$i.rc")" = 0 ] || all_ok=1; done
 record "$all_ok" "function sizes: six runs writing one cache at once all pass"

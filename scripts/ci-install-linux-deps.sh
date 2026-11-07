@@ -62,9 +62,9 @@ apt_run() { # apt_run <seconds> <apt-get args...>
     local secs="$1"
     shift
     if [ -n "$TIMEOUT_BIN" ]; then
-        ${SUDO:+$SUDO} "$TIMEOUT_BIN" "$secs" "$APT_GET" "${APT_OPTS[@]}" "$@"
+        ${SUDO:+$SUDO} "$TIMEOUT_BIN" "$secs" "$APT_GET" ${APT_OPTS[@]+"${APT_OPTS[@]}"} "$@"
     else
-        ${SUDO:+$SUDO} "$APT_GET" "${APT_OPTS[@]}" "$@"
+        ${SUDO:+$SUDO} "$APT_GET" ${APT_OPTS[@]+"${APT_OPTS[@]}"} "$@"
     fi
 }
 
@@ -110,10 +110,10 @@ degraded azure.archive.ubuntu.com on the runner. Dropping that mirror and retryi
 already on the image."
 fi
 
-if ! apt_run "$INSTALL_TIMEOUT" install -y "${PACKAGES[@]}"; then
+if ! apt_run "$INSTALL_TIMEOUT" install -y ${PACKAGES[@]+"${PACKAGES[@]}"}; then
     annotate warning "apt-get install failed or exceeded ${INSTALL_TIMEOUT}s. Dropping the Azure \
 mirror (if still configured), refreshing indexes and retrying once."
     drop_azure_mirror
     apt_run "$UPDATE_TIMEOUT" update || true
-    apt_run "$INSTALL_TIMEOUT" install -y "${PACKAGES[@]}"
+    apt_run "$INSTALL_TIMEOUT" install -y ${PACKAGES[@]+"${PACKAGES[@]}"}
 fi

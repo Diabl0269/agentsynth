@@ -104,6 +104,62 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Run log: one JSON line per run in the git common dir, so every worktree appends to one file. Logging is
+# best-effort: its errors are ignored and it never changes the gate's result or exit status.
+ORIG_ARGS=("$@")
+RUN_START="$(date +%s)"
+STEP_NAME=""
+STEP_START=0
+STEP_TIMES=""
+STEP_JSON=""
+RUNS_LOG="$(git rev-parse --git-common-dir 2>/dev/null || echo .git)"
+case "$RUNS_LOG" in /*) : ;; *) RUNS_LOG="$REPO_ROOT/$RUNS_LOG" ;; esac
+RUNS_LOG="$RUNS_LOG/ci-local-runs.jsonl"
+
+# json_escape <text> -- escapes backslashes and double quotes for a JSON string.
+json_escape() {
+    local bs='\' dq='"' s="$1"
+    s="${s//$bs/$bs$bs}"
+    s="${s//$dq/$bs$dq}"
+    printf '%s' "$s"
+}
+
+end_step() {
+    if [ -n "$STEP_NAME" ]; then
+        local secs=$(($(date +%s) - STEP_START))
+        STEP_TIMES="$STEP_TIMES$(printf '%6s s  %s' "$secs" "$STEP_NAME")"$'\n'
+        STEP_JSON="$STEP_JSON${STEP_JSON:+,}\"$(json_escape "$STEP_NAME")\":$secs"
+    fi
+    STEP_NAME=""
+}
+
+# ci_local_log_run <exit status> -- appends this run's JSON line to RUNS_LOG.
+ci_local_log_run() {
+    local rc="$1" top branch sha flags="" a ok=false
+    [ "$rc" -eq 0 ] && ok=true
+    top="$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")"
+    branch="$(git branch --show-current 2>/dev/null)"
+    sha="$(git rev-parse --short HEAD 2>/dev/null)"
+    # ${arr[@]+...}: bash 3.2 (macOS /bin/bash) treats an empty array as unbound under `set -u`, and that
+    # error would end the script with status 1 even though every check passed.
+    for a in ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}; do
+        flags="$flags${flags:+,}\"$(json_escape "$a")\""
+    done
+    printf '{"at":"%s","name":"ci-local","worktree":"%s","branch":"%s","sha":"%s","ok":%s,"seconds":%s,"flags":[%s],"steps":{%s}}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(json_escape "$top")" "$(json_escape "$branch")" "$(json_escape "$sha")" \
+        "$ok" "$(($(date +%s) - RUN_START))" "$flags" "$STEP_JSON" >>"$RUNS_LOG"
+}
+
+# EXIT trap: closes an open step, logs the run, then releases the build folder lock (see build_dir_lock).
+ci_local_on_exit() {
+    local rc=$?
+    end_step 2>/dev/null || true
+    ci_local_log_run "$rc" 2>/dev/null || true
+    if [ -n "${BUILD_DIR_LOCK_HOLDER:-}" ]; then build_dir_unlock; fi
+    exit "$rc"
+}
+trap ci_local_on_exit EXIT
+
 BUILD_DIR="build-ci-local"
 OPEN_APP=false
 SKIP_TESTS=false
@@ -166,17 +222,6 @@ for arg in "$@"; do
 done
 
 CORES="$( (command -v nproc >/dev/null 2>&1 && nproc) || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
-RUN_START="$(date +%s)"
-STEP_NAME=""
-STEP_START=0
-STEP_TIMES=""
-
-end_step() {
-    if [ -n "$STEP_NAME" ]; then
-        STEP_TIMES="$STEP_TIMES$(printf '%6s s  %s' "$(($(date +%s) - STEP_START))" "$STEP_NAME")"$'\n'
-    fi
-    STEP_NAME=""
-}
 
 step() {
     end_step
@@ -317,11 +362,11 @@ fi
 # against fixtures: it gives the same answer until its own file, a file it names, or what those name
 # changes (scripts/lib/test-deps.py; an empty key means the mapping is in doubt, so the test runs). A pass
 # leaves a stamp keyed by that hash. CI's Lint job always runs them all.
-tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q"
+tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q no-bare-array-expansion"
 to_run=()
 if ! fast_skip "the script self-tests"; then
-    dep_keys="$(python3 scripts/lib/test-deps.py --root "$REPO_ROOT" "${test_scripts[@]}" 2>/dev/null || true)"
-    for t in "${test_scripts[@]}"; do
+    dep_keys="$(python3 scripts/lib/test-deps.py --root "$REPO_ROOT" ${test_scripts[@]+"${test_scripts[@]}"} 2>/dev/null || true)"
+    for t in ${test_scripts[@]+"${test_scripts[@]}"}; do
         name="$(basename "$t" .test.sh)"
         key="$(awk -F'\t' -v n="$name" '$1 == n { print $2 }' <<<"$dep_keys")"
         stamp="$STAMP_DIR/script-test-$name-$key"
@@ -337,7 +382,7 @@ if ! fast_skip "the script self-tests"; then
         esac
     done
     if [ "${#to_run[@]}" -gt 0 ]; then
-        run_parallel "$CORES" "${to_run[@]}" || fail "a script test failed (see above)."
+        run_parallel "$CORES" ${to_run[@]+"${to_run[@]}"} || fail "a script test failed (see above)."
     fi
 fi
 
@@ -386,7 +431,7 @@ if [ "$FIRST_CONFIGURE" = true ]; then
     # unbound-variable error under `set -u` -- guard the expansion rather than relying on the
     # bash 4.4+ fix this script cannot assume.
     if [ "${#DEPS_REUSE_ARGS[@]}" -gt 0 ]; then
-        cmake_args+=("${DEPS_REUSE_ARGS[@]}")
+        cmake_args+=(${DEPS_REUSE_ARGS[@]+"${DEPS_REUSE_ARGS[@]}"})
     fi
 fi
 
@@ -395,7 +440,7 @@ fi
 cmake_key="$(content_key CMakeLists.txt cmake Tests/CMakeLists.txt 'Tests/*.cmake' scripts/ci-local.sh)"
 if [ "$FIRST_CONFIGURE" = true ] || [ ! -f "$BUILD_DIR/.gate-configured-$cmake_key" ]; then
     rm -f "$BUILD_DIR"/.gate-configured-*
-    cmake -S . "${cmake_args[@]}"
+    cmake -S . ${cmake_args[@]+"${cmake_args[@]}"}
     touch "$BUILD_DIR/.gate-configured-$cmake_key"
 else
     echo "ci-local: CMake inputs unchanged, build re-runs CMake itself if needed."
@@ -432,7 +477,7 @@ else
     done
     # Pch.cmake refuses a precompiled header next to a ccache base_dir, which CI never sets but a
     # developer's ~/.ccache may; clear it for this one configure only.
-    CCACHE_BASEDIR="" cmake -S . "${ci_flags_args[@]}" || fail "configure with CI's flags failed (see above): CI's configure step would fail the same way."
+    CCACHE_BASEDIR="" cmake -S . ${ci_flags_args[@]+"${ci_flags_args[@]}"} || fail "configure with CI's flags failed (see above): CI's configure step would fail the same way."
     touch "$ci_flags_stamp"
 fi
 
@@ -453,12 +498,14 @@ build_args=(--parallel "$JOBS")
 source "$REPO_ROOT/scripts/lib/build-slots.sh"
 # One gate per build folder for the rest of the run, and a machine-wide cap on compiling at once.
 build_dir_lock "$BUILD_DIR" || exit 1
+# build_dir_lock replaced the EXIT trap with its own unlock; put ours back, which also unlocks.
+trap ci_local_on_exit EXIT
 # CI_LOCAL_BUILD_CMD is a seam for scripts/tests/ci-local-build-slots.test.sh; unset, it is cmake.
 build_edges="$(build_edges_left "$BUILD_DIR" $([ "$FAST" = true ] && echo Tests))"
 if [ -n "${CI_LOCAL_BUILD_CMD:-}" ]; then
     build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" bash -c "$CI_LOCAL_BUILD_CMD"
 else
-    build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" cmake --build "$BUILD_DIR" "${build_args[@]}"
+    build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" cmake --build "$BUILD_DIR" ${build_args[@]+"${build_args[@]}"}
 fi
 
 # --- 9. Dev-sign the app bundle (macOS only, before tests so a signing failure surfaces early) --
@@ -509,7 +556,7 @@ else
         esac
     fi
     if [ "$run_suite" = true ]; then
-        test_shards_run "$REPO_ROOT" "$REPO_ROOT/$BUILD_DIR/test-shards" "$REPO_ROOT/$TESTS_BIN" "${test_args[@]}" ||
+        test_shards_run "$REPO_ROOT" "$REPO_ROOT/$BUILD_DIR/test-shards" "$REPO_ROOT/$TESTS_BIN" ${test_args[@]+"${test_args[@]}"} ||
             fail "test suite failed (see above)."
     fi
 fi
