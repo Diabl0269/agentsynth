@@ -1,15 +1,19 @@
 // CutoffNoteSnapTests.cpp -- the Filter cutoff knob's Snap to notes: the snapping and steps of Notes and By key, the
-// "A3 220 Hz" readout, the knob menu's choices (Custom type only) and the choice saved in the card's view state.
+// "A3 220" readout, the knob menu's choices (Custom type only) and the choice saved in the card's view state.
 #include "Modules/CardViewState.h"
 #include "Modules/FilterModule.h"
 #include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Graph/ModuleComponent/CutoffNoteSnap.h"
+#include <cmath>
 #include <gtest/gtest.h>
 
 using namespace synth::ui;
 using cutoffsnap::Mode;
 
 namespace {
+
+// (PitchGrid.h reaches too many files to include here: the header-reach guard counts it.)
+double noteHz(int midi) { return 440.0 * std::pow(2.0, (midi - 69) / 12.0); }
 
 const synth::MusicalScale kCMajor{0, 0xAB5, "Major"};
 
@@ -32,6 +36,7 @@ struct KnobRig {
     std::optional<synth::MusicalScale> songKey;
 
     KnobRig() {
+        knob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20); // the card's knob box (CardBody::createKnob)
         knob.setRange(20.0, 20000.0);
         knob.setValue(1000.0, juce::dontSendNotification);
         cutoffsnap::wire(knob, filter, [this] { return songKey; });
@@ -60,7 +65,7 @@ TEST(CutoffNoteSnap, StepsMoveOneNoteOrOneNoteOfTheKey) {
     EXPECT_NEAR(cutoffsnap::stepHz(220.0, -1, Mode::notes, std::nullopt), 207.65, 0.01);
     EXPECT_NEAR(cutoffsnap::stepHz(220.0, 1, Mode::key, kCMajor), 246.94, 0.01);
     EXPECT_NEAR(cutoffsnap::stepHz(261.63, -1, Mode::key, kCMajor), 246.94, 0.01) << "C4 down to B3";
-    EXPECT_EQ(cutoffsnap::readout(220.0), "A3 220 Hz");
+    EXPECT_EQ(cutoffsnap::readout(220.0), "A3 220");
 }
 
 TEST(CutoffNoteSnap, TheKnobDragsStepsAndReadsByNoteOnlyOnTheCustomType) {
@@ -68,7 +73,7 @@ TEST(CutoffNoteSnap, TheKnobDragsStepsAndReadsByNoteOnlyOnTheCustomType) {
     setCustomType(rig.filter, true);
     rig.setMode(Mode::notes);
     EXPECT_NEAR(rig.knob.snapValue(225.0, juce::Slider::absoluteDrag), 220.0, 1e-9);
-    EXPECT_EQ(rig.knob.getTextFromValue(220.0), "A3 220 Hz");
+    EXPECT_EQ(rig.knob.getTextFromValue(220.0), "A3 220");
     rig.knob.setValue(220.0, juce::dontSendNotification);
     EXPECT_TRUE(rig.knob.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
     EXPECT_NEAR(rig.knob.getValue(), 233.08, 0.01) << "Up is a semitone";
@@ -81,7 +86,7 @@ TEST(CutoffNoteSnap, TheKnobDragsStepsAndReadsByNoteOnlyOnTheCustomType) {
 
     setCustomType(rig.filter, false);
     EXPECT_DOUBLE_EQ(rig.knob.snapValue(225.0, juce::Slider::absoluteDrag), 225.0) << "other types stay free";
-    EXPECT_NE(rig.knob.getTextFromValue(220.0), "A3 220 Hz");
+    EXPECT_NE(rig.knob.getTextFromValue(220.0), "A3 220");
 }
 
 TEST(CutoffNoteSnap, TheKnobMenuOffersTheThreeChoicesOnTheCustomTypeAndRemembersThePick) {
@@ -123,4 +128,48 @@ TEST(CutoffNoteSnap, TheKnobMenuOffersTheThreeChoicesOnTheCustomTypeAndRemembers
     const auto saved = synth::CardViewState::fromVar(rig.filter.getCardViewState().toVar());
     EXPECT_EQ(saved.cutoffSnap, "notes") << "saved with the project";
     EXPECT_TRUE(synth::CardViewState::fromVar(juce::var()).cutoffSnap.isEmpty());
+}
+
+TEST(CutoffNoteSnap, TheReadoutIsTheNoteAndTheWholeHertzAndFreeKeepsItsUnit) {
+    EXPECT_EQ(cutoffsnap::readout(466.16), "A#4 466");
+    EXPECT_EQ(cutoffsnap::readout(739.99), "F#5 740");
+    EXPECT_EQ(cutoffsnap::spokenReadout(220.0), "A3 220 hertz") << "a screen reader still hears the unit";
+
+    KnobRig rig;
+    setCustomType(rig.filter, true);
+    rig.setMode(Mode::notes);
+    ASSERT_TRUE(rig.knob.spokenHook);
+    EXPECT_EQ(*rig.knob.spokenHook(220.0), "A3 220 hertz");
+    rig.setMode(Mode::free);
+    EXPECT_FALSE(rig.knob.getTextFromValue(440.0).startsWith("A4")) << "Free keeps the parameter's own text";
+    EXPECT_FALSE(rig.knob.spokenHook(440.0).has_value());
+}
+
+// The card's value box is 50 px wide and draws with drawFittedText, which squeezes a too-wide text down to the
+// Label's minimum horizontal scale and then cuts it with "...". So the readout fits when its width at the box's font,
+// times that scale, is within the box's text area: no note from the lowest to the highest cutoff may be truncated.
+TEST(CutoffNoteSnap, TheReadoutOfEveryNoteFitsTheKnobsValueBoxWithoutTruncation) {
+    KnobRig rig;
+    setCustomType(rig.filter, true);
+    rig.setMode(Mode::notes);
+    auto* box = rig.knob.valueBox();
+    ASSERT_NE(box, nullptr);
+    rig.knob.setBounds(0, 0, 80, 100);
+    const auto area = box->getBorderSize().subtractedFrom(juce::Rectangle<int>(0, 0, rig.knob.getTextBoxWidth(), 20));
+    const float squeeze = box->getMinimumHorizontalScale();
+    EXPECT_EQ(box->getComponentID(), "valueBox");
+
+    int checked = 0;
+    for (int midi = 0; midi < 140; ++midi) {
+        const double hz = noteHz(midi);
+        if (hz < 20.0 || hz > 20000.0)
+            continue;
+        const auto text = rig.knob.getTextFromValue(hz);
+        const float width = juce::GlyphArrangement::getStringWidth(box->getFont(), text);
+        EXPECT_LE(width * squeeze, (float)area.getWidth()) << text << " is " << width << " px at scale " << squeeze;
+        ++checked;
+    }
+    EXPECT_GE(checked, 120);
+    EXPECT_EQ(rig.knob.getTextFromValue(noteHz(16)), "E0 21") << "the lowest cutoff";
+    EXPECT_EQ(rig.knob.getTextFromValue(noteHz(135)), "D#10 19912") << "the highest cutoff";
 }

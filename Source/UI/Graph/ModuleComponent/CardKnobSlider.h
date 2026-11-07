@@ -31,6 +31,27 @@ public:
     std::function<std::optional<double>(double current, int direction)> stepHook;
     /** The readout for a value when set and it answers; else the parameter's own text. */
     std::function<std::optional<juce::String>(double)> readoutHook;
+    /** What a screen reader says for a value when set and it answers (the readout without its unit is not enough
+     *  to speak); else the readout. Set it before the handler is first asked for, or call
+     *  invalidateAccessibilityHandler(). */
+    std::function<std::optional<juce::String>(double)> spokenHook;
+
+    /** The slider's own value box: its child Label (null before the look has made one). */
+    juce::Label* valueBox() const {
+        for (auto* child : getChildren())
+            if (auto* box = dynamic_cast<juce::Label*>(child))
+                return box;
+        return nullptr;
+    }
+
+    /** Lets the value box squeeze its text down to `scale` of its width before drawFittedText truncates it with
+     *  "..." (juce::Label's minimum horizontal scale, which AppLookAndFeel::drawLabel hands to drawFittedText), and
+     *  gives the box the id "valueBox" so a scenario can read its text. The box is rebuilt on a look change, so
+     *  it is applied again there. */
+    void setValueBoxMinimumScale(float scale) {
+        valueBoxScale_ = scale;
+        styleValueBox();
+    }
 
     /** Each press is one change gesture, the same begin/set/end a mouse drag makes. */
     bool keyPressed(const juce::KeyPress& key) override {
@@ -51,6 +72,18 @@ public:
             if (const auto text = readoutHook(value))
                 return *text;
         return juce::Slider::getTextFromValue(value);
+    }
+
+    void lookAndFeelChanged() override {
+        juce::Slider::lookAndFeelChanged();
+        styleValueBox();
+    }
+
+    /** The slider's handler, except that a screen reader hears `spokenHook`'s text as the value when it is set. */
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override {
+        if (!spokenHook)
+            return juce::Slider::createAccessibilityHandler();
+        return std::make_unique<SpokenHandler>(*this);
     }
 
     /** The value `key` would set, or nullopt when it is not a knob key. */
@@ -89,6 +122,59 @@ public:
     }
 
 private:
+    float valueBoxScale_ = 0.0f; // 0: the Label's own default
+
+    void styleValueBox() {
+        if (valueBoxScale_ <= 0.0f)
+            return;
+        if (auto* box = valueBox()) {
+            box->setMinimumHorizontalScale(valueBoxScale_);
+            box->setComponentID("valueBox");
+        }
+    }
+
+    juce::String spokenText(double value) {
+        if (spokenHook)
+            if (const auto text = spokenHook(value))
+                return *text;
+        return getTextFromValue(value);
+    }
+
+    // The Slider's own handler (a slider role and a numeric value over its range) with the spoken text.
+    class SpokenHandler : public juce::AccessibilityHandler {
+    public:
+        explicit SpokenHandler(CardKnobSlider& s)
+            : juce::AccessibilityHandler(s, juce::AccessibilityRole::slider, juce::AccessibilityActions{},
+                                         Interfaces{std::make_unique<Value>(s)})
+            , slider_(s) {}
+        juce::String getHelp() const override { return slider_.getTooltip(); }
+
+    private:
+        class Value : public juce::AccessibilityValueInterface {
+        public:
+            explicit Value(CardKnobSlider& s)
+                : slider_(s) {}
+            bool isReadOnly() const override { return false; }
+            double getCurrentValue() const override { return slider_.getValue(); }
+            void setValue(double v) override {
+                juce::Slider::ScopedDragNotification drag(slider_);
+                slider_.setValue(v, juce::sendNotificationSync);
+            }
+            juce::String getCurrentValueAsString() const override { return slider_.spokenText(slider_.getValue()); }
+            void setValueAsString(const juce::String& text) override { setValue(slider_.getValueFromText(text)); }
+            AccessibleValueRange getRange() const override {
+                const double step = slider_.getInterval() > 0.0
+                                        ? slider_.getInterval()
+                                        : (slider_.getMaximum() - slider_.getMinimum()) / 1000.0;
+                return {{slider_.getMinimum(), slider_.getMaximum()}, step};
+            }
+
+        private:
+            CardKnobSlider& slider_;
+        };
+        CardKnobSlider& slider_;
+    };
+
     static int stepDirection(const juce::KeyPress& key) {
         if (key.getModifiers().isAnyModifierKeyDown())
             return 0;
