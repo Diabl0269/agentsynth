@@ -52,6 +52,7 @@ Fast checks first, so a lint failure does not wait on a full build.
    that sets `pipefail`: grep exits at its first match, the writer dies of SIGPIPE, and pipefail turns the
    match into a failure only on a busy machine, so script tests pass text to grep as a here-string
    (`grep -qF "text" <<<"$output"`).
+   `no-bare-array-expansion.test.sh` scans `scripts/` for a bare `"${NAME[@]}"` in a script that sets `-u`: bash 3.2 (macOS `/bin/bash`) treats an empty array as unbound there, so scripts write `${NAME[@]+"${NAME[@]}"}`.
    `check-ui-caps.test.sh` likewise scans `Source/UI/` for all-caps UI text
    ([rule](accessibility.md#no-all-caps-ui-text)) and for the default theme's accent and text colours
    written as literals outside `Source/UI/Theme/` ([rule](../layout/theming.md#themed-widgets)).

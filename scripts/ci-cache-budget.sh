@@ -167,7 +167,7 @@ total_mb=$((total_mb + DEPS_ALLOWANCE_MB))
 contributors+=("deps allowance (ci.yml deps6 + build-artifacts.yml release-deps-ninja6, all OSes) -> ${DEPS_ALLOWANCE_MB} MB")
 
 if [ "$LIST" -eq 1 ]; then
-    printf '%s\n' "${contributors[@]}"
+    printf '%s\n' ${contributors[@]+"${contributors[@]}"}
     printf '\ntotal: %s MB (budget %s MB)\n' "$total_mb" "$BUDGET_CAP_MB"
     exit 0
 fi
@@ -189,7 +189,7 @@ fi
 if [ "$total_mb" -gt "$BUDGET_CAP_MB" ]; then
     printf 'ci-cache-budget: one cache generation would total %s MB, over the %s MB budget:\n' \
         "$total_mb" "$BUDGET_CAP_MB" >&2
-    printf '  %s\n' "${contributors[@]}" >&2
+    printf '  %s\n' ${contributors[@]+"${contributors[@]}"} >&2
     exit 1
 fi
 

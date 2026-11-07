@@ -147,7 +147,7 @@ jobs:
       # juce::String decodes a `const char*` as Latin-1, so a non-ASCII literal ships as mojibake
       # ("Rename…" rendered "Renameâ€¦"). A compiler cannot catch it and no test asserted on it.
       # Same deal as the two above: ~1s, no compiler.
-      run: bash scripts/tests/check-nonascii-literals.test.sh
+      run: bash scripts/tests/check-nonascii-literals.test.sh && bash scripts/tests/no-bare-array-expansion.test.sh
     - name: Check UI text is not all caps
       # UI text is never written in ALL CAPS: no toUpperCase() and no capitals-only word in a string
       # literal under Source/UI (abbreviations such as MIDI excepted; `// not-ui-text: <reason>` opts a

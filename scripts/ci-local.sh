@@ -140,7 +140,9 @@ ci_local_log_run() {
     top="$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")"
     branch="$(git branch --show-current 2>/dev/null)"
     sha="$(git rev-parse --short HEAD 2>/dev/null)"
-    for a in "${ORIG_ARGS[@]}"; do
+    # ${arr[@]+...}: bash 3.2 (macOS /bin/bash) treats an empty array as unbound under `set -u`, and that
+    # error would end the script with status 1 even though every check passed.
+    for a in ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}; do
         flags="$flags${flags:+,}\"$(json_escape "$a")\""
     done
     printf '{"at":"%s","name":"ci-local","worktree":"%s","branch":"%s","sha":"%s","ok":%s,"seconds":%s,"flags":[%s],"steps":{%s}}\n' \
@@ -360,11 +362,11 @@ fi
 # against fixtures: it gives the same answer until its own file, a file it names, or what those name
 # changes (scripts/lib/test-deps.py; an empty key means the mapping is in doubt, so the test runs). A pass
 # leaves a stamp keyed by that hash. CI's Lint job always runs them all.
-tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q"
+tree_scanning="check-nonascii-literals check-ui-caps no-pipe-into-grep-q no-bare-array-expansion"
 to_run=()
 if ! fast_skip "the script self-tests"; then
-    dep_keys="$(python3 scripts/lib/test-deps.py --root "$REPO_ROOT" "${test_scripts[@]}" 2>/dev/null || true)"
-    for t in "${test_scripts[@]}"; do
+    dep_keys="$(python3 scripts/lib/test-deps.py --root "$REPO_ROOT" ${test_scripts[@]+"${test_scripts[@]}"} 2>/dev/null || true)"
+    for t in ${test_scripts[@]+"${test_scripts[@]}"}; do
         name="$(basename "$t" .test.sh)"
         key="$(awk -F'\t' -v n="$name" '$1 == n { print $2 }' <<<"$dep_keys")"
         stamp="$STAMP_DIR/script-test-$name-$key"
@@ -380,7 +382,7 @@ if ! fast_skip "the script self-tests"; then
         esac
     done
     if [ "${#to_run[@]}" -gt 0 ]; then
-        run_parallel "$CORES" "${to_run[@]}" || fail "a script test failed (see above)."
+        run_parallel "$CORES" ${to_run[@]+"${to_run[@]}"} || fail "a script test failed (see above)."
     fi
 fi
 
@@ -429,7 +431,7 @@ if [ "$FIRST_CONFIGURE" = true ]; then
     # unbound-variable error under `set -u` -- guard the expansion rather than relying on the
     # bash 4.4+ fix this script cannot assume.
     if [ "${#DEPS_REUSE_ARGS[@]}" -gt 0 ]; then
-        cmake_args+=("${DEPS_REUSE_ARGS[@]}")
+        cmake_args+=(${DEPS_REUSE_ARGS[@]+"${DEPS_REUSE_ARGS[@]}"})
     fi
 fi
 
@@ -438,7 +440,7 @@ fi
 cmake_key="$(content_key CMakeLists.txt cmake Tests/CMakeLists.txt 'Tests/*.cmake' scripts/ci-local.sh)"
 if [ "$FIRST_CONFIGURE" = true ] || [ ! -f "$BUILD_DIR/.gate-configured-$cmake_key" ]; then
     rm -f "$BUILD_DIR"/.gate-configured-*
-    cmake -S . "${cmake_args[@]}"
+    cmake -S . ${cmake_args[@]+"${cmake_args[@]}"}
     touch "$BUILD_DIR/.gate-configured-$cmake_key"
 else
     echo "ci-local: CMake inputs unchanged, build re-runs CMake itself if needed."
@@ -475,7 +477,7 @@ else
     done
     # Pch.cmake refuses a precompiled header next to a ccache base_dir, which CI never sets but a
     # developer's ~/.ccache may; clear it for this one configure only.
-    CCACHE_BASEDIR="" cmake -S . "${ci_flags_args[@]}" || fail "configure with CI's flags failed (see above): CI's configure step would fail the same way."
+    CCACHE_BASEDIR="" cmake -S . ${ci_flags_args[@]+"${ci_flags_args[@]}"} || fail "configure with CI's flags failed (see above): CI's configure step would fail the same way."
     touch "$ci_flags_stamp"
 fi
 
@@ -503,7 +505,7 @@ build_edges="$(build_edges_left "$BUILD_DIR" $([ "$FAST" = true ] && echo Tests)
 if [ -n "${CI_LOCAL_BUILD_CMD:-}" ]; then
     build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" bash -c "$CI_LOCAL_BUILD_CMD"
 else
-    build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" cmake --build "$BUILD_DIR" "${build_args[@]}"
+    build_slot_run "$REPO_ROOT" "$JOBS" "$build_edges" cmake --build "$BUILD_DIR" ${build_args[@]+"${build_args[@]}"}
 fi
 
 # --- 9. Dev-sign the app bundle (macOS only, before tests so a signing failure surfaces early) --
@@ -554,7 +556,7 @@ else
         esac
     fi
     if [ "$run_suite" = true ]; then
-        test_shards_run "$REPO_ROOT" "$REPO_ROOT/$BUILD_DIR/test-shards" "$REPO_ROOT/$TESTS_BIN" "${test_args[@]}" ||
+        test_shards_run "$REPO_ROOT" "$REPO_ROOT/$BUILD_DIR/test-shards" "$REPO_ROOT/$TESTS_BIN" ${test_args[@]+"${test_args[@]}"} ||
             fail "test suite failed (see above)."
     fi
 fi

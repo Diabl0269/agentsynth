@@ -263,7 +263,7 @@ list_scanned_paths() {
     local -a name_args
     name_args=("(")
     local ext first=1
-    for ext in "${EXTENSIONS[@]}"; do
+    for ext in ${EXTENSIONS[@]+"${EXTENSIONS[@]}"}; do
         if [ "$first" -eq 1 ]; then
             first=0
         else
@@ -275,13 +275,13 @@ list_scanned_paths() {
 
     find "$ROOT" \
         \( -type d \( -name .git -o -name 'build*' -o -name .claude \) -prune \) -o \
-        \( -type f "${name_args[@]}" -print \) |
+        \( -type f ${name_args[@]+"${name_args[@]}"} -print \) |
         sed "s|^$ROOT/||" | while IFS= read -r path; do
         case "$path" in
             .git/* | */.git/*) continue ;;
         esac
         excluded=0
-        for prefix in "${EXCLUDED_PREFIXES[@]}"; do
+        for prefix in ${EXCLUDED_PREFIXES[@]+"${EXCLUDED_PREFIXES[@]}"}; do
             case "$path" in
                 "$prefix"*)
                     excluded=1

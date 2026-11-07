@@ -187,13 +187,13 @@ build_current_data() {
     # Only hand awk files that actually exist on disk: git can list a path that isn't checked out
     # (e.g. a `--no-checkout` clone, or the ROOT-resolution bug the fail-safe in run_check exists
     # to catch), and awk treats a missing input file as fatal rather than "0 functions".
-    for p in "${paths[@]}"; do
+    for p in ${paths[@]+"${paths[@]}"}; do
         [ -f "$ROOT/$p" ] && existing+=("$p")
     done
     [ "${#existing[@]}" -eq 0 ] && return 0
     local list
     list="$(mktemp)"
-    printf '%s\n' "${existing[@]}" >"$list"
+    printf '%s\n' ${existing[@]+"${existing[@]}"} >"$list"
     gc_init function-sizes "" "${BASH_SOURCE[0]}" "$AWK_SCANNER"
     gc_scan_files 'p = $2; p = substr(p, 1, index(p, "::") - 1)' "$list" scan_function_sizes
     local rc=$?
