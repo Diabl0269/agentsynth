@@ -1,0 +1,38 @@
+# Bug: opening a macro pushes the macro beside it aside, and the pushed macro jumped to its new place instead of
+# gliding. A folded neighbour's card already glided; an OPEN neighbour's cards glided but its border, name chip and port
+# strips jumped ahead of them.
+#
+# The fixture macro-push-neighbour.agsproj is Tal's 'fro830 test' project set up as open-macro-pushes-neighbour-right.yaml
+# leaves it (made with motion off, since a wheel pan lands differently each run under motion): "Oscillator 2" folded,
+# the folded "Macro" right beside its card.
+#   1. Opens "Oscillator 2" with its card's chevron: the folded "Macro" slides right (proof 1, mid-glide).
+#   2. Cmd+Z: "Oscillator 2" folds again and "Macro" slides back.
+#   3. Opens "Macro" (its chevron), then opens "Oscillator 2" again: the OPEN "Macro" slides right with its border,
+#      chip and port strips moving together with its cards (proof 2, mid-glide).
+# CardGlideMacroPush.* covers the first and last frames headlessly (folded, open, Reduce Motion).
+motion: true
+record: true
+save_project: end
+steps:
+  - copyFixture: {name: macro-push-neighbour.agsproj}
+  - openProject: {path: "${SCRATCH}/macro-push-neighbour.agsproj"}
+  - wait: {}
+  - expect: {id: "macroCard:Oscillator 2", collapsed: true}
+  - expect: {id: "macroCard:Macro", collapsed: true}
+  - screenshot: {name: 1-macro-beside-the-folded-card}
+  - click: {id: "macroCard:Oscillator 2", x: 262, y: 18}      # the card's open chevron
+  - mark: {check: 1, name: folded-neighbour-glides}            # "Macro" on its way right, not yet landed
+  - waitForIdle: {settleMs: 1000}                             # waitForIdle cannot see the fold, so let it land
+  - expect: {id: "macroCard:Oscillator 2", collapsed: false}
+  - screenshot: {name: 2-folded-neighbour-landed}
+  - key: {keys: cmd+z}
+  - waitForIdle: {settleMs: 1000}                             # waitForIdle cannot see the fold, so let it land
+  - expect: {id: "macroCard:Oscillator 2", collapsed: true}
+  - click: {id: "macroCard:Macro", x: 262, y: 18}              # open the neighbour first
+  - waitForIdle: {settleMs: 1000}                             # waitForIdle cannot see the fold, so let it land
+  - screenshot: {name: 3-open-neighbour-beside-the-folded-card}
+  - click: {id: "macroCard:Oscillator 2", x: 262, y: 18}
+  - mark: {check: 2, name: open-neighbour-border-glides}       # border, chip and cards of "Macro" moving together
+  - waitForIdle: {settleMs: 1000}                             # waitForIdle cannot see the fold, so let it land
+  - expect: {id: "macroCard:Oscillator 2", collapsed: false}
+  - screenshot: {name: 4-open-neighbour-landed}

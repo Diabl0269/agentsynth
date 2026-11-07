@@ -39,6 +39,15 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     content.setInterceptsMouseClicks(false, true); // Fallback clicks to parent
     macroController_.arrangeCanvasHook = [this] { autoArrange(/*record=*/false); };
     macroController_.setPaintedHullProvider([this](const juce::String& id) { return paintedMacroHullBounds(id); });
+    macroController_.setBorderGlideHook([this](const std::set<juce::String>& skip) -> std::function<void()> {
+        auto before = std::make_shared<MacroHullGlide::Hulls>(snapshotPaintedHulls());
+        for (const auto& id : skip)
+            before->erase(id);
+        return [safe = juce::Component::SafePointer<GraphEditor>(this), before] {
+            if (safe != nullptr)
+                safe->glideHullsFrom(*before);
+        };
+    });
 
     // Minimap (issue #159): visibility is driven by setMinimapVisible(), called by the owner once
     // it has restored the persisted preference — NOT addAndMakeVisible, which would show it before

@@ -50,7 +50,16 @@ public:
         juce::Colour colour;  // a nested macro's colour, for its box
     };
 
-    /** One macro's fold. Collapse: `cables` are the ones with both ends on a module; expand: the ones touching one. */
+    /** A cable drawn both before and after the fold whose end on the macro moved (between the closed card's jack and
+     *  the open border's port): it slides from `from1`/`from2` to the ends of `cable` as the border grows or shrinks.
+     */
+    struct CableSlide {
+        VisibleCable cable; // as drawn after the change
+        juce::Point<float> from1, from2;
+    };
+
+    /** One macro's fold. Collapse: `cables` are the ones with both ends on a module, or one end on a module and gone
+     *  after the fold; expand: the ones touching one. */
     struct Plan {
         juce::String macroId;
         bool collapsing = true;
@@ -60,6 +69,7 @@ public:
         juce::Component::SafePointer<juce::Component> cardComp;
         std::vector<Module> modules;
         std::vector<VisibleCable> cables;
+        std::vector<CableSlide> slides;
         /** The open macro's port widgets: held back until the border has grown to hold them. */
         std::vector<juce::Component::SafePointer<juce::Component>> ports;
         /** When this macro starts, after the fold began: a nested macro folds before its parent's flight, and unfolds
@@ -165,6 +175,7 @@ private:
     int indexOf(const Live& live, uint32_t nodeUid) const noexcept;
     std::optional<DrawnCable> expandCable(const Live& live, const VisibleCable& cable) const;
     std::optional<DrawnCable> collapseCable(const Live& live, const VisibleCable& cable) const;
+    VisibleCable slideCable(const Live& live, const CableSlide& slide) const;
     std::vector<DrawnCable> drawnCables(const Live& live) const;
     void paintModule(juce::Graphics& g, const Live& live, size_t index) const;
     void applySideEffects();

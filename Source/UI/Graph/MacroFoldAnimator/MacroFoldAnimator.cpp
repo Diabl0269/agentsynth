@@ -183,15 +183,34 @@ bool MacroFoldAnimator::isHeld(uint32_t nodeUid) const {
 // ---- Cables --------------------------------------------------------------------------------------------------
 
 void MacroFoldAnimator::applyTo(std::vector<VisibleCable>& cables) const {
+    if (reduced_)
+        return;
+    const auto slides = [](const Live& live, const VisibleCable& c) {
+        return std::any_of(live.plan.slides.begin(), live.plan.slides.end(),
+                           [&c](const CableSlide& s) { return s.cable.id == c.id; });
+    };
     for (const auto& live : lives_) {
-        if (live.plan.collapsing || reduced_)
-            continue;
         cables.erase(std::remove_if(cables.begin(), cables.end(),
-                                    [this, &live](const VisibleCable& c) {
-                                        return indexOf(live, c.id.srcUid) >= 0 || indexOf(live, c.id.dstUid) >= 0;
+                                    [this, &live, &slides](const VisibleCable& c) {
+                                        if (slides(live, c))
+                                            return true;
+                                        return !live.plan.collapsing &&
+                                               (indexOf(live, c.id.srcUid) >= 0 || indexOf(live, c.id.dstUid) >= 0);
                                     }),
                      cables.end());
     }
+}
+
+// A cable crossing the border keeps pace with it: its end on the macro moves with the card-to-border blend, so it
+// reaches the open border's port as the port shows (expand) and the card's jack as the card takes over (collapse).
+MacroFoldAnimator::VisibleCable MacroFoldAnimator::slideCable(const Live& live, const CableSlide& slide) const {
+    const double ms = localMs(live);
+    const float toCard = ms < 0.0 ? (live.plan.collapsing ? 0.0f : 1.0f) : live.timeline.outlineToCard(ms);
+    const float u = live.plan.collapsing ? toCard : 1.0f - toCard;
+    auto out = slide.cable;
+    out.p1 = slide.from1 + (slide.cable.p1 - slide.from1) * u;
+    out.p2 = slide.from2 + (slide.cable.p2 - slide.from2) * u;
+    return out;
 }
 
 // Where the end `p` of a cable on module `nodeUid` is drawn now: its place on the card, mapped into the card's flying
@@ -256,6 +275,8 @@ std::vector<MacroFoldAnimator::DrawnCable> MacroFoldAnimator::drawnCables(const 
     for (const auto& cable : live.plan.cables)
         if (auto drawn = live.plan.collapsing ? collapseCable(live, cable) : expandCable(live, cable))
             out.push_back(std::move(*drawn));
+    for (const auto& slide : live.plan.slides)
+        out.push_back({slideCable(live, slide), 1.0f});
     return out;
 }
 
