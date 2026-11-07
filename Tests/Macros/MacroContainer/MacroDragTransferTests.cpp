@@ -282,6 +282,7 @@ TEST(MacroDragTransfer, JoinScanSkipsTheMacroBeingLeftEvenWhenItsLiveHullIsTheSm
     ASSERT_FALSE(macroB.isEmpty());
     editor.getMacroController().setMacroCollapsed(macroA, false);
     editor.getMacroController().setMacroCollapsed(macroB, false);
+    editor.finishHullGlideForTest(); // A's border, pushed aside by B, lands where its cards are
     auto& macros = editor.getMacroController();
 
     // Expanding B makes room by pushing A clear of it; put A's members back so the two hulls overlap the way a

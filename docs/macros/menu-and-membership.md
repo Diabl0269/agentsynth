@@ -667,7 +667,9 @@ The in-app checks are `Tools/ui-verify/scenarios/macro-leave-drag.yaml` and `mul
 **Several selected cards dragged together join, nest in or leave macros as one, on the drop, in one undo step**, the
 way one card does. Two modules dropped on an open macro both join it; two macros (folded or open) both nest in it; a
 mix does both; a group dragged out of its macro's border onto the empty canvas leaves it. One Cmd+Z puts everything
-back.
+back. **No key is held:** a plain drag of a group joins or leaves on the drop, whatever Cmd and the "Drag modules into
+and out of macros without Cmd" preference say (`finalizeSelectionDrag` and `applyGroupDrop` read neither); Cmd and
+the preference decide only a single module's drag ([Dragging without Cmd](#dragging-without-cmd-the-preference)).
 
 - **Units.** At press (`GraphEditor::beginSelectionDrag`, more than one card moving) `MacroGroupController::
   beginGroupDrag` resolves the moving nodes into units the way grouping does (`macro_units::unitsFor`: a whole macro,

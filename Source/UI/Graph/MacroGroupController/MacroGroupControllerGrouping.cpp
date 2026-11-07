@@ -17,6 +17,7 @@
 #include "UI/Graph/CardGlideAnimator/CardGlideAnimator.h"
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 #include <algorithm>
@@ -660,6 +661,7 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
     const auto preExpandOrigin = m->bounds.getTopLeft();
     m->collapsed = collapsed;
     CardGlideAnimator::Scope glide(host_.cardGlide()); // one glide for the whole expand/collapse
+    const auto glideNeighbourBorders = beginNeighbourBorderGlide(macroId);
     host_.updateComponents();
     if (!collapsed) {
         const auto nudge = nudgeHullIntoCanvas(macroId);
@@ -686,6 +688,26 @@ void MacroGroupController::applyMacroCollapsed(const juce::String& macroId, bool
         }
     }
     foldChangedMacros(foldBefore); // every card is final; this only animates how they got there
+    if (glideNeighbourBorders)
+        glideNeighbourBorders();
+}
+
+// The open macros a fold pushes aside (or lets come back) slide their borders with their cards, so no frame draws a
+// border at its new place around cards still gliding from the old one. The folding macro, its ancestors and its
+// nested macros are left to the fold, which draws their borders itself. Reduce Motion and Off move them at once.
+std::function<void()> MacroGroupController::beginNeighbourBorderGlide(const juce::String& macroId) {
+    if (!borderGlideHook_ || synth::ui::prefersReducedMotion())
+        return {};
+    const auto& macros = host_.getMacros();
+    std::set<juce::String> skip{macroId};
+    for (const auto& id : macros.ancestorChain(macroId))
+        skip.insert(id);
+    for (const auto& macro : macros.getAll()) {
+        const auto chain = macros.ancestorChain(macro.id);
+        if (std::find(chain.begin(), chain.end(), macroId) != chain.end())
+            skip.insert(macro.id);
+    }
+    return borderGlideHook_(skip);
 }
 
 // The card a collapse seeds: at the top-left of the direct non-port members and every nested macro's footprint (its

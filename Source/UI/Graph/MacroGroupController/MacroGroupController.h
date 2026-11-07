@@ -273,6 +273,10 @@ public:
     void setPaintedHullProvider(std::function<juce::Rectangle<int>(const juce::String&)> provider) {
         paintedHullProvider_ = std::move(provider);
     }
+    /** Pictures every open macro border except those in `skip`; the call it returns glides each one that moved since
+     *  to its live bounds. Unset: borders follow their cards at once. */
+    using BorderGlideHook = std::function<std::function<void()>(const std::set<juce::String>& skip)>;
+    void setBorderGlideHook(BorderGlideHook hook) { borderGlideHook_ = std::move(hook); }
 
     // ---- Making room when something grows (docs/layout/layout.md#making-room-when-something-grows) ----
 
@@ -622,6 +626,8 @@ private:
 
     juce::Rectangle<int> paintedHullBounds(const juce::String& macroId) const;
     std::function<juce::Rectangle<int>(const juce::String&)> paintedHullProvider_;
+    BorderGlideHook borderGlideHook_;
+    std::function<void()> beginNeighbourBorderGlide(const juce::String& macroId);
     std::map<juce::String, juce::Rectangle<int>> frozenDragHulls_;
     juce::AudioProcessorGraph::NodeID frozenDragNode_;
     bool makeRoomDeferred_ = false;

@@ -8,6 +8,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardGlide/CardGlideMacroDeleteTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardGlide/CardGlideMacroGapTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardGlide/CardGlideMacroTakeOutUndoTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardGlide/CardGlideMacroPushTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardGlide/CardGlideFrameCostTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/OnCard/OnCardEditorUndoGlideTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/OnCard/OnCardGroupMoveTests.cpp

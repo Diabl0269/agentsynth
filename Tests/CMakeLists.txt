@@ -22,11 +22,6 @@ add_executable(Tests
     UI/Graph/CanvasFrame/CanvasFrameTests.cpp
     UI/Graph/CanvasFrame/CanvasEdgeDragTests.cpp
     UI/Graph/MacroHullGlideTests.cpp
-    UI/Graph/MacroFold/MacroFoldTimelineTests.cpp
-    UI/Graph/MacroFold/MacroFoldTests.cpp
-    UI/Graph/MacroFold/MacroFoldPackTests.cpp
-    UI/Graph/MacroFold/MacroFoldNestedTests.cpp
-    UI/Graph/MacroFold/MacroFoldDeepNestTests.cpp
     UI/Graph/CableRetractTests.cpp
     UI/Graph/OutputDockTests.cpp
     Modules/OscillatorTests.cpp
@@ -980,6 +975,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutManagerTests.cmake) # the shortcut t
 include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/OscillatorVoiceTests.cmake) # the Oscillator voice feel tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/CardGlideTests.cmake) # the card glide, delete-gap and undo motion tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/MacroFoldTests.cmake) # the macro fold motion tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/InsertBetweenTests.cmake) # a module dropped between cards
 include(${CMAKE_CURRENT_SOURCE_DIR}/SharedOutputCvTests.cmake) # cables on Level, Pan and the shared Mix
 include(${CMAKE_CURRENT_SOURCE_DIR}/MixerRowTests.cmake) # mixer insert/send rows and focusable controls

@@ -153,12 +153,14 @@ public:
         , host_(host)
         , snapshot_(snapshot) {}
 
-    std::vector<Fold::Plan> collapse(const juce::String& macroId, const Fold::Before& before) {
+    std::vector<Fold::Plan> collapse(const juce::String& macroId, const Fold::Before& before,
+                                     const std::vector<Fold::VisibleCable>& cablesAfter) {
         auto* card = controller_.getMacroCard(macroId);
         timeScale_ = 1.0 / openLevels(macroId);
         if (card != nullptr)
             collapsePlan(macroId, before, card->getBounds(), card, 0);
-        assignCables(snapshot_.cables, /*bothEnds=*/true);
+        assignCables(snapshot_.cables, /*bothEnds=*/true, &cablesAfter);
+        addSlides(snapshot_.cables, cablesAfter);
         return std::move(plans_);
     }
 
@@ -167,6 +169,7 @@ public:
         timeScale_ = 1.0 / openLevels(macroId);
         expandPlan(macroId, before.card, &before.modules, 0.0, 0);
         assignCables(cables, /*bothEnds=*/false);
+        addSlides(snapshot_.cables, cables);
         return std::move(plans_);
     }
 
@@ -325,17 +328,53 @@ private:
     // A cable goes to the plan of its deeper end, so a cable from a nested macro's module to its parent's fades (or
     // draws out) with the nested macro's own cables. Folding, only cables with both ends flying are kept (one that
     // leaves the macro re-attaches to the card at once); unfolding, every cable touching a module is held for it.
-    void assignCables(const std::vector<Fold::VisibleCable>& cables, bool bothEnds) {
+    void assignCables(const std::vector<Fold::VisibleCable>& cables, bool bothEnds,
+                      const std::vector<Fold::VisibleCable>* after = nullptr) {
         for (const auto& c : cables) {
             const auto src = ownerOf_.find(c.id.srcUid), dst = ownerOf_.find(c.id.dstUid);
             const bool hasSrc = src != ownerOf_.end(), hasDst = dst != ownerOf_.end();
-            if (bothEnds ? !(hasSrc && hasDst) : !(hasSrc || hasDst))
+            // Folding, a cable from a flying module to the border's port goes with the fold too: it rides its module
+            // and fades, since the closed card no longer draws it.
+            const bool goneWithFold = after != nullptr && (hasSrc || hasDst) && !contains(*after, c.id);
+            if (bothEnds ? !(hasSrc && hasDst) && !goneWithFold : !(hasSrc || hasDst))
                 continue;
             const auto owner =
                 !hasDst || (hasSrc && src->second.second >= dst->second.second) ? src->second : dst->second;
             plans_[owner.first].cables.push_back(c);
         }
     }
+
+    static bool contains(const std::vector<Fold::VisibleCable>& cables, const graph_editor_types::CableId& id) {
+        return std::any_of(cables.begin(), cables.end(), [&id](const Fold::VisibleCable& c) { return c.id == id; });
+    }
+
+    // A cable drawn before and after whose end on this macro moved (the closed card's jack <-> the open border's port)
+    // slides with the border instead of jumping. Only an end near the macro slides; cables touching a flying module
+    // already belong to a plan.
+    void addSlides(const std::vector<Fold::VisibleCable>& before, const std::vector<Fold::VisibleCable>& after) {
+        if (plans_.empty())
+            return;
+        auto& root = plans_.front();
+        const auto area = root.hull.getUnion(root.card).expanded(kSlideReach).toFloat();
+        const auto moved = [](juce::Point<float> a, juce::Point<float> b) { return a.getDistanceFrom(b) > 0.5f; };
+        for (const auto& now : after) {
+            if (ownerOf_.count(now.id.srcUid) != 0 || ownerOf_.count(now.id.dstUid) != 0)
+                continue;
+            const auto was = std::find_if(before.begin(), before.end(),
+                                          [&now](const Fold::VisibleCable& c) { return c.id == now.id; });
+            if (was == before.end())
+                continue;
+            Fold::CableSlide slide{now, now.p1, now.p2};
+            if (moved(was->p1, now.p1) && (area.contains(was->p1) || area.contains(now.p1)))
+                slide.from1 = was->p1;
+            if (moved(was->p2, now.p2) && (area.contains(was->p2) || area.contains(now.p2)))
+                slide.from2 = was->p2;
+            if (slide.from1 != now.p1 || slide.from2 != now.p2)
+                root.slides.push_back(slide);
+        }
+    }
+
+    static constexpr int kSlideReach = 24; // a jack or port sits on the card's or border's edge, a little outside it
 
     Controller& controller_;
     GraphCanvasHost& host_;
@@ -473,14 +512,13 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
             continue;
         FoldTreeBuilder builder(*this, host_, *before);
         std::vector<Fold::Plan> tree;
-        if (macros.find(id)->collapsed) {
-            tree = builder.collapse(id, snapshot);
-        } else {
-            if (!haveCablesAfter)
-                cablesAfter = host_.cardGlide().fold().currentCables();
-            haveCablesAfter = true;
+        if (!haveCablesAfter)
+            cablesAfter = host_.cardGlide().fold().currentCables();
+        haveCablesAfter = true;
+        if (macros.find(id)->collapsed)
+            tree = builder.collapse(id, snapshot, cablesAfter);
+        else
             tree = builder.expand(id, snapshot, cablesAfter);
-        }
         for (auto& plan : tree)
             plans.push_back(std::move(plan));
     }
@@ -492,7 +530,10 @@ void MacroGroupController::foldChangedMacros(const std::shared_ptr<const FoldSna
                         [&](const juce::String& a) { return changed(a) || isCreated(a); }))
             continue;
         FoldTreeBuilder builder(*this, host_, *before);
-        for (auto& plan : builder.collapse(id, snapshot))
+        if (!haveCablesAfter)
+            cablesAfter = host_.cardGlide().fold().currentCables();
+        haveCablesAfter = true;
+        for (auto& plan : builder.collapse(id, snapshot, cablesAfter))
             plans.push_back(std::move(plan));
     }
     // A collapsed macro the change removed (undo of a grouping, or Ungroup) whose modules stand on the canvas again:
