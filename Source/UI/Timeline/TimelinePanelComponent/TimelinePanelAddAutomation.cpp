@@ -7,7 +7,7 @@
 // TimelinePanel*.cpp files in this directory hold the rest of the class.
 
 #include "TimelinePanelComponent.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 
 #include "UI/Timeline/AutomationLanes/AddAutomation/AddAutomationPicker.h"
 
@@ -45,7 +45,7 @@ void TimelinePanelComponent::openAddAutomationPicker(synth::TrackId track, juce:
         addAutomationPickerHook_(std::move(picker));
         return;
     }
-    synth::ui::launchCardCallOut(std::move(picker), anchor.getScreenBounds(), &anchor);
+    synth::ui::launchPopover(std::move(picker), anchor.getScreenBounds(), &anchor, {.trigger = &anchor});
 }
 
 AddAutomationRow* TimelinePanelComponent::addAutomationRowForTest(synth::TrackId track) const {

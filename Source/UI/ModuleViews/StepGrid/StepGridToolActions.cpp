@@ -4,7 +4,7 @@
 // same undo step. Pitch tools work on the pitch a step plays (written plus Transpose, through the scale), so a
 // transposed pattern moves and fits as it sounds.
 #include "StepGridComponent.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <cmath>
 
@@ -201,7 +201,7 @@ void StepGridComponent::openRandomizePanel() {
         hook(std::move(panel));
         return;
     }
-    launchCardCallOut(std::move(panel), tools_.getButton(Tool::Randomize).getScreenBounds(), this);
+    launchPopover(std::move(panel), tools_.getButton(Tool::Randomize).getScreenBounds(), this);
 }
 
 } // namespace synth::ui

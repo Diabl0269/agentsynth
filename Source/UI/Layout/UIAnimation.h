@@ -465,6 +465,62 @@ private:
 };
 
 // ============================================================================
+// ShownFade -- the fade of an overlay that is a component or a drawn layer, not a window (a window uses PopupMotion)
+// ============================================================================
+
+/** An opacity that eases to a target over a time proportional to the distance it still has to go (a fade that turns
+ *  round part-way takes a part of the time). It lands at once when `host` is not showing or Animations is Off, and is a
+ *  plain, short, linear fade under Reduce Motion. `host` supplies the vblank and the on-screen test and must outlive
+ *  this. `onFrame` runs after every change of alpha(), including the landing. */
+class ShownFade {
+public:
+    static constexpr double kReducedMs = 80.0;
+
+    explicit ShownFade(juce::Component& host)
+        : host_(host)
+        , vblank_(&host) {}
+    ~ShownFade() { driver_.stop(vblank_); }
+
+    void fadeTo(float target, double fullMs, std::function<float(float)> easing) {
+        if (!host_.isShowing() || animationsOff()) {
+            jumpTo(target);
+            return;
+        }
+        const float from = alpha_;
+        if (prefersReducedMotion()) {
+            fullMs = kReducedMs;
+            easing = [](float t) { return t; };
+        }
+        const double ms = std::max(1.0, std::abs((double)target - (double)from) * fullMs);
+        driver_.start(vblank_, ms, std::move(easing),
+                      [this, from, target](float e) { set(from + (target - from) * e); });
+    }
+
+    /** Stops any fade and sets the alpha now. */
+    void jumpTo(float value) {
+        driver_.stop(vblank_);
+        set(value);
+    }
+
+    float alpha() const noexcept { return alpha_; }
+    bool isRunning() const noexcept { return driver_.isRunning(); }
+
+    std::function<void()> onFrame;
+
+private:
+    void set(float value) {
+        alpha_ = juce::jlimit(0.0f, 1.0f, value);
+        if (onFrame)
+            onFrame();
+    }
+
+    juce::Component& host_;
+    float alpha_ = 0.0f;
+    juce::VBlankAnimatorUpdater vblank_;
+    AnimationDriver driver_;
+};
+
+// ============================================================================
 // Section 4 — formatShortcutHint
 //   Pure, no JUCE/GUI deps (only juce::String).
 // ============================================================================

@@ -17,9 +17,9 @@
 #include "Modules/Filter/CustomFilterShapes.h"
 #include "Modules/Lfo/LfoCustomShapes.h"
 #include "UI/Chrome/ColourPickerPopup.h"
-#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/ModuleViews/MorphMap/MorphMap.h"
@@ -383,15 +383,15 @@ bool pressAltC(MainComponent& mc, juce::Component* focused) {
 // Takes the place of the card call-out window: keeps the content the key opened and where it was anchored.
 struct CapturedCallOut {
     CapturedCallOut() {
-        synth::ui::test_hooks::cardCallOutLauncherForTest() = [this](std::unique_ptr<juce::Component> c,
-                                                                     juce::Rectangle<int> a) {
+        synth::ui::test_hooks::popoverLauncherForTest() = [this](std::unique_ptr<juce::Component> c,
+                                                                 juce::Rectangle<int> a) {
             ++opened;
             area = a;
             content = std::move(c);
             return nullptr;
         };
     }
-    ~CapturedCallOut() { synth::ui::test_hooks::cardCallOutLauncherForTest() = nullptr; }
+    ~CapturedCallOut() { synth::ui::test_hooks::popoverLauncherForTest() = nullptr; }
     ColourPickerPopup* picker() const { return dynamic_cast<ColourPickerPopup*>(content.get()); }
     int opened = 0;
     juce::Rectangle<int> area;

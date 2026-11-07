@@ -1,8 +1,8 @@
 #pragma once
 
-#include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/ColourSwatchButton.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/PopoverContent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <functional>
@@ -23,9 +23,6 @@
 // Keyboard: Tab visits the colour sliders, the hex field, the add-to-favourites star and each
 // favourite swatch (Space or Return applies it); Escape puts the colour back to what it was when
 // the popup opened and closes the popup.
-//
-// In a juce::CallOutBox the popup eases in (CalloutReveal.h: a 160 ms fade and a short slide out of the element that
-// opened it; at once under the OS's reduced-motion setting).
 //
 // Favourites persist across sessions via a caller-owned juce::PropertiesFile (nullptr means
 // "in-memory only for this popup instance", which is what keeps this class usable from a headless
@@ -113,6 +110,7 @@ inline void saveFavouriteColours(juce::PropertiesFile* props, const std::vector<
 class ColourPickerPopup
     : public juce::Component
     , public AppUndoAware
+    , public PopoverContent
     , private juce::ChangeListener {
 public:
     ColourPickerPopup(juce::Colour initial, juce::PropertiesFile* props, std::function<void(juce::Colour)> onPreview,
@@ -181,8 +179,6 @@ public:
         });
     }
 
-    void parentHierarchyChanged() override { reveal_.startIfInCallout(); }
-
     void resized() override {
         auto bounds = getLocalBounds();
         selector_.setBounds(bounds.removeFromTop(bounds.getHeight() - kFavouritesAreaHeight));
@@ -192,19 +188,13 @@ public:
         layoutFavouriteButtons(favArea);
     }
 
-    bool keyPressed(const juce::KeyPress& key) override {
-        if (key != juce::KeyPress::escapeKey)
-            return false;
-        // Cancel: put the colour back (the live preview and the commit both see the original),
-        // then close the callout.
+    /** Escape: put the colour back (the live preview and the commit both see the original); the popover then closes. */
+    void onPopoverCancel() override {
         selector_.setCurrentColour(initial_, juce::dontSendNotification);
         previewNow(initial_);
-        synth::ui::closeHostingWindow(*this);
-        return true;
     }
 
     // ---- Test seams (no CallOutBox involved) -----------------------------------------------
-    CalloutReveal& getRevealForTest() noexcept { return reveal_; }
     juce::Colour getCurrentColourForTest() const { return lastColour_; }
     // dontSendNotification + a direct preview call, NOT sendNotificationSync: with sliders shown,
     // ColourSelector's sync path re-enters itself from the FIRST slider's callback and rebuilds
@@ -252,10 +242,7 @@ public:
      *  drag or favourite click); onCommit fires exactly once, when the callout closes, with
      *  whatever colour was current at that point. */
     static void show(juce::Rectangle<int> screenArea, juce::Colour initial, juce::PropertiesFile* props,
-                     std::function<void(juce::Colour)> onPreview, std::function<void(juce::Colour)> onCommit) {
-        auto popup = std::make_unique<ColourPickerPopup>(initial, props, std::move(onPreview), std::move(onCommit));
-        juce::CallOutBox::launchAsynchronously(std::move(popup), screenArea, nullptr);
-    }
+                     std::function<void(juce::Colour)> onPreview, std::function<void(juce::Colour)> onCommit);
 
 private:
     static constexpr int kSwatchSize = 28;
@@ -363,8 +350,6 @@ private:
     juce::Colour lastColour_;
     juce::Colour initial_; // what the popup opened with: Escape restores it
     bool committed_ = false;
-
-    CalloutReveal reveal_{*this};
 
     juce::ColourSelector selector_{juce::ColourSelector::showColourAtTop | juce::ColourSelector::showSliders |
                                    juce::ColourSelector::showColourspace};

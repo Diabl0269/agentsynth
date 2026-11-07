@@ -204,10 +204,10 @@ TEST(DrumIdeasPanelTest, RandomizeKeepingKickAndSnareLeavesThemAloneAsOneUndoSte
     EXPECT_EQ(f.pitchCount(42), 16u) << "Rock's eighth-note hats are back";
 }
 
-TEST(DrumIdeasPanelTest, EscapeClosesThePanelAndReturnsTheFocusToTheButtonOnce) {
+TEST(DrumIdeasPanelTest, CancelClosesThePanelAndReturnsTheFocusToTheButtonOnce) {
     IdeasFixture f;
     EXPECT_EQ(f.grid.getIdeasFocusReturns(), 0);
-    EXPECT_TRUE(f.panel->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    f.panel->onPopoverCancel(); // what the popover host runs on Escape
     EXPECT_EQ(f.grid.getIdeasFocusReturns(), 1);
     f.panel.reset();
     EXPECT_EQ(f.grid.getIdeasFocusReturns(), 1) << "closing it twice does not ask twice";

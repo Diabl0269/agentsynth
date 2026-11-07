@@ -5,7 +5,7 @@
 #include "DrumMachineComponent.h"
 
 #include "AppUndoManager.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <algorithm>
 #include <cmath>
@@ -80,7 +80,8 @@ void DrumMachineComponent::openIdeasPanel() {
         hook(std::move(panel));
         return;
     }
-    synth::ui::launchCardCallOut(std::move(panel), ideasButton_.getScreenBounds(), &ideasButton_);
+    synth::ui::launchPopover(std::move(panel), ideasButton_.getScreenBounds(), &ideasButton_,
+                             {.trigger = &ideasButton_});
 }
 
 void DrumMachineComponent::focusIdeasButton() {

@@ -12,6 +12,7 @@
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/IconButton.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -380,7 +381,8 @@ public:
     }
 
     void showColourPicker() {
-        juce::CallOutBox::launchAsynchronously(buildColourPicker(), colourSwatch.getScreenBounds(), nullptr);
+        synth::ui::launchPopover(buildColourPicker(), colourSwatch.getScreenBounds(), nullptr,
+                                 {.trigger = &colourSwatch});
     }
 
     // The real drag-end path (DragHandle::onDragEnd -> MacroPortConfigDialog::endRowDrag) and

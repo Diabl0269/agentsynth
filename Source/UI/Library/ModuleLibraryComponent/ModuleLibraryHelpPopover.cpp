@@ -1,7 +1,7 @@
 // ModuleLibraryHelpPopover.cpp -- the "?" help popover: pin/float vs CallOutBox hosting,
 // its floating position/clamping, and the button bounds paint() and the mouse handlers share.
 #include "ModuleLibraryComponent.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/PopupMotion.h"
 
 juce::Rectangle<int> ModuleLibraryComponent::getHelpButtonBounds() noexcept {

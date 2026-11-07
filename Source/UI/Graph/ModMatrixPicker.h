@@ -1,8 +1,8 @@
 #pragma once
 
-#include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/NavigationSearchField.h"
+#include "UI/Layout/PopoverContent.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/IconLibrary.h"
 #include <functional>
@@ -165,7 +165,6 @@ public:
     bool isHighlightInViewForTest() const;
 
 private:
-    CalloutReveal reveal_{*this};
     class Row;
 
     /** One line of the list, header or item, whether or not it has a row component right now. */

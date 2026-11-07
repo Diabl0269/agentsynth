@@ -1,9 +1,9 @@
 #include "TimelineRulerComponent.h"
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
-#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -343,7 +343,7 @@ void TimelineRulerComponent::openMarkerContextMenu(synth::MarkerId id) {
         for (const auto& flag : flags)
             if (flag.id == id)
                 anchor = self->localAreaToGlobal(flag.bounds.toNearestInt());
-        synth::ui::launchCardCallOut(std::move(popup), anchor, self);
+        synth::ui::launchPopover(std::move(popup), anchor, self);
     });
     menu.addSeparator();
     menu.addItem("Delete", [safeThis, id] {

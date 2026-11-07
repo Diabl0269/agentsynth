@@ -2,10 +2,10 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "TimelineTrackHeaderInternal.h"
 #include "UI/Chrome/ColourPickerPopup.h"
-#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/RenameKey.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TrackColour.h"
@@ -72,7 +72,8 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
         auto popup = buildColourPicker();
         if (popup == nullptr)
             return; // the track is gone — nothing to pick a colour for
-        synth::ui::launchCardCallOut(std::move(popup), colourSwatch_.getScreenBounds(), &colourSwatch_);
+        synth::ui::launchPopover(std::move(popup), colourSwatch_.getScreenBounds(), &colourSwatch_,
+                                 {.trigger = &colourSwatch_});
     };
 
     addAndMakeVisible(nameLabel_);
@@ -269,7 +270,8 @@ void TimelineTrackHeaderComponent::openMidiDestinationsPicker() {
     auto popup = buildMidiDestinationPicker();
     if (popup == nullptr)
         return; // no host — nothing to build a picker against
-    synth::ui::launchCardCallOut(std::move(popup), bindingChip_.getScreenBounds(), &bindingChip_, true);
+    synth::ui::launchPopover(std::move(popup), bindingChip_.getScreenBounds(), &bindingChip_,
+                             {.closeOnUndo = true, .trigger = &bindingChip_});
 }
 
 //==============================================================================
@@ -771,7 +773,8 @@ bool TimelineTrackHeaderComponent::openColourForKeyboardFocus() {
     auto popup = buildColourPicker();
     if (popup == nullptr)
         return false;
-    synth::ui::launchCardCallOut(std::move(popup), colourSwatch_.getScreenBounds(), &colourSwatch_);
+    synth::ui::launchPopover(std::move(popup), colourSwatch_.getScreenBounds(), &colourSwatch_,
+                             {.trigger = &colourSwatch_});
     return true;
 }
 

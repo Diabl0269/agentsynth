@@ -14,6 +14,7 @@
 #include "Transport/TransportService.h"
 #include "UI/DrumMachine/DrumMachineHost.h"
 #include "UI/Layout/KeyRing.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Timeline/ClipSizingButton.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 #include <algorithm>

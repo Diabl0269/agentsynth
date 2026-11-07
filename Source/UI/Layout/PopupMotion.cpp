@@ -289,6 +289,8 @@ class Impl final
     : public juce::ComponentListener
     , private juce::Timer {
 public:
+    void setStyle(popup_motion::Style style) { style_ = std::move(style); }
+
     Impl(juce::Component& window, popup_motion::Style style)
         : window_(&window)
         , style_(std::move(style))
@@ -649,6 +651,13 @@ void PopupMotion::attach(juce::Component& window, popup_motion::Style style) {
         return;
     window.getProperties().set(kAttachedProperty, true);
     new Impl(window, std::move(style)); // owns itself: deleted by componentBeingDeleted
+}
+
+void PopupMotion::setStyle(juce::Component& window, popup_motion::Style style) {
+    if (const auto it = registry().find(&window); it != registry().end())
+        it->second->setStyle(std::move(style));
+    else
+        attach(window, std::move(style));
 }
 
 void PopupMotion::setEnabled(bool enabled) { enabledFlag() = enabled; }

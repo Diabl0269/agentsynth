@@ -4,8 +4,8 @@
 #include "MorphMapInternal.h"
 #include "MorphMapPalette.h"
 #include "UI/Chrome/ColourPickerPopup.h"
-#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/PointEditing/PointEditorKeys.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 
@@ -330,7 +330,7 @@ bool MorphMap::showDotColour(int index) {
             if (index < (int)safe->dotStops_.size())
                 safe->dotStops_[(size_t)index]->grabKeyboardFocus();
         });
-    launchCardCallOut(std::move(popup), menuAreaAt(getDotCentre(index)), this);
+    launchPopover(std::move(popup), menuAreaAt(getDotCentre(index)), this);
     return true;
 }
 

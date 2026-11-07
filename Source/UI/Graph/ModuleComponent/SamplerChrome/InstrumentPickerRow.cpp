@@ -7,7 +7,7 @@
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerInstrumentChoices.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/SamplerPackOffer.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 
 namespace synth::ui {
 
@@ -83,7 +83,7 @@ void InstrumentPickerRow::openPicker() {
         hook(std::move(popup));
         return;
     }
-    synth::ui::launchCardCallOut(std::move(popup), picker_.getScreenBounds(), &picker_);
+    synth::ui::launchPopover(std::move(popup), picker_.getScreenBounds(), &picker_, {.trigger = &picker_});
 }
 
 void InstrumentPickerRow::chooseInstrument(const InstrumentChoice& choice) {

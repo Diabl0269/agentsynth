@@ -6,7 +6,7 @@
 #include "ShapeListEditor.h"
 #include "ShapeRingHelpers.h"
 #include "ShapeStackPanel.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 
 namespace synth::ui {
 
@@ -42,7 +42,7 @@ void ShapeListEditor::openStackPanel() {
         if (safe != nullptr)
             safe->applyStackHarmonics(chosen);
     };
-    launchCardCallOut(std::move(panel), ringButton_.getScreenBounds(), this);
+    launchPopover(std::move(panel), ringButton_.getScreenBounds(), this, {.trigger = &ringButton_});
 }
 
 void ShapeListEditor::applyStackHarmonics(const ringhelpers::StackOptions& options) {

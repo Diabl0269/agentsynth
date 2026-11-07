@@ -126,12 +126,4 @@ void StepGridRandomizePanel::resized() {
     roll_.setBounds(area.removeFromTop(24).removeFromRight(70));
 }
 
-bool StepGridRandomizePanel::keyPressed(const juce::KeyPress& key) {
-    if (key == juce::KeyPress::escapeKey)
-        return closeHostingWindow(*this);
-    return false;
-}
-
-void StepGridRandomizePanel::parentHierarchyChanged() { reveal_.startIfInCallout(); }
-
 } // namespace synth::ui

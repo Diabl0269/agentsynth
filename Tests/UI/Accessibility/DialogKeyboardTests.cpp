@@ -282,7 +282,7 @@ TEST(DialogKeyboard, WelcomeScreenTabOrderCyclesInsideTheOverlay) {
     EXPECT_FALSE(sendEscape(welcome)) << "the start screen has no cancel";
 }
 
-TEST(DialogKeyboard, ColourPickerTabOrderAndEscapeRestoresTheOriginalColour) {
+TEST(DialogKeyboard, ColourPickerTabOrderAndCancelRestoresTheOriginalColour) {
     juce::Colour lastPreview = juce::Colours::transparentBlack;
     synth::ui::ColourPickerPopup popup(juce::Colours::red, nullptr, [&](juce::Colour c) { lastPreview = c; }, {});
     const auto walk = walkTabOrder(popup);
@@ -295,13 +295,10 @@ TEST(DialogKeyboard, ColourPickerTabOrderAndEscapeRestoresTheOriginalColour) {
     EXPECT_EQ(stops[3], "Add to favourites");
     EXPECT_TRUE(stops[4].startsWith("Favourite colour ")) << stops[4];
 
-    RecordingDialogWindow host;
-    host.setContentNonOwned(&popup, false);
     popup.setCurrentColourForTest(juce::Colours::blue);
-    EXPECT_TRUE(sendEscape(popup));
+    popup.onPopoverCancel(); // what the popover host runs on Escape
     EXPECT_EQ(popup.getCurrentColourForTest(), juce::Colours::red);
     EXPECT_EQ(lastPreview, juce::Colours::red) << "the live preview goes back too";
-    EXPECT_TRUE(host.closed);
 }
 
 TEST(DialogKeyboard, HelpPopupTabOrderAndEscape) {

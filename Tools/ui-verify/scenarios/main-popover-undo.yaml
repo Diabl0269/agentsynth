@@ -8,7 +8,7 @@
 #      Cmd+Shift+Z brings the track back.
 #   3. Opens the Controllers tab and the "+ Add controller" popover. Cmd+Z takes the track back again and the popover,
 #      which shows nothing from the project, stays open.
-# Test mode has no audio device, so the transport never starts here: CardCallOutRelayTests checks Space reaches the app.
+# Test mode has no audio device, so the transport never starts here: PopoverRelayTests checks Space reaches the app.
 record: true
 save_project: main-popover-undo
 steps:

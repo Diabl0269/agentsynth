@@ -1,6 +1,6 @@
 // AddTrackPicker.cpp -- flattens the "Add Track" menu into picker rows and launches the picker.
 #include "AddTrackPicker.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 
 namespace synth::ui {
 namespace {
@@ -87,7 +87,7 @@ void showAddTrackPicker(juce::Component& anchor, std::unique_ptr<ModMatrixPicker
         hook(std::move(picker), anchor.getScreenBounds());
         return;
     }
-    synth::ui::launchCardCallOut(std::move(picker), anchor.getScreenBounds(), &anchor);
+    synth::ui::launchPopover(std::move(picker), anchor.getScreenBounds(), &anchor, {.trigger = &anchor});
 }
 
 namespace test_hooks {

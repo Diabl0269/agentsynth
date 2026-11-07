@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Music/SongKey.h"
-#include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/FilteredRowFades.h"
 #include "UI/Layout/NavigationSearchField.h"
+#include "UI/Layout/PopoverContent.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -70,7 +70,6 @@ public:
     void paintOverChildren(juce::Graphics& g) override;
     void lookAndFeelChanged() override;
     void parentHierarchyChanged() override;
-    bool keyPressed(const juce::KeyPress& key) override;
     void mouseExit(const juce::MouseEvent& e) override;
     void focusOfChildComponentChanged(FocusChangeType) override { repaint(); }
 
@@ -108,8 +107,6 @@ public:
     std::vector<juce::String> visibleGroupTitles() const;
 
 private:
-    CalloutReveal reveal_{*this};
-
     void fillTestModeState(juce::DynamicObject& into) const;
     void buildPreviewSound();
     void buildFitProject();

@@ -6,7 +6,6 @@
 // one undo step.
 #include "ShapeRingHelpers.h"
 #include "UI/Graph/CardWidgets/CardSegmentedSwitch.h"
-#include "UI/Layout/CalloutReveal.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -36,7 +35,6 @@ public:
     void resized() override;
     void paint(juce::Graphics& g) override;
     bool keyPressed(const juce::KeyPress& key) override;
-    void parentHierarchyChanged() override;
     void lookAndFeelChanged() override;
 
 private:
@@ -47,7 +45,6 @@ private:
     juce::ComboBox root_, count_, step_;
     CardSegmentedSwitch width_;
     juce::TextButton cancel_{"Cancel"}, stack_{"Stack"};
-    CalloutReveal reveal_{*this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShapeStackPanel)
 };

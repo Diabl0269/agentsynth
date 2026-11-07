@@ -289,19 +289,6 @@ TEST(AutomationLanesShapeTest, ReleasingAHoldOffTheListPicksNothing) {
     EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select);
 }
 
-TEST(AutomationLanesShapeTest, TheFlyoutBoxIgnoresOutsideInputWhileTheHoldIsDownAndClosesOnItAfter) {
-    juce::Component parent;
-    parent.setSize(600, 400);
-    DrawShapeFlyout content(DrawShape::Free, {}, {});
-    bool holdDown = true;
-    synth::ui::DrawShapeCallOutBox box(content, {280, 20, 20, 20}, &parent, [&holdDown] { return holdDown; });
-    box.inputAttemptWhenModal();
-    EXPECT_EQ(box.getDismissAttemptsForTest(), 0) << "the release that ends the opening press must not close it";
-    holdDown = false;
-    box.inputAttemptWhenModal();
-    EXPECT_EQ(box.getDismissAttemptsForTest(), 1) << "a later click outside closes it";
-}
-
 TEST(AutomationLanesShapeTest, DraggingOffThePenBeforeTheHoldTimeCancelsIt) {
     ShapeLane f;
     const auto centre = f.pen().getLocalBounds().getCentre().toFloat();
@@ -409,10 +396,6 @@ TEST(AutomationLanesShapeTest, TheFlyoutKeysMoveWrapPickAndClose) {
     EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
     EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
     ASSERT_EQ(fly.getFocusedShape(), DrawShape::Sine);
-
-    EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
-    EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Free) << "Escape picks nothing";
-    EXPECT_EQ(f.panel.getActiveTool(), EditTool::Select);
 
     EXPECT_TRUE(fly.keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
     EXPECT_EQ(f.panel.getDrawShape(), DrawShape::Sine) << "Enter picks the focused row";

@@ -93,6 +93,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.h
     Source/UI/Timeline/TimelineRoutingPane/TimelineRoutingPaneControls.cpp
     Source/UI/Timeline/TrackChannelLinkSurface.h
+    Source/UI/Chrome/ColourPickerPopupShow.cpp
     Source/UI/Timeline/TrackColourPicker.h
     Source/UI/Timeline/TrackColourPicker.cpp
     Source/UI/Timeline/CursorGlide/TimelineCursorGlide.h
@@ -266,11 +267,10 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
     Source/UI/Layout/ProgressStrip.cpp
     Source/UI/Layout/ProgressStrip.h
-    Source/UI/Layout/CalloutReveal.h
-    Source/UI/Layout/CalloutReveal.cpp
     Source/UI/Layout/AppShortcutRelay.h
     Source/UI/Layout/AppShortcutRelay.cpp
-    Source/UI/Layout/CardCallOut.cpp
+    Source/UI/Layout/PopupHost.h
+    Source/UI/Layout/PopupHost.cpp
     Source/UI/Layout/SplitButton.h
     Source/UI/Layout/SplitButton.cpp
     Source/UI/Layout/SidePane/SidePane.h

@@ -6,8 +6,8 @@
 
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
-#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Timeline/SectionColours.h"
 #include <algorithm>
 
@@ -141,7 +141,7 @@ bool TimelineSectionStrip::applySectionMenuChoice(synth::PlacementId id, Section
         for (const auto& block : buildBlocks())
             if (block.id == id)
                 anchor = localAreaToGlobal(block.bounds.toNearestInt());
-        synth::ui::launchCardCallOut(std::move(popup), anchor, this);
+        synth::ui::launchPopover(std::move(popup), anchor, this);
         return true;
     }
     case SectionMenuChoice::PlaceAgainAfter:

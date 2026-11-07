@@ -2,8 +2,8 @@
 // (click on the label, or Enter on a focused step) and picking a chord as one undo step. The picker's contents are
 // StepGridChords.cpp; the 120 ms cross-fade of a changed label is started here and drawn by StepGridPaint.cpp.
 #include "StepGridComponent.h"
-#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReducedMotion.h"
 
 namespace synth::ui {
@@ -69,7 +69,7 @@ void StepGridComponent::openChordPicker(int step) {
     auto area = chordLabelBounds(step);
     if (area.isEmpty())
         area = cellBounds(SequencerLane::Pitch, step);
-    synth::ui::launchCardCallOut(std::move(picker), localAreaToGlobal(area), this);
+    synth::ui::launchPopover(std::move(picker), localAreaToGlobal(area), this);
 }
 
 // Plays the chord the step would play with `chord` through the module's output, or ends the audition (nullopt).

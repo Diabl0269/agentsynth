@@ -193,7 +193,7 @@ Transpose), so a transposed pattern moves and fits as it sounds. **Double** also
 through `StepGridHooks::recordEditWithParameter` (`AppUndoManager::recordNodeExtraStateAndParameterChange`), which puts the
 pattern change and the parameter change in one transaction, so a single undo gives both back.
 
-**Randomize** opens a 250 px popover (`StepGridRandomizePanel`, a `juce::CallOutBox` with `CalloutReveal`) with the note range
+**Randomize** opens a 250 px popover (`StepGridRandomizePanel`, opened through `launchPopover`) with the note range
 picker ([note-range-picker.md](../layout/note-range-picker.md)), a "Steps that play" slider (75 percent by default), the
 "Keep my rhythm" pill (on by default) and Roll. Roll applies `randomized` once and each Roll is one undo step; the popover
 stays open between rolls. Esc closes it. The density and rhythm choice live on the grid for the session and are not saved. The note range is saved with the

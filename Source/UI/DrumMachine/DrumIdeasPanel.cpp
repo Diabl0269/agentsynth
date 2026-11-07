@@ -360,15 +360,10 @@ void DrumIdeasPanel::notifyClosed() {
         onClosed();
 }
 
-bool DrumIdeasPanel::keyPressed(const juce::KeyPress& key) {
-    if (key != juce::KeyPress::escapeKey)
-        return false;
+// Escape: the box fades out; the owner gets the focus back at once.
+void DrumIdeasPanel::onPopoverCancel() {
     audition_.stop();
-    closeHostingWindow(*this); // fades the popup out; a headless run has none
-    notifyClosed();            // either way the owner gets the focus back at once
-    return true;
+    notifyClosed();
 }
-
-void DrumIdeasPanel::parentHierarchyChanged() { reveal_.startIfInCallout(); }
 
 } // namespace synth::ui

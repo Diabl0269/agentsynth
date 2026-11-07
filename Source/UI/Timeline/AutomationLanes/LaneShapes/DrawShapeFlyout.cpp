@@ -1,5 +1,4 @@
 #include "DrawShapeFlyout.h"
-#include "UI/Layout/CardCallOut.h"
 
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Layout/FocusRing.h"
@@ -152,17 +151,14 @@ bool DrawShapeFlyout::keyPressed(const juce::KeyPress& key) {
         moveFocus((int)kAllDrawShapes.size() - 1);
     else if (key == juce::KeyPress::returnKey || key == juce::KeyPress::spaceKey)
         pick(focused_);
-    else if (key == juce::KeyPress::escapeKey)
-        closeHostingWindow(*this);
     else
         return false;
     return true;
 }
 
-// Once the callout is showing, the reveal starts and keyboard focus lands on the current shape's row. It uses
+// Once the callout is showing, keyboard focus lands on the current shape's row. It uses
 // current_, not focused_: the callout first hands focus to the top row, which overwrites focused_.
 void DrawShapeFlyout::parentHierarchyChanged() {
-    reveal_.startIfInCallout();
     if (findParentComponentOfClass<juce::CallOutBox>() == nullptr)
         return;
     juce::Component::SafePointer<DrawShapeFlyout> safe(this);
@@ -170,42 +166,6 @@ void DrawShapeFlyout::parentHierarchyChanged() {
         if (safe != nullptr)
             safe->moveFocus((int)safe->current_);
     });
-}
-
-void DrawShapeCallOutBox::inputAttemptWhenModal() {
-    if (holdGestureDown_ && holdGestureDown_())
-        return;
-    ++dismissAttempts_;
-    PopupMotion::dismissCallOut(*this);
-}
-
-namespace {
-
-// Owns the content and the box, and goes with the box's modal state (the same shape as juce's own launcher).
-class DrawShapeCallOutLauncher final : public juce::ModalComponentManager::Callback {
-public:
-    DrawShapeCallOutLauncher(std::unique_ptr<DrawShapeFlyout> c, juce::Rectangle<int> area,
-                             std::function<bool()> holdGestureDown)
-        : content(std::move(c))
-        , callout(*content, area, nullptr, std::move(holdGestureDown)) {
-        callout.setVisible(true);
-        callout.enterModalState(true, this);
-    }
-
-    void modalStateFinished(int) override {}
-
-    std::unique_ptr<DrawShapeFlyout> content;
-    DrawShapeCallOutBox callout;
-};
-
-} // namespace
-
-DrawShapeCallOutBox& launchDrawShapeCallOut(std::unique_ptr<DrawShapeFlyout> flyout, juce::Rectangle<int> area,
-                                            std::function<bool()> holdGestureDown, juce::Component* anchor) {
-    auto& box = (new DrawShapeCallOutLauncher(std::move(flyout), area, std::move(holdGestureDown)))->callout;
-    if (anchor != nullptr)
-        relayAppShortcutsFromCallOut(box, anchor);
-    return box;
 }
 
 namespace test_hooks {

@@ -57,7 +57,7 @@ The dot is part of the header's drag handle: a press on it that becomes a drag r
 not a click. Its name is "<channel> colour" and its tooltip "Change this channel's colour".
 `MixerPanelComponent::buildTrackColourPicker` is wired by `MainComponent` through
 `BottomDockComponent::setOnBuildTrackColourPicker` and copied to the mirror view by `copyWiringFrom`. The picker opens
-in a `juce::CallOutBox` anchored on the dot and eases in ([popup reveal](../layout/animation.md#popup-reveal), which
+in a `juce::CallOutBox` anchored on the dot and fades in and out ([popup windows](../layout/animation.md#popup-windows), which
 lands at once under the OS's Reduce Motion setting); every colour picker in the app does, the Timeline's included.
 
 **Column colour.** A column's header shows a swatch and a 2px stripe across its top edge in the colour of the

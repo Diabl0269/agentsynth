@@ -22,7 +22,7 @@
 #include "GraphEditor.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 
@@ -255,7 +255,7 @@ void GraphEditor::promptRecolourMacro(const juce::String& macroId, juce::Rectang
     if (popup == nullptr)
         return;
     // Through the card call-out so Cmd+Z and the other app shortcuts reach the main window from the picker.
-    synth::ui::launchCardCallOut(std::move(popup), screenArea, this);
+    synth::ui::launchPopover(std::move(popup), screenArea, this);
 }
 
 // Alt+C: with exactly one macro selected (its card, or every member of an open one), its colour picker beside it, as

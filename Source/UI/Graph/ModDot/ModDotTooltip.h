@@ -26,7 +26,7 @@ class ModDotTooltip {
 public:
     static constexpr double kFadeInMs = 160.0;
     static constexpr double kFadeOutMs = 110.0;
-    static constexpr double kReducedFadeMs = 80.0;
+    static constexpr double kReducedFadeMs = ShownFade::kReducedMs;
 
     /** `canvas` only supplies the vblank the fade runs on and whether it is on screen; it must outlive this. */
     explicit ModDotTooltip(juce::Component& canvas);
@@ -45,23 +45,18 @@ public:
     std::function<void(juce::AudioProcessorGraph::NodeID card)> onChanged;
 
     bool isShown() const noexcept { return wanted_; }
-    float getOpacity() const noexcept { return opacity_; }
+    float getOpacity() const noexcept { return fade_.alpha(); }
     /** "<source> . <signed percent>%" of the readout, empty once it has gone. */
     juce::String getText() const;
     /** The readout while it is up or fading out, null once it has gone. */
     const ModDotReadout* readout() const noexcept { return content_ ? &*content_ : nullptr; }
 
 private:
-    bool animates() const;
-    void fadeTo(float target, double fullMs, std::function<float(float)> easing);
     void setOpacity(float value);
 
-    juce::Component& canvas_;
     std::optional<ModDotReadout> content_; // kept through a fade-out so it keeps drawing
     bool wanted_ = false;
-    float opacity_ = 0.0f;
-    juce::VBlankAnimatorUpdater vblank_;
-    AnimationDriver fade_;
+    ShownFade fade_;
 };
 
 } // namespace synth::ui

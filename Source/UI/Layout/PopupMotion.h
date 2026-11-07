@@ -160,6 +160,11 @@ public:
      *  engine is disabled, is left exactly as JUCE would show it. */
     static void attach(juce::Component& window, popup_motion::Style style = {});
 
+    /** attach() whose `style` also replaces the style of a window that is already attached (the look and feel attaches
+     *  a call-out with the shared style from inside its constructor, before its owner can say better). Call it before
+     *  the window is first shown. */
+    static void setStyle(juce::Component& window, popup_motion::Style style);
+
     /** Master switch (default on). Off: attached windows show and hide instantly. */
     static void setEnabled(bool enabled);
     static bool isEnabled();

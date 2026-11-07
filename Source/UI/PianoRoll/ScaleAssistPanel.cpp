@@ -1,5 +1,5 @@
 #include "UI/PianoRoll/ScaleAssistPanel.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 
 #include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
@@ -81,7 +81,7 @@ void ScaleAssistPanel::openKeyPicker() {
     if (pickerLauncher)
         pickerLauncher(std::move(picker), area);
     else
-        synth::ui::launchCardCallOut(std::move(picker), area, this);
+        synth::ui::launchPopover(std::move(picker), area, this);
 }
 
 KeyPicker* ScaleAssistPanel::getOpenKeyPicker() const noexcept {

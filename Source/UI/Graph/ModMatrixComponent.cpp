@@ -13,8 +13,8 @@
 #include "UI/Graph/ModMatrixLists.h"
 #include "UI/Graph/ModMatrixPicker.h"
 #include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
-#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <functional>
@@ -776,7 +776,7 @@ void ModMatrixComponent::ModRow::showPicker(bool forSource) {
     if (owner.pickerLauncher)
         owner.pickerLauncher(std::move(picker), combo.getScreenBounds());
     else
-        synth::ui::launchCardCallOut(std::move(picker), combo.getScreenBounds(), &combo);
+        synth::ui::launchPopover(std::move(picker), combo.getScreenBounds(), &combo, {.trigger = &combo});
 }
 
 // A routing that crosses a macro border runs through ports only it uses; the row names the real modules
