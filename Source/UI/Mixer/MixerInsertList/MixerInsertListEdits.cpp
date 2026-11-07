@@ -6,6 +6,7 @@
 #include "AppUndoManager.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CableColour.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/InsertGap/InsertGapKeyboard.h"
 #include "UI/Graph/ModMatrixPicker.h"
@@ -272,18 +273,7 @@ bool MixerInsertList::headIsSoundSource(int from, int to) const {
     const auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
     if (module == nullptr)
         return false;
-    switch (module->getModuleType()) {
-    case ModuleType::Oscillator:
-    case ModuleType::Wavetable:
-    case ModuleType::Noise:
-    case ModuleType::Pluck:
-    case ModuleType::Mallet:
-    case ModuleType::Sampler:
-    case ModuleType::DrumKit:
-        return true;
-    default:
-        return false;
-    }
+    return synth::ui::categoryFor(module->getModuleType()) == synth::ui::ModuleCategory::Sources;
 }
 
 // Whether moving the module at `from` to `to`'s place is a move the graph will take: on a straight chain any place
