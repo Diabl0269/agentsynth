@@ -131,7 +131,7 @@ TEST(OnCardGroupRename, ARenamedGroupStillMovesAndKeepsItsNewName) {
     ASSERT_NE(text, nullptr);
     text->setText("Voices", false);
     text->keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
-    pump();
+    synth::test::waitUntil([&] { return osc.shownTitle("unison") == "Voices"; });
     osc.editor->getGroupHandleForTest("unison")->keyPressed(
         juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys(juce::ModifierKeys::altModifier), 0));
     EXPECT_EQ(osc.editor->getLastAnnouncementForTest(), "Voices moved below Output");
