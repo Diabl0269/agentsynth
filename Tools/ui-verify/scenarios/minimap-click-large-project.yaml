@@ -12,3 +12,5 @@ steps:
   - click: {id: minimap, x: 110, y: 75}
   - wait: {}
   - screenshot: {name: 2-after-click}
+  - expect: {count: {prefix: "card:", atLeast: 2}, within_ms: 2000}   # cards are in the canvas view after the click
+  - expect: {id: "card:Oscillator 2", showing: true}                  # the card under the view box in the minimap

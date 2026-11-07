@@ -35,3 +35,11 @@ steps:
   - wait: {}
   - expect: {id: "Show Canvas in the main area", showing: false, within_ms: 2000}   # the canvas is the main view again
   - screenshot: {name: 5-timeline-detached-canvas-back}
+  # Dock it back: the detached window's toolbar carries the "Dock back" button (id dockBack); the Timeline returns to
+  # the main area, so the Canvas is a tab again. (Its Esc key is never sent by scenarios.)
+  - expect: {id: dockBack, showing: true, within_ms: 2000}
+  - click: {id: dockBack}
+  - wait: {}
+  - expect: {id: "Show Canvas in the main area", showing: true, within_ms: 3000}   # the Timeline fills the main area again
+  - expect: {id: dockBack, exists: false}
+  - screenshot: {name: 6-timeline-docked-back-in-main}
