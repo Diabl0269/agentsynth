@@ -2,6 +2,7 @@
 // AppLookAndFeel must leave its rounded corners fully transparent in every built-in theme.
 // Images use SoftwareImageType because the platform default reads back zeros on the Windows CI.
 
+#include "ThemeSweep/ThemeSweepSupport.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
@@ -37,6 +38,19 @@ TEST(MenuCornerTests, BackgroundCornersAreTransparentAndInteriorKeepsTheSurface)
             EXPECT_EQ(img.getPixelAt(corner.x, corner.y).getAlpha(), 0) << theme.name;
         // The interior carries the theme's own surface alpha (some themes use a translucent surface).
         EXPECT_EQ(img.getPixelAt(kWidth / 2, kHeight / 2).getAlpha(), theme.colors.surface.getAlpha()) << theme.name;
+    }
+}
+
+TEST(MenuCornerTests, SectionHeaderTextIsLegibleOnTheMenuBackgroundInEveryTheme) {
+    // addSectionHeader titles (Drum Kit pad menu, cable menu, ...) use headerTextColourId; JUCE's fixed default
+    // is unreadable on a light menu surface.
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        AppLookAndFeel laf;
+        laf.applyTheme(theme);
+        const auto bg = laf.findColour(juce::PopupMenu::backgroundColourId);
+        const auto header = laf.findColour(juce::PopupMenu::headerTextColourId);
+        EXPECT_GE(synth::test::theme_sweep::contrastRatio(header, bg), synth::test::theme_sweep::kMinTextContrast)
+            << theme.name;
     }
 }
 

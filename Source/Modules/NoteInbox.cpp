@@ -24,6 +24,26 @@ void NoteInbox::push(int pitch, int velocity, int offset) noexcept {
     events_[(size_t)slot] = {(std::uint8_t)pitch, (std::uint8_t)velocity, juce::jmax(0, offset)};
 }
 
+NoteFan::NoteFan(const std::vector<NoteInbox*>& targets) {
+    for (auto* target : targets)
+        if (target != nullptr && count_ < kMaxTargets)
+            targets_[(size_t)count_++] = target;
+}
+
+void NoteFan::push(int pitch, int velocity, int offset) noexcept {
+    for (int i = 0; i < count_; ++i)
+        targets_[(size_t)i]->push(pitch, velocity, offset);
+}
+
+bool NoteFan::sameTargets(const NoteFan& other) const noexcept {
+    if (count_ != other.count_)
+        return false;
+    for (int i = 0; i < count_; ++i)
+        if (targets_[(size_t)i].get() != other.targets_[(size_t)i].get())
+            return false;
+    return true;
+}
+
 // The graph sizes every MIDI buffer before playback, so a bounded number of adds per block never allocates.
 void NoteInbox::drainInto(juce::MidiBuffer& midi, int numSamples) noexcept {
     const int last = juce::jmax(0, numSamples - 1);

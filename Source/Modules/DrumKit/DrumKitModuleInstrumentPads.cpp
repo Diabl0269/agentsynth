@@ -3,6 +3,7 @@
 // when the hit's note ends, or a quarter second later for a pad played from the card. No cable and no audio bus: the
 // module sounds through its own outputs, so Decay and Start do nothing here.
 #include "DrumKitModule.h"
+#include <algorithm>
 #include <map>
 
 using synth::drums::kMaxPads;
@@ -17,16 +18,20 @@ bool DrumKitModule::canPlayFromPad(ModuleType type) noexcept {
 
 // A pad keeps the inbox it was linked to only while its uuid still names that module: an edit or an undo that
 // changes the uuid drops the link at once (publishPads checks padLinkUuid_), and the next link finds the new one.
-void DrumKitModule::linkInstrumentPads(const std::function<synth::NoteInbox*(const juce::String&)>& inboxFor) {
+void DrumKitModule::linkInstrumentPads(const std::function<synth::NoteInbox::Ptr(const juce::String&)>& inboxFor) {
     bool changed = false;
     for (int i = 0; i < kMaxPads; ++i) {
         const auto& p = pads_.pads[(size_t)i];
-        synth::NoteInbox* inbox = nullptr;
+        synth::NoteInbox::Ptr inbox;
         if (p.kind == PadKind::Instrument && p.instrumentUuid.isNotEmpty())
             inbox = inboxFor(p.instrumentUuid);
         auto& linked = padInboxes_[(size_t)i];
+        const auto* fan = dynamic_cast<const synth::NoteFan*>(inbox.get());
+        const auto* linkedFan = dynamic_cast<const synth::NoteFan*>(linked.get());
+        if (fan != nullptr && linkedFan != nullptr && fan->sameTargets(*linkedFan))
+            inbox = linked;
         const auto uuid = inbox != nullptr ? p.instrumentUuid : juce::String();
-        if (linked.get() == inbox && padLinkUuid_[(size_t)i] == uuid)
+        if (linked.get() == inbox.get() && padLinkUuid_[(size_t)i] == uuid)
             continue;
         linked = inbox;
         padLinkUuid_[(size_t)i] = uuid;
@@ -42,6 +47,32 @@ bool DrumKitModule::padInstrumentLinked(int index) const {
     const auto& p = pads_.pads[(size_t)index];
     return p.kind == PadKind::Instrument && padInboxes_[(size_t)index] != nullptr &&
            padLinkUuid_[(size_t)index] == p.instrumentUuid;
+}
+
+// The module's own inbox, or, when a MIDI source feeds it, one that reaches every module that source feeds (the
+// envelope that gates an Oscillator, a Poly MIDI, a filter's key tracking): playing the pad then does what playing
+// the track does. A Drum Kit is never in the fan, because a note reaching it would strike its pads again.
+synth::NoteInbox::Ptr DrumKitModule::inboxForTrack(juce::AudioProcessorGraph& graph,
+                                                   juce::AudioProcessorGraph::NodeID target, ModuleBase& module) {
+    std::set<juce::AudioProcessorGraph::NodeID> sources;
+    for (const auto& c : graph.getConnections())
+        if (c.destination.isMIDI() && c.destination.nodeID == target)
+            sources.insert(c.source.nodeID);
+    std::vector<synth::NoteInbox*> targets{&module.noteInbox()};
+    for (const auto& c : graph.getConnections()) {
+        if (!c.destination.isMIDI() || c.destination.nodeID == target || sources.count(c.source.nodeID) == 0)
+            continue;
+        auto* node = graph.getNodeForId(c.destination.nodeID);
+        auto* fed = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+        if (fed == nullptr || dynamic_cast<DrumKitModule*>(fed) != nullptr)
+            continue;
+        auto* inbox = &fed->noteInbox();
+        if (std::find(targets.begin(), targets.end(), inbox) == targets.end())
+            targets.push_back(inbox);
+    }
+    if (targets.size() == 1)
+        return targets.front();
+    return new synth::NoteFan(targets);
 }
 
 // One uuid map per call, then each kit links against it. A node whose uuid was never written cannot be a pad's
@@ -60,13 +91,13 @@ std::set<juce::AudioProcessorGraph::NodeID> DrumKitModule::linkAllInstrumentPads
     }
     std::set<juce::AudioProcessorGraph::NodeID> played;
     for (auto* kit : kits)
-        kit->linkInstrumentPads([&](const juce::String& uuid) -> synth::NoteInbox* {
+        kit->linkInstrumentPads([&](const juce::String& uuid) -> synth::NoteInbox::Ptr {
             const auto found = byUuid.find(uuid);
             auto* module = found != byUuid.end() ? dynamic_cast<ModuleBase*>(found->second->getProcessor()) : nullptr;
             if (module == nullptr || !canPlayFromPad(module->getModuleType()))
                 return nullptr;
             played.insert(found->second->nodeID);
-            return &module->noteInbox();
+            return inboxForTrack(graph, found->second->nodeID, *module);
         });
     return played;
 }

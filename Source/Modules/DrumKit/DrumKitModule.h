@@ -138,10 +138,13 @@ public:
     // ---- Instrument pads (DrumKitModuleInstrumentPads.cpp) ----
     /** The modules an instrument pad may play: sounding MIDI instruments other than a Drum Kit or a sequencer. */
     static bool canPlayFromPad(ModuleType type) noexcept;
-    /** Points each instrument pad at `inboxFor(uuid)` (null: the module is gone, the pad is silent). */
-    void linkInstrumentPads(const std::function<synth::NoteInbox*(const juce::String& uuid)>& inboxFor);
+    /** Points each instrument pad at `inboxFor(uuid)` (null: the module is gone, the pad is silent). A fan equal to
+        the pad's current one keeps the current object, so a held note is not cut by a relink. */
+    void linkInstrumentPads(const std::function<synth::NoteInbox::Ptr(const juce::String& uuid)>& inboxFor);
     /** True when instrument pad `index` found its module at the last link. */
     bool padInstrumentLinked(int index) const;
+    static synth::NoteInbox::Ptr inboxForTrack(juce::AudioProcessorGraph& graph,
+                                               juce::AudioProcessorGraph::NodeID target, ModuleBase& module);
     /** Links every Drum Kit in `graph`; returns the nodes some pad plays. Message thread. */
     static std::set<juce::AudioProcessorGraph::NodeID> linkAllInstrumentPads(juce::AudioProcessorGraph& graph);
     /** How long a pad played from the card holds an instrument's note. */
