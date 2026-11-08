@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <vector>
 
 namespace synth {
 
@@ -18,7 +19,7 @@ public:
 
     /** Any thread, no allocation. A note-on (velocity 1..127) or a note-off (velocity 0) `offset` samples into the
         sender's block. A note-off that finds the queue busy or full still arrives, at the end of the next block. */
-    void push(int pitch, int velocity, int offset) noexcept;
+    virtual void push(int pitch, int velocity, int offset) noexcept;
     /** The receiver's audio thread: moves up to kMaxPerBlock queued notes into `midi`, at their offsets. */
     void drainInto(juce::MidiBuffer& midi, int numSamples) noexcept;
 
@@ -35,6 +36,23 @@ private:
     std::array<Event, kCapacity> events_{};
     juce::SpinLock writeLock_;
     std::array<std::atomic<std::uint64_t>, 2> lostOffs_{};
+};
+
+/** What a pad plays when the module it names is one of several that a track feeds its MIDI to (an Oscillator, the
+    envelope that gates it, ...): a push reaches every target, so the pad sounds the way the track does. Targets are
+    fixed at construction; a changed set makes a new fan. */
+class NoteFan : public NoteInbox {
+public:
+    static constexpr int kMaxTargets = 8;
+
+    explicit NoteFan(const std::vector<NoteInbox*>& targets);
+    void push(int pitch, int velocity, int offset) noexcept override;
+    /** True when `other` reaches exactly the same inboxes in the same order. */
+    bool sameTargets(const NoteFan& other) const noexcept;
+
+private:
+    std::array<NoteInbox::Ptr, kMaxTargets> targets_;
+    int count_ = 0;
 };
 
 } // namespace synth

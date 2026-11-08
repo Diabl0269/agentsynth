@@ -7,6 +7,7 @@
 #include "AudioEngine/SamplerMidiWiring.h"
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/SamplerModule.h"
+#include "Modules/VCAModule.h"
 #include <gtest/gtest.h>
 
 using synth::drums::PadKind;
@@ -144,5 +145,89 @@ TEST(DrumKitInstrumentPadsRender, PadTuneMovesThePitchOfTheOscillatorAndWavetabl
         ASSERT_GT(a.zeroCrossings, 10) << name;
         const double ratio = (double)b.zeroCrossings / (double)a.zeroCrossings;
         EXPECT_NEAR(ratio, 2.0, 0.2) << name << " crossings " << a.zeroCrossings << " -> " << b.zeroCrossings;
+    }
+}
+
+namespace {
+
+// The instrument a track builds: a MIDI source feeds the oscillator and the ADSR that gates it, and the oscillator
+// runs through a VCA whose gain is the ADSR. A pad names the oscillator; what is heard is the VCA's output.
+Rendered strikeGatedChain(const juce::String& oscillatorType, float tune, int blocks) {
+    AudioEngine engine{AudioEngine::HostMode::Standalone};
+    auto& graph = engine.getGraph();
+    auto kitNode = graph.addNode(std::make_unique<DrumKitModule>());
+    auto sourceNode = graph.addNode(synth::AIStateMapper::createModule("Sequencer"));
+    auto oscNode = graph.addNode(synth::AIStateMapper::createModule(oscillatorType));
+    auto adsrNode = graph.addNode(synth::AIStateMapper::createModule("ADSR"));
+    auto* kit = dynamic_cast<DrumKitModule*>(kitNode->getProcessor());
+    auto* osc = dynamic_cast<ModuleBase*>(oscNode->getProcessor());
+    auto* adsr = dynamic_cast<ModuleBase*>(adsrNode->getProcessor());
+    VCAModule vca;
+    for (ModuleBase* m : {static_cast<ModuleBase*>(kit), osc, adsr, static_cast<ModuleBase*>(&vca)})
+        m->prepareToPlay(kRate, kBlock);
+    for (auto* node : {oscNode.get(), adsrNode.get()})
+        EXPECT_TRUE(graph.addConnection({{sourceNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                         {node->nodeID, juce::AudioProcessorGraph::midiChannelIndex}}));
+
+    auto pad = kit->pad(kStrikePad);
+    pad.kind = PadKind::Instrument;
+    pad.instrumentUuid = synth::AIStateMapper::ensureNodeUuid(oscNode.get());
+    pad.instrumentPitch = 60;
+    EXPECT_TRUE(kit->setPad(kStrikePad, pad));
+    synth::publishSamplerMidiWiring(graph);
+    EXPECT_TRUE(kit->padInstrumentLinked(kStrikePad));
+    auto* tuneParam = kit->padParameter(kStrikePad, DrumKitModule::PadParam::Tune);
+    tuneParam->setValueNotifyingHost(tuneParam->convertTo0to1(tune));
+
+    juce::MidiBuffer hit;
+    hit.addEvent(juce::MidiMessage::noteOn(10, 36, 1.0f), 0);
+    juce::AudioBuffer<float> kitBuffer(2, kBlock);
+    kitBuffer.clear();
+    kit->processBlock(kitBuffer, hit);
+
+    Rendered out;
+    float previous = 0.0f;
+    for (int b = 0; b < blocks; ++b) {
+        juce::AudioBuffer<float> oscBuffer(std::max(2, osc->getTotalNumOutputChannels()), kBlock);
+        juce::AudioBuffer<float> envBuffer(std::max(2, adsr->getTotalNumOutputChannels()), kBlock);
+        oscBuffer.clear();
+        envBuffer.clear();
+        juce::MidiBuffer oscMidi, envMidi;
+        osc->processBlock(oscBuffer, oscMidi);
+        adsr->processBlock(envBuffer, envMidi);
+        juce::AudioBuffer<float> vcaBuffer(VCAModule::kNumChannels, kBlock);
+        vcaBuffer.clear();
+        vcaBuffer.copyFrom(0, 0, oscBuffer, 0, 0, kBlock);
+        vcaBuffer.copyFrom(1, 0, envBuffer, 0, 0, kBlock);
+        juce::MidiBuffer none;
+        vca.processBlock(vcaBuffer, none);
+        out.peak = std::max(out.peak, vcaBuffer.getMagnitude(0, 0, kBlock));
+        const auto* data = vcaBuffer.getReadPointer(0);
+        for (int i = 0; i < kBlock; ++i) {
+            if (data[i] == 0.0f)
+                continue;
+            if (previous != 0.0f && (previous < 0.0f) != (data[i] < 0.0f))
+                ++out.zeroCrossings;
+            previous = data[i];
+        }
+        out.samples += kBlock;
+    }
+    return out;
+}
+
+} // namespace
+
+// The pad names the oscillator, but the ADSR that gates it is fed by the same MIDI source and has to hear the note
+// too, or the VCA stays shut.
+TEST(DrumKitInstrumentPadsRender, APadOnAnOscillatorOpensTheEnvelopeThatGatesItAtTheTunedPitch) {
+    for (const char* type : {"Oscillator", "Wavetable"}) {
+        const auto base = strikeGatedChain(type, 0.0f, 80);
+        const auto up = strikeGatedChain(type, 12.0f, 80);
+        RecordProperty(std::string(type) + "_chain_peak", std::to_string(base.peak));
+        RecordProperty(std::string(type) + "_chain_crossings_tune0", std::to_string(base.zeroCrossings));
+        RecordProperty(std::string(type) + "_chain_crossings_tune12", std::to_string(up.zeroCrossings));
+        EXPECT_GT(base.peak, 0.01f) << type << ": the gated chain is silent when the pad is struck";
+        ASSERT_GT(base.zeroCrossings, 10) << type;
+        EXPECT_NEAR((double)up.zeroCrossings / (double)base.zeroCrossings, 2.0, 0.25) << type;
     }
 }
