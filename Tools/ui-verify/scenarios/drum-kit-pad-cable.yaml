@@ -27,8 +27,13 @@ steps:
   - key: {keys: return}
   - wait: {}
   - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
-  - key: {keys: cmd+-}
-  - key: {keys: cmd+-}
+  - click: {id: Hide Library}
+  - wait: {}
+  - screenshot: {name: both-cards}
+  # The cards land at the bottom of the canvas: drag both up so the pad knobs are on screen.
+  - drag: {from: "card:Drum Kit", fromX: 120, fromY: 14, to: window, toX: 420, toY: 120}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 100, fromY: 14, to: window, toX: 1000, toY: 120}
   - wait: {}
   - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}   # pad 2 (Snare), quietly
   - wait: {}
