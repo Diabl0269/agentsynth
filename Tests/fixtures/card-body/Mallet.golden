@@ -19,9 +19,9 @@ type Mallet size 280x381
   child 17 label id="" at 140,257 64x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0
   child 18 knob id="Hardness" at 0,0 0x0 visible=0 title="Hardness" tip="Hardness" focusOrder=0 wantsFocus=1
   child 19 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 20 knob id="Resonator" at 0,0 0x0 visible=0 title="Resonator" tip="Resonator" focusOrder=0 wantsFocus=1
+  child 20 knob id="Resonator" at 0,0 0x0 visible=0 title="Resonator" tip="Resonator. How much the instrument's body resonance rings under the note, like the tubes under a marimba's bars." focusOrder=0 wantsFocus=1
   child 21 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
-  child 22 knob id="Tremolo" at 0,0 0x0 visible=0 title="Tremolo" tip="Tremolo" focusOrder=0 wantsFocus=1
+  child 22 knob id="Tremolo" at 0,0 0x0 visible=0 title="Tremolo" tip="Tremolo. How deep the volume wobbles, about 5 times a second, like a vibraphone's motor." focusOrder=0 wantsFocus=1
   child 23 label id="" at 0,0 0x0 visible=0 title="" tip="" focusOrder=0 wantsFocus=0
   child 24 knob id="Release" at 204,275 64x58 visible=1 title="Release" tip="Release" focusOrder=0 wantsFocus=1
   child 25 label id="" at 204,257 64x18 visible=1 title="" tip="" focusOrder=0 wantsFocus=0

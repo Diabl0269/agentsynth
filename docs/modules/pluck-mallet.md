@@ -18,7 +18,7 @@ A note-on starts a string at the note's pitch (12-TET, A4 = 440 Hz, shifted by `
 | `brightness` | 0..1, 0.5 | Less high-frequency loss per round trip of the string |
 | `pickPosition` | 0.02..0.5, 0.13 | Where along the string it is plucked: low = near the bridge (thin), 0.5 = middle (round) |
 | `pickHardness` | 0..1, 0.6 | Soft finger (dark) to hard pick (bright) |
-| `body` | 0..1, 0.3 | Mix of the small body resonator (smoothed 20 ms); takes a mod cable on its knob (input channel 1) |
+| `body` | 0..1, 0.3 | Mix of the small body resonator (smoothed 20 ms); takes a mod cable on its knob (input channel 1). Mallet's counterpart is `resonator`, and the two knobs' tooltips share their words |
 | `stiffness` | 0..1, 0 | Inharmonicity: upper partials run sharp, like a thick wound string |
 | `release` | 0.01..5 s, 0.3 | T60 once the key is up |
 | `velBright` | 0..1, 0.5 | How much velocity opens the pick hardness and the brightness |
@@ -53,8 +53,8 @@ A note-on strikes a bar at the note's pitch (12-TET, A4 = 440 Hz, shifted by `Tu
 | `damping` | 0..1, 0.5 | How much faster the upper modes die |
 | `brightness` | 0..1, 0.5 | Tilts the mode gains toward the upper modes (total loudness is kept) |
 | `hardness` | 0..1, 0.5 | Mallet contact: soft yarn (long, dark) to hard stick (short, bright, with a click) |
-| `resonator` | 0..1, 0.5 | Tube-resonator boost on the fundamental: x0.5 to x1.5 |
-| `tremolo` | 0..1, 0 | Depth of a 5.5 Hz amplitude wobble (vibraphone motor), smoothed 20 ms; takes a mod cable on its knob (input channel 1) |
+| `resonator` | 0..1, 0.5 | Tube-resonator boost on the fundamental: x0.5 to x1.5. The Mallet's counterpart of Pluck's `body` (same tooltip words) |
+| `tremolo` | 0..1, 0 | Depth of a 5.5 Hz amplitude wobble (vibraphone motor), smoothed 20 ms; takes a mod cable on its knob (input channel 1). Not a body resonance: the name follows the vibraphone, and its tooltip says what it does |
 | `release` | 0.01..5 s, 0.5 | T60 once the key is up |
 | `velBright` | 0..1, 0.5 | How much velocity hardens the mallet and brightens the tone |
 

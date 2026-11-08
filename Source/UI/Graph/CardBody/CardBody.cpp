@@ -45,10 +45,21 @@ juce::String explainedChoiceTooltip(const juce::String& paramId) {
 // sounding note changes nothing, and a knob that seems dead looks broken.
 juce::String explainedKnobTooltip(juce::AudioProcessor& module, const juce::RangedAudioParameter& param) {
     auto* mb = dynamic_cast<ModuleBase*>(&module);
-    if (mb == nullptr ||
-        (mb->getModuleType() != ModuleType::Oscillator && mb->getModuleType() != ModuleType::Wavetable))
+    if (mb == nullptr)
         return {};
     const auto& paramId = param.paramID;
+    // Pluck's Body and Mallet's Resonator are the same idea on two instruments, so they share their words; Tremolo
+    // sits beside Resonator on the Mallet card and says plainly that it is something else.
+    if (mb->getModuleType() == ModuleType::Pluck && paramId == "body")
+        return param.getName(100) +
+               ". How much the instrument's body resonance rings under the note, like a guitar's wooden body.";
+    if (mb->getModuleType() == ModuleType::Mallet && paramId == "resonator")
+        return param.getName(100) + ". How much the instrument's body resonance rings under the note, like the tubes "
+                                    "under a marimba's bars.";
+    if (mb->getModuleType() == ModuleType::Mallet && paramId == "tremolo")
+        return param.getName(100) + ". How deep the volume wobbles, about 5 times a second, like a vibraphone's motor.";
+    if (mb->getModuleType() != ModuleType::Oscillator && mb->getModuleType() != ModuleType::Wavetable)
+        return {};
     if (paramId == "phase")
         return param.getName(100) +
                ". Where each new note starts the wave, in degrees. It sets the start of every new note and does "

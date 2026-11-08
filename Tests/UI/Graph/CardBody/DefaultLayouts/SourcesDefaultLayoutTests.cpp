@@ -374,6 +374,28 @@ TEST(SourcesDefaultLayout, EveryControlIsReachableNamedAndHasATooltip) {
     }
 }
 
+// Pluck's Body and Mallet's Resonator are the same idea, so their tooltips share their words; Mallet's Tremolo is a
+// different sound and its tooltip says what it does instead.
+TEST(SourcesDefaultLayout, BodyAndResonatorShareTheirTooltipWordsAndTremoloSaysWhatItDoes) {
+    CardCanvas canvas;
+    const auto tipOf = [&](const juce::String& type, const juce::String& paramId) -> juce::String {
+        const auto card = build(canvas, type);
+        for (const auto& item : card.body->getPlan().items)
+            if (item.param != nullptr && item.param->paramID == paramId)
+                if (auto* client = dynamic_cast<juce::SettableTooltipClient*>(item.widget))
+                    return client->getTooltip();
+        return {};
+    };
+    const auto body = tipOf("Pluck", "body");
+    const auto resonator = tipOf("Mallet", "resonator");
+    const auto tremolo = tipOf("Mallet", "tremolo");
+    const juce::String shared = "How much the instrument's body resonance rings under the note";
+    EXPECT_TRUE(body.startsWith("Body. " + shared)) << body;
+    EXPECT_TRUE(resonator.startsWith("Resonator. " + shared)) << resonator;
+    EXPECT_TRUE(tremolo.startsWith("Tremolo. How deep the volume wobbles")) << tremolo;
+    EXPECT_FALSE(tremolo.contains("body")) << "Tremolo is not a body resonance";
+}
+
 TEST(SourcesDefaultLayout, TheDefaultsOnlyNameParametersThatExistAndNeverPoly) {
     const auto& defaults = synth::DefaultCardLayouts::builtIn();
     for (const juce::String type :
