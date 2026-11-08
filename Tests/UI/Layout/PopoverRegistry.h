@@ -36,6 +36,7 @@ inline const std::vector<PopoverUser>& popoverUsers() {
         {"Source/UI/ModuleViews/ShapeEditor/ShapeListEditorRing.cpp", {"ShapeStackPanel"}},
         {"Source/UI/ModuleViews/StepGrid/StepGridChordActions.cpp", {"StepGridChordPicker"}},
         {"Source/UI/ModuleViews/StepGrid/StepGridComponent.h", {"StepGridRandomizePanel"}},
+        {"Source/UI/ModuleViews/StepGrid/StepGridToolActions.cpp", {"StepGridRandomizePanel"}},
         {"Source/UI/PianoRoll/ScaleAssistPanel.cpp", {"KeyPicker"}},
         {"Source/UI/Settings/AccountSettingsTab.cpp", {"AccountFlowPanel"}},
         {"Source/UI/Settings/AppearanceSettingsTab.cpp", {"juce::ColourSelector"}},
