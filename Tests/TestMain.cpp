@@ -5,6 +5,7 @@
 #include "SilentLookAndFeel.h"
 #include "SoundPacks/SoundPackFetch.h"
 #include "TestMode/AutomationHiding.h"
+#include "TestWait.h"
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Layout/PopoverPointer.h"
@@ -19,12 +20,13 @@
 #include <string>
 #include <vector>
 
-// Drain pending async messages after each test to prevent
-// cross-test pollution from callAsync/timer callbacks
+// Drain pending async messages after each test to prevent cross-test pollution from callAsync/timer callbacks. It
+// runs every message already queued, not a fixed slice: a test that builds hundreds of cards (CardBodyOverlap) leaves
+// more async updates than a 10 ms slice delivers, and the next test's first click then waits behind them.
 class MessageQueueDrainer : public ::testing::EmptyTestEventListener {
     void OnTestEnd(const ::testing::TestInfo&) override {
-        if (auto* mm = juce::MessageManager::getInstanceWithoutCreating())
-            mm->runDispatchLoopUntil(10);
+        if (juce::MessageManager::getInstanceWithoutCreating() != nullptr)
+            synth::test::flushMessageQueue();
     }
 };
 
