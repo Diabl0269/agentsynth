@@ -27,6 +27,7 @@
 
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
+#include "Modules/ModSlotHost.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
@@ -155,6 +156,11 @@ void ModuleComponent::rebindMidiLearnable(juce::Component& control, juce::Ranged
     if (midiLearnableRegistry_.rebind(control, param))
         control.addMouseListener(this, false);
     refreshMidiLearnBadges();
+    // A pad knob that now shows another pad takes its ring and mod dot along (padKnobForTarget answers per pad).
+    if (dynamic_cast<synth::ModSlotHost*>(module) != nullptr) {
+        syncModDotButtons();
+        repaint();
+    }
 }
 
 void ModuleComponent::registerHostedMidiLearnable(juce::Component& control, juce::AudioProcessorParameter& param,

@@ -121,14 +121,8 @@ public:
      *  follow the audio device); the same steps applyMacroCountChange takes. */
     void refreshPortLayout();
 
-    /** Output-card identity treatment only: repoints the muted destination line drawn under the
-     *  Audio Output card's title (device name + sample rate + channel count, or "Host audio" in
-     *  HostMode::Hosted, or empty to hide the line entirely). A no-op on every other module —
-     *  callers do not need to check isAudioOutputIONode() first. Pushed in by
-     *  GraphEditor::refreshOutputDeviceInfo() (MainComponent -> GraphEditor -> here) whenever
-     *  AudioEngine's device state changes; never polled. MESSAGE THREAD ONLY. Repaints (the single
-     *  ZoomFrozenCachedImage refresh seam — see refreshPortLayout above) only when the text
-     *  actually changed. */
+    /** Audio Output card only: sets the muted destination line under its title (empty hides it); a no-op on
+     *  any other module. Pushed in by GraphEditor::refreshOutputDeviceInfo(); message thread. */
     void setOutputDeviceInfoText(const juce::String& text);
     const juce::String& getOutputDeviceInfoTextForTest() const noexcept { return outputDeviceInfoText; }
 
@@ -147,8 +141,18 @@ public:
     static constexpr int kHostedCardBodyDropChannel = -2;
     /** Drop channel of a plugin knob with no modulation slot yet: this minus its slider index. */
     static constexpr int kUnboundHostedKnobChannelBase = -1000;
-    /** The plugin knob's parameter id a stand-in drop channel names, or empty for a real channel. */
+    /** The parameter id a stand-in drop channel names (a plugin knob, or a pad knob), or empty for a real channel. */
     juce::String hostedParamForDropChannel(int channel) const;
+    /** Drop channel of a pad knob with no pad cable slot yet: this minus its registry entry index. */
+    static constexpr int kUnboundPadKnobChannelBase = -2000;
+    /** A pad knob a cable on a Drum Kit pad slot channel rings: the knob and its card-local bounds, null when the
+     *  card shows another pad's knobs (the cable still moves its own pad). */
+    struct PadKnob {
+        juce::Slider* slider = nullptr;
+        juce::Rectangle<int> bounds;
+    };
+    PadKnob padKnobForTarget(const ModulationTarget& target) const;
+    std::optional<Port> padSlotPortForPoint(juce::Point<int> localPoint) const;
 
     /** Header band the card title is drawn in, and the double-click-to-rename hit zone. */
     static constexpr int kHeaderHeight = 24;
@@ -225,12 +229,8 @@ private:
     juce::Point<int> gutterInputJackCentre(const std::vector<int>& drawn, int clamped) const;
 
 public:
-    /** Fixed MIDI jack anchor, in local coordinates — MIDI In sits top-left, MIDI Out top-right,
-     *  at kPortGutterHeaderHeight on an ordinary card or kMacroPortWidgetHeaderY on a macro-port
-     *  widget (no header of its own); they don't participate in the ordinary audio jack stack
-     *  getPortCenter lays out. This is the single ground truth paint() and getPortForPoint() both
-     *  read from; anything anchoring a MIDI cable/preview must go through it too, or it drifts
-     *  from the drawn jack. */
+    /** Fixed MIDI jack anchor, in local coordinates: the single ground truth paint() and getPortForPoint()
+     *  read; anything anchoring a MIDI cable/preview must go through it too, or it drifts from the drawn jack. */
     juce::Point<int> getMidiPortCenter(bool isOutput) const;
 
     /** Re-lays the card after its Dual I/O parameter changed. For an FX pair the raw ch0/ch1 legs

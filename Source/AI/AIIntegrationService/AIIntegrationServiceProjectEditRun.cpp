@@ -9,6 +9,7 @@
 
 #include "AI/PatchEval.h"
 #include "AI/SoundShapeChecks.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/ModuleBase.h"
 #include "SoundPacks/CoreSounds.h"
 #include "Timeline/TimelineOps.h"
@@ -426,8 +427,11 @@ juce::String bindReservations(const Plan& plan, const RecordingHost& recorder, j
     return {};
 }
 
-// True when `module` has a modulation jack on channel `port`.
+// True when `module` has a modulation jack on channel `port` that the model may name (a Drum Kit's pad cables stay
+// out of its view).
 bool hasModulationChannel(const ModuleBase& module, int port) {
+    if (dynamic_cast<const DrumKitModule*>(&module) != nullptr && port >= DrumKitModule::kPadModSlotBase)
+        return false;
     for (const auto& target : module.getModulationTargets())
         if (target.channelIndex == port)
             return true;
@@ -440,7 +444,11 @@ bool hasModulationChannel(const ModuleBase& module, int port) {
 bool modulationMissesNode(const juce::DynamicObject& modulation, const ModuleBase& module) {
     if (modulation.hasProperty("destParam")) {
         const auto param = modulation.getProperty("destParam");
-        return param.isString() && param.toString().isNotEmpty() && module.modulationChannelForParam(param) < 0;
+        if (!param.isString() || param.toString().isEmpty())
+            return false;
+        const int channel = module.modulationChannelForParam(param);
+        return channel < 0 ||
+               (dynamic_cast<const DrumKitModule*>(&module) != nullptr && channel >= DrumKitModule::kPadModSlotBase);
     }
     return modulation.hasProperty("destPort") && (int)modulation.getProperty("destPort") >= 0 &&
            !hasModulationChannel(module, (int)modulation.getProperty("destPort"));

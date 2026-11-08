@@ -35,8 +35,8 @@ struct ModRoutingRewire {
 int destChannelOnNewModule(juce::AudioProcessor& newModule, int oldChannel, const juce::String& hostedParamId) {
     if (hostedParamId.isEmpty())
         return oldChannel;
-    auto* hosted = dynamic_cast<synth::HostedPluginModule*>(&newModule);
-    return hosted != nullptr ? hosted->bindModSlot(hostedParamId) : -1;
+    auto* host = dynamic_cast<synth::ModSlotHost*>(&newModule);
+    return host != nullptr ? host->bindModSlot(hostedParamId) : -1;
 }
 
 // removeNode(oldNodeId) only removes connections TO/FROM the old node. For mod routings (source -> attenuverter ->

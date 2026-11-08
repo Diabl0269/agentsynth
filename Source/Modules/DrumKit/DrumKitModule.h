@@ -3,6 +3,7 @@
 #include "DrumKitPadVoice.h"
 #include "DrumKitPads.h"
 #include "DrumVoices.h"
+#include "Modules/ModSlotHost.h"
 #include "Modules/ModTargetList.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/Sampler/SamplerInstrumentHost.h"
@@ -34,6 +35,7 @@
  */
 class DrumKitModule
     : public ModuleBase
+    , public synth::ModSlotHost
     , public synth::VoiceCountSource
     , public synth::sampler::InstrumentHost
     , private juce::AudioProcessorParameter::Listener {
@@ -79,14 +81,11 @@ public:
         return isDualIO() ? (i == 1 ? "Audio R" : "Audio L") : "Audio";
     }
     int getVisibleInputPortCount() const override { return 0; }
-    juce::String getInputPortLabel(int i) const override { return mods_.label(i); }
-    LogicalPort mapInputChannel(int raw) const override {
-        auto port = ModuleBase::mapInputChannel(raw);
-        port.role = PortRole::ModCV;
-        return port;
-    }
-    std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
-    bool isReservedInputChannel(int rawChannel) const override { return rawChannel >= kPadModSlotBase; }
+    juce::String getInputPortLabel(int i) const override;
+    LogicalPort mapInputChannel(int raw) const override;
+    std::vector<ModulationTarget> getModulationTargets() const override;
+    bool isAutoPromotableModTarget(int dstChannel) const override;
+    bool isReservedInputChannel(int rawChannel) const override;
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
@@ -153,6 +152,13 @@ public:
     void resetPad(int index);
     /** True when the loaded kit has a region for `sound`. */
     bool kitHasSound(int sound) const;
+
+    // ---- Pad cables: modulation slots (DrumKitModuleModSlots.cpp) ----
+    int bindModSlot(const juce::String& paramId) override;
+    void releaseUnconnectedModSlots(const std::function<bool(int rawChannel)>& isConnected) override;
+    int modChannelForParam(const juce::String& paramId) const override;
+    bool canModulateParam(const juce::String& paramId) const override;
+    int maxModSlots() const noexcept override { return kMaxPadModSlots; }
 
     // ---- Instrument pads (DrumKitModuleInstrumentPads.cpp) ----
     /** The modules an instrument pad may play: sounding MIDI instruments other than a Drum Kit or a sequencer. */
@@ -234,6 +240,11 @@ private:
     void releaseMovedInstrumentPads(const synth::drums::PadSnapshot& next) noexcept;
     void advanceAuditionReleases(int numSamples) noexcept;
 
+    juce::var modSlotsToVar() const;
+    void modSlotsFromVar(const juce::var& slots);
+    juce::String modSlotParamId(int slot) const;
+    int firstFreeModSlot() const;
+
     juce::AudioParameterFloat* levelParam = nullptr;
     std::array<juce::AudioParameterBool*, kNumGroups> recorded_{};
     std::array<bool, kNumGroups> lastRecorded_{}; // message thread
@@ -241,6 +252,8 @@ private:
     std::array<GroupLink, 22> links_;
     int numLinks_ = 0;
     std::array<PadParams, synth::drums::kMaxPads> padParams_{};
+    std::array<int, kMaxPadModSlots> modSlotKeys_{};                 // message thread: pad * 4 + field, -1 free
+    std::array<std::atomic<int>, kMaxPadModSlots> modSlotKeysAudio_; // the audio thread's view of modSlotKeys_
 
     static constexpr int kRenderChunk = 256;
 

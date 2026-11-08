@@ -4,7 +4,8 @@
 // is either a cable target or listed here with its reason.
 #pragma once
 
-#include "Modules/DrumKit/DrumKitModule.h"
+#include "Modules/ModSlotHost.h"
+#include "Modules/ModuleBase.h"
 #include <juce_core/juce_core.h>
 #include <string>
 #include <vector>
@@ -48,16 +49,19 @@ inline const std::vector<Exemption>& exemptions() {
     return all;
 }
 
-/** The reason `paramId` on a `type` card takes no cable, or null when it is not exempt. A Drum Kit pad knob is exempt
-    for now: its cables come from the pad slots. */
+/** The reason `paramId` on a `type` card takes no cable, or null when it is not exempt. */
 inline const std::string* exemptionReason(const juce::String& type, const juce::String& paramId) {
     for (const auto& e : exemptions())
         if (type == juce::String(e.type) && paramId == juce::String(e.paramId))
             return &e.reason;
-    static const std::string padReason = "pad knob cables come from pad slots";
-    if (type == "Drum Kit" && DrumKitModule::isPadParamId(paramId))
-        return &padReason;
     return nullptr;
+}
+
+/** True when a cable can reach `paramId` on `module` without a listed target: a module that binds modulation slots on
+    demand (a hosted plugin, the Drum Kit's pad knobs) answers for it. */
+inline bool slotHostTakesCable(const juce::AudioProcessor& module, const juce::String& paramId) {
+    const auto* host = dynamic_cast<const synth::ModSlotHost*>(&module);
+    return host != nullptr && host->canModulateParam(paramId);
 }
 
 } // namespace modcable_test

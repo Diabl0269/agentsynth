@@ -71,12 +71,19 @@ bool ModuleComponent::repaintMovingModulation() {
             continue;
         moving = true;
         int si = -1;
+        PadKnob pad;
         if (mod != nullptr)
             for (const auto& target : mod->getModulationTargets())
                 if (target.channelIndex == info.destChannelIndex) {
                     si = sliderIndexForModTarget(target);
+                    if (si < 0)
+                        pad = padKnobForTarget(target);
                     break;
                 }
+        if (pad.slider != nullptr) {
+            repaint(pad.bounds.expanded(8));
+            continue;
+        }
         if (si < 0 || !sliders[si]->isVisible()) {
             repaint(); // a driven control this card cannot place (a plugin knob, a swapped-in combo): be safe
             return true;
@@ -109,10 +116,30 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
         g.drawEllipse(c.x - radius, c.y - radius, radius * 2.0f, radius * 2.0f, 2.0f);
     }
 
+    // A pad knob with no cable slot yet is named by its registry entry (padSlotPortForPoint).
+    if (const auto entry = (size_t)(kUnboundPadKnobChannelBase - modDropTargetChannel);
+        modDropTargetChannel <= kUnboundPadKnobChannelBase && entry < midiLearnableRegistry_.entries().size())
+        if (auto* knob = dynamic_cast<juce::Slider*>(midiLearnableRegistry_.entries()[entry].component);
+            knob != nullptr && knob->isShowing()) {
+            const auto b = getLocalArea(knob, knob->getLocalBounds()).toFloat();
+            const float radius = modRingRadiusFor(b);
+            const auto c = modRingCentreFor(*knob, b);
+            g.setColour(jackAccentColour);
+            g.drawEllipse(c.x - radius, c.y - radius, radius * 2.0f, radius * 2.0f, 2.0f);
+        }
+
     if (mod != nullptr && modDropTargetChannel >= 0) {
         for (const auto& t : mod->getModulationTargets()) {
             if (t.channelIndex != modDropTargetChannel)
                 continue;
+            if (const auto pad = padKnobForTarget(t); pad.slider != nullptr) {
+                const auto b = pad.bounds.toFloat();
+                const float radius = modRingRadiusFor(b);
+                const auto c = modRingCentreFor(*pad.slider, b);
+                g.setColour(jackAccentColour);
+                g.drawEllipse(c.x - radius, c.y - radius, radius * 2.0f, radius * 2.0f, 2.0f);
+                break;
+            }
             const int si = sliderIndexForModTarget(t);
             // si now resolves even when the knob is hidden behind a swapped-in BPM *Div
             // combo (so a jack still lands there) -- but there is no ring to draw on a combo, so
@@ -158,8 +185,16 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
 
         const int si = sliderIndexForModTarget(*target);
         // Same reasoning as the drop-target ring above -- a swapped-in BPM combo still
-        // resolves an si (real jack anchor), but has no ring to paint over it.
-        if (si < 0 || !sliders[si]->isVisible())
+        // resolves an si (real jack anchor), but has no ring to paint over it. A pad cable rings the pad knob only
+        // while the card shows that pad.
+        juce::Slider* ringKnob = si >= 0 && sliders[si]->isVisible() ? sliders[si] : nullptr;
+        auto ringBounds = ringKnob != nullptr ? ringKnob->getBounds() : juce::Rectangle<int>();
+        if (si < 0)
+            if (const auto pad = padKnobForTarget(*target); pad.slider != nullptr) {
+                ringKnob = pad.slider;
+                ringBounds = pad.bounds;
+            }
+        if (ringKnob == nullptr)
             continue;
 
         const auto* param = mod->parameterForModTarget(*target);
@@ -175,7 +210,7 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
         const bool isHovered =
             hovered.has_value() && hovered->nodeId == nodeId && hovered->channel == info.destChannelIndex;
 
-        if (auto* fader = dynamic_cast<synth::ui::CardFader*>(sliders[si])) {
+        if (auto* fader = dynamic_cast<synth::ui::CardFader*>(ringKnob)) {
             paintFaderModulation(g, *fader, param, baseNorm, modNorm, themeColours(*this), info.modSignalValue >= 0.0f,
                                  isHovered);
             continue;
@@ -186,8 +221,8 @@ void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, j
         if (lf == nullptr)
             continue;
 
-        auto sliderBounds = sliders[si]->getBounds().toFloat();
-        const auto centre = modRingCentreFor(*sliders[si], sliderBounds);
+        auto sliderBounds = ringBounds.toFloat();
+        const auto centre = modRingCentreFor(*ringKnob, sliderBounds);
         const float radius = modRingRadiusFor(sliderBounds);
 
         // The reachable-range band goes UNDER the live ring, one per routing (two

@@ -778,7 +778,7 @@ mechanism.
 
 ## Every continuous parameter is a target
 
-A hosted plugin's parameters are targets too, through modulation slots claimed on demand:
+Hosted plugin parameters and Drum Kit pad knobs take cables through modulation slots claimed on demand (`synth::ModSlotHost`):
 [`plugin-card-layout.md#modulating-plugin-parameters`](../control/plugin-card-layout.md#modulating-plugin-parameters).
 
 The rule for a module's CV jacks: **every continuous (`AudioParameterFloat`/`Int`) parameter that

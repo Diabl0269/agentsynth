@@ -77,6 +77,9 @@ DrumKitModule::DrumKitModule()
     addRecordedParameters(); // after the mute switch, so every older parameter keeps its index
     addPadParameters();      // after the group parameters, so a restore sets a group before its saved pads
     mods_.bind(*this);
+    modSlotKeys_.fill(-1);
+    for (auto& key : modSlotKeysAudio_)
+        key.store(-1);
     pads_ = synth::drums::defaultPadTable();
     publishPads();
     enableVisualBuffer(true);

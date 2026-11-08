@@ -148,8 +148,8 @@ void DrumKitModule::pollGroupLinks() noexcept {
 }
 
 // A group knob's cable moves, for this strike only, the matching knob of every pad its group reaches, on top of the
-// pad's own value. Nothing is written back: the group knob and the pads keep what they hold, so a cable never reaches a
-// saved project or a ringing hit.
+// pad's own value; a pad cable does the same for its one pad. Nothing is written back: the group knob and the pads keep
+// what they hold, so a cable never reaches a saved project or a ringing hit.
 DrumKitModule::PadValues DrumKitModule::padValuesAt(int index, int sound, const juce::AudioBuffer<float>& cv,
                                                     int sample) const noexcept {
     std::array<float, 4> cable{};
@@ -157,6 +157,13 @@ DrumKitModule::PadValues DrumKitModule::padValuesAt(int index, int sound, const 
         const auto& link = links_[(size_t)l];
         if (linkReaches(link, sound))
             cable[(size_t)link.field] += mods_.cvAt(cv, *link.param, sample);
+    }
+    // A pad cable moves one knob of its own pad, read on the same sample.
+    for (int k = 0; k < kMaxPadModSlots; ++k) {
+        const int key = modSlotKeysAudio_[(size_t)k].load(std::memory_order_acquire);
+        const int channel = kPadModSlotBase + k;
+        if (key >= 0 && (key >> 2) == index && channel < cv.getNumChannels() && cv.getNumSamples() > 0)
+            cable[(size_t)(key & 3)] += cv.getReadPointer(channel)[juce::jlimit(0, cv.getNumSamples() - 1, sample)];
     }
     const auto moved = [&](PadParam which) {
         const auto* param = padParameter(index, which);

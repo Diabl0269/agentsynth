@@ -258,7 +258,8 @@ void checkParametersWithoutAWidget(const juce::String& typeName, const ModuleBas
         if (ranged == nullptr || !isContinuous(p) || onCard.count(ranged) > 0)
             continue;
         ++checked;
-        if (targeted.count(ranged) == 0 && modcable_test::exemptionReason(typeName, ranged->paramID) == nullptr)
+        if (targeted.count(ranged) == 0 && !modcable_test::slotHostTakesCable(mb, ranged->paramID) &&
+            modcable_test::exemptionReason(typeName, ranged->paramID) == nullptr)
             gaps.push_back(typeName + " / " + ranged->paramID + " (\"" + ranged->getName(100) +
                            "\", no widget on the card)");
     }
@@ -310,7 +311,8 @@ TEST_F(ModuleComponentTest, EveryKnobAndFaderOnEveryDefaultCardTakesAModCableOrI
                                               ")");
                 continue;
             }
-            if (targeted.count(param) == 0 && reported.insert(param->paramID).second)
+            if (targeted.count(param) == 0 && !modcable_test::slotHostTakesCable(*mb, param->paramID) &&
+                reported.insert(param->paramID).second)
                 gaps.push_back(typeName + " / " + param->paramID + " (\"" + param->getName(100) + "\", " +
                                widgetKind(*slider) + (slider->isVisible() ? ", shown" : ", hidden") + ")");
         }

@@ -353,6 +353,11 @@ juce::Colour ModuleComponent::resolveMacroPortJackColour(const synth::MacroPort*
 }
 
 juce::String ModuleComponent::hostedParamForDropChannel(int channel) const {
+    if (channel <= kUnboundPadKnobChannelBase) {
+        const auto& entries = midiLearnableRegistry_.entries();
+        const auto entry = (size_t)(kUnboundPadKnobChannelBase - channel);
+        return entry < entries.size() ? entries[entry].paramId : juce::String();
+    }
     const int si = kUnboundHostedKnobChannelBase - channel;
     if (channel > kUnboundHostedKnobChannelBase || si >= sliders.size() || sliders[si] == nullptr)
         return {};
@@ -396,6 +401,9 @@ std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(j
     auto* mod = dynamic_cast<ModuleBase*>(module);
     if (mod == nullptr)
         return std::nullopt;
+
+    if (auto padPort = padSlotPortForPoint(localPoint))
+        return padPort;
 
     // Every knob on a plugin card takes a cable. One already modulated answers with its slot's channel; one that is
     // not has no channel until the drop claims a slot, so it answers with a stand-in naming the knob
@@ -511,6 +519,9 @@ std::optional<juce::Point<float>> ModuleComponent::getModTargetKnobAnchor(int de
         if (target.channelIndex != destChannel)
             continue;
         const int si = sliderIndexForModTarget(target);
+        if (const auto pad = si < 0 ? padKnobForTarget(target) : PadKnob{}; pad.slider != nullptr)
+            return modRingPointForNorm(modRingCentreFor(*pad.slider, pad.bounds.toFloat()),
+                                       modRingRadiusFor(pad.bounds.toFloat()) + knobLandingRadiusOffset(), 0.0f);
         // A knob in a tab section never takes its jack's cable: its tab can be switched away, and
         // a jack that moved between the gutter and the knob on every tab click would move the
         // card's jack layout with it. Its jack stays in the gutter; a drop on the knob still lands.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../Modules/ModSlotHost.h"
 #include "../../Modules/ModuleBase.h"
 #include "HostedPluginBackend.h"
 #include <array>
@@ -55,7 +56,9 @@ namespace synth {
  * Added via the library's Plugins section (drag/click), not the module catalogue — a bare instance
  * has no identity and no way to become anything.
  */
-class HostedPluginModule : public ModuleBase {
+class HostedPluginModule
+    : public ModuleBase
+    , public ModSlotHost {
 public:
     /** Every channel this node can ever carry, in or out. Fixed at construction, for the node's
      *  entire lifetime — see the class comment. An instance wider than this is refused. */
@@ -257,19 +260,20 @@ public:
     /** The CV channel that modulates `paramId`, claiming a free slot when it has none. -1 when every
      *  slot is taken or `paramId` is empty. Works before an instance exists (the base is then read
      *  when it publishes). */
-    int bindModSlot(const juce::String& paramId);
+    int bindModSlot(const juce::String& paramId) override;
 
     /** Frees the slot on `rawChannel` and puts its parameter back at the resting value. */
     void releaseModSlot(int rawChannel);
 
     /** Frees every bound slot whose channel `isConnected` says has no cable. */
-    void releaseUnconnectedModSlots(const std::function<bool(int rawChannel)>& isConnected);
+    void releaseUnconnectedModSlots(const std::function<bool(int rawChannel)>& isConnected) override;
 
     /** The slot channel already bound to `paramId`, or -1. Never claims one. */
-    int modChannelForParam(const juce::String& paramId) const;
+    int modChannelForParam(const juce::String& paramId) const override;
 
     /** True when `paramId` is modulated already, or the live instance has it and a slot is free. */
-    bool canModulateParam(const juce::String& paramId) const;
+    bool canModulateParam(const juce::String& paramId) const override;
+    int maxModSlots() const noexcept override { return kMaxModSlots; }
 
     /** The parameter id bound to `rawChannel`, or empty. */
     juce::String modSlotParamId(int rawChannel) const;

@@ -39,7 +39,7 @@ TEST_F(ModuleComponentTest, EveryMidiLearnableControlOnEveryDefaultCardAlsoTakes
                 dynamic_cast<const juce::AudioParameterInt*>(param) == nullptr)
                 continue; // a switch or a picker: not a continuous input
             ++checked;
-            if (targeted.count(entry.paramId) > 0)
+            if (targeted.count(entry.paramId) > 0 || modcable_test::slotHostTakesCable(*mb, entry.paramId))
                 continue;
             if (modcable_test::exemptionReason(typeName, entry.paramId) != nullptr) {
                 ++exempt;
@@ -49,7 +49,7 @@ TEST_F(ModuleComponentTest, EveryMidiLearnableControlOnEveryDefaultCardAlsoTakes
         }
     }
     EXPECT_GT(checked, 100) << "the sweep must reach the cards' learnable controls";
-    EXPECT_GT(exempt, 0) << "the Drum Kit's pad knobs are exempt for now";
+    EXPECT_GT(exempt, 0) << "the exemption list must be reached";
     EXPECT_TRUE(gaps.empty()) << "MIDI-learnable controls with no modulation target:\n"
                               << juce::StringArray(gaps.data(), (int)gaps.size()).joinIntoString("\n");
 }
