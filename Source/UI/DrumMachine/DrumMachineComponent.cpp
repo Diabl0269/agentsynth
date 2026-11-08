@@ -138,6 +138,7 @@ void DrumMachineComponent::openClip(synth::ClipId id) {
     wheelTween_.stop();
     gesture_ = {};
     hitMotions_.clear();
+    leavingHits_.clear();
     flashes_.clear();
     changed_.clear();
     motionAnim_.stop(vblank_);
@@ -186,6 +187,7 @@ void DrumMachineComponent::closeGrid() {
     motionAnim_.stop(vblank_);
     rowAnim_.stop(vblank_);
     hitMotions_.clear();
+    leavingHits_.clear();
     flashes_.clear();
     changed_.clear();
     changeAnim_.stop(vblank_);

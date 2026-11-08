@@ -267,6 +267,13 @@ public:
     juce::Button& getShowAllButton() noexcept { return showAllButton_; }
     DrumRowLabels& getRowLabels() noexcept { return labels_; }
     bool isHitMotionActive(int row, int step) const;
+    /** The scale the hit at (row, step) is drawn at right now (1 at rest). */
+    float hitScaleForTest(int row, int step) const;
+    /** How many hits of the previous grid are still shrinking out. */
+    int getLeavingHitCount() const noexcept { return static_cast<int>(leavingHits_.size()); }
+    /** Test seam: makes every running hit motion `ms` older, standing in for the frames an off-screen grid never gets.
+     */
+    void ageHitMotionsForTest(double ms);
     /** True while the hit at (row, step) is flashing because the playhead reached it. */
     bool isFlashActive(int row, int step) const;
     /** Test seams: animate although the grid is off screen, and land every running motion. */
@@ -336,6 +343,15 @@ private:
         bool growing = true;
         int velocity = 0;
     };
+    /** A hit of the previous grid shrinking out at its old place after the resolution changed (an undo or redo across
+     *  a finer grid): it cannot live in hitMotions_, whose keys are steps of the current grid. */
+    struct LeavingHit {
+        int pitch = 0;
+        double startBeat = 0.0; ///< from the clip's start
+        double lengthBeats = 0.0;
+        int velocity = 0;
+        double startMs = 0.0;
+    };
 
     // DrumMachineComponent.cpp
     const synth::Clip* clip() const;
@@ -387,6 +403,11 @@ private:
     float flashAmount(drumgrid::CellKey key) const;
     void startRowMotion();
     juce::Rectangle<int> rectForKey(drumgrid::CellKey key) const;
+    /** The cell rectangle of row `row` for a span of the clip, whatever grid the span was cut on. */
+    juce::Rectangle<int> cellRectForSpan(int row, double startBeatInClip, double lengthBeats) const;
+    void startLeavingHits(const std::unordered_map<drumgrid::CellKey, drumgrid::CellHits>& previous, double stepBeats);
+    float leavingProgress(const LeavingHit& hit) const;
+    void paintLeavingHits(juce::Graphics& g, const LaneSlot& slot, int row, bool dense);
     void finishRowMotion();
 
     // DrumMachinePainting.cpp
@@ -533,6 +554,7 @@ private:
     double previewEnd_ = 0.0;
 
     std::unordered_map<drumgrid::CellKey, HitMotion> hitMotions_;
+    std::vector<LeavingHit> leavingHits_;
     std::unique_ptr<juce::Component> stateProbe_; ///< a hidden child that reports the grid to test mode
     std::set<drumgrid::CellKey> settledKeys_;     ///< cells a stroke just wrote: their preview motion carries on
     std::unordered_map<drumgrid::CellKey, double> flashes_;

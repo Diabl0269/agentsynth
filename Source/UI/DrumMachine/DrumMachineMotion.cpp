@@ -39,6 +39,25 @@ void DrumMachineComponent::beginHitMotion(drumgrid::CellKey key, bool growing, i
     startMotionClock();
 }
 
+void DrumMachineComponent::startLeavingHits(const std::unordered_map<drumgrid::CellKey, drumgrid::CellHits>& previous,
+                                            double stepBeats) {
+    if (!motionAllowed())
+        return;
+    for (const auto& [key, hits] : previous) {
+        const int pitch = static_cast<int>(key / 1000000);
+        if (hits.velocity <= 0 || rowOfPitch(pitch) < 0)
+            continue;
+        leavingHits_.push_back(
+            {pitch, static_cast<double>(key % 1000000) * stepBeats, stepBeats, hits.velocity, nowMs()});
+    }
+    if (!leavingHits_.empty())
+        startMotionClock();
+}
+
+float DrumMachineComponent::leavingProgress(const LeavingHit& hit) const {
+    return juce::jlimit(0.0f, 1.0f, static_cast<float>((nowMs() - hit.startMs) / hitMotionDuration()));
+}
+
 // A flash is not needed to understand anything, so Reduce Motion drops it.
 void DrumMachineComponent::beginFlash(drumgrid::CellKey key) {
     if (!motionAllowed() || prefersReducedMotion())
@@ -55,6 +74,7 @@ void DrumMachineComponent::startMotionClock() {
         vblank_, duration, [](float t) { return t; }, [this](float) { tickMotion(); },
         [this] {
             hitMotions_.clear();
+            leavingHits_.clear();
             flashes_.clear();
             ghostFades_.clear();
             staggerTailMs_ = 0.0;
@@ -67,12 +87,17 @@ void DrumMachineComponent::tickMotion() {
     const double hitMs = hitMotionDuration();
     for (const auto& [key, motion] : hitMotions_)
         repaint(rectForKey(key));
+    for (const auto& hit : leavingHits_)
+        repaint(cellRectForSpan(rowOfPitch(hit.pitch), hit.startBeat, hit.lengthBeats).expanded(2));
     for (const auto& [key, start] : flashes_)
         repaint(rectForKey(key));
     for (const auto& [key, start] : ghostFades_)
         repaint(rectForKey(key));
     for (auto it = hitMotions_.begin(); it != hitMotions_.end();)
         it = now - it->second.startMs >= hitMs ? hitMotions_.erase(it) : std::next(it);
+    leavingHits_.erase(std::remove_if(leavingHits_.begin(), leavingHits_.end(),
+                                      [now, hitMs](const LeavingHit& h) { return now - h.startMs >= hitMs; }),
+                       leavingHits_.end());
     for (auto it = flashes_.begin(); it != flashes_.end();)
         it = now - it->second >= kFlashMs ? flashes_.erase(it) : std::next(it);
     for (auto it = ghostFades_.begin(); it != ghostFades_.end();)
@@ -106,6 +131,19 @@ bool DrumMachineComponent::isHitMotionActive(int row, int step) const {
     return slotIndexForRow(row) >= 0 && hitMotions_.count(drumgrid::cellKey(slots_[(size_t)row].lane.pitch, step)) > 0;
 }
 
+float DrumMachineComponent::hitScaleForTest(int row, int step) const {
+    float alpha = 1.0f;
+    return slotIndexForRow(row) >= 0 ? hitScaleAt(drumgrid::cellKey(slots_[(size_t)row].lane.pitch, step), alpha)
+                                     : 1.0f;
+}
+
+void DrumMachineComponent::ageHitMotionsForTest(double ms) {
+    for (auto& [key, motion] : hitMotions_)
+        motion.startMs -= ms;
+    for (auto& hit : leavingHits_)
+        hit.startMs -= ms;
+}
+
 bool DrumMachineComponent::isFlashActive(int row, int step) const {
     return slotIndexForRow(row) >= 0 && flashes_.count(drumgrid::cellKey(slots_[(size_t)row].lane.pitch, step)) > 0;
 }
@@ -113,6 +151,7 @@ bool DrumMachineComponent::isFlashActive(int row, int step) const {
 void DrumMachineComponent::finishMotionsForTest() {
     motionAnim_.stop(vblank_);
     hitMotions_.clear();
+    leavingHits_.clear();
     flashes_.clear();
     ghostFades_.clear();
     changed_.clear();

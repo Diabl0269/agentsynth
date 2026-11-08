@@ -100,8 +100,15 @@ juce::Rectangle<int> DrumMachineComponent::cellBounds(int row, int step) const {
     if (c == nullptr || slotIndexForRow(row) < 0 || step < 0 || step >= getStepCount())
         return {};
     const double stepLen = getStepBeats();
-    const int x0 = static_cast<int>(std::lround(beatToX(c->startBeat + step * stepLen)));
-    const int x1 = static_cast<int>(std::lround(beatToX(c->startBeat + (step + 1) * stepLen)));
+    return cellRectForSpan(row, step * stepLen, stepLen);
+}
+
+juce::Rectangle<int> DrumMachineComponent::cellRectForSpan(int row, double startBeatInClip, double lengthBeats) const {
+    const auto* c = clip();
+    if (c == nullptr || slotIndexForRow(row) < 0)
+        return {};
+    const int x0 = static_cast<int>(std::lround(beatToX(c->startBeat + startBeatInClip)));
+    const int x1 = static_cast<int>(std::lround(beatToX(c->startBeat + startBeatInClip + lengthBeats)));
     const int height = rowHeightOf(slots_[(size_t)row]);
     const int inset = std::min(kCellInset, std::max(0, (x1 - x0 - 1) / 2));
     const int vInset = std::min(kCellInset, height / 4);
