@@ -60,4 +60,22 @@ inline const std::vector<PopoverUser>& popoverUsers() {
     return users;
 }
 
+/** A hover label that is painted, not a window: it draws the shared tooltip box (`paintTooltipBox` / `drawTooltip`)
+ *  itself, so it has no PopupHost or PopupMotion to fade it. `fadeOwner` is the token its file must name: the one
+ *  object that owns its alpha (ShownFade, or a class built on it), so it rises on show and falls on hide. */
+struct HoverLabelPainter {
+    const char* file;
+    const char* fadeOwner;
+};
+
+inline const std::vector<HoverLabelPainter>& hoverLabelPainters() {
+    static const std::vector<HoverLabelPainter> painters = {
+        // The chip under a knob, painted in ModuleComponent::paintOverChildren; ModDotTooltip's fade rides along.
+        {"Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp", "ModChipFade"},
+        // The tooltip window: its own window, faded by PopupMotion.
+        {"Source/UI/Layout/AppTooltipWindow.cpp", "beginFadeIn"},
+    };
+    return painters;
+}
+
 } // namespace synth::test

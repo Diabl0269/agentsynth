@@ -26,13 +26,7 @@ ModDotController::ModDotController(GraphEditor& editor, juce::Component& canvas)
     , tooltip_(canvas) {
     keyHideTimer_.fire = [this] { tooltip_.hide(); };
     // The readout is the chip under the knob, so the card it is on repaints as the readout changes.
-    tooltip_.onChanged = [this](juce::AudioProcessorGraph::NodeID card) {
-        for (auto* comp : editor_.getModuleComponents())
-            if (comp->getNodeId() == card) {
-                comp->repaint();
-                break;
-            }
-    };
+    tooltip_.onChanged = [this](juce::AudioProcessorGraph::NodeID card) { repaintCard(card); };
     // A click on the dot of the panel that is already open closes it.
     onModDotClicked = [this](juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor) {
         if (auto* open = getPopover(); open != nullptr && open->card() == card && open->destChannel() == destChannel) {
@@ -41,6 +35,18 @@ ModDotController::ModDotController(GraphEditor& editor, juce::Component& canvas)
         }
         openPopover(card, destChannel, anchor);
     };
+}
+
+// The chip under a knob follows the card's paint (ModChipFade::follow), so anything that decides whether it shows
+// (the readout, the dot's panel opening or closing) repaints the card, or a still pointer would leave it as it was.
+void ModDotController::repaintCard(juce::AudioProcessorGraph::NodeID card) {
+    if (onCardRepaint)
+        onCardRepaint(card);
+    for (auto* comp : editor_.getModuleComponents())
+        if (comp->getNodeId() == card) {
+            comp->repaint();
+            break;
+        }
 }
 
 juce::AudioProcessorGraph::NodeID ModDotController::chosenAttenuverter(juce::AudioProcessorGraph::NodeID card,

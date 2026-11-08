@@ -547,7 +547,12 @@ drawn in the knob-value-box mono font, each row on the tooltip's own box (`synth
 when it fits inside the card, flips above the knob when the knob is in the card's last row, and as a last resort is pushed
 up (or left) just far enough to stay whole (`synth::ui::modChipRowRects`, `synth::ui::modHoverChipRects`). While the
 knob's own sources panel is open the stack is not drawn: the panel lists the same sources, and the chip would peek out
-from under it (`synth::ui::modHoverChipShows`).
+from under it (`synth::ui::modHoverChipShows`). A left click on the dot (or Return on its button) opens the panel, and
+the chip fades out on that click through the same fade, stays gone while the panel is open and fades back in when it
+closes (Esc, a click away) with the pointer still on the knob: the dot's controller repaints the card whenever the
+panel opens or closes (`ModDotController::repaintCard`), because the chip follows the card's paint. Tests:
+`ModChipClickHideTests.cpp` (per-frame alpha under Full, Reduce Motion and Animations Off); scenario
+`mod-chip-hides-on-dot-click`.
 
 The same stack is the mod dot's [drag readout](#the-mod-dot-drag-an-amount-from-the-landing-dot): during a dot drag or key
 step it shows under that knob even when the pointer is not on it, and the dragged source's row shows the live amount.

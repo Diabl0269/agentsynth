@@ -83,6 +83,10 @@ public:
     void dotDoubleClicked(juce::AudioProcessorGraph::NodeID card, int destChannel, juce::Component& anchor);
     /** The editor's 30 Hz tick: the open panel follows the graph. */
     void tickPopover();
+    /** Repaints `card`, the one place the mod hover chip's show/hide is decided (modHoverChipShows). */
+    void repaintCard(juce::AudioProcessorGraph::NodeID card);
+    /** Test seam: called with the card each time repaintCard asks it to repaint. */
+    std::function<void(juce::AudioProcessorGraph::NodeID card)> onCardRepaint;
     /** Called by the panel as it goes away. */
     void popoverClosed(ModDotPopover* popover);
     void removeSource(juce::AudioProcessorGraph::NodeID card, int destChannel,
