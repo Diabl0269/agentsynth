@@ -223,6 +223,7 @@ TEST_F(SequencerModuleTest, VelocityAndGateAmountsScaleTheSteps) {
     run(*seq, true);
 
     juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear(); // an unpatched input reads silent
     juce::MidiBuffer midi;
     seq->processBlock(buffer, midi);
     int velocity = -1;

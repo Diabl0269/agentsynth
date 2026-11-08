@@ -7,7 +7,7 @@
 namespace synth {
 
 SequencerModuleBase::SequencerModuleBase(const char* name, bool poly)
-    : ModuleBase(name, 0, 0)
+    : ModuleBase(name, (int)kModTargets.size(), 0)
     , poly_(poly) {
     namespace ids = sequencer_ids;
     addParameter(runParam_ = new juce::AudioParameterBool(ids::kRun, "Run", false));
@@ -26,6 +26,8 @@ SequencerModuleBase::SequencerModuleBase(const char* name, bool poly)
                      ids::kScaleRoot, "Key", {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}, 0));
     addParameter(scaleParam_ = new juce::AudioParameterChoice(ids::kScale, "Scale", sequencerScaleChoices(), 0));
     addParameter(followParam_ = new juce::AudioParameterBool(ids::kFollowSongKey, "Follow Song Key", true));
+    mods_.bind(*this);
+    cables_.emplace(mods_, *transposeParam_, *gateParam_, *velocityParam_, *chanceParam_);
 
     auto pattern = SequencerPattern::makeDefault(poly_);
     pattern.seed = (std::uint32_t)juce::Random::getSystemRandom().nextInt();
@@ -191,10 +193,12 @@ void SequencerModuleBase::renderPattern(juce::AudioBuffer<float>& buffer, juce::
         }
         block = clock_.synced(info, settings.rateBeats);
     } else {
-        block = clock_.freeRunning(buffer.getNumSamples(), (double)bpmParam_->get(), sampleRate_, settings.rateBeats);
+        const double bpm = (double)mods_.valueAt(buffer, *bpmParam_, 0);
+        block = clock_.freeRunning(buffer.getNumSamples(), bpm, sampleRate_, settings.rateBeats);
     }
 
-    player_.renderBlock(block, *pattern, snap_, settings, midiMessages, buffer.getNumSamples());
+    cables_->attach(buffer);
+    player_.renderBlock(block, *pattern, snap_, settings, midiMessages, buffer.getNumSamples(), &*cables_);
     currentActiveStep.store(player_.activeStep());
 }
 

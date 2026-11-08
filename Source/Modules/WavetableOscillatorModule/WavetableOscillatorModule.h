@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../GateEdges.h"
+#include "../ModTargetList.h"
 #include "../ModuleBase.h"
 #include "../RestartGhosts.h"
 #include "../UnisonMix.h"
@@ -72,12 +73,16 @@ public:
     static constexpr int kNumModCV = kJackGate - 1;              // every jack except Pitch and Gate
     static constexpr int kPolyModCVBase = kNumVoices;            // poly shared-CV block start
     static constexpr int kGateBase = kPolyModCVBase + kNumModCV; // 23: poly Gate fan, 8 wide
-    static constexpr int kNumInputs = kGateBase + kNumVoices;    // 31
+    static constexpr int kJackInputs = kGateBase + kNumVoices;   // 31: the jacks' channels, mono and poly
+    /** The knobs that take a cable and have no jack, one channel each after the jacks. Append only. */
+    static constexpr std::array<synth::ModTargetSpec, 1> kModTargets{{{"unison", synth::ModRead::NoteOn}}};
+    static constexpr int kUnisonCvChannel = kJackInputs; // 31, the same in mono and poly
+    static constexpr int kNumInputs = kJackInputs + (int)kModTargets.size();
     // A LITERAL, not derived from the input count: it must never move, saved Audio R routings depend on
     // raw output channel 23. The poly Gate fan aliases the Audio R block exactly (like the Oscillator's
     // ch14-19), so it is scanned before any write or clear.
     static constexpr int kRightBase = 23;
-    static constexpr int kNumOutputs = kRightBase + kNumVoices; // 31
+    static constexpr int kNumOutputs = kNumInputs; // 32: audio to 30, then silent pass-through channels
     static_assert(kNumOutputs >= kNumInputs, "outputs must cover every input channel");
 
     /** Raw channel carrying jack `jack`'s CV, for the current voice mode. */
@@ -176,11 +181,10 @@ public:
     static const juce::String* jackParamIds();
 
     std::vector<ModulationTarget> getModulationTargets() const override;
-    juce::String modulationRefusal(const juce::String& paramId) const override {
-        return paramId == "unison" ? "Unison takes no mod cable: it sets a whole number of voices" : juce::String();
-    }
 
     juce::String getInputPortLabel(int i) const override {
+        if (mods_.ownsChannel(i))
+            return mods_.label(i);
         return (i >= 0 && i < kNumJacks) ? jackLabels()[i] : ModuleBase::getInputPortLabel(i);
     }
     juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
@@ -834,6 +838,10 @@ private:
     /** Tracks the block's MIDI note-ons: the pitch now, the restart at each note-on's own sample. */
     void scanMidi(const juce::MidiBuffer& midi, int numSamples);
 
+    /** Settles this block's voice count before it is gathered (WavetableOscillatorModuleUnison.cpp). */
+    void holdUnisonCable(const juce::AudioBuffer<float>& buffer, bool poly, int numSamples);
+    int firstNoteStart(const float* pitchCV, bool poly, int numSamples) const;
+
     /** Fills freqRamp with a voice's smoothed per-sample frequency in Hz. */
     void fillFrequencyRamp(VoiceState& voice, float targetHz, int numSamples);
 
@@ -916,6 +924,10 @@ private:
     juce::AudioParameterFloat* levelParam = nullptr;
     juce::AudioParameterBool* polyParam = nullptr;
     juce::AudioParameterInt* unisonParam = nullptr;
+    synth::ModTargetList mods_{kModTargets, kJackInputs};
+    int heldUnison_ = -1;   ///< the voice count the Unison cable set at the last note start; -1 while the knob rules
+    bool noteSeen_ = false; ///< a note has started since prepareToPlay
+    int unisonNow_ = 1;     ///< the voice count this block renders
     juce::AudioParameterFloat* detuneParam = nullptr;
     juce::AudioParameterChoice* warpParam = nullptr;
     juce::AudioParameterFloat* warpAmountParam = nullptr;

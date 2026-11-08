@@ -3,6 +3,7 @@
 #include "../Transport/TransportService.h"
 #include "FX/BrickwallCeiling.h"
 #include "Mixer/PeakMeterLatch.h"
+#include "ModTargetList.h"
 #include "ModuleBase.h"
 #include <array>
 #include <atomic>
@@ -52,6 +53,9 @@ public:
     static constexpr int kDirectLeft = 2;
     static constexpr int kDirectRight = 3;
     static constexpr int kNumInputs = 4;
+    /** The Gain knob's cable, on the channel after the four audio inputs; no jack on the card. */
+    static constexpr std::array<synth::ModTargetSpec, 1> kModTargets{{{"gain", synth::ModRead::Live}}};
+    static constexpr int kGainCvChannel = kNumInputs;
     static constexpr int kNumOutputs = 2;
 
     static constexpr float kMinGainDb = -60.0f;
@@ -63,11 +67,12 @@ public:
     static constexpr const char* kSafetyLimiterTooltip = "Keeps the master from clipping: limits peaks to -1 dB";
 
     MasterModule()
-        : ModuleBase("Master", kNumInputs, kNumOutputs, StereoAudio::Declared) {
+        : ModuleBase("Master", kNumInputs + (int)kModTargets.size(), kNumOutputs, StereoAudio::Declared) {
         addParameter(gainParam_ = new juce::AudioParameterFloat(
                          "gain", "Gain", juce::NormalisableRange<float>(kMinGainDb, kMaxGainDb, 0.1f), 0.0f));
         addParameter(safetyLimiterParam_ = new juce::AudioParameterBool(kSafetyLimiterId, "Safety limiter", true));
         addMuteParameter();
+        mods_.bind(*this);
     }
 
     ~MasterModule() override = default;
@@ -103,7 +108,7 @@ public:
         }
 
         sumDirectIntoMix(buffer, numSamples);
-        smoothedGain_.setTargetValue(targetGain());
+        smoothedGain_.setTargetValue(targetGain(blockCV(buffer, kGainCvChannel)));
         auto* left = buffer.getWritePointer(kMixLeft);
         auto* right = buffer.getWritePointer(kMixRight);
         for (int i = 0; i < numSamples; ++i) {
@@ -125,11 +130,14 @@ public:
     bool bypassPassesInputThrough() const override { return false; }
     ModuleType getModuleType() const override { return ModuleType::Master; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Other; }
+    std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
 
     int getVisibleInputPortCount() const override { return isDualIO() ? kNumInputs : 2; }
     int getVisibleOutputPortCount() const override { return kNumOutputs; }
 
     juce::String getInputPortLabel(int visibleJack) const override {
+        if (mods_.ownsChannel(visibleJack))
+            return mods_.label(visibleJack);
         if (!isDualIO())
             return visibleJack == 0 ? "Mix" : "Direct";
         switch (visibleJack) {
@@ -146,6 +154,9 @@ public:
     juce::String getOutputPortLabel(int visibleJack) const override { return visibleJack == 1 ? "Right" : "Left"; }
 
     LogicalPort mapInputChannel(int rawChannel) const override {
+        if (mods_.ownsChannel(rawChannel)) {
+            return mods_.portOf(rawChannel);
+        }
         if (isDualIO())
             return audioJack(rawChannel, kNumInputs);
         // Collapsed: raw (0,1) is jack 0 and raw (2,3) is jack 1, each a contiguous stereo pair
@@ -175,7 +186,9 @@ private:
         return p;
     }
 
-    float targetGain() const { return juce::Decibels::decibelsToGain(gainParam_->get(), kMinGainDb); }
+    float targetGain(float cv = 0.0f) const {
+        return juce::Decibels::decibelsToGain(modulateNormalised(*gainParam_, gainParam_->get(), cv), kMinGainDb);
+    }
 
     bool isDirectGatedThisBlock() const {
         auto* transport = dynamic_cast<synth::TransportService*>(getPlayHead());
@@ -199,6 +212,7 @@ private:
     }
 
     juce::AudioParameterFloat* gainParam_ = nullptr;
+    synth::ModTargetList mods_{kModTargets, kGainCvChannel};
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGain_{1.0f};
     juce::AudioParameterBool* safetyLimiterParam_ = nullptr;
     synth::BrickwallCeiling safetyLimiter_;

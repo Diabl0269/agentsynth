@@ -267,7 +267,8 @@ TEST(StereoDeclaration, MuteAndCVClearHoldForEveryDualIOCapableModuleInBothState
                         if (takesAudio)
                             ASSERT_GE(t.channelIndex, 2) << "an inferred stereo pair owns ch0/ch1, so a CV jack "
                                                             "cannot sit below ch2";
-                        if (t.channelIndex < channels)
+                        // A cable channel above the outputs (the Master's Gain) never reaches an output.
+                        if (t.channelIndex < std::min(channels, mb->getTotalNumOutputChannels()))
                             EXPECT_LT(rmsOf(buffer, t.channelIndex), 1.0e-6f)
                                 << "CV channel " << t.channelIndex << " (" << t.name
                                 << ") leaked, bypassed=" << bypassed;

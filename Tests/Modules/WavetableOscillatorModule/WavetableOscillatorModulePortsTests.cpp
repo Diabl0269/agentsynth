@@ -49,7 +49,7 @@ TEST_F(WavetableOscillatorModuleTest, PortLabelsAndModulationTargets) {
     // Mono lists every jack including Pitch but not Gate (a trigger, not a mod target); poly drives
     // pitch from the fan instead.
     const auto mono = module->getModulationTargets();
-    ASSERT_EQ(mono.size(), (size_t)WT::kNumJacks - 1);
+    ASSERT_EQ(mono.size(), (size_t)WT::kNumJacks - 1 + WT::kModTargets.size()); // and the cable-only knobs
     EXPECT_EQ(mono[WT::kJackPosition].name, "Position");
     EXPECT_EQ(mono[WT::kJackPosition].channelIndex, WT::kJackPosition);
     EXPECT_EQ(mono[WT::kJackWarp].name, "Warp");
@@ -57,11 +57,13 @@ TEST_F(WavetableOscillatorModuleTest, PortLabelsAndModulationTargets) {
 
     setBool(*module, "poly", true);
     const auto poly = module->getModulationTargets();
-    ASSERT_EQ(poly.size(), (size_t)WT::kNumModCV);
+    ASSERT_EQ(poly.size(), (size_t)WT::kNumModCV + WT::kModTargets.size());
     EXPECT_EQ(poly[0].name, "Position");
     EXPECT_EQ(poly[0].channelIndex, WT::kPolyModCVBase);
-    EXPECT_EQ(poly.back().name, "Sync");
-    EXPECT_EQ(poly.back().channelIndex, WT::kGateBase - 1);
+    EXPECT_EQ(poly[poly.size() - 2].name, "Sync");
+    EXPECT_EQ(poly[poly.size() - 2].channelIndex, WT::kGateBase - 1);
+    EXPECT_EQ(poly.back().name, "Unison");
+    EXPECT_TRUE(poly.back().knobOnly);
 }
 
 // Channels that existed before issue #180 must not have moved: a patch saved against the old

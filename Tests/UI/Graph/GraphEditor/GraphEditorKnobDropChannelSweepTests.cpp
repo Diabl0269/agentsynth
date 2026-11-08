@@ -8,6 +8,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
 #include "Modules/ModuleBase.h"
+#include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <gtest/gtest.h>
@@ -38,6 +39,20 @@ bool shownOnCard(const juce::Component* c, const juce::Component& card) {
         if (!c->isVisible())
             return false;
     return c == &card;
+}
+
+// Brings `knob` into view: the tab holding it, or the More row when the layout keeps it out of the body.
+void showKnob(ModuleComponent& card, juce::Component& knob) {
+    auto* body = card.getCardBody();
+    if (body == nullptr || shownOnCard(&knob, card))
+        return;
+    const auto& plan = body->getPlan();
+    for (int g = 0; g < (int)plan.tabGroups.size() && !shownOnCard(&knob, card); ++g)
+        for (int t = 0; t < (int)plan.tabGroups[(size_t)g].sections.size() && !shownOnCard(&knob, card); ++t)
+            body->selectTab(g, t);
+    if (!shownOnCard(&knob, card))
+        if (auto* more = card.findChildWithID("cardMoreRow"); more != nullptr && more->isVisible())
+            more->keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
 }
 
 // A fresh engine with an LFO and one module of `typeName`, so one drop never sees the cable of another.
@@ -92,7 +107,8 @@ struct KnobDrop {
 
 } // namespace
 
-// Regression test for FRO1622: a cable dropped on a Pluck or Mallet knob landed on Level
+// Regression test: a cable dropped on a Pluck or Mallet knob landed on Level; a cable-only knob (Wavetable Unison,
+// Oscillator Phase, Sequencer settings, Channel Strip, Master, Macros) landed on another channel or none.
 TEST_F(GraphEditorTest, ACableDroppedOnAnyKnobOfAnyModuleLandsOnThatKnobsOwnChannel) {
     int dropped = 0;
     for (const auto& typeName : synth::AIStateMapper::moduleFactoryTypeNames()) {
@@ -112,8 +128,10 @@ TEST_F(GraphEditorTest, ACableDroppedOnAnyKnobOfAnyModuleLandsOnThatKnobsOwnChan
             auto* knob = sliderWithId(*drop.card, target.name);
             if (knob == nullptr)
                 knob = sliderWithId(*drop.card, target.paramId);
+            if (knob != nullptr)
+                showKnob(*drop.card, *knob);
             if (knob == nullptr || !shownOnCard(knob, *drop.card) || knob->getBounds().isEmpty())
-                continue; // a folded row, a hidden page or a control the card does not show
+                continue; // a control the card does not show, even after opening its tab and More row
             const auto landed = drop.dropOn(*knob);
             if (landed.empty() && drop.status.isNotEmpty())
                 continue; // refused with a status message saying why (a whole-number control)

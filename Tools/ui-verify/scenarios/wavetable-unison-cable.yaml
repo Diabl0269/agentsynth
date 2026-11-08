@@ -1,0 +1,47 @@
+# The Wavetable's Unison knob takes a modulation cable: the card lists it, the knob keeps its own value, and the cable
+# sets the voice count at each note start.
+#
+# What a user does: adds a Wavetable and an LFO from the library (Cmd+F), drags the LFO output onto Unison, plays a few
+# notes on the computer keyboard, and sees the cable on the card. The voice count itself is covered by
+# WavetableUnisonCable (offline render).
+# Needs the app to be the active application (the library search field must have keyboard focus).
+record: true
+save_project: fro1556 wavetable unison cable
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "wavetable"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - click: {id: "card:Wavetable > cardTabStrip", x: 10}   # the Tune tab, already shown: focuses the strip
+  - key: {keys: right}                                      # the Unison tab
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Wavetable > Unison"}
+  - wait: {}
+  - expect: {id: "card:Wavetable", contains: {cabledTargets: Unison}, within_ms: 3000}
+  - key: {keys: a}
+  - wait: {}
+  - key: {keys: s}
+  - wait: {}
+  - key: {keys: d}
+  - wait: {}
+  - mark: {check: 1, name: unison-cable}

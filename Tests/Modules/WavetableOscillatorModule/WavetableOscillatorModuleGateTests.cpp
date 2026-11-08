@@ -146,9 +146,9 @@ TEST_F(WavetableGateTest, GateChannelsAreMappedInBothModesAndAudioRStaysPut) {
     EXPECT_EQ(module->getInputPortLabel(WT::kJackGate), "Restart");
     EXPECT_EQ(module->getVisibleInputPortCount(), WT::kNumJacks);
     EXPECT_EQ(WT::kNumModCV, 15);
-    EXPECT_EQ(WT::kNumInputs, 31);
+    EXPECT_EQ(WT::kNumInputs, 32);
     EXPECT_EQ(WT::kRightBase, 23) << "saved Audio R routings key off raw output channel 23";
-    EXPECT_EQ(WT::kNumOutputs, 31);
+    EXPECT_EQ(WT::kNumOutputs, 32);
     EXPECT_EQ(module->mapOutputChannel(WT::kRightBase).visibleJackIndex, 1);
 
     for (const auto& t : module->getModulationTargets())

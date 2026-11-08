@@ -71,6 +71,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     // before the clear below touches those channels. See readGlobalParamCV.
     const GlobalParamCV global = readGlobalParamCV(buffer, numSamples);
     fixedRateCv_ = global.fixedRateCv;
+    cacheRestartCV(buffer, numSamples);
 
     // The Gate edges are found now, before the clear below wipes ch20: each one restarts voice 0 like a
     // MIDI note-on, through the same per-sample restart list.
@@ -126,7 +127,7 @@ void OscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer, juce::M
     for (int i = 0; i < numSamples; ++i) {
         // A note-on restarts the phases at its own sample.
         while (nextRestart < numRestarts && restartOffsets[(size_t)nextRestart] <= i) {
-            restartVoice(voices[0], /*fadeFromOld*/ true, restartLeads[(size_t)nextRestart]);
+            restartVoice(voices[0], /*fadeFromOld*/ true, restartLeads[(size_t)nextRestart], i);
             ++nextRestart;
         }
 

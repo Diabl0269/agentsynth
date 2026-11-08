@@ -1,6 +1,6 @@
 // A cable dropped on a knob, through the real drop path: the Level of Drum Kit, Pluck and Mallet takes it (a
-// modulation into the module's Level channel), and the Wavetable's Unison refuses it with a status message saying why
-// and connects nothing.
+// modulation into the module's Level channel), and so does the Wavetable's Unison (its own channel, read when a note
+// starts).
 
 #include "AudioEngine/AudioEngine.h"
 #include "GraphEditorTestHelpers.h"
@@ -12,7 +12,6 @@
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include <functional>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -120,7 +119,8 @@ TEST_F(GraphEditorTest, ACableDroppedOnAnInstrumentsLevelModulatesIt) {
     }
 }
 
-TEST_F(GraphEditorTest, ACableDroppedOnTheWavetablesUnisonIsRefusedOutLoud) {
+// Regression test for FRO1556: the Wavetable's Unison refused a cable; it now connects one on its own channel.
+TEST_F(GraphEditorTest, ACableDroppedOnTheWavetablesUnisonConnects) {
     Drop drop(std::make_unique<WavetableOscillatorModule>());
     ASSERT_NE(drop.targetCard, nullptr);
     auto* unison = sliderWithId(*drop.targetCard, "Unison");
@@ -135,7 +135,8 @@ TEST_F(GraphEditorTest, ACableDroppedOnTheWavetablesUnisonIsRefusedOutLoud) {
     ASSERT_TRUE(shownOnCard(unison, *drop.targetCard)) << "the Unison knob must be on the card to be dropped on";
     const int before = drop.connectionsIntoTarget();
     drop.onto(*unison);
-    EXPECT_EQ(drop.connectionsIntoTarget(), before) << "nothing connects";
-    EXPECT_EQ(drop.status, "Unison takes no mod cable: it sets a whole number of voices");
+    EXPECT_EQ(drop.connectionsIntoTarget(), before + 1) << "the cable connects";
+    EXPECT_EQ(drop.connectionsInto(WavetableOscillatorModule::kUnisonCvChannel), 1) << "on the Unison channel";
+    EXPECT_TRUE(drop.status.isEmpty()) << drop.status;
     drop.engine.shutdown();
 }

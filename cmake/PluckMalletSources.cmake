@@ -3,7 +3,6 @@
 # knob-cable list every instrument declares its cables with) lives here for the same reason.
 target_sources(Core PRIVATE
     Source/Modules/ModTargetList.cpp
-    Source/Modules/ModTargetList.h
     Source/Modules/InstrumentVoiceUtil.h
     Source/Modules/Pluck/PluckModule.cpp
     Source/Modules/Pluck/PluckModule.h

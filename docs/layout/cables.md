@@ -217,7 +217,8 @@ on the same release (a collapsed macro's card, a plugin's knob picker).
 A knob that takes no mod cable on purpose says why the same way: a module names it in
 `ModuleBase::modulationRefusal(paramId)`, and a cable released on that knob (found by
 `ModuleComponent::getModRefusalForPoint` through the card's learnable registry) makes no cable and shows the reason.
-The Wavetable's Unison is the one today: "Unison takes no mod cable: it sets a whole number of voices".
+No module names one today: every knob that can be modulated takes a cable (the rest are wiring switches and
+choices, which have no knob to drop on).
 
 ## Hover
 

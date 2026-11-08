@@ -45,6 +45,14 @@ std::vector<ModulationTarget> ModTargetList::targets() const {
     return out;
 }
 
+LogicalPort ModTargetList::portOf(int channel) const {
+    LogicalPort port;
+    port.visibleJackIndex = channel;
+    port.role = PortRole::ModCV;
+    port.isPolyGroupHead = true;
+    return port;
+}
+
 juce::String ModTargetList::label(int channel) const {
     const auto* param = paramOn(channel);
     return param != nullptr ? param->getName(64) : juce::String();

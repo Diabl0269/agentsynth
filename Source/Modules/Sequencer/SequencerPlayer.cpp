@@ -1,4 +1,5 @@
 #include "SequencerPlayer.h"
+#include "SequencerCables.h"
 #include <algorithm>
 #include <cmath>
 
@@ -171,7 +172,7 @@ void SequencerPlayer::playHit(const Hit& hit, const SequencerPattern& pattern, c
 
 void SequencerPlayer::renderBlock(const SequencerClockBlock& block, const SequencerPattern& pattern,
                                   const SequencerScaleSnap& snap, const SequencerSettings& settings,
-                                  juce::MidiBuffer& midi, int numSamples) {
+                                  juce::MidiBuffer& midi, int numSamples, const SequencerCables* cables) {
     hitCount_ = 0;
     const int steps = std::clamp(settings.steps, 1, kMaxSequencerSteps);
     SequencerSettings safe = settings;
@@ -185,7 +186,8 @@ void SequencerPlayer::renderBlock(const SequencerClockBlock& block, const Sequen
     const double samplesPerUnit = block.count > 0 ? block.segments[0].samplesPerUnit : 1.0;
     for (int i = 0; i < hitCount_; ++i) {
         emitDue(hits_[(size_t)i].offset, midi);
-        playHit(hits_[(size_t)i], pattern, snap, safe, samplesPerUnit, midi);
+        const auto atHit = cables != nullptr ? cables->at(safe, hits_[(size_t)i].offset) : safe;
+        playHit(hits_[(size_t)i], pattern, snap, atHit, samplesPerUnit, midi);
     }
     endBlock(numSamples, midi);
 }

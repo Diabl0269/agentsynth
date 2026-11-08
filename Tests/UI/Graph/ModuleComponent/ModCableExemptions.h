@@ -25,25 +25,11 @@ inline const std::vector<Exemption>& exemptions() {
             for (const auto& id : ids)
                 out.push_back({type, id, reason, slider});
         };
-        add("Oscillator", {"phase", "randomPhase"},
-            "read once when a note starts, so a cable would have nothing to modulate");
-        add("Wavetable", {"unison"},
-            "a whole number of voices, not a plain amount: a cable dropped on it is refused with a status message");
-        for (const auto* sequencer : {"Sequencer", "Poly Sequencer"})
-            add(sequencer, {"bpm", "transpose", "gate", "velocity", "chance"},
-                "read per step by the sequencer's own clock, not continuously");
         add("MIDI Keyboard", {"octave"}, "a whole octave number that shifts the keys, not a plain amount", false);
         for (const auto* sequencer : {"Sequencer", "Poly Sequencer"})
             add(sequencer, {"steps"}, "a whole step count that changes the pattern's length, not a plain amount",
                 false);
         add("Macros", {"macroCount"}, "how many macro knobs the card shows, not a sound setting");
-        for (int i = 1; i <= 16; ++i)
-            add("Macros", {"macro" + std::to_string(i)}, "a macro knob is itself a modulation source");
-        add("Channel Strip",
-            {"gain", "pan", "send1Level", "send2Level", "send3Level", "send4Level", "send1Pan", "send2Pan", "send3Pan",
-             "send4Pan"},
-            "the strip's channel layout is frozen, with its send legs on fixed channels");
-        add("Master", {"gain"}, "the strip's channel layout is frozen, with its send legs on fixed channels");
         return out;
     }();
     return all;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ModTargetList.h"
 #include "ModuleBase.h"
 #include "Modules/ParameterText.h"
 #include <array>
@@ -17,15 +18,37 @@
  * lifetime of the node — JUCE fixes the bus layout at construction, and rebuilding it would drop
  * every existing graph connection — so the visible bank size is a *parameter* (`macroCount`).
  * Channels at or above it are cleared every block and hidden by getVisibleOutputPortCount().
+ *
+ * Every macro knob takes a cable too (kModTargets, no jack on the card): input channel i moves knob i, read at the
+ * block's first sample before that channel is overwritten with the macro's own output.
  */
 class MacroControlModule : public ModuleBase {
 public:
     static constexpr int kMaxMacros = 16;
     static constexpr int kMinMacros = 1;
     static constexpr int kDefaultMacros = 8;
+    /** Macro i+1's knob cable is input channel i. Append only. */
+    static constexpr std::array<synth::ModTargetSpec, kMaxMacros> kModTargets{{
+        {"macro1", synth::ModRead::Live},
+        {"macro2", synth::ModRead::Live},
+        {"macro3", synth::ModRead::Live},
+        {"macro4", synth::ModRead::Live},
+        {"macro5", synth::ModRead::Live},
+        {"macro6", synth::ModRead::Live},
+        {"macro7", synth::ModRead::Live},
+        {"macro8", synth::ModRead::Live},
+        {"macro9", synth::ModRead::Live},
+        {"macro10", synth::ModRead::Live},
+        {"macro11", synth::ModRead::Live},
+        {"macro12", synth::ModRead::Live},
+        {"macro13", synth::ModRead::Live},
+        {"macro14", synth::ModRead::Live},
+        {"macro15", synth::ModRead::Live},
+        {"macro16", synth::ModRead::Live},
+    }};
 
     MacroControlModule()
-        : ModuleBase("Macros", 0, kMaxMacros) // no inputs; one CV output per macro
+        : ModuleBase("Macros", kMaxMacros, kMaxMacros) // one knob cable in and one CV out per macro
     {
         addParameter(countParam =
                          new juce::AudioParameterInt("macroCount", "Knobs", kMinMacros, kMaxMacros, kDefaultMacros));
@@ -37,6 +60,7 @@ public:
                              0.0f, synth::fractionPercentAttributes()));
 
         addMuteParameter();
+        mods_.bind(*this);
     }
 
     void prepareToPlay(double sampleRate, int /*samplesPerBlock*/) override {
@@ -65,7 +89,7 @@ public:
         const int active = juce::jmin(countParam->get(), numChannels);
 
         for (int i = 0; i < active; ++i) {
-            smoothed[(size_t)i].setTargetValue(outputFor(i));
+            smoothed[(size_t)i].setTargetValue(outputFor(i, blockCV(buffer, i)));
             auto* out = buffer.getWritePointer(i);
             for (int s = 0; s < numSamples; ++s)
                 out[s] = smoothed[(size_t)i].getNextValue();
@@ -85,6 +109,9 @@ public:
     //==============================================================================
 
     int getVisibleInputPortCount() const override { return 0; }
+    juce::String getInputPortLabel(int i) const override { return mods_.label(i); }
+    LogicalPort mapInputChannel(int rawChannel) const override { return mods_.portOf(rawChannel); }
+    std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
     int getVisibleOutputPortCount() const override { return countParam->get(); }
 
     juce::String getOutputPortLabel(int i) const override {
@@ -129,14 +156,15 @@ public:
     static juce::String macroName(int index) { return "M" + juce::String(index + 1); }
 
 private:
-    float outputFor(int index) const {
-        const float knob = macroParams[(size_t)index]->get();
+    float outputFor(int index, float cv = 0.0f) const {
+        const float knob = modulateNormalised(*macroParams[(size_t)index], macroParams[(size_t)index]->get(), cv);
         return bipolarParam->get() ? (knob * 2.0f - 1.0f) : knob;
     }
 
     juce::AudioParameterInt* countParam = nullptr;
     juce::AudioParameterBool* bipolarParam = nullptr;
     std::array<juce::AudioParameterFloat*, kMaxMacros> macroParams{};
+    synth::ModTargetList mods_{kModTargets};
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, kMaxMacros> smoothed{};
 
     double currentSampleRate = 44100.0;

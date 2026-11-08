@@ -113,9 +113,9 @@ void OscillatorModule::addRestartOffset(int offset, float lead) {
 // whole number of samples would otherwise land unevenly, which is grit); and the hand-over shortens, because a
 // 64-sample fade covers most of a fast master's cycle and averages the wave down to a quiet, dull remnant instead of a
 // sync sound.
-void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld, float lead) {
-    const float startPhase = phaseParam->get() / 360.0f;
-    const float randomAmount = randomPhaseParam->get() * 0.01f;
+void OscillatorModule::restartVoice(VoiceState& voice, bool fadeFromOld, float lead, int sample) {
+    const float startPhase = startPhaseDegreesAt(sample) / 360.0f;
+    const float randomAmount = randomPhasePercentAt(sample) * 0.01f;
     const bool syncing = voice.sync.noteRestart(syncEdgeSamples, fadeFromOld, lead);
 
     if (!fadeFromOld) {

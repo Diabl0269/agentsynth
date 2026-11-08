@@ -763,7 +763,7 @@ Changing `Knobs` resizes the module in place, anchored at its top-left, at `Layo
 
 ## Master Module (Mix Bus, Hidden)
 
-`Source/Modules/MasterModule.h`. The mix bus every channel strip feeds, spliced in front of Rec Tap / Audio Output by `synth::ensureMasterNode` when the first channel is created (see [`architecture/app-wiring.md`](../architecture/app-wiring.md#audio-recording) (Audio recording) for the splice).
+`Source/Modules/MasterModule.h`. The mix bus every channel strip feeds, spliced in front of Rec Tap / Audio Output by `synth::ensureMasterNode` when the first channel is created (see [`architecture/app-wiring.md`](../architecture/app-wiring.md#audio-recording) (Audio recording) for the splice). Its Gain takes a knob-only cable on raw channel 4 (after the four audio inputs), read live every block.
 
 - **Ports**: 4 in — `Mix L`/`Mix R` (ch0/1, where strips land) and `Direct L`/`Direct R` (ch2/3, whatever went straight to the output before the splice); 2 out, `Left`/`Right`. No MIDI. Input-side Dual I/O (`StereoAudio::Declared`, ships split): collapsed it shows `Mix` and `Direct`, each one stereo jack over a contiguous pair; the outputs never collapse.
 - **Parameters**: `gain` (dB, −60…+12), `safetyLimiter` (default ON, also for a project saved without it), `muted`. Direct is summed into Mix **before** the fader.

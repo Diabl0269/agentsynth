@@ -43,7 +43,7 @@ SequencerStep    { pitch 0-127, on, gate 0.05-1, velocity 1-127, chance 0-100, r
 
 | ID | Type, range | Default | Notes |
 | :-- | :-- | :-- | :-- |
-| `run`, `bpm`, `syncToTransport` | as before | off, 120, off | |
+| `run`, `bpm`, `syncToTransport` | as before | off, 120, off | BPM, Transpose, Gate, Velocity and Chance take knob-only cables on raw channels 0-4; Transpose, Gate, Velocity and Chance are sampled at each step on the step's own sample and never written into the parameter, BPM is read every block |
 | `steps` | int 1-128 | 8 | Steps that play before the pattern wraps |
 | `rate` | choice, the shared note-length list | `1/4` | Step length; `1/4` with 8 steps is round 1 |
 | `transpose` | int -24..24 | 0 | Semitones, before the scale snap |

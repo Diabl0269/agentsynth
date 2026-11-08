@@ -8,6 +8,7 @@ target_sources(Core PRIVATE
     Source/Modules/Oscillator/OscillatorModuleNotes.cpp
     Source/Modules/Oscillator/OscillatorModulePoly.cpp
     Source/Modules/Oscillator/OscillatorModuleRate.cpp
+    Source/Modules/Oscillator/OscillatorModuleRestartCv.cpp
     Source/Modules/Oscillator/OscillatorModuleVoicing.cpp
     Source/Modules/Oscillator/OscillatorModuleWaves.cpp
     Source/Modules/Oscillator/HeldNotes.h
@@ -16,5 +17,6 @@ target_sources(Core PRIVATE
     Source/Modules/UnisonMix.h
     Source/Modules/RestartGhosts.h
     Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleNotes.cpp
+    Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleUnison.cpp
     Source/Modules/WavetableOscillatorModule/WavetableOscillatorModuleVoicing.cpp
 )
