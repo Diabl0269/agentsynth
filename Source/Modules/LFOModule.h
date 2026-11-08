@@ -380,6 +380,9 @@ public:
     /** The Custom wave's shapes on the morph map. */
     const synth::LfoCustomShapes& getCustomShapes() const noexcept { return shapes_.getShapes(); }
     void setCustomShapes(const synth::LfoCustomShapes& shapes) { shapes_.setShapes(shapes); }
+    /** Fixes the S&H dice, so a test can render the same random steps twice. Audio-thread unsafe: call before playing.
+     */
+    void seedRandom(juce::int64 seed) { random.setSeed(seed); }
     /** Bumped by every setCustomWave/setCustomShapes call -- the card polls this against its own last-seen value
      *  to reverse-sync after an undo/redo or preset load it didn't itself just write. */
     int getCustomWaveGeneration() const noexcept { return shapes_.getGeneration(); }

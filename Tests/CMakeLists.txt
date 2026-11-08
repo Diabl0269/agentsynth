@@ -407,6 +407,7 @@ add_executable(Tests
     FX/PitchShifterModuleTests.cpp
     FX/ParametricEQ/ParametricEQModuleTests.cpp
     FX/ParametricEQ/ParametricEQCVTests.cpp
+    FX/ParametricEQ/ParametricEQAudibleTests.cpp
     Modules/VoiceMixerModuleTests.cpp
     FX/BitcrusherModuleTests.cpp
     FX/RingModulatorModuleTests.cpp
@@ -459,6 +460,7 @@ add_executable(Tests
     Project/PresetManagerTests.cpp
     Project/SettingsMigrationTests.cpp
     Modules/ModuleBypassTests.cpp
+    Modules/ModuleParamAudibleTests.cpp
     Modules/BypassTests.cpp
     Engine/VisualSignalFlowTests.cpp
     FX/DistortionSweepTests.cpp
