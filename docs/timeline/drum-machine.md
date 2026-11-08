@@ -81,7 +81,7 @@ an empty cell it only adds, started on a hit it only removes, so crossing a hit 
 the first 3 px decide: more sideways than up or down is an erase, otherwise it is a loudness drag. The pointer is
 sampled every half cell between two mouse events, so a fast drag skips no cell. Nothing is written while the button is
 down: added hits show in their row, growing in with a faint accent outline, and removed ones shrink out. Release writes
-the whole stroke as ONE undo step; Escape drops it. Each new hit sounds once, at most one every 40 ms. Under Reduce
+the whole stroke as ONE undo step and the hits keep the size they had (the previewed motions carry on into the written cells: no second grow-in, no flash back for erased ones); Escape drops it. Each new hit sounds once, at most one every 40 ms. Under Reduce
 Motion they fade in instead of growing. A stroke is announced ("Added 8 hits", "Removed 3 hits"); the keyboard form is one undo
 step per key press. The shortcuts are the rebindable actions `drumMachineCarryRight` and `drumMachineCarryLeft`.
 
@@ -299,7 +299,10 @@ they are reached with the pointer.
 
 ## Motion
 
-Hits grow in over 110 ms and shrink out when removed; rows arriving or leaving animate too. Everything is
+Hits grow in over 110 ms and shrink out when removed; rows arriving or leaving animate too. Undo and redo take the
+same path, because the grid follows every document change: the hits an idea added shrink out and the ones it
+replaced grow back. When the change moved the grid's resolution (an idea lifted Steps per bar and Cmd+Z puts it back)
+the new grid's hits grow in and the old grid's hits shrink out at their old places (`leavingHits_`). Everything is
 time-bounded, lands in its final state at once when off screen or with Animations off, and becomes a plain 80 ms
 fade under Reduce Motion.
 

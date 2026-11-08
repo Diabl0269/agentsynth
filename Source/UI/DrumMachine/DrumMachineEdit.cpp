@@ -19,9 +19,11 @@ void DrumMachineComponent::record(const std::function<void()>& mutation) {
 }
 
 // Rebuilds the cell index from the clip. Cells that appeared or vanished since the last build grow in or shrink out
-// (beginHitMotion), unless `animate` is false or the grid's resolution just changed (every cell would move).
+// (beginHitMotion), unless `animate` is false. When the grid's resolution changed every cell moved: the new cells grow
+// in and the old ones shrink out at their old places (startLeavingHits), so an undo across it fades like the edit did.
 void DrumMachineComponent::rebuildCells(bool animate) {
     auto previous = std::move(cells_);
+    const double previousStepLen = cellsStepBeats_;
     cells_.clear();
     const auto* c = clip();
     const double stepLen = getStepBeats();
@@ -29,19 +31,21 @@ void DrumMachineComponent::rebuildCells(bool animate) {
         cells_ = drumgrid::buildCellIndex(*c, stepLen);
     const bool sameGrid = std::abs(cellsStepBeats_ - stepLen) < 1.0e-12;
     cellsStepBeats_ = stepLen;
-    // A new grid resolution moves every cell, so nothing shrinks out; an idea that changed it still grows its hits in.
     const bool stagger = staggerNext_ && !prefersReducedMotion();
-    if (!animate || (!sameGrid && !staggerNext_)) {
-        hitMotions_.clear();
+    leavingHits_.clear();
+    if (!animate || !sameGrid)
+        hitMotions_.clear(); // its keys were steps of the old grid
+    if (!animate)
         return;
-    }
     for (const auto& [key, hits] : cells_)
         if ((previous.count(key) == 0 || !sameGrid) && settledKeys_.count(key) == 0)
             beginHitMotion(key, true, hits.velocity,
                            stagger ? std::min(kMaxStaggerMs, kStaggerMsPerColumn * static_cast<double>(key % 1000000))
                                    : 0.0);
-    if (!sameGrid)
+    if (!sameGrid) {
+        startLeavingHits(previous, previousStepLen);
         return;
+    }
     for (const auto& [key, hits] : previous)
         if (cells_.count(key) == 0 && settledKeys_.count(key) == 0)
             beginHitMotion(key, false, hits.velocity);

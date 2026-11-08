@@ -92,13 +92,15 @@ void DrumMachineComponent::commitStroke(const Gesture& stroke) {
         note.velocity = juce::jlimit(1, 127, stroke.strokeVelocity);
         added.push_back(note);
     }
+    // Set before the write: the document change reaches refreshFromDoc() from inside record(), and a key that is not
+    // settled by then grows (or shrinks) again from scratch.
+    settledKeys_ = stroke.strokeKeys;
     record([this, id, added, removed] {
         for (const auto& note : added)
             doc_->addNote(id, note);
         for (const auto noteId : removed)
             doc_->removeNote(noteId);
     });
-    settledKeys_ = stroke.strokeKeys;
     refreshFromDoc();
     settledKeys_.clear();
     const auto count = static_cast<int>(stroke.strokeCells.size());

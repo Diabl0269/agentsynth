@@ -34,6 +34,11 @@ void StepGridComponent::finishMotionForTest() {
     dimAnim_.completeForTest();
 }
 
+void StepGridComponent::stepMotionForTest(double ms) {
+    glideAnim_.stepForTest(ms);
+    dimAnim_.stepForTest(ms);
+}
+
 // The card's height follows every frame; the neighbours make room ONCE per direction: a lane opening asks for its
 // final footprint when it starts (the card is measured at that size for the call), a lane closing gives the room
 // back when it has gone.
@@ -101,12 +106,16 @@ void StepGridComponent::startPageSlide(float toPage) {
         });
 }
 
-void StepGridComponent::startGlide(const SequencerPattern& from) {
+void StepGridComponent::startGlide(const SequencerPattern& from) { startGlide(from, scale_, transpose_); }
+
+void StepGridComponent::startGlide(const SequencerPattern& from, const MusicalScale& fromScale, int fromTranspose) {
     glideAnim_.stop(vblank_);
     gliding_ = false;
     if (!FadeVisibility::canAnimateIn(this))
         return;
     glideFrom_ = from;
+    glideFromScale_ = fromScale;
+    glideFromTranspose_ = fromTranspose;
     startLabelFade();
     gliding_ = true;
     glideElapsed_ = 0.0f;
@@ -134,9 +143,14 @@ float StepGridComponent::glideMix(int step) const {
     return prefersReducedMotion() ? local : easeOutCubic(local);
 }
 
-void StepGridComponent::startDim(int fromSteps) {
+// Steps changed: every column's shade heads for its new 0 or 1 from the level it shows RIGHT NOW. A hold or drag
+// changes Steps again before the last dim ended, so a restart from the old from/to pair would flash the columns that
+// were mid-fade; retargeting from the shown level keeps each one moving one way (as ButtonStateEase does).
+void StepGridComponent::startDim() {
+    for (int s = 0; s < kMaxSequencerSteps; ++s)
+        dimFrom_[(size_t)s] = dimAmount(s);
     dimAnim_.stop(vblank_);
-    dimFromSteps_ = fromSteps;
+    dimToSteps_ = stepCount();
     if (!FadeVisibility::canAnimateIn(this)) {
         dimT_ = 1.0f;
         repaint();
@@ -157,10 +171,10 @@ void StepGridComponent::startDim(int fromSteps) {
 
 // 0 for a step that plays, 1 for one past Steps, in between while Steps has just changed.
 float StepGridComponent::dimAmount(int step) const {
-    const float to = step >= stepCount() ? 1.0f : 0.0f;
+    const float to = step >= (dimToSteps_ >= 0 ? dimToSteps_ : stepCount()) ? 1.0f : 0.0f;
     if (dimT_ >= 1.0f)
         return to;
-    const float from = step >= dimFromSteps_ ? 1.0f : 0.0f;
+    const float from = dimFrom_[(size_t)juce::jlimit(0, kMaxSequencerSteps - 1, step)];
     return from + (to - from) * dimT_;
 }
 

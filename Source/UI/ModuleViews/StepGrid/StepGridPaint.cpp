@@ -48,7 +48,8 @@ float StepGridComponent::shownPitch(int step) const {
     const float to = (float)playedPitchOf(step);
     if (!gliding_)
         return to;
-    const int from = scale_.snapPitch(juce::jlimit(0, 127, (int)glideFrom_.steps[(size_t)step].pitch + transpose_));
+    const int from = glideFromScale_.snapPitch(
+        juce::jlimit(0, 127, (int)glideFrom_.steps[(size_t)step].pitch + glideFromTranspose_));
     return (float)from + (to - (float)from) * glideMix(step);
 }
 
@@ -74,8 +75,10 @@ juce::Rectangle<float> StepGridComponent::pitchBarRect(int step, float played, j
 // bar counts as part of it, so the label never crosses the outline. Drawn only in columns 22 px wide or more.
 juce::Rectangle<float> StepGridComponent::chordLabelRect(const juce::Rectangle<float>& playedBar,
                                                          juce::Rectangle<int> lane, int step) const {
-    const auto outline = writtenOutlineRect(step, lane);
-    const auto bar = outline.isEmpty() ? playedBar : playedBar.getUnion(outline);
+    auto bar = playedBar;
+    for (const auto& outline : writtenOutlines(step, lane))
+        if (outline.alpha > 0.0f)
+            bar = bar.getUnion(outline.rect);
     const float labelY = bar.getY() >= (float)lane.getY() + 11.0f ? bar.getY() - 11.0f : bar.getBottom();
     return {bar.getX() - 4.0f, labelY, bar.getWidth() + 8.0f, 11.0f};
 }
@@ -159,18 +162,43 @@ void StepGridComponent::paintColumnBackdrop(juce::Graphics& g, const StepGridLay
 // Where the note a step was written at sits when a scale moved it elsewhere; empty when nothing moved it or the
 // written row is not shown. The stroke is solid and centred on the returned rectangle, inset so it stays in its row.
 juce::Rectangle<float> StepGridComponent::writtenOutlineBounds(int step) const {
-    return writtenOutlineRect(step, currentLayout().lanes[(size_t)SequencerLane::Pitch]);
+    const auto outlines = writtenOutlines(step, currentLayout().lanes[(size_t)SequencerLane::Pitch]);
+    return outlines[1].alpha > 0.0f   ? outlines[1].rect
+           : outlines[0].alpha > 0.0f ? outlines[0].rect
+                                      : juce::Rectangle<float>();
 }
 
-juce::Rectangle<float> StepGridComponent::writtenOutlineRect(int step, juce::Rectangle<int> lane) const {
-    const int written = module_.getPattern().steps[(size_t)juce::jlimit(0, kMaxSequencerSteps - 1, step)].pitch;
-    if (gliding_ || written == playedPitchOf(step) || written < pitchRange_.lo || written > pitchRange_.hi)
+float StepGridComponent::writtenOutlineAlpha(int step, bool fromSide) const {
+    return writtenOutlines(step, currentLayout().lanes[(size_t)SequencerLane::Pitch])[fromSide ? 0 : 1].alpha;
+}
+
+juce::Rectangle<float> StepGridComponent::outlineRectFor(int step, int written, int played,
+                                                         juce::Rectangle<int> lane) const {
+    if (written == played || written < pitchRange_.lo || written > pitchRange_.hi)
         return {};
     const float rowH = (float)lane.getHeight() / (float)pitchRange_.rows();
     const float rowTop = (float)lane.getY() + ((float)pitchRange_.hi - (float)written) * rowH;
     const float inset = kWrittenOutlineWidth * 0.5f + 0.5f;
     const auto bar = pitchBarRect(step, (float)written, lane);
     return bar.withY(rowTop + inset).withHeight(std::max(rowH - 2.0f * inset, 3.0f));
+}
+
+// While a glide runs the outline of the OLD note fades out as the one of the new note fades in, so an undo, redo or Fit
+// never drops it for the span of the glide. A note that did not move keeps one outline at full strength.
+std::array<StepGridComponent::WrittenOutline, 2> StepGridComponent::writtenOutlines(int step,
+                                                                                    juce::Rectangle<int> lane) const {
+    const int s = juce::jlimit(0, kMaxSequencerSteps - 1, step);
+    const auto to = outlineRectFor(step, module_.getPattern().steps[(size_t)s].pitch, playedPitchOf(step), lane);
+    const WrittenOutline now{to, to.isEmpty() ? 0.0f : 1.0f};
+    if (!gliding_)
+        return {WrittenOutline{}, now};
+    const int fromWritten = glideFrom_.steps[(size_t)s].pitch;
+    const int fromPlayed = glideFromScale_.snapPitch(juce::jlimit(0, 127, fromWritten + glideFromTranspose_));
+    const auto from = outlineRectFor(step, fromWritten, fromPlayed, lane);
+    if (from == to)
+        return {WrittenOutline{}, now};
+    const float mix = glideMix(step);
+    return {WrittenOutline{from, from.isEmpty() ? 0.0f : 1.0f - mix}, WrittenOutline{to, to.isEmpty() ? 0.0f : mix}};
 }
 
 void StepGridComponent::paintPitchLane(juce::Graphics& g, juce::Rectangle<int> lane) {
@@ -213,10 +241,11 @@ void StepGridComponent::paintPitchLane(juce::Graphics& g, juce::Rectangle<int> l
         g.fillRoundedRectangle(bar, 2.0f);
         if (colW >= 22.0f)
             paintStepLabel(g, s, juce::roundToInt(played), chordLabelRect(bar, lane, s));
-        const auto outline = writtenOutlineRect(s, lane);
-        if (!outline.isEmpty()) {
-            g.setColour(c.textPrimary);
-            g.drawRoundedRectangle(outline, 2.0f, kWrittenOutlineWidth);
+        for (const auto& outline : writtenOutlines(s, lane)) {
+            if (outline.alpha <= 0.0f)
+                continue;
+            g.setColour(c.textPrimary.withAlpha(outline.alpha));
+            g.drawRoundedRectangle(outline.rect, 2.0f, kWrittenOutlineWidth);
         }
     }
 }

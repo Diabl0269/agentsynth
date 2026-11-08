@@ -145,6 +145,7 @@ void DrumMachineComponent::paintCells(juce::Graphics& g) {
             continue;
         for (int step = first; step <= last; ++step)
             paintCell(g, slots_[(size_t)row], row, step, cellBounds(row, step), dense);
+        paintLeavingHits(g, slots_[(size_t)row], row, dense);
     }
 }
 
@@ -154,6 +155,7 @@ struct DrumMachineComponent::CellPaint {
     drumgrid::CellKey hitKey = 0; ///< the cell whose hit is drawn: this one, or for a ghost the cell it repeats
     int step = 0;
     bool ghost = false;
+    float leaving = -1.0f; ///< 0..1 progress of a previous-grid hit shrinking out; -1 for a cell of this grid
     int pitch = 0;
     juce::Rectangle<float> area;
     float radius = 0.0f;
@@ -205,6 +207,25 @@ void DrumMachineComponent::paintCell(juce::Graphics& g, const LaneSlot& slot, in
     }
 }
 
+// The hits of the previous grid, still shrinking out at their old places after the resolution changed.
+void DrumMachineComponent::paintLeavingHits(juce::Graphics& g, const LaneSlot& slot, int row, bool dense) {
+    const auto& theme = synth::theme::themeOf(*this);
+    for (const auto& hit : leavingHits_) {
+        if (hit.pitch != slot.lane.pitch)
+            continue;
+        CellPaint cell;
+        cell.key = cell.hitKey = -1; // no cell of the current grid: no motion, mark or flash is looked up for it
+        cell.pitch = hit.pitch;
+        cell.area = cellRectForSpan(row, hit.startBeat, hit.lengthBeats).toFloat();
+        cell.radius = dense ? 0.0f : theme.metrics.cornerRadiusSmall;
+        cell.rowAlpha = slot.reveal * (rowSilenced(hit.pitch) ? kSilencedAlpha : 1.0f);
+        cell.dense = dense;
+        cell.leaving = leavingProgress(hit);
+        if (!cell.area.isEmpty())
+            paintCellHit(g, slot, cell, hit.velocity);
+    }
+}
+
 // The empty cell: its surface, the shaded beat group and the playing column's tint.
 void DrumMachineComponent::paintCellBase(juce::Graphics& g, const CellPaint& cell, int step) {
     const auto& colors = synth::theme::themeOf(*this).colors;
@@ -232,7 +253,13 @@ void DrumMachineComponent::paintCellHit(juce::Graphics& g, const LaneSlot& slot,
     float scale = 1.0f;
     if (cell.ghost)
         motionAlpha = kGhostAlpha * ghostFadeAt(cell.key); // a repeat past the drum's end: faint, fading in
-    else
+    else if (cell.leaving >= 0.0f) {
+        // The same shrink (or Reduce Motion fade) a removed hit takes in hitScaleAt.
+        if (prefersReducedMotion())
+            motionAlpha = 1.0f - cell.leaving;
+        else
+            scale = 1.0f - easeInCubic(cell.leaving);
+    } else
         scale = hitScaleAt(cell.key, motionAlpha);
     const auto found = cells_.find(cell.hitKey);
     const bool present = found != cells_.end();

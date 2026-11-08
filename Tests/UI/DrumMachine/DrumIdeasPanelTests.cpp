@@ -2,6 +2,7 @@
 // undo step each, and the keyboard and screen-reader paths.
 
 #include "../PianoRoll/PianoRollTestHelpers.h"
+#include "DrumDocFollower.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Layout/FadeVisibility.h"
 
@@ -365,4 +366,53 @@ TEST(DrumIdeasPanelTest, PickingATakeKeepsTheDrumsOwnLengthAndSwingAndTheGrid) {
     EXPECT_DOUBLE_EQ(f.c().drumRows[1].swing, 0.6);
     f.undo.undo();
     EXPECT_FALSE(f.undo.canUndo()) << "still one undo step";
+}
+
+// Cmd+Z and Cmd+Shift+Z animate the hits an idea changed the way the pick did.
+TEST(DrumIdeasPanelTest, UndoingAPickShrinksTheHitsItAddedAndGrowsTheOnesItReplaced) {
+    IdeasFixture f;
+    drum_test::DocFollower follow(f.doc, f.grid);
+    f.doc.addNote(f.clip, makeNote(0.5, 70, 0.25));
+    f.grid.refreshFromDoc();
+    f.undo.clearUndoHistory();
+    f.panel->getStarterButton(Style::Techno).onClick();
+    std::vector<std::pair<int, int>> picked; // (pitch, step) the starter wrote
+    for (const auto& n : f.c().notes)
+        picked.emplace_back(n.pitch, static_cast<int>(std::lround(n.startBeat / 0.25)));
+    ASSERT_FALSE(picked.empty());
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    f.grid.finishMotionsForTest();
+    f.undo.undo();
+    ASSERT_EQ(f.pitchCount(70), 1u);
+    for (const auto& [pitch, step] : picked)
+        if (f.grid.rowOfPitch(pitch) >= 0) // a row the undo removes goes with its hits
+            EXPECT_TRUE(f.grid.isHitMotionActive(f.grid.rowOfPitch(pitch), step))
+                << "pitch " << pitch << " step " << step << " vanishes at once on Cmd+Z";
+    EXPECT_TRUE(f.grid.isHitMotionActive(f.grid.rowOfPitch(70), 2)) << "the replaced hit grows back";
+    f.grid.finishMotionsForTest();
+    f.undo.redo();
+    for (const auto& [pitch, step] : picked)
+        if (f.grid.rowOfPitch(pitch) >= 0) // a row the undo removes goes with its hits
+            EXPECT_TRUE(f.grid.isHitMotionActive(f.grid.rowOfPitch(pitch), step)) << "redo grows the pick back";
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+TEST(DrumIdeasPanelTest, UndoingAPickThatLiftedTheGridStillShrinksTheHitsItAdded) {
+    IdeasFixture f;
+    drum_test::DocFollower follow(f.doc, f.grid);
+    ASSERT_TRUE(f.doc.setClipStepsPerBar(f.clip, 8));
+    f.doc.addNote(f.clip, makeNote(0.5, 70, 0.5)); // step 1 of the 8-step grid
+    f.grid.refreshFromDoc();
+    f.undo.clearUndoHistory();
+    f.panel->getStarterButton(Style::Rock).onClick();
+    ASSERT_EQ(f.c().stepsPerBar, 16);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    f.grid.finishMotionsForTest();
+    f.undo.undo();
+    ASSERT_EQ(f.c().stepsPerBar, 8);
+    EXPECT_GT(f.grid.getLeavingHitCount(), 0) << "the pick's hits fade out at their 16-step places";
+    EXPECT_TRUE(f.grid.isHitMotionActive(f.grid.rowOfPitch(70), 1)) << "the old hit grows back on the 8-step grid";
+    f.grid.finishMotionsForTest();
+    EXPECT_EQ(f.grid.getLeavingHitCount(), 0);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }
