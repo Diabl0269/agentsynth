@@ -7,6 +7,9 @@ namespace synth::ui {
 namespace {
 constexpr int kSwatch = 10;
 constexpr float kFont = 12.5f;
+// The far end is named "<module> . <port>", longer than a source's title: the name gets the width the sources page
+// spends on its "show in timeline" button.
+constexpr int kModNameWidth = 96;
 } // namespace
 
 PortConnectionRow::PortConnectionRow(const PortConnection& connection)
@@ -23,7 +26,52 @@ PortConnectionRow::PortConnectionRow(const PortConnection& connection)
         focused_ = focused;
         refreshHighlight();
     };
+    if (connection_.isModulation()) {
+        mod_ = std::make_unique<ModDotSourceRow>(modSource(), juce::String());
+        mod_->setLook({kHeight, kModNameWidth, false});
+        addAndMakeVisible(*mod_);
+        removeButton_.setVisible(false);
+        mod_->onGestureBegin = [this](ModDotSourceRow&) {
+            if (onAmountGestureBegin)
+                onAmountGestureBegin(*this);
+        };
+        mod_->onAmountDragged = [this](ModDotSourceRow&, float amount) {
+            if (onAmountDragged)
+                onAmountDragged(*this, amount);
+        };
+        mod_->onGestureEnd = [this](ModDotSourceRow&) {
+            if (onAmountGestureEnd)
+                onAmountGestureEnd(*this);
+        };
+        mod_->onAmountTyped = [this](ModDotSourceRow&, float amount) {
+            if (onAmountTyped)
+                onAmountTyped(*this, amount);
+        };
+        mod_->onRemove = [this](ModDotSourceRow&) {
+            if (onRemove)
+                onRemove(*this);
+        };
+        mod_->onNavigate = [this](ModDotSourceRow&, int step) {
+            if (onNavigate)
+                onNavigate(*this, step);
+        };
+    }
     applyNames();
+}
+
+KnobModSource PortConnectionRow::modSource() const {
+    KnobModSource source;
+    source.attenuverterId = juce::AudioProcessorGraph::NodeID{connection_.cable.id.attenUid};
+    source.sourceNodeId = juce::AudioProcessorGraph::NodeID{connection_.cable.id.srcUid};
+    source.sourceChannel = connection_.cable.id.srcPort;
+    source.sourceName = connection_.label;
+    source.amount = connection_.amount;
+    return source;
+}
+
+void PortConnectionRow::focusOfChildComponentChanged(FocusChangeType) {
+    focused_ = hasKeyboardFocus(true);
+    refreshHighlight();
 }
 
 void PortConnectionRow::applyNames() {
@@ -38,6 +86,8 @@ void PortConnectionRow::update(const PortConnection& connection) {
     connection_ = connection;
     if (renamed)
         applyNames();
+    if (mod_ != nullptr)
+        mod_->update(modSource());
     if (renamed || recoloured)
         repaint();
 }
@@ -64,6 +114,8 @@ void PortConnectionRow::mouseExit(const juce::MouseEvent&) {
 }
 
 void PortConnectionRow::paint(juce::Graphics& g) {
+    if (mod_ != nullptr)
+        return; // the mod row draws its own swatch, name and hover
     const auto p = modDotPaletteFor(*this);
     const auto area = juce::Rectangle<float>(0.0f, 0.0f, (float)getWidth(), (float)kHeight).reduced(2.0f, 1.0f);
     if (hover_.value() > 0.0f) {
@@ -80,6 +132,8 @@ void PortConnectionRow::paint(juce::Graphics& g) {
 void PortConnectionRow::resized() {
     // Laid out for the full row height whatever height the panel has given it: a row growing in or shrinking out is
     // revealed and hidden, never squashed.
+    if (mod_ != nullptr)
+        mod_->setBounds(0, 0, getWidth(), kHeight);
     const int gap = modDotPaletteFor(*this).space;
     auto r = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
     removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)

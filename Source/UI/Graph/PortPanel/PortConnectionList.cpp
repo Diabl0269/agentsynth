@@ -123,6 +123,9 @@ std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortR
         entry.farRawChannel = port.isInput ? cable.id.srcPort : cable.destChannel;
         entry.label = endName(editor, cable, /*farIsDestination=*/!port.isInput);
         entry.colour = editor.colourForCable(cable);
+        if (cable.id.attenUid != 0)
+            entry.amount = attenuverterAmount(editor.getAudioEngine().getGraph(),
+                                              juce::AudioProcessorGraph::NodeID{cable.id.attenUid}, cable.attenAmount);
         const auto same = std::find_if(out.begin(), out.end(),
                                        [&entry](const PortConnection& o) { return sameConnection(o, entry); });
         if (same != out.end()) {

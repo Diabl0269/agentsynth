@@ -105,8 +105,13 @@ void ModDotSourcesPage::disconnectEverything() {
 }
 
 void ModDotSourcesPage::applyAmount(ModDotSourceRow& row, float amount) {
-    const float current = attenuverterAmount(editor_.getAudioEngine().getGraph(), row.attenuverterId(), amount);
-    editor_.adjustModAmount(row.attenuverterId(), amount - current);
+    applyAmount(editor_, row.attenuverterId(), amount);
+}
+
+void ModDotSourcesPage::applyAmount(GraphEditor& editor, juce::AudioProcessorGraph::NodeID attenuverterId,
+                                    float amount) {
+    const float current = attenuverterAmount(editor.getAudioEngine().getGraph(), attenuverterId, amount);
+    editor.adjustModAmount(attenuverterId, amount - current);
 }
 
 void ModDotSourcesPage::setRemoveHighlighted(bool on) {
