@@ -699,7 +699,7 @@ closes only through `PopupMotion::dismissCallOut`. Picking a row (click, Enter o
 `TimelinePanelComponent::pickDrawShape`, which sets the shape, switches to Draw and stamps it over a lane range if
 one is selected, so Range-drag, then a pick from the flyout, stamps in one go. Keyboard: focus lands on the current
 shape's row; Up/Down move (wrapping), Home/End jump, Escape closes. Each row is a Tab stop with the accent focus
-ring, is titled "Sine shape" and has a tooltip naming its key ("Sine shape  (Shift + 3)"). The Draw button's tooltip
+ring, is titled "Sine shape" and has a tooltip naming its key ("Sine shape  (Shift + 3)", with the Shift symbol on macOS). The Draw button's tooltip
 names the flyout key beside the tool's own ("Draw  (8) · shapes: Shift + 8"). Headless tests take the flyout
 through `test_hooks::drawShapeFlyoutHookForTest()` instead of a CallOutBox.
 

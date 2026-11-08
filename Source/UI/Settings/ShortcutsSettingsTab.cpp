@@ -312,7 +312,8 @@ void ShortcutsSettingsTab::rebuildLayout() {
                 continue;
             const bool matches =
                 !filtering || headerMatches ||
-                rowMatchesQuery(query, descLabels[(size_t)i]->getText(), bindButtons[(size_t)i]->getButtonText());
+                rowMatchesQuery(query, descLabels[(size_t)i]->getText(),
+                                ShortcutManager::keyPressToSearchText(shortcutManager.getBinding(actionIds[i])));
             categoryRows.push_back(i);
             rowMatches.push_back(matches);
             sectionHasMatch = sectionHasMatch || matches;

@@ -3,6 +3,7 @@
 // Select-tool drag, and the QUANTIZE verb (its header chip and both Option+Q shortcuts).
 // Shared PianoRollFixture and mouse-gesture helpers live in PianoRollTestHelpers.h.
 
+#include "../../ShortcutDisplayText.h"
 #include "PianoRollKeyPickerHelpers.h"
 #include "PianoRollTestHelpers.h"
 
@@ -531,7 +532,10 @@ TEST(PianoRollPitchQuantiseTest, ChipTooltipCarriesTheDynamicShortcutHint) {
     PianoRollFixture f;
     const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantisePitchButtonBounds().getCentre());
     // No ShortcutManager installed, so the hint falls back to the hardcoded Option+Shift+Q.
-    EXPECT_TRUE(tooltip.startsWith("Fit notes to key (Alt + Shift + Q)")) << tooltip;
+    EXPECT_TRUE(tooltip.startsWith(
+        "Fit notes to key (" +
+        synth::test::keyText('q', juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier) + ")"))
+        << tooltip;
     EXPECT_TRUE(tooltip.contains("Needs a key")) << tooltip;
 }
 

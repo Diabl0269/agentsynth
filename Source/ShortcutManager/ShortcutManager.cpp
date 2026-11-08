@@ -231,18 +231,24 @@ juce::String ShortcutManager::keyPressToDisplayString(const juce::KeyPress& key)
     auto mods = key.getModifiers();
 
 #if JUCE_MAC
+    // Mac keyboards have no Alt key and print their modifiers as symbols, so every modifier is a glyph there
+    // (the same symbols the shortcut bubbles use): Command, Control, Option, Shift.
     if (mods.isCommandDown())
-        result += "Cmd + ";
+        result += juce::String::fromUTF8("\xe2\x8c\x98 + ");
     if (mods.isCtrlDown())
-        result += "Ctrl + ";
+        result += juce::String::fromUTF8("\xe2\x8c\x83 + ");
+    if (mods.isAltDown())
+        result += juce::String::fromUTF8("\xe2\x8c\xa5 + ");
+    if (mods.isShiftDown())
+        result += juce::String::fromUTF8("\xe2\x87\xa7 + ");
 #else
     if (mods.isCtrlDown())
         result += "Ctrl + ";
-#endif
     if (mods.isAltDown())
         result += "Alt + ";
     if (mods.isShiftDown())
         result += "Shift + ";
+#endif
 
     auto keyCode = key.getKeyCode();
     if (keyCode >= 'a' && keyCode <= 'z')
@@ -287,6 +293,28 @@ juce::String ShortcutManager::keyPressToDisplayString(const juce::KeyPress& key)
         result += juce::String::charToString(static_cast<juce::juce_wchar>(keyCode));
 
     return result;
+}
+
+juce::String ShortcutManager::keyPressToSearchText(const juce::KeyPress& key) {
+    const auto mods = key.getModifiers();
+    juce::String words = keyPressToDisplayString(key);
+    // The modifier names, spelled out, so a glyph-printed binding is still found by typing its name.
+#if JUCE_MAC
+    if (mods.isCommandDown())
+        words += " Cmd Command";
+    if (mods.isCtrlDown())
+        words += " Ctrl Control";
+    if (mods.isAltDown())
+        words += " Alt Option Opt";
+#else
+    if (mods.isCtrlDown())
+        words += " Ctrl Control";
+    if (mods.isAltDown())
+        words += " Alt";
+#endif
+    if (mods.isShiftDown())
+        words += " Shift";
+    return words;
 }
 
 /** The category `actionId` belongs to. An id this build has never heard of answers General,

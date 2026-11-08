@@ -118,7 +118,11 @@ void MixerPanelComponent::refreshShortcutHints() {
 // Both pan keys, for the pan knobs' tooltips.
 juce::String MixerPanelComponent::panShortcutText() const {
     if (shortcuts_ == nullptr)
-        return "Shift+Left / Shift+Right";
+        return ShortcutManager::keyPressToDisplayString(
+                   juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::shiftModifier, 0)) +
+               " / " +
+               ShortcutManager::keyPressToDisplayString(
+                   juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::shiftModifier, 0));
     return ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerPanLeft")) + " / " +
            ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerPanRight"));
 }
@@ -126,7 +130,11 @@ juce::String MixerPanelComponent::panShortcutText() const {
 // Both fader nudge keys, for the faders' tooltips.
 juce::String MixerPanelComponent::faderShortcutText() const {
     if (shortcuts_ == nullptr)
-        return "Shift + Up / Shift + Down";
+        return ShortcutManager::keyPressToDisplayString(
+                   juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0)) +
+               " / " +
+               ShortcutManager::keyPressToDisplayString(
+                   juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0));
     return ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerNudgeFaderUp")) + " / " +
            ShortcutManager::keyPressToDisplayString(shortcuts_->getBinding("mixerNudgeFaderDown"));
 }

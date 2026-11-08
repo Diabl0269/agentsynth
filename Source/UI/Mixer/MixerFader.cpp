@@ -1,6 +1,7 @@
 // Concern: MixerFader's slider wiring, undo bracket and dB readout. The file holds
 // the taper-based NormalisableRange and the onDragStart/onDragEnd gesture wiring in bind() below.
 #include "MixerFader.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 #include "AppUndoManager.h"
 #include "MixerDbAccessibilityText.h"
@@ -130,6 +131,14 @@ void MixerFader::setChannelName(const juce::String& name) {
     slider_.setTitle(name.isEmpty() ? juce::String("Fader") : name + " fader");
     setNudgeShortcutText(nudgeShortcutText_);
     readout_.setTitle(name.isEmpty() ? juce::String("Fader level") : name + " fader level");
+}
+
+juce::String MixerFader::defaultNudgeShortcutText() {
+    return ShortcutManager::keyPressToDisplayString(
+               juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0)) +
+           " / " +
+           ShortcutManager::keyPressToDisplayString(
+               juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0));
 }
 
 // The keys nudge the focused channel by 1 dB; the same chord with Alt added nudges 0.1 dB.

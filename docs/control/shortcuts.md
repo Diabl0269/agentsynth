@@ -921,7 +921,7 @@ rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline/clips.m
 Hold **Cmd** (Ctrl off the Mac) on its own for about half a second and a small key-cap bubble
 appears on each visible button that has a shortcut: `⌘T` on the Show/Hide Panel toolbar button,
 `⌘1`–`⌘3` inside the bottom-panel tabs, Space on the play buttons. Each bubble grows out of the
-button it labels; release and they shrink back and fade out. **Key names.** `ShortcutManager::keyPressToDisplayString` spells keys that are not characters as words ("Return", "Escape", "Tab", "Backspace", "Delete", "Home", "End", "Page Up", "Page Down", "F1" to "F12", the arrows), so a hint reads "Alt + Return" and the Settings search finds a row by "return" (`ShortcutDisplayNamesTest`). The
+button it labels; release and they shrink back and fade out. **Key names.** `ShortcutManager::keyPressToDisplayString` spells keys that are not characters as words ("Return", "Escape", "Tab", "Backspace", "Delete", "Home", "End", "Page Up", "Page Down", "F1" to "F12", the arrows), so a hint reads "Alt + Return" (on macOS every modifier is its symbol, "⌥ + Return", never "Alt"; `keyPressToSearchText` adds the names Cmd, Command, Ctrl, Control, Alt, Option so the Settings search still finds them) and the Settings search finds a row by "return" (`ShortcutDisplayNamesTest`). The
 overlay is `ShortcutHintOverlay` (`Source/UI/Chrome/ShortcutHint/`), a full-window child of
 `MainComponent` that paints only while the hints are up. It costs nothing at rest and can never be in the way: it takes no clicks (`setInterceptsMouseClicks(false, false)`), is hidden from the accessibility tree, and never moves or resizes another component.
 

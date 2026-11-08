@@ -339,8 +339,10 @@ void BottomDockComponent::paintOverChildren(juce::Graphics& g) {
     // The shadow, raised fill and accent border are the one look every reorder list lifts its row with
     // (it insets its body by 1 px, so it is given the tab grown by 0.5 px to land the outline on the tab's edge).
     g.beginTransparencyLayer(kLiftedTabOpacity);
-    paintReorderLift(g, tab.expanded(0.5f), lift, c.surfaceHi, c.accent);
-    g.setColour(c.textPrimary);
+    // The active tab keeps its active look (the look-and-feel's toggled-on fill and text); the others stay raised.
+    const auto look = liftedButtonLook(button, c.surfaceHi, c.textPrimary);
+    paintReorderLift(g, tab.expanded(0.5f), lift, look.fill, c.accent);
+    g.setColour(look.text);
     g.setFont(lf->getTextButtonFont(button, button.getHeight()));
     auto textArea = tab.toNearestInt().reduced(4, 0);
     textArea.removeFromRight(

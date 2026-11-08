@@ -74,7 +74,12 @@ public:
     void addDrumMachineDefaultBindings();
     void addLayoutEditorDefaultBindings();
 
+    /** How a binding reads on screen. On macOS each modifier is its Mac symbol (Command, Control, Option, Shift),
+     *  never "Alt"; elsewhere it is Ctrl / Alt / Shift spelled out. */
     static juce::String keyPressToDisplayString(const juce::KeyPress& key);
+    /** The display string plus the modifiers' names spelled out ("Cmd Command", "Alt Option"), which the Settings
+     *  search matches against so typing "option" or "cmd" finds a binding printed with symbols. */
+    static juce::String keyPressToSearchText(const juce::KeyPress& key);
 
     // Display text for `actionId`'s row in Settings -> Keyboard Shortcuts and the MIDI Remote
     // action picker (docs/control/midi-remote.md#action-targets).

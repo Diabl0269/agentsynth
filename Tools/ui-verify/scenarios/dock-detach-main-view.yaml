@@ -21,10 +21,10 @@ steps:
   - screenshot: {name: 1-timeline-in-main}
   - expect: {id: "Show Canvas in the main area", showing: true}   # the canvas is a tab while the Timeline fills the main area
   - hover: {id: "Show Mixer in the main area"}
-  - expect: {id: "Show Mixer in the main area", contains: {tooltip: "Shift + Return"}}
+  - expect: {id: "Show Mixer in the main area", contains: {tooltip: "⇧ + Return"}}
   - screenshot: {name: 2-swap-icon-tooltip}
   - hover: {id: "Detach Mixer to its own window"}
-  - expect: {id: "Detach Mixer to its own window", contains: {tooltip: "Alt + Return"}}
+  - expect: {id: "Detach Mixer to its own window", contains: {tooltip: "⌥ + Return"}}
   - screenshot: {name: 3-detach-icon-tooltip}
   - key: {keys: cmd+k}
   - expect: {id: commandPalette, showing: true, within_ms: 2000}

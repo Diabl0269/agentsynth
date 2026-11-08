@@ -6,6 +6,7 @@
 // Shared PianoRollFixture, CountingRoll and mouse-gesture helpers live in PianoRollTestHelpers.h.
 
 #include "PianoRollTestHelpers.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 // ============================================================================
 // 3. PianoRollComponent
@@ -574,7 +575,8 @@ TEST(PianoRollEditingTest, QuantiseLengthButtonEnabledStateAndTooltip) {
     // Dynamic (see synth::shortcutHintFor) — no ShortcutManager installed, so it falls back to the
     // hardcoded default: Alt+Q.
     const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseLengthButtonBounds().getCentre());
-    EXPECT_TRUE(tooltip.startsWith("Quantize note lengths to the grid (Alt + Q)")) << tooltip;
+    const auto altQ = ShortcutManager::keyPressToDisplayString(juce::KeyPress('q', juce::ModifierKeys::altModifier, 0));
+    EXPECT_TRUE(tooltip.startsWith("Quantize note lengths to the grid (" + altQ + ")")) << tooltip;
 }
 
 // ---- Edits clamped to the clip window ----

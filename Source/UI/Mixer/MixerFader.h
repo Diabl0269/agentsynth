@@ -86,11 +86,13 @@ public:
     void resized() override;
 
 private:
+    /** Shift+Up / Shift+Down as the platform prints them: the tooltip text before a panel names the bound keys. */
+    static juce::String defaultNudgeShortcutText();
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
 
     MixerFaderSlider slider_;
-    juce::String nudgeShortcutText_ = "Shift + Up / Shift + Down";
+    juce::String nudgeShortcutText_ = defaultNudgeShortcutText();
     juce::Label readout_;
     std::unique_ptr<juce::SliderParameterAttachment> attachment_;
 

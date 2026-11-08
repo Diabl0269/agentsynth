@@ -17,10 +17,16 @@ protected:
     void SetUp() override {
         MainComponentTest::SetUp();
         resetGuard_.emplace();
+        // A neighbour test may have left the "both places" mirror on in the shared settings file; these tests start
+        // from the default (a detached panel leaves its tab) and put the file back as they found it.
+        detachModeGuard_.emplace(juce::StringArray{"detachedPanelBothPlaces"});
         build();
+        mc_->getAppPropertiesForTest().getUserSettings()->setValue("detachedPanelBothPlaces", "move");
+        dock().applyDetachBothPlacesPreference();
     }
     void TearDown() override {
         mc_.reset();
+        detachModeGuard_.reset();
         resetGuard_.reset();
         MainComponentTest::TearDown();
     }
@@ -47,5 +53,6 @@ protected:
     }
 
     std::optional<BottomDockActiveTabResetGuardMDT> resetGuard_;
+    std::optional<synth::test::PersistedKeysGuard> detachModeGuard_;
     std::unique_ptr<MainComponent> mc_;
 };

@@ -177,7 +177,7 @@ remembered ([settings](../layout/chrome.md#panel-collapse-and-persistence)). In 
   nothing. A plain click (under the threshold) still fires `onClick`; a drag does not.
 - **The swap icon.** Every offered tab, the Canvas tab included, ends in a 22 px `IconButton` (`Glyph::Swap`, the
   tab's full height) named "Show <View> in the main area" (View: Timeline, Mixer, Controllers,
-  Canvas); the tooltip reads "Shift + Return or <bound key>" (Shift+Return on the focused strip; `Opt+Cmd+1`-`3` by default, `swapDockTab<N>ToMain`, by place). It sits in a right-aligned icon row inside the tab (the detach icon sits on its left), and the label
+  Canvas); the tooltip reads "Shift + Return or <bound key>" (modifiers are the Mac symbols on macOS) (Shift+Return on the focused strip; `Opt+Cmd+1`-`3` by default, `swapDockTab<N>ToMain`, by place). It sits in a right-aligned icon row inside the tab (the detach icon sits on its left), and the label
   ellipsises before the icon goes: the tab hands `AppLookAndFeel::kTextInsetRightProperty` the row's 24 px. A click is
   `swapTabToMain()`: `setMainView()`, then the view that went up is the active tab, and `onMainViewChanged` has
   `MainComponent` lay the main area out again. It is disabled ("<View> is open in its own window") while that view has

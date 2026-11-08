@@ -1,6 +1,7 @@
 // BottomDockDetachIconTests.cpp -- the detach icon on every docked bottom-panel tab, left of its swap icon: where it
 // sits, which tabs have one, that a click detaches THAT tab's panel, the Mixer's "both places" second view, Option+
 // Return on the strip, and the tooltip and screen reader name (docs/mixer/panel.md#placement-and-detachable-windows).
+#include "../../ShortcutDisplayText.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "BottomDockMainAreaFixture.h"
 #include "UI/Layout/IconButton.h"
@@ -240,6 +241,10 @@ TEST_F(BottomDockDetachIconTest, TheTooltipAndTheScreenReaderNameNameTheTabAndTh
         EXPECT_EQ(icon->getTitle(), expected);
         EXPECT_EQ(icon->getTooltip(), synth::ui::formatShortcutHint(expected, key));
         EXPECT_TRUE(icon->isAccessible());
+#if JUCE_MAC
+        EXPECT_FALSE(icon->getTooltip().containsIgnoreCase("alt")) << icon->getTooltip();
+        EXPECT_TRUE(synth::test::has(icon->getTooltip(), juce::String::fromUTF8("\xe2\x8c\xa5"))) << icon->getTooltip();
+#endif
     }
     EXPECT_TRUE(BottomDockComponent::describeTab(Tab::Canvas, Tab::Canvas).detachTitle.isEmpty());
 }

@@ -21,4 +21,19 @@ inline void paintReorderLift(juce::Graphics& g, juce::Rectangle<float> bounds, f
     g.drawRoundedRectangle(body, 3.0f, 1.0f);
 }
 
+// The fill and text a lifted *button* keeps. A toggled-on button (the active dock tab) wears the look-and-feel's
+// own toggled-on colours while it is lifted, dragged and settling, read from the button so no colour is copied;
+// any other button gets the list's raised `surface` and `text`.
+struct LiftedButtonLook {
+    juce::Colour fill;
+    juce::Colour text;
+};
+
+inline LiftedButtonLook liftedButtonLook(const juce::TextButton& button, juce::Colour surface, juce::Colour text) {
+    if (button.getToggleState())
+        return {button.findColour(juce::TextButton::buttonOnColourId),
+                button.findColour(juce::TextButton::textColourOnId)};
+    return {surface, text};
+}
+
 } // namespace synth::ui
