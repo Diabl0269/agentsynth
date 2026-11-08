@@ -426,7 +426,9 @@ TEST(BottomDockComponentTests, DraggingATabDrawsALiftedTabAtThePointerAndMouseUp
     f.dragBy(drag);
     const auto during = paintDock(f.dock());
     EXPECT_TRUE(isCloseTo(during.getPixelAt(x, y), colors.accent)) << "the accent outline row of the lifted tab";
-    EXPECT_TRUE(isCloseTo(during.getPixelAt(x, y + 3), colors.surfaceHi)) << "the surfaceHi body of the lifted tab";
+    // The Timeline tab is the active one here, so it keeps the look-and-feel's toggled-on fill while lifted (an
+    // inactive tab's raised surfaceHi body is pinned in BottomDockLiftedTabLookTests).
+    EXPECT_TRUE(isCloseTo(during.getPixelAt(x, y + 3), colors.accent)) << "the active fill of the lifted tab";
     EXPECT_FALSE(isCloseTo(before, colors.accent));
 
     f.release(drag);
