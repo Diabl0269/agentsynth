@@ -59,7 +59,7 @@ protected:
         synth::test::flushMessageQueue();
         return used;
     }
-    // The platform's spelling of Cmd+<digit> ("Cmd + 1" on macOS, "Ctrl + 1" elsewhere).
+    // The platform's spelling of Cmd+<digit> (the Command symbol + 1 on macOS, "Ctrl + 1" elsewhere).
     static juce::String cmdDigit(int digit) {
         return ShortcutManager::keyPressToDisplayString(
             juce::KeyPress('0' + digit, juce::ModifierKeys::commandModifier, 0));

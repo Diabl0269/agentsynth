@@ -240,6 +240,10 @@ TEST_F(BottomDockDetachIconTest, TheTooltipAndTheScreenReaderNameNameTheTabAndTh
         EXPECT_EQ(icon->getTitle(), expected);
         EXPECT_EQ(icon->getTooltip(), synth::ui::formatShortcutHint(expected, key));
         EXPECT_TRUE(icon->isAccessible());
+#if JUCE_MAC
+        EXPECT_FALSE(icon->getTooltip().containsIgnoreCase("alt")) << icon->getTooltip();
+        EXPECT_TRUE(icon->getTooltip().contains(juce::String::fromUTF8("\xe2\x8c\xa5"))) << icon->getTooltip();
+#endif
     }
     EXPECT_TRUE(BottomDockComponent::describeTab(Tab::Canvas, Tab::Canvas).detachTitle.isEmpty());
 }
