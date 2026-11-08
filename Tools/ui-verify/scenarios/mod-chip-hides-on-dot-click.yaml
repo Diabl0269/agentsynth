@@ -6,7 +6,7 @@
 #      fades in under it.
 #   2. Left-clicks the Cutoff dot: the chip fades away as the sources panel opens and stays gone.
 #   3. Presses Esc: the panel closes and, with the pointer still on the knob, the chip fades back in.
-# The marks sit right after the click and right after Esc, where the fades show in the recording.
+# The marks sit right after the click (the chip mid-fall under the opening panel) and once the chip is back.
 motion: true
 record: true
 save_project: mod-chip-hides-on-dot-click
@@ -25,7 +25,7 @@ steps:
   - wait: {}
   - expect: {id: "card:Filter", modHoverChipAlpha: 0}
   - key: {keys: escape}
-  - mark: {check: 2, name: chip-returns-on-close}
   - expect: {id: modDotPopover, exists: false, within_ms: 2000}
   - expect: {id: "card:Filter", modHoverChipAlpha: 1, within_ms: 3000}
+  - mark: {check: 2, name: chip-returns-on-close}
   - screenshot: {id: window, name: panel-closed-chip-back}
