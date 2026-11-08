@@ -222,9 +222,13 @@ TEST_F(ColourPickerEscape, EscapeFromEveryControlFadesOnceRestoresTheColourAndRe
         std::cout << "[  RECORD  ] " << target.name << ": real focus on it = " << (origin == focused) << "\n";
 
         sendEscape(*origin);
-        drain(); // a text field posts its Escape as a message
+        // A text field posts its Escape as a message: pump in 1 ms slices only until the fade starts, never a whole
+        // drain, which on a slow machine let real frames run most of the fade before its start could be read.
+        for (const auto deadline = juce::Time::getMillisecondCounter() + 3000u;
+             !PopupMotion::isDismissing(*box) && slot.isOpen() && juce::Time::getMillisecondCounter() < deadline;)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(1);
 
-        // The drain ran the fade on the real clock for however long a slow machine took; read its start at 0 ms.
+        // Read the fade's start at 0 ms on the test clock.
         if (PopupMotion::isDismissing(*box))
             PopupMotion::stepMotionForTest(*box, 0.0);
         std::vector<float> fall{box->getAlpha()};
