@@ -109,6 +109,7 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::PopupMenu::textColourId, c.textPrimary);
     setColour(juce::PopupMenu::highlightedBackgroundColourId, c.accent.withAlpha(0.25f));
     setColour(juce::PopupMenu::highlightedTextColourId, c.textPrimary);
+    setColour(juce::PopupMenu::headerTextColourId, c.textMuted);
 
     setColour(juce::TextEditor::backgroundColourId, c.bg0);
     setColour(juce::TextEditor::textColourId, c.textPrimary);
