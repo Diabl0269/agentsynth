@@ -10,6 +10,7 @@
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
 #include "UI/Graph/MacroFoldAnimator/MacroFoldAnimator.h"
 #include "UI/Layout/CableCurve.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
 
 #include <algorithm>
@@ -92,8 +93,9 @@ juce::Rectangle<float> CardGlideAnimator::currentRect(const Item& item) const no
 // so cables touching it still slide (offsetFor).
 bool CardGlideAnimator::arm(const std::vector<Captured>& before, const std::vector<Entry>& now, float snapshotScale) {
     // A canvas that is not on screen (a headless test, a hidden editor) has nothing to animate: hiding cards and
-    // snapshotting them there only leaves alpha-0 cards and a driver that never ticks.
-    if (!canAnimate())
+    // snapshotting them there only leaves alpha-0 cards and a driver that never ticks. Under Reduce Motion nothing
+    // travels: a moved card is at its new place on the first frame (docs/layout/undo-glide.md).
+    if (!canAnimate() || synth::ui::prefersReducedMotion())
         return false;
     std::vector<const Entry*> changed;
     std::vector<juce::Rectangle<int>> fromRects;
@@ -190,8 +192,13 @@ void CardGlideAnimator::finish() noexcept {
     phased_ = false;
 }
 
+// Each drawer sets its own opacity: JUCE draws an image at the alpha of the last colour set, so a snapshot drawn after
+// the fold (whose boxes, borders and cables fade) would inherit whatever alpha the fold drew last.
 void CardGlideAnimator::paint(juce::Graphics& g) const {
-    fold_->paint(g);
+    {
+        juce::Graphics::ScopedSaveState foldState(g);
+        fold_->paint(g);
+    }
     for (const auto& item : items_) {
         if (item.kind != Kind::Move) {
             paintGhost(g, item);
@@ -200,8 +207,8 @@ void CardGlideAnimator::paint(juce::Graphics& g) const {
         if (item.snapshot.isNull())
             continue;
         juce::Graphics::ScopedSaveState state(g);
-        if (item.fadeUp) // faint on the original, fully there by halfway
-            g.setOpacity(kFadeUpFrom + (1.0f - kFadeUpFrom) * std::min(1.0f, progress_ * 2.0f));
+        // A fade-up is faint on the original and fully there by halfway; any other glide is the card itself, whole.
+        g.setOpacity(item.fadeUp ? kFadeUpFrom + (1.0f - kFadeUpFrom) * std::min(1.0f, progress_ * 2.0f) : 1.0f);
         g.drawImage(item.snapshot, currentRect(item), juce::RectanglePlacement::stretchToFit);
     }
 }
