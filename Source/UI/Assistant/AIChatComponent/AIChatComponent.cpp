@@ -2,6 +2,7 @@
 #include "AI/UpgradeUrl.h"
 #include "Branding.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <cmath>
 
 namespace synth {
@@ -9,6 +10,13 @@ namespace synth {
 // Concern: construction/destruction, the request cancel/timeout watchdog, the panel's own
 // paint()/paintOverChildren(), and the small testing-hook formatters that don't warrant their
 // own unit -- everything left over once the concerns below have their own files.
+
+// Under Off the dot is held steady and startPulse never asks, so the full speed is the answer there.
+double AIChatComponent::waitingDotHalfCycleMs() {
+    constexpr double kFullHalfCycleMs = 600.0;
+    const double rate = synth::ui::loopRate();
+    return rate > 0.0 ? kFullHalfCycleMs / rate : kFullHalfCycleMs;
+}
 
 AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::ApplicationProperties& props)
     : aiService(service)

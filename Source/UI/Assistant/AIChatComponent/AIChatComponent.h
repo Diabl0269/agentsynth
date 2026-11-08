@@ -42,6 +42,8 @@ class AIChatComponent
 {
 public:
     AIChatComponent(AIIntegrationService& service, juce::ApplicationProperties& props);
+    /** The waiting dot's pulse half-cycle in ms: 600 at full speed, 600 / loopRate() under Reduced. */
+    static double waitingDotHalfCycleMs();
     ~AIChatComponent() override;
 
     void resized() override;
@@ -302,7 +304,7 @@ private:
             updaterPtr = &updater;
             pulseAnim.start(
                 updater,
-                600.0,                     // 600 ms per half-cycle
+                waitingDotHalfCycleMs(),   // ms per half-cycle (600 at full speed)
                 [](float t) { return t; }, // linear — easing handled below
                 [this](float t) {
                     // Ping-pong: 0→1 on even passes, 1→0 on odd passes.

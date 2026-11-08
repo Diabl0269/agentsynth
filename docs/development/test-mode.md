@@ -55,7 +55,7 @@ thread is never blocked and timers and animations run in between.
 | `mouseDown`, `mouseMoveHeld`, `mouseUp` | `id`, `x?`, `y?` (local, default centre), `mods` | `{id, point}`; one step of a drag each, so other commands can read the app while the button is held. A scenario that presses also releases: nothing lets go for it |
 | `drag` | `from`, `to`, `fromX?`, `fromY?`, `toX?`, `toY?`, `steps` (12), `mods` | `{from, to}` |
 | `key` | `keys` (`cmd+z`, `space`, `shift+tab`, `escape`, `up` ...), `target?` | `{handled}` |
-| `getState` | `id` | the `list` fields plus `enabled`, `hasFocus`, and per type: Button `text`/`toggleState`, Label `text`, Slider `value`/`min`/`max`, ComboBox `text`/`selectedId`, TextEditor `text`; a module card adds `selected`, `moduleType`, `title`, `nodeId` |
+| `getState` | `id` | the `list` fields plus `enabled`, `hasFocus`, and per type: Button `text`/`toggleState`, Label `text`, Slider `value`/`min`/`max`, ComboBox `text`/`selectedId`, TextEditor `text`; a module card adds `selected`, `moduleType`, `title`, `nodeId`, `cableFlowPhase` (the canvas's cable flow-dot phase) and `animationMode` (the Animations mode in force) |
 | `screenshot` | `id` or `window`, `path` (absolute), `scale` (1) | `{path, width, height}`; parent folders are created. `id: "screen"` is what a user sees (see [Screen frame](#screen-frame)) and also answers `windows` and `pointer` |
 | `openProject` | `path` (a `.agsproj` bundle) | `{name}` once it has loaded; refused while the open project has unsaved changes or the bundle has an autosave sidecar, because opening would ask first |
 | `saveProject` | `path` (ends in `.agsproj`) | `{path}` once written; what the Save dialog runs, without the dialog |
@@ -186,7 +186,7 @@ JSON-lines `run.log` under `<out>` (one folder per scenario when a directory run
 is non-zero when any step failed. A failed `expect` names the field that differed.
 
 A file is a list of steps, or a mapping with `steps:` and optional `settings:` (values written to the instance's settings
-file before it first starts, for an install that has to look old), and `motion: true` to start with `--automation-motion`, for a check that needs a slide or fade to run; see also [Video and saved project](#video-and-saved-project)). A step is one mapping, `- <command>: {args}`: any
+file before it first starts, for an install that has to look old; quote a string value such as `animationMode: "off"`, since YAML reads a bare `off`, `on`, `yes` or `no` as a boolean, written as 0 or 1), and `motion: true` to start with `--automation-motion`, for a check that needs a slide or fade to run; see also [Video and saved project](#video-and-saved-project)). A step is one mapping, `- <command>: {args}`: any
 protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) with its arguments, plus:
 
 | Step | Meaning |

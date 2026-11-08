@@ -60,6 +60,10 @@ void paintMidiMappedDot(juce::Graphics& g, juce::Rectangle<int> controlBounds, j
  *  (UI/Layout/AutomatedMarker.h) takes the top-left, and a test holds the two apart. */
 juce::Rectangle<int> midiMappedDotRect(juce::Rectangle<int> controlBounds);
 
+/** The armed outline's alpha `elapsedMs` after arming: a breath between 0.4 and 1.0 (period 1.2 s under full
+ *  animation, 4 s under Reduced), steady 1.0 under Off. Pure apart from reading the Animations preference. */
+float midiLearnArmedOutlineAlpha(double elapsedMs);
+
 /** Caller gates on "is this the armed control"; always paints when called, and must be repainted
  *  only by an existing gated timer/poll (Source/UI/CLAUDE.md's animation rule). */
 void paintMidiLearnArmedOutline(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour armedColour,

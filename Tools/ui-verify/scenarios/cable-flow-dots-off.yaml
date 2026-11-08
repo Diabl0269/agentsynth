@@ -1,0 +1,45 @@
+# FRO731: with Animations set to Off the cable signal-flow dots hold still.
+# What a user does: sets Preferences > Animations to Off (here written to the settings before the start), adds a
+# Reverb and an LFO, and patches the LFO output onto the Reverb's Level, then Auto Arrange. The two screenshots either side of the mark
+# (1.5 s apart) show the dots in the same place (the check compares them).
+motion: true
+record: true
+save_project: end
+settings:
+  animationMode: "off"                         # quoted: YAML reads a bare off as false
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "reverb"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: "lfo"}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Panel}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Reverb > Level"}
+  - wait: {}
+  - expect: {id: "card:Reverb", contains: {cabledTargets: Level}, within_ms: 3000}
+  - click: {id: Auto Arrange}                 # LFO left of the Reverb, so the cable runs in the open
+  - wait: {}
+  - mark: {check: 1, name: patched}             # lets the patch settle (1.5 s) before the first shot
+  - screenshot: {name: dots-before}
+  - expect: {id: "card:LFO", animationMode: "off", cableFlowPhase: 0}
+  - mark: {check: 1, name: dots-off}
+  - screenshot: {name: dots-after}
+  - expect: {id: "card:LFO", animationMode: "off", cableFlowPhase: 0}

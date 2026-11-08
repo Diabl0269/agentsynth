@@ -18,6 +18,8 @@
 // context menu is trying to open.
 #include "MidiLearnMenu.h"
 
+#include "UI/Layout/ReducedMotion.h"
+
 #include <cmath>
 
 namespace synth::ui::midilearn {
@@ -78,17 +80,25 @@ void paintMidiMappedDot(juce::Graphics& g, juce::Rectangle<int> controlBounds, j
     g.fillEllipse(midiMappedDotRect(controlBounds).toFloat());
 }
 
-// A thin 1px rect around controlBounds, alpha easing ~0.4..1.0 on a 1.2s sine anchored at
+float midiLearnArmedOutlineAlpha(double elapsedMs) {
+    const double rate = loopRate();
+    if (rate <= 0.0)
+        return 1.0f; // Animations Off: steady, at full strength
+    constexpr double kBreathPeriodSec = 1.2;
+    const double periodSec = kBreathPeriodSec / rate;
+    const float phase = static_cast<float>(
+        0.5 * (1.0 - std::cos(2.0 * juce::MathConstants<double>::pi * (elapsedMs / 1000.0) / periodSec)));
+    return 0.4f + 0.6f * phase;
+}
+
+// A thin 1px rect around controlBounds, alpha easing ~0.4..1.0 on a 1.2s sine (slower under Reduced, steady under
+// Off: midiLearnArmedOutlineAlpha) anchored at
 // armedSinceMs (juce::Time::getMillisecondCounterHiRes() when this target was armed) --
 // deliberately not a glow (docs/control/midi-remote-ui.md#the-learn-interaction: "this state must
 // read the same in every theme").
 void paintMidiLearnArmedOutline(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour armedColour,
                                 double armedSinceMs) {
-    const double elapsedSec = (juce::Time::getMillisecondCounterHiRes() - armedSinceMs) / 1000.0;
-    constexpr double kBreathPeriodSec = 1.2;
-    const float phase = static_cast<float>(
-        0.5 * (1.0 - std::cos(2.0 * juce::MathConstants<double>::pi * elapsedSec / kBreathPeriodSec)));
-    const float alpha = 0.4f + 0.6f * phase;
+    const float alpha = midiLearnArmedOutlineAlpha(juce::Time::getMillisecondCounterHiRes() - armedSinceMs);
     g.setColour(armedColour.withAlpha(alpha));
     g.drawRect(controlBounds, 1);
 }

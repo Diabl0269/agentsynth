@@ -786,6 +786,16 @@ automation marker fade) land at once. A new non-essential animation asks `prefer
 `AnimationDriver` or `motionMs` for its duration, and lands on its final state at once under Off.
 Tests: `setAnimationMode` sets the mode (restore `followSystem` afterwards); `setReducedMotionForTest` forces the OS's answer. The test run itself pins the OS's answer to off (`setSystemReducedMotionForTest(false)` in `Tests/TestMain.cpp`), so no test reads the machine's own Reduce Motion setting, which differs between CI runners and developer Macs; a test that wants it on forces it.
 
+### Continuous loops
+
+A decorative loop that never ends (the cable flow dots, the MIDI Learn breathing outline, the AI waiting dot) scales
+its speed by `synth::ui::loopRate()`: Full runs it as designed, Reduced at 0.3x (`kReducedLoopRate`), Off holds it
+still (the dots stay where they are, the outline is steady at full strength, the waiting dot is steady). The AI
+build-step icons and the toolbar AI glyph already stop under Reduce Motion. Live data (meters, scopes, the playhead) is
+never slowed. A new loop steps a phase by `loopRate()` or divides its period by it. The guard
+`MotionLoopUsers.EveryTimeDrivenLoopFollowsTheAnimationsSetting` fails for a Source/UI file that drives a loop from the
+clock or a stepped phase without asking the preference.
+
 ## What moves, and how
 
 | Feature | Animation | Owner |
