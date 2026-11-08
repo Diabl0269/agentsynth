@@ -29,6 +29,7 @@ steps:
   # Hold the up arrow: it repeats after the pause and stops on release.
   - mouseDown: {id: "card:Sequencer > Steps", x: 70, y: 12}
   - expect: {id: "card:Sequencer > Steps state", repeating: true, within_ms: 1000}
+  - mark: {check: 1, name: hold-steps-shade-glides}  # the shade edge glides column by column while Steps counts up
   - expect: {id: "card:Sequencer > Steps state", value: 12, within_ms: 3000}
   - mouseUp: {id: "card:Sequencer > Steps", x: 70, y: 12}
   - getState: {id: "card:Sequencer > Steps state"}

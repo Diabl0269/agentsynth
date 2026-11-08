@@ -122,6 +122,14 @@ public:
     /** Test seams: land every running motion at once. */
     void finishMotionForTest();
     bool isMotionRunning() const;
+    /** Test seam: advances the glide and the Steps dim `ms` after their first frame (off-screen grids get no VBlank).
+     */
+    void stepMotionForTest(double ms);
+    /** How dark the Steps shade over `step` is right now: 0 plays, 1 is past Steps, in between while it slides. */
+    float dimAmountForTest(int step) const { return dimAmount(step); }
+    /** The opacity (0..1) of the written-note outline of `step` while undo, redo or Fit glide it: `fromSide` is the one
+     *  fading out (the old note), otherwise the one fading in (the current note). */
+    float writtenOutlineAlpha(int step, bool fromSide) const;
 
     void addTestModeState(juce::DynamicObject& into) const override;
     void resized() override;
@@ -174,7 +182,8 @@ private:
     void startRevealMotion(std::uint16_t from, std::uint16_t to);
     void startPageSlide(float toPage);
     void startGlide(const SequencerPattern& from);
-    void startDim(int fromSteps);
+    void startGlide(const SequencerPattern& from, const MusicalScale& fromScale, int fromTranspose);
+    void startDim();
     float glideMix(int step) const;
     float dimAmount(int step) const;
 
@@ -190,7 +199,15 @@ private:
     float shownNormal(SequencerLane lane, int step) const;
     float shownPitch(int step) const;
     stepgrid::ChordLabel labelOf(SequencerChord chord, int playedRoot, int step) const;
-    juce::Rectangle<float> writtenOutlineRect(int step, juce::Rectangle<int> lane) const;
+    /** A written-note outline and how opaque it is. */
+    struct WrittenOutline {
+        juce::Rectangle<float> rect;
+        float alpha = 0.0f;
+    };
+    /** [0] the old note's outline fading out and [1] the current one fading in while a glide runs; outside a glide only
+     *  [1]. Both are the same rectangle once, at full alpha, when the note did not move. */
+    std::array<WrittenOutline, 2> writtenOutlines(int step, juce::Rectangle<int> lane) const;
+    juce::Rectangle<float> outlineRectFor(int step, int written, int played, juce::Rectangle<int> lane) const;
     juce::Rectangle<float> pitchBarRect(int step, float played, juce::Rectangle<int> lane) const;
     juce::Rectangle<float> chordLabelRect(const juce::Rectangle<float>& bar, juce::Rectangle<int> lane, int step) const;
     void paintLabel(juce::Graphics& g, const stepgrid::ChordLabel& label, juce::Rectangle<float> area,
@@ -290,8 +307,11 @@ private:
     SequencerPattern glideFrom_;
     float glideElapsed_ = 1.0f; ///< 0..1 of the whole glide including the stagger.
     bool gliding_ = false;
-    int dimFromSteps_ = 0;
+    std::array<float, kMaxSequencerSteps> dimFrom_{}; ///< each column's shade when the running dim began
+    int dimToSteps_ = -1; ///< the Steps the running dim heads for (-1: none yet, read it live)
     float dimT_ = 1.0f;
+    MusicalScale glideFromScale_; ///< the scale the glide's old pattern was played through
+    int glideFromTranspose_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StepGridComponent)
 };

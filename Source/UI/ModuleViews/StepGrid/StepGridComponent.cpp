@@ -208,8 +208,11 @@ void StepGridComponent::syncSettings() {
     const bool scaleChanged = r != seenRoot_ || mask != seenMask_;
     if (steps == seenSteps_ && t == seenTranspose_ && !scaleChanged)
         return;
-    if (steps != seenSteps_ && seenSteps_ >= 0)
-        startDim(seenSteps_);
+    if (steps != seenSteps_ && seenSteps_ >= 0) {
+        if (dimToSteps_ < 0)
+            dimToSteps_ = seenSteps_; // the first dim starts from the Steps the card was drawn with
+        startDim();
+    }
     seenSteps_ = steps;
     seenTranspose_ = t;
     seenRoot_ = r;
@@ -228,13 +231,15 @@ void StepGridComponent::syncPattern() {
     if (generation == seenGeneration_ || gesture_.active)
         return;
     const auto from = lastSeen_;
+    const auto fromScale = scale_; // syncSettings below may swap it before the glide starts
+    const int fromTranspose = transpose_;
     lastSeen_ = module_.getPattern();
     seenGeneration_ = generation;
     if (lastSeen_.customMask != seenMask_)
         syncSettings();
     refreshPitchRange();
     syncOpenRandomizePanel();
-    startGlide(from);
+    startGlide(from, fromScale, fromTranspose);
     repaint();
 }
 

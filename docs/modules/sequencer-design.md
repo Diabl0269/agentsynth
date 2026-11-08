@@ -263,7 +263,10 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
     chord label over the bar); when the scale moved the note, the written note is a solid 1.5 px outline in the text colour
     (readable on a dark and a light theme), drawn the moment a Key or Scale change reaches the card tick. A drag lands only on
     scale notes (`MusicalScale::snapPitch`; chromatic with No scale); Shift moves by octaves; the written pitch is the
-    played pitch minus Transpose. The rows are frozen while a drag is in progress.
+    played pitch minus Transpose. The rows are frozen while a drag is in progress. While a glide runs (undo, redo, Fit to
+    scale, a preset) the outline of the OLD note fades out as the one of the new note fades in, each with the bar's own
+    glide mix, so it never drops off for the span of the glide; a note that did not move keeps one steady outline. The
+    old note is played through the scale and Transpose it had (`glideFromScale_`), not the new ones.
   - **Pads** turn a step on or off; a stroke across them paints one state. **Gate, Velocity, Chance, Repeat, Nudge,
     Filter** are bar lanes: drag across them to draw, interpolating between the columns the pointer skipped.
     **Slide** (mono only) toggles the link between a step and the next. **Condition** opens a menu of `1/1` ... `8/8`.
@@ -279,7 +282,8 @@ Built. Both sequencers are ordinary layout cards: no bespoke branch is left in `
   bars glide to it.
 - **Motion** (all time-bounded, none free-running): lanes fold 160 ms (the card's height follows every frame, the
   neighbours make room once per direction), the columns slide 160 ms between pages, bars glide 160 ms with a 4 ms
-  per-column stagger, dimming 120 ms, the page pulse 220 ms. Reduce Motion shortens them to 80 ms without the stagger;
+  per-column stagger, dimming 120 ms (every column heads for its new 0 or 1 from the level it shows when Steps changes
+  again, so holding or dragging Steps slides the shade edge instead of flashing it), the page pulse 220 ms. Reduce Motion shortens them to 80 ms without the stagger;
   Animations Off lands at once.
 - **Accessibility.** The grid is one Tab stop, read as "Step 5 of 16, F2, on, chance 100 percent". Keys: Left/Right
   pick the step (the page follows), Up/Down change the focused lane's value (Pitch: one scale note, Shift: one octave;

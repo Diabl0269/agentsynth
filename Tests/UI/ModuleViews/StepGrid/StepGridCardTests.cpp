@@ -6,6 +6,7 @@
 #include "Modules/Sequencer/SequencerModuleBase.h"
 #include "StepGridCardFixture.h"
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
+#include "UI/Layout/FadeVisibility.h"
 #include "UI/ModuleViews/StepGrid/StepGridComponent.h"
 
 using namespace cardbody_test;
@@ -207,4 +208,39 @@ TEST(StepGridCard, ThePolyCardHasNoSlideLane) {
     c.grid->finishMotionForTest();
     EXPECT_EQ(c.grid->getLanes() & synth::sequencerLaneBit(SequencerLane::Slide), 0);
     EXPECT_TRUE(c.grid->cellBounds(SequencerLane::Slide, 0).isEmpty());
+}
+
+// holding the Steps arrow changes Steps faster than the 120 ms shade slide ends. Every column keeps heading
+// one way from the level it shows, so the shade edge glides instead of flashing the columns that were mid-fade.
+TEST(StepGridCard, TheShadePastStepsRetargetsFromWhereItIsWhenStepsChangesAgainMidFade) {
+    SeqCard c;
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    auto* steps = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(c.module, "steps"));
+    ASSERT_NE(steps, nullptr);
+    *steps = 16;
+    c.grid->poll();
+    c.grid->finishMotionForTest();
+    for (const int next : {4, 12, 6, 14}) {
+        std::array<float, 16> before{};
+        for (int s = 0; s < 16; ++s)
+            before[(size_t)s] = c.grid->dimAmountForTest(s);
+        *steps = next;
+        c.grid->poll();
+        for (int s = 0; s < 16; ++s)
+            EXPECT_NEAR(c.grid->dimAmountForTest(s), before[(size_t)s], 1.0e-5f)
+                << "column " << s << " jumped when Steps changed to " << next;
+        c.grid->stepMotionForTest(30.0); // the next hold repeat arrives before the 120 ms slide has ended
+        for (int s = 0; s < 16; ++s) {
+            const float target = s >= next ? 1.0f : 0.0f;
+            const float level = c.grid->dimAmountForTest(s);
+            EXPECT_LE(std::abs(level - target), std::abs(before[(size_t)s] - target) + 1.0e-5f)
+                << "column " << s << " moved away from its target " << target;
+            EXPECT_GE(level, 0.0f);
+            EXPECT_LE(level, 1.0f);
+        }
+    }
+    c.grid->finishMotionForTest();
+    for (int s = 0; s < 16; ++s)
+        EXPECT_FLOAT_EQ(c.grid->dimAmountForTest(s), s >= 14 ? 1.0f : 0.0f);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }
