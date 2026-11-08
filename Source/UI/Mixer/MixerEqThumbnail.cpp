@@ -1,7 +1,9 @@
 // Concern: MixerEqThumbnail's listener/cache lifecycle and its curve paint.
 #include "MixerEqThumbnail.h"
 
+#include "AppUndoManager.h"
 #include "EqResponseCurve.h"
+#include "UI/ModuleViews/EqBandGlide.h"
 #include "UI/ModuleViews/FrequencyGrid.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -9,7 +11,14 @@ namespace synth::ui {
 
 int MixerEqThumbnail::liveUnbindCallCountForTest_ = 0;
 
-MixerEqThumbnail::MixerEqThumbnail() { setInterceptsMouseClicks(true, false); }
+MixerEqThumbnail::MixerEqThumbnail()
+    : glide_(std::make_unique<EqBandGlide>(*this)) {
+    setInterceptsMouseClicks(true, false);
+    glide_->onChange = [this] {
+        recompute();
+        repaint();
+    };
+}
 
 MixerEqThumbnail::~MixerEqThumbnail() {
     // Same ordering as MixerFader's own destructor discipline (unbind before the module pointer
@@ -29,6 +38,8 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
     graph_ = graph;
     nodeId_ = nodeId;
 
+    restorePending_ = false;
+    glide_->sync(lastBands_, lastOutputGainDb_, lastBands_, lastOutputGainDb_, false); // ends any glide of the old EQ
     if (eq_ == nullptr) {
         cachedMagnitudesDb_.clear();
         setVisible(false);
@@ -39,9 +50,13 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
         if (param != nullptr)
             param->addListener(this);
 
+    lastBands_ = eq_->getBandSnapshots();
+    lastOutputGainDb_ = eq_->getOutputGainDb();
     setVisible(true);
     recompute(); // synchronous, so the first paint after binding already has data
 }
+
+KeyedPointTween& MixerEqThumbnail::getBandGlideForTest() noexcept { return glide_->tweenForTest(); }
 
 void MixerEqThumbnail::detachListeners() {
     if (eq_ == nullptr)
@@ -65,6 +80,10 @@ void MixerEqThumbnail::detachListeners() {
 void MixerEqThumbnail::parameterValueChanged(int, float) {
     // May land on any thread -- a CV-modulated band's resolved value is written from the audio
     // thread. The only thing this callback may safely do is coalesce onto the message thread.
+    // A write the undo manager makes while it restores marks the refresh it causes as a restore (asked here, not at
+    // the refresh, so a restore of something else can never make a later knob drag glide).
+    if (undo_ != nullptr && juce::MessageManager::existsAndIsCurrentThread() && undo_->isRestoring())
+        restorePending_ = true;
     triggerAsyncUpdate();
 }
 
@@ -73,14 +92,27 @@ void MixerEqThumbnail::parameterGestureChanged(int, bool) {
 }
 
 void MixerEqThumbnail::handleAsyncUpdate() {
-    recompute();
+    syncFromModule(restorePending_.exchange(false));
     repaint();
+}
+
+void MixerEqThumbnail::syncFromModule(bool restored) {
+    if (eq_ == nullptr)
+        return;
+    const auto bands = eq_->getBandSnapshots();
+    const float outputGainDb = eq_->getOutputGainDb();
+    glide_->sync(lastBands_, lastOutputGainDb_, bands, outputGainDb, restored);
+    lastBands_ = bands;
+    lastOutputGainDb_ = outputGainDb;
+    recompute();
 }
 
 void MixerEqThumbnail::recompute() {
     if (eq_ == nullptr)
         return;
-    cachedMagnitudesDb_ = EqResponseCurve::compute(*eq_);
+    // The curve is summed from the DRAWN bands, which trail the real ones while an undo or redo glides.
+    const auto drawn = glide_->drawn(lastBands_, lastOutputGainDb_);
+    cachedMagnitudesDb_ = EqResponseCurve::compute(drawn.curve, drawn.outputGainDb);
     cachedBypassed_ = eq_->isBypassed();
     ++recomputeCount_;
 }

@@ -145,6 +145,7 @@ void ModuleComponent::wireEqGestureCallbacks(EQCurveComponent& curve) {
         else
             safeThis->undoManager->pushSnapshotFromCapture(graph);
     };
+    curve.setUndoManager(undoManager); // an undo or redo glides the dots and the curve
     curve.onGestureStart = [capture] { capture(true); };
     curve.onGestureEnd = [capture] { capture(false); };
 }
@@ -172,6 +173,7 @@ void ModuleComponent::openEqWindow() {
         });
 
     content->onAppShortcut = synth::ui::makeAppShortcutRelay(this);
+    content->setUndoManager(undoManager);
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(content.release());

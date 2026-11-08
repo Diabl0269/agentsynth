@@ -14,6 +14,9 @@ list(APPEND APPUI_SOURCES
     Source/UI/Layout/KeyGlide/KeyedTween.h
     Source/UI/Layout/KeyGlide/KeyedTween.cpp
     Source/UI/Layout/KeyGlide/KeyedPointTween.h
+    Source/UI/ModuleViews/EQCurveGlide.cpp
+    Source/UI/ModuleViews/EqBandGlide.h
+    Source/UI/ModuleViews/EqBandGlide.cpp
     Source/UI/Layout/PointEditing/PointSelectionModel.h
     Source/UI/Layout/PointEditing/PointSelectionModel.cpp
     Source/UI/Layout/PointEditing/PointGroupMove.h

@@ -782,6 +782,8 @@ for only the first one in signal order**, Cubase's own single-slot idiom and a d
   thread-hop `HostedPluginModule::InstanceListener` uses for `audioProcessorChanged`. `paint()` reads
   only the cached magnitudes and bypass flag, never the module, so "no unconditional per-tick repaint"
   holds by construction: there is no `Timer`.
+- **Undo and redo** glide the curve to the restored bands like the EQ's own curve (`EqBandGlide`,
+  [undo-glide.md](../layout/undo-glide.md#points-dots-and-clips)), re-summing the cached magnitudes on each glide frame.
 - **Destruction and every rebind cancel the pending update and detach every listener** before the
   module pointer can go stale, the same ordering `MixerFader::unbind()` uses.
 - **Finding the EQ** — `MixerColumnComponent::setColumn()` walks `column.inserts` (already signal

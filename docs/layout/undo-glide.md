@@ -62,6 +62,16 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   drag **scales** each note from the old span to the new one through the gliding rectangle, and a Trim drag leaves the notes
   where they are so the edge slides over them. `UndoGlideSurfaces` registers a clip-contents surface for every sizing mode and
   both edges in which the notes change place, and a second test holds the rest still.
+- **Parametric EQ curves.** `EqBandGlide` (`UI/ModuleViews/EqBandGlide.h`) keeps the EQ's REAL band settings final at once and
+  eases what is DRAWN. A band is two keys: place (log2 frequency, gain) and shape (Q, presence 0 to 1), plus one for the
+  output trim, so frequency, gain, Q and on/off move in one 160 ms glide and the curve is re-summed from the drawn bands
+  on every frame. An undo that switches a band off fades it out where it stood, and a redo that brings it back fades it
+  in where it lands (it never flies to or from its hidden settings). `EQCurveComponent` (the card's curve and the pop-out
+  EQ window's, each with its own watch; `setUndoManager`) asks a `RestoreWatch` on EVERY 30 Hz tick, changed or not, so a
+  restore that left this EQ alone cannot make a later drag glide; a drag, a key step or a CV change lands at once and
+  ends any running glide. `MixerEqThumbnail` marks a restore when a parameter write arrives while
+  `AppUndoManager::isRestoring()` (a flag instead of a watch, because its refresh is queued and unrelated restores never
+  reach it). The card's knobs are plain `juce::Slider`s that take the restored values at once and repaint themselves; they do not glide.
 
 **Repainting.** `KeyedTween` repaints the WHOLE owner for every frame, retarget, clear, fade step and erase: the lane's
 curve is drawn through the tweened points, so a box around the moving dot would leave the old dot and the segments to its
@@ -69,7 +79,7 @@ neighbours stale. An owner whose paint of a moving thing stays strictly inside t
 repaint with `repaintOnlyAround(px)`; none does today (lane, curve editor, morph map and clip lane all take the default,
 the clip lane because its selection outline, label and notes reach past the clip rectangle).
 
-Under Reduce Motion a restored point, dot, cursor or clip is already at its new place on the first frame and fades in
+Under Reduce Motion a restored point, dot (an EQ band's dot too), cursor or clip is already at its new place on the first frame and fades in
 there over `control_motion::kReducedMs` from low opacity (`KeyedTween::retarget(..., fadeWhenReduced = true)`, read with
 `alphaFor`). Animations Off and an owner that is off screen land it plain (a test forces the tween with
 `forceAnimateForTest`). The LFO card's Custom-wave editor takes the same path: its poll passes the restore flag to
@@ -90,6 +100,12 @@ The same list is walked under Reduce Motion (a fade for the point surfaces, an i
 ## Registration
 
 `DragCancel.EscMidDragRestoresTheDocumentAndLeavesNoUndoStep` (`Tests/UI/Layout/DragCancelTests.cpp`) holds every clip-lane and piano-roll drag gesture to Esc: real press and drag, Esc through the key walk, release; the document and undo history must be unchanged and the preview gone. `DragCancel.EveryDragModeOfBothSurfacesIsListed` fails by name for a drag mode missing from its table.
+
+`UndoGlideSurfaces` is an opt-in list, so a curve nobody registered snaps without any test failing (the EQ curves were
+missed this way). There is no cheap general detector for "a module-window curve that has a restore path": the miss is the
+ABSENCE of a tween, which nothing in the source marks. The rule stands in review: a surface that re-reads its model on a
+timer or a listener registers here. `EqUndoGlide` (`Tests/UI/ModuleViews/EqUndoGlideTests.cpp`) covers what the list cannot
+for the EQ: add/remove fades, the joint glide, a drag landing at once, and Cmd+Z / Cmd+Shift+Z from the curve and the window.
 
 Two discovery tests keep the guards above from being skipped by a new surface. `DragSurfaces.EveryMouseDragOverrideIsRegistered`
 (`Tests/UI/Layout/DragSurfaceRegistryTests.cpp`) scans `Source/` for every class that overrides `mouseDrag` and fails by

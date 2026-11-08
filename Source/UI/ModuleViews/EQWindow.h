@@ -67,6 +67,9 @@ public:
         return true;
     }
 
+    /** Lets an undo or redo glide the window's curve (EQCurveComponent::setUndoManager). */
+    void setUndoManager(AppUndoManager* manager) { curve->setUndoManager(manager); }
+
     /** Forwards the undo bracketing hooks to the hosted curve. */
     void setGestureCallbacks(std::function<void()> onStart, std::function<void()> onEnd) {
         curve->onGestureStart = std::move(onStart);
