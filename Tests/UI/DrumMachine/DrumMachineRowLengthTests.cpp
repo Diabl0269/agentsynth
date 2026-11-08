@@ -2,6 +2,7 @@
 // (preview equals commit, one undo step), the row-name menu, the four Alt+arrow actions through the shortcut table, the
 // accessible names, and the motion rules. The model is in Timeline/TimelineDoc; playback is the snapshot's.
 
+#include "../../ShortcutDisplayText.h"
 #include "DrumMachineGrooveFixture.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "Transport/TransportService.h"
@@ -233,7 +234,8 @@ TEST(DrumMachineRowLengthTest, TheHandleShowsOnHoverWithAResizeCursorAndTheToolt
     EXPECT_TRUE(f.grid.getMouseCursor() == juce::MouseCursor(juce::MouseCursor::LeftRightResizeCursor));
     EXPECT_TRUE(f.grid.getTooltip().startsWith("Drag to change how long this drum's pattern is"))
         << f.grid.getTooltip();
-    EXPECT_TRUE(f.grid.getTooltip().contains("Alt")) << "the tooltip names the keys";
+    EXPECT_TRUE(synth::test::has(f.grid.getTooltip(), synth::test::modifierPrefix(juce::ModifierKeys::altModifier)))
+        << "the tooltip names the keys";
     f.grid.mouseMove(hover(f.grid, centreOf(f.grid.cellBounds(f.row(), 5))));
     EXPECT_EQ(f.grid.getHoverEdgeRow(), -1);
     EXPECT_TRUE(f.grid.getMouseCursor() == juce::MouseCursor(juce::MouseCursor::NormalCursor));

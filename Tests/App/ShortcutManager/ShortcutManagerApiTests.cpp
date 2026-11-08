@@ -1,5 +1,6 @@
 // Concern: ShortcutsSettingsTab's pure filter helpers, the basic ShortcutManager API surface,
 // the shortcutHintFor tooltip helper, and the ChangeBroadcaster/persistence broadcast contract.
+#include "../../ShortcutDisplayText.h"
 #include "ShortcutManagerTestFixture.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
 
@@ -151,7 +152,7 @@ TEST_F(ShortcutManagerTest, KeyPressToDisplayString_Formats) {
     juce::KeyPress cmdS('s', juce::ModifierKeys::commandModifier, 0);
     auto display = ShortcutManager::keyPressToDisplayString(cmdS);
 #if JUCE_MAC
-    EXPECT_TRUE(display.contains("Cmd"));
+    EXPECT_TRUE(synth::test::has(display, synth::test::modifierPrefix(juce::ModifierKeys::commandModifier)));
 #endif
     EXPECT_TRUE(display.contains("S"));
 }
@@ -285,7 +286,7 @@ TEST(ShortcutDisplayNamesTest, NamedKeysReadAsWordsNotControlCharacters) {
     }
     EXPECT_EQ(
         ShortcutManager::keyPressToDisplayString(KeyPress(KeyPress::returnKey, juce::ModifierKeys::shiftModifier, 0)),
-        "Shift + Return");
+        synth::test::keyText(juce::KeyPress::returnKey, juce::ModifierKeys::shiftModifier));
 }
 
 // Every default binding is spelled with printable characters only, and a search by the key's name finds its row.
@@ -316,7 +317,7 @@ TEST_F(ShortcutManagerTest, NoBindingIsSpelledWithAltOnAMacAndEveryModifierIsASy
         EXPECT_FALSE(text.contains("Cmd") || text.contains("Ctrl") || text.contains("Shift"))
             << id << ": '" << text << "'";
 #else
-        EXPECT_FALSE(text.contains(juce::String::fromUTF8("\xe2\x8c\xa5"))) << id << ": '" << text << "'";
+        EXPECT_FALSE(synth::test::has(text, juce::String::fromUTF8("\xe2\x8c\xa5"))) << id << ": '" << text << "'";
 #endif
     }
 #if JUCE_MAC

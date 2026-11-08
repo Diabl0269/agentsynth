@@ -4,6 +4,7 @@
 // Duplicate/Select All/Repeat commands delegate to. Panel level, ungated. ToolPanelFixture is
 // local to this file.
 
+#include "../../../ShortcutDisplayText.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
@@ -316,7 +317,8 @@ TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInThe
 
     EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Split)->getTooltip(), "Split  (3)");
     EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(),
-              juce::String::fromUTF8("Draw  (8) \xc2\xb7 shapes: Shift + 8"));
+              juce::String::fromUTF8("Draw  (8) \xc2\xb7 shapes: ") +
+                  synth::test::keyText('8', juce::ModifierKeys::shiftModifier));
 
     f.panel.setActiveTool(synth::ui::EditTool::Erase);
     for (auto tool : synth::ui::kAllEditTools)

@@ -7,6 +7,7 @@
 // MainComponent + AudioEngine (mirroring FocusArbitrationPlaybackDeleteTests.cpp's
 // SpaceTogglesPlayback), since a bare ShortcutManager has no ApplicationCommandManager to invoke
 // through.
+#include "../../ShortcutDisplayText.h"
 #include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
@@ -234,8 +235,12 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportBarTooltipsNameTheirS
     EXPECT_EQ(bar.getPlayStopButton().getTooltip(), expected("Play / Stop", "togglePlayback"));
     EXPECT_EQ(bar.getLoopButton().getTooltip(), expected("Loop", "timelineToggleLoop"));
 #if JUCE_MAC
-    EXPECT_TRUE(bar.getMetronomeButton().getTooltip().endsWith("(Ctrl + M)")) << bar.getMetronomeButton().getTooltip();
-    EXPECT_TRUE(bar.getRecordButton().getTooltip().endsWith("(Ctrl + R)")) << bar.getRecordButton().getTooltip();
+    EXPECT_TRUE(bar.getMetronomeButton().getTooltip().endsWith(
+        "(" + synth::test::keyText('m', juce::ModifierKeys::ctrlModifier) + ")"))
+        << bar.getMetronomeButton().getTooltip();
+    EXPECT_TRUE(bar.getRecordButton().getTooltip().endsWith(
+        "(" + synth::test::keyText('r', juce::ModifierKeys::ctrlModifier) + ")"))
+        << bar.getRecordButton().getTooltip();
 #endif
 
     shortcuts.setBinding("transportToggleMetronome", juce::KeyPress('9', juce::ModifierKeys::altModifier, 0));

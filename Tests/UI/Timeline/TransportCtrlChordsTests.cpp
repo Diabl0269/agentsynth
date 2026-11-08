@@ -126,8 +126,12 @@ TEST_P(TransportCtrlChordsTest, TheRecordAndMetronomeTooltipsNameTheirChords) {
     auto& bar = mc_->getTimelinePanel().getTransportBar();
     const auto record = bar.getRecordButton().getTooltip();
     const auto metronome = bar.getMetronomeButton().getTooltip();
-    EXPECT_TRUE(record.containsIgnoreCase("Ctrl + R") || record.containsIgnoreCase("Ctrl+R")) << record;
-    EXPECT_TRUE(metronome.containsIgnoreCase("Ctrl + M") || metronome.containsIgnoreCase("Ctrl+M")) << metronome;
+    EXPECT_TRUE(record.contains(
+        ShortcutManager::keyPressToDisplayString(mc_->getShortcutManager().getBinding("transportRecord"))))
+        << record;
+    EXPECT_TRUE(metronome.contains(
+        ShortcutManager::keyPressToDisplayString(mc_->getShortcutManager().getBinding("transportToggleMetronome"))))
+        << metronome;
 }
 
 TEST_P(TransportCtrlChordsTest, TheDisplacedActionsStayReachableOnTheirOwnChords) {

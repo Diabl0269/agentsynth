@@ -2,6 +2,7 @@
 // it is enabled, what a click does (the view trades places with the one in the main area), the tooltip and screen
 // reader name, Shift+Return on the strip, and the label giving way before the icon on a narrow tab
 // (docs/mixer/panel.md#the-tab-strip).
+#include "../../ShortcutDisplayText.h"
 #include "BottomDockMainAreaFixture.h"
 #include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/IconButton.h"
@@ -39,7 +40,8 @@ protected:
     juce::String tooltipWithKey(Tab view, const juce::String& name) {
         const auto key = ShortcutManager::keyPressToDisplayString(
             mc_->getShortcutManager().getBinding(dock().swapActionIdForTab(view)));
-        return synth::ui::formatShortcutHint(name, key.isEmpty() ? "Shift + Return" : "Shift + Return or " + key);
+        return synth::ui::formatShortcutHint(name, key.isEmpty() ? synth::test::shiftReturnText()
+                                                                 : synth::test::shiftReturnText() + " or " + key);
     }
     void SetUp() override {
         BottomDockMainAreaTest::SetUp();
@@ -268,7 +270,8 @@ TEST_F(BottomDockSwapIconTest, HoveringAnIconOfATabShowsThatIconsTooltip) {
 TEST_F(BottomDockSwapIconTest, TheSwapIconTooltipNamesTheStripKeyAndTheBoundKey) {
     dock().setShortcutTextSource([](const juce::String&) { return juce::String("Opt + Cmd + 2"); });
     EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(),
-              "Show Mixer in the main area  (Shift + Return or Opt + Cmd + 2)");
+              "Show Mixer in the main area  (" + synth::test::shiftReturnText() + " or Opt + Cmd + 2)");
     dock().setShortcutTextSource([](const juce::String&) { return juce::String(); });
-    EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(), "Show Mixer in the main area  (Shift + Return)");
+    EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(),
+              "Show Mixer in the main area  (" + synth::test::shiftReturnText() + ")");
 }

@@ -20,6 +20,7 @@
 //                              for why the CallOutBox/floating split is implemented this way.
 // Mirrors MidiDestinationPickerTests.cpp's "talk to the component directly" approach.
 
+#include "../../ShortcutDisplayText.h"
 #include "../Layout/FadeVisibilityTestGuard.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
@@ -217,8 +218,8 @@ TEST(ModuleLibraryHelpPopupSeam, ComponentPassesItsShortcutManagerIntoThePopup) 
         ShortcutManager::keyPressToDisplayString(juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0));
     const auto lines = popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts);
     const juce::String joined = lines.joinIntoString(" | ");
-    EXPECT_TRUE(joined.contains(cmdU));
-    EXPECT_FALSE(joined.contains(cmdZ));
+    EXPECT_TRUE(synth::test::has(joined, cmdU));
+    EXPECT_FALSE(synth::test::has(joined, cmdZ));
 }
 
 TEST(ModuleLibraryHelpPopupSeam, RefreshingAfterARebindUpdatesTheShortcutSectionOfAPersistentPopup) {
@@ -236,14 +237,15 @@ TEST(ModuleLibraryHelpPopupSeam, RefreshingAfterARebindUpdatesTheShortcutSection
         ShortcutManager::keyPressToDisplayString(juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0));
     const auto cmdU =
         ShortcutManager::keyPressToDisplayString(juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
-    ASSERT_TRUE(popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts).joinIntoString("|").contains(cmdZ));
+    ASSERT_TRUE(synth::test::has(
+        popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts).joinIntoString("|"), cmdZ));
 
     manager.setBinding("undo", juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
     comp.refreshHelpPopoverForTest();
 
     const auto after = popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts).joinIntoString("|");
-    EXPECT_TRUE(after.contains(cmdU));
-    EXPECT_FALSE(after.contains(cmdZ));
+    EXPECT_TRUE(synth::test::has(after, cmdU));
+    EXPECT_FALSE(synth::test::has(after, cmdZ));
 }
 
 // ============================================================================
@@ -525,7 +527,7 @@ TEST(ModuleLibraryHelpContent, ShortcutLinesWithNoManagerUseTheDocumentedDefault
     const auto lines = ModuleLibraryHelpPopup::shortcutLines(nullptr);
     const juce::String joined = lines.joinIntoString(" | ");
     EXPECT_TRUE(joined.contains("Undo"));
-    EXPECT_TRUE(joined.contains(cmdZ));
+    EXPECT_TRUE(synth::test::has(joined, cmdZ));
     EXPECT_TRUE(joined.contains("Redo"));
     EXPECT_TRUE(joined.contains("Play / Stop"));
     EXPECT_TRUE(joined.contains("Space"));
@@ -547,13 +549,13 @@ TEST(ModuleLibraryHelpContent, RebindingAShortcutChangesItsLineImmediately) {
     const auto cmdU =
         ShortcutManager::keyPressToDisplayString(juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
     ASSERT_GE(undoIndex, 0);
-    EXPECT_TRUE(before[undoIndex].contains(cmdZ));
+    EXPECT_TRUE(synth::test::has(before[undoIndex], cmdZ));
 
     manager.setBinding("undo", juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
     const auto after = ModuleLibraryHelpPopup::shortcutLines(&manager);
 
-    EXPECT_TRUE(after[undoIndex].contains(cmdU));
-    EXPECT_FALSE(after[undoIndex].contains(cmdZ));
+    EXPECT_TRUE(synth::test::has(after[undoIndex], cmdU));
+    EXPECT_FALSE(synth::test::has(after[undoIndex], cmdZ));
 }
 
 TEST(ModuleLibraryHelpContent, ClearingAShortcutDropsItsKeyButKeepsTheLabel) {

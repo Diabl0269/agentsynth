@@ -1,6 +1,7 @@
 // BottomDockSwapKeysTests.cpp -- the keys behind the main area: Cmd+J for the bottom panel, Opt+Cmd+1..4 to swap a
 // view into the main area (default keys, routing, clean refusals, the announcement, the icon tooltips) and the
 // Tab order following the layout (docs/control/shortcuts.md, docs/control/focus-regions.md).
+#include "../../ShortcutDisplayText.h"
 #include "BottomDockMainAreaFixture.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Layout/IconButton.h"
@@ -138,7 +139,8 @@ TEST_F(BottomDockSwapKeysTest, TheSwapIconTooltipNamesTheKeyAndFollowsARebind) {
         const auto key =
             ShortcutManager::keyPressToDisplayString(shortcuts.getBinding(dock().swapActionIdForTab(view)));
         return synth::ui::formatShortcutHint(juce::String("Show ") + name + " in the main area",
-                                             key.isEmpty() ? "Shift + Return" : "Shift + Return or " + key);
+                                             key.isEmpty() ? synth::test::shiftReturnText()
+                                                           : synth::test::shiftReturnText() + " or " + key);
     };
     for (const auto& [view, name] : {std::pair{Tab::Mixer, "Mixer"}, std::pair{Tab::MidiRemote, "Controllers"},
                                      std::pair{Tab::Canvas, "Canvas"}}) {
@@ -157,7 +159,8 @@ TEST_F(BottomDockSwapKeysTest, TheSwapIconTooltipNamesTheKeyAndFollowsARebind) {
     EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(), tooltipFor(Tab::Mixer, "Mixer"));
     shortcuts.setBinding("swapDockTab2ToMain", juce::KeyPress());
     shortcuts.onBindingsChanged();
-    EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(), "Show Mixer in the main area  (Shift + Return)")
+    EXPECT_EQ(dock().getSwapIcon(Tab::Mixer).getTooltip(),
+              "Show Mixer in the main area  (" + synth::test::shiftReturnText() + ")")
         << "an unbound key is not named";
     shortcuts.resetToDefaults();
 }

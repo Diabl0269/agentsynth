@@ -7,6 +7,7 @@
 // newPatchForTest() + simulateAddAudioTrackClick(), which boxes {Track Audio, Gate, EQ, Compressor,
 // Strip} into one macro) rather than a hand-built graph/doc/macros trio, so the arm key
 // exercises the REAL MainComponent::performTrackEdit wiring end to end, not a stub.
+#include "../../ShortcutDisplayText.h"
 #include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
@@ -215,7 +216,9 @@ TEST(MixerPanelKeyboardFocusTest, TheFaderNudgeKeysAreRebindableAndTheTooltipNam
     f.panel->setShortcutManager(&shortcuts);
     f.panel->keyPressed(rightKey());
     auto& slider = f.panel->getStripColumnForTest(0)->getFaderForTest().getSlider();
-    EXPECT_TRUE(slider.getTooltip().contains("Shift + Up")) << slider.getTooltip();
+    EXPECT_TRUE(synth::test::has(slider.getTooltip(),
+                                 synth::test::keyText(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier)))
+        << slider.getTooltip();
     const auto nodeId = f.panel->getStripColumnForTest(0)->getNodeId();
     const float before = gainOf(f.mc, nodeId);
 

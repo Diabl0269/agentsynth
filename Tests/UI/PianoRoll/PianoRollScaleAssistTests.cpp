@@ -4,6 +4,7 @@
 // transpose it enables, and the ScaleAssistPanel component in isolation via its own accessors.
 // Shared PianoRollFixture and makeScaleAssistTestProps live in PianoRollTestHelpers.h.
 
+#include "../../ShortcutDisplayText.h"
 #include "../Layout/FadeVisibilityTestGuard.h"
 #include "PianoRollKeyPickerHelpers.h"
 #include "PianoRollTestHelpers.h"
@@ -57,7 +58,7 @@ TEST(PianoRollScaleAssistTest, TooltipReportsForTheScaleButton) {
     // hardcoded default: Ctrl + S (a chorded key is never lower-cased).
     const auto tooltip = f.roll.getTooltipFor(centreOf(f.roll.getScaleButtonBounds()).toInt());
     EXPECT_TRUE(tooltip.startsWith("Scale assist"));
-    EXPECT_TRUE(tooltip.contains("Ctrl + S"));
+    EXPECT_TRUE(synth::test::has(tooltip, synth::test::modifierPrefix(juce::ModifierKeys::ctrlModifier) + "S"));
 }
 
 TEST(PianoRollScaleAssistTest, QuantiseAndScaleTooltipsTrackALiveRebindAndClearingRestoresTheDefault) {
@@ -75,7 +76,8 @@ TEST(PianoRollScaleAssistTest, QuantiseAndScaleTooltipsTrackALiveRebindAndCleari
     mgr.setBinding("pianoRollToggleScalePanel", juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0));
     tooltip = f.roll.getTooltipFor(centreOf(f.roll.getScaleButtonBounds()).toInt());
     EXPECT_TRUE(tooltip.contains("M")) << "the current binding's key";
-    EXPECT_FALSE(tooltip.contains("Ctrl + S")) << "not the hardcoded default anymore";
+    EXPECT_FALSE(synth::test::has(tooltip, synth::test::modifierPrefix(juce::ModifierKeys::ctrlModifier) + "S"))
+        << "not the hardcoded default anymore";
 
     f.roll.setShortcutManager(nullptr);
     tooltip = f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre());

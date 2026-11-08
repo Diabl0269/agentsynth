@@ -2,6 +2,7 @@
 // pen's shape flyout, the Shift+digit shape keys, and the Range tool's lane range with
 // the verbs that act on it. Real events on the real panel's children.
 
+#include "../../../ShortcutDisplayText.h"
 #include "AutomationLanesTestFixture.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -325,7 +326,8 @@ TEST(AutomationLanesShapeTest, TheDrawButtonTooltipNamesTheFlyoutKey) {
     const auto tip = f.pen().getTooltip();
     EXPECT_TRUE(tip.startsWith("Draw")) << tip;
     EXPECT_TRUE(tip.contains("8")) << tip;
-    EXPECT_TRUE(tip.contains("shapes: Shift + 8")) << tip;
+    EXPECT_TRUE(synth::test::has(tip, "shapes: " + synth::test::keyText('8', juce::ModifierKeys::shiftModifier)))
+        << tip;
     f.panel.setShortcutManager(nullptr);
 }
 
@@ -344,8 +346,9 @@ TEST(AutomationLanesShapeTest, EachFlyoutRowHasANameATooltipWithItsShortcutAndTh
         ASSERT_NE(row, nullptr);
         EXPECT_EQ(row->getTitle(), juce::String(synth::ui::drawShapeName(shape)) + " shape");
         EXPECT_TRUE(f.flyout->getRowTooltip(shape).startsWith(row->getTitle()));
-        EXPECT_TRUE(
-            f.flyout->getRowTooltip(shape).contains("Shift + " + juce::String(synth::ui::drawShapeKeyDigit(shape))))
+        EXPECT_TRUE(synth::test::has(f.flyout->getRowTooltip(shape),
+                                     synth::test::modifierPrefix(juce::ModifierKeys::shiftModifier) +
+                                         juce::String(synth::ui::drawShapeKeyDigit(shape))))
             << f.flyout->getRowTooltip(shape);
         EXPECT_TRUE(row->getWantsKeyboardFocus());
     }
@@ -361,7 +364,7 @@ TEST(AutomationLanesShapeTest, ARowShowsARebindOfItsShortcut) {
     f.panel.openShapeFlyout();
     ASSERT_NE(f.flyout, nullptr);
     const auto tip = f.flyout->getRowTooltip(DrawShape::Square);
-    EXPECT_FALSE(tip.contains("Shift + 6")) << tip;
+    EXPECT_FALSE(synth::test::has(tip, synth::test::keyText('6', juce::ModifierKeys::shiftModifier))) << tip;
     EXPECT_TRUE(tip.contains("Q") || tip.contains("q")) << tip;
     f.panel.setShortcutManager(nullptr);
 }

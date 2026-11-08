@@ -8,6 +8,7 @@
 #include "UI/Theme/BuiltInThemes.h"
 #include <cmath>
 #include <gtest/gtest.h>
+#include <vector>
 
 namespace {
 
@@ -29,6 +30,11 @@ protected:
     }
     void TearDown() override {
         mc_->setLookAndFeel(nullptr);
+        // Opening the dock persists "bottomDockVisible" in the shared settings; later tests expect it hidden.
+        if (auto* settings = mc_->getAppPropertiesForTest().getUserSettings()) {
+            settings->removeValue("bottomDockVisible");
+            settings->saveIfNeeded();
+        }
         BottomDockMainAreaTest::TearDown();
     }
     juce::Component& tabButton(Tab tab) { return *dock().getSwapIcon(tab).getParentComponent(); }
@@ -64,6 +70,16 @@ protected:
         return s;
     }
 
+    // A drop persists the new tab order in the shared settings file; put the original back so later tests see it.
+    void restoreOrder(const std::vector<Tab>& original) {
+        for (size_t i = 0; i < original.size(); ++i) {
+            const auto order = dock().getTabOrderForTest();
+            if (order[i] == original[i])
+                continue;
+            dock().reorderTabsForTest(order[i], original[i]);
+        }
+    }
+
     // Picks the tab up and drags it a little way so it is lifted at full lift.
     void liftAndDrag(Tab tab, double& now) {
         auto* grabbed = &tabButton(tab);
@@ -80,6 +96,7 @@ protected:
 
 TEST_F(BottomDockLiftedTabLookTest, TheLiftedActiveTabKeepsTheActiveFillAndTextAndAnInactiveOneKeepsTheInactiveLook) {
     FadeAnimateGuard guard;
+    const auto originalOrder = dock().getTabOrderForTest();
     for (const auto& theme : synth::theme::builtInThemes()) {
         synth::theme::AppLookAndFeel lookAndFeel;
         lookAndFeel.applyTheme(theme);
@@ -112,6 +129,7 @@ TEST_F(BottomDockLiftedTabLookTest, TheLiftedActiveTabKeepsTheActiveFillAndTextA
                 << what << " text in the glide";
             now = 1.0e6;
             dock().stepReorderFrameForTest();
+            restoreOrder(originalOrder);
         }
     }
 }
