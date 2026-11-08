@@ -527,6 +527,32 @@ class ProofMarkTests(unittest.TestCase):
         with self.assertRaises(run.ScenarioError):  # a name is used once per scenario
             run.parse_scenario("steps:\n  - mark: {%s}\n  - mark: {check: 2, name: a-b}\n" % good, "x")
 
+    def test_a_glide_films_a_burst_of_frames_after_its_command_and_tiles_a_strip(self):
+        text = ("record: true\nsteps:\n  - glide: {name: slide, frames: 6, do: {click: {id: a, x: 1, y: 2}}}\n"
+                "  - mark: {check: 1, name: landed}\n")
+        with tempfile.TemporaryDirectory() as out:
+            runner, app, (ok, message) = self.run_scenario(text, out)
+            self.assertTrue(ok, message)
+            self.assertEqual([c[0] for c in app.calls].count("click"), 1)
+            self.assertGreaterEqual([c[0] for c in app.calls].count("screenshot"), 7)  # six glide frames, then the mark's
+            entry = [e for e in runner.log if e["cmd"] == "glide"][0]
+            self.assertEqual(entry["reply"]["frames"], 6)
+            if recording.find_ffmpeg() is None:
+                self.skipTest("no ffmpeg, so no strip")
+            self.assertTrue(os.path.getsize(os.path.join(out, "proof", "slide-strip.png")) > 0)
+
+    def test_malformed_glides_are_refused_at_parse_time(self):
+        ok = "record: true\nsteps:\n  - glide: %s\n"
+        run.parse_scenario(ok % "{name: a, do: {key: {keys: cmd+z}}, crop: {x: 0, y: 0, w: 5, h: 5}}", "x")
+        bad = ["{do: {click: {id: a}}}", "{name: a}", "{name: A, do: {click: {id: a}}}", "{name: a, do: {mark: {}}}",
+               "{name: a, do: {click: {id: a}}, frames: 3}", "{name: a, do: {click: {id: a}}, frames: 41}",
+               "{name: a, do: {click: {id: a}}, crop: {x: 0, y: 0, w: 0, h: 5}}", "{name: a, do: {click: 1}}"]
+        for args in bad:
+            with self.assertRaises(run.ScenarioError, msg=args):
+                run.parse_scenario(ok % args, "x")
+        with self.assertRaises(run.ScenarioError):  # it films, so it needs record
+            run.parse_scenario("steps:\n  - glide: {name: a, do: {click: {id: a}}}\n", "x")
+
     def test_the_clip_window_is_two_and_a_half_before_to_three_after_within_four_to_six_seconds(self):
         recorder = recording.Recorder("unused")
         recorder.frames = [("f", 1.0)] * 40  # 39 s and the last frame's hold
