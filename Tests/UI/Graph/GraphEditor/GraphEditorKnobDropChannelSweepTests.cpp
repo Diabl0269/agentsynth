@@ -43,8 +43,10 @@ bool shownOnCard(const juce::Component* c, const juce::Component& card) {
 // A fresh engine with an LFO and one module of `typeName`, so one drop never sees the cable of another.
 struct KnobDrop {
     AudioEngine engine;
-    GraphEditor editor{engine};
+    // Declared before the editor so the nodes outlive its cards: a card detaches from its processor when the editor
+    // is destroyed, after the destructor body has shut the engine down.
     juce::AudioProcessorGraph::Node::Ptr lfo, node;
+    GraphEditor editor{engine};
     ModuleBase* module = nullptr;
     ModuleComponent* lfoCard = nullptr;
     ModuleComponent* card = nullptr;
