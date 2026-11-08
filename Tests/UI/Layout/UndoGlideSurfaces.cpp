@@ -208,6 +208,9 @@ const std::vector<Entry>& surfaces() {
         {"Automation lane point", true, [] { return std::make_unique<LanePointSurface>(); }},
         {"Timeline clip edge", true, [] { return std::make_unique<ClipTrimSurface>(); }},
         {"LFO card curve point", true, [] { return makeLfoCardPoint(); }},
+        {"EQ card curve band", true, [] { return makeEqCardCurve(); }},
+        {"EQ window curve band", true, [] { return makeEqWindowCurve(); }},
+        {"EQ mixer thumbnail curve", true, [] { return makeEqMixerThumbnail(); }},
         {"Timeline track row", false, [] { return makeTimelineTrackRows(); }},
         {"Automation lane row", false, [] { return makeAutomationLaneReorder(); }},
     };

@@ -1,9 +1,11 @@
 #pragma once
 
+#include "EqBandGlide.h"
 #include "FrequencyGrid.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/VisualBuffer.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <algorithm>
@@ -11,6 +13,8 @@
 #include <functional>
 #include <juce_dsp/juce_dsp.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+
+class AppUndoManager;
 
 /** Interactive response curve for ParametricEQModule, in the traditional DAW idiom.
  *
@@ -58,6 +62,10 @@ public:
         spectrumMagnitudes.resize(numPoints, kSpecMinDb);
         lastBands = eqModule.getBandSnapshots();
         lastOutputGainDb = eqModule.getOutputGainDb();
+        glide_.onChange = [this] {
+            recomputeMagnitudes();
+            repaint();
+        };
         recomputeMagnitudes();
         setWantsKeyboardFocus(true);
         setTitle("EQ curve");
@@ -81,6 +89,15 @@ public:
         repaint();
     }
     bool getShowSpectrum() const { return showSpectrum; }
+
+    /** Lets an undo or redo glide the dots and the curve to the restored bands instead of snapping (EqBandGlide.h).
+     *  Without one every change lands at once. The manager must outlive this component. */
+    void setUndoManager(AppUndoManager* manager);
+
+    /** Where band `band`'s dot is drawn now (it trails the real band while a restore glides), and how opaque. */
+    juce::Point<float> getDrawnBandPosition(int band) const noexcept { return bandPosition(drawn_.dots[(size_t)band]); }
+    float getDrawnBandAlpha(int band) const noexcept { return drawn_.alpha[(size_t)band]; }
+    synth::ui::KeyedPointTween& getBandGlideForTest() noexcept { return glide_.tweenForTest(); }
 
     int getSelectedBand() const { return selectedBand; }
     int getHoveredBand() const { return hoveredBand; }
@@ -303,27 +320,7 @@ public:
 
     // ---------- painting ----------
 
-    void timerCallback() override {
-        const auto bands = eqModule.getBandSnapshots();
-        const float outputGainDb = eqModule.getOutputGainDb();
-
-        if (bandsDiffer(bands, lastBands) || outputGainDb != lastOutputGainDb) {
-            lastBands = bands;
-            lastOutputGainDb = outputGainDb;
-            recomputeMagnitudes();
-            repaint();
-            refreshAccessibilityValue();
-        }
-
-        if (showSpectrum && eqModule.getVisualBuffer() != nullptr) {
-            const bool hasSignal = updateSpectrum();
-            // Repaint while there is signal, plus one final frame once it goes quiet so the
-            // display settles instead of freezing mid-decay. A silent patch costs nothing.
-            if (hasSignal || spectrumWasActive)
-                repaint();
-            spectrumWasActive = hasSignal;
-        }
-    }
+    void timerCallback() override;
 
     void paint(juce::Graphics& g) override {
         using synth::ui::FrequencyGrid;
@@ -408,9 +405,11 @@ public:
 
         // ---- Band handles: one numbered dot per ENABLED band ----
         for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
-            const auto& band = lastBands[(size_t)b];
+            const auto& band = drawn_.dots[(size_t)b];
             if (!band.enabled)
                 continue;
+            // A band an undo brings or takes away fades; the Reduce Motion fade of a restored dot is the same alpha.
+            const float dotAlpha = drawn_.alpha[(size_t)b];
 
             const auto centre = bandPosition(band);
             const float bx = juce::jlimit(0.0f, w, centre.x);
@@ -420,12 +419,12 @@ public:
 
             // Halo on the hovered/selected handle, so the scroll-changes-Q target is obvious.
             if (active) {
-                g.setColour(accent.withAlpha(0.25f));
+                g.setColour(accent.withAlpha(0.25f * dotAlpha));
                 g.fillEllipse(bx - radius - 4.0f, by - radius - 4.0f, (radius + 4.0f) * 2.0f, (radius + 4.0f) * 2.0f);
             }
-            g.setColour(bgColor);
+            g.setColour(bgColor.withMultipliedAlpha(dotAlpha));
             g.fillEllipse(bx - radius, by - radius, radius * 2.0f, radius * 2.0f);
-            g.setColour(accent);
+            g.setColour(accent.withMultipliedAlpha(dotAlpha));
             g.drawEllipse(bx - radius, by - radius, radius * 2.0f, radius * 2.0f, 2.0f);
 
             g.setFont(juce::Font(9.0f));
@@ -456,6 +455,20 @@ public:
     }
 
 private:
+    /** The band-poll half of the timer: adopts changed settings, gliding them when `restored`. */
+    void syncBands(const synth::ui::EqBandGlide::Bands& bands, float outputGainDb, bool restored);
+
+    void spectrumTick() {
+        if (showSpectrum && eqModule.getVisualBuffer() != nullptr) {
+            const bool hasSignal = updateSpectrum();
+            // Repaint while there is signal, plus one final frame once it goes quiet so the
+            // display settles instead of freezing mid-decay. A silent patch costs nothing.
+            if (hasSignal || spectrumWasActive)
+                repaint();
+            spectrumWasActive = hasSignal;
+        }
+    }
+
     static constexpr int numPoints = 512;
     static constexpr int fftOrder = 10; // 1024-point FFT
     static constexpr int fftSize = 1 << fftOrder;
@@ -504,11 +517,8 @@ private:
      *  pointer rather than waiting up to 33 ms for the next timer tick.
      */
     void refreshFromModule() {
-        lastBands = eqModule.getBandSnapshots();
-        lastOutputGainDb = eqModule.getOutputGainDb();
-        recomputeMagnitudes();
+        syncBands(eqModule.getBandSnapshots(), eqModule.getOutputGainDb(), false); // a gesture lands at once
         repaint();
-        refreshAccessibilityValue();
     }
 
     static bool bandsDiffer(const std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>& a,
@@ -521,10 +531,12 @@ private:
     }
 
     void recomputeMagnitudes() {
+        // The curve is summed from the DRAWN bands, which trail the real ones while an undo or redo glides.
+        drawn_ = glide_.drawn(lastBands, lastOutputGainDb);
         for (int i = 0; i < numPoints; ++i) {
             const float freq = synth::ui::FrequencyGrid::indexToFreq(i, numPoints);
             magnitudes[(size_t)i] =
-                juce::jlimit(minDb, maxDb, ParametricEQModule::responseDb(lastBands, lastOutputGainDb, freq));
+                juce::jlimit(minDb, maxDb, ParametricEQModule::responseDb(drawn_.curve, drawn_.outputGainDb, freq));
         }
     }
 
@@ -612,6 +624,10 @@ private:
     std::vector<float> magnitudes;
     std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands> lastBands{};
     float lastOutputGainDb = 0.0f;
+    synth::ui::EqBandGlide glide_{*this};
+    synth::ui::EqBandGlide::Drawn drawn_;
+    synth::ui::RestoreWatch restoreWatch_;
+    AppUndoManager* undoManager_ = nullptr;
 
     int selectedBand = -1;
     juce::String announcedValueText;

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Modules/FX/ParametricEQModule.h"
+#include "UI/ModuleViews/EqBandGlide.h"
+#include <atomic>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -37,6 +39,8 @@
 // AsyncUpdater; the actual recompute + repaint happens once, on the message thread, in
 // handleAsyncUpdate() -- the same thread-hop HostedPluginModule::InstanceListener uses for its own
 // audioProcessorChanged callback. paint() reads only the cached result, never the module.
+class AppUndoManager;
+
 namespace synth::ui {
 
 class MixerEqThumbnail
@@ -61,6 +65,12 @@ public:
      *  none (a headless test binding a module with no graph at all). */
     void setEqModule(ParametricEQModule* eq, juce::AudioProcessorGraph* graph = nullptr,
                      juce::AudioProcessorGraph::NodeID nodeId = {});
+
+    // Undo/redo glide (EqBandGlide.h; docs/layout/undo-glide.md).
+    void setUndoManager(AppUndoManager* manager) noexcept { undo_ = manager; }
+    KeyedPointTween& getBandGlideForTest() noexcept { return glide_.tweenForTest(); }
+    void flushForTest() { handleUpdateNowIfNeeded(); }
+    float getDrawnMagnitudeDbForTest(int index) const { return cachedMagnitudesDb_[(size_t)index]; }
 
     /** Fires on mouseUp -- MixerColumnComponent forwards this through its existing onEditOnCanvas
      *  seam with the EQ node's own uuid, exactly like a column header click or the insert list's
@@ -90,10 +100,17 @@ private:
 
     void detachListeners();
     void recompute();
+    void syncFromModule(bool restored);
 
     ParametricEQModule* eq_ = nullptr;
     juce::AudioProcessorGraph* graph_ = nullptr;
     juce::AudioProcessorGraph::NodeID nodeId_;
+
+    AppUndoManager* undo_ = nullptr;
+    std::atomic<bool> restorePending_{false};
+    EqBandGlide glide_{*this};
+    EqBandGlide::Bands lastBands_{};
+    float lastOutputGainDb_ = 0.0f;
 
     std::vector<float> cachedMagnitudesDb_;
     bool cachedBypassed_ = false;

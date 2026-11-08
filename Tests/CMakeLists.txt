@@ -521,6 +521,7 @@ add_executable(Tests
     UI/Chrome/StatusBarTests.cpp
     UI/ModuleViews/FrequencyResponseTests.cpp
     UI/ModuleViews/EQCurveTests.cpp
+    UI/ModuleViews/EqUndoGlideTests.cpp
     UI/ModuleViews/ModuleViewsKeyboardTests.cpp
     UI/ModuleViews/ScopeTests.cpp
     UI/ModuleViews/CurveEditor/CurveModelTests.cpp

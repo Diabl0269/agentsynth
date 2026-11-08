@@ -150,6 +150,7 @@ void MixerColumnComponent::configure(juce::AudioProcessorGraph& graph, AppUndoMa
     graphEditor_ = &graphEditor;
     graph_ = &graph;
     undoManager_ = &undoManager;
+    eqThumbnail_.setUndoManager(&undoManager);
     audioEngine_ = &audioEngine;
     macros_ = &macros;
     meterReader_ = meterReader;

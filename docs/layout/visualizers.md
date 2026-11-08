@@ -75,6 +75,11 @@ an EQ point" hint.
 | Scroll over a point | Widens or narrows it (Q), multiplicatively |
 | Hover | Halos the handle and shows a freq / gain / Q readout bottom-right |
 
+**Undo and redo.** Cmd+Z and Cmd+Shift+Z glide the dots and the curve to the restored bands in 160 ms (frequency, gain, Q and
+on/off together; an added band fades in and out where it stands), on the card and in the pop-out window alike; drags
+and key steps land at once, and Reduce Motion fades the dot instead. See [undo-glide.md](undo-glide.md#points-dots-and-clips).
+The keys themselves are left to the app: the curve ignores any press with Cmd or Ctrl held and `EQWindow` relays them.
+
 **Keyboard.** The curve is a Tab stop (card and pop-out alike) with the accent focus ring. Like a
 native control's own keys, these act only inside the focused curve and are not rebindable actions:
 

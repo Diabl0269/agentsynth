@@ -49,6 +49,10 @@ const std::vector<Entry>& surfaces();
 std::unique_ptr<Surface> makeTimelineTrackRows();
 std::unique_ptr<Surface> makeAutomationLaneReorder();
 std::unique_ptr<Surface> makeLfoCardPoint();
+/** The Parametric EQ curve of the card, of the pop-out EQ window, and of the mixer column's thumbnail. */
+std::unique_ptr<Surface> makeEqCardCurve();
+std::unique_ptr<Surface> makeEqWindowCurve();
+std::unique_ptr<Surface> makeEqMixerThumbnail();
 
 /** Clip contents: the notes inside a MIDI clip whose edge was dragged, one entry per sizing mode and edge in which the
  *  notes change place (UndoGlideSurfacesClipContents.cpp builds them by looping over every mode and both edges). */
