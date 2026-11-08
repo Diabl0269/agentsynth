@@ -11,7 +11,6 @@
 #include "TestMode/TestModeStateSource.h"
 #include "UI/Graph/CardBody/CardBodyViews.h"
 #include "UI/Layout/LaneChips/LaneChipRow.h"
-#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -19,6 +18,7 @@
 
 namespace synth::ui {
 
+class PopoverSlot;
 class StepGridPolyHint;
 
 /** What the card gives the step grid after it is built: the undo record, and the card's height hooks. */
@@ -242,7 +242,7 @@ private:
     juce::String monoDestination_;
     sequencer_ops::RandomizeSettings randomize_;
     bool randomizeSeeded_ = false;
-    PopoverSlot randomizeSlot_; ///< the Randomize popover while it is open: the button toggles it
+    std::unique_ptr<PopoverSlot> randomizeSlot_; ///< the Randomize popover while it is open: the button toggles it
     juce::Component::SafePointer<StepGridRandomizePanel> randomizePanel_; ///< the panel last built, if still alive
     bool randomizeFromSaved_ = false; ///< randomize_'s range came from the pattern's saved range, not a seed.
     StepGridPageStrip pages_;

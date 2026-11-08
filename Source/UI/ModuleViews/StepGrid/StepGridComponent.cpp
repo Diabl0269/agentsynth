@@ -4,6 +4,7 @@
 #include "StepGridComponent.h"
 #include "StepGridPolyHint.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
 #include <cmath>
 

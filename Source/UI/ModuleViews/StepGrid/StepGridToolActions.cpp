@@ -207,7 +207,9 @@ void StepGridComponent::openRandomizePanel() {
     }
     auto& button = tools_.getButton(Tool::Randomize);
     // The Randomize button toggles the panel: a second request closes it, one while it fades does nothing.
-    randomizeSlot_.open([this] { return makeRandomizePanel(); }, button.getScreenBounds(), this, {.trigger = &button});
+    if (randomizeSlot_ == nullptr)
+        randomizeSlot_ = std::make_unique<PopoverSlot>();
+    randomizeSlot_->open([this] { return makeRandomizePanel(); }, button.getScreenBounds(), this, {.trigger = &button});
 }
 
 } // namespace synth::ui
