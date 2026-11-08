@@ -6,6 +6,7 @@
 #include "Modules/FX/ParametricEQModule.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/EQWindow.h"
+#include "UI/ModuleViews/EqBandGlide.h"
 #include <gtest/gtest.h>
 
 namespace {

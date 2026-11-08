@@ -7,6 +7,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Mixer/MixerEqThumbnail.h"
 #include "UI/ModuleViews/EQWindow.h"
+#include "UI/ModuleViews/EqBandGlide.h"
 #include "UndoGlideSurfaces.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 

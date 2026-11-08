@@ -1,11 +1,9 @@
 #pragma once
 
-#include "EqBandGlide.h"
 #include "FrequencyGrid.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/VisualBuffer.h"
 #include "UI/Layout/FocusRing.h"
-#include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <algorithm>
@@ -15,6 +13,10 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class AppUndoManager;
+namespace synth::ui {
+template <typename T>
+class KeyedTween;
+} // namespace synth::ui
 
 /** Interactive response curve for ParametricEQModule, in the traditional DAW idiom.
  *
@@ -55,28 +57,9 @@ public:
     /** Click/hover radius around a band handle, in pixels. */
     static constexpr float kHitRadius = 11.0f;
 
-    explicit EQCurveComponent(ParametricEQModule& eq)
-        : eqModule(eq) {
-        magnitudes.resize(numPoints, 0.0f);
-        fftData.resize(fftSize * 2, 0.0f);
-        spectrumMagnitudes.resize(numPoints, kSpecMinDb);
-        lastBands = eqModule.getBandSnapshots();
-        lastOutputGainDb = eqModule.getOutputGainDb();
-        glide_.onChange = [this] {
-            recomputeMagnitudes();
-            repaint();
-        };
-        recomputeMagnitudes();
-        setWantsKeyboardFocus(true);
-        setTitle("EQ curve");
-        setDescription("Parametric EQ response with up to four bands");
-        setTooltip("EQ curve: Left/Right pick a band, Up/Down change its gain, Alt+Left/Right its frequency, "
-                   "Page Up/Down its Q, Return switches it on or off. Mouse: double-click to add or remove a "
-                   "point, drag to move, scroll for Q");
-        startTimerHz(30);
-    }
+    explicit EQCurveComponent(ParametricEQModule& eq);
 
-    ~EQCurveComponent() override { stopTimer(); }
+    ~EQCurveComponent() override;
 
     /** Called around every parameter-changing gesture so the host can bracket it in one undo
      *  step. Both are optional; when unset the gestures still work, just without undo entries.
@@ -95,9 +78,9 @@ public:
     void setUndoManager(AppUndoManager* manager);
 
     /** Where band `band`'s dot is drawn now (it trails the real band while a restore glides), and how opaque. */
-    juce::Point<float> getDrawnBandPosition(int band) const noexcept { return bandPosition(drawn_.dots[(size_t)band]); }
-    float getDrawnBandAlpha(int band) const noexcept { return drawn_.alpha[(size_t)band]; }
-    synth::ui::KeyedPointTween& getBandGlideForTest() noexcept { return glide_.tweenForTest(); }
+    juce::Point<float> getDrawnBandPosition(int band) const noexcept { return bandPosition(dotBands_[(size_t)band]); }
+    float getDrawnBandAlpha(int band) const noexcept { return dotAlpha_[(size_t)band]; }
+    synth::ui::KeyedTween<juce::Point<float>>& getBandGlideForTest() noexcept;
 
     int getSelectedBand() const { return selectedBand; }
     int getHoveredBand() const { return hoveredBand; }
@@ -405,11 +388,11 @@ public:
 
         // ---- Band handles: one numbered dot per ENABLED band ----
         for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
-            const auto& band = drawn_.dots[(size_t)b];
+            const auto& band = dotBands_[(size_t)b];
             if (!band.enabled)
                 continue;
             // A band an undo brings or takes away fades; the Reduce Motion fade of a restored dot is the same alpha.
-            const float dotAlpha = drawn_.alpha[(size_t)b];
+            const float dotAlpha = dotAlpha_[(size_t)b];
 
             const auto centre = bandPosition(band);
             const float bx = juce::jlimit(0.0f, w, centre.x);
@@ -456,7 +439,8 @@ public:
 
 private:
     /** The band-poll half of the timer: adopts changed settings, gliding them when `restored`. */
-    void syncBands(const synth::ui::EqBandGlide::Bands& bands, float outputGainDb, bool restored);
+    void syncBands(const std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>& bands,
+                   float outputGainDb, bool restored);
 
     void spectrumTick() {
         if (showSpectrum && eqModule.getVisualBuffer() != nullptr) {
@@ -530,15 +514,7 @@ private:
         return false;
     }
 
-    void recomputeMagnitudes() {
-        // The curve is summed from the DRAWN bands, which trail the real ones while an undo or redo glides.
-        drawn_ = glide_.drawn(lastBands, lastOutputGainDb);
-        for (int i = 0; i < numPoints; ++i) {
-            const float freq = synth::ui::FrequencyGrid::indexToFreq(i, numPoints);
-            magnitudes[(size_t)i] =
-                juce::jlimit(minDb, maxDb, ParametricEQModule::responseDb(drawn_.curve, drawn_.outputGainDb, freq));
-        }
-    }
+    void recomputeMagnitudes();
 
     /** Runs the FFT into spectrumMagnitudes. Returns false when the input is silent, so the
      *  caller can skip the repaint entirely.
@@ -624,9 +600,10 @@ private:
     std::vector<float> magnitudes;
     std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands> lastBands{};
     float lastOutputGainDb = 0.0f;
-    synth::ui::EqBandGlide glide_{*this};
-    synth::ui::EqBandGlide::Drawn drawn_;
-    synth::ui::RestoreWatch restoreWatch_;
+    struct GlideState; // EqBandGlide + RestoreWatch, defined in EQCurveGlide.cpp (their headers reach far)
+    std::unique_ptr<GlideState> glide_;
+    std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands> dotBands_{}; // as drawn now
+    std::array<float, ParametricEQModule::kNumBands> dotAlpha_{};
     AppUndoManager* undoManager_ = nullptr;
 
     int selectedBand = -1;

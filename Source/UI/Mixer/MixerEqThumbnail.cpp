@@ -3,6 +3,7 @@
 
 #include "AppUndoManager.h"
 #include "EqResponseCurve.h"
+#include "UI/ModuleViews/EqBandGlide.h"
 #include "UI/ModuleViews/FrequencyGrid.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -10,9 +11,10 @@ namespace synth::ui {
 
 int MixerEqThumbnail::liveUnbindCallCountForTest_ = 0;
 
-MixerEqThumbnail::MixerEqThumbnail() {
+MixerEqThumbnail::MixerEqThumbnail()
+    : glide_(std::make_unique<EqBandGlide>(*this)) {
     setInterceptsMouseClicks(true, false);
-    glide_.onChange = [this] {
+    glide_->onChange = [this] {
         recompute();
         repaint();
     };
@@ -37,7 +39,7 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
     nodeId_ = nodeId;
 
     restorePending_ = false;
-    glide_.sync(lastBands_, lastOutputGainDb_, lastBands_, lastOutputGainDb_, false); // ends any glide of the old EQ
+    glide_->sync(lastBands_, lastOutputGainDb_, lastBands_, lastOutputGainDb_, false); // ends any glide of the old EQ
     if (eq_ == nullptr) {
         cachedMagnitudesDb_.clear();
         setVisible(false);
@@ -53,6 +55,8 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
     setVisible(true);
     recompute(); // synchronous, so the first paint after binding already has data
 }
+
+KeyedPointTween& MixerEqThumbnail::getBandGlideForTest() noexcept { return glide_->tweenForTest(); }
 
 void MixerEqThumbnail::detachListeners() {
     if (eq_ == nullptr)
@@ -97,7 +101,7 @@ void MixerEqThumbnail::syncFromModule(bool restored) {
         return;
     const auto bands = eq_->getBandSnapshots();
     const float outputGainDb = eq_->getOutputGainDb();
-    glide_.sync(lastBands_, lastOutputGainDb_, bands, outputGainDb, restored);
+    glide_->sync(lastBands_, lastOutputGainDb_, bands, outputGainDb, restored);
     lastBands_ = bands;
     lastOutputGainDb_ = outputGainDb;
     recompute();
@@ -107,7 +111,7 @@ void MixerEqThumbnail::recompute() {
     if (eq_ == nullptr)
         return;
     // The curve is summed from the DRAWN bands, which trail the real ones while an undo or redo glides.
-    const auto drawn = glide_.drawn(lastBands_, lastOutputGainDb_);
+    const auto drawn = glide_->drawn(lastBands_, lastOutputGainDb_);
     cachedMagnitudesDb_ = EqResponseCurve::compute(drawn.curve, drawn.outputGainDb);
     cachedBypassed_ = eq_->isBypassed();
     ++recomputeCount_;

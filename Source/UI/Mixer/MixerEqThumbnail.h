@@ -1,11 +1,12 @@
 #pragma once
 
 #include "Modules/FX/ParametricEQModule.h"
-#include "UI/ModuleViews/EqBandGlide.h"
+#include <array>
 #include <atomic>
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <vector>
 
 // MixerEqThumbnail.h (docs/mixer/panel.md#what-the-mixer-shows): a small frequency-response curve on a
@@ -43,6 +44,10 @@ class AppUndoManager;
 
 namespace synth::ui {
 
+class EqBandGlide;
+template <typename T>
+class KeyedTween;
+
 class MixerEqThumbnail
     : public juce::Component
     , public juce::SettableTooltipClient
@@ -68,7 +73,7 @@ public:
 
     // Undo/redo glide (EqBandGlide.h; docs/layout/undo-glide.md).
     void setUndoManager(AppUndoManager* manager) noexcept { undo_ = manager; }
-    KeyedPointTween& getBandGlideForTest() noexcept { return glide_.tweenForTest(); }
+    KeyedTween<juce::Point<float>>& getBandGlideForTest() noexcept;
     void flushForTest() { handleUpdateNowIfNeeded(); }
     float getDrawnMagnitudeDbForTest(int index) const { return cachedMagnitudesDb_[(size_t)index]; }
 
@@ -108,8 +113,8 @@ private:
 
     AppUndoManager* undo_ = nullptr;
     std::atomic<bool> restorePending_{false};
-    EqBandGlide glide_{*this};
-    EqBandGlide::Bands lastBands_{};
+    std::unique_ptr<EqBandGlide> glide_;
+    std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands> lastBands_{};
     float lastOutputGainDb_ = 0.0f;
 
     std::vector<float> cachedMagnitudesDb_;
