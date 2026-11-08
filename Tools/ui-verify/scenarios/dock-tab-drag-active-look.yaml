@@ -23,12 +23,12 @@ steps:
   - mouseMoveHeld: {id: Timeline, x: 40, y: 8}
   - mouseMoveHeld: {id: Timeline, x: 70, y: 8}
   - mouseMoveHeld: {id: Timeline, x: 100, y: 8}
-  - mouseMoveHeld: {id: Timeline, x: 130, y: 8}
+  - glide: {name: drag, frames: 14, do: {mouseMoveHeld: {id: Timeline, x: 130, y: 8}}}
   - screenshot: {name: 2-active-tab-mid-drag}
   - mark: {check: 1, name: active-tab-mid-drag}
-  - mouseUp: {id: Timeline, x: 130, y: 8}
-  - mark: {check: 1, name: active-tab-just-dropped}
+  - glide: {name: drop, frames: 14, do: {mouseUp: {id: Timeline, x: 130, y: 8}}}
   - wait: {}
+  - mark: {check: 1, name: active-tab-just-dropped}
   - screenshot: {name: 3-active-tab-after-drop}
   # An inactive tab, dragged the same way, keeps the inactive look.
   - mouseDown: {id: Mixer, x: 20, y: 8}
