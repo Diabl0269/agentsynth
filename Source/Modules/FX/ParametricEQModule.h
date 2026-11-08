@@ -166,31 +166,31 @@ public:
         // Output. These follow the normalised CV convention (base + CV in the parameter's own
         // 0-1 range, docs/modules/modulation.md#cv-in-normalised-units) rather than the bells'
         // bespoke exponential/linear curves above, which stay exactly as they were so no saved
-        // patch changes sound. `base` is each parameter's current smoothed value, same as every
-        // other smoothed CV target in the FX suite (e.g. Compressor Threshold/Ratio).
-        // Each active flag is published so getBandSnapshots() can overlay the CV-resolved value
-        // instead of the raw knob — otherwise the visualiser (and any headless caller) never
-        // sees these jacks do anything, even though they are already driving the audio below.
+        // patch changes sound. `base` is each parameter's KNOB value, never the smoother's own value: with no CV
+        // patched that makes the target the smoother itself and freezes it. Each active flag is published so
+        // getBandSnapshots() can overlay the CV-resolved value instead of the raw knob — otherwise the visualiser (and
+        // any headless caller) never sees these jacks do anything, even though they are already driving the audio
+        // below.
         const float freq0Cv = blockCV(buffer, 6);
-        smoothedFreq[0].setTargetValue(modulateNormalised(*bands[0].freq, smoothedFreq[0].getCurrentValue(), freq0Cv));
+        smoothedFreq[0].setTargetValue(modulateNormalised(*bands[0].freq, bands[0].freq->get(), freq0Cv));
         freqCVActive[0].store(freq0Cv != 0.0f, std::memory_order_relaxed);
 
         const float gain0Cv = blockCV(buffer, 7);
-        smoothedGain[0].setTargetValue(modulateNormalised(*bands[0].gain, smoothedGain[0].getCurrentValue(), gain0Cv));
+        smoothedGain[0].setTargetValue(modulateNormalised(*bands[0].gain, bands[0].gain->get(), gain0Cv));
         gainCVActive[0].store(gain0Cv != 0.0f, std::memory_order_relaxed);
 
         const float freq3Cv = blockCV(buffer, 8);
-        smoothedFreq[3].setTargetValue(modulateNormalised(*bands[3].freq, smoothedFreq[3].getCurrentValue(), freq3Cv));
+        smoothedFreq[3].setTargetValue(modulateNormalised(*bands[3].freq, bands[3].freq->get(), freq3Cv));
         freqCVActive[3].store(freq3Cv != 0.0f, std::memory_order_relaxed);
 
         const float gain3Cv = blockCV(buffer, 9);
-        smoothedGain[3].setTargetValue(modulateNormalised(*bands[3].gain, smoothedGain[3].getCurrentValue(), gain3Cv));
+        smoothedGain[3].setTargetValue(modulateNormalised(*bands[3].gain, bands[3].gain->get(), gain3Cv));
         gainCVActive[3].store(gain3Cv != 0.0f, std::memory_order_relaxed);
 
         for (int b = 0; b < kNumBands; ++b) {
             const float qCv = blockCV(buffer, 10 + b);
             smoothedQ[(size_t)b].setTargetValue(
-                modulateNormalised(*bands[(size_t)b].q, smoothedQ[(size_t)b].getCurrentValue(), qCv));
+                modulateNormalised(*bands[(size_t)b].q, bands[(size_t)b].q->get(), qCv));
             qCVActive[(size_t)b].store(qCv != 0.0f, std::memory_order_relaxed);
         }
 
