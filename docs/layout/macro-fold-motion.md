@@ -88,3 +88,15 @@ overlay, and timed by the pure `MacroFoldTimeline.h` (like `ExitEnterTimeline.h`
   Off, and an off-screen canvas, land at once (`Hooks::canAnimate`; tests force it with `setForceAnimateForTest` and
   step `MacroFoldAnimator::applyAtMs`).
 - **A frame repaints only the fold's area** (its border, ghosts and the cables it draws), never the whole canvas.
+- **One owner per drawn thing per frame.** In every frame each card on screen is drawn once: by its real card, by the
+  glide's picture of it (the real card at alpha 0), or by the fold (the real card held invisible); and each cable is
+  drawn once, by the canvas or by the fold. The fold and the glide paint in the same overlay pass, the fold first, so
+  every drawer sets its own opacity before drawing a picture: JUCE draws an image at the alpha of the last colour set,
+  and a glide picture drawn after the fold's fading boxes and cables used to inherit their alpha, so the neighbours
+  an opening macro pushed aside faded to a shadow and snapped back when the motion ended. The fold also paints inside
+  its own saved state. Guards: `CardGlideMacroPushOpenNeighbour.*` and `MacroFoldCableSlideOpenNeighbour.*`
+  (`Tests/UI/Graph/MacroFold/MacroFoldOpenNeighbourTests.cpp`) open the fro830 test project
+  (`Tools/ui-verify/fixtures/fro830-test.agsproj`: a macro opening into an open neighbour, cables crossing both
+  borders), then open Macro, open Macro2 and undo the open, rendering every 20 ms frame under Full motion, Reduce
+  Motion and Off. They fail on a card or cable that is missing or drawn twice, and on a gliding card drawn dimmer than
+  it is at rest.

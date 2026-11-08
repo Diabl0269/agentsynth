@@ -1,0 +1,40 @@
+# Bug: opening or folding "Macro" or "Macro2" in Tal's 'fro830 test' project made every card the motion pushed aside
+# (Oscillator 2's open member cards, Master, Audio Output, Macro2, Filter 3) fade to a shadow while it moved and snap
+# back when it landed. The glide drew its picture of each pushed card at the alpha the fold's last fading box or cable
+# had left on the Graphics.
+#
+# The fixture fro830-test.agsproj is that project: "Oscillator 2" open, the folded "Macro" right beside it, the folded
+# "Macro2" below, cables crossing both borders. Another macro is also named "Macro", so its open state is
+# read from the stills, not with expect.
+#   1. Opens "Macro": Oscillator 2's cards and Master glide aside whole (proof 1, mid-motion).
+#   2. Cmd+Z folds it again: the cards glide back whole (proof 2, mid-motion).
+#   3. Opens "Macro2": Filter 3 and the cards below glide aside whole (proof 3, mid-motion).
+#   4. Cmd+Z folds it again (proof 4, mid-motion).
+# CardGlideMacroPushOpenNeighbour.* and MacroFoldCableSlideOpenNeighbour.* check every frame headlessly (Full motion,
+# Reduce Motion, Off).
+motion: true
+record: true
+save_project: end
+steps:
+  - copyFixture: {name: fro830-test.agsproj}
+  - openProject: {path: "${SCRATCH}/fro830-test.agsproj"}
+  - wait: {}
+  - expect: {id: "macroCard:Macro2", collapsed: true}
+  - screenshot: {name: 1-at-rest}
+  - click: {id: "macroCard:Macro", x: 262, y: 18}             # the card's open chevron
+  - mark: {check: 1, name: open-macro-pushed-cards-whole}
+  - waitForIdle: {settleMs: 1000}                             # waitForIdle cannot see the fold, so let it land
+  - screenshot: {name: 2-macro-open}
+  - key: {keys: cmd+z}
+  - mark: {check: 2, name: undo-open-cards-return-whole}
+  - waitForIdle: {settleMs: 1000}
+  - click: {id: "macroCard:Macro2", x: 262, y: 18}
+  - mark: {check: 3, name: open-macro2-pushed-cards-whole}
+  - waitForIdle: {settleMs: 1000}
+  - expect: {id: "macroCard:Macro2", collapsed: false}
+  - screenshot: {name: 3-macro2-open}
+  - key: {keys: cmd+z}
+  - mark: {check: 4, name: undo-open-macro2-cards-return-whole}
+  - waitForIdle: {settleMs: 1000}
+  - expect: {id: "macroCard:Macro2", collapsed: true}
+  - screenshot: {name: 4-back-at-rest}
