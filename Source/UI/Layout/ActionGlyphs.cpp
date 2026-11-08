@@ -65,4 +65,42 @@ void paintVoiceGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colou
     stem(6.2f, 0.8f, 9.2f);
 }
 
+// A circle with a mark inside it (info, error) or a triangle with an exclamation mark (warning). The mark is a stroke
+// or a dot, so it stays legible down to a 12 px square.
+void paintSeverityGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour ink, SeverityGlyph severity,
+                        float strokeScale) {
+    const auto glyph = squareIn(area);
+    const float unit = glyph.getWidth() / kGridSize;
+    const float thickness = kRingThickness * unit * strokeScale;
+    const auto at = [&](float x, float y) {
+        return juce::Point<float>(glyph.getX() + x * unit, glyph.getY() + y * unit);
+    };
+    const auto dotAt = [&](float x, float y) {
+        const float d = 1.8f * unit;
+        g.fillEllipse(at(x, y).x - d * 0.5f, at(x, y).y - d * 0.5f, d, d);
+    };
+    g.setColour(ink);
+    const juce::PathStrokeType stroke(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+    if (severity == SeverityGlyph::warning) {
+        juce::Path triangle;
+        triangle.addTriangle(at(6.0f, 0.9f), at(11.3f, 10.8f), at(0.7f, 10.8f));
+        g.strokePath(triangle, stroke);
+        g.drawLine({at(6.0f, 4.1f), at(6.0f, 7.0f)}, thickness);
+        dotAt(6.0f, 9.0f);
+        return;
+    }
+    g.drawEllipse(glyph.reduced(thickness * 0.5f), thickness);
+    if (severity == SeverityGlyph::info) {
+        dotAt(6.0f, 3.5f);
+        g.drawLine({at(6.0f, 5.3f), at(6.0f, 9.0f)}, thickness);
+        return;
+    }
+    juce::Path cross;
+    cross.startNewSubPath(at(4.0f, 4.0f));
+    cross.lineTo(at(8.0f, 8.0f));
+    cross.startNewSubPath(at(8.0f, 4.0f));
+    cross.lineTo(at(4.0f, 8.0f));
+    g.strokePath(cross, stroke);
+}
+
 } // namespace synth::ui

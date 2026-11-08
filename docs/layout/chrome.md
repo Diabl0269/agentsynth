@@ -578,7 +578,10 @@ Colours are theme tokens only.
 
 A toast has a severity (`ToastComponent::Severity`: `info` by default, `warning`, `error`). Info keeps the plain pill. A
 warning or an error paints its border and a 4 px bar down its left edge in the theme's `warning` or `error` token, so
-it reads in every theme; the text stays `textPrimary`. A cable dropped on a jack that cannot take it shows its reason
+it reads in every theme; the text stays `textPrimary`. Every severity also leads with an icon (`paintSeverityGlyph`,
+`Layout/ActionGlyphs.h`; 14 px and an 8 px gap, so the toast is that much wider and the text starts after it): a circled
+"i" in the accent colour for info, a triangle with "!" in `warning`, a circled "x" in `error`. The screen reader hears
+"Warning: <message>" or "Error: <message>"; an info toast reads as the bare message. A cable dropped on a jack that cannot take it shows its reason
 as an error toast ([cables](cables.md#a-refused-drop-says-why)); other status messages stay on the status bar.
 
 A second use is a plain message with no action: a timeline hotkey that changes a setting says what it did ("Follow

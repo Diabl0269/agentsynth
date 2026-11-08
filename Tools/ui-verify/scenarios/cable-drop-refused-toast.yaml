@@ -30,7 +30,7 @@ steps:
   - click: {id: Hide Panel}
   - wait: {}
   - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Delay", toX: 268, toY: 56}
-  - expect: {id: "Connect an output to an input", showing: true, within_ms: 2000}
+  - expect: {id: "Error: Connect an output to an input", showing: true, within_ms: 2000}
   - wait: {}
   - wait: {}
   - screenshot: {name: refused-drop-error-toast}

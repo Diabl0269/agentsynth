@@ -1,5 +1,7 @@
 #include "ToastComponent.h"
 
+#include "TestMode/TestModeStateSource.h"
+#include "UI/Layout/ActionGlyphs.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -12,7 +14,44 @@ constexpr int kActionW = 56;
 constexpr float kFontSize = 12.0f;
 constexpr int kTextSlack = 2;
 constexpr float kBarWidth = 4.0f;
+
+// The screen reader hears the severity first; an info toast reads as the bare message.
+juce::String severityName(ToastComponent::Severity severity) {
+    switch (severity) {
+    case ToastComponent::Severity::warning:
+        return "Warning: ";
+    case ToastComponent::Severity::error:
+        return "Error: ";
+    case ToastComponent::Severity::info:
+        break;
+    }
+    return {};
+}
 } // namespace
+
+// A hidden 1x1 child (id "toastState") so the toast's header need not include the test-mode state interface.
+class ToastComponent::StateProbe
+    : public juce::Component
+    , public synth::testmode::StateSource {
+public:
+    explicit StateProbe(const ToastComponent& toast)
+        : toast_(toast) {
+        setComponentID("toastState");
+        setInterceptsMouseClicks(false, false);
+        setWantsKeyboardFocus(false);
+        setAccessible(false);
+    }
+    void addTestModeState(juce::DynamicObject& into) const override {
+        const auto severity = toast_.severity_;
+        into.setProperty("severity", severity == Severity::error     ? "error"
+                                     : severity == Severity::warning ? "warning"
+                                                                     : "info");
+        into.setProperty("message", toast_.message_);
+    }
+
+private:
+    const ToastComponent& toast_;
+};
 
 ToastComponent::ToastComponent() {
     setVisible(false);
@@ -20,6 +59,8 @@ ToastComponent::ToastComponent() {
     setWantsKeyboardFocus(false);
     setTitle("Notification");
     addChildComponent(action_);
+    stateProbe_ = std::make_unique<StateProbe>(*this);
+    addChildComponent(*stateProbe_);
     action_.setWantsKeyboardFocus(true);
     action_.setMouseClickGrabsKeyboardFocus(false);
     action_.onClick = [this] {
@@ -42,7 +83,8 @@ int ToastComponent::preferredWidth() const {
     // Rounded up with a pixel of slack: drawText curtails a line that is even a fraction wider than its box, so a width
     // rounded down cut the end of the message to an ellipsis in a window with plenty of room.
     const int textW = (int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth()) + kTextSlack;
-    return kPadX * 2 + textW + (action_.getButtonText().isNotEmpty() && action_.isVisible() ? kGap + kActionW : 0);
+    return kPadX * 2 + ToastComponent::kIconSlot + textW +
+           (action_.getButtonText().isNotEmpty() && action_.isVisible() ? kGap + kActionW : 0);
 }
 
 juce::Rectangle<int> ToastComponent::restingBounds() const {
@@ -97,7 +139,7 @@ void ToastComponent::show(const juce::String& message, const juce::String& actio
     action_.setTitle(actionLabel);
     action_.setTooltip(actionTooltip);
     action_.setVisible(hasAction);
-    setTitle(message);
+    setTitle(severityName(severity_) + message);
     resized();
     if (auto* parent = getParentComponent())
         toFront(false), parent->repaint();
@@ -146,6 +188,17 @@ void ToastComponent::resized() {
         applyProgress(progress_);
 }
 
+juce::Rectangle<int> ToastComponent::iconBounds() const {
+    return {kPadX, (getHeight() - kIconSize) / 2, kIconSize, kIconSize};
+}
+
+// The text runs from after the icon to just before the action button, or to the right padding without one.
+juce::Rectangle<int> ToastComponent::textBounds() const {
+    const int left = kPadX + kIconSlot;
+    const int right = action_.isVisible() ? action_.getX() - 4 : getWidth() - kPadX;
+    return {left, 0, juce::jmax(0, right - left), getHeight()};
+}
+
 void ToastComponent::paint(juce::Graphics& g) {
     const auto& c = synth::theme::themeOf(*this).colors;
     const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
@@ -165,10 +218,14 @@ void ToastComponent::paint(juce::Graphics& g) {
     }
     g.setColour(flagged ? flag : c.border);
     g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
+    const auto accent = severity_ == Severity::info ? c.accent : flag;
+    const auto glyph = severity_ == Severity::error     ? SeverityGlyph::error
+                       : severity_ == Severity::warning ? SeverityGlyph::warning
+                                                        : SeverityGlyph::info;
+    paintSeverityGlyph(g, iconBounds().toFloat(), accent, glyph);
     g.setColour(c.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(kFontSize)));
-    const int right = action_.isVisible() ? action_.getX() - 4 : getWidth() - kPadX;
-    g.drawText(message_, kPadX, 0, juce::jmax(0, right - kPadX), getHeight(), juce::Justification::centredLeft, true);
+    g.drawText(message_, textBounds(), juce::Justification::centredLeft, true);
 }
 
 } // namespace synth::ui

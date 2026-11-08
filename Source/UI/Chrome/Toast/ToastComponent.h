@@ -5,6 +5,7 @@
 #include "UI/Layout/UIAnimation.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 
 namespace synth::ui {
 
@@ -29,6 +30,10 @@ public:
     static constexpr int kSlidePx = 10;
     static constexpr int kHeight = 36;
     static constexpr int kBottomMargin = 20;
+    /** The severity icon's square and the gap after it; together the room the text gives up. */
+    static constexpr int kIconSize = 14;
+    static constexpr int kIconGap = 8;
+    static constexpr int kIconSlot = kIconSize + kIconGap;
 
     ToastComponent();
     ~ToastComponent() override;
@@ -51,6 +56,8 @@ public:
     juce::Button& getActionButton() noexcept { return action_; }
     const juce::String& getMessageForTest() const noexcept { return message_; }
     Severity getSeverityForTest() const noexcept { return severity_; }
+    juce::Rectangle<int> getIconBoundsForTest() const { return iconBounds(); }
+    juce::Rectangle<int> getTextBoundsForTest() const { return textBounds(); }
     /** The 0..1 shown amount as the animation has it (1 once landed). */
     float getProgressForTest() const noexcept { return progress_; }
     /** Runs the auto-hide as if its time had elapsed. */
@@ -61,12 +68,16 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
 
 private:
+    class StateProbe;
+    juce::Rectangle<int> iconBounds() const;
+    juce::Rectangle<int> textBounds() const;
     void timerCallback() override;
     int preferredWidth() const;
     void applyProgress(float progress);
     void animateTo(bool shown);
     juce::Rectangle<int> restingBounds() const;
 
+    std::unique_ptr<juce::Component> stateProbe_; // test mode reads severity and message from it
     juce::String message_;
     Severity severity_ = Severity::info;
     TextLinkButton action_{"Undo", juce::Justification::centred};
