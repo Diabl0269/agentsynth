@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "Modules/ModTargetList.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/VoiceCountSource.h"
@@ -76,7 +78,8 @@ public:
 private:
     std::atomic<int> publishedVoices_{0}; // activeVoiceCount() as of the end of the last block
     juce::AudioParameterFloat* addFloat(const char* id, const char* name, float lo, float hi, float def,
-                                        float skew = 1.0f);
+                                        float skew = 1.0f,
+                                        std::optional<juce::AudioParameterFloatAttributes> attributes = std::nullopt);
     void noteOn(int note, float velocity, const juce::AudioBuffer<float>& cv, int sample);
     void noteOff(int note, const juce::AudioBuffer<float>& cv, int sample);
     void stopAll() noexcept;

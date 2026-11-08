@@ -362,3 +362,27 @@ TEST(MalletModule, NoParameterAddsMoreThanSixDecibelsOverItsDefault) {
         }
     }
 }
+
+// Decay and Release are held in seconds; the value box reads them as a time with its unit, and typed text reads back.
+TEST(MalletModule, DecayAndReleaseReadInMillisecondsOrSecondsAndTheTextRoundTrips) {
+    MalletModule m;
+    auto* decay = dynamic_cast<juce::RangedAudioParameter*>(findParameterByID(&m, "decay"));
+    auto* release = dynamic_cast<juce::RangedAudioParameter*>(findParameterByID(&m, "release"));
+    ASSERT_NE(decay, nullptr);
+    ASSERT_NE(release, nullptr);
+    EXPECT_EQ(decay->getText(decay->convertTo0to1(3.0f), 0), "3.00 s");
+    EXPECT_EQ(release->getText(release->convertTo0to1(0.3f), 0), "300 ms");
+    EXPECT_NEAR(decay->convertFrom0to1(decay->getValueForText("3.00 s")), 3.0f, 0.02f);
+    EXPECT_NEAR(release->convertFrom0to1(release->getValueForText("300 ms")), 0.3f, 0.005f);
+    EXPECT_NEAR(release->convertFrom0to1(release->getValueForText("0.3 s")), 0.3f, 0.005f);
+}
+
+TEST(MalletModule, TuneAndFineReadInSemitonesAndCents) {
+    MalletModule m;
+    auto* tune = dynamic_cast<juce::RangedAudioParameter*>(findParameterByID(&m, "tune"));
+    auto* fine = dynamic_cast<juce::RangedAudioParameter*>(findParameterByID(&m, "fine"));
+    ASSERT_NE(tune, nullptr);
+    ASSERT_NE(fine, nullptr);
+    EXPECT_EQ(tune->getText(tune->convertTo0to1(-12.0f), 0), "-12.0 st");
+    EXPECT_EQ(fine->getText(fine->convertTo0to1(25.0f), 0), "25.0 ct");
+}

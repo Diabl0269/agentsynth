@@ -86,11 +86,7 @@ juce::AudioParameterFloatAttributes padAttributes(DrumKitModule::PadParam which)
     if (which == PadParam::Tune)
         return synth::semitonesAttributes();
     if (which == PadParam::Decay)
-        return juce::AudioParameterFloatAttributes()
-            .withLabel("s")
-            .withStringFromValueFunction([](float v, int) { return synth::millisecondsToText(v * 1000.0f); })
-            .withValueFromStringFunction(
-                [](const juce::String& t) { return synth::millisecondsFromText(t) / 1000.0f; });
+        return synth::secondsAttributes();
     return synth::fractionPercentAttributes();
 }
 

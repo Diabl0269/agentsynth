@@ -77,6 +77,14 @@ inline juce::AudioParameterFloatAttributes millisecondsAttributes() {
         .withValueFromStringFunction([](const juce::String& t) { return millisecondsFromText(t); });
 }
 
+/** Parameter attributes that format and parse a time held in seconds: 0.3 reads "300 ms", 3.0 reads "3.00 s". */
+inline juce::AudioParameterFloatAttributes secondsAttributes() {
+    return juce::AudioParameterFloatAttributes()
+        .withLabel("s")
+        .withStringFromValueFunction([](float v, int) { return millisecondsToText(v * 1000.0f); })
+        .withValueFromStringFunction([](const juce::String& t) { return millisecondsFromText(t) / 1000.0f; });
+}
+
 /** Parameter attributes that format and parse an angle in degrees. */
 inline juce::AudioParameterFloatAttributes degreesAttributes() {
     return juce::AudioParameterFloatAttributes()

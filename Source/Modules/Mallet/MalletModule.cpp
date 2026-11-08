@@ -13,10 +13,12 @@ constexpr float kBarPeak = 0.9f;
 } // namespace
 
 juce::AudioParameterFloat* MalletModule::addFloat(const char* id, const char* name, float lo, float hi, float def,
-                                                  float skew) {
+                                                  float skew,
+                                                  std::optional<juce::AudioParameterFloatAttributes> attributes) {
     auto* p = new juce::AudioParameterFloat(id, name, juce::NormalisableRange<float>(lo, hi, 0.0f, skew), def,
-                                            (lo == 0.0f && hi == 1.0f) ? synth::fractionPercentAttributes()
-                                                                       : juce::AudioParameterFloatAttributes());
+                                            attributes.value_or((lo == 0.0f && hi == 1.0f)
+                                                                    ? synth::fractionPercentAttributes()
+                                                                    : juce::AudioParameterFloatAttributes()));
     addParameter(p);
     return p;
 }
@@ -26,15 +28,15 @@ MalletModule::MalletModule()
     addParameter(materialParam = new juce::AudioParameterChoice(
                      "material", "Material",
                      juce::StringArray{"Marimba", "Vibraphone", "Xylophone", "Glockenspiel", "Bell"}, 0));
-    tuneParam = addFloat("tune", "Tune", -24.0f, 24.0f, 0.0f);
-    fineParam = addFloat("fine", "Fine", -100.0f, 100.0f, 0.0f);
-    decayParam = addFloat("decay", "Decay", 0.05f, 10.0f, 1.2f, 0.4f);
+    tuneParam = addFloat("tune", "Tune", -24.0f, 24.0f, 0.0f, 1.0f, synth::semitonesAttributes());
+    fineParam = addFloat("fine", "Fine", -100.0f, 100.0f, 0.0f, 1.0f, synth::centsAttributes());
+    decayParam = addFloat("decay", "Decay", 0.05f, 10.0f, 1.2f, 0.4f, synth::secondsAttributes());
     dampingParam = addFloat("damping", "Damping", 0.0f, 1.0f, 0.5f);
     brightnessParam = addFloat("brightness", "Brightness", 0.0f, 1.0f, 0.5f);
     hardnessParam = addFloat("hardness", "Hardness", 0.0f, 1.0f, 0.5f);
     resonatorParam = addFloat("resonator", "Resonator", 0.0f, 1.0f, 0.5f);
     tremoloParam = addFloat("tremolo", "Tremolo", 0.0f, 1.0f, 0.0f);
-    releaseParam = addFloat("release", "Release", 0.01f, 5.0f, 0.5f, 0.4f);
+    releaseParam = addFloat("release", "Release", 0.01f, 5.0f, 0.5f, 0.4f, synth::secondsAttributes());
     velBrightParam = addFloat("velBright", "Velocity brightness", 0.0f, 1.0f, 0.5f);
     levelParam = addFloat("level", "Level", 0.0f, 1.0f, 0.8f);
     addMuteParameter();
