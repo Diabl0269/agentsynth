@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Modules/ModTargetList.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/VoiceCountSource.h"
 #include "PluckVoices.h"
@@ -13,7 +14,8 @@
  * the Release time. When all eight strings are busy the oldest is taken over.
  *
  * Decay, Decay tracking, Brightness, Pick position, Pick hardness, Stiffness, Tune and Fine are read when a note
- * starts; Release when it ends. Level and Body are live. No ADSR or VCA is needed in front of it. Output is mono-summed
+ * starts; Release when it ends. Level and Body are live. Every knob takes a cable (kModTargets), read at the same
+ * moment as the knob. No ADSR or VCA is needed in front of it. Output is mono-summed
  * onto a stereo pair (Declared, ships SPLIT like the Drum Kit). The algorithm and the formulas are in
  * docs/modules/pluck-mallet.md.
  */
@@ -22,6 +24,21 @@ class PluckModule
     , public synth::VoiceCountSource {
 public:
     static constexpr int kNumChannels = 2;
+    /** Every knob's cable, channel = index. Append only: saved cables keep their channel. */
+    static constexpr std::array<synth::ModTargetSpec, 12> kModTargets{{
+        {"level", synth::ModRead::Live},
+        {"body", synth::ModRead::Live},
+        {"tune", synth::ModRead::NoteOn},
+        {"fine", synth::ModRead::NoteOn},
+        {"decay", synth::ModRead::NoteOn},
+        {"decayTrack", synth::ModRead::NoteOn},
+        {"brightness", synth::ModRead::NoteOn},
+        {"pickPosition", synth::ModRead::NoteOn},
+        {"pickHardness", synth::ModRead::NoteOn},
+        {"stiffness", synth::ModRead::NoteOn},
+        {"release", synth::ModRead::NoteOff},
+        {"velBright", synth::ModRead::NoteOn},
+    }};
     static constexpr int kLevelCvChannel = 0;             // the Level knob's cable; no gutter jack
     static constexpr int kBodyCvChannel = 1;              // the Body knob's cable; no gutter jack
     static constexpr double kDecayReferenceHz = 130.8128; // C3: where Decay is exactly the T60
@@ -35,15 +52,13 @@ public:
         return isDualIO() ? (i == 1 ? "Audio R" : "Audio L") : "Audio";
     }
     int getVisibleInputPortCount() const override { return 0; }
-    juce::String getInputPortLabel(int i) const override { return i == kBodyCvChannel ? "Body" : "Level"; }
+    juce::String getInputPortLabel(int i) const override { return mods_.label(i); }
     LogicalPort mapInputChannel(int raw) const override {
         auto port = ModuleBase::mapInputChannel(raw);
         port.role = PortRole::ModCV;
         return port;
     }
-    std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Level", kLevelCvChannel, "level", true}, {"Body", kBodyCvChannel, "body", true}};
-    }
+    std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
@@ -60,8 +75,8 @@ private:
     std::atomic<int> publishedVoices_{0}; // activeVoiceCount() as of the end of the last block
     juce::AudioParameterFloat* addFloat(const char* id, const char* name, float lo, float hi, float def,
                                         float skew = 1.0f);
-    void noteOn(int note, float velocity);
-    void noteOff(int note);
+    void noteOn(int note, float velocity, const juce::AudioBuffer<float>& cv, int sample);
+    void noteOff(int note, const juce::AudioBuffer<float>& cv, int sample);
     void stopAll() noexcept;
     float renderSample() noexcept;
 
@@ -85,6 +100,7 @@ private:
     juce::AudioParameterFloat* releaseParam = nullptr;
     juce::AudioParameterFloat* velBrightParam = nullptr;
     juce::AudioParameterFloat* levelParam = nullptr;
+    synth::ModTargetList mods_{kModTargets};
 
     static constexpr int kNumBodyBands = 3;
 

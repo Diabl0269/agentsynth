@@ -841,6 +841,34 @@ legitimately out of scope (paged tab cards, port widgets, per-step pattern data,
 stages, hosted-plugin parameters) rather than absorbing them silently — the ADSR Curve amounts need
 no entry there at all, since they are never declared targets in the first place.
 
+## One list per module
+
+An instrument whose knobs take cables with no gutter jack declares them once, as a `synth::ModTargetList`
+(`Source/Modules/ModTargetList.h`): a `constexpr std::array<synth::ModTargetSpec, N>` of
+`{paramId, read}` pairs, where entry k owns raw input channel k. Everything else comes from the list:
+
+- the input channel count passed to `ModuleBase` (`kModTargets.size()`);
+- `getModulationTargets()` (one knob-only target per entry, named with the parameter's display name);
+- `getInputPortLabel()` (the same name);
+- the value the module uses: `valueAt(buffer, param, sample)`, the knob moved by its cable in the
+  knob's [normalised range](#cv-in-normalised-units).
+
+`read` says when the module reads the cable, matching when it reads the knob:
+
+| `ModRead` | Read at | Used for |
+|---|---|---|
+| `Live` | every block (`blockCV`) | Level, Body, Tremolo |
+| `NoteOn` | the note-on's own sample | Tune, Decay, Brightness, Hardness, ... |
+| `NoteOff` | the note-off's own sample | Release |
+
+A `NoteOn` cable changes each new note and never a note already ringing, which is how note-time settings
+behave in other synths. The read is on the note's sample, not the block's first one, so a ramp feeding
+the cable gives a note mid-block the ramp's value there (bug kind edge-reads-a-ramp). The render writes
+the output channels as it goes, so a module reads a note's cables before rendering past that note.
+
+New entries are appended, never inserted: a saved cable keeps its channel. Pluck and Mallet use the
+list; see [`pluck-mallet.md`](pluck-mallet.md#mod-cables).
+
 ## CV in normalised units
 
 Every jack added under the rule above reads its CV the same way, through two `ModuleBase` helpers:

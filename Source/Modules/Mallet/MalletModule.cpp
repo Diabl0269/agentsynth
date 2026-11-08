@@ -22,7 +22,7 @@ juce::AudioParameterFloat* MalletModule::addFloat(const char* id, const char* na
 }
 
 MalletModule::MalletModule()
-    : ModuleBase("Mallet", 2, kNumChannels, StereoAudio::Declared) {
+    : ModuleBase("Mallet", (int)kModTargets.size(), kNumChannels, StereoAudio::Declared) {
     addParameter(materialParam = new juce::AudioParameterChoice(
                      "material", "Material",
                      juce::StringArray{"Marimba", "Vibraphone", "Xylophone", "Glockenspiel", "Bell"}, 0));
@@ -38,6 +38,7 @@ MalletModule::MalletModule()
     velBrightParam = addFloat("velBright", "Velocity brightness", 0.0f, 1.0f, 0.5f);
     levelParam = addFloat("level", "Level", 0.0f, 1.0f, 0.8f);
     addMuteParameter();
+    mods_.bind(*this);
     enableVisualBuffer(true);
 }
 
@@ -64,27 +65,31 @@ int MalletModule::activeVoiceCount() const noexcept {
     return n;
 }
 
-void MalletModule::noteOn(int note, float velocity) {
+// Every setting is the knob moved by its cable on the note's own sample, so a cable shapes each new note and never a
+// ringing one.
+void MalletModule::noteOn(int note, float velocity, const juce::AudioBuffer<float>& cv, int sample) {
+    const auto at = [&](const juce::AudioParameterFloat* p) { return mods_.valueAt(cv, *p, sample); };
     const float vel = juce::jlimit(0.0f, 1.0f, velocity);
     // Velocity brings the mallet's hardness and the upper modes up, scaled by Velocity brightness.
-    const float shift = velBrightParam->get() * (vel - 0.5f);
+    const float shift = at(velBrightParam) * (vel - 0.5f);
     synth::mallet::Strike s;
     s.material = materialParam->getIndex();
-    s.hz = synth::voices::noteHz(note, tuneParam->get(), fineParam->get());
+    s.hz = synth::voices::noteHz(note, at(tuneParam), at(fineParam));
     s.velocity = vel;
-    s.decay = decayParam->get();
-    s.damping = dampingParam->get();
-    s.brightness = juce::jlimit(0.0f, 1.0f, brightnessParam->get() + shift);
-    s.hardness = juce::jlimit(0.0f, 1.0f, hardnessParam->get() + shift);
-    s.resonator = resonatorParam->get();
+    s.decay = at(decayParam);
+    s.damping = at(dampingParam);
+    s.brightness = juce::jlimit(0.0f, 1.0f, at(brightnessParam) + shift);
+    s.hardness = juce::jlimit(0.0f, 1.0f, at(hardnessParam) + shift);
+    s.resonator = at(resonatorParam);
     s.sampleRate = sampleRate_;
     voices_[synth::voices::pickVoice(voices_)].trigger(s, note, ++noteCounter_);
 }
 
-void MalletModule::noteOff(int note) {
+void MalletModule::noteOff(int note, const juce::AudioBuffer<float>& cv, int sample) {
+    const float release = mods_.valueAt(cv, *releaseParam, sample);
     for (auto& v : voices_)
         if (v.active && v.held && v.note == note)
-            v.release(releaseParam->get(), sampleRate_);
+            v.release(release, sampleRate_);
 }
 
 float MalletModule::renderSample() noexcept {
@@ -114,8 +119,9 @@ void MalletModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     if (buffer.getNumChannels() == 0 || numSamples <= 0)
         return;
 
-    // The cables arrive on channels 0 and 1, which the render overwrites: read them before anything writes the buffer.
-    // blockCV reads 0 when a layout has no such channel.
+    // The cables arrive on the input channels, and the render overwrites channels 0 and 1 as it goes: the live cables
+    // are read before anything writes the buffer, and a note's cables on its own sample, which the render has not
+    // reached yet. blockCV reads 0 when a layout has no such channel.
     const float levelCv = blockCV(buffer, kLevelCvChannel);
     const float tremoloCv = blockCV(buffer, kTremoloCvChannel);
 
@@ -152,11 +158,12 @@ void MalletModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         const bool on = message.isNoteOn();
         if (!on && !message.isNoteOff())
             continue;
-        renderTo(juce::jlimit(position, numSamples, metadata.samplePosition));
+        const int at = juce::jlimit(position, numSamples, metadata.samplePosition);
+        renderTo(at);
         if (on)
-            noteOn(message.getNoteNumber(), message.getFloatVelocity());
+            noteOn(message.getNoteNumber(), message.getFloatVelocity(), buffer, at);
         else
-            noteOff(message.getNoteNumber());
+            noteOff(message.getNoteNumber(), buffer, at);
     }
     renderTo(numSamples);
 
