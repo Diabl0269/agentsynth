@@ -15,6 +15,7 @@
 #include "Modules/OscillatorModule.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Layout/CableCurve.h"
+#include "UI/Layout/ReducedMotion.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -239,4 +240,22 @@ TEST(GraphEditorCanvasTick, TheTickRepaintsOnlyTheVisibleCables) {
         << "the dots move along the cable";
     EXPECT_FALSE(area.intersects(findComponent(c.editor, lone)->getBounds())) << "a card with no cable is left alone";
     EXPECT_TRUE(c.editor.getVisibleCanvasRect().contains(area.toFloat()));
+}
+
+// The flow dots follow the Animations preference: a tick steps them by 0.02 at full speed, 0.006 under Reduced and not
+// at all under Off.
+TEST(GraphEditorCanvasTick, TheCableFlowDotsStepByTheLoopRate) {
+    struct RestoreMode {
+        ~RestoreMode() { synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem); }
+    } restore;
+    Canvas c;
+    const auto stepOf = [&](synth::ui::AnimationMode mode) {
+        synth::ui::setAnimationMode(mode);
+        const float before = c.editor.getCableFlowPhaseForTest();
+        c.tick();
+        return std::fmod(c.editor.getCableFlowPhaseForTest() - before + 1.0f, 1.0f);
+    };
+    EXPECT_NEAR(stepOf(synth::ui::AnimationMode::full), 0.02f, 1e-4f);
+    EXPECT_NEAR(stepOf(synth::ui::AnimationMode::reduced), 0.006f, 1e-4f);
+    EXPECT_NEAR(std::fmod(stepOf(synth::ui::AnimationMode::off) + 0.5f, 1.0f), 0.5f, 1e-6f);
 }

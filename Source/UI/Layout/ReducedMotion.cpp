@@ -77,6 +77,12 @@ double motionMs(double full, double reduced) {
     return prefersReducedMotion() ? reduced : full;
 }
 
+double loopRate() {
+    if (animationsOff())
+        return 0.0;
+    return prefersReducedMotion() ? kReducedLoopRate : 1.0;
+}
+
 void setReducedMotionForTest(std::optional<bool> value) { overrideValue() = value; }
 
 void setSystemReducedMotionForTest(std::optional<bool> value) { systemOverrideValue() = value; }

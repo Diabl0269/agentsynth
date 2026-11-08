@@ -33,6 +33,15 @@ bool animationsOff();
  *  a duration already branches on prefersReducedMotion(). */
 double motionMs(double full, double reduced);
 
+/** Loop speed under reduced motion, as a fraction of the full speed. */
+constexpr double kReducedLoopRate = 0.3;
+
+/** How fast a continuous, decorative loop runs (the cable flow dots, a breathing outline, a waiting pulse): 1 when
+ *  animating fully, kReducedLoopRate under reduced motion, 0 under Off, where the loop holds still. Scale the loop's
+ *  speed by it (a phase step, or divide a period by it); live data (meters, scopes, the playhead) never uses it.
+ *  Message thread only. */
+double loopRate();
+
 /** Test seam: forces the answer; an empty value restores the OS's own. */
 void setReducedMotionForTest(std::optional<bool> value);
 

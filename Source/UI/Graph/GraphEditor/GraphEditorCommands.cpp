@@ -10,6 +10,7 @@
 #include "GraphEditorInternal.h"
 #include "GraphEditorPaintMemo.h"
 #include "UI/Layout/ContextMenuPlacement.h"
+#include "UI/Layout/ReducedMotion.h"
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/AttenuverterModule.h"
@@ -788,7 +789,9 @@ void GraphEditor::timerCallback() {
     for (auto* card : content.getModules())
         if (card != nullptr)
             card->reflectHostedRestingValues();
-    content.connectionAnimPhase += 0.02f;
+    // The flow dots follow the Animations preference (Reduced slower, Off held where they are).
+    constexpr float kCableFlowStepPerTick = 0.02f; // a full lap of the cable in 50 ticks (about 1.7 s at 30 Hz)
+    content.connectionAnimPhase += kCableFlowStepPerTick * static_cast<float>(synth::ui::loopRate());
     if (content.connectionAnimPhase >= 1.0f)
         content.connectionAnimPhase -= 1.0f;
     canvasMemo_->tick(); // keeps the cable memo, refreshes cable activity, repaints, refits the frame if cards moved

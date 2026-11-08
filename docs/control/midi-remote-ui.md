@@ -85,7 +85,7 @@ assignment's control already selected.
    15 Hz `timerCallback`, `MixerColumnComponent`/`MixerMasterColumn`'s 10 Hz `refreshMeter`, and
    `TimelineTransportBar`'s 10 Hz `updateFromTransport` (FRO256) — never a new timer or an
    AnimationDriver entry. This is explicitly not a glow: Obsidian has glow 0, and this state must
-   read the same in every theme. The status bar
+   read the same in every theme. Under Reduced the breath is slower (4 s instead of 1.2 s); under Animations Off the outline is steady at full alpha (`midiLearnArmedOutlineAlpha`). The status bar
    (the existing `StatusBarComponent`, `Source/UI/Chrome/`) shows *"MIDI Learn: move a control on
    your controller for 'Cutoff' — Esc to cancel"*. If no controller profile exists yet and no
    MIDI input is open, the status line adds *"No MIDI device is enabled — open Settings →

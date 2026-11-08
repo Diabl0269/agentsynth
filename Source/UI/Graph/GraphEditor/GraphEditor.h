@@ -672,7 +672,7 @@ public:
     bool hasHoveredCable() const noexcept { return hoveredCableId.has_value(); }
     int getCableRebuildCountForTest() const noexcept { return cableRebuildCount; }
     juce::Rectangle<int> getLastTickRepaintAreaForTest() const; // canvas coordinates
-
+    float getCableFlowPhaseForTest() const noexcept { return content.connectionAnimPhase; }
     // ---- Zoom gesture (raster freeze) test seams ----
     bool isZoomGestureActive() const noexcept { return zoomGestureActive; }
     void settleZoomNowForTest(); // Ends the zoom gesture now, as the settle timer would.
