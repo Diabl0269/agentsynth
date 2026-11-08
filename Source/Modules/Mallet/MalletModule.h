@@ -55,6 +55,8 @@ public:
     LogicalPort mapInputChannel(int raw) const override {
         auto port = ModuleBase::mapInputChannel(raw);
         port.role = PortRole::ModCV;
+        port.visibleJackIndex = raw; // no gutter jacks: a knob drop keeps its own channel
+        port.isPolyGroupHead = true;
         return port;
     }
     std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
