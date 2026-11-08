@@ -224,6 +224,9 @@ TEST_F(ColourPickerEscape, EscapeFromEveryControlFadesOnceRestoresTheColourAndRe
         sendEscape(*origin);
         drain(); // a text field posts its Escape as a message
 
+        // The drain ran the fade on the real clock for however long a slow machine took; read its start at 0 ms.
+        if (PopupMotion::isDismissing(*box))
+            PopupMotion::stepMotionForTest(*box, 0.0);
         std::vector<float> fall{box->getAlpha()};
         int maxGhosts = PopupMotion::getNumLeavingGhosts();
         bool liveFadeAndGhost = false;
