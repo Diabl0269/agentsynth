@@ -4,8 +4,8 @@
 // knob's range, and never leaks into the output. A project saved before a channel existed opens with every cable where
 // it was.
 
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/DrumKit/DrumKitModule.h"
-#include "Modules/LFOModule.h"
 #include "Modules/Mallet/MalletModule.h"
 #include "Modules/Pluck/PluckModule.h"
 #include "PatchDocument.h"
@@ -181,7 +181,7 @@ TEST(InstrumentLevelModCable, ALevelCableSurvivesSaveAndLoad) {
     const auto dir = root.getChildFile(juce::String("cable") + synth::ProjectBundle::kBundleExtension);
     {
         juce::AudioProcessorGraph graph;
-        auto lfo = graph.addNode(std::make_unique<LFOModule>());
+        auto lfo = graph.addNode(synth::AIStateMapper::createModule("LFO"));
         for (const auto& instrument : instruments()) {
             const auto node = graph.addNode(instrument.make());
             for (int channel = 0; channel < instrument.cableCount; ++channel)

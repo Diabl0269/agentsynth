@@ -3,7 +3,7 @@
 // never again, so a cable shapes each new note and not a ringing one; Release reads its cable on the note-off's sample.
 // Level and the second live knob (Body, Tremolo) are covered in InstrumentLevelModCableTests.
 
-#include "Modules/LFOModule.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/Mallet/MalletModule.h"
 #include "Modules/ModTargetList.h"
 #include "Modules/Pluck/PluckModule.h"
@@ -183,7 +183,7 @@ TEST(InstrumentNoteTimeCable, EveryCableComesBackOnItsChannelAfterSaveAndLoad) {
     const auto dir = root.getChildFile(juce::String("cable") + synth::ProjectBundle::kBundleExtension);
     {
         juce::AudioProcessorGraph graph;
-        auto lfo = graph.addNode(std::make_unique<LFOModule>());
+        auto lfo = graph.addNode(synth::AIStateMapper::createModule("LFO"));
         for (const auto& instrument : instruments()) {
             const auto node = graph.addNode(instrument.make());
             for (size_t k = 0; k < instrument.specs.size(); ++k)

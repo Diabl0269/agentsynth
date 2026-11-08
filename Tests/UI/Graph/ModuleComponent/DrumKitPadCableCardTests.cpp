@@ -5,8 +5,8 @@
 
 #include "../CardBody/CardCanvas.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/DrumKit/DrumKitModule.h"
-#include "Modules/LFOModule.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
 
 using namespace cardbody_test;
@@ -23,7 +23,7 @@ struct PadCableScene {
     NodeID lfoId, kitId;
 
     PadCableScene() {
-        lfoId = canvas.add(std::make_unique<LFOModule>(), 0, 0);
+        lfoId = canvas.add(synth::AIStateMapper::createModule("LFO"), 0, 0);
         kitId = canvas.add(std::make_unique<DrumKitModule>(), 700, 0);
         canvas.editor.updateComponents();
         canvas.card(lfoId)->setTopLeftPosition(0, 0);

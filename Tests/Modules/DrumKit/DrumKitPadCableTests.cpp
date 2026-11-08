@@ -4,7 +4,6 @@
 // the kit saves them only when used, and the AI never sees them.
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/DrumKit/DrumKitModule.h"
-#include "Modules/LFOModule.h"
 #include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
@@ -182,7 +181,7 @@ TEST(DrumKitPadCable, TheAiNeverSeesAPadCable) {
     auto kitOwned = makeKit();
     auto* kit = kitOwned.get();
     const auto kitNode = graph.addNode(std::move(kitOwned));
-    const auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    const auto lfoNode = graph.addNode(synth::AIStateMapper::createModule("LFO"));
     ASSERT_EQ(kit->bindModSlot("pad2Level"), kBase);
 
     // The model cannot name the slot's jack, by parameter or by port.
@@ -206,7 +205,7 @@ TEST(DrumKitPadCable, AProjectWithAPadCableKeepsTheSlotAndTheCableThroughTheTrus
     auto kitOwned = makeKit();
     auto* kit = kitOwned.get();
     const auto kitNode = graph.addNode(std::move(kitOwned));
-    const auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    const auto lfoNode = graph.addNode(synth::AIStateMapper::createModule("LFO"));
     const auto attenNode = graph.addNode(synth::AIStateMapper::createModule("Attenuverter"));
     ASSERT_EQ(kit->bindModSlot("pad2Level"), kBase);
     ASSERT_TRUE(graph.addConnection({{lfoNode->nodeID, 0}, {attenNode->nodeID, 0}}));
