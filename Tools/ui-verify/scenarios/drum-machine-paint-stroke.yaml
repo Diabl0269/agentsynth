@@ -8,6 +8,7 @@
 #   3. Cmd+Shift+Z brings them back; presses the hit at step 4 and drags to step 7: those four hits go (steps 3 to 6).
 # Cell centres (local to the grid, 1400 px wide with a 132 px label column, 16 steps of 79.25 px): step n is at
 # x = 132 + 79.25 * (n + 0.5); the Kick row is at y = 62.
+motion: true
 record: true
 save_project: paint-stroke
 steps:

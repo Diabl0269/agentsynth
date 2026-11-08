@@ -3,6 +3,7 @@
 #
 # What a user does: adds a Sequencer, writes E2 on step 1, picks C Natural Minor in the card's Key picker (E plays as
 # D#2 and step 1 shows the outline at E), then presses Cmd+Z (the key goes back) and Cmd+Shift+Z (it comes again).
+motion: true
 record: true
 save_project: sequencer-outline-undo
 steps:

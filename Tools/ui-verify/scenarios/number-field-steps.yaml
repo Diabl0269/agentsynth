@@ -10,6 +10,7 @@
 #   6. Cmd-clicks the number: back to the default (8).
 #   7. Focuses the field and presses Up and Down.
 #   8. Presses Cmd+Z: the last change is undone, one gesture at a time.
+motion: true
 record: true
 save_project: end
 steps:
