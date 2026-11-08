@@ -34,6 +34,7 @@ steps:
   - mouseMoveHeld: {id: timelineDrumMachine, x: 884, y: 62}
   - mouseUp: {id: timelineDrumMachine, x: 884, y: 62}
   - wait: {}
+  - mark: {check: 1, name: drop-keeps-hits}   # the dropped hits keep their size: no second grow-in
   - expect: {id: drumMachineState, stroke: false, hitCount: 9, hits: "36:1,2,3,4,5,6,7,8,9", within_ms: 1500}
   - screenshot: {name: 3-add-stroke-done}
   # One Cmd+Z takes the whole stroke back, Cmd+Shift+Z puts it back.
@@ -54,6 +55,7 @@ steps:
   - screenshot: {name: 5-erase-stroke-preview}
   - mouseUp: {id: timelineDrumMachine, x: 646, y: 62}
   - wait: {}
+  - mark: {check: 2, name: drop-erase-stays-gone}  # the erased hits stay gone: no flash back
   - expect: {id: drumMachineState, stroke: false, hitCount: 5, hits: "36:1,2,7,8,9", within_ms: 1500}
   - screenshot: {name: 6-erase-stroke-done}
   - key: {keys: cmd+z}

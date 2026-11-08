@@ -3,6 +3,7 @@
 // step.
 
 #include "../PianoRoll/PianoRollTestHelpers.h"
+#include "DrumDocFollower.h"
 #include "Timeline/TimelineSnapshot.h"
 #include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -185,4 +186,41 @@ TEST(DrumMachineStrokeTest, ShiftRightCarriesAHitAndShiftLeftOverAnEmptyCellEras
     EXPECT_TRUE(f.grid.keyPressed(shiftLeft)); // from empty step 6 onto empty step 5: nothing to erase
     EXPECT_TRUE(f.grid.keyPressed(shiftLeft)); // onto step 4: erases the hit
     EXPECT_EQ(f.countAt(38), 2);
+}
+
+// what the drag shows is what lands. The document change reaches the grid from inside the write, so a hit the
+// stroke previewed must not start its grow-in again there.
+TEST(DrumMachineStrokeTest, DroppingAPaintStrokeKeepsEveryHitAtFullSizeWithNoSecondGrowIn) {
+    StrokeFixture f;
+    drum_test::DocFollower follow(f.doc, f.grid);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    f.press(42, 0);
+    for (int step = 1; step <= 5; ++step)
+        f.dragTo(42, step);
+    f.grid.ageHitMotionsForTest(500.0); // the previewed grow-ins have finished by the time the button is let go
+    f.release(42, 5);
+    ASSERT_EQ(f.countAt(42), 6);
+    const int row = f.grid.rowOfPitch(42);
+    for (int step = 0; step <= 5; ++step)
+        EXPECT_FLOAT_EQ(f.grid.hitScaleForTest(row, step), 1.0f) << "step " << step << " pops in again on release";
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
+}
+
+TEST(DrumMachineStrokeTest, DroppingAnEraseStrokeKeepsTheErasedHitsGoneWithNoSecondShrink) {
+    StrokeFixture f;
+    for (int step = 0; step < 6; ++step)
+        f.addHit(42, step);
+    f.settle();
+    drum_test::DocFollower follow(f.doc, f.grid);
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(true);
+    f.press(42, 0);
+    for (int step = 1; step <= 5; ++step)
+        f.dragTo(42, step);
+    f.grid.ageHitMotionsForTest(500.0);
+    f.release(42, 5);
+    ASSERT_EQ(f.countAt(42), 0);
+    const int row = f.grid.rowOfPitch(42);
+    for (int step = 0; step <= 5; ++step)
+        EXPECT_FLOAT_EQ(f.grid.hitScaleForTest(row, step), 0.0f) << "step " << step << " flashes back on release";
+    synth::ui::FadeVisibility::setAnimateOffScreenForTest(false);
 }
