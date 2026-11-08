@@ -131,10 +131,19 @@ public:
     std::vector<int> shownPads() const;
     /** How many pads within the count are switched off. */
     int hiddenPadCount() const;
-    /** Sets pad `index`'s Shown switch; false when it already read so. Never touches the sound. */
+    /** Sets pad `index`'s Shown switch; false when it already read so. Never touches the sound. A change forgets
+     *  the pads the last Show all brought back (padRevealed), so its second press has nothing to hide. */
     bool setPadShown(int index, bool shown);
-    /** Switches every pad's Shown on (also beyond the count); how many changed. */
+    /** Switches every pad's Shown on (also beyond the count) and remembers exactly those as the ones to hide again;
+     *  how many changed (0 leaves what it remembered alone). */
     int showAllPads();
+    /** True when the last Show all brought pad `index` back and nothing changed a pad's Shown by hand since. */
+    bool padRevealed(int index) const { return pad(index).revealed; }
+    /** How many pads within the count Show all brought back (what its second press would hide). */
+    int revealedPadCount() const;
+    /** Show all's second press: hides every pad it brought back (also beyond the count) and forgets them; how many
+     *  it hid. */
+    int hidePadsAgain();
     /** Replaces pad `index`; a File pad's file is decoded now (false, leaving the pad, when it cannot be read). */
     bool setPad(int index, const synth::drums::Pad& pad);
     /** Makes pad `index` play `file` (decoded now); false when it cannot be read. */

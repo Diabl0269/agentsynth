@@ -1,6 +1,6 @@
 // MainComponentTrackModule.cpp — "Show Module" for a track (Ctrl+E on a focused track row, and the row's button):
 // reveals the track's module on the canvas. A hosted plugin's editor window is its own command, Ctrl+Cmd+E
-// (toggleTrackPluginWindow).
+// (toggleTrackPluginWindow). Also the drum machine's way to the track's Drum Kit: its rows, Show all and Hide pad.
 // MainComponent is declared in MainComponent.h; the rest of its implementation lives in the sibling
 // MainComponent*.cpp units next to this one.
 #include "AudioEngine/AudioEngine.h"
@@ -10,6 +10,7 @@
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/DrumMachine/DrumLanes.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"
 
 namespace {
@@ -26,6 +27,10 @@ juce::AudioProcessorGraph::Node* instrumentOf(juce::AudioProcessorGraph& graph,
             return node;
     }
     return nullptr;
+}
+
+DrumKitModule* drumKitOf(juce::AudioProcessorGraph::Node* node) {
+    return node != nullptr ? dynamic_cast<DrumKitModule*>(node->getProcessor()) : nullptr;
 }
 
 } // namespace
@@ -45,8 +50,7 @@ juce::AudioProcessorGraph::Node* MainComponent::trackModuleNode(synth::TrackId t
 
 // A track's clips open in the drum machine when its instrument is a Drum Kit; `rows` gets the kit's shown pads.
 bool MainComponent::drumKitRows(synth::TrackId trackId, synth::ui::KitRows* rows) const {
-    auto* node = const_cast<MainComponent*>(this)->trackModuleNode(trackId);
-    auto* kit = node != nullptr ? dynamic_cast<DrumKitModule*>(node->getProcessor()) : nullptr;
+    auto* kit = drumKitOf(const_cast<MainComponent*>(this)->trackModuleNode(trackId));
     if (kit == nullptr)
         return false;
     if (rows != nullptr)
@@ -54,11 +58,28 @@ bool MainComponent::drumKitRows(synth::TrackId trackId, synth::ui::KitRows* rows
     return true;
 }
 
-// The drum machine's Show all: every pad of the track's kit on, as one undo step.
-void MainComponent::showAllDrumKitPads(synth::TrackId trackId) {
+// The drum machine's Show all and its row menu's Hide and Show reach the same undo steps as the card. Hiding goes
+// through the card's own question hook, so a drum with hits asks the same thing wherever it is hidden from; the kit is
+// found again once it is answered, since the track or the kit may be gone by then.
+void MainComponent::toggleShowAllDrumKitPads(synth::TrackId trackId) {
+    if (auto* kit = drumKitOf(trackModuleNode(trackId)))
+        synth::ui::toggleShowAllPadsUndoably(&undoManager, &audioEngine.getGraph(), *kit);
+}
+
+void MainComponent::setDrumKitPadsShown(synth::TrackId trackId, const std::vector<int>& pads, bool shown) {
     auto* node = trackModuleNode(trackId);
-    if (auto* kit = node != nullptr ? dynamic_cast<DrumKitModule*>(node->getProcessor()) : nullptr)
-        synth::ui::showAllPadsUndoably(&undoManager, &audioEngine.getGraph(), *kit);
+    auto* kit = drumKitOf(node);
+    if (kit == nullptr || pads.empty())
+        return;
+    const auto apply = [this, trackId, pads, shown] {
+        if (auto* k = drumKitOf(trackModuleNode(trackId)))
+            synth::ui::setPadsShownUndoably(&undoManager, &audioEngine.getGraph(), *k, pads, shown);
+    };
+    const auto& first = kit->pad(pads.front());
+    if (!shown && graphEditor.drumKit.confirmHidePad)
+        graphEditor.drumKit.confirmHidePad(node->nodeID, first.note, first.name, apply);
+    else
+        apply();
 }
 
 // Selects and centres the module; it never opens a window (that is toggleTrackPluginWindow's job).

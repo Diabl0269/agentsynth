@@ -23,8 +23,15 @@ When the clip's track plays a Drum Kit, the kit's pads decide the rows, not the 
   with its Shown switch (see [Drum Kit pads](../modules/drum-kit.md#hiding-a-pad)) has no row, though its hits stay in the
   clip and still play. A note on a pad that is hidden and has no shown twin is not drawn either; a note no pad owns still
   gets a "Note N" row.
-- The "Show all drums" button becomes **Show all**: enabled while a pad is hidden, titled with the count ("Show all,
-  6 of 8 drums · 2 hidden"), and it switches every pad on as one undo step.
+- The "Show all drums" button becomes the kit's **Show all** toggle, the same toggle pill and words as the card's
+  chip: enabled while a pad is hidden, titled with the count ("Show all, 6 of 8 drums · 2 hidden"). A press switches
+  every pad on as one undo step and lights it ("Show all, 8 of 8 drums · 2 shown again"); pressed again it hides
+  exactly the pads it brought back, as one more undo step. A Shown change by hand anywhere forgets that set (see
+  [Hiding a pad](../modules/drum-kit.md#hiding-a-pad)). Without a kit it stays the General MIDI table's toggle, lit
+  while the extra rows show; its width follows its text.
+- The row menu (below) gains, after a line, **Hide pad**, which hides every shown pad on the row's note (the row goes,
+  its hits stay and still play; a drum with hits asks the card's "hide it anyway?" first), and a **Show pad** submenu
+  that lists the hidden pads by name. Each is one undo step, through the same helpers as the card.
 - The rows follow the kit while the editor is open (the timeline's 15 Hz tick re-reads them), so hiding a pad on the
   card removes its row at once, and undo brings it back.
 - If the row the lanes under the grid edit (the "for Cowbell" row) is the one that was hidden, the pick moves to the first
@@ -239,8 +246,9 @@ undo step with exactly the previewed length; dragging to or past the clip's end 
 256 steps stops at 256, the model's cap); Escape drops the drag. Right-clicking a row's name (or Shift+F10, the shared
 `openContextMenu` action, on a focused name or on the grid's focused row) opens a menu: Length (Clip length, then 1 step
 to the clip's step count, the current one ticked; the clip's own count is the same as Clip length), Swing (Clip swing,
-then 0% to 100% in tens, the same mapping as the Swing field) and Reset (clears both, one undo step). Each choice is one
-undo step and is announced. A right-click on a name opens the menu without selecting the row.
+then 0% to 100% in tens, the same mapping as the Swing field) and Reset (clears both, one undo step); on a Drum Kit
+clip, Hide pad and Show pad follow after a line (see [A Drum Kit's pads as rows](#a-drum-kits-pads-as-rows)). Each
+choice is one undo step and is announced. A right-click on a name opens the menu without selecting the row.
 
 **Keys.** Four rebindable actions in the Drum Machine category act on the row of the focused name button, else the
 grid's focused row: `drumMachineRowShorter` (Alt+Left) and `drumMachineRowLonger` (Alt+Right) move the end by a step,

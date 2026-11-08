@@ -26,12 +26,27 @@ DrumLane drumLaneForPitch(int pitch);
  *  hidden pad has no row, held notes or not (it still plays them). */
 struct KitRows {
     std::vector<DrumLane> lanes;
-    std::set<int> hidden; ///< the notes of pads that are switched off and have no shown pad on the same note
-    int total = 0;        ///< the pads within the count
-    int hiddenCount = 0;  ///< how many of them are switched off
+    std::set<int> hidden;  ///< the notes of pads that are switched off and have no shown pad on the same note
+    int total = 0;         ///< the pads within the count
+    int hiddenCount = 0;   ///< how many of them are switched off
+    int revealedCount = 0; ///< how many of them Show all brought back (its second press hides them again)
+    /** One pad within the count, for the row menu's Hide and Show. */
+    struct Pad {
+        int index = 0;
+        int note = 0;
+        juce::String name;
+        bool shown = true;
+        bool operator==(const Pad& o) const {
+            return index == o.index && note == o.note && name == o.name && shown == o.shown;
+        }
+    };
+    std::vector<Pad> pads; ///< every pad within the count, in pad order
 
     bool operator==(const KitRows& other) const;
     bool operator!=(const KitRows& other) const { return !(*this == other); }
+    /** The shown pads on `note` (what hiding its row hides), and the hidden pads (what the row menu can show). */
+    std::vector<int> shownPadsOn(int note) const;
+    std::vector<Pad> hiddenPads() const;
 };
 /** `kit`'s rows. A pad plays under its own colour: the drum it plays, or its note when it plays none. */
 KitRows kitRowsFor(const DrumKitModule& kit);

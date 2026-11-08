@@ -116,6 +116,8 @@ void writePadState(const PadTable& table, juce::DynamicObject& state) {
         p->setProperty("note", pad.note);
         p->setProperty("name", pad.name);
         p->setProperty("shown", pad.shown);
+        if (pad.revealed) // only when set, so a kit saved before Show all remembered anything reads back the same
+            p->setProperty("revealed", true);
         if (pad.instrumentUuid.isNotEmpty()) {
             p->setProperty("instrument", pad.instrumentUuid);
             p->setProperty("pitch", pad.instrumentPitch);
@@ -147,6 +149,7 @@ bool readPadState(const juce::DynamicObject& state, PadTable& table) {
         if (obj->hasProperty("name"))
             pad.name = obj->getProperty("name").toString().substring(0, 64);
         pad.shown = obj->hasProperty("shown") ? (bool)obj->getProperty("shown") : true;
+        pad.revealed = pad.shown && (bool)obj->getProperty("revealed"); // a hidden pad is never one to hide again
         pad.instrumentUuid = obj->getProperty("instrument").toString().substring(0, 64);
         pad.instrumentPitch = clampNote(obj->getProperty("pitch"), 60);
         if (files != nullptr && i < files->size())

@@ -2,7 +2,7 @@
 // The Drum Kit's pad table: the default pads and the count rule, the saved state (pads beyond the count keep their
 // settings), the group parameters writing their pads (the hat split included, automation too), two pads on one drum
 // both sounding, the hat choke across pads, a file pad playing from its Start, and the Recorded switches and a kit
-// pick moving pads between the kit and the built-in drums.
+// pick moving pads between the kit and the built-in drums, and Show all remembering the pads it brought back.
 #include "../Sampler/SamplerTestWavs.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/DrumKit/DrumKitModule.h"
@@ -369,5 +369,101 @@ TEST(DrumKitPads, ShownIsPerPadAndShowAllReachesEveryPad) {
     EXPECT_FALSE(kit.getExtraState().isVoid()) << "a hidden pad is saved";
     EXPECT_EQ(kit.showAllPads(), 2);
     EXPECT_EQ(kit.hiddenPadCount(), 0);
-    EXPECT_TRUE(kit.getExtraState().isVoid()) << "all shown is an untouched kit again";
+    EXPECT_FALSE(kit.getExtraState().isVoid()) << "the pads Show all brought back are remembered";
+    EXPECT_EQ(kit.hidePadsAgain(), 2);
+    EXPECT_TRUE(kit.setPadShown(2, true));
+    EXPECT_TRUE(kit.setPadShown(12, true));
+    EXPECT_TRUE(kit.getExtraState().isVoid()) << "all shown by hand is an untouched kit again";
+}
+
+namespace {
+// The pads' saved objects, by pad.
+const juce::Array<juce::var>& savedPads(const juce::var& state) {
+    static const juce::Array<juce::var> none;
+    const auto* pads = state.getProperty("pads", {}).getArray();
+    return pads != nullptr ? *pads : none;
+}
+} // namespace
+
+// Regression test for FRO1394: Show all only switched pads on, so pressing it again could not hide the same pads.
+TEST(DrumKitPads, ShowAllRemembersThePadsItBroughtBackAndHidesExactlyThoseAgain) {
+    DrumKitModule kit;
+    for (int pad : {1, 4, 6, 12}) // three on the card, one beyond the count
+        ASSERT_TRUE(kit.setPadShown(pad, false));
+    EXPECT_EQ(kit.hiddenPadCount(), 3);
+    EXPECT_EQ(kit.revealedPadCount(), 0);
+
+    EXPECT_EQ(kit.showAllPads(), 4);
+    EXPECT_EQ(kit.hiddenPadCount(), 0);
+    EXPECT_EQ(kit.revealedPadCount(), 3) << "counted within the count, like the hidden caption";
+    for (int pad = 0; pad < synth::drums::kMaxPads; ++pad)
+        EXPECT_EQ(kit.padRevealed(pad), pad == 1 || pad == 4 || pad == 6 || pad == 12) << "pad " << pad;
+    EXPECT_EQ(kit.showAllPads(), 0) << "nothing hidden: nothing changes";
+    EXPECT_EQ(kit.revealedPadCount(), 3) << "and the remembered set stays";
+
+    EXPECT_EQ(kit.hidePadsAgain(), 4);
+    for (int pad = 0; pad < synth::drums::kMaxPads; ++pad)
+        EXPECT_EQ(kit.padShown(pad), !(pad == 1 || pad == 4 || pad == 6 || pad == 12)) << "pad " << pad;
+    EXPECT_EQ(kit.revealedPadCount(), 0);
+    EXPECT_EQ(kit.hidePadsAgain(), 0) << "a second hide has nothing left to hide";
+}
+
+TEST(DrumKitPads, AShownSwitchFlippedByHandForgetsWhatShowAllRemembered) {
+    DrumKitModule kit;
+    kit.setPadShown(2, false);
+    kit.setPadShown(3, false);
+    kit.showAllPads();
+    ASSERT_EQ(kit.revealedPadCount(), 2);
+    EXPECT_TRUE(kit.setPadShown(5, false)) << "a new choice by hand";
+    EXPECT_EQ(kit.revealedPadCount(), 0);
+    EXPECT_EQ(kit.hidePadsAgain(), 0) << "so the second press never hides a pad the person just decided about";
+    EXPECT_TRUE(kit.padShown(2));
+    EXPECT_FALSE(kit.padShown(5));
+
+    kit.showAllPads();
+    ASSERT_EQ(kit.revealedPadCount(), 1);
+    EXPECT_TRUE(kit.setPadShown(5, false));
+    EXPECT_EQ(kit.revealedPadCount(), 0) << "hiding a remembered pad by hand forgets the set too";
+
+    kit.showAllPads();
+    kit.setPadCount(16);
+    kit.resetPad(5);
+    EXPECT_TRUE(kit.padRevealed(5)) << "a count change and a reset keep it";
+}
+
+TEST(DrumKitPads, TheRememberedPadsSurviveASaveAndAReload) {
+    DrumKitModule kit;
+    for (int pad : {0, 3, 7})
+        kit.setPadShown(pad, false);
+    kit.showAllPads();
+    const auto saved = kit.getExtraState();
+
+    DrumKitModule reloaded;
+    reloaded.setExtraState(saved);
+    EXPECT_EQ(reloaded.revealedPadCount(), 3);
+    EXPECT_EQ(reloaded.hidePadsAgain(), 3);
+    for (int pad = 0; pad < 8; ++pad)
+        EXPECT_EQ(reloaded.padShown(pad), !(pad == 0 || pad == 3 || pad == 7)) << "pad " << pad;
+}
+
+TEST(DrumKitPads, OnlyARememberedPadSavesTheNewKey) {
+    DrumKitModule untouched;
+    EXPECT_TRUE(untouched.getExtraState().isVoid()) << "an untouched kit saves nothing";
+
+    DrumKitModule kit;
+    kit.setPadShown(6, false);
+    const auto hidden = kit.getExtraState();
+    const auto before = juce::JSON::toString(hidden);
+    for (const auto& pad : savedPads(hidden))
+        EXPECT_FALSE(pad.getDynamicObject()->hasProperty("revealed")) << "a kit with a hidden pad saves as before";
+
+    kit.showAllPads();
+    const auto shownAgain = kit.getExtraState();
+    int remembered = 0;
+    for (const auto& pad : savedPads(shownAgain))
+        remembered += pad.getDynamicObject()->hasProperty("revealed") ? 1 : 0;
+    EXPECT_EQ(remembered, 1);
+
+    kit.hidePadsAgain();
+    EXPECT_EQ(juce::JSON::toString(kit.getExtraState()), before) << "hiding again saves exactly what it saved before";
 }

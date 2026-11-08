@@ -630,8 +630,7 @@ private:
     bool moveModulatorToLane(const synth::ui::ModulatorInfo& modulator, synth::LaneId destLane, int destIndex) override;
     std::optional<ModulationRouting> findModulatorRouting(const synth::ui::ModulatorInfo& modulator);
     void performRemoveModulator(const synth::ui::ModulatorInfo& modulator, bool deleteLonelyLfo = true);
-    /** The mod dot's "Show in timeline": opens the Timeline and shows the lane of the modulator's parameter, where its
-     *  modulator rows sit (the lane is made, as "Automate" does, when the parameter has none yet). */
+    /** The mod dot's "Show in timeline": opens the Timeline on its parameter's lane (made, as "Automate" does). */
     void revealModulatorInTimeline(const synth::ui::ModulatorInfo& modulator);
     bool lfoMovesMoreThanOneRouting(juce::AudioProcessorGraph::NodeID lfoId);
     float getNodeParameter(const juce::String& uuid, const juce::String& paramId) override;
@@ -647,7 +646,8 @@ private:
     std::vector<synth::ui::TrackHeaderHost::MidiInputDevice> getMidiInputDevices() override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
     bool drumKitRows(synth::TrackId track, synth::ui::KitRows* rows) const override;
-    void showAllDrumKitPads(synth::TrackId track) override;
+    void toggleShowAllDrumKitPads(synth::TrackId track) override;
+    void setDrumKitPadsShown(synth::TrackId track, const std::vector<int>& pads, bool shown) override;
     bool startClipPreview(synth::TrackId track, double startBeat, double endBeat) override;
     void stopClipPreview(synth::TrackId track) override;
     double clipPreviewBeat(synth::TrackId track) override;

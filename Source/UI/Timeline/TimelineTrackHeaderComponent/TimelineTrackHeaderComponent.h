@@ -435,8 +435,9 @@ struct TrackHeaderHost {
     /** True for a Drum Kit track: its clips open in the drum machine. `rows`, when given, gets the shown pads. */
     bool isDrumKitTrack(synth::TrackId t) const { return drumKitRows(t, nullptr); }
     virtual bool drumKitRows(synth::TrackId, KitRows*) const { return false; } // rows: null for just the yes/no
-    /** Switches every pad of the track's Drum Kit on, as one undo step. */
-    virtual void showAllDrumKitPads(synth::TrackId) {}
+    /** The track's Drum Kit: Show all as a toggle, and Shown for `pads` (hiding asks first); each one undo step. */
+    virtual void toggleShowAllDrumKitPads(synth::TrackId) {}
+    virtual void setDrumKitPadsShown(synth::TrackId, const std::vector<int>& /*pads*/, bool /*shown*/) {}
 
     /** CLIP PREVIEW (the drum machine's Play clip): loops [startBeat, endBeat) of the track on its Track In while the
      *  transport is stopped; false when nothing can play it. clipPreviewBeat is NaN when none runs. Inert defaults. */

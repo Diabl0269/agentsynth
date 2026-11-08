@@ -76,6 +76,8 @@ public:
     static constexpr int kRowMenuClipSwing = 2;
     static constexpr int kRowMenuSwingBase = 100; ///< 100 + p / 10 is "p%" (0 to 100 in tens)
     static constexpr int kRowMenuReset = 3;
+    static constexpr int kRowMenuHidePad = 4;        ///< with a Drum Kit: hide the row's pad
+    static constexpr int kRowMenuShowPadBase = 2000; ///< 2000 + i shows hidden pad i (0-based)
 
     struct Cell {
         int row = -1;
@@ -172,13 +174,18 @@ public:
      *  false when the track plays no Drum Kit (the rows then come from the General MIDI table). Called on the message
      *  thread. */
     std::function<bool(KitRows&)> kitRowsProvider;
-    /** "Show all" was pressed while the kit has hidden pads: the owner switches them all on, as one undo step. */
-    std::function<void()> onShowAllKitPads;
+    /** "Show all" was pressed with a kit: the owner presses the kit's Show all toggle (shows every pad, or hides again
+     *  the ones its last press brought back), as one undo step. */
+    std::function<void()> onToggleShowAllKitPads;
+    /** The row menu's Hide pad (`shown` false, the pads behind the row) or Show pad (one hidden pad): the owner sets
+     *  them as one undo step, asking first before it hides a drum with hits. */
+    std::function<void(const std::vector<int>& pads, bool shown)> onSetKitPadsShown;
     /** Re-reads the kit's pads and, when they changed, grows or shrinks the rows to match. Cheap when they did not. */
     void refreshKitRows();
     /** The kit's rows now, or null when the open clip plays no Drum Kit. */
     const KitRows* kitRows() const noexcept { return hasKit_ ? &kitRows_ : nullptr; }
-    /** "6 of 8 drums . 2 hidden" while the kit hides any, else "8 of 8 drums"; empty without a kit. */
+    /** "6 of 8 drums . 2 hidden" while the kit hides any, ". 2 shown again" while Show all can hide them again, else
+     *  "8 of 8 drums"; empty without a kit. */
     juce::String kitRowsCaption() const;
     juce::String getAccessibilityValueText() const;
 
@@ -235,7 +242,8 @@ public:
     /** Where the drum's end is drawn, in steps (it slides between positions). */
     double getEdgePosition(int pitch) const;
     bool isGhostFadeActive(int row, int step) const;
-    /** The row's right-click menu: Length, Swing, Reset; applyRowMenuChoice runs one of its item ids. */
+    /** The row's right-click menu: Length, Swing, Reset, and with a kit Hide pad and Show pad; applyRowMenuChoice runs
+     *  one of its item ids. */
     juce::PopupMenu buildRowMenu(int pitch) const;
     void applyRowMenuChoice(int pitch, int itemId);
     void showRowMenu(int pitch, std::optional<juce::Rectangle<int>> screenAnchor);
@@ -264,7 +272,7 @@ public:
     EditorTabWalk& getTabWalk() noexcept { return *tabWalk_; }
     CardSegmentedSwitch& getViewSwitch() noexcept { return viewSwitch_; }
     juce::ComboBox& getStepsCombo() noexcept { return stepsCombo_; }
-    juce::Button& getShowAllButton() noexcept { return showAllButton_; }
+    juce::ToggleButton& getShowAllButton() noexcept { return showAllButton_; }
     DrumRowLabels& getRowLabels() noexcept { return labels_; }
     bool isHitMotionActive(int row, int step) const;
     /** The scale the hit at (row, step) is drawn at right now (1 at rest). */
@@ -359,6 +367,8 @@ private:
     int stepsPerBar() const;
     void syncLanes(bool animate);
     bool pullKitRows();
+    void addKitPadItems(juce::PopupMenu& menu, int pitch) const;
+    bool applyKitPadChoice(int pitch, int itemId);
     void refreshShowAllButton();
     void layoutRows();
     void pushRowsToLabels();
@@ -572,7 +582,7 @@ private:
 
     CardSegmentedSwitch viewSwitch_;
     juce::ComboBox stepsCombo_;
-    juce::TextButton showAllButton_{"Show all drums"};
+    juce::ToggleButton showAllButton_{"Show all drums"}; // a toggle pill, like the card's Show all chip
     juce::TextButton playClipButton_{"Play clip"};
     juce::TextButton ideasButton_{"Ideas"};
     CardStepper swingField_{"Swing"};

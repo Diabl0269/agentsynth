@@ -1,6 +1,8 @@
-// DrumPadShown.cpp -- the Shown switch's undo steps and the "hide it anyway?" question.
+// DrumPadShown.cpp -- the Shown switch's undo steps, Show all as a toggle and its words, and the "hide it anyway?"
+// question.
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"
 #include "UI/Chrome/ConfirmDontAskDialog.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -22,9 +24,22 @@ auto editUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, Edit&&
 
 bool setPadShownUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit, int index,
                          bool shown) {
-    if (index < 0 || index >= synth::drums::kMaxPads || kit.padShown(index) == shown)
-        return false;
-    return editUndoably(undo, graph, [&] { return kit.setPadShown(index, shown); });
+    return setPadsShownUndoably(undo, graph, kit, {index}, shown) > 0;
+}
+
+int setPadsShownUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit,
+                         const std::vector<int>& pads, bool shown) {
+    const bool any = std::any_of(pads.begin(), pads.end(), [&](int i) {
+        return i >= 0 && i < synth::drums::kMaxPads && kit.padShown(i) != shown;
+    });
+    if (!any)
+        return 0;
+    return editUndoably(undo, graph, [&] {
+        int changed = 0;
+        for (int i : pads)
+            changed += kit.setPadShown(i, shown) ? 1 : 0;
+        return changed;
+    });
 }
 
 int showAllPadsUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit) {
@@ -34,6 +49,43 @@ int showAllPadsUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, 
     if (!anyHidden)
         return 0;
     return editUndoably(undo, graph, [&] { return kit.showAllPads(); });
+}
+
+// The toggle reads the same state its chip shows: lit (pads remembered within the count) means the press hides them.
+int toggleShowAllPadsUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit) {
+    if (kit.revealedPadCount() > 0)
+        return editUndoably(undo, graph, [&] { return kit.hidePadsAgain(); });
+    return showAllPadsUndoably(undo, graph, kit);
+}
+
+// One wording for the card's chip, its pad menu and the drum machine's button, so the three never drift apart. The
+// label stays "Show all" in both states (the lit pill says it is on, as the lane chips do), so the chip never changes
+// width under the pointer; the caption and the tooltip carry the count.
+ShowAllText showAllText(int hidden, int revealed) {
+    ShowAllText text;
+    const auto pads = [](int n) { return juce::String(n) + (n == 1 ? " pad" : " pads"); };
+    if (revealed > 0) {
+        text.on = true;
+        text.enabled = true;
+        text.caption = juce::String(revealed) + " shown again";
+        text.tooltip = "Hide the " + pads(revealed) + " Show all brought back. Undo works too.";
+        text.menuItem = revealed == 1 ? "Hide it again" : "Hide the " + juce::String(revealed) + " again";
+    } else if (hidden > 0) {
+        text.enabled = true;
+        text.caption = juce::String(hidden) + " hidden";
+        text.tooltip = "Show the " + pads(hidden) + " you hid. A second press hides the same pads again.";
+        text.menuItem = "Show all pads";
+    } else {
+        text.tooltip = "Nothing is hidden. Hide a drum with its pad's Shown switch or from its row's menu.";
+        text.menuItem = "Show all pads";
+    }
+    return text;
+}
+
+void applyShowAllChip(juce::ToggleButton& chip, const ShowAllText& text) {
+    chip.setToggleState(text.on, juce::dontSendNotification);
+    chip.setEnabled(text.enabled);
+    chip.setTooltip(text.tooltip);
 }
 
 HideDrumConfirmText hideDrumConfirmText(const juce::String& padName, int hits) {

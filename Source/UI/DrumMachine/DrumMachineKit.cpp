@@ -1,8 +1,10 @@
 // DrumMachineKit.cpp -- when the open clip plays a Drum Kit, its pads decide the rows: a pad that is switched off has
-// no row (its hits still play), and the "Show all" button switches the hidden pads back on.
+// no row (its hits still play), and the "Show all" toggle switches the hidden pads back on and, pressed again, hides
+// the same pads again.
 // docs/timeline/drum-machine.md#a-drum-kits-pads-as-rows.
 
 #include "DrumMachineComponent.h"
+#include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"
 
 namespace synth::ui {
 
@@ -30,27 +32,31 @@ juce::String DrumMachineComponent::kitRowsCaption() const {
         return {};
     const int shown = kitRows_.total - kitRows_.hiddenCount;
     auto text = juce::String(shown) + " of " + juce::String(kitRows_.total) + " drums";
-    if (kitRows_.hiddenCount > 0)
-        text += juce::String::fromUTF8(" \xC2\xB7 ") + juce::String(kitRows_.hiddenCount) + " hidden";
+    if (const auto more = showAllText(kitRows_.hiddenCount, kitRows_.revealedCount).caption; more.isNotEmpty())
+        text += juce::String::fromUTF8(" \xC2\xB7 ") + more;
     return text;
 }
 
-// With a kit the button is the kit's Show all: it works while any pad is hidden and says how many rows that is.
+// With a kit the button is the kit's Show all toggle, in the card chip's words: it works while a pad is hidden, and
+// lit, while Show all can hide the pads it brought back again. Without one it is the General MIDI table's own toggle.
+// Its width follows its text (the toolbar is laid out again when that changes).
 void DrumMachineComponent::refreshShowAllButton() {
+    const auto oldText = showAllButton_.getButtonText();
     if (!hasKit_) {
         showAllButton_.setButtonText("Show all drums");
         showAllButton_.setTitle("Show all drums");
         showAllButton_.setEnabled(true);
+        showAllButton_.setToggleState(showAll_, juce::dontSendNotification);
         showAllButton_.setTooltip("Show every General MIDI drum as a row, not only the common ones");
-        return;
+    } else {
+        const auto text = showAllText(kitRows_.hiddenCount, kitRows_.revealedCount);
+        showAllButton_.setButtonText("Show all");
+        showAllButton_.setTitle(text.enabled ? "Show all, " + kitRowsCaption() : "Show all, none hidden");
+        applyShowAllChip(showAllButton_, text);
+        showAllButton_.setTooltip(kitRowsCaption() + ". " + text.tooltip);
     }
-    const auto caption = kitRowsCaption();
-    const bool any = kitRows_.hiddenCount > 0;
-    showAllButton_.setButtonText("Show all");
-    showAllButton_.setTitle(any ? "Show all, " + caption : "Show all, none hidden");
-    showAllButton_.setEnabled(any);
-    showAllButton_.setTooltip(any ? caption + ". Show every hidden drum as a row again."
-                                  : caption + ". Hide a drum with its pad's Shown switch on the Drum Kit card.");
+    if (showAllButton_.getButtonText() != oldText)
+        layoutToolbar();
 }
 
 } // namespace synth::ui

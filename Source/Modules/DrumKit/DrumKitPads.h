@@ -29,10 +29,13 @@ struct Pad {
     juce::String instrumentUuid; // PadKind::Instrument: the module it plays
     int instrumentPitch = 60;
     bool shown = true;
+    /** Shown again by Show all, whose second press hides exactly these pads again; saved only when true. */
+    bool revealed = false;
 
     bool operator==(const Pad& o) const {
         return kind == o.kind && sound == o.sound && note == o.note && name == o.name && file == o.file &&
-               instrumentUuid == o.instrumentUuid && instrumentPitch == o.instrumentPitch && shown == o.shown;
+               instrumentUuid == o.instrumentUuid && instrumentPitch == o.instrumentPitch && shown == o.shown &&
+               revealed == o.revealed;
     }
     bool operator!=(const Pad& o) const { return !(*this == o); }
 };

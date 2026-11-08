@@ -6,6 +6,7 @@
 #include "Modules/DrumKit/DrumKitModule.h"
 
 #include <algorithm>
+#include <iterator>
 #include <set>
 
 namespace synth::ui {
@@ -54,8 +55,8 @@ DrumLane drumLaneForPitch(int pitch) {
 }
 
 bool KitRows::operator==(const KitRows& other) const {
-    if (total != other.total || hiddenCount != other.hiddenCount || hidden != other.hidden ||
-        lanes.size() != other.lanes.size())
+    if (total != other.total || hiddenCount != other.hiddenCount || revealedCount != other.revealedCount ||
+        hidden != other.hidden || pads != other.pads || lanes.size() != other.lanes.size())
         return false;
     for (size_t i = 0; i < lanes.size(); ++i)
         if (lanes[i].pitch != other.lanes[i].pitch || lanes[i].name != other.lanes[i].name)
@@ -77,6 +78,8 @@ KitRows kitRowsFor(const DrumKitModule& kit) {
         if (i >= rows.total)
             continue;
         rows.hiddenCount += pad.shown ? 0 : 1;
+        rows.revealedCount += pad.revealed ? 1 : 0;
+        rows.pads.push_back({i, pad.note, pad.name, pad.shown});
         if (pad.shown && laneNotes.insert(pad.note).second) {
             DrumLane lane = drumLaneForPitch(pad.sound >= 0 ? pad.sound : pad.note);
             lane.pitch = pad.note;
@@ -87,6 +90,20 @@ KitRows kitRowsFor(const DrumKitModule& kit) {
     for (int note : shownNotes)
         rows.hidden.erase(note);
     return rows;
+}
+
+std::vector<int> KitRows::shownPadsOn(int note) const {
+    std::vector<int> out;
+    for (const auto& pad : pads)
+        if (pad.shown && pad.note == note)
+            out.push_back(pad.index);
+    return out;
+}
+
+std::vector<KitRows::Pad> KitRows::hiddenPads() const {
+    std::vector<Pad> out;
+    std::copy_if(pads.begin(), pads.end(), std::back_inserter(out), [](const Pad& pad) { return !pad.shown; });
+    return out;
 }
 
 std::vector<DrumLane> visibleDrumLanes(const synth::Clip* clip, bool showAll, const KitRows* kit) {

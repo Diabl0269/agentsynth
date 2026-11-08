@@ -7,6 +7,7 @@
 // clip-relative in the document, so every cell maps through clip->startBeat.
 
 #include "DrumMachineComponent.h"
+#include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Layout/EditorTabWalk.h"
 
 #include "Transport/TransportService.h"
@@ -86,18 +87,18 @@ DrumMachineComponent::DrumMachineComponent()
 
     addAndMakeVisible(showAllButton_);
     showAllButton_.setComponentID("drumShowAll");
-    showAllButton_.setClickingTogglesState(true);
+    showAllButton_.setClickingTogglesState(false); // lit follows the rows (or the kit), so an undo relights it
+    setTogglePillStyle(showAllButton_, true);
     showAllButton_.setTitle("Show all drums");
     showAllButton_.setTooltip("Show every General MIDI drum as a row, not only the common ones");
     showAllButton_.onClick = [this] {
-        if (hasKit_) { // a kit's Show all switches its pads on; it is not a toggle
-            showAllButton_.setToggleState(false, juce::dontSendNotification);
-            if (onShowAllKitPads)
-                onShowAllKitPads();
-            refreshKitRows(); // the rows come back now, not at the next timer tick
+        if (hasKit_) { // the kit's Show all toggle: every pad on, or the ones it brought back hidden again
+            if (onToggleShowAllKitPads)
+                onToggleShowAllKitPads();
+            refreshKitRows(); // the rows change now, not at the next timer tick
             return;
         }
-        setShowAllDrums(showAllButton_.getToggleState());
+        setShowAllDrums(!showAll_);
     };
     setupGroove();
     setupIdeas();

@@ -77,7 +77,7 @@ void DrumKitPadsSection::applyChoice(int index, const DrumPadSoundMenu::Choice& 
         setPadShown(index, !kit_.padShown(index));
         return;
     case Kind::ShowAll:
-        showAllPads();
+        toggleShowAll();
         return;
     case Kind::Reset:
         editPadUndoably([&] {
