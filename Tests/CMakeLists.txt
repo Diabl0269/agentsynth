@@ -80,6 +80,7 @@ add_executable(Tests
     Modules/Envelope/EnvelopeGeneratorTests.cpp
     Modules/Envelope/TempoDivisionTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
+    Modules/ModTargetListTests.cpp
     Modules/ModuleBaseTests.cpp
     Modules/ModulationTargetBindingTests.cpp
     Engine/VisualBufferTests.cpp

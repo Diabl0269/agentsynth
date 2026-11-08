@@ -166,6 +166,9 @@ void MalletModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             noteOff(message.getNoteNumber(), buffer, at);
     }
     renderTo(numSamples);
+    // The cables are spent: none leaves the module on a channel beyond the audio pair.
+    for (int ch = kNumChannels; ch < buffer.getNumChannels(); ++ch)
+        buffer.clear(ch, 0, numSamples);
 
     publishedVoices_.store(activeVoiceCount(), std::memory_order_relaxed);
 

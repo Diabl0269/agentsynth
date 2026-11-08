@@ -6,5 +6,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/SavedCablesKeepChannelsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModDot/LevelRingMovesTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/InstrumentLevelModCableTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Modules/InstrumentNoteTimeCableTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorInstrumentLevelDropTests.cpp
 )

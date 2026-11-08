@@ -200,6 +200,9 @@ void PluckModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mid
         }
     }
     renderTo(numSamples);
+    // The cables are spent: none leaves the module on a channel beyond the audio pair.
+    for (int ch = kNumChannels; ch < buffer.getNumChannels(); ++ch)
+        buffer.clear(ch, 0, numSamples);
     if (activeVoiceCount() > 0)
         bodyTail_ = std::max(bodyTail_, static_cast<int>(sampleRate_));
 
