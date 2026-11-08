@@ -7,8 +7,8 @@
 # packs between their two positions, Reduce Motion and Animations Off) are covered by SoundPackOfferTests.
 #
 # The click lands on the heading's label: the list starts 58 px down (search 32, path bar 26) and the heading is the
-# fourth row (Favourites, Used recently, Shapes, then Get more), so its centre is 58 + 3 * 30 + 15 = 163. If installed
-# packs sit above it in this build, the `getMoreOpen` expect fails and the y needs adding 30 per pack.
+# fifth row (Favourites, Used recently, Shapes, the bundled Core instruments pack, then Get more), so its centre is
+# 58 + 4 * 30 + 15 = 193. Another installed pack above it adds 30; the `getMoreOpen` expect fails if the y is off.
 motion: true
 record: true
 save_project: get-more-fold
@@ -21,12 +21,12 @@ steps:
   - expect: {id: soundBrowser, showing: true, within_ms: 3000}
   - expect: {id: soundBrowser, getMoreOpen: true}
   - screenshot: {id: soundBrowser, name: 1-open}
-  - click: {id: soundBrowser, x: 60, y: 163}
+  - click: {id: soundBrowser, x: 60, y: 193}
   - mark: {check: 1, name: get-more-mid-slide}
   - wait: {}
   - expect: {id: soundBrowser, getMoreOpen: false}
   - screenshot: {id: soundBrowser, name: 2-folded}
-  - click: {id: soundBrowser, x: 60, y: 163}
+  - click: {id: soundBrowser, x: 60, y: 193}
   - wait: {}
   - expect: {id: soundBrowser, getMoreOpen: true}
   - screenshot: {id: soundBrowser, name: 3-open-again}

@@ -8,6 +8,7 @@
 // docs/layout/animation.md#popup-windows): one motion engine (PopupMotion), Escape and click-away rules in one place,
 // and the app's shortcuts handed to the main window the way the shape editor window does (makeAppShortcutRelay).
 #include "UI/Layout/PopoverContent.h"
+#include "UI/Layout/PopoverPointer.h"
 #include "UI/Layout/PopupMotion.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -76,9 +77,6 @@ bool offerKeyToPopoverForTest(juce::CallOutBox& box, const juce::KeyPress& key);
  *  relays through the box the hook returns. */
 using PopoverLauncher = std::function<juce::CallOutBox*(std::unique_ptr<juce::Component>, juce::Rectangle<int>)>;
 PopoverLauncher& popoverLauncherForTest();
-
-/** Where the pointer is for the click-away rules (screen coordinates); empty = the real pointer. */
-std::optional<juce::Point<int>>& popoverMouseForTest();
 } // namespace test_hooks
 
 } // namespace synth::ui

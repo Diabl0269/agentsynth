@@ -5,7 +5,9 @@
 #include "SilentLookAndFeel.h"
 #include "SoundPacks/SoundPackFetch.h"
 #include "TestMode/AutomationHiding.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/PopoverPointer.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
@@ -122,6 +124,15 @@ private:
     std::vector<juce::Component::SafePointer<juce::Component>> reported_;
 };
 
+// Test-mode clicks (TestModeInput) leave the synthetic pointer where they last pressed, for the tooltip and the popover
+// click-away rules; it never carries into the next test, which would read a press at that stale point.
+class SyntheticPointerReset : public ::testing::EmptyTestEventListener {
+    void OnTestEnd(const ::testing::TestInfo&) override {
+        synth::ui::AppTooltipWindow::setSyntheticPointer(std::nullopt);
+        synth::ui::test_hooks::popoverMouseForTest() = std::nullopt;
+    }
+};
+
 int main(int argc, char** argv) {
     // The real ChildLauncher re-executes THIS binary with `--scan-plugin <fmt> <file> <token>`
     // (any test that lets a MainComponent's eager scan use the default launcher). Serve that as
@@ -158,6 +169,7 @@ int main(int argc, char** argv) {
     ::testing::UnitTest::GetInstance()->listeners().Append(new MotionSeamLeakCheck());
     ::testing::UnitTest::GetInstance()->listeners().Append(new DialogLeakCheck());
     ::testing::UnitTest::GetInstance()->listeners().Append(new CallOutLeakCheck());
+    ::testing::UnitTest::GetInstance()->listeners().Append(new SyntheticPointerReset());
 
     // The ONE call site that reads AGENTSYNTH_SETTINGS_DIR, so a shipped binary can never
     // be redirected via it (see test-patterns.md's "on-disk path" section for the full seam).

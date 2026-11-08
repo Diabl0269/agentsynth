@@ -3,6 +3,7 @@
 #include "TestMode/TestModeInput.h"
 
 #include "UI/Layout/AppTooltipWindow.h"
+#include "UI/Layout/PopoverPointer.h"
 
 namespace synth::testmode {
 
@@ -111,6 +112,8 @@ bool sendMouse(const MouseStep& step, juce::String& error) {
     // JUCE places a tooltip at the OS cursor, which this input never moves: tell the tooltip where the pointer is.
     const auto screenPoint = peer->getComponent().localPointToGlobal(inPeer.roundToInt());
     synth::ui::AppTooltipWindow::setSyntheticPointer(screenPoint);
+    // A popover reads the pointer to tell a press on its own button (a toggle) from a click away.
+    synth::ui::test_hooks::popoverMouseForTest() = screenPoint;
     lastPointer() = screenPoint;
     // JUCE reads the keyboard modifiers of a mouse event from this global, not from the event's own flags.
     const auto previous = juce::ModifierKeys::currentModifiers;
