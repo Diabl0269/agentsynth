@@ -247,8 +247,6 @@ public:
      *  is the RAW channel). Not part of getPortForPoint: a press on a knob must keep starting a value drag, so this
      *  is consulted only while a cable is in flight and no real jack was hit. */
     std::optional<Port> getModTargetPortForPoint(juce::Point<int> localPoint) const;
-    /** Why the shown knob under `localPoint` refuses a mod cable (ModuleBase::modulationRefusal), or empty. */
-    juce::String getModRefusalForPoint(juce::Point<int> localPoint) const;
 
     /** Highlights a knob as the pending modulation drop target (-1 clears); true when the highlight changed. */
     bool setModDropTargetChannel(int channelIndex);
