@@ -1,6 +1,6 @@
 # FRO731: with Animations set to Reduced the cable signal-flow dots move gently (0.3x speed).
 # What a user does: sets Preferences > Animations to Reduced (here written to the settings before the start), adds a
-# Reverb and an LFO, and patches the LFO output onto the Reverb's Level. The two screenshots either side of the mark
+# Reverb and an LFO, and patches the LFO output onto the Reverb's Level, then Auto Arrange. The two screenshots either side of the mark
 # (1.5 s apart) show the dots a little further along.
 motion: true
 record: true
@@ -35,6 +35,8 @@ steps:
   - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Reverb > Level"}
   - wait: {}
   - expect: {id: "card:Reverb", contains: {cabledTargets: Level}, within_ms: 3000}
+  - click: {id: Auto Arrange}                 # LFO left of the Reverb, so the cable runs in the open
+  - wait: {}
   - mark: {check: 1, name: patched}             # lets the patch settle (1.5 s) before the first shot
   - screenshot: {name: dots-before}
   - expect: {id: "card:LFO", animationMode: "reduced"}
