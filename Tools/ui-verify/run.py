@@ -25,12 +25,19 @@ masks components and sets how long paints may settle). One mapping per step, `- 
     - expect: {id: "card:LFO 1", exists: false}
     - expect: {count: {prefix: "card:", equals: 3}}     # list ids (or field: title) starting with the prefix
     - mark: {check: 2, name: picker-open}               # proof for check 2, see below
+    - glide: {name: card-slides, frames: 12, do: {click: {id: "macroCard:Macro", x: 262, y: 18}}}   # a motion, frame by frame
 
 `mark: {check: N, name: <slug>}` (N an integer >= 1, name [a-z0-9-]+, unique in the scenario) is the moment a check's
 claim is on screen. It takes one frame held 1.5 s, saves that image as `<out>/proof/<name>.png` (also without `record`)
 and, once the video is written, cuts `<out>/<scenario>-<name>.mp4` from 2.5 s before the mark to 3 s after (4 to 6 s
 long when the video allows). Put it while the popup or hover it shows is still open; the summary lists the stills and
 clips.
+
+`glide: {name: <slug>, do: {<command>: {args}}, frames: N}` (needs `record: true`; `frames` 4 to 40, default 12; `crop: {x, y, w, h}` limits the strip image to that part of the frame, in two columns) sends
+the command and then films the screen N times in a row, 0.1 s a frame, instead of the one frame a step normally gets:
+a 220 ms slide or fade is thus a dozen frames in the video, not one held frame caught mid-way (which reads as a blue
+block). It also saves `<out>/proof/<name>-strip.png`, the frames tiled in rows of four. The step takes no frame of its own
+after the command; follow it with a `wait` and a `mark` on the landed state.
 
 `${FIXTURES}`, `${OUT}` and `${SCRATCH}` (the run's temporary settings directory) are replaced in every string.
 `- copyFixture: {name: x.agsproj}` copies `${FIXTURES}/x.agsproj` into `${SCRATCH}/x.agsproj` for a scenario that
@@ -51,15 +58,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from agentsynth_testmode import TestModeApp, TestModeError  # noqa: E402
-from recording import DEFAULT_TARGET, DRAG_HOLD_SECONDS, MARK_HOLD_SECONDS, Recorder  # noqa: E402
+from recording import (DEFAULT_TARGET, DRAG_HOLD_SECONDS, GLIDE_DEFAULT_FRAMES, GLIDE_HOLD_SECONDS,  # noqa: E402
+                       MARK_HOLD_SECONDS, Recorder)  # noqa: E402
 
 FIXTURES = os.path.join(HERE, "fixtures")
 DEFAULT_OUT = os.path.join(HERE, "out")
 SETTINGS_FILE = "Agent Synth.settings"
 EXPECT_KEYS = {"id", "contains", "exists", "count", "within_ms"}
-RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture", "mark"}
+RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture", "mark", "glide"}
 MARK_NAME = re.compile(r"^[a-z0-9-]+$")
-UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark"}  # no video frame after these
+UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark", "glide"}  # no video frame after these
 NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld"}  # no stale-pixel check
 
 
@@ -139,6 +147,31 @@ def _check_mark(args, index, name, seen):
     seen.add(mark_name)
 
 
+def _check_glide(args, index, name, record, seen):
+    """A `glide` step: {name: slug, do: {<command>: {args}}, frames: 4..40}, only in a recorded scenario."""
+    where = "%s: step %d (glide)" % (name, index)
+    if not record:
+        raise ScenarioError("%s needs `record: true`: it films the motion" % where)
+    if not set(args) <= {"name", "do", "frames", "crop"} or not {"name", "do"} <= set(args):
+        raise ScenarioError("%s takes `name`, `do` and optionally `frames` and `crop`, got %r" % (where, sorted(args)))
+    crop = args.get("crop")
+    if crop is not None and (not isinstance(crop, dict) or set(crop) != {"x", "y", "w", "h"}
+                             or not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in crop.values())
+                             or crop["w"] < 1 or crop["h"] < 1):
+        raise ScenarioError("%s: `crop` must be {x, y, w, h} in whole pixels of the frame, got %r" % (where, crop))
+    if not isinstance(args["name"], str) or not MARK_NAME.match(args["name"]) or args["name"] in seen:
+        raise ScenarioError("%s: `name` must be a unique slug of lower-case letters, digits and dashes, got %r" % (where, args["name"]))
+    seen.add(args["name"])
+    action = args["do"]
+    if not isinstance(action, dict) or len(action) != 1 or not isinstance(next(iter(action.values())) or {}, dict):
+        raise ScenarioError("%s: `do` must be one command with a mapping of arguments, got %r" % (where, action))
+    if next(iter(action)) in RUNNER_STEPS:
+        raise ScenarioError("%s: `do` must be a protocol command (click, key, ...), got %r" % (where, next(iter(action))))
+    frames = args.get("frames", GLIDE_DEFAULT_FRAMES)
+    if isinstance(frames, bool) or not isinstance(frames, int) or not 4 <= frames <= 40:
+        raise ScenarioError("%s: `frames` must be an integer from 4 to 40, got %r" % (where, frames))
+
+
 def parse_scenario(text, name="scenario", path=None):
     """Parses scenario YAML. A step is a mapping with exactly one key (the command); its value is the args mapping."""
     import yaml
@@ -165,6 +198,7 @@ def parse_scenario(text, name="scenario", path=None):
         raise ScenarioError("%s: expected a non-empty list of steps" % name)
     steps = []
     mark_names = set()
+    glide_names = set()
     for index, raw in enumerate(document, 1):
         if not isinstance(raw, dict) or len(raw) != 1:
             raise ScenarioError("%s: step %d must be a mapping with one command, got %r" % (name, index, raw))
@@ -175,6 +209,8 @@ def parse_scenario(text, name="scenario", path=None):
             raise ScenarioError("%s: step %d (%s) takes a mapping of arguments, got %r" % (name, index, command, args))
         if command == "mark":
             _check_mark(args, index, name, mark_names)
+        if command == "glide":
+            _check_glide(args, index, name, record, glide_names)
         steps.append((str(command), args))
     return Scenario(name, steps, settings, path, motion, record, save_project, stale, record_target)
 
@@ -370,6 +406,26 @@ class Runner:
         self.app.call("mouseUp", id=target, x=end[0], y=end[1], **mods)
         return {"from": args["from"], "to": args["to"]}
 
+    def _glide(self, args):
+        """Sends `do`, then films the screen `frames` times in a row. The strip image tiles those frames."""
+        (command, command_args), = args["do"].items()
+        command_args = dict(command_args or {})
+        timeout = command_args.pop("timeoutMs", None)
+        started = time.time()
+        reply = self.app.call(command, timeout_ms=timeout, **command_args) if timeout else self.app.call(command, **command_args)
+        first = len(self.recorder.frames)
+        for _ in range(args.get("frames", GLIDE_DEFAULT_FRAMES)):
+            self.recorder.frame(self.app, GLIDE_HOLD_SECONDS)
+        taken = [path for path, _ in self.recorder.frames[first:]]
+        if len(taken) < 4:
+            raise TestModeError("glide %s: only %d frames could be taken" % (args["name"], len(taken)))
+        strip = os.path.join(self.out_dir, "proof", args["name"] + "-strip.png")
+        ok, message = self.recorder.write_strip(taken, strip, crop=args.get("crop"))
+        if not ok:
+            print("ui-verify: %s: no strip for %s: %s" % (self.scenario.name, args["name"], message), file=sys.stderr)
+        return {"do": command, "reply": reply, "frames": len(taken), "ms": int((time.time() - started) * 1000),
+                "strip": strip if ok else None}
+
     def _mark(self, args):
         """The still (and the frame the clip is cut around) for one check. Raises TestModeError when no frame came."""
         still = os.path.join(self.out_dir, "proof", args["name"] + ".png")
@@ -416,6 +472,8 @@ class Runner:
             reply = app.call("screenshot", **args)
         elif command == "mark":
             reply = self._mark(args)
+        elif command == "glide":
+            reply = self._glide(args)
         elif command == "drag" and self.recorder is not None:
             reply = self._recorded_drag(args)
         else:

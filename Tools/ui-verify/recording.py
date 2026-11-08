@@ -14,6 +14,11 @@ from agentsynth_testmode import TestModeError
 
 STEP_HOLD_SECONDS = 0.8
 DRAG_HOLD_SECONDS = 0.1  # ten frames a second
+GLIDE_HOLD_SECONDS = 0.1  # the frames of a `glide` step play back at ten a second too
+GLIDE_DEFAULT_FRAMES = 12
+GLIDE_STRIP_COLUMNS = 4
+GLIDE_STRIP_CROP_COLUMNS = 2
+GLIDE_STRIP_FRAME_WIDTH = 640  # per tile in a four-column strip; the same width in all across a cropped one
 LAST_FRAME_HOLD_SECONDS = 1.5
 MARK_LEAD_SECONDS = 2.5  # a proof clip starts this long before its mark frame ...
 MARK_TAIL_SECONDS = 3.0  # ... and ends this long after it
@@ -94,6 +99,33 @@ class Recorder:
         if done.returncode != 0:
             return False, "ffmpeg failed: %s" % done.stderr.strip()
         return True, clip_path
+
+    def write_strip(self, paths, strip_path, crop=None, ffmpeg=None):
+        """Tiles the given frames into one PNG, the frame strip across a glide: four to a row, or two to a row of the `crop`
+        {x, y, w, h} part of each frame when one is given. Returns (ok, message)."""
+        ffmpeg = ffmpeg or find_ffmpeg()
+        if not ffmpeg:
+            return False, "ffmpeg not found; install it to get a strip"
+        os.makedirs(os.path.dirname(strip_path), exist_ok=True)
+        list_path = os.path.join(self.frames_dir, "strip-%s.txt" % os.path.basename(strip_path))
+        with open(list_path, "w", encoding="utf-8") as handle:
+            for path in paths:
+                handle.write("file '%s'\nduration 0.1\n" % path)
+            handle.write("file '%s'\n" % paths[-1])
+        columns = GLIDE_STRIP_CROP_COLUMNS if crop else GLIDE_STRIP_COLUMNS
+        rows = -(-len(paths) // columns)
+        tile = "scale=%d:-2,tile=%dx%d" % (GLIDE_STRIP_FRAME_WIDTH * GLIDE_STRIP_COLUMNS // columns, columns, rows)
+        if crop:
+            tile = "crop=%d:%d:%d:%d,%s" % (crop["w"], crop["h"], crop["x"], crop["y"], tile)
+        command = [ffmpeg, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list_path, "-vf", tile,
+                   "-frames:v", "1", strip_path]
+        try:
+            done = subprocess.run(command, capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return False, "ffmpeg did not finish: %s" % error
+        if done.returncode != 0:
+            return False, "ffmpeg failed: %s" % done.stderr.strip()
+        return True, strip_path
 
     def write_video(self, video_path, ffmpeg=None):
         """Returns (ok, message). A scenario with no frames, or a machine with no ffmpeg, gets no video."""

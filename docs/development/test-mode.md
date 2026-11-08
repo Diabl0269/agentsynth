@@ -201,6 +201,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 | `expect: {id, exists: false}` | the component is not there |
 | `expect: {count: {prefix, field?, equals}}` | how many ids (or `title`s) in `list` start with the prefix |
 | `mark: {check, name}` | proof for one check, see [Proof marks](#proof-marks) |
+| `glide: {name, do, frames?, crop?}` | sends `do` (one command), then films the screen `frames` times in a row (4 to 40, default 12, 0.1 s each) and saves `proof/<name>-strip.png`; see [Proof marks](#proof-marks) |
 
 `stale_pixel_check: true` (or `{ignore: [ids], settle_ms: 1500}`) follows the window from launch and runs
 `checkStalePixels` after every step that can change it (not after `wait`, `expect`, `getState`, `list`, `screenshot`, or
@@ -238,6 +239,13 @@ picker or hover it shows is still open. It takes one screen frame held 1.5 s, sa
 with `record` off) and, once the video is written, cuts `<out>/<scenario>-<name>.mp4` from 2.5 s before the frame to 3 s
 after it (4 to 6 s when the video allows; needs ffmpeg). The run log gets a `mark` line with the still and clip, and the
 summary lists both.
+
+A motion check needs the motion itself on film, not one frame of it: a step records one frame, so a 220 ms slide caught
+after its click shows a blur held for 0.8 s. Send the click as `glide: {name: slide, frames: 14, do: {click: {...}}}`: it
+takes no frame of its own after the command, films `frames` screen frames back to back (about 90 ms apart) and tiles them
+into `proof/slide-strip.png` (`crop: {x, y, w, h}` limits the strip to the part of the frame that moves, two to a row).
+Then `wait`, and put the `mark` on the landed state, never mid-motion. Start the clip in the state the check starts from
+and end the scenario in it too, so the `save_project` bundle opens there. Read the strip before attaching the clip.
 
 To add one: copy the closest file, start the file with a comment naming the bug and the steps a user takes, and give each
 check an id from `list` (add a `setComponentID` or a `StateSource` field where the component has none, never rename an

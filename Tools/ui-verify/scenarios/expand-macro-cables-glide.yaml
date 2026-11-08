@@ -1,28 +1,30 @@
 # Bug: opening a folded macro flew its modules out nicely, but the cables going into and out of it jumped at once from
 # the card's jacks to the open border's ports, which looked unfinished.
 #
-# What a user does (a copy of Tal's 'fro830 test' project):
+# What a user does (a copy of Tal's 'fro830 test' project, saved by the run as 'fro830 test' in the state it starts from:
+# "Macro2" folded):
 #   1. Opens "Macro2" (the folded macro with a cable into its Left jack) with its card's chevron: the cable's end slides
-#      from the card's jack out to the border's port as the border grows, and reaches it as the port shows (proof 1,
-#      mid-slide).
-#   2. Cmd+Z: "Macro2" folds again and the cable's end slides back to the card's jack with the shrinking border (proof 2).
+#      from the card's jack out to the border's port as the border grows, and reaches it as the port shows. The clip starts
+#      folded, shows the slide frame by frame (a `glide` step: the slide is 220 ms) and ends landed.
+#   2. Cmd+Z: "Macro2" folds again and the cable's end slides back to the card's jack with the shrinking border.
 # MacroFoldCableSlide.* covers the first, middle and last frames headlessly (expand, collapse, Reduce Motion, Off).
+# Each mark sits on the landed state, never mid-slide; proof/<glide>-strip.png is the frames across the slide.
 motion: true
 record: true
-save_project: end
+save_project: fro830-test
 steps:
   - copyFixture: {name: fro830-test.agsproj}
   - openProject: {path: "${SCRATCH}/fro830-test.agsproj"}
   - wait: {}
   - expect: {id: "macroCard:Macro2", collapsed: true}
   - screenshot: {name: 1-macro2-folded}
-  - click: {id: "macroCard:Macro2", x: 262, y: 18}            # the card's open chevron
-  - mark: {check: 1, name: cables-slide-out}
-  - wait: {}
+  - glide: {name: cables-slide-out-frames, frames: 14, crop: {x: 200, y: 280, w: 1400, h: 560}, do: {click: {id: "macroCard:Macro2", x: 262, y: 18}}}   # the card's open chevron
+  - wait: {settleMs: 1000}
   - expect: {id: "macroCard:Macro2", collapsed: false}
+  - mark: {check: 1, name: cables-slide-out}                   # landed: the cable ends on the border's port
   - screenshot: {name: 2-macro2-open}
-  - key: {keys: cmd+z}
-  - mark: {check: 2, name: cables-slide-back}
-  - wait: {}
+  - glide: {name: cables-slide-back-frames, frames: 14, crop: {x: 200, y: 280, w: 1400, h: 560}, do: {key: {keys: cmd+z}}}
+  - wait: {settleMs: 1000}
   - expect: {id: "macroCard:Macro2", collapsed: true}
+  - mark: {check: 2, name: cables-slide-back}                  # landed: the cable ends on the card's jack again
   - screenshot: {name: 3-macro2-folded-again}
