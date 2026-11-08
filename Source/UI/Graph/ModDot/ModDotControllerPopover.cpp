@@ -64,6 +64,7 @@ void ModDotController::openPopover(juce::AudioProcessorGraph::NodeID card, int d
         popoverLauncher(std::move(content), anchor);
     else
         frame_ = launchPopoverFrame(std::move(content), anchor);
+    repaintCard(card); // the chip under this knob steps aside for the panel: it fades out now, not at the next paint
 }
 
 // The panel gets a window of its own beside the dot, held open while a canvas pick is under way.
@@ -112,8 +113,12 @@ void ModDotController::endCanvasPick() {
 }
 
 void ModDotController::closePopover() {
-    if (auto* open = getPopover())
+    if (auto* open = getPopover()) {
+        const auto card = open->card();
         open->dismiss();
+        popover_ = nullptr;
+        repaintCard(card);
+    }
     popover_ = nullptr;
 }
 
@@ -146,6 +151,8 @@ void ModDotController::tickPopover() {
 void ModDotController::popoverClosed(ModDotPopover* popover) {
     if (popover_.getComponent() == static_cast<juce::Component*>(popover))
         popover_ = nullptr;
+    repaintCard(
+        popover->card()); // Esc or a click away: the chip comes back (fades in) with the pointer still on the knob
 }
 
 namespace {

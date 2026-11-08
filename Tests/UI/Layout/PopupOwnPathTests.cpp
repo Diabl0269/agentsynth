@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 
+using synth::test::hoverLabelPainters;
 using synth::test::popoverUsers;
 using synth::test::source_scan::countCallSites;
 using synth::test::source_scan::expectCountsMatch;
@@ -82,4 +83,30 @@ TEST(PopupOwnPath, NoPopupMenuIsGivenALookAndFeelOfItsOwn) {
     for (const auto& [file, n] : onMenus)
         ADD_FAILURE() << file << " sets a look and feel on a pop-up menu (" << n
                       << "): it would skip PopupMotion's hook and show without the app's fade";
+}
+
+// A hover label painted straight onto a card (the mod chip under a knob, drawn in paintOverChildren) has no window, so
+// the CallOutBox scans above never see it. Every file outside Theme/ that draws the shared tooltip box
+// (paintTooltipBox, drawTooltip) is registered with the object that owns its alpha, and its file must name that owner:
+// a new painted label with an alpha of its own fails by name (the chip under a knob once popped because nothing faded
+// it).
+TEST(PopupOwnPath, EveryPaintedHoverLabelHasAFadeOwner) {
+    const auto drawn = countCallSites(std::regex(R"(\b(?:paintTooltipBox|drawTooltip)\s*\()"), "Source/UI/Theme/");
+    ASSERT_GE(drawn.size(), 1u) << "the scan found nothing: have paintTooltipBox and drawTooltip been renamed?";
+
+    const auto texts = sourceTexts();
+    std::set<std::string> registered;
+    for (const auto& painter : hoverLabelPainters()) {
+        EXPECT_TRUE(registered.insert(painter.file).second) << painter.file << " is registered twice";
+        const auto text = texts.find(painter.file);
+        ASSERT_NE(text, texts.end()) << "stale: " << painter.file << " does not exist";
+        EXPECT_NE(text->second.find(painter.fadeOwner), std::string::npos)
+            << painter.file << " paints a hover label but no longer names its fade owner " << painter.fadeOwner;
+    }
+    for (const auto& [file, n] : drawn)
+        EXPECT_TRUE(registered.count(file) > 0)
+            << "not registered: " << file << " draws a tooltip box itself - fade it with a ShownFade and add it to "
+            << "hoverLabelPainters() in PopoverRegistry.h";
+    for (const auto& file : registered)
+        EXPECT_TRUE(drawn.count(file) > 0) << "stale: " << file << " no longer draws a tooltip box - remove it";
 }
