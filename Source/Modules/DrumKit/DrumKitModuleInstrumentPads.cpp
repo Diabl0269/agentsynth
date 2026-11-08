@@ -105,14 +105,14 @@ std::set<juce::AudioProcessorGraph::NodeID> DrumKitModule::linkAllInstrumentPads
 // ---- Audio thread ----
 
 // A strike first ends the note this pad still holds, so a fast roll never leaves notes hanging.
-void DrumKitModule::strikeInstrumentPad(int index, const synth::drums::PadSnapshot::Entry& e, float velocity) noexcept {
+void DrumKitModule::strikeInstrumentPad(int index, const synth::drums::PadSnapshot::Entry& e, float velocity,
+                                        const PadValues& values) noexcept {
     releaseInstrumentPad(index, eventOffset_);
     auto* inbox = e.inbox.get();
-    const auto& p = padParams_[(size_t)index];
-    const float amount = p.level->get() * juce::jlimit(0.0f, 1.0f, velocity);
+    const float amount = values.level * juce::jlimit(0.0f, 1.0f, velocity);
     if (inbox == nullptr || amount <= 0.0f)
         return;
-    const int pitch = juce::jlimit(0, 127, e.pitch + juce::roundToInt(p.tune->get()));
+    const int pitch = juce::jlimit(0, 127, e.pitch + juce::roundToInt(values.tune));
     inbox->push(pitch, juce::jlimit(1, 127, juce::roundToInt(amount * 127.0f)), eventOffset_);
     heldInbox_[(size_t)index] = inbox;
     heldPitch_[(size_t)index] = pitch;

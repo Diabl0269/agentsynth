@@ -259,9 +259,10 @@ TEST(StereoDeclaration, MuteAndCVClearHoldForEveryDualIOCapableModuleInBothState
                     const auto targets = mb->getModulationTargets();
                     bool takesAudio = false;
                     for (int ch = 0; ch < mb->getTotalNumInputChannels(); ++ch)
-                        takesAudio = takesAudio || std::none_of(targets.begin(), targets.end(), [ch](const auto& t) {
-                                         return t.channelIndex == ch && t.knobOnly;
-                                     });
+                        takesAudio = takesAudio || (!mb->isReservedInputChannel(ch) &&
+                                                    std::none_of(targets.begin(), targets.end(), [ch](const auto& t) {
+                                                        return t.channelIndex == ch && t.knobOnly;
+                                                    }));
                     for (const auto& t : targets) {
                         if (takesAudio)
                             ASSERT_GE(t.channelIndex, 2) << "an inferred stereo pair owns ch0/ch1, so a CV jack "

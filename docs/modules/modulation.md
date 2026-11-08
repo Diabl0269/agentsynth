@@ -866,8 +866,10 @@ behave in other synths. The read is on the note's sample, not the block's first 
 the cable gives a note mid-block the ramp's value there (bug kind edge-reads-a-ramp). The render writes
 the output channels as it goes, so a module reads a note's cables before rendering past that note.
 
-New entries are appended, never inserted: a saved cable keeps its channel. Pluck and Mallet use the
-list; see [`pluck-mallet.md`](pluck-mallet.md#mod-cables).
+New entries are appended, never inserted: a saved cable keeps its channel. Pluck, Mallet and the Drum Kit use the
+list; see [`pluck-mallet.md`](pluck-mallet.md#mod-cables) and [`drum-kit.md`](drum-kit.md#mod-cables). The Drum
+Kit's list is its Level (live) and its group knobs (read when a pad of the group is struck); the channels after the
+list are reserved for pad cables.
 
 ## CV in normalised units
 

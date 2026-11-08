@@ -63,7 +63,7 @@ The card is 280 px wide. From the top:
 
 1. The kit picker.
 2. The master Level. It takes a mod cable (an LFO or envelope dropped on the knob moves the whole kit's level live),
-   on the module's one input channel, which has no gutter jack.
+   on input channel 0, which has no gutter jack (see [Mod cables](#mod-cables)).
 3. The **Pads** stepper:
    - "-" and "+", or Up/Down, Left/Right, + and -, step it by four.
    - Typing a number and Return sets it, rounded up to a multiple of four.
@@ -119,6 +119,18 @@ The group tabs and the Recorded switches are gone from the card (layout revision
   `pickedName`, `pickedKind`, `pickedSound`, `visiblePads` (the shown ones), `soundOutline` (a sound drag is over the card) and `dropTargetPad`.
   The Sound row is `drumPadSound`, Open is `drumPadOpenInstrument`, Plays pitch is `drumPadPitch`.
   Scenarios: `Tools/ui-verify/scenarios/drum-kit-pads.yaml`, `Tools/ui-verify/scenarios/drum-kit-pad-sound.yaml`, `drum-kit-pad-shown.yaml`.
+
+## Mod cables
+
+The kit takes a cable on its master Level (read live, every block) and on each group knob (`kickLevel`, `kickTune`,
+`kickDecay`, `snareLevel` ... `cowbellDecay`, `closedDecay` and `openDecay` included): 23 targets, declared once in
+`DrumKitModule::kModTargets` (see [one list per module](modulation.md#one-list-per-module)). The group knobs have no
+widget on the card, so their cables are made from the port panel and the AI.
+
+A group knob's cable is read on the sample a pad of its group is struck, and applied on top of that pad's own value
+for that hit only. It is never written into the pads or the group knob: the saved project is the same with or without
+a cable, and a hit already ringing keeps what it was struck with. A card audition reads the cable at the start of
+its block. The channels after the list (`kPadModSlotBase`, 32 of them) are reserved for cables on single pads.
 
 ## A pad's sound
 

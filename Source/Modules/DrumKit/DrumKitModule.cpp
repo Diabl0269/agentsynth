@@ -44,7 +44,7 @@ juce::AudioParameterFloat* DrumKitModule::addFloat(const char* id, const char* n
 }
 
 DrumKitModule::DrumKitModule()
-    : ModuleBase("Drum Kit", 1, kNumChannels, StereoAudio::Declared) {
+    : ModuleBase("Drum Kit", kPadModSlotBase + kMaxPadModSlots, kNumChannels, StereoAudio::Declared) {
     // Tune is in semitones around the drum's own pitch; decay is the time the drum takes to fall 60 dB. These are the
     // group parameters: each one writes its value to its group's pads (see addGroupLink).
     using P = PadParam;
@@ -76,6 +76,7 @@ DrumKitModule::DrumKitModule()
     addMuteParameter();
     addRecordedParameters(); // after the mute switch, so every older parameter keeps its index
     addPadParameters();      // after the group parameters, so a restore sets a group before its saved pads
+    mods_.bind(*this);
     pads_ = synth::drums::defaultPadTable();
     publishPads();
     enableVisualBuffer(true);
@@ -129,7 +130,8 @@ void DrumKitModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::M
     if (buffer.getNumChannels() == 0 || numSamples <= 0)
         return;
 
-    // The Level cable arrives on channel 0, which the render overwrites: read it before anything writes the buffer.
+    // The Level cable arrives on channel 0, which the render overwrites: read it before anything writes the buffer. A
+    // group cable is read on the sample a pad is struck, which the render has not reached yet.
     const float levelCv = blockCV(buffer, kLevelCvChannel);
 
     // A pure source has no dry signal to pass through, so bypass and mute both clear. They stay two
@@ -156,7 +158,7 @@ void DrumKitModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::M
     if (const auto audition = auditionMask_.exchange(0, std::memory_order_acq_rel); audition != 0)
         for (int i = 0; i < synth::drums::kMaxPads; ++i)
             if ((audition >> i) & 1u)
-                triggerPad(i, 0.8f);
+                triggerPad(i, 0.8f, buffer, 0);
     auditioning_ = false;
     float* left = buffer.getWritePointer(0);
     float* right = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -180,10 +182,13 @@ void DrumKitModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::M
             continue;
         renderTo(at);
         eventOffset_ = at;
-        triggerNote(message.getNoteNumber(), message.getFloatVelocity());
+        triggerNote(message.getNoteNumber(), message.getFloatVelocity(), buffer, at);
     }
     renderTo(numSamples);
     advanceAuditionReleases(numSamples);
+    // The cables are spent: none leaves the module on a channel beyond the audio pair.
+    for (int ch = kNumChannels; ch < buffer.getNumChannels(); ++ch)
+        buffer.clear(ch, 0, numSamples);
 
     if (auto* vb = getVisualBuffer())
         vb->pushBlock(left, numSamples);

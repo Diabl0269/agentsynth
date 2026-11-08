@@ -147,40 +147,58 @@ void DrumKitModule::pollGroupLinks() noexcept {
     }
 }
 
+// A group knob's cable moves, for this strike only, the matching knob of every pad its group reaches, on top of the
+// pad's own value. Nothing is written back: the group knob and the pads keep what they hold, so a cable never reaches a
+// saved project or a ringing hit.
+DrumKitModule::PadValues DrumKitModule::padValuesAt(int index, int sound, const juce::AudioBuffer<float>& cv,
+                                                    int sample) const noexcept {
+    std::array<float, 4> cable{};
+    for (int l = 0; l < numLinks_; ++l) {
+        const auto& link = links_[(size_t)l];
+        if (linkReaches(link, sound))
+            cable[(size_t)link.field] += mods_.cvAt(cv, *link.param, sample);
+    }
+    const auto moved = [&](PadParam which) {
+        const auto* param = padParameter(index, which);
+        return ModuleBase::modulateNormalised(*param, param->get(), cable[(size_t)which]);
+    };
+    return {moved(PadParam::Level), moved(PadParam::Tune), moved(PadParam::Decay), moved(PadParam::Start)};
+}
+
 // Every pad on the note strikes, in pad order.
-void DrumKitModule::triggerNote(int note, float velocity) noexcept {
+void DrumKitModule::triggerNote(int note, float velocity, const juce::AudioBuffer<float>& cv, int sample) noexcept {
     if (heldPads_ == nullptr)
         return;
     for (int i = 0; i < kMaxPads; ++i)
         if (heldPads_->pads[(size_t)i].note == note)
-            triggerPad(i, velocity);
+            triggerPad(i, velocity, cv, sample);
 }
 
-void DrumKitModule::triggerPad(int index, float velocity) noexcept {
+void DrumKitModule::triggerPad(int index, float velocity, const juce::AudioBuffer<float>& cv, int sample) noexcept {
     if (heldPads_ == nullptr)
         return;
     const auto& e = heldPads_->pads[(size_t)index];
     lastPlayedPad_.store(index, std::memory_order_relaxed);
+    const auto values = padValuesAt(index, e.sound, cv, sample);
     switch (e.kind) {
     case PadKind::Instrument:
-        strikeInstrumentPad(index, e, velocity);
+        strikeInstrumentPad(index, e, velocity, values);
         return;
     case PadKind::File: {
         if (e.sample == nullptr)
             return;
         if (synth::drums::chokesOpenHat(e.sound))
             chokeOpenHats();
-        const auto& p = padParams_[(size_t)index];
-        const float ratio = synth::drums::semitoneRatio(p.tune->get());
-        voices_[(size_t)index].sample.trigger(e.sample, p.start->get(), ratio,
-                                              p.level->get() * juce::jlimit(0.0f, 1.0f, velocity), p.decay->get(),
+        const float ratio = synth::drums::semitoneRatio(values.tune);
+        voices_[(size_t)index].sample.trigger(e.sample, values.start, ratio,
+                                              values.level * juce::jlimit(0.0f, 1.0f, velocity), values.decay,
                                               sampleRate_);
         return;
     }
     case PadKind::Kit: {
         const int kitNote = juce::jlimit(0, kMaxNote, kitNoteOf(e));
         if (poolKit_ != nullptr && covered_.test((size_t)kitNote)) {
-            triggerRecordedPad(index, kitNote, e.sound, velocity);
+            triggerRecordedPad(kitNote, e.sound, velocity, values);
             return;
         }
         break;
@@ -188,19 +206,18 @@ void DrumKitModule::triggerPad(int index, float velocity) noexcept {
     case PadKind::BuiltIn:
         break;
     }
-    triggerSynth(index, e.sound, velocity);
+    triggerSynth(index, e.sound, velocity, values);
 }
 
-void DrumKitModule::triggerSynth(int index, int sound, float velocity) noexcept {
+void DrumKitModule::triggerSynth(int index, int sound, float velocity, const PadValues& values) noexcept {
     using synth::drums::MetallicKind;
     using synth::drums::VoiceType;
-    const auto& p = padParams_[(size_t)index];
     auto& v = voices_[(size_t)index];
     synth::drums::Hit hit;
     hit.velocity = juce::jlimit(0.0f, 1.0f, velocity);
-    hit.gain = p.level->get();
-    hit.tune = synth::drums::semitoneRatio(p.tune->get());
-    hit.decay = p.decay->get();
+    hit.gain = values.level;
+    hit.tune = synth::drums::semitoneRatio(values.tune);
+    hit.decay = values.decay;
     switch (drumForNote(sound)) {
     case Drum::Kick:
         v.type = VoiceType::Kick;
@@ -252,15 +269,14 @@ void DrumKitModule::triggerSynth(int index, int sound, float velocity) noexcept 
     }
 }
 
-void DrumKitModule::triggerRecordedPad(int index, int kitNote, int sound, float velocity) noexcept {
+void DrumKitModule::triggerRecordedPad(int kitNote, int sound, float velocity, const PadValues& values) noexcept {
     if (synth::drums::chokesOpenHat(sound))
         chokeOpenHats();
-    const auto& p = padParams_[(size_t)index];
     const float vel = juce::jlimit(0.0f, 1.0f, velocity);
-    float gain = p.level->get() * ((1.0f - kVelocityFeel) + kVelocityFeel * std::pow(vel, 1.6f));
+    float gain = values.level * ((1.0f - kVelocityFeel) + kVelocityFeel * std::pow(vel, 1.6f));
     if (sound == 44)
         gain *= kPedalHatGain;
-    recordedPool_.noteOn(kitNote, vel, recordedVoiceParams(), gain, (double)p.tune->get());
+    recordedPool_.noteOn(kitNote, vel, recordedVoiceParams(), gain, (double)values.tune);
 }
 
 // A closed or pedal hat shuts every open hat pad, whichever kind of voice it is playing.

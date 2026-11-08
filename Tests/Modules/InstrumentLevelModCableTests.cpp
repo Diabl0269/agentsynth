@@ -25,16 +25,22 @@ constexpr int kBlock = 512;
 
 struct Instrument {
     const char* name;
-    int note;           // a note that sounds for the whole measured span
-    int cableCount = 1; // Level, plus Body (Pluck) or Tremolo (Mallet)
+    int note;       // a note that sounds for the whole measured span
+    int cableCount; // the live cables: Level, plus Body (Pluck) or Tremolo (Mallet)
+    int inputs;     // every raw input channel the module declares
+    int targets;    // the modulation targets it lists
     std::function<std::unique_ptr<ModuleBase>()> make;
 };
 
 const std::vector<Instrument>& instruments() {
     static const std::vector<Instrument> all = {
-        {"Drum Kit", 49, 1, [] { return std::make_unique<DrumKitModule>(); }}, // the crash rings past 0.3 s
-        {"Pluck", 48, 2, [] { return std::make_unique<PluckModule>(); }},
-        {"Mallet", 60, 2, [] { return std::make_unique<MalletModule>(); }},
+        {"Drum Kit", 49, 1, DrumKitModule::kPadModSlotBase + DrumKitModule::kMaxPadModSlots,
+         (int)DrumKitModule::kModTargets.size(),
+         [] { return std::make_unique<DrumKitModule>(); }}, // the crash rings past 0.3 s
+        {"Pluck", 48, 2, (int)PluckModule::kModTargets.size(), (int)PluckModule::kModTargets.size(),
+         [] { return std::make_unique<PluckModule>(); }},
+        {"Mallet", 60, 2, (int)MalletModule::kModTargets.size(), (int)MalletModule::kModTargets.size(),
+         [] { return std::make_unique<MalletModule>(); }},
     };
     return all;
 }
@@ -84,12 +90,12 @@ TEST(InstrumentLevelModCable, LevelIsAKnobOnlyTargetOnTheFirstInputChannel) {
     for (const auto& instrument : instruments()) {
         SCOPED_TRACE(instrument.name);
         auto module = instrument.make();
-        EXPECT_EQ(module->getTotalNumInputChannels(), instrument.cableCount);
+        EXPECT_EQ(module->getTotalNumInputChannels(), instrument.inputs);
         EXPECT_EQ(module->getVisibleInputPortCount(), 0) << "no gutter jack";
         EXPECT_EQ(module->mapInputChannel(0).role, PortRole::ModCV);
         EXPECT_EQ(module->bypassDryChannel(0), -1) << "bypass passes no cable through as audio";
         const auto targets = module->getModulationTargets();
-        ASSERT_EQ(targets.size(), (size_t)instrument.cableCount);
+        ASSERT_EQ(targets.size(), (size_t)instrument.targets);
         EXPECT_EQ(targets[0].paramId, "level");
         EXPECT_EQ(targets[0].channelIndex, 0);
         EXPECT_TRUE(targets[0].knobOnly);
@@ -151,7 +157,8 @@ TEST(InstrumentLevelModCable, AProjectFromBeforeTheLevelCableOpensWithItsCablesI
         if (node->getProcessor()->getName() == "Drum Kit")
             kit = node;
     ASSERT_NE(kit, nullptr);
-    EXPECT_EQ(kit->getProcessor()->getTotalNumInputChannels(), 1);
+    EXPECT_EQ(kit->getProcessor()->getTotalNumInputChannels(),
+              DrumKitModule::kPadModSlotBase + DrumKitModule::kMaxPadModSlots);
 
     using Edge = std::tuple<juce::String, int, juce::String, int>;
     std::set<Edge> touching;
@@ -249,7 +256,7 @@ TEST(InstrumentLevelModCable, BodyAndTremoloAreKnobOnlyTargetsOnTheSecondChannel
         SCOPED_TRACE(id);
         auto module = instrument->make();
         const auto targets = module->getModulationTargets();
-        ASSERT_EQ(targets.size(), 2u);
+        ASSERT_EQ(targets.size(), (size_t)module->getTotalNumInputChannels());
         EXPECT_EQ(targets[1].paramId, id);
         EXPECT_EQ(targets[1].name, label);
         EXPECT_EQ(targets[1].channelIndex, 1);
@@ -290,7 +297,7 @@ TEST(InstrumentLevelModCable, APluckFromBeforeTheBodyCableOpensWithNoCables) {
         if (node->getProcessor()->getName() == "Pluck")
             pluck = node;
     ASSERT_NE(pluck, nullptr);
-    EXPECT_EQ(pluck->getProcessor()->getTotalNumInputChannels(), 2);
+    EXPECT_EQ(pluck->getProcessor()->getTotalNumInputChannels(), (int)PluckModule::kModTargets.size());
     for (const auto& c : graph.getConnections())
         if (c.destination.nodeID == pluck->nodeID)
             EXPECT_EQ(c.destination.channelIndex, juce::AudioProcessorGraph::midiChannelIndex) << "only MIDI feeds it";

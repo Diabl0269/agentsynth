@@ -3,6 +3,7 @@
 #include "DrumKitPadVoice.h"
 #include "DrumKitPads.h"
 #include "DrumVoices.h"
+#include "Modules/ModTargetList.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/Sampler/SamplerInstrumentHost.h"
 #include "Modules/Sampler/SamplerInstrumentSlot.h"
@@ -38,7 +39,26 @@ class DrumKitModule
     , private juce::AudioProcessorParameter::Listener {
 public:
     static constexpr int kNumChannels = 2;
+    /** Level, then each group knob in declaration order (a group cable is read when a pad of the group is struck).
+        Append only: saved cables keep their channel. */
+    static constexpr std::array<synth::ModTargetSpec, 23> kModTargets{{
+        {"level", synth::ModRead::Live},          {"kickLevel", synth::ModRead::NoteOn},
+        {"kickTune", synth::ModRead::NoteOn},     {"kickDecay", synth::ModRead::NoteOn},
+        {"snareLevel", synth::ModRead::NoteOn},   {"snareTune", synth::ModRead::NoteOn},
+        {"snareDecay", synth::ModRead::NoteOn},   {"clapLevel", synth::ModRead::NoteOn},
+        {"clapTune", synth::ModRead::NoteOn},     {"clapDecay", synth::ModRead::NoteOn},
+        {"hatLevel", synth::ModRead::NoteOn},     {"hatTune", synth::ModRead::NoteOn},
+        {"closedDecay", synth::ModRead::NoteOn},  {"openDecay", synth::ModRead::NoteOn},
+        {"tomLevel", synth::ModRead::NoteOn},     {"tomTune", synth::ModRead::NoteOn},
+        {"tomDecay", synth::ModRead::NoteOn},     {"cymbalLevel", synth::ModRead::NoteOn},
+        {"cymbalTune", synth::ModRead::NoteOn},   {"cymbalDecay", synth::ModRead::NoteOn},
+        {"cowbellLevel", synth::ModRead::NoteOn}, {"cowbellTune", synth::ModRead::NoteOn},
+        {"cowbellDecay", synth::ModRead::NoteOn},
+    }};
     static constexpr int kLevelCvChannel = 0; // the Level knob's cable; no gutter jack
+    /** Raw channels from here on are reserved for the pad cables. */
+    static constexpr int kPadModSlotBase = (int)kModTargets.size();
+    static constexpr int kMaxPadModSlots = 32;
 
     /** The note-to-drum map, exposed for tests and docs. */
     enum class Drum { Kick, Snare, Rim, Clap, ClosedHat, OpenHat, Tom, Crash, Ride, Cowbell, None };
@@ -59,15 +79,14 @@ public:
         return isDualIO() ? (i == 1 ? "Audio R" : "Audio L") : "Audio";
     }
     int getVisibleInputPortCount() const override { return 0; }
-    juce::String getInputPortLabel(int) const override { return "Level"; }
+    juce::String getInputPortLabel(int i) const override { return mods_.label(i); }
     LogicalPort mapInputChannel(int raw) const override {
         auto port = ModuleBase::mapInputChannel(raw);
         port.role = PortRole::ModCV;
         return port;
     }
-    std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Level", kLevelCvChannel, "level", true}};
-    }
+    std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
+    bool isReservedInputChannel(int rawChannel) const override { return rawChannel >= kPadModSlotBase; }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
@@ -166,6 +185,11 @@ private:
         juce::AudioParameterFloat* start = nullptr;
     };
 
+    /** A pad's four knobs as a strike hears them: each moved by the cables of the group knobs that reach the pad. */
+    struct PadValues {
+        float level = 0.0f, tune = 0.0f, decay = 0.0f, start = 0.0f;
+    };
+
     juce::AudioParameterFloat* addFloat(const char* id, const char* name, float lo, float hi, float def);
     void addGroupLink(juce::AudioParameterFloat* param, PadParam field, Group group, int hats = 0);
     void addRecordedParameters();
@@ -191,17 +215,19 @@ private:
     // Pads, audio thread (DrumKitModulePadAudio.cpp)
     void acquirePads() noexcept;
     void pollGroupLinks() noexcept;
-    void triggerNote(int note, float velocity) noexcept;
-    void triggerPad(int index, float velocity) noexcept;
-    void triggerSynth(int index, int sound, float velocity) noexcept;
-    void triggerRecordedPad(int index, int kitNote, int sound, float velocity) noexcept;
+    PadValues padValuesAt(int index, int sound, const juce::AudioBuffer<float>& cv, int sample) const noexcept;
+    void triggerNote(int note, float velocity, const juce::AudioBuffer<float>& cv, int sample) noexcept;
+    void triggerPad(int index, float velocity, const juce::AudioBuffer<float>& cv, int sample) noexcept;
+    void triggerSynth(int index, int sound, float velocity, const PadValues& values) noexcept;
+    void triggerRecordedPad(int kitNote, int sound, float velocity, const PadValues& values) noexcept;
     void chokeOpenHats() noexcept;
     void renderSamples(float* left, float* right, int count) noexcept;
     bool samplesActive() const noexcept;
     void renderChunk(float* left, float* right, int count) noexcept;
 
     // Instrument pads, audio thread (DrumKitModuleInstrumentPads.cpp)
-    void strikeInstrumentPad(int index, const synth::drums::PadSnapshot::Entry& e, float velocity) noexcept;
+    void strikeInstrumentPad(int index, const synth::drums::PadSnapshot::Entry& e, float velocity,
+                             const PadValues& values) noexcept;
     void releaseInstrumentPad(int index, int offset) noexcept;
     void releaseInstrumentNote(int note, int offset) noexcept;
     void releaseAllInstrumentPads(int offset) noexcept;
@@ -211,6 +237,7 @@ private:
     juce::AudioParameterFloat* levelParam = nullptr;
     std::array<juce::AudioParameterBool*, kNumGroups> recorded_{};
     std::array<bool, kNumGroups> lastRecorded_{}; // message thread
+    synth::ModTargetList mods_{kModTargets};
     std::array<GroupLink, 22> links_;
     int numLinks_ = 0;
     std::array<PadParams, synth::drums::kMaxPads> padParams_{};
