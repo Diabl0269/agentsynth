@@ -402,6 +402,7 @@ public:
             return std::nullopt;
         return MidiLearnableEntryForTest{entry->paramId, entry->hosted};
     }
+    std::vector<MidiLearnableEntryForTest> midiLearnableEntriesForTest() const;
 
     /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last timerCallback() tick. */
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const {

@@ -44,13 +44,6 @@ const std::set<juce::String> kSkippedModuleTypes = {
     // Covered instead by the per-tab suites (ModuleComponentWavetableTests.cpp, WavetableDefaultLayoutTests.cpp,
     // Tests/Modules/WavetableOscillatorModule/*).
     "Wavetable",
-    // No CV jacks at all: every setting is read when a drum is struck, so there is no continuous input
-    // for a modulation cable to reach.
-    "Drum Kit",
-    // The same: Pluck and Mallet have no inputs, and every setting is read when a note starts (or is a live
-    // level), so there is no continuous input for a modulation cable to reach.
-    "Pluck",
-    "Mallet",
     // Port widgets / graph plumbing with no ModuleComponent knobs at all.
     "Macros",
     "Macro In",
@@ -150,6 +143,10 @@ bool targetHasNoGenericKnobByDesign(const ModuleBase& mb, const ModulationTarget
     const auto* param = mb.parameterForModTarget(target);
     if (param == nullptr)
         return true;
+    // The Drum Kit's group knobs (kickTune, closedDecay ...) are edited by the AI and by automation: the card shows the
+    // pads' knobs instead, so a group cable has no knob on the card to ring. Its Level is the card's one generic knob.
+    if (mb.getModuleType() == ModuleType::DrumKit && param->paramID != "level")
+        return true;
     if (!isContinuousParam(param))
         return true;
     if (auto* threshold = dynamic_cast<const ThresholdMeterSource*>(&mb))
@@ -186,6 +183,29 @@ bool knobHiddenInThisMode(const ModuleBase& mb, ModuleComponent& card, const Mod
         if (auto* slider = dynamic_cast<juce::Slider*>(child))
             if (slider->getComponentID() == param->getName(100))
                 return !slider->isVisible();
+    return false;
+}
+
+// Whether a cable dropped on `target` finds a knob to ring: a bound knob, or a slider strip of the Filter's morph map
+// (it stands in place of the Morph X / Y knobs). A knob on a tab that is not shown has no ring, so each tab is shown in
+// turn.
+bool landsOnAKnob(ModuleComponent& card, const ModulationTarget& target) {
+    const auto lands = [&] {
+        return card.sliderIndexForModTarget(target) >= 0 ||
+               (card.getMorphCard() != nullptr && card.getMorphCard()->anchorFor(target.channelIndex).has_value());
+    };
+    if (lands())
+        return true;
+    auto* body = card.getCardBody();
+    if (body == nullptr)
+        return false;
+    const auto& groups = body->getPlan().tabGroups;
+    for (int g = 0; g < (int)groups.size(); ++g)
+        for (int tab = 0; tab < (int)groups[(size_t)g].sections.size(); ++tab) {
+            body->selectTab(g, tab);
+            if (lands())
+                return true;
+        }
     return false;
 }
 
@@ -246,11 +266,7 @@ TEST_F(ModuleComponentTest, EveryModuleTypeKnobAcceptsADroppedModulationCable) {
                         kModeChoices.count(typeName) > 0 && knobHiddenInThisMode(*mb, card, target))
                         continue;
                     SCOPED_TRACE(target.name.toStdString());
-                    // The Filter's morph map shows slider strips in place of the Morph X / Y knobs: they land the
-                    // cable.
-                    const bool landsOnMapSlider = card.getMorphCard() != nullptr &&
-                                                  card.getMorphCard()->anchorFor(target.channelIndex).has_value();
-                    EXPECT_TRUE(card.sliderIndexForModTarget(target) >= 0 || landsOnMapSlider)
+                    EXPECT_TRUE(landsOnAKnob(card, target))
                         << "jack \"" << target.name << "\" (channel " << target.channelIndex
                         << ") has no bound knob -- a dropped cable would find nothing to ring";
                 }

@@ -164,6 +164,14 @@ void ModuleComponent::registerHostedMidiLearnable(juce::Component& control, juce
 
 void ModuleComponent::clearHostedMidiLearnable() { midiLearnableRegistry_.clearHosted(); }
 
+// Test/inspection: every registered control's parameter id and hosted flag, in registration order.
+std::vector<ModuleComponent::MidiLearnableEntryForTest> ModuleComponent::midiLearnableEntriesForTest() const {
+    std::vector<MidiLearnableEntryForTest> out;
+    for (const auto& e : midiLearnableRegistry_.entries())
+        out.push_back({e.paramId, e.hosted});
+    return out;
+}
+
 // The pick-target overlay's view of this card: every registered control with its parameter,
 // so the overlay never needs to know what a card is. Hosted controls are included the same as
 // built-in ones -- e.paramId is the identity to key on either way.
