@@ -5,7 +5,7 @@
 #include "MidiRemote/ControllerTemplates.h"
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemotePanelComponent.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 
 #include "UI/Layout/PopupMotion.h"
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -35,7 +35,8 @@ void MidiRemotePanelComponent::showAddControllerPopover(juce::Component& anchor)
         if (safePanel != nullptr)
             safePanel->createControllerFromChoice(choice);
     };
-    auto* boxPtr = synth::ui::launchCardCallOut(std::move(popover), anchor.getScreenBounds(), &anchor);
+    auto* boxPtr =
+        synth::ui::launchPopover(std::move(popover), anchor.getScreenBounds(), &anchor, {.trigger = &anchor});
     if (boxPtr == nullptr)
         return;
     auto& box = *boxPtr;

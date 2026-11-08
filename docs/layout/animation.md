@@ -416,10 +416,11 @@ consistently, through one header-only helper: `Source/UI/Layout/DragCursor.h`
 
 Right-click menus and their submenus, ComboBox dropdowns, call-out popovers, the note-length popup ([note-length-menu](note-length-menu.md)), alert boxes and
 dialogs (Settings, Export, confirmations) all appear and disappear with the same soft motion. One kind of call-out is
-the exception: a popover that JUCE launches and dismisses itself (`CallOutBox::launchAsynchronously`, today the
-colour picker) only eases in, through [`CalloutReveal`](#popup-reveal), because it dismisses synchronously and has no
-window of ours to fade out. The
-mechanism is `synth::ui::PopupMotion` (`Source/UI/Layout/PopupMotion.{h,cpp}`); the numbers and the
+no exception: a popover opens through `launchPopover` or a `PopoverSlot` (`Source/UI/Layout/PopupHost.h`, see
+[card popovers](card-popovers.md)), which rises 8 px out of the side facing its anchor while it fades in, leaves
+through `PopupMotion::dismissCallOut` on Esc, on a press on its button or on its area, and fades out on a click away
+too. Opening is one sequence: the open fade only ever rises, the close fade only ever falls, and a press that closes
+it is consumed so it cannot reopen it. The mechanism is `synth::ui::PopupMotion` (`Source/UI/Layout/PopupMotion.{h,cpp}`); the numbers and the
 frame math are pure functions in `synth::ui::popup_motion`, unit-tested in
 `Tests/UI/Layout/PopupMotionTests.cpp`. It reuses `AnimationDriver` and the easing helpers above. On macOS a popup is a child of the window it opened over: a press raises the main window before the app hears the click, and only a recording of a real click shows the flash that causes.
 
@@ -608,6 +609,8 @@ shortcut.
 
 ## Fading things in and out
 
+`synth::ui::ShownFade` (`Source/UI/Layout/UIAnimation.h`) is the one fade for a floating label that is a component's alpha (the mod dot tooltip, and the mod hover chip under a knob through `synth::ui::ModChipFade`, which keeps the last rows through the fade-out and repaints only the card): `fadeTo(shown)` runs 160 ms in and 110 ms out, 80 ms under Reduce Motion, and lands at once when its host is not showing or Animations are Off.
+
 Anything that appears or disappears in place (not a popup window, which is [PopupMotion](#popup-windows)) uses one
 helper, `synth::ui::FadeVisibility` (`Source/UI/Layout/FadeVisibility.h`), never a bare `setVisible()`:
 
@@ -710,6 +713,14 @@ openness (0 folded, 1 open, the number `paintDisclosureChevron` takes), tweens i
 retargets from the current openness. The Preferences and Keyboard Shortcuts section headers use it. Under Reduce Motion,
 with Animations Off, or off screen the arrow lands at once (a restored fold starts where it belongs); frames run only while it turns.
 
+The Library's Places "Get more" heading uses the same clock for its packs: the rows above and including the heading
+paint unchanged (no picture, no alpha), and only the rows below it slide, offset by `(1 - openness)` of the pack block's
+height and clipped to the area under the heading, so opening brings the packs out from under it and closing takes them
+back, with the rows after the block following the same offset (`SoundBrowserComponent::paintFoldedRows`). Under Reduce
+Motion nothing moves: only the packs fade (80 ms, the rows above stay solid). With Animations Off, or off screen, the list
+changes at once, and a restored choice never animates. A folder change or a search keeps the whole-list slide or
+cross-fade.
+
 ### Bottom dock tabs
 
 A tab leaves the strip when its panel opens in its own window or goes to the main area, and comes back when it docks again.
@@ -737,7 +748,7 @@ does not show anywhere else and keeps showing: mark its component with `synth::u
 preference's own toggle, so it can always say how to bring tips back. The window reads the setting each time it is
 asked for a tip (`AppTooltipWindow::getTipFor`), so a toggle applies at once in every window with no push. The mod-dot
 readout is painted on the canvas, not a hover tooltip; while it shows it blocks hover tips (`blockHoverTips`), as juce shows a
-changed tip at once within 500 ms of the last. Tests: `AppTooltipWindowTests.cpp`, `ModDot/ModDotSingleReadoutTests.cpp`.
+changed tip at once within 500 ms of the last. The mod hover chip under a hovered knob uses the same box (`synth::theme::paintTooltipBox`) and the same 160/110 ms `ShownFade`. Tests: `AppTooltipWindowTests.cpp`, `ModDot/ModDotSingleReadoutTests.cpp`.
 
 A window can opt into a different look by passing a `popup_motion::Style` to `PopupMotion::attach`:
 the slide distances, `overshoot` (the arrival eases with `easeOutBackSoft`, peaking 3% past rest
@@ -751,40 +762,11 @@ defaults scale nothing. Two windows use it: the mod dot's panel (`ModDotPanelFra
 
 ## Popup reveal
 
-A popover opened in a `juce::CallOutBox` eases in with `CalloutReveal` (`Source/UI/Layout/CalloutReveal.{h,cpp}`),
-owned by the popup content and started from its `parentHierarchyChanged()`: the callout is hidden (alpha 0) the moment
-the content is parented, then, on the next message-loop turn once it is showing, fades in over 160 ms (`easeOutCubic`)
-while sliding 8 px out of the side that faces the element that opened it (the side of the callout with the largest inset,
-`directionToAnchor`; a popover under a button grows down from it), landing exactly on its final bounds. Only the entrance
-is animated, and no exit is promised for this kind of call-out: it dismisses synchronously, so the 110 ms exit of the
-motion rules has nothing to run on (a call-out the app closes itself leaves through `PopupMotion::dismissCallOut`,
-[Popup windows](#popup-windows)). Today the
-colour picker (`ColourPickerPopup`) uses it, which covers the Timeline track swatch, the ruler's marker colours, the macro
-recolour and the mixer's colour dot.
+Popovers no longer have a reveal of their own: they use the popup motion in [Popup windows](#popup-windows) through `launchPopover`.
 
 ### Reduced motion
 
-Preferences > Panels & Windows > "Animations" (user setting `animationMode`, `synth::ui::AnimationMode` in
-`Source/UI/Layout/ReducedMotion.h`) chooses how much the app animates. It applies at once, app-wide; the saved choice is
-applied at launch by `MainComponent`.
-
-| Choice (stored value) | What happens |
-|---|---|
-| Follow system (`follow`, default) | macOS Reduce Motion decides (`NSWorkspace.accessibilityDisplayShouldReduceMotion`, read each time in `ReducedMotionMac.mm`). Windows and Linux answer "full motion" for now -- their settings are not read yet. An unknown stored value reads as this. |
-| Full (`full`) | Always full motion, even with macOS Reduce Motion on. |
-| Reduced (`reduced`) | As if Reduce Motion were on: short plain fades, nothing slides or grows. |
-| Off (`off`) | Nothing animates: popups, panels, glides and settles run for 0 ms and land on their final state; things still appear and disappear, just without motion. |
-
-`synth::ui::prefersReducedMotion()` answers true for Reduced and Off, false for Full, and the OS's answer for Follow
-system, so every animation that already has a Reduce Motion branch (most of the ones in this document) follows the
-setting. `synth::ui::animationsOff()` is true only for Off. `synth::ui::motionMs(full, reduced)` is the helper for a
-duration that branches on the mode (full, reduced, or 0 under Off). Off is instant at the shared seams:
-`AnimationDriver::start` runs `onUpdate` with the final eased value and `onComplete` before it returns,
-`popup_motion::durationMs` is 0 and `PopupMotion` shows, hides and `dismiss()`es windows with no fade or leaving picture
-(`reallyClose` runs at once), and the self-clocked motions (the Card Layout Editor's fades and shrink ghost, the
-automation marker fade) land at once. A new non-essential animation asks `prefersReducedMotion()` before it starts, uses
-`AnimationDriver` or `motionMs` for its duration, and lands on its final state at once under Off.
-Tests: `setAnimationMode` sets the mode (restore `followSystem` afterwards); `setReducedMotionForTest` forces the OS's answer. The test run itself pins the OS's answer to off (`setSystemReducedMotionForTest(false)` in `Tests/TestMain.cpp`), so no test reads the machine's own Reduce Motion setting, which differs between CI runners and developer Macs; a test that wants it on forces it.
+Under macOS Reduce Motion a popover fades in and out over 80 ms with no rise; under Animations: Off it appears and leaves at once (see [Popup windows](#popup-windows)).
 
 ### Continuous loops
 
@@ -834,7 +816,7 @@ clock or a stepped phase without asking the preference.
 | **Macro-crossing cable slide + module flash (FRO41)** | Also on a cable drop that mints a macro port: the new cables' port ends emerge from the release point (no flash). When a drag crosses an expanded macro's hull (applied live, mid-drag, or on the drop): a cable re-routed through an auto-created/removed port slides to its new anchor (220 ms, `easeOutCubic`; endpoints are offset from their live anchors, so a slide started mid-drag stays attached to the moving card), and the dragged module gets a fading ring — pure tween state in `MacroCrossingAnimator` (`Source/UI/Graph/MacroCrossingAnimator/`), driven by `macroCrossingDriverAnim_`; see [`docs/macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41`](../macros/menu-and-membership.md#cable-crawl-and-module-flash-fro41) | `GraphEditor` |
 | **Macro border glide** | A macro's border glides to its new bounds instead of snapping (220 ms, `easeOutCubic`) on a live membership change, a drag candidate change, and when a drag ends and the held border is released, and on undo and redo of a membership change. The dashed outline, port strips, chip and buttons and docked port widgets glide together (the driver re-docks the widgets each frame); each edge is offset from the live border, so a border that keeps moving still lands on it. Pure state in `MacroHullGlide` (`Source/UI/Graph/MacroHullGlide/`), applied in `GraphEditor::paintedMacroHullBounds`; see [`docs/macros/menu-and-membership.md#macro-borders-glide`](../macros/menu-and-membership.md#macro-borders-glide) | `GraphEditor` |
 | **Cable retract** | A removed cable retracts into its source jack and fades (180 ms, linear progress with an `easeInCubic` pull) instead of vanishing: a cable cut, a jack disconnect, a removed modulator, and undo/redo taking a cable away. The ghost paints after the live cables; New does not animate, and a project load draws its cables out instead (see the project load reveal row). Pure state in `CableRetractAnimator` (`Source/UI/Graph/CableRetractAnimator/`), armed by `GraphEditor::retractCablesGoneSince`; see [cables](cables.md#retracting-removed-cables) | `GraphEditor` |
-| **Colour picker (popup reveal)** | The callout fades in 160 ms `easeOutCubic` and slides 8 px out of the side facing the dot, swatch or chip that opened it; at once under macOS Reduce Motion or when not on screen; entrance only; see [Popup reveal](#popup-reveal) | `CalloutReveal` via `ColourPickerPopup` |
+| **Colour picker** | Fades in and out like every popover: 160 ms in with an 8 px rise out of the side facing the dot, swatch or chip that opened it, 110 ms out; plain 80 ms fade under macOS Reduce Motion; at once under Animations Off; see [Popup windows](#popup-windows) | `launchPopover` via `ColourPickerPopup` |
 | **Shortcut hint bubbles** | One tween value `t` scales (0.6 -> 1), moves (from the labelled button's centre, or 12 px below a hidden-panel pill) and fades every Cmd-hold key-cap bubble: 160 ms `easeOutCubic` in, 110 ms `easeInCubic` back out from the current `t`; pure geometry in `hint::animatedBubbleBounds`; one `AnimationDriver`, no timer besides the 500 ms show delay; see [`docs/control/shortcuts.md`](../control/shortcuts.md#shortcut-hints) | `ShortcutHintOverlay` |
 | **Toolbar buttons** | Three tweens per button, each retargeting from its current value on one `AnimationDriver` apiece: hover 110 ms `easeOutCubic` in / 90 ms `easeInCubic` out (chip 16 -> 26 percent, ground, caption colour), press 80 ms (the chip and glyph squash to 0.92 x 0.86 about the chip's centre), lit 160 ms in / 110 ms out (the chip fills with the group colour while the glyph cross-fades to its ink art). On hover the glyph lifts 1 px and its moving part (the SVG's `mv` / `mv2` group, drawn as a separate `Drawable`) does one small thing: the cog and Light mode turn 30 degrees, Undo -22 and Redo +22 (the arrow swings about its elbow with an ease-out-back overshoot of about 10 percent while the hover arrives, a plain return on leaving), Save's shutter slides 1.5 down, Load's arrow drops 2, New's plus grows 1.2x, the feedback lines slide 1 right, Auto Arrange's right tiles part 1.5 up and down, the minimap view moves (2, 1), the matrix grows 1.12x, the panel rises 1.5, the library's leaning book tips 10 degrees further (distances in icon units). The AI button is the one looping glyph: a pulse runs along its cable and a spark blooms at the plug over one 2.8 s cycle (a linear `AnimationDriver` that restarts itself, the pulse placed with `Path::getPointAlongPath`), while the assistant is working (`setBusy`, from `AIChatComponent::onWaitingChanged`) or the button is hovered; its keyframes cross-fade with the rest glyph 140 ms in / 220 ms out and the cycle stops once they are gone, so an idle button schedules no frames. Under Reduce Motion (read when a hover starts, and when the button turns busy) nothing moves and only the colours change; lands at once when not on screen; nothing runs at rest; see [toolbar buttons](chrome.md#toolbar-buttons) | `ToolbarButton`, painted by `AppLookAndFeel::drawToolbarButton` |
 | **Velocity strip readout** | The value beside a hovered or dragged stick fades 160 ms `easeOutCubic` in / 110 ms `easeInCubic` out from the current opacity and slides ~4 px from the stick head to its spot (`velocitylane::readoutSlidePx`); stick-to-stick moves and edits keep the current opacity; lands at once when not on screen; one `AnimationDriver` | `PianoRollVelocityLane` |

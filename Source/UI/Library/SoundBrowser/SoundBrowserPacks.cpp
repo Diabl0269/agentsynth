@@ -7,6 +7,7 @@
 #include "UI/Library/SoundBrowser/SoundBrowserPackLayout.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <iterator>
 
 namespace synth::ui {
 
@@ -185,20 +186,60 @@ juce::String SoundBrowserComponent::packTooltip(const Row& row) const {
     return "Download " + shownName(row) + " (" + size + ")" + (row.viaInstrument ? " to use this sound" : "");
 }
 
-// The user's choice. The list fades to the folded (or opened) one; a restore at startup, with no window yet, just
-// builds it.
+// The user's choice. The packs slide open or shut under the heading (see startFold); a restore at startup, with no
+// window yet, just builds the list.
 void SoundBrowserComponent::setGetMoreOpen(bool open, bool animate) {
     if (open == getMoreOpen_)
         return;
-    const bool onPlaces = placeId_.isEmpty() && !isSearchActive();
-    if (animate && onPlaces)
-        capturePreviousList();
+    const bool fold = animate && placeId_.isEmpty() && !isSearchActive();
+    if (fold) {
+        landListMotion();
+        if (!open)
+            std::copy_if(rows_.begin(), rows_.end(), std::back_inserter(foldPacks_),
+                         [](const Row& row) { return row.kind == RowKind::GetPack; });
+    }
     getMoreOpen_ = open;
     rebuildRows();
-    if (animate && onPlaces)
-        playListMotion(0, true);
+    if (fold)
+        startFold();
     if (animate && onGetMoreChanged)
         onGetMoreChanged();
+}
+
+bool SoundBrowserComponent::isGetMoreFolding() const {
+    return foldMode_ == FoldMode::Fade || (foldMode_ == FoldMode::Slide && getMoreTurn_->isTurning());
+}
+
+void SoundBrowserComponent::endFold() {
+    foldMode_ = FoldMode::None;
+    foldPacks_.clear();
+    foldFade_ = 1.0f;
+}
+
+void SoundBrowserComponent::startFold() {
+    if (prefersReducedMotion()) {
+        if (!isShowing() && !animateOffscreenForTest_)
+            return endFold();
+        foldMode_ = FoldMode::Fade;
+        foldFade_ = 0.0f;
+        if (!vblank_.has_value())
+            vblank_.emplace(this);
+        listAnim_.start(
+            *vblank_, motionMs(120.0, 80.0), easeOutCubic,
+            [this](float t) {
+                foldFade_ = t;
+                repaint(listArea());
+            },
+            [this] {
+                endFold();
+                repaint(listArea());
+            });
+        return;
+    }
+    if (getMoreTurn_->isTurning())
+        foldMode_ = FoldMode::Slide;
+    else
+        endFold();
 }
 
 void SoundBrowserComponent::toggleGetMore() { setGetMoreOpen(!getMoreOpen_); }

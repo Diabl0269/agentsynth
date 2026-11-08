@@ -1,7 +1,6 @@
 #pragma once
 
 #include "StepGridChords.h"
-#include "UI/Layout/CalloutReveal.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
@@ -89,7 +88,6 @@ private:
     int hoverRow_ = -1;
     int hoverChip_ = -1;
     bool auditioning_ = false;
-    CalloutReveal reveal_{*this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StepGridChordPicker)
 };

@@ -280,6 +280,12 @@ public:
     juce::String getAccessibilityValueText() const;
     bool isListAnimating() const { return listAnim_.isRunning(); }
     void completeListAnimationForTest() { listAnim_.completeForTest(); }
+    /** Steps the list's own animation (the Reduce Motion fade of the Get more packs) to `ms` after its start. */
+    void stepListAnimationForTest(double ms) { listAnim_.stepForTest(ms); }
+    bool isGetMoreFolding() const;
+    /** How far up (px) the rows below the Get more heading are held while its packs slide: the pack block's height at
+     *  the start of an opening, 0 when landed (and always 0 under Reduce Motion, which only fades the packs). */
+    int getMoreFoldShift() const { return foldLayout().shift; }
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -317,7 +323,21 @@ private:
                     const juce::String& selectKey);
     juce::String placeNameOf(const juce::String& placeId) const;
     void capturePreviousList();
-    void playListMotion(int direction, bool fold = false);
+    void playListMotion(int direction);
+    /** Lands a slide or fade in flight, and the Get more fold with it. */
+    void landListMotion();
+    /** Starts the Get more fold after the rows were rebuilt: a slide on the chevron's clock, a plain fade under
+     *  Reduce Motion, nothing when the view is not on screen or Animations is Off. */
+    void startFold();
+    void endFold();
+    void paintFoldedRows(juce::Graphics& g, int width) const;
+    struct FoldLayout {
+        int heading = -1;     // the Get more row, -1 when the list has none
+        int packs = 0;        // pack rows moving: those in rows_ (opening) or in foldPacks_ (closing)
+        bool closing = false; // the packs are no longer in rows_
+        int shift = 0;        // px the rows below the heading are held up
+    };
+    FoldLayout foldLayout() const;
 
     // Shapes (SoundBrowserShapes.cpp)
     void rebuildShapeRows();
@@ -490,6 +510,13 @@ private:
     juce::Image previousList_;
     float listMotion_ = 1.0f;
     int motionDirection_ = 0;
+
+    // The Get more fold: only the rows below the heading move (Slide, on the chevron's clock) or fade (Fade, under
+    // Reduce Motion). foldPacks_ holds the pack rows of a fold that is closing, which rows_ no longer has.
+    enum class FoldMode { None, Slide, Fade };
+    FoldMode foldMode_ = FoldMode::None;
+    std::vector<Row> foldPacks_;
+    float foldFade_ = 1.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SoundBrowserComponent)
 };

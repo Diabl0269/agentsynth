@@ -25,7 +25,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 #include "UI/Mixer/MeterColourStops.h"
 #include "UI/Mixer/MixerMeterScale.h"
@@ -844,8 +844,7 @@ TEST_F(ChannelFlowTest, UndoAfterAColourCommitRestoresTheCardAndTheHeader) {
 TEST_F(ChannelFlowTest, AltCOnTheSelectedMacroOpensItsPickerAndPreviewsLive) {
     LinkRigApp rig;
     std::unique_ptr<juce::Component> content;
-    synth::ui::test_hooks::cardCallOutLauncherForTest() = [&](std::unique_ptr<juce::Component> c,
-                                                              juce::Rectangle<int>) {
+    synth::ui::test_hooks::popoverLauncherForTest() = [&](std::unique_ptr<juce::Component> c, juce::Rectangle<int>) {
         content = std::move(c);
         return nullptr;
     };
@@ -864,5 +863,5 @@ TEST_F(ChannelFlowTest, AltCOnTheSelectedMacroOpensItsPickerAndPreviewsLive) {
     rig.editor.getMacroController().selectMacro(rig.leadMacroId, false);
     rig.editor.getMacroController().selectMacro(rig.drumsMacroId, true);
     EXPECT_FALSE(rig.editor.openColourForKeyboardFocus()) << "two macros selected: no single item to recolour";
-    synth::ui::test_hooks::cardCallOutLauncherForTest() = nullptr;
+    synth::ui::test_hooks::popoverLauncherForTest() = nullptr;
 }

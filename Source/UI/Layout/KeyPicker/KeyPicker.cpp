@@ -435,17 +435,8 @@ void KeyPicker::lookAndFeelChanged() { applyColours(); }
 void KeyPicker::parentHierarchyChanged() {
     applyColours();
     resized();
-    reveal_.startIfInCallout();
     if (isShowing())
         search_->grabKeyboardFocus();
-}
-
-bool KeyPicker::keyPressed(const juce::KeyPress& key) {
-    if (key == juce::KeyPress::escapeKey) {
-        dismiss();
-        return true;
-    }
-    return false;
 }
 
 void KeyPicker::mouseExit(const juce::MouseEvent&) {
@@ -583,10 +574,6 @@ bool KeyPicker::sendKey(const juce::KeyPress& key) {
     }
     if (key == juce::KeyPress::returnKey) {
         pickHighlighted();
-        return true;
-    }
-    if (key == juce::KeyPress::escapeKey) {
-        dismiss();
         return true;
     }
     return false;

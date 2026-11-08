@@ -148,15 +148,11 @@ void ShapeStackPanel::resized() {
 }
 
 bool ShapeStackPanel::keyPressed(const juce::KeyPress& key) {
-    if (key == juce::KeyPress::escapeKey)
-        return closeHostingWindow(*this);
     if (key == juce::KeyPress::returnKey) {
         stack_.triggerClick();
         return true;
     }
     return false;
 }
-
-void ShapeStackPanel::parentHierarchyChanged() { reveal_.startIfInCallout(); }
 
 } // namespace synth::ui

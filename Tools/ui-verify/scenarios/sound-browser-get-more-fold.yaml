@@ -1,0 +1,32 @@
+# Bug: Library > Places, the "Get more" fold cross-faded the whole list, so every row (Favourites, Used recently, the
+# heading itself) dissolved at partial opacity and the text flickered on dark themes.
+#
+# What a user does (dark theme, the Sounds view over the fixture folder): clicks "Get more" and the packs slide up under
+# the heading while every row above it stays solid; clicks it again and they slide back out from under it.
+# The mid-slide proof is the frame right after the click. The pixel rules (rows above the heading identical to rest,
+# packs between their two positions, Reduce Motion and Animations Off) are covered by SoundPackOfferTests.
+#
+# The click lands on the heading's label: the list starts 58 px down (search 32, path bar 26) and the heading is the
+# fifth row (Favourites, Used recently, Shapes, the bundled Core instruments pack, then Get more), so its centre is
+# 58 + 4 * 30 + 15 = 193. Another installed pack above it adds 30; the `getMoreOpen` expect fails if the y is off.
+motion: true
+record: true
+save_project: get-more-fold
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/sounds"
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - expect: {id: soundBrowser, getMoreOpen: true}
+  - screenshot: {id: soundBrowser, name: 1-open}
+  - click: {id: soundBrowser, x: 60, y: 193}
+  - mark: {check: 1, name: get-more-mid-slide}
+  - wait: {}
+  - expect: {id: soundBrowser, getMoreOpen: false}
+  - screenshot: {id: soundBrowser, name: 2-folded}
+  - click: {id: soundBrowser, x: 60, y: 193}
+  - wait: {}
+  - expect: {id: soundBrowser, getMoreOpen: true}
+  - screenshot: {id: soundBrowser, name: 3-open-again}

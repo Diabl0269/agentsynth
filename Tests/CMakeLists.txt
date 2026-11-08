@@ -666,7 +666,6 @@ add_executable(Tests
     UI/Mixer/MixerZonesKeyboardTests.cpp
     UI/Mixer/MixerZonesTests.cpp
     UI/Mixer/MixerZonesVisibilityTests.cpp
-    UI/Layout/CalloutRevealTests.cpp
     UI/Layout/SidePane/SidePaneTests.cpp
     UI/Layout/SidePane/SidePaneShortcutTests.cpp
     Mixer/MixerViewDocTests.cpp

@@ -29,6 +29,7 @@ list(APPEND APPUI_SOURCES
 include(cmake/PointEditingSources.cmake)
 # The song key and the command table's row files keep their own lists for the same reason.
 include(cmake/SongKeySources.cmake)
+include(cmake/ColourPickerSources.cmake)
 include(cmake/CommandRowSources.cmake)
 # The modulation curve views keep their own list for the same reason.
 include(cmake/ModCurveUISources.cmake)

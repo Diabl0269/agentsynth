@@ -6,9 +6,9 @@
 // files in this directory hold the rest of the class.
 
 #include "TimelinePanelComponent.h"
+#include "UI/Layout/PopupHost.h"
 
 #include "ShortcutManager/ShortcutManager.h"
-#include "UI/Layout/PopupMotion.h"
 
 namespace synth::ui {
 
@@ -49,31 +49,31 @@ void TimelinePanelComponent::initDrawShapes() {
 // open closes it. A pick runs pickDrawShape after the flyout has closed; the panel may be gone by then, hence the
 // safe pointer. Headless tests take the content through the hook instead of a CallOutBox.
 void TimelinePanelComponent::openShapeFlyout() {
-    if (shapeFlyoutBox_ != nullptr) {
-        PopupMotion::dismissCallOut(*shapeFlyoutBox_);
-        return;
-    }
     juce::Component::SafePointer<TimelinePanelComponent> safe(this);
-    auto flyout = std::make_unique<DrawShapeFlyout>(
-        drawShape_,
-        [this](DrawShape shape) {
-            return shortcutHintFor(shortcuts_, shapeActionIdFor(shape), shapeFallbackKey(shape));
-        },
-        [safe](DrawShape shape) {
-            if (safe != nullptr)
-                safe->pickDrawShape(shape);
-        });
-    shapeFlyout_ = flyout.get();
+    const auto makeFlyout = [this, safe] {
+        auto flyout = std::make_unique<DrawShapeFlyout>(
+            drawShape_,
+            [this](DrawShape shape) {
+                return shortcutHintFor(shortcuts_, shapeActionIdFor(shape), shapeFallbackKey(shape));
+            },
+            [safe](DrawShape shape) {
+                if (safe != nullptr)
+                    safe->pickDrawShape(shape);
+            });
+        shapeFlyout_ = flyout.get();
+        return flyout;
+    };
     if (auto& hook = test_hooks::drawShapeFlyoutHookForTest()) {
-        hook(std::move(flyout));
+        hook(makeFlyout());
         return;
     }
     // The press that opened a hold is still down until its release; that release must not dismiss the flyout.
     juce::Component::SafePointer<DrawPenButton> pen(penButton_);
-    auto& box = launchDrawShapeCallOut(
-        std::move(flyout), penButton_->getScreenBounds(), [pen] { return pen != nullptr && pen->isHoldGestureDown(); },
-        penButton_);
-    shapeFlyoutBox_ = &box;
+    if (shapeFlyoutSlot_ == nullptr)
+        shapeFlyoutSlot_ = std::make_unique<PopoverSlot>();
+    shapeFlyoutSlot_->open(
+        makeFlyout, penButton_->getScreenBounds(), penButton_,
+        {.trigger = penButton_, .holdGestureDown = [pen] { return pen != nullptr && pen->isHoldGestureDown(); }});
 }
 
 void TimelinePanelComponent::setDrawShape(DrawShape shape) {

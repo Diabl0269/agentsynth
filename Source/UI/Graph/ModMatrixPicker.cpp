@@ -406,7 +406,7 @@ ModMatrixPicker::ModMatrixPicker(juce::String what, std::vector<Item> items, int
         if (key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0) ||
             (key == juce::KeyPress::leftKey && actionSelected_))
             return selectAction(false);
-        if (key == juce::KeyPress::escapeKey) {
+        if (key == juce::KeyPress::escapeKey) { // the command palette hosts this picker in a window of its own
             dismiss();
             return true;
         }
@@ -747,7 +747,6 @@ void ModMatrixPicker::lookAndFeelChanged() { applyColours(); }
 // only become real once this component has a parent.
 void ModMatrixPicker::parentHierarchyChanged() {
     applyColours();
-    reveal_.startIfInCallout(); // eases in when it opens in a call-out
     if (isShowing())
         searchEditor_->grabKeyboardFocus();
 }

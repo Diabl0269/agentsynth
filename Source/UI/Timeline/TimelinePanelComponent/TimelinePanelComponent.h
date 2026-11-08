@@ -51,6 +51,7 @@ class TransportService;
 class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 namespace ui {
 class ClipSizingButton; // Forward declaration (Source/UI/Timeline/ClipSizingButton.h)
+class PopoverSlot;      // Forward declaration (Source/UI/Layout/PopupHost.h)
 class DrumMachineComponent;
 class KeyRing; // Forward declaration (Source/UI/Layout/KeyRing.h): kept out of this widely included header
 struct DrumMachineHost;
@@ -981,8 +982,8 @@ private:
     synth::LaneId selectedAutomationLane_;
 
     DrawShape drawShape_ = DrawShape::Free;
-    DrawPenButton* penButton_ = nullptr; // the Draw entry of toolButtons_
-    juce::Component::SafePointer<juce::CallOutBox> shapeFlyoutBox_;
+    DrawPenButton* penButton_ = nullptr;                        // the Draw entry of toolButtons_
+    std::unique_ptr<PopoverSlot> shapeFlyoutSlot_;              // made on first use
     juce::Component::SafePointer<DrawShapeFlyout> shapeFlyout_; // the open flyout (or the test hook's)
     juce::Rectangle<int> transportBarBounds_;
     juce::Rectangle<int> trackHeaderBounds_;

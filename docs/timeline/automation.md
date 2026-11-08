@@ -694,7 +694,7 @@ click anywhere else on the button just picks Draw. The transport row has the sam
 
 The flyout (`DrawShapeFlyout`) is a `juce::CallOutBox` under the button with six rows: the shape's icon, its name and
 its shortcut right-aligned (read through `shortcutHintFor`, so a rebind shows). The current shape's row is lit. It
-enters with `CalloutReveal` (the plain `PopupMotion` fade under Reduce Motion; at once under Animations: Off) and
+opens through `launchPopover` (the plain `PopupMotion` fade under Reduce Motion; at once under Animations: Off) and
 closes only through `PopupMotion::dismissCallOut`. Picking a row (click, Enter or Space) closes it and calls
 `TimelinePanelComponent::pickDrawShape`, which sets the shape, switches to Draw and stamps it over a lane range if
 one is selected, so Range-drag, then a pick from the flyout, stamps in one go. Keyboard: focus lands on the current

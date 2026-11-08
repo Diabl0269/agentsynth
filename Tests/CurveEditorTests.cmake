@@ -25,12 +25,16 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ShortcutRelayTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DialogTooltipTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/QuitRequestTests.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/CardCallOutRelayTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopoverRelayTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragSurfaceRegistryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/DragCancelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupMotionRegistryTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupDismissPathsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/MotionLoopUsersTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupOwnPathTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PopupHostBehaviourTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/ColourPickerKeyboardTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Chrome/ColourPickerEscapeTests.cpp
 )
 
 # Tests/CMakeLists.txt is at the file-size cap, so the modulation curve tests are pulled in from here.

@@ -7,7 +7,7 @@
 #include "Modules/Filter/CustomFilterShapes.h"
 #include "Modules/Lfo/LfoCustomWave.h"
 #include "ShapeEditorTestHelpers.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/ModuleViews/ShapeEditor/PitchGrid.h"
 #include "UI/ModuleViews/ShapeEditor/PitchGridRows.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
@@ -351,12 +351,12 @@ TEST(ShapeWindowPitchGrid, StackHarmonicsRingsAtTheRootsHarmonicsAsOneUndoStep) 
     const auto before = responseOf(rig);
     const int serial = rig.undo.getEditSerial();
     std::unique_ptr<juce::Component> popover;
-    test_hooks::cardCallOutLauncherForTest() = [&popover](std::unique_ptr<juce::Component> c, juce::Rectangle<int>) {
+    test_hooks::popoverLauncherForTest() = [&popover](std::unique_ptr<juce::Component> c, juce::Rectangle<int>) {
         popover = std::move(c);
         return nullptr;
     };
     ASSERT_TRUE(menu.run("Stack harmonics"));
-    test_hooks::cardCallOutLauncherForTest() = nullptr;
+    test_hooks::popoverLauncherForTest() = nullptr;
     ASSERT_NE(popover, nullptr) << "Stack harmonics asks for its options first";
     EXPECT_EQ(rig.undo.getEditSerial(), serial) << "nothing is changed until Stack is pressed";
     auto& panel = static_cast<ShapeStackPanel&>(*popover);
@@ -381,12 +381,12 @@ TEST(ShapeWindowPitchGrid, TheStackPanelsOptionsSetTheRootCountStepAndWidthOfThe
     editor.getPitchRows()->setChoice(choiceOf(pitchgrid::Kind::harmonics));
     editor.getPitchRows()->setRootId(PitchGridRows::rootIdOf(45)); // A2
     std::unique_ptr<juce::Component> popover;
-    test_hooks::cardCallOutLauncherForTest() = [&popover](std::unique_ptr<juce::Component> c, juce::Rectangle<int>) {
+    test_hooks::popoverLauncherForTest() = [&popover](std::unique_ptr<juce::Component> c, juce::Rectangle<int>) {
         popover = std::move(c);
         return nullptr;
     };
     editor.openStackPanel();
-    test_hooks::cardCallOutLauncherForTest() = nullptr;
+    test_hooks::popoverLauncherForTest() = nullptr;
     ASSERT_NE(popover, nullptr);
     auto& panel = static_cast<ShapeStackPanel&>(*popover);
 

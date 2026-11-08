@@ -1,8 +1,10 @@
 // Synthetic input travels the ComponentPeer path: a click reaches the right child's real mouseDown/mouseUp, a drag
 // delivers mouseDrag, a key reaches a keyPressed handler -- and the OS cursor never moves.
 
+#include "../UI/Layout/PopupTestCleanup.h"
 #include "TestMode/TestModeInput.h"
 #include "TestModeRig.h"
+#include "UI/Layout/PopupHost.h"
 
 using namespace synth::testmode;
 using testmode_rig::Rig;
@@ -155,10 +157,68 @@ TEST(TestModeInput, AWindowBehindAnotherStillReceivesTheClick) {
     Rig front; // same size, same position, shown after, so it covers `behind`
     front.show();
     front.toFront(false);
-    testmode_rig::pump(100);
+    synth::test::waitUntil([&] { return front.isShowing() && behind.isShowing(); }, 1000);
     juce::String error;
     ASSERT_TRUE(click(behind.right, centreOf(behind.right), Button::left, 1, juce::ModifierKeys(), error)) << error;
     EXPECT_EQ(behind.right.downs, 1);
     EXPECT_EQ(front.right.downs, 0);
 }
 #endif
+
+namespace {
+struct TestModeInputPopover : ::testing::Test {
+    void SetUp() override {
+        // A CallOutBox places itself on a display; the headless Linux run has none and would crash in its constructor.
+        if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
+            GTEST_SKIP() << "needs a display";
+    }
+    void TearDown() override { synth::test::finishPopupTest(); }
+};
+
+juce::CallOutBox* firstCallOut() {
+    auto& desktop = juce::Desktop::getInstance();
+    for (int i = 0; i < desktop.getNumComponents(); ++i)
+        if (auto* box = dynamic_cast<juce::CallOutBox*>(desktop.getComponent(i)))
+            return box;
+    return nullptr;
+}
+
+bool liveCallOutOpen() {
+    auto* box = firstCallOut();
+    return box != nullptr && box->isVisible() && !synth::ui::PopupMotion::isDismissing(*box);
+}
+} // namespace
+
+// Regression test for FRO1526: a test-mode click never moves the OS cursor, so a popover read the cursor, took the
+// press on its own button for a click away, closed, and the button then re-opened it.
+TEST_F(TestModeInputPopover, AClickOnAPopoversOwnButtonClosesIt) {
+    Rig rig;
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    synth::ui::PopoverSlot slot;
+    const auto toggle = [&] {
+        slot.open(
+            [] {
+                auto c = std::make_unique<juce::Component>();
+                c->setSize(120, 60);
+                return c;
+            },
+            rig.button.getScreenBounds(), &rig.button, {.trigger = &rig.button});
+    };
+    rig.button.onClick = toggle;
+    toggle();
+    synth::test::waitUntil([] { return firstCallOut() != nullptr && firstCallOut()->isCurrentlyModal(); }, 2000);
+    auto* box = firstCallOut();
+    ASSERT_NE(box, nullptr);
+    ASSERT_TRUE(box->isCurrentlyModal());
+
+    // Nothing sets the pointer, and the real cursor is not moved: only the synthetic press says where it is.
+    synth::ui::test_hooks::popoverMouseForTest() = std::nullopt;
+    juce::String error;
+    ASSERT_TRUE(click(rig.button, centreOf(rig.button), Button::left, 1, juce::ModifierKeys(), error)) << error;
+
+    synth::test::waitUntil([&] { return !liveCallOutOpen(); }, 2000);
+    EXPECT_FALSE(liveCallOutOpen()) << "the popover is still open or opened again";
+    // Give a re-open the time it would need: a popover that opens again within it fails.
+    EXPECT_FALSE(synth::test::waitUntil([] { return liveCallOutOpen(); }, 300)) << "the button re-opened the popover";
+}

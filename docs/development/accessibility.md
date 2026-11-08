@@ -206,6 +206,23 @@ and pinned by `Tests/UI/Accessibility/DialogKeyboardTests.cpp`:
   `launchAsync()` directly. Pinned by `Tests/UI/Layout/ModalCloseKeysTests.cpp`, which delivers both keys from every
   focusable control of the shape editor, sampler map and EQ windows.
 
+## The colour picker
+
+`ColourPickerPopup` builds its `juce::ColourSelector` without the selector's own colour square and hue bar (private
+classes with no focus and no keys) and puts two project controls in their place (`Chrome/ColourPickerFields.h`). Tab
+order: the saturation and brightness square, the hue bar, each colour slider and its hex value box, the add-to-favourites
+star, each favourite.
+
+| Control | Keys | Screen reader |
+| --- | --- | --- |
+| `SaturationBrightnessField` | Left/Right saturation, Up/Down brightness, 1 percent a step, 10 with Shift, Home/End saturation to 0 / 100 | title "Saturation and brightness", value "Saturation 40%, brightness 80%", tooltip names the keys |
+| `HueBar` | Left/Up and Right/Down hue, 1 degree a step, 10 with Shift, Home/End to 0 / 360 | title "Hue", value "Hue 210 degrees", tooltip names the keys |
+| each selector slider (`setWantsKeyboardFocus(true)`, set again after every look and feel change) | arrows, Home, End: the stock `juce::Slider` keys | title "Red", "Green", "Blue" |
+
+Every change goes through `previewNow`, the one live-preview path, and the fields and sliders follow each other. A grey
+keeps the hue the user chose. Escape and undo are unchanged: the colour goes back to the opening one. Pinned by
+`ColourPickerKeyboardTests.cpp` (real key dispatch, Tab order, names and values) and `ColourPickerEscapeTests.cpp`.
+
 ## Grids of painted cells
 
 A grid whose cells act on one pick (the Drum Kit's pad grid, [`drum-kit.md`](../modules/drum-kit.md#the-card)) is one

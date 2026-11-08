@@ -5,7 +5,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 
 namespace synth::ui {
@@ -68,7 +68,7 @@ void MixerPanelComponent::openColourPicker(const juce::String& uuid, juce::Recta
     }
     if (route == ColourRoute::Track && popup != nullptr) {
         popup->onClosed = giveKeyboardBackTo(juce::Component::getCurrentlyFocusedComponent());
-        synth::ui::launchCardCallOut(std::move(popup), dotScreenBounds, this);
+        synth::ui::launchPopover(std::move(popup), dotScreenBounds, this);
     } else if (route == ColourRoute::Macro && graphEditor_ != nullptr)
         graphEditor_->promptRecolourMacro(macroId, dotScreenBounds);
 }

@@ -3,6 +3,7 @@
 #include "AccountButtonStyle.h"
 #include "Branding.h"
 #include "UI/Assistant/PlanBadge.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace {
@@ -227,5 +228,5 @@ void AccountSettingsTab::openFlow(synth::AccountFlowPanel::Flow flow, juce::Comp
     if (flowLauncher)
         flowLauncher(std::move(panel));
     else
-        juce::CallOutBox::launchAsynchronously(std::move(panel), opener.getScreenBounds(), nullptr);
+        synth::ui::launchPopover(std::move(panel), opener.getScreenBounds(), nullptr, {.trigger = &opener});
 }

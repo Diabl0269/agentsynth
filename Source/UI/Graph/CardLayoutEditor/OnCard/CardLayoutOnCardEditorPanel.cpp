@@ -9,6 +9,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <utility>
 
@@ -88,7 +89,7 @@ void CardLayoutOnCardEditor::openControlPanel(const juce::String& paramId) {
 void CardLayoutOnCardEditor::launchPanel(std::unique_ptr<juce::Component> panel, juce::Rectangle<int> screenArea) {
     if (auto& launcher = launcherForTest())
         return launcher(std::move(panel));
-    juce::CallOutBox::launchAsynchronously(std::move(panel), screenArea, nullptr);
+    launchPopover(std::move(panel), screenArea, nullptr);
 }
 
 // The call-out deletes its content once it has gone; the editor lets go of it at once, so nothing it

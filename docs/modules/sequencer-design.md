@@ -193,7 +193,7 @@ Transpose), so a transposed pattern moves and fits as it sounds. **Double** also
 through `StepGridHooks::recordEditWithParameter` (`AppUndoManager::recordNodeExtraStateAndParameterChange`), which puts the
 pattern change and the parameter change in one transaction, so a single undo gives both back.
 
-**Randomize** opens a 250 px popover (`StepGridRandomizePanel`, a `juce::CallOutBox` with `CalloutReveal`) with the note range
+**Randomize** opens a 250 px popover (`StepGridRandomizePanel`, opened through `launchPopover`) with the note range
 picker ([note-range-picker.md](../layout/note-range-picker.md)), a "Steps that play" slider (75 percent by default), the
 "Keep my rhythm" pill (on by default) and Roll. Roll applies `randomized` once and each Roll is one undo step; the popover
 stays open between rolls. Esc closes it. The density and rhythm choice live on the grid for the session and are not saved. The note range is saved with the
@@ -212,7 +212,7 @@ Built. A step stores a chord *type* (`SequencerChord`); its notes are built on t
   a scale is set and both fit the column, e.g. "Cmaj7" with "Imaj7"; a single note stays the note name. When a chord changes
   (a pick, undo, redo) the old and new label cross-fade in 120 ms (80 under Reduce Motion). The step's screen-reader text
   gains ", chord <name>".
-- **The picker** (`StepGridChordPicker`, 250 px, `juce::CallOutBox` with `CalloutReveal`) opens from a click on the label
+- **The picker** (`StepGridChordPicker`, 250 px, a popover opened through `launchPopover`) opens from a click on the label
   (tooltip "Choose a chord for this step") or Enter on a focused step in the Pitch lane. Header "Chords that fit C major on C"
   ("Chords on C" with No scale). Rows: Triad, Seventh, Sus (sus2, sus4), Add (add9, sixth), then "Outside the key": Borrowed
   (the fixed qualities whose notes differ from every in-key chip) and More (Unison, 5ths, Octs, Random, so older chords stay

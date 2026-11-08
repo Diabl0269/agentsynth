@@ -1,6 +1,7 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/SearchMatch.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
@@ -150,8 +151,8 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         "Per-module overrides of the Split Left/Right default above - Follow global, Always on, or Always off for "
         "each module type. Applies to modules created after the change, same as the toggle.");
     perModuleDefaultsButton.onClick = [this] {
-        auto popup = buildDualIOPerModuleDefaultsPopup();
-        juce::CallOutBox::launchAsynchronously(std::move(popup), perModuleDefaultsButton.getScreenBounds(), nullptr);
+        synth::ui::launchPopover(buildDualIOPerModuleDefaultsPopup(), perModuleDefaultsButton.getScreenBounds(),
+                                 nullptr, {.trigger = &perModuleDefaultsButton});
     };
 
     contentHost.addAndMakeVisible(macroAutoPortLabel_);

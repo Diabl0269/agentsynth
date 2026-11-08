@@ -1,8 +1,8 @@
 #include "UI/Layout/FollowKeyField.h"
 #include "Music/SongKey.h"
-#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/KeyPicker/KeyAuditioner.h"
 #include "UI/Layout/KeyPicker/KeyPicker.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -113,7 +113,7 @@ void FollowKeyField::openPicker() {
     if (pickerLauncher)
         pickerLauncher(std::move(picker), area);
     else
-        launchCardCallOut(std::move(picker), area, this);
+        launchPopover(std::move(picker), area, this);
 }
 
 // 300 ms from full to nothing; under reduced motion (or Off) the text just changes.

@@ -8,6 +8,7 @@
 // ModuleComponentModBand.h's modDepthBandRange.
 
 #include "UI/Graph/ModDot/KnobModSources.h"
+#include "UI/Graph/ModuleComponent/ModChipFade.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -33,22 +34,6 @@ inline juce::String formatModHoverChipText(const juce::String& sourceName, float
     static const juce::String kMiddleDot = juce::String::fromUTF8("\xC2\xB7");
     return sourceName + " " + kMiddleDot + " " + pctStr + "%";
 }
-
-/** One row of the chip stack. */
-struct ModChipRow {
-    juce::String text;
-    bool bold = false;    // the source the mod dot's drag adjusts
-    bool positive = true; // swatch colour: modRingPositive, else modRingNegative
-    bool isMore = false;  // the trailing "+N more" row (no swatch)
-};
-
-/** What a card paints under one knob: the rows, which of the card's sliders they hang under (-1: none) and the
- *  opacity (a dot readout's fade; 1 while the pointer rests on the knob). */
-struct ModChipStack {
-    std::vector<ModChipRow> rows;
-    int sliderIndex = -1;
-    float alpha = 1.0f;
-};
 
 /** The rows for `sources` (bypassed and unnamed ones skipped), at most `maxRows` sources and then one
  *  "+N more" row. The `chosen` source is bold and always listed: past the cap it takes the last slot. */

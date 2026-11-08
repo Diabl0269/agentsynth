@@ -6,6 +6,7 @@
 #include "UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditor.h"
 #include "UI/Graph/CardLayoutEditor/OnCard/OnCardEditorOwner.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/PopupHost.h"
 
 namespace {
 std::function<void(std::unique_ptr<juce::Component>)>& launcherForTest() {
@@ -52,5 +53,5 @@ void ModuleComponent::launchCardLayoutEditorCallOutBox(std::unique_ptr<juce::Com
                                                        juce::Rectangle<int> anchor) {
     if (auto& launcher = launcherForTest())
         return launcher(std::move(editor));
-    juce::CallOutBox::launchAsynchronously(std::move(editor), anchor, nullptr);
+    synth::ui::launchPopover(std::move(editor), anchor, nullptr);
 }

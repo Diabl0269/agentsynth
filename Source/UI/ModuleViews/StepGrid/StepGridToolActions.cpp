@@ -4,7 +4,7 @@
 // same undo step. Pitch tools work on the pitch a step plays (written plus Transpose, through the scale), so a
 // transposed pattern moves and fits as it sounds.
 #include "StepGridComponent.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <cmath>
 
@@ -180,7 +180,7 @@ void StepGridComponent::syncOpenRandomizePanel() {
     randomizePanel_->showRange(randomize_.minPitch, randomize_.maxPitch);
 }
 
-void StepGridComponent::openRandomizePanel() {
+std::unique_ptr<StepGridRandomizePanel> StepGridComponent::makeRandomizePanel() {
     seedRandomizeRange();
     auto panel = std::make_unique<StepGridRandomizePanel>(randomize_, scale_, kMiddleCOctave);
     juce::Component::SafePointer<StepGridComponent> safe(this);
@@ -197,11 +197,19 @@ void StepGridComponent::openRandomizePanel() {
             safe->roll(settings);
     };
     randomizePanel_ = panel.get();
+    return panel;
+}
+
+void StepGridComponent::openRandomizePanel() {
     if (auto& hook = test_hooks::randomizePanelHookForTest()) {
-        hook(std::move(panel));
+        hook(makeRandomizePanel());
         return;
     }
-    launchCardCallOut(std::move(panel), tools_.getButton(Tool::Randomize).getScreenBounds(), this);
+    auto& button = tools_.getButton(Tool::Randomize);
+    // The Randomize button toggles the panel: a second request closes it, one while it fades does nothing.
+    if (randomizeSlot_ == nullptr)
+        randomizeSlot_ = std::make_unique<PopoverSlot>();
+    randomizeSlot_->open([this] { return makeRandomizePanel(); }, button.getScreenBounds(), this, {.trigger = &button});
 }
 
 } // namespace synth::ui

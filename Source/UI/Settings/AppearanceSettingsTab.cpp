@@ -2,6 +2,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Layout/PopupHost.h"
 
 namespace {
 // Pitch-class labels, C first — matches synth::ui::NoteColourOverrides' pitch % 12 indexing.
@@ -858,7 +859,7 @@ void AppearanceSettingsTab::openCableColourPicker(int index, juce::Rectangle<int
     selector->setSize(280, 340);
 
     // The callout takes ownership of the selector; we keep only activeSwatchIndex.
-    juce::CallOutBox::launchAsynchronously(std::move(selector), screenArea, nullptr);
+    synth::ui::launchPopover(std::move(selector), screenArea, nullptr);
 }
 
 //==============================================================================

@@ -217,8 +217,6 @@ void StepGridChordPicker::pickChip(int row, int chip) {
 bool StepGridChordPicker::keyPressed(const juce::KeyPress& key) {
     const int code = key.getKeyCode();
     const int rows = (int)content_.rows.size();
-    if (code == juce::KeyPress::escapeKey)
-        return closeHostingWindow(*this);
     if (code == juce::KeyPress::returnKey || code == juce::KeyPress::spaceKey) {
         pickChip(row_, chip_);
         return true;
@@ -242,9 +240,8 @@ bool StepGridChordPicker::keyPressed(const juce::KeyPress& key) {
 void StepGridChordPicker::focusGained(FocusChangeType) { repaint(); }
 void StepGridChordPicker::focusLost(FocusChangeType) { repaint(); }
 
-// The popover grows in, and the keyboard lands on the current chord's chip.
+// The keyboard lands on the current chord's chip.
 void StepGridChordPicker::parentHierarchyChanged() {
-    reveal_.startIfInCallout();
     if (findParentComponentOfClass<juce::CallOutBox>() == nullptr)
         return;
     juce::Component::SafePointer<StepGridChordPicker> safe(this);

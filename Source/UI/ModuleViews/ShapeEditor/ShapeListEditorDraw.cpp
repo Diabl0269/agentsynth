@@ -3,6 +3,7 @@
 #include "ShapeDrawing.h"
 #include "ShapeListEditor.h"
 #include "ShapeWindowPrefs.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShapeFlyout.h"
 #include <algorithm>
 
@@ -115,7 +116,7 @@ void ShapeListEditor::openDrawFlyout() {
         hook(std::move(flyout));
         return;
     }
-    launchDrawShapeCallOut(std::move(flyout), drawButton_.getScreenBounds(), [] { return false; });
+    launchPopover(std::move(flyout), drawButton_.getScreenBounds(), nullptr, {.trigger = &drawButton_});
 }
 
 } // namespace synth::ui

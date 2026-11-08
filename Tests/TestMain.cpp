@@ -5,7 +5,9 @@
 #include "SilentLookAndFeel.h"
 #include "SoundPacks/SoundPackFetch.h"
 #include "TestMode/AutomationHiding.h"
+#include "UI/Layout/AppTooltipWindow.h"
 #include "UI/Layout/FadeVisibility.h"
+#include "UI/Layout/PopoverPointer.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UserSettings.h"
@@ -87,6 +89,50 @@ private:
     std::vector<juce::Component::SafePointer<juce::Component>> reported_;
 };
 
+// A call-out box still on the desktop when its test ends holds the modal state, so every later test's clicks go to it.
+// It names each test once per box and fails the run; the test closes its popovers before it returns
+// (synth::test::finishPopupTest in UI/Layout/PopupTestCleanup.h).
+class CallOutLeakCheck : public ::testing::EmptyTestEventListener {
+public:
+    static std::vector<std::string>& leakers() {
+        static std::vector<std::string> names;
+        return names;
+    }
+
+private:
+    void OnTestEnd(const ::testing::TestInfo& info) override {
+        auto& desktop = juce::Desktop::getInstance();
+        bool leaked = false;
+        for (int i = 0; i < desktop.getNumComponents(); ++i) {
+            auto* box = dynamic_cast<juce::CallOutBox*>(desktop.getComponent(i));
+            if (box == nullptr || isReported(*box))
+                continue;
+            reported_.emplace_back(box);
+            leaked = true;
+        }
+        if (leaked)
+            leakers().push_back(std::string(info.test_suite_name()) + "." + info.name());
+    }
+
+    bool isReported(const juce::Component& box) const {
+        for (const auto& seen : reported_)
+            if (seen.getComponent() == &box)
+                return true;
+        return false;
+    }
+
+    std::vector<juce::Component::SafePointer<juce::Component>> reported_;
+};
+
+// Test-mode clicks (TestModeInput) leave the synthetic pointer where they last pressed, for the tooltip and the popover
+// click-away rules; it never carries into the next test, which would read a press at that stale point.
+class SyntheticPointerReset : public ::testing::EmptyTestEventListener {
+    void OnTestEnd(const ::testing::TestInfo&) override {
+        synth::ui::AppTooltipWindow::setSyntheticPointer(std::nullopt);
+        synth::ui::test_hooks::popoverMouseForTest() = std::nullopt;
+    }
+};
+
 int main(int argc, char** argv) {
     // The real ChildLauncher re-executes THIS binary with `--scan-plugin <fmt> <file> <token>`
     // (any test that lets a MainComponent's eager scan use the default launcher). Serve that as
@@ -122,6 +168,8 @@ int main(int argc, char** argv) {
     ::testing::UnitTest::GetInstance()->listeners().Append(new MessageQueueDrainer());
     ::testing::UnitTest::GetInstance()->listeners().Append(new MotionSeamLeakCheck());
     ::testing::UnitTest::GetInstance()->listeners().Append(new DialogLeakCheck());
+    ::testing::UnitTest::GetInstance()->listeners().Append(new CallOutLeakCheck());
+    ::testing::UnitTest::GetInstance()->listeners().Append(new SyntheticPointerReset());
 
     // The ONE call site that reads AGENTSYNTH_SETTINGS_DIR, so a shipped binary can never
     // be redirected via it (see test-patterns.md's "on-disk path" section for the full seam).
@@ -176,6 +224,13 @@ int main(int argc, char** argv) {
     for (const auto& name : DialogLeakCheck::leakers()) {
         std::cerr << "[  LEAKED  ] " << name
                   << " left a dialog window open: it is deleted after the objects it shows; delete it before they go"
+                  << std::endl;
+        result = 1;
+    }
+    for (const auto& name : CallOutLeakCheck::leakers()) {
+        std::cerr << "[  LEAKED  ] " << name
+                  << " left a call-out box open: it holds the modal state, so every later test's clicks go to it; "
+                     "close it before the test returns"
                   << std::endl;
         result = 1;
     }

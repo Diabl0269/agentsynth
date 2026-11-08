@@ -1,8 +1,8 @@
 #pragma once
 
-#include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/ColourSwatchButton.h"
 #include "UI/Layout/DialogKeyboard.h"
+#include "UI/Layout/PopoverContent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <functional>
@@ -11,6 +11,7 @@
 // juce::ColourSelector lives in juce_gui_extra, not juce_gui_basics — without this include the
 // class fails to parse and every juce::Component base call below cascades into bogus errors.
 #include <juce_gui_extra/juce_gui_extra.h>
+#include <memory>
 #include <vector>
 
 // ColourPickerPopup — a full colour picker (juce::ColourSelector + a favourites shelf) used
@@ -20,12 +21,10 @@
 // CallOutBox pattern, generalised into its own component so both callers share one popup rather
 // than two near-identical ad hoc ColourSelectors.
 //
-// Keyboard: Tab visits the colour sliders, the hex field, the add-to-favourites star and each
-// favourite swatch (Space or Return applies it); Escape puts the colour back to what it was when
-// the popup opened and closes the popup.
-//
-// In a juce::CallOutBox the popup eases in (CalloutReveal.h: a 160 ms fade and a short slide out of the element that
-// opened it; at once under the OS's reduced-motion setting).
+// Keyboard: Tab visits the saturation/brightness square (Left/Right = saturation, Up/Down = brightness), the hue
+// bar (arrows = hue), each colour slider (arrows, Home, End) and its hex value box, the add-to-favourites star and
+// each favourite swatch (Space or Return applies it); Shift makes an arrow step ten. Escape puts the colour back to
+// what it was when the popup opened and closes the popup.
 //
 // Favourites persist across sessions via a caller-owned juce::PropertiesFile (nullptr means
 // "in-memory only for this popup instance", which is what keeps this class usable from a headless
@@ -110,56 +109,25 @@ inline void saveFavouriteColours(juce::PropertiesFile* props, const std::vector<
 //==============================================================================
 // ColourPickerPopup
 //==============================================================================
+struct Hsb;
+class SaturationBrightnessField;
+class HueBar;
+
 class ColourPickerPopup
     : public juce::Component
     , public AppUndoAware
+    , public PopoverContent
     , private juce::ChangeListener {
 public:
     ColourPickerPopup(juce::Colour initial, juce::PropertiesFile* props, std::function<void(juce::Colour)> onPreview,
-                      std::function<void(juce::Colour)> onCommit)
-        : props_(props)
-        , favourites_(loadFavouriteColours(props))
-        , onPreview_(std::move(onPreview))
-        , onCommit_(std::move(onCommit))
-        , lastColour_(initial)
-        , initial_(initial) {
-        setComponentID("colourPickerPopup");
+                      std::function<void(juce::Colour)> onCommit);
 
-        addAndMakeVisible(selector_);
-        selector_.setCurrentColour(initial, juce::dontSendNotification);
-        selector_.addChangeListener(this);
-        nameSelectorSliders();
-
-        addAndMakeVisible(addFavouriteButton_);
-        addFavouriteButton_.setComponentID("colourPickerAddFavourite");
-        addFavouriteButton_.setButtonText(juce::CharPointer_UTF8("\xE2\x98\x85")); // filled star
-        addFavouriteButton_.setTitle("Add to favourites");
-        addFavouriteButton_.setTooltip("Add the current colour to favourites");
-        addFavouriteButton_.onClick = [this] {
-            addFavourite(favourites_, lastColour_);
-            saveFavouriteColours(props_, favourites_);
-            rebuildFavouriteButtons();
-        };
-
-        rebuildFavouriteButtons();
-        setSize(280, 400);
-    }
-
-    ~ColourPickerPopup() override {
-        selector_.removeChangeListener(this);
-        commitOnce(); // the callout closing (or this component being torn down any other way)
-                      // is the ONE close event — fire the deferred commit here if it never fired.
-        if (onClosed)
-            onClosed();
-    }
+    ~ColourPickerPopup() override;
 
     /** An undo or redo is about to run while the popup is open: the colour dragged so far is only a live preview (no
      *  undo step yet), so it goes back to the colour the popup opened with, as Escape does, and the undo then works on
      *  the project as it was. */
-    void appAboutToUndoOrRedo() override {
-        selector_.setCurrentColour(initial_, juce::dontSendNotification);
-        previewNow(initial_);
-    }
+    void appAboutToUndoOrRedo() override { restoreInitial(); }
     /** The undo or redo has run. The colour the owner remembered when the popup opened may no longer be the one in
      *  the project, so the popup closes without applying or putting back anything: the project keeps what the undo
      *  gave it. */
@@ -181,30 +149,12 @@ public:
         });
     }
 
-    void parentHierarchyChanged() override { reveal_.startIfInCallout(); }
+    void resized() override;
 
-    void resized() override {
-        auto bounds = getLocalBounds();
-        selector_.setBounds(bounds.removeFromTop(bounds.getHeight() - kFavouritesAreaHeight));
-
-        auto favArea = bounds;
-        addFavouriteButton_.setBounds(favArea.removeFromLeft(kSwatchSize).reduced(2));
-        layoutFavouriteButtons(favArea);
-    }
-
-    bool keyPressed(const juce::KeyPress& key) override {
-        if (key != juce::KeyPress::escapeKey)
-            return false;
-        // Cancel: put the colour back (the live preview and the commit both see the original),
-        // then close the callout.
-        selector_.setCurrentColour(initial_, juce::dontSendNotification);
-        previewNow(initial_);
-        synth::ui::closeHostingWindow(*this);
-        return true;
-    }
+    /** Escape: put the colour back (the live preview and the commit both see the original); the popover then closes. */
+    void onPopoverCancel() override { restoreInitial(); }
 
     // ---- Test seams (no CallOutBox involved) -----------------------------------------------
-    CalloutReveal& getRevealForTest() noexcept { return reveal_; }
     juce::Colour getCurrentColourForTest() const { return lastColour_; }
     // dontSendNotification + a direct preview call, NOT sendNotificationSync: with sliders shown,
     // ColourSelector's sync path re-enters itself from the FIRST slider's callback and rebuilds
@@ -212,6 +162,7 @@ public:
     // The production path never hits this because a user drags one slider at a time.
     void setCurrentColourForTest(juce::Colour c) {
         selector_.setCurrentColour(c, juce::dontSendNotification);
+        followColour(c);
         previewNow(c);
     }
     // Mirrors what a REAL slider drag or hex-field edit does to the selector: both commit through
@@ -252,14 +203,29 @@ public:
      *  drag or favourite click); onCommit fires exactly once, when the callout closes, with
      *  whatever colour was current at that point. */
     static void show(juce::Rectangle<int> screenArea, juce::Colour initial, juce::PropertiesFile* props,
-                     std::function<void(juce::Colour)> onPreview, std::function<void(juce::Colour)> onCommit) {
-        auto popup = std::make_unique<ColourPickerPopup>(initial, props, std::move(onPreview), std::move(onCommit));
-        juce::CallOutBox::launchAsynchronously(std::move(popup), screenArea, nullptr);
-    }
+                     std::function<void(juce::Colour)> onPreview, std::function<void(juce::Colour)> onCommit);
 
 private:
     static constexpr int kSwatchSize = 28;
     static constexpr int kFavouritesAreaHeight = 40;
+    static constexpr int kFieldsHeight = 156;
+    static constexpr int kFieldsMargin = 8;
+    static constexpr int kHueBarWidth = 22;
+    static constexpr int kSelectorHeight = 240;
+
+    void restoreInitial() {
+        selector_.setCurrentColour(initial_, juce::dontSendNotification);
+        followColour(initial_);
+        previewNow(initial_);
+    }
+
+    // The square and the hue bar show `colour`. A grey, a black or a white has no hue of its own (JUCE reads it as
+    // 0), so the hue the user chose stays unless the colour is not the one the fields themselves made.
+    void followColour(juce::Colour colour);
+
+    // A key or drag on the square or the hue bar: the selector shows the colour and the preview goes out, the same
+    // path a slider takes.
+    void applyFieldEdit(const Hsb& hsb);
 
     // The selector's own sliders carry only a lower-case component name: give each a screen-reader
     // title and a tooltip, and its editable value box (the Tab stop, since the slider itself takes no
@@ -271,6 +237,7 @@ private:
                 const auto initial = name.substring(0, 1).toUpperCase(); // not-ui-text: first letter only
                 const auto channel = initial + name.substring(1);
                 slider->setTitle(channel);
+                slider->setWantsKeyboardFocus(true);
                 slider->setTooltip(channel + " amount of the colour, 0 to 255");
                 for (auto* part : slider->getChildren())
                     if (auto* valueBox = dynamic_cast<juce::Label*>(part)) {
@@ -284,6 +251,7 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override {
         if (source != &selector_)
             return;
+        followColour(selector_.getCurrentColour());
         previewNow(selector_.getCurrentColour());
     }
 
@@ -330,6 +298,7 @@ private:
             button->onClick = [this, colour] {
                 lastColour_ = colour;
                 selector_.setCurrentColour(colour, juce::dontSendNotification);
+                followColour(colour);
                 if (onPreview_)
                     onPreview_(colour);
             };
@@ -364,10 +333,13 @@ private:
     juce::Colour initial_; // what the popup opened with: Escape restores it
     bool committed_ = false;
 
-    CalloutReveal reveal_{*this};
-
-    juce::ColourSelector selector_{juce::ColourSelector::showColourAtTop | juce::ColourSelector::showSliders |
-                                   juce::ColourSelector::showColourspace};
+    // Without juce::ColourSelector's own colour square and hue bar (private classes with no focus or keys): the two
+    // fields above stand in for them.
+    juce::ColourSelector selector_{juce::ColourSelector::showColourAtTop | juce::ColourSelector::showSliders};
+    std::unique_ptr<SaturationBrightnessField> saturationBrightness_;
+    std::unique_ptr<HueBar> hueBar_;
+    std::unique_ptr<Hsb> hsb_;
+    float hueKept_ = 0.0f;
     juce::TextButton addFavouriteButton_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ColourPickerPopup)

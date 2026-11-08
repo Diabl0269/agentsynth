@@ -1,4 +1,4 @@
-// CardCallOutRelayTests.cpp -- the shortcut-relay rule for popovers. A parentless juce::CallOutBox is its
+// PopoverRelayTests.cpp -- the shortcut-relay rule for popovers. A parentless juce::CallOutBox is its
 // own top-level window, so Cmd+Z / Cmd+Shift+Z pressed in it never reached the app (ShortcutRelayTests covers the
 // dialogs and tool windows; this covers the popovers a card opens):
 //   - a sequencer's Randomize panel hands undo and redo to the main window from every focusable child, stays open,
@@ -6,22 +6,18 @@
 //   - the popovers the main window opens (timeline, mixer, MIDI Remote, key pickers) do the same from a real
 //     MainComponent: Cmd+Z undoes, Cmd+Shift+Z redoes, Space plays and stops, a popover that would show a stale
 //     project closes instead;
-//   - every CallOutBox opened from a card or a main-window panel goes through launchCardCallOut: a raw launch must be
-//     registered below with the reason it does not relay.
+//   - every popover goes through launchPopover (PopupOwnPathTests scans for a raw launch).
 #include "../../TestWait.h"
 #include "../Mixer/MixerHeaderTestRig.h"
 #include "../ModuleViews/StepGrid/StepGridCardFixture.h"
-#include "../SourceScan.h"
 #include "MainPopoverKeys.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/CanvasCardKeyboard/CanvasCardKeyboard.h"
-#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Timeline/SongKeyField.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
-#include <map>
-#include <regex>
 
 using stepgrid_test::SeqCard;
 using synth::ui::NoteRangePicker;
@@ -65,7 +61,7 @@ struct UndoHost
 // before its own keyPressed.
 bool dispatchKey(juce::CallOutBox& box, juce::Component& origin, const juce::KeyPress& press) {
     for (auto* target = &origin; target != nullptr; target = target->getParentComponent()) {
-        if (target == &box && synth::ui::test_hooks::offerKeyToCardCallOutForTest(box, press))
+        if (target == &box && synth::ui::test_hooks::offerKeyToPopoverForTest(box, press))
             return true;
         if (target->keyPressed(press))
             return true;
@@ -80,15 +76,15 @@ const juce::KeyPress
 // The Randomize panel opened through the card's own tool button, in a CallOutBox that sits on `host`.
 struct OpenPanel {
     OpenPanel(SeqCard& c, UndoHost& host) {
-        synth::ui::test_hooks::cardCallOutLauncherForTest() = [&](std::unique_ptr<juce::Component> content,
-                                                                  juce::Rectangle<int> area) {
+        synth::ui::test_hooks::popoverLauncherForTest() = [&](std::unique_ptr<juce::Component> content,
+                                                              juce::Rectangle<int> area) {
             panel = dynamic_cast<StepGridRandomizePanel*>(content.get());
             owned = std::move(content);
             box = std::make_unique<juce::CallOutBox>(*owned, area, &host.box_host);
             return box.get();
         };
         c.grid->getTools().getButton(StepGridTools::Tool::Randomize).onClick();
-        synth::ui::test_hooks::cardCallOutLauncherForTest() = nullptr;
+        synth::ui::test_hooks::popoverLauncherForTest() = nullptr;
     }
     ~OpenPanel() {
         box.reset();
@@ -112,7 +108,7 @@ void dragBandLeft(NoteRangePicker& picker) {
 
 } // namespace
 
-TEST(CardCallOutRelay, CmdZAndCmdShiftZFromAnyFocusableChildOfTheRandomizePanelUndoAndRedoTheRangeAndKeepItOpen) {
+TEST(PopoverRelay, CmdZAndCmdShiftZFromAnyFocusableChildOfTheRandomizePanelUndoAndRedoTheRangeAndKeepItOpen) {
     SeqCard c;
     UndoHost host(c);
     OpenPanel open(c, host);
@@ -148,7 +144,7 @@ TEST(CardCallOutRelay, CmdZAndCmdShiftZFromAnyFocusableChildOfTheRandomizePanelU
     }
 }
 
-TEST(CardCallOutRelay, KeysThatActOnTheCanvasOrAreTypedStayWithThePanel) {
+TEST(PopoverRelay, KeysThatActOnTheCanvasOrAreTypedStayWithThePanel) {
     SeqCard c;
     UndoHost host(c);
     OpenPanel open(c, host);
@@ -158,40 +154,9 @@ TEST(CardCallOutRelay, KeysThatActOnTheCanvasOrAreTypedStayWithThePanel) {
     host.received.clear();
     for (const auto& key : {juce::KeyPress('a', juce::ModifierKeys(cmd), 0),
                             juce::KeyPress('c', juce::ModifierKeys(cmd), 0), juce::KeyPress(juce::KeyPress::deleteKey)})
-        EXPECT_FALSE(synth::ui::test_hooks::offerKeyToCardCallOutForTest(*open.box, key)) << key.getTextDescription();
+        EXPECT_FALSE(synth::ui::test_hooks::offerKeyToPopoverForTest(*open.box, key)) << key.getTextDescription();
     EXPECT_TRUE(host.received.empty()) << "declined at once, nothing queued";
     EXPECT_NE(stop, nullptr);
-}
-
-// Every CallOutBox::launchAsynchronously call site in Source, by file. A popover a card opens uses launchCardCallOut
-// and so is not here. A new raw launch fails until it is registered with the reason it does not relay.
-TEST(CardCallOutRelay, EveryRawCallOutLaunchIsRegisteredWithItsReason) {
-    struct Raw {
-        const char* file;
-        int calls;
-        const char* reason;
-    };
-    const char* kSettings = "Settings window: its own window, not over the canvas";
-    const char* kEditing = "a layout editing session: an undo would rewrite the layout being edited";
-    const std::vector<Raw> raw = {
-        {"Source/UI/Settings/AppearanceSettingsTab.cpp", 1, kSettings},
-        {"Source/UI/Settings/AccountSettingsTab.cpp", 1, kSettings},
-        {"Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp", 1, kSettings},
-        {"Source/UI/Layout/CardCallOut.cpp", 1, "launchCardCallOut itself"},
-        {"Source/UI/Graph/ModuleComponent/ModuleComponentLayoutEditor.cpp", 1, kEditing},
-        {"Source/UI/Graph/CardLayoutEditor/OnCard/CardLayoutOnCardEditorPanel.cpp", 1, kEditing},
-        {"Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogInternal.h", 1, "inside a modal dialog"},
-        {"Source/UI/Chrome/ColourPickerPopup.h", 1, "ColourPickerPopup::show: only the Appearance settings call it"},
-    };
-    std::map<std::string, int> registered;
-    for (const auto& r : raw) {
-        registered[r.file] = r.calls;
-        EXPECT_GT(std::string(r.reason).size(), 10u) << r.file;
-    }
-    synth::test::source_scan::expectCountsMatch(
-        "CallOutBox::launchAsynchronously",
-        synth::test::source_scan::countCallSites(std::regex(R"(CallOutBox::launchAsynchronously\s*\()"), ""),
-        registered, "CardCallOutRelayTests.cpp (raw) - a popover a card opens goes through launchCardCallOut");
 }
 
 // ---- The popovers the main window opens ------------------------------------------------------------------------

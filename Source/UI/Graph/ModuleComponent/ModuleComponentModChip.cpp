@@ -14,6 +14,7 @@
 #include "UI/Graph/ModDot/ModDotTooltip.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <cmath>
 
 void ModuleComponent::paintOverChildren(juce::Graphics& g) { paintModHoverChip(g); }
 
@@ -77,10 +78,7 @@ namespace {
 void paintChipRow(juce::Graphics& g, const synth::theme::Theme& theme, const synth::ui::ModChipRow& row,
                   const juce::Rectangle<float>& bounds, const juce::Font& font, float alpha) {
     const auto& colors = theme.colors;
-    // Opaque even when a theme's surfaceHi is translucent -- the chip sits over the next row's knob label and must
-    // hide it, not show it through.
-    g.setColour(colors.surface.overlaidWith(colors.surfaceHi).withAlpha(1.0f).withMultipliedAlpha(alpha));
-    g.fillRoundedRectangle(bounds, theme.metrics.cornerRadiusSmall);
+    synth::theme::paintTooltipBox(g, bounds, theme, alpha);
     auto textArea = bounds;
     if (!row.isMore) {
         const auto swatch =
@@ -112,7 +110,8 @@ ModChipStack modChipStack(GraphEditor& owner, juce::AudioProcessorGraph::NodeID 
     const auto& hovered = owner.getHoveredModTarget();
     const bool hoveredHere = hovered.has_value() && hovered->nodeId == nodeId;
     const int channel = readout != nullptr ? readout->destChannel : hovered->channel;
-    // While the readout fades the chip fades with it, unless the pointer still rests on the knob.
+    // While the readout fades the chip fades with it (on top of the chip's own fade), unless the pointer still rests on
+    // the knob.
     stack.alpha = (hoveredHere && hovered->channel == channel) ? 1.0f : owner.getModDot().getTooltip().getOpacity();
 
     for (const auto& t : mod->getModulationTargets())
@@ -165,14 +164,51 @@ std::vector<juce::Rectangle<float>> modChipRowRects(juce::Rectangle<float> knob,
         const float above = knob.getY() - 2.0f - height;
         top = above >= card.getY() ? above : juce::jmax(card.getY(), card.getBottom() - height);
     }
-    float y = top;
-    for (const float width : widths) {
-        const float x = juce::jlimit(card.getX(), juce::jmax(card.getX(), card.getRight() - width),
-                                     knob.getCentreX() - width * 0.5f);
+    // Whole pixels: the width comes from a font measurement, and a box on a fractional edge blurs its 1 px border.
+    float y = std::round(top);
+    for (const float measured : widths) {
+        const float width = std::ceil(measured);
+        const float x = std::round(juce::jlimit(card.getX(), juce::jmax(card.getX(), card.getRight() - width),
+                                                knob.getCentreX() - width * 0.5f));
         rects.emplace_back(x, y, width, kModChipRowHeight);
         y += kModChipRowStride;
     }
     return rects;
+}
+} // namespace synth::ui
+
+namespace synth::ui {
+ModChipFade::ModChipFade(juce::Component& card)
+    : fade_(card) {
+    fade_.onFrame = [&card] { card.repaint(); };
+}
+
+ModChipStack ModChipFade::follow(const ModChipStack& now) {
+    const bool shows = !now.rows.empty() && now.sliderIndex >= 0 && now.alpha > 0.0f;
+    if (shows) {
+        last_ = now;
+        lastNowAlpha_ = now.alpha;
+        if (!shown_) {
+            shown_ = true;
+            fade_.fadeTo(1.0f, kFadeInMs, easeOutCubic);
+        }
+        auto out = now;
+        out.alpha = fade_.alpha() * now.alpha;
+        return out;
+    }
+    if (shown_) {
+        shown_ = false;
+        // The chip was riding a dot readout's own fade: carry that opacity into the fade-out instead of restarting
+        // from full.
+        if (lastNowAlpha_ < 1.0f)
+            fade_.jumpTo(fade_.alpha() * lastNowAlpha_);
+        fade_.fadeTo(0.0f, kFadeOutMs, easeInCubic);
+    }
+    auto out = last_;
+    out.alpha = fade_.alpha();
+    if (out.alpha <= 0.0f)
+        out.rows.clear();
+    return out;
 }
 } // namespace synth::ui
 
@@ -193,14 +229,14 @@ void ModuleComponent::paintModHoverChip(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     if (lf == nullptr)
         return;
-    const auto stack =
+    const auto stack = ringFades_.chip().follow(
         synth::ui::modChipStack(owner, nodeId, dynamic_cast<ModuleBase*>(module),
-                                [this](const ModulationTarget& t) { return sliderIndexForModTarget(t); });
-    if (stack.alpha <= 0.0f)
+                                [this](const ModulationTarget& t) { return sliderIndexForModTarget(t); }));
+    if (stack.alpha <= 0.0f || stack.rows.empty())
         return;
     const auto rects = synth::ui::modHoverChipRects(
         *this, stack, stack.sliderIndex < 0 ? juce::Rectangle<int>() : sliders[stack.sliderIndex]->getBounds());
-    for (size_t i = 0; i < rects.size(); ++i) {
+    for (size_t i = 0; i < rects.size() && i < stack.rows.size(); ++i) {
         const auto& row = stack.rows[i];
         paintChipRow(g, lf->getTheme(), row, rects[i], chipFont(*lf, row.bold), stack.alpha);
     }

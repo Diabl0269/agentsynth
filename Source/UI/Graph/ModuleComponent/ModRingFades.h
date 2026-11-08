@@ -10,8 +10,11 @@
 
 namespace synth::ui {
 
-/** The fade of a card's modulation rings: a knob's ring fades in when it gets its first modulation and out when its
- *  last is removed, and a second modulation on a ringed knob changes nothing. Message thread only. */
+class ModChipFade;
+
+/** The fades of a card's modulation overlays. The rings: a knob's ring fades in when it gets its first modulation and
+ *  out when its last is removed, and a second modulation on a ringed knob changes nothing. The chip: see chip().
+ *  Message thread only. */
 class ModRingFades {
 public:
     /** One ring to paint: `info` as last seen, drawn at `alpha` (0..1). */
@@ -21,8 +24,12 @@ public:
     };
 
     /** `owner` is the card; it is repainted on every frame of a fade. */
-    explicit ModRingFades(juce::Component& owner)
-        : owner_(owner) {}
+    explicit ModRingFades(juce::Component& owner);
+    ~ModRingFades();
+
+    /** The fade of the mod hover chip the card paints under a knob. */
+    ModChipFade& chip() noexcept { return *chip_; }
+    const ModChipFade& chip() const noexcept { return *chip_; }
 
     /** Reads the routings now on `node` and starts the fade of every channel that gained or lost its modulation.
      *  A card that has never synced shows what it finds at once. */
@@ -43,6 +50,7 @@ private:
     };
 
     juce::Component& owner_;
+    std::unique_ptr<ModChipFade> chip_;
     std::map<int, Entry> entries_;
     bool synced_ = false;
 };

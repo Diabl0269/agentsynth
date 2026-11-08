@@ -1,7 +1,7 @@
 #pragma once
 
 #include "DrumIdeas.h"
-#include "UI/Layout/CalloutReveal.h"
+#include "UI/Layout/PopoverContent.h"
 #include <array>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -70,7 +70,9 @@ private:
  * or of every 4th bar). It lives in a juce::CallOutBox grown out of the Ideas button and stays open between results. It
  * holds no clip: the owner applies each result as one undo step. Esc closes it. docs/timeline/drum-machine.md#ideas.
  */
-class DrumIdeasPanel : public juce::Component {
+class DrumIdeasPanel
+    : public juce::Component
+    , public PopoverContent {
 public:
     static constexpr int kWidth = 452;
     static constexpr int kHeight = 418;
@@ -113,8 +115,7 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
-    bool keyPressed(const juce::KeyPress& key) override;
-    void parentHierarchyChanged() override;
+    void onPopoverCancel() override;
     void lookAndFeelChanged() override;
 
 private:
@@ -147,7 +148,6 @@ private:
     juce::TextButton randomize_{"Randomize"};
     std::array<std::vector<synth::MidiNote>, kTakes> takes_;
     DrumTakeAudition audition_;
-    CalloutReveal reveal_{*this};
     int seed_ = 0;
     bool seeded_ = false;
     bool closedNotified_ = false;

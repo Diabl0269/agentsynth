@@ -2,6 +2,7 @@
 // with their size, and starts the shared installer's own download from a row. The installer runs inline on a fake
 // network (SoundPackTestKit.h), so a test can read both views mid-download.
 #include "../SoundPacks/SoundPackTestKit.h"
+#include "../UI/Layout/FadeVisibilityTestGuard.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/FadeVisibility.h"
@@ -10,6 +11,8 @@
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
 #include "UserSettings.h"
 
 using namespace sound_browser_test;
@@ -486,21 +489,145 @@ TEST(SoundBrowserGetMore, ADownloadKeepsTheSectionOpenWithoutChangingTheChoice) 
     EXPECT_FALSE(rig.view->isGetMoreOpen()) << "the saved choice is the user's";
 }
 
-TEST(SoundBrowserGetMore, FoldingFadesTheListOver190MsAndTurnsTheChevron) {
+TEST(SoundBrowserGetMore, FoldingSlidesThePacksOnTheChevronsClockAndTurnsTheChevron) {
     MotionSeams seams;
     GetMoreRig rig;
     EXPECT_FLOAT_EQ(rig.view->getMoreChevron().openness(), 1.0f);
     rig.view->setGetMoreOpen(false);
-    EXPECT_TRUE(rig.view->isListAnimating()) << "the rows fade rather than vanish";
+    EXPECT_FALSE(rig.view->isListAnimating()) << "no cross-fade: the rows above the packs never dissolve";
+    EXPECT_TRUE(rig.view->isGetMoreFolding());
     EXPECT_TRUE(rig.view->getMoreChevron().isTurning());
     synth::ui::ChevronTurn::stepAllForTest(0.5f);
     EXPECT_GT(rig.view->getMoreChevron().openness(), 0.0f);
     EXPECT_LT(rig.view->getMoreChevron().openness(), 1.0f) << "the arrow is between the two on the way";
-    rig.settle();
+    EXPECT_GT(rig.view->getMoreFoldShift(), 0);
     synth::ui::ChevronTurn::stepAllForTest(1.0f);
-    EXPECT_FALSE(rig.view->isListAnimating());
+    EXPECT_FALSE(rig.view->getMoreChevron().isTurning());
     EXPECT_FLOAT_EQ(rig.view->getMoreChevron().openness(), 0.0f);
     EXPECT_EQ(rig.count(Kind::GetPack), 0);
+}
+
+namespace {
+
+juce::Image paintWhole(SoundBrowserComponent& view) {
+    juce::Image image(juce::Image::ARGB, view.getWidth(), view.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    view.paintEntireComponent(g, false);
+    return image;
+}
+
+// True when every pixel in the band [top, bottom) is the same in both pictures.
+bool bandsEqual(const juce::Image& a, const juce::Image& b, int top, int bottom) {
+    for (int y = top; y < bottom; ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            if (a.getPixelAt(x, y) != b.getPixelAt(x, y))
+                return false;
+    return true;
+}
+
+} // namespace
+
+// Regression test for FRO1542: the fold cross-faded the whole list, so every row above the packs dissolved too.
+TEST(SoundBrowserGetMore, MidSlideTheRowsAboveTheHeadingPaintExactlyAsAtRestInADarkAndALightTheme) {
+    MotionSeams seams;
+    GetMoreRig rig;
+    synth::theme::AppLookAndFeel laf;
+    rig.view->setLookAndFeel(&laf);
+    for (const auto& theme : {synth::theme::makeObsidian(), synth::theme::makeDaylight()}) {
+        laf.applyTheme(theme);
+        rig.view->setGetMoreOpen(true, false);
+        synth::ui::ChevronTurn::stepAllForTest(1.0f);
+        const int headingTop = rig.view->getRowBounds(rig.heading()).getY();
+        const int listTop = rig.view->listArea().getY();
+        ASSERT_GT(headingTop, listTop) << "Places has rows above the heading";
+        const auto rest = paintWhole(*rig.view);
+        for (const bool opening : {false, true}) {
+            rig.view->setGetMoreOpen(opening);
+            synth::ui::ChevronTurn::stepAllForTest(0.5f);
+            const auto mid = paintWhole(*rig.view);
+            EXPECT_TRUE(bandsEqual(rest, mid, listTop, headingTop)) << theme.id << (opening ? " opening" : " closing");
+            const auto headingBottom = headingTop + SoundBrowserComponent::kRowHeight;
+            EXPECT_FALSE(bandsEqual(rest, mid, headingBottom, rig.view->listArea().getBottom()))
+                << theme.id << ": the rows below the heading are mid-slide";
+            synth::ui::ChevronTurn::stepAllForTest(1.0f);
+        }
+    }
+    rig.view->setLookAndFeel(nullptr);
+}
+
+TEST(SoundBrowserGetMore, OpeningMovesThePacksMonotonicallyFromUnderTheHeadingAndClosingMirrorsIt) {
+    MotionSeams seams;
+    GetMoreRig rig;
+    rig.view->setGetMoreOpen(false, false);
+    synth::ui::ChevronTurn::stepAllForTest(1.0f);
+    const int block = 2 * SoundBrowserComponent::kRowHeight;
+
+    rig.view->setGetMoreOpen(true);
+    int previous = block + 1;
+    std::vector<int> opening;
+    for (const float t : {0.2f, 0.5f, 0.8f}) {
+        synth::ui::ChevronTurn::stepAllForTest(t);
+        const int shift = rig.view->getMoreFoldShift();
+        opening.push_back(shift);
+        EXPECT_GT(shift, 0);
+        EXPECT_LT(shift, block) << "between the closed position (the whole block) and the open one (none)";
+        EXPECT_LT(shift, previous) << "the packs only ever move down";
+        previous = shift;
+    }
+    synth::ui::ChevronTurn::stepAllForTest(1.0f);
+    EXPECT_EQ(rig.view->getMoreFoldShift(), 0);
+    EXPECT_FALSE(rig.view->isGetMoreFolding()) << "landed";
+
+    rig.view->setGetMoreOpen(false);
+    EXPECT_EQ(rig.count(Kind::GetPack), 0) << "the list is already the folded one";
+    previous = -1;
+    for (const float t : {0.2f, 0.5f, 0.8f}) {
+        synth::ui::ChevronTurn::stepAllForTest(t);
+        const int shift = rig.view->getMoreFoldShift();
+        EXPECT_GT(shift, 0);
+        EXPECT_LT(shift, block);
+        EXPECT_GT(shift, previous) << "the packs only ever move up, under the heading";
+        previous = shift;
+    }
+    synth::ui::ChevronTurn::stepAllForTest(1.0f);
+    EXPECT_EQ(rig.view->getMoreFoldShift(), 0);
+    EXPECT_FALSE(rig.view->isGetMoreFolding());
+}
+
+TEST(SoundBrowserGetMore, AnimationsOffLandsTheFoldAtOnce) {
+    FadeAnimateGuard off(synth::ui::AnimationMode::off);
+    GetMoreRig rig;
+    rig.view->setGetMoreOpen(false);
+    EXPECT_FALSE(rig.view->isGetMoreFolding());
+    EXPECT_FALSE(rig.view->isListAnimating());
+    EXPECT_FLOAT_EQ(rig.view->getMoreChevron().openness(), 0.0f);
+    rig.view->setGetMoreOpen(true);
+    EXPECT_FALSE(rig.view->isGetMoreFolding());
+    EXPECT_EQ(rig.count(Kind::GetPack), 2);
+}
+
+TEST(SoundBrowserGetMore, UnderReduceMotionOnlyThePacksFadeAndNothingMoves) {
+    MotionSeams seams;
+    synth::ui::setReducedMotionForTest(true);
+    GetMoreRig rig;
+    synth::theme::AppLookAndFeel laf;
+    rig.view->setLookAndFeel(&laf);
+    laf.applyTheme(synth::theme::makeObsidian());
+    const int headingTop = rig.view->getRowBounds(rig.heading()).getY();
+    const int listTop = rig.view->listArea().getY();
+    const auto rest = paintWhole(*rig.view);
+    rig.view->setGetMoreOpen(false);
+    ASSERT_TRUE(rig.view->isListAnimating()) << "a short fade, not a turn";
+    rig.view->stepListAnimationForTest(40.0);
+    EXPECT_EQ(rig.view->getMoreFoldShift(), 0);
+    const auto mid = paintWhole(*rig.view);
+    EXPECT_TRUE(bandsEqual(rest, mid, listTop, headingTop));
+    EXPECT_FALSE(
+        bandsEqual(rest, mid, headingTop + SoundBrowserComponent::kRowHeight, rig.view->listArea().getBottom()))
+        << "the packs are partly faded";
+    rig.settle();
+    EXPECT_FALSE(rig.view->isGetMoreFolding());
+    rig.view->setLookAndFeel(nullptr);
 }
 
 TEST(SoundBrowserGetMore, UnderReduceMotionTheChevronFlipsAtOnce) {

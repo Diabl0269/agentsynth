@@ -59,6 +59,9 @@ const std::vector<Registered> kRegistered = {
     {"DragHandle", {"test:MacroPortConfigDialogTest.DraggingAcrossTwoRowsCommitsOnceOnReleaseWithTheFinalIndex"}},
     {"ControllerSurfaceCell", {"test:ControllerSurfaceComponentTest.MultiStepDragLandsExactlyOnOriginPlusDelta"}},
     // No preview/commit split.
+    {"SaturationBrightnessField",
+     {"exempt: the colour is written live through one selector change, the release only ends the drag"}},
+    {"HueBar", {"exempt: the hue is written live through one selector change, the release only ends the drag"}},
     {"RangeSlider", {"exempt: a slider that writes its value live while it drags"}},
     {"CardFader", {"exempt: a fader that writes its value live while it drags"}},
     {"CardStepper", {"exempt: the value is written live inside one open gesture, the release only closes it"}},

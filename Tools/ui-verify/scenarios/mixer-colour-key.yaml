@@ -3,7 +3,8 @@
 #
 # What a user does:
 #   1. Starts a new project, opens the bottom panel, adds an Oscillator track and opens the Mixer tab.
-#   2. Clicks the strip's header beside its name and presses C: the colour picker opens on the strip's dot. Esc closes it.
+#   2. Clicks the strip's header beside its name and presses C: the colour picker opens on the strip's dot. Tab reaches
+#      its saturation and brightness square and the arrows move the colour. Esc closes it.
 #   3. Clicks the colour dot (the picker opens), presses Esc, then Return on the still-focused dot: one picker opens.
 #   4. Closes it and presses Space on the dot: no picker opens; the key goes on to the window's play command.
 # Test mode has no audio device, so the transport never starts here: MixerColourDotTests checks Space reaches the window.
@@ -26,8 +27,19 @@ steps:
   - key: {keys: c}
   - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
   - screenshot: {name: c-opens-picker}
+  - mark: {check: 1, name: picker-open}
+  - key: {keys: tab}                                         # the saturation and brightness square is the first stop
+  - getState: {id: colourPickerSaturationBrightness}
+  - key: {keys: right}
+  - key: {keys: right}
+  - key: {keys: down}
+  - key: {keys: shift+left}
+  - wait: {}
+  - screenshot: {name: arrows-move-the-colour}
+  - mark: {check: 2, name: picker-keys}
   - key: {keys: escape}
   - expect: {id: colourPickerPopup, exists: false, within_ms: 2000}
+  - mark: {check: 3, name: picker-esc}
   - click: {id: "Oscillator 1 colour"}                       # the dot itself
   - expect: {id: colourPickerPopup, showing: true, within_ms: 2000}
   - key: {keys: escape}

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/FadeAmount.h"
 #include "UI/Timeline/AutomationLanes/LaneShapes/DrawShape.h"
 #include <array>
@@ -12,7 +11,7 @@ namespace synth::ui {
 
 // The pen's shape flyout: a vertical list of the six Draw shapes (icon, name, shortcut hint) in a juce::CallOutBox
 // under the Draw button. The current shape's row is lit. Click, Enter or Space picks a row; Up/Down (wrapping),
-// Home/End move; Escape closes. Closing goes through PopupMotion::dismissCallOut. Message thread only.
+// Home/End move; Escape closes (the box that hosts it, see launchPopover). Message thread only.
 class DrawShapeFlyout : public juce::Component {
 public:
     static constexpr int kRowHeight = 30;
@@ -46,35 +45,10 @@ private:
     DrawShape current_;
     DrawShape focused_;
     std::function<void(DrawShape)> onPick_;
-    CalloutReveal reveal_{*this};
     std::array<std::unique_ptr<Row>, kAllDrawShapes.size()> rows_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DrawShapeFlyout)
 };
-
-// The CallOutBox the flyout opens in. While `holdGestureDown` says the press that opened it (a long press on the
-// pen) is still down, input outside the box is not a dismissal: the release that ends the press must not close it.
-// Once the press is up, input outside closes it through PopupMotion::dismissCallOut.
-class DrawShapeCallOutBox : public juce::CallOutBox {
-public:
-    DrawShapeCallOutBox(juce::Component& content, juce::Rectangle<int> area, juce::Component* parent,
-                        std::function<bool()> holdGestureDown)
-        : juce::CallOutBox(content, area, parent)
-        , holdGestureDown_(std::move(holdGestureDown)) {}
-
-    void inputAttemptWhenModal() override;
-    int getDismissAttemptsForTest() const noexcept { return dismissAttempts_; }
-
-private:
-    std::function<bool()> holdGestureDown_;
-    int dismissAttempts_ = 0;
-};
-
-/** Opens `flyout` modally in a DrawShapeCallOutBox pointing at `area` (screen), the way juce::CallOutBox's own
- *  launchAsynchronously does; the box and the content go when the modal state ends. With an `anchor` (a component of
- * the main window) Cmd+Z, Cmd+Shift+Z and Space reach the app from the box (see launchCardCallOut). */
-DrawShapeCallOutBox& launchDrawShapeCallOut(std::unique_ptr<DrawShapeFlyout> flyout, juce::Rectangle<int> area,
-                                            std::function<bool()> holdGestureDown, juce::Component* anchor = nullptr);
 
 namespace test_hooks {
 /** When set, opening the pen's flyout hands the content here instead of launching a CallOutBox (which cannot open

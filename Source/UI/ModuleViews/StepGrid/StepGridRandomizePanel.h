@@ -2,7 +2,6 @@
 
 #include "Modules/Sequencer/SequencerPatternOps.h"
 #include "Music/MusicalScale.h"
-#include "UI/Layout/CalloutReveal.h"
 #include "UI/Layout/NoteRangePicker/NoteRangePicker.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -40,8 +39,6 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
-    bool keyPressed(const juce::KeyPress& key) override;
-    void parentHierarchyChanged() override;
     void lookAndFeelChanged() override;
 
 private:
@@ -57,7 +54,6 @@ private:
     juce::Slider density_{juce::Slider::LinearHorizontal, juce::Slider::NoTextBox};
     juce::ToggleButton keepRhythm_{"Keep my rhythm"};
     juce::TextButton roll_{"Roll"};
-    CalloutReveal reveal_{*this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StepGridRandomizePanel)
 };

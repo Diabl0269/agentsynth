@@ -1,7 +1,7 @@
 // Concern: MixerInsertList's mouse, menus and edits: the effect picker and add flow, and move/remove, each ONE
 // recordGraphAndMacroChange around MixerModel's Core splice primitives (docs/mixer/mixer.md#adding-an-insert).
 #include "MixerInsertList.h"
-#include "UI/Layout/CardCallOut.h"
+#include "UI/Layout/PopupHost.h"
 
 #include "AppUndoManager.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
@@ -493,7 +493,7 @@ void MixerInsertList::showAddPicker(AddTarget target, juce::Rectangle<int> area)
         hook(std::move(picker));
         return;
     }
-    synth::ui::launchCardCallOut(std::move(picker), localAreaToGlobal(area), this);
+    synth::ui::launchPopover(std::move(picker), localAreaToGlobal(area), this);
 }
 
 // The cable is spliced and the card placed inside one undo record (insertModuleAfterNode). The new module joins the

@@ -10,8 +10,8 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "BottomDockActiveTabResetGuard.h"
-#include "UI/Layout/CardCallOut.h"
 #include "UI/Layout/FocusStepWithin.h"
+#include "UI/Layout/PopupHost.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
@@ -28,12 +28,12 @@ inline const juce::KeyPress
     kRedo('z', juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier), 0);
 inline const juce::KeyPress kSpace(juce::KeyPress::spaceKey, juce::ModifierKeys(), ' ');
 
-/** Catches the popover the next launchCardCallOut opens, as a child of `parent`. */
+/** Catches the popover the next launchPopover opens, as a child of `parent`. */
 class Capture {
 public:
     explicit Capture(juce::Component& parent) {
-        synth::ui::test_hooks::cardCallOutLauncherForTest() = [this, &parent](std::unique_ptr<juce::Component> content,
-                                                                              juce::Rectangle<int> area) {
+        synth::ui::test_hooks::popoverLauncherForTest() = [this, &parent](std::unique_ptr<juce::Component> content,
+                                                                          juce::Rectangle<int> area) {
             box_.reset();
             owned_ = std::move(content);
             box_ = std::make_unique<juce::CallOutBox>(*owned_, area, &parent);
@@ -42,7 +42,7 @@ public:
         };
     }
     ~Capture() {
-        synth::ui::test_hooks::cardCallOutLauncherForTest() = nullptr;
+        synth::ui::test_hooks::popoverLauncherForTest() = nullptr;
         box_.reset();
         owned_.reset();
     }
@@ -68,7 +68,7 @@ private:
 inline bool dispatch(juce::CallOutBox& box, juce::Component& origin, const juce::KeyPress& press) {
     for (auto* target = &origin; target != nullptr; target = target->getParentComponent()) {
         if (target == &box)
-            return synth::ui::test_hooks::offerKeyToCardCallOutForTest(box, press) || box.keyPressed(press);
+            return synth::ui::test_hooks::offerKeyToPopoverForTest(box, press) || box.keyPressed(press);
         if (target->keyPressed(press))
             return true;
     }
@@ -139,7 +139,7 @@ protected:
         for (const auto& key :
              {juce::KeyPress('a', juce::ModifierKeys(cmd), 0), juce::KeyPress('c', juce::ModifierKeys(cmd), 0),
               juce::KeyPress(juce::KeyPress::deleteKey)})
-            EXPECT_FALSE(synth::ui::test_hooks::offerKeyToCardCallOutForTest(*popover.box(), key))
+            EXPECT_FALSE(synth::ui::test_hooks::offerKeyToPopoverForTest(*popover.box(), key))
                 << name << ": " << key.getTextDescription();
     }
 

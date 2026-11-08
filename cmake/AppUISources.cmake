@@ -266,11 +266,10 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerZonesPane/MixerZonesRow.cpp
     Source/UI/Layout/ProgressStrip.cpp
     Source/UI/Layout/ProgressStrip.h
-    Source/UI/Layout/CalloutReveal.h
-    Source/UI/Layout/CalloutReveal.cpp
     Source/UI/Layout/AppShortcutRelay.h
     Source/UI/Layout/AppShortcutRelay.cpp
-    Source/UI/Layout/CardCallOut.cpp
+    Source/UI/Layout/PopupHost.h
+    Source/UI/Layout/PopupHost.cpp
     Source/UI/Layout/SplitButton.h
     Source/UI/Layout/SplitButton.cpp
     Source/UI/Layout/SidePane/SidePane.h
@@ -929,6 +928,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/CardWidgets/CardStepper.h
     Source/UI/Graph/CardWidgets/CardTogglePill.h
     Source/UI/Graph/ModuleComponent/ModuleComponentModRings.cpp
+    Source/UI/Graph/ModuleComponent/ModChipFade.h
     Source/UI/Graph/ModuleComponent/ModRingFades.cpp
     Source/UI/Graph/ModuleComponent/ModRingFades.h
     Source/UI/Graph/CardBody/ModuleCardLayoutBinding.cpp
