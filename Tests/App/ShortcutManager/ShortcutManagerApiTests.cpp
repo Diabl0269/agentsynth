@@ -338,9 +338,9 @@ TEST(ShortcutDisplayNamesTest, SearchFindsBindingsByTheModifiersNamesNotJustThei
     const auto cmdText = ShortcutManager::keyPressToSearchText(cmdZ);
     EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("alt", "Detach", altText));
     EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("alt return", "Detach", altText));
-    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("cmd", "Undo", cmdText));
     EXPECT_FALSE(ShortcutsSettingsTab::rowMatchesQuery("shift", "Undo", cmdText));
 #if JUCE_MAC
+    EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("cmd", "Undo", cmdText)); // elsewhere Command is Ctrl
     EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("option", "Detach", altText));
     EXPECT_TRUE(ShortcutsSettingsTab::rowMatchesQuery("command", "Undo", cmdText));
     EXPECT_FALSE(ShortcutsSettingsTab::rowMatchesQuery("option", "Undo", cmdText));
