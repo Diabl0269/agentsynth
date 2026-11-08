@@ -34,6 +34,18 @@ TEST(ModChipRowRectsTest, TheStackHangsUnderAKnobWithRoomBelow) {
     EXPECT_TRUE(allInside(rects, kCard));
 }
 
+// Regression test for FRO1567: a font measured at a fractional width put the box on half pixels, and its 1 px border
+// blurred (the Linux font measures differently from the Mac one).
+TEST(ModChipRowRectsTest, EveryBoxSitsOnWholePixels) {
+    const juce::Rectangle<float> knob(80.3f, 20.6f, 40.0f, 40.0f);
+    for (const auto& r : modChipRowRects(knob, {70.4f, 63.7f}, kCard)) {
+        EXPECT_FLOAT_EQ(r.getX(), std::round(r.getX()));
+        EXPECT_FLOAT_EQ(r.getY(), std::round(r.getY()));
+        EXPECT_FLOAT_EQ(r.getWidth(), std::round(r.getWidth()));
+        EXPECT_GE(r.getWidth(), 63.7f) << "the text still fits";
+    }
+}
+
 TEST(ModChipRowRectsTest, AKnobInTheLastRowGetsTheStackAboveIt) {
     const juce::Rectangle<float> knob(80.0f, 100.0f, 40.0f, 50.0f);
     const auto rects = modChipRowRects(knob, {70.0f, 70.0f, 70.0f}, kCard);

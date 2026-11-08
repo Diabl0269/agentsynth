@@ -167,6 +167,11 @@ TEST(TestModeInput, AWindowBehindAnotherStillReceivesTheClick) {
 
 namespace {
 struct TestModeInputPopover : ::testing::Test {
+    void SetUp() override {
+        // A CallOutBox places itself on a display; the headless Linux run has none and would crash in its constructor.
+        if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
+            GTEST_SKIP() << "needs a display";
+    }
     void TearDown() override { synth::test::finishPopupTest(); }
 };
 

@@ -14,6 +14,7 @@
 #include "UI/Graph/ModDot/ModDotTooltip.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
+#include <cmath>
 
 void ModuleComponent::paintOverChildren(juce::Graphics& g) { paintModHoverChip(g); }
 
@@ -163,10 +164,12 @@ std::vector<juce::Rectangle<float>> modChipRowRects(juce::Rectangle<float> knob,
         const float above = knob.getY() - 2.0f - height;
         top = above >= card.getY() ? above : juce::jmax(card.getY(), card.getBottom() - height);
     }
-    float y = top;
-    for (const float width : widths) {
-        const float x = juce::jlimit(card.getX(), juce::jmax(card.getX(), card.getRight() - width),
-                                     knob.getCentreX() - width * 0.5f);
+    // Whole pixels: the width comes from a font measurement, and a box on a fractional edge blurs its 1 px border.
+    float y = std::round(top);
+    for (const float measured : widths) {
+        const float width = std::ceil(measured);
+        const float x = std::round(juce::jlimit(card.getX(), juce::jmax(card.getX(), card.getRight() - width),
+                                                knob.getCentreX() - width * 0.5f));
         rects.emplace_back(x, y, width, kModChipRowHeight);
         y += kModChipRowStride;
     }

@@ -37,7 +37,7 @@ struct PopoverOptions {
 /** Opens `content` in a CallOutBox pointing at `area` (screen coordinates) and relays app shortcuts to the main window
  *  that holds `anchor` (a card or any component on it, or any panel of the main window: timeline, mixer, MIDI
  *  Remote...). Escape closes it through the live fade (after PopoverContent::onPopoverCancel); a press outside closes
- *  it and lands. Returns the box (null only when a test launcher declines). */
+ *  it and lands. Returns the box (null when a test launcher declines or there is no display). */
 juce::CallOutBox* launchPopover(std::unique_ptr<juce::Component> content, juce::Rectangle<int> area,
                                 juce::Component* anchor, PopoverOptions options = {});
 

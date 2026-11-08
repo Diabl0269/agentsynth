@@ -232,6 +232,8 @@ juce::CallOutBox* launchPopover(std::unique_ptr<juce::Component> content, juce::
     const bool closeOnUndo = options.closeOnUndo;
     if (auto& launcher = test_hooks::popoverLauncherForTest())
         box = launcher(std::move(content), area);
+    else if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() == nullptr)
+        return nullptr; // a CallOutBox places itself on a display and crashes without one (a headless test run)
     else
         box = &(new PopoverLaunch(std::move(content), area, std::move(options)))->box();
     if (box != nullptr && anchor != nullptr)
@@ -250,8 +252,13 @@ PopoverSlot::Result PopoverSlot::open(const std::function<std::unique_ptr<juce::
     auto content = makeContent();
     if (content == nullptr)
         return Result::Ignored;
+    const bool contentKeptByTest = static_cast<bool>(test_hooks::popoverLauncherForTest());
     content_ = content.get();
     box_ = launchPopover(std::move(content), area, anchor, std::move(options));
+    if (box_ == nullptr && !contentKeptByTest) {
+        content_ = nullptr; // nothing opened, and the content is gone with the launch
+        return Result::Ignored;
+    }
     return Result::Opened;
 }
 
