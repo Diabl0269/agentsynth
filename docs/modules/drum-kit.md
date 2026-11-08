@@ -153,6 +153,11 @@ deliberate: the graph does not change, and the module plays wherever its cables 
 - **The link.** A pad stores only its module's `uuid`. `publishSamplerMidiWiring` (run after every graph change, a
   project load and an AI patch) resolves it to the module's inbox and republishes the pads, and counts a Sampler a pad
   plays as MIDI-fed. A pad whose module is gone is silent, and its row reads "Pluck 1, removed, silent".
+- **What sounds.** The Sound menu lists every MIDI instrument except a Drum Kit and the sequencers. Struck from a pad
+  (held MIDI hit or a card click) each one sounds on its own outputs: Oscillator and Wavetable at the pad's pitch plus
+  Tune (the mono Oscillator is a free-running source, so the note sets its pitch), Pluck, Mallet, and a Sampler that has
+  a sample loaded. Poly MIDI turns the note into pitch and gate voltages for other modules and has no audio of its own.
+  `DrumKitInstrumentPadsRender` renders every listed module this way, so a module added to the menu is checked at once.
 - **Open** selects the module's card and centres the canvas on it (or on its collapsed macro).
 - Bypass, stop and all-notes-off release every held instrument note.
 

@@ -293,6 +293,9 @@ directory. A glyph a control paints in `paint()` is not text, so the text check 
 `ThemeSweepGlyphTests.cpp` renders such controls (today the timeline's clip sizing button, in each of its modes) in every
 built-in theme and requires each mode's icon to differ at one fixed size.
 A new control that shows its state only as a painted glyph joins that file.
+The popup menu's section titles (`addSectionHeader`) use `PopupMenu::headerTextColourId`, set to the theme's muted
+text; `MenuCornerTests` requires 4.5:1 against the menu surface in every theme. The sweep renders no open menu, so a
+new menu colour id needs its own check there.
 
 **Colour fallbacks go through `themeOf`.** A control with no `AppLookAndFeel` above it (a headless
 test, a component not yet parented) reads its colours with `synth::theme::themeOf(component)`, which
