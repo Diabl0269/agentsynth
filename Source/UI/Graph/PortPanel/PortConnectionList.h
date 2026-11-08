@@ -30,6 +30,10 @@ struct PortConnection {
     int farRawChannel = 0; // the RAW channel there: a knob's CV channel, what a Knob target is matched by
     juce::String label;    // "<other module title> . <other port name>" (a macro port: its own name)
     juce::Colour colour;
+    /** A modulation cable (an attenuverter chain): it has an amount and a response curve, like a source of a knob's
+     *  mod dot. Audio, MIDI and plain CV cables have neither. */
+    bool isModulation() const noexcept { return cable.id.attenUid != 0; }
+    float amount = 0.0f; // the chain's live amount, -1..1 (a modulation only)
 };
 
 /** The connections landing on `port` as of now, in the canvas' own order (a copy: the editor's list is a memo). Cables

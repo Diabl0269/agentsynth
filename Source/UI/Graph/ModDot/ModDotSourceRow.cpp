@@ -8,7 +8,6 @@ namespace synth::ui {
 
 namespace {
 constexpr int kSwatch = 10;
-constexpr int kNameWidth = 56;
 constexpr int kAmountWidth = 44;
 constexpr int kIconGap = 2; // between the two icon buttons, which read as one group
 constexpr int kBarHeight = 22;
@@ -93,13 +92,20 @@ ModDotSourceRow::~ModDotSourceRow() = default;
 
 juce::Button& ModDotSourceRow::amountButton() noexcept { return *amountButton_; }
 
+void ModDotSourceRow::setLook(const Look& look) {
+    look_ = look;
+    resized();
+    repaint();
+}
+
 void ModDotSourceRow::applyNames() {
     const auto& name = source_.sourceName;
     setTitle(name + ", " + ModDotAmountBar::percentText(source_.amount));
     bar_.setTitle(name + " amount");
     bar_.setTooltip("Drag to change " + name + " amount");
     // The long form is for a screen reader: a tooltip has to fit inside the panel's window.
-    bar_.setDescription("How strongly " + name + " moves " + paramName_);
+    bar_.setDescription("How strongly " + name +
+                        (paramName_.isEmpty() ? juce::String(" modulates this connection") : " moves " + paramName_));
     amountButton_->setTitle(name + " amount value");
     amountButton_->setTooltip("Click to type " + name + " amount");
     timelineButton_.setTitle("Show " + name + " in timeline");
@@ -135,7 +141,7 @@ void ModDotSourceRow::setSelected(bool selected) {
 
 void ModDotSourceRow::paint(juce::Graphics& g) {
     const auto p = modDotPaletteFor(*this);
-    const auto area = juce::Rectangle<float>(0.0f, 0.0f, (float)getWidth(), (float)kHeight).reduced(2.0f, 1.0f);
+    const auto area = juce::Rectangle<float>(0.0f, 0.0f, (float)getWidth(), (float)look_.height).reduced(2.0f, 1.0f);
     if (hover_.value() > 0.0f) {
         g.setColour(p.hover.withAlpha(hover_.value()));
         g.fillRoundedRectangle(area, 6.0f);
@@ -157,11 +163,14 @@ void ModDotSourceRow::resized() {
     // Left to right: swatch, name, fader, amount, curve, timeline, remove, each group a theme spacing unit from the
     // next so the icons never touch the fader or the amount.
     const int gap = modDotPaletteFor(*this).space;
-    auto r = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
+    auto r = juce::Rectangle<int>(0, 0, getWidth(), look_.height).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
     removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)
                                 .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
-    r.removeFromRight(kIconGap);
-    timelineButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize));
+    timelineButton_.setVisible(look_.timeline);
+    if (look_.timeline) {
+        r.removeFromRight(kIconGap);
+        timelineButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize));
+    }
     r.removeFromRight(gap);
     curveChip_->setBounds(
         r.removeFromRight(ModCurveChip::kWidth).withSizeKeepingCentre(ModCurveChip::kWidth, ModCurveChip::kHeight));
@@ -170,7 +179,7 @@ void ModDotSourceRow::resized() {
     r.removeFromRight(gap);
     swatchArea_ = r.removeFromLeft(kSwatch).withSizeKeepingCentre(kSwatch, kSwatch);
     r.removeFromLeft(gap);
-    nameArea_ = r.removeFromLeft(kNameWidth);
+    nameArea_ = r.removeFromLeft(look_.nameWidth);
     r.removeFromLeft(gap);
     bar_.setBounds(r.withSizeKeepingCentre(r.getWidth(), kBarHeight));
     if (editor_ != nullptr)

@@ -592,7 +592,7 @@ on releases in its own space), so it can never also read it as a click on a jack
 
 ### The mod dot menu
 
-(A click on a plain jack opens the sibling [port connections panel](../layout/cables.md#port-connections-panel), built from the same parts.)
+(A click on a plain jack opens the sibling [port connections panel](../layout/cables.md#port-connections-panel), built from the same parts. A modulation cable listed there, from the jack it lands on or the jack it leaves, is this panel's own row with the same amount bar, typed percent and curve chip.)
 
 A click on a knob's mod dot (or Return/Space on its Tab stop) opens a small panel beside the dot, with an arrow on its
 edge pointing at the dot; a second click on the dot closes it. While it is open the dot carries the `accent` ring. The

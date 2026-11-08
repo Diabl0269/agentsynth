@@ -20,6 +20,15 @@ class ModDotSourceRow final : public juce::Component {
 public:
     static constexpr int kHeight = 34;
 
+    /** How the row is laid out where it is not the knob's sources page: a shorter row, a wider name (the port
+     *  connections panel names the far end, "<module> . <port>") and no "show in timeline" button. */
+    struct Look {
+        int height = kHeight;
+        int nameWidth = 56;
+        bool timeline = true;
+    };
+    void setLook(const Look& look);
+
     ModDotSourceRow(const KnobModSource& source, const juce::String& paramName);
     ~ModDotSourceRow() override;
 
@@ -50,6 +59,8 @@ public:
     /** Shows the connection's response curve and opens its editor (wired by the page). */
     ModCurveChip& curveChip() noexcept { return *curveChip_; }
     juce::Button& removeButton() noexcept { return removeButton_; }
+    /** The same button as its glyph type (what the port connections panel's row hands its callers). */
+    ModDotGlyphButton& removeGlyph() noexcept { return removeButton_; }
     bool isEditingAmount() const noexcept { return editor_ != nullptr; }
     juce::TextEditor* amountEditor() noexcept { return editor_.get(); }
     juce::Colour swatchColour() const;
@@ -69,6 +80,7 @@ private:
 
     KnobModSource source_;
     juce::String paramName_;
+    Look look_;
     bool selected_ = false;
     ModDotHoverFade hover_;
     ModDotAmountBar bar_;

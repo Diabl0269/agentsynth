@@ -40,6 +40,9 @@ public:
     /** Re-reads the knob's sources: new ones grow in, gone ones shrink out, amounts follow. `fresh` asks the
      *  engine now instead of the editor's cache (after an edit made just before). */
     void sync(bool fresh = true);
+    /** Moves attenuverter `attenuverterId`'s amount to `amount` (the one write every amount control uses: this page's
+     *  rows and the port connections panel's). Call between begin/commitModAmountGesture for one undo step. */
+    static void applyAmount(GraphEditor& editor, juce::AudioProcessorGraph::NodeID attenuverterId, float amount);
     /** Marks `attenuverterId`'s row as the chosen one (and tells the controller). */
     void select(juce::AudioProcessorGraph::NodeID attenuverterId);
     /** Highlights every row's remove button (rows that grow in later join); cleared with the panel. */
