@@ -63,7 +63,7 @@ The card is 280 px wide. From the top:
 
 1. The kit picker.
 2. The master Level. It takes a mod cable (an LFO or envelope dropped on the knob moves the whole kit's level live),
-   on the module's one input channel, which has no gutter jack.
+   on input channel 0, which has no gutter jack (see [Mod cables](#mod-cables)).
 3. The **Pads** stepper:
    - "-" and "+", or Up/Down, Left/Right, + and -, step it by four.
    - Typing a number and Return sets it, rounded up to a multiple of four.
@@ -119,6 +119,26 @@ The group tabs and the Recorded switches are gone from the card (layout revision
   `pickedName`, `pickedKind`, `pickedSound`, `visiblePads` (the shown ones), `soundOutline` (a sound drag is over the card) and `dropTargetPad`.
   The Sound row is `drumPadSound`, Open is `drumPadOpenInstrument`, Plays pitch is `drumPadPitch`.
   Scenarios: `Tools/ui-verify/scenarios/drum-kit-pads.yaml`, `Tools/ui-verify/scenarios/drum-kit-pad-sound.yaml`, `drum-kit-pad-shown.yaml`.
+
+## Mod cables
+
+The kit takes a cable on its master Level (read live, every block) and on each group knob (`kickLevel`, `kickTune`,
+`kickDecay`, `snareLevel` ... `cowbellDecay`, `closedDecay` and `openDecay` included): 23 targets, declared once in
+`DrumKitModule::kModTargets` (see [one list per module](modulation.md#one-list-per-module)). The group knobs have no
+widget on the card, so their cables are made from the port panel and the AI.
+
+A group knob's cable is read on the sample a pad of its group is struck, and applied on top of that pad's own value
+for that hit only. It is never written into the pads or the group knob: the saved project is the same with or without
+a cable, and a hit already ringing keeps what it was struck with. A card audition reads the cable at the start of
+its block. A cable dropped on a pad knob (Level, Tune, Decay or Start of the picked pad) binds to THAT pad's parameter, not to
+whichever pad is picked: pick Snare and drop an LFO on its Level knob and Snare follows the LFO; pick Kick and the knob
+shows no ring (the cable keeps moving Snare); pick Snare again and the ring is back. The cable is added on the strike
+sample to the pad's own value, like a group cable, and never written into the pad. A kit takes at most 32 pad cables
+(`kMaxPadModSlots`, on the channels after the list from `kPadModSlotBase`); the 33rd drop is refused with a status
+message. The slots are claimed on demand through `synth::ModSlotHost` (shared with hosted plugins), freed when the last
+cable of a slot is removed, and saved under `modSlots` only when at least one is bound, so an untouched kit saves and
+renders as before. The AI never sees pad cables: they are not in its schema, catalog, patch context or diff.
+Scenario: `Tools/ui-verify/scenarios/drum-kit-pad-cable.yaml`.
 
 ## A pad's sound
 

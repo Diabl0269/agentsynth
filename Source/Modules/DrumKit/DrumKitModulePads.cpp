@@ -86,11 +86,7 @@ juce::AudioParameterFloatAttributes padAttributes(DrumKitModule::PadParam which)
     if (which == PadParam::Tune)
         return synth::semitonesAttributes();
     if (which == PadParam::Decay)
-        return juce::AudioParameterFloatAttributes()
-            .withLabel("s")
-            .withStringFromValueFunction([](float v, int) { return synth::millisecondsToText(v * 1000.0f); })
-            .withValueFromStringFunction(
-                [](const juce::String& t) { return synth::millisecondsFromText(t) / 1000.0f; });
+        return synth::secondsAttributes();
     return synth::fractionPercentAttributes();
 }
 
@@ -404,6 +400,8 @@ juce::var DrumKitModule::getExtraState() const {
     const auto plain = defaultTableForSwitches();
     if (pads_.count != plain.count || pads_.pads != plain.pads)
         synth::drums::writePadState(pads_, *state);
+    if (const auto slots = modSlotsToVar(); !slots.isVoid())
+        state->setProperty("modSlots", slots);
     if (state->getProperties().isEmpty())
         return {};
     return juce::var(state.get());
@@ -427,4 +425,5 @@ void DrumKitModule::setExtraState(const juce::var& state) {
         ++serial;
     loadPadSamples(true);
     publishPads();
+    modSlotsFromVar(obj != nullptr ? obj->getProperty("modSlots") : juce::var());
 }

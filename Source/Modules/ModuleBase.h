@@ -887,6 +887,10 @@ public:
         return false;
     }
 
+    /** True for an input channel kept free for a cable a later version adds (the Drum Kit's pad slots): it is no
+        signal input and no target yet. */
+    virtual bool isReservedInputChannel(int /*rawChannel*/) const { return false; }
+
     // Non-parameter state that must survive a graph rebuild (undo/redo, preset save/load), e.g. the
     // Sampler's loaded file path. AIStateMapper::graphToJSON writes whatever this returns as the
     // node's "state" property and applyJSONToGraph feeds it back through setExtraState().

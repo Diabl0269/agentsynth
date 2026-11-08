@@ -342,14 +342,16 @@ void AudioEngine::removeModRouting(juce::AudioProcessorGraph::NodeID attenuverte
     releaseUnconnectedHostedModSlots();
 }
 
-// A hosted plugin's modulation slot lives as long as a cable reaches its channel. Removing the last one frees the
-// slot and puts the parameter back at its resting value; this sweep is what notices, whichever path removed it.
+// A modulation slot (hosted plugin parameter, Drum Kit pad knob) lives as long as a cable reaches its channel. Removing
+// the last one frees the slot and puts the parameter back at its resting value; this sweep is what notices, whichever
+// path removed it.
 void AudioEngine::releaseUnconnectedHostedModSlots() {
     std::vector<juce::AudioProcessorGraph::Connection> connections;
     bool connectionsRead = false;
     for (auto* node : mainProcessorGraph.getNodes()) {
-        auto* module = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor());
-        if (module == nullptr || module->getModulationTargets().empty())
+        auto* module = dynamic_cast<synth::ModSlotHost*>(node->getProcessor());
+        auto* base = dynamic_cast<ModuleBase*>(node->getProcessor());
+        if (module == nullptr || base == nullptr || base->getModulationTargets().empty())
             continue;
         if (!std::exchange(connectionsRead, true))
             connections = mainProcessorGraph.getConnections();

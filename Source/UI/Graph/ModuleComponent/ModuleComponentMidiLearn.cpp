@@ -27,6 +27,7 @@
 
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
+#include "Modules/ModSlotHost.h"
 #include "UI/Graph/CardBody/CardLayoutQuickEdit.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
@@ -155,6 +156,11 @@ void ModuleComponent::rebindMidiLearnable(juce::Component& control, juce::Ranged
     if (midiLearnableRegistry_.rebind(control, param))
         control.addMouseListener(this, false);
     refreshMidiLearnBadges();
+    // A pad knob that now shows another pad takes its ring and mod dot along (padKnobForTarget answers per pad).
+    if (dynamic_cast<synth::ModSlotHost*>(module) != nullptr) {
+        syncModDotButtons();
+        repaint();
+    }
 }
 
 void ModuleComponent::registerHostedMidiLearnable(juce::Component& control, juce::AudioProcessorParameter& param,
@@ -163,6 +169,14 @@ void ModuleComponent::registerHostedMidiLearnable(juce::Component& control, juce
 }
 
 void ModuleComponent::clearHostedMidiLearnable() { midiLearnableRegistry_.clearHosted(); }
+
+// Test/inspection: every registered control's parameter id and hosted flag, in registration order.
+std::vector<ModuleComponent::MidiLearnableEntryForTest> ModuleComponent::midiLearnableEntriesForTest() const {
+    std::vector<MidiLearnableEntryForTest> out;
+    for (const auto& e : midiLearnableRegistry_.entries())
+        out.push_back({e.paramId, e.hosted});
+    return out;
+}
 
 // The pick-target overlay's view of this card: every registered control with its parameter,
 // so the overlay never needs to know what a card is. Hosted controls are included the same as

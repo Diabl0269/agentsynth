@@ -221,9 +221,10 @@ bool MainComponent::canModulate(const juce::String& nodeUuid, const juce::String
     auto* target = findNodeByUuid(nodeUuid);
     if (target == nullptr)
         return false;
-    // A plugin parameter has no CV input until a cable claims one; any parameter can, while a slot is free.
-    if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(target->getProcessor()))
-        return hosted->canModulateParam(paramId);
+    // A plugin parameter or a Drum Kit pad knob has no CV input until a cable claims one; it can, while a slot is free.
+    if (auto* host = dynamic_cast<synth::ModSlotHost*>(target->getProcessor()); host != nullptr)
+        if (host->canModulateParam(paramId))
+            return true;
     return graphEditor.modulationChannelFor(target->nodeID, paramId) >= 0;
 }
 

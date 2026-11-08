@@ -2,6 +2,7 @@
 # stays under the line cap.
 target_sources(Core PRIVATE
     Source/Modules/DrumKit/DrumKitModule.cpp
+    Source/Modules/DrumKit/DrumKitModuleModSlots.cpp
     Source/Modules/DrumKit/DrumKitModuleRecorded.cpp
     Source/Modules/DrumKit/DrumKitModulePads.cpp
     Source/Modules/DrumKit/DrumKitModulePadAudio.cpp

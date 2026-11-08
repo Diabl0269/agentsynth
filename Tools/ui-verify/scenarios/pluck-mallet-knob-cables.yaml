@@ -1,0 +1,75 @@
+# Every Pluck and Mallet knob takes a mod cable: it is read when a note starts.
+#
+# What a user does: adds a Pluck and an LFO, drags the LFO's CV jack onto the Pluck's Decay knob (the knob shows the mod
+# ring and the card lists the cable), then adds a Mallet and a second LFO and drops that one on the Mallet's Hardness
+# knob. The sound (a different tail for each note) is covered by the instrument cable tests (offline render).
+record: true
+save_project: fro1622 pluck mallet cables
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: pluck}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Pluck", equals: 1}, within_ms: 1500}
+  - click: {id: Hide Library}
+  - wait: {}
+  - click: {id: Hide Minimap}   # it would cover the lower card's knobs
+  - wait: {}
+  # The cards land at the bottom of the canvas: drag them up so the knobs are on screen.
+  - drag: {from: "card:Pluck", fromX: 120, fromY: 14, to: window, toX: 200, toY: 120}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 100, fromY: 14, to: window, toX: 700, toY: 120}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Pluck > Decay"}
+  - wait: {}
+  - expect: {id: "card:Pluck", contains: {cabledTargets: Decay}, within_ms: 3000}
+  - mark: {check: 1, name: pluck-decay-cable}
+  - screenshot: {id: "card:Pluck", name: pluck-decay-ring}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: mallet}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Mallet", equals: 1}, within_ms: 1500}
+  - click: {id: Hide Library}
+  - wait: {}
+  - drag: {from: "card:Mallet", fromX: 120, fromY: 14, to: window, toX: 200, toY: 420}
+  - wait: {}
+  - drag: {from: "card:LFO 2", fromX: 100, fromY: 14, to: window, toX: 700, toY: 420}
+  - wait: {}
+  - click: {id: "card:Mallet > cardTabStrip", x: 128, y: 12}   # the Mallet tab, where Hardness sits
+  - wait: {}
+  - drag: {from: "card:LFO 2", fromX: 268, fromY: 56, to: "card:Mallet > Hardness"}
+  - wait: {}
+  - expect: {id: "card:Mallet", contains: {cabledTargets: Hardness}, within_ms: 3000}
+  - mark: {check: 2, name: mallet-hardness-cable}
+  - screenshot: {id: "card:Mallet", name: mallet-hardness-ring}

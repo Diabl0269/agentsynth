@@ -9,6 +9,7 @@
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
+#include "ModCableExemptions.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -29,35 +30,6 @@ const std::set<juce::String> kNoModulatedControls = {"Macros",         "Macro In
                                                      "Macro Midi Out", "Audio Input", "Audio Output",  "Midi Input",
                                                      "MIDI Keyboard",  "Poly MIDI",   "External MIDI", "Track In",
                                                      "Track Audio",    "Rec Tap",     "Hosted Plugin"};
-
-// Controls that deliberately take no cable, as (module type, parameter id), each group with its reason.
-const std::set<std::pair<juce::String, juce::String>> kControlsWithoutCable = [] {
-    std::set<std::pair<juce::String, juce::String>> exempt;
-    const auto add = [&exempt](const juce::String& type, const std::vector<juce::String>& ids) {
-        for (const auto& id : ids)
-            exempt.insert({type, id});
-    };
-    // Read once when a note starts, so a continuous input would have nothing to modulate.
-    add("Oscillator", {"phase", "randomPhase"});
-    // A whole number of voices, not a plain amount: a cable dropped on it is refused with a status message saying so.
-    add("Wavetable", {"unison"});
-    // Read when a note starts (Release when it ends). Level, Body and Tremolo are live and take cables.
-    add("Pluck", {"tune", "fine", "decay", "decayTrack", "brightness", "pickPosition", "pickHardness", "stiffness",
-                  "release", "velBright"});
-    add("Mallet", {"tune", "fine", "decay", "damping", "brightness", "hardness", "resonator", "release", "velBright"});
-    // Read per step by the sequencer's own clock, not continuously.
-    for (const auto* sequencer : {"Sequencer", "Poly Sequencer"})
-        add(sequencer, {"bpm", "transpose", "gate", "velocity", "chance"});
-    // A macro knob is itself a modulation source; Knobs is how many of them the card shows.
-    add("Macros", {"macroCount"});
-    for (int i = 1; i <= 16; ++i)
-        add("Macros", {"macro" + juce::String(i)});
-    // The mixer's gain stages: the Channel Strip's channel layout is frozen, with its send legs on fixed channels.
-    add("Channel Strip", {"gain", "pan", "send1Level", "send2Level", "send3Level", "send4Level", "send1Pan", "send2Pan",
-                          "send3Pan", "send4Pan"});
-    add("Master", {"gain"});
-    return exempt;
-}();
 
 const juce::RangedAudioParameter* continuousParamNamed(const ModuleBase& mb, const juce::String& displayName) {
     for (auto* p : mb.getParameters())
@@ -267,10 +239,43 @@ TEST_F(ModuleComponentTest, ARightPressOnTheDotOfEveryModulatedControlOpensOneMe
 
 // The converse of the test above: that one presses the dots that exist, so a control with no modulation target never
 // entered it. This one starts from the widgets, so a new knob or fader with no target fails here.
+bool isContinuous(const juce::AudioProcessorParameter* param) {
+    return dynamic_cast<const juce::AudioParameterFloat*>(param) != nullptr ||
+           dynamic_cast<const juce::AudioParameterInt*>(param) != nullptr;
+}
+
+// The Drum Kit's group knobs (kickTune, closedDecay ...) have no widget on the card: the pads area edits the pads, and
+// the AI and automation write the groups. A widget walk cannot reach them, so each continuous parameter the card shows
+// no knob for is checked by itself.
+void checkParametersWithoutAWidget(const juce::String& typeName, const ModuleBase& mb,
+                                   const std::set<const juce::RangedAudioParameter*>& onCard,
+                                   const std::set<const juce::RangedAudioParameter*>& targeted,
+                                   std::vector<juce::String>& gaps, int& checked) {
+    if (typeName != "Drum Kit")
+        return;
+    for (auto* p : mb.getParameters()) {
+        const auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(p);
+        if (ranged == nullptr || !isContinuous(p) || onCard.count(ranged) > 0)
+            continue;
+        ++checked;
+        if (targeted.count(ranged) == 0 && !modcable_test::slotHostTakesCable(mb, ranged->paramID) &&
+            modcable_test::exemptionReason(typeName, ranged->paramID) == nullptr)
+            gaps.push_back(typeName + " / " + ranged->paramID + " (\"" + ranged->getName(100) +
+                           "\", no widget on the card)");
+    }
+}
+
+TEST_F(ModuleComponentTest, EveryExemptionFromAModCableNamesItsReason) {
+    for (const auto& e : modcable_test::exemptions()) {
+        EXPECT_FALSE(e.reason.empty()) << e.type << " / " << e.paramId << " is exempt without a reason";
+        EXPECT_FALSE(e.type.empty() || e.paramId.empty());
+    }
+}
+
 TEST_F(ModuleComponentTest, EveryKnobAndFaderOnEveryDefaultCardTakesAModCableOrIsAnExplicitExemption) {
     std::vector<juce::String> gaps, staleExemptions;
     std::set<std::pair<juce::String, juce::String>> exemptionsSeen;
-    int controlsChecked = 0;
+    int controlsChecked = 0, parametersChecked = 0;
 
     for (const auto& typeName : synth::AIStateMapper::moduleFactoryTypeNames()) {
         auto processor = synth::AIStateMapper::createModule(typeName);
@@ -281,7 +286,7 @@ TEST_F(ModuleComponentTest, EveryKnobAndFaderOnEveryDefaultCardTakesAModCableOrI
         GraphEditor editor(engine);
         ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
 
-        std::set<const juce::RangedAudioParameter*> targeted;
+        std::set<const juce::RangedAudioParameter*> targeted, onCard;
         for (const auto& target : mb->getModulationTargets())
             if (const auto* param = mb->parameterForModTarget(target))
                 targeted.insert(param);
@@ -290,27 +295,35 @@ TEST_F(ModuleComponentTest, EveryKnobAndFaderOnEveryDefaultCardTakesAModCableOrI
         collectSliders(card, sliders);
         std::set<juce::String> reported;
         for (auto* slider : sliders) {
-            const auto* param = continuousParamNamed(*mb, slider->getComponentID());
+            // A knob that re-binds (the Drum Kit's picked-pad knobs) is found by what it drives; every other one by the
+            // display name it carries as its component id.
+            const juce::RangedAudioParameter* param = card.findMidiLearnableParamForTest(slider);
+            if (param == nullptr || !isContinuous(param))
+                param = continuousParamNamed(*mb, slider->getComponentID());
             if (param == nullptr)
                 continue; // bound to no continuous parameter of this module: a picker, or a value of its own
+            onCard.insert(param);
             ++controlsChecked;
-            const std::pair<juce::String, juce::String> key{typeName, param->paramID};
-            if (kControlsWithoutCable.count(key) > 0) {
-                exemptionsSeen.insert(key);
+            if (const auto* reason = modcable_test::exemptionReason(typeName, param->paramID)) {
+                exemptionsSeen.insert({typeName, param->paramID});
                 if (targeted.count(param) > 0)
-                    staleExemptions.push_back(typeName + " / " + param->paramID + " has a target now");
+                    staleExemptions.push_back(typeName + " / " + param->paramID + " has a target now (" + *reason +
+                                              ")");
                 continue;
             }
-            if (targeted.count(param) == 0 && reported.insert(param->paramID).second)
+            if (targeted.count(param) == 0 && !modcable_test::slotHostTakesCable(*mb, param->paramID) &&
+                reported.insert(param->paramID).second)
                 gaps.push_back(typeName + " / " + param->paramID + " (\"" + param->getName(100) + "\", " +
                                widgetKind(*slider) + (slider->isVisible() ? ", shown" : ", hidden") + ")");
         }
+        checkParametersWithoutAWidget(typeName, *mb, onCard, targeted, gaps, parametersChecked);
     }
-    for (const auto& key : kControlsWithoutCable)
-        if (exemptionsSeen.count(key) == 0)
-            staleExemptions.push_back(key.first + " / " + key.second + " is no longer on the card");
+    for (const auto& e : modcable_test::exemptions())
+        if (e.onCardAsSlider && exemptionsSeen.count({e.type, e.paramId}) == 0)
+            staleExemptions.push_back(juce::String(e.type) + " / " + e.paramId + " is no longer on the card");
 
     EXPECT_GT(controlsChecked, 100) << "the sweep must reach the cards' controls";
+    EXPECT_GT(parametersChecked, 20) << "the sweep must reach the Drum Kit's group knobs";
     EXPECT_TRUE(gaps.empty()) << "knobs and faders that refuse a modulation cable:\n"
                               << juce::StringArray(gaps.data(), (int)gaps.size()).joinIntoString("\n");
     EXPECT_TRUE(staleExemptions.empty())

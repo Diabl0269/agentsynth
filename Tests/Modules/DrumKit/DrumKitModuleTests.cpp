@@ -104,7 +104,8 @@ TEST(DrumKitModule, IsRegisteredAsAMidiInstrumentWithAStereoPairAndOnlyTheLevelC
     EXPECT_TRUE(isMidiInstrumentType(ModuleType::DrumKit));
     EXPECT_TRUE(kit->acceptsMidi());
     EXPECT_FALSE(kit->producesMidi());
-    EXPECT_EQ(kit->getTotalNumInputChannels(), 1); // the Level knob's mod cable, no jack
+    EXPECT_EQ(kit->getTotalNumInputChannels(), DrumKitModule::kPadModSlotBase + DrumKitModule::kMaxPadModSlots)
+        << "the Level and group knobs' mod cables and the pad slots, no jack";
     EXPECT_EQ(kit->getTotalNumOutputChannels(), 2);
     EXPECT_EQ(synth::AIStateMapper::getFactoryTypeName(kit), "Drum Kit");
 }

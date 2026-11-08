@@ -38,29 +38,33 @@ double PluckModule::BodyBand::process(double x) noexcept {
 }
 
 juce::AudioParameterFloat* PluckModule::addFloat(const char* id, const char* name, float lo, float hi, float def,
-                                                 float skew) {
+                                                 float skew,
+                                                 std::optional<juce::AudioParameterFloatAttributes> attributes) {
     auto* p = new juce::AudioParameterFloat(id, name, juce::NormalisableRange<float>(lo, hi, 0.0f, skew), def,
-                                            (lo == 0.0f && hi == 1.0f) ? synth::fractionPercentAttributes()
-                                                                       : juce::AudioParameterFloatAttributes());
+                                            attributes.value_or((lo == 0.0f && hi == 1.0f)
+                                                                    ? synth::fractionPercentAttributes()
+                                                                    : juce::AudioParameterFloatAttributes()));
     addParameter(p);
     return p;
 }
 
 PluckModule::PluckModule()
-    : ModuleBase("Pluck", 2, kNumChannels, StereoAudio::Declared) {
-    tuneParam = addFloat("tune", "Tune", -24.0f, 24.0f, 0.0f);
-    fineParam = addFloat("fine", "Fine", -100.0f, 100.0f, 0.0f);
-    decayParam = addFloat("decay", "Decay", 0.1f, 20.0f, 3.0f, 0.4f);
+    : ModuleBase("Pluck", (int)kModTargets.size(), kNumChannels, StereoAudio::Declared) {
+    tuneParam = addFloat("tune", "Tune", -24.0f, 24.0f, 0.0f, 1.0f, synth::semitonesAttributes());
+    fineParam = addFloat("fine", "Fine", -100.0f, 100.0f, 0.0f, 1.0f, synth::centsAttributes());
+    decayParam = addFloat("decay", "Decay", 0.1f, 20.0f, 3.0f, 0.4f, synth::secondsAttributes());
     decayTrackParam = addFloat("decayTrack", "Decay tracking", 0.0f, 1.0f, 0.7f);
     brightnessParam = addFloat("brightness", "Brightness", 0.0f, 1.0f, 0.5f);
-    pickPositionParam = addFloat("pickPosition", "Pick position", 0.02f, 0.5f, 0.13f);
+    pickPositionParam =
+        addFloat("pickPosition", "Pick position", 0.02f, 0.5f, 0.13f, 1.0f, synth::fractionPercentAttributes());
     pickHardnessParam = addFloat("pickHardness", "Pick hardness", 0.0f, 1.0f, 0.6f);
     bodyParam = addFloat("body", "Body", 0.0f, 1.0f, 0.3f);
     stiffnessParam = addFloat("stiffness", "Stiffness", 0.0f, 1.0f, 0.0f);
-    releaseParam = addFloat("release", "Release", 0.01f, 5.0f, 0.3f, 0.4f);
+    releaseParam = addFloat("release", "Release", 0.01f, 5.0f, 0.3f, 0.4f, synth::secondsAttributes());
     velBrightParam = addFloat("velBright", "Velocity brightness", 0.0f, 1.0f, 0.5f);
     levelParam = addFloat("level", "Level", 0.0f, 1.0f, 0.8f);
     addMuteParameter();
+    mods_.bind(*this);
     enableVisualBuffer(true);
 }
 
@@ -93,28 +97,32 @@ int PluckModule::activeVoiceCount() const noexcept {
     return n;
 }
 
-void PluckModule::noteOn(int note, float velocity) {
+// Every setting is the knob moved by its cable on the note's own sample, so a cable shapes each new note and never a
+// ringing one.
+void PluckModule::noteOn(int note, float velocity, const juce::AudioBuffer<float>& cv, int sample) {
+    const auto at = [&](const juce::AudioParameterFloat* p) { return mods_.valueAt(cv, *p, sample); };
     const float vel = juce::jlimit(0.0f, 1.0f, velocity);
     // Velocity opens both the pick and the loop damping, scaled by Velocity brightness (neutral at 0.5).
-    const float shift = velBrightParam->get() * (vel - 0.5f);
+    const float shift = at(velBrightParam) * (vel - 0.5f);
     synth::pluck::Strike s;
-    s.hz = synth::voices::noteHz(note, tuneParam->get(), fineParam->get());
+    s.hz = synth::voices::noteHz(note, at(tuneParam), at(fineParam));
     s.velocity = vel;
     // Real strings ring shorter the higher they are: Decay is the T60 at C3, scaled by (f / C3)^-tracking.
-    s.decay = juce::jmax(0.05f, decayParam->get() *
-                                    static_cast<float>(std::pow(s.hz / kDecayReferenceHz, -decayTrackParam->get())));
-    s.brightness = juce::jlimit(0.0f, 1.0f, brightnessParam->get() + shift);
-    s.pickPosition = pickPositionParam->get();
-    s.hardness = juce::jlimit(0.0f, 1.0f, pickHardnessParam->get() + shift);
-    s.stiffness = stiffnessParam->get();
+    s.decay = juce::jmax(0.05f,
+                         at(decayParam) * static_cast<float>(std::pow(s.hz / kDecayReferenceHz, -at(decayTrackParam))));
+    s.brightness = juce::jlimit(0.0f, 1.0f, at(brightnessParam) + shift);
+    s.pickPosition = at(pickPositionParam);
+    s.hardness = juce::jlimit(0.0f, 1.0f, at(pickHardnessParam) + shift);
+    s.stiffness = at(stiffnessParam);
     s.sampleRate = sampleRate_;
     voices_[synth::voices::pickVoice(voices_)].trigger(s, noise_, note, ++noteCounter_);
 }
 
-void PluckModule::noteOff(int note) {
+void PluckModule::noteOff(int note, const juce::AudioBuffer<float>& cv, int sample) {
+    const float release = mods_.valueAt(cv, *releaseParam, sample);
     for (auto& v : voices_)
         if (v.active && v.held && v.note == note)
-            v.release(releaseParam->get(), sampleRate_);
+            v.release(release, sampleRate_);
 }
 
 float PluckModule::renderSample() noexcept {
@@ -146,8 +154,9 @@ void PluckModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     if (buffer.getNumChannels() == 0 || numSamples <= 0)
         return;
 
-    // The cables arrive on channels 0 and 1, which the render overwrites: read them before anything writes the buffer.
-    // blockCV reads 0 when a layout has no such channel.
+    // The cables arrive on the input channels, and the render overwrites channels 0 and 1 as it goes: the live cables
+    // are read before anything writes the buffer, and a note's cables on its own sample, which the render has not
+    // reached yet. blockCV reads 0 when a layout has no such channel.
     const float levelCv = blockCV(buffer, kLevelCvChannel);
     const float bodyCv = blockCV(buffer, kBodyCvChannel);
 
@@ -184,15 +193,19 @@ void PluckModule::processModuleBlock(juce::AudioBuffer<float>& buffer, juce::Mid
         const bool on = message.isNoteOn();
         if (!on && !message.isNoteOff())
             continue;
-        renderTo(juce::jlimit(position, numSamples, metadata.samplePosition));
+        const int at = juce::jlimit(position, numSamples, metadata.samplePosition);
+        renderTo(at);
         if (on) {
-            noteOn(message.getNoteNumber(), message.getFloatVelocity());
+            noteOn(message.getNoteNumber(), message.getFloatVelocity(), buffer, at);
             bodyTail_ = static_cast<int>(sampleRate_); // keep the box ringing one second past the last string
         } else {
-            noteOff(message.getNoteNumber());
+            noteOff(message.getNoteNumber(), buffer, at);
         }
     }
     renderTo(numSamples);
+    // The cables are spent: none leaves the module on a channel beyond the audio pair.
+    for (int ch = kNumChannels; ch < buffer.getNumChannels(); ++ch)
+        buffer.clear(ch, 0, numSamples);
     if (activeVoiceCount() > 0)
         bodyTail_ = std::max(bodyTail_, static_cast<int>(sampleRate_));
 

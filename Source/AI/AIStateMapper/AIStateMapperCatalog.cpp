@@ -105,7 +105,7 @@ bool hasSignalInput(juce::AudioProcessor& processor) {
     for (int ch = 0; ch < inputs; ++ch) {
         const bool knobOnly = std::any_of(targets.begin(), targets.end(),
                                           [ch](const auto& t) { return t.channelIndex == ch && t.knobOnly; });
-        if (!knobOnly)
+        if (!knobOnly && !mb->isReservedInputChannel(ch))
             return true;
     }
     return false;

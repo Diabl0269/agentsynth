@@ -749,9 +749,10 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
 
         // Only a single mono cable may sit behind an attenuverter; a fan is always direct, and a
         // structural pitch/gate source is never wrapped (see carriesStructuralSignal).
-        const bool useAttenuverter = link.voiceCount == 1 && destModule != nullptr &&
-                                     !carriesStructuralSignal(sourceModule, link.sourceRawChannel) &&
-                                     destModule->isAutoPromotableModTarget(link.destRawChannel);
+        const bool useAttenuverter =
+            link.voiceCount == 1 && destModule != nullptr &&
+            !carriesStructuralSignal(sourceModule, link.sourceRawChannel) &&
+            (w.attenuverterNodeId.uid != 0 || destModule->isAutoPromotableModTarget(link.destRawChannel));
 
         if (useAttenuverter) {
             const auto newAttenId =

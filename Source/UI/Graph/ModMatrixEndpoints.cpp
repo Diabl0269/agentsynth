@@ -112,14 +112,14 @@ bool canClaimHostedDestination(juce::AudioProcessorGraph& graph, const HostedDes
     if (dest.paramId.isEmpty())
         return dest.boundChannel >= 0;
     auto* node = graph.getNodeForId(dest.node);
-    auto* hosted = node != nullptr ? dynamic_cast<HostedPluginModule*>(node->getProcessor()) : nullptr;
-    return hosted != nullptr && hosted->canModulateParam(dest.paramId);
+    auto* host = node != nullptr ? dynamic_cast<ModSlotHost*>(node->getProcessor()) : nullptr;
+    return host != nullptr && host->canModulateParam(dest.paramId);
 }
 
 int claimHostedDestination(juce::AudioProcessorGraph& graph, const HostedDestination& dest) {
     auto* node = graph.getNodeForId(dest.node);
-    auto* hosted = node != nullptr ? dynamic_cast<HostedPluginModule*>(node->getProcessor()) : nullptr;
-    return hosted != nullptr && hosted->canModulateParam(dest.paramId) ? hosted->bindModSlot(dest.paramId) : -1;
+    auto* host = node != nullptr ? dynamic_cast<ModSlotHost*>(node->getProcessor()) : nullptr;
+    return host != nullptr && host->canModulateParam(dest.paramId) ? host->bindModSlot(dest.paramId) : -1;
 }
 
 ConnectionIndex::ConnectionIndex(const juce::AudioProcessorGraph& graph)

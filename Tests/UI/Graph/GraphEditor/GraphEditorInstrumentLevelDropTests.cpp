@@ -44,8 +44,9 @@ bool shownOnCard(const juce::Component* c, const juce::Component& card) {
 
 struct Drop {
     AudioEngine engine;
-    GraphEditor editor{engine};
+    // Declared before the editor so the nodes outlive its cards.
     juce::AudioProcessorGraph::Node::Ptr lfo, target;
+    GraphEditor editor{engine};
     ModuleComponent* lfoCard = nullptr;
     ModuleComponent* targetCard = nullptr;
     juce::String status;

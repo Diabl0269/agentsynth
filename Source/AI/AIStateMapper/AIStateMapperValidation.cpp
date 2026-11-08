@@ -178,7 +178,8 @@ private:
 juce::String describeModulatableParams(ModuleBase& module) {
     juce::StringArray ids;
     for (const auto& target : module.getModulationTargets())
-        if (const auto* param = module.parameterForModTarget(target))
+        if (const auto* param = module.parameterForModTarget(target);
+            param != nullptr && detail::modelVisibleParam(module, const_cast<juce::RangedAudioParameter*>(param)))
             ids.addIfNotAlreadyThere(param->paramID);
     return ids.isEmpty() ? juce::String("none") : ids.joinIntoString(", ");
 }
@@ -215,7 +216,9 @@ PatchValidationResult checkModulationDestination(const juce::DynamicObject& mObj
                 "Modulation \"destParam\" must be a non-empty parameter id string."};
     const juce::String paramId = paramVar.toString();
     auto* module = dynamic_cast<ModuleBase*>(lookup.processorFor(dest));
-    const int resolved = module != nullptr ? module->modulationChannelForParam(paramId) : -1;
+    int resolved = module != nullptr ? module->modulationChannelForParam(paramId) : -1;
+    if (resolved >= 0 && dynamic_cast<DrumKitModule*>(module) != nullptr && resolved >= DrumKitModule::kPadModSlotBase)
+        resolved = -1; // a jack the model may not name (a Drum Kit's pad cable)
     if (resolved < 0)
         return {false, PatchValidationError::ModulationInvalidPort,
                 "Modulation destParam \"" + paramId + "\" is not a parameter node " + juce::String(dest) +

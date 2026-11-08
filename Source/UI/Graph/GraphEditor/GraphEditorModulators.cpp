@@ -69,17 +69,17 @@ NodeID settleNewRouting(AudioEngine& engine, NodeID lfoId, NodeID targetId, int 
     return settled;
 }
 
-// The CV channel for (target, paramId), claiming a hosted plugin's modulation slot when the parameter has none yet.
-// Claimed before the caller's undo step opens, like a cable dropped on a plugin knob: a claim whose cable never lands
-// (or is undone) is freed by the sweep in updateComponents.
+// The CV channel for (target, paramId), claiming a modulation slot (hosted plugin parameter, Drum Kit pad knob) when
+// the parameter has none yet. Claimed before the caller's undo step opens, like a cable dropped on a plugin knob: a
+// claim whose cable never lands (or is undone) is freed by the sweep in updateComponents.
 int claimModulationChannel(juce::AudioProcessorGraph& graph, NodeID targetId, const juce::String& paramId) {
     auto* module = moduleOf(graph, targetId);
     if (module == nullptr)
         return -1;
     if (const int raw = module->modulationChannelForParam(paramId); raw >= 0)
         return raw;
-    auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module);
-    return hosted != nullptr && hosted->canModulateParam(paramId) ? hosted->bindModSlot(paramId) : -1;
+    auto* host = dynamic_cast<synth::ModSlotHost*>(module);
+    return host != nullptr && host->canModulateParam(paramId) ? host->bindModSlot(paramId) : -1;
 }
 } // namespace
 

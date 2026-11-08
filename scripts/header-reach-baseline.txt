@@ -240,6 +240,7 @@
 407 Source/UI/PianoRoll/NoteColour.h
 407 Source/UI/PianoRoll/ScaleAssistPanel.h
 407 Source/UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h
+406 Source/Modules/ModSlotHost.h
 405 Source/UI/Timeline/AutomationLanes/Modulators/ModulatorShapeIcon.h
 405 Source/UI/Timeline/SongKeyField.h
 404 Source/UI/PianoRoll/VelocityLane/VelocityLaneSlide.h

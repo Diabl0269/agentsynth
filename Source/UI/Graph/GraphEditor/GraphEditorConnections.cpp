@@ -253,17 +253,19 @@ void GraphEditor::dragConnection(juce::Point<int> screenPos) {
 }
 
 namespace {
-// A drop on a plugin knob that is not modulated yet: claim a modulation slot for its parameter, so the cable has a
-// channel to land on. Claimed before the cable's undo step opens, so undo leaves the slot claimed with no cable;
-// AudioEngine::releaseUnconnectedHostedModSlots frees it on the next rebuild. Every slot taken: the drop is refused.
+// A drop on a plugin knob or a pad knob that is not modulated yet: claim a modulation slot for its parameter, so the
+// cable has a channel to land on. Claimed before the cable's undo step opens, so undo leaves the slot claimed with no
+// cable; AudioEngine::releaseUnconnectedHostedModSlots frees it on the next rebuild. Every slot taken: the drop is
+// refused.
 std::optional<ModuleComponent::Port> claimHostedModSlot(ModuleComponent& card, ModuleComponent::Port port,
                                                         const std::function<void(const juce::String&)>& status) {
-    auto* hosted = dynamic_cast<synth::HostedPluginModule*>(card.getModule());
-    const int channel = hosted != nullptr ? hosted->bindModSlot(card.hostedParamForDropChannel(port.index)) : -1;
+    auto* host = dynamic_cast<synth::ModSlotHost*>(card.getModule());
+    const int channel = host != nullptr ? host->bindModSlot(card.hostedParamForDropChannel(port.index)) : -1;
     if (channel < 0) {
-        if (hosted != nullptr && status)
-            status(card.cardTitle() + " already has " + juce::String(synth::HostedPluginModule::kMaxModSlots) +
-                   " modulated parameters");
+        if (host != nullptr && status)
+            status(card.cardTitle() + " already has " + juce::String(host->maxModSlots()) +
+                   (port.index <= ModuleComponent::kUnboundPadKnobChannelBase ? " modulated pad knobs"
+                                                                              : " modulated parameters"));
         return std::nullopt;
     }
     port.index = channel;

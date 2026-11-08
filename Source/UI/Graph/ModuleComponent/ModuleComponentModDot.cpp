@@ -1,11 +1,15 @@
 // ModuleComponentModDot.cpp -- a card's side of the mod dot (docs/modules/modulation.md#drag-to-knob-modulation):
 // the press claim that routes the dot's mouse events to the canvas' ModDotController, and the transparent
-// Tab-stop button each modulated knob or fader gets, centred on the dot (docs/layout/module-card.md#modulation-dot).
+// Tab-stop button each modulated knob or fader gets, centred on the dot (docs/layout/module-card.md#modulation-dot),
+// and the Drum Kit's pad knobs as cable targets (a cable on one binds to the picked pad through a ModSlotHost slot).
 
 #include "AudioEngine/AudioEngine.h"
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
+#include "Modules/DrumKit/DrumKitModule.h"
+#include "Modules/ModSlotHost.h"
 #include "Modules/ModuleBase.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/CardWidgets/CardControlGestures.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModDot/ModDotController.h"
@@ -50,6 +54,8 @@ void ModuleComponent::syncModDotButtons() {
         juce::Component* control = si >= 0 ? static_cast<juce::Component*>(sliders[si]) : nullptr;
         if (control == nullptr && morphCard_ != nullptr)
             control = morphCard_->stripControlFor(target.channelIndex);
+        if (control == nullptr)
+            control = padKnobForTarget(target).slider; // a pad cable's dot sits on the picked pad's knob only
         const auto anchor = getModTargetKnobAnchor(target.channelIndex);
         if (control == nullptr || !anchor.has_value())
             continue;
@@ -115,4 +121,59 @@ bool ModuleComponent::handleModJackDoubleClick(int visibleInputIndex) {
         return true;
     }
     return false;
+}
+
+// A card's pad knobs as cable targets. The Drum Kit card shows one set of Level, Tune, Decay and Start knobs that
+// re-bind to whichever pad is picked; the knob rings and offers the drop only while it shows the pad the slot is
+// bound to, so picking another pad leaves the cable moving the first.
+namespace {
+// A control counts only while it is on the card: every ancestor up to the card is visible.
+bool shownOn(const juce::Component& card, const juce::Component& control) {
+    const juce::Component* c = &control;
+    for (; c != nullptr && c != &card; c = c->getParentComponent())
+        if (!c->isVisible())
+            return false;
+    return c == &card;
+}
+} // namespace
+
+// The knob the slot channel of `target` rings: the registry entry of its parameter, when a pad knob shows it now.
+ModuleComponent::PadKnob ModuleComponent::padKnobForTarget(const ModulationTarget& target) const {
+    auto* host = dynamic_cast<const synth::ModSlotHost*>(module);
+    if (host == nullptr || target.paramId.isEmpty() ||
+        host->modChannelForParam(target.paramId) != target.channelIndex ||
+        dynamic_cast<const synth::HostedPluginModule*>(module) != nullptr)
+        return {};
+    for (const auto& entry : midiLearnableRegistry_.entries()) {
+        if (entry.hosted || entry.paramId != target.paramId)
+            continue;
+        auto* knob = dynamic_cast<juce::Slider*>(entry.component);
+        if (knob == nullptr || !shownOn(*this, *knob))
+            return {};
+        return {knob, getLocalArea(knob, knob->getLocalBounds())};
+    }
+    return {};
+}
+
+// The pad knob under `localPoint`: its slot channel when its pad has one, else a stand-in naming the registry entry
+// that the drop turns into a claim. A pad knob on a kit with every slot taken still answers, so the drop can say why it
+// was refused.
+std::optional<ModuleComponent::Port> ModuleComponent::padSlotPortForPoint(juce::Point<int> localPoint) const {
+    auto* host = dynamic_cast<const synth::ModSlotHost*>(module);
+    if (host == nullptr || dynamic_cast<const synth::HostedPluginModule*>(module) != nullptr)
+        return std::nullopt;
+    const auto& entries = midiLearnableRegistry_.entries();
+    for (size_t i = 0; i < entries.size(); ++i) {
+        const auto& entry = entries[i];
+        if (entry.hosted || !DrumKitModule::isPadParamId(entry.paramId) || entry.component == nullptr ||
+            !shownOn(*this, *entry.component))
+            continue;
+        const auto area = getLocalArea(entry.component, entry.component->getLocalBounds());
+        if (!area.contains(localPoint))
+            continue;
+        const int channel = host->modChannelForParam(entry.paramId);
+        return Port{area, channel >= 0 ? channel : kUnboundPadKnobChannelBase - (int)i, /*isInput*/ true,
+                    /*isMidi*/ false};
+    }
+    return std::nullopt;
 }
