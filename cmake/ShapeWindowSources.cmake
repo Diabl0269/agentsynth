@@ -33,3 +33,5 @@ include(cmake/ColourPickerSources.cmake)
 include(cmake/CommandRowSources.cmake)
 # The modulation curve views keep their own list for the same reason.
 include(cmake/ModCurveUISources.cmake)
+# The Mod Matrix source picker's create rows.
+include(cmake/ModMatrixPickerCreateSources.cmake)

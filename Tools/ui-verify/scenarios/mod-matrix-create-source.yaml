@@ -1,0 +1,34 @@
+# The Mod Matrix's source search offers to create a source: typing "lfo" in a row's source search adds a
+# "Create new LFO" row; Return adds the LFO to the canvas and makes it that row's source; Cmd+Z removes both.
+#
+# What a user does: in a new project (no LFO), opens the Mod Matrix, adds a row, opens its source search and types
+# "lfo". The Create new LFO row shows (the proof frame). Return picks it: an LFO card exists beside the matrix (not under it) and the
+# row's source reads LFO. Cmd+Z takes the LFO and the row's source away in one step.
+record: true
+save_project: "fro1155 test"
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - expect: {count: {prefix: "card:LFO", equals: 0}}
+  - click: {id: toggleModMatrix}
+  - wait: {}
+  - expect: {id: modMatrix, showing: true, within_ms: 2000}
+  - click: {id: addModulation}
+  - wait: {}
+  - click: {id: modSource}
+  - wait: {}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: lfo}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Create new LFO", exists: true, within_ms: 2000}
+  - mark: {check: 1, name: create-lfo-row}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {id: modMatrixPicker, exists: false, within_ms: 2000}
+  - expect: {id: "card:LFO", exists: true, within_ms: 2000}
+  - expect: {id: modSource, contains: {text: LFO}, within_ms: 2000}
+  - wait: {}
+  - mark: {check: 2, name: lfo-created-visible}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: "card:LFO", exists: false, within_ms: 2000}

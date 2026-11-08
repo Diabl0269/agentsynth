@@ -677,7 +677,14 @@ Its rows paint under these rules:
   does not resize while typing. Only the rows in view, plus a few past each edge, exist as components: scrolling
   recycles them, a filter pass reads precomputed search text and steers only that screenful (a list of thousands stays
   instant), and an Up/Down move is announced to screen readers since most rows are not in the tree. Up/Down move the highlight, Return picks the highlighted row (the best match
-  by `searchScore`, the first among equals, until moved), Escape closes, a click picks. A pick selects the combo's id with a synchronous
+  by `searchScore`, the first among equals, until moved), Escape closes, a click picks. A source search (not the
+  destination's, and only with a canvas behind the panel) also offers **Create rows**: while the typed text names a
+  source type, a "Create new LFO" / "Create new envelope" row (`Item::createsOnMatch`, the green plus and "New" tag) per
+  matching type, under a "Create" header; an empty search shows none. The types are `newModuleSources()` (the list the
+  timeline's "Add modulator..." and the mod dot's "New" rows read), built by `createSourceItems()`
+  (`ModMatrixPickerCreate.cpp`); a test fails when the timeline offers a type the matrix does not. A pick calls
+  `ModRow::pickNewSource`: the module is added by `createSourceModule` in the middle of the canvas the panel does not cover (growing in like any new card) and the row is
+  re-pointed at it, both inside one `AppUndoManager::ScopedUndoGroup`, so Cmd+Z removes the module and restores the row. A pick selects the combo's id with a synchronous
   notification, so it goes through `ModRow::comboBoxChanged` and the macro-port routing like any other
   choice. The picker paints its own opaque themed panel (a parentless call-out is a new window that does
   not inherit the LookAndFeel), outlines itself with `paintFocusRegionOutline` while it holds focus, and

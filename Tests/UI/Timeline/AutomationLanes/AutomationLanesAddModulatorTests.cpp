@@ -10,6 +10,7 @@
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroOutletModule.h"
 #include "UI/Graph/ModDot/ModSourceCatalog.h"
+#include "UI/Graph/ModMatrixPickerCreate.h"
 #include "UI/Timeline/AutomationLanes/AddModulator/AddModulatorPicker.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorRow.h"
 
@@ -395,4 +396,15 @@ TEST_F(TimelinePanelIntegrationTest, CancelWithDontAskAgainTickedDoesNotTurnTheP
     s.row()->applyMenuChoice(synth::ui::ModulatorRow::kRemoveMenuId);
     EXPECT_TRUE(s.mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("timelineAskBeforeRemovingLfo", true));
     EXPECT_EQ(s.nodesOf<LFOModule>().size(), 1u);
+}
+
+// Sibling-gap guard: every type the timeline's "Add modulator..." offers as new is also a create row here.
+TEST(AddModulatorSourceTypes, TheMatrixOffersEverySourceTypeTheAddModulatorPickerCreates) {
+    std::vector<juce::String> created;
+    for (const auto& item : synth::ui::createSourceItems())
+        created.push_back(synth::ui::createSourcePickFor(item.id)->typeName);
+    const auto choices = synth::ui::collectAddModulatorChoices({}, "Cutoff");
+    ASSERT_FALSE(choices.newSources.empty());
+    for (const auto& fresh : choices.newSources)
+        EXPECT_TRUE(std::find(created.begin(), created.end(), fresh.typeName) != created.end()) << fresh.typeName;
 }

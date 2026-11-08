@@ -59,6 +59,9 @@ public:
         // A row that creates something ("New LFO"): a green plus before the text and a "New" tag at the right. It
         // stays in the list whatever the search says, so a query that finds nothing can still create.
         bool isNew = false;
+        // With isNew: the row shows only while the query is not empty and matches its `searchText` (not its text), so
+        // "Create new LFO" appears for "lfo" and never for the empty query.
+        bool createsOnMatch = false;
         // A muted word at the row's right end naming what the row is ("Track", "Module"); searched like the text and
         // announced after it. A `isNew` row shows its "New" tag instead.
         juce::String tag;
