@@ -7,8 +7,12 @@
 #include "../../TestWait.h"
 #include "ModMatrixCanvasHelpers.h"
 
+#include "Modules/LFOModule.h"
 #include "Modules/MacroInletModule.h"
+#include "UI/Graph/ModDot/ModSourceCatalog.h"
+#include "UI/Graph/ModMatrixEndpoints.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Graph/ModMatrixPickerCreate.h"
 #include "UI/Layout/SearchMatch.h"
 #include <gtest/gtest.h>
 
@@ -378,4 +382,128 @@ TEST(ModMatrixPicker, AFreshPickerOpensAtTheTopSoItsFirstHeaderAndRowAreInView) 
     ASSERT_NE(f.source, nullptr);
     EXPECT_EQ(f.source->getViewTopForTest(), 0);
     EXPECT_EQ(f.dest->getViewTopForTest(), 0);
+}
+
+namespace {
+
+std::unique_ptr<ModMatrixPicker> openSourcePicker(MatrixCanvas& c) {
+    std::unique_ptr<juce::Component> captured;
+    c.matrix().setPickerLauncherForTest(
+        [&captured](std::unique_ptr<juce::Component> p, juce::Rectangle<int>) { captured = std::move(p); });
+    c.matrix().getRowSourceComboForTest(0)->showPopup();
+    return std::unique_ptr<ModMatrixPicker>(dynamic_cast<ModMatrixPicker*>(captured.release()));
+}
+
+bool hasText(const std::vector<juce::String>& texts, const juce::String& text) {
+    return std::find(texts.begin(), texts.end(), text) != texts.end();
+}
+
+// The module a row reads from, looking through macro ports.
+NodeID realSourceOf(MatrixCanvas& c, NodeID attenuverter) {
+    const auto isPort = [&c](NodeID id) { return c.editor.getMacroController().nodeIsMacroPort(id); };
+    for (const auto& routing : c.engine.getModulationRoutings())
+        if (routing.attenuverterNodeID == attenuverter)
+            return synth::ui::resolveRouting(c.engine.getGraph(), routing, isPort).source.node;
+    return {};
+}
+
+struct CreateFixture {
+    MatrixCanvas c{Boxed::DestInside};
+    NodeID row;
+    std::unique_ptr<ModMatrixPicker> picker;
+
+    CreateFixture() {
+        row = c.addRow();
+        c.pickDest(c.filterIn);
+        picker = openSourcePicker(c);
+    }
+    // Arrows to the row named `text`, then Return, as a person would.
+    void arrowToAndEnter(const juce::String& text) {
+        for (int i = 0; i < 40 && picker->getVisibleItemTextsForTest().size() > 0; ++i) {
+            const auto texts = picker->getVisibleItemTextsForTest();
+            const int at = picker->getHighlightedItemIndexForTest();
+            if (at >= 0 && at < (int)texts.size() && texts[(size_t)at] == text)
+                break;
+            picker->sendKeyForTest(juce::KeyPress(juce::KeyPress::downKey));
+        }
+        picker->sendKeyForTest(juce::KeyPress(juce::KeyPress::returnKey));
+    }
+};
+
+} // namespace
+
+TEST(ModMatrixPickerCreate, TypingASourceTypeOffersACreateRowForMatchingTypesOnly) {
+    CreateFixture f;
+    ASSERT_NE(f.picker, nullptr);
+    EXPECT_FALSE(hasText(f.picker->getVisibleItemTextsForTest(), "Create new LFO")) << "nothing typed, no create row";
+
+    f.picker->setSearchTextForTest("lfo");
+    auto texts = f.picker->getVisibleItemTextsForTest();
+    EXPECT_TRUE(hasText(texts, "Create new LFO"));
+    EXPECT_FALSE(hasText(texts, "Create new envelope")) << "the envelope's name does not match";
+
+    f.picker->setSearchTextForTest("adsr");
+    texts = f.picker->getVisibleItemTextsForTest();
+    EXPECT_TRUE(hasText(texts, "Create new envelope"));
+    EXPECT_FALSE(hasText(texts, "Create new LFO"));
+
+    f.picker->setSearchTextForTest("zzzz");
+    EXPECT_TRUE(f.picker->getVisibleItemTextsForTest().empty()) << "text naming no type creates nothing";
+}
+
+TEST(ModMatrixPickerCreate, EveryCreateRowIsATypeFromTheSharedSourceList) {
+    const auto items = synth::ui::createSourceItems();
+    const auto& types = synth::ui::newModuleSources();
+    ASSERT_EQ(items.size(), types.size());
+    for (size_t i = 0; i < items.size(); ++i) {
+        const auto pick = synth::ui::createSourcePickFor(items[i].id);
+        ASSERT_TRUE(pick.has_value());
+        EXPECT_EQ(pick->typeName, types[i].typeName);
+        EXPECT_TRUE(items[i].isNew);
+    }
+    EXPECT_FALSE(synth::ui::createSourcePickFor(synth::ui::createSourceItems().front().id - 1).has_value());
+}
+
+TEST(ModMatrixPickerCreate, ReturnOnTheCreateRowAddsTheModuleAsTheRowsSourceInOneUndoStep) {
+    CreateFixture f;
+    ASSERT_NE(f.picker, nullptr);
+    const auto lfosBefore = f.c.nodesOf<LFOModule>().size();
+    f.picker->setSearchTextForTest("lfo");
+    f.arrowToAndEnter("Create new LFO");
+    f.c.matrix().updateRowsFromGraph();
+
+    const auto lfos = f.c.nodesOf<LFOModule>();
+    ASSERT_EQ(lfos.size(), lfosBefore + 1);
+    const auto created = lfos.back();
+    EXPECT_EQ(realSourceOf(f.c, f.row), created) << "the new LFO is the row's source";
+
+    ASSERT_TRUE(f.c.undo.undo());
+    f.c.matrix().updateRowsFromGraph();
+    EXPECT_EQ(f.c.nodesOf<LFOModule>().size(), lfosBefore) << "one Cmd+Z removes the module";
+    EXPECT_NE(realSourceOf(f.c, f.row), created);
+    EXPECT_EQ(f.c.nodesOf<AttenuverterModule>().size(), 1u) << "and the row itself stays, as before the pick";
+}
+
+// The created card lands in the part of the canvas the Mod Matrix panel does not cover, not half under it.
+TEST(ModMatrixPickerCreate, TheCreatedCardLandsWhereTheMatrixPanelDoesNotCoverIt) {
+    CreateFixture f;
+    ASSERT_NE(f.picker, nullptr);
+    f.c.editor.toggleModMatrixVisibility();
+    f.c.editor.completeModMatrixSlideForTest();
+    const auto panel = f.c.matrix().getBounds();
+    ASSERT_FALSE(panel.isEmpty());
+    const auto lfosBefore = f.c.nodesOf<LFOModule>();
+
+    f.picker->setSearchTextForTest("lfo");
+    f.arrowToAndEnter("Create new LFO");
+
+    const auto lfos = f.c.nodesOf<LFOModule>();
+    ASSERT_EQ(lfos.size(), lfosBefore.size() + 1);
+    juce::Rectangle<int> card;
+    for (auto* comp : f.c.editor.getModuleComponents())
+        if (comp->getNodeId() == lfos.back())
+            card = comp->getBounds();
+    ASSERT_FALSE(card.isEmpty());
+    EXPECT_FALSE(card.intersects(panel)) << "the card is not under the panel";
+    EXPECT_TRUE(f.c.editor.getVisibleCanvasRect().toNearestInt().contains(card)) << "and it is in view";
 }

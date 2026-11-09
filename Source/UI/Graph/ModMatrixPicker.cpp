@@ -460,7 +460,8 @@ void ModMatrixPicker::buildEntries() {
         Entry entry;
         entry.item = (int)i;
         entry.height = item.detail.isNotEmpty() ? kDetailRowHeight : kRowHeight;
-        entry.haystack = item.text + " " + item.detail + " " + item.searchText + " " + item.tag;
+        entry.haystack = item.createsOnMatch ? item.searchText
+                                             : item.text + " " + item.detail + " " + item.searchText + " " + item.tag;
         entries_.push_back(std::move(entry));
     }
 }
@@ -525,8 +526,9 @@ void ModMatrixPicker::applyFilter() {
             continue;
         }
         const auto& item = items_[(size_t)entry.item];
-        const bool found = searchWordsMatch(entry.haystack, words);
-        entry.shown = found || item.isNew; // a row that creates stays, however little the query finds
+        const bool found = searchWordsMatch(entry.haystack, words) && !(item.createsOnMatch && query_.isEmpty());
+        entry.shown = found || (item.isNew && !item.createsOnMatch); // a row that creates stays, however little the
+                                                                     // query finds, unless it only creates on a match
         headerHasMatch = headerHasMatch || entry.shown;
         if (!entry.shown)
             continue;

@@ -159,7 +159,7 @@ TEST(ToastComponentTests, AToastIsWideEnoughForItsWholeMessageWhereThereIsRoom) 
     for (const char* text : {"Stamped ee on Filter", "Stamped ee onto the selected Filter",
                              "Stamped a shape with a rather long name on the selected Filter card"}) {
         toast.show(text);
-        const int textWidth = toast.getWidth() - 28;
+        const int textWidth = toast.getWidth() - 28 - synth::ui::ToastComponent::kIconSlot;
         EXPECT_EQ(glyphsDrawn(text, textWidth), glyphsInFull(text))
             << text << " was shortened in " << textWidth << " px";
     }
@@ -177,7 +177,7 @@ TEST(ToastComponentTests, AMessageTooLongForTheAreaIsCappedWithAnEllipsis) {
         text += ", and it keeps going";
     toast.show(text);
     EXPECT_EQ(toast.getWidth(), 600 - 40);
-    EXPECT_LT(glyphsDrawn(text, toast.getWidth() - 28), glyphsInFull(text));
+    EXPECT_LT(glyphsDrawn(text, toast.getWidth() - 28 - synth::ui::ToastComponent::kIconSlot), glyphsInFull(text));
 }
 
 TEST(ToastComponentTests, TheDefaultSeverityIsInfo) {
@@ -217,4 +217,78 @@ TEST(ToastComponentTests, SeverityShowsAsABarInTheThemesWarningAndErrorColoursIn
             f.toast.setLookAndFeel(nullptr);
         }
     }
+}
+
+// The icon takes a slot before the text: the toast is wider by exactly that, with or without an action.
+TEST(ToastComponentTests, TheIconSlotWidensTheToastAndMovesTheTextRight) {
+    ToastFixture f;
+    f.toast.show("Saved");
+    const int plainWidth = f.toast.getWidth();
+    EXPECT_EQ(plainWidth, 14 * 2 + synth::ui::ToastComponent::kIconSlot + (int)std::ceil(measuredWidth("Saved")) + 2);
+    EXPECT_EQ(f.toast.getTextBoundsForTest().getX(), 14 + synth::ui::ToastComponent::kIconSlot);
+    EXPECT_EQ(f.toast.getIconBoundsForTest().getX(), 14);
+}
+
+TEST(ToastComponentTests, TheIconAndTheTextNeverReachTheActionButton) {
+    using Severity = synth::ui::ToastComponent::Severity;
+    for (const auto severity : {Severity::info, Severity::warning, Severity::error}) {
+        for (const char* text : {"Made 4 modules poly", "Undone"}) {
+            ToastFixture f;
+            f.toast.show(text, "Undo", [] {}, "Undo this change", severity);
+            const auto icon = f.toast.getIconBoundsForTest();
+            const auto label = f.toast.getTextBoundsForTest();
+            const auto button = f.toast.getActionButton().getBounds();
+            EXPECT_FALSE(icon.intersects(label)) << text;
+            EXPECT_FALSE(icon.intersects(button)) << text;
+            EXPECT_FALSE(label.intersects(button)) << text;
+            EXPECT_EQ(glyphsDrawn(text, label.getWidth()), glyphsInFull(text)) << text << " was shortened";
+        }
+    }
+}
+
+// Each severity paints its icon in its theme colour (info in the accent), in every built-in theme.
+TEST(ToastComponentTests, EachSeverityPaintsItsIconInItsThemeColourInEveryTheme) {
+    using Severity = synth::ui::ToastComponent::Severity;
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lookAndFeel;
+        lookAndFeel.applyTheme(theme);
+        for (const auto severity : {Severity::info, Severity::warning, Severity::error}) {
+            ToastFixture f;
+            f.toast.setLookAndFeel(&lookAndFeel);
+            f.toast.show("Cannot connect", {}, {}, {}, severity);
+            juce::Image image(juce::Image::ARGB, f.toast.getWidth(), f.toast.getHeight(), true,
+                              juce::SoftwareImageType());
+            {
+                juce::Graphics g(image);
+                f.toast.paint(g);
+            }
+            const auto expected = (severity == Severity::error     ? theme.colors.error
+                                   : severity == Severity::warning ? theme.colors.warning
+                                                                   : theme.colors.accent)
+                                      .withAlpha(1.0f);
+            int inkPixels = 0;
+            const auto icon = f.toast.getIconBoundsForTest();
+            for (int y = icon.getY(); y < icon.getBottom(); ++y)
+                for (int x = icon.getX(); x < icon.getRight(); ++x) {
+                    const auto px = image.getPixelAt(x, y);
+                    if (px.getAlpha() > 200 && std::abs(px.getRed() - expected.getRed()) < 8 &&
+                        std::abs(px.getGreen() - expected.getGreen()) < 8 &&
+                        std::abs(px.getBlue() - expected.getBlue()) < 8)
+                        ++inkPixels;
+                }
+            EXPECT_GT(inkPixels, 6) << theme.name << " severity " << (int)severity;
+            f.toast.setLookAndFeel(nullptr);
+        }
+    }
+}
+
+TEST(ToastComponentTests, TheScreenReaderHearsTheSeverityBeforeTheMessage) {
+    using Severity = synth::ui::ToastComponent::Severity;
+    ToastFixture f;
+    f.toast.show("Saved");
+    EXPECT_EQ(f.toast.getTitle(), "Saved");
+    f.toast.show("Cannot connect", {}, {}, {}, Severity::error);
+    EXPECT_EQ(f.toast.getTitle(), "Error: Cannot connect");
+    f.toast.show("Low disk space", {}, {}, {}, Severity::warning);
+    EXPECT_EQ(f.toast.getTitle(), "Warning: Low disk space");
 }

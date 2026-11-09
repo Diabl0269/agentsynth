@@ -12,6 +12,7 @@
 #include "UI/Graph/ModMatrixKeyboard.h"
 #include "UI/Graph/ModMatrixLists.h"
 #include "UI/Graph/ModMatrixPicker.h"
+#include "UI/Graph/ModMatrixPickerCreate.h"
 #include "UI/Graph/PluginKnobPicker/HostedModTargetPicker.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/PopupHost.h"
@@ -187,6 +188,7 @@ struct ModMatrixComponent::ModRow
     // `claimDest`, when given, picks the destination inside the same undo step; invalid leaves the routing as it was.
     void reroute(bool sourceChanged, Endpoint source, Endpoint dest, std::function<Endpoint()> claimDest = {});
     void pickHostedDestination(const synth::ui::HostedDestination& dest);
+    void pickNewSource(const synth::ui::CreateSourcePick& pick);
     // Runs graph mutations, in order, through the macro-port seam (or plain, in a bare panel) as ONE undo step.
     void applyRoutingChange(const std::vector<std::function<bool()>>& mutations, bool slideAttenuverter);
 };
@@ -763,11 +765,18 @@ void ModMatrixComponent::ModRow::showPicker(bool forSource) {
     }
     juce::Component::SafePointer<ModRow> safeRow(this);
     juce::Component::SafePointer<juce::ComboBox> safeCombo(&combo);
+    // A row with a canvas behind it can make a source; a bare panel has nowhere to put the module.
+    if (forSource && owner.graphEditor != nullptr)
+        for (auto& item : synth::ui::createSourceItems())
+            items.push_back(std::move(item));
     auto picker = std::make_unique<synth::ui::ModMatrixPicker>(
-        forSource ? "source" : "destination", std::move(items), selected, [safeCombo, safeRow, hosted](int id) {
+        forSource ? "source" : "destination", std::move(items), selected,
+        [safeCombo, safeRow, hosted, forSource](int id) {
             if (safeCombo == nullptr || safeRow == nullptr)
                 return;
-            if (const auto it = hosted.find(id); it != hosted.end())
+            if (const auto create = synth::ui::createSourcePickFor(id); create && forSource)
+                safeRow->pickNewSource(*create);
+            else if (const auto it = hosted.find(id); it != hosted.end())
                 safeRow->pickHostedDestination(it->second);
             else
                 safeCombo->setSelectedId(id, juce::sendNotificationSync);
@@ -851,6 +860,22 @@ void ModMatrixComponent::ModRow::pickHostedDestination(const synth::ui::HostedDe
         const int id = (int)((landed->node.uid << 8) | (uint32_t)landed->channel);
         showSelection(self->destCombo, id, self->owner.lists_->destinationLabel(id));
     }
+}
+
+// A new module of the picked type becomes the row's source. The module and the re-pointing share one undo group, so
+// one Cmd+Z removes the module and puts the row back.
+void ModMatrixComponent::ModRow::pickNewSource(const synth::ui::CreateSourcePick& pick) {
+    auto* editor = owner.graphEditor;
+    if (editor == nullptr)
+        return;
+    std::optional<AppUndoManager::ScopedUndoGroup> group;
+    if (owner.undoManager != nullptr)
+        group.emplace(*owner.undoManager);
+    const auto created = synth::ui::createSourceModule(*editor, owner.undoManager, pick);
+    if (created.uid == 0)
+        return;
+    const auto rawDest = (juce::uint32)selectedRawId(destCombo);
+    reroute(true, Endpoint{created, pick.channel}, Endpoint{NodeID(rawDest >> 8), (int)(rawDest & 0xFF)});
 }
 
 void ModMatrixComponent::ModRow::reroute(bool sourceChanged, Endpoint source, Endpoint dest,
