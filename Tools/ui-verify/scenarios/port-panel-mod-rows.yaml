@@ -15,19 +15,19 @@ save_project: "fro1575 test"
 steps:
   - openProject: {path: "${FIXTURES}/port-panel-mod-rows.agsproj"}
   - wait: {}
-  - click: {id: "card:LFO 1", x: 268, y: 57}
-  - wait: {}
+  - glide: {name: lfo-panel-opens, frames: 12, do: {click: {id: "card:LFO 1", x: 268, y: 57}}}
+  - wait: {settleMs: 200}
   - expect: {id: portConnectionsPanel, within_ms: 3000}
   - expect: {id: "portConnectionsPanel > Show VCA · CV in timeline", showing: true, tooltip: "Show VCA · CV in timeline"}
   - expect: {id: "portConnectionsPanel > Show Filter · Cutoff in timeline", showing: true}
   - expect: {id: "portConnectionsPanel > Filter · Cutoff amount", showing: true}
   - expect: {id: "portConnectionsPanel > Filter · Cutoff curve", showing: true}
   - mark: {check: 1, name: lfo-output-mod-rows}
-  - key: {keys: escape}
+  - glide: {name: lfo-panel-closes, frames: 10, do: {key: {keys: escape}}}
   - expect: {id: portConnectionsPanel, exists: false, within_ms: 2000}
   - wait: {}
-  - click: {id: "card:Oscillator", x: 270, y: 58}
-  - wait: {}
+  - glide: {name: osc-panel-opens, frames: 12, do: {click: {id: "card:Oscillator", x: 270, y: 58}}}
+  - wait: {settleMs: 200}
   - expect: {id: portConnectionsPanel, within_ms: 3000}
   - expect: {id: "portConnectionsPanel > Show Filter · Cutoff in timeline", showing: true}
   - expect: {id: "portConnectionsPanel > Filter · Cutoff amount", showing: true}
@@ -35,3 +35,5 @@ steps:
   - expect: {id: "portConnectionsPanel > Show VCA · Audio in timeline", exists: false}
   - expect: {id: "portConnectionsPanel > VCA · Audio amount", exists: false}
   - mark: {check: 2, name: osc-output-mixed-rows}
+  - glide: {name: osc-panel-closes, frames: 10, do: {key: {keys: escape}}}
+  - expect: {id: portConnectionsPanel, exists: false, within_ms: 2000}
