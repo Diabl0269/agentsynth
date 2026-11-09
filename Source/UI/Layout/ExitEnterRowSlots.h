@@ -2,6 +2,7 @@
 
 #include "UI/Layout/ExitEnterTimeline.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <type_traits>
 
 // ExitEnterRowSlots.h (docs/layout/animation.md "Delete and undo animation"): the per-row state and the math a list
 // of rows shares when it animates a removal and its undo with ExitEnterTimeline. A row that went away (leaving)
@@ -25,15 +26,23 @@ struct ExitEnterSlot {
 
 namespace exit_enter_slots {
 
-/** Starts a removal / restore motion: slots begin and end at `full` (a leaving row ends at 0, a restored one starts at
- * 0). */
-template <class Entries>
-void begin(Entries& entries, float full) {
+/** Starts a removal / restore motion: each slot begins and ends at its row's full height, `fullOf(entry)` (a leaving
+ * row ends at 0, a restored one starts at 0). */
+template <class Entries, class FullOf>
+    requires std::is_invocable_r_v<float, FullOf, const typename Entries::value_type&>
+void begin(Entries& entries, FullOf fullOf) {
     for (auto& e : entries) {
+        const float full = fullOf(e);
         e.from = e.leaving ? full : (e.restored ? 0.0f : full);
         e.to = e.leaving ? 0.0f : full;
         e.current = e.from;
     }
+}
+
+/** begin() for a list whose rows all have the height `full`. */
+template <class Entries>
+void begin(Entries& entries, float full) {
+    begin(entries, [full](const typename Entries::value_type&) { return full; });
 }
 
 /** The phases the entries need: an exit when a row leaves, a grow and outline when one is restored, always the gap. */
@@ -67,15 +76,22 @@ void apply(Entries& entries, const ExitEnterTimeline& timeline, double elapsedMs
     }
 }
 
-/** Every slot at its final place and look (the caller then drops the leaving rows). */
-template <class Entries>
-void land(Entries& entries, float full) {
+/** Every slot at its final place and look, `fullOf(entry)` high (the caller then drops the leaving rows). */
+template <class Entries, class FullOf>
+    requires std::is_invocable_r_v<float, FullOf, const typename Entries::value_type&>
+void land(Entries& entries, FullOf fullOf) {
     for (auto& e : entries) {
-        e.current = e.leaving ? 0.0f : full;
+        e.current = e.leaving ? 0.0f : fullOf(e);
         e.restored = false;
         e.scale = e.alpha = 1.0f;
         e.outline = 0.0f;
     }
+}
+
+/** land() for a list whose rows all have the height `full`. */
+template <class Entries>
+void land(Entries& entries, float full) {
+    land(entries, [full](const typename Entries::value_type&) { return full; });
 }
 
 /** Puts `row` in its slot at `y` and gives it the slot's look; returns the slot's height. */

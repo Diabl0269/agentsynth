@@ -5,7 +5,7 @@
 #   1. Opens a project where LFO 1 modulates the VCA's Gain and the Filter's Cutoff, and LFO 2 also modulates Gain.
 #   2. Clicks LFO 1's CV output jack: the panel lists both destinations, each with an amount bar, a percent and a curve chip.
 #   3. Drags the first row's bar: the percent follows; clicking away and pressing Undo once puts it back (+50%).
-#   4. Presses Tab: focus reaches each row's amount bar, percent and curve chip in turn.
+#   4. Presses Tab: focus reaches each row's amount bar, percent, curve chip and show-in-timeline button in turn.
 #   5. Clicks the VCA's CV input jack: the same controls, one row per LFO.
 motion: true
 record: true
@@ -17,7 +17,8 @@ steps:
   - wait: {}
   - expect: {id: portConnectionsPanel, within_ms: 3000}
   - mark: {check: 1, name: source-jack-rows}
-  - drag: {from: portConnectionsPanel, to: portConnectionsPanel, fromX: 168, fromY: 45, toX: 178, toY: 45}
+  # the bar sits on the row's second line; +50% is three quarters along it
+  - drag: {from: portConnectionsPanel, to: portConnectionsPanel, fromX: 144, fromY: 71, toX: 154, toY: 71}
   - wait: {}
   - mark: {check: 2, name: amount-dragged}
   - click: {id: "card:VCA", x: 150, y: 12}   # click away: the panel closes
@@ -35,6 +36,8 @@ steps:
   - mark: {check: 4, name: tab-reaches-percent}
   - key: {keys: tab}
   - mark: {check: 4, name: tab-reaches-curve-chip}
+  - key: {keys: tab}
+  - mark: {check: 4, name: tab-reaches-show-in-timeline}
   - click: {id: "card:VCA", x: 8, y: 78}
   - wait: {}
   - expect: {id: portConnectionsPanel, within_ms: 3000}

@@ -4,9 +4,8 @@
 #include "PortPanelController.h"
 #include "UI/Graph/MacroGroupController/MacroGroupController.h"
 #include "UI/Graph/ModDot/ModDotPalette.h"
-#include "UI/Graph/ModDot/ModDotSourcesPage.h"
+#include "UI/Graph/ModDot/ModSourceRowWiring.h"
 #include "UI/Layout/PopupMotion.h"
-#include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
 #include <algorithm>
 
 namespace synth::ui {
@@ -83,7 +82,7 @@ PortConnectionsPanel::PortConnectionsPanel(GraphEditor& editor, PortPanelControl
     for (const auto& connection : listPortConnections(editor_, port_)) {
         Entry entry;
         entry.row = std::make_unique<PortConnectionRow>(connection);
-        entry.current = entry.to = (float)PortConnectionRow::kHeight;
+        entry.current = entry.to = (float)PortConnectionRow::heightFor(connection);
         wireRow(*entry.row);
         holder_->addAndMakeVisible(*entry.row);
         entries_.push_back(std::move(entry));
@@ -103,22 +102,9 @@ PortConnectionsPanel::~PortConnectionsPanel() {
 void PortConnectionsPanel::wireRow(PortConnectionRow& row) {
     row.onRemove = [this](PortConnectionRow& r) { removeConnection(r); };
     row.onNavigate = [this](PortConnectionRow& r, int step) { navigate(&r, step); };
-    if (auto* mod = row.modRow()) {
-        // A modulation connection: the same amount bar, typed percent and curve chip as the knob's sources panel,
-        // written through the same call. A drag is one undo step, so is a typed value.
-        wireModCurveChip(mod->curveChip(), editor_, mod->attenuverterId(), mod->source().sourceName);
-        row.onAmountGestureBegin = [this](PortConnectionRow&) { editor_.beginModAmountGesture(); };
-        row.onAmountDragged = [this](PortConnectionRow& r, float amount) {
-            ModDotSourcesPage::applyAmount(editor_, r.modRow()->attenuverterId(), amount);
-        };
-        row.onAmountGestureEnd = [this](PortConnectionRow&) { editor_.commitModAmountGesture(); };
-        row.onAmountTyped = [this](PortConnectionRow& r, float amount) {
-            editor_.beginModAmountGesture();
-            ModDotSourcesPage::applyAmount(editor_, r.modRow()->attenuverterId(), amount);
-            editor_.commitModAmountGesture();
-            sync();
-        };
-    }
+    // A modulation connection: the knob sources panel's own controls and wiring, aimed at the knob the chain lands on.
+    if (auto* mod = row.modRow())
+        wireModSourceRow(*mod, editor_, row.connection().modCard, row.connection().modChannel, [this] { sync(); });
     row.onHighlight = [this](PortConnectionRow& r, bool on) {
         if (controller_ == nullptr)
             return;

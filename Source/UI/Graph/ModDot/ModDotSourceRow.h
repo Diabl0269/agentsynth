@@ -20,12 +20,13 @@ class ModDotSourceRow final : public juce::Component {
 public:
     static constexpr int kHeight = 34;
 
-    /** How the row is laid out where it is not the knob's sources page: a shorter row, a wider name (the port
-     *  connections panel names the far end, "<module> . <port>") and no "show in timeline" button. */
+    /** How the row is laid out where it is not the knob's sources page. `nameLine` > 0 puts the swatch, name and
+     *  remove button on a top line of that height and the other controls on a line under it (`height` is both). */
     struct Look {
         int height = kHeight;
         int nameWidth = 56;
         bool timeline = true;
+        int nameLine = 0;
     };
     void setLook(const Look& look);
 
@@ -77,6 +78,9 @@ private:
     class AmountButton;
     void endAmountEdit(bool apply);
     void applyNames();
+    void layoutTwoLines(int gap);
+    void setReadingFocusOrder();
+    juce::Rectangle<int> layoutControls(juce::Rectangle<int> r, int gap);
 
     KnobModSource source_;
     juce::String paramName_;

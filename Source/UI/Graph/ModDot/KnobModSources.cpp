@@ -16,9 +16,9 @@ float attenuverterAmount(juce::AudioProcessorGraph& graph, juce::AudioProcessorG
     return fallback;
 }
 
-std::vector<KnobModSource> knobModSources(GraphEditor& editor, juce::AudioProcessorGraph::NodeID dest, int destChannel,
-                                          bool fresh) {
-    std::vector<KnobModSource> out;
+// Every routing is resolved against one cable index, so listing all chains costs what listing one knob's did.
+std::vector<KnobModChain> knobModChains(GraphEditor& editor, bool fresh) {
+    std::vector<KnobModChain> out;
     auto& graph = editor.getAudioEngine().getGraph();
     const auto isPort = [&editor](juce::AudioProcessorGraph::NodeID id) {
         return editor.getMacroController().nodeIsMacroPort(id);
@@ -39,9 +39,10 @@ std::vector<KnobModSource> knobModSources(GraphEditor& editor, juce::AudioProces
             !routing.hasDest)
             continue;
         const auto real = resolveRouting(cables, routing, isPort);
-        if (real.dest.node != dest || real.dest.channel != destChannel)
-            continue;
-        KnobModSource source;
+        KnobModChain chain;
+        chain.card = real.dest.node;
+        chain.destChannel = real.dest.channel;
+        auto& source = chain.source;
         source.attenuverterId = routing.attenuverterNodeID;
         source.amount = attenuverterAmount(graph, routing.attenuverterNodeID, 1.0f);
         source.bypassed = routing.isBypassed;
@@ -54,8 +55,17 @@ std::vector<KnobModSource> knobModSources(GraphEditor& editor, juce::AudioProces
         source.sourceChannel = real.source.channel;
         if (auto* node = graph.getNodeForId(source.sourceNodeId))
             source.sourceName = synth::moduleTitle(*node);
-        out.push_back(std::move(source));
+        out.push_back(std::move(chain));
     }
+    return out;
+}
+
+std::vector<KnobModSource> knobModSources(GraphEditor& editor, juce::AudioProcessorGraph::NodeID dest, int destChannel,
+                                          bool fresh) {
+    std::vector<KnobModSource> out;
+    for (auto& chain : knobModChains(editor, fresh))
+        if (chain.card == dest && chain.destChannel == destChannel)
+            out.push_back(std::move(chain.source));
     return out;
 }
 

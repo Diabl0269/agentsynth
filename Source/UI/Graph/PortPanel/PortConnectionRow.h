@@ -2,9 +2,9 @@
 
 // One connection of the port connections panel: a swatch in the cable's colour, "<module> . <port>" at the far end
 // and a remove button. A modulation cable (an attenuverter chain) is the same row the knob's sources panel draws
-// (ModDotSourceRow: amount bar, typed percent, curve chip) so a connection offers the same controls everywhere. Pure
-// view: it reports what the user did and the panel applies it to the graph. Hovering the row or focusing its remove
-// button reports "highlight this cable" so the canvas can show which one it is.
+// (ModDotSourceRow: amount bar, typed percent, curve chip, show in timeline) on two lines, the name on top, so a
+// connection offers the same controls everywhere; the panel wires them (ModSourceRowWiring). Hovering the row or
+// focusing its remove button reports "highlight this cable" so the canvas can show which one it is.
 // docs/layout/cables.md#port-connections-panel.
 
 #include "PortConnectionList.h"
@@ -18,7 +18,13 @@ namespace synth::ui {
 
 class PortConnectionRow final : public juce::Component {
 public:
-    static constexpr int kHeight = 30;
+    static constexpr int kHeight = 30;    // an audio, MIDI or plain CV row, and a mod row's name line
+    static constexpr int kModHeight = 56; // a modulation row: the name line, then the controls line
+
+    /** The row's full height: kModHeight for a modulation, else kHeight. */
+    static int heightFor(const PortConnection& connection) noexcept {
+        return connection.isModulation() ? kModHeight : kHeight;
+    }
 
     explicit PortConnectionRow(const PortConnection& connection);
 
@@ -34,11 +40,6 @@ public:
     std::function<void(PortConnectionRow&, bool highlighted)> onHighlight;
     /** Up/Down on the row's button: the panel moves focus to the neighbouring control. */
     std::function<void(PortConnectionRow&, int step)> onNavigate;
-    // A modulation row's amount: a drag reports begin, live values and end; a typed value is one step on its own.
-    std::function<void(PortConnectionRow&)> onAmountGestureBegin;
-    std::function<void(PortConnectionRow&, float amount)> onAmountDragged;
-    std::function<void(PortConnectionRow&)> onAmountGestureEnd;
-    std::function<void(PortConnectionRow&, float amount)> onAmountTyped;
 
     /** The remove button of whichever row this is. */
     ModDotGlyphButton& removeButton() noexcept { return mod_ != nullptr ? mod_->removeGlyph() : removeButton_; }
