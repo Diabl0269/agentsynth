@@ -24,9 +24,19 @@ steps:
   - mouseMoveHeld: {id: Timeline, x: 70, y: 8}
   - mouseMoveHeld: {id: Timeline, x: 100, y: 8}
   - mouseMoveHeld: {id: Timeline, x: 130, y: 8}
-  - screenshot: {name: 2-active-tab-mid-drag}
+  - mouseMoveHeld: {id: Timeline, x: 160, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 190, y: 8}
+  - glide: {name: drag, frames: 14, do: {mouseMoveHeld: {id: Timeline, x: 220, y: 8}}}
   - mark: {check: 1, name: active-tab-mid-drag}
-  - mouseUp: {id: Timeline, x: 130, y: 8}
+  - screenshot: {name: 2-active-tab-mid-drag}
+  - mouseMoveHeld: {id: Timeline, x: 250, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 280, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 310, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 340, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 370, y: 8}
+  - mouseMoveHeld: {id: Timeline, x: 400, y: 8}
+  - glide: {name: drop, frames: 14, do: {mouseUp: {id: Timeline, x: 420, y: 8}}}
+  - wait: {settleMs: 50}
   - mark: {check: 1, name: active-tab-just-dropped}
   - wait: {}
   - screenshot: {name: 3-active-tab-after-drop}
