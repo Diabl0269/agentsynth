@@ -46,7 +46,9 @@ juce::AudioBuffer<float> stripInput(float left, float right) {
     buffer.clear();
     for (int i = 0; i < kBlockSize; ++i) {
         for (int ch = 0; ch < ChannelStripModule::kNumOutputs; ++ch)
-            buffer.setSample(ch, i, 9.0f);
+            if (ch < ChannelStripModule::kFirstCvChannel ||
+                ch >= ChannelStripModule::kNumInputs) // an unpatched cable reads 0
+                buffer.setSample(ch, i, 9.0f);
         buffer.setSample(0, i, left);
         buffer.setSample(kRight, i, right);
     }

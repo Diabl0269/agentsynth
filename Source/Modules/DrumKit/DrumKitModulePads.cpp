@@ -235,22 +235,49 @@ std::vector<int> DrumKitModule::shownPads() const {
 
 int DrumKitModule::hiddenPadCount() const { return pads_.count - (int)shownPads().size(); }
 
-// Shown is card and editor chrome only: a hidden pad keeps its sound and its note, so its hits still play.
+// Shown is card and editor chrome only: a hidden pad keeps its sound and its note, so its hits still play. A switch
+// flipped by hand is a new choice, so Show all's remembered set is dropped: its second press then never hides a pad
+// the person has just decided about, and the button reads plainly as Show all again.
 bool DrumKitModule::setPadShown(int index, bool shown) {
     if (index < 0 || index >= kMaxPads || pads_.pads[(size_t)index].shown == shown)
         return false;
+    for (auto& p : pads_.pads)
+        p.revealed = false;
     pads_.pads[(size_t)index].shown = shown;
     return true;
 }
 
+// The set it remembers is replaced, never merged: only the pads this press brought back are hidden by the next.
 int DrumKitModule::showAllPads() {
     int changed = 0;
-    for (auto& p : pads_.pads)
-        if (!p.shown) {
-            p.shown = true;
-            ++changed;
-        }
+    for (const auto& p : pads_.pads)
+        changed += p.shown ? 0 : 1;
+    if (changed == 0)
+        return 0;
+    for (auto& p : pads_.pads) {
+        p.revealed = !p.shown;
+        p.shown = true;
+    }
     return changed;
+}
+
+int DrumKitModule::revealedPadCount() const {
+    int revealed = 0;
+    for (int i = 0; i < pads_.count; ++i)
+        revealed += pads_.pads[(size_t)i].revealed ? 1 : 0;
+    return revealed;
+}
+
+int DrumKitModule::hidePadsAgain() {
+    int hidden = 0;
+    for (auto& p : pads_.pads) {
+        if (p.revealed && p.shown) {
+            p.shown = false;
+            ++hidden;
+        }
+        p.revealed = false;
+    }
+    return hidden;
 }
 
 bool DrumKitModule::setPad(int index, const synth::drums::Pad& pad) {
@@ -309,6 +336,7 @@ void DrumKitModule::resetPad(int index) {
     }
     p.note = now.note;
     p.shown = now.shown;
+    p.revealed = now.revealed;
     p.instrumentPitch = now.instrumentPitch;
     setPad(index, p);
 }

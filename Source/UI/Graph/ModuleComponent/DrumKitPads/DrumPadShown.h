@@ -8,6 +8,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <vector>
 
 namespace synth::ui {
 
@@ -19,8 +20,28 @@ inline constexpr const char* kAskBeforeHidingDrumKey = "drumKitAskBeforeHidingPa
  *  False when the switch already read so. */
 bool setPadShownUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit, int index,
                          bool shown);
-/** Switches every pad on as one undo step; how many changed. */
+/** The same for every pad in `pads` at once (out-of-range indices skipped): one undo step; how many changed. */
+int setPadsShownUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit,
+                         const std::vector<int>& pads, bool shown);
+/** Switches every pad on as one undo step, remembering which it brought back; how many changed. */
 int showAllPadsUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit);
+/** Show all as a toggle, one undo step: while the pads its last press brought back are remembered it hides exactly
+ *  those again (never asking, since it restores the person's own choice), else it switches every pad on. How many
+ *  pads changed. The card's chip and pad menu and the drum machine's button all press it through here. */
+int toggleShowAllPadsUndoably(AppUndoManager* undo, juce::AudioProcessorGraph* graph, DrumKitModule& kit);
+
+/** What the Show all toggle reads for `hidden` pads switched off (within the count) and `revealed` pads it would hide
+ *  again; `revealed` wins when both are set. */
+struct ShowAllText {
+    bool on = false;       // the chip is lit: a press hides the remembered pads again
+    bool enabled = false;  // something to show or hide
+    juce::String caption;  // "3 hidden", "3 shown again", empty
+    juce::String tooltip;  // what a press does now
+    juce::String menuItem; // the pad menu's item: "Show all pads", "Hide the 3 again"
+};
+ShowAllText showAllText(int hidden, int revealed);
+/** Paints `chip` (a toggle pill labelled "Show all") as `text` says: lit, enabled and tooltip. */
+void applyShowAllChip(juce::ToggleButton& chip, const ShowAllText& text);
 
 /** The question for hiding `padName`, which has `hits` notes in the clips that play the kit. */
 struct HideDrumConfirmText {

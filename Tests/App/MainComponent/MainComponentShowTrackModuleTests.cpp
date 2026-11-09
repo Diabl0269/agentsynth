@@ -1,13 +1,19 @@
 // Concern: "Show module" end to end on a real MainComponent -- Ctrl+E through a track header's keyPressed (and the
 // header's button) selects the track's module on the canvas, and for a hosted plugin opens its editor window and
 // closes it on the next press. The plugin is the stub backend's, so the window is the real (headless) one.
+// Also the drum machine's way to a Drum Kit track's kit through the same unit: its Show all toggle and its row menu's
+// Hide pad / Show pad reach the card's shared undo helpers, one undo step each, the toggle hides exactly the pads it
+// brought back, and hiding a drum with hits asks the card's question.
 #include "../../StubPluginInstance.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponentTestFixture.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/DrumMachine/DrumMachineComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 
 #include "../../TestWait.h"
@@ -191,4 +197,133 @@ TEST_F(ShowTrackModuleTest, CtrlEOnAHostedPluginTrackFocusesItsModuleAndCtrlCmdE
     ASSERT_TRUE(header.keyPressed(toggleKey));
     EXPECT_FALSE(windows.hasWindowForTest(node->nodeID)) << "and the next press closes it";
     windows.closeAll();
+}
+
+using synth::ui::DrumMachineComponent;
+using synth::ui::TimelinePanelComponent;
+
+namespace {
+
+class DrumKitShowAllAppTest : public MainComponentTest {
+protected:
+    void SetUp() override {
+        MainComponentTest::SetUp();
+        mc = std::make_unique<MainComponent>(std::make_unique<MockProvider>());
+        mc->setSize(1600, 900);
+        mc->getAudioEngine().suspendDeviceCallback();
+        mc->getTimelinePanel().applyAddTrackMenuChoice(TimelinePanelComponent::kAddInstrumentDrumKitMenuId);
+        track = mc->getTimelineDoc().getTracks().back().id;
+        for (auto* node : mc->getAudioEngine().getGraph().getNodes())
+            if (auto* k = dynamic_cast<DrumKitModule*>(node->getProcessor()))
+                kit = k;
+        ASSERT_NE(kit, nullptr);
+        ASSERT_TRUE(mc->getTimelinePanel().openDrumMachineOnTrack(track));
+        synth::ui::test_hooks::drumRowMenuHookForTest() = [this](int, juce::PopupMenu m, std::function<void(int)> c) {
+            menu = std::move(m);
+            choose = std::move(c);
+        };
+    }
+    void TearDown() override {
+        synth::ui::test_hooks::drumRowMenuHookForTest() = nullptr;
+        synth::ui::test_hooks::hideDrumConfirmHookForTest() = nullptr;
+        mc.reset();
+        MainComponentTest::TearDown();
+    }
+
+    DrumMachineComponent& grid() { return mc->getTimelinePanel().getDrumMachine(); }
+    bool undo() {
+        const bool ok = mc->getUndoManager().undo();
+        grid().refreshKitRows();
+        return ok;
+    }
+    // Opens the row menu of `pitch` and picks the item titled `text` (in a submenu too); false when it is not there.
+    bool pickRowItem(int pitch, const juce::String& text) {
+        grid().showRowMenu(pitch, std::nullopt);
+        for (juce::PopupMenu::MenuItemIterator it(menu, true); it.next();)
+            if (it.getItem().text == text && it.getItem().subMenu == nullptr) {
+                choose(it.getItem().itemID);
+                return true;
+            }
+        return false;
+    }
+    std::vector<int> hiddenPads() const {
+        std::vector<int> out;
+        for (int i = 0; i < kit->padCount(); ++i)
+            if (!kit->padShown(i))
+                out.push_back(i);
+        return out;
+    }
+
+    std::unique_ptr<MainComponent> mc;
+    synth::TrackId track;
+    DrumKitModule* kit = nullptr;
+    juce::PopupMenu menu;
+    std::function<void(int)> choose;
+};
+
+} // namespace
+
+// Regression test for FRO1394: the clip editor could neither hide a pad nor hide the pads Show all brought back.
+TEST_F(DrumKitShowAllAppTest, TheRowMenuHidesAndShowsAPadAsOneUndoStepEach) {
+    ASSERT_TRUE(pickRowItem(kit->pad(2).note, "Hide pad"));
+    EXPECT_EQ(hiddenPads(), std::vector<int>{2});
+    EXPECT_LT(grid().rowOfPitch(kit->pad(2).note), 0);
+    ASSERT_TRUE(undo());
+    EXPECT_TRUE(hiddenPads().empty()) << "Cmd+Z brings the pad back in one step";
+    EXPECT_GE(grid().rowOfPitch(kit->pad(2).note), 0);
+
+    ASSERT_TRUE(pickRowItem(kit->pad(2).note, "Hide pad"));
+    ASSERT_TRUE(pickRowItem(kit->pad(0).note, kit->pad(2).name)) << "Show pad lists it";
+    EXPECT_TRUE(hiddenPads().empty());
+    ASSERT_TRUE(undo());
+    EXPECT_EQ(hiddenPads(), std::vector<int>{2}) << "undoing the show hides it again";
+}
+
+TEST_F(DrumKitShowAllAppTest, ShowAllTogglesTheSamePadsAndEachPressIsOneUndoStep) {
+    for (int pad : {1, 4, 6})
+        ASSERT_TRUE(pickRowItem(kit->pad(pad).note, "Hide pad"));
+    ASSERT_EQ(hiddenPads(), (std::vector<int>{1, 4, 6}));
+    auto& button = grid().getShowAllButton();
+    ASSERT_TRUE(button.isEnabled());
+
+    button.onClick();
+    EXPECT_TRUE(hiddenPads().empty()) << "they return";
+    EXPECT_TRUE(button.getToggleState());
+    button.onClick();
+    EXPECT_EQ(hiddenPads(), (std::vector<int>{1, 4, 6})) << "the same 3 hide";
+    EXPECT_FALSE(button.getToggleState());
+
+    ASSERT_TRUE(undo());
+    EXPECT_TRUE(hiddenPads().empty()) << "one undo brings the hide-again back";
+    EXPECT_TRUE(button.getToggleState()) << "lit again: the remembered pads came back with it";
+    ASSERT_TRUE(undo());
+    EXPECT_EQ(hiddenPads(), (std::vector<int>{1, 4, 6})) << "one more undoes Show all";
+    EXPECT_FALSE(button.getToggleState());
+}
+
+TEST_F(DrumKitShowAllAppTest, HidingADrumWithHitsFromTheRowMenuAsksTheCardsQuestion) {
+    const int clap = kit->pad(2).note;
+    synth::MidiNote hit;
+    hit.pitch = clap;
+    hit.lengthBeats = 0.25;
+    mc->getTimelineDoc().addNote(grid().getClipId(), hit);
+    std::vector<juce::String> asked;
+    std::function<void(bool, bool)> answer;
+    synth::ui::test_hooks::hideDrumConfirmHookForTest() = [&](const synth::ui::HideDrumConfirmText& text,
+                                                              std::function<void(bool, bool)> done) {
+        asked.push_back(text.title);
+        answer = std::move(done);
+    };
+    ASSERT_TRUE(pickRowItem(clap, "Hide pad"));
+    ASSERT_EQ(asked.size(), 1u);
+    EXPECT_EQ(asked[0], "Clap has 1 hit; hide it anyway?");
+    EXPECT_TRUE(kit->padShown(2)) << "nothing changes until the person says yes";
+    answer(true, false);
+    EXPECT_FALSE(kit->padShown(2));
+
+    asked.clear();
+    grid().getShowAllButton().onClick();
+    grid().getShowAllButton().onClick();
+    EXPECT_FALSE(kit->padShown(2)) << "Show all's second press hid it again";
+    EXPECT_TRUE(asked.empty()) << "without asking: it restores the person's own choice";
 }

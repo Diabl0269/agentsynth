@@ -54,13 +54,7 @@ public:
     }
     int getVisibleInputPortCount() const override { return 0; }
     juce::String getInputPortLabel(int i) const override { return mods_.label(i); }
-    LogicalPort mapInputChannel(int raw) const override {
-        auto port = ModuleBase::mapInputChannel(raw);
-        port.role = PortRole::ModCV;
-        port.visibleJackIndex = raw; // no gutter jacks: a knob drop keeps its own channel
-        port.isPolyGroupHead = true;
-        return port;
-    }
+    LogicalPort mapInputChannel(int raw) const override { return mods_.portOf(raw); }
     std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
     bool acceptsMidi() const override { return true; }

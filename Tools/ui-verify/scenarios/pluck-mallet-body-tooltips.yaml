@@ -1,0 +1,56 @@
+# Pluck's Body and Mallet's Resonator say the same thing on hover; Mallet's Tremolo says it is a volume wobble.
+#
+# What a user does: adds a Pluck and a Mallet, opens the Pluck's Tune tab and rests the pointer on Body, then opens the
+# Mallet's Mallet tab and rests on Resonator, then on Tremolo. Each tooltip is one plain line.
+record: true
+save_project: pluck mallet body tooltips
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: pluck}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Pluck", equals: 1}, within_ms: 1500}
+  - key: {keys: cmd+f}
+  - wait: {}
+  - key: {keys: cmd+a}
+  - type: {text: mallet}
+  - wait: {}
+  - key: {keys: down}
+  - key: {keys: down}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Mallet", equals: 1}, within_ms: 1500}
+  - click: {id: Hide Library}
+  - wait: {}
+  - click: {id: Hide Minimap}
+  - wait: {}
+  - drag: {from: "card:Pluck", fromX: 120, fromY: 14, to: window, toX: 200, toY: 120}
+  - wait: {}
+  - drag: {from: "card:Mallet", fromX: 120, fromY: 14, to: window, toX: 700, toY: 120}
+  - wait: {}
+  - click: {id: "card:Pluck > cardTabStrip", x: 213, y: 12}   # the Tune tab, where Body sits
+  - wait: {}
+  - click: {id: "card:Mallet > cardTabStrip", x: 128, y: 12}  # the Mallet tab: Resonator and Tremolo
+  - wait: {}
+  - expect: {id: "card:Pluck > Body", contains: {tooltip: "body resonance rings under the note"}}
+  - expect: {id: "card:Mallet > Resonator", contains: {tooltip: "body resonance rings under the note"}}
+  - expect: {id: "card:Mallet > Tremolo", contains: {tooltip: "How deep the volume wobbles"}}
+  - hover: {id: "card:Pluck > Body"}
+  - wait: {settleMs: 1800}
+  - mark: {check: 1, name: body-tooltip}
+  - screenshot: {id: window, name: body-tooltip}
+  - hover: {id: "card:Mallet > Resonator"}
+  - wait: {settleMs: 1800}
+  - mark: {check: 1, name: resonator-tooltip}
+  - screenshot: {id: window, name: resonator-tooltip}
+  - hover: {id: "card:Mallet > Tremolo"}
+  - wait: {settleMs: 1800}
+  - mark: {check: 1, name: tremolo-tooltip}
+  - screenshot: {id: window, name: tremolo-tooltip}

@@ -162,7 +162,7 @@ TEST_F(ModuleBypassTest, BypassedSourceOutputsSilence) {
     // above every CV input channel is what makes JUCE copy shared CV buffers that fan out to multiple nodes.
     int numChannels = oscillator.getTotalNumOutputChannels();
     EXPECT_EQ(numChannels, OscillatorModule::kNumOutputs);
-    EXPECT_EQ(numChannels, 29);
+    EXPECT_EQ(numChannels, 31);
 
     juce::AudioBuffer<float> buffer(numChannels, blockSize);
     juce::MidiBuffer midiBuffer;

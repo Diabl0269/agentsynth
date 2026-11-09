@@ -9,6 +9,8 @@
 
 namespace synth {
 
+class SequencerCables;
+
 /** The MIDI channel the sequencer writes on. */
 inline constexpr int kSequencerMidiChannel = 1;
 
@@ -38,9 +40,11 @@ public:
     /** Whether `note` is among the notes whose note-off is still to come. */
     bool isHolding(int note) const noexcept;
 
-    /** Plays every step hit inside the block's segments, in time order, and the note-offs that fall in the block. */
+    /** Plays every step hit inside the block's segments, in time order, and the note-offs that fall in the block.
+     *  With `cables`, each hit plays with the settings the cables give on its own sample. */
     void renderBlock(const SequencerClockBlock& block, const SequencerPattern& pattern, const SequencerScaleSnap& snap,
-                     const SequencerSettings& settings, juce::MidiBuffer& midi, int numSamples);
+                     const SequencerSettings& settings, juce::MidiBuffer& midi, int numSamples,
+                     const SequencerCables* cables = nullptr);
 
     /** Index of the step whose first hit came last (what the card highlights). */
     int activeStep() const noexcept { return activeStep_; }

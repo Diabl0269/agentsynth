@@ -144,7 +144,8 @@ Scenario: `Tools/ui-verify/scenarios/drum-kit-pad-cable.yaml`.
 
 The Sound row's button opens the **Sound menu** (`DrumPadSoundMenu`). Right-click on a pad, or Shift+F10 on the grid,
 opens the **pad menu**: Play, Replace from file..., Reset to kit sound, Hide pad (H; Show pad when the pad is hidden),
-Show all pads (enabled while a pad is hidden), then the same groups inline. The current choice
+Show all pads (enabled while a pad is hidden; "Hide the 3 again" while the Show all chip is lit), then the same groups
+inline. The current choice
 has a tick.
 
 - **Audio file**: Choose a file..., and Recent files (pad files chosen this session plus the files this kit's pads
@@ -211,14 +212,27 @@ right-click and mapped badge to the picked pad (`ModuleComponent::rebindMidiLear
   over 160 ms; Reduce Motion is an 80 ms fade and Animations Off is instant. The card height follows the rows.
 - A hidden pad stays picked if it was, so the switch can bring it back. Arrow keys, Home and End skip hidden pads.
   A pad's name for a screen reader counts the shown pads ("Cowbell pad, kit sound, 7 of 7").
-- The caption line reads "N hidden ·" followed by a **Show all** link (Tab-reachable, focus ring, named "Show all
-  hidden pads"). Show all switches on every pad, also those beyond the count, as one undo step. A pick hint
-  replaces the link for its two seconds.
+- The caption line reads "N hidden" followed by the **Show all** chip: the shared toggle pill (the lane chips' and
+  the card footer's look), 20 px tall, Tab-reachable with the pill's focus ring, Return presses it (Space stays the
+  transport's), named "Show all hidden pads" with a tooltip that says what a press does now. It fades in and out with
+  the count; a pick hint or a drop hint takes the line for its time.
+- **Show all is a toggle.** The first press switches on every pad, also those beyond the count, and remembers exactly
+  the pads it brought back (`Pad::revealed`). The chip is then lit and the caption reads "N shown again"; the second
+  press hides exactly those pads again and forgets them. The label stays "Show all" in both states, so the chip never
+  changes width under the pointer. Hiding again never asks the "has hits" question: it restores the person's own
+  earlier choice.
+- **When the remembered set is dropped.** Any Shown change made by hand (the switch, H, the pad menu's Hide or Show
+  pad, the drum machine's row menu) forgets it, so the chip reads plainly as Show all again and its second press never
+  hides a pad the person has just decided about. Undo and a project load bring it back with the pads; a count change
+  and Reset to kit sound keep it. A press of Show all that has nothing to show leaves it alone.
 - **Hiding never mutes.** A hidden pad keeps its sound and note, so its hits still play. Hiding only decides what the
   card, and the [drum machine](../timeline/drum-machine.md#a-drum-kits-pads-as-rows), draw.
 - A hidden pad's hits are not drawn in the timeline clip's note preview either, and the other rows close up.
 - Hiding a pad whose drum has hits in a clip of a track playing the kit asks first: "Cowbell has 1 hit; hide it
   anyway?", with a "Don't ask again" box (user setting `drumKitAskBeforeHidingPad`). Showing never asks.
-- The pad menu (right-click, Shift+F10) has the same two actions: Hide pad or Show pad, and Show all pads.
-- Each switch, and Show all, is one undo step. `shown` is saved per pad; a kit with every pad shown writes nothing
-  new, so older projects load as before.
+- The pad menu (right-click, Shift+F10) has the same actions: Hide pad or Show pad, and Show all pads (or "Hide the N
+  again" while the chip is lit). The drum machine's Show all button and its row menu's Hide pad and Show pad reach the
+  same undo steps (`DrumPadShown.h`: `setPadsShownUndoably`, `toggleShowAllPadsUndoably`), with the same words
+  (`showAllText`).
+- Each switch, and each Show all press, is one undo step. `shown` is saved per pad and `revealed` only on a remembered
+  pad; a kit with every pad shown and nothing remembered writes nothing new, so older projects load as before.

@@ -77,6 +77,7 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
     // before the clear below writes to those channels. See readGlobalParamCV.
     const GlobalParamCV global = readGlobalParamCV(buffer, numSamples);
     fixedRateCv_ = global.fixedRateCv;
+    cacheRestartCV(buffer, numSamples);
 
     // Materialised once, before the voice loop -- see fillLevelRamp.
     fillLevelRamp(ns);
@@ -126,7 +127,7 @@ void OscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer, int num
         // pitch CV never drops (Poly MIDI holds it after a note-off) still restarts on the next note.
         const bool wasActive = voices[v].active;
         if (!wasActive || (v == 0 && voice0RestartPending))
-            restartVoice(voices[v], /*fadeFromOld*/ wasActive);
+            restartVoice(voices[v], /*fadeFromOld*/ wasActive, 0.0f, std::max(0, settings.firstSample));
         voices[v].active = true;
 
         // A silent voice keeps its last pitch, so the next note on it slides from there.
@@ -184,7 +185,7 @@ void OscillatorModule::renderPolyVoiceSteady(int v, float* output, float* output
 
     for (int s = set.firstSample; s < numSamples; ++s) {
         if (voices[v].gateEdges.firesAt(s))
-            restartVoice(voices[v], /*fadeFromOld*/ true, voices[v].gateEdges.firedLead);
+            restartVoice(voices[v], /*fadeFromOld*/ true, voices[v].gateEdges.firedLead, s);
         const int idx = std::min(s, ns - 1);
         const int wfS = hasWaveCV ? juce::jlimit(0, 3, wf + (int)std::round(waveformCVCache[idx] * 3.0f)) : wf;
         const float pulseWidth = pulseWidthRamp[(size_t)idx];
@@ -231,7 +232,7 @@ void OscillatorModule::renderPolyVoiceModulated(int v, float* output, float* out
 
     for (int s = set.firstSample; s < numSamples; ++s) {
         if (voices[v].gateEdges.firesAt(s))
-            restartVoice(voices[v], /*fadeFromOld*/ true, voices[v].gateEdges.firedLead);
+            restartVoice(voices[v], /*fadeFromOld*/ true, voices[v].gateEdges.firedLead, s);
         const int idx = std::min(s, ns - 1);
 
         float extraPitchShift = 0.0f;

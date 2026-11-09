@@ -1,8 +1,9 @@
 // DrumKitPadShownTests.cpp
 // The Drum Kit card's Shown switch: a hidden pad leaves the grid and the pads after it move up, the caption counts
-// them and offers Show all, H flips the picked pad, every change is one undo step, a hidden pad still plays, hiding a
-// drum that has hits asks first, and the pads slide.
+// them and offers the Show all toggle (pressed again it hides the same pads), H flips the picked pad, every change is
+// one undo step, a hidden pad still plays, hiding a drum that has hits asks first, and the pads slide.
 
+#include "../../../TestWait.h"
 #include "../CardBody/CardCanvas.h"
 #include "../GraphEditor/GraphEditorTestHelpers.h"
 #include "Modules/DrumKit/DrumKitModule.h"
@@ -84,8 +85,8 @@ TEST(DrumKitPadShown, TheSwitchTakesAPadOffTheGridAndThePadsAfterItMoveUp) {
     EXPECT_EQ(grid.padTitle(7), "Cowbell pad, built-in sound, 7 of 7");
     EXPECT_EQ(grid.padAt(seventhSpot.getCentre()), 7);
     EXPECT_FALSE(shown.getToggleState());
-    EXPECT_EQ(scene.pads().caption().getText(), juce::String::fromUTF8("1 hidden \xC2\xB7"));
-    EXPECT_TRUE(scene.pads().showAllLink().isVisible());
+    EXPECT_EQ(scene.pads().caption().getText(), "1 hidden");
+    EXPECT_TRUE(scene.pads().showAllChip().isVisible());
     EXPECT_EQ(scene.pads().controls().boundPad(), 6) << "the hidden pad stays picked, so it can be shown again";
 }
 
@@ -143,16 +144,17 @@ TEST(DrumKitPadShown, ShowAllIsOneUndoStepAndAnUndoHidesThemAgain) {
     scene.pickQuietly(4);
     scene.flipSwitch();
     ASSERT_EQ(scene.kit().hiddenPadCount(), 2);
-    EXPECT_EQ(scene.pads().caption().getText(), juce::String::fromUTF8("2 hidden \xC2\xB7"));
+    EXPECT_EQ(scene.pads().caption().getText(), "2 hidden");
 
-    scene.pads().showAllLink().onClick();
+    scene.pads().showAllChip().onClick();
     EXPECT_EQ(scene.kit().hiddenPadCount(), 0);
     EXPECT_EQ(scene.grid().visibleCount(), 8);
-    EXPECT_FALSE(scene.pads().showAllLink().isVisible());
+    EXPECT_TRUE(scene.pads().showAllChip().getToggleState()) << "lit: a second press hides them again";
     ASSERT_TRUE(scene.undo());
     EXPECT_EQ(scene.kit().hiddenPadCount(), 2) << "one step brought both back, one undo hides both";
     EXPECT_EQ(scene.grid().visibleCount(), 6);
-    EXPECT_TRUE(scene.pads().showAllLink().isVisible());
+    EXPECT_TRUE(scene.pads().showAllChip().isVisible());
+    EXPECT_FALSE(scene.pads().showAllChip().getToggleState());
 }
 
 TEST(DrumKitPadShown, EachSwitchIsOneUndoStepAndRedoFollows) {
@@ -180,7 +182,7 @@ TEST(DrumKitPadShown, TheCardShrinksWithTheRowsAndGrowsBack) {
     EXPECT_EQ(scene.grid().visibleCount(), 4);
     EXPECT_EQ(scene.grid().getHeight(), DrumPadGrid::heightFor(4));
     EXPECT_LT(scene.card().getHeight(), height) << "one row of pads, not two";
-    scene.pads().showAllLink().onClick();
+    scene.pads().showAllChip().onClick();
     EXPECT_EQ(scene.card().getHeight(), height);
 }
 
@@ -234,20 +236,86 @@ TEST(DrumKitPadShown, TheQuestionNamesTheDrumAndItsHits) {
     EXPECT_EQ(synth::ui::hideDrumConfirmText("Kick", 12).title, "Kick has 12 hits; hide it anyway?");
 }
 
-TEST(DrumKitPadShown, TheSwitchAndTheLinkHaveKeyboardPathsAndNames) {
+TEST(DrumKitPadShown, TheSwitchAndTheChipHaveKeyboardPathsAndNames) {
     Scene scene;
     auto& shown = scene.pads().controls().shownSwitch();
     EXPECT_TRUE(shown.getWantsKeyboardFocus());
     EXPECT_FALSE(shown.getTitle().isEmpty());
     scene.pickQuietly(1);
     scene.flipSwitch();
-    auto& link = scene.pads().showAllLink();
-    EXPECT_TRUE(link.getWantsKeyboardFocus());
-    EXPECT_EQ(link.getTitle(), "Show all hidden pads");
-    EXPECT_FALSE(link.getTooltip().isEmpty());
+    auto& chip = scene.pads().showAllChip();
+    EXPECT_TRUE(chip.getWantsKeyboardFocus());
+    EXPECT_EQ(chip.getTitle(), "Show all hidden pads");
+    EXPECT_FALSE(chip.getTooltip().isEmpty());
     const auto tabbable = scene.card().createKeyboardFocusTraverser()->getAllComponents(&scene.card());
-    EXPECT_NE(std::find(tabbable.begin(), tabbable.end(), &link), tabbable.end());
+    EXPECT_NE(std::find(tabbable.begin(), tabbable.end(), &chip), tabbable.end());
     EXPECT_NE(std::find(tabbable.begin(), tabbable.end(), &shown), tabbable.end());
+}
+
+// Regression test for FRO1394: Show all was a one-way text link, so the pads it brought back could only be hidden
+// again one by one.
+TEST(DrumKitPadShown, ShowAllIsAToggleThatHidesTheSamePadsAgainOneUndoStepEach) {
+    Scene scene;
+    for (int pad : {1, 4, 6})
+        scene.pads().setPadShown(pad, false);
+    auto& chip = scene.pads().showAllChip();
+    ASSERT_TRUE(chip.isVisible());
+    EXPECT_FALSE(chip.getToggleState());
+    EXPECT_EQ(scene.pads().caption().getText(), "3 hidden");
+
+    chip.onClick();
+    EXPECT_EQ(scene.grid().visibleCount(), 8) << "they return";
+    EXPECT_TRUE(chip.isVisible());
+    EXPECT_TRUE(chip.getToggleState());
+    EXPECT_EQ(scene.pads().caption().getText(), "3 shown again");
+
+    chip.onClick();
+    for (int pad = 0; pad < 8; ++pad)
+        EXPECT_EQ(scene.kit().padShown(pad), !(pad == 1 || pad == 4 || pad == 6)) << "the same 3 hide, pad " << pad;
+    EXPECT_FALSE(chip.getToggleState());
+    EXPECT_EQ(scene.pads().caption().getText(), "3 hidden");
+
+    ASSERT_TRUE(scene.undo());
+    EXPECT_EQ(scene.grid().visibleCount(), 8) << "one undo brings the hide-again back";
+    EXPECT_TRUE(chip.getToggleState()) << "and the chip is lit again: the remembered set came back too";
+    ASSERT_TRUE(scene.undo());
+    EXPECT_EQ(scene.grid().visibleCount(), 5) << "one more undoes Show all";
+    EXPECT_FALSE(chip.getToggleState());
+}
+
+TEST(DrumKitPadShown, AHandMadeSwitchAfterShowAllTurnsTheChipBackIntoShowAll) {
+    Scene scene;
+    scene.pads().setPadShown(2, false);
+    scene.pads().showAllChip().onClick();
+    ASSERT_TRUE(scene.pads().showAllChip().getToggleState());
+    scene.pads().setPadShown(5, false);
+    EXPECT_FALSE(scene.pads().showAllChip().getToggleState());
+    EXPECT_EQ(scene.pads().caption().getText(), "1 hidden");
+    scene.pads().showAllChip().onClick();
+    EXPECT_TRUE(scene.kit().padShown(5));
+    EXPECT_TRUE(scene.kit().padShown(2));
+}
+
+TEST(DrumKitPadShown, TheShowAllChipIsTheTogglePillAndReturnPressesIt) {
+    Scene scene;
+    scene.pads().setPadShown(3, false);
+    auto& chip = scene.pads().showAllChip();
+    EXPECT_TRUE((bool)chip.getProperties()[synth::theme::AppLookAndFeel::kTogglePillProperty])
+        << "the shared toggle pill, as the lane chips and the card footer use";
+    EXPECT_EQ(chip.getButtonText(), "Show all");
+    EXPECT_EQ(chip.getHeight(), DrumKitPadsSection::kCaptionHeight);
+    EXPECT_EQ(chip.getWidth(), synth::theme::AppLookAndFeel::togglePillWidth("Show all"));
+    EXPECT_TRUE(chip.getTooltip().contains("1 pad")) << chip.getTooltip();
+    EXPECT_FALSE(chip.getBounds().intersects(scene.pads().caption().getBounds()))
+        << "the count and the chip never meet";
+    EXPECT_TRUE(static_cast<juce::Component&>(chip).keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
+    synth::test::waitUntil([&] { return scene.kit().padShown(3); });
+    EXPECT_TRUE(scene.kit().padShown(3));
+    EXPECT_TRUE(chip.getToggleState());
+    EXPECT_TRUE(chip.getTooltip().startsWith("Hide the 1 pad")) << chip.getTooltip();
+    EXPECT_EQ(chip.getButtonText(), "Show all") << "the label never changes width under the pointer";
+    EXPECT_FALSE(static_cast<juce::Component&>(chip).keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)))
+        << "Space stays the transport's";
 }
 
 TEST(DrumKitPadShown, ThePadsSlideToMakeRoomWhenAnimationsRun) {
@@ -337,4 +405,28 @@ TEST(DrumKitPadShown, ThePadMenuHidesAPadAndShowsThemAll) {
     EXPECT_EQ(scene.kit().hiddenPadCount(), 0);
     EXPECT_TRUE(scene.undo());
     EXPECT_FALSE(scene.kit().padShown(3));
+}
+
+TEST(DrumKitPadShown, ThePadMenuItemFollowsTheShowAllToggle) {
+    Scene scene;
+    for (int pad : {2, 5})
+        scene.pads().setPadShown(pad, false);
+    juce::PopupMenu menu;
+    openPadMenu(scene, 0, menu);
+    auto all = itemNamed(menu, "Show all pads");
+    ASSERT_TRUE(all);
+    scene.pads().applyMenuResult(0, all->itemID);
+    EXPECT_EQ(scene.kit().hiddenPadCount(), 0);
+
+    openPadMenu(scene, 0, menu);
+    EXPECT_FALSE(itemNamed(menu, "Show all pads"));
+    const auto again = itemNamed(menu, "Hide the 2 again");
+    ASSERT_TRUE(again) << "the item says what the lit chip would do";
+    EXPECT_TRUE(again->isEnabled);
+    scene.pads().applyMenuResult(0, again->itemID);
+    EXPECT_FALSE(scene.kit().padShown(2));
+    EXPECT_FALSE(scene.kit().padShown(5));
+    EXPECT_EQ(scene.kit().hiddenPadCount(), 2);
+    ASSERT_TRUE(scene.undo());
+    EXPECT_EQ(scene.kit().hiddenPadCount(), 0) << "one undo step";
 }

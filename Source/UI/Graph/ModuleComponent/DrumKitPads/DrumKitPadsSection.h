@@ -9,7 +9,7 @@
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadGrid.h"
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadSoundMenu.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/InstrumentChrome.h"
-#include "UI/Layout/TextLinkButton.h"
+#include "UI/Layout/FadeVisibility.h"
 #include <memory>
 
 namespace synth::ui {
@@ -18,7 +18,7 @@ class DrumKitPadsSection {
 public:
     static constexpr int kGridGap = 6;
     static constexpr int kCaptionGap = 4;
-    static constexpr int kCaptionHeight = 16;
+    static constexpr int kCaptionHeight = 20; // the Show all chip's pill height
     static constexpr int kControlsGap = 8;
     static constexpr int kSectionGap = 8;
     static constexpr int kHintMs = 1800;
@@ -42,9 +42,10 @@ public:
     /** Flips pad `index`'s Shown switch as one undo step. Hiding a drum that has hits in a clip asks first (the
      *  Host's confirmHidePad); a hidden pad still plays. */
     void setPadShown(int index, bool shown);
-    /** Switches every pad on, as one undo step. */
-    void showAllPads();
-    /** "2 hidden" while any pad within the count is off, else empty. */
+    /** Show all as a toggle, one undo step: shows every pad, or hides again the ones its last press brought back. */
+    void toggleShowAll();
+    /** "2 hidden" while any pad within the count is off, "2 shown again" while Show all can hide them again, else
+     *  empty. */
     juce::String hiddenCaption() const;
 
     // ---- A pad's sound (DrumKitPadsSectionSound.cpp); each edit is one undo step ----
@@ -68,8 +69,8 @@ public:
     DrumPadGrid& grid() noexcept { return grid_; }
     DrumPadControls& controls() noexcept { return controls_; }
     juce::Label& caption() noexcept { return caption_; }
-    /** The caption's "Show all" link, visible while any pad is hidden. */
-    juce::Button& showAllLink() noexcept { return showAll_; }
+    /** The caption's "Show all" chip, visible while any pad is hidden or Show all can hide them again (then lit). */
+    juce::ToggleButton& showAllChip() noexcept { return showAll_; }
     /** The last thing said to a screen reader ("Snare picked"). */
     const juce::String& lastAnnouncement() const noexcept { return lastAnnouncement_; }
 
@@ -99,7 +100,8 @@ private:
     CountStepper stepper_{"Pads"};
     DrumPadGrid grid_;
     juce::Label caption_{"Pads caption", juce::String()};
-    TextLinkButton showAll_{"Show all"};
+    juce::ToggleButton showAll_{"Show all"};
+    FadeVisibility showAllFade_{&showAll_};
     juce::Rectangle<int> captionRow_;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true); // a confirmation can outlive the card
     DrumPadControls controls_;

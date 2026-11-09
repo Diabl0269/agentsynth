@@ -13,6 +13,8 @@ target_sources(Core PRIVATE
     Source/Modules/Sequencer/SequencerPatternOps.cpp
     Source/Modules/Sequencer/SequencerChords.h
     Source/Modules/Sequencer/SequencerChords.cpp
+    Source/Modules/Sequencer/SequencerCables.h
+    Source/Modules/Sequencer/SequencerCables.cpp
     Source/Modules/Sequencer/SequencerClock.h
     Source/Modules/Sequencer/SequencerClock.cpp
     Source/Modules/Sequencer/SequencerPlayer.h

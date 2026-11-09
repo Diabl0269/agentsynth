@@ -62,6 +62,7 @@
 802 Source/MidiRemote/PickTarget.h
 797 Source/UI/Layout/FocusRing.h
 791 Source/UI/Library/SoundBrowser/SoundDragState.h
+788 Source/Modules/ModTargetList.h
 787 Source/UI/Library/SoundBrowser/ShapeDropTarget.h
 786 Source/UI/Library/SoundBrowser/SoundDropAdapter.h
 781 Source/PatchDocument.h

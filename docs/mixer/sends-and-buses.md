@@ -58,14 +58,15 @@ macro-agnostic. Off, the send is the two direct cables it always was. See
 
 | | channels |
 |---|---|
-| inputs (unchanged) | `0` = In/Left, `1..3` reserved, `kRightBase = 4` = Right, so `kNumInputs = 5` |
+| inputs (unchanged) | `0` = In/Left, `1..3` reserved, `kRightBase = 4` = Right |
+| cable inputs (knob-only, appended) | `kFirstCvChannel = 5`: Gain `5`, Pan `6`, Send 1-4 Level `7..10`, Send 1-4 Pan `11..14`, so `kNumInputs = 15`; read live once per block before the output hygiene clears |
 | main out | `0` = Left, `1..3` reserved, `4` = Right, `5..7` reserved |
 | send L block | `kSendBase = 8`, slot *k* at `8 + k` |
 | send R block | slot *k* at `kSendBase + kMaxSends + k` |
 | | `kNumOutputs = 16` |
 
 **Each send's right leg is on its own block, so the "right leg never on ch1" invariant
-(`Source/Modules/CLAUDE.md`) holds per send.** `hasStereoOutputPairShape(5, 16)` is false, so no Dual
+(`Source/Modules/CLAUDE.md`) holds per send.** `hasStereoOutputPairShape(15, 16)` is false, so no Dual
 I/O toggle is inherited.
 
 ## What is a parameter and what is state

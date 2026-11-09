@@ -53,6 +53,7 @@ inline std::vector<Event> render(juce::AudioProcessor& module, int totalSamples,
     while (position < totalSamples) {
         const int n = (int)std::min<juce::int64>(blockSize, totalSamples - position);
         juce::AudioBuffer<float> buffer(2, n);
+        buffer.clear(); // an unpatched input reads silent
         juce::MidiBuffer midi;
         module.processBlock(buffer, midi);
         collect(midi, position, events);

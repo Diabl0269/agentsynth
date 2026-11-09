@@ -28,6 +28,7 @@ protected:
             if (infos != nullptr)
                 infos->push_back(info);
             juce::AudioBuffer<float> buffer(2, kBlock);
+            buffer.clear(); // an unpatched input reads silent
             juce::MidiBuffer midi;
             seq.processBlock(buffer, midi);
             collect(midi, (juce::int64)b * kBlock, events);
@@ -137,6 +138,7 @@ TEST_F(SequencerSyncedTest, PolySequencerLocksTheWholeChordTogether) {
     for (int b = 0; b < 4; ++b) {
         transport.tick(kBlock);
         juce::AudioBuffer<float> buffer(2, kBlock);
+        buffer.clear(); // an unpatched input reads silent
         juce::MidiBuffer midi;
         poly.processBlock(buffer, midi);
         collect(midi, (juce::int64)b * kBlock, events);

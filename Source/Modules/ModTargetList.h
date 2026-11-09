@@ -45,6 +45,9 @@ public:
     /** When the module reads the cable on `channel` (Live for a channel the list does not own). */
     ModRead readOn(int channel) const noexcept;
 
+    /** The port of an owned `channel`: a cable-only head of its own, indexed by the raw channel so a drop on the knob
+        maps raw -> jack -> raw back to the same channel. */
+    LogicalPort portOf(int channel) const;
     /** One knob-only target per entry, named with its parameter's display name. */
     std::vector<ModulationTarget> targets() const;
     /** The port label of `channel`: its parameter's display name, empty when the list does not own it. */

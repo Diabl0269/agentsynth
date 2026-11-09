@@ -69,6 +69,7 @@ TEST_F(SequencerPreviewTest, TheVelocityIsTheRequestedOne) {
     const int chord[] = {60};
     seq->previewNotes(chord, 1, 0.5f);
     juce::AudioBuffer<float> buffer(2, 256);
+    buffer.clear(); // an unpatched input reads silent
     juce::MidiBuffer midi;
     seq->processBlock(buffer, midi);
     int velocity = -1;
@@ -85,6 +86,7 @@ TEST_F(SequencerPreviewTest, ASecondPreviewReplacesTheFirstWithOffsForTheFirst) 
     auto events = render(*seq, 512);
     seq->previewNotes(second, 2, 0.8f);
     juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear(); // an unpatched input reads silent
     juce::MidiBuffer midi;
     seq->processBlock(buffer, midi);
     std::vector<Event> block;

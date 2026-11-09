@@ -3,6 +3,7 @@
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumKitPadsSection.h"
 #include "AppUndoManager.h"
 #include "UI/Graph/CardBody/CardBodyGeometry.h"
+#include "UI/Graph/CardWidgets/CardTogglePill.h"
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"
 
 namespace synth::ui {
@@ -14,6 +15,7 @@ using synth::drums::PadKind;
 namespace {
 
 constexpr int kStepperWidth = 104;
+constexpr int kChipGap = 4; // the caption's count and the Show all chip
 
 // A pad holds a setting of its own when it differs from what a fresh kit holds there: its note, name, file or
 // instrument, a sound other than its default (or the one the count gives a free pad), or a knob moved off its
@@ -99,10 +101,11 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
 
     showAll_.setComponentID("drumPadsShowAll");
     showAll_.setTitle("Show all hidden pads");
-    showAll_.setTooltip("Show every hidden pad again. Undo hides them again.");
     showAll_.setWantsKeyboardFocus(true);
+    showAll_.setClickingTogglesState(false); // lit follows the kit, so an undo relights it
+    setTogglePillStyle(showAll_, true);
     showAll_.setVisible(false);
-    showAll_.onClick = [this] { showAllPads(); };
+    showAll_.onClick = [this] { toggleShowAll(); };
     host_.card->addChildComponent(showAll_);
 
     grid_.onToggleShown = [this](int index) { setPadShown(index, !kit_.padShown(index)); };
@@ -183,8 +186,8 @@ void DrumKitPadsSection::setPadShown(int index, bool shown) {
         apply();
 }
 
-void DrumKitPadsSection::showAllPads() {
-    if (synth::ui::showAllPadsUndoably(host_.undo, host_.graph, kit_) == 0)
+void DrumKitPadsSection::toggleShowAll() {
+    if (synth::ui::toggleShowAllPadsUndoably(host_.undo, host_.graph, kit_) == 0)
         return;
     hint_.clear();
     refreshFromKit();
@@ -198,8 +201,7 @@ void DrumKitPadsSection::relayoutIfGridResized() {
 }
 
 juce::String DrumKitPadsSection::hiddenCaption() const {
-    const int hidden = kit_.hiddenPadCount();
-    return hidden > 0 ? juce::String(hidden) + " hidden" : juce::String();
+    return synth::ui::showAllText(kit_.hiddenPadCount(), kit_.revealedPadCount()).caption;
 }
 
 // ---- Picks ----
@@ -226,8 +228,8 @@ void DrumKitPadsSection::refreshCaption() {
         text = drop;
     } else if (hint_.isNotEmpty()) {
         text = hint_;
-    } else if (kit_.hiddenPadCount() > 0) {
-        text = hiddenCaption() + juce::String::fromUTF8(" \xC2\xB7");
+    } else if (const auto chip = hiddenCaption(); chip.isNotEmpty()) {
+        text = chip;
     } else if (const int hidden = hiddenPadsWithSettings(kit_); hidden > 0) {
         text = juce::String(hidden) + (hidden == 1 ? " hidden pad keeps its sound" : " hidden pads keep their sounds");
     } else {
@@ -238,17 +240,20 @@ void DrumKitPadsSection::refreshCaption() {
     placeCaption();
 }
 
-// "2 hidden · Show all": the link sits right after the count (and is away while a pick hint has the line).
+// "2 hidden [Show all]": the chip sits right after the count, a gap away (and is away while a pick hint has the
+// line). Lit, it reads "2 shown again [Show all]" and a press hides those two again.
 void DrumKitPadsSection::placeCaption() {
-    const bool link = hint_.isEmpty() && kit_.hiddenPadCount() > 0;
+    const auto text = synth::ui::showAllText(kit_.hiddenPadCount(), kit_.revealedPadCount());
+    const bool chip = hint_.isEmpty() && dropHint().isEmpty() && text.enabled;
+    synth::ui::applyShowAllChip(showAll_, text);
     const float textWidth = juce::GlyphArrangement::getStringWidth(caption_.getFont(), caption_.getText());
-    constexpr int kLinkWidth = 56;
-    const int textW = link ? juce::jmin(captionRow_.getWidth() - kLinkWidth,
+    const int chipWidth = synth::theme::AppLookAndFeel::togglePillWidth(showAll_.getButtonText());
+    const int textW = chip ? juce::jmin(captionRow_.getWidth() - chipWidth - kChipGap,
                                         (int)std::ceil(textWidth) + caption_.getBorderSize().getLeftAndRight() + 2)
                            : captionRow_.getWidth();
     caption_.setBounds(captionRow_.withWidth(textW));
-    showAll_.setBounds(captionRow_.withTrimmedLeft(textW).withWidth(kLinkWidth));
-    showAll_.setVisible(link);
+    showAll_.setBounds(captionRow_.withTrimmedLeft(textW + kChipGap).withWidth(chipWidth));
+    showAllFade_.setShown(chip); // fades in and out with the count beside it, never pops
 }
 
 // ---- Following the kit ----

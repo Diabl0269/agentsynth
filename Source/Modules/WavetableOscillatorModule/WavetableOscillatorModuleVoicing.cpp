@@ -12,7 +12,7 @@
 // of the outermost voice that stays, so it fades out in tune. `numSamples` is the block length.
 WavetableOscillatorModule::BlockSettings WavetableOscillatorModule::gatherBlockSettings(int numSamples) {
     BlockSettings bs;
-    bs.unisonCount = juce::jlimit(1, MAX_UNISON, unisonParam->get());
+    bs.unisonCount = unisonNow_;
     bs.warp = (Warp)juce::jlimit(0, (int)Warp::Count - 1, warpParam->getIndex());
     bs.stack = (Stack)juce::jlimit(0, (int)Stack::Count - 1, stackParam->getIndex());
     bs.syncMode = (SyncMode)juce::jlimit(0, (int)SyncMode::Count - 1, syncModeParam->getIndex());

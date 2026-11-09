@@ -2,6 +2,7 @@
 
 #include "../Transport/TransportService.h"
 #include "Mixer/PeakMeterLatch.h"
+#include "ModTargetList.h"
 #include "ModuleBase.h"
 #include <array>
 #include <atomic>
@@ -37,7 +38,7 @@
  * maximum and varies only the VISIBLE count — Source/Modules/CLAUDE.md), each with its own L and R
  * block so the "right leg on its own block" invariant holds per send:
  *
- *   inputs   0 = In/Left, 1..3 reserved, kRightBase = Right                     -> kNumInputs  = 5
+ *   inputs   0 = In/Left, 1..3 reserved, kRightBase = Right, 5..14 knob cables  -> kNumInputs  = 15
  *   main out 0 = Left,    1..3 reserved, kRightBase = Right, 5..7 reserved
  *   send L   kSendBase + slot                                                   (8..11)
  *   send R   kSendBase + kMaxSends + slot                                       (12..15)
@@ -130,8 +131,25 @@ public:
 
     /** Raw channel carrying the right leg, in and out. See the class comment. */
     static constexpr int kRightBase = 4;
+    /** The knobs that take a cable and have no jack, one raw input channel each from kFirstCvChannel: the fader, the
+     *  pan, then each send's level and pan. They sit above every audio input so a saved cable never moves. Append
+     *  only. The cables are read once per block, before the hygiene clears below wipe their channels (which overlap
+     *  the send output block). */
+    static constexpr std::array<synth::ModTargetSpec, 2 + 2 * 4> kModTargets{{
+        {"gain", synth::ModRead::Live},
+        {"pan", synth::ModRead::Live},
+        {"send1Level", synth::ModRead::Live},
+        {"send2Level", synth::ModRead::Live},
+        {"send3Level", synth::ModRead::Live},
+        {"send4Level", synth::ModRead::Live},
+        {"send1Pan", synth::ModRead::Live},
+        {"send2Pan", synth::ModRead::Live},
+        {"send3Pan", synth::ModRead::Live},
+        {"send4Pan", synth::ModRead::Live},
+    }};
+    static constexpr int kFirstCvChannel = kRightBase + 1;
     /** Raw input channels. Fixed for the node's lifetime. */
-    static constexpr int kNumInputs = kRightBase + 1;
+    static constexpr int kNumInputs = kFirstCvChannel + (int)kModTargets.size();
 
     /** Send slots. Fixed: the parameters and the raw channels for all of them always exist; only
      *  `activeMask_` (and therefore the visible jack count) varies. */
@@ -178,6 +196,7 @@ public:
                              new juce::AudioParameterFloat(id, "Send " + juce::String(slot + 1) + " Pan",
                                                            juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f));
         }
+        mods_.bind(*this);
     }
 
     ~ChannelStripModule() override = default;
@@ -201,7 +220,7 @@ public:
             // shape as the strip's own gain/pan split -- writeSendLegs() re-derives gainL/gainR from
             // the smoothed value every sample via the shared ModuleBase::panGains law.
             smoothedSendPan_[slot].reset(sampleRate, kSmoothingSeconds);
-            smoothedSendPan_[slot].setCurrentAndTargetValue(sendPanParams_[slot]->get());
+            smoothedSendPan_[slot].setCurrentAndTargetValue(sendPanNow(slot));
         }
         meterLatches_[0].reset();
         meterLatches_[1].reset();
@@ -216,6 +235,7 @@ public:
         }
 
         const bool stereo = getShape() == Shape::Stereo;
+        readCables(buffer);
 
         // Hidden-channel hygiene, unconditional — the reserved blocks, every send leg (a stale
         // block from the previous callback must never leak into a bus), and the right input when
@@ -275,11 +295,14 @@ public:
 
     ModuleType getModuleType() const override { return ModuleType::ChannelStrip; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Other; }
+    std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
 
     int getVisibleInputPortCount() const override { return getShape() == Shape::Stereo && isDualIO() ? 2 : 1; }
     int getVisibleOutputPortCount() const override { return 2 + 2 * getActiveSendCount(); }
 
     juce::String getInputPortLabel(int visibleJack) const override {
+        if (mods_.ownsChannel(visibleJack))
+            return mods_.label(visibleJack);
         if (getShape() == Shape::Mono)
             return "In";
         if (!isDualIO())
@@ -312,6 +335,8 @@ public:
             port.isPolyGroupHead = isDualIO();
             return port;
         }
+        if (mods_.ownsChannel(rawChannel))
+            return mods_.portOf(rawChannel);
         return {}; // reserved / hidden: role Other, not a group head
     }
     LogicalPort mapOutputChannel(int rawChannel) const override {
@@ -629,10 +654,21 @@ private:
         }
     }
 
+    /** Copies this block's first-sample cable of each knob, before anything writes the buffer. */
+    void readCables(const juce::AudioBuffer<float>& buffer) noexcept {
+        for (int k = 0; k < (int)kModTargets.size(); ++k)
+            cableCv_[(size_t)k] = blockCV(buffer, kFirstCvChannel + k);
+    }
+    /** A knob moved by its cable in the knob's own normalised range; `index` is its place in kModTargets. */
+    float knobNow(const juce::AudioParameterFloat& param, int index) const noexcept {
+        return modulateNormalised(param, param.get(), cableCv_[(size_t)index]);
+    }
+    float sendPanNow(int slot) const noexcept { return knobNow(*sendPanParams_[slot], 2 + kMaxSends + slot); }
+
     void computeTargetGains(float& targetL, float& targetR) const {
-        const float gain = juce::Decibels::decibelsToGain(gainParam_->get(), kMinGainDb);
+        const float gain = juce::Decibels::decibelsToGain(knobNow(*gainParam_, 0), kMinGainDb);
         float panL = 1.0f, panR = 1.0f;
-        applyPanLaw(panParam_->get(), panL, panR);
+        applyPanLaw(knobNow(*panParam_, 1), panL, panR);
         targetL = gain * panL;
         targetR = gain * panR;
     }
@@ -655,7 +691,7 @@ private:
     }
 
     float sendTargetGain(int slot) const {
-        return juce::Decibels::decibelsToGain(sendLevelParams_[slot]->get(), kMinGainDb);
+        return juce::Decibels::decibelsToGain(knobNow(*sendLevelParams_[slot], 2 + slot), kMinGainDb);
     }
 
     /** Which legs may be written this block. ~0u whenever the mixer solo gate is open, or this
@@ -693,7 +729,7 @@ private:
             // change, so bypassing and restoring never click.
             const bool bypassed = isSendBypassed(slot);
             smoothed.setTargetValue(bypassed ? 0.0f : sendTargetGain(slot));
-            smoothedPan.setTargetValue(sendPanParams_[slot]->get());
+            smoothedPan.setTargetValue(sendPanNow(slot));
             // A muted slot is silenced the same way a solo-gated-shut leg is -- the hygiene
             // pass already cleared it, so just don't write over that silence. The level parameter
             // (and this smoother) keep tracking the target, so unmuting picks up at the same level.
@@ -788,6 +824,8 @@ private:
     juce::AudioParameterFloat* panParam_ = nullptr;
     juce::AudioParameterFloat* sendLevelParams_[kMaxSends] = {};
     juce::AudioParameterFloat* sendPanParams_[kMaxSends] = {};
+    synth::ModTargetList mods_{kModTargets, kFirstCvChannel};
+    std::array<float, kModTargets.size()> cableCv_{}; ///< each knob's cable at this block's first sample
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGainL_{1.0f};
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGainR_{1.0f};

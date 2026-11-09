@@ -2,6 +2,7 @@
 
 #include "FrequencyText.h"
 #include "GateEdges.h"
+#include "ModTargetList.h"
 #include "ModuleBase.h"
 #include "Oscillator/HeldNotes.h"
 #include "Oscillator/PitchGlide.h"
@@ -56,8 +57,11 @@ public:
     static constexpr int kPolyModCVBase = kNumVoices;                  // poly shared-CV block start
     static constexpr int kGateBase = 20;                               // mono: one channel; poly: 8-wide fan
     static constexpr int kFixedRateCVChannel = kGateBase + kNumVoices; // appended after the fan, same in both modes
-    static constexpr int kNumInputs =
-        kFixedRateCVChannel + 1;                // 8 pitch + 6 shared CV + 6 global CV + 8 gate + Fixed rate
+    /** The knobs that take a cable and have no jack, one channel each after Fixed rate. Append only. */
+    static constexpr std::array<synth::ModTargetSpec, 2> kModTargets{
+        {{"phase", synth::ModRead::NoteOn}, {"randomPhase", synth::ModRead::NoteOn}}};
+    static constexpr int kJackInputs = kFixedRateCVChannel + 1; // 8 pitch + 6 shared CV + 6 global CV + 8 gate + Fixed
+    static constexpr int kNumInputs = kJackInputs + (int)kModTargets.size();
     static constexpr int kUnisonCVChannel = 14; // same raw channel, mono and poly
     static constexpr int kDetuneCVChannel = 15;
     static constexpr int kPulseWidthCVChannel = 16;
@@ -72,7 +76,7 @@ public:
     // Outputs must stay at or above every input channel (the Gate fan ends at kGateBase + 7): JUCE only
     // copies a shared input buffer for channels below the output count, and the bypass/mute clear would
     // otherwise wipe a Poly MIDI gate that also feeds the ADSR.
-    static constexpr int kNumOutputs = kNumInputs; // 29
+    static constexpr int kNumOutputs = kNumInputs; // 31
     static_assert(kNumOutputs >= kNumInputs, "outputs must cover every input channel");
 
     /** Raw channel carrying jack `jack`'s CV, for the current voice mode. Only valid for the
@@ -150,6 +154,7 @@ public:
         fixedRateRange.setSkewForCentre(20.0f);
         addParameter(fixedRateParam = new juce::AudioParameterFloat("fixedRate", "Fixed rate", fixedRateRange, 50.0f,
                                                                     synth::frequencyAttributes()));
+        mods_.bind(*this);
         enableVisualBuffer(true);
     }
 
@@ -258,7 +263,9 @@ public:
                     {"Glide", kGlideCVChannel, "glide"},
                     {"Blend", kBlendCVChannel, "blend"},
                     {"Width", kWidthCVChannel, "width"},
-                    {"Fixed rate", kFixedRateCVChannel, "fixedRate", true}};
+                    {"Fixed rate", kFixedRateCVChannel, "fixedRate", true},
+                    mods_.targets()[0],
+                    mods_.targets()[1]};
         return {{"Pitch", 0},
                 {"Waveform", 1, "waveform"},
                 {"Octave", 2, "octave"},
@@ -272,12 +279,16 @@ public:
                 {"Glide", kGlideCVChannel, "glide"},
                 {"Blend", kBlendCVChannel, "blend"},
                 {"Width", kWidthCVChannel, "width"},
-                {"Fixed rate", kFixedRateCVChannel, "fixedRate", true}};
+                {"Fixed rate", kFixedRateCVChannel, "fixedRate", true},
+                mods_.targets()[0],
+                mods_.targets()[1]};
     }
     juce::String getInputPortLabel(int i) const override {
         const juce::String labels[] = {"Pitch", "Waveform", "Octave", "Coarse",  "Fine",
                                        "Level", "Pan",      "Unison", "Detune",  "Pulse Width",
                                        "Glide", "Blend",    "Width",  "Restart", "Fixed rate"};
+        if (mods_.ownsChannel(i))
+            return mods_.label(i);
         return (i >= 0 && i < kNumJacks) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
     /** What the last input does, shown when the pointer rests on its jack. The jack keeps its channel and its
@@ -407,7 +418,7 @@ public:
                 return p;
             }
         }
-        return ModuleBase::mapInputChannel(raw);
+        return mods_.ownsChannel(raw) ? mods_.portOf(raw) : ModuleBase::mapInputChannel(raw);
     }
 
     /** Audio L lives on the voice block (ch0, or ch0-7 in poly) and Audio R on a dedicated block
@@ -563,7 +574,13 @@ private:
     /** Restarts every unison oscillator of `voice`; with `fadeFromOld` the previous phases run out over
      * CROSSFADE_SAMPLES. A restart during a fade starts from the output as it is at that sample. `lead` is how long
      * before this sample a gate edge really fell, in samples. */
-    void restartVoice(VoiceState& voice, bool fadeFromOld, float lead = 0.0f);
+    void restartVoice(VoiceState& voice, bool fadeFromOld, float lead = 0.0f, int sample = 0);
+    /** Copies the Phase and Rand cables before the block's clear wipes their channels (OscillatorModuleRestartCv.cpp).
+     */
+    void cacheRestartCV(const juce::AudioBuffer<float>& buffer, int numSamples);
+    /** Phase (degrees) and Rand (percent) as a restart on `sample` hears them: the knob moved by its cable there. */
+    float startPhaseDegreesAt(int sample) const noexcept;
+    float randomPhasePercentAt(int sample) const noexcept;
     void resetNoteState();
     synth::GlideTime glideTime() const {
         return glideModeParam->getIndex() == 1 ? synth::GlideTime::Scaled : synth::GlideTime::Always;
@@ -745,5 +762,9 @@ private:
     juce::AudioParameterChoice* rateModeParam = nullptr;
     juce::AudioParameterFloat* fixedRateParam = nullptr;
     float fixedRateCv_ = 0.0f; // this block's Fixed rate CV, render thread only
+    synth::ModTargetList mods_{kModTargets, kJackInputs};
+    std::array<float, 4096> phaseCvCache_{}; ///< this block's Phase and Rand cables; empty when unpatched
+    std::array<float, 4096> randCvCache_{};
+    bool phaseCvActive_ = false, randCvActive_ = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OscillatorModule)
 };

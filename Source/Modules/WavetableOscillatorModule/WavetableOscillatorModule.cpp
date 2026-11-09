@@ -311,6 +311,7 @@ WavetableOscillatorModule::WavetableOscillatorModule()
                      new juce::AudioParameterChoice("interpolation", "Interp", {"Linear", "Hermite"}, 0));
 
     addMuteParameter();
+    mods_.bind(*this);
     enableVisualBuffer(true);
 
     // Force the shared built-in pyramid to be built here, on the message thread, so
@@ -349,6 +350,8 @@ void WavetableOscillatorModule::prepareToPlay(double sampleRate, int samplesPerB
         voices[v].sync.reset();
     }
     unisonMix.primed = false; // the next block starts the voice gains at their targets
+    heldUnison_ = -1;
+    noteSeen_ = false;
     lastSyncSample = 0.0f;
     blockPeakWarpAmount = 0.0f;
 }
@@ -386,6 +389,9 @@ std::vector<ModulationTarget> WavetableOscillatorModule::getModulationTargets() 
 
     for (int jack = 1; jack <= kNumModCV; ++jack)
         targets.push_back({jackLabels()[jack], modCVChannelFor(jack, poly), jackParamIds()[jack]});
+
+    for (auto& target : mods_.targets())
+        targets.push_back(std::move(target));
 
     return targets;
 }
@@ -433,7 +439,7 @@ LogicalPort WavetableOscillatorModule::mapInputChannel(int raw) const {
         p.polyVoiceSpan = 1;
         return p;
     }
-    return ModuleBase::mapInputChannel(raw);
+    return mods_.ownsChannel(raw) ? mods_.portOf(raw) : ModuleBase::mapInputChannel(raw);
 }
 
 LogicalPort WavetableOscillatorModule::mapOutputChannel(int raw) const {
@@ -819,6 +825,7 @@ void WavetableOscillatorModule::processMonoMode(juce::AudioBuffer<float>& buffer
     // OscillatorModule — pitch CV is ignored in mono mode; MIDI drives the pitch.
     cacheModCV(buffer, /*poly*/ false, cacheLen, numSamples);
     scanGateEdges(buffer, /*poly*/ false, numSamples);
+    holdUnisonCable(buffer, /*poly*/ false, numSamples);
 
     // Clearing the CV channels here is safe because they were cached above and the module
     // declares kNumOutputs outputs, so JUCE hands us a private copy of any CV buffer that
@@ -856,6 +863,7 @@ void WavetableOscillatorModule::processPolyMode(juce::AudioBuffer<float>& buffer
 
     cacheModCV(buffer, /*poly*/ true, cacheLen, numSamples);
     scanGateEdges(buffer, /*poly*/ true, numSamples);
+    holdUnisonCable(buffer, /*poly*/ true, numSamples);
 
     // See the note in processMonoMode: safe because the CVs are cached and the module
     // declares kNumOutputs outputs.

@@ -1,12 +1,15 @@
 #pragma once
 
+#include "Modules/ModTargetList.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/Shapes/LockFreeHandoff.h"
+#include "SequencerCables.h"
 #include "SequencerClock.h"
 #include "SequencerPattern.h"
 #include "SequencerPlayer.h"
 #include "SequencerPreview.h"
 #include "SequencerScaleSnap.h"
+#include <array>
 #include <atomic>
 #include <optional>
 
@@ -34,6 +37,14 @@ class SequencerModuleBase : public ModuleBase {
 public:
     /** The step the playhead last reached (UI). */
     std::atomic<int> currentActiveStep{0};
+
+    /** The knobs that take a cable, one input channel each (no jack on the card). BPM is read every block; the
+        others on the sample each step hits. Append only: saved cables keep their channel. */
+    static constexpr std::array<ModTargetSpec, 5> kModTargets{{{sequencer_ids::kBpm, ModRead::Live},
+                                                               {sequencer_ids::kTranspose, ModRead::NoteOn},
+                                                               {sequencer_ids::kGate, ModRead::NoteOn},
+                                                               {sequencer_ids::kVelocity, ModRead::NoteOn},
+                                                               {sequencer_ids::kChance, ModRead::NoteOn}}};
 
     bool isPoly() const noexcept { return poly_; }
 
@@ -70,6 +81,11 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void processModuleBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override;
 
+    int getVisibleInputPortCount() const override { return 0; }
+    juce::String getInputPortLabel(int i) const override { return mods_.label(i); }
+    LogicalPort mapInputChannel(int raw) const override { return mods_.portOf(raw); }
+    std::vector<ModulationTarget> getModulationTargets() const override { return mods_.targets(); }
+
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return true; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Sequencer; }
@@ -99,6 +115,8 @@ private:
     SequencerPlayer player_;
     bool flushOnNextBlock_ = false; // prepared since the last block: the player still owes its note-offs
     SequencerScaleSnap snap_;
+    ModTargetList mods_{kModTargets};
+    std::optional<SequencerCables> cables_;
     SequencerPreview preview_;
     double sampleRate_ = 44100.0;
 

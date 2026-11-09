@@ -214,10 +214,8 @@ Poly MIDI's Poly Out carries CV, so the Oscillator's MIDI input refuses it) make
 reports the reason through a toast with error severity (`GraphEditor::onDropRefused`, wired in `MainComponentSetup.cpp`; [toast](chrome.md#toast)), so a refusal is as visible as the cable it did not make. Nothing is said when the cable lands somewhere else
 on the same release (a collapsed macro's card, a plugin's knob picker).
 
-A knob that takes no mod cable on purpose says why the same way: a module names it in
-`ModuleBase::modulationRefusal(paramId)`, and a cable released on that knob (found by
-`ModuleComponent::getModRefusalForPoint` through the card's learnable registry) makes no cable and shows the reason.
-The Wavetable's Unison is the one today: "Unison takes no mod cable: it sets a whole number of voices".
+Every knob that can be modulated takes a cable (the rest are wiring switches and choices, which have no knob to drop
+on), so a drop on a knob is never refused for being a knob.
 
 ## Hover
 

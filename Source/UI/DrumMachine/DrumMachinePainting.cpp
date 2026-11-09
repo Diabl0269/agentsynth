@@ -14,7 +14,6 @@ namespace synth::ui {
 namespace {
 constexpr int kSwitchWidth = 184;
 constexpr int kPlayClipSlotWidth = 72;
-constexpr int kShowAllWidth = 92;
 constexpr int kStepsComboWidth = 56;
 constexpr int kStepsCaptionWidth = 78;
 constexpr int kSwingCaptionWidth = 44;
@@ -46,8 +45,9 @@ int DrumMachineComponent::swingFieldWidth() const { return swingField_.getIdealW
 
 void DrumMachineComponent::layoutToolbar() {
     auto header = getLocalBounds().removeFromTop(kToolbarHeight).reduced(kToolbarPad, 1);
+    const int showAllWidth = theme::AppLookAndFeel::togglePillWidth(showAllButton_.getButtonText());
     const int nameWidth =
-        std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - kShowAllWidth - kStepsComboWidth -
+        std::max(0, header.getWidth() - kSwitchWidth - kPlayClipSlotWidth - showAllWidth - kStepsComboWidth -
                         kStepsCaptionWidth - kSwingCaptionWidth - swingFieldWidth() - kHumaniseCaptionWidth -
                         kSwingKnobSize - kSwingValueWidth - kIdeasWidth - 10 * kToolbarPad);
     nameBounds_ = header.removeFromLeft(std::min(nameWidth, 220));
@@ -56,7 +56,7 @@ void DrumMachineComponent::layoutToolbar() {
     header.removeFromLeft(kToolbarPad);
     playClipButton_.setBounds(header.removeFromLeft(kPlayClipSlotWidth));
     header.removeFromLeft(kToolbarPad);
-    showAllButton_.setBounds(header.removeFromLeft(kShowAllWidth));
+    showAllButton_.setBounds(header.removeFromLeft(showAllWidth));
     header.removeFromLeft(kToolbarPad);
     stepsCaptionBounds_ = header.removeFromLeft(kStepsCaptionWidth);
     stepsCombo_.setBounds(header.removeFromLeft(kStepsComboWidth));

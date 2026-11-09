@@ -803,12 +803,21 @@ ch8; a tempo-synced stage ignores its time CV), the Oscillator's Pulse Width ch1
 ch6-14), the Filter's Key Track ch27 (after its Pitch block, ch19-26) and the Reverb's Pre-Delay ch7 (the
 Delay's tempo sync and ping-pong are switches and have no jack) — see [`lfo.md`](lfo.md),
 [`modules.md#adsr-envelope-module`](modules.md#adsr-envelope-module) and
-[`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). A knob that takes no cable is listed with its reason in the test that sweeps every card
-(`ModuleComponentModDotEveryControlTests`): settings read once at note start or per sequencer step,
-the Wavetable's Unison (a whole voice count: a cable
-dropped on it is refused with a status message saying so), macro knobs, and the mixer modules (Channel Strip,
-Master), whose gain is driven by the mixer panel rather than by CV — deliberately out of scope for FRO314's sweep below, since Channel Strip's channel
-layout is frozen-once-set with fixed send legs (`Source/Modules/CLAUDE.md`).
+[`fx-modules.md#parametric-eq-module`](fx-modules.md#parametric-eq-module). A knob that takes no cable is listed with its reason in `ModCableExemptions.h`: wiring switches (Dual I/O, Poly),
+choices, the Macros' `macroCount`, the MIDI Keyboard octave, the Sequencers' per-step pattern data and the Drum Kit pads.
+Everything else that can be modulated takes a knob-only cable on a channel above every existing input
+(`ModTargetList`, below), so saved cables keep their channel:
+
+| Module | Knob (channel) | Read |
+|---|---|---|
+| Wavetable | Unison (31) | at note start, rounded to a whole voice count; applied when the voices restart (gain glides, no click); a cable change mid-note waits for the next note |
+| Oscillator | Phase (29), Rand Phase (30) | at note start, for each restarted voice |
+| Sequencer, Poly Sequencer | BPM (0), Transpose (1), Gate (2), Velocity (3), Chance (4) | BPM every block; the other four at each step, on the step's own sample; the knob is never written |
+| Channel Strip | Gain (5), Pan (6), Send 1-4 Level (7-10), Send 1-4 Pan (11-14) | live, every block |
+| Master | Gain (4) | live, every block |
+| Macros | Macro 1-16 (0-15) | live, every block; moves the knob inside its own range |
+
+The cable moves the knob in its normalised range, never the stored value.
 
 The dynamics and Sampler controls follow the same rule: Compressor Knee on ch9 (after the Key pair
 on ch7/ch8, which keep their channels, so the Knee jack is the last visible one), Limiter Ceiling
@@ -844,7 +853,7 @@ no entry there at all, since they are never declared targets in the first place.
 ## One list per module
 
 An instrument whose knobs take cables with no gutter jack declares them once, as a `synth::ModTargetList`
-(`Source/Modules/ModTargetList.h`): a `constexpr std::array<synth::ModTargetSpec, N>` of
+(`Source/Modules/PortRole.h`): a `constexpr std::array<synth::ModTargetSpec, N>` of
 `{paramId, read}` pairs, where entry k owns raw input channel k. Everything else comes from the list:
 
 - the input channel count passed to `ModuleBase` (`kModTargets.size()`);

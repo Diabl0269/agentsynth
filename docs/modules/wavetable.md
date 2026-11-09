@@ -146,7 +146,7 @@ reach: it starts at zero, so a master above twice the note only lets it climb pa
 
 ## Unison, stacking and the sub
 
-- **Unison** (1–8) with **Detune** (0–100 cents) spreads voices symmetrically about the root.
+- **Unison** (1–8) with **Detune** (0–100 cents) spreads voices symmetrically about the root. Unison takes a cable on raw channel 31 (knob-only, the same in mono and poly), read at each note start and rounded to a whole voice count; the count applies when the voices restart and the voice gains glide, so it never clicks. A cable that changes mid-note waits for the next note; with no cable patched the knob stays live.
 - **Stack** applies an interval on top of detune: `Detune` (none), `Octave`, `Power Chord`, `12th`,
   `Major`, `Minor`. Voice 0 always stays at the root pitch. The stack is constant power: it is divided by the
   root of the summed mean leg power of the voices, so its loudness stays that of one voice (the sub is added

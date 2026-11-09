@@ -47,11 +47,17 @@ void TimelinePanelComponent::wireDrumMachine() {
         const auto* track = doc_ != nullptr ? doc_->getTrackForClip(drum_->grid.getClipId()) : nullptr;
         return track != nullptr && trackHeaderHost_ != nullptr && trackHeaderHost_->drumKitRows(track->id, &rows);
     };
-    grid.onShowAllKitPads = [this] {
+    // Show all and the row menu's Hide pad / Show pad reach the kit through the host, the same undo steps as the card.
+    grid.onToggleShowAllKitPads = [this] {
         const auto* track = doc_ != nullptr ? doc_->getTrackForClip(drum_->grid.getClipId()) : nullptr;
         if (track != nullptr && trackHeaderHost_ != nullptr)
-            trackHeaderHost_->showAllDrumKitPads(track->id);
+            trackHeaderHost_->toggleShowAllDrumKitPads(track->id);
         drum_->grid.refreshKitRows();
+    };
+    grid.onSetKitPadsShown = [this](const std::vector<int>& pads, bool shown) {
+        const auto* track = doc_ != nullptr ? doc_->getTrackForClip(drum_->grid.getClipId()) : nullptr;
+        if (track != nullptr && trackHeaderHost_ != nullptr)
+            trackHeaderHost_->setDrumKitPadsShown(track->id, pads, shown);
     };
     pianoRoll_.onDrumMachineRequested = [this](synth::ClipId id) {
         closePianoRoll();

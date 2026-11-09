@@ -2,6 +2,7 @@
 // is built, so a pick resolves against what the menu showed even if the canvas changed while it was open.
 #include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadSoundMenu.h"
 #include "AudioEngine/ModuleTitle.h"
+#include "UI/Graph/ModuleComponent/DrumKitPads/DrumPadShown.h"
 
 namespace synth::ui {
 
@@ -150,7 +151,8 @@ juce::PopupMenu DrumPadSoundMenu::buildPadMenu(const DrumKitModule& kit, int ind
     toggle.itemID = add({Kind::ToggleShown});
     toggle.shortcutKeyDescription = "H";
     menu.addItem(toggle);
-    menu.addItem(add({Kind::ShowAll}), "Show all pads", kit.hiddenPadCount() > 0);
+    const auto showAll = showAllText(kit.hiddenPadCount(), kit.revealedPadCount()); // the card chip's own words
+    menu.addItem(add({Kind::ShowAll}), showAll.menuItem, showAll.enabled);
     menu.addSeparator();
     addGroups(menu, kit, index, instruments);
     return menu;

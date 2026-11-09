@@ -736,8 +736,6 @@ public:
     const char* getNodeUuid() const noexcept { return nodeUuidSet_.load(std::memory_order_acquire) ? nodeUuid_ : ""; }
 
     virtual std::vector<ModulationTarget> getModulationTargets() const { return {}; }
-    /** Why the knob of `paramId` takes no mod cable, said when one is dropped on it; empty when nothing to say. */
-    virtual juce::String modulationRefusal(const juce::String& /*paramId*/) const { return {}; }
 
     /** The parameter a modulation target's knob is attached to: the one whose `paramID` equals
         `target.paramId` when that is set, else the one whose display name equals `target.name`.

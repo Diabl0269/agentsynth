@@ -1,8 +1,10 @@
 // DrumMachineComponent: the menu of a drum row's name. Right-click on the name (or Shift+F10, the shared
-// openContextMenu action, on a focused name or on the grid's focused row) opens Length, Swing and Reset for that drum.
-// Every choice is ONE undo step. docs/timeline/drum-machine.md#per-drum-length-and-swing.
+// openContextMenu action, on a focused name or on the grid's focused row) opens Length, Swing and Reset for that drum,
+// and with a Drum Kit Hide pad and Show pad. Every choice is ONE undo step.
+// docs/timeline/drum-machine.md#per-drum-length-and-swing.
 
 #include "DrumMachineComponent.h"
+#include "Modules/DrumKit/DrumKitPads.h"
 
 #include "UI/Layout/ContextMenuPlacement.h"
 #include <algorithm>
@@ -44,11 +46,52 @@ juce::PopupMenu DrumMachineComponent::buildRowMenu(int pitch) const {
     menu.addSubMenu("Swing", swing);
     menu.addSeparator();
     menu.addItem(kRowMenuReset, "Reset", rawRowLength(pitch) > 0 || own);
+    addKitPadItems(menu, pitch);
     return menu;
 }
 
+// With a Drum Kit, after a line: Hide pad (the row goes; its hits stay and still play) and a Show pad submenu of the
+// hidden pads by name, the clip editor's own way back to one pad (a hidden pad has no row to right-click).
+void DrumMachineComponent::addKitPadItems(juce::PopupMenu& menu, int pitch) const {
+    if (!hasKit_)
+        return;
+    menu.addSeparator();
+    menu.addItem(kRowMenuHidePad, "Hide pad", !kitRows_.shownPadsOn(pitch).empty());
+    juce::PopupMenu show;
+    for (const auto& pad : kitRows_.hiddenPads())
+        show.addItem(kRowMenuShowPadBase + pad.index, pad.name);
+    menu.addSubMenu("Show pad", show, show.getNumItems() > 0);
+}
+
+// The kit's Shown edits go through the owner (one undo step, the same question the card asks before hiding a drum
+// with hits); the rows follow at once.
+bool DrumMachineComponent::applyKitPadChoice(int pitch, int itemId) {
+    std::vector<int> pads;
+    bool shown = false;
+    if (itemId == kRowMenuHidePad) {
+        pads = kitRows_.shownPadsOn(pitch);
+    } else if (itemId >= kRowMenuShowPadBase && itemId < kRowMenuShowPadBase + synth::drums::kMaxPads) {
+        pads = {itemId - kRowMenuShowPadBase};
+        shown = true;
+    } else {
+        return false;
+    }
+    if (!hasKit_ || pads.empty() || !onSetKitPadsShown)
+        return true;
+    juce::String name = drumLaneForPitch(pitch).name;
+    for (const auto& pad : kitRows_.pads)
+        if (pad.index == pads.front())
+            name = pad.name;
+    const int hiddenBefore = kitRows_.hiddenCount;
+    onSetKitPadsShown(pads, shown);
+    refreshKitRows();
+    if (kitRows_.hiddenCount != hiddenBefore) // not yet when a question about the drum's hits is still open
+        announce(name + (shown ? " shown" : " hidden"));
+    return true;
+}
+
 void DrumMachineComponent::applyRowMenuChoice(int pitch, int itemId) {
-    if (clip() == nullptr)
+    if (clip() == nullptr || applyKitPadChoice(pitch, itemId))
         return;
     const auto name = drumLaneForPitch(pitch).name;
     if (itemId == kRowMenuClipLength) {
