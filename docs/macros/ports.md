@@ -336,6 +336,27 @@ when a mod cable would land on it. Leave it, let go or press Esc and the hint go
 
 An open macro's border and its ports are their own drop targets and show no card hint.
 
+### A cable dropped on a folded card
+
+A cable let go on a folded macro's card does not appear on the port at once: its port end slides from where it was
+released to the port's jack (220 ms `easeOutCubic`), the same slide a drag across a macro's border gives a cable that
+ends on a new port (`MacroCrossingAnimator::armSlideFrom`, through `GraphEditor::armMacroPortSlide`). It holds for both
+kinds of drop: onto an existing port's jack, and onto the card's body where a new port is made. A new port's row
+grows in as the cable arrives (`MacroCardComponent::growInPort`, a `ShownFade`): its dot grows from nothing and the
+dot and name fade in over 170 ms `easeOutCubic`. A card that grows a row for it glides to its new height
+(`CardGlideAnimator::Scope`).
+
+- **Motion.** Under Reduce Motion nothing slides or grows: the new cable fades in over 80 ms where it lands
+  (`retractCablesGoneSince` with `growAdded`) and the new row fades in over 80 ms at full size. Under Animations Off
+  both are there at once.
+- **Undo and redo.** Cmd+Z pulls the cable back into its source jack and the card glides back to its old height, as
+  every undone cable does ([cables](../layout/cables.md#retracting-removed-cables)); redo grows it out of its source
+  jack again, not from the drop point, since the drop point is not part of the undo record. The port's row goes at
+  once on undo and is there at once on redo: the card paints rows from the live macro, so a removed row has nothing
+  left to fade.
+- **Tests and scenario.** `MacroCardDropSlide.*` steps the slide's first, middle and last frames;
+  `Tools/ui-verify/scenarios/macro-cable-drop-glide.yaml` films it.
+
 ## Member counts report modules, not ports
 
 A port's uuid is a genuine `Macro::members` entry — load-bearing, and what the "every port's

@@ -3,4 +3,5 @@
 target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroCardJackTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroCardDropHintTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroCardDropSlideTests.cpp
 )

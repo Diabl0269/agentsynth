@@ -135,14 +135,17 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
     // the cable-colour invariant forbids. A port's user colour, or an armed picker preview, wins.
     g.setFont(juce::Font(juce::FontOptions(kMacroPortNameFontSize)));
     for (const auto& port : layout) {
+        // A row growInPort is fading in: its dot grows from nothing as it fades (a plain fade under Reduce Motion).
+        const float shown = getPortShown(port.nodeUuid);
+        const float radius = 5.0f * (synth::ui::prefersReducedMotion() ? 1.0f : shown);
         const juce::Colour kindTint =
             port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent;
-        g.setColour(resolvePortJackColour(port.nodeUuid, port.colour, kindTint));
-        g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
+        g.setColour(resolvePortJackColour(port.nodeUuid, port.colour, kindTint).withMultipliedAlpha(shown));
+        g.fillEllipse((float)port.jackPos.x - radius, (float)port.jackPos.y - radius, radius * 2.0f, radius * 2.0f);
 
         // Names fade in with zoom; the strip keeps its width and shows dots alone when they are hidden.
         if (nameAlpha > 0.0f && port.name.isNotEmpty()) {
-            g.setColour(themeColors.textPrimary.withMultipliedAlpha(nameAlpha));
+            g.setColour(themeColors.textPrimary.withMultipliedAlpha(nameAlpha * shown));
             g.drawFittedText(port.name, port.labelArea,
                              port.isInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1,
                              1.0f);
@@ -202,6 +205,35 @@ void MacroCardComponent::setCableDropHint(std::optional<CableDropHint> hint, boo
 
 float MacroCardComponent::getCableDropHintAlphaForTest() const {
     return hintFade_ != nullptr ? hintFade_->alpha() : 0.0f;
+}
+
+// A port a dropped cable just made grows in instead of appearing: 170 ms easeOutCubic, landing a little before the
+// cable's 220 ms slide reaches its jack. ShownFade makes it a plain 80 ms fade under Reduce Motion (paint then keeps
+// the dot full size) and lands it at once under Animations Off or off screen. One row at a time: a second call moves
+// the fade to the newer port and shows the older one fully.
+void MacroCardComponent::growInPort(const juce::String& portUuid) {
+    if (portEnterFade_ == nullptr) {
+        portEnterFade_ = std::make_unique<synth::ui::ShownFade>(*this);
+        portEnterFade_->onFrame = [this] {
+            if (portEnterFade_->alpha() >= 1.0f)
+                enteringPortUuid_.clear();
+            repaint();
+        };
+    }
+    enteringPortUuid_ = portUuid;
+    portEnterFade_->jumpTo(0.0f);
+    portEnterFade_->fadeTo(1.0f, 170.0, synth::ui::easeOutCubic);
+}
+
+float MacroCardComponent::getPortShown(const juce::String& portUuid) const {
+    if (portEnterFade_ == nullptr || enteringPortUuid_.isEmpty() || portUuid != enteringPortUuid_)
+        return 1.0f;
+    return portEnterFade_->alpha();
+}
+
+void MacroCardComponent::stepPortEnterForTest(double ms) {
+    if (portEnterFade_ != nullptr)
+        portEnterFade_->stepForTest(ms);
 }
 
 // The card outlined in the accent colour with a soft glow, and its port row marked: a ring round the jack of the port

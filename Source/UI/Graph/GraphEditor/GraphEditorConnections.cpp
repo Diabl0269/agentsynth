@@ -217,6 +217,25 @@ void showMacroCardDropHints(juce::OwnedArray<MacroCardComponent>& cards,
         card->setCableDropHint(hint);
     }
 }
+
+// The ports `macroId` has now, to tell which one a drop made.
+std::vector<juce::String> macroPortUuids(const synth::MacroSet& macros, const juce::String& macroId) {
+    std::vector<juce::String> out;
+    if (const auto* macro = macros.find(macroId))
+        for (const auto& port : macro->ports)
+            out.push_back(port.nodeUuid);
+    return out;
+}
+
+// Grows in, on the macro's card, each port that is in `macroId` now but was not in `before`.
+void growInNewMacroPorts(juce::OwnedArray<MacroCardComponent>& cards, const synth::MacroSet& macros,
+                         const juce::String& macroId, const std::vector<juce::String>& before) {
+    for (auto* card : cards)
+        if (card != nullptr && card->getMacroId() == macroId)
+            for (const auto& uuid : macroPortUuids(macros, macroId))
+                if (std::find(before.begin(), before.end(), uuid) == before.end())
+                    card->growInPort(uuid);
+}
 } // namespace
 
 bool GraphEditor::isCableDragFrom(const ModuleComponent& card) const noexcept {
@@ -544,6 +563,9 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
     // on picks the port's jack (Left 0, Right 1); a one-row port is its jack 0. Anywhere else on the card a fresh port
     // is shaped from the dropped cable (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed); a
     // port that already carries this cable takes it again and nothing new is made. A refused drop does nothing.
+    // The cable then slides from the release point to the port's jack instead of appearing there
+    // (docs/macros/ports.md#a-cable-dropped-on-a-folded-card): armed once, after the edit and outside its undo record,
+    // so a redo does not slide it again, and after the card glide's Scope so the slide ends on the card's final jacks.
     if (!connectedToAModule && dragSourceModule != nullptr) {
         using DropKind = MacroGroupController::CardCableDrop::Kind;
         const auto drop = macroController_.cardCableDropAt(screenPos, dragSourceModule->getNodeId(), dragSourceChannel,
@@ -552,7 +574,11 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             drop->card->setCableDropHint(std::nullopt, /*instant=*/true);
             connectedToAModule = true; // the card took the cable: a jack passed over on the way is not a refusal
             const auto srcId = dragSourceModule->getNodeId();
-            if (drop->kind == DropKind::existingPort) {
+            const auto dropPoint = content.getLocalPoint(nullptr, screenPos).toFloat();
+            repaintCanvas(); // the slide diffs against the cables as drawn before the drop
+            const auto cablesBefore = rebuildVisibleCables();
+            // The Scope lives through both branches: a card that grows a row glides to its new height.
+            if (CardGlideAnimator::Scope glide(cardGlide_); drop->kind == DropKind::existingPort) {
                 const bool toInput = drop->portIsInput;
                 const auto portNodeId = drop->portNodeId;
                 const int portJack = std::max(drop->visibleJack, 0);
@@ -561,10 +587,9 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 const int connSrcJack = toInput ? dragSourceChannel : portJack;
                 const int connDstJack = toInput ? portJack : dragSourceChannel;
                 const auto macroId = drop->macroId;
-                const auto slideFrom = content.getLocalPoint(nullptr, screenPos).toFloat();
-                auto doDrop = [this, macroId, portNodeId, connSrcId, connSrcJack, connDstId, connDstJack, slideFrom] {
+                auto doDrop = [this, macroId, portNodeId, connSrcId, connSrcJack, connDstId, connDstJack] {
                     synth::ui::PortConnector::connectJacks(*this, connSrcId, connSrcJack, connDstId, connDstJack,
-                                                           dragSourceIsMidi, /*recordUndo=*/false, slideFrom);
+                                                           dragSourceIsMidi, /*recordUndo=*/false);
                     macroController_.connectEmptyPortInterior(macroId, portNodeId);
                     updateComponents();
                 };
@@ -572,9 +597,13 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                     undoManager->recordGraphAndMacroChange(audioEngine.getGraph(), macros, doDrop);
                 else
                     doDrop();
-            } else if (drop->kind == DropKind::newPort)
+            } else if (drop->kind == DropKind::newPort) {
+                const auto portsBefore = macroPortUuids(macros, drop->macroId);
                 macroController_.createMacroPortFromDroppedCable(drop->macroId, drop->portIsInput, dragSourceIsMidi,
                                                                  srcId, dragSourceChannel);
+                growInNewMacroPorts(macroCards(), macros, drop->macroId, portsBefore); // the new row grows in
+            }
+            armMacroPortSlide(cablesBefore, dropPoint);
         }
     }
 

@@ -136,6 +136,11 @@ public:
     const std::optional<CableDropHint>& getCableDropHint() const noexcept { return cableDropHint_; }
     float getCableDropHintAlphaForTest() const;
 
+    /** Fades `portUuid`'s row in (dot and name) as a cable lands on it; a port that is not entering shows fully. */
+    void growInPort(const juce::String& portUuid);
+    float getPortShown(const juce::String& portUuid) const;
+    void stepPortEnterForTest(double ms);
+
 private:
     /** `priorSelection`: whatever was selected right before mouseDown's own reselect —
      *  see GraphEditor::buildMacroMenu's addCandidateSelection comment for why this must be
@@ -222,6 +227,8 @@ private:
     std::optional<CableDropHint> cableDropHint_; // what a hovering cable would do now
     std::optional<CableDropHint> paintedHint_;   // what is drawn while the hint fades out
     std::unique_ptr<synth::ui::ShownFade> hintFade_;
+    juce::String enteringPortUuid_; // the row growInPort is fading in
+    std::unique_ptr<synth::ui::ShownFade> portEnterFade_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroCardComponent)
 };

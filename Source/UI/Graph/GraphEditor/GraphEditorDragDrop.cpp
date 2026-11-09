@@ -31,6 +31,7 @@
 #include "UI/Graph/CardBody/CardBodyMeasure.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Graph/ProjectLoad/LoadRevealAnimator.h"
+#include "UI/Layout/ReducedMotion.h"
 #include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 // Sizes of the cards whose body is NOT drawn from layout data (the bespoke cards, the I/O nodes, a
@@ -879,9 +880,16 @@ void GraphEditor::armMacroCrossingAnimation(const std::vector<VisibleCable>& cab
         startMacroCrossingDriver();
 }
 
-// A cable dropped across a macro boundary has no earlier self to slide from, so each cable it created that
-// ends on a minted port emerges from the drop point instead (MacroCrossingAnimator::armSlideFrom).
+// A cable dropped across a macro boundary or on a folded card has no earlier self to slide from, so each cable it
+// created that ends on a port emerges from the drop point instead (MacroCrossingAnimator::armSlideFrom). Reduce
+// Motion moves nothing: the new cables fade in where they land (the cable-retract grow, an 80 ms fade there).
+// Animations Off falls through to the slide, whose driver lands at once.
 void GraphEditor::armMacroPortSlide(const std::vector<VisibleCable>& cablesBeforeDrop, juce::Point<float> dropPoint) {
+    if (synth::ui::prefersReducedMotion() && !synth::ui::animationsOff()) {
+        repaintCanvas(); // the grow diffs against the cables as they are now
+        retractCablesGoneSince(cablesBeforeDrop, /*growAdded=*/true);
+        return;
+    }
     const auto isPort = [this](uint32_t uid) {
         return macroController_.nodeIsMacroPort(juce::AudioProcessorGraph::NodeID{uid});
     };
