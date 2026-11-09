@@ -1,4 +1,5 @@
 #include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
+#include "UI/Settings/SettingsFoldState.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace {
@@ -10,7 +11,7 @@ constexpr int kStatusH = 20;
 constexpr int kRowGap = 6;
 constexpr int kSectionGap = 12;
 constexpr int kHeadingH = 22;
-constexpr int kCreditGap = 12;
+constexpr const char* kOpenPacksKey = "soundPacksOpen";
 constexpr int kScrollbarW = 14;
 constexpr int kRetryW = 50;
 
@@ -31,9 +32,12 @@ void askWithAlert(const juce::String& message, std::function<void()> onYes) {
 
 } // namespace
 
-SoundPacksSettingsTab::SoundPacksSettingsTab(Installer& installer, synth::soundbrowser::SoundFolderBook* folders)
+SoundPacksSettingsTab::SoundPacksSettingsTab(Installer& installer, synth::soundbrowser::SoundFolderBook* folders,
+                                             juce::ApplicationProperties* props)
     : installer_(installer)
     , folders_(folders)
+    , props_(props)
+    , openPacks_(synth::ui::settingsfold::load(props, kOpenPacksKey))
     , confirmer_(askWithAlert) {
     setTitle("Sound packs");
 
@@ -43,7 +47,7 @@ SoundPacksSettingsTab::SoundPacksSettingsTab(Installer& installer, synth::soundb
 
     addAndMakeVisible(intro_);
     intro_.setText("Optional instruments for the Sampler. They download to this device when you ask for them. "
-                   "Every pack's credit is listed below.",
+                   "Open a pack to see who made it, its licence and every instrument.",
                    juce::dontSendNotification);
     intro_.setJustificationType(juce::Justification::topLeft);
     intro_.setMinimumHorizontalScale(1.0f);
@@ -59,10 +63,6 @@ SoundPacksSettingsTab::SoundPacksSettingsTab(Installer& installer, synth::soundb
     viewport_.setViewedComponent(&content_, false);
     viewport_.setScrollBarsShown(true, false);
     viewport_.setWantsKeyboardFocus(false);
-
-    content_.addChildComponent(creditsHeading_);
-    creditsHeading_.setText("Credits", juce::dontSendNotification);
-    creditsHeading_.setFont(juce::Font(juce::FontOptions(14.0f, juce::Font::bold)));
 
     if (folders_ != nullptr) {
         content_.addAndMakeVisible(foldersHeading_);
@@ -173,38 +173,47 @@ void SoundPacksSettingsTab::rebuildComponents(const std::vector<Installer::Row>&
     if (changed) {
         shownIds_ = ids;
         rows_.clear();
-        credits_.clear();
         for (const auto& row : rows) {
             rows_.push_back(std::make_unique<synth::ui::SoundPackRow>(
-                row.id, synth::ui::SoundPackRow::Actions{[this](const juce::String& id) { installer_.install(id); },
-                                                         [this](const juce::String& id) { installer_.cancel(id); },
-                                                         [this](const juce::String& id) { askToRemove(id); }}));
-            credits_.push_back(std::make_unique<synth::ui::SoundPackCredit>(
                 row.id,
-                synth::ui::SoundPackCredit::Actions{[this](const juce::String& url) { urlOpener_(juce::URL(url)); },
-                                                    [this](const juce::String& id) { installer_.showSources(id); }}));
-            content_.addAndMakeVisible(*rows_.back());
-            content_.addAndMakeVisible(*credits_.back());
+                synth::ui::SoundPackRow::Actions{[this](const juce::String& id) { installer_.install(id); },
+                                                 [this](const juce::String& id) { installer_.cancel(id); },
+                                                 [this](const juce::String& id) { askToRemove(id); },
+                                                 [this](const juce::String& url) { urlOpener_(juce::URL(url)); },
+                                                 [this](const juce::String& id) { installer_.showSources(id); }}));
+            auto& made = *rows_.back();
+            content_.addAndMakeVisible(made);
+            made.setExpanded(openPacks_.contains(row.id), false); // a remembered row is there from the start
+            made.onExpandedChanged = [this, id = row.id] {
+                const auto it =
+                    std::find_if(rows_.begin(), rows_.end(), [&id](const auto& r) { return r->getPackId() == id; });
+                if (it != rows_.end()) {
+                    openPacks_.removeString(id);
+                    if ((*it)->isExpanded())
+                        openPacks_.add(id);
+                }
+                saveOpenPacks();
+                layoutContent();
+            };
         }
     }
     for (size_t i = 0; i < rows.size(); ++i) {
         rows_[i]->update(rows[i]);
-        credits_[i]->update(rows[i]);
     }
     layoutContent();
     if (changed) {
         listFade_.snapTo(false);
         listFade_.setShown(!rows.empty());
     }
-    headingFade_.setShown(!rows.empty());
 }
 
 void SoundPacksSettingsTab::layoutContent() {
     const int width = juce::jmax(1, viewport_.getWidth() - kScrollbarW);
     int y = 0;
     for (auto& row : rows_) {
-        row->setBounds(0, y, width, synth::ui::SoundPackRow::kHeight);
-        y += synth::ui::SoundPackRow::kHeight + kRowGap;
+        const int height = row->heightForWidth(width);
+        row->setBounds(0, y, width, height);
+        y += height + kRowGap;
     }
     y += kSectionGap;
     if (folders_ != nullptr) {
@@ -220,15 +229,10 @@ void SoundPacksSettingsTab::layoutContent() {
         }
         y += kSectionGap;
     }
-    creditsHeading_.setBounds(0, y, width, kHeadingH);
-    y += kHeadingH + kRowGap;
-    for (auto& credit : credits_) {
-        const int height = credit->heightForWidth(width);
-        credit->setBounds(0, y, width, height);
-        y += height + kCreditGap;
-    }
     content_.setSize(width, juce::jmax(y, 1));
 }
+
+void SoundPacksSettingsTab::saveOpenPacks() { synth::ui::settingsfold::save(props_, kOpenPacksKey, openPacks_); }
 
 void SoundPacksSettingsTab::askToRemove(const juce::String& packId) {
     const auto row = installer_.row(packId);

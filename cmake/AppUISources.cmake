@@ -844,6 +844,8 @@ set(APPUI_SOURCES
     Source/UI/Settings/FeedbackSettingsTab.h
     Source/UI/Settings/SoundPacks/SoundPackCredit.cpp
     Source/UI/Settings/SoundPacks/SoundPackCredit.h
+    Source/UI/Settings/SoundPacks/SoundPackDisclosure.cpp
+    Source/UI/Settings/SoundPacks/SoundPackDisclosure.h
     Source/UI/Settings/SoundPacks/SoundPackRow.cpp
     Source/UI/Settings/SoundPacks/SoundPackRow.h
     Source/UI/Settings/SoundPacks/SoundPacksSettingsTab.cpp

@@ -13,21 +13,17 @@ constexpr int kButtonW = 84;
 constexpr int kButtonH = 26;
 constexpr int kGap = 8;
 constexpr int kBarH = 6;
+constexpr int kDisclosureSize = 24; // the chevron's hit area, at the row's left
+constexpr int kContentLeft = 32;    // where the name and the open details start
+constexpr int kOpenGap = 4;         // between the closed band and the open details
 constexpr int kNameH = 18;
 constexpr int kLineH = 16;
 constexpr float kNameSize = 13.0f;
 constexpr float kLineSize = 11.5f;
 
-juce::String instrumentList(const synth::soundpacks::SoundPackInstaller::Row& row) {
-    juce::StringArray names;
-    for (const auto& instrument : row.instruments)
-        names.add(instrument.name);
-    return names.joinIntoString(", ");
-}
-
 juce::String detailText(const synth::soundpacks::SoundPackInstaller::Row& row) {
     juce::StringArray parts;
-    const juce::String list = instrumentList(row);
+    const juce::String list = soundPackInstrumentList(row);
     if (list.isNotEmpty())
         parts.add(list);
     if (row.downloadBytes > 0)
@@ -87,7 +83,8 @@ void setUpLabel(juce::Label& label, float size, bool bold) {
 
 SoundPackRow::SoundPackRow(juce::String packId, Actions actions)
     : packId_(std::move(packId))
-    , actions_(std::move(actions)) {
+    , actions_(std::move(actions))
+    , credit_(packId_, SoundPackCredit::Actions{actions_.openLicence, actions_.showSources}) {
     setAccessible(true);
     setFocusContainerType(FocusContainerType::none);
     for (auto* label : {&name_, &detail_, &status_})
@@ -100,6 +97,10 @@ SoundPackRow::SoundPackRow(juce::String packId, Actions actions)
     for (auto* button : {&download_, &update_, &remove_, &cancel_})
         addChildComponent(*button);
     addChildComponent(progress_);
+    addAndMakeVisible(disclosure_);
+    disclosure_.setComponentID("packDisclosure:" + packId_); // test mode clicks it to open the row
+    disclosure_.onOpenRequested = [this](bool open) { setExpanded(open); };
+    addChildComponent(credit_);
 
     download_.onClick = [this] { actions_.install(packId_); };
     update_.onClick = [this] { actions_.install(packId_); };
@@ -139,6 +140,8 @@ void SoundPackRow::showControls(const synth::soundpacks::SoundPackInstaller::Row
 void SoundPackRow::update(const synth::soundpacks::SoundPackInstaller::Row& row) {
     hasError_ = row.state == State::NotInstalled && row.error.isNotEmpty();
     name_.setText(row.name, juce::dontSendNotification);
+    disclosure_.setPackName(row.name);
+    credit_.update(row);
     detail_.setText(detailText(row), juce::dontSendNotification);
     setDescription(detail_.getText());
     fitDetail();
@@ -169,8 +172,29 @@ void SoundPackRow::fitDetail() {
     detail_.setTooltip(fits ? juce::String() : detail_.getText());
 }
 
+int SoundPackRow::heightForWidth(int width) const {
+    if (!isExpanded())
+        return kHeight;
+    return kHeight + kOpenGap + credit_.heightForWidth(juce::jmax(1, width - kContentLeft - kPad)) + kPad;
+}
+
+void SoundPackRow::setExpanded(bool expanded, bool animate) {
+    if (expanded == isExpanded())
+        return;
+    disclosure_.setOpen(expanded, animate);
+    if (animate)
+        creditFade_.setShown(expanded);
+    else
+        creditFade_.snapTo(expanded);
+    if (onExpandedChanged)
+        onExpandedChanged();
+}
+
 void SoundPackRow::resized() {
-    auto area = getLocalBounds().reduced(kPad, kPad);
+    auto top = getLocalBounds().removeFromTop(kHeight);
+    disclosure_.setBounds(kPad - 4, kPad - 3, kDisclosureSize, kDisclosureSize);
+    auto area = top.reduced(kPad, kPad);
+    area.removeFromLeft(kContentLeft - kPad);
     auto buttons = area.removeFromRight(kButtonW * 2 + kGap);
     const auto vCentre = [&buttons](int height) { return buttons.getCentreY() - height / 2; };
     const int primaryX = buttons.getRight() - kButtonW;
@@ -185,6 +209,9 @@ void SoundPackRow::resized() {
     detail_.setBounds(area.removeFromTop(kLineH));
     status_.setBounds(area.removeFromTop(kLineH));
     fitDetail();
+
+    const int creditW = juce::jmax(1, getWidth() - kContentLeft - kPad);
+    credit_.setBounds(kContentLeft, kHeight + kOpenGap, creditW, credit_.heightForWidth(creditW));
 }
 
 void SoundPackRow::paint(juce::Graphics& g) {

@@ -505,10 +505,11 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     auto* feedbackSettingsTab = new FeedbackSettingsTab(accountService);
     tabs.addTab("Feedback", juce::Colours::transparentBlack, feedbackSettingsTab, true);
 
-    // Optional instrument downloads and their credits. After Feedback for the same reason Feedback is last.
+    // Optional instrument downloads, each row opening to its credit. After Feedback for the same reason Feedback is
+    // last.
     if (soundPacks != nullptr)
         tabs.addTab("Sound packs", juce::Colours::transparentBlack,
-                    new SoundPacksSettingsTab(*soundPacks, soundFolders), true);
+                    new SoundPacksSettingsTab(*soundPacks, soundFolders, &appProperties), true);
 
     addAndMakeVisible(tabs);
     // The strip is one Tab stop (SettingsTabs::getStripFocus), ahead of the open tab's controls; its

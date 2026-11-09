@@ -1,10 +1,11 @@
 // SoundPacksSettingsTabTests.cpp -- the Settings "Sound packs" tab: one row per pack with its state and buttons, the
-// credits section, the Remove question, the offline line, and the screen-reader names and tooltips. The installer
-// runs inline on a fake network (SoundPackTestKit.h).
+// details each row opens to (credit, licence, every instrument), the Remove question, the offline line, and the
+// screen-reader names and tooltips. The installer runs inline on a fake network (SoundPackTestKit.h).
 #include "../../SoundBrowser/SoundBrowserTestKit.h"
 #include "../../SoundPacks/SoundPackTestKit.h"
 #include "../../TestWait.h"
 #include "../Accessibility/AccessibilitySettingsFixture.h"
+#include "UI/Settings/SettingsWindow.h"
 #include "UI/Settings/SoundPacks/SoundPacksSettingsTab.h"
 
 using namespace sound_pack_test;
@@ -169,9 +170,10 @@ TEST(SoundPacksSettingsTab, OfflineShowsTheLineAndRetryAndKeepsInstalledPacksLis
     EXPECT_FALSE(rig.tab.isRetryShownForTest());
 }
 
-TEST(SoundPacksSettingsTab, CreditsListEveryPackWithItsLicenceLink) {
+TEST(SoundPacksSettingsTab, EveryRowCarriesItsCreditAndLicenceLinkAndTheLinksStillFire) {
     TabRig rig;
     rig.publish("core", "1.0.0");
+    rig.row().setExpanded(true);
     auto& credit = rig.tab.getCreditForTest(0);
     EXPECT_EQ(credit.getCreditText(), "Made by someone.");
     EXPECT_EQ(credit.getLicenceText(), "Licence: CC0 1.0");
@@ -277,6 +279,210 @@ TEST(SoundPackRowDetail, TheLineNeverReachesTheButtonsAtTheNarrowestWidth) {
     row.update(packWithInstruments(9));
     EXPECT_LE(row.getDetailBounds().getRight(), row.getUpdateButton().getX());
     EXPECT_GT(row.getDetailBounds().getWidth(), 0);
+}
+
+// ---- each row opens to its credit, licence and every instrument ----
+
+namespace {
+
+// No visible child overlaps another or leaves `parent`; descends into `descend` (the open details).
+void expectNoOverlap(juce::Component& parent, juce::Component* descend = nullptr) {
+    std::vector<juce::Component*> kids;
+    for (auto* child : parent.getChildren())
+        if (child->isVisible())
+            kids.push_back(child);
+    for (size_t i = 0; i < kids.size(); ++i) {
+        EXPECT_TRUE(parent.getLocalBounds().contains(kids[i]->getBounds()))
+            << kids[i]->getComponentID() << " " << kids[i]->getBounds().toString() << " leaves "
+            << parent.getLocalBounds().toString();
+        for (size_t j = i + 1; j < kids.size(); ++j)
+            EXPECT_FALSE(kids[i]->getBounds().intersects(kids[j]->getBounds()))
+                << kids[i]->getBounds().toString() << " overlaps " << kids[j]->getBounds().toString();
+    }
+    if (descend != nullptr)
+        expectNoOverlap(*descend);
+}
+
+synth::soundpacks::SoundPackInstaller::Row richPack(int instruments) {
+    auto row = packWithInstruments(instruments);
+    row.credit = juce::String::repeatedString("Recorded in a hall by someone patient. ", 6);
+    row.licence = "CC BY 4.0";
+    row.licenceUrl = "https://example.test/licence";
+    row.sources = juce::File::getSpecialLocation(juce::File::tempDirectory);
+    return row;
+}
+
+struct TestProps {
+    juce::ApplicationProperties props;
+    explicit TestProps(const juce::File& folder) {
+        juce::PropertiesFile::Options options;
+        options.applicationName = "SoundPacksTabTest";
+        options.filenameSuffix = "test";
+        options.storageFormat = juce::PropertiesFile::storeAsXML;
+        options.folderName = folder.getFullPathName();
+        props.setStorageParameters(options);
+        props.getUserSettings()->setFallbackPropertySet(nullptr);
+    }
+};
+
+} // namespace
+
+TEST(SoundPackRowDetails, AClosedRowIsTheOldHeightAndAnOpenRowAddsTheDetails) {
+    synth::ui::SoundPackRow row("big", {});
+    row.update(richPack(9));
+    EXPECT_FALSE(row.isExpanded());
+    EXPECT_EQ(row.heightForWidth(466), synth::ui::SoundPackRow::kHeight);
+    EXPECT_FALSE(row.isCreditShown());
+    row.setExpanded(true);
+    EXPECT_TRUE(row.isExpanded());
+    EXPECT_TRUE(row.isCreditShown());
+    EXPECT_GT(row.heightForWidth(466), synth::ui::SoundPackRow::kHeight + 60);
+    EXPECT_GT(row.heightForWidth(300), row.heightForWidth(466)) << "a narrower row wraps to more lines";
+    row.setExpanded(false);
+    EXPECT_EQ(row.heightForWidth(300), synth::ui::SoundPackRow::kHeight);
+    EXPECT_FALSE(row.isCreditShown());
+}
+
+TEST(SoundPackRowDetails, TheOpenPartHoldsTheCreditTheLicenceBothLinksAndEveryInstrument) {
+    int licences = 0;
+    juce::String sourcesFor;
+    synth::ui::SoundPackRow row(
+        "big",
+        {{}, {}, {}, [&](const juce::String&) { ++licences; }, [&](const juce::String& id) { sourcesFor = id; }});
+    row.update(richPack(9));
+    row.setSize(466, row.heightForWidth(466));
+    auto& credit = row.getCredit();
+    EXPECT_TRUE(credit.getCreditText().startsWith("Recorded in a hall"));
+    EXPECT_EQ(credit.getLicenceText(), "Licence: CC BY 4.0");
+    EXPECT_TRUE(credit.isLicenceLinkShown());
+    EXPECT_TRUE(credit.isSourcesLinkShown());
+    for (int i = 1; i <= 9; ++i)
+        EXPECT_TRUE(credit.getInstrumentsText().contains("Instrument" + juce::String(i)));
+    EXPECT_TRUE(credit.getInstrumentsText().startsWith("Instruments: "));
+    credit.getLicenceLink().onClick();
+    credit.getSourcesLink().onClick();
+    EXPECT_EQ(licences, 1);
+    EXPECT_EQ(sourcesFor, "big");
+}
+
+TEST(SoundPackRowDetails, TheCreditLinksAreOnlyOnScreenWhileTheRowIsOpen) {
+    synth::ui::SoundPackRow row("big", {});
+    row.update(richPack(3));
+    EXPECT_FALSE(row.getCredit().isVisible()) << "closed: not on screen, so not a Tab stop";
+    row.setExpanded(true);
+    EXPECT_TRUE(row.getCredit().isVisible());
+    row.setExpanded(false);
+    EXPECT_FALSE(row.getCredit().isVisible());
+}
+
+TEST(SoundPackRowDetails, TheDetailLineKeepsItsTooltipWhileClosedAndOpen) {
+    synth::ui::SoundPackRow row("big", {});
+    row.setSize(300, synth::ui::SoundPackRow::kHeight);
+    row.update(packWithInstruments(9));
+    const auto tip = row.getDetailTooltip();
+    EXPECT_TRUE(tip.contains("Instrument9"));
+    row.setExpanded(true);
+    row.setSize(300, row.heightForWidth(300));
+    EXPECT_EQ(row.getDetailTooltip(), tip);
+}
+
+TEST(SoundPackRowDetails, TheDisclosureNamesThePackAndItsStateAndTurnsTheChevron) {
+    synth::ui::SoundPackRow row("big", {});
+    row.update(packWithInstruments(2));
+    auto& disclosure = row.getDisclosure();
+    EXPECT_EQ(disclosure.getTitle(), "Details for Big pack, collapsed");
+    EXPECT_EQ(disclosure.getTooltip(), "Show who made Big pack, its licence and every instrument");
+    EXPECT_TRUE(disclosure.getWantsKeyboardFocus());
+    EXPECT_EQ(disclosure.getChevronOpenness(), 0.0f);
+    EXPECT_TRUE(row.getTitle().startsWith("Big pack, not installed")) << "the row's own name is unchanged";
+    row.setExpanded(true);
+    EXPECT_EQ(disclosure.getTitle(), "Details for Big pack, expanded");
+    EXPECT_EQ(disclosure.getTooltip(), "Hide the details of Big pack");
+    EXPECT_EQ(disclosure.getChevronOpenness(), 1.0f);
+}
+
+TEST(SoundPackRowDetails, ReturnOnTheDisclosureOpensAndClosesTheRowAndCallsTheOwner) {
+    synth::ui::SoundPackRow row("big", {});
+    row.update(packWithInstruments(2));
+    int changes = 0;
+    row.onExpandedChanged = [&] { ++changes; };
+    EXPECT_TRUE(row.getDisclosure().pressKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)));
+    synth::test::waitUntil([&] { return row.isExpanded(); }); // a key press clicks on the next message
+    EXPECT_TRUE(row.isExpanded());
+    row.getDisclosure().onClick(); // what Space and a mouse click end in
+    EXPECT_FALSE(row.isExpanded());
+    EXPECT_EQ(changes, 2);
+}
+
+TEST(SoundPackRowDetails, NoChildOfAnOpenRowOverlapsAnotherOrLeavesItAtTheNarrowestWidth) {
+    for (const int width : {300, SettingsWindow::kMinWidth - 20 - 14}) {
+        synth::ui::SoundPackRow row("big", {});
+        row.update(richPack(12));
+        row.setExpanded(true);
+        row.setSize(width, row.heightForWidth(width));
+        expectNoOverlap(row, &row.getCredit());
+        EXPECT_GE(row.getCredit().getY(), synth::ui::SoundPackRow::kHeight - 8) << "the details sit under the band";
+        EXPECT_LE(row.getCredit().getBottom(), row.getHeight());
+        EXPECT_LE(row.getDetailBounds().getRight(), row.getUpdateButton().getX());
+    }
+}
+
+TEST(SoundPacksSettingsTab, TheCreditsHeadingAndTheBottomListAreGone) {
+    TabRig rig;
+    rig.publish("core", "1.0.0");
+    for (auto* child : rig.tab.getContentForTest().getChildren()) {
+        if (auto* label = dynamic_cast<juce::Label*>(child))
+            EXPECT_NE(label->getText(), "Credits");
+        EXPECT_EQ(dynamic_cast<synth::ui::SoundPackCredit*>(child), nullptr) << "a credit lives inside its row";
+    }
+    EXPECT_EQ(&rig.tab.getCreditForTest(0), &rig.row().getCredit());
+}
+
+TEST(SoundPacksSettingsTab, TheListGrowsWhenARowOpensAndShrinksWhenItCloses) {
+    TabRig rig;
+    rig.publish("core", "1.0.0");
+    const int closed = rig.tab.getContentHeightForTest();
+    EXPECT_EQ(rig.row().getHeight(), synth::ui::SoundPackRow::kHeight);
+    rig.row().getDisclosure().onClick();
+    const int open = rig.tab.getContentHeightForTest();
+    EXPECT_GT(open, closed);
+    EXPECT_EQ(rig.row().getHeight(), rig.row().heightForWidth(rig.row().getWidth()));
+    rig.row().getDisclosure().onClick();
+    EXPECT_EQ(rig.tab.getContentHeightForTest(), closed);
+}
+
+TEST(SoundPacksSettingsTab, WhichPacksAreOpenIsRememberedAcrossTabsAndRowRebuilds) {
+    TabRig rig;
+    TestProps holder(rig.dir.path());
+    auto& props = holder.props;
+    {
+        SoundPacksSettingsTab tab(rig.installer, nullptr, &props);
+        tab.setSize(500, 400);
+        tab.resized();
+        rig.publish("core", "1.0.0");
+        EXPECT_FALSE(tab.getRowForTest(0).isExpanded()) << "all closed by default";
+        tab.getRowForTest(0).getDisclosure().onClick();
+        EXPECT_EQ(props.getUserSettings()->getValue("soundPacksOpen"), "core");
+
+        rig.publish("other", "1.0.0"); // the row set changes, then comes back
+        rig.publish("core", "1.0.0");
+        EXPECT_TRUE(tab.getRowForTest(0).isExpanded()) << "a rebuild keeps the open state";
+    }
+    SoundPacksSettingsTab again(rig.installer, nullptr, &props);
+    again.setSize(500, 400);
+    again.resized();
+    ASSERT_EQ(again.getRowCountForTest(), 1);
+    EXPECT_TRUE(again.getRowForTest(0).isExpanded());
+    EXPECT_TRUE(again.getRowForTest(0).isCreditShown());
+    again.getRowForTest(0).getDisclosure().onClick();
+    EXPECT_TRUE(props.getUserSettings()->getValue("soundPacksOpen").isEmpty());
+}
+
+TEST(SoundPacksSettingsTab, TheIntroPointsAtTheRowsInsteadOfAListBelow) {
+    TabRig rig;
+    EXPECT_EQ(rig.tab.getIntroTextForTest(), "Optional instruments for the Sampler. They download to this device when "
+                                             "you ask for them. Open a pack to see who made it, its licence and every "
+                                             "instrument.");
 }
 
 TEST(SoundPacksSettingsTab, YourFoldersListsTheSoundsViewFoldersAndRemoveKeepsTheirFiles) {
