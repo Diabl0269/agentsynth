@@ -5,10 +5,10 @@
 #include "ModDotAddSourceParts.h"
 #include "ModDotController.h"
 #include "ModDotPalette.h"
+#include "ModSourceRowWiring.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ExitEnterRowSlots.h"
 #include "UI/Layout/ReducedMotion.h"
-#include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
 #include <algorithm>
 #include <cmath>
 
@@ -67,20 +67,8 @@ ModDotSourcesPage::ModDotSourcesPage(GraphEditor& editor, ModDotController& cont
 ModDotSourcesPage::~ModDotSourcesPage() { anim_.stop(updater_); }
 
 void ModDotSourcesPage::wireRow(ModDotSourceRow& row) {
-    wireModCurveChip(row.curveChip(), editor_, row.attenuverterId(), row.source().sourceName);
+    wireModSourceRow(row, editor_, card_, destChannel_, [this] { sync(); });
     row.onSelect = [this](ModDotSourceRow& r) { select(r.attenuverterId()); };
-    row.onGestureBegin = [this](ModDotSourceRow&) { editor_.beginModAmountGesture(); };
-    row.onAmountDragged = [this](ModDotSourceRow& r, float amount) { applyAmount(r, amount); };
-    row.onGestureEnd = [this](ModDotSourceRow&) { editor_.commitModAmountGesture(); };
-    row.onAmountTyped = [this](ModDotSourceRow& r, float amount) {
-        editor_.beginModAmountGesture();
-        applyAmount(r, amount);
-        editor_.commitModAmountGesture();
-        sync();
-    };
-    row.onShowInTimeline = [this](ModDotSourceRow& r) {
-        controller_.revealSource(card_, destChannel_, r.attenuverterId());
-    };
     row.onRemove = [this](ModDotSourceRow& r) {
         controller_.removeSource(card_, destChannel_, r.attenuverterId());
         sync();
@@ -102,16 +90,6 @@ void ModDotSourcesPage::disconnectEverything() {
     controller_.removeAllSources(card_, destChannel_);
     sync();
     focusEntry();
-}
-
-void ModDotSourcesPage::applyAmount(ModDotSourceRow& row, float amount) {
-    applyAmount(editor_, row.attenuverterId(), amount);
-}
-
-void ModDotSourcesPage::applyAmount(GraphEditor& editor, juce::AudioProcessorGraph::NodeID attenuverterId,
-                                    float amount) {
-    const float current = attenuverterAmount(editor.getAudioEngine().getGraph(), attenuverterId, amount);
-    editor.adjustModAmount(attenuverterId, amount - current);
 }
 
 void ModDotSourcesPage::setRemoveHighlighted(bool on) {

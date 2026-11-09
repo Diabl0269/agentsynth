@@ -109,10 +109,56 @@ bool sameConnection(const PortConnection& a, const PortConnection& b) {
            (!a.cable.landsOnKnob || a.farRawChannel == b.farRawChannel);
 }
 
+// The routings, resolved once per listing and only when a modulation cable needs them: the editor's cache first, the
+// engine itself when a chain made since the cache's last refresh is missing from it.
+struct Chains {
+    std::vector<KnobModChain> list;
+    bool read = false;
+    bool fresh = false;
+};
+
+const KnobModChain* findChain(GraphEditor& editor, Chains& chains, juce::AudioProcessorGraph::NodeID atten) {
+    const auto find = [&chains, atten]() -> const KnobModChain* {
+        for (const auto& c : chains.list)
+            if (c.source.attenuverterId == atten)
+                return &c;
+        return nullptr;
+    };
+    if (!chains.read) {
+        chains.list = knobModChains(editor, false);
+        chains.read = true;
+    }
+    if (const auto* hit = find())
+        return hit;
+    if (chains.fresh)
+        return nullptr;
+    chains.list = knobModChains(editor, true);
+    chains.fresh = true;
+    return find();
+}
+
+// A modulation row edits the chain the knob's sources panel lists, landing on the knob behind any macro port. With no
+// routing for it (a chain being rebuilt) the cable alone describes it, and no knob is named.
+void describeChain(GraphEditor& editor, PortConnection& entry, Chains& chains) {
+    const juce::AudioProcessorGraph::NodeID atten{entry.cable.id.attenUid};
+    entry.attenuverterId = atten;
+    if (const auto* chain = findChain(editor, chains, atten)) {
+        entry.modSource = chain->source;
+        entry.modCard = chain->card;
+        entry.modChannel = chain->destChannel;
+        return;
+    }
+    entry.modSource.attenuverterId = atten;
+    entry.modSource.sourceNodeId = juce::AudioProcessorGraph::NodeID{entry.cable.id.srcUid};
+    entry.modSource.sourceChannel = entry.cable.id.srcPort;
+    entry.modSource.amount = attenuverterAmount(editor.getAudioEngine().getGraph(), atten, entry.cable.attenAmount);
+}
+
 } // namespace
 
 std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortRef& port) {
     std::vector<PortConnection> out;
+    Chains chains;
     const auto cables = editor.buildVisibleCables(); // a copy: the editor's list is rebuilt under us by an edit
     for (const auto& cable : cables) {
         if (!landsOn(editor, cable, port))
@@ -124,8 +170,7 @@ std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortR
         entry.label = endName(editor, cable, /*farIsDestination=*/!port.isInput);
         entry.colour = editor.colourForCable(cable);
         if (cable.id.attenUid != 0)
-            entry.amount = attenuverterAmount(editor.getAudioEngine().getGraph(),
-                                              juce::AudioProcessorGraph::NodeID{cable.id.attenUid}, cable.attenAmount);
+            describeChain(editor, entry, chains);
         const auto same = std::find_if(out.begin(), out.end(),
                                        [&entry](const PortConnection& o) { return sameConnection(o, entry); });
         if (same != out.end()) {

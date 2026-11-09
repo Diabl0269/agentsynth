@@ -5,6 +5,7 @@
 // these; this is pure data, so it is tested without a window. docs/layout/cables.md#port-connections-panel.
 
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModDot/KnobModSources.h"
 #include <vector>
 
 namespace synth::ui {
@@ -32,8 +33,13 @@ struct PortConnection {
     juce::Colour colour;
     /** A modulation cable (an attenuverter chain): it has an amount and a response curve, like a source of a knob's
      *  mod dot. Audio, MIDI and plain CV cables have neither. */
-    bool isModulation() const noexcept { return cable.id.attenUid != 0; }
-    float amount = 0.0f; // the chain's live amount, -1..1 (a modulation only)
+    bool isModulation() const noexcept { return attenuverterId.uid != 0; }
+    juce::AudioProcessorGraph::NodeID attenuverterId; // the chain's attenuverter; uid 0 on any other cable
+    /** The chain as the knob's sources panel lists it (amount, the real modulator behind macro ports); a modulation
+     *  only. `modCard`/`modChannel` name the knob it lands on, invalid when no routing resolves it. */
+    KnobModSource modSource;
+    juce::AudioProcessorGraph::NodeID modCard;
+    int modChannel = -1;
 };
 
 /** The connections landing on `port` as of now, in the canvas' own order (a copy: the editor's list is a memo). Cables

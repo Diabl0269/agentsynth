@@ -1,0 +1,37 @@
+# An output dot's panel edits the modulations it carries like the knob's mod dot panel does: each mod cable's row has
+# the amount bar, the typed percent, the curve chip and "show in timeline" (it used to have no timeline button). A jack
+# that is both an audio output and a mod source lists its audio cables as plain rows beside the mod rows.
+#
+# What a user does:
+#   1. Opens a project where LFO 1 modulates the VCA's CV and the Filter's Cutoff, and the Oscillator's output feeds
+#      the VCA's audio input and also modulates the Filter's Cutoff.
+#   2. Clicks LFO 1's output dot: two rows, each on two lines (the name, then bar, percent, curve chip and the
+#      show-in-timeline button).
+#   3. Clicks the Oscillator's output dot: the VCA audio row is a plain one-line row; the Filter Cutoff row has the
+#      mod controls.
+motion: true
+record: true
+save_project: "fro1575 test"
+steps:
+  - openProject: {path: "${FIXTURES}/port-panel-mod-rows.agsproj"}
+  - wait: {}
+  - click: {id: "card:LFO 1", x: 268, y: 57}
+  - wait: {}
+  - expect: {id: portConnectionsPanel, within_ms: 3000}
+  - expect: {id: "portConnectionsPanel > Show VCA · CV in timeline", showing: true, tooltip: "Show VCA · CV in timeline"}
+  - expect: {id: "portConnectionsPanel > Show Filter · Cutoff in timeline", showing: true}
+  - expect: {id: "portConnectionsPanel > Filter · Cutoff amount", showing: true}
+  - expect: {id: "portConnectionsPanel > Filter · Cutoff curve", showing: true}
+  - mark: {check: 1, name: lfo-output-mod-rows}
+  - key: {keys: escape}
+  - expect: {id: portConnectionsPanel, exists: false, within_ms: 2000}
+  - wait: {}
+  - click: {id: "card:Oscillator", x: 270, y: 58}
+  - wait: {}
+  - expect: {id: portConnectionsPanel, within_ms: 3000}
+  - expect: {id: "portConnectionsPanel > Show Filter · Cutoff in timeline", showing: true}
+  - expect: {id: "portConnectionsPanel > Filter · Cutoff amount", showing: true}
+  - expect: {id: "portConnectionsPanel > Remove connection to VCA · Audio", showing: true}
+  - expect: {id: "portConnectionsPanel > Show VCA · Audio in timeline", exists: false}
+  - expect: {id: "portConnectionsPanel > VCA · Audio amount", exists: false}
+  - mark: {check: 2, name: osc-output-mixed-rows}

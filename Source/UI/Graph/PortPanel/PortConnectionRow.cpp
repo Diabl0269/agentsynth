@@ -7,9 +7,6 @@ namespace synth::ui {
 namespace {
 constexpr int kSwatch = 10;
 constexpr float kFont = 12.5f;
-// The far end is named "<module> . <port>", longer than a source's title: the name gets the width the sources page
-// spends on its "show in timeline" button.
-constexpr int kModNameWidth = 96;
 } // namespace
 
 PortConnectionRow::PortConnectionRow(const PortConnection& connection)
@@ -28,25 +25,10 @@ PortConnectionRow::PortConnectionRow(const PortConnection& connection)
     };
     if (connection_.isModulation()) {
         mod_ = std::make_unique<ModDotSourceRow>(modSource(), juce::String());
-        mod_->setLook({kHeight, kModNameWidth, false});
+        // "Show in timeline" only when the chain resolves to a knob, the lane it reveals.
+        mod_->setLook({kModHeight, 0, connection_.modCard.uid != 0, kHeight});
         addAndMakeVisible(*mod_);
         removeButton_.setVisible(false);
-        mod_->onGestureBegin = [this](ModDotSourceRow&) {
-            if (onAmountGestureBegin)
-                onAmountGestureBegin(*this);
-        };
-        mod_->onAmountDragged = [this](ModDotSourceRow&, float amount) {
-            if (onAmountDragged)
-                onAmountDragged(*this, amount);
-        };
-        mod_->onGestureEnd = [this](ModDotSourceRow&) {
-            if (onAmountGestureEnd)
-                onAmountGestureEnd(*this);
-        };
-        mod_->onAmountTyped = [this](ModDotSourceRow&, float amount) {
-            if (onAmountTyped)
-                onAmountTyped(*this, amount);
-        };
         mod_->onRemove = [this](ModDotSourceRow&) {
             if (onRemove)
                 onRemove(*this);
@@ -59,13 +41,10 @@ PortConnectionRow::PortConnectionRow(const PortConnection& connection)
     applyNames();
 }
 
+// The chain as listed, under the far end's name: the panel names what is at the other end of the cable.
 KnobModSource PortConnectionRow::modSource() const {
-    KnobModSource source;
-    source.attenuverterId = juce::AudioProcessorGraph::NodeID{connection_.cable.id.attenUid};
-    source.sourceNodeId = juce::AudioProcessorGraph::NodeID{connection_.cable.id.srcUid};
-    source.sourceChannel = connection_.cable.id.srcPort;
+    auto source = connection_.modSource;
     source.sourceName = connection_.label;
-    source.amount = connection_.amount;
     return source;
 }
 
@@ -133,7 +112,7 @@ void PortConnectionRow::resized() {
     // Laid out for the full row height whatever height the panel has given it: a row growing in or shrinking out is
     // revealed and hidden, never squashed.
     if (mod_ != nullptr)
-        mod_->setBounds(0, 0, getWidth(), kHeight);
+        mod_->setBounds(0, 0, getWidth(), kModHeight);
     const int gap = modDotPaletteFor(*this).space;
     auto r = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
     removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)

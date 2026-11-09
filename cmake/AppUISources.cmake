@@ -570,40 +570,6 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModChip.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentModDot.cpp
-    Source/UI/Graph/ModDot/KnobModSources.h
-    Source/UI/Graph/ModDot/KnobModSources.cpp
-    Source/UI/Graph/ModDot/ModDotButton.h
-    Source/UI/Graph/ModDot/ModDotCanvasPicker.h
-    Source/UI/Graph/ModDot/ModDotCanvasPicker.cpp
-    Source/UI/Graph/ModDot/ModDotPanelFrame.h
-    Source/UI/Graph/ModDot/ModDotPanelFrame.cpp
-    Source/UI/Graph/ModDot/ModDotPanelLaunch.h
-    Source/UI/Graph/ModDot/ModDotPanelLaunch.cpp
-    Source/UI/Graph/ModDot/ModDotPanelGeometry.h
-    Source/UI/Graph/ModDot/ModDotPanelGeometry.cpp
-    Source/UI/Graph/ModDot/ModDotController.h
-    Source/UI/Graph/ModDot/ModDotController.cpp
-    Source/UI/Graph/ModDot/ModDotTooltip.h
-    Source/UI/Graph/ModDot/ModDotTooltip.cpp
-    Source/UI/Graph/ModDot/ModDotAddSourceParts.h
-    Source/UI/Graph/ModDot/ModDotAddSourcePage.h
-    Source/UI/Graph/ModDot/ModDotAmountBar.h
-    Source/UI/Graph/ModDot/ModDotGlyphButton.h
-    Source/UI/Graph/ModDot/ModDotMotion.h
-    Source/UI/Graph/ModDot/ModDotPage.h
-    Source/UI/Graph/ModDot/ModDotPalette.h
-    Source/UI/Graph/ModDot/ModDotPopover.h
-    Source/UI/Graph/ModDot/ModDotSourceRow.h
-    Source/UI/Graph/ModDot/ModDotSourcesPage.h
-    Source/UI/Graph/ModDot/ModSourceCatalog.h
-    Source/UI/Graph/ModDot/ModDotAddSourcePage.cpp
-    Source/UI/Graph/ModDot/ModDotAmountBar.cpp
-    Source/UI/Graph/ModDot/ModDotControllerPopover.cpp
-    Source/UI/Graph/ModDot/ModDotGlyphs.cpp
-    Source/UI/Graph/ModDot/ModDotPopover.cpp
-    Source/UI/Graph/ModDot/ModDotSourceRow.cpp
-    Source/UI/Graph/ModDot/ModDotSourcesPage.cpp
-    Source/UI/Graph/ModDot/ModSourceCatalog.cpp
     Source/UI/Graph/PortPanel/PortConnector.h
     Source/UI/Graph/PortPanel/PortConnector.cpp
     Source/UI/Graph/PortPanel/PortConnectorNewModule.cpp
@@ -998,3 +964,4 @@ include(cmake/CardLayoutGroupMoveSources.cmake) # appends the Edit Layout group 
 list(APPEND APPUI_SOURCES ${SOUND_BROWSER_UI_SOURCES}) # the Sounds view, from SoundBrowserSources.cmake
 include(cmake/CanvasDragSources.cmake) # appends the edge scroll and the drag grid to APPUI_SOURCES
 include(cmake/MorphShapesCardSources.cmake) # appends the morph card and the Morph Shapes card to APPUI_SOURCES
+include(cmake/ModDotSources.cmake) # appends the mod dot panel and the modulation row parts to APPUI_SOURCES

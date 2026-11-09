@@ -291,16 +291,31 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
   (a cable names raw channels, the card and the labels speak in visible jacks), never from graph edges. Zero and one
   connection still show the panel; with none, "Add destination" is its main action.
 - **Modulation rows.** A cable that is a modulation (an attenuverter chain, `PortConnection::isModulation()`) is not a plain
-  row: it is the mod dot sources panel's own row, `ModDotSourceRow`, embedded in `PortConnectionRow` and laid out at the
-  panel's row height (`ModDotSourceRow::Look`: a 96 px name, no "show in timeline" button). It carries the swatch, the far
-  end's name, the amount bar, the typed percent (click it or press Return), the curve chip and the remove button, from a
-  destination jack (the far end is the modulator) and from a source jack such as an LFO's output (the far end is the
-  knob or jack it drives). A drag of the bar is one undo step (`beginModAmountGesture` / `commitModAmountGesture`), a
-  typed value is one step, both written by `ModDotSourcesPage::applyAmount`, the one write the sources panel also uses;
-  the chip opens the same curve editor (`wireModCurveChip`). Audio, MIDI and plain CV rows are unchanged. Keys: Tab walks
-  bar, percent, chip and remove in each row; Up and Down move between rows. Test: `PortPanelModControlsTests.cpp`, whose
-  `EverySurfaceThatListsAModulationOffersAmountPercentAndCurve` lists every surface that shows a modulation (the knob's
-  sources panel and the port panel from either end): a new surface that lists modulations is one more entry there.
+  row: it is the mod dot sources panel's own row, `ModDotSourceRow`, embedded in `PortConnectionRow`. Rows are told apart
+  per cable, never per module type, so a jack that carries both (an Oscillator's output into an audio input and onto a
+  knob) lists its audio cables as plain rows and its modulations as mod rows, side by side. The panel is
+  `ModDotPage::kWidth` (312 px) wide, too narrow for the far end's "<module> . <port>" name and every control on one line,
+  so a mod row has two (`ModDotSourceRow::Look::nameLine`, `PortConnectionRow::kModHeight` = 56 px): the swatch, the
+  whole name and the remove button on a 30 px top line, where a plain row has them; under the name the amount bar, the
+  typed percent (click it or press Return), the curve chip and **show in timeline**. Plain rows keep their 30 px. It
+  shows from a destination jack (the far end is the modulator) and from a source jack such as an LFO's output (the far
+  end is the knob or jack it drives). `listPortConnections` fills each modulation's `attenuverterId`, its `modSource`
+  and the knob it lands on (`modCard`, `modChannel`, macro ports looked through) from `knobModChains`, the list the
+  knob's panel filters (one read per listing, the editor's cache first). Every control is wired by
+  `wireModSourceRow` (`ModDot/ModSourceRowWiring.cpp`), the one wiring the sources panel uses too, so the two cannot
+  drift: a drag of the bar is one undo step (`beginModAmountGesture` / `commitModAmountGesture`), a typed value is one
+  step (`applyModAmount`), the chip opens the same curve editor (`wireModCurveChip`) and show in timeline is
+  `ModDotController::revealSource` for that knob, the same call as the mod dot panel's (hidden when no routing names a
+  knob). Its name and tooltip are "Show <far end> in timeline". Rows of both heights move through the shared row motion
+  (`ExitEnterRowSlots` with a height per row): a removed mod row shrinks from 56 px and Cmd+Z grows it back to 56.
+  Audio, MIDI and plain CV rows are unchanged. Keys: Tab walks remove, bar, percent, chip and show in timeline in each
+  mod row (top line first; `ModDotSourceRow` sets an explicit focus order, since sorting by top edge would visit the
+  tall timeline button before the fader; the knob's one-line rows read bar to remove); Up and Down move between rows.
+  Tests: `PortPanelModControlsTests.cpp`. Its `EverySurfaceThatListsAModulationOffersAmountPercentAndCurve` lists every
+  surface that shows a modulation (the knob's sources panel and the port panel from either end; a new surface that
+  lists modulations is one more entry there). Its output-row tests cover an LFO on two knobs, an Oscillator used as
+  audio and as a mod source, the drag, the chip, the reveal against the mod dot panel's, the Tab order and the
+  mixed-height undo.
 - **Edits.** Remove is `GraphEditor::disconnectCable` (one undo step, the cable retracts; an attenuverter chain goes
   through `removeModulationChain`), "Disconnect all" is `GraphEditor::disconnectPort` (one undo step), "Delete port" is
   `MacroGroupController::deleteMacroPortManually` (one undo step, the cables retract; the node is gone, so the panel

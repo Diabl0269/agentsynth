@@ -24,6 +24,16 @@ struct KnobModSource {
     bool bypassed = false;
 };
 
+/** One AttenuverterChain routing and the knob it lands on, macro ports looked through. */
+struct KnobModChain {
+    juce::AudioProcessorGraph::NodeID card; // the module whose knob (or CV jack) the chain drives
+    int destChannel = -1;                   // its raw CV channel
+    KnobModSource source;
+};
+
+/** Every AttenuverterChain routing, as knobModSources words each (same order, same `fresh` rule). */
+std::vector<KnobModChain> knobModChains(GraphEditor& editor, bool fresh = false);
+
 /** Every AttenuverterChain routing onto (`dest`, `destChannel`), in GraphEditor::getCachedModDisplayInfo()
  *  order. `fresh` reads the engine's routings now instead of the editor's cache (which only the editor's 30 Hz tick
  *  refreshes): for a caller that just edited the graph. Message thread only. */

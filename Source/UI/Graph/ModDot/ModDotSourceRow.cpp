@@ -163,27 +163,72 @@ void ModDotSourceRow::resized() {
     // Left to right: swatch, name, fader, amount, curve, timeline, remove, each group a theme spacing unit from the
     // next so the icons never touch the fader or the amount.
     const int gap = modDotPaletteFor(*this).space;
-    auto r = juce::Rectangle<int>(0, 0, getWidth(), look_.height).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
-    removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)
-                                .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
     timelineButton_.setVisible(look_.timeline);
-    if (look_.timeline) {
-        r.removeFromRight(kIconGap);
-        timelineButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize));
+    if (look_.nameLine > 0) {
+        layoutTwoLines(gap);
+    } else {
+        auto r = juce::Rectangle<int>(0, 0, getWidth(), look_.height).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
+        removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)
+                                    .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
+        if (look_.timeline)
+            r.removeFromRight(kIconGap);
+        r = layoutControls(r, gap);
+        swatchArea_ = r.removeFromLeft(kSwatch).withSizeKeepingCentre(kSwatch, kSwatch);
+        r.removeFromLeft(gap);
+        nameArea_ = r.removeFromLeft(look_.nameWidth);
+        r.removeFromLeft(gap);
+        bar_.setBounds(r.withSizeKeepingCentre(r.getWidth(), kBarHeight));
     }
+    if (editor_ != nullptr)
+        editor_->setBounds(amountButton_->getBounds());
+    setReadingFocusOrder();
+}
+
+// Tab follows reading order, not the controls' top edges: the default traverser sorts siblings by y first, and the
+// controls differ in height (the timeline button fills its line, the fader is thin), so it would visit the timeline
+// button before the fader. One line reads fader, amount, curve, timeline, remove; two lines put remove on the top
+// line, before the controls under it.
+void ModDotSourceRow::setReadingFocusOrder() {
+    const bool removeFirst = look_.nameLine > 0;
+    int order = 1;
+    if (removeFirst)
+        removeButton_.setExplicitFocusOrder(order++);
+    for (juce::Component* c :
+         {static_cast<juce::Component*>(&bar_), static_cast<juce::Component*>(amountButton_.get()),
+          static_cast<juce::Component*>(curveChip_.get()), static_cast<juce::Component*>(&timelineButton_)})
+        c->setExplicitFocusOrder(order++);
+    if (!removeFirst)
+        removeButton_.setExplicitFocusOrder(order);
+}
+
+// Top line: swatch, the whole name and remove, where a plain row of the same list has them. Under it, starting below
+// the name: fader, amount, curve and timeline, so a long name never squeezes the fader.
+void ModDotSourceRow::layoutTwoLines(int gap) {
+    auto top = juce::Rectangle<int>(0, 0, getWidth(), look_.nameLine).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
+    removeButton_.setBounds(top.removeFromRight(ModDotGlyphButton::kSize)
+                                .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
+    top.removeFromRight(gap);
+    swatchArea_ = top.removeFromLeft(kSwatch).withSizeKeepingCentre(kSwatch, kSwatch);
+    top.removeFromLeft(gap);
+    nameArea_ = top;
+    auto r = juce::Rectangle<int>(0, look_.nameLine, getWidth(), look_.height - look_.nameLine)
+                 .reduced(ModDotGlyphButton::kRowEdgeInset, 0);
+    r.removeFromLeft(kSwatch + gap);
+    r = layoutControls(r, gap);
+    bar_.setBounds(r.withSizeKeepingCentre(r.getWidth(), kBarHeight));
+}
+
+// Timeline (when shown), curve and amount from the right edge of `r`; returns what is left of it.
+juce::Rectangle<int> ModDotSourceRow::layoutControls(juce::Rectangle<int> r, int gap) {
+    if (look_.timeline)
+        timelineButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize));
     r.removeFromRight(gap);
     curveChip_->setBounds(
         r.removeFromRight(ModCurveChip::kWidth).withSizeKeepingCentre(ModCurveChip::kWidth, ModCurveChip::kHeight));
     r.removeFromRight(gap);
     amountButton_->setBounds(r.removeFromRight(kAmountWidth).withSizeKeepingCentre(kAmountWidth, 20));
     r.removeFromRight(gap);
-    swatchArea_ = r.removeFromLeft(kSwatch).withSizeKeepingCentre(kSwatch, kSwatch);
-    r.removeFromLeft(gap);
-    nameArea_ = r.removeFromLeft(look_.nameWidth);
-    r.removeFromLeft(gap);
-    bar_.setBounds(r.withSizeKeepingCentre(r.getWidth(), kBarHeight));
-    if (editor_ != nullptr)
-        editor_->setBounds(amountButton_->getBounds());
+    return r;
 }
 
 void ModDotSourceRow::mouseEnter(const juce::MouseEvent&) { hover_.setHovered(isMouseOver(true)); }

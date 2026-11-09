@@ -10,6 +10,13 @@
 
 namespace synth::ui {
 
+namespace {
+// Rows differ in height (a modulation row has two lines), so every slot moves to and from its own row's.
+constexpr auto fullHeightOf = [](const auto& entry) {
+    return (float)PortConnectionRow::heightFor(entry.row->connection());
+};
+} // namespace
+
 void PortConnectionsPanel::animateLayout() {
     const bool changing =
         disconnectFade_.current != disconnectFade_.to ||
@@ -21,7 +28,7 @@ void PortConnectionsPanel::animateLayout() {
 }
 
 void PortConnectionsPanel::startRemovalMotion() {
-    exit_enter_slots::begin(entries_, (float)PortConnectionRow::kHeight);
+    exit_enter_slots::begin(entries_, fullHeightOf);
     for (auto& e : entries_) {
         if (e.leaving) {
             e.row->setEnabled(false); // a row on its way out is not a control any more
@@ -61,7 +68,7 @@ void PortConnectionsPanel::landMotion() {
     if (!wasActive)
         return;
     motionActive_ = false;
-    exit_enter_slots::land(entries_, (float)PortConnectionRow::kHeight);
+    exit_enter_slots::land(entries_, fullHeightOf);
     disconnectFade_.current = disconnectFade_.to;
     finishLeaving();
     layoutRows();
