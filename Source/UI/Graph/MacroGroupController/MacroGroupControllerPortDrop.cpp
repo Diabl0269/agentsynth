@@ -1,8 +1,8 @@
 // MacroGroupControllerPortDrop.cpp
 //
-// A cable dropped on a collapsed macro's card: the port it makes (or finds again), the chain of ports across every
-// border it crosses, and the join of an empty port to the module it was made for. The rest of the port code is in
-// MacroGroupControllerPorts.cpp.
+// A cable dropped on a collapsed macro's card: where it would land (cardCableDropAt, which the drag's hint and the drop
+// both act on), the port it makes (or finds again), the chain of ports across every border it crosses, and the join of
+// an empty port to the module it was made for. The rest of the port code is in MacroGroupControllerPorts.cpp.
 
 #include "MacroGroupController.h"
 
@@ -14,6 +14,7 @@
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroOutletModule.h"
 #include "UI/Graph/GraphEditor/GraphEditorTypes.h"
+#include "UI/Macros/MacroCardComponent/MacroCardComponent.h"
 
 #include <algorithm>
 #include <set>
@@ -37,6 +38,36 @@ std::vector<juce::String> outerFirst(std::vector<juce::String> innerFirst) {
 }
 } // namespace
 
+// A port of this macro (through the same chain of ports on the other end's own macros) that carries this very jack
+// takes a repeated drop, so no second port or cable appears. The drag's hint asks the same question
+// (cardCableDropAt), so it rings the port the drop leaves in place.
+juce::AudioProcessorGraph::NodeID
+MacroGroupController::portAlreadyCarryingDrop(const juce::String& macroId, bool newPortIsInput, bool isMidi,
+                                              juce::AudioProcessorGraph::NodeID otherNodeId,
+                                              int otherVisibleJack) const {
+    auto reusedOther = otherNodeId;
+    int reusedJack = otherVisibleJack;
+    const auto& macrosNow = host_.getMacros();
+    auto shared = macrosNow.ancestorChain(macroId);
+    shared.insert(shared.begin(), macroId);
+    for (const auto& crossedId : macro_nesting::boundariesCrossed(macrosNow, nodeUuidFor(otherNodeId), shared)) {
+        const auto link = existingPortLinkedTo(crossedId, !newPortIsInput, reusedOther, reusedJack, isMidi);
+        if (link.uid == 0)
+            return {};
+        reusedOther = link;
+        reusedJack = 0;
+    }
+    for (const auto& crossedId : outerFirst(targetBorders(macrosNow, macroId, nodeUuidFor(otherNodeId)))) {
+        const auto link =
+            existingPortLinkedTo(crossedId, newPortIsInput, reusedOther, reusedJack, isMidi, /*otherOutside=*/true);
+        if (link.uid == 0)
+            return {};
+        reusedOther = link;
+        reusedJack = 0;
+    }
+    return existingPortLinkedTo(macroId, newPortIsInput, reusedOther, reusedJack, isMidi, /*otherOutside=*/true);
+}
+
 void MacroGroupController::createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput,
                                                            bool isMidi, juce::AudioProcessorGraph::NodeID otherNodeId,
                                                            int otherVisibleJack) {
@@ -44,41 +75,9 @@ void MacroGroupController::createMacroPortFromDroppedCable(const juce::String& m
     if (macro == nullptr)
         return;
 
-    // The same cable dropped again is already there: a port of this macro (through the same chain of ports on the
-    // other end's own macros) that carries this very jack takes the drop, so no second port or cable appears.
-    {
-        auto reusedOther = otherNodeId;
-        int reusedJack = otherVisibleJack;
-        const auto& macrosNow = host_.getMacros();
-        auto shared = macrosNow.ancestorChain(macroId);
-        shared.insert(shared.begin(), macroId);
-        bool chainExists = true;
-        for (const auto& crossedId : macro_nesting::boundariesCrossed(macrosNow, nodeUuidFor(otherNodeId), shared)) {
-            const auto link = existingPortLinkedTo(crossedId, !newPortIsInput, reusedOther, reusedJack, isMidi);
-            if (link.uid == 0) {
-                chainExists = false;
-                break;
-            }
-            reusedOther = link;
-            reusedJack = 0;
-        }
-        if (chainExists) {
-            for (const auto& crossedId : outerFirst(targetBorders(macrosNow, macroId, nodeUuidFor(otherNodeId)))) {
-                const auto link = existingPortLinkedTo(crossedId, newPortIsInput, reusedOther, reusedJack, isMidi,
-                                                       /*otherOutside=*/true);
-                if (link.uid == 0) {
-                    chainExists = false;
-                    break;
-                }
-                reusedOther = link;
-                reusedJack = 0;
-            }
-        }
-        if (chainExists && existingPortLinkedTo(macroId, newPortIsInput, reusedOther, reusedJack, isMidi,
-                                                /*otherOutside=*/true)
-                                   .uid != 0)
-            return;
-    }
+    // The same cable dropped again is already there: no second port or cable appears.
+    if (portAlreadyCarryingDrop(macroId, newPortIsInput, isMidi, otherNodeId, otherVisibleJack).uid != 0)
+        return;
 
     const auto kind = isMidi ? synth::MacroPortKind::Midi : synth::MacroPortKind::AudioCV;
     const juce::String typeName = macroPortNodeTypeName(newPortIsInput, kind);
@@ -312,4 +311,53 @@ bool MacroGroupController::connectEmptyPortInterior(const juce::String& macroId,
             g.addConnection({{targetId, memberCh}, {portNodeId, portCh}}, juce::AudioProcessorGraph::UpdateKind::none);
     }
     return true;
+}
+
+// The first visible card containing the point wins, in the card array's order (a card is visible exactly while its
+// macro is folded). An existing port's jack under the cursor takes the cable when its direction and kind match the
+// drag and is refused otherwise: a mismatched jack never falls back to minting a port
+// (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed). Anywhere else on the card the cable mints a
+// port, unless a port of this macro already carries this very jack.
+std::optional<MacroGroupController::CardCableDrop>
+MacroGroupController::cardCableDropAt(juce::Point<int> screenPos, juce::AudioProcessorGraph::NodeID otherNode,
+                                      int otherJack, bool dragFromInput, bool isMidi) {
+    for (auto* card : host_.macroCards()) {
+        if (card == nullptr || !card->isVisible())
+            continue;
+        const auto cardLocal = card->getLocalPoint(nullptr, screenPos);
+        if (!card->getLocalBounds().contains(cardLocal))
+            continue;
+
+        CardCableDrop drop;
+        drop.card = card;
+        drop.macroId = card->getMacroId();
+        // A drag from an OUTPUT looks for a destination, so the macro offers an input; from an INPUT, an output.
+        drop.portIsInput = !dragFromInput;
+        if (host_.graph().getNodeForId(otherNode) == nullptr)
+            return drop; // refused: the cable's own end is gone
+
+        if (const auto hit = macroCardPortForPoint(drop.macroId, cardLocal)) {
+            const bool matches =
+                hit->isInput == drop.portIsInput && (hit->kind == synth::MacroPortKind::Midi) == isMidi;
+            const auto portNode = resolveMemberNodeId(hit->nodeUuid);
+            if (matches && host_.graph().getNodeForId(portNode) != nullptr) {
+                drop.kind = CardCableDrop::Kind::existingPort;
+                drop.portUuid = hit->nodeUuid;
+                drop.visibleJack = hit->visibleJack;
+                drop.portNodeId = portNode;
+            }
+            return drop;
+        }
+
+        if (const auto carrying = portAlreadyCarryingDrop(drop.macroId, drop.portIsInput, isMidi, otherNode, otherJack);
+            carrying.uid != 0) {
+            drop.kind = CardCableDrop::Kind::alreadyLinked;
+            drop.portUuid = nodeUuidFor(carrying);
+            drop.portNodeId = carrying;
+            return drop;
+        }
+        drop.kind = CardCableDrop::Kind::newPort;
+        return drop;
+    }
+    return std::nullopt;
 }

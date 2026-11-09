@@ -14,6 +14,9 @@
 #include <vector>
 
 class GraphEditor; // Forward declaration
+namespace synth::ui {
+class ShownFade;
+}
 namespace synth::theme {
 struct Colors;
 }
@@ -117,6 +120,27 @@ public:
     }
     juce::String getHoveredPortUuidForTest() const { return hoveredPortUuid_.value_or(juce::String()); }
 
+    /** Where a cable hovering this card would land: one of the card's ports, or a new port on `isInput`'s side. */
+    struct CableDropHint {
+        bool newPort = false;
+        bool isInput = true;
+        juce::String portUuid;
+        int visibleJack = -1;
+        bool operator==(const CableDropHint& o) const noexcept {
+            return newPort == o.newPort && isInput == o.isInput && portUuid == o.portUuid &&
+                   visibleJack == o.visibleJack;
+        }
+    };
+    /** Set on every drag tick; repeating the same hint keeps its fade going. `instant` drops the fade. */
+    void setCableDropHint(std::optional<CableDropHint> hint, bool instant = false);
+    const std::optional<CableDropHint>& getCableDropHint() const noexcept { return cableDropHint_; }
+    float getCableDropHintAlphaForTest() const;
+
+    /** Fades `portUuid`'s row in (dot and name) as a cable lands on it; a port that is not entering shows fully. */
+    void growInPort(const juce::String& portUuid);
+    float getPortShown(const juce::String& portUuid) const;
+    void stepPortEnterForTest(double ms);
+
 private:
     /** `priorSelection`: whatever was selected right before mouseDown's own reselect —
      *  see GraphEditor::buildMacroMenu's addCandidateSelection comment for why this must be
@@ -157,6 +181,8 @@ private:
     // Both strips, the jacks, the names, the '+'/'-' pair and the hovered-jack ring
     // (MacroCardComponentPorts.cpp).
     void paintPortStrips(juce::Graphics& g, const synth::Macro& macro, const synth::theme::Colors& themeColors);
+    // The cable drop hint at its current fade (MacroCardComponentPorts.cpp).
+    void paintCableDropHint(juce::Graphics& g, const synth::Macro& macro, const synth::theme::Colors& themeColors);
 
     // Opacity of the port names, '-' glyph and inner dividers at the canvas zoom (0 = dots only); the strips keep
     // their width. portNameIsTruncated: the name would be ellipsised in its column.
@@ -197,6 +223,12 @@ private:
     std::unique_ptr<juce::TextEditor> nameEditor;
 
     std::optional<std::pair<juce::String, juce::Colour>> portColourPreview_; // the open picker's one port
+
+    std::optional<CableDropHint> cableDropHint_; // what a hovering cable would do now
+    std::optional<CableDropHint> paintedHint_;   // what is drawn while the hint fades out
+    std::unique_ptr<synth::ui::ShownFade> hintFade_;
+    juce::String enteringPortUuid_; // the row growInPort is fading in
+    std::unique_ptr<synth::ui::ShownFade> portEnterFade_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroCardComponent)
 };

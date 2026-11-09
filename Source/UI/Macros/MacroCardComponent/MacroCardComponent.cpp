@@ -5,6 +5,7 @@
 #include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Layout/ContextMenuPlacement.h"
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 // The port-strip constants live in GraphEditorInternal.h, shared with
@@ -21,6 +22,19 @@ MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
 
 MacroCardComponent::~MacroCardComponent() { finishRename(false); }
 
+// Test mode: `cableDropHint` is what a cable hovering the card would do ("port", "newPort" or empty), with
+// `cableDropHintPort` naming the port that takes it.
+static void addCableDropHintState(juce::DynamicObject& into, const synth::Macro* macro,
+                                  const std::optional<MacroCardComponent::CableDropHint>& hint) {
+    into.setProperty("cableDropHint", !hint.has_value() ? juce::String() : hint->newPort ? "newPort" : "port");
+    juce::String portName;
+    if (hint.has_value() && macro != nullptr)
+        for (const auto& port : macro->ports)
+            if (port.nodeUuid == hint->portUuid)
+                portName = port.name;
+    into.setProperty("cableDropHintPort", portName);
+}
+
 void MacroCardComponent::addTestModeState(juce::DynamicObject& into) const {
     const auto* macro = owner.getMacros().find(macroId);
     into.setProperty("name", macro != nullptr ? macro->name : juce::String());
@@ -28,6 +42,7 @@ void MacroCardComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("members", macro != nullptr ? static_cast<int>(macro->members.size()) : 0);
     into.setProperty("renaming", isRenamingTitle());
     into.setProperty("colour", macro != nullptr ? macro->colour.toDisplayString(false) : juce::String());
+    addCableDropHintState(into, macro, cableDropHint_);
 }
 
 void MacroCardComponent::paint(juce::Graphics& g) {
@@ -133,6 +148,8 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     synth::theme::paintDisclosureChevron(
         g, juce::Rectangle<float>(kChevronSize, kChevronSize).withCentre(chevronBounds.getCentre()), 0.0f,
         synth::theme::themeOf(*this), false);
+
+    paintCableDropHint(g, *macro, themeColors);
 }
 
 juce::Rectangle<float> MacroCardComponent::getExpandButtonBounds() const {

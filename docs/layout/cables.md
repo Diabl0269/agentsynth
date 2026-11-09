@@ -88,7 +88,9 @@ growAdded)` with the cables drawn before a change (`snapshotCablesForRetract()`)
   (through the `GraphCanvasHost` seam), a delete that removes a macro (its cables retract while the
   card shrinks away) and `AppUndoManager::undo()`/`redo()`, so Cmd+Z taking a cable away
   animates too. The ghosts paint in `GraphContentComponent::paint` after the live cables.
-- **Grow.** Only undo and redo pass `growAdded`: a cable in the graph now that was not drawn before grows from its
+- **Grow.** Undo and redo pass `growAdded`, and so does a cable dropped on a macro's port under Reduce Motion
+  (`GraphEditor::armMacroPortSlide`, which slides it from the drop point otherwise; see
+  [ports](../macros/ports.md#a-cable-dropped-on-a-folded-card)): a cable in the graph now that was not drawn before grows from its
   source jack out to its destination (`easeOutCubic`) while its opacity rises over the first 40%. The cable is real
   already, so the normal cable pass skips its id and the growing wire is drawn instead (no flow dots or knob until
   it lands). More than 16 cables in one step skip the grow (a mass undo shows them at once). Undoing the mod dot

@@ -1,0 +1,37 @@
+# Check: a cable dropped on a folded macro's card slides from where it was let go to the port that takes it, instead of
+# appearing there at once (docs/macros/ports.md#a-cable-dropped-on-a-folded-card).
+#
+# What a user does (macros fixture: the free "Oscillator 1" beside the folded "Collapsed macro", which has no ports):
+#   1. Drags a cable from Oscillator 1's output and lets go on the folded card's body: a new input port is made and the
+#      cable's end slides from the drop point to the port's jack (a `glide` step: the slide is 220 ms).
+#   2. Cmd+Z: the port goes and the cable pulls back into Oscillator 1's jack.
+# MacroCardDropSlide.* covers the first, middle and last frames headlessly (new port, existing port, Reduce Motion, Off,
+# undo and redo). The mark sits on the landed state, never mid-slide; proof/<glide>-strip.png is the frames across it.
+motion: true
+record: true
+save_project: "fro1572 test"
+steps:
+  - copyFixture: {name: macros.agsproj}
+  - openProject: {path: "${SCRATCH}/macros.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 500, dx: 1.0}                  # pan right: Oscillator 1 starts under the library
+  - wait: {}
+  - expect: {id: "macroCard:Collapsed macro", collapsed: true, members: 2}
+  - screenshot: {name: 1-before}
+
+  # Oscillator 1 sits 496 px left of the card: its output jack is at (269, 58) on its own card, the card's body
+  # centre right of the chips at (720, 70) in the same coordinates.
+  - mouseDown: {id: "card:Oscillator 1", x: 269, y: 58}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 480, y: 64}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 720, y: 70}
+  - expect: {id: "macroCard:Collapsed macro", cableDropHint: newPort, within_ms: 1500}
+  - glide: {name: cable-slides-to-port-frames, frames: 14, crop: {x: 380, y: 340, w: 600, h: 160}, do: {mouseUp: {id: "card:Oscillator 1", x: 720, y: 70}}}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Collapsed macro", members: 3, cableDropHint: ""}
+  - mark: {check: 1, name: cable-slides-to-port}                 # landed: the cable ends on the new port's jack
+  - screenshot: {name: 2-dropped}
+
+  - key: {keys: cmd+z}
+  - wait: {settleMs: 1000}
+  - expect: {id: "macroCard:Collapsed macro", members: 2, within_ms: 1500}
+  - screenshot: {name: 3-undone}

@@ -505,6 +505,25 @@ public:
     void createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
                                          juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack);
 
+    /** What a cable dragged from jack `otherJack` of `otherNode` would do if released at `screenPos` over a folded
+     *  macro's card. `portJack` is the port node's jack (`existingPort`), `portUuid` the port that takes or already
+     *  carries the cable. */
+    struct CardCableDrop {
+        enum class Kind { existingPort, alreadyLinked, newPort, refused };
+        MacroCardComponent* card = nullptr;
+        juce::String macroId;
+        Kind kind = Kind::refused;
+        bool portIsInput = false;
+        juce::String portUuid;
+        int visibleJack = -1;
+        juce::AudioProcessorGraph::NodeID portNodeId;
+    };
+    /** The one answer the cable drag's hint and its drop both act on; nullopt when no folded card is under the point.
+     */
+    std::optional<CardCableDrop> cardCableDropAt(juce::Point<int> screenPos,
+                                                 juce::AudioProcessorGraph::NodeID otherNode, int otherJack,
+                                                 bool dragFromInput, bool isMidi);
+
     /** A cable was dropped on an EXISTING port's jack and that port has nothing behind it yet (a port made from a
      *  dropped cable wires no interior): joins the port to the macro's own module it was made for, the first ordinary
      *  member with a free matching jack (the head of the chain for an input, the tail for an output). A two-jack Stereo
@@ -704,6 +723,12 @@ private:
     juce::AudioProcessorGraph::NodeID existingPortLinkedTo(const juce::String& macroId, bool portIsInput,
                                                            juce::AudioProcessorGraph::NodeID otherId, int visibleJack,
                                                            bool isMidi, bool otherOutside = false) const;
+    /** This macro's port that a cable from `otherNodeId` already reaches through every border between them, or an
+     *  invalid NodeID: dropping the same cable on the card again makes nothing new. */
+    juce::AudioProcessorGraph::NodeID portAlreadyCarryingDrop(const juce::String& macroId, bool newPortIsInput,
+                                                              bool isMidi,
+                                                              juce::AudioProcessorGraph::NodeID otherNodeId,
+                                                              int otherVisibleJack) const;
     /** Infers a macro port's shape (Mono/StereoCollapsed/Poly) from ONE dragged cable's
      *  own jack fan, instead of always Mono. Returns {shape, voiceCount}. See the .cpp. */
     static std::pair<MacroPortShape, int> inferPortShapeFromCableFan(ModuleBase* otherMb, int otherVisibleJack,
