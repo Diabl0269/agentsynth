@@ -30,17 +30,17 @@ steps:
   - mouseMoveHeld: {id: "card:Oscillator 1", x: 636, y: 60}
   - expect: {id: "macroCard:Collapsed macro", cableDropHint: newPort, within_ms: 1500}
   - wait: {settleMs: 400}
-  - mark: {check: 1, name: macro-drop-hint}                       # the outline and the new port's hollow dot
+  - screenshot: {name: 1b-hint}
 
-  - mouseMoveHeld: {id: "card:Oscillator 1", x: 636, y: 200}
+  - glide: {name: macro-drop-hint-fades-out, frames: 10, do: {mouseMoveHeld: {id: "card:Oscillator 1", x: 636, y: 200}}}
   - expect: {id: "macroCard:Collapsed macro", cableDropHint: "", within_ms: 1500}
   - wait: {settleMs: 400}
   - screenshot: {name: 2-left-the-card}
 
-  - mouseMoveHeld: {id: "card:Oscillator 1", x: 636, y: 60}
+  - glide: {name: macro-drop-hint-fades-in, frames: 10, do: {mouseMoveHeld: {id: "card:Oscillator 1", x: 636, y: 60}}}
   - expect: {id: "macroCard:Collapsed macro", cableDropHint: newPort, within_ms: 1500}
-  - mouseUp: {id: "card:Oscillator 1", x: 636, y: 60}
-  - wait: {}
+  - mark: {check: 1, name: macro-drop-hint}                       # the outline and the new port's hollow dot (clip: hint off, back on, then the drop)
+  - glide: {name: cable-drops-on-card, frames: 14, do: {mouseUp: {id: "card:Oscillator 1", x: 636, y: 60}}}
   - expect: {id: "macroCard:Collapsed macro", cableDropHint: "", within_ms: 1500}
   - wait: {settleMs: 600}
   - screenshot: {name: 3-dropped}
@@ -51,7 +51,7 @@ steps:
   - expect: {id: "macroCard:Collapsed macro", cableDropHint: port, within_ms: 1500}
   - wait: {settleMs: 400}
   - mark: {check: 2, name: macro-drop-hint-existing-port}         # the ring round the port that carries the cable
-  - key: {keys: escape}
+  - glide: {name: macro-drop-ring-fades-out, frames: 12, do: {key: {keys: escape}}}
   - expect: {id: "macroCard:Collapsed macro", cableDropHint: "", within_ms: 1500}
   - mouseUp: {id: "card:Oscillator 1", x: 636, y: 72}
   - wait: {settleMs: 400}
