@@ -10,10 +10,10 @@ constexpr float kChevronSize = 8.0f;
 }
 
 SoundPackDisclosure::SoundPackDisclosure()
-    : juce::Button("Details") {
+    : SpaceClaimingButton<juce::Button>("Details") {
     setWantsKeyboardFocus(true);
     setMouseCursor(juce::MouseCursor::PointingHandCursor);
-    addShortcut(juce::KeyPress(juce::KeyPress::returnKey)); // Space already clicks a focused button
+    addShortcut(juce::KeyPress(juce::KeyPress::returnKey));
     refreshText();
     onClick = [this] {
         if (onOpenRequested)

@@ -1,0 +1,35 @@
+# FRO1484: the sound pack row in the "daylight" theme: its open detail, and the chevron's keys.
+#
+# What a user does: opens Settings > Sound packs, presses Tab to reach the first pack's chevron, then Space (row opens),
+# Space (closes), Return (opens), Return (closes), and finally leaves it open and looks at it. Each state is a PNG;
+# the open row's accessible names (chevron, credit, View licence, Show the sources) are in run.log.
+settings:
+  themeId: daylight
+  themeMode: Dark
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Sound packs"}
+  - wait: {}
+  - wait: {settleMs: 4000} # the pack list's first refresh rebuilds the rows and drops focus
+  - key: {keys: tab}
+  - expect: {id: "packDisclosure:core", hasFocus: true}
+  - expect: {id: "packDisclosure:core", contains: {title: collapsed}}
+  - screenshot: {id: "Settings", name: daylight-1-closed-focused}
+  - key: {keys: space}
+  - wait: {settleMs: 600}
+  - expect: {id: "packDisclosure:core", contains: {title: ", expanded"}}
+  - key: {keys: space}
+  - wait: {settleMs: 600}
+  - expect: {id: "packDisclosure:core", contains: {title: ", collapsed"}}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - expect: {id: "packDisclosure:core", contains: {title: ", expanded"}}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - expect: {id: "packDisclosure:core", contains: {title: ", collapsed"}}
+  - key: {keys: return}
+  - wait: {settleMs: 600}
+  - expect: {id: "packDisclosure:core", contains: {title: ", expanded"}}
+  - screenshot: {id: "Settings", name: daylight-2-open-focused}
+  - list: {id: "Settings", depth: 12}

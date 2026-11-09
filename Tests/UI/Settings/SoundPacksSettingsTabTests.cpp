@@ -409,7 +409,8 @@ TEST(SoundPackRowDetails, ReturnOnTheDisclosureOpensAndClosesTheRowAndCallsTheOw
     EXPECT_TRUE(row.getDisclosure().pressKeyForTest(juce::KeyPress(juce::KeyPress::returnKey)));
     synth::test::waitUntil([&] { return row.isExpanded(); }); // a key press clicks on the next message
     EXPECT_TRUE(row.isExpanded());
-    row.getDisclosure().onClick(); // what Space and a mouse click end in
+    EXPECT_TRUE(row.getDisclosure().pressKeyForTest(juce::KeyPress(juce::KeyPress::spaceKey))); // consumed, so no Play
+    synth::test::waitUntil([&] { return !row.isExpanded(); });
     EXPECT_FALSE(row.isExpanded());
     EXPECT_EQ(changes, 2);
 }

@@ -4,12 +4,13 @@
 // juce::Button, so it is a Tab stop with the accent focus ring; its accessible name carries the state.
 
 #include "UI/Layout/ChevronTurn.h"
+#include "UI/Layout/SpaceClaimingButton.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui {
 
-class SoundPackDisclosure : public juce::Button {
+class SoundPackDisclosure : public SpaceClaimingButton<juce::Button> {
 public:
     SoundPackDisclosure();
 
@@ -28,7 +29,7 @@ public:
     void paintButton(juce::Graphics& g, bool hot, bool down) override;
 
     // ---- Test seam ----
-    /** Sends a key the way the focused button would receive it (Return toggles; Space is JUCE's key-state path). */
+    /** Sends a key the way the focused button would receive it (Return and Space both toggle). */
     bool pressKeyForTest(const juce::KeyPress& key) { return keyPressed(key); }
 
 private:
