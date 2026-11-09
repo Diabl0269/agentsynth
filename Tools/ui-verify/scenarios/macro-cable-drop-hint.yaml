@@ -1,0 +1,58 @@
+# Check: a cable held over a folded macro's card shows where the drop would land, and the hint goes when the cable
+# leaves the card, lands or is cancelled with Esc (docs/macros/ports.md#a-cable-hovering-a-folded-card).
+#
+# What a user does (macros fixture: the free "Oscillator 1" beside the folded "Collapsed macro", which has no ports):
+#   1. Presses on Oscillator 1's output jack and holds the cable over the folded card's body: the card is outlined and
+#      a hollow dot marks the new input port's row (cableDropHint "newPort").
+#   2. Moves the cable off the card, still holding: the hint goes.
+#   3. Moves back onto the card and lets go: a port is made and wired, and the hint is gone.
+#   4. Drags the same cable over the card again: the port that already carries it is ringed (cableDropHint "port").
+#   5. Presses Esc while still holding: the drag is cancelled and the hint goes.
+# MacroCardDropHint.* covers each case headlessly (refused kinds and directions, an output port from an input jack).
+motion: true
+record: true
+save_project: "fro1571 test"
+steps:
+  - copyFixture: {name: macros.agsproj}
+  - openProject: {path: "${SCRATCH}/macros.agsproj"}
+  - wait: {}
+  - wheel: {id: window, x: 900, y: 500, dx: 1.0}                  # pan right: Oscillator 1 starts under the library
+  - wait: {}
+  - expect: {id: "macroCard:Collapsed macro", collapsed: true, cableDropHint: ""}
+  - screenshot: {name: 1-before}
+
+  # Oscillator 1 sits 496 px left of the card: its output jack is at (269, 58) on its own card, the card's body
+  # centre at (636, 60) in the same coordinates.
+  - mouseDown: {id: "card:Oscillator 1", x: 269, y: 58}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 360, y: 59}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 480, y: 60}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 600, y: 60}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 636, y: 60}
+  - expect: {id: "macroCard:Collapsed macro", cableDropHint: newPort, within_ms: 1500}
+  - wait: {settleMs: 400}
+  - mark: {check: 1, name: macro-drop-hint}                       # the outline and the new port's hollow dot
+
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 636, y: 200}
+  - expect: {id: "macroCard:Collapsed macro", cableDropHint: "", within_ms: 1500}
+  - wait: {settleMs: 400}
+  - screenshot: {name: 2-left-the-card}
+
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 636, y: 60}
+  - expect: {id: "macroCard:Collapsed macro", cableDropHint: newPort, within_ms: 1500}
+  - mouseUp: {id: "card:Oscillator 1", x: 636, y: 60}
+  - wait: {}
+  - expect: {id: "macroCard:Collapsed macro", cableDropHint: "", within_ms: 1500}
+  - wait: {settleMs: 600}
+  - screenshot: {name: 3-dropped}
+
+  - mouseDown: {id: "card:Oscillator 1", x: 269, y: 58}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 480, y: 60}
+  - mouseMoveHeld: {id: "card:Oscillator 1", x: 636, y: 72}
+  - expect: {id: "macroCard:Collapsed macro", cableDropHint: port, within_ms: 1500}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: macro-drop-hint-existing-port}         # the ring round the port that carries the cable
+  - key: {keys: escape}
+  - expect: {id: "macroCard:Collapsed macro", cableDropHint: "", within_ms: 1500}
+  - mouseUp: {id: "card:Oscillator 1", x: 636, y: 72}
+  - wait: {settleMs: 400}
+  - screenshot: {name: 4-escaped}

@@ -314,6 +314,28 @@ start below the chip row) are painted under it by `paintMacroPortStrips` from
   `ModuleComponent::layoutMacroPortWidget` uses before the first dock, pinned by
   `MacroPortWidgetG4.EstimateModuleSizeMatchesTheRealWidgetForEveryPortTypeName`.
 
+### A cable hovering a folded card
+
+While a cable is dragged over a folded macro's card, the card shows where the drop would land, the way a knob rings
+when a mod cable would land on it. Leave it, let go or press Esc and the hint goes.
+
+- **What it shows.** The card is outlined in the accent colour with a soft glow, and its port row is marked: a ring
+  round the jack of the port that takes the cable, or a hollow dot in the next free row of the side the new port goes
+  on (a ring round that side's '+' when the row would fall on it).
+- **One answer for the hint and the drop.** `MacroGroupController::cardCableDropAt` says which card, which port and
+  whether a new port is made. The drag tick (`GraphEditor::dragConnection`) shows its answer on the card
+  (`MacroCardComponent::setCableDropHint`); the release (`endConnectionDrag`) commits through the same call, so the
+  two cannot disagree. A jack whose direction or kind does not match the drag is refused, so it shows no hint and the
+  drop does nothing. A cable a port already carries rings that port, and the drop makes nothing new
+  (`portAlreadyCarryingDrop`, shared with `createMacroPortFromDroppedCable`). A module's jack or knob under the cursor
+  takes the cable first, so the card shows no hint then.
+- **Motion.** The hint fades in over 120 ms `easeOutCubic` and out over 90 ms `easeInCubic` (`synth::ui::ShownFade`):
+  a plain 80 ms fade under Reduce Motion, at once under Animations Off. A drop that lands clears it at once.
+- **Test mode.** The `macroCard` state carries `cableDropHint` (`port`, `newPort` or empty) and `cableDropHintPort`
+  (the port's name). Scenario: `Tools/ui-verify/scenarios/macro-cable-drop-hint.yaml`.
+
+An open macro's border and its ports are their own drop targets and show no card hint.
+
 ## Member counts report modules, not ports
 
 A port's uuid is a genuine `Macro::members` entry — load-bearing, and what the "every port's

@@ -12,6 +12,7 @@
 #include "UI/Graph/PortPanel/PortConnectionList.h"
 #include "UI/Graph/PortPanel/PortConnectionsPanel.h"
 #include "UI/Graph/PortPanel/PortPanelController.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;
@@ -169,6 +170,79 @@ void MacroCardComponent::paintPortStrips(juce::Graphics& g, const synth::Macro& 
             break;
         }
     }
+}
+
+// The drag tick sets this from MacroGroupController::cardCableDropAt, the answer the drop commits through, so the hint
+// can never promise a landing the release does not make. It fades in like a hover (120 ms easeOutCubic) and out in
+// 90 ms easeInCubic; ShownFade makes that a plain 80 ms fade under Reduce Motion and instant under Animations Off or
+// off screen. While it fades out the last hint stays drawn. A drop that lands clears it `instant`, so a glide's picture
+// of the card never carries a half-faded outline.
+void MacroCardComponent::setCableDropHint(std::optional<CableDropHint> hint, bool instant) {
+    if (hint == cableDropHint_ && !instant)
+        return;
+    cableDropHint_ = hint;
+    if (hint.has_value())
+        paintedHint_ = hint;
+    if (hintFade_ == nullptr) {
+        hintFade_ = std::make_unique<synth::ui::ShownFade>(*this);
+        hintFade_->onFrame = [this] {
+            if (!cableDropHint_.has_value() && hintFade_->alpha() <= 0.0f)
+                paintedHint_.reset();
+            repaint();
+        };
+    }
+    const float target = hint.has_value() ? 1.0f : 0.0f;
+    if (instant)
+        hintFade_->jumpTo(target);
+    else if (hint.has_value())
+        hintFade_->fadeTo(target, 120.0, synth::ui::easeOutCubic);
+    else
+        hintFade_->fadeTo(target, 90.0, synth::ui::easeInCubic);
+}
+
+float MacroCardComponent::getCableDropHintAlphaForTest() const {
+    return hintFade_ != nullptr ? hintFade_->alpha() : 0.0f;
+}
+
+// The card outlined in the accent colour with a soft glow, and its port row marked: a ring round the jack of the port
+// that takes the cable, or a hollow dot in the next free row of the side a new port is added to (the '+' of that side
+// when the row would fall on it). Positions come from macroCardPortLayout and the '+' bounds, the same layout paint
+// and the drop's hit test read.
+void MacroCardComponent::paintCableDropHint(juce::Graphics& g, const synth::Macro& macro,
+                                            const synth::theme::Colors& themeColors) {
+    const float alpha = hintFade_ != nullptr ? hintFade_->alpha() : 0.0f;
+    if (!paintedHint_.has_value() || alpha <= 0.0f)
+        return;
+    const auto& hint = *paintedHint_;
+    const auto accent = themeColors.accent;
+    const auto bounds = getLocalBounds().toFloat();
+    g.setColour(accent.withMultipliedAlpha(0.25f * alpha));
+    g.drawRoundedRectangle(bounds.reduced(2.0f), 8.0f, 4.0f);
+    g.setColour(accent.withMultipliedAlpha(alpha));
+    g.drawRoundedRectangle(bounds.reduced(1.0f), 8.0f, 2.0f);
+
+    constexpr float kDot = 10.0f;
+    const auto layout = owner.getMacroController().macroCardPortLayout(macro.id);
+    if (!hint.newPort) {
+        for (const auto& port : layout) {
+            if (port.nodeUuid != hint.portUuid || (hint.visibleJack >= 0 && port.visibleJack != hint.visibleJack))
+                continue;
+            const auto dot = juce::Rectangle<float>(kDot, kDot).withCentre(port.jackPos.toFloat());
+            g.drawEllipse(dot.expanded(3.0f), 2.0f); // a whole two-row Stereo port rings both rows
+        }
+        return;
+    }
+    int rows = 0;
+    for (const auto& port : layout)
+        rows += port.isInput == hint.isInput ? 1 : 0;
+    const float x = hint.isInput ? 10.0f : (float)getWidth() - 10.0f;
+    const float y = (float)(kMacroPortRowsTop + rows * kMacroPortRowHeight + kMacroPortRowHeight / 2);
+    const auto plus = getAddPortButtonBounds(hint.isInput);
+    const auto slot = juce::Rectangle<float>(kDot, kDot).withCentre({x, y});
+    if (slot.getBottom() + 2.0f <= plus.getY())
+        g.drawEllipse(slot.reduced(0.75f), 1.5f);
+    else
+        g.drawEllipse(plus.expanded(3.0f), 2.0f);
 }
 
 // One menu for the card's '+' and the open macro's hull '+': MacroGroupController::buildAddPortMenu.
