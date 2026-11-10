@@ -11,4 +11,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ReorderDragPreviewCommitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerZonesDragPreviewCommitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/CardLayoutEditorGripPreviewCommitTests.cpp
+    # canvas card moves: the spot the last drag event showed is where the card lands (FRO1319)
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/CardMoveDragPreviewCommitTests.cpp
 )

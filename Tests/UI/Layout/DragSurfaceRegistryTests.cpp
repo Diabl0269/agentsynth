@@ -117,6 +117,11 @@ const std::vector<Registered> kRegistered = {
     {"ControllerSurfaceComponent", {"exempt: a selection marquee, nothing to commit"}},
     {"TopBar", {"exempt: moves the help window, nothing to commit"}},
     {"CommandPaletteComponent", {"exempt: moves the search bar, the release only stores the position shown"}},
+    {"GraphEditor",
+     {"test:CardMoveDragPreviewCommit.AModuleCardLandsWhereTheDragShowedIt",
+      "test:CardMoveDragPreviewCommit.AMacroCardLandsWhereTheDragShowedIt"}},
+    {"ModuleComponent", {"test:CardMoveDragPreviewCommit.AModuleCardLandsWhereTheDragShowedIt"}},
+    {"MacroCardComponent", {"test:CardMoveDragPreviewCommit.AMacroCardLandsWhereTheDragShowedIt"}},
     {"ModuleLibraryComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},
     {"SoundBrowserComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},
     {"DrawPenButton", {"exempt: a drag only cancels the press-and-hold timer"}},
@@ -126,11 +131,7 @@ const std::vector<Registered> kRegistered = {
 };
 
 // A real preview/commit split with no guard that compares the two. Each needs one; the list may only shrink.
-const std::vector<KnownGap> kKnownGaps = {
-    {"GraphEditor", "FRO1319", "canvas card move: shown card bounds vs the node position after release"},
-    {"ModuleComponent", "FRO1319", "module card move: shown card bounds vs the node position after release"},
-    {"MacroCardComponent", "FRO1319", "macro card move: shown card bounds vs the node position after release"},
-};
+const std::vector<KnownGap> kKnownGaps = {};
 
 // Every drag follows the view. A class is one of:
 //   "follow:<Suite.Name>"      a registered test that parks the pointer at the edge and sees the view and the thing
