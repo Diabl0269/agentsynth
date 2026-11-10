@@ -165,42 +165,44 @@ const std::vector<Follows> kFollow = {
     {"DrawPenButton", "follow-exempt: a drag only cancels the press-and-hold timer"},
     {"ModuleLibraryComponent", kDragAndDrop},
     {"SoundBrowserComponent", kDragAndDrop},
+    {"CurveEditorComponent", "follow-exempt: a card on the canvas with no scroll or zoom of its own; the point clamps "
+                             "to a range frozen for the drag"},
+    {"StepGridComponent", "follow-exempt: a fixed page, paging is explicit; a paint stroke cannot leave the page"},
+    {"DockTabButton",
+     "follow-exempt: a fixed-width tab strip with no overflow scroll; the drag only reorders within it"},
     {"MixerColourDot", kForwarder},
     {"SwatchButton", kForwarder},
     {"ContextMenuForwardingLabel", kForwarder},
 };
 
 // A drag that can carry something out of a view that scrolls and does not follow yet. The list may only shrink: the
-// ticket triages each (follow it, or move it to kFollow with an exemption).
+// each is built as a follow (a registered test) or moved to kFollow with an exemption.
 const std::vector<KnownGap> kFollowGaps = {
-    {"GraphEditor", "FRO1685", "selection box, cable and drops from the library: the canvas does not pan"},
-    {"TimelineSectionStrip", "FRO1685", "section drag stops at the view edge"},
-    {"TimelineRulerComponent", "FRO1685", "marker and locator drags stop at the view edge"},
-    {"TimelineTrackHeaderComponent", "FRO1685", "track reorder does not scroll the track list"},
-    {"AutomationLaneHeaderComponent", "FRO1685", "lane reorder does not scroll the track list"},
-    {"LaneControlChip", "FRO1685", "chip reorder does not scroll"},
-    {"ModulatorRow", "FRO1685", "modulator row reorder does not scroll the track list"},
-    {"PianoRollVelocityLane", "FRO1685", "a velocity ramp stops at the roll's edge"},
-    {"DrumMachineComponent", "FRO1685", "edge drags stop at the view edge"},
-    {"DrumHitLane", "FRO1685", "a ramp across a lane stops at the view edge"},
-    {"CurveEditorComponent", "FRO1685", "a point drag in a zoomed curve editor stops at its edge"},
-    {"MixerInsertList", "FRO1685", "insert reorder does not scroll the list"},
-    {"MixerSendList", "FRO1685", "send reorder does not scroll the list"},
-    {"MixerColumnHeader", "FRO1685", "column reorder does not scroll the mixer"},
-    {"MixerZonesRow", "FRO1685", "zone drag does not scroll the mixer"},
-    {"ControllerSurfaceComponent", "FRO1685", "selection box: triage whether the surface scrolls"},
-    {"ControllerSurfaceCell", "FRO1685", "cell move: triage whether the surface scrolls"},
-    {"DragHandle", "FRO1685", "macro port row reorder: triage whether the list scrolls"},
-    {"CardLayoutEditorGrip", "FRO1685", "list editor row reorder: triage whether the list scrolls"},
-    {"CardLayoutOutline", "FRO1685", "on-card row drag: triage whether it can leave the card's view"},
-    {"CardLayoutAddRow", "FRO1685", "on-card row drag: triage whether it can leave the card's view"},
-    {"CardLayoutGroupHandle", "FRO1685", "on-card group move: triage whether it can leave the card's view"},
-    {"StepGridComponent", "FRO1685", "cell paint: triage whether the grid scrolls"},
-    {"NoteRangePicker", "FRO1685", "range edge drag: triage whether the keyboard strip scrolls"},
-    {"DockTabButton", "FRO1685", "tab reorder: triage whether the tab bar scrolls"},
+    {"GraphEditor", "FRO1688", "selection box, cable and drops from the library: the canvas does not pan"},
+    {"TimelineSectionStrip", "FRO1686", "section drag stops at the view edge"},
+    {"TimelineRulerComponent", "FRO1686", "marker and locator drags stop at the view edge"},
+    {"TimelineTrackHeaderComponent", "FRO1687", "track reorder does not scroll the track list"},
+    {"AutomationLaneHeaderComponent", "FRO1687", "lane reorder does not scroll the track list"},
+    {"LaneControlChip", "FRO1687", "chip reorder does not scroll"},
+    {"ModulatorRow", "FRO1687", "modulator row reorder does not scroll the track list"},
+    {"PianoRollVelocityLane", "FRO1686", "a velocity ramp stops at the roll's edge"},
+    {"DrumMachineComponent", "FRO1686", "edge drags stop at the view edge"},
+    {"DrumHitLane", "FRO1686", "a ramp across a lane stops at the view edge"},
+    {"MixerInsertList", "FRO1687", "insert reorder does not scroll the list"},
+    {"MixerSendList", "FRO1687", "send reorder does not scroll the list"},
+    {"MixerColumnHeader", "FRO1687", "column reorder does not scroll the mixer"},
+    {"MixerZonesRow", "FRO1687", "zone drag does not scroll the mixer"},
+    {"ControllerSurfaceComponent", "FRO1688", "selection box: triage whether the surface scrolls"},
+    {"ControllerSurfaceCell", "FRO1688", "cell move: triage whether the surface scrolls"},
+    {"DragHandle", "FRO1687", "macro port row reorder: triage whether the list scrolls"},
+    {"CardLayoutEditorGrip", "FRO1687", "list editor row reorder: triage whether the list scrolls"},
+    {"CardLayoutOutline", "FRO1688", "on-card row drag: triage whether it can leave the card's view"},
+    {"CardLayoutAddRow", "FRO1688", "on-card row drag: triage whether it can leave the card's view"},
+    {"CardLayoutGroupHandle", "FRO1688", "on-card group move: triage whether it can leave the card's view"},
+    {"NoteRangePicker", "FRO1687", "range edge drag: triage whether the keyboard strip scrolls"},
 };
 // What kFollowGaps holds today; it may only go down.
-constexpr std::size_t kFollowGapCeiling = 25;
+constexpr std::size_t kFollowGapCeiling = 22;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Scanning
