@@ -509,7 +509,7 @@ With `filterType` Custom the Filter card (`DefaultCardLayoutsFilterDynamics.cpp`
   Depth and Resonance applied (`customfilter::responseGridDb`, the numbers the kernel is designed from), follows the
   cursor, the shapes, the knobs and their modulation (each control's CV as the last audio block applied it), and draws the cutoff marker (a thin vertical line) like the other types. Double-clicking it opens the shape editor on the shape nearest the cursor.
 - **Edit shapes** button (a row under the response view) opens the [shape editor window](#shape-editor-window) on the
-  shape nearest the cursor.
+  selected dot, else the shape nearest the cursor (`MorphShapesCard::targetShapeIndex`; a drop on the card still replaces the one nearest the cursor).
 - **Curve view** (252 x 110, under the button, above the map; `MorphShapesCardCurve.cpp`): the shape under the morph
   cursor on log-frequency and dB axes (`FilterShapesAdapter::getAxisGuides`). With the cursor on a dot (within 0.06
   map units, or the only shape) it shows and edits that shape in place: a drag goes through the adapter's

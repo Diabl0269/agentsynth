@@ -48,7 +48,7 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
 
     editButton_.setTooltip("Edit shapes: open the shape editor window");
     editButton_.setTitle("Edit shapes");
-    editButton_.onClick = [this] { openEditor(nearestShapeToCursor()); };
+    editButton_.onClick = [this] { openEditor(targetShapeIndex()); };
     pickButton_.setTooltip("Pick shape: choose a saved or factory shape from a list with a small picture of each; the "
                            "selected shape (else the one nearest the cursor) takes its curve (Cmd+Z undoes it)");
     pickButton_.setTitle("Pick shape");

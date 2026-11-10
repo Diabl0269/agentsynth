@@ -540,6 +540,34 @@ TEST_F(ModuleComponentTest, ADropOnTheCardStillReplacesTheShapeNearestTheCursorN
     EXPECT_NE(shapes[(size_t)selected].curve, shape.curve);
 }
 
+// Regression test for FRO1586: Edit shapes opened on the dot nearest the cursor, not the selected one.
+TEST_F(ModuleComponentTest, EditShapesOpensTheWindowOnTheSelectedDotOnBothCards) {
+    WindowCapture capture;
+    {
+        FilterPickerRig rig;
+        const int selected = clickDotAwayFromTheCursor(rig.morph());
+        rig.morph().getEditButton().onClick();
+        ASSERT_EQ(capture.opened.size(), 1u);
+        EXPECT_EQ(capture.opened.back()->getSelected(), selected);
+    }
+    {
+        LfoPickerRig rig;
+        const int selected = clickDotAwayFromTheCursor(rig.morph());
+        rig.morph().getEditButton().onClick();
+        ASSERT_EQ(capture.opened.size(), 2u);
+        EXPECT_EQ(capture.opened.back()->getSelected(), selected);
+    }
+}
+
+TEST_F(ModuleComponentTest, EditShapesWithNothingSelectedOpensOnTheNearestDot) {
+    WindowCapture capture;
+    LfoPickerRig rig;
+    ASSERT_EQ(rig.morph().getMap().getSelected(), -1);
+    rig.morph().getEditButton().onClick();
+    ASSERT_EQ(capture.opened.size(), 1u);
+    EXPECT_EQ(capture.opened.back()->getSelected(), rig.morph().nearestShapeToCursor());
+}
+
 TEST_F(ModuleComponentTest, PickShapeOpensFromTheKeyboardWithReturn) {
     TempLibrary library;
     FilterPickerRig rig;
