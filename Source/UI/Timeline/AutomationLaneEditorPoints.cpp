@@ -211,6 +211,11 @@ std::vector<LaneBreakpoint> AutomationLaneEditor::dragMovedPoints() const {
                       maxValue);
 }
 
+double AutomationLaneEditor::settledBeatDelta(const std::vector<LaneBreakpoint>& moving, double delta) const {
+    const auto* points = lanePoints();
+    return points != nullptr ? settleBeatDelta(*points, moving, delta, tickBeats()) : clampBeatDelta(moving, delta);
+}
+
 // The moved points replace the originals in ONE edit, so a multi-point drag is one revision bump and one undo step.
 // The notification the edit fires prunes the selection (the old beats are gone), so the new beats are selected
 // after it returns.
@@ -337,7 +342,7 @@ bool AutomationLaneEditor::nudgePoints(int keyCode, double beatDirection, double
 
     const auto& range = doc_->getLane(laneId_)->range;
     const double fine = size == NudgeSize::Fine ? lane_key::kFineScale : 1.0;
-    const double beatDelta = clampBeatDelta(picked, beatDirection * keyStepBeats() * fine);
+    const double beatDelta = settledBeatDelta(picked, beatDirection * keyStepBeats() * fine);
     const double valueStep = size == NudgeSize::Coarse ? lane_key::kCoarseValueStep : lane_key::kFineValueStep * fine;
     const double valueDelta = valueDirection * valueStep * (double)(range.maxValue - range.minValue);
     const auto moved = movePoints(picked, beatDelta, valueDelta, range.minValue, range.maxValue);

@@ -18,6 +18,8 @@ std::vector<double> beatsOf(const std::vector<LaneBreakpoint>& points) {
         beats.push_back(p.beat);
     return beats;
 }
+
+double holdClockMs(const KeyGlideHost& host) { return host.nowMs ? host.nowMs() : 0.0; }
 } // namespace
 
 juce::Point<float> AutomationLaneEditor::pointPosition(const LaneBreakpoint& point) const {
@@ -69,14 +71,12 @@ bool AutomationLaneEditor::beginKeyDrag(int keyCode, const std::vector<LaneBreak
     dragOriginalValue_ = previewValue_ = grabbed->value;
 
     namespace k = lane_key;
-    // A snapped hold starts at one grid step per kSnappedStepSeconds (never slower than a free one) and the cap grows
-    // by the same factor, so a coarse grid keeps stepping instead of waiting seconds for its next line.
-    const double paceScale =
-        keyDrag_.snapped ? std::max(1.0, keyDrag_.unit / (k::kSnappedStepSeconds * k::kTimeStartBeatsPerSecond)) : 1.0;
-    const KeyAxisMotion time{
-        {k::kTimeStartBeatsPerSecond * paceScale, k::kTimeMaxBeatsPerSecond * paceScale, k::kTapMs, k::kRampMs},
-        keyDrag_.unit,
-        true};
+    // A snapped hold paces in grid steps (snappedHoldPace): a coarse grid keeps stepping instead of waiting seconds for
+    // its next line, and no grid steps faster than the eye can count.
+    const auto pace = keyDrag_.snapped ? k::snappedHoldPace(keyDrag_.unit, k::kTimeStartBeatsPerSecond)
+                                       : k::HoldPace{k::kTimeStartBeatsPerSecond, k::kTimeMaxBeatsPerSecond};
+    const KeyAxisMotion time{{pace.start, pace.max, k::kTapMs, k::kRampMs}, keyDrag_.unit, true};
+    keyDrag_.lastStepMs = holdClockMs(keyHold_.host);
     const double valueTap = size == NudgeSize::Coarse ? k::kCoarseValueStep : k::kFineValueStep * fine;
     const KeyAxisMotion value{{k::kValueStartRangePerSecond, k::kValueMaxRangePerSecond, k::kTapMs, k::kRampMs},
                               valueTap};
@@ -87,7 +87,8 @@ bool AutomationLaneEditor::beginKeyDrag(int keyCode, const std::vector<LaneBreak
 }
 
 // Sets the preview from how far the keys have moved things along each axis. With snap on a time move is whole steps,
-// so it jumps from grid line to grid line and each jump eases; a free move and any value move follow the glide
+// so it jumps from grid line to grid line and each jump eases, unless the steps come faster than the ease runs: then
+// the drawn points move with the preview (snappedStepEases). A free move and any value move follow the glide
 // continuously.
 void AutomationLaneEditor::applyKeyDrag(bool tapStep) {
     const auto* lane = dragMode_ == DragMode::MoveHandle && doc_ != nullptr ? doc_->getLane(laneId_) : nullptr;
@@ -98,14 +99,22 @@ void AutomationLaneEditor::applyKeyDrag(bool tapStep) {
     double delta = keyHold_.distance(KeyAxis::time);
     if (keyDrag_.snapped)
         delta = (delta < 0.0 ? -1.0 : 1.0) * std::floor(std::abs(delta) / keyDrag_.unit + 1e-9) * keyDrag_.unit;
-    previewBeat_ = dragOriginalBeat_ + clampBeatDelta(dragPoints_, delta);
+    previewBeat_ = dragOriginalBeat_ + settledBeatDelta(dragPoints_, delta);
     previewValue_ =
         dragOriginalValue_ + keyHold_.distance(KeyAxis::value) * (double)(lane->range.maxValue - lane->range.minValue);
     showBubbleAt(previewBeat_, clampValue(previewValue_));
-    if (tapStep || (keyDrag_.snapped && previewBeat_ != beatBefore)) {
-        const auto keys = beatsOf(dragPoints_);
+    const bool snappedStep = keyDrag_.snapped && previewBeat_ != beatBefore;
+    const double now = holdClockMs(keyHold_.host);
+    const auto keys = beatsOf(dragPoints_);
+    if (tapStep || (snappedStep && lane_key::snappedStepEases(now - keyDrag_.lastStepMs))) {
         easeMovedPoints(before, dragMovedPoints(), keys, keys);
+    } else if (snappedStep) {
+        for (const double beat : keys)
+            pointTween_.erase(lane_key::tweenKey(beat));
     }
+    if (snappedStep)
+        keyDrag_.lastStepMs = now;
+    keepKeyDragInView();
     refreshStretchBox();
     repaint();
 }

@@ -25,6 +25,12 @@ public:
     void show(juce::Point<float> anchor, const juce::String& text);
     // Fades out, still drawn where it was until it has gone.
     void hide();
+    // Moves the shown text to `anchor` without repainting: for an owner that places the bubble on what it draws, from
+    // its own paint() just before paint() below, so the bubble is drawn on the very frame the anchor moved.
+    void moveAnchor(juce::Point<float> anchor) noexcept {
+        if (content_)
+            content_->anchor = anchor;
+    }
 
     void paint(juce::Graphics& g);
 
@@ -32,6 +38,10 @@ public:
     // 0 hidden .. 1 settled; also the bubble's alpha.
     float getOpacity() const noexcept { return opacity_; }
     juce::String getText() const { return content_ ? content_->text : juce::String(); }
+    // The point the bubble is drawn above (owner coordinates); none before the first show.
+    std::optional<juce::Point<float>> getAnchor() const {
+        return content_ ? std::optional<juce::Point<float>>(content_->anchor) : std::nullopt;
+    }
     // Where the bubble is drawn now (owner coordinates); empty before the first show.
     juce::Rectangle<int> getBounds() const;
 

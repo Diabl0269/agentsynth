@@ -3,6 +3,10 @@
 // reason it has no preview/commit split. A new dragging class that is in neither list fails here by name, so a new
 // drag surface cannot ship without choosing its guard. Gaps that are known and ticketed live in kKnownGaps; the list
 // may only shrink (docs/layout/undo-glide.md, "Registration").
+//
+// The second test holds the other drag rule, every drag follows the view (docs/layout/layout.md, "Every drag follows
+// the view"): each of the same classes names the test that proves its drag scrolls the view along, or why it cannot
+// leave a view; the ones still missing it live in kFollowGaps, which may only shrink.
 #include "../SourceScan.h"
 #include "PointMarkers/PointMarkerSurfaceNames.h"
 #include "TestPaths.h"
@@ -46,7 +50,9 @@ const std::vector<Registered> kRegistered = {
      {"undo-glide:Curve editor point", "point-markers:Curve editor point",
       "test:ShapeDrawGesture.PreviewAtTheLastDragEqualsTheCommit"}},
     {"MorphMap", {"undo-glide:Morph map dot", "point-markers:Morph map dot"}},
-    {"AutomationLaneEditor", {"undo-glide:Automation lane point", "point-markers:Automation lane point"}},
+    {"AutomationLaneEditor",
+     {"undo-glide:Automation lane point", "point-markers:Automation lane point",
+      "test:AutomationLanesDragKeepsDots.ThePreviewAtTheLastDragFrameIsWhatTheDropCommits"}},
     // Preview and commit checked by a test of their own.
     {"CardLayoutOutline", {kOnCardRows}},
     {"CardLayoutAddRow", {kOnCardRows}},
@@ -111,6 +117,90 @@ const std::vector<KnownGap> kKnownGaps = {
     {"TimelineRulerComponent", "FRO1318", "marker drag: snapped preview vs the marker position committed"},
     {"TimelineTrackHeaderComponent", "FRO1316", "track row reorder: lifted row slot vs the committed order"},
 };
+
+// Every drag follows the view. A class is one of:
+//   "follow:<Suite.Name>"      a registered test that parks the pointer at the edge and sees the view and the thing
+//   move "follow-exempt: <reason>"  its drag cannot carry anything out of a view that scrolls
+struct Follows {
+    const char* cls;
+    const char* guard;
+};
+
+const char* const kValueInRange = "follow-exempt: sets a value inside a fixed range, nothing moves across a view";
+const char* const kResizer = "follow-exempt: resizes a panel or pane, nothing is carried";
+const char* const kForwarder = "follow-exempt: forwards the drag to its parent, whose entry decides";
+const char* const kDragAndDrop = "follow-exempt: starts a drag-and-drop, the drop target scrolls";
+const char* const kCanvasCards =
+    "follow:CanvasEdgeScroll.ACardHeldAtTheRightEdgeScrollsTheCanvasAndKeepsTrackingUnderThePointer";
+
+const std::vector<Follows> kFollow = {
+    {"TimelineClipLaneArea", "follow:TimelineClipLaneAutoScrollTimerTest.GatedOnDragAndEdgeZoneOnly"},
+    {"PianoRollComponent",
+     "follow:PianoRollAutoScrollTest.EachTickAdvancesTheViewAndReDerivesThePreviewFromTheLastPointer"},
+    {"AutomationLaneEditor",
+     "follow:AutomationLanesEdgeScroll.ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnderThePointer"},
+    {"ModuleComponent", kCanvasCards},
+    {"MacroCardComponent", kCanvasCards},
+    {"MorphMap", "follow-exempt: the dot is clamped inside a pad that is drawn whole"},
+    {"SaturationBrightnessField", kValueInRange},
+    {"HueBar", kValueInRange},
+    {"RangeSlider", kValueInRange},
+    {"CardFader", kValueInRange},
+    {"CardStepper", kValueInRange},
+    {"CardKnobSlider", kValueInRange},
+    {"MixerFaderSlider", kValueInRange},
+    {"ModCurveRangeHandle", kValueInRange},
+    {"ModDotAmountBar", kValueInRange},
+    {"ModulatorBand", kValueInRange},
+    {"EQCurveComponent", kValueInRange},
+    {"MeterColourStopsEditor", kValueInRange},
+    {"BpmDragLabel", kValueInRange},
+    {"EdgeResizeHandle", kResizer},
+    {"PanelResizeHandle", kResizer},
+    {"GrabEdge", kResizer},
+    {"MixerSectionDivider", kResizer},
+    {"MinimapComponent", "follow-exempt: the drag is the scroll itself"},
+    {"TopBar", "follow-exempt: moves the help window on screen"},
+    {"CommandPaletteComponent", "follow-exempt: moves the search bar on screen"},
+    {"DrawPenButton", "follow-exempt: a drag only cancels the press-and-hold timer"},
+    {"ModuleLibraryComponent", kDragAndDrop},
+    {"SoundBrowserComponent", kDragAndDrop},
+    {"MixerColourDot", kForwarder},
+    {"SwatchButton", kForwarder},
+    {"ContextMenuForwardingLabel", kForwarder},
+};
+
+// A drag that can carry something out of a view that scrolls and does not follow yet. The list may only shrink: the
+// ticket triages each (follow it, or move it to kFollow with an exemption).
+const std::vector<KnownGap> kFollowGaps = {
+    {"GraphEditor", "FRO1685", "selection box, cable and drops from the library: the canvas does not pan"},
+    {"TimelineSectionStrip", "FRO1685", "section drag stops at the view edge"},
+    {"TimelineRulerComponent", "FRO1685", "marker and locator drags stop at the view edge"},
+    {"TimelineTrackHeaderComponent", "FRO1685", "track reorder does not scroll the track list"},
+    {"AutomationLaneHeaderComponent", "FRO1685", "lane reorder does not scroll the track list"},
+    {"LaneControlChip", "FRO1685", "chip reorder does not scroll"},
+    {"ModulatorRow", "FRO1685", "modulator row reorder does not scroll the track list"},
+    {"PianoRollVelocityLane", "FRO1685", "a velocity ramp stops at the roll's edge"},
+    {"DrumMachineComponent", "FRO1685", "edge drags stop at the view edge"},
+    {"DrumHitLane", "FRO1685", "a ramp across a lane stops at the view edge"},
+    {"CurveEditorComponent", "FRO1685", "a point drag in a zoomed curve editor stops at its edge"},
+    {"MixerInsertList", "FRO1685", "insert reorder does not scroll the list"},
+    {"MixerSendList", "FRO1685", "send reorder does not scroll the list"},
+    {"MixerColumnHeader", "FRO1685", "column reorder does not scroll the mixer"},
+    {"MixerZonesRow", "FRO1685", "zone drag does not scroll the mixer"},
+    {"ControllerSurfaceComponent", "FRO1685", "selection box: triage whether the surface scrolls"},
+    {"ControllerSurfaceCell", "FRO1685", "cell move: triage whether the surface scrolls"},
+    {"DragHandle", "FRO1685", "macro port row reorder: triage whether the list scrolls"},
+    {"CardLayoutEditorGrip", "FRO1685", "list editor row reorder: triage whether the list scrolls"},
+    {"CardLayoutOutline", "FRO1685", "on-card row drag: triage whether it can leave the card's view"},
+    {"CardLayoutAddRow", "FRO1685", "on-card row drag: triage whether it can leave the card's view"},
+    {"CardLayoutGroupHandle", "FRO1685", "on-card group move: triage whether it can leave the card's view"},
+    {"StepGridComponent", "FRO1685", "cell paint: triage whether the grid scrolls"},
+    {"NoteRangePicker", "FRO1685", "range edge drag: triage whether the keyboard strip scrolls"},
+    {"DockTabButton", "FRO1685", "tab reorder: triage whether the tab bar scrolls"},
+};
+// What kFollowGaps holds today; it may only go down.
+constexpr std::size_t kFollowGapCeiling = 25;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Scanning
@@ -227,4 +317,37 @@ TEST(DragSurfaces, EveryMouseDragOverrideIsRegistered) {
             ADD_FAILURE() << "not registered: " << cls << " (" << file
                           << ") overrides mouseDrag - add it to kRegistered in DragSurfaceRegistryTests.cpp with "
                              "the guard that checks its preview against its commit, or an exemption with a reason";
+}
+
+TEST(DragSurfaces, EveryMouseDragSaysWhetherItFollowsTheView) {
+    const auto found = classesOverridingMouseDrag();
+    ASSERT_GT(found.size(), 40u) << "the scan found almost nothing: has the mouseDrag signature changed?";
+    EXPECT_LE(kFollowGaps.size(), kFollowGapCeiling) << "kFollowGaps may only shrink: a new drag follows the view";
+
+    std::set<std::string> named, gaps;
+    for (const auto& entry : kFollow) {
+        EXPECT_TRUE(named.insert(entry.cls).second) << entry.cls << " is named twice";
+        const std::string guard = entry.guard;
+        if (guard.rfind("follow:", 0) == 0)
+            EXPECT_TRUE(testIsRegistered(guard.substr(7)))
+                << entry.cls << ": no test is named '" << guard.substr(7) << "'";
+        else if (guard.rfind("follow-exempt:", 0) == 0)
+            EXPECT_GT(guard.size(), 26u) << entry.cls << ": an exemption needs a reason";
+        else
+            ADD_FAILURE() << entry.cls << ": unknown guard '" << guard << "'";
+        if (!found.count(entry.cls))
+            ADD_FAILURE() << "stale: " << entry.cls << " no longer overrides mouseDrag - remove it from kFollow";
+    }
+    for (const auto& gap : kFollowGaps) {
+        EXPECT_TRUE(gaps.insert(gap.cls).second) << gap.cls << " is listed twice";
+        EXPECT_EQ(named.count(gap.cls), 0u)
+            << "fixed - remove " << gap.cls << " from kFollowGaps (" << gap.ticket << ")";
+        if (!found.count(gap.cls))
+            ADD_FAILURE() << "stale: " << gap.cls << " no longer overrides mouseDrag - remove it from kFollowGaps";
+    }
+    for (const auto& [cls, file] : found)
+        if (!named.count(cls) && !gaps.count(cls))
+            ADD_FAILURE() << "not named: " << cls << " (" << file
+                          << ") overrides mouseDrag - add it to kFollow in DragSurfaceRegistryTests.cpp with the test "
+                             "that proves its drag follows the view, or an exemption with a reason";
 }

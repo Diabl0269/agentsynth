@@ -144,7 +144,7 @@ class TestModeApp:
 
     def call(self, cmd, timeout_ms=None, **args):
         """Runs one command; returns its result or raises TestModeError."""
-        if cmd in ("key", "click", "drag"):
+        if cmd in ("key", "keyDown", "click", "drag"):
             self.activate()
         with self._lock:
             request = {"id": self._next_id, "cmd": cmd, "args": args}

@@ -108,6 +108,34 @@ from the module library or the sound browser; a marquee and a cable drag do not 
 - **Keyboard.** There is no pointer to park, so the keyboard move (arrow keys on a focused card) already pans the card
   into view instead.
 
+### Every drag follows the view
+
+The rule: a drag (or a key hold) that can carry something past the edge of a view that scrolls must scroll that view
+along, so the thing never sticks at the edge or goes out of sight. Each surface that does it, and the helpers:
+
+- **Timeline, pointer.** `edgeScrollVelocity` (`Source/UI/Timeline/EdgeAutoScroll.h`) gives the signed speed from the
+  pointer's depth in a `kEdgeZonePx` (24 px) zone at either end, up to `kEdgeAutoScrollMaxPxPerTick` (18 px) per tick at
+  `kEdgeScrollHz` (30 Hz). The clip lanes (`TimelineClipLaneArea`), the piano roll and the lane editor's dot, selection
+  and stretch-box drags (`AutomationLaneEditorEdgeScroll.cpp`, its timer a nested `EdgeScrollTimer`) each run that timer only
+  while the pointer sits in a zone, and each tick re-derives the preview from the last pointer, so the dragged thing
+  stays under the still pointer. The view stops at beat 0 and never stops to the right.
+- **Timeline, keys.** `firstBeatShowing` (`Source/UI/Timeline/ScrollIntoView.h`) is where the view starts so a span is
+  in sight, placed `kScrollIntoViewMargin` (a tenth of the view) in from the edge it was leaving by. A clip picked with
+  the keys and a lane dot carried by a held Alt+arrow both use it; the view jumps once per step, ahead of the dot, so it
+  never fights the dot's own ease.
+- **Canvas.** `CanvasEdgeScroller` and `canvasEdgePanDelta`, above.
+- **The view is shared.** A drag that scrolls the timeline view tells its owner (`onViewScrolledByDrag`), which repaints
+  the ruler and the section strip and turns follow-playhead off, as a sideways wheel scroll does.
+
+Checklist for a drag surface: the pointer parked in the edge zone scrolls, faster nearer the edge; the thing stays under
+the pointer; a held key keeps it in view; a drop from outside (the module library, the sound browser) scrolls too; the
+scroll stops on release, Escape, a tool change and the pointer moving back in; the undo step count is unchanged (one).
+
+The guard is `DragSurfaces.EveryMouseDragSaysWhetherItFollowsTheView` (`Tests/UI/Layout/DragSurfaceRegistryTests.cpp`):
+every class that overrides `mouseDrag` names its follow test or the reason it is exempt (a slider inside a fixed range,
+a resizer, a forwarder, a drag-and-drop starter). The surfaces still missing it are listed in `kFollowGaps`, which may
+only shrink.
+
 ## Anti-overlap search
 
 When a module is placed (library drop or drag-release) the engine:

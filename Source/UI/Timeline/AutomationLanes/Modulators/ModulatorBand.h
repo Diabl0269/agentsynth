@@ -83,6 +83,8 @@ public:
     /** Asked to show the modulator row's menu with the given placement: a right-click anywhere on the band (its
      *  curve editor included) and Shift+F10; may be null. */
     std::function<void(const juce::PopupMenu::Options&)> onMenuRequested;
+    /** Fired when the curve editor's drag or key hold scrolled the shared view; may be null. */
+    std::function<void()> onViewScrolledByDrag;
     bool showContextMenuForKeyboardFocus() override;
 
     juce::String getTooltip() override;

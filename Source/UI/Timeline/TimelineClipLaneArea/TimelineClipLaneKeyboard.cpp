@@ -18,6 +18,7 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Timeline/ClipAccessibilityText.h"
 #include "UI/Timeline/ClipKeyboardNav.h"
+#include "UI/Timeline/ScrollIntoView.h"
 #include <algorithm>
 #include <cmath>
 
@@ -40,8 +41,6 @@ private:
     const TimelineClipLaneArea& lane_;
 };
 
-// The fraction of the view a clip is scrolled in from the edge it came from.
-constexpr double kScrollMarginFraction = 0.1;
 // The grid step when the snap division is Off.
 constexpr double kFallbackStepBeats = 1.0;
 
@@ -121,16 +120,7 @@ void TimelineClipLaneArea::scrollClipIntoView(const synth::Clip& clip) {
         return;
     const double visibleBeats = (double)getWidth() / viewState_.pixelsPerBeat;
     const double first = viewState_.firstVisibleBeat;
-    const double start = clip.startBeat;
-    const double end = clip.startBeat + clip.lengthBeats;
-    const bool fits = clip.lengthBeats <= (1.0 - kScrollMarginFraction) * visibleBeats;
-
-    double newFirst = first;
-    if (start < first)
-        newFirst = fits ? start - kScrollMarginFraction * visibleBeats : start;
-    else if (end > first + visibleBeats)
-        newFirst = fits ? end - (1.0 - kScrollMarginFraction) * visibleBeats : start;
-    newFirst = std::max(0.0, newFirst);
+    const double newFirst = firstBeatShowing(first, visibleBeats, clip.startBeat, clip.startBeat + clip.lengthBeats);
     if (std::abs(newFirst - first) < 1e-9)
         return;
 

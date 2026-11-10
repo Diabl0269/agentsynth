@@ -280,6 +280,10 @@ void TimelineAutomationLanes::syncPools() {
                     header->addCreateCustomLfoItem(menu, /*direct=*/true);
             };
             editor->onLaneKey = [this, id](const juce::KeyPress& key) { return handleLaneKey(id, key); };
+            editor->onViewScrolledByDrag = [this] {
+                if (onViewScrolledByDrag)
+                    onViewScrolledByDrag();
+            };
             editor->onSelectionChanged = [this, id] { updateSelectedReadout(id); };
             editor->onFocused = [this, id] {
                 if (onLaneFocused)

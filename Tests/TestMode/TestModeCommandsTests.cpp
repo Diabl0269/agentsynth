@@ -3,6 +3,7 @@
 
 #include "TestMode/TestModeComponents.h"
 #include "TestModeRig.h"
+#include "UI/Layout/KeyGlide/KeyGlideHost.h"
 #include "UI/Layout/ReducedMotion.h"
 
 using namespace synth::testmode;
@@ -12,9 +13,27 @@ using testmode_rig::run;
 
 TEST(TestModeCommands, TheRegistryHasEveryProtocolCommand) {
     const auto names = CommandTable::standard().names();
-    for (const char* name : {"ping", "list", "click", "wheel", "hover", "mouseDown", "mouseMoveHeld", "mouseUp", "drag",
-                             "key", "getState", "screenshot", "openProject", "saveProject", "waitForIdle", "quit",
-                             "trackPresentedFrame", "checkStalePixels", "requestQuit"})
+    for (const char* name : {"ping",
+                             "list",
+                             "click",
+                             "wheel",
+                             "hover",
+                             "mouseDown",
+                             "mouseMoveHeld",
+                             "mouseUp",
+                             "drag",
+                             "key",
+                             "getState",
+                             "screenshot",
+                             "openProject",
+                             "saveProject",
+                             "waitForIdle",
+                             "quit",
+                             "trackPresentedFrame",
+                             "checkStalePixels",
+                             "requestQuit",
+                             "keyDown",
+                             "keyUp"})
         EXPECT_TRUE(names.contains(name)) << name;
     EXPECT_EQ(CommandTable::standard().find("nope"), nullptr);
 }
@@ -162,6 +181,25 @@ TEST(TestModeCommands, KeyReachesTheFocusedComponentOrTheWindow) {
     ASSERT_EQ(r.state, StepResult::State::done) << r.error;
     EXPECT_EQ(rig.keys + rig.left.keys + rig.right.keys, 1);
     EXPECT_EQ(run("key", args({{"keys", "hyper+q"}})).state, StepResult::State::failed);
+}
+
+TEST(TestModeCommands, KeyDownHoldsAnArrowForEveryKeyHoldUntilKeyUp) {
+    Rig rig;
+    if (!rig.show())
+        GTEST_SKIP() << "no native window in this environment";
+    const auto host = synth::ui::makeDefaultKeyGlideHost();
+    const auto r = run("keyDown", args({{"keys", "alt+right"}}));
+    ASSERT_EQ(r.state, StepResult::State::done) << r.error;
+    EXPECT_EQ(rig.keys + rig.left.keys + rig.right.keys, 1) << "the press itself arrives once";
+    EXPECT_TRUE(host.isArrowDown(juce::KeyPress::rightKey)) << "and the arrow then reads as held";
+    EXPECT_FALSE(host.isArrowDown(juce::KeyPress::leftKey));
+    EXPECT_TRUE(host.isAltDown());
+    EXPECT_FALSE(host.isShiftDown());
+    EXPECT_EQ(run("keyUp", args({{"keys", "right"}})).state, StepResult::State::done);
+    EXPECT_FALSE(synth::ui::heldKeys().has_value()) << "the last arrow up hands the keys back to the keyboard";
+    EXPECT_EQ(run("keyDown", args({{"keys", "space"}})).state, StepResult::State::failed) << "arrows only";
+    EXPECT_FALSE(synth::ui::heldKeys().has_value());
+    EXPECT_EQ(run("keyUp", args({})).state, StepResult::State::done);
 }
 
 TEST(TestModeCommands, GetStateReadsAControl) {

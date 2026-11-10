@@ -113,6 +113,10 @@ void ModulatorBand::setModulator(const ModulatorInfo& info, synth::LaneId ownerL
             if (onMenuRequested)
                 onMenuRequested(options);
         };
+        editor_->onViewScrolledByDrag = [this] {
+            if (onViewScrolledByDrag)
+                onViewScrolledByDrag();
+        };
         editor_->setAccessible(false);
         addAndMakeVisible(*editor_);
         editor_->setBounds(getLocalBounds());

@@ -586,7 +586,10 @@ instead ([piano-roll](piano-roll.md#horizontal-mapping)). Y maps the lane's own 
 bottom edges, so a point or the line at the maximum or minimum is drawn whole instead of half or fully outside the lane.
 
 The curve is sampled every ~2 px by building a local `TimelineSnapshot::Point[]` from the lane's
-breakpoints and calling `AutomationKernel::evaluate` with a fresh `AutomationCursor`.
+breakpoints and calling `AutomationKernel::evaluate` with a fresh `AutomationCursor`, plus a stop at
+the exact x of every point, evaluated just before and at its beat
+(`AutomationLaneEditorCurvePath.cpp`), so a step narrower than a sample (two points one tick apart)
+is drawn straight down instead of as a 2 px ramp.
 
 **Why it is re-derived on every repaint rather than cached.** Paint is not hot, and this is the
 SAME evaluator the audio thread uses, so the canvas can never show a shape real playback would not
@@ -792,8 +795,8 @@ Every preview above is strictly component-local (a handful of `preview*_` member
 
 The subtlety: `TimelineDoc`'s own single-point mutators (`addBreakpoint` / `removeBreakpoint`) each
 bump the revision counter independently, so a gesture that touches several points — Pencil's
-thin-and-replace, Line's remove-span-then-add-two-endpoints, a Pointer move that lands on a
-different beat, Eraser's multi-point sweep — calling them in a loop would cost one revision bump,
+thin-and-replace, Line's remove-span-then-add-two-endpoints, a Pointer move to a different beat,
+Eraser's multi-point sweep — calling them in a loop would cost one revision bump,
 i.e. one audio-thread republish, PER POINT instead of per gesture.
 
 `TimelineDoc::editBreakpoints(laneId, removeBeats, addPoints)` is the batched primitive that fixes
@@ -932,7 +935,10 @@ space still adding a point, the parameter's own parser, focus loss, one of sever
 when its point goes) and `AutomationLanesPointSelectionTests.cpp` (click, Shift-click, box, Escape, Select All, multi-drag with its clamps as one
 undo step, Delete/Backspace, nudge, the keyboard cursor, copy/cut/paste, the selection following the doc, the accent
 dot read back from pixels, the description) and `LanePointMathTests.cpp` (the selection set, rigid-block move,
-replace, box test, clipboard and the glide's state machine); the surface routing of Cmd+A/C/X/V is in
+replace, the settle beside a dot a move would land on, box test, clipboard and the glide's state machine) and
+`AutomationLanesDragKeepsDotsTests.cpp` (a drag and a key hold across five dots delete none, a duplicate's joint
+survives a small drag with snap on and off, the last drag frame equals the drop, the one-tick step drawn vertical,
+read back from pixels); the surface routing of Cmd+A/C/X/V is in
 `FocusArbitrationAutomationLaneTests.cpp`,
 `CustomLfoFromRangeTests.cpp` (the rate chosen per range length, the wave and level, the phase offset, base plus the
 LFO reproducing linear, held, bent and skewed-range lanes, the 64-point budget, the flattening leaving every beat outside

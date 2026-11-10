@@ -16,6 +16,8 @@ constexpr double kFineSpeedFactor = 0.2;
 // value glide have it.
 constexpr double kStartRangePerSecond = 0.15;
 constexpr double kMaxRangePerSecond = 1.2;
+
+double holdClockMs(const KeyGlideHost& host) { return host.nowMs ? host.nowMs() : 0.0; }
 } // namespace
 
 std::vector<juce::Point<float>> CurveEditorComponent::selectionPositions() const {
@@ -59,16 +61,15 @@ bool CurveEditorComponent::beginKeyDrag(int keyCode, double dx, double dy, bool 
     keyDrag_.start = {node.x, (double)node.y};
     keyDrag_.unit = steps * scale;
     keyDrag_.snapped = snapToGrid_ && grid_.has_value() && !fine;
-    // A snapped hold starts at one grid step per kSnappedStepSeconds (never slower than a free one), the cap scaled
-    // alike.
+    // A snapped hold paces in grid steps, as the automation lane's does (snappedHoldPace): a coarse grid keeps
+    // stepping, and no grid steps faster than the eye can count.
     const auto motion = [this](double step, double range) {
-        const double paceScale =
-            keyDrag_.snapped ? std::max(1.0, step / (lane_key::kSnappedStepSeconds * kStartRangePerSecond * range))
-                             : 1.0;
-        return KeyAxisMotion{{kStartRangePerSecond * range * paceScale, kMaxRangePerSecond * range * paceScale,
-                              lane_key::kTapMs, lane_key::kRampMs},
-                             step};
+        const auto pace = keyDrag_.snapped
+                              ? lane_key::snappedHoldPace(step, kStartRangePerSecond * range)
+                              : lane_key::HoldPace{kStartRangePerSecond * range, kMaxRangePerSecond * range};
+        return KeyAxisMotion{{pace.start, pace.max, lane_key::kTapMs, lane_key::kRampMs}, step};
     };
+    keyDrag_.lastStepMs = holdClockMs(keyHold_.host);
     auto timeMotion = motion(keyDrag_.unit.x, currentGeometry().getVisibleRange());
     timeMotion.joinsWithAltOnly = true;
     const auto valueMotion = motion(keyDrag_.unit.y, 1.0);
@@ -86,7 +87,8 @@ double CurveEditorComponent::coveredAlong(KeyAxis axis, double unit) const {
 }
 
 // Moves the group to where the keys have carried the cursor point: relative to the point's place now, so the same
-// move path as a press does the clamping, snapping and neighbour limits.
+// move path as a press does the clamping, snapping and neighbour limits. A tap and a snapped step ease the drawn
+// points, unless snapped steps come faster than the ease runs: then the drawn points move with the nodes.
 void CurveEditorComponent::applyKeyDrag(bool tapStep) {
     if (cursorIndex() < 0 || cursorIndex() >= model_.getNumNodes())
         return;
@@ -94,7 +96,14 @@ void CurveEditorComponent::applyKeyDrag(bool tapStep) {
     const double dx = keyDrag_.start.x + coveredAlong(KeyAxis::time, keyDrag_.unit.x) - node.x;
     const double dy = keyDrag_.start.y + coveredAlong(KeyAxis::value, keyDrag_.unit.y) - node.y;
     const bool fine = keyHold_.host.isShiftDown && keyHold_.host.isShiftDown();
-    moveSelectionBy(dx, (float)dy, fine, true, tapStep || keyDrag_.snapped);
+    const double now = holdClockMs(keyHold_.host);
+    const bool eases = tapStep || (keyDrag_.snapped && lane_key::snappedStepEases(now - keyDrag_.lastStepMs));
+    if (!moveSelectionBy(dx, (float)dy, fine, true, eases) || !keyDrag_.snapped)
+        return;
+    if (!eases)
+        for (const int i : selection_.selected())
+            pointTween_.erase(i);
+    keyDrag_.lastStepMs = now;
 }
 
 void CurveEditorComponent::endKeyDrag() {

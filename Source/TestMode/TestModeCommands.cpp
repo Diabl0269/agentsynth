@@ -7,6 +7,7 @@
 #include "TestMode/TestModeInput.h"
 #include "TestMode/TestModePresentedFrame.h"
 #include "TestMode/TestModeScreenFrame.h"
+#include "UI/Layout/KeyGlide/KeyGlideHost.h"
 #include <cmath>
 #if JUCE_WINDOWS
 #include <process.h>
@@ -230,28 +231,86 @@ StepResult cmdDrag(const juce::var& args, Scratch& s, int attempt) {
                               : StepResult::pending();
 }
 
+juce::Component* keyTarget(const juce::var& args, juce::String& error) {
+    if (!args.hasProperty("target"))
+        return findMainWindow();
+    const auto found = lookupArg(args, "target");
+    if (found.component == nullptr) {
+        error = found.error;
+        return nullptr;
+    }
+    if (found.component->getWantsKeyboardFocus())
+        found.component->grabKeyboardFocus();
+    return found.component;
+}
+
 StepResult cmdKey(const juce::var& args, Scratch&, int) {
     juce::String error;
     const auto key = keyPressFromText(args.getProperty("keys", {}).toString(), error);
     if (error.isNotEmpty())
         return StepResult::failed(error);
-    juce::Component* target = nullptr;
-    if (args.hasProperty("target")) {
-        const auto found = lookupArg(args, "target");
-        if (found.component == nullptr)
-            return StepResult::failed(found.error);
-        target = found.component;
-        if (target->getWantsKeyboardFocus())
-            target->grabKeyboardFocus();
-    } else {
-        target = findMainWindow();
-    }
+    auto* target = keyTarget(args, error);
     if (target == nullptr)
-        return StepResult::failed("no window");
+        return StepResult::failed(error.isNotEmpty() ? error : juce::String("no window"));
     bool handled = false;
     if (!pressKey(*target, key, handled, error))
         return StepResult::failed(error);
     return StepResult::done(object({{"handled", handled}}));
+}
+
+bool isArrow(int code) {
+    return code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey || code == juce::KeyPress::upKey ||
+           code == juce::KeyPress::downKey;
+}
+
+// Presses an arrow and keeps it held: every key hold reads it as physically down (with the chord's Shift and Alt)
+// until keyUp, so a scenario can film the hold while it runs.
+StepResult cmdKeyDown(const juce::var& args, Scratch&, int) {
+    juce::String error;
+    const auto key = keyPressFromText(args.getProperty("keys", {}).toString(), error);
+    if (error.isNotEmpty())
+        return StepResult::failed(error);
+    if (!isArrow(key.getKeyCode()))
+        return StepResult::failed("keyDown holds an arrow key only");
+    auto* target = keyTarget(args, error);
+    if (target == nullptr)
+        return StepResult::failed(error.isNotEmpty() ? error : juce::String("no window"));
+    auto held = ui::heldKeys().value_or(ui::HeldKeys{});
+    held.arrows.insert(key.getKeyCode());
+    held.shift = key.getModifiers().isShiftDown();
+    held.alt = key.getModifiers().isAltDown();
+    ui::setHeldKeys(held);
+    bool handled = false;
+    if (!pressKey(*target, key, handled, error))
+        return StepResult::failed(error);
+    return StepResult::done(object({{"handled", handled}}));
+}
+
+// A key-up as the OS sends one: the focused component hears that the keys changed, so a hold ends now even with
+// animations off (it would otherwise wait for a frame that never comes).
+void sendKeyUp() {
+    if (auto* window = findMainWindow())
+        if (auto* peer = window->getPeer())
+            peer->handleKeyUpOrDown(false);
+}
+
+// Lets go of the held arrow `keys` names, or of every held key with none named.
+StepResult cmdKeyUp(const juce::var& args, Scratch&, int) {
+    if (!args.hasProperty("keys")) {
+        ui::setHeldKeys(std::nullopt);
+        sendKeyUp();
+        return StepResult::done(object({{"held", 0}}));
+    }
+    juce::String error;
+    const auto key = keyPressFromText(args.getProperty("keys", {}).toString(), error);
+    if (error.isNotEmpty())
+        return StepResult::failed(error);
+    auto held = ui::heldKeys().value_or(ui::HeldKeys{});
+    held.arrows.erase(key.getKeyCode());
+    const int left = (int)held.arrows.size();
+    ui::setHeldKeys(left > 0 ? std::optional<ui::HeldKeys>(held) : std::nullopt);
+    sendKeyUp();
+    return StepResult::done(object({{"held", left}}));
 }
 
 StepResult cmdGetState(const juce::var& args, Scratch&, int) {
@@ -460,6 +519,8 @@ CommandTable CommandTable::standard() {
     table.add("mouseUp", {cmdMouseUp});
     table.add("drag", {cmdDrag});
     table.add("key", {cmdKey});
+    table.add("keyDown", {cmdKeyDown});
+    table.add("keyUp", {cmdKeyUp});
     table.add("getState", {cmdGetState});
     table.add("screenshot", {cmdScreenshot});
     table.add("openProject", {cmdOpenProject});

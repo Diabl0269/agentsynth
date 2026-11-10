@@ -37,13 +37,16 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     keyHold_.speedFactor = [this](KeyAxis axis) { return keyDragSpeedFactor(axis); };
     keyHold_.onFrame = [this] { applyKeyDrag(false); };
     keyHold_.onEnd = [this] { endKeyDrag(); };
+    edgeScroll_.onTick = [this] { edgeScrollTick(); };
     refreshDescription();
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
-    // count.
+    // count, `holding` whether a key hold is moving the selection and `dragging` whether any drag is under way.
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
         into.setProperty("points", lanePoints() != nullptr ? (int)lanePoints()->size() : 0);
+        into.setProperty("holding", keyHold_.active());
+        into.setProperty("dragging", dragMode_ != DragMode::None);
     });
     addChildComponent(*testModeProbe_);
     testModeProbe_->setVisible(true);
@@ -51,6 +54,7 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
 
 void AutomationLaneEditor::setActiveLane(synth::LaneId id) {
     cancelKeyDrag();
+    stopEdgeScroll();
     pointTween_.clear();
     laneId_ = id;
     dragMode_ = DragMode::None;
@@ -69,6 +73,7 @@ void AutomationLaneEditor::setActiveLane(synth::LaneId id) {
 }
 
 void AutomationLaneEditor::setTool(Tool tool) {
+    stopEdgeScroll();
     editTool_.reset();
     tool_ = tool;
     refreshStretchBox();
@@ -284,6 +289,8 @@ void AutomationLaneEditor::paint(juce::Graphics& g) {
     shapeGesture_.paintOverCurve(g);
     selection_.paintMarquee(g);
     paintStretchBox(g);
+    if (const auto grabbed = grabbedPointDrawnAt())
+        bubble_.moveAnchor(*grabbed); // on the dot as drawn, so a step's ease carries the value with it
     bubble_.paint(g);
     paintKeyboardCursorRing(g);
 }
@@ -348,31 +355,6 @@ void AutomationLaneEditor::strokeCurve(juce::Graphics& g, const std::vector<Lane
                                        const synth::AutomationLane& lane, juce::Colour colour, float thickness) const {
     g.setColour(colour);
     g.strokePath(curvePath(points, lane), juce::PathStrokeType(thickness));
-}
-
-juce::Path AutomationLaneEditor::curvePath(const std::vector<LaneBreakpoint>& points,
-                                           const synth::AutomationLane& lane) const {
-    std::vector<TimelineSnapshot::Point> pts;
-    pts.reserve(points.size());
-    for (const auto& bp : points)
-        pts.push_back({bp.beat, bp.value, bp.tension, bp.curve});
-
-    juce::Path path;
-    AutomationCursor cursor{};
-    const int width = getWidth();
-    const double flat = dragMode_ == DragMode::LaneConstant ? previewValue_ : (double)lane.range.defaultValue;
-    for (int x = 0; x < width; x += 2) {
-        const double beat = viewState_.xToBeat((double)x);
-        const double value = pts.empty() ? flat
-                                         : AutomationKernel::evaluate(pts.data(), (int)pts.size(), beat,
-                                                                      (double)lane.range.defaultValue, cursor);
-        const float y = (float)valueToY(value);
-        if (x == 0)
-            path.startNewSubPath((float)x, y);
-        else
-            path.lineTo((float)x, y);
-    }
-    return path;
 }
 
 void AutomationLaneEditor::paintToolPreview(juce::Graphics& g) {
@@ -610,19 +592,12 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
     const auto pos = e.getPosition();
 
     switch (dragMode_) {
-    case DragMode::MoveHandle: {
-        // The whole selection moves by the grabbed point's delta; the block stops at beat 0 as a unit.
-        const double target = std::max(0.0, snappedBeatAt(viewState_.xToBeat((double)pos.x)));
-        const double delta = clampBeatDelta(dragPoints_, target - dragOriginalBeat_);
-        previewBeat_ = delta == target - dragOriginalBeat_ ? target : dragOriginalBeat_ + delta;
-        previewValue_ = clampValue(yToValue(pos.y));
-        showBubbleAt(previewBeat_, previewValue_);
-        refreshStretchBox();
-        break;
-    }
+    case DragMode::MoveHandle:
     case DragMode::Stretch:
-        dragStretch(pos);
-        refreshStretchBox();
+        // A dot (or the selection with it) and the stretch box follow the view past either edge.
+        previewDragAt(pos);
+        lastDragPointer_ = pos;
+        updateEdgeScrollArming();
         break;
     case DragMode::LaneConstant:
         previewValue_ = clampValue(dragOriginalValue_ + yToValue(pos.y) - yToValue(mouseDownPos_.y));
@@ -654,6 +629,7 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
 }
 
 void AutomationLaneEditor::mouseUp(const juce::MouseEvent& e) {
+    stopEdgeScroll();
     if (shapeGesture_.mouseUp(e))
         return;
     if (doc_ == nullptr || !laneId_.isValid()) {
@@ -828,6 +804,7 @@ bool AutomationLaneEditor::handleEditorKey(const juce::KeyPress& key) {
             return true;
         }
         if (dragMode_ != DragMode::None || selection_.isBoxActive()) {
+            stopEdgeScroll();
             dragMode_ = DragMode::None;
             cancelStretch();
             selection_.cancelGesture();

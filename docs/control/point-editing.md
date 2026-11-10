@@ -28,7 +28,7 @@ this point", "No room: the curve has the most points it can hold") in the shape 
 |---|---|
 | Left / Right | Pick the previous / next dot. The cursor and the selection move to it; nothing moves in time. With nothing picked, the first press lands on the nearest end |
 | Shift+Left / Shift+Right | Extend the selection one dot toward that side (the cursor moves with it) |
-| Alt+Left / Alt+Right | Move the selection in time (a grid step with snap on, else a small step: four pixels in a lane; on a grid of explicit lines, such as the Filter shape window's Notes or Harmonics, the step goes to the next line that snaps, past the dotted out-of-key notes). Hold the key and it glides, one undo step ([`timeline/automation-points.md`](../timeline/automation-points.md#keyboard-moves)) |
+| Alt+Left / Alt+Right | Move the selection in time (a grid step with snap on, else a small step: four pixels in a lane; on a grid of explicit lines, such as the Filter shape window's Notes or Harmonics, the step goes to the next line that snaps, past the dotted out-of-key notes). Hold the key and it glides, one undo step; with snap on a hold steps at most 12 grid steps a second and the value tooltip stays on the dot ([`timeline/automation-points.md`](../timeline/automation-points.md#keyboard-moves)) |
 | Alt+Up / Alt+Down | Move the selection's value (holding glides, like Alt+Left / Right) |
 | Two arrows held | Diagonal: hold Alt+Right, then also Up, and time and value move at once; let one go and the other carries on alone. The whole hold, both keys, is one undo step (`KeyHold` glides each axis on its own) |
 | Alt+Shift+arrows | The fine move: a fifth of the step in the curve editor, a quarter in a lane, never snapped. In a lane with two or more points selected, Alt+Shift+arrows stretch or scale the selection instead ([`timeline/automation.md`](../timeline/automation-points.md#stretching-a-selection)) |
@@ -86,8 +86,10 @@ Each editor declares one `PointSelectionRules` constant (`CurveEditorComponent::
 | Shift+Left/Right | Selects the range from the anchor to the cursor, so reversing shrinks it | Adds the next dot past the selection's end, never shrinks |
 | Cmd+A cursor | Kept if selected, else the last dot | Kept, else the first dot |
 
-Outside the rules: a lane's block move stops only at beat 0 and clamps each value on its own (a move onto another
-point's beat replaces it), the curve's stops at unmoving neighbours and clamps the level as a group; a lane leaves
+Outside the rules: a lane's block move stops only at beat 0 and clamps each value on its own; it passes other dots
+freely and never deletes one: a move (mouse drag, held keys or nudge) that would land on another dot's beat settles one
+tick (1/960 beat) beside that dot on the side it came from, so both stay (paste, duplicate and a typed value still
+replace a dot on the same beat). The curve's stops at unmoving neighbours and clamps the level as a group; a lane leaves
 Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifiers.
 
 ## Mouse

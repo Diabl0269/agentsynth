@@ -1,0 +1,236 @@
+// AutomationLanesEdgeScrollTests.cpp -- a lane drag follows the view: a dot, a selection of dots or the stretch box
+// held in the edge zone scrolls the shared timeline view and stays under the still pointer, the view stops at beat 0,
+// a held Alt+arrow keeps the moving dot in view, follow-playhead turns off as for a manual scroll, the scroll stops on
+// release, Escape and a tool change, and the whole move is still one undo step. Real events on the real panel's editor.
+
+#include "../../Layout/KeyGlide/KeyGlideTestHost.h"
+#include "AutomationLanesTestFixture.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LanePointStretch.h"
+#include <algorithm>
+#include <cmath>
+
+using namespace automation_lanes_test;
+using synth::TrackKind;
+using synth::ui::AutomationLaneEditor;
+using synth::ui::StretchHandle;
+
+namespace {
+
+// An open lane (snap a quarter note, one beat; 40 px per beat) with a Pointer editor whose held keys are the test's.
+struct EdgeLane : LanesPanel {
+    synth::TrackId bass;
+    synth::LaneId lane;
+    AutomationLaneEditor* editor = nullptr;
+    key_glide_test::FakeKeys keys;
+
+    EdgeLane() {
+        bass = doc.addTrack(TrackKind::Midi, "Bass");
+        lane = addLane(bass, "cutoff");
+        panel.setTrackAutomationExpanded(bass, true);
+        editor = panel.laneEditorForTest(lane);
+        editor->setTool(AutomationLaneEditor::Tool::Pointer);
+        editor->getKeyHoldForTest().host = keys.host();
+    }
+
+    synth::ui::TimelineViewState& view() { return panel.getViewState(); }
+    double first() { return view().firstVisibleBeat; }
+    double visibleBeats() { return (double)editor->getWidth() / view().pixelsPerBeat; }
+    juce::Point<float> at(double beat, double value) {
+        return {(float)view().beatToX(beat), (float)editor->valueToY(value)};
+    }
+    // A pointer two pixels in from the right edge, or the left: deep in the edge zone.
+    juce::Point<float> rightEdge(double value) {
+        return {(float)editor->getWidth() - 2.0f, (float)editor->valueToY(value)};
+    }
+    juce::Point<float> leftEdge(double value) { return {2.0f, (float)editor->valueToY(value)}; }
+
+    void press(juce::Point<float> p) { editor->mouseDown(makeClickEvent(*editor, p, leftButton())); }
+    void dragTo(juce::Point<float> p, juce::Point<float> from) {
+        editor->mouseDrag(makeDragEvent(*editor, p, from, leftButton()));
+    }
+    void release(juce::Point<float> p, juce::Point<float> from) {
+        editor->mouseUp(makeDragEvent(*editor, p, from, leftButton()));
+    }
+    // Ticks only while the timer runs, as the real timer does.
+    void ticks(int n) {
+        for (int i = 0; i < n && editor->isEdgeScrollRunningForTest(); ++i)
+            editor->tickEdgeScrollForTest();
+    }
+    const std::vector<synth::ui::LaneBreakpoint>& points() const { return doc.getLane(lane)->points; }
+};
+
+} // namespace
+
+// Regression test for FRO1333: a dot dragged to the edge of the lane stopped there; the view never scrolled.
+TEST(AutomationLanesEdgeScroll, ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnderThePointer) {
+    EdgeLane f;
+    f.doc.addBreakpoint(f.lane, 2.0, 50.0);
+    f.undo.beginNewTransaction();
+    const auto rev = f.doc.getRevision();
+    const auto from = f.at(2.0, 50.0);
+    f.press(from);
+    f.dragTo(f.rightEdge(50.0), from);
+    ASSERT_TRUE(f.editor->isEdgeScrollRunningForTest()) << "the pointer in the edge zone starts the scroll";
+
+    const double firstBefore = f.first();
+    const double beatBefore = f.editor->getPreviewBeatForTest();
+    f.ticks(30);
+    const double scrolled = f.first() - firstBefore;
+    EXPECT_GT(scrolled, 5.0) << "a second at the edge scrolls several beats";
+    const double followed = f.editor->getPreviewBeatForTest() - beatBefore;
+    EXPECT_NEAR(followed, scrolled, 1.0) << "the dot moves with the view, within one grid step";
+    const double under = f.view().xToBeat(f.rightEdge(50.0).x);
+    EXPECT_NEAR(f.editor->getPreviewBeatForTest(), std::round(under), 1e-9) << "the dot is still under the pointer";
+
+    // Nearer the edge is faster: a pointer just inside the zone crawls.
+    const auto crawlAt = juce::Point<float>((float)f.editor->getWidth() - 20.0f, f.rightEdge(50.0).y);
+    f.dragTo(crawlAt, from);
+    const double crawlFrom = f.first();
+    f.ticks(30);
+    EXPECT_LT(f.first() - crawlFrom, scrolled / 3.0) << "the scroll is slower further from the edge";
+
+    const auto middle = juce::Point<float>((float)f.editor->getWidth() / 2.0f, f.rightEdge(50.0).y);
+    f.dragTo(middle, from);
+    EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "back in the middle, the scroll stops";
+
+    f.dragTo(f.rightEdge(50.0), from);
+    f.ticks(3);
+    const double landed = f.editor->getPreviewBeatForTest();
+    f.release(f.rightEdge(50.0), from);
+    EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "release stops the scroll";
+    ASSERT_EQ(f.points().size(), 1u);
+    EXPECT_EQ(f.points()[0].beat, landed) << "the drop is what the drag showed";
+    EXPECT_EQ(f.doc.getRevision(), rev + 1) << "one edit";
+    f.undo.undo();
+    EXPECT_EQ(f.points()[0].beat, 2.0) << "one undo puts it back";
+}
+
+TEST(AutomationLanesEdgeScroll, TheLeftEdgeScrollsBackAndStopsAtBeatZero) {
+    EdgeLane f;
+    f.view().firstVisibleBeat = 8.0;
+    f.doc.addBreakpoint(f.lane, 12.0, 50.0);
+    const auto from = f.at(12.0, 50.0);
+    f.press(from);
+    f.dragTo(f.leftEdge(50.0), from);
+    f.ticks(10);
+    EXPECT_LT(f.first(), 8.0) << "the view scrolls back";
+    f.ticks(200);
+    EXPECT_EQ(f.first(), 0.0) << "and stops at beat 0";
+    EXPECT_GE(f.editor->getPreviewBeatForTest(), 0.0);
+    EXPECT_NEAR(f.editor->getPreviewBeatForTest(), 0.0, 1e-9) << "the dot lands at the start, under the pointer";
+    f.release(f.leftEdge(50.0), from);
+}
+
+TEST(AutomationLanesEdgeScroll, ThreeSelectedDotsAndTheStretchBoxFollowTheView) {
+    {
+        SCOPED_TRACE("three dots moved together");
+        EdgeLane f;
+        for (const double b : {1.0, 2.0, 3.0})
+            f.doc.addBreakpoint(f.lane, b, 50.0);
+        f.editor->getPointSelection().setSelection({1.0, 2.0, 3.0});
+        const auto from = f.at(3.0, 50.0);
+        f.press(from);
+        f.dragTo(f.rightEdge(50.0), from);
+        const auto before = f.editor->getDragMovedPointsForTest();
+        f.ticks(20);
+        const auto after = f.editor->getDragMovedPointsForTest();
+        ASSERT_EQ(before.size(), 3u);
+        ASSERT_EQ(after.size(), 3u);
+        EXPECT_GT(after[2].beat - before[2].beat, 3.0) << "the selection moves on with the view";
+        for (std::size_t i = 0; i < 3; ++i)
+            EXPECT_NEAR(after[i].beat - before[i].beat, after[2].beat - before[2].beat, 1e-9) << "as one block";
+        f.release(f.rightEdge(50.0), from);
+        EXPECT_EQ(f.points().size(), 3u);
+    }
+    {
+        SCOPED_TRACE("the stretch box's right edge");
+        EdgeLane f;
+        for (const double b : {1.0, 2.0, 3.0})
+            f.doc.addBreakpoint(f.lane, b, 50.0);
+        f.editor->getPointSelection().setSelection({1.0, 2.0, 3.0});
+        f.editor->resized();
+        const auto from = f.editor->getStretchHandleRectForTest(StretchHandle::Right).getCentre();
+        ASSERT_FALSE(f.editor->getStretchHandleRectForTest(StretchHandle::Right).isEmpty());
+        f.undo.beginNewTransaction();
+        const auto rev = f.doc.getRevision();
+        f.press(from);
+        f.dragTo(f.rightEdge(50.0), from);
+        ASSERT_TRUE(f.editor->isEdgeScrollRunningForTest());
+        const double endBefore = f.editor->getStretchForTest().result().moved.back().beat;
+        f.ticks(20);
+        EXPECT_GT(f.editor->getStretchForTest().result().moved.back().beat, endBefore + 3.0)
+            << "the stretched end follows the view";
+        f.release(f.rightEdge(50.0), from);
+        EXPECT_EQ(f.doc.getRevision(), rev + 1) << "one edit";
+        EXPECT_GT(f.points().back().beat, 6.0);
+    }
+}
+
+TEST(AutomationLanesEdgeScroll, AHeldAltRightNearTheRightEdgeKeepsTheMovingDotInView) {
+    EdgeLane f;
+    const double start = std::floor(f.visibleBeats()) - 2.0;
+    f.doc.addBreakpoint(f.lane, start, 50.0);
+    f.editor->getPointSelection().setSelection({start});
+    f.undo.beginNewTransaction();
+    const auto rev = f.doc.getRevision();
+
+    f.keys.down = {juce::KeyPress::rightKey};
+    f.keys.alt = true;
+    ASSERT_TRUE(f.editor->keyPressed(
+        juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(juce::ModifierKeys::altModifier), 0)));
+    for (double ms = 0.0; ms <= 4000.0; ms += 16.0) {
+        f.keys.now = 1000.0 + synth::ui::lane_key::kTapMs + ms;
+        f.editor->getKeyHoldForTest().tick();
+        const double beat = f.editor->getPreviewBeatForTest();
+        ASSERT_GE(beat, f.first()) << "at " << ms << " ms";
+        ASSERT_LE(beat, f.first() + f.visibleBeats()) << "the moving dot is in view at " << ms << " ms";
+    }
+    EXPECT_GT(f.first(), 0.0) << "the view scrolled along";
+    EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "a key hold scrolls by itself, not with the mouse timer";
+    f.keys.down.clear();
+    f.editor->getKeyHoldForTest().checkKeyUp();
+    EXPECT_EQ(f.doc.getRevision(), rev + 1) << "one edit";
+    f.undo.undo();
+    EXPECT_EQ(f.points()[0].beat, start) << "one undo puts it back";
+}
+
+TEST(AutomationLanesEdgeScroll, ADragThatScrollsTheViewTurnsFollowPlayheadOff) {
+    EdgeLane f;
+    f.panel.setFollowPlayheadEnabled(true);
+    ASSERT_TRUE(f.panel.isFollowPlayheadEnabled());
+    f.doc.addBreakpoint(f.lane, 2.0, 50.0);
+    const auto from = f.at(2.0, 50.0);
+    f.press(from);
+    f.dragTo(f.rightEdge(50.0), from);
+    f.ticks(1);
+    EXPECT_FALSE(f.panel.isFollowPlayheadEnabled())
+        << "taking the view by hand stops following, as a wheel scroll does";
+    f.release(f.rightEdge(50.0), from);
+}
+
+TEST(AutomationLanesEdgeScroll, EscapeAndAToolChangeStopTheScroll) {
+    {
+        EdgeLane f;
+        f.doc.addBreakpoint(f.lane, 2.0, 50.0);
+        const auto rev = f.doc.getRevision();
+        const auto from = f.at(2.0, 50.0);
+        f.press(from);
+        f.dragTo(f.rightEdge(50.0), from);
+        ASSERT_TRUE(f.editor->isEdgeScrollRunningForTest());
+        EXPECT_TRUE(f.editor->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+        EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "Escape stops the scroll";
+        f.release(f.rightEdge(50.0), from);
+        EXPECT_EQ(f.doc.getRevision(), rev) << "and the cancelled drag writes nothing";
+    }
+    {
+        EdgeLane f;
+        f.doc.addBreakpoint(f.lane, 2.0, 50.0);
+        const auto from = f.at(2.0, 50.0);
+        f.press(from);
+        f.dragTo(f.rightEdge(50.0), from);
+        ASSERT_TRUE(f.editor->isEdgeScrollRunningForTest());
+        f.editor->setTool(AutomationLaneEditor::Tool::Pencil);
+        EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "a tool change stops the scroll";
+    }
+}

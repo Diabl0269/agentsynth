@@ -9,6 +9,7 @@
 #include "TimelinePanelComponent.h"
 
 #include "UI/Timeline/AutomationLanes/AutomationLaneActions.h"
+#include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
 namespace synth::ui {
 
@@ -25,6 +26,15 @@ void TimelinePanelComponent::initAutomationLanes() {
     wireLaneKeyboard();
     automationLanes_.onAddAutomationRequested = [this](synth::TrackId track, juce::Component& row) {
         openAddAutomationPicker(track, row);
+    };
+    // A lane drag that scrolled the shared view took it by hand, as a sideways wheel does: follow-playhead stops,
+    // and the ruler and the section strip learn their beats moved.
+    automationLanes_.onViewScrolledByDrag = [this] {
+        if (follow_.enabled)
+            setFollowPlayheadEnabled(false);
+        ruler_.repaint();
+        sectionStrip_->repaint();
+        repaint();
     };
 }
 

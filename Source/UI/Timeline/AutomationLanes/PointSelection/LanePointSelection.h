@@ -84,6 +84,11 @@ private:
 
 // `delta` shortened so the earliest of `points` stays at or after beat 0 (the block stops as a unit).
 double clampBeatDelta(const std::vector<LaneBreakpoint>& points, double delta);
+// clampBeatDelta's `delta` for moving `moving` (points of `lane`), changed only where a moved point would land on the
+// beat of a point that is not moving: that landing comes `tick` back toward where the block came from, so both stay.
+// 0 when that leads back past the start.
+double settleBeatDelta(const std::vector<LaneBreakpoint>& lane, const std::vector<LaneBreakpoint>& moving, double delta,
+                       double tick);
 // `points` shifted by the same beat and value deltas, each value clamped to [minValue, maxValue]; order kept.
 std::vector<LaneBreakpoint> movePoints(const std::vector<LaneBreakpoint>& points, double beatDelta, double valueDelta,
                                        double minValue, double maxValue);

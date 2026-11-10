@@ -6,6 +6,11 @@
 namespace synth::ui {
 
 namespace {
+std::optional<HeldKeys>& heldOverride() {
+    static std::optional<HeldKeys> held;
+    return held;
+}
+
 std::optional<ArrowKey> arrowOf(int keyCode) {
     if (keyCode == juce::KeyPress::leftKey)
         return ArrowKey::Left;
@@ -20,6 +25,8 @@ std::optional<ArrowKey> arrowOf(int keyCode) {
 
 /** A held Cmd chord loses its key-up in JUCE's state on macOS, so the OS's own view wins where there is one. */
 bool arrowPhysicallyDown(int keyCode) {
+    if (const auto& held = heldOverride())
+        return held->arrows.count(keyCode) > 0;
     std::optional<bool> physical;
     if (const auto arrow = arrowOf(keyCode))
         physical = physicalArrowKeyDown(*arrow);
@@ -31,9 +38,19 @@ KeyGlideHost makeDefaultKeyGlideHost() {
     KeyGlideHost host;
     host.nowMs = [] { return juce::Time::getMillisecondCounterHiRes(); };
     host.isArrowDown = arrowPhysicallyDown;
-    host.isShiftDown = [] { return juce::ModifierKeys::currentModifiers.isShiftDown(); };
-    host.isAltDown = [] { return juce::ModifierKeys::currentModifiers.isAltDown(); };
+    host.isShiftDown = [] {
+        const auto& held = heldOverride();
+        return held ? held->shift : juce::ModifierKeys::currentModifiers.isShiftDown();
+    };
+    host.isAltDown = [] {
+        const auto& held = heldOverride();
+        return held ? held->alt : juce::ModifierKeys::currentModifiers.isAltDown();
+    };
     return host;
 }
+
+void setHeldKeys(std::optional<HeldKeys> held) { heldOverride() = std::move(held); }
+
+const std::optional<HeldKeys>& heldKeys() { return heldOverride(); }
 
 } // namespace synth::ui

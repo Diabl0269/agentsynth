@@ -603,7 +603,9 @@ shortcut.
 - **Cancel (Esc, or a release over no valid target).** The dragged item or ghost returns into its origin in 140 ms
   `easeInCubic` (a ghost also fades), its neighbours glide back in 160 ms, and nothing is committed.
 - **Keyboard moves of points glide**: a hold ramps like the cursor glide and is one undo step; discrete steps (a tap, a
-  snapped step) ease the drawn point 160 ms; plain under Reduce Motion ([details](../timeline/automation-points.md#keyboard-moves)).
+  snapped step) ease the drawn point 160 ms, except snapped steps that come faster than the ease runs, which move the
+  drawn point with the hold; a snapped hold tops out at 12 grid steps a second; the value bubble sits on the drawn
+  dot; plain under Reduce Motion ([details](../timeline/automation-points.md#keyboard-moves)).
 - **A selection box eases to its new rectangle and follows what it frames during a drag**
   ([details](../timeline/automation-points.md#stretching-a-selection)).
 

@@ -8,6 +8,7 @@
 #include "UI/Layout/PointEditorDuplicate.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/ModuleViewAccessibility.h"
+#include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include <gtest/gtest.h>
 #include <set>
 
@@ -446,6 +447,35 @@ TEST(CurveEditorKeyHold, WithSnapOnAHoldStepsFromGridLineToGridLine) {
     EXPECT_GT(rig.node(1).x, 0.625);
     rig.release();
     EXPECT_EQ(rig.count("end"), 1);
+}
+
+// Regression test for FRO1332: a snapped hold's pace was the free one scaled up, so a fine grid raced past the steps
+// the eye can count; it is counted in grid steps now, the same cap as the automation lane's.
+TEST(CurveEditorKeyHold, ASnappedHoldNeverStepsFasterThanTheCap) {
+    HeldRig rig(freeModel(1));
+    const int cells = 256;
+    rig.editor.setGrid(CurveEditorComponent::CurveGrid{cells, 2, 0.0, 0.0});
+    rig.editor.setSnapToGrid(true);
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    rig.hold(juce::KeyPress::rightKey, kAlt);
+    ASSERT_NEAR(rig.node(1).x, 0.5 + 1.0 / cells, 1e-9) << "the tap is one grid cell";
+    std::vector<std::pair<int, double>> frames;
+    for (int ms = 0; ms <= 3000; ms += 16) {
+        rig.frame((double)ms);
+        frames.emplace_back(ms, rig.node(1).x);
+    }
+    rig.release();
+    int worst = 0;
+    for (std::size_t i = 0; i < frames.size(); ++i) {
+        int steps = 0;
+        for (std::size_t j = i + 1; j < frames.size() && frames[j].first < frames[i].first + 1000; ++j)
+            steps += (int)std::lround((frames[j].second - frames[j - 1].second) * cells);
+        worst = std::max(worst, steps);
+    }
+    EXPECT_GT(frames.back().second, 0.5 + 10.0 / cells) << "it kept stepping";
+    EXPECT_LE(worst, (int)synth::ui::lane_key::kSnappedMaxStepsPerSecond + 1) << "no second steps faster than the cap";
+    EXPECT_EQ(rig.count("end"), 1) << "one undo step";
 }
 
 TEST(CurveEditorKeyHold, ATapEasesTheDrawnPointAndPlainlyLandsUnderReduceMotion) {

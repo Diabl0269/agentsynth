@@ -123,6 +123,10 @@ public:
     /** Fired when this editor takes keyboard focus; may be null. */
     std::function<void()> onFocused;
 
+    /** Fired after a drag or a key hold scrolled the shared view to keep what it moves in sight; the owner repaints
+     *  the ruler and the other lanes and stops following the playhead. May be null. */
+    std::function<void()> onViewScrolledByDrag;
+
     // Non-owning setters; same null-safety contract as every other timeline sub-component.
     void setTimelineDoc(synth::TimelineDoc* doc) noexcept {
         doc_ = doc;
@@ -169,6 +173,7 @@ public:
     double getPreviewBeatForTest() const noexcept { return previewBeat_; }
     double getPreviewValueForTest() const noexcept { return previewValue_; }
     std::vector<LaneBreakpoint> getDragMovedPointsForTest() const { return dragMovedPoints(); }
+    std::optional<juce::Point<float>> getGrabbedPointDrawnAtForTest() const { return grabbedPointDrawnAt(); }
     // The curve's and points' colour; unset = the theme's modWire. Drawn pushed to a readable contrast on the lane
     // background.
     void setCurveColour(juce::Colour colour);
@@ -237,6 +242,9 @@ public:
     // How many point handles are drawn at the current zoom (crowded ones are left out).
     int visibleHandleCountForTest() const;
     bool isDragActiveForTest() const noexcept { return dragMode_ != DragMode::None || shapeGesture_.isActive(); }
+    // The edge scroll's timer: one tick as the timer runs it, and whether it is running.
+    void tickEdgeScrollForTest() { edgeScrollTick(); }
+    bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isTimerRunning(); }
 
     // Pure value<->y mapping for the active lane's current range (no drag state involved) — what a
     // test uses to place a synthetic mouse event at a target value.
@@ -295,6 +303,8 @@ private:
     // ---- Where points are drawn (AutomationLaneEditorDrawnPoints.cpp) ----
     // The points a drag or stretch is moving, where it has put them, by the beat they rest at.
     std::map<double, LaneBreakpoint> movedPointsByRestingBeat() const;
+    // Where the point a move grabbed (by mouse or keys) is drawn now; none outside such a move.
+    std::optional<juce::Point<float>> grabbedPointDrawnAt() const;
     // Where `point` (as the document has it) is drawn: its preview place, plus its eased offset.
     juce::Point<float> drawnPointPosition(const LaneBreakpoint& point,
                                           const std::map<double, LaneBreakpoint>& moved) const;
@@ -321,6 +331,8 @@ private:
     // A press inside the stretch box (not on a handle or a point) drags the whole selection.
     bool beginBoxMove(juce::Point<int> pos);
     std::vector<LaneBreakpoint> dragMovedPoints() const;
+    // The beat delta that moves `moving` by `delta` without landing on another point (settleBeatDelta).
+    double settledBeatDelta(const std::vector<LaneBreakpoint>& moving, double delta) const;
     void commitPointMove();
     double gridStepBeats() const;
     // One keyboard step in time: a grid step, or four pixels at the current zoom with snap off.
@@ -437,6 +449,24 @@ private:
     PointValueField valueField_{*this};
     std::optional<double> valueFieldBeat_; // the point the field is editing
     LanePointSelection selection_{*this};
+    // Edge scroll (AutomationLaneEditorEdgeScroll.cpp).
+    bool dragFollowsView() const noexcept;
+    void previewDragAt(juce::Point<int> pos);
+    void updateEdgeScrollArming();
+    void edgeScrollTick();
+    void stopEdgeScroll();
+    void keepKeyDragInView();
+    void viewScrolledByDrag();
+    // The kEdgeScrollHz timer of a drag's edge scroll: runs onTick while started.
+    struct EdgeScrollTimer : juce::Timer {
+        std::function<void()> onTick;
+        void timerCallback() override {
+            if (onTick)
+                onTick();
+        }
+    };
+    EdgeScrollTimer edgeScroll_;
+    juce::Point<int> lastDragPointer_;
     LanePointStretch stretch_{*this};
     StretchHandle hoverHandle_ = StretchHandle::None;
     double stretchGrabBeat_ = 0.0;
@@ -448,6 +478,7 @@ private:
         double unit = 0.0; // beats of one step in time (the tap, and the snapped quantum)
         bool snapped = false;
         bool cancelled = false;
+        double lastStepMs = 0.0; // the hold clock at the last snapped step (or the press)
     } keyDrag_;
     LanePointClipboard* clipboard_ = nullptr;
     std::int64_t syncedRevision_ = -1;
