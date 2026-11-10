@@ -148,20 +148,20 @@ int MorphShapesCard::layout(int y, int x, int width, bool apply, int topGap) {
         editButton_.setBounds(left, y, w - pickW - kPickButtonGap, h);
         pickButton_.setBounds(left + w - pickW, y, pickW, h);
     }
-    y += blockHeight(editFade_, settling, synth::cardbody::kRowHeight + 2);
+    y += blockHeight(editFade_, settling, synth::cardbody::kRowHeight + synth::cardbody::kBlockGap);
     if (host_.curveView && curveFade_.isAttached() && curveView_.isVisible()) {
         if (apply) {
             const int w = juce::jmin(width, kMapWidth);
             curveView_.setBounds(x + (width - w) / 2, y, w, blockHeight(curveFade_, settling, kCurveHeight));
         }
-        y += blockHeight(curveFade_, settling, kCurveHeight + 8);
+        y += blockHeight(curveFade_, settling, kCurveHeight + synth::cardbody::kBlockGap);
     }
     if (mapFade_.isAttached() && map_.isVisible()) {
         if (apply) {
             const int w = juce::jmin(width, kMapWidth);
             map_.setBounds(x + (width - w) / 2, y, w, blockHeight(mapFade_, settling, kMapHeight));
         }
-        y += blockHeight(mapFade_, settling, kMapHeight + 8);
+        y += blockHeight(mapFade_, settling, kMapHeight + synth::cardbody::kBlockGap);
     }
     return y;
 }
