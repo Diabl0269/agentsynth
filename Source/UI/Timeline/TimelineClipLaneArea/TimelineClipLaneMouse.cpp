@@ -16,12 +16,6 @@
 namespace synth::ui {
 
 namespace {
-// The fastest an edge-drag can scroll the view, in pixels per kEdgeScrollHz tick (at the pointer
-// pinned to or beyond the component's edge). Chosen to feel brisk without outrunning the eye at a
-// typical zoom — the same "fast but still readable" target TimelinePlayheadOverlay's 30 Hz line
-// aims for.
-constexpr double kEdgeAutoScrollMaxPxPerTick = 18.0;
-
 // Whether a double-click inside the loop locators authors a clip spanning them instead of the
 // one-bar default. Duplicated as a string rather than shared with PreferencesSettingsTab (which
 // WRITES it) for the same reason "timelineLoopSelectionArms" is: a one-line string constant is not

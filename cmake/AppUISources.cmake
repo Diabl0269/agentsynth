@@ -394,6 +394,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/AutomationLaneEditorStretch.cpp
     Source/UI/Timeline/AutomationLaneEditorDrawnPoints.cpp
     Source/UI/Timeline/AutomationLaneEditorCurvePath.cpp
+    Source/UI/Timeline/AutomationLaneEditorEdgeScroll.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.h
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointSelection.cpp
     Source/UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h

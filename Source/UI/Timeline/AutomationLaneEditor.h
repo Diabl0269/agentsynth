@@ -123,6 +123,10 @@ public:
     /** Fired when this editor takes keyboard focus; may be null. */
     std::function<void()> onFocused;
 
+    /** Fired after a drag or a key hold scrolled the shared view to keep what it moves in sight; the owner repaints
+     *  the ruler and the other lanes and stops following the playhead. May be null. */
+    std::function<void()> onViewScrolledByDrag;
+
     // Non-owning setters; same null-safety contract as every other timeline sub-component.
     void setTimelineDoc(synth::TimelineDoc* doc) noexcept {
         doc_ = doc;
@@ -238,6 +242,9 @@ public:
     // How many point handles are drawn at the current zoom (crowded ones are left out).
     int visibleHandleCountForTest() const;
     bool isDragActiveForTest() const noexcept { return dragMode_ != DragMode::None || shapeGesture_.isActive(); }
+    // The edge scroll's timer: one tick as the timer runs it, and whether it is running.
+    void tickEdgeScrollForTest() { edgeScrollTick(); }
+    bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isTimerRunning(); }
 
     // Pure value<->y mapping for the active lane's current range (no drag state involved) — what a
     // test uses to place a synthetic mouse event at a target value.
@@ -442,6 +449,24 @@ private:
     PointValueField valueField_{*this};
     std::optional<double> valueFieldBeat_; // the point the field is editing
     LanePointSelection selection_{*this};
+    // Edge scroll (AutomationLaneEditorEdgeScroll.cpp).
+    bool dragFollowsView() const noexcept;
+    void previewDragAt(juce::Point<int> pos);
+    void updateEdgeScrollArming();
+    void edgeScrollTick();
+    void stopEdgeScroll();
+    void keepKeyDragInView();
+    void viewScrolledByDrag();
+    // The kEdgeScrollHz timer of a drag's edge scroll: runs onTick while started.
+    struct EdgeScrollTimer : juce::Timer {
+        std::function<void()> onTick;
+        void timerCallback() override {
+            if (onTick)
+                onTick();
+        }
+    };
+    EdgeScrollTimer edgeScroll_;
+    juce::Point<int> lastDragPointer_;
     LanePointStretch stretch_{*this};
     StretchHandle hoverHandle_ = StretchHandle::None;
     double stretchGrabBeat_ = 0.0;

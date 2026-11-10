@@ -282,6 +282,9 @@ public:
     /** Fired when a lane editor takes keyboard focus. */
     std::function<void(synth::LaneId)> onLaneFocused;
 
+    /** Fired when a drag or a key hold in any lane editor (modulator bands included) scrolled the shared view. */
+    std::function<void()> onViewScrolledByDrag;
+
 private:
     struct Bodies : juce::Component {
         Bodies();

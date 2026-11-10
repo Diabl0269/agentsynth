@@ -233,6 +233,10 @@ void TimelineAutomationLanes::wireBand(ModulatorBand& band) const {
     band.setTransport(transport_);
     band.setEditTool(editTool_);
     band.setDrawShape(drawShape_);
+    band.onViewScrolledByDrag = [this] {
+        if (onViewScrolledByDrag)
+            onViewScrolledByDrag();
+    };
 }
 
 void TimelineAutomationLanes::rebuildModulators(LaneModulators& entry, synth::LaneId lane,

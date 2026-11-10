@@ -19,6 +19,10 @@ namespace synth::ui {
 constexpr int kEdgeZonePx = 24;
 constexpr int kEdgeScrollHz = 30;
 
+// The fastest an edge-drag scrolls a timeline view, in pixels per kEdgeScrollHz tick (the pointer pinned to or beyond
+// the edge): brisk without outrunning the eye at a typical zoom. Every timeline drag that follows the view reads it.
+constexpr double kEdgeAutoScrollMaxPxPerTick = 18.0;
+
 // The signed scroll speed (in the SAME units as `maxPerTick` — the caller decides px or beats per
 // tick) a pointer at `pos` should drive, given the component's visible span [lo, hi) and an edge
 // zone `zonePx` wide at each end.

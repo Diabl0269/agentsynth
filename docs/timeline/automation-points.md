@@ -95,6 +95,15 @@ selected, and for a single point its bar and beat and its value in the parameter
 selected it also names the stretch keys) and announced as a title change. The nudge and cursor keys are fixed, like Delete and Escape on the piano roll; Cmd+A/C/X/V are the
 existing rebindable commands. Return stays free.
 
+### Past the edge of the view
+
+A dot, a selection or the stretch box dragged into the 24 px zone at either end of the lane scrolls the shared timeline
+view, faster nearer the edge, and stays under the still pointer (each 30 Hz tick re-derives the preview from the last
+pointer: `AutomationLaneEditorEdgeScroll.cpp`). Moving back in, releasing, Escape or a tool change stops it; the view
+stops at beat 0. A held Alt+Left/Right brings the moving dot back into view whenever a step would carry it out
+(`firstBeatShowing`, landing a tenth of the view in from the edge). Either way the scroll turns follow-playhead off,
+and the move is still one undo step. The rule for every drag: [layout](../layout/layout.md#every-drag-follows-the-view).
+
 ## Duplicating
 
 Cmd+D copies the selected points as ONE undo step; the copies keep their spacing and become the selection. Where they

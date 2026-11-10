@@ -114,6 +114,7 @@ void AutomationLaneEditor::applyKeyDrag(bool tapStep) {
     }
     if (snappedStep)
         keyDrag_.lastStepMs = now;
+    keepKeyDragInView();
     refreshStretchBox();
     repaint();
 }

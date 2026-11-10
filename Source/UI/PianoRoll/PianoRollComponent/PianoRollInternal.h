@@ -25,14 +25,12 @@ inline constexpr double kZoomWheelSensitivity = 2.0;
 inline constexpr double kScrollPixelsPerWheelUnit = 200.0;
 inline constexpr double kPitchScrollSemitonesPerWheelUnit = 3.0;
 
-// Edge-auto-scroll tuning (see EdgeAutoScroll.h). Horizontal mirrors
-// TimelineClipLaneArea's kEdgeAutoScrollMaxPxPerTick exactly — the roll's own drag should feel
-// identical. Vertical is ROWS, not pixels (visiblePitches_ can collapse rows to less than
-// pixelsPerSemitone_ apart in screen terms — a row is the unit that means something), and ~1 row
-// per tick at kEdgeScrollHz is a brisk-but-followable walk up/down the keyboard. That maximum is
-// only reached at full zone penetration (right at the edge); autoScrollTick applies the
-// shallower-penetration fraction of it straight to topRowPosition_, uncoarsened.
-inline constexpr double kEdgeAutoScrollMaxPxPerTick = 18.0;
+// Edge-auto-scroll tuning (see EdgeAutoScroll.h). Horizontal is the shared kEdgeAutoScrollMaxPxPerTick there, so the
+// roll's own drag feels identical to the timeline's. Vertical is ROWS, not pixels (visiblePitches_ can collapse rows to
+// less than pixelsPerSemitone_ apart in screen terms — a row is the unit that means something), and ~1 row per tick at
+// kEdgeScrollHz is a brisk-but-followable walk up/down the keyboard. That maximum is only reached at full zone
+// penetration (right at the edge); autoScrollTick applies the shallower-penetration fraction of it straight to
+// topRowPosition_, uncoarsened.
 inline constexpr double kEdgeAutoScrollMaxRowsPerTick = 1.0;
 
 // The per-level gridline density guard now lives with the rest of the grid's colour/visibility

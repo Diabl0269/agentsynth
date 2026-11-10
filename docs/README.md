@@ -31,7 +31,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## Layout, canvas & theming
 
-- [`docs/layout/layout.md`](layout/layout.md) — hub: the soft grid, anti-overlap search, auto-arrange, the `LayoutUtil` API, drag affordance and alignment guides
+- [`docs/layout/layout.md`](layout/layout.md) — hub: the soft grid, anti-overlap search, auto-arrange, the `LayoutUtil` API, drag affordance and alignment guides, edge scroll and the rule that every drag follows the view
 - [`docs/layout/chrome.md`](layout/chrome.md) — toolbar, status bar, minimum window size, panel collapse and persistence, the welcome overlay, the Cmd-hold shortcut hint overlay, the mod-matrix panel
 - [`docs/layout/module-card.md`](layout/module-card.md) — a card's own geometry: width buckets, body layout, header buttons, deleting a module (reconnect-the-chain heal, FRO23), custom titles, the Audio Output identity treatment, the Wavetable card
 - [`docs/layout/module-card-layout.md`](layout/module-card-layout.md) — design (not built): data-driven card layouts for built-in modules, `CardLayout` v2, per-module defaults, knob/fader/switch widgets, the Edit Layout editor, the future custom module
