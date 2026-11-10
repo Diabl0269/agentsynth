@@ -1,0 +1,59 @@
+# A modulator row dragged up from one track's lane to another did not follow the pointer at first (a lone row stayed
+# put until the pointer left its lane's whole block, then jumped), and snapped back to its slot when the pointer passed
+# over its own lane again. Now the lifted row sits under the pointer from the first pixel, everywhere.
+#
+# What a user does:
+#   1. Opens a project with three audio tracks, a Compressor lane on each and an LFO on Audio 1's Ratio lane (fixture
+#      cross-track-lanes.agsproj), shows the timeline in the main area and opens every track's automation, then moves
+#      the LFO 2 row onto Audio 2's Threshold lane, where it is the only row.
+#   2. Presses on that row and drags it up, slowly, over Audio 2's own lane header and on to Audio 1's lanes: the row
+#      stays under the pointer (the strip shows it moving with the pointer from the first frame), and when the pointer
+#      comes back down over Audio 2's lane the row does not snap to its slot.
+#   3. Esc glides the row home; the release changes nothing.
+#   4. The same drag released over Audio 1's Ratio lane: the row lands there.
+motion: true
+record: true
+save_project: end
+steps:
+  - openProject: {path: "${FIXTURES}/cross-track-lanes.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: "Show Audio 1 automation (2 lanes)"}
+  - click: {id: "Show Audio 2 automation (1 lane)"}
+  - click: {id: "Show Audio 3 automation (1 lane)"}
+  - wait: {}
+  - expect: {id: LFO 2 mod lane on Ratio, showing: true}
+  # The setup: LFO 2 moved onto Audio 2's Threshold lane, alone there.
+  - drag: {from: LFO 2 mod lane on Ratio, fromX: 60, fromY: 8, to: timelineTrackHeaderViewport, toX: 100, toY: 278}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", showing: true, within_ms: 2000}
+  - screenshot: {name: before}
+  # 2. Up over its own lane's header strip (the first pixels), then on towards Audio 1.
+  - mouseDown: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", x: 60, y: 8}
+  - glide: {name: first-pixels, frames: 8, do: {mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 245}}}
+  - glide: {name: over-own-block, frames: 8, do: {mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 215}}}
+  - mark: {check: 1, name: over-own-lane}
+  - glide: {name: up-to-audio-1, frames: 12, do: {mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 70}}}
+  - mark: {check: 2, name: over-audio-1}
+  # Back down over the source block: no magnet.
+  - glide: {name: back-over-source, frames: 12, do: {mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 215}}}
+  - mark: {check: 3, name: back-over-source-block}
+  - glide: {name: up-again, frames: 12, do: {mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 70}}}
+  # 3. Esc glides home.
+  - key: {keys: escape}
+  - wait: {}
+  - mouseUp: {id: timelineTrackHeaderViewport, x: 100, y: 70}
+  - wait: {}
+  - expect: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", showing: true, within_ms: 2000}
+  - screenshot: {name: after-escape}
+  # 4. The same drag, released over Audio 1.
+  - mouseDown: {id: "LFO 2 mod lane on Threshold (dB), from Audio 1", x: 60, y: 8}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 215}
+  - mouseMoveHeld: {id: timelineTrackHeaderViewport, x: 100, y: 70}
+  - wait: {}
+  - mouseUp: {id: timelineTrackHeaderViewport, x: 100, y: 70}
+  - wait: {}
+  - screenshot: {name: dropped}
