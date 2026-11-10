@@ -997,4 +997,6 @@ jobs:
         set -euo pipefail
         exe=$(find build -name Tests.exe | head -n 1)
         test -n "$exe" || { echo "::error::Tests.exe not found under build/"; exit 1; }
-        "$exe"
+        # DIAGNOSTIC ONLY (never merge): repeat the popup tests that crashed with 0xc0000005.
+        "$exe" --gtest_filter='PopupDismissPaths.*' --gtest_repeat=300 --gtest_brief=1
+        "$exe" --gtest_filter='DragSurfaces.*:DragCancel.*:PopupMotionUsers.*:PopupDismissPaths.*:AlertSoundSilence.*' --gtest_repeat=100 --gtest_brief=1
