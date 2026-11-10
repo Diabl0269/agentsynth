@@ -56,6 +56,23 @@ void PianoRollComponent::updateMoveCursor() {
 
 bool PianoRollComponent::isCopyDragForTest() const noexcept { return dragMode_ == DragMode::Move && copyDrag_; }
 
+// The geometry paintCopyGhosts draws for a live copy drag (clip-relative), empty outside one.
+std::vector<PianoRollComponent::NoteGeometry> PianoRollComponent::getCopyGhostsForTest() const {
+    std::vector<NoteGeometry> ghosts;
+    if (dragMode_ != DragMode::Move || !copyDrag_)
+        return ghosts;
+    for (const auto& origin : dragNotes_)
+        ghosts.push_back({origin.startBeat + previewDeltaBeats_, origin.lengthBeats,
+                          rowShiftedPitch(origin.pitch, previewDeltaPitch_), origin.velocity});
+    return ghosts;
+}
+
+// What paint() shows for the note right now (clip-relative, mid-drag preview included).
+pianoroll::NoteGeometry PianoRollComponent::getShownGeometryForTest(synth::NoteId id) const {
+    const auto* note = doc_ != nullptr ? doc_->getNote(id) : nullptr;
+    return note != nullptr ? effectiveGeometryFor(*note) : NoteGeometry{};
+}
+
 void PianoRollComponent::modifierKeysChanged(const juce::ModifierKeys& mods) {
     if (dragMode_ == DragMode::Move)
         setCopyDrag(mods.isAltDown());

@@ -54,6 +54,14 @@ const std::vector<Registered> kRegistered = {
      {"undo-glide:Automation lane point", "point-markers:Automation lane point",
       "test:AutomationLanesDragKeepsDots.ThePreviewAtTheLastDragFrameIsWhatTheDropCommits"}},
     // Preview and commit checked by a test of their own.
+    {"PianoRollComponent",
+     {"test:PianoRollDragPreviewCommitTest.ANoteMoveCommitsTheStartsAndPitchesItLastShowed",
+      "test:PianoRollDragPreviewCommitTest.ARightEdgeResizeCommitsTheLengthsItLastShowed",
+      "test:PianoRollDragPreviewCommitTest.AnOptionDragCopyCommitsTheNotesItsGhostsLastShowed",
+      "test:PianoRollNewNoteCellTest.DrawToolStartsInTheClickedCellAndItsPreviewIsWhatIsCommitted"}},
+    {"PianoRollVelocityLane",
+     {"test:PianoRollVelocityDragPreviewCommitTest.AStickDragCommitsTheVelocitiesItLastShowed",
+      "test:PianoRollVelocityDragPreviewCommitTest.AShiftRampCommitsTheVelocitiesItLastShowed"}},
     {"CardLayoutOutline", {kOnCardRows}},
     {"CardLayoutAddRow", {kOnCardRows}},
     {"CardLayoutGroupHandle", {"test:OnCardGroupMoveEditor.WhatTheDragShowsIsWhatTheDropWrites"}},
@@ -115,9 +123,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"MacroCardComponent", "FRO1319", "macro card move: shown card bounds vs the node position after release"},
     {"NoteRangePicker", "FRO1318", "range edge/band drag: shown range vs the range committed on release"},
     {"MixerZonesRow", "FRO1318", "zone row drag: preview slot vs the committed zone and order"},
-    {"PianoRollComponent", "FRO1317",
-     "note move/resize/copy: ghost notes vs the notes committed (only the draw tool is checked)"},
-    {"PianoRollVelocityLane", "FRO1317", "velocity stick/ramp gesture: shown velocities vs the committed ones"},
     {"TimelineRulerComponent", "FRO1318", "marker drag: snapped preview vs the marker position committed"},
 };
 
