@@ -77,6 +77,29 @@ struct Style {
     std::function<juce::Point<float>()> bodyPivot;
 };
 
+// The grow shared by everything that grows out of its opener (the mod dot panel, the pickers): the body scales from 40%
+// to 100% with a 3% overshoot over 200 ms while it fades in over the first 120 ms, and shrinks to 4% over 140 ms.
+constexpr float kGrowInStartScale = 0.4f;
+constexpr float kGrowOutEndScale = 0.04f;
+constexpr double kGrowInMs = 200.0;
+constexpr double kGrowOutMs = 140.0;
+constexpr float kGrowFadeInFraction = 0.6f;
+
+/** The grow-out-of-the-opener look, without its places: the caller sets `anchor`, `body` and `bodyPivot`. The window
+ *  itself does not slide, the scale already moves it. */
+inline Style growStyle() noexcept {
+    Style style;
+    style.inSlidePx = 0.0f;
+    style.outSlidePx = 0.0f;
+    style.overshoot = true;
+    style.inMs = kGrowInMs;
+    style.outMs = kGrowOutMs;
+    style.alphaInFraction = kGrowFadeInFraction;
+    style.inStartScale = kGrowInStartScale;
+    style.outEndScale = kGrowOutEndScale;
+    return style;
+}
+
 /** How long a phase runs under `style`: its own duration when it sets one, else the shared one. */
 inline double durationMs(Phase phase, bool reduceMotion, const Style& style) noexcept {
     const double own = phase == Phase::In ? style.inMs : style.outMs;

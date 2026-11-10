@@ -33,7 +33,8 @@ namespace synth::ui {
  *  parentless CallOutBox is a new top-level window that does not inherit the app's LookAndFeel. */
 class ModMatrixPicker
     : public juce::Component
-    , public AppUndoAware {
+    , public AppUndoAware
+    , public PopoverContent {
 public:
     /** A small icon button at a row's right end ("Show plugin window"). `title` is what a screen reader says. */
     struct RowAction {
@@ -125,6 +126,8 @@ public:
 
     /** Its rows were listed when it opened and an undo can remove what they name: it closes without picking. */
     void appUndoneOrRedone() override { dismiss(); }
+
+    bool growsFromOpener() const override { return true; }
 
     // ---- Test seams ----
     void setSearchTextForTest(const juce::String& text);
