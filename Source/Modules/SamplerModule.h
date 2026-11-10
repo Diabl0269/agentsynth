@@ -310,14 +310,16 @@ public:
     }
 
     void setExtraState(const juce::var& state) override {
-        if (auto* obj = state.getDynamicObject()) {
-            const juce::String path = obj->getProperty(synth::module_file_keys::kSampleFile).toString();
-            if (path.isNotEmpty() && !deferSampleLoad(juce::File(path)))
-                loadSampleFile(juce::File(path), /*fromRestoredState=*/true);
+        const auto* obj = state.getDynamicObject();
+        const auto path = obj ? obj->getProperty(synth::module_file_keys::kSampleFile).toString() : juce::String();
+        if (path.isNotEmpty() && !deferSampleLoad(juce::File(path)))
+            loadSampleFile(juce::File(path), /*fromRestoredState=*/true);
+        else if (path.isEmpty() && (loadedPath.isNotEmpty() || pendingPath.isNotEmpty()))
+            clearSample(); // a state with no file: undo of the first load drops the sample
+        if (obj)
             instrumentSlot.restore(synth::sampler::readInstrumentState(*obj));
-        } else {
-            instrumentSlot.clear(); // a state saved with no instrument: undo of the first load
-        }
+        else
+            instrumentSlot.clear();
     }
 
     /** True while a project open is still decoding this module's file. Message thread only. */
