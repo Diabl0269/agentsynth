@@ -166,6 +166,8 @@ public:
     /** The viewport's top edge, and whether the highlighted row is inside the view. */
     int getViewTopForTest() const noexcept { return viewport_.getViewPositionY(); }
     bool isHighlightInViewForTest() const;
+    /** Whether the list's first line (its first header, else its first row) is a component fully inside the view. */
+    bool isFirstEntryInViewForTest() const;
 
 private:
     class Row;

@@ -937,6 +937,13 @@ bool ModMatrixPicker::isHighlightInViewForTest() const {
     return entry.row != nullptr && viewport_.getViewArea().contains(entry.row->getBounds());
 }
 
+bool ModMatrixPicker::isFirstEntryInViewForTest() const {
+    if (entries_.empty())
+        return false;
+    const auto* row = entries_.front().row;
+    return row != nullptr && viewport_.getViewArea().contains(row->getBounds());
+}
+
 juce::String ModMatrixPicker::getSearchPlaceholderForTest() const { return searchEditor_->getTextToShowWhenEmpty(); }
 
 bool ModMatrixPicker::isVisibleItemPickableForTest(int index) const {
