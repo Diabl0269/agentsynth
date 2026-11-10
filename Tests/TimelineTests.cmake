@@ -1,6 +1,8 @@
 # The timeline UI tests (Tests/UI/Timeline), kept in their own list so Tests/CMakeLists.txt stays
 # under the file-size cap.
 target_sources(Tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/AudioClipSampleRateTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/ClipResampleTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachinePreviewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineGrooveTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/DrumMachine/DrumMachineLanesTests.cpp

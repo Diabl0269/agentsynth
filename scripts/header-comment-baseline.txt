@@ -24,7 +24,7 @@
 56 Source/ProjectBundle.h
 54 Source/SnippetManager.h
 53 Source/Timeline/AssetManager.h
-118 Source/Timeline/AudioClipStreamer.h
+111 Source/Timeline/AudioClipStreamer.h
 52 Source/Timeline/AutomationApplier.h
 44 Source/Timeline/AutomationBinding.h
 11 Source/Timeline/AutomationRecorder.h

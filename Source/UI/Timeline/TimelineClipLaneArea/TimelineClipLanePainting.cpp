@@ -165,6 +165,10 @@ const synth::PeaksFile::Data* TimelineClipLaneArea::findPeaksData(const juce::St
         const juce::File file = peaksResolver_(assetRef);
         if (file != juce::File())
             synth::PeaksFile::read(file, data);
+        // The sidecar carries no rate, so the audio file's header rate rides along in the same
+        // cached entry (one read per miss, never per paint). 0 means "use the transport rate".
+        if (assetSampleRateResolver_)
+            data.sampleRate = assetSampleRateResolver_(assetRef);
         it = peaksCache_.emplace(assetRef, std::move(data)).first;
     }
 
