@@ -9,6 +9,7 @@ import json
 import os
 import queue
 import shutil
+import signal
 import socket
 import subprocess
 import tempfile
@@ -121,7 +122,15 @@ class TestModeApp:
                 _, port, pid = line.split()
                 self.port, self.pid = int(port), int(pid)
         if self.port is None:
+            killed = self.process.poll() == -signal.SIGKILL
             self.stop()
+            if killed:
+                # macOS kills a bundle whose signature no longer matches it (a rebuild that rewrote Info.plist without
+                # re-signing) before it prints anything.
+                raise TestModeError(
+                    "the app was killed as it started: its signature is probably stale; check with `codesign --verify "
+                    "--strict <app>` and re-sign with `bash scripts/dev-sign-app.sh <app>` outside the sandbox"
+                )
             raise TestModeError("the app did not announce a test-mode port within %.0fs" % self.startup_timeout)
         self._sock = socket.create_connection(("127.0.0.1", self.port), timeout=10)
         self._reader = self._sock.makefile("r", encoding="utf-8", newline="\n")

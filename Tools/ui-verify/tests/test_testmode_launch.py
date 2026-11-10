@@ -53,6 +53,13 @@ class LaunchTests(unittest.TestCase):
             self.assertIn(word, words)
         self.assertEqual(words[-2:], ["1", "1"], "AGENTSYNTH_NO_KEYCHAIN and AGENTSYNTH_NO_AUDIO_DEVICE set")
 
+    def test_an_app_killed_as_it_starts_says_its_signature_is_stale(self):
+        app = TestModeApp(app_path=fake_app(self.tmp.name, "# AGENTSYNTH_AUTOMATION_PORT\nkill -9 $$"), settings_dir=self.tmp.name)
+        started = time.time()
+        with self.assertRaisesRegex(TestModeError, "signature is probably stale"):
+            app.start()
+        self.assertLess(time.time() - started, 10, "a killed launch is reported at once, not after the startup timeout")
+
     def launched_words(self, **options):
         seen = os.path.join(self.tmp.name, "seen")
         body = "# AGENTSYNTH_AUTOMATION_PORT\necho \"$@\" > '%s'\necho AGENTSYNTH_AUTOMATION_PORT 1 $$\nsleep 5" % seen
