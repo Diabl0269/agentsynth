@@ -152,7 +152,8 @@ juce::PopupMenu SoundBrowserComponent::buildFolderMenu(int rowIndex) const {
     if (rowIndex < 0 || rowIndex >= (int)rows_.size() || !rows_[(size_t)rowIndex].userFolder)
         return menu;
     menu.addItem(1, "Rename");
-    menu.addItem(2, "Show in " + fileManagerName(), !rows_[(size_t)rowIndex].missing);
+    const bool missing = rows_[(size_t)rowIndex].missing;
+    menu.addItem(2, "Show in " + fileManagerName() + (missing ? " (folder not found)" : ""), !missing);
     menu.addItem(3, "Scan again");
     menu.addSeparator();
     menu.addItem(4, "Remove");

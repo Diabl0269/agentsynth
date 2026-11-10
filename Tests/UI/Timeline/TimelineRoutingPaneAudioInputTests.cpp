@@ -192,7 +192,7 @@ TEST(TimelineRoutingPaneAudioInputTest, TheMenuListsMonoAndStereoInputsOfTheOpen
                                              "Stereo" + dot() + "Scarlett 4i4",
                                              "In 1 + 2",
                                              "In 3 + 4",
-                                             "Another track",
+                                             "Another track (no other tracks)",
                                              "Whole mix",
                                              "Audio settings..."};
     EXPECT_EQ(textsOf(items), expected);
@@ -260,8 +260,8 @@ TEST(TimelineRoutingPaneAudioInputTest, TurnedOffInputsAreDisabledAndCanBeTurned
     EXPECT_TRUE(pane.getAudioInputButtonForTest().getTooltip().contains("turned off"));
 
     const auto items = openMenu(pane);
-    EXPECT_FALSE(find(items, "In 3")->enabled);
-    EXPECT_FALSE(find(items, "In 3 + 4")->enabled);
+    EXPECT_FALSE(find(items, "In 3 (off)")->enabled);
+    EXPECT_FALSE(find(items, "In 3 + 4 (off)")->enabled);
     EXPECT_TRUE(find(items, "In 1 + 2")->enabled);
     ASSERT_NE(find(items, "In 3 (turned off)"), nullptr) << "the track's own choice stays on the menu, ticked";
     EXPECT_TRUE(find(items, "In 3 (turned off)")->ticked);
@@ -300,14 +300,9 @@ TEST(TimelineRoutingPaneAudioInputTest, HostedInputsCarryNoDeviceAndOfferNoSetti
     f.host.inputs.status.activeMask = 0b11;
     f.select(0);
     const auto texts = textsOf(openMenu(f.pane()));
-    const std::vector<juce::String> expected{"No input",
-                                             "Mono" + dot() + "Host input",
-                                             "In 1",
-                                             "In 2",
-                                             "Stereo" + dot() + "Host input",
-                                             "In 1 + 2",
-                                             "Another track",
-                                             "Whole mix"};
+    const std::vector<juce::String> expected{
+        "No input", "Mono" + dot() + "Host input",     "In 1",     "In 2", "Stereo" + dot() + "Host input",
+        "In 1 + 2", "Another track (no other tracks)", "Whole mix"};
     EXPECT_EQ(texts, expected);
     f.pane().applyAudioInputChoice(AudioInputMenuIds::kFirstStereo);
     EXPECT_EQ(f.doc.getTrack(id)->audioInput, device(0, 2, {}));
