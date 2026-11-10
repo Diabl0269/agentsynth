@@ -35,6 +35,8 @@ public:
     void finishShapeMotionForTest();
     /** The preview whose state the Play/Stop button and the playhead follow (may be null). */
     void setPlayer(const synth::soundbrowser::SoundPreviewPlayer* player);
+    /** The Play/Stop tooltip names the key that toggles the preview (how the binding reads on screen). */
+    void setPreviewKeyText(const juce::String& keyText);
     /** The button reads "Stop" while a preview sounds and "Play" otherwise. Only a change touches the button. */
     void setPlaying(bool playing);
     bool isPlaying() const { return playing_; }
@@ -62,6 +64,8 @@ public:
     juce::ToggleButton& getAutoPlay() { return autoPlay_; }
     juce::ToggleButton& getMatchKey() { return matchKey_; }
     juce::TextButton& getPlayButton() { return play_; }
+    /** Ctrl+Space, the factory key that toggles the preview. */
+    static const juce::KeyPress kDefaultPreviewKey;
 
     /** Compact is one row: Play/Stop, then room for the sound's name (drawn by the browser), then the volume. The
      * waveform and Auto-play are hidden, and keep their state. */

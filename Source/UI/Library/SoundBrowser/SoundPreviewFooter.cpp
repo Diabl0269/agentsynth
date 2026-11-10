@@ -2,9 +2,13 @@
 #include "UI/Library/SoundBrowser/SoundPreviewFooter.h"
 #include "SoundBrowser/SoundPreviewPlayer.h"
 
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/ReducedMotion.h"
 
 namespace synth::ui {
+
+const juce::KeyPress SoundPreviewFooter::kDefaultPreviewKey(juce::KeyPress::spaceKey, juce::ModifierKeys::ctrlModifier,
+                                                            0);
 
 SoundPreviewFooter::SoundPreviewFooter() {
     addAndMakeVisible(wave_);
@@ -12,7 +16,7 @@ SoundPreviewFooter::SoundPreviewFooter() {
 
     play_.setComponentID("soundPreviewPlay"); // a stable name for test mode: the title changes with the state
     play_.setTitle("Play preview");
-    play_.setTooltip("Play or stop the preview (Space)");
+    setPreviewKeyText(ShortcutManager::keyPressToDisplayString(kDefaultPreviewKey));
     play_.onClick = [this] {
         if (onTogglePlay)
             onTogglePlay();
@@ -57,6 +61,10 @@ SoundPreviewFooter::SoundPreviewFooter() {
 SoundPreviewFooter::~SoundPreviewFooter() {
     playTimer_.stopTimer();
     shapeAnim_.stop(vblank_);
+}
+
+void SoundPreviewFooter::setPreviewKeyText(const juce::String& keyText) {
+    play_.setTooltip("Play or stop the preview (" + keyText + ")");
 }
 
 void SoundPreviewFooter::setPlayer(const synth::soundbrowser::SoundPreviewPlayer* player) {

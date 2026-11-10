@@ -62,6 +62,8 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "mixerFocusTopBar",
         "mixerNudgeFaderUp",
         "mixerNudgeFaderDown",
+        // SoundBrowserComponent::handlePreviewKey (Ctrl+Space; plain Space stays the transport)
+        "soundPreviewToggle",
         // CardLayoutEditorComponent's row keys (CardLayoutEditorComponentKeyboard.cpp) and the on-card nudge keys
         "layoutEditorToggleShown",
         "layoutEditorMoveUp",

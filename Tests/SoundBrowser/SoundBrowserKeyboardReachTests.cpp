@@ -455,3 +455,22 @@ TEST(SoundBrowserKeyboardReachTest, TheGetMoreHeadingFoldsWithLeftAndRightFromTh
     EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::rightKey)));
     EXPECT_TRUE(v.isGetMoreShowing());
 }
+
+// The key-double-fire kind, widened: a widget that swallows a key the app binds. Plain Space on every kind of
+// row and every footer stop is the song's play key, so it must reach the app; Ctrl+Space is the preview's.
+TEST(SoundBrowserKeyboardReachTest, PlainSpaceOnASoundRowOrFooterStopIsNeverConsumed) {
+    Fixture f;
+    auto& v = *f.view;
+    int sounds = 0;
+    v.showLocation("core", "Drums", 0);
+    v.completeListAnimationForTest();
+    for (int i = 0; i < (int)v.getRows().size(); ++i)
+        if (v.getRows()[(size_t)i].kind == SoundBrowserComponent::RowKind::Sound) {
+            v.selectRow(i);
+            ++sounds;
+            EXPECT_FALSE(dispatchKey(v, v, space())) << "Space on sound row " << i << " must reach the transport";
+        }
+    EXPECT_GE(sounds, 1);
+    for (auto* stop : synth::ui::focusableDescendants(v.getPreviewFooter()))
+        EXPECT_FALSE(dispatchKey(v, *stop, space())) << "Space on " << stop->getTitle();
+}

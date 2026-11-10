@@ -1,7 +1,8 @@
-// The Sounds view's preview: Auto-play on plays on select, off stays silent until Space, Space stops, the settings
-// persist, instruments and missing files never play, the Play/Stop button follows the player, and the waveform repaints
-// only the playhead's strip.
+// The Sounds view's preview: Auto-play on plays on select, off stays silent until Ctrl+Space, Ctrl+Space stops, the
+// settings persist, instruments and missing files never play, the Play/Stop button follows the player, and the waveform
+// repaints only the playhead's strip.
 #include "../App/MainComponent/MainComponentTestFixture.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "SoundBrowser/SoundPreviewPlayer.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Library/LibrarySidebarViews.h"
@@ -17,6 +18,7 @@ namespace {
 
 constexpr double kRate = 48000.0;
 juce::KeyPress space() { return juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys(), ' '); }
+juce::KeyPress ctrlSpace() { return juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::ctrlModifier, ' '); }
 
 int rowIndex(const SoundBrowserComponent& view, const juce::String& text) {
     for (size_t i = 0; i < view.getRows().size(); ++i)
@@ -86,7 +88,7 @@ TEST(SoundPreviewViewTest, SelectingASoundPlaysItWhenAutoPlayIsOn) {
     EXPECT_TRUE(f.player.isPlaying());
 }
 
-TEST(SoundPreviewViewTest, WithAutoPlayOffSelectingIsSilentAndSpacePlaysAndStops) {
+TEST(SoundPreviewViewTest, WithAutoPlayOffSelectingIsSilentAndCtrlSpacePlaysAndStops) {
     Fixture f;
     f.view->setPreviewSettings(false, -6.0f);
     f.selectSnare();
@@ -94,12 +96,17 @@ TEST(SoundPreviewViewTest, WithAutoPlayOffSelectingIsSilentAndSpacePlaysAndStops
     EXPECT_EQ(renderPeak(f.player), 0.0f) << "selecting alone makes no sound";
     EXPECT_FALSE(f.player.isPlaying());
 
-    EXPECT_TRUE(f.view->keyPressed(space()));
+    EXPECT_FALSE(f.view->keyPressed(space())) << "plain Space is the song's play key: it must bubble to the app";
+    EXPECT_FALSE(f.player.isPlaying()) << "plain Space never plays the preview";
+
+    EXPECT_TRUE(f.view->keyPressed(ctrlSpace()));
     ASSERT_TRUE(f.player.waitForDecodeForTests(10000));
     EXPECT_GT(renderPeak(f.player, 2), 0.01f);
     EXPECT_TRUE(f.player.isPlaying());
 
-    EXPECT_TRUE(f.view->keyPressed(space())) << "Space on a playing preview stops it";
+    EXPECT_FALSE(f.view->keyPressed(space())) << "nor does plain Space stop it";
+    EXPECT_TRUE(f.player.isPlaying());
+    EXPECT_TRUE(f.view->keyPressed(ctrlSpace())) << "Ctrl+Space on a playing preview stops it";
     renderPeak(f.player, 4);
     EXPECT_EQ(renderPeak(f.player, 4), 0.0f);
 }
@@ -203,7 +210,9 @@ TEST(SoundPreviewViewTest, ThePlayButtonReadsPlayWhenIdleAndStopWhileSoundingAnd
     auto& button = footer.getPlayButton();
     EXPECT_EQ(button.getButtonText(), "Play") << "nothing plays yet";
     EXPECT_EQ(button.getTitle(), "Play preview");
-    EXPECT_EQ(button.getTooltip(), "Play or stop the preview (Space)");
+    EXPECT_EQ(button.getTooltip(),
+              "Play or stop the preview (" + ShortcutManager::keyPressToDisplayString(ctrlSpace()) + ")");
+    EXPECT_FALSE(button.getTooltip().contains("(Space)")) << "plain Space is the song's";
 
     f.selectSnare(); // Auto-play is on
     ASSERT_TRUE(f.player.waitForDecodeForTests(10000));
@@ -228,7 +237,7 @@ TEST(SoundPreviewViewTest, ThePlayButtonReadsPlayWhenIdleAndStopWhileSoundingAnd
     EXPECT_EQ(button.getButtonText(), "Stop");
 }
 
-TEST(SoundPreviewViewTest, ThePlayButtonFlipsToPlayWhenTheSoundEndsOrSpaceStopsIt) {
+TEST(SoundPreviewViewTest, ThePlayButtonFlipsToPlayWhenTheSoundEndsOrCtrlSpaceStopsIt) {
     Fixture f;
     auto& footer = f.view->getPreviewFooter();
     auto& button = footer.getPlayButton();
@@ -242,15 +251,15 @@ TEST(SoundPreviewViewTest, ThePlayButtonFlipsToPlayWhenTheSoundEndsOrSpaceStopsI
     EXPECT_FALSE(f.player.isPlaying());
     EXPECT_EQ(button.getButtonText(), "Play");
 
-    EXPECT_TRUE(f.view->keyPressed(space()));
+    EXPECT_TRUE(f.view->keyPressed(ctrlSpace()));
     ASSERT_TRUE(f.player.waitForDecodeForTests(10000));
     renderPeak(f.player, 2);
     footer.syncPlayState();
     EXPECT_EQ(button.getButtonText(), "Stop");
-    EXPECT_TRUE(f.view->keyPressed(space()));
+    EXPECT_TRUE(f.view->keyPressed(ctrlSpace()));
     renderPeak(f.player, 4);
     footer.syncPlayState();
-    EXPECT_EQ(button.getButtonText(), "Play") << "Space stopped it";
+    EXPECT_EQ(button.getButtonText(), "Play") << "Ctrl+Space stopped it";
 }
 
 TEST(SoundPreviewViewTest, ThePlayStateTimerRunsOnlyWhileTheFooterShows) {

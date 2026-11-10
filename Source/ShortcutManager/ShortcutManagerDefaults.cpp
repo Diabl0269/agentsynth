@@ -137,6 +137,9 @@ void ShortcutManager::addGeneralDefaultBindings() {
     // The keyboard route to every "Colour..." menu item: Alt+C. Free (no other binding is Alt with 'c'); the mixer's
     // bare C is a different chord and only acts inside the mixer.
     bindings["recolourFocusedItem"] = juce::KeyPress('c', juce::ModifierKeys::altModifier, 0);
+    // Plays or stops the Sounds view's preview. Plain Space stays the song's play key everywhere. A real Ctrl
+    // on the Mac, because Cmd+Space is Spotlight; off the Mac it is the same chord Cmd would be.
+    bindings["soundPreviewToggle"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::ctrlModifier, 0);
 
     // The transport family ships UNBOUND (bar Record and Metronome, below) -- an explicit invalid juce::KeyPress(), not
     // an absent map entry. saveToProperties() below indexes `bindings` with `.at()` for every

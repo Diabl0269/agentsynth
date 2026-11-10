@@ -349,6 +349,8 @@ MainComponent::~MainComponent() {
     // dynamic tooltip refresh) while the manager is still alive, or ~TimelinePanelComponent()
     // dereferences a dangling pointer on quit.
     timelinePanel.setShortcutManager(nullptr);
+    if (librarySidebar_ != nullptr)
+        librarySidebar_->getSounds().setShortcutManager(nullptr); // same: it listens to the manager
     // Same reason: the settings file outlives this component on the plugin path (it is a shared
     // location — see synth::userSettingsOptions()), so a write from any other holder after this
     // point would call back into freed memory.

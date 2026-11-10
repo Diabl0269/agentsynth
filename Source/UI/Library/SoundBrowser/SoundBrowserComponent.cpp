@@ -2,6 +2,7 @@
 // navigation are in SoundBrowserNavigation.cpp, painting in SoundBrowserPainting.cpp, keys and mouse in
 // SoundBrowserInput.cpp, the screen-reader list in SoundBrowserAccessibility.cpp.
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/ChevronTurn.h"
 #include "UI/Layout/DialogKeyboard.h"
 #include "UI/Library/SoundBrowser/SoundDragState.h"
@@ -67,6 +68,8 @@ SoundBrowserComponent::~SoundBrowserComponent() {
     if (hasKeyboardFocus(true))
         giveAwayKeyboardFocus();
     juce::Desktop::getInstance().removeFocusChangeListener(this);
+    if (shortcuts_ != nullptr)
+        shortcuts_->removeChangeListener(this);
     index_.removeListener(this);
     if (shapeLibrary_ != nullptr)
         shapeLibrary_->removeListener(this);

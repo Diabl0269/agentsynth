@@ -54,7 +54,11 @@ void SoundBrowserComponent::focusStop(juce::Component& stop) {
 }
 
 bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key, juce::Component* origin) {
-    if (origin == nullptr || key.getModifiers().isAnyModifierKeyDown() || keepsUpAndDown(*origin))
+    if (origin == nullptr || keepsUpAndDown(*origin))
+        return false;
+    if (handlePreviewKey(key))
+        return true;
+    if (key.getModifiers().isAnyModifierKeyDown())
         return false;
     const bool up = key.isKeyCode(juce::KeyPress::upKey);
     if (!up && !key.isKeyCode(juce::KeyPress::downKey))
