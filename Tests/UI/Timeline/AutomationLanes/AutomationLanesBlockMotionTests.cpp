@@ -319,7 +319,9 @@ TEST(AutomationLanesBlockMotionTest, ARemovedModulatorRowLeavesAsAStillPictureCr
     s.f().panel.refreshModulators();
     ASSERT_EQ(s.lanes().leavingModulatorCountForTest(), 1);
     EXPECT_EQ(row.getComponent(), nullptr) << "the live row and its controls go at once";
-    const auto* picture = s.lanes().leavingModulatorForTest(0);
+    const juce::Component::SafePointer<juce::Component> pictureRef(
+        const_cast<juce::Component*>(s.lanes().leavingModulatorForTest(0)));
+    const auto* picture = pictureRef.getComponent();
     ASSERT_NE(picture, nullptr);
     EXPECT_EQ(picture->getParentComponent(), column);
     EXPECT_EQ(picture->getBounds(), stood) << "the picture stands where the row stood";
@@ -331,10 +333,10 @@ TEST(AutomationLanesBlockMotionTest, ARemovedModulatorRowLeavesAsAStillPictureCr
 
     s.lanes().stepBlockMotionForTest(1.0f);
     synth::ui::FadeVisibility::stepAllForTest(1.0f);
+    ASSERT_TRUE(synth::test::flushMessageQueue());
     EXPECT_EQ(s.lanes().leavingModulatorCountForTest(), 0);
+    EXPECT_EQ(pictureRef.getComponent(), nullptr) << "nothing of the row is left";
     EXPECT_LE(column->getNumChildComponents(), (int)others.size()) << "nothing is added to the column";
-    for (auto* child : column->getChildren())
-        EXPECT_NE(std::find(others.begin(), others.end(), child), others.end()) << "nothing of the row is left";
 }
 
 // Regression test for FRO1472: under Reduce Motion a removed row only fades, in place. Once the fade ends the row is
