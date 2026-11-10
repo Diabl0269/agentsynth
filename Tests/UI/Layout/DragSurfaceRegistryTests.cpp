@@ -62,6 +62,18 @@ const std::vector<Registered> kRegistered = {
     {"DrumHitLane", {"test:DrumMachineLanesTest.ADragAcrossAnyLaneSetsARampAsOneUndoStepAndCommitsWhatItPreviewed"}},
     {"MixerInsertList",
      {"test:MixerInsertListReorderTests.ARealDragReordersAsOneUndoStepAndThePreviewIsWhatTheDropCommits"}},
+    {"CardLayoutEditorGrip", {"test:CardLayoutEditorGripPreviewCommit.ADropCommitsTheRowOrderTheLastDragEventShowed"}},
+    {"DockTabButton", {"test:ReorderDragPreviewCommit.ADockTabDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"MixerColumnHeader", {"test:ReorderDragPreviewCommit.AMixerColumnDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"MixerSendList", {"test:ReorderDragPreviewCommit.ASendRowDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"TimelineTrackHeaderComponent",
+     {"test:ReorderDragPreviewCommit.ATrackRowDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"AutomationLaneHeaderComponent",
+     {"test:AutomationLanesReorderPreviewCommit.ALaneHeaderDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"LaneControlChip",
+     {"test:AutomationLanesReorderPreviewCommit.AControlChipDropCommitsTheOrderTheLastDragEventShowed"}},
+    {"ModulatorRow",
+     {"test:AutomationLanesReorderPreviewCommit.AModulatorRowDropCommitsTheOrderTheLastDragEventShowed"}},
     {"DragHandle", {"test:MacroPortConfigDialogTest.DraggingAcrossTwoRowsCommitsOnceOnReleaseWithTheFinalIndex"}},
     {"ControllerSurfaceCell", {"test:ControllerSurfaceComponentTest.MultiStepDragLandsExactlyOnOriginPlusDelta"}},
     // No preview/commit split.
@@ -91,10 +103,9 @@ const std::vector<Registered> kRegistered = {
     {"ModuleLibraryComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},
     {"SoundBrowserComponent", {"exempt: starts a drag-and-drop, the drop target owns the preview"}},
     {"DrawPenButton", {"exempt: a drag only cancels the press-and-hold timer"}},
-    {"MixerColourDot", {"exempt: forwards the drag to MixerColumnHeader (its gap is listed there)"}},
-    {"SwatchButton", {"exempt: forwards the drag to TimelineTrackHeaderComponent (its gap is listed there)"}},
-    {"ContextMenuForwardingLabel",
-     {"exempt: forwards the drag to TimelineTrackHeaderComponent (its gap is listed there)"}},
+    {"MixerColourDot", {"exempt: forwards the drag to MixerColumnHeader (guarded there)"}},
+    {"SwatchButton", {"exempt: forwards the drag to TimelineTrackHeaderComponent (guarded there)"}},
+    {"ContextMenuForwardingLabel", {"exempt: forwards the drag to TimelineTrackHeaderComponent (guarded there)"}},
 };
 
 // A real preview/commit split with no guard that compares the two. Each needs one; the list may only shrink.
@@ -102,20 +113,12 @@ const std::vector<KnownGap> kKnownGaps = {
     {"GraphEditor", "FRO1319", "canvas card move: shown card bounds vs the node position after release"},
     {"ModuleComponent", "FRO1319", "module card move: shown card bounds vs the node position after release"},
     {"MacroCardComponent", "FRO1319", "macro card move: shown card bounds vs the node position after release"},
-    {"CardLayoutEditorGrip", "FRO1316", "list editor row reorder: preview rows vs the committed order"},
-    {"DockTabButton", "FRO1316", "bottom dock tab reorder: lifted tab order vs the saved order"},
     {"NoteRangePicker", "FRO1318", "range edge/band drag: shown range vs the range committed on release"},
-    {"MixerColumnHeader", "FRO1316", "mixer column reorder: preview slot vs the committed order"},
-    {"MixerSendList", "FRO1316", "send row reorder: preview slot vs the committed order"},
     {"MixerZonesRow", "FRO1318", "zone row drag: preview slot vs the committed zone and order"},
     {"PianoRollComponent", "FRO1317",
      "note move/resize/copy: ghost notes vs the notes committed (only the draw tool is checked)"},
     {"PianoRollVelocityLane", "FRO1317", "velocity stick/ramp gesture: shown velocities vs the committed ones"},
-    {"AutomationLaneHeaderComponent", "FRO1316", "lane header reorder: preview slot vs the committed order"},
-    {"LaneControlChip", "FRO1316", "lane chip reorder: preview order vs the committed order"},
-    {"ModulatorRow", "FRO1316", "modulator row reorder: preview slot vs the committed order"},
     {"TimelineRulerComponent", "FRO1318", "marker drag: snapped preview vs the marker position committed"},
-    {"TimelineTrackHeaderComponent", "FRO1316", "track row reorder: lifted row slot vs the committed order"},
 };
 
 // Every drag follows the view. A class is one of:
