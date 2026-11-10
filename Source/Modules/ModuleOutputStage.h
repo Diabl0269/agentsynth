@@ -46,7 +46,8 @@ public:
     /** True when nothing needs doing this block: the effective state equals the parameters, no fade is
         running and Mix / Pan rest at 1 / 0. Audio thread; a handful of loads. */
     bool isIdle(bool paramBypass, bool paramMute) const noexcept {
-        return synced_ && fade_ == Fade::None && effBypass_ == paramBypass && effMute_ == paramMute && !mixPanWanted();
+        return !(paramMute && auditionAudible()) && synced_ && fade_ == Fade::None && effBypass_ == paramBypass &&
+               effMute_ == paramMute && !mixPanWanted();
     }
 
     /** The state processModuleBlock sees: the lagging effective one on the render thread while a block runs
@@ -64,6 +65,13 @@ public:
         muteQueried_ = true;
         return effMute_;
     }
+
+    /** Message thread: while on, the render treats this module's Mute parameter as off (the parameter itself is never
+        written), so a scale audition is heard through a muted module; the normal mute fade runs both ways. */
+    void setAuditionAudible(bool on) noexcept { auditionAudible_.store(on, std::memory_order_relaxed); }
+    bool auditionAudible() const noexcept { return auditionAudible_.load(std::memory_order_relaxed); }
+    /** The Mute parameter as the render sees it: `param`, unless an audition is being heard through this module. */
+    bool muteParamForRender(bool param) const noexcept { return param && !auditionAudible(); }
 
     // Audio thread, slow path only (ModuleBase::renderThroughOutputStage).
     void setRate(double sampleRate) noexcept;
@@ -118,6 +126,7 @@ private:
     int rampLen_ = 64;
     double rate_ = 0.0;
     std::atomic<std::size_t> renderThread_{0};
+    std::atomic<bool> auditionAudible_{false};
     mutable bool bypassQueried_ = false; // written by the render thread only, inside processModuleBlock
     mutable bool muteQueried_ = false;
 };

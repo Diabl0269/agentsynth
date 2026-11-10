@@ -2,6 +2,7 @@
 // field: the grid edits the pattern itself, the card gives it the undo record and the height hooks, and the existing
 // 15 Hz timer feeds it the playhead and the song key (no new Timer). docs/modules/sequencer-design.md#card.
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/AuditionMonitor.h"
 #include "AudioEngine/ConnectionIndex.h"
 #include "ModuleComponent.h"
 #include "SoundBrowser/KeyAuditionSound.h"
@@ -48,19 +49,29 @@ void wireSequencerKeyAudition(synth::ui::SequencerKeyField& key, juce::Component
         synth::soundbrowser::playKeyAuditionSound(engine.getSoundPreview(), pitches);
     };
     auditioner.stopDefaultSound = [&engine] { engine.getSoundPreview().stop(); };
+    auditioner.isPlaybackRunning = [&engine] { return engine.getTransport().getPositionSnapshot().playing; };
     auditioner.resolveTarget = [card, &engine]() -> synth::ui::KeyAuditioner::Target {
         auto* sequencer = card != nullptr ? dynamic_cast<synth::SequencerModuleBase*>(card->getModule()) : nullptr;
         if (sequencer == nullptr || !hasNoteDestination(engine, *sequencer, card->getNodeId()))
             return {};
         return {[card](int pitch, int velocity, bool on) {
-            auto* target = card != nullptr ? dynamic_cast<synth::SequencerModuleBase*>(card->getModule()) : nullptr;
-            if (target == nullptr)
-                return;
-            if (on)
-                target->previewNotes(&pitch, 1, (float)velocity / 127.0f);
-            else
-                target->stopPreview();
-        }};
+                    auto* target =
+                        card != nullptr ? dynamic_cast<synth::SequencerModuleBase*>(card->getModule()) : nullptr;
+                    if (target == nullptr)
+                        return;
+                    if (on)
+                        target->previewNotes(&pitch, 1, (float)velocity / 127.0f);
+                    else
+                        target->stopPreview();
+                },
+                [card, &engine](bool running) {
+                    if (card == nullptr)
+                        return;
+                    if (running)
+                        engine.getAuditionMonitor().begin(card->getNodeId());
+                    else
+                        engine.getAuditionMonitor().end();
+                }};
     };
 }
 

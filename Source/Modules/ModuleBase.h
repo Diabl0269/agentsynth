@@ -620,6 +620,9 @@ public:
 
     bool isMuted() const { return outputStage_.mutedForRender(mutedParam->get()); }
     void setMuted(bool m) { mutedParam->setValueNotifyingHost(m ? 1.0f : 0.0f); }
+    /** Message thread: a scale audition is heard through this module even while muted; see AuditionMonitor. */
+    void setAuditionAudible(bool on) noexcept { outputStage_.setAuditionAudible(on); }
+    bool isAuditionAudible() const noexcept { return outputStage_.auditionAudible(); }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override = 0;
     void releaseResources() override {}
