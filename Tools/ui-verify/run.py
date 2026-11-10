@@ -453,8 +453,9 @@ class Runner:
         if command == "wait":
             reply = app.call("waitForIdle", **args)
         elif command == "type":
+            extra = {"target": args["target"]} if args.get("target") else {}
             for char in str(args.get("text", "")):
-                app.call("key", keys="space" if char == " " else char)  # the key parser splits on spaces
+                app.call("key", keys="space" if char == " " else char, **extra)  # the key parser splits on spaces
             reply = {"typed": len(str(args.get("text", "")))}
         elif command == "copyFixture":
             destination = os.path.join(self.settings_dir, args["name"])

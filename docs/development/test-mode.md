@@ -192,7 +192,7 @@ protocol command above (`click`, `drag`, `key`, `getState`, `openProject`, ...) 
 
 | Step | Meaning |
 | --- | --- |
-| `type: {text}` | one `key` per character |
+| `type: {text, target?}` | one `key` per character, each sent to `target` when given (a text field of another window, e.g. `name` in the Save Snippet dialog) |
 | `wait: {}` | `waitForIdle` |
 | `restart: {}` | quit and start again on the same settings directory |
 | `copyFixture: {name}` | copies `${FIXTURES}/<name>` into `${SCRATCH}/<name>`, so a scenario can change a fixture without touching the committed copy |
