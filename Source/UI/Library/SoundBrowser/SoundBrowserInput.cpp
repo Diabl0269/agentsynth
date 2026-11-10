@@ -210,6 +210,14 @@ bool SoundBrowserComponent::handlePreviewKey(const juce::KeyPress& key) {
     return true;
 }
 
+// Esc steps back out of the panel wherever the keyboard is: a panel control, the list and the search box all end here.
+bool SoundBrowserComponent::closeFiltersWithEscape(const juce::KeyPress& key) {
+    if (!key.isKeyCode(juce::KeyPress::escapeKey) || key.getModifiers().isAnyModifierKeyDown() || !filtersOpen_)
+        return false;
+    setFiltersOpen(false);
+    return true;
+}
+
 bool SoundBrowserComponent::handleSearchKey(const juce::KeyPress& key) {
     if (handlePreviewKey(key))
         return true;
@@ -223,9 +231,11 @@ bool SoundBrowserComponent::handleSearchKey(const juce::KeyPress& key) {
     }
     if (key.isKeyCode(juce::KeyPress::escapeKey)) {
         if (search_.getText().isNotEmpty())
-            setQuery({});
-        else
-            focusList();
+            setQuery({}); // the first Esc clears; the next closes the panel and returns to the list
+        else {
+            closeFiltersWithEscape(key);
+            focusListStop(false);
+        }
         return true;
     }
     return false;
@@ -235,13 +245,7 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
     // A key that bubbled up from a child (the Filters button, the chips, the panel): only Esc closes the panel.
     auto* focused = juce::Component::getCurrentlyFocusedComponent();
     if (focused != nullptr && focused != this && isParentOf(focused)) {
-        if (handlePreviewKey(key))
-            return true;
-        if (key.isKeyCode(juce::KeyPress::escapeKey) && !key.getModifiers().isAnyModifierKeyDown() && filtersOpen_) {
-            setFiltersOpen(false);
-            return true;
-        }
-        return false;
+        return handlePreviewKey(key) || closeFiltersWithEscape(key); // the panel's own Esc lands the focus on Filters
     }
     if (handlePreviewKey(key))
         return true;
@@ -299,6 +303,10 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
     }
     if (key.isKeyCode(juce::KeyPress::escapeKey) && isSearchActive()) {
         setQuery({});
+        return true;
+    }
+    if (closeFiltersWithEscape(key)) {
+        focusListStop(false);
         return true;
     }
     const auto ch = key.getTextCharacter();

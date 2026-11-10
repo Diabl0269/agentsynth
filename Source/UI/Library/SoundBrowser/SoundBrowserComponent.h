@@ -408,6 +408,8 @@ private:
     /** The preview key anywhere in this view (the list, the search box, the panel, the footer). */
     bool handlePreviewKey(const juce::KeyPress& key);
     juce::String previewKeyText() const;
+    /** Esc with the panel open closes it (the one place every focus region's Esc ends up); false when it is shut. */
+    bool closeFiltersWithEscape(const juce::KeyPress& key);
     std::vector<juce::Component*> headerStops();
     void attachReachListeners();
     void focusStop(juce::Component& stop);

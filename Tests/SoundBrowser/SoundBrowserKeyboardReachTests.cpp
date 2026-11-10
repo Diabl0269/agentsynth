@@ -456,6 +456,46 @@ TEST(SoundBrowserKeyboardReachTest, TheGetMoreHeadingFoldsWithLeftAndRightFromTh
     EXPECT_TRUE(v.isGetMoreShowing());
 }
 
+// Esc steps back out from every focus region of the view, one place: the search box (after the first Esc has
+// cleared its text), the list and the panel's own controls all close the open panel.
+TEST(SoundBrowserKeyboardReachTest, EscClosesTheFiltersFromTheSearchBoxTheListAndThePanelControls) {
+    Fixture f;
+    auto& v = *f.view;
+    auto reopen = [&] {
+        v.setFiltersOpen(true, false);
+        f.settle();
+        ASSERT_TRUE(v.areFiltersOpen());
+    };
+
+    reopen();
+    v.getSearchField().setText("snare", juce::sendNotification);
+    EXPECT_TRUE(dispatchKey(v, v.getSearchField(), key(juce::KeyPress::escapeKey)));
+    EXPECT_TRUE(v.getSearchField().getText().isEmpty()) << "the first Esc clears the search";
+    EXPECT_TRUE(v.areFiltersOpen()) << "and leaves the panel open";
+    EXPECT_TRUE(dispatchKey(v, v.getSearchField(), key(juce::KeyPress::escapeKey)));
+    f.settle();
+    EXPECT_FALSE(v.areFiltersOpen()) << "the second Esc closes it";
+    EXPECT_EQ(f.landed(), &v) << "and the keyboard returns to the list";
+
+    reopen();
+    v.selectRow(0);
+    EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::escapeKey)));
+    f.settle();
+    EXPECT_FALSE(v.areFiltersOpen()) << "Esc from the sound list closes the panel";
+    EXPECT_EQ(f.landed(), &v);
+    EXPECT_GE(v.getSelectedIndex(), 0) << "Esc closes the panel, it does not deselect";
+    EXPECT_FALSE(dispatchKey(v, v, key(juce::KeyPress::escapeKey))) << "with the panel shut, Esc bubbles on";
+
+    for (juce::Component* control : {static_cast<juce::Component*>(&v.getFilterPanel().lengthBox()),
+                                     static_cast<juce::Component*>(&v.getFilterPanel().kindGroup()),
+                                     static_cast<juce::Component*>(&v.getFiltersButton())}) {
+        reopen();
+        EXPECT_TRUE(dispatchKey(v, *control, key(juce::KeyPress::escapeKey))) << control->getTitle();
+        f.settle();
+        EXPECT_FALSE(v.areFiltersOpen()) << "Esc from " << control->getTitle();
+    }
+}
+
 // The key-double-fire kind, widened: a widget that swallows a key the app binds. Plain Space on every kind of
 // row and every footer stop is the song's play key, so it must reach the app; Ctrl+Space is the preview's.
 TEST(SoundBrowserKeyboardReachTest, PlainSpaceOnASoundRowOrFooterStopIsNeverConsumed) {
