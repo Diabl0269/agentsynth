@@ -33,6 +33,17 @@ juce::Point<float> AutomationLaneEditor::drawnPointPosition(const LaneBreakpoint
            pointTween_.offsetFor(lane_key::tweenKey(point.beat));
 }
 
+// The grabbed point is the one whose resting beat the move measures from (dragOriginalBeat_).
+std::optional<juce::Point<float>> AutomationLaneEditor::grabbedPointDrawnAt() const {
+    if (dragMode_ != DragMode::MoveHandle)
+        return std::nullopt;
+    const auto moved = movedPointsByRestingBeat();
+    for (const auto& point : dragPoints_)
+        if (point.beat == dragOriginalBeat_)
+            return drawnPointPosition(point, moved);
+    return std::nullopt;
+}
+
 juce::Rectangle<float> AutomationLaneEditor::drawnSelectionBounds() const {
     const auto* points = lanePoints();
     if (points == nullptr)

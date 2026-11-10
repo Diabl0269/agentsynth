@@ -15,6 +15,7 @@
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include <functional>
 #include <memory>
+#include <optional>
 #include <set>
 
 using namespace point_marker_test;
@@ -138,6 +139,34 @@ public:
         auto& tween = editor_->getPointTweenForTest();
         return {at(4.0, 55.0) + tween.offsetFor(synth::ui::lane_key::tweenKey(4.0)),
                 at(6.0, 45.0) + tween.offsetFor(synth::ui::lane_key::tweenKey(6.0))};
+    }
+
+    /** A snapped (one bar) Alt+Right hold, 40 ms into the tap's ease: the dot is drawn short of its preview place. */
+    Places snappedHoldMidEase() {
+        f_.panel.getViewState().snapEnabled = true;
+        f_.panel.getViewState().snap = synth::ui::TimelineViewState::Snap::Bar;
+        editor_->forceGlideAnimateForTest(true);
+        select({4.0}, 4.0);
+        holdAltRight(0.0);
+        editor_->getPointTweenForTest().stepForTest(40.0);
+        const auto offset = editor_->getPointTweenForTest().offsetFor(synth::ui::lane_key::tweenKey(4.0));
+        return {previewOf(0) + offset, previewOf(0)};
+    }
+    /** A snapped mouse drag, mid-way: the dot is drawn where the snapped preview and any ease put it. */
+    Places snappedMouseDrag() {
+        f_.panel.getViewState().snapEnabled = true;
+        editor_->forceGlideAnimateForTest(true);
+        select({4.0}, 4.0);
+        const auto from = at(4.0, 55.0);
+        press(from, from + juce::Point<float>(70.0f, -8.0f));
+        editor_->getPointTweenForTest().stepForTest(40.0);
+        const auto offset = editor_->getPointTweenForTest().offsetFor(synth::ui::lane_key::tweenKey(4.0));
+        return {previewOf(0) + offset, from};
+    }
+    /** Where the value bubble is drawn, after one paint. */
+    std::optional<juce::Point<float>> bubbleAnchor() {
+        paintMarks(*editor_);
+        return editor_->getPointBubbleForTest().getAnchor();
     }
 
 private:
@@ -352,5 +381,24 @@ TEST(PointMarkersFollowTheDot, TheLaneSelectionBoxIsAroundTheDrawnDots) {
         LanePoint lane;
         const auto dots = lane.twoPointsAfter(phase);
         expectBoxAroundDots(paintMarks(lane.painted()), dots, std::string("selection box, ") + phases[phase]);
+    }
+}
+
+// Regression test for FRO1332: the value bubble was placed at the preview place, ahead of the dot the ease was still
+// drawing on its way there.
+TEST(PointMarkersFollowTheDot, TheLaneValueBubbleSitsOnTheDrawnDot) {
+    const char* phases[] = {"mouse drag", "key hold", "snapped hold mid-ease", "snapped mouse drag"};
+    for (int phase = 0; phase < 4; ++phase) {
+        FullMotion motion;
+        LanePoint lane;
+        const auto places = phase == 0   ? lane.mouseDragLastFrame()
+                            : phase == 1 ? lane.keyHoldLastFrame()
+                            : phase == 2 ? lane.snappedHoldMidEase()
+                                         : lane.snappedMouseDrag();
+        if (phase == 2)
+            ASSERT_GT(places.drawn.getDistanceFrom(places.stale), 2.0f) << "the ease is still running";
+        const auto anchor = lane.bubbleAnchor();
+        ASSERT_TRUE(anchor.has_value()) << phases[phase];
+        EXPECT_LE(anchor->getDistanceFrom(places.drawn), 1.0f) << phases[phase];
     }
 }

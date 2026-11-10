@@ -68,7 +68,7 @@ EXPECT_KEYS = {"id", "contains", "exists", "count", "within_ms"}
 RUNNER_STEPS = {"expect", "screenshot", "wait", "type", "restart", "copyFixture", "mark", "glide"}
 MARK_NAME = re.compile(r"^[a-z0-9-]+$")
 UNCHANGED_BY = {"expect", "screenshot", "getState", "list", "ping", "copyFixture", "mark", "glide"}  # no video frame after these
-NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld"}  # no stale-pixel check
+NOT_CHECKED_AFTER = UNCHANGED_BY | {"restart", "quit", "wait", "mouseDown", "mouseMoveHeld", "keyDown"}  # no stale-pixel check
 
 
 class ScenarioError(ValueError):

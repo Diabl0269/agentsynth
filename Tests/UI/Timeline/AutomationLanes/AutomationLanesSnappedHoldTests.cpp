@@ -1,12 +1,16 @@
-// AutomationLanesSnappedHoldTests.cpp -- holding Alt+Right on a coarse grid: the selection keeps stepping at a pace
-// scaled to the grid, the dot is drawn travelling during the hold, and the whole hold is one undo step.
+// AutomationLanesSnappedHoldTests.cpp -- holding Alt+Right with snap on: the selection keeps stepping on a coarse grid,
+// no grid steps faster than the cap, the dot and its value bubble are drawn together during the hold, and the whole
+// hold is one undo step.
 
 #include "../../Layout/KeyGlide/KeyGlideTestHost.h"
 #include "AutomationLanesTestFixture.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include <algorithm>
+#include <cmath>
+#include <optional>
 #include <set>
+#include <vector>
 
 using namespace automation_lanes_test;
 using synth::ui::AutomationLaneEditor;
@@ -121,4 +125,109 @@ TEST(AutomationLanesSnappedHold, TheDotIsDrawnAtItsPreviewPlaceWhileTheKeyIsDown
     EXPECT_FALSE(f.dotDrawnAt(f.render(), 2.0)) << "and it left its old place";
     f.release();
     synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+namespace {
+
+// Holds Alt+Right for five seconds at 60 frames a second with the ease running, and records each frame: the preview
+// beat, where the preview rests on screen, where the grabbed dot is drawn and where the value bubble is drawn.
+struct HoldFrame {
+    double ms = 0.0;
+    double previewBeat = 0.0;
+    float restingX = 0.0f;
+    float dotX = 0.0f;
+    std::optional<float> bubbleX;
+};
+
+std::vector<HoldFrame> holdFiveSeconds(TimelineViewState::Snap snap) {
+    SnapHold f;
+    f.panel.getViewState().snap = snap;
+    f.editor->forceGlideAnimateForTest(true);
+    auto& tween = f.editor->getPointTweenForTest();
+    std::vector<HoldFrame> frames;
+    f.holdAltRight();
+    // The ease's test clock counts from its own start, which every step that eases restarts.
+    double easeMs = 0.0;
+    double lastBeat = f.editor->getPreviewBeatForTest();
+    for (int ms = 0; ms <= 5000; ms += 16) {
+        f.frame((double)ms);
+        if (f.editor->getPreviewBeatForTest() != lastBeat) {
+            lastBeat = f.editor->getPreviewBeatForTest();
+            easeMs = 0.0;
+        }
+        easeMs += 16.0;
+        tween.stepForTest(easeMs);
+        f.render(); // the bubble takes its place from what is drawn
+        const double beat = f.editor->getPreviewBeatForTest();
+        const float restingX = (float)f.panel.getViewState().beatToX(beat);
+        const float dotX = restingX + tween.offsetFor(synth::ui::lane_key::tweenKey(2.0)).x;
+        const auto anchor = f.editor->getPointBubbleForTest().getAnchor();
+        frames.push_back({(double)ms, beat, restingX, dotX, anchor ? std::optional<float>(anchor->x) : std::nullopt});
+    }
+    f.release();
+    f.editor->forceGlideAnimateForTest(false);
+    return frames;
+}
+
+double beatAt(const std::vector<HoldFrame>& frames, double ms) {
+    double beat = frames.front().previewBeat;
+    for (const auto& frame : frames)
+        if (frame.ms <= ms)
+            beat = frame.previewBeat;
+    return beat;
+}
+
+void expectSteadyHold(TimelineViewState::Snap snap, double stepBeats, const char* name) {
+    const double pixelsPerBeat = 40.0; // the fixture's zoom
+    const auto frames = holdFiveSeconds(snap);
+    const float stepPx = (float)(stepBeats * pixelsPerBeat);
+    int worstStepsInASecond = 0;
+    for (std::size_t i = 0; i < frames.size(); ++i) {
+        const auto& frame = frames[i];
+        ASSERT_TRUE(frame.bubbleX.has_value()) << name << ": the bubble is shown during the hold";
+        EXPECT_NEAR(*frame.bubbleX, frame.dotX, 1.0f)
+            << name << ": the bubble is on the drawn dot at " << frame.ms << " ms";
+        EXPECT_LE(std::abs(frame.restingX - frame.dotX), stepPx + 1.0f)
+            << name << ": the drawn dot trails the preview by at most one step at " << frame.ms << " ms";
+        int steps = 0;
+        for (std::size_t j = i + 1; j < frames.size() && frames[j].ms < frame.ms + 1000.0; ++j)
+            steps += (int)std::lround((frames[j].previewBeat - frames[j - 1].previewBeat) / stepBeats);
+        worstStepsInASecond = std::max(worstStepsInASecond, steps);
+    }
+    EXPECT_LE(worstStepsInASecond, (int)synth::ui::lane_key::kSnappedMaxStepsPerSecond + 1)
+        << name << ": no second of the hold steps faster than the cap";
+    const double fourth = beatAt(frames, 4000.0) - beatAt(frames, 3000.0);
+    const double fifth = beatAt(frames, 5000.0) - beatAt(frames, 4000.0);
+    EXPECT_GT(fourth, 0.0) << name;
+    // Each second's count can be one step off where its edge falls between steps.
+    EXPECT_NEAR(fourth, fifth, 2.0 * stepBeats + 1e-9)
+        << name << ": the pace after three seconds is the pace after five";
+}
+
+} // namespace
+
+// Regression test for FRO1332: the cap grew with the grid (a bar grid could reach 256 beats a second), each step
+// restarted the ease so the dot trailed further and further behind, and the bubble sat at the preview place ahead of
+// the dot.
+TEST(AutomationLanesSnappedHold, ABarHoldStepsAtAnEvenCappedPaceWithTheBubbleOnTheDot) {
+    expectSteadyHold(TimelineViewState::Snap::Bar, 4.0, "bar");
+}
+
+TEST(AutomationLanesSnappedHold, AQuarterHoldStepsAtAnEvenCappedPaceWithTheBubbleOnTheDot) {
+    expectSteadyHold(TimelineViewState::Snap::Quarter, 1.0, "1/4");
+}
+
+TEST(AutomationLanesSnappedHold, ASixteenthHoldStepsAtAnEvenCappedPaceWithTheBubbleOnTheDot) {
+    expectSteadyHold(TimelineViewState::Snap::Sixteenth, 0.25, "1/16");
+}
+
+TEST(AutomationLanesSnappedHold, TheSnappedPaceIsCountedInGridStepsWhateverTheirSize) {
+    namespace k = synth::ui::lane_key;
+    for (const double step : {4.0, 1.0, 0.25}) {
+        const auto pace = k::snappedHoldPace(step, k::kTimeStartBeatsPerSecond);
+        EXPECT_DOUBLE_EQ(pace.max, k::kSnappedMaxStepsPerSecond * step) << step;
+        EXPECT_LE(pace.start, pace.max) << step;
+        EXPECT_GE(pace.start, std::min(pace.max, step / k::kSnappedStepSeconds)) << step;
+    }
+    EXPECT_DOUBLE_EQ(k::snappedHoldPace(0.01, 1.0).start, 0.12) << "the cap wins over a free start on a fine grid";
 }

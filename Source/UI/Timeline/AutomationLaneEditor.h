@@ -169,6 +169,7 @@ public:
     double getPreviewBeatForTest() const noexcept { return previewBeat_; }
     double getPreviewValueForTest() const noexcept { return previewValue_; }
     std::vector<LaneBreakpoint> getDragMovedPointsForTest() const { return dragMovedPoints(); }
+    std::optional<juce::Point<float>> getGrabbedPointDrawnAtForTest() const { return grabbedPointDrawnAt(); }
     // The curve's and points' colour; unset = the theme's modWire. Drawn pushed to a readable contrast on the lane
     // background.
     void setCurveColour(juce::Colour colour);
@@ -295,6 +296,8 @@ private:
     // ---- Where points are drawn (AutomationLaneEditorDrawnPoints.cpp) ----
     // The points a drag or stretch is moving, where it has put them, by the beat they rest at.
     std::map<double, LaneBreakpoint> movedPointsByRestingBeat() const;
+    // Where the point a move grabbed (by mouse or keys) is drawn now; none outside such a move.
+    std::optional<juce::Point<float>> grabbedPointDrawnAt() const;
     // Where `point` (as the document has it) is drawn: its preview place, plus its eased offset.
     juce::Point<float> drawnPointPosition(const LaneBreakpoint& point,
                                           const std::map<double, LaneBreakpoint>& moved) const;
@@ -450,6 +453,7 @@ private:
         double unit = 0.0; // beats of one step in time (the tap, and the snapped quantum)
         bool snapped = false;
         bool cancelled = false;
+        double lastStepMs = 0.0; // the hold clock at the last snapped step (or the press)
     } keyDrag_;
     LanePointClipboard* clipboard_ = nullptr;
     std::int64_t syncedRevision_ = -1;

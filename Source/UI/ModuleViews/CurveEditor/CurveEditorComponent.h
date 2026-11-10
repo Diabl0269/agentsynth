@@ -476,6 +476,7 @@ private:
         juce::Point<double> unit;  // one step along each axis: the tap, and the snapped quantum
         bool snapped = false;
         bool gestureOpen = false;
+        double lastStepMs = 0.0; // the hold clock at the last snapped step (or the press)
     } keyDrag_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CurveEditorComponent)

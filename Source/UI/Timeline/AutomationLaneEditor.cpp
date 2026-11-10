@@ -39,11 +39,13 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     keyHold_.onEnd = [this] { endKeyDrag(); };
     refreshDescription();
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
-    // count.
+    // count, `holding` whether a key hold is moving the selection and `dragging` whether any drag is under way.
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
         into.setProperty("points", lanePoints() != nullptr ? (int)lanePoints()->size() : 0);
+        into.setProperty("holding", keyHold_.active());
+        into.setProperty("dragging", dragMode_ != DragMode::None);
     });
     addChildComponent(*testModeProbe_);
     testModeProbe_->setVisible(true);
@@ -284,6 +286,8 @@ void AutomationLaneEditor::paint(juce::Graphics& g) {
     shapeGesture_.paintOverCurve(g);
     selection_.paintMarquee(g);
     paintStretchBox(g);
+    if (const auto grabbed = grabbedPointDrawnAt())
+        bubble_.moveAnchor(*grabbed); // on the dot as drawn, so a step's ease carries the value with it
     bubble_.paint(g);
     paintKeyboardCursorRing(g);
 }
