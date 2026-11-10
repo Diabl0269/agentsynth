@@ -340,7 +340,7 @@ Named curves outside any one Filter: the user's saved shapes and a factory set, 
 One picker for every place a module holds shapes (`ShapePicker.h`, `makeShapePickerMenu`): a menu whose rows are a
 52 x 20 thumbnail of the curve (`paintShapeThumbnail`, the same drawing as the Sounds view's Shapes rows), the name and
 a Badge, under **Your shapes** then **Factory shapes**. It opens from the **Pick shape** button beside Edit shapes in the
-Custom section of the Filter and LFO cards (`MorphShapesCard`; the shape nearest the morph cursor takes the pick as ONE
+Custom section of the Filter and LFO cards (`MorphShapesCard`; the selected dot, else the shape nearest the morph cursor, takes the pick as ONE
 undo step and the pick joins Used recently) and from the shape window's **Start from**. Enter or Space on the button
 opens it, arrows move, Enter picks, Escape closes; each row is named "<name>, <badge>" and the button has a title, a
 tooltip and the shared focus ring.

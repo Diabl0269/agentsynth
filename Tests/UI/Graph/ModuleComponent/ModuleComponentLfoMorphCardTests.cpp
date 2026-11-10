@@ -454,6 +454,92 @@ TEST_F(ModuleComponentTest, PickShapeOnTheFilterCardListsEveryShapeWithAThumbnai
     EXPECT_EQ(rig.filter->getCustomShapes(), before);
 }
 
+namespace {
+/** A real click on dot `index` of the card's map: it becomes the selected dot. Returns it. */
+int clickDotAwayFromTheCursor(MorphShapesCard& morph) {
+    auto& map = morph.getMap();
+    const int index = (morph.nearestShapeToCursor() + 1) % morph.getNumShapes();
+    const auto at = map.getDotCentre(index);
+    map.mouseDown(mouseOn(map, at));
+    map.mouseUp(mouseOn(map, at));
+    return index;
+}
+} // namespace
+
+// Regression test for FRO1585: Pick shape changed the dot nearest the cursor, not the dot the user had selected.
+TEST_F(ModuleComponentTest, PickShapeOnTheFilterCardStampsTheSelectedDotNotTheOneNearestTheCursor) {
+    TempLibrary library;
+    FilterPickerRig rig;
+    const int selected = clickDotAwayFromTheCursor(rig.morph());
+    ASSERT_NE(selected, rig.morph().nearestShapeToCursor());
+    ASSERT_EQ(rig.morph().getMap().getSelected(), selected);
+    EXPECT_EQ(rig.morph().targetShapeIndex(), selected);
+
+    const auto before = rig.filter->getCustomShapes();
+    const int serial = rig.undo.getEditSerial();
+    rig.morph().getPickButton().onClick();
+    ASSERT_TRUE(rig.captured.run("low-pass ramp, Factory"));
+    const auto expected = ShapeLibrary::shared().find(ShapeKind::Filter, true, "low-pass ramp")->curve;
+    const auto after = rig.filter->getCustomShapes();
+    for (size_t i = 0; i < after.shapes.size(); ++i) {
+        if ((int)i == selected)
+            EXPECT_EQ(after.shapes[i].curve, expected);
+        else
+            EXPECT_EQ(after.shapes[i].curve, before.shapes[i].curve) << "dot " << i << " is not the selected one";
+    }
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1) << "one undo step";
+    rig.undo.undo();
+    EXPECT_EQ(rig.filter->getCustomShapes(), before);
+}
+
+TEST_F(ModuleComponentTest, PickShapeOnTheLfoCardStampsTheSelectedDotAndFallsBackToTheNearestOne) {
+    TempLibrary library;
+    LfoPickerRig rig;
+    const auto triangle = synth::LfoCustomWave::preset(synth::LfoCustomWave::Preset::Triangle);
+    const auto heartbeat = ShapeLibrary::shared().find(ShapeKind::Lfo, true, "heartbeat")->curve;
+
+    // Nothing selected: the nearest dot, as before.
+    ASSERT_EQ(rig.morph().getMap().getSelected(), -1);
+    const auto nearest = (size_t)rig.morph().nearestShapeToCursor();
+    EXPECT_EQ((size_t)rig.morph().targetShapeIndex(), nearest);
+
+    const int selected = clickDotAwayFromTheCursor(rig.morph());
+    const int serial = rig.undo.getEditSerial();
+    rig.morph().getPickButton().onClick();
+    ASSERT_TRUE(rig.captured.run("heartbeat, Factory"));
+    const auto shapes = rig.lfo->getCustomShapes().shapes;
+    for (size_t i = 0; i < shapes.size(); ++i)
+        EXPECT_EQ(shapes[i].curve, (int)i == selected ? heartbeat : triangle) << "dot " << i;
+    EXPECT_EQ(rig.undo.getEditSerial(), serial + 1);
+    rig.undo.undo();
+    EXPECT_EQ(rig.lfo->getCustomShapes().shapes[(size_t)selected].curve, triangle);
+}
+
+// Regression test for FRO1585: the cursor being the selection has no dot, so Pick shape and a drop use the nearest.
+TEST_F(ModuleComponentTest, PickShapeWithTheCursorSelectedUsesTheNearestDot) {
+    LfoPickerRig rig;
+    clickDotAwayFromTheCursor(rig.morph());
+    auto& map = rig.morph().getMap();
+    const auto at = map.getCursorCentre();
+    map.mouseDown(mouseOn(map, at));
+    map.mouseUp(mouseOn(map, at));
+    ASSERT_TRUE(map.isCursorSelected());
+    EXPECT_EQ(rig.morph().targetShapeIndex(), rig.morph().nearestShapeToCursor());
+}
+
+// A drop on the card keeps replacing the shape under the cursor, whatever dot is selected.
+TEST_F(ModuleComponentTest, ADropOnTheCardStillReplacesTheShapeNearestTheCursorNotTheSelectedDot) {
+    TempLibrary library;
+    LfoPickerRig rig;
+    const int selected = clickDotAwayFromTheCursor(rig.morph());
+    const auto nearest = (size_t)rig.morph().nearestShapeToCursor();
+    const auto shape = *ShapeLibrary::shared().find(ShapeKind::Lfo, true, "heartbeat");
+    rig.morph().shapeDropped(shape);
+    const auto shapes = rig.lfo->getCustomShapes().shapes;
+    EXPECT_EQ(shapes[nearest].curve, shape.curve);
+    EXPECT_NE(shapes[(size_t)selected].curve, shape.curve);
+}
+
 TEST_F(ModuleComponentTest, PickShapeOpensFromTheKeyboardWithReturn) {
     TempLibrary library;
     FilterPickerRig rig;
