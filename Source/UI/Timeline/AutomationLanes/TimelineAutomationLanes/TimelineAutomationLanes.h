@@ -441,6 +441,7 @@ private:
     Landing landing_;
     std::set<juce::String> travellingRows_; // rows gliding to another lane: drawn whole while their slot grows
     int dragGapAt(synth::LaneId lane, int slot) const;
+    int dragGapsIn(synth::LaneId lane) const;
     void updateDragGaps();
     void closeDragGaps();
     void clearDragGaps();

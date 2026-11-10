@@ -31,6 +31,14 @@ int TimelineAutomationLanes::dragGapAt(synth::LaneId lane, int slot) const {
     return px;
 }
 
+// All the drag adds to `lane`'s block, px (what dragGapAt sums over its slots).
+int TimelineAutomationLanes::dragGapsIn(synth::LaneId lane) const {
+    int px = 0;
+    for (int slot = 0; slot <= modulatorCount(lane); ++slot)
+        px += dragGapAt(lane, slot);
+    return px;
+}
+
 // The pointer that holds the animator's gap on the row's own slot (the slot it was picked up from): while the row is
 // away the source lane's rows stand still, and only that one gap closes.
 float TimelineAutomationLanes::pointerAtDragOrigin() const {

@@ -129,16 +129,21 @@ TimelineAutomationLanes::ModulatorDrop TimelineAutomationLanes::modulatorDropAt(
     ModulatorDrop drop;
     if (doc_ == nullptr)
         return drop;
+    // The blocks as they stand without the drag's gaps: a gap opening or closing under the pointer moves the lanes,
+    // and must not change which lane the pointer is over.
+    float gapsAbove = 0.0f;
     for (const auto& track : doc_->getTracks()) {
         const auto origin = rowOrigin_.find(track.id);
         if (origin == rowOrigin_.end() || !isVisibleLane(track))
             continue;
-        float y = static_cast<float>(origin->second);
+        float y = static_cast<float>(origin->second) - gapsAbove;
         for (const auto& lane : track.lanes) {
-            const float height = static_cast<float>(laneBlockHeight(lane));
+            const float gaps = static_cast<float>(dragGapsIn(lane.id));
+            const float height = static_cast<float>(laneBlockHeight(lane)) - gaps;
             if (height > 0.0f && pointerY >= y && pointerY < y + height)
                 drop.lane = lane.id;
             y += height;
+            gapsAbove += gaps;
         }
     }
     if (!drop.lane.isValid())
@@ -160,10 +165,10 @@ TimelineAutomationLanes::ModulatorDrop TimelineAutomationLanes::modulatorDropAt(
     return drop;
 }
 
-// How the layout poses the lane's `index`th row (resting at content y `restY`) while a drag is on: the dragged row
-// follows the pointer (clamped to its own lane while the drop is there, free over any other lane), the others move by
-// the animator's offsets alone (so a gap opening above the lane carries them with it), and the lifted row is drawn
-// raised.
+// How the layout poses the lane's `index`th row (resting at content y `restY`) while a drag is on: the dragged row is
+// always at the pointer minus where it was grabbed (over its own lane or any other, from the first pixel), the others
+// move by the animator's offsets alone (so a gap opening above the lane carries them with it), and the lifted row is
+// drawn raised.
 TimelineAutomationLanes::ModulatorDragPose TimelineAutomationLanes::modulatorDragPose(synth::LaneId lane, int index,
                                                                                       int restY) const {
     if (!modDrag_.isReordering() || lane != dragModLane_)
@@ -180,8 +185,7 @@ TimelineAutomationLanes::ModulatorDragPose TimelineAutomationLanes::modulatorDra
         return {static_cast<int>(std::lround(animator.getLayoutStart(key) - dragModRestOf(key))), 0.0f};
     if (!animator.isDragging()) // settling into its slot: relative, like its neighbours
         return {static_cast<int>(std::lround(animator.getDraggedStart() - dragModRestOf(key))), animator.getLift()};
-    const float y = dragFree_ ? dragModPointer_ - dragModGrab_ : animator.getDraggedStart();
-    return {static_cast<int>(std::lround(y)) - restY, animator.getLift()};
+    return {static_cast<int>(std::lround(dragModPointer_ - dragModGrab_)) - restY, animator.getLift()};
 }
 
 // Runs per drag event, per frame of a tween and once after Esc: re-places the rows and bands, marks the slot, and

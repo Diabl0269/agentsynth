@@ -38,6 +38,11 @@ struct RowDrag {
         lastY = screenY;
     }
     void release() { row.mouseUp(at(lastY)); }
+    // How far the lifted row stands from under the pointer (pointer - the grab), px; zero when it is glued to it.
+    int offPointer() const {
+        const int rowTop = row.localPointToGlobal(juce::Point<int>(0, 0)).y;
+        return rowTop - (lastY - static_cast<int>(pressLocal.y));
+    }
 };
 
 // The KeyMove project with the added LFO's row moved to track 3's Threshold lane, every motion landed: dragging it up
@@ -105,6 +110,39 @@ TEST(AutomationLanesDragMakeRoom, ARowOverAnotherTracksLaneOpensAGapThereAndTheL
     EXPECT_EQ(extras[0], extrasBefore[0] + h) << "track 1 makes room";
     EXPECT_EQ(extras[1], extrasBefore[1]);
     EXPECT_EQ(extras[2], extrasBefore[2] - h) << "track 3's gap closed";
+    drag.release();
+}
+
+// Regression test for FRO1580: a lone row dragged up from another track did not follow the pointer until it left its
+// source lane's whole block, then jumped; back over that block it snapped to its slot.
+TEST(AutomationLanesDragMakeRoom, ALoneRowStaysUnderThePointerOnEveryStepAcrossLaneHeadersAndBackOverItsSourceBlock) {
+    MakeRoom s;
+    ASSERT_NE(s.mc, nullptr);
+    FadeAnimateGuard animate;
+    auto* row = s.lfoRow();
+    ASSERT_NE(row, nullptr);
+    RowDrag drag(*row);
+    const int start = drag.pressScreen.y;
+    const int target = s.overFirstSlot(s.ratioA);
+    ASSERT_LT(target, start - 40);
+    // Up in small steps across the source block (its header strip), the lanes between and Ratio's header; the gaps
+    // tween under the pointer between the steps. Then back down over the source block, then up again.
+    std::vector<int> path;
+    for (int y = start; y > target; y -= 5)
+        path.push_back(y);
+    path.push_back(target);
+    for (int y = target; y < start + 10; y += 7)
+        path.push_back(y);
+    for (int y = start + 10; y > target; y -= 9)
+        path.push_back(y);
+    int step = 0;
+    for (const int y : path) {
+        drag.moveTo(y);
+        EXPECT_EQ(drag.offPointer(), 0) << "step " << step << " at y " << y;
+        if (++step % 2 == 0)
+            s.lanes().stepBlockMotionForTest(0.5f);
+        EXPECT_EQ(drag.offPointer(), 0) << "after the gaps moved, step " << step << " at y " << y;
+    }
     drag.release();
 }
 
@@ -233,8 +271,9 @@ TEST(AutomationLanesDragMakeRoom, TheKeyboardsMoveIntoAnotherLaneGlidesTheRowFro
 namespace {
 
 struct MidDragShift {
-    int shift = 0; // how far the neighbour moved, px (sign ignored)
-    int item = 0;  // the dragged item's height, px
+    int shift = 0;  // how far the neighbour moved, px (sign ignored)
+    int item = 0;   // the dragged item's height, px
+    int lifted = 0; // how far the lifted item stands from under the pointer, px (zero: glued to it)
 };
 
 struct MakeRoomSurface {
@@ -279,8 +318,9 @@ const std::vector<MakeRoomSurface>& makeRoomSurfaces() {
              drag.moveTo(drag.pressScreen.y + h * 3 / 2);
              s.settle();
              const int after = second->getY();
+             const int lifted = drag.offPointer();
              drag.release();
-             return MidDragShift{after - before, h};
+             return MidDragShift{after - before, h, lifted};
          }},
         {"mod row, another lane of its track",
          [](MakeRoom& s) {
@@ -294,8 +334,9 @@ const std::vector<MakeRoomSurface>& makeRoomSurfaces() {
              drag.moveTo(s.overFirstSlot(s.attackA));
              s.settle();
              const int after = s.headerY(s.attackA); // its own lane's gap closed above Attack
+             const int lifted = drag.offPointer();
              drag.release();
-             return MidDragShift{after - before, h};
+             return MidDragShift{after - before, h, lifted};
          }},
         {"mod row, another track",
          [](MakeRoom& s) {
@@ -306,8 +347,9 @@ const std::vector<MakeRoomSurface>& makeRoomSurfaces() {
              drag.moveTo(s.overFirstSlot(s.ratioA));
              s.settle();
              const int after = s.headerY(s.thresholdB);
+             const int lifted = drag.offPointer();
              drag.release();
-             return MidDragShift{after - before, h};
+             return MidDragShift{after - before, h, lifted};
          }},
         {"lane header, its own track",
          [](MakeRoom& s) {
@@ -334,5 +376,6 @@ TEST(DragMakeRoomSurfaces, EveryMultiTargetDragShiftsItsNeighbourByTheItemsHeigh
         const auto got = surface.run(s);
         EXPECT_GT(got.item, 0) << surface.name;
         EXPECT_EQ(std::abs(got.shift), got.item) << surface.name << ": the neighbour did not make room mid-drag";
+        EXPECT_EQ(got.lifted, 0) << surface.name << ": the lifted row is not under the pointer mid-drag";
     }
 }
