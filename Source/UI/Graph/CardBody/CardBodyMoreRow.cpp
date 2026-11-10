@@ -67,7 +67,7 @@ void CardBody::createMoreButton() {
     moreButton_->onToggle = [this] { setMoreUnfolded(!moreUnfolded_); }; // clears the cable's claim on the row
     foldGrace_.onExpire = [this] {
         if (moreOpenedByDrag_)
-            setMoreUnfolded(false);
+            applyMoreUnfolded(false, /*peek=*/true);
     };
     card_.addAndMakeVisible(*moreButton_);
 }
@@ -77,37 +77,54 @@ juce::Button* CardBody::getMoreButton() const { return moreButton_.get(); }
 // A discrete event, never per value change: the card re-measures and the canvas pushes neighbours
 // clear (or returns them) the same way any other card growth does. The row's controls fade and the card's height
 // follows (CardBlockFade); the row is clipped by the card's bottom edge while it grows.
-void CardBody::setMoreUnfolded(bool unfolded) {
+void CardBody::setMoreUnfolded(bool unfolded) { applyMoreUnfolded(unfolded, /*peek=*/false); }
+
+// `peek` is a cable's doing (opening the row, or folding what it opened): the row then grows over its neighbours
+// without making room, so a live cable never moves a card it may still land on. Any other caller is the person's
+// and ends the peek, so the card makes room as usual.
+void CardBody::applyMoreUnfolded(bool unfolded, bool peek) {
     if (!hasMoreRow() || unfolded == moreUnfolded_)
         return;
     if (moreFade_.isAttached())
         if (auto* memo = graph_editor_paint::CanvasMemo::of(card_.owner))
             memo->cableEndGlide().begin(card_, unfolded); // records the cable ends before the row changes
     moreUnfolded_ = unfolded;
-    moreOpenedByDrag_ = false; // any other change is the person's or already settled
+    moreOpenedByDrag_ = false;   // any other change is the person's or already settled
+    peekHoldsNeighbours_ = peek; // set before the resize below, which must already skip make-room
     foldGrace_.stopTimer();
     if (!moreFade_.isAttached()) {
         applyVisibility();
         card_.updateLayout();
-        card_.owner.handleModuleResized(&card_);
+        finishMoreResize();
         card_.repaint();
         return;
     }
     startingMore_ = true; // applyVisibility leaves the row's controls to their fade
     applyVisibility();
     startingMore_ = false;
-    moreFade_.setShown(
-        unfolded, settlingFootprint_, [this] { card_.updateLayout(); },
-        [this] { card_.owner.handleModuleResized(&card_); });
+    moreFade_.setShown(unfolded, settlingFootprint_, [this] { card_.updateLayout(); }, [this] { finishMoreResize(); });
     card_.repaint();
+}
+
+// The card has its new height. A peek only re-anchors the cable ends (the row overlaps its neighbours, nothing
+// moves) and ends once the row is folded again; otherwise the canvas makes room or gives it back.
+void CardBody::finishMoreResize() {
+    if (!peekHoldsNeighbours_) {
+        card_.owner.handleModuleResized(&card_);
+        return;
+    }
+    if (!moreUnfolded_)
+        peekHoldsNeighbours_ = false;
+    card_.owner.notifyModuleContentChanged();
 }
 
 bool CardBody::unfoldForCableDragAt(juce::Point<int> cardLocal) {
     if (moreButton_ == nullptr || moreUnfolded_ || !moreButton_->isVisible() ||
         !moreButton_->getBounds().contains(cardLocal))
         return false;
-    setMoreUnfolded(true);
-    moreOpenedByDrag_ = true;
+    applyMoreUnfolded(true, /*peek=*/true);
+    moreOpenedByDrag_ = true; // after the unfold, which clears it as it does for any other change
+    card_.toFront(false);     // the revealed controls draw over the neighbour they overlap
     return true;
 }
 
@@ -127,10 +144,12 @@ void CardBody::cableDragEnded(bool keepOpen) {
     foldGrace_.stopTimer();
     if (!moreOpenedByDrag_)
         return;
-    if (keepOpen)
+    if (keepOpen) {
         moreOpenedByDrag_ = false;
-    else
-        setMoreUnfolded(false);
+        peekHoldsNeighbours_ = false; // the cable landed on a revealed control: the neighbours make room now
+        card_.owner.handleModuleResized(&card_);
+    } else
+        applyMoreUnfolded(false, /*peek=*/true);
 }
 
 // The row's state flips when it is toggled, but its controls stay visible until the fade has ended; a cable that

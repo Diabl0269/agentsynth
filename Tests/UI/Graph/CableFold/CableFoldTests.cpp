@@ -22,9 +22,11 @@ struct Rig {
     NodeID oscId;
     ModuleComponent* lfo = nullptr;
     ModuleComponent* osc = nullptr;
+    NodeID belowId; ///< With `withBelow`: a card just under the osc card, which an open row overlaps.
+    ModuleComponent* below = nullptr;
     synth::CardBody* body = nullptr;
 
-    explicit Rig(const juce::StringArray& hidden = {"level"}) {
+    explicit Rig(const juce::StringArray& hidden = {"level"}, bool withBelow = false) {
         OscillatorModule probe;
         lfoId = canvas.add(std::make_unique<LFOModule>(), 0, 0);
         oscId = canvas.add(std::make_unique<OscillatorModule>(), 600, 0, automaticLayoutHiding(probe, hidden));
@@ -32,6 +34,14 @@ struct Rig {
         lfo = canvas.card(lfoId);
         osc = canvas.card(oscId);
         body = osc->getCardBody();
+        if (withBelow) {
+            belowId = canvas.add(std::make_unique<LFOModule>(), 600, osc->getBottom() + 4);
+            canvas.editor.updateComponents();
+            lfo = canvas.card(lfoId);
+            osc = canvas.card(oscId);
+            below = canvas.card(belowId);
+            body = osc->getCardBody();
+        }
     }
 
     juce::Point<int> screen(juce::Point<int> cardLocal) { return osc->localPointToGlobal(cardLocal); }
@@ -295,4 +305,61 @@ TEST(CableFold, ARowOpeningUnderAStillCableStaysOpenThoughTheCardShrinksFirst) {
     EXPECT_TRUE(rig.body->isMoreUnfolded());
     rig.release(rig.offTheCard());
     EXPECT_FALSE(rig.body->isMoreUnfolded());
+}
+
+// Regression test for FRO1501: a row a cable opened grew the card and pushed the card below it down, so a drop aimed
+// at that card's jack missed. The row peeks over its neighbours instead; nothing moves while the cable is live.
+TEST(CableFold, ACableOpeningARowMovesNoOtherCard) {
+    FadeAnimateGuard guard;
+    Rig rig({"level"}, /*withBelow=*/true);
+    const auto belowBefore = rig.below->getBounds();
+    const auto lfoBefore = rig.lfo->getBounds();
+    const int folded = rig.height();
+    rig.begin();
+    rig.moveTo(rig.overMoreButton());
+    ASSERT_TRUE(rig.body->isMoreUnfolded());
+    FadeVisibility::stepAllForTest(1.0f);
+    ASSERT_GT(rig.height(), folded);
+    ASSERT_TRUE(rig.osc->getBounds().intersects(belowBefore)) << "the open row overlaps the card below";
+    EXPECT_EQ(rig.below->getBounds(), belowBefore);
+    EXPECT_EQ(rig.lfo->getBounds(), lfoBefore);
+
+    rig.moveTo(rig.offTheCard());
+    rig.body->endCableFoldGraceForTest();
+    FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(rig.body->isMoreUnfolded());
+    EXPECT_EQ(rig.height(), folded);
+    EXPECT_EQ(rig.below->getBounds(), belowBefore);
+    EXPECT_EQ(rig.lfo->getBounds(), lfoBefore);
+    rig.release(rig.offTheCard());
+    EXPECT_EQ(rig.below->getBounds(), belowBefore);
+}
+
+TEST(CableFold, ARowAPeekOpenedIsInFrontOfTheCardItOverlaps) {
+    Rig rig({"level"}, /*withBelow=*/true);
+    auto& content = *rig.osc->getParentComponent();
+    ASSERT_EQ(rig.below->getParentComponent(), &content);
+    rig.below->toFront(false); // the card below starts in front, as any later-added or later-clicked card can be
+    ASSERT_GT(content.getIndexOfChildComponent(rig.below), content.getIndexOfChildComponent(rig.osc));
+    rig.begin();
+    rig.moveTo(rig.overMoreButton());
+    EXPECT_GT(content.getIndexOfChildComponent(rig.osc), content.getIndexOfChildComponent(rig.below));
+    rig.release(rig.offTheCard());
+}
+
+TEST(CableFold, ADropOnARevealedControlMakesRoomThen) {
+    FadeAnimateGuard guard;
+    Rig rig({"level"}, /*withBelow=*/true);
+    const auto belowBefore = rig.below->getBounds();
+    rig.begin();
+    rig.moveTo(rig.overMoreButton());
+    FadeVisibility::stepAllForTest(1.0f);
+    rig.moveTo(rig.overHiddenKnob());
+    EXPECT_EQ(rig.below->getBounds(), belowBefore) << "nothing moves until the cable lands";
+    rig.release(rig.overHiddenKnob());
+    FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_TRUE(rig.routed());
+    EXPECT_TRUE(rig.body->isMoreUnfolded());
+    EXPECT_FALSE(rig.osc->getBounds().intersects(rig.below->getBounds())) << "the card below made room";
+    EXPECT_GT(rig.below->getY(), belowBefore.getY());
 }
