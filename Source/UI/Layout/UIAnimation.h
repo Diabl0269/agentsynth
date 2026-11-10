@@ -187,12 +187,24 @@ public:
 
     /** Test seam: advances a running animation to `ms` after its first frame, standing in for the VBlank frames that
      *  never reach an off-screen component, so a test can read the values between the start and the end. The first
-     *  call starts the clock; later calls move it. A no-op when nothing runs. After a stall restart (see
-     *  `stallGuardForTest`) the clock starts again at the next call, so `ms` counts from the restart. */
+     *  call starts the clock (and rewinds an animation real frames already advanced); later calls move it. A no-op when
+     *  nothing runs. After a stall restart (see `stallGuardForTest`) the clock starts again at the next call, so `ms`
+     *  counts from the restart. */
     void stepForTest(double ms) {
         if (run == nullptr || !run->animator.has_value())
             return;
         run->testClock = true;
+        if (!testClockEntered && run->hasFrame && !run->animator->isComplete()) {
+            // Real frames already ran before the first call: start over, so `ms` counts from the call and not from
+            // a real clock a loaded machine let run ahead.
+            run->baseProgress = 0.0;
+            run->lastProgress = 0.0;
+            run->hasFrame = false;
+            ++run->generation;
+            Run::retire(run->animator);
+            run->launch();
+        }
+        testClockEntered = true;
         const auto generationBefore = run->generation;
         const auto keepAlive = run; // a stall restart replaces the animator inside its own update()
         const juce::Animator current = *run->animator;
@@ -238,6 +250,7 @@ private:
                std::function<void()> onComplete) {
         stop(); // the previous animation, if any
         testClockStart.reset();
+        testClockEntered = false;
 
         // Animations: Off lands on the final frame at once; nothing is left running.
         if (animationsOff()) {
@@ -329,6 +342,7 @@ private:
 
     std::shared_ptr<Run> run;
     std::optional<double> testClockStart; // stepForTest's clock; reset with each animation
+    bool testClockEntered = false;        // stepForTest has run for this animation (a stall restart keeps it)
 };
 
 // ============================================================================
