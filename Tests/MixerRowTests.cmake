@@ -9,5 +9,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerTopBarRingTests.cpp
     # reorder drags: the order the last drag event showed is the order the drop commits (FRO1316)
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/ReorderDragPreviewCommitTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Mixer/MixerZonesDragPreviewCommitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CardLayoutEditor/CardLayoutEditorGripPreviewCommitTests.cpp
 )

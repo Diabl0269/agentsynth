@@ -62,6 +62,15 @@ const std::vector<Registered> kRegistered = {
     {"PianoRollVelocityLane",
      {"test:PianoRollVelocityDragPreviewCommitTest.AStickDragCommitsTheVelocitiesItLastShowed",
       "test:PianoRollVelocityDragPreviewCommitTest.AShiftRampCommitsTheVelocitiesItLastShowed"}},
+    {"NoteRangePicker",
+     {"test:NoteRangeDragPreviewCommit.AnEdgeDragCommitsTheRangeTheLastDragEventDrew",
+      "test:NoteRangeDragPreviewCommit.AnEdgeDragWithAScaleCommitsTheScaleNotesTheLastDragEventDrew",
+      "test:NoteRangeDragPreviewCommit.ABandDragCommitsTheRangeTheLastDragEventDrew"}},
+    {"MixerZonesRow",
+     {"test:MixerZonesDragPreviewCommit.AWithinGroupDropCommitsTheOrderTheLastDragEventShowed",
+      "test:MixerZonesDragPreviewCommit.ACrossGroupDropCommitsTheZoneAndSlotTheLastDragEventShowed"}},
+    {"TimelineRulerComponent",
+     {"test:TimelineRulerMarkerDragPreviewCommit.ASnappedMarkerDropWritesTheBeatTheLastDragEventDrew"}},
     {"CardLayoutOutline", {kOnCardRows}},
     {"CardLayoutAddRow", {kOnCardRows}},
     {"CardLayoutGroupHandle", {"test:OnCardGroupMoveEditor.WhatTheDragShowsIsWhatTheDropWrites"}},
@@ -121,9 +130,6 @@ const std::vector<KnownGap> kKnownGaps = {
     {"GraphEditor", "FRO1319", "canvas card move: shown card bounds vs the node position after release"},
     {"ModuleComponent", "FRO1319", "module card move: shown card bounds vs the node position after release"},
     {"MacroCardComponent", "FRO1319", "macro card move: shown card bounds vs the node position after release"},
-    {"NoteRangePicker", "FRO1318", "range edge/band drag: shown range vs the range committed on release"},
-    {"MixerZonesRow", "FRO1318", "zone row drag: preview slot vs the committed zone and order"},
-    {"TimelineRulerComponent", "FRO1318", "marker drag: snapped preview vs the marker position committed"},
 };
 
 // Every drag follows the view. A class is one of:
