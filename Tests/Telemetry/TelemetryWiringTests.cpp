@@ -153,7 +153,7 @@ TEST_F(TelemetryWiringTest, TheSettingSwitchesRecordingOnAndOffWhileRunning) {
     EXPECT_EQ(moduleCount(*service, "Oscillator"), 1);
 
     settings.setValue(synth::kShareUsageStatsSettingKey, false);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return !service->getRecorder().isEnabled(); });
     EXPECT_FALSE(service->getRecorder().isEnabled());
     EXPECT_FALSE(service->getRecorder().getToday().has_value());
     EXPECT_TRUE(synth::telemetry::TelemetryIdStore().load().isEmpty());

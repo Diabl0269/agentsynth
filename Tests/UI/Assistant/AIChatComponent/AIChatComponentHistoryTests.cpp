@@ -453,7 +453,7 @@ TEST_F(AIChatComponentTest, RestoringALocalConversationReplaysItsMessages) {
     chatComponent.setHistorySourcesForTesting(std::move(localFake), nullptr);
 
     chatComponent.simulateRestoreConversationForTesting("restore-me", /*isCloud=*/false);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
 
     auto* messageList = findMessageList(chatComponent);
     ASSERT_NE(messageList, nullptr);
@@ -489,7 +489,7 @@ TEST_F(AIChatComponentTest, EverySuccessfulExchangeIsSavedLocallyRegardlessOfPla
 
     inputField->setText("hello there");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return !synth::LocalHistoryStore::list(historyDir).empty(); });
 
     auto list = synth::LocalHistoryStore::list(historyDir);
     ASSERT_EQ(list.size(), 1u) << "the first exchange must lazily create exactly one conversation file";
@@ -505,7 +505,7 @@ TEST_F(AIChatComponentTest, EverySuccessfulExchangeIsSavedLocallyRegardlessOfPla
     // minting a new one.
     inputField->setText("second message");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 4; });
 
     auto listAfterSecond = synth::LocalHistoryStore::list(historyDir);
     ASSERT_EQ(listAfterSecond.size(), 1u)
@@ -548,7 +548,7 @@ TEST_F(AIChatComponentTest, NewChatClearsCloudConversationIdToo) {
 
     inputField->setText("hello");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
 
     ASSERT_FALSE(provider->setConversationIdCalls.empty());
     EXPECT_EQ(provider->setConversationIdCalls.back(), "server-conv-1")
@@ -637,7 +637,7 @@ TEST_F(AIChatComponentTest, RatingWithServerMessageIdAndProAccountFiresExactlyOn
     ASSERT_NE(inputField, nullptr);
     inputField->setText("give me a patch");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
 
     clickThumbsUp(chatComponent);
 
@@ -689,7 +689,7 @@ TEST_F(AIChatComponentTest, RatingOnFreePlanAccountDoesNotFireFeedbackPost) {
     ASSERT_NE(inputField, nullptr);
     inputField->setText("give me a patch");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
 
     // MockPatchProviderWithServerIds still returns a conversationId/messageId even against a Free
     // account here (a real hosted backend never would — see AIResponse::conversationId's doc
@@ -739,7 +739,7 @@ TEST_F(AIChatComponentTest, RatingWithNoServerMessageIdDoesNotFireFeedbackPostEv
     ASSERT_NE(inputField, nullptr);
     inputField->setText("give me a patch");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
 
     clickThumbsUp(chatComponent);
 
@@ -800,7 +800,7 @@ TEST_F(AIChatComponentTest, EditPlanCardRejectionReasonIsNotClipped) {
     ASSERT_NE(inputField, nullptr);
     inputField->setText("give me a patch");
     chatComponent.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return chatComponent.getMessageCountForTesting() >= 2; });
 
     auto* messageList = findMessageList(chatComponent);
     ASSERT_NE(messageList, nullptr);
@@ -854,7 +854,7 @@ TEST_F(AIChatComponentTest, BottomBarReservesFullHeightForWrappedDowngradeNotice
     chatComponent.setHistorySourcesForTesting(std::move(localFake), std::move(cloudFake));
 
     chatComponent.simulateHistoryButtonClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return findDirectChildLabelContaining(chatComponent, "lapsed") != nullptr; });
 
     auto* downgradeLabel = findDirectChildLabelContaining(chatComponent, "lapsed");
     ASSERT_NE(downgradeLabel, nullptr);

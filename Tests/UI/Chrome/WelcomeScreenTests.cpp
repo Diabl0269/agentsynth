@@ -384,7 +384,10 @@ TEST_F(WelcomeScreenTest, RecentProjectRow_OpensThatFileAndHidesWelcomeScreen) {
     ASSERT_EQ(mc.getWelcomeScreenForTest()->getRecentProjectCountForTest(), 1);
 
     mc.getWelcomeScreenForTest()->triggerRecentProjectForTest(0);
-    pumpMessageLoop();
+    synth::test::waitUntil([&] {
+        return mc.getCurrentPatchName() == bundleDir.getFileNameWithoutExtension() &&
+               !mc.getWelcomeScreenForTest()->isVisible();
+    });
 
     EXPECT_EQ(mc.getCurrentPatchName(), bundleDir.getFileNameWithoutExtension());
     EXPECT_FALSE(mc.wouldPromptOnSaveForTest()) << "the recent project is now the open bundle";

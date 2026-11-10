@@ -8,6 +8,7 @@
 // back, a routing appearing.
 
 #include "../../../Macros/MacroContainer/MacroContainerTestHelpers.h"
+#include "../../../TestWait.h"
 
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
@@ -126,8 +127,8 @@ TEST(GraphEditorCanvasTick, ACableAddedBehindTheEditorsBackIsDrawnOnceTheGraphSa
     const auto other = addModuleAt(c.editor, c.engine, std::make_unique<FilterModule>(), 900, 900);
     c.settle();
     const int cables = c.editor.getVisibleCableCount();
-    c.engine.getGraph().addConnection({{c.osc, 0}, {other, 0}});   // no repaintCanvas(), no updateComponents()
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20); // the graph's change broadcast is asynchronous
+    c.engine.getGraph().addConnection({{c.osc, 0}, {other, 0}}); // no repaintCanvas(), no updateComponents()
+    synth::test::flushMessageQueue();                            // the graph's change broadcast is asynchronous
     c.tick();
     EXPECT_EQ(c.editor.getVisibleCableCount(), cables + 1);
 }

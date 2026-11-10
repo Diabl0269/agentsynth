@@ -9,13 +9,9 @@
 
 namespace {
 
-void settle() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
-
 // The dirty flag is polled on a timer, so a slow (Debug, sanitized) run needs more than one short pump.
 bool settleUntilDirty(MainComponent& mc) {
-    for (int i = 0; i < 40 && !mc.isProjectDirty(); ++i)
-        settle();
-    return mc.isProjectDirty();
+    return synth::test::waitUntil([&] { return mc.isProjectDirty(); });
 }
 
 synth::ViewDoc editedView() {
@@ -58,7 +54,7 @@ TEST_F(MainComponentTest, CanvasViewSurvivesSaveAndReopenAndTheLoadLeavesTheDocu
 
     ASSERT_TRUE(reloaded.openProjectForTest(bundleDir));
     EXPECT_EQ(reloaded.getGraphEditor().getViewDoc(), editedView());
-    settle();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(reloaded.getUndoManager().canUndo());
     EXPECT_FALSE(reloaded.isProjectDirty());
 }
@@ -78,7 +74,7 @@ TEST_F(MainComponentTest, ReopeningInTheSameWindowRestoresTheSavedCanvasView) {
 
     ASSERT_TRUE(mc.openProjectForTest(bundleDir));
     EXPECT_EQ(mc.getGraphEditor().getViewDoc(), editedView());
-    settle();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.isProjectDirty());
 }
 
@@ -109,7 +105,7 @@ TEST_F(MainComponentTest, ChangingTheCanvasViewIsNotAnEdit) {
 
     mc.getGraphEditor().applyViewDoc(editedView());
     mc.getGraphEditor().zoomAroundCentre(1.0f);
-    settle();
+    synth::test::flushMessageQueue();
 
     EXPECT_FALSE(mc.isProjectDirty());
     EXPECT_FALSE(mc.getUndoManager().canUndo());
@@ -139,7 +135,7 @@ TEST_F(MainComponentTest, OpeningAProjectFromTheCommandLineLoadsItAndHidesTheWel
     mc.getWelcomeScreenForTest()->setVisible(true);
 
     mc.openProjectFromCommandLine(bundleDir);
-    settle();
+    synth::test::waitUntil([&] { return mc.getCurrentPatchName() == "FromCli"; });
 
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isVisible());
     EXPECT_EQ(mc.getGraphEditor().getViewDoc(), editedView())

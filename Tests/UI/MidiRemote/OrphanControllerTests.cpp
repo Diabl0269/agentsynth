@@ -5,6 +5,7 @@
 // own rules are MidiLearnControllerOrphanTests.cpp; this file drives them through the panel. Suite names
 // contain "MidiRemote" per the ship-task --gtest_filter convention.
 
+#include "../../TestWait.h"
 #include "../Layout/BottomDockActiveTabResetGuard.h"
 #include "MainComponent/MainComponent.h"
 #include "MidiRemoteMockProvider.h"
@@ -243,7 +244,10 @@ TEST(MidiRemoteOrphanMainComponentTest, ADeletedModuleShowsAsMissingWithoutATabS
         EXPECT_NE(before->getAssignmentLabelForTest(), "(missing module)");
 
         editor.requestDeleteModule(node->nodeID); // the card's own delete button
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+        synth::test::waitUntil([&] {
+            const auto* cell = panel.findSurfaceCellForTest("k");
+            return cell != nullptr && cell->getAssignmentLabelForTest() == "(missing module)";
+        });
 
         const auto* after = panel.findSurfaceCellForTest("k");
         ASSERT_NE(after, nullptr);

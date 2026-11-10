@@ -1,6 +1,7 @@
 // MorphMapTests.cpp -- the morph map through real mouse and key events: cursor and dot drags, click-to-add, the dot
 // menu, Delete, the cable edge bands, the tooltips, the screen-reader names and the Tab order, and the keyboard in
 // the shape editor (stops that survive a refresh, the arrow-hold glide and its model).
+#include "../../../TestWait.h"
 #include "../../Accessibility/TabOrderHelpers.h"
 #include "Modules/Filter/CustomFilterBlend.h"
 #include "Modules/Filter/CustomFilterPeakMorph.h"
@@ -761,7 +762,7 @@ TEST(MorphMapGlide, ALostKeyUpIsSeenByTheFramePoll) {
     const float before = g.y(1);
     map.glideTickForTest();
     EXPECT_FLOAT_EQ(g.y(1), before) << "no arrow is down, so the frame does not move it";
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return !map.isGliding() && g.ends == 1; });
     EXPECT_FALSE(map.isGliding());
     EXPECT_EQ(g.ends, 1);
 }

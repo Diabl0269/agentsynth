@@ -164,7 +164,7 @@ TEST_F(GraphEditorTest, AModuleWithOneTargetIsOneRowAndAModuleWithSeveralIsAGrou
 
     // A group folds from its header.
     audio.header(f.titleOf(f.math))->triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    synth::test::waitUntil([&] { return !audio.isGroupExpanded(f.titleOf(f.math)); });
     EXPECT_FALSE(audio.isGroupExpanded(f.titleOf(f.math)));
 }
 

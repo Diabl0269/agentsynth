@@ -5,6 +5,7 @@
 // surface). The picker's own rows are in AutomationLanesChangeSourceTests.cpp; "New LFO" / "New envelope" against a
 // real MainComponent is at the end of this file.
 
+#include "../../../TestWait.h"
 #include "../../Layout/FadeVisibilityTestGuard.h"
 #include "AutomationLanesAmountFixture.h"
 #include "AutomationLanesMenuFixture.h"
@@ -337,7 +338,10 @@ TEST_F(TimelinePanelIntegrationTest, NewLfoFromTheNamePickerReplacesTheSourceKee
     ASSERT_GE(names.size(), 2u);
     ASSERT_EQ(names[names.size() - 2], "New LFO");
     picker.picker->chooseVisibleItemForTest((int)names.size() - 2);
-    s.flush();
+    synth::test::waitUntil([&] {
+        return s.nodesOf<LFOModule>().size() == lfosBefore + 1 && s.row() != nullptr &&
+               s.row()->getInfo().sourceUuid != oldLfo;
+    });
 
     EXPECT_EQ(s.nodesOf<LFOModule>().size(), lfosBefore + 1) << "a fresh LFO card";
     EXPECT_TRUE(s.chainsInto(oldLfo, raw).empty()) << "the routing left the old source";
@@ -375,7 +379,9 @@ TEST_F(TimelinePanelIntegrationTest, NewEnvelopeFromTheNamePickerCreatesAnEnvelo
     ASSERT_EQ(names.back(), "New envelope");
     const size_t adsrBefore = s.nodesOf<ADSRModule>().size();
     picker.picker->chooseVisibleItemForTest((int)names.size() - 1);
-    s.flush();
+    synth::test::waitUntil([&] {
+        return s.nodesOf<ADSRModule>().size() == adsrBefore + 1 && s.row() != nullptr && s.row()->getInfo().isEnvelope;
+    });
 
     EXPECT_EQ(s.nodesOf<ADSRModule>().size(), adsrBefore + 1);
     EXPECT_TRUE(s.chainsInto(oldLfo, raw).empty());

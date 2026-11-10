@@ -179,8 +179,6 @@ TEST(ShapesPlaceTest, AShapePayloadRoundTripsAndOtherPayloadsAreNotShapes) {
 
 namespace {
 
-void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(60); }
-
 // Plays the part of the Delete confirmation: remembers what was asked, answers on demand.
 struct DeletePrompt {
     juce::StringArray asked;
@@ -297,7 +295,7 @@ TEST(ShapesPlaceTest, RenamingASavedShapeMovesItsFileAndKeepsItSelectedAndFavour
     EXPECT_TRUE(label.isVisible());
     EXPECT_EQ(label.getText(), "zz mine");
     label.setText("renamed", juce::sendNotification);
-    pump();
+    synth::test::waitUntil([&] { return f.rowOf("renamed") >= 0; });
     EXPECT_EQ(f.rowOf("zz mine"), -1);
     ASSERT_GE(f.rowOf("renamed"), 0);
     EXPECT_FALSE(f.library.exists(ShapeKind::Filter, "zz mine"));

@@ -9,6 +9,7 @@
 //                   undo step, and undo removes them
 //   * row        -- the new row and its knob read "Send to Key: ..."
 
+#include "../../TestWait.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
@@ -162,8 +163,7 @@ TEST(MixerSendListKeyTargetTests, TheSendMenuOffersTheOtherChannelsKeyAndChoosin
 
     // Nothing later re-routes the cable: after the message loop runs, the send still resolves to
     // the same Key.
-    for (int i = 0; i < 5; ++i)
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    synth::test::flushMessageQueue();
     EXPECT_EQ(synth::resolveSendTarget(rig.graph(), rig.column(0)->getNodeId(), 0),
               (synth::SendTarget{bassComp, true}));
 

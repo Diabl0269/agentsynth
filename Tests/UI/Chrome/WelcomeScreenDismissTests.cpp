@@ -53,7 +53,7 @@ TEST_F(WelcomeDismissTest, LaunchScreenIsOpaqueAndNothingDismissesIt) {
 
     EXPECT_FALSE(welcome->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
     welcome->mouseDown(mouseEventAt(*welcome, outsideCard()));
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.isWelcomeScreenHiddenForTest());
 }
 
@@ -70,7 +70,7 @@ TEST_F(WelcomeDismissTest, EscapeClosesItAndLeavesTheProjectUntouched) {
     open(mc);
     mc.hideWelcomeScreenForTest();
     mc.simulateAddMidiTrackClick();
-    pump();
+    synth::test::waitUntil([&] { return mc.isProjectDirty(); });
     const int nodes = mc.getAudioEngine().getGraph().getNumNodes();
     const bool dirty = mc.isProjectDirty();
     ASSERT_TRUE(dirty);

@@ -14,8 +14,6 @@ namespace {
 constexpr juce::uint32 kStart = 1000;
 constexpr juce::uint32 kHeld = 400; // past the 300 ms debounce
 
-void settle() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
-
 synth::MusicalScale dDorian() { return synth::makeScale(2, synth::scalePresetIndex("Dorian")); }
 
 } // namespace
@@ -40,7 +38,7 @@ TEST_F(MainComponentTest, SongKeySurvivesSaveAndReopenAndTheLoadLeavesTheDocumen
 
     reloaded.pollTransportEditsForTest(kStart);
     reloaded.pollTransportEditsForTest(kStart + kHeld);
-    settle();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(reloaded.getUndoManager().canUndo());
     EXPECT_FALSE(reloaded.isProjectDirty());
 
@@ -90,7 +88,7 @@ TEST_F(MainComponentTest, NewPatchStartsWithNoKeyAndRecordsNoEdit) {
     EXPECT_FALSE(transport.getDocumentState().songKey.has_value());
     mc.pollTransportEditsForTest(kStart + 2 * kHeld);
     mc.pollTransportEditsForTest(kStart + 3 * kHeld);
-    settle();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.getUndoManager().canUndo());
     EXPECT_FALSE(mc.isProjectDirty());
 }

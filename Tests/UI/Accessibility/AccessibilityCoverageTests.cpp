@@ -8,6 +8,7 @@
 #include "../../App/MainComponent/MainComponentTestFixture.h"
 #include "../../SoundBrowser/SoundBrowserTestKit.h"
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "../Graph/GraphEditor/GraphEditorTestHelpers.h"
 #include "../MidiRemote/MidiRemotePanelTestFixture.h"
 #include "AI/AIIntegrationService/AIIntegrationService.h"
@@ -593,7 +594,7 @@ TEST_F(AccessibilitySettingsTest, AIChat) {
             if (editor->isVisible())
                 editor->setText("Create a fat bass");
     aiChat->triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return aiChat->getMessageCountForTesting() >= 2; });
     EXPECT_TRUE(matchesBaseline("AIChat", auditAccessibility(*aiChat)));
 }
 

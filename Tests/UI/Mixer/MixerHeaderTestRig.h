@@ -8,6 +8,7 @@
 // its default insert chain (with a Parametric EQ) and one send row; the bus column has the first strip as its source.
 
 #include "../../TestSettingsHelpers.h"
+#include "../../TestWait.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestEvents.h"
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
@@ -72,7 +73,7 @@ struct HeaderRig {
         // Let the setup's queued edit notifications land first: the mixer re-checks itself against the graph on
         // each one (a module's numbered name arrives after its column was built), and a test that holds a column's
         // control must not have that column replaced under it.
-        pumpMessages();
+        synth::test::flushMessageQueue();
     }
 
     synth::ui::MixerPanelComponent& panel() { return mc.getBottomDock().getMixerPanel(); }
@@ -94,9 +95,6 @@ struct HeaderRig {
         auto* node = mc.getAudioEngine().getGraph().getNodeForId(id);
         return node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
     }
-
-    /** Runs what a button queued: juce::Button::triggerClick posts its click as a command message. */
-    static void pumpMessages() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
 };
 
 /** A press and release on the middle of `button`, as the live mouse would deliver them (hit component first). */

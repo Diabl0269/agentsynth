@@ -56,7 +56,10 @@ TEST_F(TimelinePanelIntegrationTest, NoAmountLaneUntilTheFirstPenStrokeWhichCrea
     EXPECT_EQ(s.amountLane(), nullptr) << "one undo takes the lane and its points together";
     EXPECT_TRUE(juce::JSON::toString(s.doc().toVar()) == juce::JSON::toString(before));
     EXPECT_EQ(s.nodesOf<LFOModule>().size(), 1u) << "and nothing before it";
-    s.flush();
+    synth::test::waitUntil([&] {
+        const auto* followed = proxy.getLane(s.band()->getEditor()->getActiveLane());
+        return followed != nullptr && followed->points.empty();
+    });
     EXPECT_TRUE(proxy.getLane(s.band()->getEditor()->getActiveLane())->points.empty()) << "the band follows";
     ASSERT_TRUE(s.undo().redo());
     ASSERT_NE(s.amountLane(), nullptr);
@@ -83,7 +86,10 @@ TEST_F(TimelinePanelIntegrationTest, WithNoLaneTheSelectToolDragsTheKnobAsOneGra
     ASSERT_TRUE(s.undo().undo());
     EXPECT_NEAR(s.amount(), 0.51f, 1.0e-4f) << "each key press is its own step";
     s.tick();
-    s.flush();
+    synth::test::waitUntil([&] {
+        const auto* followed = s.band()->getProxyDoc().getLane(band->getEditor()->getActiveLane());
+        return followed != nullptr && std::abs(followed->range.defaultValue - 0.51f) < 1.0e-4f;
+    });
     EXPECT_FLOAT_EQ(s.band()->getProxyDoc().getLane(band->getEditor()->getActiveLane())->range.defaultValue, 0.51f)
         << "the flat line follows the knob";
 }
@@ -155,7 +161,10 @@ TEST_F(TimelinePanelIntegrationTest, AnExistingLaneIsEditedThroughTheEditorAndEr
     AmountScene s;
     s.doubleClick({s.x(16.0), s.yFor(-0.25)});
     ASSERT_NE(s.amountLane(), nullptr);
-    s.flush();
+    synth::test::waitUntil([&] {
+        return s.band() != nullptr && s.band()->getEditor() != nullptr &&
+               !s.band()->getEditor()->getHandleRectForTest(16.0).getCentre().toFloat().isOrigin();
+    });
     auto* editor = s.band()->getEditor();
     const auto handle = editor->getHandleRectForTest(16.0).getCentre().toFloat();
     ASSERT_FALSE(handle.isOrigin());
@@ -168,7 +177,8 @@ TEST_F(TimelinePanelIntegrationTest, AnExistingLaneIsEditedThroughTheEditorAndEr
     EXPECT_NEAR(s.amountLane()->points[0].value, 0.75, 0.05);
     ASSERT_TRUE(s.undo().undo());
     EXPECT_NEAR(s.amountLane()->points[0].value, -0.25, 0.05);
-    s.flush();
+    synth::test::waitUntil(
+        [&] { return std::abs(editor->getHandleRectForTest(16.0).getCentre().toFloat().y - s.yFor(-0.25)) < 3.0f; });
 
     // Erase the only point: the lane goes in the same step, and the knob plays again.
     s.panel().setActiveTool(synth::ui::EditTool::Erase);
@@ -185,7 +195,10 @@ TEST_F(TimelinePanelIntegrationTest, TheBandIsBipolarWithADashedCentreLineAndSca
     // The flat line well away from the centre and from the top label.
     s.band()->setKnobAmount(-0.5);
     s.tick();
-    s.flush();
+    synth::test::waitUntil([&] {
+        const auto* followed = s.band()->getProxyDoc().getLane(s.band()->getEditor()->getActiveLane());
+        return followed != nullptr && std::abs(followed->range.defaultValue + 0.5f) < 1.0e-4f;
+    });
     const auto image = renderBand(s);
     const int zeroY = juce::roundToInt(s.band()->getEditor()->valueToY(0.0));
     EXPECT_EQ(zeroY, image.getHeight() / 2) << "-100%..+100%: 0 is the middle";
@@ -248,7 +261,7 @@ TEST_F(TimelinePanelIntegrationTest, AShapeBoxStampsOntoTheAmountLaneInOneUndoSt
 
     // Snap is one bar, so a box over bars 2-3 is two square cycles swinging -50%..+50%.
     s.drag({s.x(4.0), s.yFor(0.5)}, {s.x(12.0), s.yFor(-0.5)}, 12);
-    s.flush();
+    synth::test::waitUntil([&] { return s.amountLane() != nullptr && s.amountLane()->points.size() == 2u * 2u + 1u; });
 
     const auto* lane = s.amountLane();
     ASSERT_NE(lane, nullptr) << "the stamp created the amount lane";

@@ -250,7 +250,6 @@ struct MoveScene : amount_test::AmountScene {
         auto& header = *panel().laneHeaderForTest(l);
         return header.localPointToGlobal(juce::Point<int>(0, header.getHeight())).y;
     }
-    void flushUi() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
 };
 } // namespace
 
@@ -342,7 +341,7 @@ TEST_F(TimelinePanelIntegrationTest, ALaneWhoseParameterHasNoCvJackIsNotHereAndT
     EXPECT_FALSE(s.panel().getAutomationLanes().modulatorDrop().valid);
     EXPECT_FALSE(s.panel().getAutomationLanes().modulatorDropIndicator().isVisible());
     drag.release();
-    synth::test::waitUntil([&] { return (s.chainsInto(s.lfoUuid, cutoff).size()) == (1u); });
+    synth::test::flushMessageQueue(); // the refused drop leaves the routing where it was
 
     EXPECT_EQ(s.chainsInto(s.lfoUuid, cutoff).size(), 1u);
     EXPECT_EQ(s.doc().getRevision(), revision);
@@ -364,7 +363,7 @@ TEST_F(TimelinePanelIntegrationTest, ALaneThatAlreadyHasThisSourceOnItsJackIsNot
     EXPECT_EQ(s.panel().getAutomationLanes().modulatorDrop().lane, s.resLane);
     EXPECT_FALSE(s.panel().getAutomationLanes().modulatorDrop().valid);
     drag.release();
-    s.flushUi();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(s.panel().getAutomationLanes().modulatorCount(s.lane), 1) << "it stays where it was";
     EXPECT_FALSE(s.undo().canUndo());
 }

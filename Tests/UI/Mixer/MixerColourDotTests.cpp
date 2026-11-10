@@ -205,7 +205,7 @@ TEST(MixerColourDotTest, PressingTheDotAndDraggingReordersTheColumnInsteadOfOpen
     EXPECT_TRUE(rig.panel().isColumnReorderActiveForTest()) << "the dot is part of the header's drag handle";
     ASSERT_TRUE(rig.panel().sendEscapeToColumnDragForTest());
     dot.mouseUp(makeClickEvent(dot, start.translated(60.0f, 0.0f)));
-    HeaderRig::pumpMessages();
+    synth::test::flushMessageQueue(); // runs any click the release queued
     EXPECT_EQ(captured.opens, 0) << "the release of a drag is not a click";
 }
 

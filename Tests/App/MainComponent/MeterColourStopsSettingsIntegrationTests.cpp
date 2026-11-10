@@ -82,7 +82,7 @@ TEST_F(MainComponentTest, ClearingTheSettingsKeyRevertsTheSharedLookAndFeelToThe
     ASSERT_TRUE(mc.getLookAndFeelForTest().hasMeterColourStopsOverride());
 
     synth::ui::clearMeterColourStopsOverride(*mc.getAppPropertiesForTest().getUserSettings());
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return !mc.getLookAndFeelForTest().hasMeterColourStopsOverride(); });
 
     EXPECT_FALSE(mc.getLookAndFeelForTest().hasMeterColourStopsOverride());
     const auto expected = synth::ui::MeterColourStops::fromTheme(mc.getLookAndFeelForTest().getTheme().colors);

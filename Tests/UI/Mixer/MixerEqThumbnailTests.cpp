@@ -125,8 +125,9 @@ TEST(MixerEqThumbnailTests, DimmedWhenBypassed) {
 
     const auto activeImage = renderUnderTheme(thumbnail, "Obsidian Studio");
 
+    const int recomputesBefore = thumbnail.getRecomputeCountForTest();
     eq.setBypassed(true);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return thumbnail.getRecomputeCountForTest() > recomputesBefore; });
 
     const auto bypassedImage = renderUnderTheme(thumbnail, "Obsidian Studio");
 

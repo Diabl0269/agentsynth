@@ -4,6 +4,7 @@
 // driven through the real panel, reusing MidiRemotePanelTestFixture.h exactly like
 // MidiRemotePanelPagesTests.cpp.
 
+#include "../../TestWait.h"
 #include "MidiRemotePanelTestFixture.h"
 #include "Modules/ModuleBase.h"
 
@@ -58,7 +59,7 @@ TEST_F(MidiRemotePanelFocusBankTest, BoundFocusBankCellShowsFocusPrefixedLabel) 
     remoteEngine_.setTransientAssignments({transient});
     remoteEngine_.reconcile(engine_->getGraph());
     panel_.scheduleLiveRefresh();
-    pump();
+    synth::test::flushMessageQueue();
 
     auto* cell = panel_.findSurfaceCellForTest("bank-1");
     ASSERT_NE(cell, nullptr);
@@ -83,7 +84,7 @@ TEST_F(MidiRemotePanelFocusBankTest, ExplicitProjectAssignmentTakesTheCellOverTh
     remoteEngine_.setTransientAssignments({transient});
     remoteEngine_.reconcile(engine_->getGraph());
     panel_.scheduleLiveRefresh();
-    pump();
+    synth::test::flushMessageQueue();
 
     auto* cell = panel_.findSurfaceCellForTest("bank-1");
     ASSERT_NE(cell, nullptr);
