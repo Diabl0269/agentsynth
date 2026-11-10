@@ -100,7 +100,12 @@ void CardBody::attachMoreAndSectionFades() {
             if (component != nullptr)
                 moreTargets.push_back(component);
     if (!moreTargets.empty())
-        moreFade_.attach(std::move(moreTargets), [this] { relayoutForFade(); }, [this] { settleAfterFade(); });
+        moreFade_.attach(
+            std::move(moreTargets), [this] { relayoutForFade(); },
+            [this] {
+                card_.updateLayout();
+                finishMoreResize(); // a peek's fold gives no room back: nothing was made
+            });
 
     sectionFades_.resize(plan_.sections.size());
     for (int s = 0; s < (int)plan_.sections.size(); ++s)
