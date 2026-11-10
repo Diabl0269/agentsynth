@@ -410,6 +410,8 @@ private:
     juce::String previewKeyText() const;
     /** Esc with the panel open closes it (the one place every focus region's Esc ends up); false when it is shut. */
     bool closeFiltersWithEscape(const juce::KeyPress& key);
+    /** Tab (the region-cycle key) from the list lands on the footer; Shift+Tab from the footer returns to the list. */
+    bool handleFooterTab(const juce::KeyPress& key, bool fromFooter);
     std::vector<juce::Component*> headerStops();
     void attachReachListeners();
     void focusStop(juce::Component& stop);

@@ -19,6 +19,9 @@ namespace {
 
 juce::KeyPress key(int code) { return juce::KeyPress(code, juce::ModifierKeys(), 0); }
 juce::KeyPress space() { return juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys(), ' '); }
+juce::KeyPress tab(bool shift = false) {
+    return juce::KeyPress(juce::KeyPress::tabKey, shift ? juce::ModifierKeys::shiftModifier : 0, 0);
+}
 
 // The order of juce::ComponentPeer::handleKeyPress (JUCE 8): from the focused component up through its parents, each
 // one offers the key to its key listeners first and to its own keyPressed second, and the first to use it ends the
@@ -454,6 +457,74 @@ TEST(SoundBrowserKeyboardReachTest, TheGetMoreHeadingFoldsWithLeftAndRightFromTh
         << "folded, the heading is the last stop: the hidden packs are not reachable";
     EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::rightKey)));
     EXPECT_TRUE(v.isGetMoreShowing());
+}
+
+// The footer is a row, so Left and Right step along it in the order it reads (the guard above only proved
+// every stop is reachable, not which key gets there). The volume keeps Left and Right for its value.
+TEST(SoundBrowserKeyboardReachTest, LeftAndRightStepAlongTheFooterAndTheVolumeKeepsThemForItsValue) {
+    Fixture f;
+    auto& v = *f.view;
+    auto& footer = v.getPreviewFooter();
+    const auto stops = synth::ui::focusableDescendants(footer);
+    ASSERT_GE(stops.size(), 3u);
+    ASSERT_EQ(stops.front(), &footer.getPlayButton());
+    ASSERT_EQ(stops.back(), &footer.getVolume());
+
+    for (size_t i = 0; i + 1 < stops.size(); ++i) {
+        if (stops[i] == &footer.getVolume())
+            break;
+        EXPECT_TRUE(dispatchKey(v, *stops[i], key(juce::KeyPress::rightKey)));
+        EXPECT_EQ(f.landed(), stops[i + 1]) << "Right from stop " << i;
+    }
+    for (size_t i = stops.size() - 1; i > 0; --i) {
+        if (stops[i] == &footer.getVolume())
+            continue; // Left on the volume is its value; Up leaves it (below)
+        EXPECT_TRUE(dispatchKey(v, *stops[i], key(juce::KeyPress::leftKey)));
+        EXPECT_EQ(f.landed(), stops[i - 1]) << "Left from stop " << i;
+    }
+    EXPECT_TRUE(dispatchKey(v, footer.getPlayButton(), key(juce::KeyPress::leftKey)))
+        << "Left on the first stop is consumed: it must not reach the app";
+    EXPECT_EQ(f.landed(), &footer.getPlayButton());
+
+    auto& volume = footer.getVolume();
+    const double before = volume.getValue();
+    EXPECT_TRUE(dispatchKey(v, volume, key(juce::KeyPress::leftKey)));
+    EXPECT_LT(volume.getValue(), before) << "Left on the volume is its value";
+    EXPECT_NE(f.landed(), stops[stops.size() - 2]);
+    dispatchKey(v, volume, key(juce::KeyPress::rightKey));
+    EXPECT_DOUBLE_EQ(volume.getValue(), before);
+    EXPECT_TRUE(dispatchKey(v, volume, key(juce::KeyPress::upKey))) << "Up still leaves the volume";
+    EXPECT_EQ(f.landed(), stops[stops.size() - 2]);
+    EXPECT_TRUE(dispatchKey(v, volume, key(juce::KeyPress::downKey)));
+}
+
+// Tab from the list lands on the first footer control in one press, Shift+Tab from the footer returns, and
+// anywhere else Tab is still the app's region cycle (it bubbles on).
+TEST(SoundBrowserKeyboardReachTest, TabFromTheListJumpsToTheFooterAndShiftTabComesBack) {
+    Fixture f;
+    auto& v = *f.view;
+    auto& footer = v.getPreviewFooter();
+    v.selectRow(0);
+    const int selected = v.getSelectedIndex();
+    EXPECT_TRUE(dispatchKey(v, v, tab()));
+    EXPECT_EQ(f.landed(), &footer.getPlayButton()) << "one Tab, not one per row";
+    EXPECT_EQ(v.getSelectedIndex(), selected) << "the selection is kept";
+
+    // Offered as the footer control's key listener (a real focused footer control never reaches the list's own Tab).
+    EXPECT_FALSE(v.offerStepKeyForTest(tab(), footer.getPlayButton())) << "Tab from the footer cycles regions";
+    EXPECT_TRUE(dispatchKey(v, footer.getVolume(), tab(true)));
+    EXPECT_EQ(f.landed(), &v) << "Shift+Tab from any footer control returns to the list";
+    EXPECT_FALSE(dispatchKey(v, v, tab(true))) << "Shift+Tab from the list cycles regions";
+}
+
+TEST(SoundBrowserKeyboardReachTest, TabFromTheListWithNoFooterStillCyclesRegions) {
+    Fixture f;
+    auto& v = *f.view;
+    using Mode = SoundBrowserComponent::FooterMode;
+    ASSERT_GT(heightShowing(v, Mode::Hidden), 0);
+    ASSERT_FALSE(v.getPreviewFooter().isVisible());
+    v.selectRow(0);
+    EXPECT_FALSE(dispatchKey(v, v, tab()));
 }
 
 // Esc steps back out from every focus region of the view, one place: the search box (after the first Esc has

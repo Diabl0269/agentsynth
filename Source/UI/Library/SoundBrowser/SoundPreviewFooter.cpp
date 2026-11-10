@@ -24,6 +24,15 @@ SoundPreviewFooter::SoundPreviewFooter() {
     };
     addAndMakeVisible(play_);
 
+    // Child order is the keyboard order: it follows the layout, Play, Match key, Auto-play, volume.
+    matchKey_.setTitle("Match key");
+    matchKey_.setTooltip("Play loops in the song's key");
+    matchKey_.onClick = [this] {
+        if (onMatchKeyChanged)
+            onMatchKeyChanged(matchKey_.getToggleState());
+    };
+    addAndMakeVisible(matchKey_);
+
     autoPlay_.setTitle("Auto-play");
     autoPlay_.setTooltip("Play a sound when you select it");
     autoPlay_.setToggleState(true, juce::dontSendNotification);
@@ -32,14 +41,6 @@ SoundPreviewFooter::SoundPreviewFooter() {
             onAutoPlayChanged(autoPlay_.getToggleState());
     };
     addAndMakeVisible(autoPlay_);
-
-    matchKey_.setTitle("Match key");
-    matchKey_.setTooltip("Play loops in the song's key");
-    matchKey_.onClick = [this] {
-        if (onMatchKeyChanged)
-            onMatchKeyChanged(matchKey_.getToggleState());
-    };
-    addAndMakeVisible(matchKey_);
 
     using Player = synth::soundbrowser::SoundPreviewPlayer;
     volume_.setTitle("Preview volume");

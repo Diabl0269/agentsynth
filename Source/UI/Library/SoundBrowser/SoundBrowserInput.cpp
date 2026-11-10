@@ -247,7 +247,7 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
     if (focused != nullptr && focused != this && isParentOf(focused)) {
         return handlePreviewKey(key) || closeFiltersWithEscape(key); // the panel's own Esc lands the focus on Filters
     }
-    if (handlePreviewKey(key))
+    if (handlePreviewKey(key) || handleFooterTab(key, false))
         return true;
     if (key == juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::commandModifier, 0))
         return goUp();

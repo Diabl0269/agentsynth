@@ -1,0 +1,87 @@
+# Bugs FRO1381, FRO1385 and FRO1379 in the Sounds view: Space on a selected sound played its preview instead of the song,
+# Esc closed the filters only from a filter control, and the footer's controls moved with Up and Down while Tab walked
+# on past the list.
+#
+# What a user does: selects the one fixture sound, presses Space (the key goes on to the song, so the view's preview
+# counter stays at 0) and then Ctrl+Space (the preview toggles: the counter reads 1). Opens Filters and presses Esc
+# from the list (it closes), from the empty search box (the first Esc clears the text, the
+# next closes the panel and the list takes focus) and from a panel control. Tab from the list lands on Play in one
+# press; Right walks Play, Match key, Auto-play and the volume, Left walks back, Left on the volume moves its value
+# and Up leaves it; Shift+Tab returns to the list. The test-mode app has no audio device, so the preview never sounds
+# and the song never runs here: the preview counter and the focus ring show which key went where, and the gtests pin
+# the rest (`SoundPreviewViewTest`, `SoundBrowserKeyboardReachTest`).
+settings:
+  librarySidebarView: sounds
+  soundBrowserFolders: "${FIXTURES}/sounds"
+record: true
+save_project: sound-browser-keys
+steps:
+  - openProject: {path: "${FIXTURES}/macros.agsproj"}
+  - wait: {}
+  - expect: {id: soundBrowser, showing: true, within_ms: 3000}
+  - click: {id: "Search sounds"}
+  - type: {text: test loop}
+  - wait: {}
+  - key: {keys: down}
+  - wait: {}
+  - expect: {id: soundBrowser, contains: {selectedName: "test loop"}}
+  - expect: {id: soundBrowser, hasFocus: true, within_ms: 1000}
+  # FRO1381: plain Space is the song's; Ctrl+Space is the preview's.
+  - key: {keys: space}
+  - wait: {}
+  - expect: {id: soundBrowser, previewToggles: 0}
+  - expect: {id: soundPreviewPlay, contains: {tooltip: "+ Space)"}}
+  - screenshot: {id: soundBrowser, name: 1-space-leaves-the-preview-alone}
+  - key: {keys: ctrl+space}
+  - wait: {}
+  - expect: {id: soundBrowser, previewToggles: 1}
+  - screenshot: {id: soundBrowser, name: 2-ctrl-space-toggles-the-preview}
+  # FRO1385: Esc closes the filters from the list, the empty search box and a panel control.
+  - click: {id: Filters}
+  - wait: {}
+  - expect: {id: Filters, contains: {title: expanded}}
+  - screenshot: {id: soundBrowser, name: 3-filters-open}
+  - click: {id: "Search sounds"}
+  - type: {text: test}
+  - key: {keys: escape}
+  - wait: {}
+  - expect: {id: Filters, contains: {title: expanded}}
+  - key: {keys: escape}
+  - wait: {within_ms: 600}
+  - expect: {id: Filters, contains: {title: collapsed}, within_ms: 1500}
+  - expect: {id: soundBrowser, hasFocus: true, within_ms: 1000}
+  - screenshot: {id: soundBrowser, name: 4-second-esc-from-search-closed-the-filters}
+  - click: {id: Filters}
+  - wait: {}
+  - expect: {id: Filters, contains: {title: expanded}}
+  - key: {keys: down, target: Filters}
+  - key: {keys: down, target: soundBrowser}
+  - expect: {id: soundBrowser, hasFocus: true, within_ms: 1000}
+  - key: {keys: escape, target: soundBrowser}
+  - wait: {}
+  - expect: {id: Filters, contains: {title: collapsed}, within_ms: 1500}
+  - expect: {id: soundBrowser, hasFocus: true}
+  - screenshot: {id: soundBrowser, name: 5-esc-from-the-list-closed-the-filters}
+  # FRO1379: Tab jumps from the list to the footer; Left and Right walk it.
+  - key: {keys: tab, target: soundBrowser}
+  - expect: {id: soundPreviewPlay, hasFocus: true, within_ms: 1000}
+  - screenshot: {id: soundBrowser, name: 6-tab-lands-on-play}
+  - key: {keys: right, target: soundPreviewPlay}
+  - expect: {id: "Match key", hasFocus: true, within_ms: 1000}
+  - key: {keys: right, target: "Match key"}
+  - expect: {id: "Auto-play", hasFocus: true, within_ms: 1000}
+  - key: {keys: right, target: "Auto-play"}
+  - expect: {id: "Preview volume", hasFocus: true, within_ms: 1000}
+  - screenshot: {id: soundBrowser, name: 7-right-reaches-the-volume}
+  - key: {keys: left, target: "Preview volume"}
+  - expect: {id: "Preview volume", hasFocus: true}
+  - key: {keys: up, target: "Preview volume"}
+  - expect: {id: "Auto-play", hasFocus: true, within_ms: 1000}
+  - key: {keys: left, target: "Auto-play"}
+  - expect: {id: "Match key", hasFocus: true, within_ms: 1000}
+  - key: {keys: left, target: "Match key"}
+  - expect: {id: soundPreviewPlay, hasFocus: true, within_ms: 1000}
+  - screenshot: {id: soundBrowser, name: 8-left-walks-back}
+  - key: {keys: shift+tab, target: soundPreviewPlay}
+  - expect: {id: soundBrowser, hasFocus: true, within_ms: 1000}
+  - screenshot: {id: soundBrowser, name: 9-shift-tab-returns-to-the-list}
