@@ -73,6 +73,11 @@ public:
      *  Returns false on any I/O failure or if `data.bucketSize`/`data.numChannels` is <= 0. */
     static bool write(const juce::File& file, const Data& data);
 
+    /** Folds buckets into `numColumns` (min,max) pairs, every bucket kept (see PeaksFile.cpp). */
+    static std::vector<std::pair<float, float>> aggregateToColumns(const std::vector<std::pair<float, float>>& buckets,
+                                                                   int numChannels, int firstBucket, int bucketCount,
+                                                                   int numColumns);
+
     /** Peaks of an already-written audio file (a render), bucketed like a take's; false if unreadable or unwritable. */
     static bool writeForAudioFile(const juce::File& audioFile, const juce::File& peaksFile, int bucketSize);
 

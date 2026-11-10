@@ -41,6 +41,22 @@ bool waitForLivePeaks(const RecordTapModule& tap, size_t minPairs, std::vector<s
     return false;
 }
 
+// Paints the lane into a software image (pixel reads are not reliable on a GPU-backed image type).
+juce::Image paintLaneSoftware(TimelineClipLaneArea& lane) {
+    juce::Image image(juce::Image::ARGB, lane.getWidth(), lane.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    lane.paintEntireComponent(g, true);
+    return image;
+}
+
+bool differsInRows(const juce::Image& a, const juce::Image& b, int yFrom, int yTo) {
+    for (int y = yFrom; y < yTo; ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            if (a.getPixelAt(x, y) != b.getPixelAt(x, y))
+                return true;
+    return false;
+}
+
 } // namespace
 
 TEST(TimelineClipLaneWaveformTest, AudioClipPaintsWaveform) {
@@ -326,4 +342,38 @@ TEST(TimelineClipLanePaintCost, APaintDrawsOnlyTheClipsOnRowsInView) {
     const int scrolledBefore = f.lane.getClipsPaintedForTest();
     (void)f.lane.createComponentSnapshot(f.lane.getLocalBounds());
     EXPECT_LT(f.lane.getClipsPaintedForTest() - scrolledBefore, kTracks / 4) << "scrolled down, still only those";
+}
+
+// Kind guard (downsample-skip): at every clip width, a single loud bucket among quiet ones must reach the drawn
+// columns. The committed-clip painter and the live strip both go through paintWaveformColumns, so this covers both;
+// the pure aggregation is pinned over widths 1..400 in PeaksFileTests.
+TEST(TimelineClipLaneWaveformTest, SingleLoudBucketIsDrawnAtEveryClipWidth) {
+    ScopedPeaksFile quiet("agentsynth_clipslane_spike_quiet.agpk");
+    ScopedPeaksFile spike("agentsynth_clipslane_spike_loud.agpk");
+    auto quietData = makeWaveformData(1000, 0.05f);
+    auto spikeData = quietData;
+    spikeData.buckets[20] = {-1.0f, 1.0f}; // inside the clip's first bucket window at every width
+    ASSERT_TRUE(synth::PeaksFile::write(quiet.file, quietData));
+    ASSERT_TRUE(synth::PeaksFile::write(spike.file, spikeData));
+
+    for (int width = 25; width <= 400; ++width) {
+        ClipLaneFixture f;
+        const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+        const auto clipId = f.doc.addClip(trackId, 0.0, (double)width / 40.0, "Take");
+        ASSERT_TRUE(clipId.isValid());
+        ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+        f.lane.setSize(500, 200);
+
+        juce::File current = quiet.file;
+        f.lane.setPeaksResolver([&current](const juce::String&) { return current; });
+        const juce::Image quietImage = paintLaneSoftware(f.lane);
+        current = spike.file;
+        f.lane.invalidatePeaksCache();
+        const juce::Image spikeImage = paintLaneSoftware(f.lane);
+
+        const auto rect = f.lane.getClipRect(clipId);
+        ASSERT_EQ(f.lane.getWaveformShapeForTest(clipId), "columns") << "width " << width;
+        EXPECT_TRUE(differsInRows(quietImage, spikeImage, rect.getY(), rect.getY() + rect.getHeight() / 4))
+            << "the loud bucket vanished at clip width " << width;
+    }
 }

@@ -283,44 +283,25 @@ void TimelineClipLaneArea::paintMissingAssetPlaceholder(juce::Graphics& g, const
 }
 
 // Shared by paintWaveform() (a committed clip's peaks) and paintLiveRecordingStrip() (the live
-// accumulator's peaks) — one juce::Graphics::drawLine per x column, sampling
-// buckets[firstBucket + column's fraction of bucketCount] across every channel (min of mins, max
-// of maxes — a simple downmix, deliberately kept cheap enough to run every paint).
+// accumulator's peaks): one drawLine per x column, each the min of mins / max of maxes of EVERY bucket that
+// column covers (PeaksFile::aggregateToColumns), so zooming out never skips a loud bucket.
 void TimelineClipLaneArea::paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
                                                 const std::vector<std::pair<float, float>>& buckets, int numChannels,
                                                 int firstBucket, int bucketCount) {
-    if (bucketCount <= 0 || numChannels <= 0)
-        return;
-
     const auto bounds = rect.reduced(1);
     if (bounds.getWidth() <= 0 || bounds.getHeight() <= 0)
         return;
 
+    const auto columns =
+        synth::PeaksFile::aggregateToColumns(buckets, numChannels, firstBucket, bucketCount, bounds.getWidth());
     const float midY = (float)bounds.getCentreY();
     const float halfHeight = (float)bounds.getHeight() * 0.5f;
-    const int width = juce::jmax(1, bounds.getWidth());
 
-    for (int x = bounds.getX(); x < bounds.getRight(); ++x) {
-        const double frac = (double)(x - bounds.getX()) / (double)width;
-        const int bucket = firstBucket + juce::jlimit(0, bucketCount - 1, (int)(frac * bucketCount));
-
-        float minValue = 0.0f, maxValue = 0.0f;
-        bool any = false;
-        for (int channel = 0; channel < numChannels; ++channel) {
-            const std::size_t index = (std::size_t)bucket * (std::size_t)numChannels + (std::size_t)channel;
-            if (index >= buckets.size())
-                continue;
-            const auto& pair = buckets[index];
-            minValue = any ? std::min(minValue, pair.first) : pair.first;
-            maxValue = any ? std::max(maxValue, pair.second) : pair.second;
-            any = true;
-        }
-        if (!any)
-            continue;
-
-        const float y0 = midY - juce::jlimit(-1.0f, 1.0f, maxValue) * halfHeight;
-        const float y1 = midY - juce::jlimit(-1.0f, 1.0f, minValue) * halfHeight;
-        g.drawLine((float)x, y0, (float)x, juce::jmax(y1, y0 + 1.0f), 1.0f);
+    for (std::size_t i = 0; i < columns.size(); ++i) {
+        const float x = (float)(bounds.getX() + (int)i);
+        const float y0 = midY - juce::jlimit(-1.0f, 1.0f, columns[i].second) * halfHeight;
+        const float y1 = midY - juce::jlimit(-1.0f, 1.0f, columns[i].first) * halfHeight;
+        g.drawLine(x, y0, x, juce::jmax(y1, y0 + 1.0f), 1.0f);
     }
 }
 
