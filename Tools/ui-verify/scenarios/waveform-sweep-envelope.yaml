@@ -2,6 +2,9 @@
 # looked like stepped rectangles. Each column now folds every bucket it covers, so the envelope is smooth and every loud
 # part shows at its height.
 #
+# The peaks now carry an RMS per bucket, so each note shows a light peak outline with a darker body
+# inside it (loud notes a tall body, the decaying tails a thin one), at the default zoom.
+#
 # What a user does: opens a project with one 4 s audio clip, a sine sweeping 110 Hz to 2 kHz in four decaying notes,
 # and looks at its waveform. The probe `clipWaveform` reads `name:none|summary|columns`; the PNG shows the envelope.
 # Opening an old project backfills the missing waveform file, so no peaks file ships with the fixture.

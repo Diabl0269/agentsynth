@@ -214,7 +214,7 @@ TEST(PeaksFileTest, ReadRejectsTruncatedPayload) {
         std::unique_ptr<juce::FileOutputStream> stream(file.file.createOutputStream());
         ASSERT_NE(stream, nullptr);
         stream->writeInt((int)PeaksFile::kMagic);
-        stream->writeInt((int)PeaksFile::kVersion);
+        stream->writeInt((int)PeaksFile::kVersionNoRms);
         stream->writeInt(256);
         stream->writeInt(2); // numChannels == 2, so a bucket is 4 floats (16 bytes)
         stream->writeFloat(0.0f);
@@ -238,7 +238,7 @@ TEST(PeaksFileTest, ReadRejectsFileOverSizeCap) {
         std::unique_ptr<juce::FileOutputStream> stream(file.file.createOutputStream());
         ASSERT_NE(stream, nullptr);
         stream->writeInt((int)PeaksFile::kMagic);
-        stream->writeInt((int)PeaksFile::kVersion);
+        stream->writeInt((int)PeaksFile::kVersionNoRms);
         stream->writeInt(256);
         stream->writeInt(2); // numChannels == 2: a bucket is 16 bytes
         stream->flush();
@@ -400,7 +400,7 @@ TEST(PeaksFileTest, RecordTapStillWritesIdenticalFormat) {
 
     const juce::int64 expectedBuckets =
         (kExpectedFrames + RecordTapModule::kPeakBucketSize - 1) / RecordTapModule::kPeakBucketSize;
-    EXPECT_EQ((juce::int64)block.getSize(), 16 + expectedBuckets * 2 /*channels*/ * 2 /*min,max*/ * 4 /*bytes*/);
+    EXPECT_EQ((juce::int64)block.getSize(), 16 + expectedBuckets * 2 /*channels*/ * 3 /*min,max,rms*/ * 4 /*bytes*/);
 
     // And PeaksFile::read() agrees with that same raw parse.
     PeaksFile::Data data;
@@ -465,4 +465,129 @@ TEST(PeaksFileAggregate, LoudSpikeSurvivesAtEveryWidth) {
             }
         }
     }
+}
+
+// ---- Version 2: an RMS value per bucket slot ----
+
+namespace {
+
+juce::AudioBuffer<float> makeSquareOrSine(int frames, bool square, float amplitude) {
+    juce::AudioBuffer<float> buffer(1, frames);
+    for (int i = 0; i < frames; ++i) {
+        const double phase = 2.0 * juce::MathConstants<double>::pi * (double)i / 64.0; // 64-sample period
+        const float sine = (float)std::sin(phase);
+        buffer.setSample(0, i, square ? (sine >= 0.0f ? amplitude : -amplitude) : amplitude * sine);
+    }
+    return buffer;
+}
+
+} // namespace
+
+TEST(PeaksFileRms, AccumulatorRmsOfASineIsAmplitudeOverRootTwo) {
+    PeaksFile::Accumulator accumulator(256, 1);
+    const auto sine = makeSquareOrSine(1024, false, 0.8f); // a whole number of periods per bucket
+    accumulator.addSamples(sine, 1024);
+    const auto& data = accumulator.getData();
+    ASSERT_EQ(data.rms.size(), data.buckets.size());
+    ASSERT_EQ(data.buckets.size(), 4u);
+    for (const float rms : data.rms)
+        EXPECT_NEAR(rms, 0.8f / std::sqrt(2.0f), 1e-4f);
+}
+
+TEST(PeaksFileRms, AccumulatorRmsOfASquareIsTheAmplitudeAndShortFinalBucketIsMeanOfWhatExists) {
+    PeaksFile::Accumulator accumulator(256, 1);
+    const auto square = makeSquareOrSine(300, true, 0.5f);
+    accumulator.addSamples(square, 300);
+    accumulator.flushPartial();
+    const auto& data = accumulator.getData();
+    ASSERT_EQ(data.rms.size(), 2u);
+    EXPECT_NEAR(data.rms[0], 0.5f, 1e-5f);
+    EXPECT_NEAR(data.rms[1], 0.5f, 1e-5f) << "the 44-sample tail is divided by 44, not 256";
+}
+
+TEST(PeaksFileRms, AccumulatorResetClearsRmsAndKeepsPerChannelValues) {
+    PeaksFile::Accumulator accumulator(4, 2);
+    juce::AudioBuffer<float> buffer(2, 4);
+    for (int i = 0; i < 4; ++i) {
+        buffer.setSample(0, i, 1.0f);
+        buffer.setSample(1, i, 0.25f);
+    }
+    accumulator.addSamples(buffer, 4);
+    ASSERT_EQ(accumulator.getData().rms.size(), 2u);
+    EXPECT_FLOAT_EQ(accumulator.getData().rms[0], 1.0f);
+    EXPECT_FLOAT_EQ(accumulator.getData().rms[1], 0.25f);
+    accumulator.reset();
+    EXPECT_TRUE(accumulator.getData().rms.empty());
+    accumulator.addSamples(buffer, 2); // a stale sum would leak into the next bucket
+    accumulator.flushPartial();
+    EXPECT_FLOAT_EQ(accumulator.getData().rms[0], 1.0f);
+}
+
+TEST(PeaksFileRms, VersionTwoRoundTripsRmsAndWritesTwelveBytesPerSlot) {
+    ScopedTempFile file("agentsynth_peaksfile_v2.agpk");
+    auto written = makeSyntheticData(256, 2, 3);
+    for (std::size_t i = 0; i < written.buckets.size(); ++i)
+        written.rms.push_back(0.1f * (float)(i + 1));
+    ASSERT_TRUE(PeaksFile::write(file.file, written));
+    EXPECT_EQ(file.file.getSize(), (juce::int64)(16 + 6 * 12));
+
+    PeaksFile::Data read;
+    ASSERT_TRUE(PeaksFile::read(file.file, read));
+    EXPECT_EQ(read.buckets, written.buckets);
+    EXPECT_EQ(read.rms, written.rms);
+}
+
+TEST(PeaksFileRms, VersionOneFileStillReadsWithNoRms) {
+    ScopedTempFile file("agentsynth_peaksfile_v1.agpk");
+    {
+        std::unique_ptr<juce::FileOutputStream> stream(file.file.createOutputStream());
+        ASSERT_NE(stream, nullptr);
+        stream->writeInt((int)PeaksFile::kMagic);
+        stream->writeInt((int)PeaksFile::kVersionNoRms);
+        stream->writeInt(256);
+        stream->writeInt(1);
+        for (const float v : {-0.5f, 0.5f, -0.25f, 0.75f})
+            stream->writeFloat(v);
+    }
+    PeaksFile::Data read;
+    ASSERT_TRUE(PeaksFile::read(file.file, read));
+    ASSERT_EQ(read.buckets.size(), 2u);
+    EXPECT_FLOAT_EQ(read.buckets[1].second, 0.75f);
+    EXPECT_TRUE(read.rms.empty());
+
+    // Data without rms is written back as version 1 (min/max only), so a writer that has no RMS stays readable.
+    ASSERT_TRUE(PeaksFile::write(file.file, read));
+    EXPECT_EQ(file.file.getSize(), (juce::int64)(16 + 2 * 8));
+}
+
+TEST(PeaksFileRms, ARealWriteFromTheAccumulatorIsVersionTwo) {
+    ScopedTempFile file("agentsynth_peaksfile_acc_v2.agpk");
+    PeaksFile::Accumulator accumulator(256, 1);
+    const auto sine = makeSquareOrSine(512, false, 1.0f);
+    accumulator.addSamples(sine, 512);
+    ASSERT_TRUE(PeaksFile::write(file.file, accumulator.getData()));
+    PeaksFile::Data read;
+    ASSERT_TRUE(PeaksFile::read(file.file, read));
+    ASSERT_EQ(read.rms.size(), 2u);
+    EXPECT_NEAR(read.rms[0], 1.0f / std::sqrt(2.0f), 1e-4f);
+}
+
+TEST(PeaksFileRms, AggregationIsTheRootMeanSquareOfTheBucketsUnderEachColumn) {
+    // 4 buckets: two quiet (0.1) then two loud (0.5); 2 columns => [0.1,0.1] and [0.5,0.5].
+    const std::vector<float> rms = {0.1f, 0.1f, 0.5f, 0.5f};
+    const auto two = PeaksFile::aggregateRmsToColumns(rms, 1, 0, 4, 2);
+    ASSERT_EQ(two.size(), 2u);
+    EXPECT_NEAR(two[0], 0.1f, 1e-6f);
+    EXPECT_NEAR(two[1], 0.5f, 1e-6f);
+    // One column folds all four: sqrt((0.01 + 0.01 + 0.25 + 0.25) / 4).
+    const auto one = PeaksFile::aggregateRmsToColumns(rms, 1, 0, 4, 1);
+    ASSERT_EQ(one.size(), 1u);
+    EXPECT_NEAR(one[0], std::sqrt(0.52f / 4.0f), 1e-6f);
+    // Channels fold in, the first bucket is honoured, and empty input stays empty.
+    const std::vector<float> stereo = {0.2f, 0.2f, 0.3f, 0.4f};
+    const auto folded = PeaksFile::aggregateRmsToColumns(stereo, 2, 1, 1, 1);
+    ASSERT_EQ(folded.size(), 1u);
+    EXPECT_NEAR(folded[0], std::sqrt((0.09f + 0.16f) / 2.0f), 1e-6f);
+    EXPECT_TRUE(PeaksFile::aggregateRmsToColumns({}, 1, 0, 4, 2).empty());
+    EXPECT_TRUE(PeaksFile::aggregateRmsToColumns(rms, 1, 0, 4, 0).empty());
 }
