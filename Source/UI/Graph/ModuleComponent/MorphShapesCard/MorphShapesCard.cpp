@@ -48,9 +48,9 @@ MorphShapesCard::MorphShapesCard(Host host, ModuleBase& module, std::shared_ptr<
 
     editButton_.setTooltip("Edit shapes: open the shape editor window");
     editButton_.setTitle("Edit shapes");
-    editButton_.onClick = [this] { openEditor(nearestShapeToCursor()); };
+    editButton_.onClick = [this] { openEditor(targetShapeIndex()); };
     pickButton_.setTooltip("Pick shape: choose a saved or factory shape from a list with a small picture of each; the "
-                           "shape nearest the cursor takes its curve (Cmd+Z undoes it)");
+                           "selected shape (else the one nearest the cursor) takes its curve (Cmd+Z undoes it)");
     pickButton_.setTitle("Pick shape");
     pickButton_.onClick = [this] { openPicker(); };
     toggle_.setTooltip("Show Morph Map: the map of shapes and the morph cursor " + host_.mapPlace);
@@ -148,20 +148,20 @@ int MorphShapesCard::layout(int y, int x, int width, bool apply, int topGap) {
         editButton_.setBounds(left, y, w - pickW - kPickButtonGap, h);
         pickButton_.setBounds(left + w - pickW, y, pickW, h);
     }
-    y += blockHeight(editFade_, settling, synth::cardbody::kRowHeight + 2);
+    y += blockHeight(editFade_, settling, synth::cardbody::kRowHeight + synth::cardbody::kBlockGap);
     if (host_.curveView && curveFade_.isAttached() && curveView_.isVisible()) {
         if (apply) {
             const int w = juce::jmin(width, kMapWidth);
             curveView_.setBounds(x + (width - w) / 2, y, w, blockHeight(curveFade_, settling, kCurveHeight));
         }
-        y += blockHeight(curveFade_, settling, kCurveHeight + 8);
+        y += blockHeight(curveFade_, settling, kCurveHeight + synth::cardbody::kBlockGap);
     }
     if (mapFade_.isAttached() && map_.isVisible()) {
         if (apply) {
             const int w = juce::jmin(width, kMapWidth);
             map_.setBounds(x + (width - w) / 2, y, w, blockHeight(mapFade_, settling, kMapHeight));
         }
-        y += blockHeight(mapFade_, settling, kMapHeight + 8);
+        y += blockHeight(mapFade_, settling, kMapHeight + synth::cardbody::kBlockGap);
     }
     return y;
 }
@@ -196,6 +196,15 @@ int MorphShapesCard::getNumShapes() const { return (int)adapter_->getShapes().si
 int MorphShapesCard::nearestShapeToCursor() const {
     const auto cursor = adapter_->getCursor();
     return synth::morph::nearestShapeIndex(adapter_->getShapes(), cursor.x, cursor.y);
+}
+
+/** What Pick shape and Edit shapes act on: the dot the user selected on the map, else the one nearest the cursor.
+    The cursor being the selection has no dot to act on, so it falls to the nearest one too. */
+int MorphShapesCard::targetShapeIndex() const {
+    const int selected = map_.getSelected();
+    if (!map_.isCursorSelected() && selected >= 0 && selected < getNumShapes())
+        return selected;
+    return nearestShapeToCursor();
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -312,14 +321,20 @@ void MorphShapesCard::shapeDragOver(bool over, const juce::String& name) {
         host_.card->repaint();
 }
 
-// The shape under the cursor is the one the card's curve editor shows, so that is the one the drop replaces.
-void MorphShapesCard::shapeDropped(const synth::shapes::LibraryShape& shape) { applyPickedShape(shape); }
+// The shape under the cursor is the one the card's curve editor shows, so that is the one a drop replaces.
+void MorphShapesCard::shapeDropped(const synth::shapes::LibraryShape& shape) {
+    replaceShapeCurve(nearestShapeToCursor(), shape);
+}
 
 void MorphShapesCard::applyPickedShape(const synth::shapes::LibraryShape& shape) {
+    replaceShapeCurve(targetShapeIndex(), shape);
+}
+
+void MorphShapesCard::replaceShapeCurve(int target, const synth::shapes::LibraryShape& shape) {
     auto shapes = adapter_->getShapes();
     if (shapes.empty() || !acceptsShapeDrop(shape.kind))
         return;
-    const auto index = (size_t)juce::jlimit(0, (int)shapes.size() - 1, nearestShapeToCursor());
+    const auto index = (size_t)juce::jlimit(0, (int)shapes.size() - 1, target);
     adapter_->beginEdit();
     shapes[index].curve = shape.curve;
     adapter_->setShapes(shapes);

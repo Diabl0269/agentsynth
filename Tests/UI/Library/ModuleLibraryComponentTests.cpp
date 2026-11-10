@@ -4,7 +4,9 @@
 //   • getEntryIndexAt — maps y-coordinates to entry indices, including header rows
 //   • paint smoke test — construct, setSize, paint; simulate a hovered index and paint again
 
+#include "UI/Chrome/Badge/Badge.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibrarySnippetRow.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -349,4 +351,23 @@ TEST(ModuleLibraryRowPress, CtrlLeftClickDoesNotSuppressTheDrag) {
     // A real right-click still suppresses it, on every platform.
     const juce::ModifierKeys rightButton(juce::ModifierKeys::rightButtonModifier);
     EXPECT_TRUE(ModuleLibraryComponent::pressSuppressesRowDrag(rightButton));
+}
+
+// Regression test for FRO1584: a snippet row's Yours badge sat left of the count; it belongs at the far right margin,
+// like a Sounds shape row's, with the count left of it and the label stopping before the count.
+TEST(ModuleLibrarySnippetRow, BadgeSitsAtTheRightMarginTheCountLeftOfItAndTheLabelTruncates) {
+    for (const int width : {220, 300, 420}) {
+        for (const int countW : {18, 30}) {
+            const auto r = synth::ui::snippetRowRects(width, 100, 28, countW);
+            EXPECT_EQ(r.badge.getRight(), width - synth::ui::kSnippetRowRightMargin) << "width " << width;
+            EXPECT_EQ(r.badge.getWidth(), synth::ui::badgeWidth(synth::ui::BadgeKind::Yours));
+            EXPECT_LE(r.count.getRight(), r.badge.getX());
+            EXPECT_LE(r.label.getRight(), r.count.getX()) << "a long name truncates before the count";
+            EXPECT_GT(r.label.getWidth(), 0);
+            EXPECT_TRUE(r.label.getY() == 100 && r.badge.getCentreY() == r.count.getCentreY());
+        }
+    }
+    const auto narrow = synth::ui::snippetRowRects(220, 0, 28, 30);
+    const auto wide = synth::ui::snippetRowRects(420, 0, 28, 30);
+    EXPECT_EQ(wide.label.getWidth() - narrow.label.getWidth(), 200) << "the label takes what the row gains";
 }

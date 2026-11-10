@@ -77,6 +77,9 @@ public:
     int getNumShapes() const;
     /** The shape the cursor is closest to (the one that dominates the blend). */
     int nearestShapeToCursor() const;
+    /** The shape Pick shape and Edit shapes act on: the selected dot, else the one nearest the cursor (also when the
+     *  cursor itself is the selection). */
+    int targetShapeIndex() const;
 
     /** The map is on the card (shown or fading in): its sliders then stand in for the Morph X / Y knobs. */
     bool isMapShown() const;
@@ -110,8 +113,7 @@ public:
     juce::TextButton& getPickButton() noexcept { return pickButton_; }
     /** Opens the shape picker beside the Pick shape button (what a press of the button does). */
     void openPicker();
-    /** Applies a library shape picked from the picker or dropped: the shape nearest the cursor takes its curve, as
-     *  one undo step. */
+    /** Applies a library shape picked from the picker: the target shape takes its curve, as one undo step. */
     void applyPickedShape(const synth::shapes::LibraryShape& shape);
     juce::ToggleButton& getToggle() noexcept { return toggle_; }
     ShapeMapController& getController() noexcept { return *controller_; }
@@ -126,6 +128,7 @@ private:
     };
 
     bool mapWanted() const;
+    void replaceShapeCurve(int target, const synth::shapes::LibraryShape& shape);
     bool routeMapPress(const juce::MouseEvent& e, int phase);
     void routeStripHover(MorphMap::Axis axis);
     void openStripMenu(MorphMap::Axis axis, juce::Rectangle<int> screenArea);

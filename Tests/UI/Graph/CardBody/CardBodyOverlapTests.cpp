@@ -23,10 +23,13 @@
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Layout/NoteLengthMenu/NoteLengthBox.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
+#include "UI/ModuleViews/MorphMap/MorphMap.h"
 #include "UI/ModuleViews/ScopeComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeelFader.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <set>
 #include <typeinfo>
@@ -129,7 +132,42 @@ bool isBlock(const juce::Component& c, const std::set<const juce::Component*>& p
     return !isBodyControl(c, parts) && !hasOwnSpacing(c);
 }
 
-void checkCard(ModuleComponent& card, const juce::String& context) {
+// The stacked blocks of a Custom card: the button rows (Edit shapes and Pick shape; Grid, Shapes and Tools), the
+// curve editors, the morph map and the response view.
+bool isStackedBlock(const juce::Component& c, const std::set<const juce::Component*>& parts) {
+    if (dynamic_cast<const juce::TextButton*>(&c) != nullptr ||
+        dynamic_cast<const synth::ui::CurveEditorComponent*>(&c) || dynamic_cast<const synth::ui::MorphMap*>(&c) ||
+        dynamic_cast<const FrequencyResponseComponent*>(&c))
+        return true;
+    return dynamic_cast<const juce::ComboBox*>(&c) != nullptr && parts.count(&c) == 0 &&
+           dynamic_cast<const synth::ui::NoteLengthBox*>(&c) == nullptr;
+}
+
+// Rows of those blocks (parts sharing a top edge are one row): the gap between one row and the next below it that
+// overlaps it sideways is kBlockGap, touching or a different size counts as a failure.
+void checkBlockGaps(const std::vector<juce::Component*>& visible, const std::set<const juce::Component*>& parts,
+                    const juce::String& context) {
+    std::vector<juce::Component*> blocks;
+    for (auto* c : visible)
+        if (isStackedBlock(*c, parts))
+            blocks.push_back(c);
+    std::sort(blocks.begin(), blocks.end(), [](auto* a, auto* b) { return a->getY() < b->getY(); });
+    std::vector<juce::Rectangle<int>> rows;
+    int rowTop = -1;
+    for (auto* c : blocks) {
+        if (c->getY() != rowTop) {
+            rows.push_back(c->getBounds());
+            rowTop = c->getY();
+        } else {
+            rows.back() = rows.back().getUnion(c->getBounds());
+        }
+    }
+    for (size_t i = 1; i < rows.size(); ++i)
+        EXPECT_EQ(rows[i].getY() - rows[i - 1].getBottom(), synth::cardbody::kBlockGap)
+            << context << "\n  between " << rows[i - 1].toString() << " and " << rows[i].toString();
+}
+
+void checkCard(ModuleComponent& card, const juce::String& context, bool custom = false) {
     std::vector<juce::Component*> visible;
     for (auto* child : card.getChildren())
         if (child->isVisible() && !child->getBounds().isEmpty() &&
@@ -142,6 +180,8 @@ void checkCard(ModuleComponent& card, const juce::String& context) {
                 << context << "\n  " << name(*visible[i]) << "\n  overlaps " << name(*visible[j]);
 
     const auto parts = bodyParts(card);
+    if (custom)
+        checkBlockGaps(visible, parts, context);
     for (auto* block : visible) {
         if (!isBlock(*block, parts))
             continue;
@@ -167,33 +207,42 @@ TEST(CardBodyOverlap, NoCardPartsOverlapAndBlocksUnderTheControlsKeepTheGap) {
 
     for (const auto& type : types) {
         for (const auto& state : chromeStates()) {
-            auto processor = synth::AIStateMapper::createModule(type);
-            auto* module = dynamic_cast<ModuleBase*>(processor.get());
-            if (module == nullptr)
-                continue;
-            if (state.custom) {
-                if (type == "Filter")
-                    setChoice(*module, "filterType", "Custom");
-                else if (type == "LFO")
-                    setChoice(*module, "shape", "Custom");
-                else
-                    continue; // only the two Custom types have a Custom state
-            }
-            synth::CardViewState view;
-            view.showScope = state.scope;
-            view.showResponse = state.response;
-            if (state.response)
-                view.showSpectrum = state.spectrum;
-            view.showMorphMap = state.morphMap;
-            view.showCurveView = state.curveView;
-            module->setCardViewState(view);
+            // The LFO's Rate row differs between Sync and Free, so its Custom state is checked in both.
+            for (const bool free : {false, true}) {
+                if (free && !(state.custom && type == "LFO"))
+                    continue;
+                auto processor = synth::AIStateMapper::createModule(type);
+                auto* module = dynamic_cast<ModuleBase*>(processor.get());
+                if (module == nullptr)
+                    continue;
+                if (state.custom) {
+                    if (type == "Filter")
+                        setChoice(*module, "filterType", "Custom");
+                    else if (type == "LFO")
+                        setChoice(*module, "shape", "Custom");
+                    else
+                        continue; // only the two Custom types have a Custom state
+                }
+                synth::CardViewState view;
+                view.showScope = state.scope;
+                view.showResponse = state.response;
+                if (state.response)
+                    view.showSpectrum = state.spectrum;
+                view.showMorphMap = state.morphMap;
+                view.showCurveView = state.curveView;
+                module->setCardViewState(view);
+                if (free)
+                    for (auto* p : module->getParameters())
+                        if (auto* b = dynamic_cast<juce::AudioParameterBool*>(p); b != nullptr && b->paramID == "mode")
+                            *b = false;
 
-            ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
-            for (auto* child : card.getChildren())
-                if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child);
-                    toggle != nullptr && toggle->getButtonText() == synth::cardbody::kShowEnvelopeText)
-                    toggle->setToggleState(state.envelopeGraph, juce::sendNotificationSync);
-            checkCard(card, type + ": " + state.describe());
+                ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+                for (auto* child : card.getChildren())
+                    if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child);
+                        toggle != nullptr && toggle->getButtonText() == synth::cardbody::kShowEnvelopeText)
+                        toggle->setToggleState(state.envelopeGraph, juce::sendNotificationSync);
+                checkCard(card, type + ": " + state.describe() + (free ? " free" : ""), state.custom);
+            }
         }
     }
 }

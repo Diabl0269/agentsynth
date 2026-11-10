@@ -335,9 +335,9 @@ rebuilds and makes room inside one undo record, and undo and redo rebuild the sa
 ## Modules that resize at runtime
 
 Widths are static; a few modules' **heights** are not (the More row above also folds a card's height). The LFO (FRO114) stays `Single` width even with
-its Custom-waveform section open — the section adds `6` px (the gap under the body controls, `kPanelGap`, shared with the response and scope panels through `cardbody::gapUnderBodyControls`) `+ 24 + 2` px (the Grid/Shapes/Tools toolbar
-row) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 8` px (bottom breathing room), a total
-of 190 px, inserted right after the envelope graph section in `layoutDefaultContent` — and ONLY
+its Custom-waveform section open — the section adds `6` px (the gap under the body controls, `kPanelGap`, shared with the response and scope panels through `cardbody::gapUnderBodyControls`) `+ 24 + 6` px (the Grid/Shapes/Tools toolbar
+row and `cardbody::kBlockGap`, the one gap under a button row and between neighbouring blocks) `+ 150` px (the curve editor, `kLfoWaveGraphHeight`) `+ 6` px (`kBlockGap` again, bottom breathing room), a total
+of 192 px, inserted right after the envelope graph section in `layoutDefaultContent` — and ONLY
 while `shape == Custom` (`LFOModule::kCustomShapeIndex`); every other shape measures exactly the
 369 px in the table above, unchanged. See `ModuleComponentLfoCard.cpp`'s
 `layoutLfoCustomWaveSection` and [lfo.md](../modules/lfo.md)'s "Card UI" entry.
