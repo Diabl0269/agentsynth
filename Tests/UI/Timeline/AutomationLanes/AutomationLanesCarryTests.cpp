@@ -100,7 +100,10 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterMovesBothModulatorsWithTheir
     ASSERT_EQ(s.routingsInto("cutoff"), 2u);
 
     ASSERT_TRUE(s.pick(Header::kChangeParameterMenuId, "Resonance"));
-    synth::test::waitUntil([&] { return (s.doc().getLane(s.lane)->paramId) == ("resonance"); });
+    synth::test::waitUntil([&] {
+        return s.doc().getLane(s.lane)->paramId == "resonance" && s.attenInto(s.lfoUuid, "resonance").isNotEmpty() &&
+               s.attenInto(s.adsrUuid, "resonance").isNotEmpty();
+    });
 
     EXPECT_EQ(s.doc().getLane(s.lane)->paramId, "resonance");
     EXPECT_EQ(s.chainsInto(s.lfoUuid, resonance).size(), 1u);
@@ -152,7 +155,12 @@ TEST_F(TimelinePanelIntegrationTest, DuplicateGivesTheCopyItsOwnModulatorsAndLea
     const auto nodesBefore = s.graph().getNodes().size();
 
     ASSERT_TRUE(s.pick(Header::kDuplicateMenuId, "Drive"));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] {
+        return s.doc().getLaneForParam(s.targetUuid, "drive") != nullptr &&
+               s.chainsInto(s.lfoUuid, drive).size() == 1u && s.chainsInto(s.adsrUuid, drive).size() == 1u &&
+               synth::ui::amountLaneFor(s.doc(), s.attenInto(s.lfoUuid, "drive")) != nullptr &&
+               synth::ui::amountLaneFor(s.doc(), s.attenInto(s.adsrUuid, "drive")) != nullptr;
+    });
 
     const auto* copy = s.doc().getLaneForParam(s.targetUuid, "drive");
     ASSERT_NE(copy, nullptr);
@@ -193,7 +201,11 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterCarriesTheLanesModulatorOrde
     s.undo().clearUndoHistory();
 
     ASSERT_TRUE(s.pick(Header::kChangeParameterMenuId, "Resonance"));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] {
+        const auto* firstRow = s.panel().modulatorRowForTest(s.lane, 0);
+        return s.attenInto(s.lfoUuid, "resonance").isNotEmpty() && s.attenInto(s.adsrUuid, "resonance").isNotEmpty() &&
+               firstRow != nullptr && firstRow->getInfo().paramId == "resonance";
+    });
 
     const auto newLfo = s.attenInto(s.lfoUuid, "resonance");
     const auto newAdsr = s.attenInto(s.adsrUuid, "resonance");
@@ -229,7 +241,8 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterKeepsTheRowsTheirFoldsAndThe
     ASSERT_LT(before[1], before[2]) << "the premise: the folded row is the shorter one";
 
     ASSERT_TRUE(s.pick(Header::kChangeParameterMenuId, "Resonance"));
-    synth::test::waitUntil([&] { return (s.doc().getLane(s.lane)->paramId) == ("resonance"); });
+    synth::test::waitUntil(
+        [&] { return s.doc().getLane(s.lane)->paramId == "resonance" && first->getInfo().paramId == "resonance"; });
 
     ASSERT_EQ(s.doc().getLane(s.lane)->paramId, "resonance");
     ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
@@ -243,7 +256,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterKeepsTheRowsTheirFoldsAndThe
     EXPECT_EQ(heights(), before);
 
     ASSERT_TRUE(s.undo().undo());
-    synth::test::waitUntil([&] { return (lanes.modulatorCount(s.lane)) == (2); });
+    synth::test::waitUntil([&] { return first->getInfo().paramId == "cutoff"; });
     ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
     EXPECT_EQ(s.panel().modulatorRowForTest(s.lane, 0), first);
     EXPECT_EQ(first->getInfo().paramId, "cutoff");
@@ -258,7 +271,10 @@ TEST_F(TimelinePanelIntegrationTest, DuplicateGivesTheCopyTheMappedModulatorOrde
     s.undo().clearUndoHistory();
 
     ASSERT_TRUE(s.pick(Header::kDuplicateMenuId, "Drive"));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] {
+        return s.doc().getLaneForParam(s.targetUuid, "drive") != nullptr &&
+               s.attenInto(s.adsrUuid, "drive").isNotEmpty() && s.attenInto(s.lfoUuid, "drive").isNotEmpty();
+    });
 
     const auto* copy = s.doc().getLaneForParam(s.targetUuid, "drive");
     ASSERT_NE(copy, nullptr);
@@ -273,7 +289,7 @@ TEST_F(TimelinePanelIntegrationTest, AParameterWithNoCvJackTakesTheLaneButLeaves
 
     // The envelope's Attack Curve has no CV jack (checked below once the lane is on it).
     ASSERT_TRUE(s.pick(Header::kChangeParameterMenuId, "Attack Curve"));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return s.doc().getLane(s.lane)->nodeUuid == s.adsrUuid; });
 
     const auto* moved = s.doc().getLane(s.lane);
     ASSERT_NE(moved, nullptr);
@@ -361,7 +377,10 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterDuplicateAndChangeSourceKeep
     s.undo().clearUndoHistory();
 
     ASSERT_TRUE(s.pick(Header::kChangeParameterMenuId, "Resonance"));
-    synth::test::waitUntil([&] { return (s.doc().getLane(s.lane)->paramId) == ("resonance"); });
+    synth::test::waitUntil([&] {
+        return s.doc().getLane(s.lane)->paramId == "resonance" && s.attenInto(s.lfoUuid, "resonance").isNotEmpty() &&
+               s.attenInto(s.adsrUuid, "resonance").isNotEmpty();
+    });
     const auto newAdsr = s.attenInto(s.adsrUuid, "resonance");
     const auto newLfo = s.attenInto(s.lfoUuid, "resonance");
     ASSERT_TRUE(newAdsr.isNotEmpty() && newLfo.isNotEmpty());
@@ -389,7 +408,8 @@ TEST_F(TimelinePanelIntegrationTest, ChangeParameterDuplicateAndChangeSourceKeep
                 adsrRow = i;
         return adsrRow >= 0;
     };
-    synth::test::waitUntil(findAdsrRow);
+    synth::test::flushMessageQueue();
+    findAdsrRow();
     ASSERT_GE(adsrRow, 0);
     const int tall = s.panel().modulatorRowBoundsForTest(s.lane, adsrRow).getHeight();
     ASSERT_TRUE(s.mc.trackHeaderHostForTest().changeModulatorSource(

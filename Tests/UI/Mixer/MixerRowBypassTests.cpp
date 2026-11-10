@@ -3,6 +3,7 @@
 // module's bypass, a send to its own persisted bypass bit; both are one undo step, bypassed rows read dimmed, and the
 // buttons carry a name that states the state and a tooltip that names the key. A real off-screen MainComponent, every
 // key through MixerPanelComponent::keyPressed with a real juce::KeyPress.
+#include "../../TestWait.h"
 #include "MixerHeaderTestRig.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -123,7 +124,7 @@ TEST(MixerRowBypassTest, ReturnOnAFocusedBypassButtonTogglesTooAndTheButtonLeave
     EXPECT_EQ(insertBypassed(rig, 1), before) << "none of those acted on the button";
 
     EXPECT_TRUE(static_cast<juce::Component&>(*button).keyPressed(key(juce::KeyPress::returnKey)));
-    HeaderRig::pumpMessages();
+    synth::test::waitUntil([&] { return insertBypassed(rig, 1) == !before; });
     EXPECT_EQ(insertBypassed(rig, 1), !before);
 }
 

@@ -4,6 +4,8 @@
 #include "FocusArbitrationTestFixture.h"
 #include "ShortcutManager/AppCommands.h"
 
+#include "../../TestWait.h"
+
 // ============================================================================
 // 6. Space — global play/stop toggle
 // ============================================================================
@@ -34,12 +36,12 @@ TEST_F(FocusArbitrationTest, SpaceTogglesPlayback) {
         // briefly so it actually runs, the same idiom GraphEditorLayoutTests.cpp's setKnobs() helper uses for a
         // marshalled callback, before draining the resulting transport command with a tick.
         ASSERT_TRUE(cm.invokeDirectly(AppCommands::togglePlayback, false));
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+        synth::test::flushMessageQueue();
         engine.processHostBlock(buffer, midi);
         EXPECT_TRUE(transport.getPositionSnapshot().playing) << "surface " << (int)surface;
 
         ASSERT_TRUE(cm.invokeDirectly(AppCommands::togglePlayback, false));
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+        synth::test::flushMessageQueue();
         engine.processHostBlock(buffer, midi);
         EXPECT_FALSE(transport.getPositionSnapshot().playing) << "surface " << (int)surface;
     }

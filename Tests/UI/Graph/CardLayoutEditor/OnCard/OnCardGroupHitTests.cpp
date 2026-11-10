@@ -1,6 +1,7 @@
 // OnCardGroupHitTests.cpp -- a group's title row in Edit Layout reached the way a real mouse reaches it: the component
 // JUCE's hit-testing finds under the pointer gets the press, drag and double-click, and Return on the focused handle.
 
+#include "../../../../TestWait.h"
 #include "Modules/OscillatorModule.h"
 #include "OnCardTestHelpers.h"
 
@@ -32,8 +33,21 @@ struct Oscillator {
     }
 };
 
-/** Lets every glide the editor started run to its end. */
-void settle() { juce::MessageManager::getInstance()->runDispatchLoopUntil(500); }
+/** True once every drawn title (the plan's headers) sits over its own group's handle row, as the glides end. */
+bool drawnTitlesReachTheirHandles(Oscillator& osc) {
+    for (const auto& section : osc.rig.card(osc.id)->getCardBody()->getPlan().sections) {
+        if (!section.hasHeader())
+            continue;
+        auto* handle = osc.editor->getGroupHandleForTest(section.id);
+        if (handle == nullptr)
+            return false;
+        const auto drawn = osc.editor->getLocalArea(section.header->getParentComponent(), section.header->getBounds());
+        const auto row = handle->getTitleRowArea().translated(handle->getX(), handle->getY());
+        if (!row.intersects(drawn) || osc.under(drawn.getCentre()) != handle)
+            return false;
+    }
+    return true;
+}
 
 /** Every title the card draws, found from the drawn header component (not from the handle): the component under
  *  it must be that group's own handle. */
@@ -137,14 +151,14 @@ TEST(OnCardGroupHit, EveryDrawnTitleIsBackedByItsOwnHandleAtOpenAndAfterMoveUndo
     expectDrawnTitlesReachTheirHandles(osc, "open");
     auto* unison = osc.editor->getGroupHandleForTest("unison");
     ASSERT_TRUE(unison->keyPressed(juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::altModifier, 0)));
-    settle();
+    synth::test::waitUntil([&] { return drawnTitlesReachTheirHandles(osc); });
     expectDrawnTitlesReachTheirHandles(osc, "after Alt+Down");
     ASSERT_TRUE(osc.rig.canvas.undo.undo());
     osc.editor->runQueuedSyncForTest();
-    settle();
+    synth::test::waitUntil([&] { return drawnTitlesReachTheirHandles(osc); });
     expectDrawnTitlesReachTheirHandles(osc, "after undo");
     ASSERT_TRUE(osc.rig.canvas.undo.redo());
     osc.editor->runQueuedSyncForTest();
-    settle();
+    synth::test::waitUntil([&] { return drawnTitlesReachTheirHandles(osc); });
     expectDrawnTitlesReachTheirHandles(osc, "after redo");
 }

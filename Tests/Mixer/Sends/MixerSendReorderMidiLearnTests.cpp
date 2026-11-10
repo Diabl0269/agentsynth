@@ -16,6 +16,7 @@
 //   2. ReorderIsOneUndoStepAndUndoRestoresTheMidiMappingToo -- one undo() restores cables, the
 //      lane AND the MIDI mapping together; redo() re-applies all three together.
 
+#include "../../TestWait.h"
 #include "../../UI/Layout/BottomDockActiveTabResetGuard.h"
 #include "../../UI/MidiRemote/MidiRemoteMockProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -156,7 +157,7 @@ TEST(MixerSendReorderMidiLearnTest, MidiLearnMappingFollowsItsSendAcrossAReorder
 
     mc.getAudioEngine().handleIncomingMidiMessageFromSource(kFakeDevice, juce::MidiMessage::controllerEvent(1, kCc, 0));
     remote.drain();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // the drain's apply is a real gesture
+    synth::test::waitUntil([&] { return level1->get() != before1; }); // the drain's apply is a real gesture
 
     EXPECT_NE(level1->get(), before1) << "the fake CC now drives slot 1, where the mapped send now lives";
     EXPECT_FLOAT_EQ(level0->get(), before0) << "slot 0 (the send left behind) must not move";

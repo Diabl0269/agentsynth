@@ -64,10 +64,10 @@ TEST_F(MainComponentTest, WritingOnlyTheFaderStyleReachesTheSharedLookAndFeel) {
 
     auto* settings = mc.getAppPropertiesForTest().getUserSettings();
     settings->setValue(synth::theme::knobStyleKey(), "classic");
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     settings->setValue(synth::theme::faderStyleKey(), "neon"); // only the fader key changes
     synth::test::waitUntil(
-        [&] { return (mc.getLookAndFeelForTest().getKnobAppearance().style) == (synth::theme::KnobStyle::Classic); });
+        [&] { return mc.getLookAndFeelForTest().getKnobAppearance().faderStyle == synth::theme::KnobStyle::Neon; });
 
     EXPECT_EQ(mc.getLookAndFeelForTest().getKnobAppearance().style, synth::theme::KnobStyle::Classic);
     EXPECT_EQ(mc.getLookAndFeelForTest().getKnobAppearance().faderStyle, synth::theme::KnobStyle::Neon);

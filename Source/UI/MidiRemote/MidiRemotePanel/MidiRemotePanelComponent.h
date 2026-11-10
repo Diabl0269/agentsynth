@@ -328,6 +328,12 @@ private:
     std::map<juce::String, juce::int64> profileLastActivityMs_;
     static constexpr int kActivityLitMs = 150;
 
+    // The last raw hardware position (0..1) each absolute control reported, keyed by profile id +
+    // control id. A rebuild (any async live refresh) re-seeds the surface from the parameter, which
+    // under Scale takeover differs from where the knob physically is, so it would snap the cell away
+    // from the hardware until the next move; seeding from this keeps the cell on the knob.
+    std::map<juce::String, float> lastHardwareValue_;
+
     // scheduleLiveRefresh()'s coalescing latch -- true from the first call until the
     // deferred rebuildFromProfiles() actually runs, so several onChanged notifications in a row
     // (e.g. a Learn's profile write followed by its project-assignment write) collapse into one

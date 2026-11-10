@@ -3,6 +3,7 @@
 // take it along in one undo step, a saved project reopens with it, and a project saved with the retired LFO
 // sections is migrated to amount lanes once, on load.
 
+#include "../../../TestWait.h"
 #include "AutomationLanesAmountFixture.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorSections.h"
 
@@ -236,7 +237,7 @@ TEST_F(TimelinePanelIntegrationTest, AProjectSavedWithLfoSectionsInsideAMacroOpe
         const auto* cutoff = s.doc().getLaneForParam(s.targetUuid, "cutoff");
         s.panel().setTrackAutomationExpanded(s.doc().getTrackForLane(cutoff->id)->id, true);
         EXPECT_EQ(s.panel().laneHeaderForTest(amount->id), nullptr);
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(20); // the undo broadcast is async
+        synth::test::flushMessageQueue(); // the undo broadcast is async
         EXPECT_FALSE(s.mc.isProjectDirty());
     }
     bundle.getParentDirectory().deleteRecursively();

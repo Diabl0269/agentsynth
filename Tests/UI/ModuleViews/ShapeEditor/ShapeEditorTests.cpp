@@ -453,7 +453,7 @@ TEST(ShapeEditor, TheRelayHandsSpaceAndUndoToTheMainWindowLaterAndLeavesEditingK
          {key(juce::KeyPress::backspaceKey), key(juce::KeyPress::deleteKey), key(juce::KeyPress::leftKey),
           key(juce::KeyPress::tabKey), key('c', cmd), key('v', cmd), key('a', cmd), key('x')})
         EXPECT_FALSE(relay(k)) << k.getTextDescription();
-    pumpMessages();
+    synth::test::flushMessageQueue();
     EXPECT_TRUE(target.received.empty());
 }
 

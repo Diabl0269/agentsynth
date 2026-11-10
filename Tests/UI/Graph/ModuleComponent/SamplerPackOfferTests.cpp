@@ -2,6 +2,7 @@
 // downloads in place with progress, fills the list when done and goes away. The installer is the app's shared one,
 // faked at the network.
 #include "../../../SoundPacks/SoundPackTestKit.h"
+#include "../../../TestWait.h"
 #include "../CardBody/CardCanvas.h"
 #include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/SamplerModule.h"
@@ -56,8 +57,6 @@ struct Scene {
 
 SamplerPackOffer* offerOf(ModMatrixPicker& picker) { return dynamic_cast<SamplerPackOffer*>(picker.getFooter()); }
 
-void settle() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
-
 } // namespace
 
 TEST(SamplerPackOffer, IsMadeWhenNoPackIsInstalledAndOffersTheCorePackWithItsSize) {
@@ -111,7 +110,7 @@ TEST(SamplerPackOffer, DownloadsInPlaceThenFillsTheListAndGoesAway) {
     EXPECT_EQ(items.front(), "Grand") << "the list filled without reopening";
     EXPECT_FALSE(offer->isOfferShown());
 
-    settle();
+    synth::test::waitUntil([&] { return list->getFooter() == nullptr && list->getHeightForTest() < heightWithOffer; });
     EXPECT_EQ(list->getFooter(), nullptr);
     EXPECT_LT(list->getHeightForTest(), heightWithOffer);
 }

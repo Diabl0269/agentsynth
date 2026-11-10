@@ -11,8 +11,6 @@ namespace {
 constexpr juce::uint32 kStart = 1000;
 constexpr juce::uint32 kHeld = 400; // past the 300 ms debounce
 
-void settle() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
-
 synth::TransportDoc editedTransport() {
     synth::TransportDoc t;
     t.bpm = 96.0;
@@ -54,7 +52,7 @@ TEST_F(MainComponentTest, TransportSurvivesSaveAndReopenAndTheLoadLeavesTheDocum
     reloaded.pollTransportEditsForTest(kStart);
     reloaded.pollTransportEditsForTest(kStart + kHeld);
     reloaded.pollTransportEditsForTest(kStart + 2 * kHeld);
-    settle();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(reloaded.getUndoManager().canUndo());
     EXPECT_FALSE(reloaded.isProjectDirty());
 }
@@ -75,7 +73,7 @@ TEST_F(MainComponentTest, ReopeningInTheSameWindowRestoresTheSavedTransport) {
     EXPECT_EQ(mc.getAudioEngine().getTransport().getDocumentState(), editedTransport());
     mc.pollTransportEditsForTest(kStart + 2 * kHeld);
     mc.pollTransportEditsForTest(kStart + 3 * kHeld);
-    settle();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.isProjectDirty());
 }
 
@@ -99,7 +97,7 @@ TEST_F(MainComponentTest, HeldTransportEditMarksTheDocumentUnsavedAndUndoRestore
     mc.pollTransportEditsForTest(kStart + 3 * kHeld);
 
     mc.getUndoManager().undo();
-    settle();
+    synth::test::flushMessageQueue();
     EXPECT_DOUBLE_EQ(transport.getDocumentState().bpm, 120.0);
     EXPECT_FALSE(mc.getUndoManager().canUndo()) << "the edit was exactly one undo step";
     // The edit serial counts undos too, so undoing back to the saved state still reads as unsaved.
@@ -109,12 +107,12 @@ TEST_F(MainComponentTest, HeldTransportEditMarksTheDocumentUnsavedAndUndoRestore
     const int serialAfterUndo = mc.getUndoManager().getEditSerial();
     mc.pollTransportEditsForTest(kStart + 4 * kHeld);
     mc.pollTransportEditsForTest(kStart + 5 * kHeld);
-    settle();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.getUndoManager().canUndo());
     EXPECT_EQ(mc.getUndoManager().getEditSerial(), serialAfterUndo);
 
     mc.getUndoManager().redo();
-    settle();
+    synth::test::flushMessageQueue();
     EXPECT_DOUBLE_EQ(transport.getDocumentState().bpm, 96.0);
     EXPECT_TRUE(mc.isProjectDirty());
 }
@@ -123,8 +121,8 @@ TEST_F(MainComponentTest, ContinuouslyChangingTransportRecordsNoStepUntilItSettl
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
-    // The poll is driven by hand with a fake clock below; a real 10 Hz tick landing in settle() would compare
-    // the wall clock against that fake one and record the step early.
+    // The poll is driven by hand with a fake clock below; a real 10 Hz tick landing while the queue is flushed would
+    // compare the wall clock against that fake one and record the step early.
     mc.stopTimer();
     auto& transport = mc.getAudioEngine().getTransport();
 
@@ -133,7 +131,7 @@ TEST_F(MainComponentTest, ContinuouslyChangingTransportRecordsNoStepUntilItSettl
         ASSERT_TRUE(transport.setBpm(100.0 + i));
         mc.pollTransportEditsForTest(kStart + static_cast<juce::uint32>(i) * 200);
     }
-    settle();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.getUndoManager().canUndo());
     EXPECT_FALSE(mc.isProjectDirty());
 

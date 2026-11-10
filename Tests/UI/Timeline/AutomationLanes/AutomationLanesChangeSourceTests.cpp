@@ -327,7 +327,10 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceFollowsTheOtherLfoKeepsTheAmoun
     ASSERT_GE(otherIndex, 0);
     const auto depthBefore = s.depthOf(s.chainsInto(oldLfo, raw).front());
     capture.picker->chooseVisibleItemForTest(otherIndex);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] {
+        return s.chainsInto(oldLfo, raw).empty() && s.chainsInto(otherUuid, raw).size() == 1u && s.row() != nullptr &&
+               s.row()->getInfo().sourceUuid == otherUuid;
+    });
 
     // The lane follows the other LFO; the old routing is gone, the old LFO card stays.
     EXPECT_TRUE(s.chainsInto(oldLfo, raw).empty());
@@ -403,8 +406,8 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceRefusesTheCurrentSourceAndALfoT
     ASSERT_NE(
         s.mc.getGraphEditor().connectModulationSource(other->nodeID, 0, s.byUuid(s.targetUuid)->nodeID, raw, 0.5f).uid,
         0u);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     const auto otherUuid = other->properties["uuid"].toString();
+    synth::test::waitUntil([&] { return s.chainsInto(otherUuid, raw).size() == 1u; });
     EXPECT_FALSE(s.mc.trackHeaderHostForTest().changeModulatorSource(info, otherUuid, 0));
     EXPECT_EQ(s.chainsInto(s.lfoUuid, raw).size(), 1u) << "nothing changed";
     EXPECT_EQ(s.chainsInto(otherUuid, raw).size(), 1u);
@@ -469,7 +472,8 @@ TEST_F(TimelinePanelIntegrationTest, AnEnvelopeRoutingChangesToAnLfoKeepsItsAmou
     const auto laneId = before->id;
 
     ASSERT_TRUE(s.mc.trackHeaderHostForTest().changeModulatorSource(adsrRow->getInfo(), spareUuid, 0));
-    s.flush();
+    synth::test::waitUntil(
+        [&] { return s.chainsInto(spareUuid, raw).size() == 1u && rowFor(s, spareUuid) != nullptr; });
     EXPECT_TRUE(s.chainsInto(adsrUuid, raw).empty());
     ASSERT_EQ(s.chainsInto(spareUuid, raw).size(), 1u);
     auto* moved = rowFor(s, spareUuid);
@@ -505,7 +509,7 @@ TEST_F(TimelinePanelIntegrationTest, AnLfoRoutingChangesToAnEnvelopeReadingTheCa
     ASSERT_TRUE(s.mc.trackHeaderHostForTest().canChangeModulatorSource(s.row()->getInfo()));
 
     ASSERT_TRUE(s.mc.trackHeaderHostForTest().changeModulatorSource(s.row()->getInfo(), adsrUuid, adsrChannel));
-    s.flush();
+    synth::test::waitUntil([&] { return s.chainsInto(adsrUuid, raw).size() == 1u && rowFor(s, adsrUuid) != nullptr; });
     EXPECT_TRUE(s.chainsInto(s.lfoUuid, raw).empty());
     const auto chains = s.chainsInto(adsrUuid, raw);
     ASSERT_EQ(chains.size(), 1u);
@@ -568,7 +572,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowI
     auto spare = addNodeWithUuid(s.mc, "LFO");
     const auto spareUuid = spare->properties["uuid"].toString();
     s.mc.getGraphEditor().updateComponents();
-    s.flush();
+    synth::test::flushMessageQueue();
     s.undo().clearUndoHistory();
 
     auto& lanes = s.panel().getAutomationLanes();
@@ -588,7 +592,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowI
     first->setForceSwapMotionForTest(true);
 
     ASSERT_TRUE(s.mc.trackHeaderHostForTest().changeModulatorSource(first->getInfo(), spareUuid, 0));
-    synth::test::waitUntil([&] { return (lanes.modulatorCount(s.lane)) == (2); });
+    synth::test::waitUntil([&] { return first->getInfo().sourceUuid == spareUuid; });
 
     ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
     EXPECT_EQ(s.row(0), first) << "the same row, re-bound in place";
@@ -606,7 +610,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowI
     ASSERT_FALSE(first->isSwapMotionRunning());
 
     ASSERT_TRUE(s.undo().undo());
-    synth::test::waitUntil([&] { return (lanes.modulatorCount(s.lane)) == (2); });
+    synth::test::waitUntil([&] { return first->getInfo().sourceUuid == s.lfoUuid; });
     ASSERT_EQ(lanes.modulatorCount(s.lane), 2);
     EXPECT_EQ(s.row(0), first) << "the undo re-binds the same row back";
     EXPECT_EQ(s.row(1), second);
@@ -617,7 +621,7 @@ TEST_F(TimelinePanelIntegrationTest, ChangeSourceOnTheFirstOfTwoRowsKeepsItsRowI
     EXPECT_EQ(s.panel().modulatorRowBoundsForTest(s.lane, 0).getHeight(), foldedHeight);
 
     ASSERT_TRUE(s.undo().redo());
-    synth::test::waitUntil([&] { return (s.row(0)) == (first); });
+    synth::test::waitUntil([&] { return first->getInfo().sourceUuid == spareUuid; });
     EXPECT_EQ(s.row(0), first);
     EXPECT_EQ(first->getInfo().sourceUuid, spareUuid);
 }

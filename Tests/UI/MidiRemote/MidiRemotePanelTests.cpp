@@ -127,7 +127,7 @@ TEST_F(MidiRemotePanelLiveRefreshTest, LearnDoneWhileThePanelIsOpenAppearsWithou
     EXPECT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "Host MIDI")
         << "not yet -- scheduleLiveRefresh() defers via callAsync, same as the mid-gesture-rebuild hazard";
 
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "")
         << "the deferred rebuild ran and picked up the auto-created profile";
     EXPECT_EQ(panel_.getControllersListRowCountForTest(), 1);
@@ -139,7 +139,8 @@ TEST_F(MidiRemotePanelLiveRefreshTest, ForgetThenUndoIsReflectedWithoutATabSwitc
     controller_->arm(node_->nodeID, "cutoff");
     send(juce::MidiMessage::controllerEvent(1, 20, 64));
     settle();
-    synth::test::waitUntil([&] { return (panel_.getControllersListRowCountForTest()) == (1); });
+    synth::test::waitUntil(
+        [&] { return panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi") == ""; });
     ASSERT_EQ(panel_.getControllersListRowCountForTest(), 1);
     const juce::String nodeUuid = node_->properties["uuid"].toString();
     ASSERT_FALSE(nodeUuid.isEmpty());
@@ -152,7 +153,7 @@ TEST_F(MidiRemotePanelLiveRefreshTest, ForgetThenUndoIsReflectedWithoutATabSwitc
     undo_.undo();
     EXPECT_EQ(doc_.assignments.size(), 1u) << "MidiRemoteSnapshotAction's undo() restores doc_ synchronously";
 
-    synth::test::waitUntil([&] { return panel_.selectAssignmentForParameter(nodeUuid, "cutoff"); });
+    synth::test::flushMessageQueue();
     EXPECT_TRUE(panel_.selectAssignmentForParameter(nodeUuid, "cutoff"))
         << "the panel re-pulled its Surface/Inspector state after the live-refresh pump, matching doc_ again -- "
            "before FRO263 this stayed stale until a tab switch";
@@ -186,7 +187,7 @@ TEST_F(MidiRemotePanelLiveRefreshTest, DeviceOpenedWhilePanelIsOpenAppearsWithou
     EXPECT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "Host MIDI")
         << "not yet -- scheduleLiveRefresh() defers via callAsync, same as every other caller of it";
 
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "")
         << "the deferred rebuild ran off the onMidiDevicesChanged path alone and picked up the profile -- "
            "before this fix the panel stayed stale here until a tab switch";
@@ -227,7 +228,8 @@ class MidiRemotePopoverRelay : public main_popover::MainPopoverTest {};
 
 TEST_F(MidiRemotePopoverRelay, TheAddControllerPopoverTakesCmdZCmdShiftZAndSpaceFromTheApp) {
     mc_->simulateAddAudioTrackClick(); // an undo step to take back
-    synth::test::waitUntil([&] { return mc_->getUndoManager().canUndo(); });
+    synth::test::flushMessageQueue();
+    ASSERT_TRUE(mc_->getUndoManager().canUndo());
     auto& panel = mc_->getBottomDock().getMidiRemotePanel();
     main_popover::Capture popover(*mc_);
     panel.showAddControllerPopover(panel);

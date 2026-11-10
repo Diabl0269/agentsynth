@@ -174,7 +174,7 @@ TEST_F(AutosaveTest, DoesNotRefireWhenNothingChangedSinceTheLastAutosave) {
 
     // A genuine new edit, though, must autosave again once the interval has (still) elapsed.
     mc->simulateAddMidiTrackClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     mc->setAutosaveElapsedMsForTest(999999);
     mc->runAutosaveTickForTest();
     EXPECT_TRUE(synth::ProjectBundle::hasAutosave(bundleDir));
@@ -187,7 +187,7 @@ TEST_F(AutosaveTest, DoesNotFireWhenDisabledInPreferences) {
     mc->getAppPropertiesForTest().getUserSettings()->setValue("autosaveEnabled", "0");
 
     mc->simulateAddMidiTrackClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc->isProjectDirty(); });
     mc->setAutosaveElapsedMsForTest(999999);
     mc->runAutosaveTickForTest();
 
@@ -200,7 +200,7 @@ TEST_F(AutosaveTest, DoesNotFireDuringAnActiveAudioTake) {
     ASSERT_TRUE(mc->saveProjectForTest(bundleDir));
 
     mc->simulateAddMidiTrackClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc->isProjectDirty(); });
     mc->setAutosaveElapsedMsForTest(999999);
 
     mc->setAudioTakeCapturingForTest(true);
@@ -276,7 +276,7 @@ TEST_F(AutosaveTest, RestoringTheSidecarLoadsItAndLeavesTheDocumentDirty) {
     ASSERT_TRUE(mc->saveProjectForTest(bundleDir)); // project.json: 0 tracks
 
     mc->simulateAddMidiTrackClick(); // the autosave will capture 1 track, project.json still has 0
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc->isProjectDirty(); });
     mc->setAutosaveElapsedMsForTest(999999);
     mc->runAutosaveTickForTest();
     ASSERT_TRUE(synth::ProjectBundle::hasAutosave(bundleDir));
@@ -304,7 +304,7 @@ TEST_F(AutosaveTest, DiscardingTheSidecarLoadsTheSavedProjectAndClearsIt) {
     ASSERT_TRUE(mc->saveProjectForTest(bundleDir)); // project.json: 0 tracks
 
     mc->simulateAddMidiTrackClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc->isProjectDirty(); });
     mc->setAutosaveElapsedMsForTest(999999);
     mc->runAutosaveTickForTest();
     ASSERT_TRUE(synth::ProjectBundle::hasAutosave(bundleDir));
@@ -344,7 +344,7 @@ TEST_F(AutosaveTest, AnExplicitSaveDiscardsAnyPendingAutosave) {
     ASSERT_TRUE(mc->saveProjectForTest(bundleDir));
 
     mc->simulateAddMidiTrackClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc->isProjectDirty(); });
     mc->setAutosaveElapsedMsForTest(999999);
     mc->runAutosaveTickForTest();
     ASSERT_TRUE(synth::ProjectBundle::hasAutosave(bundleDir));
@@ -414,7 +414,7 @@ TEST_F(AutosaveTest, DiscardingUnsavedChangesAlsoDiscardsAnyPendingAutosaveForTh
     ASSERT_TRUE(mc->saveProjectForTest(bundleDir));
 
     mc->simulateAddMidiTrackClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc->isProjectDirty(); });
     mc->setAutosaveElapsedMsForTest(999999);
     mc->runAutosaveTickForTest();
     ASSERT_TRUE(synth::ProjectBundle::hasAutosave(bundleDir));

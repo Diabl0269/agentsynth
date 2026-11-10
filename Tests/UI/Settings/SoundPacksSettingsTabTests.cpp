@@ -496,8 +496,6 @@ TEST(SoundPacksSettingsTab, YourFoldersListsTheSoundsViewFoldersAndRemoveKeepsTh
     SoundPacksSettingsTab tab(rig.installer, &book);
     tab.setSize(500, 500);
     tab.resized();
-    const auto pump = [] { juce::MessageManager::getInstance()->runDispatchLoopUntil(60); };
-
     ASSERT_EQ(tab.getFolderRowCountForTest(), 1);
     auto& row = tab.getFolderRowForTest(0);
     EXPECT_EQ(row.getNameText(), "user");
@@ -511,7 +509,7 @@ TEST(SoundPacksSettingsTab, YourFoldersListsTheSoundsViewFoldersAndRemoveKeepsTh
 
     const auto file = tree.user.getChildFile("Field/dusty_keys_120_Am_loop.wav");
     tab.getFolderRowForTest(0).getRemoveButton().onClick();
-    pump();
+    synth::test::waitUntil([&] { return tab.getFolderRowCountForTest() == 0; });
     EXPECT_EQ(tab.getFolderRowCountForTest(), 0);
     EXPECT_TRUE(book.folders().empty());
     EXPECT_TRUE(file.existsAsFile());

@@ -42,14 +42,11 @@ struct PromptRecorder {
     }
 };
 
-/** The dirty flag moves on juce::UndoManager's ASYNC change broadcast, so every assertion about it
- *  has to follow a dispatch pass — same idiom as DirtyFlagTracksARealUndoStepThenClearsOnSave. */
-void pumpMessageLoop() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
-
-/** One edit that dirties the document, with the pump already folded in. */
+/** One edit that dirties the document. The dirty flag moves on juce::UndoManager's ASYNC change broadcast, so this
+ *  waits until the flag is set. */
 void makeDirty(MainComponent& mc) {
     mc.simulateAddMidiTrackClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return mc.isProjectDirty(); });
 }
 
 } // namespace
@@ -337,7 +334,7 @@ TEST_F(MainComponentTest, NewPatchLeavesTheDocumentClean) {
     EXPECT_GT(mc.getUndoManager().getEditSerial(), serialBefore)
         << "New Patch really does record undoable steps - so a change broadcast really was queued";
 
-    pumpMessageLoop();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.isProjectDirty()) << "a freshly created document must not come back dirty";
 }
 
@@ -357,7 +354,7 @@ TEST_F(MainComponentTest, LoadingAProjectClearsTheDirtyFlag) {
     ASSERT_TRUE(mc.openProjectForTest(bundleDir));
     EXPECT_FALSE(mc.isProjectDirty());
 
-    pumpMessageLoop();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(mc.isProjectDirty()) << "a stale undo notification must not resurrect the flag";
 }
 
@@ -378,7 +375,7 @@ TEST_F(MainComponentTest, UndoBackToTheSavedStateIsStillDirty) {
     ASSERT_TRUE(mc.isProjectDirty());
 
     ASSERT_TRUE(mc.getUndoManager().undo());
-    pumpMessageLoop();
+    synth::test::flushMessageQueue();
 
     EXPECT_TRUE(mc.isProjectDirty()) << "undoing back to the saved state is still treated as dirty, by design";
 }
@@ -413,7 +410,7 @@ TEST_F(MainComponentTest, FactoryPresetLoadKeepsADirtyTimelineDirty) {
     ASSERT_EQ(mc.getTimelineDoc().getTracks().size(), 1u);
 
     mc.simulateLoadFactoryPresetForTest(1);
-    synth::test::waitUntil([&] { return (mc.getTimelineDoc().getTracks().size()) == (1u); });
+    synth::test::flushMessageQueue();
 
     EXPECT_EQ(mc.getTimelineDoc().getTracks().size(), 1u) << "the load leaves the timeline in place...";
     EXPECT_TRUE(mc.isProjectDirty()) << "...so the document is still unsaved, and must still say so";

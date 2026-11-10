@@ -1,6 +1,7 @@
 // AIChatAccessibilityTests.cpp -- what a screen reader hears from the AI chat: the message wording
 // builder (Source/UI/Assistant/ChatMessageAccessibilityText.h), the message list being a Tab-stop
 // list, each message bubble reading as one list item, and the input row's names and tooltips.
+#include "../../../TestWait.h"
 #include "AIChatComponentTestFixture.h"
 #include "UI/Assistant/ChatMessageAccessibilityText.h"
 
@@ -67,7 +68,7 @@ TEST_F(AIChatComponentTest, EachMessageIsAListItemThatReadsItsText) {
             if (editor->isVisible())
                 editor->setText("Create a fat bass");
     rig.chat->triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    synth::test::waitUntil([&] { return rig.chat->getMessageCountForTesting() >= 2; });
 
     auto* list = findMessageList(*rig.chat);
     ASSERT_NE(list, nullptr);

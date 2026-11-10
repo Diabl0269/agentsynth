@@ -9,8 +9,6 @@
 
 namespace {
 
-void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
-
 // The condition JUCE's own accessibility code keys on (juce_AccessibilityHandler.cpp): a component blocked by
 // another modal component is treated as unavailable.
 bool windowIsBlockedByAnEditor(juce::Component& bystander) {
@@ -43,7 +41,7 @@ TEST(NonModalLabelTest, APlainLabelIsModalWhileItsEditorIsOpen) {
     host.addAndMakeVisible(label);
     label.setEditable(false, true, false);
     label.showEditor();
-    synth::test::waitUntil([&] { return windowIsBlockedByAnEditor(bystander); });
+    synth::test::flushMessageQueue(); // a plain Label stays modal after the queue has run
 
     EXPECT_TRUE(windowIsBlockedByAnEditor(bystander));
     label.hideEditor(true);
@@ -53,7 +51,7 @@ TEST(NonModalLabelTest, TheEditorOpensWithoutBlockingTheRestOfTheWindow) {
     Host host;
     host.label.setEditable(false, true, false);
     host.label.showEditor();
-    pump();
+    synth::test::waitUntil([&] { return !windowIsBlockedByAnEditor(host.bystander); });
 
     ASSERT_NE(host.label.getCurrentTextEditor(), nullptr) << "the editor itself must stay open";
     EXPECT_FALSE(windowIsBlockedByAnEditor(host.bystander));
@@ -71,7 +69,7 @@ TEST(NonModalLabelTest, CommittingStillAppliesTheEditedText) {
     host.label.onTextChange = [&changes] { ++changes; };
 
     host.label.showEditor();
-    pump();
+    synth::test::waitUntil([&] { return !windowIsBlockedByAnEditor(host.bystander); });
     // No text-change message: a headless editor has no real focus, so the Label would commit at once.
     host.label.getCurrentTextEditor()->setText("96.0", false);
     host.label.hideEditor(false); // false = commit
@@ -87,12 +85,12 @@ TEST(NonModalLabelTest, EscapeDiscardsTheEditWithoutALingeringModalState) {
     Host host;
     host.label.setEditable(false, true, false);
     host.label.showEditor();
-    pump();
+    synth::test::waitUntil([&] { return !windowIsBlockedByAnEditor(host.bystander); });
     auto* editor = host.label.getCurrentTextEditor();
     ASSERT_NE(editor, nullptr);
     editor->setText("nonsense", false);
     EXPECT_TRUE(editor->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
-    synth::test::waitUntil([&] { return (host.label.getText()) == ("120.0"); });
+    synth::test::waitUntil([&] { return host.label.getCurrentTextEditor() == nullptr; });
     EXPECT_EQ(host.label.getText(), "120.0");
     EXPECT_EQ(host.label.getCurrentTextEditor(), nullptr);
     EXPECT_FALSE(host.label.isCurrentlyModal(false));
@@ -104,7 +102,7 @@ TEST(NonModalLabelTest, ClosingTheEditorBeforeTheDeferredExitRunsIsSafe) {
     host.label.setEditable(false, true, false);
     host.label.showEditor();
     host.label.hideEditor(true); // before the message loop ever ran the deferred exit
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_FALSE(windowIsBlockedByAnEditor(host.bystander));
 }
 
@@ -114,7 +112,7 @@ TEST(NonModalLabelTest, TransportBarLabelsDoNotBlockTheWindow) {
     for (auto* label : {&bar.getBpmLabel(), &bar.getTimeSigLabel()}) {
         ASSERT_NE(dynamic_cast<synth::ui::NonModalLabel*>(label), nullptr);
         label->showEditor();
-        synth::test::waitUntil([&] { return (label->getCurrentTextEditor()) != (nullptr); });
+        synth::test::waitUntil([&] { return !windowIsBlockedByAnEditor(bar.getPlayStopButton()); });
         EXPECT_NE(label->getCurrentTextEditor(), nullptr);
         EXPECT_FALSE(windowIsBlockedByAnEditor(bar.getPlayStopButton())) << label->getComponentID();
         label->hideEditor(true);
@@ -129,7 +127,7 @@ TEST(NonModalLabelTest, MixerColumnNameEditorDoesNotBlockTheWindow) {
     auto& nameLabel = header.getNameLabelForTest();
     ASSERT_NE(dynamic_cast<synth::ui::NonModalLabel*>(&nameLabel), nullptr);
     nameLabel.showEditor();
-    synth::test::waitUntil([&] { return (nameLabel.getCurrentTextEditor()) != (nullptr); });
+    synth::test::waitUntil([&] { return !windowIsBlockedByAnEditor(header); });
     ASSERT_NE(nameLabel.getCurrentTextEditor(), nullptr);
     EXPECT_FALSE(windowIsBlockedByAnEditor(header));
     nameLabel.hideEditor(true);

@@ -9,6 +9,7 @@
 // Does NOT register in CMakeLists.txt — add it manually when ready.
 // Mirrors the pattern in MainComponentTests.cpp and AIChatComponentTests.cpp.
 
+#include "../../TestWait.h"
 #include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h" // timelinePanelBoundsInMainComponent
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
@@ -600,7 +601,7 @@ TEST_F(AICancelTest, CancelAfterResponseDoesNotCancelAnything) {
 
     // The response handler posts through the message queue, so let it run.
     rawProvider->completePending("All done.");
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return !chat.isWaiting(); });
 
     ASSERT_FALSE(chat.isWaiting()) << "the component never left the waiting state";
     EXPECT_TRUE(rawProvider->cancelledIds.empty()) << "a completed request was cancelled after the fact";

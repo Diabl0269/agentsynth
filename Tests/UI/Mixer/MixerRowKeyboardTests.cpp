@@ -112,9 +112,6 @@ struct RowRig {
             panel().keyPressed(rightKey());
     }
 
-    /** Runs what a button queued: juce::Button::triggerClick posts its click as a command message. */
-    static void pumpMessages() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
-
     float sendLevel() { return firstStrip()->getSendLevelParameter(0)->get(); }
 
     void setSendLevel(float db) {
@@ -555,7 +552,7 @@ TEST(MixerHeaderControlsTest, ReturnOnPlusBusCreatesABus) {
     const int before = rig.panel().getColumnCount();
     auto& addBus = static_cast<juce::Component&>(rig.panel().getToolbarForTest().getAddBusButtonForTest());
     EXPECT_TRUE(addBus.keyPressed(returnKey()));
-    RowRig::pumpMessages();
+    synth::test::waitUntil([&] { return rig.panel().getColumnCount() == before + 1; });
     EXPECT_EQ(rig.panel().getColumnCount(), before + 1) << "the existing create-bus path ran";
 }
 
