@@ -35,7 +35,7 @@ juce::File newestReportSince(const juce::File& reportsDir, juce::Time since) {
     juce::Time newestTime;
     const juce::String pattern = juce::String(branding::kProductName) + "-*.ips";
     for (const auto& entry : juce::RangedDirectoryIterator(reportsDir, false, pattern, juce::File::findFiles)) {
-        const auto modified = entry.getLastModificationTime();
+        const auto modified = entry.getModificationTime();
         if (modified > since && (newest == juce::File() || modified > newestTime)) {
             newest = entry.getFile();
             newestTime = modified;
@@ -62,7 +62,7 @@ std::optional<juce::Time> RunSentinel::takeStaleRun(const juce::File& dir, const
         const int pid = file.getFileName().fromFirstOccurrenceOf(kSentinelPrefix, false, false).getIntValue();
         if (pid > 0 && isAlive != nullptr && isAlive(pid))
             continue; // another instance, still running
-        const auto started = entry.getLastModificationTime();
+        const auto started = entry.getModificationTime();
         if (!latest.has_value() || started > *latest)
             latest = started;
         file.deleteFile();

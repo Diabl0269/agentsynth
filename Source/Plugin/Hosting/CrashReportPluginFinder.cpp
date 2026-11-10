@@ -4,16 +4,17 @@ namespace synth::CrashReportPluginFinder {
 
 namespace {
 
-/** The body JSON: the text after the header line, or the whole text when that is all there is. */
+/** The body JSON: the first object that has a "threads" list. The header line comes before it, and a report with
+ *  no header is the body alone. */
 juce::var parseReport(const juce::String& text) {
     const auto trimmed = text.trimStart();
-    const auto newline = trimmed.indexOfChar('\n');
-    if (newline >= 0) {
-        auto body = juce::JSON::parse(trimmed.substring(newline + 1));
-        if (body.isObject())
-            return body;
+    for (int from = 0; from >= 0; from = trimmed.indexOf(from + 1, "\n{")) {
+        const auto start = from == 0 ? 0 : from + 1;
+        auto candidate = juce::JSON::parse(trimmed.substring(start));
+        if (candidate.isObject() && candidate.hasProperty("threads"))
+            return candidate;
     }
-    return juce::JSON::parse(trimmed);
+    return {};
 }
 
 /** End index (exclusive) of the first path component ending in `extension` (".vst3"), or -1. */
@@ -28,6 +29,8 @@ int bundleEnd(const juce::String& path, const juce::String& extension) {
         from = at + 1;
     }
 }
+
+bool isWholeNumber(const juce::var& value) { return value.isInt() || value.isInt64(); }
 
 } // namespace
 
@@ -54,7 +57,7 @@ std::optional<CrashedPlugin> find(const juce::String& reportText) {
     const auto* threads = report.getProperty("threads", juce::var()).getArray();
     const auto* images = report.getProperty("usedImages", juce::var()).getArray();
     const auto& faulting = report.getProperty("faultingThread", juce::var());
-    if (threads == nullptr || images == nullptr || !faulting.isInt() || static_cast<int>(faulting) < 0 ||
+    if (threads == nullptr || images == nullptr || !isWholeNumber(faulting) || static_cast<int>(faulting) < 0 ||
         static_cast<int>(faulting) >= threads->size())
         return std::nullopt;
 
@@ -64,7 +67,7 @@ std::optional<CrashedPlugin> find(const juce::String& reportText) {
 
     for (const auto& frame : *frames) {
         const auto& index = frame.getProperty("imageIndex", juce::var());
-        if (!index.isInt() || static_cast<int>(index) < 0 || static_cast<int>(index) >= images->size())
+        if (!isWholeNumber(index) || static_cast<int>(index) < 0 || static_cast<int>(index) >= images->size())
             continue;
         const auto path = (*images)[static_cast<int>(index)].getProperty("path", juce::var()).toString();
         if (auto plugin = pluginFromImagePath(path))

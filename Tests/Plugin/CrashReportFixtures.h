@@ -4,13 +4,11 @@
 // real report (header line, then the body) from a crash on a plugin's own USB thread, trimmed to the keys the finder
 // reads. Plugin, vendor and every path are invented; the user name is the system's own "USER" placeholder.
 
+// clang-format off
 namespace synth::test {
 
-inline constexpr const char *
-    kPluginCrashReport =
-       R"({"app_name":"Agent Synth","timestamp":"2026-10-28 17:02:26.00 +0200","app_version":"0.202.0","bundleID":"com.agentsynth.app","os_version":"macOS 26.5.1 (25F80)",
-   "bug_type" : "309"
-}
+inline constexpr const char* kPluginCrashReport =
+    R"CRASH({"app_name":"Agent Synth","timestamp":"2026-10-28 17:02:26.00 +0200","app_version":"0.202.0","bundleID":"com.agentsynth.app","os_version":"macOS 26.5.1 (25F80)","bug_type":"309"}
 {
   "procName" : "Agent Synth",
   "exception" : {"type":"EXC_BAD_ACCESS","signal":"SIGSEGV","subtype":"KERN_INVALID_ADDRESS at 0xffffffffffffff98"},
@@ -37,6 +35,7 @@ inline constexpr const char *
     {"source":"P","arch":"arm64","name":"libsystem_pthread.dylib","path":"/usr/lib/system/libsystem_pthread.dylib"},
     {"source":"P","arch":"arm64","name":"Example Synth","path":"/Library/Audio/Plug-Ins/VST3/Example Synth.vst3/Contents/MacOS/Example Synth"}
   ]
-})";
+})CRASH";
 
 } // namespace synth::test
+// clang-format on
