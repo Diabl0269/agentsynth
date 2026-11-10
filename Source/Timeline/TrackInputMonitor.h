@@ -18,8 +18,9 @@ inline constexpr float kMonitorGuardPeakThreshold = 0.97f;
 inline constexpr double kMonitorGuardSustainSeconds = 0.25;
 
 // One audio track's live input: mixes the track's own device inputs into its Track Audio node's output while the
-// monitor rule says the track hears them, and mutes it for good when the input clips for too long (feedback). Owned
-// by the node; process() runs on the AUDIO THREAD inside the node's processBlock, allocation- and lock-free.
+// monitor rule says the track hears them (and then the track's own clips do not play, see wouldHear), and mutes it for
+// good when the input clips for too long (feedback). Owned by the node; process() runs on the AUDIO THREAD inside the
+// node's processBlock, allocation- and lock-free.
 class TrackInputMonitor {
 public:
     // Adds the input to `buffer` (channels 0 and 1; a mono input goes to both) when `track` should hear it. Returns
@@ -48,6 +49,23 @@ public:
         if (buffer.getNumChannels() > 1)
             addInto(buffer, 1, right, samples);
         return true;
+    }
+
+    // Whether process() would play the input this block, using the same checks it makes before it reads the input:
+    // the monitor rule, the device, the latch, and a device input that exists. The Track Audio node asks this BEFORE
+    // rendering the track's clips, because an input that is heard replaces them (they never play under it). It does
+    // not see the guard tripping on this very block: process() returning false after a true here is the cue to play
+    // the clips after all. Audio thread; does not change any state.
+    bool wouldHear(const TransportService& transport, const TimelineSnapshot::TrackInfo& track,
+                   bool playing) const noexcept {
+        const auto& context = transport.getInputMonitorContext();
+        if (!hearsInput(track, playing, context.recording) || !onOpenDevice(track, context))
+            return false;
+        if (latched_.load(std::memory_order_relaxed) || transport.getNumDeviceInputSamples() <= 0)
+            return false;
+        return transport.getDeviceInputForDeviceChannel(track.inputFirstChannel) != nullptr ||
+               (track.inputNumChannels > 1 &&
+                transport.getDeviceInputForDeviceChannel(track.inputFirstChannel + 1) != nullptr);
     }
 
     // Any thread. Whether sustained clipping has muted this track's monitoring (re-arming the track clears it).
