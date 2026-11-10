@@ -27,12 +27,6 @@
 
 namespace {
 
-// Forces any pending juce::MessageManager::callAsync (GraphEditor::updateComponents()'s own
-// mod-matrix refresh, the actual carrier of the rename) and the 10 Hz ModMatrixComponent
-// timer to actually run — without this, the bug is invisible in a headless test that never pumps
-// the message loop (the async callback simply never fires).
-void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(60); }
-
 // A small patch shaped like the ticket's repro: several modules that are each the only one of
 // their type (so each is a "lone singleton" the auto-rename targets), one of them additionally carrying a
 // user-set custom card title ("displayName" — a totally different mechanism from the processor's
@@ -105,7 +99,8 @@ TEST(MacroUndoNamePreservation, GroupThenUndoLeavesEveryModuleNameByteIdentical)
 
     ASSERT_TRUE(patch.undo.canUndo());
     patch.undo.undo();
-    pump();
+    synth::test::waitUntil([&] { return patch.editor.getMacros().empty(); });
+    synth::test::flushMessageQueue();
 
     EXPECT_EQ(patch.snapshotNames(), before) << "undoing the group must not rename anything";
     EXPECT_EQ(patch.editor.getModuleDisplayName(patch.distortion), customTitleBefore)
@@ -120,15 +115,18 @@ TEST(MacroUndoNamePreservation, GroupUndoRedoLeavesEveryModuleNameByteIdentical)
     patch.editor.setSelectedNodes({patch.input, patch.osc});
     const auto macroId = patch.editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
-    pump();
+    synth::test::waitUntil([&] { return !patch.editor.getMacros().empty(); });
+    synth::test::flushMessageQueue();
     const auto afterGroup = patch.snapshotNames();
 
     patch.undo.undo();
-    pump();
+    synth::test::waitUntil([&] { return patch.editor.getMacros().empty(); });
+    synth::test::flushMessageQueue();
     EXPECT_EQ(patch.snapshotNames(), before) << "undo";
 
     patch.undo.redo();
-    synth::test::waitUntil([&] { return (patch.snapshotNames()) == (afterGroup); });
+    synth::test::waitUntil([&] { return !patch.editor.getMacros().empty(); });
+    synth::test::flushMessageQueue();
     EXPECT_EQ(patch.snapshotNames(), afterGroup) << "redo restores exactly what grouping produced, byte-identical";
     EXPECT_FALSE(patch.editor.getMacros().empty());
 }
@@ -139,16 +137,18 @@ TEST(MacroUndoNamePreservation, UngroupThenUndoLeavesEveryModuleNameByteIdentica
     patch.editor.setSelectedNodes({patch.input, patch.osc});
     const auto macroId = patch.editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
-    pump();
+    synth::test::waitUntil([&] { return !patch.editor.getMacros().empty(); });
+    synth::test::flushMessageQueue();
     const auto afterGroup = patch.snapshotNames();
 
     patch.editor.setSelectedNodes({patch.input, patch.osc});
     patch.editor.getMacroController().ungroupSelection();
-    synth::test::waitUntil([&] { return patch.undo.canUndo(); });
+    synth::test::waitUntil([&] { return patch.editor.getMacros().empty(); });
 
     ASSERT_TRUE(patch.undo.canUndo());
     patch.undo.undo();
-    synth::test::waitUntil([&] { return (patch.snapshotNames()) == (afterGroup); });
+    synth::test::waitUntil([&] { return !patch.editor.getMacros().empty(); });
+    synth::test::flushMessageQueue();
 
     EXPECT_EQ(patch.snapshotNames(), afterGroup)
         << "undoing the ungroup must restore the macro without renaming anything";

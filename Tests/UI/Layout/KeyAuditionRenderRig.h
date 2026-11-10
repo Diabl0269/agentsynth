@@ -39,6 +39,13 @@ struct Render {
             p = std::max(p, block());
         return p;
     }
+    /** The loudest of `blocks` blocks after `skip` more were rendered first: past a fade-in, so a note heard only
+     *  through the fade's leakage does not count as heard. */
+    float peakAfter(int skip, int blocks) {
+        for (int i = 0; i < skip; ++i)
+            block();
+        return peak(blocks);
+    }
     /** Blocks rendered until a block is below `floor` (a bounded loop, not a wait); -1 if it never gets there. */
     int blocksUntilQuiet(float floor, int maxBlocks) {
         for (int i = 0; i < maxBlocks; ++i)

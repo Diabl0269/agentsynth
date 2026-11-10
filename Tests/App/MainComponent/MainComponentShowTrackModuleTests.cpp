@@ -187,7 +187,7 @@ TEST_F(ShowTrackModuleTest, CtrlEOnAHostedPluginTrackFocusesItsModuleAndCtrlCmdE
     ASSERT_EQ(selected().size(), 1u);
     EXPECT_EQ(selected()[0], node->nodeID) << "it shows the plugin, not the Track In";
     header.getShowModuleButton().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(30); // triggerClick posts its click
+    synth::test::flushMessageQueue(); // triggerClick posts its click
     EXPECT_FALSE(windows.hasWindowForTest(node->nodeID)) << "nor does the row's button";
 
     // The window has its own rebindable chord (Ctrl+Cmd+E on the Mac, Ctrl+Alt+E elsewhere).

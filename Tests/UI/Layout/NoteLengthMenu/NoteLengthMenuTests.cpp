@@ -441,7 +441,7 @@ TEST(NoteLengthBox, AClickInsideAModalDialogOpensThePopupAndAChipPicks) {
     box.setCurrentName("1/2", juce::dontSendNotification);
 
     box.mouseDown(mouseEvent(box));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return box.getPopup() != nullptr; });
     auto* popup = box.getPopup();
     ASSERT_NE(popup, nullptr) << "the click opened the popup";
     EXPECT_TRUE(popup->isCurrentlyModal(true));

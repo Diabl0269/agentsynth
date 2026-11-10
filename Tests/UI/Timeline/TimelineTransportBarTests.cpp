@@ -348,7 +348,6 @@ namespace {
 void setRecordStartsPlayback(MainComponent& mc, bool on) {
     mc.getAppPropertiesForTest().getUserSettings()->setValue("recordStartsPlayback", on ? "1" : "0");
 }
-void pumpMessages() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
 } // namespace
 
 // The default (preference untouched) is today's behaviour: the record command, which Ctrl+R is bound to, rolls the
@@ -360,7 +359,7 @@ TEST_F(TimelineTransportBarAppWiringTest, RecordCommandStartsTheTransportByDefau
     auto& transport = mc.getAudioEngine().getTransport();
 
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::transportRecord, false));
-    pumpMessages();
+    synth::test::flushMessageQueue();
     transport.tick(512);
     EXPECT_TRUE(mc.getTimelinePanel().getTransportBar().isRecordingForTest());
     EXPECT_TRUE(transport.getPositionSnapshot().playing);
@@ -450,7 +449,8 @@ TEST_F(TimelineTransportBarAppWiringTest, TheRecordTooltipFollowsThePreference) 
     EXPECT_TRUE(button.getTooltip().contains("implies Play"));
 
     setRecordStartsPlayback(mc, false);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(200); // the settings broadcast is asynchronous
+    // the settings broadcast is asynchronous
+    synth::test::waitUntil([&] { return !button.getTooltip().contains("implies Play"); });
     EXPECT_FALSE(button.getTooltip().contains("implies Play")) << button.getTooltip();
     EXPECT_TRUE(button.getTooltip().contains("press Play")) << button.getTooltip();
 

@@ -2,6 +2,7 @@
 // with their size, and starts the shared installer's own download from a row. The installer runs inline on a fake
 // network (SoundPackTestKit.h), so a test can read both views mid-download.
 #include "../SoundPacks/SoundPackTestKit.h"
+#include "../TestWait.h"
 #include "../UI/Layout/FadeVisibilityTestGuard.h"
 #include "SoundBrowserTestKit.h"
 #include "UI/Layout/ChevronTurn.h"
@@ -271,7 +272,7 @@ TEST(SoundPackOffer, AnInstalledPackBecomesANormalPlace) {
     EXPECT_TRUE(rig.view->getRows()[(size_t)rig.firstOf(Kind::GetPack)].busy);
 
     scanAndWait(*rig.index);
-    pump();
+    synth::test::waitUntil([&] { return rig.countOf(Kind::GetPack) == 0; });
     EXPECT_EQ(rig.countOf(Kind::GetPack), 0);
     bool place = false;
     for (const auto& row : rig.view->getRows())

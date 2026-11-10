@@ -42,7 +42,7 @@ TEST(AIChatWaitingCallbackTest, FiresTrueOnSendAndFalseOnReply) {
     ASSERT_EQ(seen.size(), 1u);
     EXPECT_TRUE(seen[0]);
 
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     synth::AIProvider::AIResponse response;
     response.success = true;
     response.content = "Hi there.";
@@ -65,7 +65,7 @@ TEST(AIChatWaitingCallbackTest, FiresFalseOnCancelAndOnlyOnce) {
 
     findInput(chat)->setText("hello");
     chat.triggerSend();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::flushMessageQueue();
     chat.simulateCancelClick();
     chat.simulateEscapeKey(); // nothing is waiting any more: no second call
     ASSERT_EQ(seen.size(), 2u);

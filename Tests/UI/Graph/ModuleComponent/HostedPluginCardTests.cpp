@@ -507,14 +507,13 @@ TEST(HostedParameterAttachmentTest, AWidgetDrivenWriteIsNotEchoedBackIntoThePara
     HostedParameterAttachment attachment(*param, slider);
 
     slider.setValue(0.3, juce::sendNotificationSync);
-    pump();
-    synth::test::waitUntil([&] { return (param->setValueCalls.load()) == (1); });
+    synth::test::flushMessageQueue();
     EXPECT_EQ(param->setValueCalls.load(), 1) << "one widget change is exactly one parameter write";
     EXPECT_NEAR(slider.getValue(), 0.3, 1e-6);
 
     // An incoming value does not write back either.
     param->setValueNotifyingHost(0.8f);
-    synth::test::waitUntil([&] { return (param->setValueCalls.load()) == (2); });
+    synth::test::waitUntil([&] { return std::abs(slider.getValue() - 0.8) <= 1e-6; });
     EXPECT_EQ(param->setValueCalls.load(), 2);
     EXPECT_NEAR(slider.getValue(), 0.8, 1e-6);
 }
@@ -556,13 +555,13 @@ TEST(HostedParameterAttachmentTest, DetachRemovesTheListenerAndStopsAllTraffic) 
     param->setValueNotifyingHost(0.9f); // queues an async update...
     attachment.detach();                // ...which detach() drops
     EXPECT_FALSE(attachment.isBound());
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_NEAR(slider.getValue(), 0.0, 1e-9) << "a queued update must not outlive detach()";
 
     param->beginChangeGesture(); // a listener still registered would be called here
     param->endChangeGesture();
     param->setValueNotifyingHost(0.2f);
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(gestures, 2) << "after detach() the attachment hears nothing";
     EXPECT_NEAR(slider.getValue(), 0.0, 1e-9);
 
@@ -637,7 +636,7 @@ TEST(HostedPluginCardTest, AutomationReflectsIntoTheWidgetWithoutWritingTheParam
     card->reflectParameterValue(param, 0.9f);
 
     EXPECT_NEAR(slider->getValue(), 0.9, 1e-6);
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(param->setValueCalls.load(), writesBefore + 1) << "reflecting must not write back";
 }
 
@@ -728,7 +727,7 @@ TEST(HostedPluginCardTest, ReplacingThePluginRebindsTheCardToTheNewInstance) {
         return rig.module->hasInstance() && rig.module->getActiveInstanceForEditor() != nullptr &&
                rig.param(0) != oldParam;
     }));
-    pump();
+    synth::test::flushMessageQueue();
 
     auto* slider = childWithId<juce::Slider>(*card, "hostedKnob:k");
     ASSERT_NE(slider, nullptr);

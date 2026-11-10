@@ -234,9 +234,11 @@ bool TakeCaptureWriter::writePeaksFile() const {
     return PeaksFile::write(peaksFile_, data);
 }
 
-void TakeCaptureWriter::copyLivePeaks(std::vector<std::pair<float, float>>& out) const {
+void TakeCaptureWriter::copyLivePeaks(std::vector<std::pair<float, float>>& out, std::vector<float>* rmsOut) const {
     const juce::ScopedLock lock(peaksLock_);
     out = peaksAccumulator_.getData().buckets;
+    if (rmsOut != nullptr)
+        *rmsOut = peaksAccumulator_.getData().rms;
 }
 
 } // namespace synth

@@ -30,8 +30,9 @@
 #include <vector>
 
 namespace synth {
-class MidiRecorder; // Forward declaration (Source/Timeline/MidiRecorder.h)
-class TimelineDoc;  // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
+class AuditionMonitor; // Forward declaration (Source/AudioEngine/AuditionMonitor.h)
+class MidiRecorder;    // Forward declaration (Source/Timeline/MidiRecorder.h)
+class TimelineDoc;     // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
 
 namespace midi {
 class RemoteMessageSink; // Forward declaration (Source/MidiRemote/RemoteEngine/RemoteMessageSink.h)
@@ -266,6 +267,8 @@ public:
     // there and docs/architecture/audio-engine.md#sound-preview). Message-thread callers use play/stop/setGainDb;
     // the audio thread only ever calls process(), from renderNextBlock.
     synth::soundbrowser::SoundPreviewPlayer& getSoundPreview() noexcept { return soundPreview_; }
+    // Makes a key-scale audition heard through a muted or solo-silenced sound (message thread; AuditionMonitor.h).
+    synth::AuditionMonitor& getAuditionMonitor() noexcept { return *auditionMonitor_; }
     const synth::soundbrowser::SoundPreviewPlayer& getSoundPreview() const noexcept { return soundPreview_; }
 
     // The timeline's message-thread -> audio-thread hand-off. The message thread publishes
@@ -577,6 +580,7 @@ private:
     // allocates from the audio thread.
     synth::AutomationUiFeed automationUiFeed_;
     juce::AudioProcessorGraph mainProcessorGraph;
+    std::unique_ptr<synth::AuditionMonitor> auditionMonitor_; // after the graph: it goes first
     juce::AudioProcessorPlayer processorPlayer;
 
     // Message-thread only (initialise / shutdown / suspendDeviceCallback / resumeDeviceCallback),

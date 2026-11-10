@@ -502,7 +502,7 @@ TEST(PluginKnobPickerTouchCaptureTest, AnOffThreadGestureIsHoppedToTheMessageThr
     worker.join();
 
     EXPECT_EQ(touchedIndex, -1) << "the callback must not run on the reporting thread";
-    pump();
+    synth::test::waitUntil([&] { return touchedIndex == 0; });
     EXPECT_EQ(touchedIndex, 0);
 
     capture.setArmed(false);

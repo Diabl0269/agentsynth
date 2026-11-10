@@ -133,8 +133,10 @@ scroll stops on release, Escape, a tool change and the pointer moving back in; t
 
 The guard is `DragSurfaces.EveryMouseDragSaysWhetherItFollowsTheView` (`Tests/UI/Layout/DragSurfaceRegistryTests.cpp`):
 every class that overrides `mouseDrag` names its follow test or the reason it is exempt (a slider inside a fixed range,
-a resizer, a forwarder, a drag-and-drop starter). The surfaces still missing it are listed in `kFollowGaps`, which may
-only shrink.
+a resizer, a forwarder, a drag-and-drop starter, a card with no scroll of its own, a fixed page or tab strip). The
+surfaces still missing it are listed in `kFollowGaps`, which may only shrink; they fall in three families: horizontal
+beat-axis drags (timeline strips, velocity and drum lanes), vertical reorders inside a viewport (lanes, modulator rows,
+mixer lists, dialog lists) and free canvas or controller-surface pans (selection box, cable, cell move).
 
 ## Anti-overlap search
 

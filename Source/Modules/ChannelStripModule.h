@@ -700,7 +700,7 @@ private:
         auto* transport = dynamic_cast<synth::TransportService*>(getPlayHead());
         if (transport == nullptr || !transport->isMixerSoloActiveForBlock())
             return ~0u;
-        if (isSoloed())
+        if (isSoloed() || isAuditionAudible())
             return ~0u;
         return soloAudibleMask_.load(std::memory_order_relaxed);
     }

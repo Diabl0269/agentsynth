@@ -45,6 +45,9 @@ public:
     std::function<std::vector<PreviewTrack>()> previewTracks;
     /** Plays or ends one audition note on `track`. */
     std::function<void(synth::TrackId track, int pitch, int velocity, bool on)> auditionNote;
+    /** A run through `track` starts (true) or ends (false): the app makes that track's sound audible past mute and
+     * solo. Also used by the piano roll's Key picker, which plays through the open clip's track. */
+    std::function<void(synth::TrackId track, bool running)> auditionMonitor;
     /** Fits the project's clips that follow the song key to `songKey` (one undo step, with its own message). Unset
      * hides the picker's Fit project to key button. */
     std::function<void(const MusicalScale& songKey)> fitProjectToKey;

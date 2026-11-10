@@ -199,12 +199,12 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportToggleLoopFlipsLoopin
     // the message loop before draining the resulting transport command, the same idiom
     // SpaceTogglesPlayback uses for togglePlayback's identical triggerClick() body.
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportToggleLoop, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     engine.processHostBlock(buffer, midi);
     EXPECT_EQ(transport.getPositionSnapshot().looping, !loopingBefore);
 
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportToggleLoop, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     engine.processHostBlock(buffer, midi);
     EXPECT_EQ(transport.getPositionSnapshot().looping, loopingBefore);
 }
@@ -216,7 +216,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportToggleMetronomeFlipsM
     const bool enabledBefore = metronome.isEnabled();
 
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportToggleMetronome, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return metronome.isEnabled() == !enabledBefore; });
     EXPECT_EQ(metronome.isEnabled(), !enabledBefore);
     EXPECT_EQ(mc.getTimelinePanel().getTransportBar().getMetronomeButton().getToggleState(), !enabledBefore);
 }
@@ -271,7 +271,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordRoutesThroughTh
     // Nothing armed: transportRecord still reaches handleRecordToggle's "record implies roll"
     // behaviour (proving it went through the gate, not a bare toggle), but no take starts.
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     engine.processHostBlock(buffer, midi);
     EXPECT_TRUE(transport.getPositionSnapshot().playing) << "record implies roll, even with nothing armed";
     EXPECT_TRUE(mc.getTimelinePanel().getTransportBar().isRecordingForTest());
@@ -279,7 +279,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordRoutesThroughTh
 
     // Off, then arm a MIDI track and try again -- this time the take must actually start.
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     engine.processHostBlock(buffer, midi);
     transport.stop();
     engine.processHostBlock(buffer, midi);
@@ -289,7 +289,7 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordRoutesThroughTh
     doc.setTrackArmed(trackA, true);
 
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::flushMessageQueue();
     engine.processHostBlock(buffer, midi);
     EXPECT_TRUE(transport.getPositionSnapshot().playing);
     EXPECT_TRUE(mc.getMidiRecorderForTest().isRecording()) << "an armed MIDI track must actually start a take";

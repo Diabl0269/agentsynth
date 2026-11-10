@@ -272,8 +272,11 @@ void MidiRemotePanelComponent::refreshActivity() {
             if (step.litControlId.isNotEmpty())
                 litControlIds.push_back(step.litControlId);
         }
-        if (const auto* control = synth::midi::findControlForEvent(profile->controls, event))
+        if (const auto* control = synth::midi::findControlForEvent(profile->controls, event)) {
+            if (event.kind == synth::midi::RemoteEventKind::absolute)
+                lastHardwareValue_[profile->id + "/" + control->id] = juce::jlimit(0.0f, 1.0f, event.value);
             controllerSurface_.noteActivity(control->id, event.kind, event.value);
+        }
     });
 
     commitDetectStep(working, profileChanged, litControlIds, selectedEvents);
@@ -409,6 +412,10 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
                                     ? juce::jlimit(0.0f, 1.0f,
                                                    static_cast<float>((paramValue - rangeMin) / (rangeMax - rangeMin)))
                                     : 0.0f;
+                            // The knob's last reported position beats the parameter-implied one.
+                            if (const auto hw = lastHardwareValue_.find(profile->id + "/" + control.id);
+                                hw != lastHardwareValue_.end())
+                                cell.initialValue = hw->second;
                         } else {
                             // Relative encodings never range-map (RemoteEngineApply.cpp adds event.value
                             // straight onto param->getValue()) -- the parameter's own value IS the

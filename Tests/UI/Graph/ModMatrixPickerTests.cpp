@@ -211,7 +211,7 @@ TEST(ModMatrixPicker, TheComboOpensItsPickerEveryTimeNotOnlyTheFirst) {
         for (int attempt = 1; attempt <= 3; ++attempt) {
             const int before = launches;
             EXPECT_TRUE(combo->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+            synth::test::waitUntil([&] { return launches == before + 1; });
             EXPECT_EQ(launches, before + 1) << "attempt " << attempt;
             EXPECT_FALSE(combo->isPopupActive()) << "the stock flag is lowered while the picker is up";
             open.reset(); // the picker closes, as a pick or Escape would
@@ -229,7 +229,7 @@ TEST(ModMatrixPicker, AnOpenedAndClosedPickerLetsThePanelRefreshAgain) {
     f.c.pickSource(f.c.lfo);
     auto* combo = f.c.matrix().getRowSourceComboForTest(0);
     combo->keyPressed(juce::KeyPress(juce::KeyPress::returnKey));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::waitUntil([&] { return open != nullptr; });
     open.reset();
 
     f.c.editor.setModuleDisplayName(f.c.lfo, "Renamed");

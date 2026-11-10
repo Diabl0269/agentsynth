@@ -47,9 +47,10 @@ struct AudioInputRowText {
 AudioInputRowText describeAudioInput(const synth::AudioInputChoice& choice, const synth::AudioInputStatus& status,
                                      const std::vector<AudioInputTrackSource>& sources = {});
 
-/** The combo's menu (ids in AudioInputMenuIds): No input; the device's mono inputs, then its stereo pairs (or, with
- *  its inputs off, a line saying so and "Turn on its inputs"); "Another track" with one row per source (one with no
- *  mixer channel is disabled); the whole mix; "Audio settings..." (not Hosted). */
+/** The combo's menu (ids in AudioInputMenuIds): No input; the device's mono inputs (a turned-off one is greyed and
+ *  reads "(off)", with "Turn on all its inputs" under the header), then its stereo pairs (or, with its inputs off, a
+ *  line saying so and "Turn on its inputs"); "Another track" with one row per source (one with no mixer channel is
+ *  disabled); the whole mix; "Audio settings..." (not Hosted). Every disabled row says why in its own text. */
 juce::PopupMenu buildAudioInputMenu(const synth::AudioInputChoice& choice, const synth::AudioInputStatus& status,
                                     const std::vector<AudioInputTrackSource>& sources = {});
 

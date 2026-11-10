@@ -47,8 +47,6 @@ private:
     std::vector<std::tuple<juce::String, juce::String, bool>> saved_;
 };
 
-void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(60); }
-
 } // namespace
 
 TEST(MidiRemotePreferencesTests, DefaultTakeoverReachesTheEngineLive) {
@@ -183,7 +181,7 @@ TEST(MidiRemotePreferencesTests, BadgeSwitchReachesThePainterLive) {
 
     PreferencesSettingsTab tab(props);
     tab.setMidiRemoteShowBadgesEnabled(false);
-    pump();
+    synth::test::waitUntil([&] { return !synth::ui::midilearn::areMappedBadgesVisible(); });
     EXPECT_FALSE(synth::ui::midilearn::areMappedBadgesVisible());
 
     tab.setMidiRemoteShowBadgesEnabled(true);

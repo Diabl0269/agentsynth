@@ -268,6 +268,7 @@ TEST_F(ModuleComponentTest, TheListScrollsInsideTheRoomLeftOnScreen) {
     f.panel->setMaxHeight(300);
 
     f.openAdd();
+    synth::test::waitUntil([&] { return f.panel->getHeight() == f.panel->settledHeight(true); });
 
     EXPECT_LE(f.panel->getHeight(), 300) << "the panel never outgrows the room";
     EXPECT_EQ(f.panel->getHeight(), f.panel->settledHeight(true));
@@ -278,9 +279,12 @@ TEST_F(ModuleComponentTest, TheAddSourceListIsAsTallAsItsRowsUpToTheCap) {
     NoMotion motion;
     AddFixture f;
     f.openAdd();
+    const auto listHeight = [&] { return f.panel->sourcesPage().preferredHeight() + f.add().preferredHeight(); };
     typeInto(f.add().searchEditor(), "lfo");
+    synth::test::waitUntil([&] { return f.panel->getHeight() == listHeight(); });
     const int searched = f.panel->getHeight();
     f.add().setQuery({});
+    synth::test::waitUntil([&] { return f.panel->getHeight() == listHeight(); });
     const int all = f.panel->getHeight();
     EXPECT_LT(searched, all) << "a search with few hits shrinks the panel";
     EXPECT_EQ(f.panel->getHeight(), f.panel->sourcesPage().preferredHeight() + f.add().preferredHeight());
@@ -293,6 +297,7 @@ TEST_F(ModuleComponentTest, ASecondClickOnAddSourceFoldsTheListAgain) {
     f.openAdd();
     ASSERT_TRUE(f.panel->isListOpen());
     f.openAdd();
+    synth::test::waitUntil([&] { return f.panel->getHeight() == f.panel->sourcesPage().preferredHeight(); });
     EXPECT_FALSE(f.panel->isListOpen());
     EXPECT_EQ(f.panel->getHeight(), f.panel->sourcesPage().preferredHeight());
 }

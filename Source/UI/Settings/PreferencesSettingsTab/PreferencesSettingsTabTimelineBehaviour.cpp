@@ -72,6 +72,19 @@ void PreferencesSettingsTab::setAskBeforeDeletingTrackEnabled(bool enabled) {
 
 // The toggles after the loop-selection one: double-click-spans-locators and the LFO-removal question, each
 // DEFAULT TRUE like the rows around them and read at use time (TimelineClipLaneArea, MainComponent::removeModulator).
+PreferencesSettingsTab::~PreferencesSettingsTab() {
+    if (auto* settings = appProperties.getUserSettings())
+        settings->removeChangeListener(this);
+}
+
+// The settings file broadcasts every write: the key menus' play-scale row writes the key this checkbox shows, so the
+// checkbox re-reads it here instead of waiting for the tab to be rebuilt.
+void PreferencesSettingsTab::changeListenerCallback(juce::ChangeBroadcaster*) {
+    playScaleOnBrowseToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue(synth::kPlayScaleOnBrowseSettingsKey, true),
+        juce::dontSendNotification);
+}
+
 void PreferencesSettingsTab::initTimelineEditingToggles() {
     contentHost.addAndMakeVisible(doubleClickSpansLocatorsToggle);
     // DEFAULT TRUE, same idiom as the rows above.
@@ -153,6 +166,7 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
         "When on (the default), hovering a key in a key picker (the transport bar's Song key, the piano roll's Key, "
         "a sequencer's Key) plays its scale. Turn it off to browse in silence; picking a key still works.");
     playScaleOnBrowseToggle.onClick = [this] { persistPlayScaleOnBrowse(playScaleOnBrowseToggle.getToggleState()); };
+    appProperties.getUserSettings()->addChangeListener(this);
 
     contentHost.addAndMakeVisible(followPointLabel);
     followPointLabel.setText("Follow playhead point:", juce::dontSendNotification);

@@ -157,7 +157,9 @@ layout (the node's `cardLayout` override, [module-card-layout.md](module-card-la
   3-column knob grid), and a knob-bound jack leaves the gutter as usual.
 - **Height.** Folding and unfolding change the card's height: the card re-measures and calls
   `GraphEditor::handleModuleResized`, the same make-room path every growing card takes. A value drag
-  never changes a card's height (`CardBodyLayout.CardHeightNeverChangesWhileAKnobIsDragged`).
+  never changes a card's height (`CardBodyLayout.CardHeightNeverChangesWhileAKnobIsDragged`). A row a cable opens
+  is the exception: it peeks over its neighbours (the card comes to the front) and the neighbours make room only
+  when the cable lands on one of its controls, so a live cable never moves a card it may still land on.
 - **Motion.** The hidden controls fade in (160 ms) and out (110 ms) and the card's height follows the fade, the
   card's bottom edge clipping the controls while the row opens or closes; the neighbours make room once
   (`CardBody::setMoreUnfolded`, `CardBlockFade`; [animation](animation.md#fading-things-in-and-out)).
@@ -167,7 +169,7 @@ layout (the node's `cardLayout` override, [module-card-layout.md](module-card-la
   card the row folds after a 120 ms grace, so crossing the edge does not flicker, and coming back cancels it; a
   release anywhere but on one of the row's controls folds it, and so does Esc (`GraphEditor::keyPressed` ends the drag as a release over nothing; the canvas takes the keyboard
   for the drag and gives it back to what had it). A cable that lands on a hidden control keeps the row open and hands it to the person,
-  so it then stays like a row they opened. The refold is the usual fade (above).
+  so it then stays like a row they opened. The refold is the usual fade (above); a refold after a peek moves nothing.
 
 ## The footer row
 

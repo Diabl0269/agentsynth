@@ -8,6 +8,7 @@
 // pump the message loop for the async load.
 
 #include "../StubPluginInstance.h"
+#include "../TestWait.h"
 #include "AppUndoManager.h"
 #include "Modules/CardLayout.h"
 #include "Modules/CardLayoutJson.h"
@@ -326,7 +327,7 @@ TEST(CardLayoutUndoTest, ExtraStateChangeUndoesAndRedoesWithoutReloadingThePlugi
     ASSERT_TRUE(undo.redo());
     EXPECT_EQ(juce::JSON::toString(module->getCardLayoutOverride()), juce::JSON::toString(layout));
 
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::flushMessageQueue();
     EXPECT_EQ(backend.createCount, createsBefore) << "layout undo must never re-load the plugin";
     EXPECT_TRUE(module->hasInstance());
 }

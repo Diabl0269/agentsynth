@@ -148,7 +148,7 @@ TEST_F(MixerOwnPanelTest, SwitchingPlacementSnapsWithNoAnimation) {
 
     mc.getAppPropertiesForTest().getUserSettings()->setValue("mixerPlacement", "tab");
     mc.getAppPropertiesForTest().getUserSettings()->saveIfNeeded();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return own.getPlacement() == Controller::Placement::Tab; });
 
     EXPECT_EQ(own.getSlideProgressForTest(), 0.0f);
     EXPECT_FALSE(own.isOwnPanelShowing());

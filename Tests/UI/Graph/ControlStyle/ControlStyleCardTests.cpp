@@ -323,10 +323,10 @@ TEST(ControlStylePanel, EveryButtonPressesOnSpaceAndConsumesIt) {
     EXPECT_EQ(rig.panel->getScope(), Scope::Module);
 
     EXPECT_TRUE(pressSpace(rig.picker().getStyleButtonForTest((int)KnobStyle::Analog)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return rig.own() == ControlStyleOverride{KnobStyle::Analog, std::nullopt}; });
     EXPECT_EQ(rig.own(), (ControlStyleOverride{KnobStyle::Analog, std::nullopt}));
     EXPECT_TRUE(pressSpace(rig.picker().getFollowButtonForTest(false)));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return rig.own().isEmpty(); });
     EXPECT_TRUE(rig.own().isEmpty());
 }
 

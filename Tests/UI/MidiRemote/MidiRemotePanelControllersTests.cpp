@@ -5,6 +5,8 @@
 // per the ship-task --gtest_filter convention.
 #include "MidiRemotePanelTestFixture.h"
 
+#include "../../TestWait.h"
+
 using midiremote_test::MidiRemotePanelLiveRefreshTest;
 using synth::midi::hostSourceKey;
 using synth::ui::AddControllerPopover;
@@ -192,7 +194,7 @@ TEST_F(MidiRemotePanelControllersTest, EncoderAutoDetectSetsTheEncodingKindAndTh
     controller_->arm(node_->nodeID, "cutoff");
     send(juce::MidiMessage::controllerEvent(1, 20, 64));
     settle();
-    pump();
+    synth::test::flushMessageQueue();
     const auto nodeUuid = node_->properties["uuid"].toString();
     ASSERT_TRUE(panel_.selectAssignmentForParameter(nodeUuid, "cutoff"));
     ASSERT_EQ(doc_.assignments.size(), 1u);

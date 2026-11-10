@@ -119,3 +119,55 @@ TEST(KeyAuditionOwners, TurningTheSettingOffSilencesEveryPickerButPickingStillWo
     picker->pickHighlighted();
     EXPECT_EQ(picked, 1) << "picking is not affected by the setting";
 }
+
+// Every owner's picker carries the play-scale row and it writes the one shared setting; with playback running the row
+// is greyed and no owner starts a run. A new owner without the wiring shows up as a row that never toggles.
+TEST(KeyAuditionOwners, EveryKeyPickersPlayScaleRowWritesTheSharedSettingAndPlaybackGreysItAndSilencesTheRun) {
+    juce::ApplicationProperties app;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "KeyAuditionOwnersPlayScaleTest";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    app.setStorageParameters(options);
+    auto& props = *app.getUserSettings();
+    props.clear();
+
+    Table t;
+    bool playing = false;
+    for (auto& owner : t.owners) {
+        owner.auditioner->setSettings(&props);
+        owner.auditioner->isPlaybackRunning = [&playing] { return playing; };
+    }
+    for (auto& owner : t.owners) {
+        props.setValue(synth::kPlayScaleOnBrowseSettingsKey, "1");
+        owner.open();
+        auto* picker = dynamic_cast<KeyPicker*>(t.held.get());
+        ASSERT_NE(picker, nullptr) << owner.name;
+        EXPECT_TRUE(picker->isPlayScaleEnabled()) << owner.name;
+        EXPECT_TRUE(picker->isPlayScaleOn()) << owner.name;
+        picker->clickPlayScale();
+        EXPECT_FALSE(KeyAuditioner::isEnabledIn(&props)) << owner.name << ": the click writes the shared setting";
+        EXPECT_EQ(props.getValue(synth::kPlayScaleOnBrowseSettingsKey), "0") << owner.name;
+        t.held.reset();
+
+        props.setValue(synth::kPlayScaleOnBrowseSettingsKey, "0");
+        owner.open();
+        picker = dynamic_cast<KeyPicker*>(t.held.get());
+        ASSERT_NE(picker, nullptr) << owner.name;
+        EXPECT_FALSE(picker->isPlayScaleOn()) << owner.name << ": it opens showing the stored setting";
+        t.held.reset();
+
+        props.setValue(synth::kPlayScaleOnBrowseSettingsKey, "1");
+        playing = true;
+        owner.open();
+        picker = dynamic_cast<KeyPicker*>(t.held.get());
+        ASSERT_NE(picker, nullptr) << owner.name;
+        EXPECT_FALSE(picker->isPlayScaleEnabled()) << owner.name << ": greyed while the song plays";
+        EXPECT_TRUE(picker->getPlayScaleTooltip().containsIgnoreCase("playing")) << owner.name;
+        const int before = t.runs;
+        owner.auditioner->start(synth::makeScale(0, synth::scalePresetIndex("Major")));
+        EXPECT_EQ(t.runs, before) << owner.name << ": no preview on top of playback";
+        t.held.reset();
+        playing = false;
+    }
+}

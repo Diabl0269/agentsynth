@@ -657,7 +657,10 @@ without a menu. The pane reaches the app through ONE accessor, `TrackHeaderHost:
 - **The combo** says "No input" (muted text), "In 2 (mono)", "In 3 + 4", "Whole mix" (the master, through the
   Rec Tap) or the name of another track. Its menu: "No input"; a "Mono · <device>" section with In 1 to In N; a
   "Stereo · <device>" section with In 1 + 2, In 3 + 4 and so on; an "Another track" submenu; "Whole mix"; "Audio settings..." (opens Settings on its Audio tab). An
-  input that is turned off is listed but disabled, with "Turn on all its inputs" under the list. A pick stores
+  input that is turned off is listed but disabled and says so ("In 3 (off)", "In 3 + 4 (off)": a pair is off when
+  either jack is), and "Turn on all its inputs" sits right under the "Mono" header, where the grey rows are. With
+  no other track to record, "Another track" is disabled and reads "Another track (no other tracks)". Every
+  disabled row of the menu states why in its own words (`AudioInputMenuOffRowsTests.cpp`). A pick stores
   the input and the name of the device open now (`TimelineDoc::setTrackAudioInput`) through `performTrackEdit`:
   one undo step. The Mono and Stereo sections both stay; a jack the user named in Settings > Audio carries the
   name ("Vocal mic (In 1)"), on the mono entry for an unpaired jack and on the stereo entry for a paired pair.
@@ -716,6 +719,11 @@ track's mixer channel and effects. `Track::monitorMode` (`synth::MonitorMode`) p
   play instead.
 - **On**: always, armed or not.
 - **Off**: never.
+
+**The input replaces the track's own clips.** While the monitor hears the input, the track's clips do not play: you
+hear the live input only, never the old take mixed under the new one (recording a second pass in a loop does not play
+the first pass). When the monitor lets go (Off, Auto during plain playback, or the feedback guard muting the input) the
+clips play again at once. Other tracks, including a track the recording track takes its sound from, keep playing.
 
 The rule is `synth::monitorHearsInput` in `Source/Timeline/TrackAudioInput.h`. No input, Whole mix and Another track monitor
 nothing, nor does an input that is not connected; a muted or solo-gated track hears nothing.

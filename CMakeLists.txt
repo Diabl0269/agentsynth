@@ -41,8 +41,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/CheckJuceSourceDir.cmake)
 # for the actual measured numbers. This cache key hashes only
 # cmake/DependencyVersions.cmake (see that file's header) and does not depend on this line, so the
 # workflows' deps cache keys had to be bumped by hand (deps3 -> deps4, release-deps-ninja3 -> 4;
-# see docs/development/ci-caching.md) for the shallow clone to actually take effect instead of
-# forever restoring the old, non-shallow juce-src.
+# see docs/development/ci-caching.md) for the shallow clone to actually take effect, not restore the old juce-src.
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/FetchJuce.cmake)
 
 # Fetch Sparkle (macOS auto-update). Prebuilt .xcframework distribution, not a CMake project —
@@ -85,8 +84,7 @@ option(ENABLE_PLUGIN "Build the VST3 (+ AU on macOS) audio-plugin targets" ON)
 
 # Product identity — the single place to override branding at configure time
 # (e.g. `cmake -S . -B build -DSYNTH_PRODUCT_NAME=MySynth`). Mirrored in C++ at
-# Source/Branding.h, which JUCE's PRODUCT_NAME/COMPANY_NAME/BUNDLE_ID args can't read
-# directly since they're consumed at configure time, not compile time.
+# Source/Branding.h, which JUCE's PRODUCT_NAME/COMPANY_NAME/BUNDLE_ID args can't read (consumed at configure time).
 set(SYNTH_PRODUCT_NAME "Agent Synth" CACHE STRING "Display name: window title, About box, installer")
 set(SYNTH_COMPANY_NAME "yourcompany" CACHE STRING "JUCE COMPANY_NAME / macOS bundle vendor")
 set(SYNTH_BUNDLE_ID "com.agentsynth.app" CACHE STRING "macOS/iOS CFBundleIdentifier")
@@ -215,6 +213,8 @@ add_library(Core STATIC
     Source/AudioEngine/AudioEngineRenderPass.cpp
     Source/AudioEngine/AudioEngineRuntimeState.cpp
     Source/AudioEngine/AudioEngineTimelinePublish.cpp
+    Source/AudioEngine/AuditionMonitor.cpp
+    Source/AudioEngine/AuditionMonitor.h
     Source/AudioEngine/SamplerMidiWiring.cpp
     Source/AudioEngine/SamplerMidiWiring.h
     Source/AudioEngine/SidechainConnections.cpp

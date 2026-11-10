@@ -192,12 +192,16 @@ void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& c
 
     const auto range = bucketRangeForClip(*data, clip.lengthBeats, clip.sourceStartSeconds, bpm, sampleRate);
     // Black at low alpha, not a theme token — a shadow-style darkening of whatever `fill` already
-    // is (the module cards' drop shadows are composed the same way), not a colour of its own.
-    g.setColour(juce::Colours::black.withAlpha(0.4f));
+    // is (the module cards' drop shadows are composed the same way), not a colour of its own. The peak outline is
+    // the lighter wash and the RMS body the darker one; a file without RMS keeps the single 0.4 wash.
+    const WaveformInk ink{juce::Colours::black.withAlpha(0.22f), juce::Colours::black.withAlpha(0.55f),
+                          juce::Colours::black.withAlpha(0.4f)};
+    g.setColour(ink.flat);
     if (rect.getWidth() <= kMinWidthForWaveform)
         paintWaveformSummary(g, rect, *data, range.firstBucket, range.bucketCount);
     else
-        paintWaveformColumns(g, rect, data->buckets, data->numChannels, range.firstBucket, range.bucketCount);
+        paintWaveformColumns(g, rect, data->buckets, data->rms, data->numChannels, range.firstBucket, range.bucketCount,
+                             ink);
 }
 
 // What paintWaveform draws for `clip` in a rect `width` wide: nothing without peaks, a one-bar summary below
@@ -283,44 +287,41 @@ void TimelineClipLaneArea::paintMissingAssetPlaceholder(juce::Graphics& g, const
 }
 
 // Shared by paintWaveform() (a committed clip's peaks) and paintLiveRecordingStrip() (the live
-// accumulator's peaks) — one juce::Graphics::drawLine per x column, sampling
-// buckets[firstBucket + column's fraction of bucketCount] across every channel (min of mins, max
-// of maxes — a simple downmix, deliberately kept cheap enough to run every paint).
+// accumulator's peaks): per x column, the min of mins / max of maxes of EVERY bucket that column covers
+// (PeaksFile::aggregateToColumns), so zooming out never skips a loud bucket. With RMS, the lighter outline spans
+// min..max and the darker body spans +-rms (clamped inside the outline), like Reaper/Logic; without it, one line.
 void TimelineClipLaneArea::paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
-                                                const std::vector<std::pair<float, float>>& buckets, int numChannels,
-                                                int firstBucket, int bucketCount) {
-    if (bucketCount <= 0 || numChannels <= 0)
-        return;
-
+                                                const std::vector<std::pair<float, float>>& buckets,
+                                                const std::vector<float>& rms, int numChannels, int firstBucket,
+                                                int bucketCount, const WaveformInk& ink) {
     const auto bounds = rect.reduced(1);
     if (bounds.getWidth() <= 0 || bounds.getHeight() <= 0)
         return;
 
+    const auto columns =
+        synth::PeaksFile::aggregateToColumns(buckets, numChannels, firstBucket, bucketCount, bounds.getWidth());
+    const auto bodies =
+        rms.size() == buckets.size()
+            ? synth::PeaksFile::aggregateRmsToColumns(rms, numChannels, firstBucket, bucketCount, bounds.getWidth())
+            : std::vector<float>{};
     const float midY = (float)bounds.getCentreY();
     const float halfHeight = (float)bounds.getHeight() * 0.5f;
-    const int width = juce::jmax(1, bounds.getWidth());
 
-    for (int x = bounds.getX(); x < bounds.getRight(); ++x) {
-        const double frac = (double)(x - bounds.getX()) / (double)width;
-        const int bucket = firstBucket + juce::jlimit(0, bucketCount - 1, (int)(frac * bucketCount));
-
-        float minValue = 0.0f, maxValue = 0.0f;
-        bool any = false;
-        for (int channel = 0; channel < numChannels; ++channel) {
-            const std::size_t index = (std::size_t)bucket * (std::size_t)numChannels + (std::size_t)channel;
-            if (index >= buckets.size())
-                continue;
-            const auto& pair = buckets[index];
-            minValue = any ? std::min(minValue, pair.first) : pair.first;
-            maxValue = any ? std::max(maxValue, pair.second) : pair.second;
-            any = true;
+    for (std::size_t i = 0; i < columns.size(); ++i) {
+        const float x = (float)(bounds.getX() + (int)i);
+        const float lo = juce::jlimit(-1.0f, 1.0f, columns[i].first);
+        const float hi = juce::jlimit(-1.0f, 1.0f, columns[i].second);
+        const float y0 = midY - hi * halfHeight;
+        const float y1 = juce::jmax(midY - lo * halfHeight, y0 + 1.0f);
+        g.setColour(i < bodies.size() ? ink.outline : ink.flat);
+        g.drawLine(x, y0, x, y1, 1.0f);
+        if (i < bodies.size()) {
+            const float r = juce::jlimit(0.0f, 1.0f, bodies[i]);
+            const float b0 = midY - std::min(hi, r) * halfHeight;
+            const float b1 = midY - std::max(lo, -r) * halfHeight;
+            g.setColour(ink.body);
+            g.drawLine(x, b0, x, juce::jmax(b1, b0 + 1.0f), 1.0f);
         }
-        if (!any)
-            continue;
-
-        const float y0 = midY - juce::jlimit(-1.0f, 1.0f, maxValue) * halfHeight;
-        const float y1 = midY - juce::jlimit(-1.0f, 1.0f, minValue) * halfHeight;
-        g.drawLine((float)x, y0, (float)x, juce::jmax(y1, y0 + 1.0f), 1.0f);
     }
 }
 
@@ -357,9 +358,9 @@ void TimelineClipLaneArea::updateLiveRecordings(const std::vector<LiveRecordingI
             LiveStrip strip;
             strip.info = info;
             if (info.copyPeaks)
-                info.copyPeaks(strip.peaks);
+                info.copyPeaks(strip.peaks, strip.rms);
             else
-                info.tap->copyLivePeaks(strip.peaks);
+                info.tap->copyLivePeaks(strip.peaks, &strip.rms);
             strip.rect = computeClipRect(viewState_, getRowLayout(), (int)(found - tracks.begin()), info.punchBeat,
                                          std::max(0.0, info.currentBeat - info.punchBeat));
             next.push_back(std::move(strip));
@@ -413,8 +414,8 @@ void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g, const Live
     // The take's own channel count: a whole-mix take is stereo, an input take mono or stereo.
     const int numChannels = std::max(1, strip.info.numChannels);
     const int bucketCount = (int)(strip.peaks.size() / (std::size_t)numChannels);
-    g.setColour(accent.withAlpha(0.7f));
-    paintWaveformColumns(g, strip.rect, strip.peaks, numChannels, 0, bucketCount);
+    paintWaveformColumns(g, strip.rect, strip.peaks, strip.rms, numChannels, 0, bucketCount,
+                         {accent.withAlpha(0.4f), accent.withAlpha(0.9f), accent.withAlpha(0.7f)});
 }
 
 // The lane editors paint their own rows over the extra areas; this only fills what shows through

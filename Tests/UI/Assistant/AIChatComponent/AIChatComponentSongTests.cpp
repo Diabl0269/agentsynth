@@ -203,7 +203,10 @@ TEST_F(AIChatComponentTest, BuildStreamsTheStepsCardThenAppliesTheEnvelopeAsTheS
     rig.provider->line(
         R"({"type":"steps","steps":[{"id":"track:Kit","kind":"track","label":"Kit sound"},{"id":"sections","kind":"sections","label":"Laying out"}]})");
     rig.provider->line(R"({"type":"step","id":"track:Kit","status":"running"})");
-    SongRig::pump();
+    synth::test::waitUntil([&] {
+        return rig.buildCard() != nullptr && rig.buildCard()->nowText() == "Kit sound" &&
+               rig.buildCard()->progressText() == "step 1 of 2";
+    });
     steps = rig.buildCard();
     ASSERT_NE(steps, nullptr);
     EXPECT_EQ(steps->nowText(), juce::String("Kit sound"));
@@ -237,7 +240,11 @@ TEST_F(AIChatComponentTest, CancellingABuildClosesTheStreamAndTheCardSaysTheUses
     ASSERT_NE(rig.buildCard(), nullptr);
 
     rig.chat->simulateCancelClick();
-    SongRig::pump();
+    synth::test::waitUntil([&] {
+        return rig.buildCard() != nullptr && rig.buildCard()->headerText() == "Build cancelled" &&
+               rig.chat->getMessageTextForTesting(rig.chat->getMessageCountForTesting() - 1) ==
+                   "The song was not built.";
+    });
     EXPECT_EQ(rig.provider->cancelled, std::vector<uint64_t>{9});
     EXPECT_EQ(rig.chat->getMessageTextForTesting(rig.chat->getMessageCountForTesting() - 1),
               juce::String("The song was not built."));
@@ -251,11 +258,14 @@ TEST_F(AIChatComponentTest, AnErrorLineEndsTheBuildInTheCardNotInABubble) {
     SongRig rig;
     rig.send("dark drum and bass");
     rig.planCard()->pressBuildForTesting();
-    SongRig::pump();
+    synth::test::waitUntil([&] { return rig.buildCard() != nullptr; });
     const auto messagesBefore = rig.chat->getMessageCountForTesting();
     rig.provider->line(R"({"type":"error","message":"The build failed","refunded":true})");
     rig.provider->end();
-    SongRig::pump();
+    synth::test::waitUntil([&] {
+        return rig.buildCard() != nullptr && rig.buildCard()->headerText() == "Build stopped" &&
+               rig.buildCard()->nowText() == "The build failed";
+    });
     EXPECT_EQ(rig.chat->getMessageCountForTesting(), messagesBefore);
     EXPECT_EQ(rig.buildCard()->headerText(), juce::String("Build stopped"));
     EXPECT_EQ(rig.buildCard()->nowText(), juce::String("The build failed"));

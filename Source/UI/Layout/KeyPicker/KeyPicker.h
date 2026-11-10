@@ -17,6 +17,7 @@ class KeyPickerFollowRow;
 class KeyPickerKeyboard;
 class KeyPickerRow;
 class KeyPickerStateProbe;
+class KeyPickerToggleRow;
 
 /** The key picker: a popover for choosing a musical key (root plus scale). Lives in a juce::CallOutBox the caller
  *  launches (like ModMatrixPicker); it never launches one itself. A pick reports through `onPick` and closes the box.
@@ -59,6 +60,9 @@ public:
     std::function<std::optional<MusicalScale>()> detect;
     /** "Fit project to key" was pressed; the picker closes first. Needs Options::showFitProject. */
     std::function<void()> onFitProject;
+    /** The "Play the scale when browsing keys" row was switched; the picker has already stopped any scale it was
+     *  playing when it went off. Set through setPlayScale. */
+    std::function<void(bool on)> onPlayScaleChanged;
     /** Runs once from the destructor, however the picker closed. */
     std::function<void()> onClosed;
 
@@ -72,6 +76,11 @@ public:
     void parentHierarchyChanged() override;
     void mouseExit(const juce::MouseEvent& e) override;
     void focusOfChildComponentChanged(FocusChangeType) override { repaint(); }
+
+    /** Gives the "Play the scale when browsing keys" row its state: ticked when `on`; unusable unless `available` (a
+     *  setting to write to exists), and unusable with a "playback is running" tooltip while `playbackRunning`.
+     * `changed` receives each click. The row is always shown, greyed until this is called. */
+    void setPlayScale(bool on, bool available, bool playbackRunning, std::function<void(bool on)> changed);
 
     /** Closes the launching CallOutBox, if any. */
     void dismiss();
@@ -94,6 +103,11 @@ public:
     void clickDetect();
     void clickNoKey();
     void clickFitProject();
+    void clickPlayScale();
+    bool isPlayScaleOn() const;
+    bool isPlayScaleEnabled() const;
+    juce::String getPlayScaleTooltip() const;
+    juce::String getPlayScaleName() const;
     bool isFitProjectShown() const;
     bool isFitProjectEnabled() const;
     void clickFollow();
@@ -110,6 +124,8 @@ private:
     void fillTestModeState(juce::DynamicObject& into) const;
     void buildPreviewSound();
     void buildFitProject();
+    void buildPlayScale();
+    void playScaleToggled();
     void buildRows();
     void applyFilter();
     void layoutRowColumn();
@@ -151,6 +167,7 @@ private:
     juce::Label previewLabel_;
     juce::ComboBox previewCombo_;
     std::unique_ptr<KeyPickerButton> fitProject_;
+    std::unique_ptr<KeyPickerToggleRow> playScale_;
     // A 1x1 child (id "keyPicker") that answers test-mode getState, so this header stays free of TestModeStateSource.h.
     std::unique_ptr<KeyPickerStateProbe> stateProbe_;
 

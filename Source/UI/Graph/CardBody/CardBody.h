@@ -222,7 +222,8 @@ private:
     juce::WeakReference<ModuleCardLayoutStore> store_;
     int builtFromRevision_ = 0;
     bool moreUnfolded_ = false;
-    bool moreOpenedByDrag_ = false; ///< Set while a cable drag, not the person, holds the row open.
+    bool moreOpenedByDrag_ = false;    ///< Set while a cable drag, not the person, holds the row open.
+    bool peekHoldsNeighbours_ = false; ///< A cable opened the row: it grows over its neighbours without making room.
     /** The pause between a cable leaving the card and the row folding, so crossing the edge does not flicker. */
     struct FoldGrace : juce::Timer {
         std::function<void()> onExpire;
@@ -248,6 +249,10 @@ private:
     CardBlockFade moreFade_;
     std::set<int> startingSections_; ///< Sections whose fade starts in this re-read (applyVisibility leaves them).
     bool startingMore_ = false;
+    /** setMoreUnfolded for a cable (`peek`) or the person; see CardBodyMoreRow.cpp. */
+    void applyMoreUnfolded(bool unfolded, bool peek);
+    /** The row's height has settled: make room, or only re-anchor cables while a cable's peek holds the neighbours. */
+    void finishMoreResize();
     bool settlingFootprint_ = false; ///< Measuring at the final footprint (CardBlockFade::setShown).
     juce::OwnedArray<juce::SliderParameterAttachment> sliderAttachments_;
     juce::OwnedArray<juce::ComboBoxParameterAttachment> comboAttachments_;

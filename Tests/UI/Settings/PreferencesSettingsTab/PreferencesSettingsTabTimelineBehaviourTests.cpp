@@ -1,3 +1,4 @@
+#include "../../../TestWait.h"
 #include "PreferencesSettingsTabTestFixture.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/KeyPicker/KeyAuditioner.h"
@@ -421,4 +422,16 @@ TEST_F(PreferencesSettingsTabTest, SectionsPreferencesDefaultAndRoundTrip) {
     PreferencesSettingsTab again(appProperties);
     EXPECT_FALSE(again.isShowSectionsStripEnabled());
     EXPECT_TRUE(again.isSectionsCoverOnDropEnabled());
+}
+
+// The key menus' play-scale row writes the same key; an open Settings tab re-reads it (the settings file broadcasts).
+TEST_F(PreferencesSettingsTabTest, PlayScaleWhenBrowsingKeysFollowsTheKeyMenuToggleWhileTheTabIsOpen) {
+    PreferencesSettingsTab tab(appProperties);
+    ASSERT_TRUE(tab.isPlayScaleOnBrowseEnabled());
+    synth::ui::KeyAuditioner::setEnabledIn(appProperties.getUserSettings(), false);
+    synth::test::waitUntil([&] { return !tab.isPlayScaleOnBrowseEnabled(); }, 2000);
+    EXPECT_FALSE(tab.isPlayScaleOnBrowseEnabled());
+    synth::ui::KeyAuditioner::setEnabledIn(appProperties.getUserSettings(), true);
+    synth::test::waitUntil([&] { return tab.isPlayScaleOnBrowseEnabled(); }, 2000);
+    EXPECT_TRUE(tab.isPlayScaleOnBrowseEnabled());
 }

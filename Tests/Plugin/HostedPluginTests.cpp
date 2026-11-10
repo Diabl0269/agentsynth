@@ -21,6 +21,7 @@
 //   8. Registration — the internal-only checklist Track In / Rec Tap / Track Audio established.
 
 #include "../StubPluginInstance.h"
+#include "../TestWait.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
@@ -625,7 +626,7 @@ TEST(HostedPluginTest, UntrustedApplyNeverReachesSetExtraStateOnAnExistingNode) 
         R"({"nodes":[{"id":1,"type":"Hosted Plugin","state":{"pluginFormat":"VST3","pluginName":"Evil","pluginUid":99,"pluginState":"QUJD"}}],"connections":[]})");
     EXPECT_FALSE(synth::AIStateMapper::applyJSONToGraph(merge, graph, /*clearExisting=*/false, /*trusted=*/false));
 
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::flushMessageQueue();
     EXPECT_EQ(modulePtr->getIdentity().name, "Victim") << "an untrusted patch must not repoint a live hosted plugin";
     EXPECT_EQ(juce::JSON::toString(modulePtr->getExtraState()), juce::JSON::toString(before));
 }
@@ -667,7 +668,7 @@ TEST(HostedPluginTest, CardLayoutOverrideRoundTripsThroughTheTrustedExtraStatePa
     const int createsBefore = backend.createCount;
     modulePtr->setExtraState(HostedPluginModule::makeCardLayoutPatch({}));
     EXPECT_TRUE(modulePtr->getCardLayoutOverride().isVoid());
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::flushMessageQueue();
     EXPECT_EQ(backend.createCount, createsBefore) << "a layout patch must not reload the plugin";
     EXPECT_EQ(modulePtr->getIdentity().name, "Layout Plugin");
 }
@@ -708,7 +709,7 @@ TEST(HostedPluginTest, UntrustedApplyNeverSetsACardLayoutOnAnExistingNode) {
         R"({"nodes":[{"id":1,"type":"Hosted Plugin","state":{"cardLayout":{"version":1,"slots":[]}}}],"connections":[]})");
     EXPECT_FALSE(synth::AIStateMapper::applyJSONToGraph(merge, graph, /*clearExisting=*/false, /*trusted=*/false));
 
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    synth::test::flushMessageQueue();
     EXPECT_TRUE(modulePtr->getCardLayoutOverride().isVoid()) << "provider output must never author a card layout";
 }
 

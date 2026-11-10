@@ -181,7 +181,7 @@ TEST(MixerPlacementControllerTests, LivePlacementChangeRebuildsTheMixerFocusRegi
     // registry (DetachablePanelHost::setHostedPanelFocusRegion), never MainComponent's.
     mc.getAppPropertiesForTest().getUserSettings()->setValue("mixerPlacement", "window");
     mc.getAppPropertiesForTest().getUserSettings()->saveIfNeeded();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    synth::test::waitUntil([&] { return mc.getFocusRegionsForTest().findById("mixer") == nullptr; });
 
     EXPECT_EQ(mc.getFocusRegionsForTest().findById("mixer"), nullptr)
         << "Window placement has no docked mixer region to Tab-cycle to";

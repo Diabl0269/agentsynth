@@ -20,7 +20,7 @@ two or more units in `TimelineClipLaneInternal.h`:
 | Unit | Concern |
 |------|---------|
 | `TimelineClipLaneArea.cpp` | Ctor, `TimelineDoc` wiring, row/rect geometry, hit-testing, core `paint()` |
-| `TimelineClipLanePainting.cpp` | Tool affordances (drag/draw/split-preview ghosts), waveform painting, live-recording strip |
+| `TimelineClipLanePainting.cpp` | Tool affordances (drag/draw/split-preview ghosts), waveform painting (each column folds every peak bucket under it; a lighter peak outline with a darker RMS body), live-recording strip |
 | `TimelineClipLaneMouse.cpp` | Mouse handling, drag-preview/auto-scroll, double-click clip creation, file drag/drop |
 | `TimelineClipLaneSelection.cpp` | Selected-clip span query, panel-scoped `keyPressed`, marquee begin/update/end |
 | `TimelineClipLaneKeyboard.cpp` | Clip keyboard mode: stepping/opening/moving the keyboard clip, its accent ring, its screen-reader description |

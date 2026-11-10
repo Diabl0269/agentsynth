@@ -192,7 +192,7 @@ private:
 
     bool isDirectGatedThisBlock() const {
         auto* transport = dynamic_cast<synth::TransportService*>(getPlayHead());
-        return transport != nullptr && transport->isMixerSoloActiveForBlock();
+        return transport != nullptr && transport->isMixerSoloActiveForBlock() && !isAuditionAudible();
     }
 
     // Direct into Mix (unless solo is gating it), then clear the Direct channels — they are not

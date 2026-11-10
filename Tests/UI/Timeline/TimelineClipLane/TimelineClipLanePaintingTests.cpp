@@ -41,6 +41,22 @@ bool waitForLivePeaks(const RecordTapModule& tap, size_t minPairs, std::vector<s
     return false;
 }
 
+// Paints the lane into a software image (pixel reads are not reliable on a GPU-backed image type).
+juce::Image paintLaneSoftware(TimelineClipLaneArea& lane) {
+    juce::Image image(juce::Image::ARGB, lane.getWidth(), lane.getHeight(), true, juce::SoftwareImageType());
+    juce::Graphics g(image);
+    lane.paintEntireComponent(g, true);
+    return image;
+}
+
+bool differsInRows(const juce::Image& a, const juce::Image& b, int yFrom, int yTo) {
+    for (int y = yFrom; y < yTo; ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            if (a.getPixelAt(x, y) != b.getPixelAt(x, y))
+                return true;
+    return false;
+}
+
 } // namespace
 
 TEST(TimelineClipLaneWaveformTest, AudioClipPaintsWaveform) {
@@ -326,4 +342,146 @@ TEST(TimelineClipLanePaintCost, APaintDrawsOnlyTheClipsOnRowsInView) {
     const int scrolledBefore = f.lane.getClipsPaintedForTest();
     (void)f.lane.createComponentSnapshot(f.lane.getLocalBounds());
     EXPECT_LT(f.lane.getClipsPaintedForTest() - scrolledBefore, kTracks / 4) << "scrolled down, still only those";
+}
+
+// Kind guard (downsample-skip): at every clip width, a single loud bucket among quiet ones must reach the drawn
+// columns. The committed-clip painter and the live strip both go through paintWaveformColumns, so this covers both;
+// the pure aggregation is pinned over widths 1..400 in PeaksFileTests.
+TEST(TimelineClipLaneWaveformTest, SingleLoudBucketIsDrawnAtEveryClipWidth) {
+    ScopedPeaksFile quiet("agentsynth_clipslane_spike_quiet.agpk");
+    ScopedPeaksFile spike("agentsynth_clipslane_spike_loud.agpk");
+    auto quietData = makeWaveformData(1000, 0.05f);
+    auto spikeData = quietData;
+    spikeData.buckets[20] = {-1.0f, 1.0f}; // inside the clip's first bucket window at every width
+    ASSERT_TRUE(synth::PeaksFile::write(quiet.file, quietData));
+    ASSERT_TRUE(synth::PeaksFile::write(spike.file, spikeData));
+
+    for (int width = 25; width <= 400; ++width) {
+        ClipLaneFixture f;
+        const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+        const auto clipId = f.doc.addClip(trackId, 0.0, (double)width / 40.0, "Take");
+        ASSERT_TRUE(clipId.isValid());
+        ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+        f.lane.setSize(500, 200);
+
+        juce::File current = quiet.file;
+        f.lane.setPeaksResolver([&current](const juce::String&) { return current; });
+        const juce::Image quietImage = paintLaneSoftware(f.lane);
+        current = spike.file;
+        f.lane.invalidatePeaksCache();
+        const juce::Image spikeImage = paintLaneSoftware(f.lane);
+
+        const auto rect = f.lane.getClipRect(clipId);
+        ASSERT_EQ(f.lane.getWaveformShapeForTest(clipId), "columns") << "width " << width;
+        EXPECT_TRUE(differsInRows(quietImage, spikeImage, rect.getY(), rect.getY() + rect.getHeight() / 4))
+            << "the loud bucket vanished at clip width " << width;
+    }
+}
+
+namespace {
+
+// Peaks of `numBuckets` buckets: the first half at (peakQuiet, rmsQuiet), the second at (peakLoud, rmsLoud).
+synth::PeaksFile::Data makeWaveformDataWithRms(int numBuckets, float peakQuiet, float rmsQuiet, float peakLoud,
+                                               float rmsLoud) {
+    synth::PeaksFile::Data data;
+    data.bucketSize = 256;
+    data.numChannels = 1;
+    for (int i = 0; i < numBuckets; ++i) {
+        const bool loud = i >= numBuckets / 2;
+        const float peak = loud ? peakLoud : peakQuiet;
+        data.buckets.emplace_back(-peak, peak);
+        data.rms.push_back(loud ? rmsLoud : rmsQuiet);
+    }
+    return data;
+}
+
+struct ColumnInk {
+    int inkRows = 0;  // rows painted darker than the clip fill (outline plus body)
+    int bodyRows = 0; // rows painted at the darkest level (the RMS body)
+};
+
+// Scans one pixel column of the clip body; the brightest row is the clip fill (every test leaves some rows unpainted).
+ColumnInk scanColumn(const juce::Image& image, juce::Rectangle<int> rect, int x) {
+    std::vector<float> rows;
+    for (int y = rect.getY() + 3; y < rect.getBottom() - 3; ++y)
+        rows.push_back(image.getPixelAt(x, y).getBrightness());
+    const float brightest = *std::max_element(rows.begin(), rows.end());
+    const float darkest = *std::min_element(rows.begin(), rows.end());
+    const float fill = brightest;
+    ColumnInk ink;
+    for (const float b : rows) {
+        ink.inkRows += b < fill - 0.01f ? 1 : 0;
+        ink.bodyRows += b <= darkest + 0.01f && darkest < fill - 0.05f ? 1 : 0;
+    }
+    return ink;
+}
+
+} // namespace
+
+// A clip with RMS draws a lighter peak outline with a darker, narrower body inside it (like Reaper/Logic): a quiet
+// then loud clip has a narrow body in the quiet half and a wide one in the loud half, always inside the outline.
+TEST(TimelineClipLaneWaveformTest, RmsBodyIsDrawnDarkerAndNarrowerThanThePeakOutline) {
+    ScopedPeaksFile peaks("agentsynth_clipslane_rms_body.agpk");
+    ASSERT_TRUE(synth::PeaksFile::write(peaks.file, makeWaveformDataWithRms(400, 0.3f, 0.05f, 0.9f, 0.5f)));
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take");
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 240);
+    const juce::File resolved = peaks.file;
+    f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
+
+    const juce::Image image = paintLaneSoftware(f.lane);
+    const auto rect = f.lane.getClipRect(clipId);
+    const auto quiet = scanColumn(image, rect, rect.getX() + rect.getWidth() * 3 / 10);
+    const auto loud = scanColumn(image, rect, rect.getX() + rect.getWidth() * 8 / 10);
+
+    EXPECT_GT(quiet.bodyRows, 0) << "the quiet half still has a body";
+    EXPECT_GT(quiet.inkRows, quiet.bodyRows * 3) << "outline (peak 0.3) is much taller than the body (rms 0.05)";
+    EXPECT_GT(loud.inkRows, loud.bodyRows + 10) << "outline rows remain around the body";
+    EXPECT_GT(loud.bodyRows, quiet.bodyRows * 3) << "a louder part has a taller body";
+    EXPECT_GT(loud.inkRows, quiet.inkRows) << "and a taller outline";
+}
+
+// A loud constant tone (a high peak with a sine's RMS) shows an outline AND a body: not one solid block.
+TEST(TimelineClipLaneWaveformTest, LoudConstantToneShowsAnOutlineAroundABody) {
+    ScopedPeaksFile peaks("agentsynth_clipslane_rms_tone.agpk");
+    ASSERT_TRUE(synth::PeaksFile::write(peaks.file, makeWaveformDataWithRms(400, 0.8f, 0.57f, 0.8f, 0.57f)));
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take");
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 240);
+    const juce::File resolved = peaks.file;
+    f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
+
+    const juce::Image image = paintLaneSoftware(f.lane);
+    const auto rect = f.lane.getClipRect(clipId);
+    const auto col = scanColumn(image, rect, rect.getX() + rect.getWidth() / 2);
+    EXPECT_GT(col.bodyRows, 0);
+    EXPECT_GT(col.inkRows, col.bodyRows + 10) << "a lighter outline band shows above and below the body";
+    EXPECT_LT(col.bodyRows, col.inkRows * 3 / 4) << "the body is not the whole column";
+}
+
+// A version 1 file (no RMS) still draws exactly as before: one flat wash, no darker body level.
+TEST(TimelineClipLaneWaveformTest, PeaksWithoutRmsDrawAsAPlainOutline) {
+    ScopedPeaksFile peaks("agentsynth_clipslane_no_rms.agpk");
+    ASSERT_TRUE(synth::PeaksFile::write(peaks.file, makeWaveformData(400, 0.6f)));
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take");
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 240);
+    const juce::File resolved = peaks.file;
+    f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
+
+    const juce::Image image = paintLaneSoftware(f.lane);
+    const auto rect = f.lane.getClipRect(clipId);
+    const auto col = scanColumn(image, rect, rect.getX() + rect.getWidth() / 2);
+    EXPECT_GT(col.inkRows, 0);
+    EXPECT_GE(col.bodyRows, col.inkRows - 4)
+        << "every inked row is the same single wash (bar two antialiased edge rows)";
 }

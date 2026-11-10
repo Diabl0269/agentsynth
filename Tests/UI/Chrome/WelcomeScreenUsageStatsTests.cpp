@@ -89,13 +89,14 @@ TEST_F(WelcomeUsageStatsTest, ShareWritesBothKeysCreatesTheIdAndTurnsTheRunningS
     ASSERT_FALSE(service->getRecorder().isEnabled());
 
     mc.getWelcomeScreenForTest()->getUsageStatsPromptForTest().getShareButtonForTest().triggerClick();
-    pump(); // the click is posted; the settings change it causes is posted again
+    // the click is posted; the settings change it causes is posted again
+    synth::test::waitUntil(
+        [&] { return service->getRecorder().isEnabled() && !mc.getWelcomeScreenForTest()->isUsageStatsPromptShown(); });
 
     const auto stored = readStored();
     EXPECT_TRUE(stored.share);
     EXPECT_TRUE(stored.asked);
     EXPECT_TRUE(synth::telemetry::TelemetryIdStore().load().isNotEmpty());
-    synth::test::waitUntil([&] { return service->getRecorder().isEnabled(); });
     EXPECT_TRUE(service->getRecorder().isEnabled()) << "the settings change reached TelemetryService";
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isUsageStatsPromptShown());
 }
@@ -103,8 +104,8 @@ TEST_F(WelcomeUsageStatsTest, ShareWritesBothKeysCreatesTheIdAndTurnsTheRunningS
 TEST_F(WelcomeUsageStatsTest, NoThanksWritesAskedOnlyAndLeavesNoId) {
     MainComponent mc(std::make_unique<MockProvider>());
     mc.getWelcomeScreenForTest()->getUsageStatsPromptForTest().getNoThanksButtonForTest().triggerClick();
-    pump();
-    pump();
+    synth::test::waitUntil(
+        [&] { return readStored().asked && !mc.getWelcomeScreenForTest()->isUsageStatsPromptShown(); });
     const auto stored = readStored();
     EXPECT_FALSE(stored.share);
     EXPECT_TRUE(stored.asked);
@@ -129,7 +130,7 @@ TEST_F(WelcomeUsageStatsTest, AnAnswerInPreferencesClosesTheCardToo) {
     MainComponent mc(std::make_unique<MockProvider>());
     ASSERT_TRUE(mc.getWelcomeScreenForTest()->isUsageStatsPromptShown());
     synth::telemetry::applyShareUsageStatsChoice(*mc.getAppPropertiesForTest().getUserSettings(), true);
-    pump();
+    synth::test::waitUntil([&] { return !mc.getWelcomeScreenForTest()->isUsageStatsPromptShown(); });
     EXPECT_FALSE(mc.getWelcomeScreenForTest()->isUsageStatsPromptShown());
 }
 

@@ -4,6 +4,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/AudioInputLayoutStoreTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/AudioInputByNameTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AudioInputMenuNamesTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AudioInputMenuOffRowsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Settings/AudioSettingsTabTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Settings/AudioDeviceSectionTests.cpp
 )

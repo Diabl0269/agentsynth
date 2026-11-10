@@ -232,8 +232,10 @@ TEST(SoundFolderView, AFolderThatIsGoneShowsNotFoundAndComesBack) {
     auto menu = rig.view->buildFolderMenu(row);
     juce::PopupMenu::MenuItemIterator it(menu);
     while (it.next())
-        if (it.getItem().text == "Show in " + synth::ui::fileManagerName())
+        if (it.getItem().text.startsWith("Show in " + synth::ui::fileManagerName())) {
             EXPECT_FALSE(it.getItem().isEnabled) << "there is nothing to show";
+            EXPECT_TRUE(it.getItem().text.contains("folder not found")) << "the greyed row says why";
+        }
 
     ASSERT_TRUE(parked.moveFileTo(rig.other));
     rig.view->checkFoldersOnReturn();

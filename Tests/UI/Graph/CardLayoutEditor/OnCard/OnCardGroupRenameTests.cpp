@@ -35,8 +35,6 @@ struct Oscillator {
     }
 };
 
-void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(20); }
-
 } // namespace
 
 TEST(OnCardGroupRename, DoubleClickTypeAndEnterRenamesTheGroupAsOneUndoStep) {
@@ -81,7 +79,7 @@ TEST(OnCardGroupRename, EscapeCancelsAndAnEmptyTextRevertsWithNothingWritten) {
     ASSERT_NE(text, nullptr);
     text->setText("Nonsense", false);
     EXPECT_TRUE(text->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
-    pump();
+    synth::test::waitUntil([&] { return osc.editor->getRenameLabelForTest().getCurrentTextEditor() == nullptr; });
     EXPECT_EQ(osc.editor->getRenameLabelForTest().getCurrentTextEditor(), nullptr);
     EXPECT_EQ(osc.shownTitle("unison"), "Unison");
     EXPECT_EQ(osc.serial(), serial);
@@ -97,7 +95,7 @@ TEST(OnCardGroupRename, EscapeCancelsAndAnEmptyTextRevertsWithNothingWritten) {
     text = osc.doubleClickTitle("unison");
     ASSERT_NE(text, nullptr);
     EXPECT_TRUE(text->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)));
-    pump();
+    synth::test::flushMessageQueue();
     EXPECT_EQ(osc.serial(), serial) << "keeping the same name writes nothing";
     EXPECT_FALSE(osc.rig.storedLayout(osc.id).has_value());
 }

@@ -69,8 +69,9 @@ public:
     /** False, leaving `timelineSample` untouched, until the first block was captured. */
     bool getCaptureStartTimelineSample(juce::int64& timelineSample) const noexcept;
 
-    /** MESSAGE THREAD. The complete buckets so far this take, channel-interleaved; `out` is replaced. */
-    void copyLivePeaks(std::vector<std::pair<float, float>>& out) const;
+    /** MESSAGE THREAD. The complete buckets so far this take, channel-interleaved; `out` is replaced. `rmsOut`, when
+     * given, gets the matching per-slot RMS values (same length as `out`). */
+    void copyLivePeaks(std::vector<std::pair<float, float>>& out, std::vector<float>* rmsOut = nullptr) const;
 
 private:
     struct WriterClient : public juce::TimeSliceClient {

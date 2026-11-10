@@ -9,11 +9,6 @@
 #include <set>
 #include <vector>
 
-namespace {
-// The dirty flag follows UndoManager's async change broadcast, so assertions need a dispatch pass.
-void pumpMessageLoop() { juce::MessageManager::getInstance()->runDispatchLoopUntil(50); }
-} // namespace
-
 // Before the fix, Cmd+Z after File > New restored the canvas without its macros or tracks.
 TEST_F(MainComponentTest, NewPatchStartsAFreshUndoHistory) {
     MainComponent mc(std::make_unique<MockProvider>());
@@ -35,7 +30,7 @@ TEST_F(MainComponentTest, NewPatchStartsAFreshUndoHistory) {
     editor.setSelectedNodes({added[0], added[1]});
     ASSERT_FALSE(editor.getMacroController().groupSelectionIntoMacro().isEmpty());
     mc.simulateAddMidiTrackClick();
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return !mc.getTimelineDoc().getTracks().empty() && mc.getUndoManager().canUndo(); });
     ASSERT_FALSE(mc.getTimelineDoc().getTracks().empty());
     ASSERT_TRUE(mc.getUndoManager().canUndo());
     // The document is dirty, so New goes through the unsaved-changes guard; answer Discard.
@@ -45,7 +40,8 @@ TEST_F(MainComponentTest, NewPatchStartsAFreshUndoHistory) {
     };
 
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::newPatch, false));
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return mc.getTimelineDoc().getTracks().empty() && !mc.getUndoManager().canUndo(); });
+    synth::test::flushMessageQueue(); // a stale undo broadcast must not re-dirty the fresh document
 
     EXPECT_FALSE(mc.getUndoManager().canUndo()) << "New must start an empty undo history";
     EXPECT_FALSE(mc.isProjectDirty());
@@ -69,7 +65,8 @@ TEST_F(MainComponentTest, OpeningAProjectStartsAFreshUndoHistory) {
     ASSERT_TRUE(mc.getUndoManager().canUndo());
 
     ASSERT_TRUE(mc.openProjectForTest(bundleDir));
-    pumpMessageLoop();
+    synth::test::waitUntil([&] { return !mc.getUndoManager().canUndo(); });
+    synth::test::flushMessageQueue(); // a stale undo broadcast must not re-dirty the opened document
 
     EXPECT_FALSE(mc.getUndoManager().canUndo()) << "Open must start an empty undo history";
     EXPECT_FALSE(mc.isProjectDirty());
