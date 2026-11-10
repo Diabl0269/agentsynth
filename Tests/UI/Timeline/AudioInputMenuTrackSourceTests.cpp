@@ -31,7 +31,7 @@ SubmenuView anotherTrackSubmenu(juce::PopupMenu& menu) {
     juce::PopupMenu::MenuItemIterator it(menu);
     while (it.next()) {
         const auto& item = it.getItem();
-        if (item.text != "Another track" || item.subMenu == nullptr)
+        if (!item.text.startsWith("Another track") || item.subMenu == nullptr)
             continue;
         view.found = true;
         view.enabled = item.isEnabled;
