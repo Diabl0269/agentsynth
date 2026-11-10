@@ -12,6 +12,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/MainComponentAudioTakesTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Timeline/TimelineDoc/TimelineDocTrackMonitorTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackInputMonitoringTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Engine/TrackInputMonitorClipTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Engine/StemRenderOptionsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/MainComponentRenderToAudioTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/MainComponent/MainComponentPeaksBackfillTests.cpp

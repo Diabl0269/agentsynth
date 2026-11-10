@@ -717,6 +717,11 @@ track's mixer channel and effects. `Track::monitorMode` (`synth::MonitorMode`) p
 - **On**: always, armed or not.
 - **Off**: never.
 
+**The input replaces the track's own clips.** While the monitor hears the input, the track's clips do not play: you
+hear the live input only, never the old take mixed under the new one (recording a second pass in a loop does not play
+the first pass). When the monitor lets go (Off, Auto during plain playback, or the feedback guard muting the input) the
+clips play again at once. Other tracks, including a track the recording track takes its sound from, keep playing.
+
 The rule is `synth::monitorHearsInput` in `Source/Timeline/TrackAudioInput.h`. No input, Whole mix and Another track monitor
 nothing, nor does an input that is not connected; a muted or solo-gated track hears nothing.
 
