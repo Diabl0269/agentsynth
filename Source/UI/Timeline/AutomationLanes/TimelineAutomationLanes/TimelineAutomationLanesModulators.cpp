@@ -226,13 +226,14 @@ void TimelineAutomationLanes::rekeyModulators(LaneModulators& entry, synth::Lane
     }
 }
 
-void TimelineAutomationLanes::wireBand(ModulatorBand& band) const {
+void TimelineAutomationLanes::wireBand(ModulatorBand& band) {
     band.setTimelineDoc(doc_);
     band.setHost(host_);
     band.setUndoManager(undo_);
     band.setTransport(transport_);
     band.setEditTool(editTool_);
     band.setDrawShape(drawShape_);
+    band.setLaneRange(&laneRange_);
     band.onViewScrolledByDrag = [this] {
         if (onViewScrolledByDrag)
             onViewScrolledByDrag();

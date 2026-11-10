@@ -5,6 +5,7 @@
 // inside a macro reopens with its row.
 
 #include "AutomationLanesModulatorFixture.h"
+#include "Modules/AttenuverterModule.h"
 #include "Modules/LfoRateDivisions.h"
 #include "UI/Timeline/AutomationLanes/Modulators/ModulatorAmountLane.h"
 

@@ -426,6 +426,10 @@ AddAutomationRow* TimelineAutomationLanes::addRowFor(synth::TrackId track) const
 void TimelineAutomationLanes::repaintEditors() {
     for (auto& [id, editor] : editors_)
         editor->repaint();
+    for (auto& [id, entry] : modulators_)
+        for (auto& band : entry.bands)
+            if (auto* editor = band->getEditor())
+                editor->repaint();
 }
 
 } // namespace synth::ui

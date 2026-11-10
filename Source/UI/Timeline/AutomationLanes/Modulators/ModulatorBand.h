@@ -56,6 +56,9 @@ public:
     void setEditTool(EditTool tool);
     /** The Draw tool's shape, so a box stamp works on the amount lane like on any lane. */
     void setDrawShape(DrawShape shape);
+    /** The timeline's one lane range, so the Range tool selects a stretch of the amount curve; non-owning, may be null.
+     */
+    void setLaneRange(LaneRangeSelection* range);
 
     /** The routing this band stands for, under `ownerLane` (whose track a new amount lane goes on). */
     void setModulator(const ModulatorInfo& info, synth::LaneId ownerLane, const juce::String& parameterName);
@@ -72,6 +75,8 @@ public:
      *  modulator). May be null. */
     std::function<bool(const juce::KeyPress&)> onMoveKey;
     bool isEditable() const noexcept { return info_.attenuverterUuid.isNotEmpty(); }
+    /** True while the curve editor takes the press (an amount lane exists, or the Draw tool will start one). */
+    bool editorTakesPress() const;
     const synth::AutomationLane* amountLane() const;
     /** The curve editor over the proxy doc; nullptr for a decoration band. */
     AutomationLaneEditor* getEditor() noexcept { return editor_.get(); }
@@ -131,6 +136,7 @@ private:
     std::unique_ptr<LaneToolCursors> toolCursors_;
     std::unique_ptr<juce::Component> testModeProbe_; // answers getState: the cursor the band shows
     DrawShape drawShape_ = DrawShape::Free;
+    LaneRangeSelection* laneRange_ = nullptr;
 
     ModulatorInfo info_;
     synth::LaneId ownerLane_;

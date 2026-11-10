@@ -7,6 +7,7 @@
 #include "AutomationLanesModulatorFixture.h"
 
 #include "Modules/ADSRModule.h"
+#include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "Modules/MacroOutletModule.h"
 #include "UI/Graph/ModDot/ModSourceCatalog.h"
