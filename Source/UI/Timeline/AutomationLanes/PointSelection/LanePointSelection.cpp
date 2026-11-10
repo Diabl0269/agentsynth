@@ -1,6 +1,7 @@
 #include "LanePointSelection.h"
 #include "UI/Layout/PointEditing/PointGroupMove.h"
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <set>
 
@@ -138,14 +139,52 @@ void LanePointSelection::cancelGesture() { box_.cancel(); }
 void LanePointSelection::paintMarquee(juce::Graphics& g) const { box_.paintMarquee(g); }
 
 //==============================================================================
-// A lane has no end and its block may pass unselected points (a move onto a point's beat replaces it), so the only
-// limit is beat 0.
+// A lane has no end and its block passes unselected points freely (settleBeatDelta keeps it off their beats), so the
+// only limit is beat 0.
 double clampBeatDelta(const std::vector<LaneBreakpoint>& points, double delta) {
     std::vector<PointRoom> rooms;
     rooms.reserve(points.size());
     for (const auto& p : points)
         rooms.push_back(roomWithin(p.beat, 0.0, std::numeric_limits<double>::infinity()));
     return clampGroupDelta(rooms, delta);
+}
+
+// A lane holds one point per beat, so a move that lands on a point it does not carry would replace it. A drag never
+// deletes a dot: the landing settles one tick beside that point on the side the drag came from. Each settle shortens
+// the move by a tick, so the loop ends; it repeats because the tick beside can hold a point too (a duplicate's first
+// copy sits one tick after the original's last point).
+double settleBeatDelta(const std::vector<LaneBreakpoint>& lane, const std::vector<LaneBreakpoint>& moving, double delta,
+                       double tick) {
+    constexpr double kSameBeat = 1e-9;
+    delta = clampBeatDelta(moving, delta);
+    if (tick <= 0.0 || moving.empty())
+        return delta;
+    std::set<double> carried;
+    for (const auto& p : moving)
+        carried.insert(p.beat);
+    std::vector<double> others;
+    for (const auto& q : lane)
+        if (carried.count(q.beat) == 0)
+            others.push_back(q.beat);
+    const double direction = delta < 0.0 ? -1.0 : 1.0;
+    for (std::size_t round = 0; round <= others.size() * moving.size(); ++round) {
+        if (std::abs(delta) <= kSameBeat || delta * direction < 0.0)
+            return 0.0;
+        bool settled = true;
+        for (const auto& p : moving) {
+            for (const double other : others)
+                if (std::abs(p.beat + delta - other) <= kSameBeat) {
+                    delta = other - direction * tick - p.beat;
+                    settled = false;
+                    break;
+                }
+            if (!settled)
+                break;
+        }
+        if (settled)
+            return delta;
+    }
+    return 0.0;
 }
 
 std::vector<LaneBreakpoint> movePoints(const std::vector<LaneBreakpoint>& points, double beatDelta, double valueDelta,

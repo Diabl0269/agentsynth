@@ -321,6 +321,8 @@ private:
     // A press inside the stretch box (not on a handle or a point) drags the whole selection.
     bool beginBoxMove(juce::Point<int> pos);
     std::vector<LaneBreakpoint> dragMovedPoints() const;
+    // The beat delta that moves `moving` by `delta` without landing on another point (settleBeatDelta).
+    double settledBeatDelta(const std::vector<LaneBreakpoint>& moving, double delta) const;
     void commitPointMove();
     double gridStepBeats() const;
     // One keyboard step in time: a grid step, or four pixels at the current zoom with snap off.

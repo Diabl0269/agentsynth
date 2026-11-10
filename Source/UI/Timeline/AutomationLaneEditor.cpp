@@ -350,31 +350,6 @@ void AutomationLaneEditor::strokeCurve(juce::Graphics& g, const std::vector<Lane
     g.strokePath(curvePath(points, lane), juce::PathStrokeType(thickness));
 }
 
-juce::Path AutomationLaneEditor::curvePath(const std::vector<LaneBreakpoint>& points,
-                                           const synth::AutomationLane& lane) const {
-    std::vector<TimelineSnapshot::Point> pts;
-    pts.reserve(points.size());
-    for (const auto& bp : points)
-        pts.push_back({bp.beat, bp.value, bp.tension, bp.curve});
-
-    juce::Path path;
-    AutomationCursor cursor{};
-    const int width = getWidth();
-    const double flat = dragMode_ == DragMode::LaneConstant ? previewValue_ : (double)lane.range.defaultValue;
-    for (int x = 0; x < width; x += 2) {
-        const double beat = viewState_.xToBeat((double)x);
-        const double value = pts.empty() ? flat
-                                         : AutomationKernel::evaluate(pts.data(), (int)pts.size(), beat,
-                                                                      (double)lane.range.defaultValue, cursor);
-        const float y = (float)valueToY(value);
-        if (x == 0)
-            path.startNewSubPath((float)x, y);
-        else
-            path.lineTo((float)x, y);
-    }
-    return path;
-}
-
 void AutomationLaneEditor::paintToolPreview(juce::Graphics& g) {
     juce::Colour accent;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
@@ -611,9 +586,10 @@ void AutomationLaneEditor::mouseDrag(const juce::MouseEvent& e) {
 
     switch (dragMode_) {
     case DragMode::MoveHandle: {
-        // The whole selection moves by the grabbed point's delta; the block stops at beat 0 as a unit.
+        // The whole selection moves by the grabbed point's delta; the block stops at beat 0 as a unit and never lands
+        // on another point.
         const double target = std::max(0.0, snappedBeatAt(viewState_.xToBeat((double)pos.x)));
-        const double delta = clampBeatDelta(dragPoints_, target - dragOriginalBeat_);
+        const double delta = settledBeatDelta(dragPoints_, target - dragOriginalBeat_);
         previewBeat_ = delta == target - dragOriginalBeat_ ? target : dragOriginalBeat_ + delta;
         previewValue_ = clampValue(yToValue(pos.y));
         showBubbleAt(previewBeat_, previewValue_);

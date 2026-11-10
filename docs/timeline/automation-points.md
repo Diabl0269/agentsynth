@@ -103,7 +103,13 @@ shared with the curve editor):
 | At the next grid line after the selection | The copies shifted by whole grid steps so the first copy sits at the first grid step past the last selected point; with snap off, as the default |
 
 One selected point is copied one grid step on (a quarter of a beat with snap off) in every choice. A copy that lands on an
-existing point's beat replaces it, as a move does.
+existing point's beat replaces it (paste and a typed value do too). A move never does: a dragged, held or nudged dot
+passes other dots freely, and one that would land on another dot's beat settles one tick beside it on the side it came
+from, so both stay (`settleBeatDelta`, shared by the mouse, the held keys and the nudge). What the drag shows is what
+the drop writes.
+
+Two points one tick apart (the joint "Right after" leaves) are drawn as a true vertical step: the curve is built from
+its 2 px samples plus the exact x of every point, evaluated just before and at the point's beat.
 
 ## Stretching a selection
 

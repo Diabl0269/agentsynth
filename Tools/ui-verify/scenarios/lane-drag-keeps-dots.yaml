@@ -1,0 +1,44 @@
+# Duplicating a lane's bar one into bar two drew the joint between the last original dot and the first copied dot as a
+# leaning line, and dragging the lower copied dot a little to the left deleted the upper dot.
+#
+# What a user does: opens a project whose Cutoff lane has three points in bar one, from the bottom of the range at
+# beat 0 to the top at beat 3 (fixture lane-duplicate-joint.agsproj, the lane twice the default height), selects them
+# all and presses Cmd+D: the copies start one tick after beat 3, so the line drops straight down there. Then drags the
+# lower dot at the joint 3 px left with snap on (that lands on the upper dot's beat): both dots stay. Then drags it
+# right across the two other copies and drops it at beat 7: all six dots stay. Cmd+Z puts it back at the joint.
+record: true
+save_project: lane-drag-keeps-dots
+steps:
+  - openProject: {path: "${FIXTURES}/lane-duplicate-joint.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 3}
+  - click: {id: automationLaneState, x: 36, y: 65}
+  - expect: {id: automationLaneState, selectedPoints: 1}
+  - key: {keys: cmd+a}
+  - expect: {id: automationLaneState, selectedPoints: 3}
+  - key: {keys: cmd+d}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 6, within_ms: 2000}
+  - key: {keys: escape}
+  - expect: {id: automationLaneState, selectedPoints: 0}
+  - screenshot: {name: joint}
+  - mark: {check: 1, name: joint-drops-straight-down}
+  # A small left drag of the lower dot at the joint: snapped, it lands on the upper dot's beat and settles beside it.
+  - drag: {from: automationLaneState, fromX: 72, fromY: 72, to: automationLaneState, toX: 69, toY: 72, steps: 6}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 6}
+  - screenshot: {name: small-left-drag}
+  - mark: {check: 2, name: both-dots-after-left-drag}
+  # Across the two other copies, dropped at beat 7.
+  - drag: {from: automationLaneState, fromX: 72, fromY: 72, to: automationLaneState, toX: 168, toY: 72, steps: 12}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 6}
+  - screenshot: {name: across-two-dots}
+  - mark: {check: 3, name: every-dot-after-crossing}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 6}
+  - screenshot: {name: undone}
+  - mark: {check: 4, name: one-undo-puts-it-back}

@@ -98,7 +98,7 @@ void AutomationLaneEditor::applyKeyDrag(bool tapStep) {
     double delta = keyHold_.distance(KeyAxis::time);
     if (keyDrag_.snapped)
         delta = (delta < 0.0 ? -1.0 : 1.0) * std::floor(std::abs(delta) / keyDrag_.unit + 1e-9) * keyDrag_.unit;
-    previewBeat_ = dragOriginalBeat_ + clampBeatDelta(dragPoints_, delta);
+    previewBeat_ = dragOriginalBeat_ + settledBeatDelta(dragPoints_, delta);
     previewValue_ =
         dragOriginalValue_ + keyHold_.distance(KeyAxis::value) * (double)(lane->range.maxValue - lane->range.minValue);
     showBubbleAt(previewBeat_, clampValue(previewValue_));

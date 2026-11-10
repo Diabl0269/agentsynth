@@ -229,7 +229,8 @@ TEST(AutomationLanesPointSelectionTest, ArrowKeysNudgeTheSelectionByAGridStepAnd
     const auto alt = juce::ModifierKeys::altModifier;
 
     EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, alt, 0)));
-    EXPECT_EQ(f.beats(), Beats({1.0, 3.0})) << "the nudged point lands on the existing point's beat and replaces it";
+    EXPECT_EQ(f.beats(), Beats({1.0, 3.0 - synth::ui::tickBeats(), 3.0}))
+        << "the nudged point lands on the existing point's beat, so it settles one tick before it and both stay";
     f.undo.undo();
     EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0}));
 
@@ -540,7 +541,8 @@ TEST(AutomationLanesPointSelectionTest, AltRightMovesTheSelectionInTimeAndAltUpC
 
     EXPECT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, alt, 0)));
     EXPECT_EQ(f.doc.getRevision(), rev + 1);
-    EXPECT_EQ(f.selected(), Beats({3.0})) << "the selection follows the point";
+    EXPECT_EQ(f.selected(), Beats({3.0 - synth::ui::tickBeats()}))
+        << "the selection follows the point (settled one tick before the point at beat 3)";
     f.undo.undo();
     EXPECT_EQ(f.beats(), Beats({1.0, 2.0, 3.0, 5.0}));
 
@@ -703,7 +705,8 @@ TEST(AutomationLanesKeyboardDrag, ATapReleasedBeforeTheGlideStartsCommitsTheOneS
     f.editor->getPointSelection().setSelection({2.0});
     f.hold(juce::KeyPress::rightKey, kAltMod);
     f.release();
-    EXPECT_EQ(f.beats(), Beats({1.0, 3.0})) << "one grid step: it landed on the point at beat 3 and replaced it";
+    EXPECT_EQ(f.beats(), Beats({1.0, 3.0 - synth::ui::tickBeats(), 3.0}))
+        << "one grid step lands on the point at beat 3: it settles one tick before it";
 
     HeldKeys edge;
     edge.doc.addBreakpoint(edge.lane, 0.0, 10.0);
@@ -744,6 +747,7 @@ TEST(AutomationLanesKeyboardDrag, AutoRepeatKeepsTheRunningHoldAndEscapeCancelsI
 
 TEST(AutomationLanesKeyboardDrag, ATapEasesTheDrawnPointAndPlainlyLandsUnderReduceMotion) {
     HeldKeys f;
+    f.doc.removeBreakpoint(f.lane, 3.0); // a free landing: a step onto a point settles beside it
     f.editor->forceGlideAnimateForTest(true);
     f.editor->getPointSelection().setSelection({2.0});
     const auto key2 = synth::ui::lane_key::tweenKey(2.0);
@@ -788,6 +792,7 @@ float pathYAt(const juce::Path& path, float x) {
 // Regression test for FRO1063: the dots glided but the line stayed at the model place, so the dots left the line.
 TEST(AutomationLanesKeyboardDrag, TheLineFollowsTheGlidingDots) {
     HeldKeys f;
+    f.doc.removeBreakpoint(f.lane, 3.0);
     f.editor->forceGlideAnimateForTest(true);
     f.editor->getPointSelection().setSelection({2.0});
     ASSERT_TRUE(f.key(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(kAltMod), 0)));
@@ -837,6 +842,7 @@ juce::Rectangle<float> boxAround(AutomationLaneEditor& editor, const std::vector
 // back in around every nudge and mouse drop.
 TEST(AutomationLanesSelectionBox, TheBoxStaysFullyShownAcrossANudgeAndAfterAMouseDrop) {
     SelectLane f;
+    f.doc.removeBreakpoint(f.lane, 3.0); // free landings: a move onto a point settles beside it
     f.editor->getPointSelection().setSelection({1.0, 2.0});
     ASSERT_FLOAT_EQ(f.editor->getStretchForTest().boxAlpha(), 1.0f);
     AlphaLog log(*f.editor);
@@ -855,6 +861,7 @@ TEST(AutomationLanesSelectionBox, TheBoxStaysFullyShownAcrossANudgeAndAfterAMous
 
 TEST(AutomationLanesSelectionBox, DuringAMouseDragTheBoxIsTheBoundsOfThePreviewPoints) {
     SelectLane f;
+    f.doc.removeBreakpoint(f.lane, 3.0);
     f.editor->getPointSelection().setSelection({1.0, 2.0});
     const auto from = f.at(2.0, 60.0);
     const auto to = f.at(3.0, 90.0);

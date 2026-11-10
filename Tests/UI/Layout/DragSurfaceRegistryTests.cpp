@@ -46,7 +46,9 @@ const std::vector<Registered> kRegistered = {
      {"undo-glide:Curve editor point", "point-markers:Curve editor point",
       "test:ShapeDrawGesture.PreviewAtTheLastDragEqualsTheCommit"}},
     {"MorphMap", {"undo-glide:Morph map dot", "point-markers:Morph map dot"}},
-    {"AutomationLaneEditor", {"undo-glide:Automation lane point", "point-markers:Automation lane point"}},
+    {"AutomationLaneEditor",
+     {"undo-glide:Automation lane point", "point-markers:Automation lane point",
+      "test:AutomationLanesDragKeepsDots.ThePreviewAtTheLastDragFrameIsWhatTheDropCommits"}},
     // Preview and commit checked by a test of their own.
     {"CardLayoutOutline", {kOnCardRows}},
     {"CardLayoutAddRow", {kOnCardRows}},

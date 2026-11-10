@@ -1,6 +1,7 @@
 // LanePointMathTests.cpp -- the pure parts of the lane point selection (set algebra, rigid-block move, replace,
 // box hit test, clipboard) and the removal/addition glide's state machine, without a panel.
 
+#include "UI/Layout/PointEditorDuplicate.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LanePointEdits.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LanePointGlide.h"
@@ -153,4 +154,29 @@ TEST(LanePointGlideTest, APureRemovalOrAdditionRunsAndAMoveDoesNot) {
     glide.pointsChanged(moved);
     EXPECT_FALSE(glide.isRunning()) << "a point that moved is one removal and one addition: lands at once";
     synth::ui::setReducedMotionForTest(std::nullopt);
+}
+
+// Regression test for FRO1331: a move onto another point's beat replaced that point.
+TEST(LanePointMathTest, AMoveOntoAPointItDoesNotCarrySettlesOneTickBesideItOnTheSideItCameFrom) {
+    using synth::ui::settleBeatDelta;
+    const double t = synth::ui::tickBeats();
+    const auto lane = sample(); // beats 1, 2, 4
+    const std::vector<LaneBreakpoint> first{lane[0]}, last{lane[2]};
+    EXPECT_DOUBLE_EQ(settleBeatDelta(lane, first, 0.5, t), 0.5) << "a free landing is the move itself";
+    EXPECT_DOUBLE_EQ(settleBeatDelta(lane, first, 4.0, t), 4.0) << "passing points is free";
+    EXPECT_DOUBLE_EQ(settleBeatDelta(lane, first, 1.0, t), 1.0 - t) << "onto beat 2 from the left: a tick before it";
+    EXPECT_DOUBLE_EQ(settleBeatDelta(lane, last, -2.0, t), -2.0 + t) << "onto beat 2 from the right: a tick after it";
+    EXPECT_DOUBLE_EQ(settleBeatDelta(lane, first, -2.0, t), -1.0) << "beat 0 still stops the block";
+
+    const std::vector<LaneBreakpoint> chain{{1.0, 0.0, 0.0f, 0}, {3.0 - t, 0.0, 0.0f, 0}, {3.0, 0.0, 0.0f, 0}};
+    EXPECT_DOUBLE_EQ(settleBeatDelta(chain, {chain[0]}, 2.0, t), 2.0 - 2.0 * t)
+        << "the tick beside holds a point too (a duplicate's joint): it settles beside that one";
+
+    const std::vector<LaneBreakpoint> pair{{1.0, 0.0, 0.0f, 0}, {1.0 + t, 0.0, 0.0f, 0}};
+    EXPECT_DOUBLE_EQ(settleBeatDelta(pair, {pair[1]}, -t, t), 0.0) << "settling back past the start is no move";
+
+    const std::vector<LaneBreakpoint> block{lane[0], lane[1]};
+    EXPECT_DOUBLE_EQ(settleBeatDelta(lane, block, 2.0, t), 2.0 - t)
+        << "a block settles as a whole when one of its points lands on a point it does not carry";
+    EXPECT_DOUBLE_EQ(settleBeatDelta(lane, block, 1.0, t), 1.0) << "landing on a beat it carries is free";
 }

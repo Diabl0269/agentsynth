@@ -86,8 +86,10 @@ Each editor declares one `PointSelectionRules` constant (`CurveEditorComponent::
 | Shift+Left/Right | Selects the range from the anchor to the cursor, so reversing shrinks it | Adds the next dot past the selection's end, never shrinks |
 | Cmd+A cursor | Kept if selected, else the last dot | Kept, else the first dot |
 
-Outside the rules: a lane's block move stops only at beat 0 and clamps each value on its own (a move onto another
-point's beat replaces it), the curve's stops at unmoving neighbours and clamps the level as a group; a lane leaves
+Outside the rules: a lane's block move stops only at beat 0 and clamps each value on its own; it passes other dots
+freely and never deletes one: a move (mouse drag, held keys or nudge) that would land on another dot's beat settles one
+tick (1/960 beat) beside that dot on the side it came from, so both stay (paste, duplicate and a typed value still
+replace a dot on the same beat). The curve's stops at unmoving neighbours and clamps the level as a group; a lane leaves
 Cmd+A/C/V/D to the app's commands and Escape and Delete only act without modifiers.
 
 ## Mouse
