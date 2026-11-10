@@ -111,6 +111,7 @@ struct PeaksContents {
     juce::uint32 bucketSize = 0;
     juce::uint32 numChannels = 0;
     std::vector<float> values; // per bucket, per channel: min, max
+    std::vector<float> rms;    // per bucket, per channel (version 2 only)
 };
 
 PeaksContents readPeaks(const juce::File& file) {
@@ -130,11 +131,20 @@ PeaksContents readPeaks(const juce::File& file) {
     out.bucketSize = readU32(8);
     out.numChannels = readU32(12);
 
+    std::vector<float> raw;
     for (size_t offset = 16; offset + 4 <= block.getSize(); offset += 4) {
         const juce::uint32 bits = readU32(offset);
         float value = 0.0f;
         std::memcpy(&value, &bits, sizeof(value));
-        out.values.push_back(value);
+        raw.push_back(value);
+    }
+    // Version 2 carries a third float (rms) per bucket slot; split it off so `values` stays min,max pairs.
+    const size_t stride = out.version >= 2 ? 3 : 2;
+    for (size_t i = 0; i + stride <= raw.size(); i += stride) {
+        out.values.push_back(raw[i]);
+        out.values.push_back(raw[i + 1]);
+        if (stride == 3)
+            out.rms.push_back(raw[i + 2]);
     }
     out.ok = true;
     return out;
@@ -230,6 +240,7 @@ TEST(RecordTapTest, CaptureWritesExactWav) {
     EXPECT_EQ(parsed.version, RecordTapModule::kPeaksVersion);
     EXPECT_EQ(parsed.bucketSize, (juce::uint32)RecordTapModule::kPeakBucketSize);
     EXPECT_EQ(parsed.numChannels, 2u);
+    EXPECT_EQ(parsed.rms.size(), parsed.values.size() / 2) << "version 2 carries one rms per bucket slot";
 
     const juce::int64 expectedBuckets =
         (kExpectedFrames + RecordTapModule::kPeakBucketSize - 1) / RecordTapModule::kPeakBucketSize;

@@ -152,7 +152,9 @@ public:
      *  `kPeakBucketSize` samples or the take stops, so a live strip updates in ~`kPeakBucketSize /
      *  sampleRate` steps, not sample-by-sample. `out` is cleared and replaced (a plain copy, not
      *  merged) whether or not anything has accumulated yet. */
-    void copyLivePeaks(std::vector<std::pair<float, float>>& out) const { capture_.copyLivePeaks(out); }
+    void copyLivePeaks(std::vector<std::pair<float, float>>& out, std::vector<float>* rmsOut = nullptr) const {
+        capture_.copyLivePeaks(out, rmsOut);
+    }
 
 private:
     static LogicalPort audioPort(int rawChannel) noexcept {

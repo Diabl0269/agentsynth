@@ -455,7 +455,7 @@ public:
         double punchBeat = 0.0;   // the strip's fixed left edge
         double currentBeat = 0.0; // the strip's growing right edge — the transport's current position
         const RecordTapModule* tap = nullptr;
-        std::function<void(std::vector<std::pair<float, float>>&)> copyPeaks;
+        std::function<void(std::vector<std::pair<float, float>>&, std::vector<float>&)> copyPeaks; // peaks, then rms
         int numChannels = 2; // channels per peak bucket in the source
     };
 
@@ -784,10 +784,14 @@ private:
     // `rect`: columns, or below kMinWidthForWaveform a one-bar summary. A no-op when nothing resolves.
     void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
     // The cheap per-column line-pair loop shared by paintWaveform() and paintLiveRecordingStrip().
-    // Assumes the caller already set the colour.
+    // With `rms` (one value per bucket slot) it draws the peak outline in `ink.outline` and the darker RMS body inside
+    // it in `ink.body`; with no rms (a version 1 peaks file) it draws the plain outline in `ink.flat`.
+    struct WaveformInk {
+        juce::Colour outline, body, flat;
+    };
     static void paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
-                                     const std::vector<std::pair<float, float>>& buckets, int numChannels,
-                                     int firstBucket, int bucketCount);
+                                     const std::vector<std::pair<float, float>>& buckets, const std::vector<float>& rms,
+                                     int numChannels, int firstBucket, int bucketCount, const WaveformInk& ink);
     // What paintWaveform draws for a clip `width` px wide (see waveformShapeFor / getWaveformShapeForTest).
     enum class WaveformShape { None, Summary, Columns };
     WaveformShape waveformShapeFor(const synth::Clip& clip, int width);
@@ -806,6 +810,7 @@ private:
     struct LiveStrip {
         LiveRecordingInfo info;
         std::vector<std::pair<float, float>> peaks;
+        std::vector<float> rms;
         juce::Rectangle<int> rect;
     };
     void paintLiveRecordingStrip(juce::Graphics& g, const LiveStrip& strip);

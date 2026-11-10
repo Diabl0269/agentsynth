@@ -17,7 +17,7 @@
 87 Source/Mixer/ChannelFlows/ChannelFlows.h
 22 Source/Mixer/MixerModel/MixerModel.h
 49 Source/Mixer/TrackPresetManager.h
-32 Source/Modules/RecordTapModule.h
+30 Source/Modules/RecordTapModule.h
 38 Source/Plugin/Hosting/HostedPluginBackend.h
 53 Source/Plugin/Hosting/HostedPluginModule.h
 147 Source/Plugin/Hosting/PluginScanService.h
@@ -30,7 +30,7 @@
 11 Source/Timeline/AutomationRecorder.h
 32 Source/Timeline/MidiClipFile.h
 14 Source/Timeline/MidiRecorder.h
-30 Source/Timeline/PeaksFile.h
+29 Source/Timeline/PeaksFile.h
 12 Source/Timeline/TimelineOps.h
 47 Source/Timeline/TimelineValidator.h
 26 Source/Transport/BounceExporter.h
