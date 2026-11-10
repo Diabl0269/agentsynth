@@ -30,10 +30,12 @@
 //
 // NOTE: PreferencesSettingsTab.cpp MUST be added to BOTH the app target AND the test
 // target in CMakeLists.txt.
-class PreferencesSettingsTab : public juce::Component {
+class PreferencesSettingsTab
+    : public juce::Component
+    , private juce::ChangeListener {
 public:
     explicit PreferencesSettingsTab(juce::ApplicationProperties& props);
-    ~PreferencesSettingsTab() override = default;
+    ~PreferencesSettingsTab() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -211,7 +213,8 @@ public:
     // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
     // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
     // "Play the scale when browsing keys" (default ON): off, no key picker plays a scale while a key is hovered.
-    // Read at the start of each audition (KeyAuditioner), so it applies at once.
+    // Read at the start of each audition (KeyAuditioner), so it applies at once. The key menus' play-scale row writes
+    // the same key; this checkbox follows it while the tab is open.
     bool isPlayScaleOnBrowseEnabled() const;
     void setPlayScaleOnBrowseEnabled(bool enabled);
     bool isPianoRollKeyLabelModeAll() const;
@@ -315,6 +318,7 @@ public:
     }
 
 private:
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     // The layout helpers' shared closures: layoutContent's own filter / visibility / divider steps.
     using GroupMatchFn = std::function<bool(std::initializer_list<juce::Component*>)>;
     using SetVisibleFn = std::function<void(std::initializer_list<juce::Component*>, bool)>;

@@ -51,9 +51,14 @@ void TimelinePanelComponent::initSongKeyField() {
         const auto clip = pianoRoll_.isOpen() ? pianoRoll_.getClipId() : synth::ClipId{};
         if (doc_ == nullptr || !clip.isValid() || !hasInstrumentToHear(trackHeaderHost_, doc_->getTrackForClip(clip)))
             return {};
+        const auto track = doc_->getTrackForClip(clip)->id;
         return {[this, clip](int pitch, int velocity, bool on) {
-            auditionClipNote(clip, pitch, (float)velocity / 127.0f, on);
-        }};
+                    auditionClipNote(clip, pitch, (float)velocity / 127.0f, on);
+                },
+                [this, track](bool running) {
+                    if (const auto& monitor = transportBar_.getSongKeyField().auditionMonitor)
+                        monitor(track, running);
+                }};
     };
 }
 

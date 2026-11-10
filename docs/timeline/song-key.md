@@ -50,7 +50,19 @@ where its note-on went.
   closing the picker cuts it only while it is still ringing.
 - **Switch.** Settings, Timeline, **Play the scale when browsing keys** (on by default,
   `playScaleWhenBrowsingKeys`; [settings](../layout/settings-preferences.md)) turns hover-to-hear off everywhere. It is
-  read each time an audition starts.
+  read each time an audition starts. Every key picker also has the same switch as a row between the status line and Preview sound (a
+  checkbox, tab-reachable, named **Play the scale when browsing keys**, with a tooltip): it reads and writes the same
+  setting (`KeyAuditioner::setEnabledIn`, given to each picker by `KeyAuditioner::wire`, so a new owner gets it by
+  wiring its auditioner), the open Settings tab follows it, and switching it off cuts a scale that is playing.
+- **Mute and solo do not matter.** A scale is heard even when its sound is muted or another sound is soloed
+  (`KeyAuditioner::Target::monitor`, `synth::AuditionMonitor`). While a run plays, the target and everything downstream
+  of it (instrument, inserts, channel strip, send buses, Master) render as if not muted and ignore the solo gate; the
+  flags stay on for 2.5 s after the last note so a release tail is not cut, and drop at once if the transport starts
+  playing. No mute or solo parameter is written, so the mixer keeps showing the real state, and the Track In note path
+  was never gated.
+- **Not while the song plays.** With the transport playing no run starts, and the picker's row is greyed with a tooltip
+  saying playback is running (`KeyAuditioner::isPlaybackRunning`, checked again at each run's start). The row is
+  decided when the picker opens; a run that is blocked by playback started after that stays silent.
 
 ## Saved, undone, never rewriting
 

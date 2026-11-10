@@ -6,6 +6,7 @@
 #include "../../Layout/KeyAuditionRenderRig.h"
 #include "../StepGrid/StepGridCardFixture.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
+#include "AudioEngine/AuditionMonitor.h"
 #include "Modules/Sequencer/SequencerModuleBase.h"
 #include "Music/SongKey.h"
 #include "UI/Graph/CardBody/DefaultLayouts/DefaultCardLayoutsFamilies.h"
@@ -212,6 +213,47 @@ TEST(SequencerKeyField, ItsKeyFieldIsHeardThroughTheMalletItIsCabledTo) {
     const int quietAfter = render.blocksUntilQuiet(keyaudition_test::kQuiet, 1500);
     EXPECT_GE(quietAfter, 0) << "the Mallet's ring dies away after the note-off";
     EXPECT_LT(render.peak(20), keyaudition_test::kQuiet) << "and stays silent";
+}
+
+// Regression test for FRO1410: a muted Mallet still plays the scale (bypass for the run), goes quiet and muted again
+// once the tail is over, and no scale starts while the transport plays.
+TEST(SequencerKeyField, ItsScaleIsHeardThroughAMutedMalletAndNotWhilePlaybackRuns) {
+    cardbody_test::CardCanvas canvas;
+    auto& graph = canvas.engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, synth::test::kFakeDeviceSampleRate, keyaudition_test::kBlock);
+    const auto seqId = canvas.add(synth::AIStateMapper::createModule("Sequencer"), 40, 40);
+    const auto malletId = canvas.add(synth::AIStateMapper::createModule("Mallet"), 400, 40);
+    const auto out = graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
+        juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode));
+    ASSERT_TRUE(graph.addConnection({{seqId, juce::AudioProcessorGraph::midiChannelIndex},
+                                     {malletId, juce::AudioProcessorGraph::midiChannelIndex}}));
+    ASSERT_TRUE(graph.addConnection({{malletId, 0}, {out->nodeID, 0}}));
+    canvas.engine.refreshNormalling();
+    canvas.editor.updateComponents();
+    auto* card = canvas.card(seqId);
+    ASSERT_NE(card, nullptr);
+    auto* key = dynamic_cast<synth::ui::SequencerKeyField*>(card->getCardBody()->findWidget("scaleRoot"));
+    ASSERT_NE(key, nullptr);
+    card->timerCallback();
+    auto* mallet = dynamic_cast<ModuleBase*>(graph.getNodeForId(malletId)->getProcessor());
+    ASSERT_NE(mallet, nullptr);
+    mallet->setMuted(true);
+
+    keyaudition_test::Render render(canvas.engine);
+    key->getAuditioner().start(keyaudition_test::kMajor);
+    ASSERT_TRUE(key->getAuditioner().isAuditioning());
+    const float heard = render.peakAfter(10, 20);
+    RecordProperty("sequencer_muted_peak", std::to_string(heard));
+    EXPECT_GT(heard, 0.001f) << "a muted Mallet still plays the scale";
+    key->getAuditioner().stop();
+    canvas.engine.getAuditionMonitor().clear();
+    EXPECT_GE(render.blocksUntilQuiet(keyaudition_test::kQuiet, 3000), 0);
+    EXPECT_TRUE(mallet->isMuted()) << "the mute itself is untouched";
+
+    ASSERT_TRUE(canvas.engine.getTransport().play());
+    render.block();
+    key->getAuditioner().start(keyaudition_test::kMajor);
+    EXPECT_FALSE(key->getAuditioner().isAuditioning()) << "no scale on top of playback";
 }
 
 // Hovering a key in a sequencer card's picker plays the scale (the default sound when nothing is cabled), and the

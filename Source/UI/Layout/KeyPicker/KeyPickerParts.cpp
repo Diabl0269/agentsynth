@@ -190,4 +190,45 @@ void KeyPickerFollowRow::paintButton(juce::Graphics& g, bool over, bool down) {
     paintFocusRing(g, bounds.reduced(1.0f), *this, 4.0f);
 }
 
+// ---- KeyPickerToggleRow ----
+
+KeyPickerToggleRow::KeyPickerToggleRow(const juce::String& title)
+    : juce::Button(title) {
+    setTitle(title);
+    setClickingTogglesState(true);
+    setWantsKeyboardFocus(true);
+    setMouseCursor(juce::MouseCursor::PointingHandCursor);
+}
+
+void KeyPickerToggleRow::setPalette(const keypicker::Palette& palette) {
+    palette_ = palette;
+    repaint();
+}
+
+void KeyPickerToggleRow::paintButton(juce::Graphics& g, bool over, bool down) {
+    const auto bounds = getLocalBounds().toFloat();
+    const bool enabled = isEnabled();
+    const bool on = getToggleState();
+    if (enabled && (over || down)) {
+        g.setColour(palette_.accent.withAlpha(0.12f));
+        g.fillRoundedRectangle(bounds.reduced(2.0f, 1.0f), 4.0f);
+    }
+    auto content = getLocalBounds().reduced(12, 0);
+    const auto box = content.removeFromLeft(kGutter).toFloat().getCentre();
+    const auto square = juce::Rectangle<float>(10.0f, 10.0f).withCentre(box);
+    const auto ink = enabled ? (on ? palette_.accent : palette_.muted) : palette_.muted.withAlpha(0.5f);
+    g.setColour(ink);
+    if (on)
+        g.fillRoundedRectangle(square, 2.0f);
+    else
+        g.drawRoundedRectangle(square, 2.0f, 1.2f);
+    g.setColour(enabled ? palette_.text : palette_.muted.withAlpha(0.6f));
+    g.setFont(juce::Font(juce::FontOptions(kRowFontSize)));
+    g.drawText(getTitle(), content, juce::Justification::centredLeft, true);
+    g.setColour(palette_.muted);
+    g.setFont(juce::Font(juce::FontOptions(kDetailFontSize)));
+    g.drawText(on ? "On" : "Off", content, juce::Justification::centredRight, true);
+    paintFocusRing(g, bounds.reduced(1.0f), *this, 4.0f);
+}
+
 } // namespace synth::ui

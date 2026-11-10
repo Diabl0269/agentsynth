@@ -24,9 +24,13 @@ SongKeyField::SongKeyField()
         if (!listed)
             return {};
         return {[this, track](int pitch, int velocity, bool on) {
-            if (auditionNote)
-                auditionNote(track, pitch, velocity, on);
-        }};
+                    if (auditionNote)
+                        auditionNote(track, pitch, velocity, on);
+                },
+                [this, track](bool running) {
+                    if (auditionMonitor)
+                        auditionMonitor(track, running);
+                }};
     };
 }
 

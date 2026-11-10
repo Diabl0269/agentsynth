@@ -24,12 +24,17 @@ struct DefaultSoundHooks {
 /** Plays a key's scale once while the user browses a key picker: the root at middle C's octave, every scale note up to
  *  the root an octave above, one step apart, quietly. Each key field owns one. It sends the notes to whatever its
  *  `resolveTarget` names, or plays the built-in default sound when that names nothing, and does nothing while the
- *  "Play the scale when browsing keys" setting is off. Message thread only. docs/timeline/song-key.md#hearing-a-key. */
+ *  "Play the scale when browsing keys" setting is off or the transport is playing. The notes are heard even when the
+ *  chosen sound is muted or another sound is soloed (`Target::monitor`). Message thread only.
+ *  docs/timeline/song-key.md#hearing-a-key. */
 class KeyAuditioner : private juce::Timer {
 public:
     /** Where one run goes. An empty `note` means the default sound. */
     struct Target {
         std::function<void(int pitch, int velocity, bool on)> note;
+        /** Called with true right before the run's first note and with false after its last note-off: the app makes
+         *  the target audible past mute and solo in between. Optional. */
+        std::function<void(bool running)> monitor;
     };
 
     KeyAuditioner();
@@ -43,10 +48,18 @@ public:
     /** Cuts the default sound; called only while a run's sound is still ringing. */
     std::function<void()> stopDefaultSound;
 
+    /** True while the transport is playing: no run starts then. Unset = never. */
+    std::function<bool()> isPlaybackRunning;
+
     /** Where the on/off setting is read, at the start of each run; null = on. Non-owning. */
     void setSettings(juce::PropertiesFile* settings) noexcept { settings_ = settings; }
+    juce::PropertiesFile* getSettings() const noexcept { return settings_; }
     /** True unless the user turned "Play the scale when browsing keys" off in `settings`. */
     static bool isEnabledIn(const juce::PropertiesFile* settings);
+    /** Writes the setting the Settings checkbox and the key menus' toggle share. Null `settings` does nothing. */
+    static void setEnabledIn(juce::PropertiesFile* settings, bool enabled);
+    /** True while the transport is playing, when runs are held back. */
+    bool isPlaybackBlocked() const { return isPlaybackRunning && isPlaybackRunning(); }
 
     /** Starts (or restarts) playing `scale`; ends any run already sounding. Does nothing while the setting is off. */
     void start(const MusicalScale& scale);
@@ -55,7 +68,8 @@ public:
     bool isAuditioning() const noexcept { return target_.has_value() || defaultSounding_; }
     /** True while the run goes to the default sound rather than a note target. */
     bool isUsingDefaultSound() const noexcept { return defaultSounding_; }
-    /** Hooks `picker`'s hover and close to this auditioner; safe if the auditioner goes first. */
+    /** Hooks `picker`'s hover and close to this auditioner, and gives its "play scale" row this auditioner's setting
+     *  and playback state; safe if the auditioner goes first. */
     void wire(KeyPicker& picker);
     /** Test seam: plays the next step at once. */
     void advanceForTest() { timerCallback(); }
@@ -76,6 +90,7 @@ private:
     std::optional<Target> target_;
     bool defaultSounding_ = false;
     juce::uint32 defaultEndMs_ = 0;
+    bool monitoring_ = false;
     std::shared_ptr<int> life_ = std::make_shared<int>(0);
 
     JUCE_DECLARE_NON_COPYABLE(KeyAuditioner)
