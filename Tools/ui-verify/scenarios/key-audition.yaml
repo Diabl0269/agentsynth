@@ -5,7 +5,15 @@
 # switches the audition; Escape closes the picker and the audition ends. The same on the piano roll's scale Key and on
 # the Sequencer card's Key. Only the Song key picker shows a Preview sound row, set to "Default sound".
 # The picker is its own desktop window, so the PNGs capture the picker, not the main window.
-# The sound itself is not heard here: KeyAuditionerTests and KeyAuditionSoundTests check the notes and the audio.
+# The sound itself is not heard here: KeyAuditionerTests, KeyAuditionSoundTests and KeyAuditionRenderTests (muted and
+# solo-elsewhere targets) check the notes and the audio.
+#
+# Also: every key picker has a "Play the scale when browsing keys" row. In the Song key picker it shows on, a click turns it
+# off (and back on). The piano roll's Key and the Sequencer's Key show the same row. The greyed row while the song
+# plays is not driven here (test mode has no audio device, so the transport cannot roll): KeyPickerTests,
+# KeyAuditionOwnersTests and KeyAuditionRenderTests cover it.
+record: true
+save_project: key audition play scale row
 steps:
   - openProject: {path: "${FIXTURES}/clip-and-sequencer.agsproj"}
   - wait: {}
@@ -17,6 +25,15 @@ steps:
   - click: {id: timelineTransportSongKey}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
   - expect: {id: keyPicker, auditioning: false, previewSoundShown: true, previewSound: Default sound}
+  - expect: {id: keyPicker, playScaleOn: true, playScaleEnabled: true}
+  - expect: {id: keyPickerPlayScale, title: Play the scale when browsing keys, enabled: true}
+  - mark: {check: 1, name: song-key-play-scale-row-on}
+  - click: {id: keyPickerPlayScale}
+  - expect: {id: keyPicker, playScaleOn: false, within_ms: 2000}
+  - expect: {id: keyPickerPlayScale, toggleState: false}
+  - mark: {check: 2, name: song-key-play-scale-row-off}
+  - click: {id: keyPickerPlayScale}
+  - expect: {id: keyPicker, playScaleOn: true, within_ms: 2000}
   - hover: {id: "C Major, C D E F G A B"}
   - expect: {id: keyPicker, auditioning: true, auditionKey: C Major, within_ms: 2000}
   - screenshot: {id: keyPickerPanel, name: song-key-hover}
@@ -30,7 +47,7 @@ steps:
   - wait: {}
   - click: {id: scaleAssistKeyField}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
-  - expect: {id: keyPicker, previewSoundShown: false}
+  - expect: {id: keyPicker, previewSoundShown: false, playScaleOn: true, playScaleEnabled: true}
   - hover: {id: "C Major, C D E F G A B"}
   - expect: {id: keyPicker, auditioning: true, auditionKey: C Major, within_ms: 2000}
   - screenshot: {id: keyPickerPanel, name: piano-roll-key-hover}
@@ -41,9 +58,10 @@ steps:
   - expect: {id: sequencerKey, showing: true, within_ms: 2000}
   - click: {id: sequencerKey}
   - expect: {id: keyPicker, showing: true, within_ms: 2000}
-  - expect: {id: keyPicker, previewSoundShown: false}
+  - expect: {id: keyPicker, previewSoundShown: false, playScaleOn: true, playScaleEnabled: true}
   - hover: {id: "C Major, C D E F G A B"}
   - expect: {id: keyPicker, auditioning: true, auditionKey: C Major, within_ms: 2000}
+  - mark: {check: 4, name: sequencer-key-play-scale-row}
   - screenshot: {id: keyPickerPanel, name: sequencer-key-hover}
   - key: {keys: escape}
   - expect: {id: keyPicker, exists: false, within_ms: 2000}

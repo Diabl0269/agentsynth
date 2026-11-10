@@ -283,3 +283,53 @@ TEST(KeyPicker, FitProjectButtonSitsAboveTheButtonsAndInsideThePicker) {
     EXPECT_TRUE(f.picker->getLocalBounds().contains(fit->getBounds()));
     EXPECT_TRUE(fit->getWantsKeyboardFocus());
 }
+
+// The play-scale row: always in the picker, named and tooltipped, reachable by keyboard, greyed until an owner wires
+// it, and greyed with a reason while playback runs.
+TEST(KeyPicker, ThePlayScaleRowIsNamedFocusableAndGreyUntilAnOwnerWiresIt) {
+    Fixture f(cMajor());
+    auto* row = f.picker->findChildWithID("keyPickerPlayScale");
+    ASSERT_NE(row, nullptr);
+    EXPECT_EQ(f.picker->getPlayScaleName(), "Play the scale when browsing keys");
+    EXPECT_TRUE(f.picker->getLocalBounds().contains(row->getBounds()));
+    EXPECT_TRUE(f.picker->getPlayScaleTooltip().isNotEmpty());
+    EXPECT_FALSE(f.picker->isPlayScaleEnabled());
+    EXPECT_FALSE(row->getWantsKeyboardFocus()) << "a greyed row is skipped by Tab";
+
+    std::vector<bool> changes;
+    f.picker->setPlayScale(true, true, false, [&changes](bool on) { changes.push_back(on); });
+    EXPECT_TRUE(f.picker->isPlayScaleEnabled());
+    EXPECT_TRUE(row->getWantsKeyboardFocus());
+    EXPECT_TRUE(f.picker->isPlayScaleOn());
+    f.picker->clickPlayScale();
+    EXPECT_FALSE(f.picker->isPlayScaleOn());
+    f.picker->clickPlayScale();
+    EXPECT_TRUE(f.picker->isPlayScaleOn());
+    EXPECT_EQ(changes, (std::vector<bool>{false, true}));
+    EXPECT_TRUE(f.picks.empty()) << "toggling is not picking a key";
+}
+
+// Regression test for FRO1410: while the transport plays the row is greyed and its tooltip says why.
+TEST(KeyPicker, ThePlayScaleRowIsGreyWithAReasonWhilePlaybackRuns) {
+    Fixture f(cMajor());
+    int changes = 0;
+    f.picker->setPlayScale(true, true, true, [&changes](bool) { ++changes; });
+    EXPECT_FALSE(f.picker->isPlayScaleEnabled());
+    EXPECT_TRUE(f.picker->getPlayScaleTooltip().containsIgnoreCase("playing"));
+    f.picker->clickPlayScale();
+    EXPECT_EQ(changes, 0);
+    EXPECT_TRUE(f.picker->isPlayScaleOn());
+}
+
+TEST(KeyPicker, SwitchingTheRowOffEndsTheScaleThatIsPlaying) {
+    Fixture f(cMajor());
+    f.picker->setPlayScale(true, true, false, [](bool) {});
+    int audition = 0;
+    int ends = 0;
+    f.picker->onAudition = [&](std::optional<MusicalScale> scale) { scale.has_value() ? ++audition : ++ends; };
+    f.picker->hoverVisibleKey(1);
+    synth::test::waitUntil([&] { return audition > 0; }, 2000);
+    ASSERT_GT(audition, 0);
+    f.picker->clickPlayScale();
+    EXPECT_EQ(ends, 1);
+}

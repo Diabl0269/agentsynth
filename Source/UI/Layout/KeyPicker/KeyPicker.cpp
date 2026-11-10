@@ -20,6 +20,7 @@ constexpr int kKeyboardHeight = 44;
 constexpr int kListHeight = 190;
 constexpr int kStatusHeight = 16;
 constexpr int kPreviewHeight = 24;
+constexpr int kPlayScaleHeight = 24;
 constexpr int kPreviewLabelWidth = 92;
 constexpr int kButtonHeight = 26;
 constexpr int kDetectWidth = 112;
@@ -50,7 +51,7 @@ int KeyPicker::preferredHeight(bool followRow, bool previewRow, bool fitRow) {
     const int preview = previewRow ? kPreviewHeight + kGap : 0;
     const int fit = fitRow ? kButtonHeight + kGap : 0;
     return kPad + follow + preview + fit + kSearchHeight + kGap + kKeyboardHeight + kGap + kListHeight + kGap +
-           kStatusHeight + kGap + kButtonHeight + kPad;
+           kPlayScaleHeight + kGap + kStatusHeight + kGap + kButtonHeight + kPad;
 }
 
 KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalScale>)> onPickCallback)
@@ -110,18 +111,18 @@ KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalSc
     addAndMakeVisible(status_);
 
     relative_ = std::make_unique<KeyPickerButton>("Relative key", "Switch to the relative major or minor key");
-    relative_->setExplicitFocusOrder(5);
+    relative_->setExplicitFocusOrder(6);
     relative_->onClick = [this] { clickRelative(); };
     addAndMakeVisible(*relative_);
 
     detectButton_ = std::make_unique<KeyPickerButton>("Detect from notes",
                                                       "Suggest the key that fits the notes in your MIDI clips");
-    detectButton_->setExplicitFocusOrder(6);
+    detectButton_->setExplicitFocusOrder(7);
     detectButton_->onClick = [this] { clickDetect(); };
     addChildComponent(*detectButton_);
 
     noKey_ = std::make_unique<KeyPickerButton>("No key", "Turn the song key off");
-    noKey_->setExplicitFocusOrder(7);
+    noKey_->setExplicitFocusOrder(8);
     noKey_->onClick = [this] { clickNoKey(); };
     addChildComponent(*noKey_);
     noKey_->setVisible(options_.showNoKey);
@@ -130,6 +131,7 @@ KeyPicker::KeyPicker(Options options, std::function<void(std::optional<MusicalSc
         buildPreviewSound();
     if (options_.showFitProject)
         buildFitProject();
+    buildPlayScale();
 
     buildRows();
     applyColours();
@@ -168,7 +170,7 @@ void KeyPicker::buildPreviewSound() {
         previewCombo_.addItem(options_.previewTracks[i], (int)i + 2);
     previewCombo_.setSelectedId(juce::jlimit(0, (int)options_.previewTracks.size(), options_.previewSelected) + 1,
                                 juce::dontSendNotification);
-    previewCombo_.setExplicitFocusOrder(3);
+    previewCombo_.setExplicitFocusOrder(4);
     previewCombo_.onChange = [this] {
         if (onPreviewSoundChanged)
             onPreviewSoundChanged(getPreviewSoundChoice());
@@ -184,10 +186,54 @@ void KeyPicker::buildFitProject() {
         "Move the notes of every MIDI clip that follows the song key into the song key. Clips with "
         "their own key and audio clips are left alone. One undo step.");
     fitProject_->setComponentID("keyPickerFitProject");
-    fitProject_->setExplicitFocusOrder(4);
+    fitProject_->setExplicitFocusOrder(5);
     fitProject_->setEnabled(options_.fitProjectEnabled);
     fitProject_->onClick = [this] { clickFitProject(); };
     addAndMakeVisible(*fitProject_);
+}
+
+// The play-scale row: the same setting as Preferences > Timeline "Play the scale when browsing keys", flipped in
+// place. Greyed until the owner's auditioner gives it a setting (setPlayScale), and while the transport is playing.
+void KeyPicker::buildPlayScale() {
+    playScale_ = std::make_unique<KeyPickerToggleRow>("Play the scale when browsing keys");
+    playScale_->setComponentID("keyPickerPlayScale");
+    playScale_->setExplicitFocusOrder(3);
+    playScale_->setEnabled(false);
+    playScale_->setTooltip("Plays the scale of the key you hover while you browse. Same setting as Preferences.");
+    playScale_->onClick = [this] { playScaleToggled(); };
+    addAndMakeVisible(*playScale_);
+}
+
+void KeyPicker::setPlayScale(bool on, bool available, bool playbackRunning, std::function<void(bool)> changed) {
+    onPlayScaleChanged = std::move(changed);
+    playScale_->setToggleState(on, juce::dontSendNotification);
+    playScale_->setEnabled(available && !playbackRunning);
+    playScale_->setTooltip(playbackRunning
+                               ? "The scale is not played while the song is playing. Stop playback to hear it."
+                               : "Plays the scale of the key you hover while you browse. Same setting as Preferences.");
+}
+
+// The button flips its own state before this runs, so it only has to act on the new one.
+void KeyPicker::playScaleToggled() {
+    const bool on = playScale_->getToggleState();
+    if (!on)
+        endAudition();
+    if (onPlayScaleChanged)
+        onPlayScaleChanged(on);
+}
+
+void KeyPicker::clickPlayScale() {
+    if (playScale_ != nullptr && playScale_->isEnabled())
+        playScale_->setToggleState(!playScale_->getToggleState(), juce::sendNotificationSync);
+}
+
+bool KeyPicker::isPlayScaleOn() const { return playScale_ != nullptr && playScale_->getToggleState(); }
+bool KeyPicker::isPlayScaleEnabled() const { return playScale_ != nullptr && playScale_->isEnabled(); }
+juce::String KeyPicker::getPlayScaleTooltip() const {
+    return playScale_ != nullptr ? playScale_->getTooltip() : juce::String();
+}
+juce::String KeyPicker::getPlayScaleName() const {
+    return playScale_ != nullptr ? playScale_->getTitle() : juce::String();
 }
 
 void KeyPicker::clickFitProject() {
@@ -372,6 +418,8 @@ void KeyPicker::resized() {
         previewLabel_.setBounds(preview.removeFromLeft(kPreviewLabelWidth));
         previewCombo_.setBounds(preview);
     }
+    playScale_->setBounds(bounds.removeFromBottom(kPlayScaleHeight));
+    bounds.removeFromBottom(kGap);
     status_.setBounds(bounds.removeFromBottom(kStatusHeight));
     bounds.removeFromBottom(kGap);
     viewport_.setBounds(bounds);
@@ -422,6 +470,7 @@ void KeyPicker::applyColours() {
         fitProject_->setPalette(p);
     if (follow_ != nullptr)
         follow_->setPalette(p);
+    playScale_->setPalette(p);
     for (const auto& row : rows_)
         row->setPalette(p);
     repaint();
@@ -587,6 +636,8 @@ void KeyPicker::fillTestModeState(juce::DynamicObject& into) const {
     into.setProperty("previewSoundShown", isPreviewSoundShown());
     into.setProperty("fitProjectShown", isFitProjectShown());
     into.setProperty("fitProjectEnabled", isFitProjectEnabled());
+    into.setProperty("playScaleOn", isPlayScaleOn());
+    into.setProperty("playScaleEnabled", isPlayScaleEnabled());
     into.setProperty("previewSound", isPreviewSoundShown() ? previewCombo_.getText() : juce::String());
 }
 

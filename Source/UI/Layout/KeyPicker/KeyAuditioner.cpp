@@ -13,6 +13,13 @@ bool KeyAuditioner::isEnabledIn(const juce::PropertiesFile* settings) {
     return settings == nullptr || settings->getBoolValue(kPlayScaleOnBrowseSettingsKey, true);
 }
 
+void KeyAuditioner::setEnabledIn(juce::PropertiesFile* settings, bool enabled) {
+    if (settings == nullptr)
+        return;
+    settings->setValue(kPlayScaleOnBrowseSettingsKey, enabled ? "1" : "0");
+    settings->saveIfNeeded();
+}
+
 std::vector<int> KeyAuditioner::pitchesFor(const MusicalScale& scale) {
     std::vector<int> pitches;
     const int root = 60 + ((scale.rootPitchClass % 12) + 12) % 12;
@@ -27,7 +34,7 @@ std::vector<int> KeyAuditioner::pitchesFor(const MusicalScale& scale) {
 // stop only while it can still be sounding, so closing a picker later never cuts a Sounds view preview.
 void KeyAuditioner::start(const MusicalScale& scale) {
     stop();
-    if (!isEnabledIn(settings_))
+    if (!isEnabledIn(settings_) || isPlaybackBlocked())
         return;
     pitches_ = pitchesFor(scale);
     if (pitches_.empty())
@@ -43,6 +50,10 @@ void KeyAuditioner::start(const MusicalScale& scale) {
         return;
     }
     target_ = std::move(target);
+    if (target_->monitor) {
+        target_->monitor(true);
+        monitoring_ = true;
+    }
     step_ = 0;
     timerCallback();
     startTimer(kStepMs);
@@ -53,6 +64,9 @@ void KeyAuditioner::stop() {
     if (target_.has_value() && soundingPitch_ >= 0 && target_->note)
         target_->note(soundingPitch_, 0, false);
     soundingPitch_ = -1;
+    if (monitoring_ && target_.has_value() && target_->monitor)
+        target_->monitor(false);
+    monitoring_ = false;
     target_.reset();
     pitches_.clear();
     if (defaultSounding_) {
@@ -93,6 +107,12 @@ void KeyAuditioner::wire(KeyPicker& picker) {
         if (!alive.expired())
             stop();
     };
+    const std::weak_ptr<int> settingsAlive = life_;
+    picker.setPlayScale(isEnabledIn(settings_), settings_ != nullptr, isPlaybackBlocked(),
+                        [this, settingsAlive](bool on) {
+                            if (!settingsAlive.expired())
+                                setEnabledIn(settings_, on);
+                        });
 }
 
 } // namespace synth::ui

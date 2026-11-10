@@ -153,3 +153,40 @@ TEST(KeyAuditioner, AnUnsetResolverMeansTheDefaultSound) {
     auditioner.start(major());
     EXPECT_EQ(runs, 1);
 }
+
+// Regression test for FRO1410: no run starts while the transport plays, and a target is told when its run begins and
+// ends so the app can make it audible past mute and solo.
+TEST(KeyAuditioner, NothingStartsWhilePlaybackRunsAndTheTargetIsToldWhenItsRunBeginsAndEnds) {
+    Rig rig;
+    bool playing = true;
+    rig.auditioner.isPlaybackRunning = [&playing] { return playing; };
+    std::vector<std::string> log;
+    rig.auditioner.resolveTarget = [&]() -> KeyAuditioner::Target {
+        return {[&log](int, int, bool on) { log.push_back(on ? "on" : "off"); },
+                [&log](bool running) { log.push_back(running ? "monitor-on" : "monitor-off"); }};
+    };
+    rig.auditioner.start(major());
+    EXPECT_TRUE(log.empty());
+    EXPECT_FALSE(rig.auditioner.isAuditioning());
+    EXPECT_TRUE(rig.auditioner.isPlaybackBlocked());
+    EXPECT_TRUE(rig.defaultRuns.empty());
+
+    playing = false;
+    rig.auditioner.start(major());
+    ASSERT_FALSE(log.empty());
+    EXPECT_EQ(log.front(), "monitor-on") << "the bypass is on before the first note";
+    rig.runToEnd();
+    ASSERT_GE(log.size(), 3u);
+    EXPECT_EQ(log.back(), "monitor-off");
+    EXPECT_EQ(log[log.size() - 2], "off") << "after the last note-off";
+}
+
+TEST(KeyAuditioner, SetEnabledInWritesTheSettingTheSettingsCheckboxShares) {
+    Settings settings;
+    KeyAuditioner::setEnabledIn(&settings.props, false);
+    EXPECT_FALSE(KeyAuditioner::isEnabledIn(&settings.props));
+    EXPECT_EQ(settings.props.getValue(synth::kPlayScaleOnBrowseSettingsKey), "0");
+    KeyAuditioner::setEnabledIn(&settings.props, true);
+    EXPECT_TRUE(KeyAuditioner::isEnabledIn(&settings.props));
+    KeyAuditioner::setEnabledIn(nullptr, false); // no settings: nothing to write, no crash
+}

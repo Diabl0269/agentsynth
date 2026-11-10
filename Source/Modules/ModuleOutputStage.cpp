@@ -350,7 +350,7 @@ void ModuleBase::renderThroughOutputStage(juce::AudioBuffer<float>& buffer, juce
     }
     auto& stage = outputStage_;
     const bool paramBypass = bypassedParam->get();
-    const bool paramMute = mutedParam != nullptr && mutedParam->get();
+    const bool paramMute = stage.muteParamForRender(mutedParam != nullptr && mutedParam->get());
 
     synth::OutputLegs legs;
     buildOutputLegs(legs, buffer.getNumChannels());

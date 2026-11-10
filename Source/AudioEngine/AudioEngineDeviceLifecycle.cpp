@@ -2,6 +2,7 @@
 // (audioDeviceAboutToStart/Stopped), and the scratch/format-change hooks they call.
 
 #include "AudioEngine.h"
+#include "AudioEngine/AuditionMonitor.h"
 #include "DeviceStateInputs.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/AudioInputModule.h"
@@ -27,6 +28,8 @@ AudioEngine::AudioEngine(HostMode mode)
     // — sees it through the standard getPlayHead() API. No per-node injection, and nothing to
     // re-wire when the graph's node set changes.
     mainProcessorGraph.setPlayHead(&transport);
+    auditionMonitor_ = std::make_unique<synth::AuditionMonitor>(
+        mainProcessorGraph, [this] { return transport.getPositionSnapshot().playing; });
     // Every node/connection change broadcasts (asynchronously, coalesced); the key-input
     // publication hangs off it so it holds in the app AND the plugin (changeListenerCallback).
     mainProcessorGraph.addChangeListener(this);
@@ -35,6 +38,7 @@ AudioEngine::AudioEngine(HostMode mode)
 
 AudioEngine::~AudioEngine() {
     stopTimer();
+    auditionMonitor_.reset();
     mainProcessorGraph.removeChangeListener(this);
     shutdown();
 }

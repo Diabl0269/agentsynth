@@ -81,4 +81,16 @@ private:
     keypicker::Palette palette_;
 };
 
+/** The "Play the scale when browsing keys" row: a checkbox square (ticked while on), the label and a muted On / Off at
+ *  the right. A toggle button, so a screen reader hears its checked state; greyed while it cannot be used. */
+class KeyPickerToggleRow : public juce::Button {
+public:
+    explicit KeyPickerToggleRow(const juce::String& title);
+    void setPalette(const keypicker::Palette& palette);
+    void paintButton(juce::Graphics& g, bool over, bool down) override;
+
+private:
+    keypicker::Palette palette_;
+};
+
 } // namespace synth::ui

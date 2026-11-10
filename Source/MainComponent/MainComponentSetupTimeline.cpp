@@ -3,6 +3,7 @@
 // inventory, clip-lane callbacks, and the transport-bar record toggle. Split out of the former
 // single MainComponent.cpp -- see MainComponent::initialiseCommon in MainComponent.cpp.
 #include "AudioEngine/AudioEngine.h"
+#include "AudioEngine/AuditionMonitor.h"
 #include "MainComponent.h"
 #include "MainComponentAudioImport.h"
 #include "MainComponentInternal.h"
@@ -28,6 +29,7 @@ void wireKeyAuditionDefaultSound(AudioEngine& engine, synth::ui::TimelinePanelCo
             synth::soundbrowser::playKeyAuditionSound(engine.getSoundPreview(), pitches);
         };
         auditioner->stopDefaultSound = [&engine] { engine.getSoundPreview().stop(); };
+        auditioner->isPlaybackRunning = [&engine] { return engine.getTransport().getPositionSnapshot().playing; };
     }
 }
 
@@ -255,6 +257,16 @@ void MainComponent::wireTimelineHookInventory() {
     //     bindings afterwards (both domains — see AppUndoManager::setRestoreHooks).
     //  4. PANEL: the track-header column reads the doc and calls back into us (TrackHeaderHost)
     //     to create, re-bind and delete the Track In nodes its chips name.
+    timelinePanel.getTransportBar().getSongKeyField().auditionMonitor = [this](synth::TrackId track, bool running) {
+        const auto* entry = timelineDoc.getTrack(track);
+        auto* node = entry != nullptr && entry->bindingUuid.isNotEmpty() ? findNodeByUuid(entry->bindingUuid) : nullptr;
+        if (node == nullptr)
+            return;
+        if (running)
+            audioEngine.getAuditionMonitor().begin(node->nodeID);
+        else
+            audioEngine.getAuditionMonitor().end();
+    };
     timelineDoc.addListener(this);
     automationRecorder.attachTo(timelineDoc, undoManager, audioEngine.getTransport());
     audioEngine.setAutomationRecorder(&automationRecorder);
