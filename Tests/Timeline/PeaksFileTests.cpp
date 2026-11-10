@@ -409,3 +409,60 @@ TEST(PeaksFileTest, RecordTapStillWritesIdenticalFormat) {
     EXPECT_EQ(data.numChannels, 2);
     EXPECT_EQ((juce::int64)(data.buckets.size() / 2), expectedBuckets);
 }
+
+// ---- aggregateToColumns: every bucket under a column is folded in (kind: downsample-skip) ----
+
+TEST(PeaksFileAggregate, TenBucketsIntoThreeColumnsEqualTheAggregate) {
+    std::vector<std::pair<float, float>> buckets;
+    for (int i = 0; i < 10; ++i)
+        buckets.emplace_back(-0.1f * (float)(i + 1), 0.05f * (float)(i + 1));
+
+    const auto columns = PeaksFile::aggregateToColumns(buckets, 1, 0, 10, 3);
+    ASSERT_EQ(columns.size(), 3u);
+    // Spans: [0,3.33) -> buckets 0..3, [3.33,6.67) -> 3..6 (partial edges included), [6.67,10) -> 6..9.
+    EXPECT_FLOAT_EQ(columns[0].first, -0.4f);
+    EXPECT_FLOAT_EQ(columns[0].second, 0.2f);
+    EXPECT_FLOAT_EQ(columns[1].first, -0.7f);
+    EXPECT_FLOAT_EQ(columns[1].second, 0.35f);
+    EXPECT_FLOAT_EQ(columns[2].first, -1.0f);
+    EXPECT_FLOAT_EQ(columns[2].second, 0.5f);
+}
+
+TEST(PeaksFileAggregate, FoldsChannelsAndHonoursTheFirstBucket) {
+    // 2 channels, 4 buckets; channel 1 carries the extremes of bucket 2.
+    std::vector<std::pair<float, float>> buckets = {{-.1f, .1f}, {-.1f, .1f}, {-.2f, .2f}, {-.2f, .2f},
+                                                    {-.3f, .3f}, {-.9f, .8f}, {-.1f, .1f}, {-.1f, .1f}};
+    const auto columns = PeaksFile::aggregateToColumns(buckets, 2, 2, 2, 1);
+    ASSERT_EQ(columns.size(), 1u);
+    EXPECT_FLOAT_EQ(columns[0].first, -0.9f);
+    EXPECT_FLOAT_EQ(columns[0].second, 0.8f);
+}
+
+TEST(PeaksFileAggregate, EmptyAndClampedInputs) {
+    const std::vector<std::pair<float, float>> buckets(4, {-0.5f, 0.5f});
+    EXPECT_TRUE(PeaksFile::aggregateToColumns(buckets, 1, 0, 4, 0).empty());
+    EXPECT_TRUE(PeaksFile::aggregateToColumns(buckets, 0, 0, 4, 3).empty());
+    EXPECT_TRUE(PeaksFile::aggregateToColumns(buckets, 1, 4, 4, 3).empty());
+    EXPECT_EQ(PeaksFile::aggregateToColumns(buckets, 1, 2, 99, 5).size(), 5u); // count clamped to what exists
+}
+
+// Quiet - loud spike - quiet: the spike survives at every width, however many buckets share a column.
+TEST(PeaksFileAggregate, LoudSpikeSurvivesAtEveryWidth) {
+    for (const int numBuckets : {1, 2, 7, 10, 255, 1000, 4096}) {
+        for (int spikeAt : {0, numBuckets / 2, numBuckets - 1}) {
+            std::vector<std::pair<float, float>> buckets((std::size_t)numBuckets, {-0.02f, 0.02f});
+            buckets[(std::size_t)spikeAt] = {-0.97f, 0.99f};
+            for (int width = 1; width <= 400; ++width) {
+                const auto columns = PeaksFile::aggregateToColumns(buckets, 1, 0, numBuckets, width);
+                ASSERT_EQ((int)columns.size(), width);
+                float lo = 0.0f, hi = 0.0f;
+                for (const auto& c : columns) {
+                    lo = std::min(lo, c.first);
+                    hi = std::max(hi, c.second);
+                }
+                EXPECT_FLOAT_EQ(lo, -0.97f) << numBuckets << " buckets, spike " << spikeAt << ", width " << width;
+                EXPECT_FLOAT_EQ(hi, 0.99f) << numBuckets << " buckets, spike " << spikeAt << ", width " << width;
+            }
+        }
+    }
+}

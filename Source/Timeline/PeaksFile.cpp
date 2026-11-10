@@ -180,4 +180,40 @@ void PeaksFile::Accumulator::flushPartial() {
     bucketFill_ = 0;
 }
 
+// Reduces `bucketCount` buckets (starting at bucket `firstBucket`, all channels folded: min of mins, max of
+// maxes) to exactly `numColumns` (min,max) pairs for drawing. Column `c` covers the span
+// `[c * bucketCount / numColumns, (c + 1) * bucketCount / numColumns)` and aggregates EVERY bucket that span
+// touches, partial edge buckets included, so no bucket's extreme is ever skipped at any zoom. With fewer buckets
+// than columns a bucket repeats across the columns it covers. The count is clamped to the buckets that exist;
+// returns an empty vector when there is nothing to reduce. Pure: the one downsampler every peaks painter uses.
+std::vector<std::pair<float, float>> PeaksFile::aggregateToColumns(const std::vector<std::pair<float, float>>& buckets,
+                                                                   int numChannels, int firstBucket, int bucketCount,
+                                                                   int numColumns) {
+    std::vector<std::pair<float, float>> columns;
+    if (numChannels <= 0 || numColumns <= 0 || firstBucket < 0)
+        return columns;
+    const std::int64_t available = (std::int64_t)(buckets.size() / (std::size_t)numChannels) - firstBucket;
+    const std::int64_t count = std::min<std::int64_t>(bucketCount, available);
+    if (count <= 0)
+        return columns;
+
+    columns.reserve((std::size_t)numColumns);
+    for (std::int64_t x = 0; x < numColumns; ++x) {
+        const std::int64_t first = x * count / numColumns;
+        const std::int64_t last = std::max(first, ((x + 1) * count + numColumns - 1) / numColumns - 1);
+        float lo = 0.0f, hi = 0.0f;
+        bool any = false;
+        for (std::int64_t b = first; b <= last && b < count; ++b) {
+            for (int ch = 0; ch < numChannels; ++ch) {
+                const auto& pair = buckets[(std::size_t)((firstBucket + b) * numChannels + ch)];
+                lo = any ? std::min(lo, pair.first) : pair.first;
+                hi = any ? std::max(hi, pair.second) : pair.second;
+                any = true;
+            }
+        }
+        columns.emplace_back(lo, hi);
+    }
+    return columns;
+}
+
 } // namespace synth
