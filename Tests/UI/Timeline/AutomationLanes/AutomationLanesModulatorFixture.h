@@ -8,7 +8,6 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AutomationLanesTestFixture.h"
 #include "MacroSet.h"
-#include "Modules/AttenuverterModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -51,7 +50,9 @@ struct Scene {
         mc.getGraphEditor().updateComponents();
         lane = doc().addLane(track, targetUuid, paramId, {0.0f, 1.0f, 0.5f});
         panel().setTrackAutomationExpanded(track, true);
-        baseAttenuverters = nodesOf<AttenuverterModule>().size();
+        for (auto* node : graph().getNodes())
+            if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+                baseAttenuverters += module->getModuleType() == ModuleType::Attenuverter ? 1 : 0;
         synth::ui::test_hooks::removeLfoConfirmHookForTest() = [this](const auto& text, auto done) {
             ++confirmAsked;
             lastConfirm = text;

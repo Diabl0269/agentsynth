@@ -258,8 +258,10 @@ public:
     void setDrawShape(DrawShape shape);
     /** The one lane range across every lane. */
     LaneRangeSelection& getLaneRange() noexcept { return laneRange_; }
-    /** True while a lane range with width sits on a lane that is on screen. */
+    /** True while a lane range with width sits on a lane or a modulator band that is on screen. */
     bool hasLaneRange() const;
+    /** True while the lane range sits on lane `lane`'s own editor (never on a modulator band's amount curve). */
+    bool laneRangeIsOnLane(synth::LaneId lane) const;
     /** Stamps `shape` over the lane range (one undo step); false when nothing changed. */
     bool stampShapeOnLaneRange(DrawShape shape);
     /** Removes the points inside the lane range (one undo step); false when nothing changed. */
@@ -286,6 +288,8 @@ public:
     std::function<void()> onViewScrolledByDrag;
 
 private:
+    /** The editor the lane range was begun on while it is still one of ours (lane or modulator band), else null. */
+    AutomationLaneEditor* laneRangeEditor() const;
     struct Bodies : juce::Component {
         Bodies();
     };
@@ -485,7 +489,7 @@ private:
                          const juce::String& parameterName);
     void rebuildModulators(LaneModulators& entry, synth::LaneId lane, std::vector<ModulatorInfo> infos,
                            const juce::String& parameterName, bool growNewRows);
-    void wireBand(ModulatorBand& band) const;
+    void wireBand(ModulatorBand& band);
     void refreshModulatorAmounts(int visibleTop, int visibleBottom);
     int laneBlockHeight(const synth::AutomationLane& lane) const;
     void syncPools();

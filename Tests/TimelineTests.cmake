@@ -112,6 +112,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesUnassignedTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesLoadTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesColourCursorTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesRangeToolTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesMenuTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesRetargetTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesDuplicateTests.cpp

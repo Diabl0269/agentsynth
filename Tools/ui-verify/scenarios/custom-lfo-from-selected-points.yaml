@@ -2,7 +2,7 @@
 # selection of points said "select a range first"), and the Range tool showed no Range cursor over a lane or a mod row.
 #
 # What a user does: opens the project with a lane on Filter cutoff and an LFO mod row, picks the Range tool and hovers
-# the lane and the mod row (the Range cursor shows on both), goes back to Select, clicks the first point and
+# the lane and the mod row (the Range cursor shows on the lane; the flat mod row shows the arrow, since Range has no curve to select there), goes back to Select, clicks the first point and
 # shift-clicks the last one, right-clicks inside the stretch and picks "Create custom LFO" (a second LFO appears),
 # presses Cmd+Z (it is gone), Cmd+Shift+Z (back) and Cmd+Z again. With one point selected, the lane menu has no Create
 # custom LFO item. The LFO's mod row grows in and leaves in a closing gap; after every step the window must equal a full
@@ -24,7 +24,7 @@ steps:
   - click: {id: timelineToolRange}
   - hover: {id: automationLaneState, x: 120, y: 29}
   - expect: {id: automationLaneState, cursor: tool}
-  - expect: {id: modulatorBandState, cursor: tool}
+  - expect: {id: modulatorBandState, cursor: arrow}  # a flat mod row (no amount curve) has nothing to select
   - screenshot: {name: range-tool-lane}
   - mark: {check: 1, name: range-cursor}  # the pointer still rests on the lane with the Range tool
   - click: {id: timelineToolSelect}

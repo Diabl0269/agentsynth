@@ -40,13 +40,15 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     edgeScroll_.onTick = [this] { edgeScrollTick(); };
     refreshDescription();
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
-    // count, `holding` whether a key hold is moving the selection and `dragging` whether any drag is under way.
+    // count, `holding` whether a key hold is moving the selection and `dragging` whether any drag is under way and
+    // `laneRange` whether the Range tool's selection sits here.
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
         into.setProperty("points", lanePoints() != nullptr ? (int)lanePoints()->size() : 0);
         into.setProperty("holding", keyHold_.active());
         into.setProperty("dragging", dragMode_ != DragMode::None);
+        into.setProperty("laneRange", shapeGesture_.rangeIsOnThisLane() && shapeGesture_.getLaneRange()->hasWidth());
     });
     addChildComponent(*testModeProbe_);
     testModeProbe_->setVisible(true);
@@ -873,7 +875,7 @@ void AutomationLaneEditor::handlePopupClick(const juce::MouseEvent& e) {
 bool AutomationLaneEditor::isInSelectedRange(juce::Point<int> pos) const {
     const double beat = viewState_.xToBeat((double)pos.x);
     const auto* range = shapeGesture_.getLaneRange();
-    if (range != nullptr && range->hasWidth() && range->getLane() == laneId_)
+    if (range != nullptr && range->hasWidth() && shapeGesture_.rangeIsOnThisLane())
         return beat >= range->getStartBeat() && beat <= range->getEndBeat();
     const auto span = pointSelectionSpan();
     return span.has_value() && beat >= span->first && beat <= span->second;

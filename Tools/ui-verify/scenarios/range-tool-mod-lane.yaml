@@ -1,0 +1,51 @@
+# The Range tool showed its cursor on a mod row's amount band but a drag there acted like the pointer: no stretch was
+# selected, so the shape and Delete verbs had nothing to act on. Now the Range tool selects a stretch of the amount
+# curve like on a lane, and Delete removes the points in it as one undo step.
+#
+# What a user does:
+#   1. Opens a project whose MIDI track has a Cutoff lane carrying two LFO mod rows (fixture lane-rows.agsproj),
+#      shows the timeline in the main area and opens the track's automation.
+#   2. Draws an amount curve on the first mod row's band with the Draw tool (the band starts flat).
+#   3. Picks the Range tool and drags across the band: a washed stretch with accent edges shows on the mod row
+#      (and not on the Cutoff lane above it).
+#   4. Presses Delete: the points inside the stretch go. Cmd+Z brings them back.
+record: true
+save_project: range-mod-lane
+steps:
+  - openProject: {path: "${FIXTURES}/lane-rows.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: trackAutomationFoldArrow}
+  - wait: {}
+  - screenshot: {name: before}
+  # A flat band has no curve to select from: the Range tool shows the plain arrow there.
+  - click: {id: timelineToolRange}
+  - expect: {id: modulatorBandState, hasAmountLane: false}
+  - expect: {id: modulatorBandState, cursor: arrow}
+  # Give the band an amount curve with a pen stroke.
+  - click: {id: timelineToolDraw}
+  - drag: {from: modulatorBandState, to: modulatorBandState, fromX: 60, fromY: 12, toX: 400, toY: 28, steps: 20}
+  - wait: {}
+  - expect: {id: modulatorBandState, hasAmountLane: true}
+  - screenshot: {name: amount-curve}
+  # The Range tool over the curve: the cursor shows and a drag selects a stretch of it.
+  - click: {id: timelineToolRange}
+  - expect: {id: modulatorBandState, cursor: tool}
+  - expect: {id: modulatorBandState, laneRange: false}
+  - drag: {from: modulatorBandState, to: modulatorBandState, fromX: 120, fromY: 20, toX: 300, toY: 20, steps: 20}
+  - wait: {}
+  - expect: {id: modulatorBandState, laneRange: true}
+  - expect: {id: automationLaneState, laneRange: false}
+  - screenshot: {name: range-on-mod-row}
+  - mark: {check: 1, name: range-on-mod-row}  # the stretch is still selected on the mod row
+  # Delete removes the points in the stretch; one Cmd+Z puts them back.
+  - key: {keys: delete}
+  - wait: {}
+  - screenshot: {name: after-delete}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: modulatorBandState, hasAmountLane: true}
+  - screenshot: {name: after-undo}
