@@ -318,7 +318,7 @@ bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key) {
         jumpToSearchWith(ch);
         return true;
     }
-    // Plain Space on a sound is the song's play key (the app takes it); the preview is Ctrl+Space (handlePreviewKey).
+    // Plain Space on a sound is the song's play key (the app takes it); the preview is Shift+Space (handlePreviewKey).
     if (key.isKeyCode(juce::KeyPress::spaceKey) && selected_ >= 0 && rows_[(size_t)selected_].kind != RowKind::Sound)
         return activateSelectedAction();
     if ((key.isKeyCode(juce::KeyPress::deleteKey) || key.isKeyCode(juce::KeyPress::backspaceKey)) && selected_ >= 0) {

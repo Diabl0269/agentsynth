@@ -150,7 +150,7 @@ public:
     /** Plays the selected sound (a loop on the next bar when the song plays); false when none can play. */
     bool playSelected();
     void stopPreview();
-    /** Ctrl+Space (the rebindable `soundPreviewToggle`): stops the preview when one sounds, else plays the selected
+    /** Shift+Space (the rebindable `soundPreviewToggle`): stops the preview when one sounds, else plays the selected
      *  sound. Plain Space is the song's play key and never reaches this. */
     bool togglePreview();
     /** The user's bindings, read for the preview key (null: the factory key); the Play/Stop tooltip follows a rebind.

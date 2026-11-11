@@ -167,3 +167,16 @@ TEST_F(MainComponentTest, ConstructedForTestsNeverPointsAtTheRealControllerProfi
     EXPECT_TRUE(dir.getFullPathName().contains("agentsynth-tests-controller-profiles"))
         << "expected Tests/TestMain.cpp's test override directory, got: " << dir.getFullPathName();
 }
+
+// Shift+Space belongs to the Sounds view's preview: the window that sees it last neither starts nor stops the song with
+// it (plain Space is the play key).
+TEST_F(MainComponentTest, ShiftSpaceIsNotTheTransportsPlayKey) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1200, 800);
+    const juce::KeyPress shiftSpace(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, ' ');
+    const juce::KeyPress plainSpace(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, ' ');
+    ASSERT_EQ(mc.getShortcutManager().getBinding("soundPreviewToggle"), shiftSpace);
+    EXPECT_FALSE(mc.keyPressed(shiftSpace)) << "no command is bound to Shift+Space";
+    EXPECT_TRUE(mc.keyPressed(plainSpace)) << "plain Space is still the play key";
+    synth::test::flushMessageQueue();
+}

@@ -62,7 +62,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "mixerFocusTopBar",
         "mixerNudgeFaderUp",
         "mixerNudgeFaderDown",
-        // SoundBrowserComponent::handlePreviewKey (Ctrl+Space; plain Space stays the transport)
+        // SoundBrowserComponent::handlePreviewKey (Shift+Space; plain Space stays the transport)
         "soundPreviewToggle",
         // CardLayoutEditorComponent's row keys (CardLayoutEditorComponentKeyboard.cpp) and the on-card nudge keys
         "layoutEditorToggleShown",
@@ -258,6 +258,20 @@ TEST_F(ShortcutManagerTest, EveryDefaultBindingIsUnique) {
     for (const auto& actionId : manager.getActionIds())
         EXPECT_TRUE(manager.getConflictingAction(actionId, manager.getBinding(actionId)).isEmpty())
             << actionId << " collides with " << manager.getConflictingAction(actionId, manager.getBinding(actionId));
+}
+
+// Shift+Space is the Sounds view's preview key and nothing else's; plain Space stays the song's play key, and neither
+// matches the other (the matcher compares modifiers exactly).
+TEST_F(ShortcutManagerTest, ShiftSpaceIsOnlyTheSoundPreviewAndPlainSpaceStaysThePlayKey) {
+    const juce::KeyPress shiftSpace(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, ' ');
+    const juce::KeyPress plainSpace(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, ' ');
+    EXPECT_EQ(manager.getBinding("soundPreviewToggle"), shiftSpace);
+    EXPECT_EQ(manager.getActionsForKeyPress(shiftSpace), juce::StringArray("soundPreviewToggle"));
+    EXPECT_FALSE(manager.getActionsForKeyPress(plainSpace).contains("soundPreviewToggle"));
+    EXPECT_TRUE(manager.getActionsForKeyPress(plainSpace).contains("togglePlayback"));
+    EXPECT_FALSE(manager.getActionsForKeyPress(shiftSpace).contains("togglePlayback"));
+    EXPECT_EQ(AppCommands::getCommandForAction("soundPreviewToggle"), AppCommands::kNoCommand)
+        << "the preview key is the Sounds view's own, so the window never turns it into a command";
 }
 
 // Every id needs a binding and a label. The COMMAND half of this invariant is no longer universal:

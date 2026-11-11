@@ -43,6 +43,11 @@ SoundBrowserComponent::SoundBrowserComponent(synth::soundbrowser::SoundIndex& in
     removeHiddenTabStops(search_);
     search_.onTextChange = [this] { setQuery(search_.getText()); };
     search_.onNavigationKey = [this](const juce::KeyPress& key) { return handleSearchKey(key); };
+    // On macOS a typed character reaches a focused text field through the input system as inserted text and never as
+    // a key press, so the preview's Shift+Space can only be claimed here, before the field types it as a space.
+    search_.onShiftSpaceTyped = [this] {
+        return handlePreviewKey(juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, ' '));
+    };
     addAndMakeVisible(search_);
     applySearchColours();
 

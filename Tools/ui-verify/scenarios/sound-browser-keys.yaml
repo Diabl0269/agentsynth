@@ -3,7 +3,7 @@
 # on past the list.
 #
 # What a user does: selects the one fixture sound, presses Space (the key goes on to the song, so the view's preview
-# counter stays at 0) and then Ctrl+Space (the preview toggles: the counter reads 1). Opens Filters and presses Esc
+# counter stays at 0) and then Shift+Space (the preview toggles: the counter reads 1). Opens Filters and presses Esc
 # from the list (it closes), from the empty search box (the first Esc clears the text, the
 # next closes the panel and the list takes focus) and from a panel control. Tab from the list lands on Play in one
 # press; Right walks Play, Match key, Auto-play and the volume, Left walks back, Left on the volume moves its value
@@ -26,16 +26,16 @@ steps:
   - wait: {}
   - expect: {id: soundBrowser, contains: {selectedName: "test loop"}}
   - expect: {id: soundBrowser, hasFocus: true, within_ms: 1000}
-  # FRO1381: plain Space is the song's; Ctrl+Space is the preview's.
+  # FRO1381: plain Space is the song's; Shift+Space is the preview's.
   - key: {keys: space}
   - wait: {}
   - expect: {id: soundBrowser, previewToggles: 0}
   - expect: {id: soundPreviewPlay, contains: {tooltip: "+ Space)"}}
   - screenshot: {id: soundBrowser, name: 1-space-leaves-the-preview-alone}
-  - key: {keys: ctrl+space}
+  - key: {keys: shift+space}
   - wait: {}
   - expect: {id: soundBrowser, previewToggles: 1}
-  - screenshot: {id: soundBrowser, name: 2-ctrl-space-toggles-the-preview}
+  - screenshot: {id: soundBrowser, name: 2-shift-space-toggles-the-preview}
   # FRO1385: Esc closes the filters from the list, the empty search box and a panel control.
   - click: {id: Filters}
   - wait: {}

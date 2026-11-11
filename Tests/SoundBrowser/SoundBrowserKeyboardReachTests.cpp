@@ -568,7 +568,7 @@ TEST(SoundBrowserKeyboardReachTest, EscClosesTheFiltersFromTheSearchBoxTheListAn
 }
 
 // The key-double-fire kind, widened: a widget that swallows a key the app binds. Plain Space on every kind of
-// row and every footer stop is the song's play key, so it must reach the app; Ctrl+Space is the preview's.
+// row and every footer stop is the song's play key, so it must reach the app; Shift+Space is the preview's.
 TEST(SoundBrowserKeyboardReachTest, PlainSpaceOnASoundRowOrFooterStopIsNeverConsumed) {
     Fixture f;
     auto& v = *f.view;
@@ -584,4 +584,63 @@ TEST(SoundBrowserKeyboardReachTest, PlainSpaceOnASoundRowOrFooterStopIsNeverCons
     EXPECT_GE(sounds, 1);
     for (auto* stop : synth::ui::focusableDescendants(v.getPreviewFooter()))
         EXPECT_FALSE(dispatchKey(v, *stop, space())) << "Space on " << stop->getTitle();
+}
+
+namespace {
+
+juce::KeyPress shiftSpace() { return juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, ' '); }
+
+int previewToggles(const SoundBrowserComponent& v) {
+    juce::DynamicObject state;
+    v.addTestModeState(state);
+    return (int)state.getProperty("previewToggles");
+}
+
+} // namespace
+
+// Shift+Space is the preview's key wherever the keyboard is in the Sounds view: it is used up there (so it never
+// reaches the transport's Space) and toggles the preview once. A footer button must not press itself on it either.
+TEST(SoundBrowserKeyboardReachTest, ShiftSpaceTogglesThePreviewFromEveryStopAndNeverReachesTheTransport) {
+    Fixture f;
+    auto& v = *f.view;
+    v.showLocation("core", "Drums", 0);
+    v.completeListAnimationForTest();
+    for (int i = 0; i < (int)v.getRows().size(); ++i)
+        if (v.getRows()[(size_t)i].kind == SoundBrowserComponent::RowKind::Sound) {
+            v.selectRow(i);
+            break;
+        }
+    v.setFiltersOpen(true, false);
+    f.settle();
+
+    std::vector<juce::Component*> origins{&v, &v.getSearchField(), &v.getFiltersButton(),
+                                          &v.getFilterPanel().lengthBox(), &v.getFilterPanel().kindGroup()};
+    for (auto* stop : synth::ui::focusableDescendants(v.getPreviewFooter()))
+        origins.push_back(stop);
+    ASSERT_GE(origins.size(), 7u);
+
+    int expected = previewToggles(v);
+    for (auto* origin : origins) {
+        EXPECT_TRUE(dispatchKey(v, *origin, shiftSpace()))
+            << "Shift+Space on " << origin->getTitle() << " must be used up";
+        EXPECT_EQ(previewToggles(v), ++expected) << "Shift+Space on " << origin->getTitle() << " toggles the preview";
+    }
+    for (auto* stop : synth::ui::focusableDescendants(v.getPreviewFooter())) {
+        EXPECT_TRUE(v.offerStepKeyForTest(shiftSpace(), *stop))
+            << "the footer's key listener takes it before the button's own Space handling: " << stop->getTitle();
+    }
+}
+
+// On macOS Shift+Space in the focused search box arrives as inserted text, not as a key press, so the field asks the
+// view before typing it: the preview toggles and no space lands in the query.
+TEST(SoundBrowserKeyboardReachTest, ShiftSpaceTypedInTheSearchBoxTogglesThePreviewInsteadOfTypingASpace) {
+    Fixture f;
+    auto& v = *f.view;
+    auto& search = v.getSearchField();
+    search.setText("snare", juce::dontSendNotification);
+    ASSERT_TRUE(static_cast<bool>(search.onShiftSpaceTyped));
+    const int before = previewToggles(v);
+    EXPECT_TRUE(search.onShiftSpaceTyped());
+    EXPECT_EQ(previewToggles(v), before + 1);
+    EXPECT_EQ(search.getText(), "snare");
 }

@@ -7,7 +7,7 @@
 
 namespace synth::ui {
 
-const juce::KeyPress SoundPreviewFooter::kDefaultPreviewKey(juce::KeyPress::spaceKey, juce::ModifierKeys::ctrlModifier,
+const juce::KeyPress SoundPreviewFooter::kDefaultPreviewKey(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier,
                                                             0);
 
 SoundPreviewFooter::SoundPreviewFooter() {

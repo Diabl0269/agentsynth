@@ -64,7 +64,7 @@ public:
     juce::ToggleButton& getAutoPlay() { return autoPlay_; }
     juce::ToggleButton& getMatchKey() { return matchKey_; }
     juce::TextButton& getPlayButton() { return play_; }
-    /** Ctrl+Space, the factory key that toggles the preview. */
+    /** Shift+Space, the factory key that toggles the preview. */
     static const juce::KeyPress kDefaultPreviewKey;
 
     /** Compact is one row: Play/Stop, then room for the sound's name (drawn by the browser), then the volume. The
