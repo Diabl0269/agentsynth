@@ -47,6 +47,8 @@ Modules may opt in to a thread-safe `VisualBuffer` (circular buffer of `std::ato
 
 A module feeds it a block at a time — `pushBlock(samples, n)`, or `pushConstant(value, n)` for an activity LED — never `pushSample` in a per-sample loop. The audio thread is its only writer, so a block publishes its write position once (a release store) instead of a seq_cst load/store pair and an integer modulo per sample; on the Load test project the per-sample form cost about as much as the modules' own DSP ([audio-engine.md](audio-engine.md#measuring-render-cost)). The ring ends up exactly as the same samples pushed one at a time would leave it (`VisualBufferTest.PushBlockMatchesPushSample`).
 
+The early bypass and mute returns still feed it: a muted module pushes silence and a bypassed one the signal that leaves it, so a scope or spectrum falls away instead of freezing on the last audible block (`VisualBufferOnMute.EveryMutedModuleShowsSilence`).
+
 ### Logical-Port API
 
 Maps raw audio-buffer channel indices to the visible jack slots shown in the UI.

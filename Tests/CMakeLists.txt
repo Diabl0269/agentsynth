@@ -459,6 +459,7 @@ add_executable(Tests
     Project/PresetManagerTests.cpp
     Project/SettingsMigrationTests.cpp
     Modules/ModuleBypassTests.cpp
+    Modules/VisualBufferOnMuteTests.cpp
     Modules/ModuleParamAudibleTests.cpp
     Modules/BypassTests.cpp
     Engine/VisualSignalFlowTests.cpp
