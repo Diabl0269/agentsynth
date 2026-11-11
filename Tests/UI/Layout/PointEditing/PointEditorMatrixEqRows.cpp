@@ -53,7 +53,7 @@ public:
 private:
     std::vector<int> enabled() const {
         std::vector<int> bands;
-        for (int b = 0; b < ParametricEQModule::kShownBands; ++b)
+        for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
             if (module_->isBandEnabled(b))
                 bands.push_back(b);
         return bands;
