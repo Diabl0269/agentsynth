@@ -16,6 +16,9 @@ namespace {
 
 constexpr int kStepperWidth = 104;
 constexpr int kChipGap = 8; // the Pads title and the Show all chip
+// The "Pads" title gets at least this width, so the chip lands at the same x on every platform
+// (the title measures 41-43 px across macOS, Linux and Windows fonts; the card goldens are shared).
+constexpr int kPadsTitleMinWidth = 48;
 
 // A pad holds a setting of its own when it differs from what a fresh kit holds there: its note, name, file or
 // instrument, a sound other than its default (or the one the count gives a free pad), or a knob moved off its
@@ -275,9 +278,9 @@ void DrumKitPadsSection::placeCaption() {
 void DrumKitPadsSection::placePadsRow() {
     auto row = padsRow_;
     stepper_.setBounds(row.removeFromRight(kStepperWidth));
-    const int labelW =
-        (int)std::ceil(juce::GlyphArrangement::getStringWidth(stepperLabel_.getFont(), stepperLabel_.getText())) +
-        stepperLabel_.getBorderSize().getLeftAndRight() + 2;
+    const int labelW = juce::jmax(kPadsTitleMinWidth, (int)std::ceil(juce::GlyphArrangement::getStringWidth(
+                                                          stepperLabel_.getFont(), stepperLabel_.getText())) +
+                                                          stepperLabel_.getBorderSize().getLeftAndRight() + 2);
     stepperLabel_.setBounds(row.removeFromLeft(labelW));
     const int chipWidth = synth::theme::AppLookAndFeel::togglePillWidth(showAll_.getButtonText());
     // On the stepper's own top edge: Tab orders siblings by y, so the chip then comes before the stepper.

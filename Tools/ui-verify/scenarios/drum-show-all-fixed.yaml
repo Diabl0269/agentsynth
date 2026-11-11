@@ -38,7 +38,7 @@ steps:
   - wait: {}
   - click: {id: "card:Drum Kit > Shown: Tom"}
   - wait: {}
-  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 5, chipVisible: true, chipLit: false, chipX: 62, levelToStepperGap: 6, within_ms: 2000}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 5, chipVisible: true, chipLit: false, chipX: 68, levelToStepperGap: 6, within_ms: 2000}
   - getState: {id: "card:Drum Kit > drumPads"}
   - screenshot: {id: "card:Drum Kit", name: three-hidden}
   # Check 1: with three pads hidden the Show all chip sits on the Pads row, next to the title; the caption says
@@ -46,7 +46,7 @@ steps:
   - mark: {check: 1, name: show-all-by-pads-title}
   - glide: {name: press-show-all, frames: 10, crop: {x: 380, y: 80, w: 320, h: 640}, do: {click: {id: "card:Drum Kit > Show all hidden pads"}}}
   - wait: {}
-  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 8, chipVisible: true, chipLit: true, chipX: 62, levelToStepperGap: 6, within_ms: 2000}
+  - expect: {id: "card:Drum Kit > drumPads", visiblePads: 8, chipVisible: true, chipLit: true, chipX: 68, levelToStepperGap: 6, within_ms: 2000}
   - getState: {id: "card:Drum Kit > drumPads"}
   # Check 2: the pads came back and the lit chip is at the same x as before.
   - mark: {check: 2, name: show-all-stays-put}
