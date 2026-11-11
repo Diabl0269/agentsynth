@@ -260,7 +260,7 @@ TimelinePanelComponent::TimelinePanelComponent()
 
     // Added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
     addAndMakeVisible(playhead_);
-    playhead_.setComponentID("timelinePlayhead");
+    playhead_.setComponentID("timelinePlayheadOverlay");
     // The piano roll maps beats to x through its OWN zoom/scroll, so while it is open the overlay
     // hands it the drawn beat and leaves its rows alone entirely — one timer, two mappings. The
     // region itself is set in resized(), which is the only place the offset is known.
@@ -454,11 +454,11 @@ void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
 // TimelineTransportBar::setMetronome.
 void TimelinePanelComponent::setMetronome(synth::Metronome* metronome) { transportBar_.setMetronome(metronome); }
 
-// Two jobs: hand the snapshot to the playhead overlay, which owns its 30 Hz playing-only timer
-// from the play/stop transitions it sees here (see TimelinePlayheadOverlay.h); and diff the small
-// slice of transport state the RULER paints (time signature + loop trio), repainting it only on a
-// change. The position is deliberately NOT part of that diff: the playhead is the only thing that
-// moves with it, and it repaints its own strip. Same gated idiom as the status bar's 5 Hz poll.
+// Two jobs: hand the snapshot to the playhead overlay, which owns its display-rate frames
+// (playing, a clip preview or a locate glide only) from the play/stop transitions it sees here (see
+// TimelinePlayheadOverlay.h); and diff the small slice of transport state the RULER paints (time signature + loop
+// trio), repainting it only on a change. The position is deliberately NOT part of that diff: the playhead is the only
+// thing that moves with it, and it repaints its own strip. Same gated idiom as the status bar's 5 Hz poll.
 void TimelinePanelComponent::updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot,
                                                  double outputLatencySeconds) {
     ++transportUpdateCount_;
@@ -476,11 +476,11 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
     // Follow playhead: keep the (latency-compensated) playhead on screen, per mode. Gated on
     // playing/enabled/roll-closed/ no-drag-in-flight, so a stopped transport, the feature off, the piano roll open (it
     // follows on its own) or a clip drag in progress cost nothing here. No new timer: Page rides this 10 Hz poll,
-    // Smooth the playhead's 30 Hz frames.
+    // Smooth the playhead's display-rate frames.
     drum_->grid.setTransportPlaying(snapshot.playing);
     if (follow_.enabled && snapshot.playing && !clipEditorOpen() && !clipLaneArea_.isDragInProgress() &&
         viewState_.pixelsPerBeat > 0.0) {
-        followViewToBeat(playhead_.getDrawnBeat());
+        followViewToBeat(follow_.mode == FollowMode::Page ? playhead_.getTargetBeat() : playhead_.getDrawnBeat());
     }
 
     // Nothing else repaints the ruler when the time signature or the loop range changes from

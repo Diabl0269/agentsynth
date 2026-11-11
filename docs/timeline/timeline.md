@@ -37,7 +37,7 @@ Source layout — one file per concern; the class itself is declared in `Timelin
 
 ## Regions
 
-The low-rate transport poll ([playhead](playhead.md#two-timers)) aside, everything here is pure
+The low-rate transport poll ([playhead](playhead.md#two-frame-sources)) aside, everything here is pure
 layout-plus-paint with no timer or animation of its own:
 
 ```

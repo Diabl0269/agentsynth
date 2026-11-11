@@ -11,9 +11,10 @@ namespace synth::ui {
 // The mode menu's choice and the playhead's frames both land here.
 void TimelinePanelComponent::wireFollowPlayheadModes() {
     followPlayheadButton_.onModeChosen = [this](FollowMode mode) { setFollowMode(mode); };
-    // Smooth follow rides the playhead's own 30 Hz frames; Page follow rides the 10 Hz poll in updateFromTransport.
+    // Smooth follow rides the playhead's own display-rate frames; Page follow rides the 10 Hz poll in
+    // updateFromTransport.
     playhead_.onDrawnBeat = [this](double beat) {
-        if (follow_.enabled && follow_.mode == FollowMode::Smooth && playhead_.isPlayheadTimerRunning())
+        if (follow_.enabled && follow_.mode == FollowMode::Smooth && playhead_.isPlayheadFrameRunning())
             followViewToBeat(beat);
     };
 }
