@@ -10,6 +10,7 @@
 #include "ShortcutManager/ShortcutManager.h"
 #include "TestMode/TestModeStateSource.h"
 #include "Timeline/TimelineDoc/SectionVariationLetter.h"
+#include "UI/Timeline/ListSelectionModel.h"
 #include <algorithm>
 #include <map>
 
@@ -17,6 +18,22 @@ namespace synth::ui {
 
 namespace {
 constexpr int kMaxProxyCoordinate = 1'000'000;
+
+// A block is one selectable item of a multi-selectable list; the stock handler has no selected state to report.
+class BlockProxyHandler : public juce::AccessibilityHandler {
+public:
+    BlockProxyHandler(juce::Component& proxy, juce::AccessibilityActions actions, std::function<bool()> isSelected)
+        : juce::AccessibilityHandler(proxy, juce::AccessibilityRole::button, std::move(actions))
+        , isSelected_(std::move(isSelected)) {}
+
+    juce::AccessibleState getCurrentState() const override {
+        auto state = juce::AccessibilityHandler::getCurrentState().withSelectable().withMultiSelectable();
+        return isSelected_ && isSelected_() ? state.withSelected() : state;
+    }
+
+private:
+    std::function<bool()> isSelected_;
+};
 } // namespace
 
 // A child of the strip that only answers test-mode getState, so the strip's own header stays out of
@@ -48,7 +65,8 @@ std::unique_ptr<juce::AccessibilityHandler> TimelineSectionStrip::BlockProxy::cr
         if (showVariations)
             showVariations();
     });
-    return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::button, std::move(actions));
+    return std::make_unique<BlockProxyHandler>(*this, std::move(actions),
+                                               [this] { return isSelected && isSelected(); });
 }
 
 std::unique_ptr<juce::AccessibilityHandler> TimelineSectionStrip::createAccessibilityHandler() {
@@ -58,6 +76,7 @@ std::unique_ptr<juce::AccessibilityHandler> TimelineSectionStrip::createAccessib
 // The constructor and destructor live here: Probe is only complete in this file.
 TimelineSectionStrip::TimelineSectionStrip(TimelineViewState& viewState)
     : viewState_(viewState)
+    , selection_(std::make_unique<ListSelectionModel<synth::PlacementId>>())
     , dropGlide_(std::make_unique<KeyedPointTween>(*this)) {
     setComponentID("timelineSectionStrip");
     setTitle("Sections");
@@ -75,6 +94,7 @@ void TimelineSectionStrip::addTestProbe() {
         juce::StringArray variations;
         juce::String selected;
         int selectedVariationCount = 0;
+        const auto anchor = getSelectedPlacement();
         if (doc_ != nullptr) {
             std::map<std::int64_t, int> total;
             for (const auto& placement : doc_->getPlacements())
@@ -90,7 +110,7 @@ void TimelineSectionStrip::addTestProbe() {
                              juce::String(total[placement.section.value]));
                 const bool several = section->variations.size() > 1;
                 variations.add(synth::variationLetter(placement.variation) + (several ? "*" : ""));
-                if (placement.id == selected_) {
+                if (placement.id == anchor) {
                     selected = juce::String(placement.startBeat, 3);
                     selectedVariationCount = (int)section->variations.size();
                 }
@@ -114,9 +134,11 @@ juce::String TimelineSectionStrip::tooltipAt(juce::Point<float> pos) const {
             const auto letter = synth::variationLetter(block.variation);
             if (sectionstrip::chipBounds(block.bounds).contains(pos))
                 return sectionstrip::chipTooltip(letter, block.name);
+            const int selected = isPlacementSelected(block.id) ? (int)getSelectedPlacements().size() : 0;
             return sectionstrip::blockTooltip(block.name, block.lengthBeats, beatsPerBar(), block.count,
                                               platformCommandKeyName(),
-                                              block.variationCount > 1 ? letter : juce::String());
+                                              block.variationCount > 1 ? letter : juce::String()) +
+                   sectionstrip::selectionTooltipSuffix(selected, platformCommandKeyName());
         }
     }
     // The key is named only when it would make something now, and says from what.
@@ -169,10 +191,15 @@ void TimelineSectionStrip::rebuildProxies() {
     int index = 0;
     for (const auto& [title, description] : proxyText_) {
         auto proxy = std::make_unique<BlockProxy>();
-        proxy->showVariations = [safeThis, i = index++] {
+        proxy->showVariations = [safeThis, i = index] {
             auto* self = safeThis.getComponent();
             if (self != nullptr && self->doc_ != nullptr && i < (int)self->doc_->getPlacements().size())
                 self->openVariationMenu(self->doc_->getPlacements()[(std::size_t)i].id);
+        };
+        proxy->isSelected = [safeThis, i = index++] {
+            auto* self = safeThis.getComponent();
+            return self != nullptr && self->doc_ != nullptr && i < (int)self->doc_->getPlacements().size() &&
+                   self->isPlacementSelected(self->doc_->getPlacements()[(std::size_t)i].id);
         };
         // An overlay purely for accessibility: mouseDown() above still owns every real click.
         proxy->setInterceptsMouseClicks(false, false);
@@ -211,6 +238,13 @@ juce::String TimelineSectionStrip::getProxyTitleForTest(int index) const {
 
 juce::String TimelineSectionStrip::getProxyDescriptionForTest(int index) const {
     return index >= 0 && index < (int)proxies_.size() ? proxies_[(size_t)index]->getDescription() : juce::String();
+}
+
+bool TimelineSectionStrip::isProxySelectedForTest(int index) const {
+    if (index < 0 || index >= (int)proxies_.size())
+        return false;
+    const auto handler = proxies_[(size_t)index]->createAccessibilityHandler();
+    return handler != nullptr && handler->getCurrentState().isSelected();
 }
 
 } // namespace synth::ui

@@ -18,6 +18,22 @@ open in the piano roll, and by the Settings toggle below.
   drag started on. Held in the strip's left or right 24 px edge zone the drag scrolls the timeline (below).
 - **Rename:** double-click a block or press the menu's Rename. Return or focus-lost commits, Esc cancels, an
   empty or unchanged name records nothing.
+- **Select several:** a click selects one block; Cmd-click adds or takes out one; Shift-click selects the run
+  from the anchor (the last plain- or Cmd-clicked block) to the clicked one, and a second Shift-click moves the
+  run's far end (Finder rules, `ListSelectionModel` in `Source/UI/Timeline/ListSelectionModel.h`, the same model
+  the track list uses). Cmd+A with the strip focused selects every block; a click on empty strip clears. Every
+  selected block draws the accent ring; the anchor carries the focus ring and is the block the one-block verbs
+  (Rename, V, Make unique, Change colour, Select its clips) act on. A plain press on one of several selected keeps
+  the set, so the press can drag it, and narrows to that block on a release that did not drag. A Cmd- or
+  Shift-press only changes the selection; a drag after it moves the set when the pressed block is in it. A
+  selected block's tooltip ends ", 2 selected: drag, Delete or Cmd + D acts on all", and each block's proxy
+  reports its selected state to a screen reader.
+- **Verbs on the set** (each one undo step, however many blocks): Delete or Backspace, and the menu's Delete,
+  delete every selected block and its bars (latest first, so no delete shifts one still to go); the menu's
+  Remove (keep the music) removes every selected placement; Cmd+D and "Place again after this" place every
+  selected section again back to back in time order from the end of the last selected block
+  (`TimelineDoc::placeSectionsTogether`), and the copies become the selection. A menu opened on a selected block
+  applies these to the whole set; opened on another block it first selects just that one.
 - **Move or place again by dragging:** press a block and drag past 4 px. It lifts (a ghost follows the pointer at
   the grab offset, with a 2 px raise and a shadow) and the strip shows the drop before it happens, the way a
   dragged track does: one pure function, `sectionstrip::planSectionDrop` (`SectionDropPlan.h`), gives the landing
@@ -38,6 +54,14 @@ open in the piano roll, and by the Settings toggle below.
   own Shift decides the drop. Esc, or releasing above the strip, cancels with nothing written and eases the blocks
   back. One drop is one undo step; the ghost settles over 140 ms onto the drop line while the real block stays
   hidden, so it never shows in two places. Clip lanes redraw at the drop (they do not preview the move).
+  - **A group:** pressing one of several selected blocks drags them all. `sectionstrip::planGroupDrop` (of which
+    `planSectionDrop` is the one-block case) plans it with the members' summed length L: the members land back to
+    back in time order (gaps between them close) with the group's left edge at the landing; with make room the
+    other blocks first move earlier by the members that ended before them, then everything from the landing moves
+    later by L; with cover whatever [landing, landing + L) overlaps is covered. Every member draws as a ghost,
+    back to back, the pressed one under the pointer at its grab offset; the originals hide (make room) or dim
+    (cover) as one block's does. The drop calls `TimelineDoc::movePlacementsTogether`, or for an Option-drag
+    `placeSectionsTogether`, once, as one undo step, and the dropped blocks (or the copies) stay selected.
 - **Edge scroll:** a block drag or a make-drag held in the strip's left or right 24 px zone scrolls the shared
   timeline view at the clip lanes' pace (`EdgeAutoScroll.h`, faster nearer the edge, 30 Hz), and each tick
   re-derives the drop line, the ghost and the plan (or the make-drag's outline) from the still pointer, so they
@@ -46,12 +70,16 @@ open in the piano roll, and by the Settings toggle below.
   (`TimelineSectionStripEdgeScroll.cpp`).
 - **Keyboard:** the strip takes focus on a click or Tab and the selected block carries the accent focus ring.
   Left/Right (the `timelineClipPrevious` / `timelineClipNext` actions, shared with the clip lane) and Home/End move
-  between blocks; Return or the Rename key renames; Cmd+D (the `timelineDuplicateFocusedTrack` chord, shared with
-  the track row) places the section again after it; Option+Left/Right (`timelineClipMoveEarlier` /
-  `timelineClipMoveLater`, the move-this-item chord) move it one section earlier or later with make-room (later
-  puts it right after the next block, whatever their lengths); Delete or Backspace deletes it
-  and its bars; Shift+F10 opens its menu (the strip is a `KeyboardContextMenuProvider`). With no block selected
-  Return starts nothing. Esc cancels a drag in flight.
+  between blocks, selecting just the one they land on; Shift+Left/Right extend the selection a block at a time;
+  Cmd+A (the `timelineSelectAllTracks` chord, shared with the track row) selects every block; Return or the Rename
+  key renames; Cmd+D (the `timelineDuplicateFocusedTrack` chord, shared with the track row) places the selected
+  sections again after the last of them; Option+Left/Right (`timelineClipMoveEarlier` / `timelineClipMoveLater`,
+  the move-this-item chord) move one block one section earlier or later with make-room (later puts it right after
+  the next block, whatever their lengths), and a group past the neighbouring unselected block (later: the first
+  one after the last selected; earlier: the last one before the first), back to back, doing nothing at either end;
+  Delete or Backspace deletes the selected blocks and their bars; Shift+F10 opens the focused block's menu (the
+  strip is a `KeyboardContextMenuProvider`). With no block selected Return starts nothing. Esc cancels a drag in
+  flight.
 - **Block menu** (right-click a block): Rename, Change colour, Place again after this, Place again at the end,
   Make unique (only when the section plays more than once), Select its clips, Remove (keep the music), Delete
   and bars. "Place again" makes room for the music after it, unless the cover setting is on. Each choice is
@@ -198,6 +226,9 @@ never stamps; the last scope to end runs one sync, and only when it would change
 `SectionDropMode::MakeRoom` takes a moved placement's bars out first, closing its gap, then shifts everything from
 the target later; `Cover` overwrites what is under the drop), `removePlacementKeepMusic`, `deletePlacementAndBars`,
 `makePlacementUnique` (moves one placement to a new section; rejected for a section's only placement),
+`movePlacementsTogether` and `placeSectionsTogether` (the group forms: back to back in time order from the beat
+given, one id behaving exactly as `movePlacement` / `placeSection`; the copies read each section's music before
+anything changes, so a copy that covers another member's original still places its music),
 `renameSection`, `setSectionColour` and `makeSectionsFromMarkers` (markers stay; a repeated label joins one
 section only when its span has the same length and identical content, otherwise it becomes "Chorus 2").
 `insertTime` and `deleteTime` edit the whole song: clips, lane points, markers and placements all move; a

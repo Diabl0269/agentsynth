@@ -696,6 +696,14 @@ public:
     // Moves a placement, music and all; the placement keeps its id. `newStartBeat` is its start after the move (with
     // MakeRoom, counted with its old bars already closed up).
     bool movePlacement(PlacementId id, double newStartBeat, SectionDropMode mode, double secondsPerBeat);
+    // Moves the placements as one group, back to back in time order from `landingBeat` (its start after the move, as
+    // for movePlacement). False, with nothing changed, when an id is unknown.
+    bool movePlacementsTogether(const std::vector<PlacementId>& ids, double landingBeat, SectionDropMode mode,
+                                double secondsPerBeat);
+    // placeSection (variation A) for each placement's section, back to back in time order from atBeat; returns the new
+    // placements in that order, or none when an id is unknown or the placement cap would be passed.
+    std::vector<PlacementId> placeSectionsTogether(const std::vector<PlacementId>& ids, double atBeat,
+                                                   SectionDropMode mode, double secondsPerBeat);
     // Removes the placement only; the section goes with its last placement.
     bool removePlacementKeepMusic(PlacementId id);
     // Removes the placement and its bars, closing the gap on every track.

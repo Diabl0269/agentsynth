@@ -190,7 +190,8 @@ From the keyboard: **Shift+Up/Down** moves focus a row and extends the selection
 focus and resets the selection to that one row.
 
 The model is `TrackSelectionModel` (`Source/UI/Timeline/TrackSelectionModel.h`, pure state, owned by
-`TimelinePanelComponent`). It is ephemeral view state like `focusedTrackIndex_`: it is not on `TimelineDoc`,
+`TimelinePanelComponent`), the track-id form of `ListSelectionModel` (`Source/UI/Timeline/ListSelectionModel.h`),
+which the Sections strip uses for its blocks too. It is ephemeral view state like `focusedTrackIndex_`: it is not on `TimelineDoc`,
 is not an undo step and is not saved. `TimelinePanelComponent::selectedTracks()` returns the selected
 `TrackId`s in timeline order, and `isTrackSelected(id)` asks about one. Selection is by id, so it survives
 relayouts, rebuilds and reorders; a deleted track drops out of it. The **primary** track (`getSelectedTrackId()`,

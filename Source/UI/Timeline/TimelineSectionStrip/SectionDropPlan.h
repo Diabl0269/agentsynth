@@ -1,14 +1,17 @@
 #pragma once
 
-// SectionDropPlan.h: where a dragged section block lands and where every other block ends up, as one pure function the
-// strip's preview (the drop line, the ghost's settle, the neighbours making room) and its tests read. Every beat here
-// is in the layout AFTER the drop, the one the user sees while dragging, so the drop line, the ghost's left edge and
-// the block's final start are one number. TimelineDoc::movePlacement and placeSection take that number as the start the
-// block gets; TimelineSectionStripDragTests check, case by case, that the doc after a drop equals this plan.
+// SectionDropPlan.h: where a dragged section block, or a group of them, lands and where every other block ends up, as
+// one pure function the strip's preview (the drop line, the ghosts' settle, the neighbours making room) and its tests
+// read. Every beat here is in the layout AFTER the drop, the one the user sees while dragging, so the drop line, the
+// ghost's left edge and the final start are one number. TimelineDoc::movePlacement, movePlacementsTogether,
+// placeSection and placeSectionsTogether take that number as the start the group gets; the strip's drag tests check,
+// case by case, that the doc after a drop equals this plan.
 
 #include "UI/Timeline/TimelineSectionStrip/SectionStripGeometry.h"
+#include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace synth::ui::sectionstrip {
@@ -27,7 +30,9 @@ struct DropPlan {
         double start = 0.0;   // where it starts after the drop
         bool covered = false; // a cover drop removes it (its music is overwritten)
     };
-    std::vector<Other> others; // every placement except the moved one (a copy's original is one of them)
+    std::vector<Other> others; // every placement except the moved ones (a copy's originals are among them)
+    // Each dragged placement's start after the drop, in time order (for a copy, its copy's start), keyed by its id.
+    std::vector<std::pair<std::int64_t, double>> group;
 
     std::optional<double> startOf(std::int64_t id) const {
         for (const auto& other : others)
@@ -43,27 +48,36 @@ struct DropPlan {
     }
 };
 
-/** The plan for dropping `dragged` (a placement in `placements`) with its left edge over `rawStart`. `copy` places the
- *  section again (the original stays); `makeRoom` pushes what is at the landing later, else the drop covers it.
+/** The plan for dropping the placements `dragged` (ids in `placements`, any order) as one group, its left edge over
+ *  `rawStart`: the members land back to back in time order from the landing (gaps between them close). `copy` places
+ *  their sections again (the originals stay); `makeRoom` pushes what is at the landing later, else the drop covers it.
+ *  With L the members' summed length:
  *
- *  Make room: a moved block first leaves its place and the gap it leaves closes (what TimelineDoc::deleteTime does),
- *  then it is inserted at the landing and everything from there on moves later by its length. The landing snaps to a
- *  neighbour's start or end within kBoundarySnapPx, else to the nearest bar; with the ghost's left edge over another
- *  block it goes before that block until the ghost's centre passes the block's centre where it was drawn before the
- *  drag (the way a dragged track passes a neighbour), then after it. It is never inside another block.
+ *  Make room: the members first leave their places and the gaps close (every other block moves earlier by the lengths
+ *  of the members that end at or before it, what TimelineDoc::deleteTime does), then the group is inserted at the
+ *  landing and everything from there on moves later by L. The landing snaps to a neighbour's start or end within
+ *  kBoundarySnapPx, else to the nearest bar; with the group's left edge over another block it goes before that block
+ *  until the group's centre passes the block's centre where it was drawn before the drag (the way a dragged track
+ *  passes a neighbour), then after it. It is never inside another block. A copy closes nothing up.
  *  Cover: the landing is sectionstrip::dropBeat against the other blocks as they are; what it overlaps is covered. */
-inline DropPlan planSectionDrop(const std::vector<PlacedSpan>& placements, std::int64_t dragged, double rawStart,
-                                bool copy, bool makeRoom, double beatsPerBar, double pixelsPerBeat) {
+inline DropPlan planGroupDrop(const std::vector<PlacedSpan>& placements, const std::vector<std::int64_t>& dragged,
+                              double rawStart, bool copy, bool makeRoom, double beatsPerBar, double pixelsPerBeat) {
     DropPlan plan;
-    const PlacedSpan* self = nullptr;
+    const auto isMember = [&dragged](std::int64_t id) {
+        return std::find(dragged.begin(), dragged.end(), id) != dragged.end();
+    };
+    std::vector<PlacedSpan> members;
     for (const auto& placement : placements)
-        if (placement.id == dragged)
-            self = &placement;
-    if (self == nullptr)
+        if (isMember(placement.id))
+            members.push_back(placement);
+    if (members.empty())
         return plan;
-    const double length = self->length;
-    const double oldEnd = self->start + length;
-    const bool closesGap = makeRoom && !copy; // the moved block's old bars are taken out before it lands
+    std::stable_sort(members.begin(), members.end(),
+                     [](const PlacedSpan& a, const PlacedSpan& b) { return a.start < b.start; });
+    double length = 0.0;
+    for (const auto& member : members)
+        length += member.length;
+    const bool closesGap = makeRoom && !copy; // the members' old bars are taken out before the group lands
 
     struct Basis {
         std::int64_t id;
@@ -74,11 +88,13 @@ inline DropPlan planSectionDrop(const std::vector<PlacedSpan>& placements, std::
     std::vector<Basis> basis;
     std::vector<Span> spans;
     for (const auto& placement : placements) {
-        if (!copy && placement.id == dragged)
+        if (!copy && isMember(placement.id))
             continue;
         double start = placement.start;
-        if (closesGap && placement.start >= oldEnd - kBarEpsilon)
-            start -= length;
+        if (closesGap)
+            for (const auto& member : members)
+                if (placement.start >= member.start + member.length - kBarEpsilon)
+                    start -= member.length;
         basis.push_back({placement.id, start, placement.length, placement.start + placement.length * 0.5});
         spans.push_back({start, start + placement.length});
     }
@@ -100,6 +116,11 @@ inline DropPlan planSectionDrop(const std::vector<PlacedSpan>& placements, std::
     }
     plan.landing = std::max(0.0, landing);
 
+    double at = plan.landing;
+    for (const auto& member : members) {
+        plan.group.emplace_back(member.id, at);
+        at += member.length;
+    }
     for (const auto& other : basis) {
         DropPlan::Other entry{other.id, other.start, false};
         if (makeRoom) {
@@ -111,6 +132,12 @@ inline DropPlan planSectionDrop(const std::vector<PlacedSpan>& placements, std::
         plan.others.push_back(entry);
     }
     return plan;
+}
+
+/** planGroupDrop with the one block `dragged`: the drag of a single block. */
+inline DropPlan planSectionDrop(const std::vector<PlacedSpan>& placements, std::int64_t dragged, double rawStart,
+                                bool copy, bool makeRoom, double beatsPerBar, double pixelsPerBeat) {
+    return planGroupDrop(placements, {dragged}, rawStart, copy, makeRoom, beatsPerBar, pixelsPerBeat);
 }
 
 } // namespace synth::ui::sectionstrip
