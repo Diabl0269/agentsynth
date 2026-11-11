@@ -313,3 +313,171 @@ TEST_F(ModuleComponentTest, LfoAndEnvelopeCardsDrawBothEndDotsWhole) {
         expectFirstDotPaintedWhole(*curve, "envelope card");
     }
 }
+
+// Regression test for FRO1447: an undo or redo glides the whole curve, the line between the dots as well as the dots.
+// One table of every undoable property of a curve (a dot's time, a dot's level, a segment's bend, the number of dots):
+// each restore is drawn at the old value on the first frame, strictly between old and new a little later, and settled
+// at the new one; Reduce Motion lands it and fades in, Animations Off lands it at once.
+using synth::LfoCustomWave;
+using synth::ui::CurveEditorComponent;
+using synth::ui::CurveEditorGeometry;
+using synth::ui::CurveGeometryConfig;
+
+namespace {
+
+struct FullMotion {
+    FullMotion() {
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::full);
+        synth::ui::setReducedMotionForTest(false);
+    }
+    ~FullMotion() {
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::followSystem);
+        synth::ui::setReducedMotionForTest(std::nullopt);
+    }
+};
+
+LfoCustomWave wave(std::vector<LfoCustomWave::Point> points) {
+    LfoCustomWave w;
+    w.points = std::move(points);
+    return w;
+}
+
+/** Three dots: low, high, low, with a bend on each segment. */
+LfoCustomWave base() { return wave({{0.0f, 0.1f, 0.2f}, {0.5f, 0.9f, -0.3f}, {1.0f, 0.2f, 0.0f}}); }
+
+float lineY(const std::vector<juce::Point<float>>& line, float x) {
+    for (size_t i = 1; i < line.size(); ++i)
+        if (line[i].x >= x) {
+            const float span = line[i].x - line[i - 1].x;
+            return span > 0.0f ? line[i - 1].y + (line[i].y - line[i - 1].y) * (x - line[i - 1].x) / span : line[i].y;
+        }
+    return line.back().y;
+}
+
+struct Property {
+    const char* name;
+    LfoCustomWave before;
+    LfoCustomWave after;
+    std::function<double(CurveEditorComponent&)> drawn;
+};
+
+double drawnNodeX(CurveEditorComponent& ed, int node) {
+    CurveGeometryConfig config;
+    config.explicitVisibleRange = 1.0;
+    const CurveEditorGeometry g(ed.getModel(), ed.getLocalBounds().toFloat(), config);
+    return g.nodePosition(node).x + ed.getPointTweenForTest().offsetFor(node).x;
+}
+
+double drawnNodeY(CurveEditorComponent& ed, int node) {
+    CurveGeometryConfig config;
+    config.explicitVisibleRange = 1.0;
+    const CurveEditorGeometry g(ed.getModel(), ed.getLocalBounds().toFloat(), config);
+    return g.nodePosition(node).y + ed.getPointTweenForTest().offsetFor(node).y;
+}
+
+std::vector<Property> properties() {
+    auto moveX = base();
+    moveX.points[1].x = 0.7f;
+    auto moveY = base();
+    moveY.points[1].y = 0.3f;
+    auto bend = base();
+    bend.points[0].bend = 0.8f;
+    auto added = base();
+    added.points.insert(added.points.begin() + 1, {0.25f, 0.95f, 0.0f});
+    return {
+        {"a dot's time", base(), moveX, [](CurveEditorComponent& e) { return drawnNodeX(e, 1); }},
+        {"a dot's level", base(), moveY, [](CurveEditorComponent& e) { return drawnNodeY(e, 1); }},
+        {"a segment's bend", base(), bend, [](CurveEditorComponent& e) { return (double)e.getDrawnBendForTest(0); }},
+        {"the number of dots", base(), added,
+         [](CurveEditorComponent& e) { return (double)lineY(e.getDrawnCurvePointsForTest(), 0.25f * e.getWidth()); }},
+    };
+}
+
+struct Rig {
+    CurveEditorComponent ed;
+    Rig(const LfoCustomWave& start) {
+        ed.setSize(300, 200);
+        ed.setVisibleRangeOverride(1.0);
+        ed.getPointTweenForTest().forceAnimateForTest(true);
+        ed.getBendTweenForTest().forceAnimateForTest(true);
+        ed.getMorphTweenForTest().forceAnimateForTest(true);
+        ed.setModel(synth::ui::curveModelFromWave(start));
+    }
+    void restore(const LfoCustomWave& w) { ed.setModel(synth::ui::curveModelFromWave(w), true); }
+    void step(double ms) {
+        ed.getPointTweenForTest().stepForTest(ms);
+        ed.getBendTweenForTest().stepForTest(ms);
+        ed.getMorphTweenForTest().stepForTest(ms);
+    }
+    bool gliding() {
+        return ed.getPointTweenForTest().isAnimating() || ed.getBendTweenForTest().isAnimating() ||
+               ed.getMorphTweenForTest().isAnimating();
+    }
+};
+
+} // namespace
+
+TEST(CurveEditorRestoreGlide, EveryUndoableCurvePropertyGlidesOnUndoAndRedo) {
+    for (const auto& property : properties()) {
+        SCOPED_TRACE(property.name);
+        FullMotion motion;
+        Rig rig(property.before);
+        const double old = property.drawn(rig.ed);
+        rig.restore(property.after);
+        rig.ed.getPointTweenForTest().completeForTest();
+        rig.ed.getBendTweenForTest().completeForTest();
+        rig.ed.getMorphTweenForTest().completeForTest();
+        const double now = property.drawn(rig.ed);
+        ASSERT_GT(std::abs(now - old), 1e-3) << "the edit changed the property";
+
+        // Redo from the old shape, as an undo would run: from `before` back to `after` mid-glide.
+        rig.restore(property.before);
+        EXPECT_TRUE(rig.gliding());
+        EXPECT_NEAR(property.drawn(rig.ed), now, std::abs(now - old) * 0.02 + 1e-3) << "first frame at the old place";
+        rig.step(70.0);
+        const double mid = property.drawn(rig.ed);
+        EXPECT_GT(std::abs(mid - now), 1e-4) << "it has left the old place";
+        EXPECT_LT(std::abs(mid - old), std::abs(now - old)) << "and is on its way to the new one";
+        EXPECT_TRUE((mid > std::min(old, now) - 1e-6) && (mid < std::max(old, now) + 1e-6)) << "between old and new";
+        rig.step(1000.0);
+        EXPECT_FALSE(rig.gliding());
+        EXPECT_NEAR(property.drawn(rig.ed), old, 1e-3);
+    }
+}
+
+TEST(CurveEditorRestoreGlide, ABendGlidesBetweenTheOldAndTheNewBendAndTheLineFollowsIt) {
+    FullMotion motion;
+    auto bent = base();
+    bent.points[0].bend = 0.8f;
+    Rig rig(base());
+    rig.restore(bent);
+    EXPECT_NEAR(rig.ed.getDrawnBendForTest(0), 0.2f, 1e-4f);
+    const float lineBefore = lineY(rig.ed.getDrawnCurvePointsForTest(), 0.25f * 300.0f);
+    rig.step(70.0);
+    const float mid = rig.ed.getDrawnBendForTest(0);
+    EXPECT_GT(mid, 0.2f);
+    EXPECT_LT(mid, 0.8f);
+    EXPECT_NE(lineY(rig.ed.getDrawnCurvePointsForTest(), 0.25f * 300.0f), lineBefore) << "the line itself moved";
+    rig.step(1000.0);
+    EXPECT_NEAR(rig.ed.getDrawnBendForTest(0), 0.8f, 1e-4f);
+}
+
+TEST(CurveEditorRestoreGlide, UnderReduceMotionABendLandsAtOnceAndAnimationsOffLandsPlainly) {
+    FullMotion motion;
+    auto bent = base();
+    bent.points[0].bend = 0.8f;
+    {
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::reduced);
+        synth::ui::setReducedMotionForTest(true);
+        Rig rig(base());
+        rig.restore(bent);
+        EXPECT_NEAR(rig.ed.getDrawnBendForTest(0), 0.8f, 1e-4f) << "no glide under Reduce Motion";
+    }
+    {
+        synth::ui::setAnimationMode(synth::ui::AnimationMode::off);
+        Rig rig(base());
+        rig.restore(bent);
+        EXPECT_NEAR(rig.ed.getDrawnBendForTest(0), 0.8f, 1e-4f);
+        EXPECT_FALSE(rig.gliding());
+    }
+}
