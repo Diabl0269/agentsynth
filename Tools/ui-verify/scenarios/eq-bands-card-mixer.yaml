@@ -50,7 +50,7 @@ steps:
   - wait: {settleMs: 500}
   - click: {id: eqWindowCurve, x: 700, y: 150, button: right}
   - wait: {settleMs: 500}
-  - click: {id: "Band Pass"}
+  - click: {id: "Low Shelf"}
   - wait: {settleMs: 500}
   - click: {id: eqWindowCurve, x: 770, y: 280, clicks: 2}
   - wait: {settleMs: 800}
