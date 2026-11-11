@@ -296,7 +296,14 @@ void checkComboReturn(Findings& f, const std::string& surface, juce::ComboBox& c
         f.add(surface, describe(combo), "Return does not open its menu");
         return;
     }
-    if (!menus.empty()) {
+    // A menu is kept inside its display, so a control on or past the screen's edge (a small CI display under a 1400 x
+    // 900 window) gets it moved: only judge where the control is fully on screen.
+    const auto onScreen =
+        juce::Desktop::getInstance().getDisplays().getTotalBounds(true).contains(combo.getScreenBounds());
+    if (!menus.empty() && !onScreen)
+        std::cout << "[ key standards ] menu position not judged, control is off the display: " << surface << " / "
+                  << describe(combo) << "\n";
+    if (!menus.empty() && onScreen) {
         const auto control = combo.getScreenBounds().expanded(kMenuReach);
         bool touches = false;
         for (auto* menu : menus)

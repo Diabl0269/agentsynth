@@ -40,6 +40,9 @@ struct Delivery {
 inline bool takeFocus(juce::Component& c) {
     if (c.hasKeyboardFocus(false))
         return true;
+    // JUCE only hands focus to a shown, enabled component that wants it: waiting a second on one that cannot is waste.
+    if (!c.isShowing() || !c.isEnabled() || !c.getWantsKeyboardFocus())
+        return false;
     return synth::test::waitUntil(
         [&c] {
             if (!c.hasKeyboardFocus(false))
