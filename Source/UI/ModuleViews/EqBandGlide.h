@@ -9,11 +9,19 @@
 #pragma once
 
 #include "Modules/FX/ParametricEQModule.h"
-#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include <array>
+#include <cstdint>
 #include <functional>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 
 namespace synth::ui {
+
+// Only named here, so this header stays out of KeyedTween.h's reach (scripts/check-header-reach.sh); the .cpp files
+// that call into the tween include UI/Layout/KeyGlide/KeyedTween.h.
+template <typename T>
+class KeyedTween;
+using KeyedPointTween = KeyedTween<juce::Point<float>>;
 
 class EqBandGlide {
 public:
@@ -31,6 +39,7 @@ public:
     };
 
     explicit EqBandGlide(juce::Component& owner);
+    ~EqBandGlide();
 
     /** Called for every frame, retarget and clear of the glide: the owner recomputes what it draws and repaints. */
     std::function<void()> onChange;
@@ -40,12 +49,12 @@ public:
     void sync(const Bands& before, float outputGainBefore, const Bands& after, float outputGainAfter, bool restored);
 
     Drawn drawn(const Bands& resting, float outputGain) const;
-    bool isAnimating() const noexcept { return tween_.isAnimating(); }
+    bool isAnimating() const noexcept;
 
-    KeyedPointTween& tweenForTest() noexcept { return tween_; }
-    static KeyedPointTween::Key placeKey(int band) noexcept { return band * 2; }     // (log2 frequency, gain)
-    static KeyedPointTween::Key shapeKey(int band) noexcept { return band * 2 + 1; } // (Q, presence)
-    static constexpr KeyedPointTween::Key kOutputKey = ParametricEQModule::kMaxBands * 2;
+    KeyedPointTween& tweenForTest() noexcept { return *tween_; }
+    static std::int64_t placeKey(int band) noexcept { return band * 2; }     // (log2 frequency, gain)
+    static std::int64_t shapeKey(int band) noexcept { return band * 2 + 1; } // (Q, presence)
+    static constexpr std::int64_t kOutputKey = ParametricEQModule::kMaxBands * 2;
 
 private:
     struct Ghost { // where a band an undo took away is still drawn while it fades out
@@ -55,7 +64,7 @@ private:
         float q = ParametricEQModule::kDefaultQ;
     };
 
-    KeyedPointTween tween_;
+    std::unique_ptr<KeyedPointTween> tween_;
     std::array<Ghost, ParametricEQModule::kMaxBands> ghost_{};
 };
 
