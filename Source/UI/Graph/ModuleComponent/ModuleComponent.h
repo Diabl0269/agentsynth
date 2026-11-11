@@ -381,8 +381,7 @@ protected:
     virtual void launchCardLayoutEditorCallOutBox(std::unique_ptr<juce::Component> editor, juce::Rectangle<int> anchor);
 
 public:
-    /** Test: runs the EQ card's knob glide while hidden; `stepMs` > 0 also advances it. */
-    void driveEqKnobGlideForTest(bool force, double stepMs);
+    void driveEqKnobGlideForTest(bool force, double stepMs); ///< Test: the EQ knob glide while hidden.
     /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null
      *  (also null for a hosted entry -- see findMidiLearnableEntryForTest() below). */
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const {
@@ -938,9 +937,7 @@ private:
     void pollSequencerCard();
 
     // --- Parametric EQ card ---
-    // The curve, the band strip, then the selected band's Freq / Gain / Q, on/off and type (EqBandRow), then the
-    // Output trim and the buttons. Height is computed by parametricEQHeight() from the same constants the layout
-    // uses, so the two cannot drift apart.
+    // Curve, strip, the selected band's controls (EqBandRow), trim, buttons; height from parametricEQHeight().
     void layoutParametricEQ();
     int parametricEQHeight() const;
     // Brackets a curve's edits in one undo step. Uses a SafePointer, so a pop-out window that
