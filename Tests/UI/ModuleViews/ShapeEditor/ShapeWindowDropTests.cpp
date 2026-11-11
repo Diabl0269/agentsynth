@@ -10,6 +10,7 @@
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Library/SoundBrowser/ShapeDragPayload.h"
+#include "UI/Library/SoundBrowser/SoundDragState.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeEditorWindow.h"
 #include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 
@@ -190,6 +191,35 @@ TEST_F(ShapeWindowLifecycle, TheWindowIsNotModalAndStaysAboveTheMainWindow) {
 
     main.toFront(true);
     EXPECT_TRUE(PopupMotion::isAboveForTest(*window, main)) << "a press on the main window does not bury it";
+}
+
+// Regression test for FRO1588: the container hides its drag image just before it looks for the drop target and the OS
+// then activates the main window again, so the drop was tested against the main window and landed nowhere
+TEST_F(ShapeWindowLifecycle, AWindowBroughtForwardDuringAShapeDragAndItsReleaseDoesNotBuryTheShapeWindow) {
+    ShapeRig rig;
+    MainStandIn main;
+    const DialogsDeletedFirst dialogsFirst;
+    juce::Component::SafePointer<juce::DialogWindow> window(openShapeEditorWindow(rig.adapter, 0, &main.content));
+    ASSERT_NE(window.getComponent(), nullptr);
+
+    // The container looks the drop target up in the Desktop's own stacking order.
+    const auto stackIndex = [](const juce::Component& c) {
+        auto& desktop = juce::Desktop::getInstance();
+        for (int i = 0; i < desktop.getNumComponents(); ++i)
+            if (desktop.getComponent(i) == &c)
+                return i;
+        return -1;
+    };
+    // The OS reports an activation to JUCE through the peer, not through Component::toFront.
+    const auto activate = [](juce::Component& c) { c.getPeer()->handleBroughtToFront(); };
+    const auto windowIsOnTop = [&] { return stackIndex(*window) > stackIndex(main); };
+
+    SoundDragState::beginShape(ShapeKind::Filter, "eh");
+    activate(main); // the OS activation after the drag image hides
+    EXPECT_TRUE(windowIsOnTop()) << "a drag in progress keeps the window on top";
+    SoundDragState::end();
+    activate(main); // the activation that follows the release, before the drop target is looked up
+    EXPECT_TRUE(windowIsOnTop()) << "the release itself does not bury it";
 }
 
 TEST_F(ShapeWindowLifecycle, EscDoneAndTheCloseButtonEachCloseItAndItDeletesItself) {

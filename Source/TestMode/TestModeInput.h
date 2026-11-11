@@ -23,6 +23,11 @@ struct MouseStep {
     juce::ModifierKeys keys; // key modifiers held (no mouse buttons)
     bool buttonDown = false;
     Button button = Button::left;
+    /** True: while a press is in progress the event goes to the window the press happened in, at this point's screen
+     *  position even when that is outside the window, as the OS does for a held button (implicit capture). The
+     *  event is not hit-tested against `target`'s own window, so a drag over a second window reaches the app the way a
+     *  hand's does. Ignored when no press is in progress. */
+    bool captured = false;
 };
 
 /** Delivers one mouse event through the peer. False (with `error`) when the target is not on a native window. */
