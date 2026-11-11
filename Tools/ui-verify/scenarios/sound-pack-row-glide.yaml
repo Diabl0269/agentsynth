@@ -1,0 +1,23 @@
+# Settings > Sound packs: clicking a pack's arrow glides the row's height (and the rows below) over about 160 ms, both
+# ways, instead of stepping; before, only the credit text faded while the card edge jumped.
+#
+# What a user does:
+#   1. Opens Settings (Cmd+,) and its Sound packs tab: every pack is a closed row.
+#   2. Clicks the arrow of a pack: the card's bottom edge and the rows beneath slide down; the strip shows frames
+#      with the row between its closed and its full height.
+#   3. Clicks the arrow again: the row slides back to its closed height.
+motion: true
+record: true
+save_project: sound-pack-row-glide
+steps:
+  - key: {keys: "cmd+,"}
+  - wait: {}
+  - click: {id: "settingsTab:Sound packs"}
+  - wait: {settleMs: 600}
+  - mark: {check: 1, name: pack-row-closed}
+  - glide: {name: pack-row-opens, frames: 8, do: {click: {id: "packDisclosure:core"}}}
+  - wait: {settleMs: 400}
+  - mark: {check: 2, name: pack-row-open}
+  - glide: {name: pack-row-closes, frames: 8, do: {click: {id: "packDisclosure:core"}}}
+  - wait: {settleMs: 400}
+  - mark: {check: 3, name: pack-row-closed-again}

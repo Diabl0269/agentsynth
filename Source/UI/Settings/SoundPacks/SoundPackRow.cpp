@@ -101,6 +101,12 @@ SoundPackRow::SoundPackRow(juce::String packId, Actions actions)
     disclosure_.setComponentID("packDisclosure:" + packId_); // test mode clicks it to open the row
     disclosure_.onOpenRequested = [this](bool open) { setExpanded(open); };
     addChildComponent(credit_);
+    // The row's height follows the details' fade (they stay clipped to the row), so the owner lays the list out
+    // again on every frame.
+    creditFade_.onFrame = [this] {
+        if (onHeightChanged)
+            onHeightChanged();
+    };
 
     download_.onClick = [this] { actions_.install(packId_); };
     update_.onClick = [this] { actions_.install(packId_); };
@@ -173,9 +179,11 @@ void SoundPackRow::fitDetail() {
 }
 
 int SoundPackRow::heightForWidth(int width) const {
-    if (!isExpanded())
+    const float open = creditFade_.progress();
+    if (open <= 0.0f)
         return kHeight;
-    return kHeight + kOpenGap + credit_.heightForWidth(juce::jmax(1, width - kContentLeft - kPad)) + kPad;
+    const int details = kOpenGap + credit_.heightForWidth(juce::jmax(1, width - kContentLeft - kPad)) + kPad;
+    return kHeight + juce::roundToInt((float)details * open);
 }
 
 void SoundPackRow::setExpanded(bool expanded, bool animate) {

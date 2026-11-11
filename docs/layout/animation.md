@@ -685,7 +685,10 @@ Preferences section headers fade as one when the All view shows or hides them (a
 fold-all strip fades with its height following `progress()` so the rows below slide. The Keyboard Shortcuts tab folds
 the same way: each row (and a section header the search drops) is one `FadeVisibility` whose slot is squeezed to
 `progress()`, a fold and a search filter alike, so the rows below slide; its "No matching shortcuts" line is a small
-non-interactive child that fades in under the rows as they close up and out when the search clears. `FadeVisibility::snapTo(shown)` lands on a state at once, for the first layout of
+non-interactive child that fades in under the rows as they close up and out when the search clears. Settings > Sound packs rows do the same with their details:
+a row's height is its closed height plus `progress()` of the credit's fade (the credit stays clipped to the row), so the
+row's bottom edge and the rows below glide over the 160 ms in and 110 ms out, the list lays out again on every frame and
+the scroll position holds when a row above the viewport grows; a remembered-open row starts open with `snapTo`. `FadeVisibility::snapTo(shown)` lands on a state at once, for the first layout of
 something already on screen so what was there from the start does not fade.
 
 The MIDI Remote panel uses it too: the inspector and the orphan view cross-fade in the same spot; the page strip

@@ -939,6 +939,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/ClickAuditTests.cmake) # the headless click 
 include(${CMAKE_CURRENT_SOURCE_DIR}/TimelineTests.cmake) # the timeline UI tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/RecordingTests.cmake) # MIDI and audio recording, each track's input
 include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutFoldTests.cmake) # the Keyboard Shortcuts fold motion tests
+include(${CMAKE_CURRENT_SOURCE_DIR}/SoundPackRowGlideTests.cmake) # the Sound packs row glide tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/ShortcutManagerTests.cmake) # the shortcut table: defaults, conflicts, migrations
 include(${CMAKE_CURRENT_SOURCE_DIR}/GraphPanelTests.cmake)  # the mod dot and port connections panels' tests
 include(${CMAKE_CURRENT_SOURCE_DIR}/OscillatorVoiceTests.cmake) # the Oscillator voice feel tests

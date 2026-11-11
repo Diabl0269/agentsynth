@@ -184,6 +184,7 @@ void SoundPacksSettingsTab::rebuildComponents(const std::vector<Installer::Row>&
             auto& made = *rows_.back();
             content_.addAndMakeVisible(made);
             made.setExpanded(openPacks_.contains(row.id), false); // a remembered row is there from the start
+            made.onHeightChanged = [this] { layoutContent(); };   // each frame of a row's glide
             made.onExpandedChanged = [this, id = row.id] {
                 const auto it =
                     std::find_if(rows_.begin(), rows_.end(), [&id](const auto& r) { return r->getPackId() == id; });
@@ -209,9 +210,15 @@ void SoundPacksSettingsTab::rebuildComponents(const std::vector<Installer::Row>&
 
 void SoundPacksSettingsTab::layoutContent() {
     const int width = juce::jmax(1, viewport_.getWidth() - kScrollbarW);
+    // A row that ends above the viewport's top and changes height moves what the user is reading; the view
+    // follows by the same amount so the glide never shifts it.
+    const int viewTop = viewport_.getViewPositionY();
+    int scrollShift = 0;
     int y = 0;
     for (auto& row : rows_) {
         const int height = row->heightForWidth(width);
+        if (row->getBottom() <= viewTop && row->getHeight() > 0)
+            scrollShift += height - row->getHeight();
         row->setBounds(0, y, width, height);
         y += height + kRowGap;
     }
@@ -230,6 +237,8 @@ void SoundPacksSettingsTab::layoutContent() {
         y += kSectionGap;
     }
     content_.setSize(width, juce::jmax(y, 1));
+    if (scrollShift != 0)
+        viewport_.setViewPosition(viewport_.getViewPositionX(), juce::jmax(0, viewTop + scrollShift));
 }
 
 void SoundPacksSettingsTab::saveOpenPacks() { synth::ui::settingsfold::save(props_, kOpenPacksKey, openPacks_); }
