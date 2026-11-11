@@ -45,7 +45,7 @@ const char* const kOnCardRows = "test:OnCardEditorRows.TheCommittedLayoutEqualsT
 const std::vector<Registered> kRegistered = {
     // Preview and commit checked by a shared guard.
     {"TimelineClipLaneArea", {"clip-edge"}},
-    {"TimelineSectionStrip", {"test:TimelineSectionStripDragTest.WhatTheDragPreviewsIsWhatTheDropCommits"}},
+    {"TimelineSectionStrip", {"test:TimelineSectionStripDragFollowTest.ThePreviewIsTheCommitForEveryModeAndPosition"}},
     {"CurveEditorComponent",
      {"undo-glide:Curve editor point", "point-markers:Curve editor point",
       "test:ShapeDrawGesture.PreviewAtTheLastDragEqualsTheCommit"}},
@@ -154,6 +154,8 @@ const std::vector<Follows> kFollow = {
      "follow:PianoRollAutoScrollTest.EachTickAdvancesTheViewAndReDerivesThePreviewFromTheLastPointer"},
     {"AutomationLaneEditor",
      "follow:AutomationLanesEdgeScroll.ADotHeldAtTheRightEdgeScrollsTheViewAndStaysUnderThePointer"},
+    {"TimelineSectionStrip",
+     "follow:TimelineSectionStripDragFollowTest.HoldingABlockAtTheRightEdgeScrollsTheViewAndTheDropFollows"},
     {"ModuleComponent", kCanvasCards},
     {"MacroCardComponent", kCanvasCards},
     {"MorphMap", "follow-exempt: the dot is clamped inside a pad that is drawn whole"},
@@ -194,7 +196,6 @@ const std::vector<Follows> kFollow = {
 // each is built as a follow (a registered test) or moved to kFollow with an exemption.
 const std::vector<KnownGap> kFollowGaps = {
     {"GraphEditor", "FRO1688", "selection box, cable and drops from the library: the canvas does not pan"},
-    {"TimelineSectionStrip", "FRO1686", "section drag stops at the view edge"},
     {"TimelineRulerComponent", "FRO1686", "marker and locator drags stop at the view edge"},
     {"TimelineTrackHeaderComponent", "FRO1687", "track reorder does not scroll the track list"},
     {"AutomationLaneHeaderComponent", "FRO1687", "lane reorder does not scroll the track list"},
@@ -217,7 +218,7 @@ const std::vector<KnownGap> kFollowGaps = {
     {"NoteRangePicker", "FRO1687", "range edge drag: triage whether the keyboard strip scrolls"},
 };
 // What kFollowGaps holds today; it may only go down.
-constexpr std::size_t kFollowGapCeiling = 22;
+constexpr std::size_t kFollowGapCeiling = 21;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Scanning

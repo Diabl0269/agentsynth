@@ -693,7 +693,8 @@ public:
                           double secondsPerBeat);
     // Plays the section once more at atBeat, playing variation `letter` (rejected when the section has none).
     PlacementId placeSection(SectionId id, double atBeat, SectionDropMode mode, double secondsPerBeat, int letter = 0);
-    // Moves a placement, music and all; the placement keeps its id.
+    // Moves a placement, music and all; the placement keeps its id. `newStartBeat` is its start after the move (with
+    // MakeRoom, counted with its old bars already closed up).
     bool movePlacement(PlacementId id, double newStartBeat, SectionDropMode mode, double secondsPerBeat);
     // Removes the placement only; the section goes with its last placement.
     bool removePlacementKeepMusic(PlacementId id);

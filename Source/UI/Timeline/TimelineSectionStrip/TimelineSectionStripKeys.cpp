@@ -51,8 +51,9 @@ void TimelineSectionStrip::selectEnd(bool last) {
     selectPlacement(last ? doc_->getPlacements().back().id : doc_->getPlacements().front().id);
 }
 
-// One section earlier lands on the previous block's start; one later lands just after the next block's end. Always
-// make-room, so no music is covered. False at either end.
+// One section earlier lands on the previous block's start; one later lands just after the next block's end (the two
+// swap places, any gap between them staying where it was). Always make-room, so no music is covered. False at either
+// end.
 bool TimelineSectionStrip::moveSelectedBlock(int step) {
     if (doc_ == nullptr || !selected_.isValid())
         return false;
@@ -67,7 +68,13 @@ bool TimelineSectionStrip::moveSelectedBlock(int step) {
         const auto* otherSection = doc_->getSection(other.section);
         if (otherSection == nullptr)
             return false;
-        const double target = step < 0 ? other.startBeat : other.startBeat + otherSection->lengthBeats;
+        // The target is the block's start after the move, counted with its own bars closed up: one later lands where
+        // the next block ends once it has moved up into the gap.
+        const auto* ownSection = doc_->getSection(placements[i].section);
+        if (ownSection == nullptr)
+            return false;
+        const double length = ownSection->lengthBeats;
+        const double target = step < 0 ? other.startBeat : other.startBeat + otherSection->lengthBeats - length;
         const auto id = selected_;
         const double spb = secondsPerBeat();
         bool moved = false;

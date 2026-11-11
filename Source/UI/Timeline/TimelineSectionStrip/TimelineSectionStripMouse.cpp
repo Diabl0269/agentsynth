@@ -5,6 +5,7 @@
 // starts from pressedBlock_ and hooks into dragPressedBlock / releasePressedBlock below.
 
 #include "UI/Layout/DragCursor.h"
+#include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
 
@@ -59,9 +60,13 @@ void TimelineSectionStrip::beginMakeDrag(const juce::MouseEvent& e) {
     updateMakeDrag(e);
 }
 
-void TimelineSectionStrip::updateMakeDrag(const juce::MouseEvent& e) {
-    const auto span =
-        sectionstrip::makeDragSpan(makeAnchorBeat_, beatAtX((double)e.position.x), beatsPerBar(), blockSpans());
+void TimelineSectionStrip::updateMakeDrag(const juce::MouseEvent& e) { updateMakeDragAt(e.position); }
+
+// The outline at a pointer position; a drag event and an edge-scroll tick both land here.
+void TimelineSectionStrip::updateMakeDragAt(juce::Point<float> pos) {
+    lastDragPointer_ = pos;
+    updateEdgeScrollArming();
+    const auto span = sectionstrip::makeDragSpan(makeAnchorBeat_, beatAtX((double)pos.x), beatsPerBar(), blockSpans());
     if (span.start == makeDragSpan_.start && span.end == makeDragSpan_.end)
         return;
     makeDragSpan_ = span;
@@ -72,6 +77,7 @@ void TimelineSectionStrip::endMakeDrag(bool commit) {
     const bool was = makeDragging_;
     const auto span = makeDragSpan_;
     makeDragging_ = false;
+    stopEdgeScroll();
     makeArmed_ = false;
     makeDragSpan_ = {};
     if (was)
@@ -160,6 +166,7 @@ void TimelineSectionStrip::beginBlockDrag(const juce::MouseEvent& e) {
             continue;
         dragBlock_ = block;
         dragCopy_ = e.mods.isAltDown();
+        settlingId_ = {};
         dragGrabOffsetPx_ = pressPos_.x - block.bounds.getX();
         blockDragging_ = true;
         showDragCursor(*this, dragCopy_);
@@ -169,57 +176,135 @@ void TimelineSectionStrip::beginBlockDrag(const juce::MouseEvent& e) {
 }
 
 void TimelineSectionStrip::updateBlockDrag(const juce::MouseEvent& e) {
-    dragGhostX_ = e.position.x - dragGrabOffsetPx_;
-    dragOutside_ = e.position.y < 0.0f;
-    // A move ignores the block's own span, which it is about to leave; a copy leaves the original where it is, so the
-    // original counts as an obstacle.
-    std::vector<sectionstrip::Span> others;
+    updateBlockDragAt(e.position, e.mods.isShiftDown());
+}
+
+// The preview of a block drag at a pointer position: the ghost under the pointer, and the plan of what a release there
+// does (sectionstrip::planSectionDrop): the drop line at the landing, the other blocks easing to where the drop puts
+// them. A drag event, a Shift press or release, and an edge-scroll tick all land here.
+void TimelineSectionStrip::updateBlockDragAt(juce::Point<float> pos, bool shift) {
+    lastDragPointer_ = pos;
+    lastDragShift_ = shift;
+    dragGhostX_ = pos.x - dragGrabOffsetPx_;
+    dragOutside_ = pos.y < 0.0f;
+    dragMakeRoom_ = dropMode(shift) == synth::SectionDropMode::MakeRoom;
+    setDropPlan(sectionstrip::planSectionDrop(placedSpans(), pressedBlock_.value, beatAtX((double)dragGhostX_),
+                                              dragCopy_, dragMakeRoom_, beatsPerBar(), viewState_.pixelsPerBeat));
+    updateEdgeScrollArming();
+    repaint();
+}
+
+void TimelineSectionStrip::modifierKeysChanged(const juce::ModifierKeys& mods) {
+    if (blockDragging_ && !dragCancelled_ && mods.isShiftDown() != lastDragShift_)
+        updateBlockDragAt(lastDragPointer_, mods.isShiftDown());
+}
+
+std::vector<sectionstrip::PlacedSpan> TimelineSectionStrip::placedSpans() const {
+    std::vector<sectionstrip::PlacedSpan> spans;
     if (doc_ != nullptr)
         for (const auto& placement : doc_->getPlacements())
             if (const auto* section = doc_->getSection(placement.section))
-                if (dragCopy_ || placement.id != pressedBlock_)
-                    others.push_back({placement.startBeat, placement.startBeat + section->lengthBeats});
-    dragTargetBeat_ = sectionstrip::dropBeat(beatAtX((double)dragGhostX_), dragBlock_.lengthBeats, beatsPerBar(),
-                                             viewState_.pixelsPerBeat, others);
-    repaint();
+                spans.push_back({placement.id.value, placement.startBeat, section->lengthBeats});
+    return spans;
+}
+
+// Every other block eases from where it is drawn now to where the new plan puts it; a block the old and new plans
+// agree on keeps its glide.
+void TimelineSectionStrip::setDropPlan(sectionstrip::DropPlan plan) {
+    if (doc_ == nullptr)
+        return;
+    for (const auto& placement : doc_->getPlacements()) {
+        if (placement.id == pressedBlock_ && !dragCopy_)
+            continue;
+        const double was =
+            hasDragPlan_ ? dragPlan_.startOf(placement.id.value).value_or(placement.startBeat) : placement.startBeat;
+        const double now = plan.startOf(placement.id.value).value_or(placement.startBeat);
+        if (std::abs(was - now) > sectionstrip::kBarEpsilon)
+            dropGlide_->retarget(placement.id.value, dropGlide_->drawnAt(placement.id.value, {(float)was, 0.0f}),
+                                 {(float)now, 0.0f});
+    }
+    dragPlan_ = std::move(plan);
+    hasDragPlan_ = true;
+}
+
+// The drag ended with nothing written: the blocks it moved aside ease back to where they are.
+void TimelineSectionStrip::clearDropPlan() {
+    if (hasDragPlan_)
+        setDropPlan({});
+    hasDragPlan_ = false;
+    dragPlan_ = {};
+}
+
+double TimelineSectionStrip::drawnStartOf(synth::PlacementId id, double docStart) const {
+    const double resting = hasDragPlan_ ? dragPlan_.startOf(id.value).value_or(docStart) : docStart;
+    return (double)dropGlide_->drawnAt(id.value, {(float)resting, 0.0f}).x;
+}
+
+double TimelineSectionStrip::getDrawnStartBeatForTest(synth::PlacementId id) const {
+    const auto* placement = doc_ != nullptr ? doc_->getPlacement(id) : nullptr;
+    return placement == nullptr ? 0.0 : drawnStartOf(id, placement->startBeat);
+}
+
+juce::Rectangle<float> TimelineSectionStrip::getDragGhostBoundsForTest() const {
+    const float lift = motion_.lift();
+    const float x = blockDragging_ ? dragGhostX_ : dragSettleX_ + (dragGhostX_ - dragSettleX_) * lift;
+    return dragBlock_.bounds.withX(x);
 }
 
 void TimelineSectionStrip::releasePressedBlock(const juce::MouseEvent& e) {
     if (!blockDragging_)
         return;
     const bool commit = !dragCancelled_ && e.position.y >= 0.0f && doc_ != nullptr;
+    if (commit)
+        updateBlockDragAt(e.position, e.mods.isShiftDown()); // the release's own place and Shift are the last word
     const auto id = pressedBlock_;
     const auto section = dragBlock_.section;
-    const double target = dragTargetBeat_;
-    const auto mode = dropMode(e.mods.isShiftDown());
+    const double target = dragPlan_.landing;
+    const auto mode = dragMakeRoom_ ? synth::SectionDropMode::MakeRoom : synth::SectionDropMode::Cover;
     const bool copy = dragCopy_;
     const double spb = secondsPerBeat();
     const bool moved = std::abs(target - dragBlock_.startBeat) > sectionstrip::kBarEpsilon;
-    dragSettleX_ = commit ? (float)xAtBeat(target) : dragBlock_.bounds.getX();
     blockDragging_ = false;
+    stopEdgeScroll(); // after the last re-plan, which re-arms it while the drag still holds
     endDragCursor(*this, hovered_.isValid() ? dragGrabCursor() : juce::MouseCursor());
     motion_.liftTo(false);
     if (!commit || (!copy && !moved)) {
-        dragSettleX_ = dragBlock_.bounds.getX();
+        dragSettleX_ = (float)xAtBeat(dragBlock_.startBeat); // the view may have scrolled since the press
+        clearDropPlan();
         repaint();
         return;
     }
+    // A cover drop takes the blocks under the landing away: the first of them shrinks out where it was.
+    for (const auto& other : dragPlan_.others)
+        if (other.covered) {
+            if (const auto ghost = ghostOf(synth::PlacementId{other.id}))
+                motion_.startExit(*ghost);
+            break;
+        }
+    dragSettleX_ = (float)xAtBeat(target);
     synth::PlacementId placed;
     if (copy)
         performEdit(
             [this, section, target, mode, spb, &placed] { placed = doc_->placeSection(section, target, mode, spb); });
     else
         performEdit([this, id, target, mode, spb] { doc_->movePlacement(id, target, mode, spb); });
+    // The doc now has every block where the plan drew it, so the glides in flight carry on toward the same places;
+    // refreshing while the plan is still held tells trackChangesForMotion not to start glides of its own.
     refresh();
+    hasDragPlan_ = false;
+    dragPlan_ = {};
     // The edit can rebuild the panel (which clears the selection); the block just dropped stays the selected one.
-    selectPlacement(placed.isValid() ? placed : id);
+    settlingId_ = placed.isValid() ? placed : id;
+    selectPlacement(settlingId_);
 }
 
-// Esc mid-drag: the ghost settles back where the block is; nothing is written. Later drag events of the same press
-// are ignored.
+// Esc mid-drag: the ghost settles back where the block is and the blocks it moved aside ease back; nothing is written.
+// Later drag events of the same press are ignored.
 void TimelineSectionStrip::cancelBlockDrag() {
     dragCancelled_ = true;
-    dragSettleX_ = dragBlock_.bounds.getX();
+    stopEdgeScroll();
+    dragSettleX_ = (float)xAtBeat(dragBlock_.startBeat);
+    clearDropPlan();
     endDragCursor(*this, hovered_.isValid() ? dragGrabCursor() : juce::MouseCursor());
     motion_.liftTo(false);
     repaint();
