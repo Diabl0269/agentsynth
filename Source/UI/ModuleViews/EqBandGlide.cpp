@@ -34,7 +34,6 @@ EqBandGlide::EqBandGlide(juce::Component& owner)
     };
     tween_->onDirty = dirty;
     morph_->onDirty = dirty;
-    morph_->setDurationMs(kTypeMorphMs);
 }
 
 EqBandGlide::Drawn EqBandGlide::drawn(const Bands& resting, float outputGain) const {
@@ -72,7 +71,7 @@ EqBandGlide::Drawn EqBandGlide::drawn(const Bands& resting, float outputGain) co
 void EqBandGlide::sync(const Bands& before, float outputGainBefore, const Bands& after, float outputGainAfter,
                        bool restored) {
     if (shapeDiffers(before, after))
-        morph_->retarget(kMorphKey, {1.0f, 0.0f}, {0.0f, 0.0f});
+        morph_->retarget(kMorphKey, {1.0f, 0.0f}, {0.0f, 0.0f}, false, kTypeMorphMs);
     if (!tween_->isAnimating())
         presenceGlide_.fill(false);
     const auto now = drawn(before, outputGainBefore);
