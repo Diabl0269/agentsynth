@@ -6,6 +6,10 @@ namespace synth::soundbrowser {
 
 namespace {
 
+// Saved index format. A classifier change bumps it so every file is analysed again (a cached entry is otherwise
+// reused while its size and modification time match).
+constexpr int kIndexCacheVersion = 2;
+
 bool isAudioExtension(const juce::String& ext) {
     return ext == "wav" || ext == "aif" || ext == "aiff" || ext == "flac" || ext == "ogg" || ext == "mp3";
 }
@@ -16,8 +20,10 @@ juce::String relativeFolderOf(const juce::File& file, const juce::File& root) {
 }
 
 // Header-only analysis: opens the reader (which parses the format header and metadata chunks) and never reads a
-// sample.
-void readAudioHeader(juce::AudioFormatManager& formats, const juce::File& file, SoundEntry& entry, bool& readable) {
+// sample. `acidDecided` is set when an ACID chunk is present: it then decides the kind, whatever the name says.
+void readAudioHeader(juce::AudioFormatManager& formats, const juce::File& file, SoundEntry& entry, bool& readable,
+                     bool& acidDecided) {
+    acidDecided = false;
     std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
     readable = reader != nullptr;
     if (!readable)
@@ -28,6 +34,7 @@ void readAudioHeader(juce::AudioFormatManager& formats, const juce::File& file, 
     const auto& meta = reader->metadataValues;
     if (!meta.containsKey(juce::WavAudioFormat::acidOneShot))
         return;
+    acidDecided = true;
     const bool oneShot = meta[juce::WavAudioFormat::acidOneShot].getIntValue() != 0;
     double tempo = meta.getValue(juce::WavAudioFormat::acidTempo, "0").getDoubleValue();
     const int beats = meta.getValue(juce::WavAudioFormat::acidBeats, "0").getIntValue();
@@ -69,7 +76,14 @@ void classify(SoundEntry& e, bool isInstrument, juce::AudioFormatManager* format
     if (isInstrument)
         return;
     const auto nameKey = e.key;
-    readAudioHeader(*formats, file, e, readable);
+    bool acidDecided = false;
+    readAudioHeader(*formats, file, e, readable, acidDecided);
+    // A name or folder that says loop over-promises: a 0.3 s slice in "Loops/Synth" is a hit. Only the file's own ACID
+    // chunk is trusted over the audio's length.
+    if (readable && !acidDecided && e.kind == SoundKind::Loop && !loopLengthFits(e.lengthSeconds, e.tempo)) {
+        e.kind = SoundKind::OneShot;
+        e.tempo = 0.0;
+    }
     if (nameKey.isNotEmpty())
         e.key = nameKey;
 }
@@ -229,7 +243,7 @@ std::vector<SoundEntry> readIndexCache(const juce::File& file, bool& truncated) 
         return out;
     const auto root = juce::JSON::parse(file);
     const auto* list = root.getProperty("entries", {}).getArray();
-    if (list == nullptr || (int)root.getProperty("version", 0) != 1)
+    if (list == nullptr || (int)root.getProperty("version", 0) != kIndexCacheVersion)
         return out;
     truncated = (bool)root.getProperty("truncated", false);
     out.reserve((size_t)list->size());
@@ -246,7 +260,7 @@ void writeIndexCache(const juce::File& file, const std::vector<SoundEntry>& entr
     for (const auto& e : entries)
         list.add(entryToVar(e));
     auto* o = new juce::DynamicObject();
-    o->setProperty("version", 1);
+    o->setProperty("version", kIndexCacheVersion);
     o->setProperty("truncated", truncated);
     o->setProperty("entries", juce::var(list));
     file.getParentDirectory().createDirectory();
