@@ -73,6 +73,9 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.drawText(cardTitle(), 0, 0, getWidth(), kHeaderHeight, juce::Justification::centred, true);
     }
 
+    if (cardBody_ != nullptr)
+        cardBody_->paintMoreHighlight(g);
+
     // Drop-target highlight while an audio file hovers over a Sampler.
     if (fileDragHighlight) {
         auto dropColour = (lf != nullptr) ? lf->getTheme().colors.accent : juce::Colours::yellow;

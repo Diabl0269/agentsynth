@@ -22,6 +22,8 @@
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include "UI/ModuleViews/ScopeComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/ThemeManager.h"
 
 using namespace cardbody_test;
 using namespace synth::cardlayout;
@@ -486,4 +488,97 @@ TEST(CardFades, EveryFadeFrameReachesTheCardsCachedRasterAndASettledCardPaintsNo
     EXPECT_GT(last, mid) << "and so does the last one";
     paintCard();
     EXPECT_EQ(cache->getRasterCountForTest(), last) << "once landed the card is settled again";
+}
+
+namespace {
+int channelSum(juce::Colour c) { return (int)c.getRed() + (int)c.getGreen() + (int)c.getBlue(); }
+} // namespace
+
+// The open More area carries a soft accent wash and hairline in every theme, over that area only, and nothing when
+// folded; the card's own paint draws it, and it fades with the row.
+TEST(CardFades, TheOpenMoreAreaCarriesAnAccentHighlightInEveryThemeAndOnlyThere) {
+    synth::theme::ThemeManager themes;
+    synth::theme::AppLookAndFeel lf;
+    for (const auto& theme : themes.getThemes()) {
+        SCOPED_TRACE(theme.id.toStdString());
+        lf.applyTheme(theme);
+        Rig rig;
+        rig.build(std::make_unique<OscillatorModule>(), [] {
+            OscillatorModule module;
+            return automaticLayoutHiding(module, {"level"});
+        }());
+        auto* card = rig.card;
+        card->setLookAndFeel(&lf);
+        auto* body = card->getCardBody();
+        ASSERT_NE(body, nullptr);
+        const auto render = [&](auto&& paintFn) {
+            juce::Image img(juce::Image::ARGB, card->getWidth(), card->getHeight(), true, juce::SoftwareImageType());
+            juce::Graphics g(img);
+            paintFn(g);
+            return img;
+        };
+
+        const auto folded = render([&](juce::Graphics& g) { body->paintMoreHighlight(g); });
+        for (int y = 0; y < folded.getHeight(); y += 3)
+            for (int x = 0; x < folded.getWidth(); x += 3)
+                ASSERT_EQ(folded.getPixelAt(x, y).getAlpha(), 0) << "folded: nothing painted at " << x << "," << y;
+
+        body->setMoreUnfolded(true);
+        ASSERT_TRUE(body->isMoreUnfolded());
+        const int top = body->getMoreButton()->getY() - 3;
+        const auto open = render([&](juce::Graphics& g) { body->paintMoreHighlight(g); });
+        bool insideTinted = false;
+        for (int y = 0; y < open.getHeight(); ++y)
+            for (int x = 0; x < open.getWidth(); ++x)
+                if (open.getPixelAt(x, y).getAlpha() > 0) {
+                    ASSERT_GE(y, top) << "tint above the More area at " << x << "," << y;
+                    ASSERT_GE(x, 3) << "tint left of the More area";
+                    ASSERT_LT(x, open.getWidth() - 3) << "tint right of the More area";
+                    insideTinted = true;
+                }
+        EXPECT_TRUE(insideTinted);
+
+        // The card's own paint includes it: the hairline differs from the plain card fill just outside it.
+        const auto whole = render([&](juce::Graphics& g) { card->paint(g); });
+        const int y = (top + card->getHeight()) / 2;
+        EXPECT_GE(std::abs(channelSum(whole.getPixelAt(3, y)) - channelSum(whole.getPixelAt(1, y))), 6)
+            << "the hairline is drawn by the card's paint";
+        card->setLookAndFeel(nullptr);
+    }
+}
+
+TEST(CardFades, TheMoreHighlightFadesWithTheRowInsteadOfPopping) {
+    Rig rig;
+    rig.build(std::make_unique<OscillatorModule>(), [] {
+        OscillatorModule module;
+        return automaticLayoutHiding(module, {"level"});
+    }());
+    auto* body = rig.card->getCardBody();
+    ASSERT_NE(body, nullptr);
+    const auto alphaAt = [&] {
+        juce::Image img(juce::Image::ARGB, rig.card->getWidth(), rig.card->getHeight(), true,
+                        juce::SoftwareImageType());
+        juce::Graphics g(img);
+        body->paintMoreHighlight(g);
+        juce::uint8 most = 0;
+        for (int y = 0; y < img.getHeight(); ++y)
+            for (int x = 0; x < img.getWidth(); ++x)
+                most = std::max(most, img.getPixelAt(x, y).getAlpha());
+        return most;
+    };
+    FadeAnimateGuard guard;
+    EXPECT_EQ(alphaAt(), 0);
+    body->setMoreUnfolded(true);
+    const auto start = alphaAt();
+    FadeVisibility::stepAllForTest(0.5f);
+    const auto middle = alphaAt();
+    FadeVisibility::stepAllForTest(1.0f);
+    const auto full = alphaAt();
+    EXPECT_LT(start, middle);
+    EXPECT_LT(middle, full);
+    body->setMoreUnfolded(false);
+    FadeVisibility::stepAllForTest(0.5f);
+    EXPECT_LT(alphaAt(), full) << "fading out, not gone at once";
+    FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_EQ(alphaAt(), 0);
 }

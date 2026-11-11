@@ -5,11 +5,13 @@
 // docs/layout/module-card.md#the-more-row.
 #include "CardBody.h"
 #include "CardBodyMoreButton.h"
+#include "UI/Graph/CardOutline.h"
 #include "UI/Graph/GraphEditor/CableEndGlide.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/GraphEditor/GraphEditorPaintMemo.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/FocusRing.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth {
 
@@ -78,6 +80,36 @@ juce::Button* CardBody::getMoreButton() const { return moreButton_.get(); }
 // clear (or returns them) the same way any other card growth does. The row's controls fade and the card's height
 // follows (CardBlockFade); the row is clipped by the card's bottom edge while it grows.
 void CardBody::setMoreUnfolded(bool unfolded) { applyMoreUnfolded(unfolded, /*peek=*/false); }
+
+// The row opens or folds with the step while the cards the step restores are already placed: a peek skips make-room;
+// an opened row hands the neighbours back to the person's rules at once.
+void CardBody::setMoreUnfoldedByHistory(bool unfolded) {
+    applyMoreUnfolded(unfolded, /*peek=*/true);
+    if (unfolded)
+        peekHoldsNeighbours_ = false;
+}
+
+// The open More area (its button and the controls under it) carries a low-alpha accent wash and a hairline in the
+// theme's accent, fading with the row (moreFade_), so it is clear the person is working inside it. The card
+// image's border and selection glow are untouched.
+void CardBody::paintMoreHighlight(juce::Graphics& g) const {
+    if (!hasMoreRow() || moreButton_ == nullptr)
+        return;
+    const float shown = moreFade_.isAttached() ? moreFade_.fraction() : (moreUnfolded_ ? 1.0f : 0.0f);
+    if (shown <= 0.01f)
+        return;
+    const auto& theme = synth::theme::themeOf(card_);
+    const auto body = synth::ui::cardBodyRect(card_.getLocalBounds().toFloat());
+    auto area = body.withTop((float)moreButton_->getY() - 3.0f).reduced(3.0f, 0.0f);
+    area.removeFromBottom(3.0f);
+    area = area.getIntersection(body);
+    if (area.isEmpty())
+        return;
+    g.setColour(theme.colors.accent.withAlpha(0.08f * shown));
+    g.fillRoundedRectangle(area, 6.0f);
+    g.setColour(theme.colors.accent.withAlpha(0.35f * shown));
+    g.drawRoundedRectangle(area.reduced(0.5f), 6.0f, 1.0f);
+}
 
 // `peek` is a cable's doing (opening the row, or folding what it opened): the row then grows over its neighbours
 // without making room, so a live cable never moves a card it may still land on. Any other caller is the person's

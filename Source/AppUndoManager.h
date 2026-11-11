@@ -34,6 +34,10 @@ public:
 
     juce::UndoManager& getUndoManager() { return undoManager; }
 
+    /** Appends a UI-only action (a card's row open state) to the transaction the gesture's edits opened, so one
+     *  Cmd+Z undoes it with them. The action's perform() runs now; make it a no-op if the change is already made. */
+    bool recordUiAction(std::unique_ptr<juce::UndoableAction> action) { return performAction(action.release()); }
+
     /**
      * @brief Records a graph-structural mutation (add/remove module, connect/disconnect).
      *
