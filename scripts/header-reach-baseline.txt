@@ -128,8 +128,8 @@
 506 Source/Modules/Sampler/SamplerInstrumentSlot.h
 505 Source/Modules/Sampler/SamplerInstrumentHost.h
 501 Source/UI/Layout/ChevronTurn.h
-499 Source/UI/Layout/KeyGlide/KeyGlide.h
-498 Source/UI/Layout/KeyGlide/KeyGlideHost.h
+502 Source/UI/Layout/KeyGlide/KeyGlide.h
+502 Source/UI/Layout/KeyGlide/KeyGlideHost.h
 498 Source/UI/Layout/PointEditing/PointSelectionModel.h
 497 Source/UI/Layout/PointEditing/PointBoxSelect.h
 496 Source/Modules/Lfo/LfoCustomWave.h
