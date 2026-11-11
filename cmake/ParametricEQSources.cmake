@@ -5,7 +5,6 @@ target_sources(Core PRIVATE
     Source/Modules/FX/ParametricEQ/ParametricEQBandTypes.h
     Source/Modules/FX/ParametricEQ/ParametricEQFilterDesign.h
     Source/Modules/FX/ParametricEQ/ParametricEQFilterDesign.cpp
-    Source/Modules/FX/ParametricEQ/ParametricEQParamIds.h
     Source/Modules/FX/ParametricEQ/ParametricEQModule.cpp
     Source/Modules/FX/ParametricEQ/ParametricEQModuleProcess.cpp
 )

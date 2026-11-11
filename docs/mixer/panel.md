@@ -767,7 +767,7 @@ row and fader still line up; Direct has none of the rows and stays as it was. A 
 When a strip's insert chain contains a Parametric EQ, its column shows a small frequency-response
 curve (Cubase's top-mixer-row idiom) — **computed from the EQ's own parameters, never audio**, and
 cached so a busy graph never pays for an unconditional per-tick repaint (`Source/UI/CLAUDE.md`). A bypassed
-EQ draws dimmed; a strip with no EQ insert shows no thumbnail; **a strip with two shows the thumbnail
+EQ draws dimmed; the curve sums every enabled band of the 24 and a rounded badge at its top right counts them (none for 0; tooltip "EQ: N bands. Click to open.", "EQ: 1 band." when singular); a strip with no EQ insert shows no thumbnail; **a strip with two shows the thumbnail
 for only the first one in signal order**, Cubase's own single-slot idiom and a deliberate trim.
 
 - **Curve maths** — `synth::ui::EqResponseCurve::compute` (`Source/UI/Mixer/EqResponseCurve.h`), 48

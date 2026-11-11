@@ -4,7 +4,6 @@
 #include "AIIntegrationService.h"
 #include "AppUndoManager.h"
 #include "Modules/DrumKit/DrumKitModule.h"
-#include "Modules/FX/ParametricEQ/ParametricEQParamIds.h"
 
 namespace synth {
 
@@ -356,18 +355,15 @@ juce::String AIIntegrationService::extractJsonFromResponse(const juce::String& r
     return response.trim();
 }
 
-// The model reads a Drum Kit through its group ids, so the 128 per-pad values stay out of its context; an EQ's
-// hidden bands and band types (edited ones; nodeToJSON already leaves out those at their default) stay out too.
+// The model reads a Drum Kit through its group ids, so the 128 per-pad values stay out of its context.
 juce::String AIIntegrationService::getPatchContext() {
     juce::var json = AIStateMapper::graphToJSON(audioGraph);
     if (auto* nodes = json.getProperty("nodes", {}).getArray())
         for (auto& node : *nodes)
-            if (const auto type = node.getProperty("type", {}).toString();
-                type == "Drum Kit" || type == "Parametric EQ")
+            if (node.getProperty("type", {}).toString() == "Drum Kit")
                 if (auto* params = node.getProperty("params", {}).getDynamicObject())
                     for (int i = params->getProperties().size(); --i >= 0;)
-                        if (const auto key = params->getProperties().getName(i).toString();
-                            type == "Drum Kit" ? DrumKitModule::isPadParamId(key) : synth::eq::isHiddenParamId(key))
+                        if (DrumKitModule::isPadParamId(params->getProperties().getName(i).toString()))
                             params->removeProperty(params->getProperties().getName(i));
     return juce::JSON::toString(json);
 }

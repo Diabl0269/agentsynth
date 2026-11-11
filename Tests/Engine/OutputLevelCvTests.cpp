@@ -246,7 +246,10 @@ TEST(OutputLevelCv, TheNewTargetsAreAppendedLastAndHaveNoGutterJack) {
         for (const auto& target : module->getModulationTargets())
             if (target.channelIndex >= testCase.widthBeforeCables) {
                 EXPECT_TRUE(target.knobOnly) << target.name;
-                EXPECT_TRUE(target.paramId == "outputLevel" || target.paramId == "pan" || target.paramId == "mix")
+                const bool eqBand =
+                    module->getModuleType() == ModuleType::ParametricEQ && target.paramId.startsWith("band");
+                EXPECT_TRUE(target.paramId == "outputLevel" || target.paramId == "pan" || target.paramId == "mix" ||
+                            eqBand)
                     << target.name;
             }
     }

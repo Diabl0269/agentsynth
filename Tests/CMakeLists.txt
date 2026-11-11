@@ -350,6 +350,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentMorphShapesCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLfoMorphCardTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentEqBandRowTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentAutomationMarkerTests.cpp
     UI/Layout/AutomatedMarkerTests.cpp
     UI/Mixer/MixerAutomationMarkerTests.cpp

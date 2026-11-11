@@ -142,7 +142,7 @@ std::vector<Variant> effectVariants(const std::string& type) {
                 set(m, ("band" + juce::String(b) + "Gain").toRawUTF8(), 12);
             }
         }));
-        // Slots 5-24 are off by default like every slot; on, their knobs are heard (no surface shows them yet).
+        // Slots 5-24 are off by default like every slot; on, their knobs are heard.
         v.push_back(plain("slots 5-24 on, +12 dB", [](juce::AudioProcessor& m) {
             for (int b = 5; b <= 24; ++b) {
                 set(m, ("band" + juce::String(b) + "On").toRawUTF8(), 1);

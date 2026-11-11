@@ -5,6 +5,7 @@
 #include "ModuleComponent.h"
 #include "AudioEngine/AudioEngine.h"
 #include "CardKnobSlider.h"
+#include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentHostedPluginCard.h"
 #include "ModuleComponentInternal.h"
 #include "ModuleComponentModChip.h"
@@ -218,6 +219,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         eqCurveComponent = std::make_unique<EQCurveComponent>(*eqMod);
         wireEqGestureCallbacks(*eqCurveComponent);
         addAndMakeVisible(eqCurveComponent.get());
+        eqBand_ = std::make_unique<EqBandRow>(*this, *eqMod, *eqCurveComponent);
 
         // The spectrum is this curve's backdrop, so it starts on (the analyser gates itself on
         // actual signal, so an idle patch still costs no repaints).
@@ -371,6 +373,9 @@ void ModuleComponent::detachFromProcessor() {
 
     // Same for the frequency-domain views: their 30 Hz timers poll the module for parameter
     // values and FFT samples, so they must go before the module pointer is dropped.
+    if (eqBand_ != nullptr)
+        eqBand_->shutdown(processorAlive);
+    eqBand_.reset(); // the strip and pill listen to the curve
     eqCurveComponent.reset();
     freqResponseComponent.reset();
     freqResponseToggle.reset();

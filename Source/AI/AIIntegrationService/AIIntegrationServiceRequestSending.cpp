@@ -163,7 +163,7 @@ std::vector<AIIntegrationService::AutomationTargetInfo> AIIntegrationService::en
         for (auto* p : node->getProcessor()->getParameters()) {
             auto* f = dynamic_cast<juce::AudioParameterFloat*>(p);
             // A Drum Kit's per-pad parameters stay out: the model drives its group ids, which write the pads. So does a
-            // parameter no surface shows yet (ModuleBase::isParameterExposed).
+            // parameter a module keeps off every surface (ModuleBase::isParameterExposed).
             const auto* module = dynamic_cast<const ModuleBase*>(node->getProcessor());
             if (f == nullptr ||
                 (dynamic_cast<DrumKitModule*>(node->getProcessor()) != nullptr &&
