@@ -9,7 +9,7 @@
 # + and Cmd+D and Backspace (each undone with Cmd+Z), then the same keys on the card's own curve with the card focused:
 # Option+arrows and Up/Down, and S and Escape. Last, Settings > Keyboard Shortcuts shows the EQ section with its 13 rows.
 # Every key goes through the window peer's key path to whatever has keyboard focus, as the OS delivers it.
-# The Settings tab's state (`eqRows`) is read with getState on `shortcutsSettingsTab`.
+# The Settings tab's state (`eqRows`) is read with getState on `shortcutsSettingsState`.
 motion: true
 pop_check: {off: "keys here are checked by values; the glides of undo are filmed by eq-undo-glide and eq-bands-strip"}
 record: true
@@ -121,21 +121,21 @@ steps:
   - expect: {id: "Settings", showing: true, within_ms: 3000}
   - click: {id: "Keyboard Shortcuts"}
   - wait: {}
-  - expect: {id: shortcutsSettingsTab, contains: {sections: "EQ"}, within_ms: 2000}
+  - expect: {id: shortcutsSettingsState, contains: {sections: "EQ"}, within_ms: 2000}
   - click: {id: "Search shortcuts"}
   - type: {text: "EQ Band"}
   - wait: {}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Select Previous EQ Band"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Select Next EQ Band"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Move EQ Band Down in Frequency"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Move EQ Band Up in Frequency"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Raise EQ Band Gain"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Lower EQ Band Gain"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Widen EQ Band"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Narrow EQ Band"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Solo EQ Band"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Open EQ Band Type Menu"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Add EQ Band"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Remove EQ Band"}}
-  - expect: {id: shortcutsSettingsTab, contains: {eqRows: "Duplicate EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Select Previous EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Select Next EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Move EQ Band Down in Frequency"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Move EQ Band Up in Frequency"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Raise EQ Band Gain"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Lower EQ Band Gain"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Widen EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Narrow EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Solo EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Open EQ Band Type Menu"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Add EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Remove EQ Band"}}
+  - expect: {id: shortcutsSettingsState, contains: {eqRows: "Duplicate EQ Band"}}
   - mark: {check: 5, name: eq-shortcuts-section}

@@ -4,7 +4,6 @@
 #include "ModuleComponentEQBandRow.h"
 #include "ModuleComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include <algorithm>
 
 namespace {
@@ -62,7 +61,7 @@ ModuleComponent::EqBandRow::EqBandRow(ModuleComponent& card, ParametricEQModule&
     card_.addAndMakeVisible(strip_.get());
 
     for (int f = 0; f < kFields; ++f) {
-        auto* knob = card_.adoptBespokeWidget(new synth::ui::CardKnobSlider());
+        auto* knob = newKnob();
         knobs_[(size_t)f] = knob;
         card_.sliders.add(knob);
         card_.sliderParams.add(nullptr);
@@ -149,8 +148,7 @@ void ModuleComponent::EqBandRow::bind(int band) {
         slider->setTitle(param->getName(100));
         slider->setTooltip(param->getName(100));
         card_.rebindMidiLearnable(*slider, param);
-        if (auto* gestures = dynamic_cast<synth::ui::CardControlGestures*>(slider))
-            card_.wireCardControlGestures(*slider, *gestures, param);
+        wireKnobGestures(*slider, param);
         if (previous != band) {
             glide_->retarget(f, {shown, 0.0f}, {param->getValue(), 0.0f}, false, kKnobGlideMs);
             applyGlideFrame();

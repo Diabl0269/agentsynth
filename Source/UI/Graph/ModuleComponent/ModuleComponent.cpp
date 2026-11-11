@@ -974,3 +974,13 @@ void ModuleComponent::setRasterFrozen(bool frozen) {
 }
 
 bool ModuleComponent::isRasterFrozen() const noexcept { return rasterCache != nullptr && rasterCache->isFrozen(); }
+
+// Defined here, where CardKnobSlider is already included, so the band row unit stays out of its header's reach.
+juce::Slider* ModuleComponent::EqBandRow::newKnob() {
+    return card_.adoptBespokeWidget(new synth::ui::CardKnobSlider());
+}
+
+void ModuleComponent::EqBandRow::wireKnobGestures(juce::Slider& knob, juce::RangedAudioParameter* param) {
+    if (auto* gestures = dynamic_cast<synth::ui::CardControlGestures*>(&knob))
+        card_.wireCardControlGestures(knob, *gestures, param);
+}

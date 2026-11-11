@@ -52,6 +52,8 @@ public:
 private:
     void eqCurveChanged() override;
     void bind(int band);
+    juce::Slider* newKnob();
+    void wireKnobGestures(juce::Slider& knob, juce::RangedAudioParameter* param);
     void refreshText();
     void applyGlideFrame();
 
