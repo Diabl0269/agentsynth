@@ -144,7 +144,8 @@ along, so the thing never sticks at the edge or goes out of sight. Each surface 
   in from the edge a thing leaving by it is kept. A clip picked with the keys jumps there once (`firstBeatShowing`). A
   lane dot carried by a held Alt+arrow never makes the view jump: once the dot's DRAWN place passes that line the view
   scrolls by the excess every frame (`followKeyDragDot`), eased together with the dot, so the drawn dot holds the line
-  and does not lurch; at beat 0 it stays clamped.
+  and does not lurch; at beat 0 it stays clamped. Undo and redo of a lane move bring the restored selection into view
+  the same way (`AutomationLaneEditor::followRestoredSelection`, guard `UndoKeepsSelection.*`).
 - **Canvas.** `CanvasEdgeScroller` and `canvasEdgePanDelta`, above: card, macro, cable, selection box, macro name
   chip, library drops and the on-card layout editor's control, group and Add control drags (so a card bigger than the
   view still takes a drop anywhere on it and on its "Drop to hide" area; that scroll stops once the card's far side

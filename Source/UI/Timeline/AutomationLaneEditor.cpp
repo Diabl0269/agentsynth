@@ -45,7 +45,8 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
     refreshDescription();
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
     // count, `holding` whether a key hold is moving the selection and `dragging` whether any drag is under way and
-    // `laneRange` whether the Range tool's selection sits here.
+    // `laneRange` whether the Range tool's selection sits here; `selectedInView` how many selected points the view
+    // shows and `holdSegments` how many segments are Hold.
     testModeProbe_ = makeLaneStateProbe("automationLaneState", [this](juce::DynamicObject& into) {
         into.setProperty("cursor", laneCursorKind(getMouseCursor()));
         into.setProperty("selectedPoints", selection_.size());
@@ -53,6 +54,18 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
         into.setProperty("holding", keyHold_.active());
         into.setProperty("dragging", dragMode_ != DragMode::None);
         into.setProperty("laneRange", shapeGesture_.rangeIsOnThisLane() && shapeGesture_.getLaneRange()->hasWidth());
+        int inView = 0, holds = 0;
+        if (const auto* points = lanePoints()) {
+            const double last = viewState_.xToBeat((double)getWidth());
+            for (std::size_t i = 0; i < points->size(); ++i) {
+                const auto& p = (*points)[i];
+                inView +=
+                    selection_.contains(p.beat) && p.beat >= viewState_.firstVisibleBeat && p.beat <= last ? 1 : 0;
+                holds += i + 1 < points->size() && p.curve == static_cast<int>(synth::BreakpointCurve::Hold) ? 1 : 0;
+            }
+        }
+        into.setProperty("selectedInView", inView);
+        into.setProperty("holdSegments", holds);
     });
     addChildComponent(*testModeProbe_);
     testModeProbe_->setVisible(true);
@@ -832,39 +845,6 @@ bool AutomationLaneEditor::handleEditorKey(const juce::KeyPress& key) {
     return handleSelectionKey(key);
 }
 
-//==============================================================================
-void AutomationLaneEditor::applySegmentCurveChoice(double leftBeat, int curve) {
-    if (doc_ == nullptr || !laneId_.isValid())
-        return;
-    const auto* lane = doc_->getLane(laneId_);
-    if (lane == nullptr)
-        return;
-
-    double value = 0.0;
-    float tension = 0.0f;
-    bool found = false;
-    for (const auto& bp : lane->points) {
-        if (bp.beat == leftBeat) {
-            value = bp.value;
-            tension = bp.tension;
-            found = true;
-            break;
-        }
-    }
-    if (!found)
-        return;
-
-    const auto laneId = laneId_;
-    auto mutate = [this, laneId, leftBeat, value, tension, curve] {
-        doc_->addBreakpoint(laneId, leftBeat, value, tension, curve);
-    };
-    if (undoManager_)
-        undoManager_->recordTimelineChange(*doc_, mutate);
-    else
-        mutate();
-    repaint();
-}
-
 // A handle has its own menu, and so has the curve between two points; anywhere else on the lane is the lane's
 // own menu, which only the owner of the lane can build (the parameter, the track, the host).
 void AutomationLaneEditor::handlePopupClick(const juce::MouseEvent& e) {
@@ -881,15 +861,27 @@ void AutomationLaneEditor::handlePopupClick(const juce::MouseEvent& e) {
 
 bool AutomationLaneEditor::isInSelectedRange(juce::Point<int> pos) const {
     const double beat = viewState_.xToBeat((double)pos.x);
-    const auto* range = shapeGesture_.getLaneRange();
-    if (range != nullptr && range->hasWidth() && shapeGesture_.rangeIsOnThisLane())
-        return beat >= range->getStartBeat() && beat <= range->getEndBeat();
-    const auto span = pointSelectionSpan();
+    const auto span = selectedStretch();
     return span.has_value() && beat >= span->first && beat <= span->second;
 }
 
+// With a selected stretch the keyboard item is the selection, so the menu is the one a right-click inside it opens
+// (its segments' curve, then the range's items), anchored on the curve in the middle of the stretch.
 bool AutomationLaneEditor::showContextMenuForKeyboardFocus() {
-    if (!onLaneMenuRequested || doc_ == nullptr || doc_->getLane(laneId_) == nullptr)
+    if (doc_ == nullptr || doc_->getLane(laneId_) == nullptr)
+        return false;
+    if (const auto stretch = selectedStretch()) {
+        const auto lefts = segmentLeftBeatsIn(stretch->first, stretch->second);
+        const auto* points = lanePoints();
+        for (std::size_t i = 0; points != nullptr && !lefts.empty() && i < points->size(); ++i) {
+            if ((*points)[i].beat != lefts.front())
+                continue;
+            const auto x = viewState_.beatToX((stretch->first + stretch->second) / 2.0);
+            showSegmentContextMenu((int)i, {(int)std::lround(x), getHeight() / 2});
+            return true;
+        }
+    }
+    if (!onLaneMenuRequested)
         return false;
     onLaneMenuRequested(synth::ui::contextMenuOptionsAtPoint(getScreenBounds().getPosition()));
     return true;
@@ -921,24 +913,6 @@ void AutomationLaneEditor::showHandleContextMenu(double beat, juce::Point<int> p
         else
             mutate();
         repaint();
-    });
-    showContextMenu(menu, pos);
-}
-
-void AutomationLaneEditor::showSegmentContextMenu(int leftIndex, juce::Point<int> pos) {
-    const auto* lane = doc_->getLane(laneId_);
-    if (lane == nullptr || leftIndex < 0 || (size_t)leftIndex >= lane->points.size())
-        return;
-
-    const double leftBeat = lane->points[(size_t)leftIndex].beat;
-    const int currentCurve = lane->points[(size_t)leftIndex].curve;
-
-    juce::PopupMenu menu;
-    menu.addItem("Hold", true, currentCurve == static_cast<int>(synth::BreakpointCurve::Hold), [this, leftBeat] {
-        applySegmentCurveChoice(leftBeat, static_cast<int>(synth::BreakpointCurve::Hold));
-    });
-    menu.addItem("Linear", true, currentCurve == static_cast<int>(synth::BreakpointCurve::Linear), [this, leftBeat] {
-        applySegmentCurveChoice(leftBeat, static_cast<int>(synth::BreakpointCurve::Linear));
     });
     showContextMenu(menu, pos);
 }

@@ -81,7 +81,11 @@ from where the dot is drawn, and the offsets carry across the commit at release.
 each ease lands as the next starts): the drawn dots glide on from where they are drawn, never restart from far behind
 and never hop from grid line to grid line. The committed value stays exactly on the grid. The value bubble is placed on the grabbed point's drawn
 dot at every paint (`AutomationLaneEditor::grabbedPointDrawnAt`), so it and the dot move together. Under Reduce Motion or Animations
-Off, or off screen, nothing eases (a hold still moves). The stretch box and the keyboard focus ring follow the drawn dots (during a drag, a hold and any glide, `AutomationLaneEditorDrawnPoints.cpp`), and so does the line (`AutomationLaneEditor::tweenedPoints` feeds the kernel the moved points, so it meets every dot). Undo and redo of a move use the same tween: when a restore keeps the point count and changes beats or values, `AutomationLaneEditor::glideRestoredPoints` matches old to new by order and glides each dot back ([undo-glide.md](../layout/undo-glide.md)); a pure add or remove stays `LanePointGlide`'s.
+Off, or off screen, nothing eases (a hold still moves). The stretch box and the keyboard focus ring follow the drawn dots (during a drag, a hold and any glide, `AutomationLaneEditorDrawnPoints.cpp`), and so does the line (`AutomationLaneEditor::tweenedPoints` feeds the kernel the moved points, so it meets every dot). Undo and redo of a move use the same tween: when a restore keeps the point count and changes beats or values, `AutomationLaneEditor::glideRestoredPoints` matches old to new by order and glides each dot back ([undo-glide.md](../layout/undo-glide.md)); a pure add or remove stays `LanePointGlide`'s. The
+restore also keeps the selection (`AutomationLaneEditorRestoreGlide.cpp`): a selected point stays selected at its
+restored beat, the keyboard cursor with it, and when that place is out of sight the view follows it there
+(`firstBeatShowing`), riding the gliding dot as a held Alt+arrow does; under Reduce Motion, Animations off, or when the
+dot starts off screen, the view lands there at once.
 
 Each point is reachable from the keyboard, following the shared map in [`control/point-editing.md`](../control/point-editing.md): Tab into the editor, Left/Right walk the points
 (nothing moves in time), Shift+Left/Right add the next point past the selection on that side (the cursor moves there),

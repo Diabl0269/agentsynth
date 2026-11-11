@@ -656,3 +656,26 @@ TEST(CurveEditorKeyHold, AHoldOnACoarseGridKeepsSteppingAtAPaceScaledToTheGrid) 
     EXPECT_EQ(rig.count("start"), 1);
     EXPECT_EQ(rig.count("end"), 1) << "the whole hold is one gesture";
 }
+
+// The curve editor's sibling of the lane's undo-keeps-selection: an undo or redo arrives as a new model of the same
+// shape (setModel with the glide), and the point moved by a held Alt+Right stays selected with the cursor on it. The
+// curve has no scrolling view, so there is nothing to follow.
+TEST(CurveEditorKeyHold, UndoAndRedoOfAHeldMoveKeepThePointSelected) {
+    HeldRig rig(freeModel(3));
+    rig.press(juce::KeyPress::rightKey);
+    rig.press(juce::KeyPress::rightKey);
+    const auto before = rig.editor.getModel();
+    rig.hold(juce::KeyPress::rightKey, kAlt);
+    rig.frame(0.0);
+    rig.frame(300.0);
+    rig.release();
+    const auto after = rig.editor.getModel();
+    ASSERT_GT(after.getNode(1).x, before.getNode(1).x) << "the hold moved the point";
+
+    rig.editor.setModel(before, true); // the undo
+    EXPECT_EQ(rig.selected(), std::vector<int>{1});
+    EXPECT_EQ(rig.editor.getSelectedIndex(), 1);
+    rig.editor.setModel(after, true); // the redo
+    EXPECT_EQ(rig.selected(), std::vector<int>{1});
+    EXPECT_EQ(rig.editor.getSelectedIndex(), 1);
+}
