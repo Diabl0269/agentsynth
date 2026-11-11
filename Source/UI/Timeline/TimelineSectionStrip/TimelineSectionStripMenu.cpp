@@ -141,7 +141,6 @@ bool TimelineSectionStrip::applySectionMenuChoice(synth::PlacementId id, Section
     }
     const double spb = secondsPerBeat();
     bool done = false;
-    const auto leaving = ghostOf(id); // a removed block shrinks away from where it was
     switch (choice) {
     case SectionMenuChoice::Rename:
         beginRenameSection(id);
@@ -172,9 +171,7 @@ bool TimelineSectionStrip::applySectionMenuChoice(synth::PlacementId id, Section
         performEdit([this, id, spb, &done] { done = doc_->deletePlacementAndBars(id, spb); });
         break;
     }
-    refresh();
-    if (done && leaving.has_value())
-        motion_.startExit(*leaving);
+    refresh(); // a removed block shrinks away from where it was (trackChangesForMotion)
     return done;
 }
 

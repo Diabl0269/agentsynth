@@ -40,4 +40,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/ModuleViews/CurveEditor/CurveEditorRestoreGlide.cpp
     Source/UI/Timeline/AutomationLaneEditorRestoreGlide.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneRestoreGlide.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSectionGlide.cpp
+    Source/UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h
+    Source/UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.cpp
 )

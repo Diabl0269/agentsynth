@@ -24,6 +24,8 @@ namespace synth::ui {
  *  repaint reports owner.getLocalBounds()). Empty by default. */
 using KeyedTweenDirtyProbe = std::function<void(juce::Component& owner, juce::Rectangle<int> area)>;
 void setKeyedTweenDirtyProbeForTest(KeyedTweenDirtyProbe probe);
+/** Repaints `area` of `owner` for motion drawn outside a KeyedTween (a leaving picture), reporting it to the probe. */
+void repaintMotionArea(juce::Component& owner, juce::Rectangle<int> area);
 
 /** Arithmetic a tweened value type needs: offsets are differences that scale toward zero. */
 template <typename T>

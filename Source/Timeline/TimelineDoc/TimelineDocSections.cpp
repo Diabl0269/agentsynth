@@ -98,10 +98,17 @@ bool TimelineDoc::insertTime(double atBeat, double lengthBeats, double secondsPe
 }
 
 bool TimelineDoc::deleteTime(double startBeat, double endBeat, double secondsPerBeat) {
+    return deleteTimeSteps(startBeat, endBeat, secondsPerBeat, false);
+}
+
+// `finishesSectionEdit`: deleting a placement's bars is a section edit of its own, finished by the last step here.
+bool TimelineDoc::deleteTimeSteps(double startBeat, double endBeat, double secondsPerBeat, bool finishesSectionEdit) {
     if (!isValidSpan(startBeat, endBeat) || !isFinitePositive(secondsPerBeat))
         return false;
 
     SectionEditScope scope(*this);
+    if (finishesSectionEdit)
+        beginSectionEdit();
     const double gap = endBeat - startBeat;
     applyMutation([&] { removePlacementsOverlapping(startBeat, endBeat, {}); });
     deleteRange(trackIds(true), startBeat, endBeat, true, secondsPerBeat);
@@ -128,8 +135,19 @@ bool TimelineDoc::deleteTime(double startBeat, double endBeat, double secondsPer
         for (auto& placement : placements)
             if (placement.startBeat >= endBeat)
                 placement.startBeat -= gap;
+        if (finishesSectionEdit)
+            finishSectionEdit();
     });
     return true;
+}
+
+// Ends the section edit with the notification of the step running now: the strip and the clip lane diff against the
+// state before the op's first step, never against the states between its steps.
+void TimelineDoc::finishSectionEdit() noexcept {
+    if (!sectionEditOpen)
+        return;
+    sectionEditOpen = false;
+    ++sectionEditCount;
 }
 
 // ------------------------------------------------------------------ sections --
@@ -169,6 +187,7 @@ PlacementId TimelineDoc::placeSection(SectionId id, double atBeat, SectionDropMo
     const auto content = variationContent(*getSection(id), letter);
 
     SectionEditScope scope(*this);
+    beginSectionEdit();
     if (mode == SectionDropMode::MakeRoom) {
         insertTime(atBeat, length, secondsPerBeat);
     } else {
@@ -180,6 +199,7 @@ PlacementId TimelineDoc::placeSection(SectionId id, double atBeat, SectionDropMo
         const PlacementId placementId{nextSectionId++};
         insertPlacementSorted({placementId, id, atBeat, letter});
         stampContent(content, atBeat, length);
+        finishSectionEdit();
         return placementId;
     });
 }
@@ -200,6 +220,7 @@ bool TimelineDoc::movePlacement(PlacementId id, double newStartBeat, SectionDrop
     // sectionstrip::planSectionDrop): with make-room its old bars close up first, so a later target is already counted
     // without them.
     SectionEditScope scope(*this);
+    beginSectionEdit();
     const double target = newStartBeat;
     if (mode == SectionDropMode::MakeRoom) {
         deleteTime(old.startBeat, oldEnd, secondsPerBeat); // takes the placement with it; the section stays alive
@@ -218,7 +239,8 @@ bool TimelineDoc::movePlacement(PlacementId id, double newStartBeat, SectionDrop
     }
     applyMutation([&] {
         insertPlacementSorted({id, old.section, target, old.variation});
-        stampContent(content, target, length);
+        stampContent(content, target, length, true); // a moved clip keeps its id
+        finishSectionEdit();
     });
     return true;
 }
@@ -264,6 +286,7 @@ bool TimelineDoc::movePlacementsTogether(const std::vector<PlacementId>& ids, do
     }
 
     SectionEditScope scope(*this);
+    beginSectionEdit();
     if (mode == SectionDropMode::MakeRoom) {
         for (auto it = members.rbegin(); it != members.rend(); ++it)
             deleteTime(it->startBeat, it->startBeat + sectionLength(it->section), secondsPerBeat);
@@ -288,9 +311,10 @@ bool TimelineDoc::movePlacementsTogether(const std::vector<PlacementId>& ids, do
         for (std::size_t i = 0; i < members.size(); ++i) {
             const double length = sectionLength(members[i].section);
             insertPlacementSorted({members[i].id, members[i].section, at, members[i].variation});
-            stampContent(contents[i], at, length);
+            stampContent(contents[i], at, length, true);
             at += length;
         }
+        finishSectionEdit();
     });
     return true;
 }
@@ -317,6 +341,7 @@ std::vector<PlacementId> TimelineDoc::placeSectionsTogether(const std::vector<Pl
     }
 
     SectionEditScope scope(*this);
+    beginSectionEdit();
     if (mode == SectionDropMode::MakeRoom) {
         insertTime(atBeat, total, secondsPerBeat);
     } else {
@@ -335,6 +360,7 @@ std::vector<PlacementId> TimelineDoc::placeSectionsTogether(const std::vector<Pl
             placed.push_back(placementId);
             at += length;
         }
+        finishSectionEdit();
         return placed;
     });
 }
@@ -355,7 +381,7 @@ bool TimelineDoc::deletePlacementAndBars(PlacementId id, double secondsPerBeat) 
     if (placement == nullptr || !isFinitePositive(secondsPerBeat))
         return false;
     const double start = placement->startBeat;
-    return deleteTime(start, start + sectionLength(placement->section), secondsPerBeat);
+    return deleteTimeSteps(start, start + sectionLength(placement->section), secondsPerBeat, true);
 }
 
 SectionId TimelineDoc::makePlacementUnique(PlacementId id, const juce::String& newName, juce::uint32 newColourArgb) {

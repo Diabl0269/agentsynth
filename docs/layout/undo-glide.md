@@ -67,6 +67,11 @@ from its old drawn place to the new one. An ordinary edit keeps landing at once.
   drag **scales** each note from the old span to the new one through the gliding rectangle, and a Trim drag leaves the notes
   where they are so the edge slides over them. `UndoGlideSurfaces` registers a clip-contents surface for every sizing mode and
   both edges in which the notes change place, and a second test holds the rest still.
+  A finished section edit and a repeat stamp glide clips too (a stamp only those in the placements it rewrote), and a
+  clip that arrives on a known track grows from its left edge while one that leaves shrinks toward its centre where it
+  was: `ClipLaneEnterExit` keeps a copy of every clip at each sync and draws the leaving ones with the real `paintClip`
+  under a scale (180 ms; Reduce Motion an 80 ms fade; Off nothing), repainting through `repaintMotionArea` so the
+  frame guard below sees those repaints too. Mechanism: [sections](../timeline/sections.md#motion).
 - **Parametric EQ curves.** `EqBandGlide` (`UI/ModuleViews/EqBandGlide.h`) keeps the EQ's REAL band settings final at once and
   eases what is DRAWN. A band is two keys: place (log2 frequency, gain) and shape (Q, presence 0 to 1), plus one for the
   output trim, so frequency, gain, Q and on/off move in one 160 ms glide and the curve is re-summed from the drawn bands
@@ -100,6 +105,8 @@ frames and settles at the restored one. **A new move surface adds an entry there
 tween repaints (`paintedComponent()`; a surface drawn through a `KeyedTween` must return one), and after every 16 ms
 glide frame of an undo and a redo (also under Reduce Motion) the test re-renders only the areas the tween asked to repaint
 (`setKeyedTweenDirtyProbeForTest`) and compares with a full render.
+Two entries cover sections: `Section move: clips` (a cover move whose covered clip comes back on undo and shrinks
+away again on redo) and `Section strip block` (a block dragged past another; it lands at once under Reduce Motion).
 The same list is walked under Reduce Motion (a fade for the point surfaces, an instant landing for the rows) and with Animations Off (instant).
 
 ## Registration

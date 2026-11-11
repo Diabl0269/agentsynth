@@ -12,6 +12,7 @@
 #include "Transport/TransportService.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Timeline/TimelineClipLaneArea/ClipLaneEnterExit.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
@@ -49,7 +50,8 @@ TimelineClipLaneArea::~TimelineClipLaneArea() = default;
 TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection)
     : viewState_(viewState)
     , selection_(selection)
-    , clipGlide_(std::make_unique<KeyedRectTween>(*this)) {
+    , clipGlide_(std::make_unique<KeyedRectTween>(*this))
+    , enterExit_(std::make_unique<ClipLaneEnterExit>(*this)) {
     setComponentID("timelineClipLaneArea");
     addTestModeProbe();
     setInterceptsMouseClicks(true, false);
@@ -76,6 +78,7 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
 //==============================================================================
 void TimelineClipLaneArea::setTimelineDoc(synth::TimelineDoc* doc) {
     doc_ = doc;
+    enterExit_->clear(); // a new document: its clips are simply there
     refreshFromDoc();
 }
 
@@ -436,6 +439,8 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
                 g.endTransparencyLayer();
         }
     }
+
+    paintClipGhosts(g, layout);
 
     if (belowTracksHint_ || isShowingSoundOutline())
         paintBelowTracksStrip(g);
