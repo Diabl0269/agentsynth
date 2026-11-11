@@ -7,6 +7,7 @@
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/CardKnobSlider.h"
 #include "UI/Graph/ModuleComponent/SamplerChrome/DrumKitChrome.h"
 
 void ModuleComponent::createSamplerControls() {
@@ -39,6 +40,9 @@ void ModuleComponent::createSamplerControls() {
         host.rebindLearnable = [this](juce::Component& knob, juce::RangedAudioParameter* param) {
             rebindMidiLearnable(knob, param);
         };
+        // A pad knob has no fixed parameter: destChannelForKnob reads the pad it shows now from the registry.
+        host.wireKnob = [this](synth::ui::CardKnobSlider& knob) { wireCardControlGestures(knob, knob, nullptr); };
+        host.cableEndsMove = [this] { glideCableEnds(); };
         instrumentChrome_ = std::make_unique<synth::ui::DrumKitChrome>(host, *kit);
     }
 }

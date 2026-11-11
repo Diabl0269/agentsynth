@@ -138,6 +138,13 @@ sample to the pad's own value, like a group cable, and never written into the pa
 message. The slots are claimed on demand through `synth::ModSlotHost` (shared with hosted plugins), freed when the last
 cable of a slot is removed, and saved under `modSlots` only when at least one is bound, so an untouched kit saves and
 renders as before. The AI never sees pad cables: they are not in its schema, catalog, patch context or diff.
+While its pad is picked, a pad cable ends on the knob with a mod dot beside it, a real control like any knob's dot: a
+press-drag on it changes that cable's amount as one undo step, a plain click opens its panel, Tab reaches it after its
+knob. The knobs have no fixed parameter, so their gestures read the pad they show now from the card's MIDI Learn
+registry. A cable whose pad is not picked has no knob to land on: it parks at the card's left edge level with the top of
+the pad panel, each parked cable at its own place ([cables](../layout/cables.md#knob-landing)), and picking a pad
+glides the ends between the knob and that place, starting when the panel's knobs move to the new pad (a plain move
+under Reduce Motion, at once under Animations Off).
 Scenario: `Tools/ui-verify/scenarios/drum-kit-pad-cable.yaml`.
 
 ## A pad's sound
