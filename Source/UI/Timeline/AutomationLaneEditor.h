@@ -72,6 +72,7 @@ namespace synth::ui {
 struct PointKeyAction;
 
 class LaneToolCursors; // Source/UI/Timeline/AutomationLanes/LaneToolCursors.h
+class EdgeScrollTimer; // Source/UI/Timeline/EdgeScrollTimer.h
 
 class AutomationLaneEditor
     : public juce::Component
@@ -248,8 +249,8 @@ public:
     int visibleHandleCountForTest() const;
     bool isDragActiveForTest() const noexcept { return dragMode_ != DragMode::None || shapeGesture_.isActive(); }
     // The edge scroll's timer: one tick as the timer runs it, and whether it is running.
-    void tickEdgeScrollForTest() { edgeScrollTick(); }
-    bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isTimerRunning(); }
+    void tickEdgeScrollForTest();
+    bool isEdgeScrollRunningForTest() const noexcept;
 
     // Pure value<->y mapping for the active lane's current range (no drag state involved) — what a
     // test uses to place a synthetic mouse event at a target value.
@@ -472,15 +473,7 @@ private:
     void stopEdgeScroll();
     void followKeyDragDot();
     void viewScrolledByDrag();
-    // The kEdgeScrollHz timer of a drag's edge scroll: runs onTick while started.
-    struct EdgeScrollTimer : juce::Timer {
-        std::function<void()> onTick;
-        void timerCallback() override {
-            if (onTick)
-                onTick();
-        }
-    };
-    EdgeScrollTimer edgeScroll_;
+    std::unique_ptr<EdgeScrollTimer> edgeScroll_;
     juce::Point<int> lastDragPointer_;
     // The beat a selection box was pressed at, which its corner follows when the view scrolls.
     double boxAnchorBeat_ = 0.0;

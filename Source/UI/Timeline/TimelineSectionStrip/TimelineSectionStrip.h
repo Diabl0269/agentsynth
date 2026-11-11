@@ -4,10 +4,10 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/KeyGlide/RestoreWatch.h"
 #include "UI/Layout/KeyboardContextMenu.h"
+#include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionDropPlan.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripGeometry.h"
 #include "UI/Timeline/TimelineSectionStrip/SectionStripMotion.h"
-#include "UI/Timeline/TimelineViewState.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
@@ -41,6 +41,7 @@ namespace synth::ui {
 
 template <typename T>
 class KeyedTween;
+struct TimelineViewState; // Source/UI/Timeline/TimelineViewState.h
 using KeyedPointTween = KeyedTween<juce::Point<float>>;
 template <typename Id>
 class ListSelectionModel;
@@ -219,7 +220,7 @@ public:
     // Where the ghost of drag member `index` is drawn now (the grabbed one is getDragGhostBoundsForTest()).
     juce::Rectangle<float> getDragMemberGhostBoundsForTest(int index) const;
     // One edge-scroll tick, as the timer would run it.
-    void tickEdgeScrollForTest() { edgeScrollTick(); }
+    void tickEdgeScrollForTest() { edgeScroll_.timerCallback(); }
     bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isTimerRunning(); }
     KeyedPointTween& getDropGlideForTest() noexcept { return *dropGlide_; }
     SectionStripMotion& getMotionForTest() noexcept { return motion_; }
@@ -282,8 +283,8 @@ private:
     void performEdit(const std::function<void()>& mutation);
     double beatsPerBar() const;
     double secondsPerBeat() const;
-    double beatAtX(double x) const noexcept { return viewState_.xToBeat(x); }
-    double xAtBeat(double beat) const noexcept { return viewState_.beatToX(beat); }
+    double beatAtX(double x) const noexcept;
+    double xAtBeat(double beat) const noexcept;
 
     // Pointer gestures (TimelineSectionStripMouse.cpp)
     void beginMakeDrag(const juce::MouseEvent& e);
@@ -295,13 +296,6 @@ private:
     void updateEdgeScrollArming();
     void edgeScrollTick();
     void stopEdgeScroll();
-    struct EdgeScrollTimer : juce::Timer {
-        std::function<void()> onTick;
-        void timerCallback() override {
-            if (onTick)
-                onTick();
-        }
-    };
     EdgeScrollTimer edgeScroll_;
     juce::Point<float> lastDragPointer_;
     bool lastDragShift_ = false;

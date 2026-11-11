@@ -14,6 +14,7 @@
 #include "UI/Layout/LaneChips/LaneChipRow.h"
 #include "UI/Layout/ScrollTween.h"
 #include "UI/Layout/UIAnimation.h"
+#include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
 #include "UI/Timeline/TimelineViewState.h"
 #include <array>
@@ -287,6 +288,10 @@ public:
     /** Test seams: animate although the grid is off screen, and land every running motion. */
     static void setAnimateOffScreenForTest(bool animate);
     void finishMotionsForTest();
+    /** Test seams: one tick of the edge scroll a drag held at the grid's or a lane's edge runs, and its state. */
+    void tickEdgeScrollForTest() { edgeScroll_.timerCallback(); }
+    bool isEdgeScrollRunningForTest() const noexcept { return edgeScroll_.isTimerRunning(); }
+    double getScrollYForTest() const noexcept { return scrollY_; }
 
     // ---- juce::Component ----
     void paint(juce::Graphics& g) override;
@@ -459,6 +464,13 @@ private:
     int gridHeight() const noexcept;
     juce::Range<int> stepXRange(int step) const;
 
+    // DrumMachineEdgeScroll.cpp
+    bool gridDragFollows() const noexcept;
+    void trackGridDrag(juce::Point<int> pointer);
+    void trackLaneDrag(DrumHitLane& lane, juce::Point<int> pointer);
+    void edgeScrollTick();
+    void stopEdgeScroll();
+
     // DrumMachineRowLength.cpp
     int storedRowLength(int pitch) const;
     int rawRowLength(int pitch) const;
@@ -538,6 +550,8 @@ private:
     double cellsStepBeats_ = 0.0;
     Cell focus_{0, 0};
     Gesture gesture_;
+    EdgeScrollTimer edgeScroll_;
+    DrumHitLane* edgeLane_ = nullptr; ///< the lane whose ramp is held at an edge, or null for the grid
 
     double swing_ = synth::Clip::kStraightSwing;
     int selectedPitch_ = kDefaultSelectedPitch;

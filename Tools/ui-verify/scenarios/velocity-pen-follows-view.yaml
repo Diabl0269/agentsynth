@@ -1,0 +1,32 @@
+# A pen stroke in the piano roll's velocity strip stopped at the strip's edge; now the roll scrolls sideways along and
+# every note that passes under the pointer takes the stroke's value. The whole stroke is still one Cmd+Z.
+#
+# What a user does: opens a project with a 64-beat clip of notes every two beats at velocity 100 (fixture
+# edge-follow.agsproj), opens the clip in the piano roll, presses the velocity strip low down between the first two
+# sticks and drags to the strip's right edge, holding there: the roll scrolls right (never up or down) and the sticks
+# that scroll in drop to the stroke's height. One Cmd+Z puts every stick back at 100.
+record: true
+save_project: velocity-pen-follows-view
+steps:
+  - openProject: {path: "${FIXTURES}/edge-follow.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+j}
+  - wait: {}
+  - click: {id: Show Timeline in the main area}
+  - wait: {}
+  - click: {id: timelineClipLaneArea, x: 120, y: 30, clicks: 2}
+  - wait: {}
+  - expect: {id: pianoRollVelocityLane, showing: true, within_ms: 1500}
+  - screenshot: {name: 1-all-at-100}
+  - mouseDown: {id: pianoRollVelocityLane, x: 62, y: 50}
+  - mouseMoveHeld: {id: pianoRollVelocityLane, x: 600, y: 50}
+  - glide: {name: pen-edge-follows, frames: 16, crop: {x: 400, y: 78, w: 1200, h: 578}, do: {mouseMoveHeld: {id: pianoRollVelocityLane, x: 1196, y: 50}}}
+  - wait: {settleMs: 1000}
+  - mark: {check: 1, name: pen-follows-view}
+  - mouseUp: {id: pianoRollVelocityLane, x: 1196, y: 50}
+  - wait: {}
+  - screenshot: {name: 2-stroke-done}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - screenshot: {name: 3-undone}
+  - mark: {check: 2, name: one-undo-puts-the-sticks-back}

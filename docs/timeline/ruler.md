@@ -69,6 +69,14 @@ FIFO dedupes nothing. `postSeekIfChanged` dedupes on the beat clamped to `>= 0` 
 dedupes on the `[start, end]` pair. `mouseUp` calls its zone's poster again, so it is a no-op when
 the last drag update already posted the final value.
 
+**A drag follows the view.** A loop drag, a scrub or a marker drag held in the ruler's left or right 24 px edge zone
+scrolls the shared timeline view, faster nearer the edge (`TimelineRulerEdgeScroll.cpp`, the shared `EdgeScrollTimer`);
+each tick re-derives the loop end, the playhead or the flag from the still pointer, so it stays under it, and the view
+stops at beat 0. The panel hears each scroll (`onViewScrolledByDrag`): follow-playhead turns off and the section strip
+repaints. Release and the pointer moving back in stop it. Escape mid-drag stops it too: a marker drag commits nothing, a
+loop drag puts back the loop it started from, and a scrub leaves the playhead where it is. While the piano roll lends
+the ruler its mapping (`setMappingOverride`) nothing scrolls, since the strip then shows the roll's beats.
+
 ## The loop brace
 
 The brace is drawn whenever a RANGE exists (`loopEnd > loopStart`) — **not** only while looping is

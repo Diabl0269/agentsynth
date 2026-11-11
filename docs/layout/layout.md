@@ -135,11 +135,16 @@ along, so the thing never sticks at the edge or goes out of sight. Each surface 
 - **Timeline, pointer.** `edgeScrollVelocity` (`Source/UI/Timeline/EdgeAutoScroll.h`) gives the signed speed from the
   pointer's depth in a `kEdgeZonePx` (24 px) zone at either end, up to `kEdgeAutoScrollMaxPxPerTick` (18 px) per tick at
   `kEdgeScrollHz` (30 Hz). The clip lanes (`TimelineClipLaneArea`), the piano roll and the lane editor's dot, selection,
-  stretch-box and selection-box drags (`AutomationLaneEditorEdgeScroll.cpp`, its timer a nested `EdgeScrollTimer`; the
-  selection box keeps its pressed corner on its beat as the view scrolls) and the Sections
-  strip's block and make-section drags (`TimelineSectionStripEdgeScroll.cpp`) each run that timer only
-  while the pointer sits in a zone, and each tick re-derives the preview from the last pointer, so the dragged thing
-  stays under the still pointer. The view stops at beat 0 and never stops to the right.
+  stretch-box and selection-box drags (`AutomationLaneEditorEdgeScroll.cpp`; the selection box keeps its pressed corner
+  on its beat as the view scrolls), the Sections strip's block and make-section drags
+  (`TimelineSectionStripEdgeScroll.cpp`), the ruler's marker, loop and scrub drags (`TimelineRulerEdgeScroll.cpp`),
+  the velocity strip's pen and ramp (on the piano roll's own timer, sideways only) and the drum machine's paint
+  stroke, end edge and lane ramps (`DrumMachineEdgeScroll.cpp`; a stroke also scrolls the rows) each run that timer
+  only while the pointer sits in a zone, and each tick re-derives the preview from the last pointer, so the dragged
+  thing stays under the still pointer. The shared timer is `EdgeScrollTimer` (`Source/UI/Timeline/EdgeScrollTimer.h`:
+  `track` starts or stops it from the pointer, `scrollView` moves a `TimelineViewState` and says how far). A drag that
+  only changes one value (a velocity stick, a drum hit's loudness) never scrolls. The view stops at beat 0 and never
+  stops to the right.
 - **Timeline, keys.** `kScrollIntoViewMargin` (`Source/UI/Timeline/ScrollIntoView.h`, a tenth of the view) is how far
   in from the edge a thing leaving by it is kept. A clip picked with the keys jumps there once (`firstBeatShowing`). A
   lane dot carried by a held Alt+arrow never makes the view jump: once the dot's DRAWN place passes that line the view
@@ -173,8 +178,7 @@ scroll stops on release, Escape, a tool change and the pointer moving back in; t
 The guard is `DragSurfaces.EveryMouseDragSaysWhetherItFollowsTheView` (`Tests/UI/Layout/DragSurfaceRegistryTests.cpp`):
 every class that overrides `mouseDrag` names its follow test or the reason it is exempt (a slider inside a fixed range,
 a resizer, a forwarder, a drag-and-drop starter, a card with no scroll of its own, a fixed page or tab strip). The
-surfaces still missing it are listed in `kFollowGaps`, which may only shrink; one family is left: horizontal
-beat-axis drags (the ruler's markers and locators, velocity and drum lanes).
+surfaces still missing it would be listed in `kFollowGaps`, which may only shrink; it is empty now.
 
 ## Anti-overlap search
 

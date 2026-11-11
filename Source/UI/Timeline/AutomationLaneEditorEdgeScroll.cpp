@@ -6,6 +6,7 @@
 #include "AutomationLaneEditor.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
+#include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/ScrollIntoView.h"
 #include <algorithm>
 #include <cmath>
@@ -59,10 +60,10 @@ void AutomationLaneEditor::previewDragAt(juce::Point<int> pos) {
 void AutomationLaneEditor::updateEdgeScrollArming() {
     const bool inZone =
         dragFollowsView() && edgeScrollVelocity(lastDragPointer_.x, 0, getWidth(), kEdgeZonePx, 1.0) != 0.0;
-    if (inZone && !edgeScroll_.isTimerRunning())
-        edgeScroll_.startTimerHz(kEdgeScrollHz);
-    else if (!inZone && edgeScroll_.isTimerRunning())
-        edgeScroll_.stopTimer();
+    if (inZone && !edgeScroll_->isTimerRunning())
+        edgeScroll_->startTimerHz(kEdgeScrollHz);
+    else if (!inZone && edgeScroll_->isTimerRunning())
+        edgeScroll_->stopTimer();
 }
 
 // One tick scrolls the view by the edge speed at the last pointer (faster nearer the edge), then moves the preview to
@@ -89,7 +90,11 @@ void AutomationLaneEditor::edgeScrollTick() {
     repaint();
 }
 
-void AutomationLaneEditor::stopEdgeScroll() { edgeScroll_.stopTimer(); }
+void AutomationLaneEditor::stopEdgeScroll() { edgeScroll_->stopTimer(); }
+
+bool AutomationLaneEditor::isEdgeScrollRunningForTest() const noexcept { return edgeScroll_->isTimerRunning(); }
+
+void AutomationLaneEditor::tickEdgeScrollForTest() { edgeScroll_->timerCallback(); }
 
 // The view follows the grabbed dot of a key move by where it is DRAWN (its rest place plus its eased offset), not by
 // where it will rest: once that passes the margin line (kScrollIntoViewMargin in from the edge it is leaving by) the

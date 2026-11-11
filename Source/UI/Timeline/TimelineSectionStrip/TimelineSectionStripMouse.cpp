@@ -8,6 +8,7 @@
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReorderDrag/ReorderDragAnimator.h"
 #include "UI/Timeline/TimelineSectionStrip/TimelineSectionStrip.h"
+#include "UI/Timeline/TimelineViewState.h"
 #include <algorithm>
 #include <cmath>
 

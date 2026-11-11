@@ -63,14 +63,21 @@ void PianoRollComponent::initVelocityControls() {
         repaint(); // the notes recolour live, not just the sticks
     };
     host.onCommit = [this](const std::vector<std::pair<synth::NoteId, int>>& changes) {
+        autoScrollTimer_.stopTimer();
         velocityPreview_.clear();
         commitVelocities(changes);
     };
     host.onCancel = [this] {
+        autoScrollTimer_.stopTimer();
         if (velocityPreview_.empty())
             return;
         velocityPreview_.clear();
         repaint();
+    };
+    // A pen or ramp held at the strip's left or right edge scrolls the roll on its own edge timer (autoScrollTick).
+    host.onDragAt = [this](juce::Point<int> pointer) {
+        lastDragPointer_ = pointer + velocityLane_->getPosition();
+        updateAutoScrollArming();
     };
     host.onResizeRequest = [this](int desired) { onVelocityLaneResized(desired); };
     host.onResizeCommitted = [this](int desired) { onVelocityLaneResizeCommitted(desired); };

@@ -34,6 +34,7 @@ list(APPEND APPUI_SOURCES
     Source/UI/DrumMachine/DrumMachineMotion.cpp
     Source/UI/DrumMachine/DrumMachinePainting.cpp
     Source/UI/DrumMachine/DrumMachineMouse.cpp
+    Source/UI/DrumMachine/DrumMachineEdgeScroll.cpp
     Source/UI/DrumMachine/DrumMachineStroke.cpp
     Source/UI/DrumMachine/DrumMachineKeys.cpp
     Source/UI/DrumMachine/DrumMachinePreview.cpp

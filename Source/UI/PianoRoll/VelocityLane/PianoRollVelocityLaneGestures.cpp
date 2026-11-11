@@ -44,8 +44,29 @@ void PianoRollVelocityLane::mouseDown(const juce::MouseEvent& e) {
 }
 
 void PianoRollVelocityLane::mouseDrag(const juce::MouseEvent& e) {
-    if (gesture_ != Gesture::None)
-        updateGesture(e.position);
+    if (gesture_ == Gesture::None)
+        return;
+    updateGesture(e.position);
+    if (followsView() && host_.onDragAt)
+        host_.onDragAt(e.getPosition());
+}
+
+// The sticks moved by `movedPx` under the still pointer (lastPos_). The notes' places are read again, and the ramp's
+// start and the pen's last sample, both pixels, move with the content they were on, so the ramp stays anchored to
+// where it began and the pen covers every stick that scrolled in under the pointer.
+void PianoRollVelocityLane::followScroll(double movedPx) {
+    if (!followsView() || movedPx == 0.0)
+        return;
+    const auto now = currentSticks();
+    for (auto* list : {&origins_, &eligible_})
+        for (auto& stick : *list)
+            for (const auto& fresh : now)
+                if (fresh.id == stick.id)
+                    stick.x = fresh.x;
+    const auto pointer = lastPos_;
+    anchor_.x -= (float)movedPx;
+    lastPos_.x -= (float)movedPx;
+    updateGesture(pointer);
 }
 
 void PianoRollVelocityLane::mouseUp(const juce::MouseEvent&) {

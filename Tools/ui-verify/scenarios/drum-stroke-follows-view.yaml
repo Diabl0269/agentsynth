@@ -1,0 +1,38 @@
+# A paint stroke in the drum machine stopped at the edge of the grid; now the grid scrolls along and the stroke reaches
+# the cells that scroll in. The whole stroke is still one Cmd+Z.
+#
+# What a user does: opens the project with a Drum Kit track and its empty 16-step clip (fixture
+# drum-kit-track-clip.agsproj), opens the drum machine, zooms in with Cmd+scroll until only about half the steps show,
+# presses the empty Kick cell of step 1 and drags to the grid's right edge, holding there: the grid scrolls and every
+# Kick cell to the clip's end lights. Lets go: sixteen hits. One Cmd+Z takes them all back.
+record: true
+save_project: drum-stroke-follows-view
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 1500}
+  - wheel: {id: timelineDrumMachine, x: 134, y: 62, dy: 0.5, mods: cmd}
+  - wheel: {id: timelineDrumMachine, x: 134, y: 62, dy: 0.5, mods: cmd}
+  - wheel: {id: timelineDrumMachine, x: 134, y: 62, dy: 0.5, mods: cmd}
+  - wheel: {id: timelineDrumMachine, x: 134, y: 62, dy: 0.5, mods: cmd}
+  - wait: {}
+  - expect: {id: drumMachineState, hitCount: 0}
+  - screenshot: {name: 1-zoomed-in}
+  - mouseDown: {id: timelineDrumMachine, x: 190, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 600, y: 62}
+  - glide: {name: stroke-edge-follows, frames: 16, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {mouseMoveHeld: {id: timelineDrumMachine, x: 1396, y: 62}}}
+  - wait: {settleMs: 2500}
+  - mark: {check: 1, name: stroke-follows-view}
+  - mouseUp: {id: timelineDrumMachine, x: 1396, y: 62}
+  - wait: {}
+  - expect: {id: drumMachineState, stroke: false, hitCount: 16, within_ms: 1500}
+  - screenshot: {name: 2-sixteen-hits}
+  - key: {keys: cmd+z}
+  - wait: {}
+  - expect: {id: drumMachineState, hitCount: 0, within_ms: 1500}
+  - screenshot: {name: 3-undone}
+  - mark: {check: 2, name: one-undo-takes-the-stroke-back}

@@ -52,6 +52,9 @@ public:
         // out and persists); the commit fires once on release, only if the drag moved.
         std::function<void(int desiredHeight)> onResizeRequest;
         std::function<void(int desiredHeight)> onResizeCommitted;
+        // Every drag event of a pen or ramp (the drags that follow the roll's view), with the pointer in lane
+        // coordinates: the owner runs its edge scroll from it and calls followScroll after each scroll.
+        std::function<void(juce::Point<int>)> onDragAt;
     };
 
     enum class Gesture { None, Stick, Pen, Ramp };
@@ -65,6 +68,10 @@ public:
     bool cancelGesture();
     bool isGestureActive() const noexcept;
     Gesture getGesture() const noexcept;
+    // True while a pen or ramp is live: the drags that follow the roll's view sideways.
+    bool followsView() const noexcept { return gesture_ == Gesture::Pen || gesture_ == Gesture::Ramp; }
+    // The roll's view moved `movedPx` under a still pointer: re-derives the gesture against the new note places.
+    void followScroll(double movedPx);
 
     // The y of `velocity`'s stick head, in this component's coordinates.
     float yForVelocity(int velocity) const noexcept;

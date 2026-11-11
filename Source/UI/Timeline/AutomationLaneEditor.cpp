@@ -13,6 +13,7 @@
 #include "UI/Timeline/AutomationLanes/LaneMenuHook.h"
 #include "UI/Timeline/AutomationLanes/LaneToolCursors.h"
 #include "UI/Timeline/AutomationLanes/PointSelection/LaneKeyStep.h"
+#include "UI/Timeline/EdgeScrollTimer.h"
 #include "UI/Timeline/TimelineBeatsPerBar.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
@@ -41,7 +42,8 @@ AutomationLaneEditor::AutomationLaneEditor(TimelineViewState& viewState)
         followKeyDragDot();
         repaint();
     };
-    edgeScroll_.onTick = [this] { edgeScrollTick(); };
+    edgeScroll_ = std::make_unique<EdgeScrollTimer>();
+    edgeScroll_->onTick = [this] { edgeScrollTick(); };
     refreshDescription();
     // `cursor` is what the pointer shows here now ("arrow", "grab" or "tool"), `selectedPoints` the Select tool's
     // count, `holding` whether a key hold is moving the selection and `dragging` whether any drag is under way and

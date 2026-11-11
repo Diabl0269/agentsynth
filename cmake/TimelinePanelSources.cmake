@@ -37,6 +37,9 @@ list(APPEND APPUI_SOURCES
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripVariations.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripAccessibility.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripEdgeScroll.cpp
+    Source/UI/Timeline/EdgeScrollTimer.h
+    Source/UI/Timeline/EdgeScrollTimer.cpp
+    Source/UI/Timeline/TimelineRulerEdgeScroll.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripKeys.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripSelection.cpp
     Source/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMotion.cpp
