@@ -19,7 +19,10 @@ The rows are listed fresh each time it opens:
 | Recent projects, Presets | the File menu's recent projects and the factory presets | opens or loads it, through the unsaved-changes guard |
 
 Each row ends in its kind as a tag (View, Module, Track, Marker, Action, Setting, Project, Preset), searched and read out with the row. An on/off row shows a switch. Return or a click flips it, writes the preference with the same key and the same live
-effect as its Preferences checkbox, and the palette stays open. An open Settings window does not refresh its
+effect as its Preferences checkbox, and the palette stays open. The switch glides: the knob slides across and the
+pill's fill fades, 110 ms switching on and 90 ms switching off (`SwitchGlide`, see [theming](theming.md#themed-widgets));
+80 ms under Reduce Motion and none under Animations: Off. A row bound for the first time (the list opening, a scroll, a
+different entry on the row) shows its switch at rest with no motion; only a flip of the entry that stays bound glides. An open Settings window does not refresh its
 checkbox until it is reopened.
 
 ## Order

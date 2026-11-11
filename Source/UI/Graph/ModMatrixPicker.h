@@ -155,6 +155,8 @@ public:
     bool isActionSelectedForTest() const noexcept { return actionSelected_; }
     /** The on/off state of the nth visible item row (nothing for a plain row). */
     std::optional<bool> getVisibleItemSwitchForTest(int index) const;
+    /** The row's switch as eased right now (0 off .. 1 on); empty for a row with no switch or none on screen. */
+    std::optional<float> getVisibleItemSwitchAmountForTest(int index) const;
     /** The nth visible item's action button component, while its row has one in view (else null). */
     juce::Component* getVisibleItemActionButtonForTest(int index) const;
     int getHeightForTest() const noexcept { return getHeight(); }

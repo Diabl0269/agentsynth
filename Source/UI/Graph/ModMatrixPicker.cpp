@@ -4,6 +4,7 @@
 #include "UI/Layout/FocusRing.h"
 #include "UI/Layout/PopupMotion.h"
 #include "UI/Layout/SearchMatch.h"
+#include "UI/Layout/SwitchGlide.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -27,8 +28,6 @@ constexpr float kTagFontSize = 9.0f;
 constexpr int kOverscan = 4 * kRowHeight; // rows kept past each edge of the view, so a scroll never shows a gap
 constexpr int kActionSize = 20;           // a row's action button, square
 constexpr float kHintFontSize = 11.0f;
-constexpr int kSwitchWidth = 26;
-constexpr int kSwitchHeight = 14;
 
 struct Palette {
     juce::Colour panel = juce::Colours::darkgrey.darker(0.4f);
@@ -154,6 +153,7 @@ public:
     FadeVisibility fade{this};
 
     int entry() const noexcept { return entry_; }
+    float switchAmount() const noexcept { return switchGlide_.amount(); }
     void unbind() noexcept { entry_ = -1; }
     void bindHeader(int entry, const juce::String& text) {
         entry_ = entry;
@@ -174,6 +174,9 @@ public:
     }
     // A disabled row is announced as unavailable and takes no pick; its detail says why.
     void bindItem(int entry, const Item& item, bool isCurrent, bool gutter) {
+        // The switch glides only when this very entry stays bound; any other bind lands at once.
+        const bool sameEntry = entry_ == entry && !header_ && itemId_ == item.id && switchOn_.has_value();
+        itemId_ = item.id;
         entry_ = entry;
         header_ = false;
         text_ = item.text;
@@ -184,6 +187,8 @@ public:
         tag_ = item.tag;
         hint_ = item.hint;
         switchOn_ = item.switchOn;
+        if (switchOn_)
+            switchGlide_.retarget(*switchOn_, sameEntry);
         gutter_ = gutter;
         actionButton_.setVisible(item.action.has_value());
         if (item.action)
@@ -249,8 +254,9 @@ public:
             paintTag(g, content, "New");
         else if (tag_.isNotEmpty())
             paintTag(g, content, tag_);
-        if (switchOn_)
-            paintSwitch(g, content);
+        if (switchOn_) // before its tag: the accent pill with the knob right when on, an outline when off
+            switchGlide_.paint(g, SwitchGlide::takeFromRight(content).toFloat(),
+                               {palette_.accent, palette_.muted, palette_.panel});
         if (hint_.isNotEmpty())
             paintHint(g, content);
         if (detail_.isEmpty()) {
@@ -295,26 +301,6 @@ public:
         g.drawText(label, tag, juce::Justification::centred, false);
     }
 
-    // An on/off row's switch, before its tag: the accent pill with the knob right when on, an outline when off.
-    void paintSwitch(juce::Graphics& g, juce::Rectangle<int>& content) const {
-        const auto pill = content.removeFromRight(kSwitchWidth).withSizeKeepingCentre(kSwitchWidth, kSwitchHeight);
-        content.removeFromRight(8);
-        const auto area = pill.toFloat();
-        const float radius = area.getHeight() * 0.5f;
-        const bool on = *switchOn_;
-        if (on) {
-            g.setColour(palette_.accent);
-            g.fillRoundedRectangle(area, radius);
-        } else {
-            g.setColour(palette_.muted);
-            g.drawRoundedRectangle(area.reduced(0.5f), radius, 1.0f);
-        }
-        const float knob = area.getHeight() - 4.0f;
-        const float x = on ? area.getRight() - 2.0f - knob : area.getX() + 2.0f;
-        g.setColour(on ? palette_.panel : palette_.muted);
-        g.fillEllipse(x, area.getY() + 2.0f, knob, knob);
-    }
-
     // A muted note (an action's key) right-aligned before the tag; it never squeezes the row's own text below half.
     void paintHint(juce::Graphics& g, juce::Rectangle<int>& content) const {
         const juce::Font font{juce::FontOptions(kHintFontSize)};
@@ -351,6 +337,8 @@ private:
     juce::String hint_;
     juce::String query_;
     std::optional<bool> switchOn_;
+    int itemId_ = -1;
+    SwitchGlide switchGlide_{*this};
     RowActionButton actionButton_;
     bool isCurrent_ = false;
     bool ticked_ = false;
@@ -953,6 +941,13 @@ bool ModMatrixPicker::isVisibleItemPickableForTest(int index) const {
 void ModMatrixPicker::chooseVisibleItemForTest(int index) {
     if (index >= 0 && index < (int)visibleItems_.size())
         chooseEntry(visibleItems_[(size_t)index]);
+}
+
+std::optional<float> ModMatrixPicker::getVisibleItemSwitchAmountForTest(int index) const {
+    if (index < 0 || index >= (int)visibleItems_.size() || !itemAtVisible(index).switchOn)
+        return std::nullopt;
+    const auto* row = entries_[(size_t)visibleItems_[(size_t)index]].row;
+    return row != nullptr ? std::optional<float>(row->switchAmount()) : std::nullopt;
 }
 
 std::optional<bool> ModMatrixPicker::getVisibleItemSwitchForTest(int index) const {

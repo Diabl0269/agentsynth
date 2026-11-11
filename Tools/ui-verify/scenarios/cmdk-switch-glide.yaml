@@ -1,0 +1,28 @@
+# Bug: a Cmd+K row with an on/off switch (Natural scrolling) popped its knob to the other side when flipped.
+#
+# What a user does:
+#   1. Presses Cmd+K, types "scroll" and moves the highlight down onto the Natural scrolling row, its switch on.
+#   2. Presses Return: the knob slides to the left and the pill's fill fades out into an outline over about 90 ms;
+#      the bar stays open. (The strip shows the frames of that slide.)
+#   3. Presses Return again: the knob slides back and the fill fades in, so the project ends as it started.
+record: true
+motion: true
+save_project: fro1630 switch
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: scroll}
+  - wait: {}
+  - key: {keys: down}                                        # the top match is another row; highlight Natural scrolling
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Natural scrolling, Setting, on", exists: true}
+  - glide: {name: switch-glide, frames: 12, crop: {x: 900, y: 170, w: 170, h: 32}, do: {key: {keys: return}}}   # on -> off: film the knob sliding
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Natural scrolling, Setting, off", exists: true}
+  - mark: {check: 1, name: switch-glide}
+  - glide: {name: switch-glide-back, frames: 12, crop: {x: 900, y: 170, w: 170, h: 32}, do: {key: {keys: return}}}   # off -> on: back to the start
+  - wait: {}
+  - expect: {id: "modMatrixPicker > Natural scrolling, Setting, on", exists: true}
+  - key: {keys: escape}
