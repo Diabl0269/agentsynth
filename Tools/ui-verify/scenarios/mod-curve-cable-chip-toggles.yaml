@@ -1,0 +1,29 @@
+# The curve chip on a cable opens its curve box on a click and closes it on the next click on the same chip.
+#
+# What a user does:
+#   1. With "Show curves on cables" on, opens a project with an LFO modulating the Filter's Cutoff.
+#   2. Clicks the curve chip on the cable: the curve box opens beside it.
+#   3. Clicks the same chip again: the box closes.
+#   4. Clicks it a third time: the box opens again.
+record: true
+save_project: fro1449-chip-toggle
+settings:
+  showCurvesOnCables: true
+steps:
+  - openProject: {path: "${FIXTURES}/mod-dot.agsproj"}
+  - wait: {}
+  - click: {id: window, x: 755, y: 424}
+  - wait: {}
+  - expect: {id: modCurveBox, showing: true, within_ms: 1500}
+  - mark: {check: 1, name: chip-click-opens-box}
+  - click: {id: window, x: 755, y: 424}
+  - wait: {}
+  - expect: {id: modCurveBox, exists: false, within_ms: 2000}
+  - mark: {check: 2, name: second-click-closes-box}
+  - click: {id: window, x: 755, y: 424}
+  - wait: {}
+  - expect: {id: modCurveBox, showing: true, within_ms: 1500}
+  - mark: {check: 3, name: third-click-opens-again}
+  - key: {keys: escape, target: modCurveBox}
+  - wait: {}
+  - expect: {id: modCurveBox, exists: false, within_ms: 2000}

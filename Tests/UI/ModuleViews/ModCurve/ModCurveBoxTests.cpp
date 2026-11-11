@@ -464,3 +464,95 @@ TEST_F(ModuleComponentTest, WindowGridBoxNamesAreCellsAcrossTheRange) {
     EXPECT_EQ(r.content.gridBox().getText(), "Grid 1/8");
     EXPECT_FALSE(r.content.snapButton().getToggleState()) << "Snap starts off: nothing moves until it is asked to";
 }
+
+// Regression test for FRO1449: a click on the anchor of an open panel closes it, and never re-opens it. A press on its
+// own anchor does not dismiss the panel (the frame leaves it to the owner), so each anchor's own click handler has to
+// treat the open panel as a toggle. One guard walks every anchor family that opens a panel in its own frame: the mod
+// dot, the port jack, the curve chip in a dot row and the curve chip on a cable.
+namespace {
+
+using Cable = graph_editor_types::VisibleCable;
+
+struct HeldBox {
+    std::unique_ptr<synth::ui::ModCurveBox> box;
+    int opened = 0;
+    HeldBox() {
+        synth::ui::test_hooks::modCurvePopoverLauncherForTest() = [this](std::unique_ptr<synth::ui::ModCurveBox> b,
+                                                                         juce::Component&) {
+            box = std::move(b);
+            ++opened;
+        };
+    }
+    ~HeldBox() {
+        box.reset();
+        synth::ui::test_hooks::modCurvePopoverLauncherForTest() = nullptr;
+        synth::ui::closeModCurvePopover();
+    }
+};
+
+} // namespace
+
+TEST_F(ModuleComponentTest, ACurveChipOnACableTogglesItsBoxOnEveryPressOnIt) {
+    Fixture f;
+    HeldBox held;
+    f.refresh();
+    f.editor->showCurvesOnCables = true;
+    const Cable* chain = nullptr;
+    const auto cables = f.editor->buildVisibleCables();
+    for (const auto& c : cables)
+        if (c.kind == Cable::Kind::AttenuverterChain)
+            chain = &c;
+    ASSERT_NE(chain, nullptr);
+    const auto centre = synth::ui::cable_curve_chips::chipRect(*chain).getCentre();
+
+    EXPECT_TRUE(synth::ui::cable_curve_chips::press(*f.editor, *f.editor, centre));
+    EXPECT_TRUE(synth::ui::isModCurvePopoverOpen());
+    EXPECT_EQ(held.opened, 1);
+
+    EXPECT_TRUE(synth::ui::cable_curve_chips::press(*f.editor, *f.editor, centre)) << "the press is consumed";
+    EXPECT_FALSE(synth::ui::isModCurvePopoverOpen()) << "a second press on the chip closes the box";
+    EXPECT_EQ(held.opened, 1) << "and does not open it again";
+
+    EXPECT_TRUE(synth::ui::cable_curve_chips::press(*f.editor, *f.editor, centre));
+    EXPECT_TRUE(synth::ui::isModCurvePopoverOpen()) << "a third opens it once more";
+    EXPECT_EQ(held.opened, 2);
+}
+
+TEST_F(ModuleComponentTest, ACurveChipInADotRowTogglesItsBoxOnEveryClick) {
+    Fixture f;
+    HeldBox held;
+    synth::ui::ModCurveChip chip;
+    synth::ui::wireModCurveChip(chip, *f.editor, f.attenId, "LFO");
+    clickNow(chip);
+    EXPECT_TRUE(synth::ui::isModCurvePopoverOpen());
+    clickNow(chip);
+    EXPECT_FALSE(synth::ui::isModCurvePopoverOpen());
+    EXPECT_EQ(held.opened, 1);
+}
+
+TEST_F(ModuleComponentTest, TheModDotAndThePortJackToggleTheirPanelOnASecondClick) {
+    Fixture f;
+    ASSERT_NE(f.clickDot(), nullptr);
+    EXPECT_NE(f.editor->getModDot().getPopover(), nullptr);
+    f.clickDot();
+    EXPECT_EQ(f.editor->getModDot().getPopover(), nullptr) << "a second click on the dot closes its panel";
+
+    std::unique_ptr<juce::Component> heldPanel;
+    f.editor->getPortPanel().panelLauncher = [&heldPanel](std::unique_ptr<juce::Component> content, juce::Component&,
+                                                          juce::Rectangle<int>) { heldPanel = std::move(content); };
+    f.editor->setDoubleClickPortDisconnectEnabled(false);
+    Cable cable;
+    for (const auto& c : f.editor->buildVisibleCables())
+        if (c.id.attenUid != 0)
+            cable = c;
+    auto* vca = dynamic_cast<ModuleBase*>(f.engine.getGraph().getNodeForId(f.vcaId)->getProcessor());
+    const synth::ui::PortRef jack{f.vcaId, vca->mapInputChannel(cable.id.dstPort).visibleJackIndex, true, false};
+    const juce::Rectangle<int> area(0, 0, 10, 10);
+    const auto click = synth::ui::test::curveLeftClick(*f.editor, {5.0f, 5.0f});
+
+    f.editor->getPortPanel().jackReleased(*f.editor, area, jack, click);
+    EXPECT_TRUE(f.editor->getPortPanel().isOpenFor(jack));
+    f.editor->getPortPanel().jackReleased(*f.editor, area, jack, click);
+    EXPECT_FALSE(f.editor->getPortPanel().isOpenFor(jack)) << "a second click on the jack closes its panel";
+    heldPanel.reset();
+}

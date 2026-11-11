@@ -50,7 +50,7 @@ bool press(GraphEditor& editor, juce::Component& canvas, juce::Point<float> canv
     for (const auto& cable : editor.buildVisibleCables())
         if (cable.id.attenUid == atten.uid) {
             const auto screen = canvas.localAreaToGlobal(chipRect(cable).toNearestInt());
-            openModCurvePopover(editor, atten, editor, screen, true);
+            toggleModCurvePopover(editor, atten, editor, screen, true);
             break;
         }
     return true;
