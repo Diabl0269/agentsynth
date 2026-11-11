@@ -117,7 +117,7 @@
 552 Source/Modules/UnisonVoicing.h
 550 Source/UI/Layout/ContextMenuPlacement.h
 536 Source/UI/Layout/FocusRegion.h
-532 Source/UI/Layout/KeyGlide/KeyedTween.h
+562 Source/UI/Layout/KeyGlide/KeyedTween.h
 520 Source/Modules/Sampler/SamplerSampleData.h
 519 Source/Modules/Sampler/SamplerInstrument.h
 515 Source/UI/Layout/AutomatedMarker.h
