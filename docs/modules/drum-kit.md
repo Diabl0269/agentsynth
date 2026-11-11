@@ -227,10 +227,13 @@ right-click and mapped badge to the picked pad (`ModuleComponent::rebindMidiLear
   over 160 ms; Reduce Motion is an 80 ms fade and Animations Off is instant. The card height follows the rows.
 - A hidden pad stays picked if it was, so the switch can bring it back. Arrow keys, Home and End skip hidden pads.
   A pad's name for a screen reader counts the shown pads ("Cowbell pad, kit sound, 7 of 7").
-- The caption line reads "N hidden" followed by the **Show all** chip: the shared toggle pill (the lane chips' and
-  the card footer's look), 20 px tall, Tab-reachable with the pill's focus ring, Return presses it (Space stays the
-  transport's), named "Show all hidden pads" with a tooltip that says what a press does now. It fades in and out with
-  the count; a pick hint or a drop hint takes the line for its time.
+- The caption line under the grid reads "N hidden" (or "N shown again"); the **Show all** chip sits on the Pads row,
+  between the "Pads" title and the count stepper, at a fixed place (the same x whichever state it is in, so a press
+  never moves it). It is the shared toggle pill (the lane chips' and the card footer's look), 20 px tall, Tab-reachable
+  with the pill's focus ring (Tab goes label, chip, stepper), Return presses it (Space stays the transport's), named
+  "Show all hidden pads" with a tooltip that says what a press does now. It fades in and out with the count; a pick
+  hint or a drop hint takes the caption line for its time and leaves the chip alone. The Pads row starts a
+  `cardbody::kBlockGap` under the Level box, so the stepper never touches its value box.
 - **Show all is a toggle.** The first press switches on every pad, also those beyond the count, and remembers exactly
   the pads it brought back (`Pad::revealed`). The chip is then lit and the caption reads "N shown again"; the second
   press hides exactly those pads again and forgets them. The label stays "Show all" in both states, so the chip never

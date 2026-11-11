@@ -110,6 +110,7 @@ edits only its own table:
 | Oscillator | 471 |
 | Noise | 245 |
 | Sampler | 565 |
+| Drum Kit | 617 (8 pads: the pads area is the `kBlockGap` under the Level box, the Pads row with its Show all chip, the grid, the caption and the picked pad's controls) |
 | LFO | 391 |
 | Wavetable | 578 (double width, 560) |
 
