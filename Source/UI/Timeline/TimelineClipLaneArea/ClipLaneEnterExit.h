@@ -20,6 +20,7 @@ struct ClipLaneChange {
     bool intermediate = false;                    // between the steps of one section edit: the lane keeps its last sync
     bool animates = false;                        // a restore, a section edit or a repeat stamp
     bool replaced = false;                        // the doc was replaced (a load, an undo or a redo)
+    bool restored = false;                        // an undo or a redo
     std::vector<std::pair<double, double>> spans; // a stamp: only clips starting in these spans move
     bool covers(double beat) const;
 };
