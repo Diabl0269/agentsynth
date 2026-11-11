@@ -114,6 +114,8 @@ const std::vector<Registered> kRegistered = {
     {"GrabEdge", {"exempt: resizes the side pane live, the release only stores the width already shown"}},
     {"MixerSectionDivider", {"exempt: resizes the sections live, the release only stores the heights shown"}},
     {"MinimapComponent", {"exempt: scrolls the view, nothing to commit"}},
+    {"CanvasEdgeScrollDriver",
+     {"exempt: only listens to where the pointer is while another drag runs, it has none of its own"}},
     {"ControllerSurfaceComponent", {"exempt: a selection marquee, nothing to commit"}},
     {"TopBar", {"exempt: moves the help window, nothing to commit"}},
     {"CommandPaletteComponent", {"exempt: moves the search bar, the release only stores the position shown"}},
@@ -212,24 +214,31 @@ const std::vector<Follows> kFollow = {
     {"LaneControlChip",
      "follow-exempt: a chip lands only on its own lane header or its tray, anywhere else it goes "
      "back (AutomationLanesControlChipsTest.AChipDroppedOnAnotherLaneOrDownTheListGoesBackAndChangesNothing)"},
+    {"GraphEditor",
+     "follow:CanvasEdgeScrollEveryDrag.TheCanvasScrollsAndTheGestureFollowsWhileThePointerIsHeldAtTheEdge"},
+    {"CanvasEdgeScrollDriver",
+     "follow-exempt: only listens to where the pointer is while another drag runs, it is the follow itself"},
+    {"ControllerSurfaceComponent",
+     "follow:ControllerSurfaceEdgeScroll.AMarqueeHeldAtTheRightEdgePansTheSurfaceAndSelectsWhatScrolledIn"},
+    {"ControllerSurfaceCell",
+     "follow:ControllerSurfaceEdgeScroll.ACellHeldAtTheRightEdgePansAndStaysUnderThePointerAndCommitsOnce"},
+    {"CardLayoutOutline",
+     "follow:OnCardEditorEdgeScroll.AControlHeldAtTheViewEdgeScrollsTheCanvasDownToTheHideAreaAndTheDropIsOneUndo"},
+    {"CardLayoutAddRow",
+     "follow:OnCardEditorEdgeScroll.ARowFromTheAddPanelHeldAtTheViewEdgeScrollsAndItsGhostFollowsDownTheCard"},
+    {"CardLayoutGroupHandle", "follow:OnCardEditorEdgeScroll.AGroupHeldAtTheViewEdgeScrollsTheCanvasAndEscapeStopsIt"},
 };
 
 // A drag that can carry something out of a view that scrolls and does not follow yet. The list may only shrink: the
 // each is built as a follow (a registered test) or moved to kFollow with an exemption.
 const std::vector<KnownGap> kFollowGaps = {
-    {"GraphEditor", "FRO1688", "selection box, cable and drops from the library: the canvas does not pan"},
     {"TimelineRulerComponent", "FRO1686", "marker and locator drags stop at the view edge"},
     {"PianoRollVelocityLane", "FRO1686", "a velocity ramp stops at the roll's edge"},
     {"DrumMachineComponent", "FRO1686", "edge drags stop at the view edge"},
     {"DrumHitLane", "FRO1686", "a ramp across a lane stops at the view edge"},
-    {"ControllerSurfaceComponent", "FRO1688", "selection box: triage whether the surface scrolls"},
-    {"ControllerSurfaceCell", "FRO1688", "cell move: triage whether the surface scrolls"},
-    {"CardLayoutOutline", "FRO1688", "on-card row drag: triage whether it can leave the card's view"},
-    {"CardLayoutAddRow", "FRO1688", "on-card row drag: triage whether it can leave the card's view"},
-    {"CardLayoutGroupHandle", "FRO1688", "on-card group move: triage whether it can leave the card's view"},
 };
 // What kFollowGaps holds today; it may only go down.
-constexpr std::size_t kFollowGapCeiling = 10;
+constexpr std::size_t kFollowGapCeiling = 4;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Scanning

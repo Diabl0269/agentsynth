@@ -10,6 +10,8 @@
 
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
+#include <map>
+#include <set>
 #include <unordered_map>
 
 // The ModuleComponent hosting a given graph node, or nullptr if none exists right now (a routing to
@@ -41,8 +43,8 @@ void GraphEditor::endPluginAddingControls(juce::AudioProcessorGraph::NodeID node
 // resolves to a bound, visible knob; if so, re-anchor cable.p2 onto that knob's ring-landing point
 // (canvas space, defensively recomputed here too -- cheap, and the one source of truth either way)
 // and mark landsOnKnob so paint can draw the landing dot (GraphEditorCables.cpp's
-// paintOverChildren). A hidden-page knob (sliderIndexForModTarget says -1) is left alone -- it
-// keeps the gutter jack pass 1/2 already gave it, exactly as before.
+// paintOverChildren). A hidden-page knob (sliderIndexForModTarget says -1) keeps the gutter jack pass 1/2 already
+// gave it, unless its target is knob-only: that cable has no jack, so it parks (ModuleComponent::parkedCableEnd).
 // Runs on every cable rebuild (each 30 Hz tick and each glide frame), so the node -> card lookup is
 // one map built here in O(nodes + cards): a per-cable moduleComponentForNode() made this pass
 // O(cables x cards) and dominated the tick on a many-track project.
@@ -56,16 +58,36 @@ void GraphEditor::reanchorCablesToKnobTargets(std::vector<VisibleCable>& cables)
         if (auto it = compForProcessor.find(node->getProcessor()); it != compForProcessor.end())
             compForNode.emplace(node->nodeID.uid, it->second);
 
+    // A cable whose knob-only target is out of view (an unselected tab, an unpicked pad) parks at the card's edge; the
+    // parked targets of one card are ranked by channel so each cable keeps an end of its own.
+    std::map<ModuleComponent*, std::set<int>> parked;
     for (auto& cable : cables) {
         const auto found = compForNode.find(cable.destNodeId);
         if (found == compForNode.end())
             continue;
         auto* dstComp = found->second;
         auto anchor = dstComp->getModTargetKnobAnchor(cable.destChannel);
-        if (!anchor.has_value())
+        if (!anchor.has_value()) {
+            if (dstComp->parkedCableEnd(cable.destChannel, 0).has_value())
+                parked[dstComp].insert(cable.destChannel);
             continue;
+        }
         cable.p2 = dstComp->getBounds().getPosition().toFloat() + *anchor;
         cable.landsOnKnob = true;
+    }
+    if (parked.empty())
+        return;
+    for (auto& cable : cables) {
+        const auto found = compForNode.find(cable.destNodeId);
+        if (found == compForNode.end() || parked.count(found->second) == 0)
+            continue;
+        const auto& channels = parked[found->second];
+        const auto at = channels.find(cable.destChannel);
+        if (at == channels.end())
+            continue;
+        const int rank = (int)std::distance(channels.begin(), at);
+        if (const auto end = found->second->parkedCableEnd(cable.destChannel, rank))
+            cable.p2 = found->second->getBounds().getPosition().toFloat() + *end;
     }
 }
 

@@ -42,6 +42,24 @@ public:
     }
 };
 
+// The name's hit area: hovering it shows the full name (the row draws it elided). A press selects the row; hover
+// already reaches it through the row's mouse listener.
+class ModDotSourceRow::NameTip final
+    : public juce::Component
+    , public juce::SettableTooltipClient {
+public:
+    explicit NameTip(ModDotSourceRow& row)
+        : row_(row) {
+        setInterceptsMouseClicks(true, false);
+    }
+    void mouseDown(const juce::MouseEvent& e) override { row_.mouseDown(e.getEventRelativeTo(&row_)); }
+
+private:
+    ModDotSourceRow& row_;
+};
+
+juce::Component& ModDotSourceRow::nameArea() noexcept { return *nameTip_; }
+
 ModDotSourceRow::ModDotSourceRow(const KnobModSource& source, const juce::String& paramName)
     : source_(source)
     , paramName_(paramName)
@@ -49,6 +67,9 @@ ModDotSourceRow::ModDotSourceRow(const KnobModSource& source, const juce::String
     , amountButton_(std::make_unique<AmountButton>())
     , timelineButton_(ModDotGlyph::Timeline, {}, {})
     , removeButton_(ModDotGlyph::Trash, {}, {}) {
+    nameTip_ = std::make_unique<NameTip>(*this);
+    nameTip_->setTitle("Name");
+    addAndMakeVisible(*nameTip_);
     addAndMakeVisible(bar_);
     addAndMakeVisible(*amountButton_);
     curveChip_ = std::make_unique<ModCurveChip>();
@@ -99,7 +120,9 @@ void ModDotSourceRow::setLook(const Look& look) {
 }
 
 void ModDotSourceRow::applyNames() {
-    const auto& name = source_.sourceName;
+    const auto& name = source_.spokenName();
+    nameTip_->setTooltip(name);
+    nameTip_->setTitle(name);
     setTitle(name + ", " + ModDotAmountBar::percentText(source_.amount));
     bar_.setTitle(name + " amount");
     bar_.setTooltip("Drag to change " + name + " amount");
@@ -115,7 +138,7 @@ void ModDotSourceRow::applyNames() {
 }
 
 void ModDotSourceRow::update(const KnobModSource& source) {
-    const bool renamed = source.sourceName != source_.sourceName;
+    const bool renamed = source.sourceName != source_.sourceName || source.fullName != source_.fullName;
     const bool amountChanged = source.amount != source_.amount;
     source_ = source;
     if (!bar_.isMouseButtonDown()) {
@@ -125,7 +148,7 @@ void ModDotSourceRow::update(const KnobModSource& source) {
     if (renamed || amountChanged)
         applyNames();
     if (renamed)
-        curveChip_->setSourceName(source.sourceName);
+        curveChip_->setSourceName(source.spokenName());
     curveChip_->refresh();
     repaint();
 }
@@ -137,6 +160,19 @@ void ModDotSourceRow::setSelected(bool selected) {
         return;
     selected_ = selected;
     repaint();
+}
+
+// A name too wide for its area gives up its module first: the port is what tells two rows of one module apart, and
+// the tooltip still says the whole name.
+juce::String ModDotSourceRow::shownName() const {
+    const auto& name = source_.sourceName;
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(juce::Font(juce::FontOptions(kFont)), name, 0.0f, 0.0f);
+    if (glyphs.getBoundingBox(0, -1, true).getWidth() <= (float)nameArea_.getWidth())
+        return name;
+    const auto separator = juce::String::fromUTF8(" \xC2\xB7 ");
+    const int at = name.indexOf(separator);
+    return at >= 0 ? name.substring(at + separator.length()) : name;
 }
 
 void ModDotSourceRow::paint(juce::Graphics& g) {
@@ -154,7 +190,7 @@ void ModDotSourceRow::paint(juce::Graphics& g) {
     g.fillEllipse(swatchArea_.toFloat());
     g.setColour(p.text);
     g.setFont(juce::Font(juce::FontOptions(kFont)));
-    g.drawText(source_.sourceName, nameArea_, juce::Justification::centredLeft, true);
+    g.drawText(shownName(), nameArea_, juce::Justification::centredLeft, true);
 }
 
 void ModDotSourceRow::resized() {
@@ -164,21 +200,21 @@ void ModDotSourceRow::resized() {
     // next so the icons never touch the fader or the amount.
     const int gap = modDotPaletteFor(*this).space;
     timelineButton_.setVisible(look_.timeline);
-    if (look_.nameLine > 0) {
-        layoutTwoLines(gap);
-    } else {
-        auto r = juce::Rectangle<int>(0, 0, getWidth(), look_.height).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
-        removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)
-                                    .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
-        if (look_.timeline)
-            r.removeFromRight(kIconGap);
-        r = layoutControls(r, gap);
-        swatchArea_ = r.removeFromLeft(kSwatch).withSizeKeepingCentre(kSwatch, kSwatch);
-        r.removeFromLeft(gap);
-        nameArea_ = r.removeFromLeft(look_.nameWidth);
-        r.removeFromLeft(gap);
-        bar_.setBounds(r.withSizeKeepingCentre(r.getWidth(), kBarHeight));
-    }
+    auto r = juce::Rectangle<int>(0, 0, getWidth(), look_.height).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
+    removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)
+                                .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
+    if (look_.timeline)
+        r.removeFromRight(kIconGap);
+    r = layoutControls(r, gap);
+    swatchArea_ = r.removeFromLeft(kSwatch).withSizeKeepingCentre(kSwatch, kSwatch);
+    r.removeFromLeft(gap);
+    // An elastic name is kNameMax wide, less what the fader needs to keep kMinBar; every row of a list lines up.
+    const int nameWidth =
+        look_.nameWidth == kElasticName ? juce::jlimit(0, kNameMax, r.getWidth() - gap - kMinBar) : look_.nameWidth;
+    nameArea_ = r.removeFromLeft(nameWidth);
+    nameTip_->setBounds(nameArea_);
+    r.removeFromLeft(gap);
+    bar_.setBounds(r.withSizeKeepingCentre(r.getWidth(), kBarHeight));
     if (editor_ != nullptr)
         editor_->setBounds(amountButton_->getBounds());
     setReadingFocusOrder();
@@ -186,36 +222,14 @@ void ModDotSourceRow::resized() {
 
 // Tab follows reading order, not the controls' top edges: the default traverser sorts siblings by y first, and the
 // controls differ in height (the timeline button fills its line, the fader is thin), so it would visit the timeline
-// button before the fader. One line reads fader, amount, curve, timeline, remove; two lines put remove on the top
-// line, before the controls under it.
+// button before the fader. The row reads fader, amount, curve, timeline, remove.
 void ModDotSourceRow::setReadingFocusOrder() {
-    const bool removeFirst = look_.nameLine > 0;
     int order = 1;
-    if (removeFirst)
-        removeButton_.setExplicitFocusOrder(order++);
     for (juce::Component* c :
          {static_cast<juce::Component*>(&bar_), static_cast<juce::Component*>(amountButton_.get()),
-          static_cast<juce::Component*>(curveChip_.get()), static_cast<juce::Component*>(&timelineButton_)})
+          static_cast<juce::Component*>(curveChip_.get()), static_cast<juce::Component*>(&timelineButton_),
+          static_cast<juce::Component*>(&removeButton_)})
         c->setExplicitFocusOrder(order++);
-    if (!removeFirst)
-        removeButton_.setExplicitFocusOrder(order);
-}
-
-// Top line: swatch, the whole name and remove, where a plain row of the same list has them. Under it, starting below
-// the name: fader, amount, curve and timeline, so a long name never squeezes the fader.
-void ModDotSourceRow::layoutTwoLines(int gap) {
-    auto top = juce::Rectangle<int>(0, 0, getWidth(), look_.nameLine).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
-    removeButton_.setBounds(top.removeFromRight(ModDotGlyphButton::kSize)
-                                .withSizeKeepingCentre(ModDotGlyphButton::kSize, ModDotGlyphButton::kSize));
-    top.removeFromRight(gap);
-    swatchArea_ = top.removeFromLeft(kSwatch).withSizeKeepingCentre(kSwatch, kSwatch);
-    top.removeFromLeft(gap);
-    nameArea_ = top;
-    auto r = juce::Rectangle<int>(0, look_.nameLine, getWidth(), look_.height - look_.nameLine)
-                 .reduced(ModDotGlyphButton::kRowEdgeInset, 0);
-    r.removeFromLeft(kSwatch + gap);
-    r = layoutControls(r, gap);
-    bar_.setBounds(r.withSizeKeepingCentre(r.getWidth(), kBarHeight));
 }
 
 // Timeline (when shown), curve and amount from the right edge of `r`; returns what is left of it.

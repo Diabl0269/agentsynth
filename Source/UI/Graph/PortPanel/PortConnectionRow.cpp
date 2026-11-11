@@ -26,7 +26,7 @@ PortConnectionRow::PortConnectionRow(const PortConnection& connection)
     if (connection_.isModulation()) {
         mod_ = std::make_unique<ModDotSourceRow>(modSource(), juce::String());
         // "Show in timeline" only when the chain resolves to a knob, the lane it reveals.
-        mod_->setLook({kModHeight, 0, connection_.modCard.uid != 0, kHeight});
+        mod_->setLook({kHeight, ModDotSourceRow::kElasticName, connection_.modCard.uid != 0});
         addAndMakeVisible(*mod_);
         removeButton_.setVisible(false);
         mod_->onRemove = [this](ModDotSourceRow&) {
@@ -45,6 +45,7 @@ PortConnectionRow::PortConnectionRow(const PortConnection& connection)
 KnobModSource PortConnectionRow::modSource() const {
     auto source = connection_.modSource;
     source.sourceName = connection_.label;
+    source.fullName = connection_.fullLabel;
     return source;
 }
 
@@ -54,13 +55,15 @@ void PortConnectionRow::focusOfChildComponentChanged(FocusChangeType) {
 }
 
 void PortConnectionRow::applyNames() {
-    setTitle(connection_.label + " connection");
-    removeButton_.setTitle("Remove connection to " + connection_.label);
-    removeButton_.setTooltip("Remove connection to " + connection_.label);
+    // The row shows the short form; what is spoken and what a tooltip says is the whole name.
+    setTitle(connection_.fullLabel + " connection");
+    setTooltip(connection_.fullLabel);
+    removeButton_.setTitle("Remove connection to " + connection_.fullLabel);
+    removeButton_.setTooltip("Remove connection to " + connection_.fullLabel);
 }
 
 void PortConnectionRow::update(const PortConnection& connection) {
-    const bool renamed = connection.label != connection_.label;
+    const bool renamed = connection.label != connection_.label || connection.fullLabel != connection_.fullLabel;
     const bool recoloured = connection.colour != connection_.colour;
     connection_ = connection;
     if (renamed)
@@ -112,7 +115,7 @@ void PortConnectionRow::resized() {
     // Laid out for the full row height whatever height the panel has given it: a row growing in or shrinking out is
     // revealed and hidden, never squashed.
     if (mod_ != nullptr)
-        mod_->setBounds(0, 0, getWidth(), kModHeight);
+        mod_->setBounds(0, 0, getWidth(), kHeight);
     const int gap = modDotPaletteFor(*this).space;
     auto r = juce::Rectangle<int>(0, 0, getWidth(), kHeight).reduced(ModDotGlyphButton::kRowEdgeInset, 0);
     removeButton_.setBounds(r.removeFromRight(ModDotGlyphButton::kSize)

@@ -348,15 +348,25 @@ TEST(MacroFold, UndoAndRedoOfAToggleFoldTheModulesToo) {
     EXPECT_TRUE(c.card()->isVisible());
 }
 
-TEST(MacroFold, ASecondToggleMidFlightLandsTheRunningFoldFirst) {
+// Regression test for FRO1664: a second toggle landed the running fold and started the reverse from the card's boxes.
+TEST(MacroFold, ASecondToggleMidFlightReversesFromWhereTheModulesAreDrawn) {
     FoldCanvas c(3);
     c.animate();
     c.toggle(true);
     ASSERT_TRUE(c.fold().isLive());
-    c.fold().applyAtMs(50.0);
+    c.fold().applyAtMs(120.0);
+    std::vector<std::pair<uint32_t, juce::Rectangle<float>>> drawn;
+    for (const auto& p : c.previews())
+        drawn.emplace_back(p.nodeUid, c.fold().moduleRectFor(p.nodeUid));
     c.toggle(false);
     ASSERT_TRUE(c.fold().isLive());
     EXPECT_EQ(c.card()->isVisible(), false) << "the card from the first fold was landed, then hidden by the unfold";
+    for (const auto& [uid, rect] : drawn) {
+        ASSERT_FALSE(rect.isEmpty());
+        const auto now = c.fold().moduleRectFor(uid);
+        EXPECT_LT(now.getPosition().getDistanceFrom(rect.getPosition()), 2.0f)
+            << "module " << uid << " unfolds from where it was drawn: " << rect.toString() << " vs " << now.toString();
+    }
     EXPECT_FALSE(c.fold().outlineFor(c.macroId)->isEmpty());
     EXPECT_FALSE(c.editor.getMacros().find(c.macroId)->collapsed);
 }

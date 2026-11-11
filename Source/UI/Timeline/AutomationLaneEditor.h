@@ -482,6 +482,8 @@ private:
     };
     EdgeScrollTimer edgeScroll_;
     juce::Point<int> lastDragPointer_;
+    // The beat a selection box was pressed at, which its corner follows when the view scrolls.
+    double boxAnchorBeat_ = 0.0;
     LanePointStretch stretch_{*this};
     StretchHandle hoverHandle_ = StretchHandle::None;
     double stretchGrabBeat_ = 0.0;

@@ -149,12 +149,16 @@ predictable offset from the ring, never a hand-rolled approximation.
 `ModulationTarget::channelIndex`), set for every cable kind so they also serve as the
 [hover-correlation](#hover) key.
 
-**Fallback — the gutter jack, unchanged.** A knob on a hidden tab page (`getModTargetKnobAnchor`
-returns `nullopt` the same way `getModRingSliderIndex` does) is not knob-bound for layout purposes
-either — `ModuleComponent::isInputJackKnobBound` says false, so the jack stays drawn and a cable
-still lands there, rather than painting a landing dot over empty card. A knob-only target (Level's sibling Pan,
-the shared Mix) draws no jack, so while its knob is folded into the More row its cable ends at the left edge of the
-More button (`moreRowButtonForKnobOnlyJack`), never on a gutter row that belongs to the next real jack.
+**Fallback when the knob is out of view.** A knob on a tab that is not shown paints no ring and no dot, and its
+cable cannot end on it. A target that also has a gutter jack (most Wavetable knobs) keeps that jack drawn on every tab
+(`knobAnchorForVisibleInputJack` never binds a tabbed knob's jack, so the jack column is the same on every tab), and
+its cable ends on the knob while the knob's tab is shown and on the jack otherwise. A knob-only target (every Pluck and
+Mallet knob, the Wavetable's Unison, a Drum Kit pad knob) has no jack to fall back on: its cable parks at the card's
+left edge, 10 px in, level with the tab strip (an unpicked Drum Kit pad: the top of the pad panel). Several parked
+cables on one card each take their own place, 6 px apart in channel order and kept inside the card
+(`ModuleComponent::parkedCableEnd`, ranked in `GraphEditor::reanchorCablesToKnobTargets`), so they never meet at one
+point. A parked end draws no landing dot. A knob-only target of a folded More row ends at the left edge of the More
+button instead (`moreRowButtonForKnobOnlyJack`), never on a gutter row that belongs to the next real jack.
 
 **The landing dot.** `paint()` draws cables BEFORE module cards paint as children, so a cable
 re-anchored deep into a card's knob has its final stretch drawn underneath the opaque card.
@@ -198,6 +202,11 @@ A control that also has a gutter jack keeps its knob until the fade ends, since 
 then, so when a fold begins `CableEndGlide::begin` asks the card where that jack will sit (`ModuleComponent::foldedJackCentre`:
 the drawn column with the jack added back, by the same math as `getPortCenter`) and the end glides to that place, so it
 does not jump when the fade ends. Each frame repaints the canvas and the glide stops repainting when it ends.
+
+A tab switch (`CardBody::selectTab`) and a Drum Kit pad pick move ends the same way through
+`ModuleComponent::glideCableEnds` (`CableEndGlide::beginMove`): the old tab's cables leave their knobs for the parked
+place or the gutter jack while the new tab's cables arrive on their knobs, over the fade-in time with `easeOutCubic`,
+a plain short move under Reduce Motion and at once under Animations Off.
 
 ## Hit-testing
 
@@ -294,10 +303,12 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
   row: it is the mod dot sources panel's own row, `ModDotSourceRow`, embedded in `PortConnectionRow`. Rows are told apart
   per cable, never per module type, so a jack that carries both (an Oscillator's output into an audio input and onto a
   knob) lists its audio cables as plain rows and its modulations as mod rows, side by side. The panel is
-  `ModDotPage::kWidth` (312 px) wide, too narrow for the far end's "<module> . <port>" name and every control on one line,
-  so a mod row has two (`ModDotSourceRow::Look::nameLine`, `PortConnectionRow::kModHeight` = 56 px): the swatch, the
-  whole name and the remove button on a 30 px top line, where a plain row has them; under the name the amount bar, the
-  typed percent (click it or press Return), the curve chip and **show in timeline**. Plain rows keep their 30 px. It
+  `PortConnectionsPanel::kWidth` (336 px) wide, 24 px wider than the knob's panel, so a mod row is one 30 px line
+  (`PortConnectionRow::kHeight`, `ModDotSourceRow::Look{kHeight, kElasticName, timeline}`): the swatch, the name (elastic,
+  up to `ModDotSourceRow::kNameMax` = 90 px, less what the fader needs), the amount bar (`kMinBar` = 48 px minimum, with
+  the scroll bar's 10 px in), the
+  typed percent (click it or press Return), the curve chip, **show in timeline** and the remove button. Plain rows are the
+  same 30 px. It
   shows from a destination jack (the far end is the modulator) and from a source jack such as an LFO's output (the far
   end is the knob or jack it drives). `listPortConnections` fills each modulation's `attenuverterId`, its `modSource`
   and the knob it lands on (`modCard`, `modChannel`, macro ports looked through) from `knobModChains`, the list the
@@ -307,15 +318,22 @@ through the shared `launchInFrame`, which grows out of the jack and shrinks back
   step (`applyModAmount`), the chip opens the same curve editor (`wireModCurveChip`) and show in timeline is
   `ModDotController::revealSource` for that knob, the same call as the mod dot panel's (hidden when no routing names a
   knob). Its name and tooltip are "Show <far end> in timeline". Rows of both heights move through the shared row motion
-  (`ExitEnterRowSlots` with a height per row): a removed mod row shrinks from 56 px and Cmd+Z grows it back to 56.
+  (`ExitEnterRowSlots` with a height per row): every row is `PortConnectionRow::kHeight` and a removed one shrinks from it; Cmd+Z grows it back.
   Audio, MIDI and plain CV rows are unchanged. Keys: Tab walks remove, bar, percent, chip and show in timeline in each
-  mod row (top line first; `ModDotSourceRow` sets an explicit focus order, since sorting by top edge would visit the
-  tall timeline button before the fader; the knob's one-line rows read bar to remove); Up and Down move between rows.
+  mod row, left to right (`ModDotSourceRow` sets an explicit focus order, since sorting by top edge would visit the
+  tall timeline button before the fader; the knob's rows read the same way); Up and Down move between rows.
+  **Names.** `PortConnection::label` is what a row shows and `fullLabel` is always "<module> . <port>". The rule: the
+  module is dropped only where it names the panel's own card (an LFO modulating one of its own knobs reads "Rate"); on
+  another card's name `label` keeps its module, so the row reads in full whenever it fits. A name too wide for its area first gives up its module and shows only the port (`ModDotSourceRow::shownName`: "Pad 2
+  level", since the port tells two rows of one module apart), then is elided with an ellipsis if still too wide; and the name area
+  (`ModDotSourceRow::nameArea()`, a plain row's whole row) carries the full name as its tooltip, title and the remove
+  button's name, on both this panel and the knob's panel (`KnobModSource::fullName`, `spokenName()`).
   Tests: `PortPanelModControlsTests.cpp`. Its `EverySurfaceThatListsAModulationOffersAmountPercentAndCurve` lists every
   surface that shows a modulation (the knob's sources panel and the port panel from either end; a new surface that
   lists modulations is one more entry there). Its output-row tests cover an LFO on two knobs, an Oscillator used as
   audio and as a mod source, the drag, the chip, the reveal against the mod dot panel's, the Tab order and the
-  mixed-height undo.
+  undo. FRO1665 / FRO1676 add a long-name case (elided text, tooltip, title), the panel height at 1, 8 and 32 rows under
+  a cap, and the one-line row fit (no overlap, nothing clipped, bar >= 48 px) in every built-in theme.
 - **Edits.** Remove is `GraphEditor::disconnectCable` (one undo step, the cable retracts; an attenuverter chain goes
   through `removeModulationChain`), "Disconnect all" is `GraphEditor::disconnectPort` (one undo step), "Delete port" is
   `MacroGroupController::deleteMacroPortManually` (one undo step, the cables retract; the node is gone, so the panel

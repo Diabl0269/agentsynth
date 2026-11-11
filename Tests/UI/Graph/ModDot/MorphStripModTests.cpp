@@ -1,12 +1,17 @@
 // The Filter's morph map sliders as landing widgets for Morph X / Y cables: the landing dot clear of the bar, a mod dot
 // that opens and drags like a knob's, the modulation bar, and the amount drag on that bar -- all driven by real mouse
-// events delivered to the real map inside a real card.
+// events delivered to the real map inside a real card. Also the focus-ring guard for every mod dot (knob and map
+// slider): the ring is centred on the dot at every zoom.
 
 #include "ModDotTestFixture.h"
 #include "Modules/FilterModule.h"
+#include "UI/Graph/ModDot/ModDotButton.h"
 #include "UI/Graph/ModuleComponent/ModuleComponentModBand.h"
 #include "UI/Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h"
+#include "UI/Layout/FocusRing.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cmath>
+#include <functional>
 
 using namespace synth::ui;
 
@@ -76,6 +81,98 @@ struct MorphRig {
     }
     juce::Point<float> barCentre(MorphMap::Axis axis) { return map().getModBarTrack(axis).getCentre(); }
 };
+
+struct Centroid {
+    double x = 0.0, y = 0.0, mass = 0.0;
+};
+
+Centroid centroidOf(const juce::Image& image) {
+    Centroid c;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x) {
+            const double a = image.getPixelAt(x, y).getAlpha();
+            c.x += a * (x + 0.5);
+            c.y += a * (y + 0.5);
+            c.mass += a;
+        }
+    if (c.mass > 0.0) {
+        c.x /= c.mass;
+        c.y /= c.mass;
+    }
+    return c;
+}
+
+// A canvas for the card as the canvas shows it at `zoom`: children keep their integer bounds, the whole card is scaled.
+// Big enough for a button that sits below or right of the card's own bounds.
+juce::Image cardImage(const juce::Rectangle<int>& extent, float zoom) {
+    return juce::Image(juce::Image::ARGB, (int)std::ceil(extent.getRight() * zoom) + 2,
+                       (int)std::ceil(extent.getBottom() * zoom) + 2, true, juce::SoftwareImageType());
+}
+
+Centroid dotCentroid(const juce::Rectangle<int>& extent, juce::Point<float> anchor, float zoom) {
+    auto image = cardImage(extent, zoom);
+    {
+        juce::Graphics g(image);
+        g.addTransform(juce::AffineTransform::scale(zoom));
+        g.setColour(juce::Colours::white);
+        const float d = ModuleComponent::kKnobLandingDotDiameter;
+        g.fillEllipse(anchor.x - d * 0.5f, anchor.y - d * 0.5f, d, d);
+    }
+    return centroidOf(image);
+}
+
+Centroid ringCentroid(ModDotButton& button, float zoom) {
+    auto image = cardImage(button.getBounds(), zoom);
+    {
+        juce::Graphics g(image);
+        g.addTransform(juce::AffineTransform::scale(zoom));
+        g.addTransform(juce::AffineTransform::translation(button.getPosition()));
+        button.paintEntireComponent(g, true);
+    }
+    return centroidOf(image);
+}
+
+struct RingsShown {
+    RingsShown() { setFocusRingsShownForTest(true); }
+    ~RingsShown() { setFocusRingsShownForTest(false); }
+};
+
+// One dot-with-ring surface: its card, its mod dot channel, and a way to relayout the card so the anchor lands on a new
+// fractional spot.
+struct Surface {
+    juce::String name;
+    ModuleComponent* card = nullptr;
+    int channel = -1;
+    std::function<void(int step)> moveAnchor;
+    std::function<void()> refresh;
+};
+
+void expectRingCentredOnDot(const Surface& s) {
+    RingsShown shown;
+    for (int step = 0; step < 6; ++step) {
+        s.moveAnchor(step);
+        s.refresh();
+        auto* button = s.card->getModDotButton(s.channel);
+        ASSERT_NE(button, nullptr) << s.name << " step " << step;
+        const auto anchor = s.card->getModTargetKnobAnchor(s.channel);
+        ASSERT_TRUE(anchor.has_value());
+        for (const bool open : {false, true}) {
+            button->setMenuOpen(open);
+            for (const float zoom : {1.0f, 1.5f, 2.0f}) {
+                const auto dot = dotCentroid(button->getBounds(), *anchor, zoom);
+                const auto ring = ringCentroid(*button, zoom);
+                ASSERT_GT(ring.mass, 0.0)
+                    << s.name << ": the ring paints, step " << step << " open " << open << " zoom " << zoom
+                    << " button " << button->getBounds().toString() << " card " << s.card->getBounds().toString();
+                EXPECT_NEAR(ring.x, dot.x, 0.5) << s.name << " step " << step << " zoom " << zoom << " open " << open
+                                                << " anchor " << anchor->x << "," << anchor->y;
+                EXPECT_NEAR(ring.y, dot.y, 0.5) << s.name << " step " << step << " zoom " << zoom << " open " << open
+                                                << " anchor " << anchor->x << "," << anchor->y;
+            }
+        }
+        button->setMenuOpen(false);
+    }
+}
 
 float landingDot() { return ModuleComponent::kKnobLandingDotDiameter; }
 
@@ -229,4 +326,31 @@ TEST_F(ModuleComponentTest, CustomFilterCardRendersToPngForVisualInspection) {
     juce::FileOutputStream stream(outFile);
     ASSERT_TRUE(stream.openedOk());
     ASSERT_TRUE(juce::PNGImageFormat().writeImageToStream(img, stream));
+}
+
+// Regression test for FRO1663: the mod dot's focus ring sat up to half a pixel (more under zoom) off the dot.
+TEST_F(ModuleComponentTest, EveryDotWithRingPaintsItsRingCentredOnTheDot) {
+    // A knob's mod dot, the card resized so the knob centre lands on fractions.
+    {
+        Fixture f;
+        ASSERT_NE(f.gainKnob, nullptr);
+        const auto base = f.vcaCard->getBounds();
+        Surface s{
+            "knob dot", f.vcaCard, f.gainChannel,
+            [&](int step) { f.vcaCard->setSize(base.getWidth() + step * 5 % 11, base.getHeight() + step * 3 % 7); },
+            [&] { f.editor->timerCallback(); }};
+        expectRingCentredOnDot(s);
+    }
+    // A morph map slider's mod dot, the card resized so the strip anchor lands on fractions.
+    {
+        MorphRig rig;
+        ASSERT_NE(rig.card, nullptr);
+        const auto base = rig.card->getBounds();
+        Surface s{
+            "morph map dot", rig.card, FilterModule::kMorphXCVChannel,
+            [&](int step) { rig.card->setSize(base.getWidth() + step * 7 % 13, base.getHeight() + step * 3 % 9); },
+            [&] { rig.editor->timerCallback(); }};
+        expectRingCentredOnDot(s);
+    }
+    // Port jacks carry no keyboard focus ring (they are not Tab stops), so no jack surface applies.
 }

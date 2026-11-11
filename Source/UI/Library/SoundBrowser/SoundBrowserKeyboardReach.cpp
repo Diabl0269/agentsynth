@@ -3,11 +3,15 @@
 // view Up and Down always step focus (the model of Layout/FocusStepWithin.h): search, Filters, the chip row while it
 // shows, every control of the open panel, then the list, then the footer's controls. Past the last header stop Down
 // lands on the list and Up on the first row climbs back; Down on the last row enters the footer and Up on its first
-// control returns to the list. Only a text field keeps its own Up and Down.
+// control returns to the list. Only a text field keeps its own Up and Down. The footer is a row, so Left and Right
+// step along it too (the volume keeps them for its value: Up and Down leave it), Tab from the list jumps straight to
+// its first control and Shift+Tab from any of them returns to the list.
 //
 // A key reaches us as a key listener on the control (juce::ComponentPeer::handleKeyPress offers a component's key
 // listeners before its own keyPressed), so the steps win over a menu's or slider's own arrows. A menu opens with Return
 // (its own) or Space (here, the macOS pop-up convention) and a handle or the volume moves with Left and Right.
+#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/FocusStepWithin.h"
 #include "UI/Library/SoundBrowser/SoundBrowserComponent.h"
 #include <algorithm>
@@ -53,22 +57,51 @@ void SoundBrowserComponent::focusStop(juce::Component& stop) {
         scrollFocusedControlIntoView(&stop); // headless windows raise no focus change to do this for us
 }
 
+bool SoundBrowserComponent::handleFooterTab(const juce::KeyPress& key, bool fromFooter) {
+    const auto cycle = shortcuts_ != nullptr ? resolveFocusCycleKeyPress(key, *shortcuts_)
+                       : key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0)
+                           ? std::optional<bool>(true)
+                       : key == juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0)
+                           ? std::optional<bool>(false)
+                           : std::nullopt;
+    if (!cycle.has_value() || *cycle == fromFooter)
+        return false; // Tab leaves the list for the footer, Shift+Tab leaves the footer for the list; the rest cycles
+    if (fromFooter) {
+        focusListStop(false);
+        return true;
+    }
+    return enterFooter();
+}
+
 bool SoundBrowserComponent::keyPressed(const juce::KeyPress& key, juce::Component* origin) {
-    if (origin == nullptr || key.getModifiers().isAnyModifierKeyDown() || keepsUpAndDown(*origin))
+    if (origin == nullptr || keepsUpAndDown(*origin))
+        return false;
+    if (handlePreviewKey(key))
+        return true;
+    const auto footer = footerStops();
+    const auto inFooter = std::find(footer.begin(), footer.end(), origin);
+    if (inFooter != footer.end() && handleFooterTab(key, true))
+        return true;
+    if (key.getModifiers().isAnyModifierKeyDown())
         return false;
     const bool up = key.isKeyCode(juce::KeyPress::upKey);
-    if (!up && !key.isKeyCode(juce::KeyPress::downKey))
+    const bool left = key.isKeyCode(juce::KeyPress::leftKey);
+    const bool right = key.isKeyCode(juce::KeyPress::rightKey);
+    if (!up && !left && !right && !key.isKeyCode(juce::KeyPress::downKey))
         return false;
-    const auto footer = footerStops();
-    if (const auto inFooter = std::find(footer.begin(), footer.end(), origin); inFooter != footer.end()) {
-        if (!up && inFooter + 1 != footer.end())
-            focusStop(**(inFooter + 1));
-        else if (up && inFooter != footer.begin())
+    if (inFooter != footer.end()) {
+        if ((left || right) && dynamic_cast<juce::Slider*>(origin) != nullptr)
+            return false; // the volume's own value
+        if ((up || left) && inFooter != footer.begin())
             focusStop(**(inFooter - 1));
         else if (up)
             focusListStop(false);
+        else if (!(up || left) && inFooter + 1 != footer.end())
+            focusStop(**(inFooter + 1));
         return true;
     }
+    if (left || right)
+        return false;
     const auto stops = headerStops();
     const auto at = std::find(stops.begin(), stops.end(), origin);
     if (at == stops.end() || origin == &search_)

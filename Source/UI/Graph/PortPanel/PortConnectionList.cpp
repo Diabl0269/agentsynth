@@ -46,20 +46,27 @@ juce::AudioProcessor* processorFor(GraphEditor& editor, juce::AudioProcessorGrap
     return node != nullptr ? node->getProcessor() : nullptr;
 }
 
+// A jack's name: the module's title and the port, kept apart so a row can leave the module off.
+struct EndName {
+    juce::String module; // empty for a macro port or a plugin slot, whose name already carries what it needs
+    juce::String port;
+    juce::String full() const { return module.isEmpty() ? port : module + dotSeparator() + port; }
+};
+
 // The name of a jack by node and raw channel. A macro port has no module worth naming: it reads as its own name.
-juce::String endName(GraphEditor& editor, const GraphEditor::VisibleCable& cable, bool farIsDestination) {
+EndName endName(GraphEditor& editor, const GraphEditor::VisibleCable& cable, bool farIsDestination) {
     const juce::AudioProcessorGraph::NodeID id{farIsDestination ? cable.id.dstUid : cable.id.srcUid};
     auto* processor = processorFor(editor, id);
     if (processor == nullptr)
         return {};
     if (const auto owner = editor.getMacroController().macroPortOwnerFor(id); owner.port != nullptr)
-        return owner.port->name;
+        return {{}, owner.port->name};
     // A plugin's parameter is named the way the Mod Matrix names it, card title included.
     if (farIsDestination && cable.signal != CableSignal::Midi &&
         cable.kind != GraphEditor::VisibleCable::Kind::Direct) {
         const auto slot = hostedSlotLabel(editor.getAudioEngine().getGraph(), id, cable.destChannel);
         if (slot.isNotEmpty())
-            return slot;
+            return {{}, slot};
     }
     juce::String port;
     if (cable.signal == CableSignal::Midi) {
@@ -73,7 +80,7 @@ juce::String endName(GraphEditor& editor, const GraphEditor::VisibleCable& cable
         const int raw = farIsDestination ? cable.id.dstPort : cable.id.srcPort;
         port = jackLabel(processor, visibleJackOf(processor, raw, farIsDestination), farIsDestination);
     }
-    return editor.getModuleTitle(id, processor) + dotSeparator() + port;
+    return {editor.getModuleTitle(id, processor), port};
 }
 
 bool landsOn(GraphEditor& editor, const GraphEditor::VisibleCable& cable, const PortRef& port) {
@@ -167,7 +174,10 @@ std::vector<PortConnection> listPortConnections(GraphEditor& editor, const PortR
         entry.cable = cable;
         entry.far = farEnd(editor, cable, port);
         entry.farRawChannel = port.isInput ? cable.id.srcPort : cable.destChannel;
-        entry.label = endName(editor, cable, /*farIsDestination=*/!port.isInput);
+        const auto name = endName(editor, cable, /*farIsDestination=*/!port.isInput);
+        entry.fullLabel = name.full();
+        // The panel's own card is no news in its own list: only the port is shown.
+        entry.label = entry.far.node == port.node && name.module.isNotEmpty() ? name.port : entry.fullLabel;
         entry.colour = editor.colourForCable(cable);
         if (cable.id.attenUid != 0)
             describeChain(editor, entry, chains);

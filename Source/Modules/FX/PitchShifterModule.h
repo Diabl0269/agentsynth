@@ -110,6 +110,8 @@ public:
 
         if (isMuted()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 
@@ -117,6 +119,8 @@ public:
             // Pass dry audio through; clear CV channels so mod signals don't leak downstream
             for (int ch = 2; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
+            if (auto* vb = getVisualBuffer())
+                vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
             return;
         }
 

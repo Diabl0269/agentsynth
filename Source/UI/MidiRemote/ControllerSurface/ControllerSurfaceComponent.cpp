@@ -19,6 +19,7 @@
 
 #include "ControllerSurfaceComponent.h"
 
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScroller.h"
 #include "UI/Layout/FadeVisibility.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -78,6 +79,14 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
             handleCellDragged(controlId, dCols, dRows);
         };
         cell->onDragEnded = [this, controlId]() { handleCellDragEnded(controlId); };
+        cell->onPointer = [this, cell](const juce::MouseEvent& event, bool released) {
+            noteEdgePointer(event);
+            if (released) {
+                endEdgeScroll();
+                edgeScrollStoppedByEscape_ = false;
+            } else
+                beginCellEdgeScroll(*cell);
+        };
 
         cell->setSelected(std::find(selectedIds_.begin(), selectedIds_.end(), controlId) != selectedIds_.end());
         if (controlId == pulseControlId_)
@@ -181,6 +190,10 @@ bool ControllerSurfaceComponent::keyPressed(const juce::KeyPress& key) {
     // Esc clears the selection regardless of how many are selected -- checked first since
     // it is valid even with nothing selected (a no-op, reported as unhandled below).
     if (key == juce::KeyPress::escapeKey) {
+        // Mid-drag, Esc first stops a pan held at the edge, as it does on every other surface; the drag itself goes
+        // on where it is and commits on release as usual.
+        if (stopEdgeScrollForEscape())
+            return true;
         if (selectedIds_.empty())
             return false;
         setSelectionInternal({});

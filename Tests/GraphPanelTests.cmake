@@ -29,6 +29,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelModControlsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/PortPanel/PortPanelDisconnectAllTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollGestureTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Macros/MacroGroupController/MacroMultiSelectTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorDropRebuildTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/ModuleComponentModDotEveryControlTests.cpp
@@ -47,5 +48,6 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/ModuleDeletePathsTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Modules/DrumKit/DrumKitPadCableTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadCableCardTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/ModuleComponent/DrumKitPadModDotTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Graph/GraphEditor/GraphEditorKnobDropChannelSweepTests.cpp
 )

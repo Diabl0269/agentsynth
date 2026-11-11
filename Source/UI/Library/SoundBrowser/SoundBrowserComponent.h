@@ -24,6 +24,8 @@
 #include <optional>
 #include <vector>
 
+class ShortcutManager;
+
 namespace synth::ui {
 
 class ChevronTurn;
@@ -41,6 +43,7 @@ class SoundBrowserComponent
     , private synth::soundpacks::SoundPackInstaller::Listener
     , private synth::soundbrowser::SoundFolderBook::Listener
     , private juce::FocusChangeListener
+    , private juce::ChangeListener
     , private juce::KeyListener
     , private synth::shapes::ShapeLibrary::Listener
     , private synth::soundbrowser::SoundIndex::Listener {
@@ -147,8 +150,12 @@ public:
     /** Plays the selected sound (a loop on the next bar when the song plays); false when none can play. */
     bool playSelected();
     void stopPreview();
-    /** Space: stops the preview when one sounds, else plays the selected sound. */
+    /** Shift+Space (the rebindable `soundPreviewToggle`): stops the preview when one sounds, else plays the selected
+     *  sound. Plain Space is the song's play key and never reaches this. */
     bool togglePreview();
+    /** The user's bindings, read for the preview key (null: the factory key); the Play/Stop tooltip follows a rebind.
+     *  Detach with null before the manager goes. */
+    void setShortcutManager(ShortcutManager* manager);
     SoundPreviewFooter& getPreviewFooter() { return footer_; }
     /** What the footer shows at this height: the whole strip, the one-row strip, or nothing. */
     enum class FooterMode { Full, Compact, Hidden };
@@ -397,6 +404,14 @@ private:
 
     // Keyboard reach (SoundBrowserKeyboardReach.cpp)
     bool keyPressed(const juce::KeyPress& key, juce::Component* origin) override;
+    void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    /** The preview key anywhere in this view (the list, the search box, the panel, the footer). */
+    bool handlePreviewKey(const juce::KeyPress& key);
+    juce::String previewKeyText() const;
+    /** Esc with the panel open closes it (the one place every focus region's Esc ends up); false when it is shut. */
+    bool closeFiltersWithEscape(const juce::KeyPress& key);
+    /** Tab (the region-cycle key) from the list lands on the footer; Shift+Tab from the footer returns to the list. */
+    bool handleFooterTab(const juce::KeyPress& key, bool fromFooter);
     std::vector<juce::Component*> headerStops();
     void attachReachListeners();
     void focusStop(juce::Component& stop);
@@ -487,6 +502,8 @@ private:
     bool animateOffscreenForTest_ = false;
     juce::Component* lastFocusRequest_ = nullptr;
     bool tearingDown_ = false;
+    int previewToggles_ = 0;
+    ShortcutManager* shortcuts_ = nullptr;
     std::vector<juce::Component*> reachAttached_;
     PanelSlide panelSlide_;
     synth::ui::AnimationDriver panelAnim_;

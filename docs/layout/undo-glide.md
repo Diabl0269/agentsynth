@@ -26,6 +26,9 @@ redo.** An undo that jumps looks like a different app from the edit it reverses.
   editor, showing the restored layout with no outlines. A second Cmd+Z or Cmd+Shift+Z
   mid-glide starts the new glide from where each control is drawn then (nothing is landed first), and a re-sync that
   arrives while a glide runs with no new rebuild is ignored (FRO721).
+- **Macro folds.** A collapse or expand the step reverses folds the modules back ([macro fold motion](macro-fold-motion.md)).
+  A second Cmd+Z or Cmd+Shift+Z while the first fold or glide runs starts the new fold from where every card is drawn
+  then; the first fold keeps going ([interruption](macro-fold-motion.md)).
 - **Macro borders.** `undo()`/`redo()` also snapshot the painted macro borders before the restore and hand them to
   `GraphEditor::glideHullsFrom` after it, so the border a take-out or join moved glides (220 ms, `MacroHullGlide`) back
   to where it was, like it glided out.
@@ -108,6 +111,10 @@ glide frame of an undo and a redo (also under Reduce Motion) the test re-renders
 Two entries cover sections: `Section move: clips` (a cover move whose covered clip comes back on undo and shrinks
 away again on redo) and `Section strip block` (a block dragged past another; it lands at once under Reduce Motion).
 The same list is walked under Reduce Motion (a fade for the point surfaces, an instant landing for the rows) and with Animations Off (instant).
+`UndoGlideSurfaces.ASecondStepMidGlideStartsFromTheDrawnPlace` (`UndoGlideSurfacesSecondStepTests.cpp`) presses a second
+step mid-motion on every entry: an undo, then a redo 40 ms later while the undo still glides (and the mirror). Nothing may
+jump at the second press, and the glide settles where the second step puts it. The canvas's macro fold has the same
+check in `MacroFoldSecondStepMidMotion.*` (two undos, and two redos, 40 ms apart).
 
 ## Registration
 

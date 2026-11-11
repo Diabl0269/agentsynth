@@ -54,8 +54,11 @@ void ModuleComponent::syncModDotButtons() {
         juce::Component* control = si >= 0 ? static_cast<juce::Component*>(sliders[si]) : nullptr;
         if (control == nullptr && morphCard_ != nullptr)
             control = morphCard_->stripControlFor(target.channelIndex);
-        if (control == nullptr)
+        bool onPadKnob = false;
+        if (control == nullptr) {
             control = padKnobForTarget(target).slider; // a pad cable's dot sits on the picked pad's knob only
+            onPadKnob = control != nullptr;
+        }
         const auto anchor = getModTargetKnobAnchor(target.channelIndex);
         if (control == nullptr || !anchor.has_value())
             continue;
@@ -86,7 +89,9 @@ void ModuleComponent::syncModDotButtons() {
             addChildComponent(button);
         }
 
-        const auto knobName = knobNameForModTarget(mb, target);
+        // A pad knob's own title names the pad ("Level: Kick"), where the slot's target only has its number.
+        const auto knobName =
+            onPadKnob && control->getTitle().isNotEmpty() ? control->getTitle() : knobNameForModTarget(mb, target);
         const auto title = knobName + " modulation, " + juce::String(count) + (count == 1 ? " source" : " sources");
         if (button->getTitle() != title)
             button->setTitle(title);
@@ -95,8 +100,10 @@ void ModuleComponent::syncModDotButtons() {
             tip += ". Double-click to remove";
         if (button->getTooltip() != tip)
             button->setTooltip(tip);
-        button->setBounds(juce::Rectangle<int>(synth::ui::ModDotButton::kSize, synth::ui::ModDotButton::kSize)
-                              .withCentre(anchor->roundToInt()));
+        const auto centre = anchor->roundToInt();
+        button->setBounds(
+            juce::Rectangle<int>(synth::ui::ModDotButton::kSize, synth::ui::ModDotButton::kSize).withCentre(centre));
+        button->setDotOffset(*anchor - centre.toFloat());
         button->setVisible(true);
     }
     for (auto* button : modDotButtons_)

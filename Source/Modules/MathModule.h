@@ -37,11 +37,15 @@ public:
         if (isBypassed()) {
             for (int ch = 1; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
+            if (auto* vb = getVisualBuffer())
+                vb->pushBlock(buffer.getReadPointer(0), buffer.getNumSamples());
             return;
         }
 
         if (isMuted()) {
             buffer.clear();
+            if (auto* vb = getVisualBuffer())
+                vb->pushConstant(0.0f, buffer.getNumSamples());
             return;
         }
 

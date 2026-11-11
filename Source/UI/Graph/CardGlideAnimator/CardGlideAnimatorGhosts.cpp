@@ -134,12 +134,14 @@ void CardGlideAnimator::landGhosts() noexcept {
                  items_.end());
 }
 
+// A card still gliding when a fold takes it (a second Cmd+Z mid-glide folds the macro it was gliding in) loses its
+// glide too: the fold starts from where the glide drew it (snapshotFoldState), and drawing both would show it twice.
 void CardGlideAnimator::dropGhostsFor(const std::vector<uint32_t>& nodeUids) {
     const auto listed = [&nodeUids](const Item& it) {
-        return it.kind != Kind::Move && std::find(nodeUids.begin(), nodeUids.end(), it.nodeUid) != nodeUids.end();
+        return std::find(nodeUids.begin(), nodeUids.end(), it.nodeUid) != nodeUids.end();
     };
     for (auto& item : items_)
-        if (listed(item) && item.kind == Kind::Enter)
+        if (listed(item) && item.kind != Kind::Exit)
             if (auto* comp = item.comp.getComponent(); comp != nullptr && comp->getAlpha() == 0.0f)
                 comp->setAlpha(item.savedAlpha);
     items_.erase(std::remove_if(items_.begin(), items_.end(), listed), items_.end());

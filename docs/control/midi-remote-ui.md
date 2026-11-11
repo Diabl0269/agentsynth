@@ -193,6 +193,15 @@ or Esc, clears it. The selection is owned by the surface itself and survives a l
 rebuild (Detect, a move, an undo/redo) — any id no longer present is silently dropped, and
 switching to a different controller clears it, same as before FRO270.
 
+**Edge scroll.** A marquee or a cell (or group) move held near the surface's edge pans the surface, faster nearer the
+edge, on the canvas's own scroller and speed curve (`ControllerSurfaceEdgeScroll.cpp`; `CanvasEdgeScroller`,
+`canvasEdgePanDelta`). After each pan the drag is re-aimed at the still pointer through its own handler, so the box
+grows over what scrolls in and the cell keeps moving under the pointer; moving back inward or releasing stops it, the
+pan stops at the content's origin and far end, and the move is still one commit on release. Esc mid-drag stops the
+pan for the rest of that drag (the drag goes on and commits on release; the next Esc clears the selection as usual).
+[Every drag follows the
+view](../layout/layout.md#every-drag-follows-the-view).
+
 **Pan/zoom (FRO331).** A plain drag (no Shift) on EMPTY grid space pans the view instead of
 drawing a marquee — the Shift requirement above is what disambiguates the two gestures, mirroring
 `GraphEditor`'s own drag-to-pan/Shift-to-marquee split on the module canvas. Cmd+scroll (trackpad

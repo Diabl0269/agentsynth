@@ -82,19 +82,34 @@ is the theme `bg0`; inside is `bg1` with the dot grid, a 10 px rounded corner an
 
 ## Edge scroll while dragging
 
-Dragging a card to the edge of the canvas view pans the canvas (`CanvasEdgeScrollDriver`, `CanvasEdgeScroller`,
-`Source/UI/Graph/CanvasEdgeScroll/`). It covers a module or folded macro card moved on the canvas and a card dragged in
-from the module library or the sound browser; a marquee and a cable drag do not scroll.
+Holding a drag at the edge of the canvas view pans the canvas (`CanvasEdgeScrollDriver`, `CanvasEdgeScroller`,
+`Source/UI/Graph/CanvasEdgeScroll/`). Every drag that carries something across the canvas does it:
+
+| Drag | Armed by | Re-aimed after each pan by |
+| --- | --- | --- |
+| module card body (plain, Ctrl, Cmd) | `ModuleComponent::mouseDown` (`beginCardDrag`) | a synthetic `mouseDrag` on the card |
+| folded macro card body | `MacroCardComponent::mouseDown` (`beginCardDrag`) | a synthetic `mouseDrag` on the card |
+| cable from a jack or an input knob's landing dot | `GraphEditor::beginConnectionDrag` (`beginCableDrag`) | `GraphEditor::dragConnection` at the pointer |
+| selection box (Shift-drag) | `GraphEditor::beginMarquee` (`beginCanvasDrag`) | a synthetic `GraphEditor::mouseDrag` |
+| expanded macro's name chip (and the hull-drag preference) | `GraphEditor::mouseDown` (`beginCanvasDrag`) | a synthetic `GraphEditor::mouseDrag` |
+| card from the module library or sound browser | `GraphEditor::itemDragEnter` (`beginLibraryDrag`) | a synthetic `itemDragMove` |
+| control outline, group handle or Add control row of the on-card layout editor | `CardLayoutOnCardEditorFollow.cpp` (`beginPointerDrag`) on the first drag event | the editor's own drag handler at the pointer |
+
+Not scrolled on purpose: the empty-canvas pan (it is the scroll), the mod-amount ring and the card knob, fader and curve
+drags (they edit a value), and the minimap drag (it moves the view itself). A new drag that moves something across the
+canvas gets a row here and a gesture in `CanvasEdgeScrollGestureTests.cpp`, which presses, drags, holds and releases
+each one through its real mouse handlers.
 
 - **Speed.** `canvasEdgePanDelta` (`CanvasEdgeScroll.h`, pure) gives zero in the middle of the view and a speed that
   grows linearly over the outer 48 px (a third of a small view at most) up to 22 screen px per tick at the edge or past
   it, one axis at a time, on the timeline's `edgeScrollVelocity` curve. The tick is a gated 30 Hz timer that runs only
-  for the length of a drag; moving the pointer back inward stops the pan on the next tick, and a release, drop, exit or
-  `cancelLiveDragGestures` stops the timer.
+  for the length of a drag; moving the pointer back inward stops the pan on the next tick, and a release, drop, exit,
+  Esc (a cable, a macro) or `cancelLiveDragGestures` stops the timer.
 - **The card keeps tracking.** The pointer does not move while the canvas does, so no mouse event arrives. Each tick
   that panned sends the card a synthetic `mouseDrag` at the pointer (its own press point and `ComponentDragger` keep the
   grab offset), so it takes the real drag path: group drag, canvas frame growth, landing ghost, macro join highlight. A
-  library drag gets a synthetic `itemDragMove` at the pointer.
+  library drag gets a synthetic `itemDragMove` at the pointer. A cable keeps the endpoint under the pointer, and the box
+  grows over what scrolls in.
 - **Cost per tick.** The full landing preview (gap hover aside, which follows every aim because the way a gap opens
   depends on the path) costs tens of ms at a crowded aim on the Load test project, so inside a tick it runs at most once
   per `GraphDragDropController::kScrollPreviewIntervalMs` (100 ms, every third tick). A skipped aim is flushed by a tick
@@ -103,8 +118,12 @@ from the module library or the sound browser; a marquee and a cable drag do not 
   throttled. `CanvasEdgeScrollCost` (`CanvasEdgeScrollTests.cpp`) holds it for every drag kind the scroll drives (library drag, module card,
   folded macro card) and has a disabled bench that prints a tick's cost on a real project
   (`AGENTSYNTH_BENCH_PROJECT=<project.json>`).
+- **The pointer.** The last position a drag handler reported (`notePointer`, and a global listener for events on the
+  canvas itself), not the OS cursor: they are the same for a real mouse, and test mode injects its events into the
+  window's peer, which the cursor never sees. A library drag is the OS drag-and-drop's, so it reads the cursor.
 - **Limits.** The pan never goes past the origin (nothing exists left of or above it) and never further right or down
-  than the content extends; a card drag grows the content ahead of itself, so it can keep going.
+  than the content extends; a card or macro drag grows the content ahead of itself, so it can keep going, while a cable
+  or a selection box stops at the end of the content.
 - **Keyboard.** There is no pointer to park, so the keyboard move (arrow keys on a focused card) already pans the card
   into view instead.
 
@@ -115,8 +134,9 @@ along, so the thing never sticks at the edge or goes out of sight. Each surface 
 
 - **Timeline, pointer.** `edgeScrollVelocity` (`Source/UI/Timeline/EdgeAutoScroll.h`) gives the signed speed from the
   pointer's depth in a `kEdgeZonePx` (24 px) zone at either end, up to `kEdgeAutoScrollMaxPxPerTick` (18 px) per tick at
-  `kEdgeScrollHz` (30 Hz). The clip lanes (`TimelineClipLaneArea`), the piano roll and the lane editor's dot, selection
-  and stretch-box drags (`AutomationLaneEditorEdgeScroll.cpp`, its timer a nested `EdgeScrollTimer`) and the Sections
+  `kEdgeScrollHz` (30 Hz). The clip lanes (`TimelineClipLaneArea`), the piano roll and the lane editor's dot, selection,
+  stretch-box and selection-box drags (`AutomationLaneEditorEdgeScroll.cpp`, its timer a nested `EdgeScrollTimer`; the
+  selection box keeps its pressed corner on its beat as the view scrolls) and the Sections
   strip's block and make-section drags (`TimelineSectionStripEdgeScroll.cpp`) each run that timer only
   while the pointer sits in a zone, and each tick re-derives the preview from the last pointer, so the dragged thing
   stays under the still pointer. The view stops at beat 0 and never stops to the right.
@@ -126,7 +146,14 @@ along, so the thing never sticks at the edge or goes out of sight. Each surface 
   scrolls by the excess every frame (`followKeyDragDot`), eased together with the dot, so the drawn dot holds the line
   and does not lurch; at beat 0 it stays clamped. Undo and redo of a lane move bring the restored selection into view
   the same way (`AutomationLaneEditor::followRestoredSelection`, guard `UndoKeepsSelection.*`).
-- **Canvas.** `CanvasEdgeScroller` and `canvasEdgePanDelta`, above.
+- **Canvas.** `CanvasEdgeScroller` and `canvasEdgePanDelta`, above: card, macro, cable, selection box, macro name
+  chip, library drops and the on-card layout editor's control, group and Add control drags (so a card bigger than the
+  view still takes a drop anywhere on it and on its "Drop to hide" area; that scroll stops once the card's far side
+  meets the view's edge, `CanvasEdgeScrollDriver::beginPointerDrag`'s drop area).
+- **Controller surface.** The MIDI Remote surface uses the same scroller and curve
+  (`ControllerSurfaceEdgeScroll.cpp`): a selection box or a cell (or group) move held at its edge pans it, the box
+  grows over what scrolls in and the cell stays under the pointer; the pan stops at the content's origin and far end,
+  and the move is still one commit on release; Esc stops the pan for the rest of the drag.
 - **Reorders in a list.** `viewport_drag_scroll` (`Source/UI/Layout/ReorderDrag/ViewportDragScroll.h`) gives the step
   for a pointer in a 32 px zone (never more than a third of the view) at either end of a `juce::Viewport`, up to 18 px
   per drag event on the same curve; the drag auto-repeat (`ReorderDragSession`) keeps the events coming while the
@@ -146,9 +173,8 @@ scroll stops on release, Escape, a tool change and the pointer moving back in; t
 The guard is `DragSurfaces.EveryMouseDragSaysWhetherItFollowsTheView` (`Tests/UI/Layout/DragSurfaceRegistryTests.cpp`):
 every class that overrides `mouseDrag` names its follow test or the reason it is exempt (a slider inside a fixed range,
 a resizer, a forwarder, a drag-and-drop starter, a card with no scroll of its own, a fixed page or tab strip). The
-surfaces still missing it are listed in `kFollowGaps`, which may only shrink; they fall in two families: horizontal
-beat-axis drags (timeline strips, velocity and drum lanes) and free canvas or controller-surface pans (selection box,
-cable, cell move).
+surfaces still missing it are listed in `kFollowGaps`, which may only shrink; one family is left: horizontal
+beat-axis drags (the ruler's markers and locators, velocity and drum lanes).
 
 ## Anti-overlap search
 

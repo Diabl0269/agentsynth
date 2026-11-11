@@ -15,6 +15,9 @@
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/ModCurve/ModCurveChip.h"
 #include "UI/ModuleViews/ModCurve/ModCurvePopover.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/BuiltInThemes.h"
+#include <algorithm>
 #include <map>
 
 namespace {
@@ -90,7 +93,7 @@ TEST_F(ModuleComponentTest, ADestinationJackListsTheModulationWithAmountPercentA
     ASSERT_EQ(panel->rowCount(), 1);
     auto* row = panel->rowAt(0);
     ASSERT_NE(row->modRow(), nullptr) << "a modulation cable gets the mod controls";
-    EXPECT_EQ(row->getHeight(), PortConnectionRow::kModHeight) << "a mod row has its two lines";
+    EXPECT_EQ(row->getHeight(), PortConnectionRow::kHeight) << "a mod row is one line";
     EXPECT_NEAR(row->modRow()->bar().amount(), 0.5f, 1e-4f);
     EXPECT_EQ(row->modRow()->amountButton().getButtonText(), synth::ui::ModDotAmountBar::percentText(0.5f));
     EXPECT_EQ(row->modRow()->curveChip().getWidth(), synth::ui::ModCurveChip::kWidth);
@@ -237,7 +240,7 @@ TEST_F(ModuleComponentTest, EverySurfaceThatListsAModulationOffersAmountPercentA
     }
 }
 
-// ---- an output jack's mod rows: amount, curve and show in timeline on two lines, audio rows plain beside them ----
+// ---- an output jack's mod rows: amount, curve and show in timeline on one line, audio rows plain beside them ----
 // The rows are told apart by cable (an attenuverter chain or not), never by module type.
 
 namespace {
@@ -314,9 +317,8 @@ void expectModControls(PortConnectionRow& row) {
     }
     EXPECT_EQ(mod->timelineButton().getTooltip(), "Show " + mod->source().sourceName + " in timeline")
         << "the same title and tooltip as the knob's panel";
-    EXPECT_EQ(row.getHeight(), PortConnectionRow::kModHeight)
-        << "a mod row takes two lines: the name, then the controls";
-    EXPECT_GE(mod->bar().getWidth(), 120) << "the amount bar gets a usable width";
+    EXPECT_EQ(row.getHeight(), PortConnectionRow::kHeight) << "a mod row is one line";
+    EXPECT_GE(mod->bar().getWidth(), ModDotSourceRow::kMinBar) << "the amount bar keeps a usable width";
 }
 
 } // namespace
@@ -333,8 +335,8 @@ TEST_F(ModuleComponentTest, AnLfoOutputListsEachModulationWithAmountCurveAndShow
     }
 }
 
-// Tab reads a mod row like a person does: the top line's remove first, then fader, percent, curve and timeline.
-// The knob's one-line rows read fader to remove. (Sorting by top edge visited the tall timeline button first.)
+// Tab reads a mod row like a person does, left to right: fader, percent, curve, timeline, remove, on the port panel's
+// row and the knob's alike. (Sorting by top edge visited the tall timeline button first.)
 TEST_F(ModuleComponentTest, TabWalksAModRowInReadingOrderOnBothPanels) {
     NoMotion motion;
     const auto stopsOf = [](ModDotSourceRow& row) {
@@ -347,12 +349,11 @@ TEST_F(ModuleComponentTest, TabWalksAModRowInReadingOrderOnBothPanels) {
     RowsFixture f(RowsFixture::Shape::LfoOnTwoKnobs);
     auto* panel = f.openOutput(f.lfoId);
     ASSERT_NE(panel, nullptr);
-    auto* twoLines = panel->rowAt(0)->modRow();
-    ASSERT_NE(twoLines, nullptr);
-    const std::vector<juce::Component*> twoLineOrder = {&twoLines->removeButton(), &twoLines->bar(),
-                                                        &twoLines->amountButton(), &twoLines->curveChip(),
-                                                        &twoLines->timelineButton()};
-    EXPECT_EQ(stopsOf(*twoLines), twoLineOrder);
+    auto* portRow = panel->rowAt(0)->modRow();
+    ASSERT_NE(portRow, nullptr);
+    const std::vector<juce::Component*> portOrder = {&portRow->bar(), &portRow->amountButton(), &portRow->curveChip(),
+                                                     &portRow->timelineButton(), &portRow->removeButton()};
+    EXPECT_EQ(stopsOf(*portRow), portOrder);
 
     ModPanelFixture k;
     k.editor->getModDot().openPopover(k.vcaId, k.gainChannel, *k.vcaCard);
@@ -465,8 +466,7 @@ TEST_F(ModuleComponentTest, AnOutputRowsShowInTimelineRevealsTheSameLaneAsTheMod
     }
 }
 
-// Mixed heights move through the shared row motion: a removed mod row leaves from its two-line height and Cmd+Z grows
-// it back to that height, not the audio row's.
+// A removed mod row leaves from its own height through the shared row motion, and Cmd+Z grows it back to that height.
 TEST_F(ModuleComponentTest, AModRowRemovedAndUndoneGrowsBackToItsOwnHeight) {
     NoMotion motion;
     RowsFixture f(RowsFixture::Shape::OscAudioAndMod);
@@ -480,7 +480,7 @@ TEST_F(ModuleComponentTest, AModRowRemovedAndUndoneGrowsBackToItsOwnHeight) {
     ASSERT_NE(modRow, nullptr);
     const auto id = modRow->cableId();
     const int full = modRow->getHeight();
-    ASSERT_GT(full, PortConnectionRow::kHeight);
+    ASSERT_EQ(full, PortConnectionRow::kHeight);
 
     clickNow(modRow->removeButton());
     EXPECT_EQ(panel->slotHeightFor(id), full) << "the leaving row starts from its own height";
@@ -492,5 +492,202 @@ TEST_F(ModuleComponentTest, AModRowRemovedAndUndoneGrowsBackToItsOwnHeight) {
     ASSERT_NE(panel->rowFor(id), nullptr) << "Cmd+Z brings the row back";
     EXPECT_EQ(panel->slotHeightFor(id), 0) << "it grows from nothing";
     panel->applyTimelineAtMs(panel->timeline().totalMs());
-    EXPECT_EQ(panel->slotHeightFor(id), full) << "and lands at its own two-line height";
+    EXPECT_EQ(panel->slotHeightFor(id), full) << "and lands at its own height";
+}
+
+// ---- one line per row, long names stay short, the full name is on hover ----
+
+namespace {
+
+constexpr const char* kLongTitle = "Rhythm Section Drum Kit With A Very Long Custom Name";
+
+// One LFO driving the Gain knob of `count` VCAs; the first is called `firstTitle`, the rest are "VCA n".
+struct ManyTargets : RowsFixture {
+    explicit ManyTargets(int count, const juce::String& firstTitle = {})
+        : RowsFixture(Shape::LfoOnTwoKnobs) {
+        auto& graph = engine.getGraph();
+        for (int i = 2; i < count; ++i) {
+            auto vca = graph.addNode(std::make_unique<VCAModule>());
+            showGainAsKnob(graph, vca->nodeID);
+            engine.addModRouting(lfoId, 0, vca->nodeID, gainChannel);
+        }
+        if (firstTitle.isNotEmpty())
+            graph.getNodeForId(vcaId)->properties.set("displayName", firstTitle);
+        engine.updateModuleNames();
+        refresh();
+    }
+};
+
+int textWidth(const juce::String& text) {
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText(juce::Font(juce::FontOptions(12.5f)), text, 0.0f, 0.0f);
+    return (int)std::ceil(glyphs.getBoundingBox(0, -1, true).getWidth());
+}
+
+// Every control of a one-line mod row is inside the row, none touches another, and the fader keeps its minimum.
+void expectOneLineRowFits(PortConnectionRow& row, const juce::String& what) {
+    SCOPED_TRACE(what.toStdString());
+    auto* mod = row.modRow();
+    ASSERT_NE(mod, nullptr);
+    EXPECT_EQ(row.getHeight(), PortConnectionRow::kHeight);
+    std::vector<juce::Component*> parts = {&mod->nameArea(),       &mod->bar(),
+                                           &mod->amountButton(),   &mod->curveChip(),
+                                           &mod->timelineButton(), &mod->removeButton()};
+    std::sort(parts.begin(), parts.end(), [](auto* a, auto* b) { return a->getX() < b->getX(); });
+    for (size_t i = 0; i < parts.size(); ++i) {
+        SCOPED_TRACE(parts[i]->getTitle().toStdString());
+        EXPECT_TRUE(parts[i]->isVisible());
+        EXPECT_TRUE(mod->getLocalBounds().contains(parts[i]->getBounds())) << "nothing is clipped";
+        if (i > 0)
+            EXPECT_GT(parts[i]->getX(), parts[i - 1]->getRight()) << "no two controls touch";
+    }
+    EXPECT_GE(mod->bar().getWidth(), ModDotSourceRow::kMinBar);
+}
+
+} // namespace
+
+TEST_F(ModuleComponentTest, ALongTargetNameIsElidedInTheRowAndFullInTheTooltipAndTitle) {
+    NoMotion motion;
+    ManyTargets f(2, kLongTitle);
+    auto* panel = f.openOutput(f.lfoId);
+    ASSERT_NE(panel, nullptr);
+    PortConnectionRow* row = nullptr;
+    for (int i = 0; i < panel->rowCount(); ++i)
+        if (panel->rowAt(i)->connection().fullLabel.startsWith(kLongTitle))
+            row = panel->rowAt(i);
+    ASSERT_NE(row, nullptr);
+    const auto full = row->connection().fullLabel;
+    EXPECT_EQ(row->connection().label, full) << "another card's name keeps its module: the panel is on the LFO";
+    EXPECT_GT(textWidth(full), row->modRow()->nameBounds().getWidth()) << "too long: it ends in '...'";
+    EXPECT_EQ(row->modRow()->shownName(), full.fromFirstOccurrenceOf(synth::ui::portSeparator(), false, false))
+        << "too long: the row gives up the module and keeps the port";
+    auto& name = row->modRow()->nameArea();
+    EXPECT_EQ(dynamic_cast<juce::SettableTooltipClient&>(name).getTooltip(), full);
+    EXPECT_EQ(name.getTitle(), full);
+    EXPECT_TRUE(row->getTitle().contains(full));
+    EXPECT_TRUE(row->modRow()->removeButton().getTitle().contains(full));
+    EXPECT_EQ(row->modRow()->getHeight(), PortConnectionRow::kHeight);
+}
+
+TEST_F(ModuleComponentTest, TheKnobsModDotPanelShowsTheFullNameOnHoverToo) {
+    NoMotion motion;
+    ManyTargets f(2);
+    f.engine.getGraph().getNodeForId(f.lfoId)->properties.set("displayName", kLongTitle);
+    f.engine.updateModuleNames();
+    f.refresh();
+    f.editor->getModDot().openPopover(f.vcaId, f.gainChannel, *findModuleComp(*f.editor, f.module(f.vcaId)));
+    ASSERT_NE(f.popover(), nullptr);
+    auto* row = f.popover()->sourcesPage().rowAt(0);
+    ASSERT_NE(row, nullptr);
+    EXPECT_EQ(dynamic_cast<juce::SettableTooltipClient&>(row->nameArea()).getTooltip(), kLongTitle);
+    EXPECT_GT(textWidth(kLongTitle), row->nameBounds().getWidth());
+    EXPECT_GE(row->bar().getWidth(), ModDotSourceRow::kMinBar);
+    EXPECT_LE(row->nameBounds().getWidth(), ModDotSourceRow::kNameMax);
+    EXPECT_GT(row->nameBounds().getWidth(), 56) << "the knob's panel lays a row out as the jack's panel does";
+}
+
+// The knob's panel in every theme with the longest name: the same one-line fit as the jack's panel.
+TEST_F(ModuleComponentTest, TheKnobsModDotPanelFitsTheLongestNameInEveryTheme) {
+    NoMotion motion;
+    ManyTargets f(2);
+    f.engine.getGraph().getNodeForId(f.lfoId)->properties.set("displayName", kLongTitle);
+    f.engine.updateModuleNames();
+    f.refresh();
+    f.editor->getModDot().openPopover(f.vcaId, f.gainChannel, *findModuleComp(*f.editor, f.module(f.vcaId)));
+    ASSERT_NE(f.popover(), nullptr);
+    auto* row = f.popover()->sourcesPage().rowAt(0);
+    ASSERT_NE(row, nullptr);
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        SCOPED_TRACE(theme.name.toStdString());
+        synth::theme::AppLookAndFeel lnf;
+        lnf.applyTheme(theme);
+        row->setLookAndFeel(&lnf);
+        row->resized();
+        std::vector<juce::Component*> parts = {&row->nameArea(),       &row->bar(),
+                                               &row->amountButton(),   &row->curveChip(),
+                                               &row->timelineButton(), &row->removeButton()};
+        std::sort(parts.begin(), parts.end(), [](auto* a, auto* b) { return a->getX() < b->getX(); });
+        for (size_t i = 0; i < parts.size(); ++i) {
+            SCOPED_TRACE(parts[i]->getTitle().toStdString());
+            EXPECT_TRUE(row->getLocalBounds().contains(parts[i]->getBounds())) << "nothing is clipped";
+            if (i > 0)
+                EXPECT_GT(parts[i]->getX(), parts[i - 1]->getRight()) << "no two controls touch";
+        }
+        EXPECT_GE(row->bar().getWidth(), ModDotSourceRow::kMinBar);
+        row->setLookAndFeel(nullptr);
+    }
+}
+
+TEST_F(ModuleComponentTest, AJacksOwnCardIsLeftOffItsRowsAndKeptInTheTooltip) {
+    NoMotion motion;
+    RowsFixture f(RowsFixture::Shape::LfoOnTwoKnobs);
+    // The LFO modulating one of its own knobs: the far end is the panel's own card.
+    const auto targets = f.module(f.lfoId)->getModulationTargets();
+    ASSERT_FALSE(targets.empty());
+    ASSERT_NE(f.engine.addModRouting(f.lfoId, 0, f.lfoId, targets.front().channelIndex).uid, 0u);
+    f.refresh();
+    auto* panel = f.openOutput(f.lfoId);
+    ASSERT_NE(panel, nullptr);
+    bool seenOwn = false;
+    for (int i = 0; i < panel->rowCount(); ++i) {
+        const auto& c = panel->rowAt(i)->connection();
+        const bool own = c.far.node == f.lfoId;
+        seenOwn |= own;
+        EXPECT_EQ(c.label == c.fullLabel, !own) << c.fullLabel.toStdString();
+        if (own) {
+            EXPECT_FALSE(c.label.contains(f.editor->getModuleTitle(f.lfoId, f.module(f.lfoId))))
+                << c.label.toStdString();
+            EXPECT_TRUE(c.fullLabel.startsWith(f.editor->getModuleTitle(f.lfoId, f.module(f.lfoId))));
+        }
+    }
+    EXPECT_TRUE(seenOwn);
+}
+
+// 1, 8 and 32 targets: every row is one line, the panel is exactly the rows' height and a cap scrolls the rest.
+TEST_F(ModuleComponentTest, ThePortPanelsHeightIsOneLinePerRowAndScrollsUnderTheCap) {
+    NoMotion motion;
+    for (const int count : {1, 8, 32}) {
+        SCOPED_TRACE(count);
+        ManyTargets f(count < 2 ? 2 : count, kLongTitle);
+        auto* panel = f.openOutput(f.lfoId);
+        ASSERT_NE(panel, nullptr);
+        if (count == 1) {
+            clickNow(panel->rowAt(0)->removeButton());
+            panel->applyTimelineAtMs(panel->timeline().totalMs());
+        }
+        const int rows = panel->rowCount();
+        EXPECT_EQ(rows, count);
+        const int chrome = PortConnectionsPanel::kTitleHeight + PortConnectionsPanel::kSplitRowHeight +
+                           PortConnectionsPanel::kBottomPad;
+        EXPECT_EQ(panel->getHeight(), chrome + rows * PortConnectionRow::kHeight) << "one line per row, no more";
+        for (int i = 0; i < rows; ++i)
+            EXPECT_EQ(panel->rowAt(i)->getHeight(), PortConnectionRow::kHeight) << "row " << i;
+        panel->setMaxHeight(300);
+        EXPECT_LE(panel->getHeight(), 300) << "a cap holds however many rows";
+        if (rows * PortConnectionRow::kHeight > 300 - chrome)
+            EXPECT_EQ(panel->getHeight(), 300) << "and the rows scroll under it";
+    }
+}
+
+// The widest name in every built-in theme, with and without the scroll bar: nothing overlaps, nothing is clipped, the
+// fader keeps its minimum (the guard for the layout-overlap kind on these rows).
+TEST_F(ModuleComponentTest, OneLineRowsFitInEveryThemeWithTheLongestName) {
+    NoMotion motion;
+    ManyTargets f(32, kLongTitle);
+    auto* panel = f.openOutput(f.lfoId);
+    ASSERT_NE(panel, nullptr);
+    ASSERT_GT(panel->rowCount(), 20);
+    for (const auto& theme : synth::theme::builtInThemes()) {
+        synth::theme::AppLookAndFeel lnf;
+        lnf.applyTheme(theme);
+        panel->setLookAndFeel(&lnf);
+        for (const int cap : {0, 300}) { // 0: no scroll bar (all rows), 300: the scroll bar takes 10 px
+            panel->setMaxHeight(cap);
+            for (int i = 0; i < panel->rowCount(); ++i) {
+                panel->rowAt(i)->modRow()->resized();
+                expectOneLineRowFits(*panel->rowAt(i), theme.name.toStdString() + " row " + std::to_string(i));
+            }
+        }
+        panel->setLookAndFeel(nullptr);
+    }
 }

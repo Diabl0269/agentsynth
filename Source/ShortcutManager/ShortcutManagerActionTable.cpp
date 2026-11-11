@@ -170,6 +170,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"focusLibrarySearch", ShortcutCategory::General},
             {"openContextMenu", ShortcutCategory::General},
             {"recolourFocusedItem", ShortcutCategory::General},
+            {"soundPreviewToggle", ShortcutCategory::General},
             {"openAddTrackMenu", ShortcutCategory::General},
             {"openFeedback", ShortcutCategory::General},
             // Transport verbs (midi-remote.md#action-targets): UNBOUND by default; transportTogglePlayStop is an alias.
@@ -215,8 +216,7 @@ const std::vector<ShortcutManager::ActionEntry>& ShortcutManager::getActionTable
             {"canvasMoveCardUp", ShortcutCategory::Graph},
             {"canvasMoveCardDown", ShortcutCategory::Graph},
             {"canvasEnterCard", ShortcutCategory::Graph},
-            // Timeline — the panel's own keys (consulted by TimelinePanelComponent /
-            // TimelineClipLaneArea) plus the grid commands, which act on the shared snap value.
+            // Timeline — the panel's own keys (TimelinePanelComponent / TimelineClipLaneArea) plus the grid commands.
             {"timelineSnapToggle", ShortcutCategory::Timeline},
             {"timelineToggleLoop", ShortcutCategory::Timeline},
             {"timelineLoopSelection", ShortcutCategory::Timeline},

@@ -90,10 +90,24 @@ float MacroFoldAnimator::nestedAlpha(const Live& live, size_t index) const noexc
     return 1.0f - smooth(static_cast<float>(localMs(*nested) / nested->timeline.handoverMs()));
 }
 
+namespace {
+// How far a retargeted flight has moved its end at progress `p` (0..1 in time): none at the change that moved it
+// (where it is drawn then), all of it on landing, eased in and out over the time left so the bend has no kink.
+juce::Point<float> shiftAt(juce::Point<float> from, juce::Point<float> to, float p0, float p) noexcept {
+    const float f = p0 >= 0.999f ? 1.0f : std::clamp((p - p0) / (1.0f - p0), 0.0f, 1.0f);
+    return from + (to - from) * (f * f * (3.0f - 2.0f * f));
+}
+} // namespace
+
 juce::Rectangle<float> MacroFoldAnimator::moduleRect(const Live& live, size_t index) const noexcept {
     const auto& m = live.plan.modules[index];
     const float e = live.timeline.eased(static_cast<int>(index), localMs(live));
-    return live.plan.collapsing ? mf::lerpRect(m.rect.toFloat(), m.box, e) : mf::lerpRect(m.box, m.rect.toFloat(), e);
+    auto r = live.plan.collapsing ? mf::lerpRect(m.rect.toFloat(), m.box, e) : mf::lerpRect(m.box, m.rect.toFloat(), e);
+    if (index < live.shifts.size()) {
+        const auto& s = live.shifts[index];
+        r += shiftAt(s.from, s.to, s.p0, live.timeline.flight(static_cast<int>(index), localMs(live)));
+    }
+    return r;
 }
 
 std::vector<juce::Rectangle<float>> MacroFoldAnimator::moduleRects(const Live& live) const {
@@ -106,8 +120,16 @@ std::vector<juce::Rectangle<float>> MacroFoldAnimator::moduleRects(const Live& l
 
 // The border holds every module in every frame: the card-to-border blend grown to take in each module's current rect.
 juce::Rectangle<float> MacroFoldAnimator::outline(const Live& live) const noexcept {
-    return mf::outlineRect(live.plan.hull.toFloat(), live.plan.card.toFloat(),
+    const auto& s = live.outlineShift;
+    const auto shift = shiftAt(s.from, s.to, s.p0, outlineProgress(live));
+    return mf::outlineRect(live.plan.hull.toFloat() + shift, live.plan.card.toFloat() + shift,
                            live.timeline.outlineToCard(localMs(live)), moduleRects(live));
+}
+
+// How far in time the border is from where it starts to where it ends, 0..1 (an unfolding border is done by 60%).
+float MacroFoldAnimator::outlineProgress(const Live& live) const noexcept {
+    const double span = std::max(1.0, live.timeline.modulesEndMs()) * (live.plan.collapsing ? 1.0 : 0.6);
+    return static_cast<float>(std::clamp(localMs(live) / span, 0.0, 1.0));
 }
 
 int MacroFoldAnimator::indexOf(const Live& live, uint32_t nodeUid) const noexcept {
@@ -169,7 +191,8 @@ juce::Rectangle<float> MacroFoldAnimator::nestedRectFor(const juce::String& macr
 
 std::optional<std::pair<double, double>> MacroFoldAnimator::spanFor(const juce::String& macroId) const {
     if (const auto* live = liveFor(macroId))
-        return std::make_pair(live->plan.delayMs, live->plan.delayMs + live->timeline.modulesEndMs());
+        return std::make_pair(live->startMs + live->plan.delayMs,
+                              live->startMs + live->plan.delayMs + live->timeline.modulesEndMs());
     return std::nullopt;
 }
 
@@ -254,8 +277,9 @@ std::optional<MacroFoldAnimator::DrawnCable> MacroFoldAnimator::expandCable(cons
     const int a = indexOf(live, cable.id.srcUid), b = indexOf(live, cable.id.dstUid);
     if (a < 0 && b < 0)
         return std::nullopt;
-    const double landA = a >= 0 ? live.plan.delayMs + live.timeline.landMs(a) : -1.0;
-    const double landB = b >= 0 ? live.plan.delayMs + live.timeline.landMs(b) : -1.0;
+    const double from = live.startMs + live.plan.delayMs;
+    const double landA = a >= 0 ? from + live.timeline.landMs(a) : -1.0;
+    const double landB = b >= 0 ? from + live.timeline.landMs(b) : -1.0;
     const double landed = std::max(landA, landB);
     const float draw = mf::Timeline::cableDraw(landed, elapsed_);
     if (elapsed_ < landed || draw <= 0.0f)
@@ -354,34 +378,51 @@ juce::Rectangle<int> MacroFoldAnimator::drawnArea() const {
 
 // ---- Driving -------------------------------------------------------------------------------------------------
 
+// A second change while a fold runs (a second Cmd+Z mid-fold) does not land it: it goes on, and the new plans join it
+// on the same clock, starting now with no delay inherited from it. Only a running plan the new ones replace (the same
+// macro, or a module they fly) is dropped; the caller captured its modules where they were drawn
+// (MacroGroupController::snapshotFoldState), so the new plan starts there.
 bool MacroFoldAnimator::arm(std::vector<Plan> plans) {
-    land();
     plans.erase(std::remove_if(plans.begin(), plans.end(), [](const Plan& p) { return p.modules.empty(); }),
                 plans.end());
-    if (plans.empty() || !wouldAnimate())
+    if (!wouldAnimate()) {
+        land();
         return false;
+    }
+    if (plans.empty())
+        return false;
+    landWhere([&plans](const Plan& running) {
+        return std::any_of(plans.begin(), plans.end(), [&running](const Plan& p) {
+            if (p.macroId == running.macroId || (p.rootId.isNotEmpty() && p.rootId == running.rootId))
+                return true;
+            return std::any_of(p.modules.begin(), p.modules.end(), [&running](const Module& m) {
+                return std::any_of(running.modules.begin(), running.modules.end(), [&m](const Module& r) {
+                    return m.nodeUid != 0 ? r.nodeUid == m.nodeUid : m.macroId.isNotEmpty() && r.macroId == m.macroId;
+                });
+            });
+        });
+    });
 
+    const bool joining = !lives_.empty();
+    if (joining)
+        retargetRunning(plans);
+    else
+        elapsed_ = total_ = 0.0;
     reduced_ = synth::ui::prefersReducedMotion();
-    total_ = 0.0;
     for (auto& plan : plans) {
         Live live;
+        live.startMs = elapsed_;
         live.timeline.count = static_cast<int>(plan.modules.size());
         live.timeline.collapsing = plan.collapsing;
         live.timeline.withCables = !plan.cables.empty();
         live.timeline.scale = plan.timeScale;
         live.landed.assign(plan.modules.size(), 0);
-        total_ = std::max(total_, reduced_ ? mf::kFadeMs : plan.delayMs + live.timeline.totalMs());
+        if (!plan.collapsing && !plan.startShift.isOrigin()) {
+            live.shifts.assign(plan.modules.size(), {plan.startShift, {}, 0.0f});
+            live.outlineShift = {plan.startShift, {}, 0.0f};
+        }
+        total_ = std::max(total_, elapsed_ + (reduced_ ? mf::kFadeMs : plan.delayMs + live.timeline.totalMs()));
         live.plan = std::move(plan);
-        // Held back: invisible, so nothing can click, focus or announce a card that is not on screen yet. A plain fade
-        // keeps the card visible at alpha 0 instead.
-        const auto hold = [this](juce::Component* c) {
-            if (c == nullptr)
-                return;
-            if (reduced_)
-                c->setAlpha(0.0f);
-            else
-                c->setVisible(false);
-        };
         if (live.plan.collapsing)
             hold(live.plan.cardComp.getComponent());
         else {
@@ -392,15 +433,128 @@ bool MacroFoldAnimator::arm(std::vector<Plan> plans) {
         }
         lives_.push_back(std::move(live));
     }
-    elapsed_ = 0.0;
     lastDrawn_ = drawnArea();
     if (hooks_.repaint)
         hooks_.repaint(); // drops the cable memo so an expanding fold's cables leave it
+    startDriver();
+    return true;
+}
+
+// A change made while a fold runs can move where its modules land (a macro opening beside it pushes its cards on):
+// each flight bends from where it is drawn now towards the new place, reaching it as it lands, and the cables it draws
+// take the canvas' new geometry. A closing card that now folds into its parent's card is left to that fold: its own
+// place is no longer where it is drawn.
+void MacroFoldAnimator::retargetRunning(const std::vector<Plan>& incoming) {
+    const auto cables = currentCables();
+    const auto now = [&cables](const VisibleCable& c) {
+        const auto it =
+            std::find_if(cables.begin(), cables.end(), [&c](const VisibleCable& n) { return n.id == c.id; });
+        return it == cables.end() ? c : *it;
+    };
+    for (auto& live : lives_) {
+        const auto& plan = live.plan;
+        const auto* card = plan.cardComp.getComponent();
+        const auto nests = [&plan](const Plan& p) {
+            return std::any_of(p.modules.begin(), p.modules.end(), [&plan](const Module& m) {
+                return m.macroId.isNotEmpty() && m.macroId == plan.macroId;
+            });
+        };
+        const bool nested =
+            std::any_of(incoming.begin(), incoming.end(), nests) ||
+            std::any_of(lives_.begin(), lives_.end(), [&nests](const Live& other) { return nests(other.plan); });
+        const auto cardMove = card != nullptr && plan.collapsing && !nested
+                                  ? (card->getPosition() - plan.card.getPosition()).toFloat()
+                                  : juce::Point<float>();
+        live.shifts.resize(plan.modules.size());
+        std::optional<juce::Point<float>> outlineMove;
+        if (plan.collapsing)
+            outlineMove = cardMove;
+        for (size_t i = 0; i < plan.modules.size(); ++i) {
+            const auto& m = plan.modules[i];
+            auto move = cardMove;
+            if (!plan.collapsing) {
+                if (live.landed[i] != 0 || m.nodeUid == 0)
+                    continue;
+                auto* comp = m.comp.getComponent();
+                if (comp == nullptr && hooks_.moduleFor)
+                    comp = hooks_.moduleFor(m.nodeUid);
+                if (comp == nullptr)
+                    continue;
+                move = (comp->getPosition() - m.rect.getPosition()).toFloat();
+                if (!outlineMove)
+                    outlineMove = move;
+            }
+            auto& s = live.shifts[i];
+            const float p = live.timeline.flight(static_cast<int>(i), localMs(live));
+            s = {shiftAt(s.from, s.to, s.p0, p), move, p};
+        }
+        if (outlineMove) {
+            auto& s = live.outlineShift;
+            const float p = outlineProgress(live);
+            s = {shiftAt(s.from, s.to, s.p0, p), *outlineMove, p};
+        }
+        if (!plan.collapsing) // a collapse's cables ride their modules from where they were drawn before it
+            for (auto& c : live.plan.cables)
+                c = now(c);
+        for (auto& slide : live.plan.slides)
+            slide.cable = now(slide.cable);
+    }
+}
+
+// Held back: invisible, so nothing can click, focus or announce a card that is not on screen yet. A plain fade keeps
+// the card visible at alpha 0 instead.
+void MacroFoldAnimator::hold(juce::Component* c) const {
+    if (c == nullptr)
+        return;
+    if (reduced_)
+        c->setAlpha(0.0f);
+    else
+        c->setVisible(false);
+}
+
+// The driver's 0..1 spans the clock from where it (re)starts to the end of the longest plan.
+void MacroFoldAnimator::startDriver() {
+    driverFromMs_ = elapsed_;
     if (hooks_.updater != nullptr)
         driver_.start(
-            *hooks_.updater, total_, [](float t) { return t; }, [this](float t) { frameAt(t); },
-            [this] { release(false); });
-    return true;
+            *hooks_.updater, std::max(1.0, total_ - driverFromMs_), [](float t) { return t; },
+            [this](float t) { frameAt(t); }, [this] { release(false); });
+}
+
+// A re-sync decided every card's visibility from the model alone; the plans still running hold theirs back again (a
+// card the re-sync rebuilt is found by its node). Under Reduce Motion only alpha holds a card, which the re-sync does
+// not touch.
+void MacroFoldAnimator::reassertHolds() {
+    for (auto& live : lives_) {
+        if (reduced_)
+            continue;
+        if (live.plan.collapsing) {
+            if (handover(live) <= 0.0f)
+                hold(live.plan.cardComp.getComponent());
+            continue;
+        }
+        for (size_t i = 0; i < live.plan.modules.size(); ++i) {
+            auto& m = live.plan.modules[i];
+            if (m.comp == nullptr && m.nodeUid != 0 && hooks_.moduleFor)
+                m.comp = hooks_.moduleFor(m.nodeUid);
+            if (live.landed[i] == 0)
+                hold(m.comp.getComponent());
+        }
+        if (localMs(live) < live.timeline.modulesEndMs() * 0.6)
+            for (const auto& port : live.plan.ports)
+                hold(port.getComponent());
+    }
+    applySideEffects();
+}
+
+std::optional<MacroFoldAnimator::Module> MacroFoldAnimator::drawnModule(uint32_t nodeUid) const {
+    for (const auto& live : lives_)
+        if (const int i = indexOf(live, nodeUid); i >= 0) {
+            auto m = live.plan.modules[static_cast<size_t>(i)];
+            m.rect = moduleRect(live, static_cast<size_t>(i)).toNearestInt();
+            return m;
+        }
+    return std::nullopt;
 }
 
 // Per-frame effects on the real cards: the hand-over of a closing card, a landed module's card coming back, or the
@@ -408,7 +562,7 @@ bool MacroFoldAnimator::arm(std::vector<Plan> plans) {
 void MacroFoldAnimator::applySideEffects() {
     for (auto& live : lives_) {
         if (reduced_) {
-            const float u = smooth(static_cast<float>(elapsed_ / mf::kFadeMs));
+            const float u = smooth(static_cast<float>((elapsed_ - live.startMs) / mf::kFadeMs));
             if (live.plan.collapsing) {
                 if (auto* c = live.plan.cardComp.getComponent())
                     c->setAlpha(u);
@@ -448,7 +602,7 @@ void MacroFoldAnimator::frameAt(float t) {
     if (lives_.empty())
         return;
     const auto before = lastDrawn_;
-    applyAtMs(static_cast<double>(t) * total_);
+    applyAtMs(driverFromMs_ + static_cast<double>(t) * (total_ - driverFromMs_));
     lastDrawn_ = drawnArea();
     const auto area = before.getUnion(lastDrawn_);
     if (t >= 1.0f)
@@ -477,27 +631,10 @@ void MacroFoldAnimator::release(bool stopDriver) noexcept {
         driver_.stop(*hooks_.updater);
     if (lives_.empty())
         return;
-    for (auto& live : lives_) {
-        if (live.plan.collapsing) {
-            if (auto* c = live.plan.cardComp.getComponent()) {
-                c->setVisible(true);
-                c->setAlpha(1.0f);
-            }
-            continue;
-        }
-        for (const auto& m : live.plan.modules)
-            if (auto* c = m.comp.getComponent()) {
-                c->setVisible(true);
-                c->setAlpha(1.0f);
-            }
-        for (const auto& port : live.plan.ports)
-            if (auto* c = port.getComponent()) {
-                c->setVisible(true);
-                c->setAlpha(1.0f);
-            }
-    }
+    for (auto& live : lives_)
+        showCards(live);
     lives_.clear();
-    elapsed_ = total_ = 0.0;
+    elapsed_ = total_ = driverFromMs_ = 0.0;
     lastDrawn_ = {};
     if (hooks_.repaint)
         hooks_.repaint();
@@ -505,4 +642,41 @@ void MacroFoldAnimator::release(bool stopDriver) noexcept {
     settled_.clear();
     for (auto& fn : settled)
         fn();
+}
+
+// Every card `live` holds back, shown whole: the closed card of a collapse, the modules and ports of an expand.
+void MacroFoldAnimator::showCards(Live& live) noexcept {
+    const auto show = [](juce::Component* c) {
+        if (c != nullptr) {
+            c->setVisible(true);
+            c->setAlpha(1.0f);
+        }
+    };
+    if (live.plan.collapsing) {
+        show(live.plan.cardComp.getComponent());
+        return;
+    }
+    for (const auto& m : live.plan.modules)
+        show(m.comp.getComponent());
+    for (const auto& port : live.plan.ports)
+        show(port.getComponent());
+}
+
+// The rest keep running on the same clock; when none is left this is a full land.
+void MacroFoldAnimator::landWhere(const std::function<bool(const Plan&)>& stale) {
+    if (std::none_of(lives_.begin(), lives_.end(), [&stale](const Live& l) { return stale(l.plan); }))
+        return;
+    if (std::all_of(lives_.begin(), lives_.end(), [&stale](const Live& l) { return stale(l.plan); })) {
+        land();
+        return;
+    }
+    const auto drawn = drawnArea();
+    for (auto& live : lives_)
+        if (stale(live.plan))
+            showCards(live);
+    lives_.erase(std::remove_if(lives_.begin(), lives_.end(), [&stale](const Live& l) { return stale(l.plan); }),
+                 lives_.end());
+    lastDrawn_ = drawn.getUnion(drawnArea());
+    if (hooks_.repaint)
+        hooks_.repaint();
 }

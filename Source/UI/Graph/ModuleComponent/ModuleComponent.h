@@ -225,6 +225,7 @@ private:
     /** Visible input `index`: its knob's anchor, or nullopt; the More button when a knob-only one is folded. */
     std::optional<juce::Point<float>> knobAnchorForVisibleInputJack(int index) const;
     const juce::Component* moreRowButtonForKnobOnlyJack(int index) const;
+    const juce::Slider* tabbedKnobFor(const ModulationTarget& target) const; // shown or not; null when untabbed
     juce::Point<int> gutterInputJackCentre(const std::vector<int>& drawn, int clamped) const;
 
 public:
@@ -232,14 +233,9 @@ public:
      *  read; anything anchoring a MIDI cable/preview must go through it too, or it drifts from the drawn jack. */
     juce::Point<int> getMidiPortCenter(bool isOutput) const;
 
-    /** Re-lays the card after its Dual I/O parameter changed. For an FX pair the raw ch0/ch1 legs
-     *  stay put and no cable is touched; for a split-block module (#219) collapsing also hides its
-     *  kRightBase leg, so GraphEditor drops the cables left on it — an invisible jack cannot be
-     *  unplugged. NOTE: the card does get one jack row shorter when collapsed — see the reserved-
-     *  count note on ModuleBase::getReservedInputPortCount for why height stability was not taken.
-     *
-     *  Public so GraphEditor can drive it synchronously when the Preferences default re-lays every
-     *  module at once; the parameter-listener path is asynchronous. Message thread only. */
+    /** Re-lays the card after its Dual I/O parameter changed; a split-block module's collapse hides its kRightBase leg,
+     *  so GraphEditor drops the cables left on it (the card gets one jack row shorter, see
+     *  ModuleBase::getReservedInputPortCount). Called synchronously by GraphEditor too. Message thread only. */
     void applyDualIOLayoutChange();
 
     /** Serum-style modulation drop: the visible knob under `localPoint` as the input Port its CV jack would be (`index`
@@ -272,12 +268,8 @@ public:
     // Test/inspection helper: true while a valid audio file is hovering over this module.
     bool isFileDragHighlighted() const noexcept { return fileDragHighlight; }
 
-    /** Index of the knob a modulation ring for `paramName` should be drawn on, or -1 when no
-     *  ring belongs on the card right now.
-     *
-     *  Visibility is part of the answer, not just a paint-time detail: a knob on an inactive tab
-     *  page keeps its last bounds, so a ring drawn from them lands on empty card. Public so the
-     *  rule can be tested without a themed LookAndFeel and a live modulation routing. */
+    /** Index of the knob a modulation ring for `paramName` should be drawn on, or -1 when no ring belongs on the
+     *  card right now: a knob on an unselected tab or a folded row answers -1. */
     int getModRingSliderIndex(const juce::String& paramName) const;
 
     /** getModRingSliderIndex for a ModulationTarget, via its bound parameter; -1 if no visible knob. */
@@ -297,6 +289,11 @@ public:
 
     /** Card-LOCAL ring-anchor point for `destChannel`, or nullopt -- see .cpp. */
     std::optional<juce::Point<float>> getModTargetKnobAnchor(int destChannel) const;
+    /** Card-LOCAL end of a cable whose knob-only target is out of view (an unselected tab, an unpicked pad), or
+     *  nullopt; `rank` is its place among this card's parked cable ends, so no two meet. */
+    std::optional<juce::Point<float>> parkedCableEnd(int destChannel, int rank) const;
+    /** Call just before something moves this card's cable ends without a fade of its own (a tab or pad pick). */
+    void glideCableEnds();
 
     /** Diameter of the knob cable-landing dot. See GraphEditorCables.cpp's paintOverChildren. */
     static constexpr float kKnobLandingDotDiameter = 7.0f;

@@ -3,7 +3,7 @@ type Filter size 280x553
   child 1 toggle id="" at 161,513 79x20 visible=1 title="Show Scope" tip="Show Scope" focusOrder=0 wantsFocus=1
   child 2 component id="" at 0,0 0x0 visible=0 title="Filter response" tip="Filter response: the filter's gain across 20 Hz to 20 kHz" focusOrder=0 wantsFocus=0
   child 3 toggle id="" at 59,513 96x20 visible=1 title="Show Response" tip="Show Response" focusOrder=0 wantsFocus=1
-  child 4 toggle id="" at 0,0 0x0 visible=0 title="Show Spectrum" tip="Show Spectrum" focusOrder=0 wantsFocus=1
+  child 4 toggle id="" at 0,0 0x0 visible=0 title="Show Spectrum" tip="Show spectrum: draw the filter's output behind the response, before any volume stage, so a sound still running into the filter keeps it moving after the notes stop" focusOrder=0 wantsFocus=1
   child 5 drawableButton id="" at 230,2 22x20 visible=1 title="Bypass" tip="Bypass" focusOrder=0 wantsFocus=1
   child 6 drawableButton id="" at 206,2 22x20 visible=1 title="Mute" tip="Mute" focusOrder=0 wantsFocus=1
   child 7 drawableButton id="" at 254,2 22x20 visible=1 title="Delete" tip="Delete module" focusOrder=0 wantsFocus=1

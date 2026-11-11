@@ -1,0 +1,73 @@
+# The mod dot on a Drum Kit pad knob did nothing when dragged, and pad cables met at one point.
+#
+# What a user does: adds a Drum Kit and two LFOs, picks the Snare and drops one LFO on its Level knob, picks the Kick
+# and drops the other on the Kick's Level. The picked pad's cable ends on the knob with a dot; the other pad's cable
+# waits at the card's left edge by the pad panel. Dragging the dot changes the cable's amount; picking the other pad
+# glides the ends. DrumKitPadModDotTests step the glide and check the undo step.
+motion: true
+record: true
+save_project: fro1677 drum kit lfo pads
+steps:
+  - click: {id: New empty project}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: drum kit}
+  - wait: {}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: return}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: return}
+  - wait: {}
+  - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
+  - click: {id: Hide Library}
+  - wait: {}
+  - click: {id: Hide Minimap}
+  - wait: {}
+  - drag: {from: "card:Drum Kit", fromX: 120, fromY: 14, to: window, toX: 520, toY: 100}
+  - wait: {}
+  - drag: {from: "card:LFO", fromX: 100, fromY: 14, to: window, toX: 120, toY: 80}
+  - wait: {}
+  - key: {keys: cmd+f, instant: "focus ring and caret appear on the library search field"}
+  - wait: {}
+  - key: {keys: cmd+a, instant: "the text selection highlight appears in the library search field"}
+  - type: {text: lfo}
+  - wait: {}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: down, instant: "the list highlight moves and the caret blinks in the search field"}
+  - key: {keys: return}
+  - wait: {}
+  - click: {id: Hide Library}
+  - wait: {}
+  - drag: {from: "card:LFO 2", fromX: 100, fromY: 14, to: window, toX: 120, toY: 380}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}   # pad 2 (Snare), quietly
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 2, within_ms: 1500}
+  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Drum Kit > Level: Snare"}
+  - wait: {}
+  - click: {id: "card:Drum Kit > drumPads", x: 30, y: 20, mods: [shift]}   # pad 1 (Kick)
+  - wait: {}
+  - expect: {id: "card:Drum Kit > drumPads", pickedPad: 1, within_ms: 1500}
+  - drag: {from: "card:LFO 2", fromX: 268, fromY: 56, to: "card:Drum Kit > Level: Kick"}
+  - wait: {}
+  - expect: {id: "card:Drum Kit", contains: {modDots: "Level: Kick modulation"}, within_ms: 3000}
+  - getState: {id: "card:Drum Kit"}
+  - screenshot: {id: "card:Drum Kit", name: kick-dot-snare-parked}
+  # Check 1: the Kick's cable ends on its Level knob with a dot; the Snare's waits by the pad panel.
+  - mark: {check: 1, name: kick-dot-snare-parked}
+  - glide: {name: pick-snare, frames: 10, crop: {x: 480, y: 80, w: 520, h: 640}, do: {click: {id: "card:Drum Kit > drumPads", x: 95, y: 20, mods: [shift]}}}
+  - wait: {}
+  - expect: {id: "card:Drum Kit", contains: {modDots: "Level: Snare modulation", cableEndGliding: "false"}, within_ms: 2000}
+  - getState: {id: "card:Drum Kit"}
+  # Check 2: picking the Snare glided its cable onto the knob and the Kick's off it.
+  - mark: {check: 2, name: snare-picked-ends-swapped}

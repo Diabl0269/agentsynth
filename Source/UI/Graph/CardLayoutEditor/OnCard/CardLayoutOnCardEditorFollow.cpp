@@ -3,8 +3,17 @@
 // card and its Add control strip on screen. A card that stays visible moves nothing. Reduce Motion, Animations Off
 // and an editor that is not showing land the pan at once (a pan has nothing to fade).
 // docs/layout/module-card-layout.md#editing-a-layout.
+//
+// The canvas also follows the editor's own drags: a control, a group or a row of the Add control panel dragged to the
+// edge of the canvas view arms the canvas's edge scroll (CanvasEdgeScrollDriver), so a card bigger than the view, or
+// one partly off it, can still take a drop anywhere on it and on the "Drop to hide" area under it. After each pan the
+// drag is re-aimed at the still pointer through its own handler (the overlay moved with the canvas, so the same
+// screen point is a new spot on the card); the release, Esc and the pointer moving back in stop it, and so does the
+// card's far side (with its Drop to hide strip) coming clear of the edge, and the drop is the drag's own single write.
+// docs/layout/layout.md, "Every drag follows the view".
 #include "CardLayoutOnCardEditor.h"
 #include "Project/ViewDoc.h"
+#include "UI/Graph/CanvasEdgeScroll/CanvasEdgeScrollDriver.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/ReducedMotion.h"
 #include <cmath>
@@ -77,6 +86,72 @@ void CardLayoutOnCardEditor::followCard() {
     followPump_.run(
         kFollowMs, [frame, start] { frame((float)(juce::Time::getMillisecondCounterHiRes() - start)); },
         [this] { followFrame_ = nullptr; });
+}
+
+// ---- The editor's own drags held at the canvas view's edge ----
+
+namespace {
+
+// A drag event at a screen point, as the overlay would have received it: the handlers read it relative to the overlay.
+juce::MouseEvent dragEventAt(juce::Component& overlay, juce::Point<int> screenPos) {
+    const auto pos = overlay.getLocalPoint(nullptr, screenPos).toFloat();
+    const auto now = juce::Time::getCurrentTime();
+    return juce::MouseEvent(
+        juce::Desktop::getInstance().getMainMouseSource(), pos,
+        juce::ModifierKeys::getCurrentModifiersRealtime().withFlags(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, &overlay, &overlay, now, pos, now, 1, true);
+}
+
+} // namespace
+
+// Armed once per drag; every later event only moves the pointer the scroll reads.
+void CardLayoutOnCardEditor::followDragAt(juce::Point<int> screenPos, std::function<bool(juce::Point<int>)> reaim) {
+    auto* graph = graphEditor_.getComponent();
+    if (graph == nullptr || closed_)
+        return;
+    if (edgeFollowing_)
+        return graph->getEdgeScroll().notePointerAt(screenPos);
+    edgeFollowing_ = true;
+    juce::Component::SafePointer<CardLayoutOnCardEditor> self(this);
+    graph->getEdgeScroll().beginPointerDrag(
+        screenPos,
+        [self, reaim = std::move(reaim)](juce::Point<int> at) {
+            auto* editor = self.getComponent();
+            if (editor == nullptr || editor->closed_ || !reaim(at)) {
+                if (editor != nullptr)
+                    editor->edgeFollowing_ = false;
+                return false;
+            }
+            return true;
+        },
+        // The card and the strip under it (Add control, Drop to hide) are all a drag here can land on.
+        [self] { return self != nullptr ? self->getScreenBounds() : juce::Rectangle<int>(); });
+}
+
+void CardLayoutOnCardEditor::followControlDrag(const juce::MouseEvent& e) {
+    followDragAt(e.getScreenPosition(), [this](juce::Point<int> at) {
+        if (!drag_.pressed || !drag_.moving)
+            return false;
+        dragTo(dragEventAt(*this, at));
+        return true;
+    });
+}
+
+// Esc ends a group drag inside the reorder session, with no call here: the re-aim sees the session no longer dragging.
+void CardLayoutOnCardEditor::followGroupDrag(const juce::MouseEvent& e) {
+    followDragAt(e.getScreenPosition(), [this](juce::Point<int> at) {
+        if (!groupDrag_.pressed || !groupSession_.animator().isDragging())
+            return false;
+        dragGroup(dragEventAt(*this, at));
+        return true;
+    });
+}
+
+void CardLayoutOnCardEditor::endDragFollow() {
+    if (!std::exchange(edgeFollowing_, false))
+        return;
+    if (auto* graph = graphEditor_.getComponent())
+        graph->getEdgeScroll().end();
 }
 
 } // namespace synth::ui

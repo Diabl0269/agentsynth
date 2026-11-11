@@ -1,0 +1,35 @@
+# Bug: in Tal's 'fro830 test' project, with "Macro" and "Macro2" both open, pressing Cmd+Z twice quickly folded the
+# second macro with a hitch: the second press landed the first fold at once (its modules vanished, its card popped in)
+# and started the second fold from where the cards stood at rest, not where they were drawn.
+#
+# The fixture fro830-test.agsproj is that project (another macro is also named "Macro", so its open state is read from
+# the stills, not with expect).
+#   1. Opens "Macro", then "Macro2", then sends Cmd+Z and a second Cmd+Z straight after it (a `glide` with `then`):
+#      both macros fold smoothly, the second fold starts while the first still runs (proof 1, the landed state).
+#   2. Cmd+Shift+Z twice the same way: both unfold smoothly (proof 2, the landed state).
+# MacroFoldSecondStepMidMotion.* checks every 20 ms frame headlessly (Full motion, Reduce Motion, Off).
+motion: true
+# The steps here are undo and redo themselves: the runner's own undo+redo after the Cmd+Z pair has nothing left to undo
+# and would redo one open, so the landed state of check 1 would not be the pair's.
+pop_check: {undo: false}
+record: true
+save_project: fro830-test-macro-macro2
+steps:
+  - copyFixture: {name: fro830-test.agsproj}
+  - openProject: {path: "${SCRATCH}/fro830-test.agsproj"}
+  - wait: {}
+  - expect: {id: "macroCard:Macro2", collapsed: true}
+  - click: {id: "macroCard:Macro", x: 262, y: 18}             # the card's open chevron
+  - waitForIdle: {settleMs: 1000}                             # waitForIdle cannot see the fold, so let it land
+  - click: {id: "macroCard:Macro2", x: 262, y: 18}
+  - waitForIdle: {settleMs: 1000}
+  - expect: {id: "macroCard:Macro2", collapsed: false}
+  - screenshot: {name: 1-both-open}
+  - glide: {name: undo-twice, frames: 14, do: {key: {keys: cmd+z}}, then: {key: {keys: cmd+z}}}
+  - waitForIdle: {settleMs: 1000}
+  - expect: {id: "macroCard:Macro2", collapsed: true}
+  - mark: {check: 1, name: undo-twice-both-folded}
+  - glide: {name: redo-twice, frames: 14, do: {key: {keys: cmd+shift+z}}, then: {key: {keys: cmd+shift+z}}}
+  - waitForIdle: {settleMs: 1000}
+  - expect: {id: "macroCard:Macro2", collapsed: false}
+  - mark: {check: 2, name: redo-twice-both-unfolded}

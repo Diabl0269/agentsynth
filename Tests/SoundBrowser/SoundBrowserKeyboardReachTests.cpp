@@ -19,6 +19,9 @@ namespace {
 
 juce::KeyPress key(int code) { return juce::KeyPress(code, juce::ModifierKeys(), 0); }
 juce::KeyPress space() { return juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys(), ' '); }
+juce::KeyPress tab(bool shift = false) {
+    return juce::KeyPress(juce::KeyPress::tabKey, shift ? juce::ModifierKeys::shiftModifier : 0, 0);
+}
 
 // The order of juce::ComponentPeer::handleKeyPress (JUCE 8): from the focused component up through its parents, each
 // one offers the key to its key listeners first and to its own keyPressed second, and the first to use it ends the
@@ -454,4 +457,190 @@ TEST(SoundBrowserKeyboardReachTest, TheGetMoreHeadingFoldsWithLeftAndRightFromTh
         << "folded, the heading is the last stop: the hidden packs are not reachable";
     EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::rightKey)));
     EXPECT_TRUE(v.isGetMoreShowing());
+}
+
+// The footer is a row, so Left and Right step along it in the order it reads (the guard above only proved
+// every stop is reachable, not which key gets there). The volume keeps Left and Right for its value.
+TEST(SoundBrowserKeyboardReachTest, LeftAndRightStepAlongTheFooterAndTheVolumeKeepsThemForItsValue) {
+    Fixture f;
+    auto& v = *f.view;
+    auto& footer = v.getPreviewFooter();
+    const auto stops = synth::ui::focusableDescendants(footer);
+    ASSERT_GE(stops.size(), 3u);
+    ASSERT_EQ(stops.front(), &footer.getPlayButton());
+    ASSERT_EQ(stops.back(), &footer.getVolume());
+
+    for (size_t i = 0; i + 1 < stops.size(); ++i) {
+        if (stops[i] == &footer.getVolume())
+            break;
+        EXPECT_TRUE(dispatchKey(v, *stops[i], key(juce::KeyPress::rightKey)));
+        EXPECT_EQ(f.landed(), stops[i + 1]) << "Right from stop " << i;
+    }
+    for (size_t i = stops.size() - 1; i > 0; --i) {
+        if (stops[i] == &footer.getVolume())
+            continue; // Left on the volume is its value; Up leaves it (below)
+        EXPECT_TRUE(dispatchKey(v, *stops[i], key(juce::KeyPress::leftKey)));
+        EXPECT_EQ(f.landed(), stops[i - 1]) << "Left from stop " << i;
+    }
+    EXPECT_TRUE(dispatchKey(v, footer.getPlayButton(), key(juce::KeyPress::leftKey)))
+        << "Left on the first stop is consumed: it must not reach the app";
+    EXPECT_EQ(f.landed(), &footer.getPlayButton());
+
+    auto& volume = footer.getVolume();
+    const double before = volume.getValue();
+    EXPECT_TRUE(dispatchKey(v, volume, key(juce::KeyPress::leftKey)));
+    EXPECT_LT(volume.getValue(), before) << "Left on the volume is its value";
+    EXPECT_NE(f.landed(), stops[stops.size() - 2]);
+    dispatchKey(v, volume, key(juce::KeyPress::rightKey));
+    EXPECT_DOUBLE_EQ(volume.getValue(), before);
+    EXPECT_TRUE(dispatchKey(v, volume, key(juce::KeyPress::upKey))) << "Up still leaves the volume";
+    EXPECT_EQ(f.landed(), stops[stops.size() - 2]);
+    EXPECT_TRUE(dispatchKey(v, volume, key(juce::KeyPress::downKey)));
+}
+
+// Tab from the list lands on the first footer control in one press, Shift+Tab from the footer returns, and
+// anywhere else Tab is still the app's region cycle (it bubbles on).
+TEST(SoundBrowserKeyboardReachTest, TabFromTheListJumpsToTheFooterAndShiftTabComesBack) {
+    Fixture f;
+    auto& v = *f.view;
+    auto& footer = v.getPreviewFooter();
+    v.selectRow(0);
+    const int selected = v.getSelectedIndex();
+    EXPECT_TRUE(dispatchKey(v, v, tab()));
+    EXPECT_EQ(f.landed(), &footer.getPlayButton()) << "one Tab, not one per row";
+    EXPECT_EQ(v.getSelectedIndex(), selected) << "the selection is kept";
+
+    // Offered as the footer control's key listener (a real focused footer control never reaches the list's own Tab).
+    EXPECT_FALSE(v.offerStepKeyForTest(tab(), footer.getPlayButton())) << "Tab from the footer cycles regions";
+    EXPECT_TRUE(dispatchKey(v, footer.getVolume(), tab(true)));
+    EXPECT_EQ(f.landed(), &v) << "Shift+Tab from any footer control returns to the list";
+    EXPECT_FALSE(dispatchKey(v, v, tab(true))) << "Shift+Tab from the list cycles regions";
+}
+
+TEST(SoundBrowserKeyboardReachTest, TabFromTheListWithNoFooterStillCyclesRegions) {
+    Fixture f;
+    auto& v = *f.view;
+    using Mode = SoundBrowserComponent::FooterMode;
+    ASSERT_GT(heightShowing(v, Mode::Hidden), 0);
+    ASSERT_FALSE(v.getPreviewFooter().isVisible());
+    v.selectRow(0);
+    EXPECT_FALSE(dispatchKey(v, v, tab()));
+}
+
+// Esc steps back out from every focus region of the view, one place: the search box (after the first Esc has
+// cleared its text), the list and the panel's own controls all close the open panel.
+TEST(SoundBrowserKeyboardReachTest, EscClosesTheFiltersFromTheSearchBoxTheListAndThePanelControls) {
+    Fixture f;
+    auto& v = *f.view;
+    auto reopen = [&] {
+        v.setFiltersOpen(true, false);
+        f.settle();
+        ASSERT_TRUE(v.areFiltersOpen());
+    };
+
+    reopen();
+    v.getSearchField().setText("snare", juce::sendNotification);
+    EXPECT_TRUE(dispatchKey(v, v.getSearchField(), key(juce::KeyPress::escapeKey)));
+    EXPECT_TRUE(v.getSearchField().getText().isEmpty()) << "the first Esc clears the search";
+    EXPECT_TRUE(v.areFiltersOpen()) << "and leaves the panel open";
+    EXPECT_TRUE(dispatchKey(v, v.getSearchField(), key(juce::KeyPress::escapeKey)));
+    f.settle();
+    EXPECT_FALSE(v.areFiltersOpen()) << "the second Esc closes it";
+    EXPECT_EQ(f.landed(), &v) << "and the keyboard returns to the list";
+
+    reopen();
+    v.selectRow(0);
+    EXPECT_TRUE(dispatchKey(v, v, key(juce::KeyPress::escapeKey)));
+    f.settle();
+    EXPECT_FALSE(v.areFiltersOpen()) << "Esc from the sound list closes the panel";
+    EXPECT_EQ(f.landed(), &v);
+    EXPECT_GE(v.getSelectedIndex(), 0) << "Esc closes the panel, it does not deselect";
+    EXPECT_FALSE(dispatchKey(v, v, key(juce::KeyPress::escapeKey))) << "with the panel shut, Esc bubbles on";
+
+    for (juce::Component* control : {static_cast<juce::Component*>(&v.getFilterPanel().lengthBox()),
+                                     static_cast<juce::Component*>(&v.getFilterPanel().kindGroup()),
+                                     static_cast<juce::Component*>(&v.getFiltersButton())}) {
+        reopen();
+        EXPECT_TRUE(dispatchKey(v, *control, key(juce::KeyPress::escapeKey))) << control->getTitle();
+        f.settle();
+        EXPECT_FALSE(v.areFiltersOpen()) << "Esc from " << control->getTitle();
+    }
+}
+
+// The key-double-fire kind, widened: a widget that swallows a key the app binds. Plain Space on every kind of
+// row and every footer stop is the song's play key, so it must reach the app; Shift+Space is the preview's.
+TEST(SoundBrowserKeyboardReachTest, PlainSpaceOnASoundRowOrFooterStopIsNeverConsumed) {
+    Fixture f;
+    auto& v = *f.view;
+    int sounds = 0;
+    v.showLocation("core", "Drums", 0);
+    v.completeListAnimationForTest();
+    for (int i = 0; i < (int)v.getRows().size(); ++i)
+        if (v.getRows()[(size_t)i].kind == SoundBrowserComponent::RowKind::Sound) {
+            v.selectRow(i);
+            ++sounds;
+            EXPECT_FALSE(dispatchKey(v, v, space())) << "Space on sound row " << i << " must reach the transport";
+        }
+    EXPECT_GE(sounds, 1);
+    for (auto* stop : synth::ui::focusableDescendants(v.getPreviewFooter()))
+        EXPECT_FALSE(dispatchKey(v, *stop, space())) << "Space on " << stop->getTitle();
+}
+
+namespace {
+
+juce::KeyPress shiftSpace() { return juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::shiftModifier, ' '); }
+
+int previewToggles(const SoundBrowserComponent& v) {
+    juce::DynamicObject state;
+    v.addTestModeState(state);
+    return (int)state.getProperty("previewToggles");
+}
+
+} // namespace
+
+// Shift+Space is the preview's key wherever the keyboard is in the Sounds view: it is used up there (so it never
+// reaches the transport's Space) and toggles the preview once. A footer button must not press itself on it either.
+TEST(SoundBrowserKeyboardReachTest, ShiftSpaceTogglesThePreviewFromEveryStopAndNeverReachesTheTransport) {
+    Fixture f;
+    auto& v = *f.view;
+    v.showLocation("core", "Drums", 0);
+    v.completeListAnimationForTest();
+    for (int i = 0; i < (int)v.getRows().size(); ++i)
+        if (v.getRows()[(size_t)i].kind == SoundBrowserComponent::RowKind::Sound) {
+            v.selectRow(i);
+            break;
+        }
+    v.setFiltersOpen(true, false);
+    f.settle();
+
+    std::vector<juce::Component*> origins{&v, &v.getSearchField(), &v.getFiltersButton(),
+                                          &v.getFilterPanel().lengthBox(), &v.getFilterPanel().kindGroup()};
+    for (auto* stop : synth::ui::focusableDescendants(v.getPreviewFooter()))
+        origins.push_back(stop);
+    ASSERT_GE(origins.size(), 7u);
+
+    int expected = previewToggles(v);
+    for (auto* origin : origins) {
+        EXPECT_TRUE(dispatchKey(v, *origin, shiftSpace()))
+            << "Shift+Space on " << origin->getTitle() << " must be used up";
+        EXPECT_EQ(previewToggles(v), ++expected) << "Shift+Space on " << origin->getTitle() << " toggles the preview";
+    }
+    for (auto* stop : synth::ui::focusableDescendants(v.getPreviewFooter())) {
+        EXPECT_TRUE(v.offerStepKeyForTest(shiftSpace(), *stop))
+            << "the footer's key listener takes it before the button's own Space handling: " << stop->getTitle();
+    }
+}
+
+// On macOS Shift+Space in the focused search box arrives as inserted text, not as a key press, so the field asks the
+// view before typing it: the preview toggles and no space lands in the query.
+TEST(SoundBrowserKeyboardReachTest, ShiftSpaceTypedInTheSearchBoxTogglesThePreviewInsteadOfTypingASpace) {
+    Fixture f;
+    auto& v = *f.view;
+    auto& search = v.getSearchField();
+    search.setText("snare", juce::dontSendNotification);
+    ASSERT_TRUE(static_cast<bool>(search.onShiftSpaceTyped));
+    const int before = previewToggles(v);
+    EXPECT_TRUE(search.onShiftSpaceTyped());
+    EXPECT_EQ(previewToggles(v), before + 1);
+    EXPECT_EQ(search.getText(), "snare");
 }
