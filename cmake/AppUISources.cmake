@@ -567,6 +567,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentModBand.h
     Source/UI/Graph/ModuleComponent/CardKnobSlider.h
     Source/UI/Graph/ModuleComponent/ModuleComponentCardView.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentEQBandRow.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentEQBandRow.h
     Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp

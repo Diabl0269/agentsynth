@@ -62,9 +62,9 @@ static juce::Point<int> bespokeCardSizeTable(const juce::String& typeName) {
         return {synth::LayoutUtil::kSingleWidth,
                 synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
     if (typeName == "Parametric EQ")
-        // Double-width card: a 150px response curve set between the port-label gutters, then a
-        // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
-        return {synth::LayoutUtil::kDoubleWidth, 592};
+        // Double-width card: a 150px response curve set between the port-label gutters, a one-row band strip (a
+        // fresh EQ has every band off), the selected band's row and the Output trim row. Mirrors parametricEQHeight().
+        return {synth::LayoutUtil::kDoubleWidth, 432};
     if (typeName == "External MIDI")
         return {280, 146};
     if (typeName == "Hosted Plugin")

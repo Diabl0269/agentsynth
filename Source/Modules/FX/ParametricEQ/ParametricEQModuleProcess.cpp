@@ -108,10 +108,10 @@ void ParametricEQModule::processModuleBlock(juce::AudioBuffer<float>& buffer, ju
 }
 
 // Per-block CV, RMS-gated like the rest of the FX suite. Channels 2-5 drive the two bells (bands 2-3) through their
-// bespoke exponential/linear curves; 6-14 drive B1/B4 Freq+Gain, every shown band's Q and Output in the normalised
+// bespoke exponential/linear curves; 6-14 drive B1/B4 Freq+Gain, every original band's Q and Output in the normalised
 // convention (docs/modules/modulation.md#cv-in-normalised-units). `base` is each parameter's KNOB value, never the
 // smoother's own: with no CV patched that would make the target the smoother itself and freeze it. Each active flag
-// is published so getBandSnapshots() overlays the CV-resolved value. Bands 5-24 have no jacks.
+// is published so getBandSnapshots() overlays the CV-resolved value. Bands 5-24 read channels past Pan (knob-only).
 void ParametricEQModule::readTargetsAndCV(const juce::AudioBuffer<float>& buffer, int numSamples) {
     for (int b = 0; b < kMaxBands; ++b) {
         smoothedFreq[(size_t)b].setTargetValue(bands[(size_t)b].freq->get());
@@ -139,8 +139,13 @@ void ParametricEQModule::readTargetsAndCV(const juce::AudioBuffer<float>& buffer
     normalised(0, *bands[0].gain, 7, smoothedGain, gainCVActive);
     normalised(3, *bands[3].freq, 8, smoothedFreq, freqCVActive);
     normalised(3, *bands[3].gain, 9, smoothedGain, gainCVActive);
-    for (int b = 0; b < kShownBands; ++b)
+    for (int b = 0; b < kOriginalBands; ++b)
         normalised(b, *bands[(size_t)b].q, 10 + b, smoothedQ, qCVActive);
+    for (int b = kOriginalBands; b < kMaxBands; ++b) {
+        normalised(b, *bands[(size_t)b].freq, bandCvChannel(b, 0), smoothedFreq, freqCVActive);
+        normalised(b, *bands[(size_t)b].gain, bandCvChannel(b, 1), smoothedGain, gainCVActive);
+        normalised(b, *bands[(size_t)b].q, bandCvChannel(b, 2), smoothedQ, qCVActive);
+    }
 
     smoothedOutputGain.setTargetValue(juce::Decibels::decibelsToGain(
         modulateNormalised(*outputGainParam, outputGainParam->get(), blockCV(buffer, 14))));

@@ -221,9 +221,8 @@ inline const std::set<juce::String> kNonAuthorableModuleTypes = {
 
 inline bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
 
-// A parameter the module keeps but no surface offers yet (ModuleBase::isParameterExposed; the Parametric EQ's bands
-// 5-24 and every band's Type and Slope). The model never sees or sets one; a node's JSON leaves it out while it is at
-// its default, so the saved JSON of a module that gained it is unchanged, and a trusted apply resets an absent one.
+// A parameter the module keeps but offers on no surface (ModuleBase::isParameterExposed). The model never sees or
+// sets one; a node's JSON leaves it out while it is at its default, and a trusted apply resets an absent one.
 inline bool isUnexposedParam(juce::AudioProcessor& processor, const juce::String& paramId) {
     const auto* module = dynamic_cast<const ModuleBase*>(&processor);
     return module != nullptr && !module->isParameterExposed(paramId);

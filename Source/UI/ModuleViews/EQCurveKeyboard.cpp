@@ -72,7 +72,7 @@ bool EQCurveComponent::keyPressed(const juce::KeyPress& key) {
     const float fine = mods.isShiftDown() ? kFineFactor : 1.0f;
     const int code = key.getKeyCode();
 
-    if (code >= '1' && code < '1' + ParametricEQModule::kShownBands) {
+    if (code >= '1' && code < '1' + ParametricEQModule::kOriginalBands) {
         selectBand(code - '1');
         return true;
     }

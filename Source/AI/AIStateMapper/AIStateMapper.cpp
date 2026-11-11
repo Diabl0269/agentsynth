@@ -366,7 +366,7 @@ juce::var AIStateMapper::nodeToJSON(juce::AudioProcessorGraph::Node& node) {
         if (const auto& value = node.properties[key]; value.isObject())
             n->setProperty(key, value.clone());
 
-    // Params, denormalized (a choice by name). One no surface shows yet is left out at its default (see
+    // Params, denormalized (a choice by name). One no surface shows is left out at its default (see
     // detail::isUnexposedParam), so the JSON of a module that gained it is unchanged.
     juce::DynamicObject::Ptr params = new juce::DynamicObject();
     for (auto* param : processor->getParameters()) {

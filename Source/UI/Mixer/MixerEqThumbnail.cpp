@@ -42,6 +42,7 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorG
     glide_->sync(lastBands_, lastOutputGainDb_, lastBands_, lastOutputGainDb_, false); // ends any glide of the old EQ
     if (eq_ == nullptr) {
         cachedMagnitudesDb_.clear();
+        bandCount_ = 0;
         setVisible(false);
         return;
     }
@@ -114,7 +115,23 @@ void MixerEqThumbnail::recompute() {
     const auto drawn = glide_->drawn(lastBands_, lastOutputGainDb_);
     cachedMagnitudesDb_ = EqResponseCurve::compute(drawn.curve, drawn.outputGainDb);
     cachedBypassed_ = eq_->isBypassed();
+    refreshBandCount();
     ++recomputeCount_;
+}
+
+// The count is of the real bands (not the glide's drawn ones). Tooltip and accessibility description say the same.
+void MixerEqThumbnail::refreshBandCount() {
+    int count = 0;
+    for (const auto& band : lastBands_)
+        if (band.enabled)
+            ++count;
+    const bool changed = count != bandCount_;
+    bandCount_ = count;
+    const auto text = "EQ: " + juce::String(count) + (count == 1 ? " band" : " bands") + ".";
+    setTooltip(text + " Click to open.");
+    setDescription(text + " Selects this channel's EQ on the canvas.");
+    if (changed)
+        repaint();
 }
 
 void MixerEqThumbnail::mouseUp(const juce::MouseEvent&) {
@@ -157,6 +174,23 @@ void MixerEqThumbnail::paint(juce::Graphics& g) {
 
     g.setColour(fillColour);
     g.fillPath(fillPath);
+    paintBadge(g);
+}
+
+// The band count, small, in the top-right corner; nothing while no band is on.
+void MixerEqThumbnail::paintBadge(juce::Graphics& g) const {
+    if (bandCount_ <= 0)
+        return;
+    const auto& colors = synth::theme::themeOf(*this).colors;
+    const auto font = synth::theme::AppLookAndFeel::uiFont(9.0f);
+    const auto text = getBadgeText();
+    const int textW = juce::GlyphArrangement::getStringWidthInt(font, text);
+    const auto badge = juce::Rectangle<float>((float)(getWidth() - textW - 10), 2.0f, (float)textW + 8.0f, 12.0f);
+    g.setColour(colors.surface.withAlpha(0.85f));
+    g.fillRoundedRectangle(badge, badge.getHeight() * 0.5f);
+    g.setColour(cachedBypassed_ ? colors.textDisabled : colors.textPrimary);
+    g.setFont(font);
+    g.drawText(text, badge.toNearestInt(), juce::Justification::centred, false);
 }
 
 } // namespace synth::ui

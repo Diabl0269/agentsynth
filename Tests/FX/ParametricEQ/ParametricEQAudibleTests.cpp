@@ -84,10 +84,10 @@ TEST(ParametricEQAudible, ShelfQMovedAfterPrepareReshapesTheCorner) {
     }
 }
 
-// Slots 5-24 have no surface yet; their knobs still reach the sound when moved
+// Slots 5-24 have no gutter jack; their knobs still reach the sound when moved
 // after prepare.
 TEST(ParametricEQAudible, EveryHiddenSlotsGainMovedAfterPrepareIsHeard) {
-    for (int band = kShownBands; band < kMaxBands; ++band) {
+    for (int band = kOriginalBands; band < kMaxBands; ++band) {
         const float centre = ParametricEQModule::defaultFreqFor(band);
         PreparedEQ p(band, centre, 0.0f, 1.0f);
         EXPECT_NEAR(p.db(centre), 0.0f, 0.5f) << "slot " << band + 1;

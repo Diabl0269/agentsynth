@@ -275,7 +275,7 @@ TEST(EQCurveInteraction, AddPointPastFourTakesTheLowestFreeSlotAsABellUntilAll24
         const int slot = comp.addPointAt({(float)(10 + i * 15), (float)kCurveHeight * 0.5f});
         ASSERT_GE(slot, 0) << "point " << i;
         slots.insert(slot);
-        if (i >= ParametricEQModule::kShownBands)
+        if (i >= ParametricEQModule::kOriginalBands)
             EXPECT_EQ(eq.getBandType(slot), synth::eq::BandType::Peak) << "a band past four is a Bell";
     }
     EXPECT_EQ(slots.size(), (size_t)ParametricEQModule::kMaxBands) << "every point took its own slot";
@@ -514,7 +514,7 @@ TEST(EQCurveTest, PaintSmokeWithAllFourBandsAndSpectrum) {
 
     EQCurveComponent comp(eq);
     comp.setBounds(0, 0, kCurveWidth, kCurveHeight);
-    for (int i = 0; i < ParametricEQModule::kShownBands; ++i)
+    for (int i = 0; i < ParametricEQModule::kOriginalBands; ++i)
         comp.addPointAt({(float)(40 + i * 80), (float)(40 + i * 20)});
 
     ASSERT_TRUE(comp.getShowSpectrum());

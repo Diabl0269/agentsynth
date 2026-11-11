@@ -224,8 +224,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     meterReadout_.setTitle(column.name + " peak");
     meterReadout_.setTooltip("Peak level: click to reset it, Option-click to reset every channel");
     eqThumbnail_.setTitle(column.name + " EQ curve");
-    eqThumbnail_.setTooltip("EQ curve: click to select this channel's EQ on the canvas");
-    eqThumbnail_.setDescription("Selects this channel's EQ on the canvas");
+    // Its tooltip and description carry the live band count (MixerEqThumbnail::refreshBandCount).
 
     rebindControls();
     // Must run AFTER rebindControls() -- it clears midiLearnableEntries_ and would wipe out

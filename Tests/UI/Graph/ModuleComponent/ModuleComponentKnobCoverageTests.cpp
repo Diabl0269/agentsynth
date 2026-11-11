@@ -141,6 +141,10 @@ bool targetHasNoGenericKnobByDesign(const ModuleBase& mb, const ModulationTarget
     // pads' knobs instead, so a group cable has no knob on the card to ring. Its Level is the card's one generic knob.
     if (mb.getModuleType() == ModuleType::DrumKit && param->paramID != "level")
         return true;
+    // The Parametric EQ card has one selected-band row, not a knob per band: its cables to the other bands anchor to
+    // their strip chips (ModuleComponentEqBandRowTests).
+    if (mb.getModuleType() == ModuleType::ParametricEQ && param->paramID.startsWith("band"))
+        return true;
     if (!isContinuousParam(param))
         return true;
     if (auto* threshold = dynamic_cast<const ThresholdMeterSource*>(&mb))

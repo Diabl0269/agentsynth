@@ -4,8 +4,8 @@
 // with every value it had, every slot's type is the one the four-band module gave it, and it renders
 // exactly what the four-band engine rendered. The reference render below re-derives the four-band
 // module's biquads from its own formulas, independently of the module's code. Also: the band model's
-// slot API (findFreeBand / addBand), the hidden-parameter set, that a snapshot restore puts a
-// hidden band back off, and the goldens of what the AI and a save see (at the end).
+// slot API (findFreeBand / addBand), that every band is exposed, that a snapshot restore puts an added
+// band back off, and the goldens of what the AI and a save see (at the end).
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "ParametricEQGoldenFixtures.h"
@@ -34,11 +34,11 @@ void expectLegacyValues(ParametricEQModule& eq) {
     for (const auto& edit : eqgolden::legacyEdits())
         EXPECT_NEAR(paramValue(eq, edit.id), edit.value, std::max(1.0e-3f, std::abs(edit.value) * 1.0e-4f)) << edit.id;
     const BandType expected[] = {BandType::LowShelf, BandType::Peak, BandType::Peak, BandType::HighShelf};
-    for (int b = 0; b < ParametricEQModule::kShownBands; ++b)
+    for (int b = 0; b < ParametricEQModule::kOriginalBands; ++b)
         EXPECT_EQ(eq.getBandType(b), expected[b]) << "slot " << b + 1;
     for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
         EXPECT_EQ(eq.getBandSlope(b), 12) << "slot " << b + 1;
-    for (int b = ParametricEQModule::kShownBands; b < ParametricEQModule::kMaxBands; ++b) {
+    for (int b = ParametricEQModule::kOriginalBands; b < ParametricEQModule::kMaxBands; ++b) {
         EXPECT_FALSE(eq.isBandEnabled(b)) << "slot " << b + 1;
         EXPECT_EQ(eq.getBandType(b), BandType::Peak) << "slot " << b + 1;
         EXPECT_FLOAT_EQ(paramValue(eq, bandId(b, "Gain")), 0.0f);
@@ -251,20 +251,11 @@ TEST(ParametricEQSavedModel, ParametersAreAppendedAfterPanSoOldIndicesHold) {
     EXPECT_EQ(ids.size(), pan + 1 + 80 + 48);
 }
 
-TEST(ParametricEQSavedModel, HiddenParametersAreBandsFiveUpAndEveryTypeAndSlope) {
-    for (int b = 1; b <= ParametricEQModule::kMaxBands; ++b) {
-        for (const char* suffix : {"On", "Freq", "Gain", "Q"}) {
-            const auto id = "band" + juce::String(b) + suffix;
-            EXPECT_EQ(ParametricEQModule::isHiddenParamId(id), b > ParametricEQModule::kShownBands) << id;
-        }
-        EXPECT_TRUE(ParametricEQModule::isHiddenParamId("band" + juce::String(b) + "Type"));
-        EXPECT_TRUE(ParametricEQModule::isHiddenParamId("band" + juce::String(b) + "Slope"));
-    }
-    for (const char* shown : {"outputGain", "mix", "pan", "muted", "bypassed", "dualIO", "band25On", "bandOn", "band"})
-        EXPECT_FALSE(ParametricEQModule::isHiddenParamId(shown)) << shown;
+TEST(ParametricEQSavedModel, EveryBandParameterIsExposedOnEverySurface) {
     ParametricEQModule eq;
-    EXPECT_FALSE(eq.isParameterExposed("band5Gain"));
-    EXPECT_TRUE(eq.isParameterExposed("band4Gain"));
+    for (int b = 1; b <= ParametricEQModule::kMaxBands; ++b)
+        for (const char* suffix : {"On", "Freq", "Gain", "Q", "Type", "Slope"})
+            EXPECT_TRUE(eq.isParameterExposed("band" + juce::String(b) + suffix)) << b << suffix;
 }
 
 TEST(ParametricEQSlots, FindFreeBandIsTheLowestOffSlotOfAllTwentyFour) {
@@ -273,7 +264,7 @@ TEST(ParametricEQSlots, FindFreeBandIsTheLowestOffSlotOfAllTwentyFour) {
     eq.setBandEnabled(0, true);
     eq.setBandEnabled(1, true);
     EXPECT_EQ(eq.findFreeBand(), 2);
-    for (int b = 0; b < ParametricEQModule::kShownBands; ++b)
+    for (int b = 0; b < ParametricEQModule::kOriginalBands; ++b)
         eq.setBandEnabled(b, true);
     EXPECT_EQ(eq.findFreeBand(), 4) << "past the four shown slots";
     for (int b = 0; b < ParametricEQModule::kMaxBands; ++b)
@@ -285,7 +276,7 @@ TEST(ParametricEQSlots, FindFreeBandIsTheLowestOffSlotOfAllTwentyFour) {
 
 TEST(ParametricEQSlots, AddBandTurnsTheLowestFreeSlotOnWithItsTypeAndFrequency) {
     ParametricEQModule eq;
-    for (int b = 0; b < ParametricEQModule::kShownBands; ++b)
+    for (int b = 0; b < ParametricEQModule::kOriginalBands; ++b)
         eq.setBandEnabled(b, true);
     eq.setBandGain(4, 9.0f); // a leftover setting is reset
     const int band = eq.addBand(250.0f, BandType::HighCut);
@@ -302,11 +293,11 @@ TEST(ParametricEQSlots, AddBandTurnsTheLowestFreeSlotOnWithItsTypeAndFrequency) 
     EXPECT_EQ(eq.addBand(1000.0f, BandType::Peak), -1) << "every slot is on";
 }
 
-TEST(ParametricEQSlots, NewPointsStillOnlyLandOnTheFourShownSlots) {
+TEST(ParametricEQSlots, NewPointsStillOnlyLandOnTheOriginalFourSlots) {
     ParametricEQModule eq;
-    for (int b = 0; b < ParametricEQModule::kShownBands; ++b)
+    for (int b = 0; b < ParametricEQModule::kOriginalBands; ++b)
         eq.setBandEnabled(b, true);
-    EXPECT_EQ(eq.findBandForNewPoint(1000.0f), -1) << "slots 5-24 are free but not shown";
+    EXPECT_EQ(eq.findBandForNewPoint(1000.0f), -1) << "slots 5-24 are free but are picked by findFreeBand";
 }
 
 TEST(ParametricEQSlots, TypeAndSlopeSettersRoundTripAndSnap) {
@@ -325,14 +316,13 @@ TEST(ParametricEQSlots, TypeAndSlopeSettersRoundTripAndSnap) {
     EXPECT_EQ(snap.type, BandType::Tilt);
 }
 
-// A hidden band at its default is left out of the node JSON (so an old patch's JSON is unchanged), so a trusted
-// restore must put a hidden band the snapshot does not name back to its default, or undoing an added band would
-// leave it playing.
-TEST(ParametricEQSavedModel, ATrustedRestoreTurnsAnAddedHiddenBandBackOff) {
+// An old patch's JSON names only the original four bands, so a trusted restore of it must put every other band back
+// to its default, and undoing an added band must turn it off again.
+TEST(ParametricEQSavedModel, ATrustedRestoreTurnsAnAddedBandBackOff) {
     GraphEQ graphEq("00000000-0000-4000-8000-0000000000e1");
     const auto before = synth::AIStateMapper::nodeToJSON(*graphEq.node);
     auto& eq = graphEq.eq();
-    for (int b = 0; b < ParametricEQModule::kShownBands; ++b)
+    for (int b = 0; b < ParametricEQModule::kOriginalBands; ++b)
         eq.setBandEnabled(b, true);
     ASSERT_EQ(eq.addBand(300.0f, BandType::LowCut), 4);
     eq.setBandSlope(4, 48);
@@ -340,10 +330,8 @@ TEST(ParametricEQSavedModel, ATrustedRestoreTurnsAnAddedHiddenBandBackOff) {
     const auto after = synth::AIStateMapper::nodeToJSON(*graphEq.node);
     auto* afterParams = after.getProperty("params", {}).getDynamicObject();
     ASSERT_NE(afterParams, nullptr);
-    EXPECT_TRUE(afterParams->hasProperty("band5On")) << "an edited hidden band is saved";
-    EXPECT_TRUE(afterParams->hasProperty("band5Type"));
-    EXPECT_TRUE(afterParams->hasProperty("band5Slope"));
-    EXPECT_FALSE(afterParams->hasProperty("band6On")) << "an untouched hidden band is not";
+    for (const char* id : {"band5On", "band5Type", "band5Slope", "band6On", "band24Q"})
+        EXPECT_TRUE(afterParams->hasProperty(id)) << id << ": every band is saved";
 
     ASSERT_TRUE(graphEq.restore(before));
     EXPECT_FALSE(eq.isBandEnabled(4));
@@ -357,45 +345,111 @@ TEST(ParametricEQSavedModel, ATrustedRestoreTurnsAnAddedHiddenBandBackOff) {
     EXPECT_EQ(eq.getBandSlope(4), 48);
 }
 
-// A model-authored patch never reaches the hidden parameters: the AI does not see them yet, and a merge must not
-// reset a user's hidden band either.
-TEST(ParametricEQSavedModel, AnUntrustedPatchNeitherSetsNorResetsHiddenParameters) {
+// A model-authored patch reaches every band now, the same way it reaches the first four.
+TEST(ParametricEQSavedModel, AnUntrustedPatchSetsAnyBand) {
     ParametricEQModule eq;
     eq.setBandEnabled(6, true);
     juce::DynamicObject::Ptr params = new juce::DynamicObject();
     params->setProperty("band1Gain", 3.0);
     params->setProperty("band9On", true);
+    params->setProperty("band9Freq", 1800.0);
     params->setProperty("band2Type", "Notch");
     synth::AIStateMapper::applyUntrustedParams(&eq, params.get());
     EXPECT_NEAR(paramValue(eq, "band1Gain"), 3.0f, 1.0e-3f);
-    EXPECT_FALSE(eq.isBandEnabled(8));
-    EXPECT_EQ(eq.getBandType(1), BandType::Peak);
-    EXPECT_TRUE(eq.isBandEnabled(6)) << "a merge leaves a hidden band alone";
+    EXPECT_TRUE(eq.isBandEnabled(8));
+    EXPECT_NEAR(paramValue(eq, "band9Freq"), 1800.0f, 2.0f);
+    EXPECT_EQ(eq.getBandType(1), BandType::Notch);
+    EXPECT_TRUE(eq.isBandEnabled(6)) << "a merge leaves a band it does not name alone";
 }
 
-// What the AI and the save format see of a Parametric EQ must not change while the engine grows beyond its four
-// shown bands. The files in Tests/fixtures/parametric-eq/ were written by the four-band module: its node JSON
-// (all-default and with every shown band edited), its module catalog entry, its schema table and its saved
-// parameter state. A diff here means an old patch's JSON, or the AI's view of the module, moved.
-// Regenerate (only for a deliberate change to what the AI or a save sees):
-//   PEQ_WRITE_GOLDEN=1 ./Tests --gtest_filter='ParametricEQGolden*'
+// What the AI and the save format see of a Parametric EQ: the files in Tests/fixtures/parametric-eq/ were written by
+// the four-band module (its node JSON all-default and with every original band edited, its module catalog entry, its
+// schema table and its saved parameter state). The module now offers 24 bands with a Type and Slope each, so the AI's
+// node JSON, catalog entry and schema grow by exactly those entries; everything the four-band module wrote is still
+// there, unchanged. A diff here means an old patch's JSON, or the AI's view of one of the original parameters, moved.
 
-TEST(ParametricEQGolden, DefaultNodeJsonMatchesTheFourBandModule) {
+namespace {
+
+// True when `actual` holds everything `expected` does: objects by key, arrays of objects with an "id" by that id, other
+// arrays element by element, numbers within float noise.
+bool jsonContains(const juce::var& actual, const juce::var& expected) {
+    if (auto* e = expected.getDynamicObject()) {
+        auto* a = actual.getDynamicObject();
+        if (a == nullptr)
+            return false;
+        for (const auto& prop : e->getProperties())
+            if (!a->hasProperty(prop.name) || !jsonContains(a->getProperty(prop.name), prop.value))
+                return false;
+        return true;
+    }
+    if (auto* e = expected.getArray()) {
+        auto* a = actual.getArray();
+        if (a == nullptr)
+            return false;
+        const bool keyed = !e->isEmpty() && e->getFirst().getProperty("id", {}).isString();
+        for (int i = 0; i < e->size(); ++i) {
+            if (!keyed) {
+                if (i >= a->size() || !jsonContains((*a)[i], (*e)[i]))
+                    return false;
+                continue;
+            }
+            bool found = false;
+            for (const auto& candidate : *a)
+                found = found || (candidate.getProperty("id", {}) == (*e)[i].getProperty("id", {}) &&
+                                  jsonContains(candidate, (*e)[i]));
+            if (!found)
+                return false;
+        }
+        return true;
+    }
+    if (expected.isDouble() || expected.isInt() || expected.isInt64())
+        return std::abs((double)actual - (double)expected) <= 1.0e-5 * std::max(1.0, std::abs((double)expected));
+    return actual == expected;
+}
+
+void expectContainsGoldenJson(const juce::String& name, const juce::var& actual) {
+    const auto golden = eqgolden::goldenFile(name);
+    ASSERT_TRUE(golden.existsAsFile()) << "missing golden " << name.toStdString();
+    EXPECT_TRUE(jsonContains(actual, juce::JSON::parse(golden)))
+        << name.toStdString() << " lost or changed an entry the four-band module wrote";
+}
+
+} // namespace
+
+TEST(ParametricEQGolden, DefaultNodeJsonKeepsEverythingTheFourBandModuleWrote) {
     juce::AudioProcessorGraph graph;
-    eqgolden::expectMatchesGolden("node-default.json", juce::JSON::toString(eqgolden::eqNodeJson(graph, false), false));
+    const auto json = eqgolden::eqNodeJson(graph, false);
+    expectContainsGoldenJson("node-default.json", json);
+    auto* params = json.getProperty("params", {}).getDynamicObject();
+    ASSERT_NE(params, nullptr);
+    EXPECT_TRUE(params->hasProperty("band24Q")) << "the other bands are saved too";
+    EXPECT_TRUE(params->hasProperty("band1Type"));
+    EXPECT_TRUE(params->hasProperty("band24Slope"));
 }
 
-TEST(ParametricEQGolden, EditedNodeJsonMatchesTheFourBandModule) {
+TEST(ParametricEQGolden, EditedNodeJsonKeepsEverythingTheFourBandModuleWrote) {
     juce::AudioProcessorGraph graph;
-    eqgolden::expectMatchesGolden("node-legacy.json", juce::JSON::toString(eqgolden::eqNodeJson(graph, true), false));
+    expectContainsGoldenJson("node-legacy.json", eqgolden::eqNodeJson(graph, true));
 }
 
-TEST(ParametricEQGolden, CatalogEntryMatchesTheFourBandModule) {
-    eqgolden::expectMatchesGolden("catalog-entry.json", juce::JSON::toString(eqgolden::catalogEntry(), false));
+TEST(ParametricEQGolden, CatalogEntryKeepsEverythingTheFourBandModuleListed) {
+    const auto entry = eqgolden::catalogEntry();
+    expectContainsGoldenJson("catalog-entry.json", entry);
+    juce::StringArray ids;
+    for (const auto& param : *entry.getProperty("params", {}).getArray())
+        ids.add(param.getProperty("id", {}).toString());
+    for (const char* id : {"band5On", "band24Gain", "band1Type", "band24Slope"})
+        EXPECT_TRUE(ids.contains(id)) << id;
 }
 
-TEST(ParametricEQGolden, SchemaSectionMatchesTheFourBandModule) {
-    eqgolden::expectMatchesGolden("schema-section.golden", eqgolden::schemaSection());
+TEST(ParametricEQGolden, SchemaSectionKeepsEveryRowTheFourBandModuleHad) {
+    const auto actual = eqgolden::schemaSection();
+    const auto golden = eqgolden::goldenFile("schema-section.golden").loadFileAsString().replace("\r\n", "\n");
+    for (const auto& line : juce::StringArray::fromLines(golden))
+        if (line.isNotEmpty())
+            EXPECT_TRUE(actual.contains(line)) << "missing row: " << line.toStdString();
+    EXPECT_TRUE(actual.contains("`band24Gain`"));
+    EXPECT_TRUE(actual.contains("`band1Type`"));
 }
 
 TEST(ParametricEQGolden, SavedStateOfTheFourBandModuleIsRecorded) {

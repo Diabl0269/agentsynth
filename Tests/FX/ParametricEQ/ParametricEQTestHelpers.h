@@ -19,7 +19,7 @@ using BandType = ParametricEQModule::BandType;
 constexpr double kSampleRate = 48000.0;
 constexpr int kBlockSize = 512;
 constexpr int kMaxBands = ParametricEQModule::kMaxBands;
-constexpr int kShownBands = ParametricEQModule::kShownBands;
+constexpr int kOriginalBands = ParametricEQModule::kOriginalBands;
 
 inline juce::AudioParameterFloat* floatParamById(ParametricEQModule& eq, const juce::String& id) {
     for (auto* p : eq.getParameters())

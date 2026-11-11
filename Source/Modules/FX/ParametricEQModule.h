@@ -8,8 +8,8 @@
 
 /** Parametric EQ with 24 fixed band slots, each with its own type and (for cuts) slope.
  *
- *  Slots 1-4 are the bands the card and curve show (Low Shelf, Bell, Bell, High Shelf by default);
- *  slots 5-24 exist in the engine and the saved model but are not shown yet (isParameterExposed).
+ *  Slots 1-4 are the original four bands (Low Shelf, Bell, Bell, High Shelf by default, each with its own home
+ *  frequency); slots 5-24 are added on demand. Every slot is shown on every surface and has a Type and a Slope.
  *  Every band starts off, so a fresh EQ is a straight wire. Saved ids, the append order of the
  *  parameters and the slope set: docs/modules/fx-modules.md#parametric-eq-module.
  */
@@ -18,8 +18,8 @@ public:
     using BandType = synth::eq::BandType;
 
     static constexpr int kMaxBands = 24;
-    /** The slots the card, the curve's points and its keys show today. */
-    static constexpr int kShownBands = 4;
+    /** The original four slots: they keep their default types and home frequencies, their jacks and the 1-4 keys. */
+    static constexpr int kOriginalBands = 4;
     static constexpr int kMaxStages = synth::eq::kMaxStages;
     static constexpr float kMaxGainDb = 24.0f;
     static constexpr float kMinFreq = 20.0f;
@@ -30,6 +30,12 @@ public:
     static constexpr float kDefaultQ = 0.70710678f;
     static constexpr int kMixCvChannel = 15;
     static constexpr int kPanCvChannel = 16;
+    /** Bands 5-24 each own three raw CV channels (Freq, Gain, Q) from here on, reached only through their knobs. */
+    static constexpr int kFirstBandCvChannel = 17;
+    static constexpr int kBandCvFields = 3;
+    static constexpr int kTotalInputChannels = kFirstBandCvChannel + (kMaxBands - kOriginalBands) * kBandCvFields;
+    /** Raw CV channel of band `band`'s Freq (field 0), Gain (1) or Q (2): the original four keep their old channels. */
+    static int bandCvChannel(int band, int field) noexcept;
 
     /** Resolved (post-CV) settings of one band: what the visualiser draws. */
     struct BandSnapshot {
@@ -51,7 +57,7 @@ public:
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
     int getVisibleInputPortCount() const override { return stereoVisibleInputCount(kNumCvInputs); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, kNumCvInputs); }
+    LogicalPort mapInputChannel(int raw) const override;
     bool hasStereoAudioInputPair() const override { return true; }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
     std::vector<ModulationTarget> getModulationTargets() const override;
@@ -59,10 +65,6 @@ public:
     bool producesMidi() const override { return false; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Filter; }
     ModuleType getModuleType() const override { return ModuleType::ParametricEQ; }
-    bool isParameterExposed(const juce::String& paramId) const override { return !isHiddenParamId(paramId); }
-
-    /** True for a parameter no surface shows yet: bands 5-24 and every band's Type and Slope. */
-    static bool isHiddenParamId(const juce::String& paramId);
 
     // ---------- band model (message thread) ----------
 

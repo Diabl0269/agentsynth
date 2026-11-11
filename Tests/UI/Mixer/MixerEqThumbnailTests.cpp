@@ -221,3 +221,34 @@ TEST(MixerEqThumbnailTests, DoesNotTouchFreedParametersWhenTheNodeWasRemovedWith
     thumbnail.setEqModule(nullptr);
     EXPECT_FALSE(thumbnail.isVisible());
 }
+
+TEST(MixerEqThumbnailTests, TheBadgeCountsEveryBandAndTheTooltipSaysSo) {
+    ParametricEQModule eq;
+    for (int b = 0; b < 16; ++b)
+        eq.setBandEnabled(b, true);
+    synth::ui::MixerEqThumbnail thumbnail;
+    thumbnail.setSize(140, 28);
+    thumbnail.setEqModule(&eq);
+    EXPECT_EQ(thumbnail.getBandCount(), 16);
+    EXPECT_EQ(thumbnail.getBadgeText(), "16");
+    EXPECT_TRUE(thumbnail.getTooltip().startsWith("EQ: 16 bands."));
+    thumbnail.setEqModule(nullptr);
+}
+
+TEST(MixerEqThumbnailTests, OneBandIsSingularAndNoBandsShowNoBadge) {
+    ParametricEQModule eq;
+    for (int b = 0; b < 4; ++b)
+        eq.setBandEnabled(b, false);
+    synth::ui::MixerEqThumbnail thumbnail;
+    thumbnail.setSize(140, 28);
+    thumbnail.setEqModule(&eq);
+    EXPECT_EQ(thumbnail.getBandCount(), 0);
+    EXPECT_TRUE(thumbnail.getBadgeText().isEmpty());
+
+    const int before = thumbnail.getRecomputeCountForTest();
+    eq.setBandEnabled(2, true);
+    synth::test::waitUntil([&] { return thumbnail.getRecomputeCountForTest() > before; });
+    EXPECT_EQ(thumbnail.getBandCount(), 1);
+    EXPECT_TRUE(thumbnail.getTooltip().startsWith("EQ: 1 band."));
+    thumbnail.setEqModule(nullptr);
+}
