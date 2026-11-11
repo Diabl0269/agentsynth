@@ -1,9 +1,10 @@
 // ParametricEQHiddenSurfaceTests.cpp
 //
 // Slots 5-24 and every band's Type and Slope exist in the engine and the saved model but no surface offers
-// them yet: not the card (and so not MIDI learn, which registers the card's widgets), not the timeline's
+// them yet: not the timeline's
 // automation picker, not the modulation targets, not a patch diff. The AI's node JSON, catalog entry and
-// schema are pinned byte-for-byte to the four-band module by ParametricEQSavedModelTests.cpp.
+// schema are pinned byte-for-byte to the four-band module by ParametricEQSavedModelTests.cpp; the card (and so
+// MIDI learn, which registers the card's widgets) by CardBodyWidgetKindTests.cpp.
 
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
@@ -11,7 +12,6 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "ParametricEQTestHelpers.h"
-#include "UI/Graph/CardBody/CardBodyPlan.h"
 
 using namespace eqtest;
 
@@ -38,28 +38,7 @@ public:
     int getRequestTimeoutMs() const override { return 240000; }
 };
 
-juce::StringArray allIds(ParametricEQModule& eq) {
-    juce::StringArray ids;
-    for (auto* p : eq.getParameters())
-        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p))
-            ids.add(withId->paramID);
-    return ids;
-}
-
 } // namespace
-
-TEST(ParametricEQHiddenSurfaces, TheCardBuildsOnlyTheFourShownBands) {
-    ParametricEQModule eq;
-    const auto plan = synth::CardBodyPlan::forModule(eq, std::nullopt);
-    for (const auto& id : allIds(eq)) {
-        if (ParametricEQModule::isHiddenParamId(id))
-            EXPECT_EQ(plan.findParam(id), -1) << id << " must not be a card widget (or a MIDI learn target)";
-    }
-    for (int b = 0; b < kShownBands; ++b)
-        for (const char* suffix : {"On", "Freq", "Gain", "Q"})
-            EXPECT_GE(plan.findParam(bandId(b, suffix)), 0) << bandId(b, suffix);
-    EXPECT_GE(plan.findParam("outputGain"), 0);
-}
 
 TEST(ParametricEQHiddenSurfaces, ModulationTargetsAreTheFourBandSet) {
     ParametricEQModule eq;

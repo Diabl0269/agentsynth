@@ -2,6 +2,7 @@
 # list so the root file stays under the line cap.
 target_sources(Core PRIVATE
     Source/Modules/FX/ParametricEQModule.h
+    Source/Modules/FX/ParametricEQ/ParametricEQBandTypes.h
     Source/Modules/FX/ParametricEQ/ParametricEQFilterDesign.h
     Source/Modules/FX/ParametricEQ/ParametricEQFilterDesign.cpp
     Source/Modules/FX/ParametricEQ/ParametricEQParamIds.h

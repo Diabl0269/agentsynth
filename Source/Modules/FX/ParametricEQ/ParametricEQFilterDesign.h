@@ -1,11 +1,11 @@
 #pragma once
 
-#include "Modules/FX/ParametricEQModule.h"
+#include "Modules/FX/ParametricEQ/ParametricEQBandTypes.h"
 #include <array>
 
 // The Parametric EQ's band shapes as pure maths: the digital stages a band runs (RBJ biquads, cascaded
 // Butterworth cuts, first-order stages) and the analog magnitude the curve draws. No module state; the band
-// vocabulary (BandType, the slope list, kMaxStages) is in the module header.
+// vocabulary (BandType, the slope list, kMaxStages) is in ParametricEQBandTypes.h.
 namespace synth::eq {
 
 inline constexpr float kButterworthQ = 0.70710678f;

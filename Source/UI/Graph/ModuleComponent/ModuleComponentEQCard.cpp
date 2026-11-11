@@ -7,6 +7,8 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/AppShortcutRelay.h"
 #include "UI/Layout/PopupMotion.h"
+#include "UI/ModuleViews/EQCurveComponent.h"
+#include "UI/ModuleViews/EQWindow.h"
 
 namespace eqCard {
 constexpr int kMargin = 12;
