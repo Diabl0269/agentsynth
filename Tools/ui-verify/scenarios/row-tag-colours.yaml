@@ -1,0 +1,28 @@
+# Bug: the small tags at the right edge of the rows in the Add lists and Cmd+K ("Module", "Track", "Preset" ...) were
+# tiny, all in the same muted grey, so a kind could not be told at a glance. They are now larger and each kind has its
+# own hue.
+#
+# What a user does:
+#   1. Starts a new project and presses Cmd+K, types "midi": rows of several kinds show, each tag in its kind's colour.
+#   2. Closes it, presses Add on the canvas toolbar and types "midi": the Module and Track tags use the same colours.
+record: true
+save_project: fro1631 tags
+steps:
+  - click: {id: New empty project}                           # the welcome screen
+  - wait: {}
+  - key: {keys: cmd+k}
+  - expect: {id: commandPalette, showing: true, within_ms: 2000}
+  - type: {text: midi}
+  - wait: {}
+  - wait: {}
+  - mark: {check: 1, name: tags-cmdk}
+  - key: {keys: escape}
+  - wait: {}
+  - click: {id: "canvasToolbar:add"}
+  - expect: {id: modMatrixPicker, showing: true, within_ms: 2000}
+  - type: {text: midi}
+  - wait: {}
+  - expect: {id: "modMatrixPicker > MIDI Track, Track", exists: true, within_ms: 2000}
+  - wait: {}
+  - mark: {check: 1, name: tags-add}
+  - key: {keys: escape}

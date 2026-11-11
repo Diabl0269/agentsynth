@@ -18,7 +18,7 @@ The rows are listed fresh each time it opens:
 | Settings | the on/off Preferences (natural scrolling, cables on top, autosave ...) and a few others (Theme, Audio device, Keyboard shortcuts ...) | flips the on/off ones in place; the others open Settings at their tab |
 | Recent projects, Presets | the File menu's recent projects and the factory presets | opens or loads it, through the unsaved-changes guard |
 
-Each row ends in its kind as a tag (View, Module, Track, Marker, Action, Setting, Project, Preset), searched and read out with the row. An on/off row shows a switch. Return or a click flips it, writes the preference with the same key and the same live
+Each row ends in its kind as a tag (View, Module, Track, Marker, Action, Setting, Project, Preset), 11 px and coloured by kind (one hue per kind, [theming](theming.md#colour-code-kinds)), searched and read out with the row. An on/off row shows a switch. Return or a click flips it, writes the preference with the same key and the same live
 effect as its Preferences checkbox, and the palette stays open. The switch glides: the knob slides across and the
 pill's fill fades, 110 ms switching on and 90 ms switching off (`SwitchGlide`, see [theming](theming.md#themed-widgets));
 80 ms under Reduce Motion and none under Animations: Off. A row bound for the first time (the list opening, a scroll, a

@@ -229,6 +229,35 @@ ratio = (max(L1,L2) + 0.05) / (min(L1,L2) + 0.05)
 
 `Tests/UI/Theme/ThemeTests.cpp` enforces `ratio >= 4.5` for every built-in automatically.
 
+## Colour-code kinds
+
+Every type label in the app is colour-coded: one hue per kind, so a row's kind reads at a glance without reading the
+word. The rule holds for any new kind label (a chip, a tag, a badge naming a type): give it a slot in the table
+below, never the muted text colour. The row tags of the + Add lists and Cmd+K are the first user. A tag is 11 px bold in
+a 17 px box (the 24 px row is unchanged), its outline and text in the kind's hue over a faint wash of the same hue
+(`kTagWashAlpha`, 12 %). The hues are the eight `cableCategory` tokens of the active theme (deepened a step on a light
+theme), so each theme tunes them; `New` uses `textPrimary`. A tag that is not in the table falls back to `textMuted`,
+and a test fails for any tag the code can set that does.
+
+| Tag | Hue slot (`cableCategory`) |
+| --- | --- |
+| Module | Filters |
+| Snippet | Filters |
+| Track | Envelopes |
+| Preset | Modulation FX |
+| Track preset | Modulation FX |
+| Bus preset | Modulation FX |
+| Marker | Sources |
+| Action | Sequencing |
+| Project | Utility |
+| View | Utility |
+| Setting | Utility |
+| New | text (`textPrimary`) |
+
+Kinds that mean nearly the same share a hue: Module and Snippet (a snippet is modules), the three preset tags, and View,
+Setting and Project (the app's own); no other two kinds share a hue. The table lives in `Source/UI/Layout/TagHue.cpp`; `Tests/UI/Layout/TagHueTests.cpp` holds it to
+this table and checks 4.5:1 contrast of every tag on the row and on the highlighted row in all four themes.
+
 ## Where files live, and how reload works
 
 | Location | Description |
