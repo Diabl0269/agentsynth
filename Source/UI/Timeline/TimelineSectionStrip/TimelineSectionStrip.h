@@ -202,6 +202,7 @@ public:
     bool isBlockDragCopyForTest() const noexcept { return dragCopy_; }
     // The words of the hint the drop line carries now ("Release to ..."); empty unless a drag in flight shows it.
     juce::String getDropHintTextForTest() const { return dropHintShown() ? dropHint_ : juce::String(); }
+    juce::Rectangle<float> getDropHintBoundsForTest() const { return dropHintPillRect(); }
     // What the block menu's "Place again after this" says with the current setting.
     juce::String getPlaceAgainAfterMenuTextForTest() const { return placeAgainAfterMenuText(); }
     // The beat a block drag in flight would drop its start on (what the accent drop line shows).
@@ -267,6 +268,7 @@ private:
     double drawnStartOf(synth::PlacementId id, double docStart) const;
     void paintBlockDrag(juce::Graphics& g) const;
     void paintDropHint(juce::Graphics& g, float lift) const;
+    juce::Rectangle<float> dropHintPillRect() const;
     bool dropHintShown() const noexcept { return blockDragging_ && !dragCancelled_ && !dragOutside_; }
     void updateDropHint();
     juce::String placeAgainAfterMenuText() const;

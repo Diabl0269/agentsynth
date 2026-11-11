@@ -166,3 +166,24 @@ TEST(TimelineSectionStripDropHintTest, PlaceAgainAfterThisReallyUsesTheNamedMode
         EXPECT_EQ(f.doc.getPlacement(f.verse) == nullptr, cover) << "cover removes it, make room pushes it";
     }
 }
+
+// The words never sit on the drop line or on the block being dragged, wherever the drag is and whichever side has room.
+TEST(TimelineSectionStripDropHintTest, TheWordsNeverCoverTheDropLineOrTheDraggedBlock) {
+    for (const bool shift : {false, true}) {
+        for (const double leftBeat : {-2.0, 0.0, 1.0, 4.0, 8.0, 12.0, 16.0, 24.0}) {
+            HintFixture f(false);
+            f.press();
+            f.dragTo(leftBeat, shift ? kShift : 0);
+            if (f.strip.getDropHintTextForTest().isEmpty())
+                continue;
+            const auto pill = f.strip.getDropHintBoundsForTest();
+            const auto ghost = f.strip.getDragGhostBoundsForTest();
+            const float lineX = f.x(f.strip.getBlockDragTargetBeatForTest());
+            EXPECT_FALSE(pill.getHorizontalRange().intersects({ghost.getX(), ghost.getRight()}))
+                << "beat " << leftBeat << " shift " << (int)shift;
+            EXPECT_FALSE(pill.getHorizontalRange().contains(lineX)) << "beat " << leftBeat << " shift " << (int)shift;
+            EXPECT_GE(pill.getX(), 0.0f);
+            EXPECT_LE(pill.getRight(), (float)f.strip.getWidth());
+        }
+    }
+}
