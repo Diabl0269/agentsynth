@@ -182,6 +182,13 @@ layout (the node's `cardLayout` override, [module-card-layout.md](module-card-la
   release anywhere but on one of the row's controls folds it, and so does Esc (`GraphEditor::keyPressed` ends the drag as a release over nothing; the canvas takes the keyboard
   for the drag and gives it back to what had it). A cable that lands on a hidden control keeps the row open and hands it to the person,
   so it then stays like a row they opened. The refold is the usual fade (above); a refold after a peek moves nothing.
+  A drop that keeps the row open, the room it makes for the cards below and the connection are **one undo step**
+  (`GraphEditor::endConnectionDrag` groups them; `MoreRowKeptOpenAction`): Cmd+Z removes the cable, folds the row and
+  glides the pushed cards back, Cmd+Shift+Z replays all of it.
+- **Highlight.** While the row is open (a person's, or a cable's peek) its area, the More button and the controls under
+  it, carries a soft accent wash (8 %) with a hairline (35 %) in the theme's accent, so it is clear where the person
+  is working. Only that area is tinted, never the whole card, and it fades with the row (`CardBody::paintMoreHighlight`,
+  drawn by the card's paint under its controls; instant under Reduce Motion or Animations Off like the row itself).
 
 ## The footer row
 

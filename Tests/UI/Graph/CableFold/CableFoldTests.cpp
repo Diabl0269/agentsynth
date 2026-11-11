@@ -363,3 +363,39 @@ TEST(CableFold, ADropOnARevealedControlMakesRoomThen) {
     EXPECT_FALSE(rig.osc->getBounds().intersects(rig.below->getBounds())) << "the card below made room";
     EXPECT_GT(rig.below->getY(), belowBefore.getY());
 }
+
+// Regression test for FRO1697: the room a kept-open row makes belongs to the cable's own undo step.
+TEST(CableFold, OneUndoOfADropOnARevealedControlRemovesTheCableFoldsTheRowAndReturnsTheCardBelow) {
+    FadeAnimateGuard guard;
+    Rig rig({"level"}, /*withBelow=*/true);
+    const auto belowBefore = rig.below->getBounds();
+    const auto oscBefore = rig.osc->getBounds();
+    rig.begin();
+    rig.moveTo(rig.overMoreButton());
+    FadeVisibility::stepAllForTest(1.0f);
+    rig.release(rig.overHiddenKnob());
+    FadeVisibility::stepAllForTest(1.0f);
+    ASSERT_TRUE(rig.routed());
+    ASSERT_GT(rig.below->getY(), belowBefore.getY());
+    const auto belowAfter = rig.below->getBounds();
+
+    ASSERT_TRUE(rig.canvas.undo.undo());
+    FadeVisibility::stepAllForTest(1.0f);
+    EXPECT_FALSE(rig.canvas.undo.canUndo()) << "the cable and the room are one step";
+    auto* osc = rig.canvas.card(rig.oscId);
+    auto* below = rig.canvas.card(rig.belowId);
+    ASSERT_NE(osc, nullptr);
+    ASSERT_NE(below, nullptr);
+    EXPECT_FALSE(rig.canvas.engine.getModulationRoutings().size() > 0 && rig.routed()) << "the cable is gone";
+    EXPECT_FALSE(osc->getCardBody()->isMoreUnfolded()) << "the row folds";
+    EXPECT_EQ(osc->getBounds(), oscBefore);
+    EXPECT_EQ(below->getBounds(), belowBefore) << "the pushed card is back";
+
+    ASSERT_TRUE(rig.canvas.undo.redo());
+    FadeVisibility::stepAllForTest(1.0f);
+    osc = rig.canvas.card(rig.oscId);
+    below = rig.canvas.card(rig.belowId);
+    EXPECT_TRUE(rig.routed());
+    EXPECT_TRUE(osc->getCardBody()->isMoreUnfolded()) << "redo opens the row again";
+    EXPECT_EQ(below->getBounds(), belowAfter) << "redo pushes the card again";
+}

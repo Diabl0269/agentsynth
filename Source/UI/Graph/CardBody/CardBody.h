@@ -141,6 +141,11 @@ public:
     bool isMoreUnfolded() const { return moreUnfolded_; }
     /** Shows or hides the More row's widgets and resizes the card (make room / give it back). */
     void setMoreUnfolded(bool unfolded);
+    /** Undo or redo of a drop that kept the row open: the row follows the step, and the cards the step restores are
+     *  already where they belong, so nothing makes room. */
+    void setMoreUnfoldedByHistory(bool unfolded);
+    /** The soft accent wash and hairline over the open More area (below the cards' controls); nothing when folded. */
+    void paintMoreHighlight(juce::Graphics& g) const;
     /** Null without a More row. */
     juce::Button* getMoreButton() const;
     /** Unfolds the More row when a cable dragged over the card is at `cardLocal`; true if it did. Only a row this
