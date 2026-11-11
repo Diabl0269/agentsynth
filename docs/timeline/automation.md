@@ -217,7 +217,9 @@ clicks to it), the lane's curve editor wherever it is not a handle or the curve 
 Hold/Linear), a [modulator row](#modulators) and a modulator's band (its curve editor included), where it opens the
 row's menu (Show on canvas, Change source..., Remove modulator). The editor asks its owner through `onLaneMenuRequested`, the band through
 `onMenuRequested`; neither builds a menu itself. Shift+F10 (`openContextMenu`) opens the same menu from a focused header,
-editor, modulator row or band (`KeyboardContextMenuProvider`). A direct-cable modulator band is decoration that takes no
+editor, modulator row or band (`KeyboardContextMenuProvider`); on an editor with a stretch selected (two or more
+points, or a Range tool range) it opens the selection's menu instead, as a right-click inside the stretch does: "Curve of
+the selection" (Hold / Linear), then the range's items. A direct-cable modulator band is decoration that takes no
 clicks, so a right-click there still falls through to the clip lanes; its row in the header column has the menu.
 
 ## Change parameter and Duplicate
@@ -671,8 +673,12 @@ lane range are taken before the tool mapping is consulted ([Draw shapes](#draw-s
 | Line | Drag previews a straight line from press to release; mouse-up replaces the dragged span with exactly the two snapped endpoints, Linear |
 | Eraser | Drag removes every handle it touches — collected into a set as the pointer passes over them (dimmed in the preview), deleted on mouse-up |
 
-Right-click a SEGMENT (on the curve itself) shows Hold/Linear, ticking the current one, routed through the headless
-`applySegmentCurveChoice(beat, curve)` hook. Right-click a HANDLE shows `{Delete point}`. Right-click anywhere else
+Right-click a SEGMENT (on the curve itself) shows a "Curve of this segment" header with Hold and Linear, ticking the
+current one (`AutomationLaneEditorCurvePath.cpp`; the headless hook is `applySegmentCurveChoice(beat, curve)`).
+Inside a selected stretch (the Range tool's selection, else the selected points' span) the header reads "Curve of the
+selection" and the items set every segment of the stretch, so they act on what is selected like the Create custom LFO
+item below them; an item is ticked only when every segment it would change already has that shape. A pick melts the old
+curve into the new one and is one undo step (nothing when no segment differs); its undo melts back. Right-click a HANDLE shows `{Delete point}`. Right-click anywhere else
 on the lane opens the lane menu ([below](#right-click-anywhere-on-a-lane)).
 
 Escape clears in-flight tool-drag state (a box included) and returns `true`; when idle it clears a point selection

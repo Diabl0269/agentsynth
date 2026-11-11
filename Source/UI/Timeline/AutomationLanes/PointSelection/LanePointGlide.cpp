@@ -74,6 +74,12 @@ void LanePointGlide::pointsChanged(std::vector<LaneBreakpoint> now) {
     const bool pure = gone.empty() != arrived.empty();
     if (gone.empty() && arrived.empty())
         return;
+    // An edit that changes its points one after another (a curve pick over a stretch) feeds each step before the
+    // melt's first frame: the later steps join that melt instead of cutting it off.
+    if (isMelting() && amount_ == 0.0f && !meltArmed_) {
+        shown_ = std::move(now);
+        return;
+    }
     const bool melt = meltArmed_;
     meltArmed_ = false;
     if (melt ? !animatesMelt() : (!pure || !animates())) {

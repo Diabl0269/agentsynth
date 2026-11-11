@@ -1,0 +1,36 @@
+# Cmd+Z of a lane dot carried past the right edge by a held Alt+Right put the dot back, but dropped its selection and
+# left the view where the hold had taken it, so the dot was off screen and nothing was selected.
+#
+# What a user does: opens a project whose Cutoff lane has one point at beat 52, near the right edge of the view
+# (fixture lane-edge.agsproj), clicks it and holds Alt+Right for about twenty seconds: the dot walks some fifteen bars right
+# and the view scrolls along, so beat 52 is far out of sight. Presses Cmd+Z: the dot glides back to beat 52, the view
+# follows it there, and the dot is still selected. Cmd+Shift+Z: the
+# dot glides forward again, the view with it, still selected.
+record: true
+motion: true
+pop_check: {undo: false}   # undo off: the scenario's own undo and redo are what it checks
+save_project: lane-undo-keeps-dot-in-view
+steps:
+  - openProject: {path: "${FIXTURES}/lane-edge.agsproj"}
+  - wait: {}
+  - click: {id: toggleBottomPanel}
+  - wait: {}
+  - expect: {id: automationLaneState, points: 1}
+  - click: {id: automationLaneState, x: 1248, y: 65}
+  - expect: {id: automationLaneState, selectedPoints: 1}
+  - keyDown: {keys: alt+right}
+  - wait: {settleMs: 20000, timeoutMs: 25000}   # the hold keeps animating, so this waits the full time
+  - keyUp: {}
+  - wait: {settleMs: 600}
+  - expect: {id: automationLaneState, points: 1, selectedPoints: 1, selectedInView: 1, holding: false}
+  - screenshot: {name: after-hold}
+  - glide: {name: undo-follows, frames: 12, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {key: {keys: cmd+z}}}
+  - wait: {}
+  - mark: {check: 1, name: undo-dot-selected-in-view}
+  - expect: {id: automationLaneState, points: 1, selectedPoints: 1, selectedInView: 1}
+  - screenshot: {name: after-undo}
+  - glide: {name: redo-follows, frames: 12, crop: {x: 200, y: 730, w: 1400, h: 170}, do: {key: {keys: cmd+shift+z}}}
+  - wait: {}
+  - mark: {check: 1, name: redo-dot-selected-in-view}
+  - expect: {id: automationLaneState, points: 1, selectedPoints: 1, selectedInView: 1}
+  - screenshot: {name: after-redo}
