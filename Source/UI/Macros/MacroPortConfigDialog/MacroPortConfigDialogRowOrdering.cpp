@@ -1,5 +1,6 @@
 #include "MacroPortConfigDialog.h"
 #include "MacroPortConfigDialogInternal.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include <algorithm>
 #include <cmath>
 
@@ -49,8 +50,11 @@ void MacroPortConfigDialog::beginRowDrag(PortRowComponent& row, const juce::Mous
     rowDrag_.begin(slots, pressedKey, pointer - slots[(size_t)pressedKey].start, pointer);
 }
 
+// The row list follows a row held at its top or bottom edge; the pointer is read once, before it scrolls.
 void MacroPortConfigDialog::updateRowDrag(const juce::MouseEvent& e) {
-    if (rowDrag_.dragTo(rowDragPointerY(e)))
+    using namespace viewport_drag_scroll;
+    const auto pointer = pointerOf(e);
+    if (rowDrag_.dragTo(followAndLocate(rowsContent_, pointer, Axis::Vertical, rowDrag_.animator().isDragging())))
         placeDragRows();
 }
 

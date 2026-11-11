@@ -289,6 +289,10 @@ public:
     /** Fired when a drag or a key hold in any lane editor (modulator bands included) scrolled the shared view. */
     std::function<void()> onViewScrolledByDrag;
 
+    /** Called on every drag event of a lane or modulator-row reorder past its threshold, with the pointer's screen Y,
+     *  before the drag reads it: the owner scrolls the list the rows sit in when the pointer is at its edge. */
+    std::function<void(int screenY)> followReorderDrag;
+
 private:
     /** The editor the lane range was begun on while it is still one of ours (lane or modulator band), else null. */
     AutomationLaneEditor* laneRangeEditor() const;

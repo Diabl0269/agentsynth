@@ -598,7 +598,7 @@ private:
     void discardColumnDrag();
     void onColumnReorderFrame();
     void startColumnFramesIfNeeded();
-    void autoscrollForPointer(const juce::MouseEvent& e);
+    void autoscrollForPointer(juce::Point<int> pointer);
     float pointerXInContent(const juce::MouseEvent& e);
     /** Positions every column; a reorder in flight shifts the track strips to their animated places. */
     void placeColumns(int columnHeight, bool relayout);

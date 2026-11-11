@@ -4,9 +4,11 @@
 // opens none; the drop keeps everything where it stands; Reduce Motion and Animations off land at once; the keyboard's
 // move into another lane glides. Against the real saved project (CrossTrack); the tweens are stepped by hand.
 #include "../../Layout/FadeVisibilityTestGuard.h"
+#include "../TallTimelinePanel.h"
 #include "AutomationLanesCrossTrackFixture.h"
 #include "AutomationLanesTestFixture.h"
 #include "UI/Timeline/AutomationLanes/AutomationLaneHeader/AutomationLaneHeaderComponent.h"
+#include <algorithm>
 #include <cstdlib>
 #include <functional>
 
@@ -47,7 +49,9 @@ struct RowDrag {
 
 // The KeyMove project with the added LFO's row moved to track 3's Threshold lane, every motion landed: dragging it up
 // over track 1's (now empty) Ratio lane crosses two tracks.
-struct MakeRoom : KeyMove {
+struct MakeRoom
+    : TallTimelinePanel
+    , KeyMove {
     MakeRoom() {
         if (mc == nullptr)
             return;
@@ -63,6 +67,12 @@ struct MakeRoom : KeyMove {
     }
     ModulatorRow* lfoRow() { return lanes().modulatorRowFor(thresholdC, 0); }
     int headerY(synth::LaneId lane) { return panel().laneHeaderForTest(lane)->getY(); }
+    // Scrolls the track list so `row` sits mid-view, clear of the edge zones where a drag scrolls the list.
+    void centreInList(const juce::Component& row) {
+        auto& list = panel().getTrackHeaderViewport();
+        list.setViewPosition(0, std::max(0, row.getY() - list.getMaximumVisibleHeight() / 2));
+        settle();
+    }
     int trackY(int index) { return panel().getTrackHeaderAt(index)->getY(); }
     // Just above the bottom of `lane`'s header: over the lane, at its first slot.
     int overFirstSlot(synth::LaneId lane) {
@@ -312,6 +322,7 @@ const std::vector<MakeRoomSurface>& makeRoomSurfaces() {
              s.settle();
              auto* first = s.lanes().modulatorRowFor(s.thresholdC, 0);
              auto* second = s.lanes().modulatorRowFor(s.thresholdC, 1);
+             s.centreInList(*first); // the last track's rows: at the list's bottom edge otherwise
              const int h = first->getHeight();
              const int before = second->getY();
              RowDrag drag(*first);

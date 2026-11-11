@@ -334,6 +334,8 @@ set(APPUI_SOURCES
     Source/UI/Layout/ReorderDrag/ReorderCancelKey.h
     Source/UI/Layout/ReorderDrag/ReorderFramePump.h
     Source/UI/Layout/ReorderDrag/ReorderDragSession.h
+    Source/UI/Layout/ReorderDrag/ViewportDragScroll.h
+    Source/UI/Layout/ReorderDrag/ViewportDragScroll.cpp
     Source/UI/Layout/ReorderDrag/ReorderLiftLook.h
     Source/UI/Layout/DragCursor.h
     Source/UI/Layout/ExitEnterRowSlots.h
