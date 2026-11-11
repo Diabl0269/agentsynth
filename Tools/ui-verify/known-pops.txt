@@ -1,0 +1,38 @@
+# Changes that still land in one frame in a motion scenario (docs/development/test-mode.md#no-pop-check).
+# One per line: <scenario> <step>[u|r] <ticket> <reason...>. `u` is the undo and `r` the redo of that step.
+# Shrink-only: fix the animation and delete the line; never add one without a ticket. A listed step that does not pop
+# on a run prints a note, not a failure: which frames a busy machine catches varies, so one quiet run proves nothing.
+canvas-header-swap 4 FRO1704 [layout] the Alt+Cmd+1 layout switch swaps the canvas and timeline areas in one frame
+minimap-click-large-project 4 FRO1705 [canvas] a minimap click moves the canvas view in one frame
+timeline-hotkey-toasts 23 FRO1706 [toast] the toast appears in one frame
+cable-end-glide-jack-row 21 FRO1705 [canvas] adding a module moves the canvas view in one frame
+cable-end-glide-jack-row 30 FRO1705 [graph] a jack row appears on the card in one frame
+sequencer-outline-undo 27 FRO1707 [sequencer] undo rewrites the pattern notes in one frame
+sequencer-outline-undo 31 FRO1707 [sequencer] redo rewrites the pattern notes in one frame
+sequencer-outline-undo 22u FRO1707 [sequencer] undoing a key change rewrites the pattern notes in one frame
+sequencer-outline-undo 22r FRO1707 [sequencer] redoing a key change rewrites the pattern notes in one frame
+timeline-hotkey-toasts 20 FRO1706 [toast] the toast appears in one frame
+drum-idea-undo 5 FRO1704 [layout] the drum machine view replaces the editor area in one frame
+drum-machine-paint-stroke 5 FRO1704 [layout] the drum machine view replaces the editor area in one frame
+mod-dot-right-click-one-menu 8 FRO1709 [mod] the sources panel closes in one frame
+mod-row-cross-track-drag 8 FRO1708 [timeline] an automation lane appears in one frame
+mod-row-cross-track-drag 9 FRO1708 [timeline] an automation lane appears in one frame
+mod-row-cross-track-drag 37 FRO1708 [timeline] the timeline toggle icon swaps in one frame
+key-menus-reopen 14 FRO1704 [layout] a small control under the canvas changes in one frame
+key-menus-reopen 23 FRO1704 [layout] the editor area changes in one frame
+lane-change-parameter-rows-still 35 FRO1708 [timeline] the lane rows change in one frame
+mod-matrix-create-source 1u FRO1709 [mod] undoing the project load clears the window in one frame
+mod-matrix-create-source 7u FRO1709 [mod] undoing a source panel edit changes it in one frame
+mod-matrix-create-source 7r FRO1709 [mod] redoing a source panel edit changes it in one frame
+mod-row-drag-follows-pointer 8 FRO1708 [timeline] an automation lane appears in one frame
+mod-row-drag-follows-pointer 9 FRO1708 [timeline] an automation lane appears in one frame
+sequencer-outline-undo 1u FRO1707 [sequencer] undoing the project load changes the window edge in one frame
+sequencer-outline-undo 22 FRO1707 [sequencer] the key change rewrites the pattern notes in one frame
+sequencer-outline-undo 31u FRO1707 [sequencer] undo rewrites the pattern notes in one frame
+sequencer-outline-undo 31r FRO1707 [sequencer] redo rewrites the pattern notes in one frame
+toast-severity-icons 19 FRO1706 [toast] the toast appears in one frame
+toast-severity-icons 20 FRO1706 [toast] the toast appears in one frame
+key-menus-reopen 21 FRO1704 [layout] a small control under the canvas changes in one frame
+mod-matrix-create-source 7 FRO1709 [mod] the sources panel edit changes the window area in one frame
+mod-matrix-create-source 25u FRO1709 [mod] undoing the glide edit changes the sources panel in one frame
+mod-matrix-create-source 25r FRO1709 [mod] redoing the glide edit changes the sources panel in one frame
