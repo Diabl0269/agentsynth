@@ -721,6 +721,7 @@ add_executable(Tests
     UI/MidiRemote/ControllerSurfaceSelectionTests.cpp
     UI/MidiRemote/ControllerSurfaceGroupDragTests.cpp
     UI/MidiRemote/ControllerSurfaceViewTests.cpp
+    UI/MidiRemote/ControllerSurfaceEdgeScrollTests.cpp
     UI/MidiRemote/MidiRemotePanelMoveTests.cpp
     UI/MidiRemote/ControlInspectorTests.cpp
     UI/MidiRemote/PickTargetOverlayTests.cpp

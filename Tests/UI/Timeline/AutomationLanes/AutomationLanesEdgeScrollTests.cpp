@@ -1,7 +1,8 @@
-// AutomationLanesEdgeScrollTests.cpp -- a lane drag follows the view: a dot, a selection of dots or the stretch box
-// held in the edge zone scrolls the shared timeline view and stays under the still pointer, the view stops at beat 0,
-// a held Alt+arrow keeps the moving dot in view, follow-playhead turns off as for a manual scroll, the scroll stops on
-// release, Escape and a tool change, and the whole move is still one undo step. Real events on the real panel's editor.
+// AutomationLanesEdgeScrollTests.cpp -- a lane drag follows the view: a dot, a selection of dots, the stretch box or a
+// selection box held in the edge zone scrolls the shared timeline view and stays under the still pointer, the view
+// stops at beat 0, a held Alt+arrow keeps the moving dot in view, follow-playhead turns off as for a manual scroll, the
+// scroll stops on release, Escape and a tool change, and the whole move is still one undo step. Real events on the real
+// panel's editor.
 
 #include "../../Layout/KeyGlide/KeyGlideTestHost.h"
 #include "AutomationLanesTestFixture.h"
@@ -279,4 +280,34 @@ TEST(AutomationLanesEdgeScroll, EscapeAndAToolChangeStopTheScroll) {
         f.editor->setTool(AutomationLaneEditor::Tool::Pencil);
         EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "a tool change stops the scroll";
     }
+}
+
+// Regression test for FRO1688: a selection box held at the edge never scrolled the view, and its pressed corner was a
+// pixel, so a view scrolled under it would have slid the corner off the dots it was pressed beside.
+TEST(AutomationLanesEdgeScroll, ASelectionBoxHeldAtTheEdgeScrollsAndKeepsItsCornerOnItsBeat) {
+    EdgeLane f;
+    for (int b = 3; b <= 60; b += 3)
+        f.doc.addBreakpoint(f.lane, (double)b, 50.0);
+    const auto rev = f.doc.getRevision();
+    const auto from = f.at(2.5, 80.0);
+    f.press(from);
+    f.dragTo(f.rightEdge(20.0), from);
+    ASSERT_TRUE(f.editor->getPointSelection().isBoxActive());
+    ASSERT_TRUE(f.editor->isEdgeScrollRunningForTest()) << "the box in the edge zone starts the scroll";
+    const double lastBefore = f.view().xToBeat(f.rightEdge(20.0).x);
+
+    f.ticks(30);
+    EXPECT_GT(f.first(), 5.0) << "the view scrolled under the box";
+    const double lastAfter = f.view().xToBeat(f.rightEdge(20.0).x);
+    const auto picked = f.editor->getPointSelection().getSelected();
+    ASSERT_FALSE(picked.empty());
+    EXPECT_EQ(picked.front(), 3.0) << "the corner stayed at beat 2.5, so the first dot is still inside";
+    EXPECT_GT(picked.back(), lastBefore) << "dots that scrolled in are selected";
+    EXPECT_LE(picked.back(), lastAfter);
+    EXPECT_EQ(f.editor->getPointSelection().boxAnchor().x, (int)std::lround(f.view().beatToX(2.5)))
+        << "the box's corner moved with its beat";
+
+    EXPECT_TRUE(f.editor->keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_FALSE(f.editor->isEdgeScrollRunningForTest()) << "Escape stops the scroll with the box";
+    EXPECT_EQ(f.doc.getRevision(), rev) << "a box selects; it never edits the lane";
 }

@@ -70,6 +70,9 @@ public:
     bool release();
     void cancelGesture();
     bool isBoxActive() const noexcept { return box_.isActive(); }
+    // The box's pressed corner; the editor moves it along when the view scrolls under a held box.
+    juce::Point<int> boxAnchor() const noexcept { return box_.anchor(); }
+    void setBoxAnchor(juce::Point<int> pos) noexcept { box_.setAnchor(pos); }
     void paintMarquee(juce::Graphics& g) const;
 
 private:

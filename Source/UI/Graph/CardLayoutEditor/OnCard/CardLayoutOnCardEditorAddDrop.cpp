@@ -48,6 +48,15 @@ void CardLayoutOnCardEditor::dragAdded(const juce::String& paramId, CardLayoutAd
         box->setAlpha(kDraggedPanelAlpha);
     addDrag_.paramId = paramId;
     addDrag_.ghost = {};
+    if (phase == CardLayoutAddRow::DragPhase::End)
+        endDragFollow();
+    else // held at the edge of the canvas view, the canvas scrolls and the ghost follows the pointer onto the card
+        followDragAt(screenPosition, [this, paramId](juce::Point<int> at) {
+            if (addDrag_.paramId != paramId)
+                return false;
+            dragAdded(paramId, CardLayoutAddRow::DragPhase::Move, at);
+            return true;
+        });
     if (phase != CardLayoutAddRow::DragPhase::End && section >= 0 && cardArea().contains(at)) {
         const auto size = addedCellSize(section, paramId);
         addDrag_.ghost = oncard::clampToLimits({at - size / 2, at - size / 2 + size},

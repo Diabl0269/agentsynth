@@ -183,6 +183,7 @@ void CardLayoutOnCardEditor::dragTo(const juce::MouseEvent& e) {
             showDragCursor(*outline);
         }
     }
+    followControlDrag(e); // held at the edge of the canvas view, the canvas scrolls and the control stays under it
     // Below the card the control stays where it last was (in the card) and a release hides it; back above the
     // edge it follows the pointer again.
     const bool below = pointer.y > cardArea().getBottom();
@@ -363,6 +364,7 @@ void CardLayoutOnCardEditor::setHideZoneShown(bool shown) {
 }
 
 void CardLayoutOnCardEditor::endDrag() {
+    endDragFollow();
     escapeKey_.disarm();
     guides_.clear();
     dropSection_ = -1;
