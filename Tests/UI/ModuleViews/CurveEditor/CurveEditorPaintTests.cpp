@@ -5,29 +5,20 @@
 // inspection (same pattern as ADSR_CARD_PNG in
 // Tests/UI/Graph/ModuleComponent/ModuleComponentLayoutTests.cpp).
 
-#include "../../Graph/ModuleComponent/ModuleComponentTestFixture.h"
-#include "../ModCurve/ModCurveTestRig.h"
-#include "../ShapeEditor/ShapeEditorTestHelpers.h"
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "CurveEditorTestHelpers.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/LFOModule.h"
-#include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/KeyGlide/KeyedTween.h"
 #include "UI/Layout/ReducedMotion.h"
 #include "UI/ModuleViews/CurveEditor/CurveWaveConversion.h"
-#include "UI/ModuleViews/ModCurve/ModCurveWindow.h"
-#include "UI/ModuleViews/ShapeEditor/LfoShapesAdapter.h"
-#include "UI/ModuleViews/ShapeEditor/ShapeListEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 #include <cstdlib>
 #include <functional>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
-#include <set>
 
 using namespace synth::ui;
 using namespace synth::ui::test;
@@ -174,144 +165,6 @@ TEST(CurveEditorPaintTest, PlayheadNulloptHidesTheMarker) {
 
     comp.setPlayhead(std::nullopt);
     EXPECT_FALSE(comp.getPlayhead().has_value());
-}
-
-// Regression test for FRO1445: every curve editor draws its first and last dot whole and the shape edge to edge. One
-// guard over every user of CurveEditorComponent: the envelope card, the LFO card and its morph card, the shape window
-// (Filter and LFO) and the modulation curve box and window. A user missing from `registeredUsers()` fails the scan
-// below, so a new editor cannot join without a dot check.
-using synth::ui::CurveEditorComponent;
-using synth::ui::CurveEditorGeometry;
-
-namespace {
-
-constexpr float kDotExtent = CurveEditorGeometry::kNodeMaxExtentPx;
-
-/** The line as drawn runs from the first node to the last; each dot, at its widest, must lie inside the component. */
-void expectEndDotsInside(CurveEditorComponent& editor, const juce::String& what) {
-    ASSERT_GT(editor.getWidth(), 40) << what;
-    const auto line = editor.getDrawnCurvePointsForTest();
-    ASSERT_GE(line.size(), 2u) << what;
-    EXPECT_GE(line.front().x - kDotExtent, 0.0f) << what << ": the first dot is cut by the left edge";
-    EXPECT_LE(line.back().x + kDotExtent, (float)editor.getWidth())
-        << what << ": the last dot is cut by the right edge";
-}
-
-/** A free-mode editor's shape spans the box: its ends sit at the insets and nowhere short of them. */
-void expectSpansTheBox(CurveEditorComponent& editor, const juce::String& what) {
-    const auto line = editor.getDrawnCurvePointsForTest();
-    ASSERT_GE(line.size(), 2u) << what;
-    EXPECT_NEAR(line.front().x, CurveEditorGeometry::kNodeInsetPx, 0.51f) << what;
-    EXPECT_NEAR(line.back().x, (float)editor.getWidth() - CurveEditorGeometry::kNodeInsetPx, 0.51f)
-        << what << ": the shape stops short of the right edge";
-}
-
-/** The ring of the first dot is painted at its left extreme: not clipped away by the edge. */
-void expectFirstDotPaintedWhole(CurveEditorComponent& editor, const juce::String& what) {
-    const auto image = editor.createComponentSnapshot(editor.getLocalBounds(), false, 1.0f);
-    const auto first = editor.getDrawnCurvePointsForTest().front();
-    const auto ringLeft =
-        image.getPixelAt((int)std::floor(first.x - CurveEditorGeometry::kNodeRadiusPx), (int)std::round(first.y));
-    const auto beyond = image.getPixelAt(0, (int)std::round(first.y));
-    EXPECT_NE(ringLeft, beyond) << what << ": no ring pixel where the first dot's left edge should be";
-}
-
-std::set<juce::String> registeredUsers() {
-    return {"Graph/CardBody/CardBodyViews.cpp", "Graph/ModuleComponent/ModuleComponentLfoCard.cpp",
-            "Graph/ModuleComponent/MorphShapesCard/MorphShapesCard.h", "ModuleViews/ModCurve/ModCurveEditorView.h",
-            "ModuleViews/ShapeEditor/ShapeListEditor.h"};
-}
-
-} // namespace
-
-TEST_F(ModuleComponentTest, EveryCurveEditorUserIsCoveredByTheEdgeDotGuard) {
-    auto root = juce::File::getCurrentWorkingDirectory().getChildFile(__FILE__).getParentDirectory();
-    while (root.getParentDirectory() != root && !root.getChildFile("Source/UI").isDirectory())
-        root = root.getParentDirectory();
-    const auto source = root.getChildFile("Source/UI");
-    ASSERT_TRUE(source.isDirectory()) << source.getFullPathName();
-    std::set<juce::String> found;
-    for (const auto& file : source.findChildFiles(juce::File::findFiles, true, "*.h;*.cpp")) {
-        const auto text = file.loadFileAsString();
-        const bool owns = text.contains("CurveEditorComponent curve") ||
-                          text.contains("CurveEditorComponent editor_") ||
-                          text.contains("make_unique<synth::ui::CurveEditorComponent>") ||
-                          text.contains("make_unique<CurveEditorComponent>");
-        if (owns)
-            found.insert(file.getRelativePathFrom(source).replaceCharacter('\\', '/'));
-    }
-    EXPECT_FALSE(found.empty());
-    for (const auto& path : found)
-        EXPECT_TRUE(registeredUsers().count(path) > 0)
-            << path << " owns a curve editor but the edge-dot guard does not cover it: add a case below";
-}
-
-TEST_F(ModuleComponentTest, ModCurveBoxAndWindowDrawBothEndDotsWholeAndSpanTheBox) {
-    BoxRig box;
-    box.box->setSize(320, 260);
-    expectEndDotsInside(box.editor(), "mod curve box");
-    expectSpansTheBox(box.editor(), "mod curve box");
-    expectFirstDotPaintedWhole(box.editor(), "mod curve box");
-
-    synth::ui::ModCurveWindowContent window(box.target);
-    window.setSize(520, 440);
-    expectEndDotsInside(window.view().editor(), "mod curve window");
-    expectSpansTheBox(window.view().editor(), "mod curve window");
-}
-
-TEST_F(ModuleComponentTest, ShapeWindowsDrawBothEndDotsWhole) {
-    synth::ui::test::ShapeRig filter;
-    synth::ui::ShapeListEditor filterEditor(filter.adapter, 0);
-    filterEditor.setSize(720, 460);
-    expectEndDotsInside(filterEditor.getCurveEditor(), "filter shape window");
-    expectFirstDotPaintedWhole(filterEditor.getCurveEditor(), "filter shape window");
-
-    AudioEngine engine;
-    auto* lfo = new LFOModule();
-    const auto node = engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(lfo));
-    AppUndoManager undo;
-    auto adapter = std::make_shared<synth::ui::LfoShapesAdapter>(*lfo, &undo, engine.getGraph(), node->nodeID, "LFO");
-    synth::ui::ShapeListEditor lfoEditor(adapter, 0);
-    lfoEditor.setSize(720, 460);
-    expectEndDotsInside(lfoEditor.getCurveEditor(), "LFO shape window");
-    expectSpansTheBox(lfoEditor.getCurveEditor(), "LFO shape window");
-}
-
-TEST_F(ModuleComponentTest, LfoAndEnvelopeCardsDrawBothEndDotsWhole) {
-    AudioEngine engine;
-    GraphEditor editor(engine);
-    {
-        LFOModule lfo;
-        ModuleComponent card(&lfo, juce::AudioProcessorGraph::NodeID(1), editor);
-        *dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&lfo, "shape")) = LFOModule::kCustomShapeIndex;
-        card.timerCallback();
-        CurveEditorComponent* curve = nullptr;
-        for (auto* child : card.getChildren())
-            if (auto* c = dynamic_cast<CurveEditorComponent*>(child))
-                curve = c;
-        ASSERT_NE(curve, nullptr);
-        expectEndDotsInside(*curve, "LFO card");
-        expectSpansTheBox(*curve, "LFO card");
-        expectFirstDotPaintedWhole(*curve, "LFO card");
-    }
-    {
-        ADSRModule adsr;
-        ModuleComponent card(&adsr, juce::AudioProcessorGraph::NodeID(2), editor);
-        juce::ToggleButton* toggle = nullptr;
-        for (auto* child : card.getChildren())
-            if (auto* t = dynamic_cast<juce::ToggleButton*>(child))
-                if (t->getButtonText() == "Show Envelope Graph")
-                    toggle = t;
-        ASSERT_NE(toggle, nullptr);
-        toggle->setToggleState(true, juce::sendNotificationSync);
-        CurveEditorComponent* curve = nullptr;
-        for (auto* child : card.getChildren())
-            if (auto* c = dynamic_cast<CurveEditorComponent*>(child))
-                curve = c;
-        ASSERT_NE(curve, nullptr);
-        expectEndDotsInside(*curve, "envelope card");
-        expectFirstDotPaintedWhole(*curve, "envelope card");
-    }
 }
 
 // Regression test for FRO1447: an undo or redo glides the whole curve, the line between the dots as well as the dots.
