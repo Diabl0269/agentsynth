@@ -38,10 +38,10 @@ void PreferencesSettingsTab::setShowSectionsStripEnabled(bool enabled) {
     persistSectionsSetting(synth::ui::kTimelineShowSectionsStripKey, enabled);
 }
 
-bool PreferencesSettingsTab::isSectionsCoverOnDropEnabled() const { return sectionsCoverOnDropToggle.getToggleState(); }
+bool PreferencesSettingsTab::isSectionsCoverOnDropEnabled() const { return sectionsDropCombo.getSelectedId() == 2; }
 
 void PreferencesSettingsTab::setSectionsCoverOnDropEnabled(bool enabled) {
-    sectionsCoverOnDropToggle.setToggleState(enabled, juce::dontSendNotification);
+    sectionsDropCombo.setSelectedId(enabled ? 2 : 1, juce::dontSendNotification);
     persistSectionsSetting(synth::ui::kTimelineSectionsCoverOnDropKey, enabled);
 }
 
@@ -110,16 +110,27 @@ void PreferencesSettingsTab::initTimelineEditingToggles() {
         persistSectionsSetting(synth::ui::kTimelineShowSectionsStripKey, showSectionsStripToggle.getToggleState());
     };
 
-    contentHost.addAndMakeVisible(sectionsCoverOnDropToggle);
-    sectionsCoverOnDropToggle.setToggleState(synth::ui::sectionsCoverOnDrop(appProperties.getUserSettings()),
-                                             juce::dontSendNotification);
-    sectionsCoverOnDropToggle.setTooltip(
-        "When off (the default), placing or moving a section makes room: the music after it shifts later. Turn it on "
-        "to "
-        "cover the music where the section lands instead. Holding Shift while you drop does the other one.");
-    sectionsCoverOnDropToggle.onClick = [this] {
-        persistSectionsSetting(synth::ui::kTimelineSectionsCoverOnDropKey, sectionsCoverOnDropToggle.getToggleState());
+    contentHost.addAndMakeVisible(sectionsDropLabel);
+    sectionsDropLabel.setText("Timeline: dropping a section on other music", juce::dontSendNotification);
+    sectionsDropLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    contentHost.addAndMakeVisible(sectionsDropCombo);
+    sectionsDropCombo.setTitle(sectionsDropLabel.getText());
+    sectionsDropCombo.addItem("Pushes the music later", 1);
+    sectionsDropCombo.addItem("Covers it", 2);
+    sectionsDropCombo.setTooltip(
+        "Pushes the music later (the default): the section goes in between and everything after it moves later. Covers "
+        "it: the section replaces the music where it lands. Hold Shift while you drop to do the other one.");
+    sectionsDropCombo.setSelectedId(synth::ui::sectionsCoverOnDrop(appProperties.getUserSettings()) ? 2 : 1,
+                                    juce::dontSendNotification);
+    sectionsDropCombo.onChange = [this] {
+        persistSectionsSetting(synth::ui::kTimelineSectionsCoverOnDropKey, sectionsDropCombo.getSelectedId() == 2);
     };
+
+    contentHost.addAndMakeVisible(sectionsDropHint);
+    sectionsDropHint.setText("Hold Shift while you drop to do the other one, that time only.",
+                             juce::dontSendNotification);
+    styleMutedHintLabel(sectionsDropHint);
 
     contentHost.addAndMakeVisible(askBeforeRemovingLfoToggle);
     askBeforeRemovingLfoToggle.setToggleState(
@@ -328,7 +339,8 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
     // Group 5: the two loop-locator toggles and the LFO-removal and track-delete questions (no divider between them).
     {
         const std::initializer_list<juce::Component*> rows{&loopSelectionArmsToggle,    &doubleClickSpansLocatorsToggle,
-                                                           &showSectionsStripToggle,    &sectionsCoverOnDropToggle,
+                                                           &showSectionsStripToggle,    &sectionsDropLabel,
+                                                           &sectionsDropCombo,          &sectionsDropHint,
                                                            &askBeforeRemovingLfoToggle, &askBeforeDeletingTrackToggle};
         const bool visible = groupMatches(rows);
         setGroupVisible(rows, visible);
@@ -340,8 +352,12 @@ void PreferencesSettingsTab::layoutTimelineGroups(int& y, int contentWidth, bool
             y += 34;
             showSectionsStripToggle.setBounds({0, y, contentWidth, 24});
             y += 34;
-            sectionsCoverOnDropToggle.setBounds({0, y, contentWidth, 24});
-            y += 34;
+            juce::Rectangle<int> dropRow(0, y, contentWidth, 24);
+            sectionsDropLabel.setBounds(dropRow.removeFromLeft(270));
+            sectionsDropCombo.setBounds(dropRow.removeFromLeft(200));
+            y += 24;
+            sectionsDropHint.setBounds({0, y, contentWidth, kHintHeight});
+            y += kHintHeight + 2;
             askBeforeRemovingLfoToggle.setBounds({0, y, contentWidth, 24});
             y += 34;
             askBeforeDeletingTrackToggle.setBounds({0, y, contentWidth, 24});

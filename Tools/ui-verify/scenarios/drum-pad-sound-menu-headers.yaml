@@ -32,6 +32,6 @@ steps:
   - wait: {}
   - expect: {count: {prefix: "card:Drum Kit", equals: 1}, within_ms: 1500}
   - expect: {id: "card:Drum Kit > drumPads", padCount: 8, pickedPad: 1}
-  - click: {id: "card:Drum Kit > drumPads", x: 30, y: 22, button: right}
-  - wait: {}
+  - glide: {name: menu-open, frames: 12, do: {click: {id: "card:Drum Kit > drumPads", x: 30, y: 22, button: right}}}
+  - wait: {settleMs: 600}
   - mark: {check: 1, name: pad-menu-headers}

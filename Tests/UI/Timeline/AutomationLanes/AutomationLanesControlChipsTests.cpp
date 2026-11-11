@@ -466,6 +466,31 @@ TEST(AutomationLanesControlChipsTest, DraggingAChipSidewaysInTheHeaderReordersAn
     EXPECT_EQ(shownOn(strip), (Controls{LaneControl::AddMod, LaneControl::ReadWrite})) << "dropped away: back in place";
 }
 
+// Why a chip drag needs no follow: it can only land on its own header or that header's tray, so a drop anywhere else in
+// the track list (another lane's header, far down the list) changes nothing on either lane and the chip goes back.
+TEST(AutomationLanesControlChipsTest, AChipDroppedOnAnotherLaneOrDownTheListGoesBackAndChangesNothing) {
+    ChipPanel f;
+    auto& strip = f.strip(f.lane);
+    auto& other = f.strip(f.lane2);
+    strip.enterEdit();
+    const auto before = shownOn(strip);
+    const auto otherBefore = shownOn(other);
+    auto* add = strip.chipFor(LaneControl::AddMod);
+    ASSERT_NE(add, nullptr);
+
+    const auto onOtherHeader = add->getLocalPoint(&other, juce::Point<int>(2, other.getHeight() / 2)).toFloat();
+    dragAcross(*add, centreOf(*add), onOtherHeader);
+    EXPECT_EQ(shownOn(strip), before) << "another lane's header is not a drop zone";
+    EXPECT_EQ(shownOn(other), otherBefore);
+    EXPECT_EQ(add->getParentComponent(), &strip) << "the chip goes back to its own header";
+
+    auto& list = f.panel.getTrackHeaderViewport();
+    const auto downTheList = add->getLocalPoint(&list, juce::Point<int>(40, list.getHeight() - 2)).toFloat();
+    dragAcross(*add, centreOf(*add), downTheList);
+    EXPECT_EQ(shownOn(strip), before) << "a drop at the list's edge changes nothing";
+    EXPECT_EQ(list.getViewPositionY(), 0) << "and scrolls nothing";
+}
+
 TEST(AutomationLanesControlChipsTest, OnlyOneLaneIsInEditModeAtATime) {
     ChipPanel f;
     f.strip(f.lane).enterEdit();

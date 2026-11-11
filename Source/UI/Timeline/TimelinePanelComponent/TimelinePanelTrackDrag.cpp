@@ -5,6 +5,7 @@
 #include "AppUndoManager.h"
 #include "TimelinePanelComponent.h"
 #include "UI/Layout/ReducedMotion.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -13,8 +14,6 @@
 namespace synth::ui {
 
 namespace {
-constexpr float kAutoscrollZone = 32.0f;
-constexpr float kAutoscrollMaxStep = 18.0f;
 constexpr int kDragRepeatMs = 40;
 constexpr float kRowRadius = 3.0f;
 
@@ -93,22 +92,14 @@ void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY)
 }
 
 // Scrolls the track list while the pointer is within the edge zone of its viewport; the drag
-// auto-repeat keeps the events coming when the pointer rests there. Faster the deeper into the zone.
-// It goes through scrollTrackRows so the clip lanes and the viewport stay in step.
+// auto-repeat keeps the events coming when the pointer rests there. Faster the deeper into the zone
+// (the shared step, UI/Layout/ReorderDrag/ViewportDragScroll.h). It goes through scrollTrackRows so
+// the clip lanes and the viewport stay in step. Every reorder in the list uses it: track rows here,
+// lane headers and modulator rows through TimelineAutomationLanes::followReorderDrag.
 void TimelinePanelComponent::autoscrollForTrackPointer(int screenY) {
-    const float y = static_cast<float>(trackHeaderViewport_.getLocalPoint(nullptr, juce::Point<int>(0, screenY)).y);
-    const float visible = static_cast<float>(trackHeaderViewport_.getMaximumVisibleHeight());
-    float depth = 0.0f;
-    if (y < kAutoscrollZone)
-        depth = -(kAutoscrollZone - std::max(y, 0.0f)) / kAutoscrollZone;
-    else if (y > visible - kAutoscrollZone)
-        depth = (std::min(y, visible) - (visible - kAutoscrollZone)) / kAutoscrollZone;
-    if (depth == 0.0f)
-        return;
-    int step = static_cast<int>(std::lround(depth * kAutoscrollMaxStep));
-    if (step == 0)
-        step = depth < 0.0f ? -1 : 1;
-    scrollTrackRows(static_cast<double>(step));
+    using namespace viewport_drag_scroll;
+    if (const int step = stepFor(trackHeaderViewport_, {0, screenY}, Axis::Vertical); step != 0)
+        scrollTrackRows(static_cast<double>(step));
 }
 
 void TimelinePanelComponent::updateTrackDrag(int screenY) {

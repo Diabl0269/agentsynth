@@ -32,6 +32,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelMarkerTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelineRulerMarkerDragPreviewCommitTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelZoomSnapScrollTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelineListDragFollowTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTrackHeaderTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelTrackSizingTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelinePanel/TimelinePanelClipSizingTests.cpp
@@ -79,6 +80,7 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripDragTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripDragFollowTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripDropHintTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/SectionDropPlanTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/SectionGroupDropPlanTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/TimelineSectionStrip/TimelineSectionStripMultiSelectTests.cpp

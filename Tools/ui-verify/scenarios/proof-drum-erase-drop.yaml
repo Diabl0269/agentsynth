@@ -1,0 +1,29 @@
+# FRO1608 check 2 (FRO1548): drag-erase a run of hits and let go; they stay gone, no ghost regrowing.
+motion: true
+pop_check: {undo: false}
+record: true
+save_project: drum-erase-drop
+steps:
+  - openProject: {path: "${FIXTURES}/drum-kit-track-clip.agsproj"}
+  - wait: {}
+  - key: {keys: cmd+t}
+  - wait: {}
+  - click: {id: trackDrumMachineButton}
+  - wait: {}
+  - expect: {id: timelineDrumMachine, showing: true, within_ms: 1500}
+  - mouseDown: {id: timelineDrumMachine, x: 251, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 409, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 567, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 726, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 884, y: 62}
+  - mouseUp: {id: timelineDrumMachine, x: 884, y: 62}
+  - wait: {settleMs: 600}
+  - expect: {id: drumMachineState, hitCount: 9, within_ms: 1500}
+  - mouseDown: {id: timelineDrumMachine, x: 409, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 430, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 488, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 567, y: 62}
+  - mouseMoveHeld: {id: timelineDrumMachine, x: 646, y: 62}
+  - glide: {name: erase-drop-frames, frames: 14, do: {mouseUp: {id: timelineDrumMachine, x: 646, y: 62}}}
+  - expect: {id: drumMachineState, stroke: false, hitCount: 5, hits: "36:1,2,7,8,9", within_ms: 1500}
+  - mark: {check: 2, name: erase-stays-gone}

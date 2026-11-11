@@ -106,8 +106,13 @@ void TimelineAutomationLanes::beginLaneDrag(synth::LaneId lane, int screenY) {
     laneDrag_.begin(slots, key, pointer - slots[static_cast<size_t>(key)].start, pointer);
 }
 
+// The list follows first (only while really dragging, so Esc stops it), then the pointer is read in the scrolled list.
 void TimelineAutomationLanes::dragLane(int screenY) {
-    if (dragLaneIds_.empty() || !laneDrag_.dragTo(laneDragPointerY(screenY)))
+    if (dragLaneIds_.empty())
+        return;
+    if (laneDrag_.animator().isDragging() && followReorderDrag)
+        followReorderDrag(screenY);
+    if (!laneDrag_.dragTo(laneDragPointerY(screenY)))
         return;
     liftedLane_ = dragLaneIds_[static_cast<size_t>(laneDrag_.animator().getDraggedKey())];
     onLaneDragFrame();

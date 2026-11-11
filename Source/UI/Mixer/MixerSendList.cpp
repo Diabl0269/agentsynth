@@ -12,6 +12,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/DragCursor.h"
 #include "UI/Layout/ReorderDrag/ReorderLiftLook.h"
+#include "UI/Layout/ReorderDrag/ViewportDragScroll.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
@@ -404,7 +405,10 @@ void MixerSendList::mouseDown(const juce::MouseEvent& event) {
 void MixerSendList::mouseDrag(const juce::MouseEvent& event) {
     if (pressedRow_ < 0)
         return;
-    if (rowDrag_.dragTo(event.getEventRelativeTo(this).position.y)) {
+    // As MixerInsertList::mouseDrag: the section frame follows a row held at its edge.
+    using namespace viewport_drag_scroll;
+    const auto pointer = pointerOf(event);
+    if (rowDrag_.dragTo(followAndLocate(*this, pointer, Axis::Vertical, rowDrag_.animator().isDragging()))) {
         updateHoverCursor(event.getPosition());
         placeRows();
     }

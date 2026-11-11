@@ -35,13 +35,10 @@ steps:
   - click: {id: "card:Wavetable > cardTabStrip", x: 10}   # the Tune tab, already shown: focuses the strip
   - key: {keys: right}                                      # the Unison tab
   - wait: {}
-  - drag: {from: "card:LFO", fromX: 268, fromY: 56, to: "card:Wavetable > Unison"}
-  - wait: {}
+  - mouseDown: {id: "card:LFO", x: 268, y: 56}
+  - mouseMoveHeld: {id: "card:Wavetable > Unison"}
+  - mouseMoveHeld: {id: "card:Wavetable > Unison"}
+  - glide: {name: cable-drop, frames: 14, do: {mouseUp: {id: "card:Wavetable > Unison"}}}
+  - wait: {settleMs: 600}
   - expect: {id: "card:Wavetable", contains: {cabledTargets: Unison}, within_ms: 3000}
-  - key: {keys: a}
-  - wait: {}
-  - key: {keys: s}
-  - wait: {}
-  - key: {keys: d}
-  - wait: {}
   - mark: {check: 1, name: unison-cable}

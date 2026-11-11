@@ -31,6 +31,8 @@ The strip's left side can sit on any white key (it scrolls smoothly, not by octa
   every key further out, up to 70. The key under the pointer keeps changing, so the edge or band keeps moving; every note
   is reachable in one drag. Scrolling starts only after the pointer has moved 3 px, so pressing an edge that sits at the
   strip's end does nothing by itself. `beginDragAutoRepeat` keeps the drag events coming while the pointer rests.
+- **Escape during a drag** puts the range and the strip back where the press found them and commits nothing; the
+  scroll stops at once, though the button is still down ([layout.md](layout.md#every-drag-follows-the-view)).
 - **Overview bar**: click or drag to centre the strip on that spot of the keyboard. It never changes the range.
 - **Note names**: click the low or high name (without dragging) and type an exact key such as `C#3` or `Bb2` (octave
   numbering follows `setMiddleCOctave`), then Enter. The edge goes exactly there, with no scale snap; if it passes the other

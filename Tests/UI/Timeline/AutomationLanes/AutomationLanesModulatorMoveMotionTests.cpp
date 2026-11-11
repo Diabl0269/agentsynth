@@ -4,6 +4,7 @@
 // path is forced (FadeAnimateGuard) and the tweens are stepped by hand, never by frames.
 
 #include "../../Layout/FadeVisibilityTestGuard.h"
+#include "../TallTimelinePanel.h"
 #include "AutomationLanesAmountFixture.h"
 
 using synth::ui::ModulatorRow;
@@ -25,7 +26,9 @@ void dragRowToScreenY(ModulatorRow& row, int screenY) {
 }
 
 // A Cutoff lane carrying an LFO and an empty Resonance lane below it on the same track, everything landed.
-struct MoveMotionScene : amount_test::AmountScene {
+struct MoveMotionScene
+    : TallTimelinePanel
+    , amount_test::AmountScene {
     synth::LaneId resLane;
 
     MoveMotionScene() {

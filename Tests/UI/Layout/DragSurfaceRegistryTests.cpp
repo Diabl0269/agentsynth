@@ -190,6 +190,28 @@ const std::vector<Follows> kFollow = {
     {"MixerColourDot", kForwarder},
     {"SwatchButton", kForwarder},
     {"ContextMenuForwardingLabel", kForwarder},
+    // Reorders in a scrolling list: the list follows a row held at its edge
+    // (UI/Layout/ReorderDrag/ViewportDragScroll.h).
+    {"TimelineTrackHeaderComponent",
+     "follow:TimelineListDragFollow.ATrackRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"AutomationLaneHeaderComponent",
+     "follow:TimelineListDragFollow.ALaneHeaderHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"ModulatorRow",
+     "follow:TimelineListDragFollow.AModulatorRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"MixerInsertList",
+     "follow:MixerListDragFollow.AnInsertRowHeldAtTheSectionEdgeScrollsTheSectionAndStaysUnderThePointer"},
+    {"MixerSendList",
+     "follow:MixerListDragFollow.ASendRowHeldAtTheSectionEdgeScrollsTheSectionAndStaysUnderThePointer"},
+    {"MixerZonesRow", "follow:MixerListDragFollow.AZonesRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"MixerColumnHeader", "follow:MixerListDragFollow.AColumnHeldAtThePanelEdgeScrollsTheMixerAndStaysUnderThePointer"},
+    {"DragHandle", "follow:DialogListDragFollow.APortRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"CardLayoutEditorGrip",
+     "follow:DialogListDragFollow.ACardLayoutRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer"},
+    {"NoteRangePicker",
+     "follow:NoteRangePickerDragFollow.AnEdgeHeldAtTheStripsEndScrollsTheStripAndStaysOnTheKeyUnderThePointer"},
+    {"LaneControlChip",
+     "follow-exempt: a chip lands only on its own lane header or its tray, anywhere else it goes "
+     "back (AutomationLanesControlChipsTest.AChipDroppedOnAnotherLaneOrDownTheListGoesBackAndChangesNothing)"},
 };
 
 // A drag that can carry something out of a view that scrolls and does not follow yet. The list may only shrink: the
@@ -197,28 +219,17 @@ const std::vector<Follows> kFollow = {
 const std::vector<KnownGap> kFollowGaps = {
     {"GraphEditor", "FRO1688", "selection box, cable and drops from the library: the canvas does not pan"},
     {"TimelineRulerComponent", "FRO1686", "marker and locator drags stop at the view edge"},
-    {"TimelineTrackHeaderComponent", "FRO1687", "track reorder does not scroll the track list"},
-    {"AutomationLaneHeaderComponent", "FRO1687", "lane reorder does not scroll the track list"},
-    {"LaneControlChip", "FRO1687", "chip reorder does not scroll"},
-    {"ModulatorRow", "FRO1687", "modulator row reorder does not scroll the track list"},
     {"PianoRollVelocityLane", "FRO1686", "a velocity ramp stops at the roll's edge"},
     {"DrumMachineComponent", "FRO1686", "edge drags stop at the view edge"},
     {"DrumHitLane", "FRO1686", "a ramp across a lane stops at the view edge"},
-    {"MixerInsertList", "FRO1687", "insert reorder does not scroll the list"},
-    {"MixerSendList", "FRO1687", "send reorder does not scroll the list"},
-    {"MixerColumnHeader", "FRO1687", "column reorder does not scroll the mixer"},
-    {"MixerZonesRow", "FRO1687", "zone drag does not scroll the mixer"},
     {"ControllerSurfaceComponent", "FRO1688", "selection box: triage whether the surface scrolls"},
     {"ControllerSurfaceCell", "FRO1688", "cell move: triage whether the surface scrolls"},
-    {"DragHandle", "FRO1687", "macro port row reorder: triage whether the list scrolls"},
-    {"CardLayoutEditorGrip", "FRO1687", "list editor row reorder: triage whether the list scrolls"},
     {"CardLayoutOutline", "FRO1688", "on-card row drag: triage whether it can leave the card's view"},
     {"CardLayoutAddRow", "FRO1688", "on-card row drag: triage whether it can leave the card's view"},
     {"CardLayoutGroupHandle", "FRO1688", "on-card group move: triage whether it can leave the card's view"},
-    {"NoteRangePicker", "FRO1687", "range edge drag: triage whether the keyboard strip scrolls"},
 };
 // What kFollowGaps holds today; it may only go down.
-constexpr std::size_t kFollowGapCeiling = 21;
+constexpr std::size_t kFollowGapCeiling = 10;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Scanning

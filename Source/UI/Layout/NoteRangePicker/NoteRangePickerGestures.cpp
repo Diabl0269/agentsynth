@@ -30,6 +30,7 @@ void NoteRangePicker::beginDrag(const juce::MouseEvent& e) {
     drag_.startX = p.x;
     drag_.startLow = drag_.anchorLow = low_;
     drag_.startHigh = drag_.anchorHigh = high_;
+    drag_.startScroll = scroll_;
     drag_.lastTime = juce::Time::getMillisecondCounterHiRes() * 0.001;
     if (overviewHeight() > 0 && p.y < (float)stripTop()) {
         drag_.kind = DragKind::Overview;
@@ -118,6 +119,19 @@ void NoteRangePicker::mouseUp(const juce::MouseEvent&) {
         beginNoteEdit(*done.label);
 }
 
+// Esc while the button is held puts the range and the strip back where the press found them. The auto-repeat stops, and
+// the drag events still coming until the release find no gesture, so nothing scrolls on and the release commits
+// nothing.
+void NoteRangePicker::cancelDrag() {
+    const Drag cancelled = drag_;
+    drag_ = {};
+    juce::Component::beginDragAutoRepeat(0);
+    if (cancelled.kind == DragKind::Overview)
+        setScrollNow(cancelled.startScroll);
+    else
+        commit(cancelled.startLow, cancelled.startHigh, true, cancelled.startScroll);
+}
+
 void NoteRangePicker::mouseMove(const juce::MouseEvent& e) {
     auto cursor = juce::MouseCursor::PointingHandCursor;
     if (overviewHeight() > 0 && e.position.y < (float)stripTop())
@@ -169,10 +183,14 @@ void NoteRangePicker::finishUserChange(int lo, int hi, Part part) {
 }
 
 // Left and Right: the focused edge moves one scale note (Shift: an octave); the range moves one scale note (Shift: an
-// octave). Page Up and Page Down show the octave above or below. Enter on an edge types a note. Returns whether the
-// key was one of those.
+// octave). Page Up and Page Down show the octave above or below. Enter on an edge types a note. Esc during a drag
+// cancels it. Returns whether the key was one of those.
 bool NoteRangePicker::keyPressedOn(Part part, const juce::KeyPress& key) {
     const int code = key.getKeyCode();
+    if (code == juce::KeyPress::escapeKey && drag_.kind != DragKind::None) {
+        cancelDrag(); // the press gave this stop the focus, so Esc mid-drag lands here
+        return true;
+    }
     if (code == juce::KeyPress::pageUpKey || code == juce::KeyPress::pageDownKey) {
         scrollTo(scroll_ + (code == juce::KeyPress::pageUpKey ? 7.0f : -7.0f));
         return true;

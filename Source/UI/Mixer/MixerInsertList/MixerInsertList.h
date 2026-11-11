@@ -189,6 +189,7 @@ public:
     bool canMoveRowForTest(int rowIndex, int delta) const { return canMoveRow(rowIndex, delta); }
     bool isRowDragActiveForTest() const noexcept { return rowDrag_.isReordering(); }
     bool sendEscapeToRowDragForTest() { return rowDrag_.sendEscapeForTest(); }
+    float getRowDrawTopForTest(int rowIndex) const { return rowDrawTop(rowIndex); }
     /** The module names top to bottom as the drag draws them right now (the order a release would commit). */
     std::vector<juce::String> getDragPreviewNamesForTest() const;
     /** The last startSettleFrom(): row -1 if none. */

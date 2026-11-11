@@ -3,8 +3,10 @@
 // Real mouse down/drag/up on the grip (../../Layout/ReorderDragPreviewCommit.h).
 
 #include "../../Layout/ReorderDragPreviewCommit.h"
+#include "../../Layout/ViewportDragFollowEvents.h"
 #include "CardLayoutEditorTestHelpers.h"
 #include "Modules/FilterModule.h"
+#include <memory>
 
 using namespace cardlayouteditor_test;
 using namespace reorder_preview_commit;
@@ -97,4 +99,46 @@ TEST(CardLayoutEditorGripPreviewCommit, ADropCommitsTheRowOrderTheLastDragEventS
         EXPECT_EQ(outcome.preview, expected);
         expectCommitsWhatItPreviewed(outcome, before);
     }
+}
+
+// A row held at the list's edge scrolls the list along (the port dialog's rows are in DialogListDragFollowTests.cpp,
+// the checklist in ../../Layout/ViewportDragFollow.h).
+TEST(DialogListDragFollow, ACardLayoutRowHeldAtTheListEdgeScrollsTheListAndStaysUnderThePointer) {
+    viewport_drag_follow::expectFollows([] {
+        auto rig = std::make_shared<EditorCanvas>();
+        const auto id = rig->add(std::make_unique<FilterModule>());
+        auto* editor = rig->openList(id);
+        EXPECT_NE(editor, nullptr);
+        auto& content = editor->getRowsContentForTest();
+        auto* viewport = content.findParentComponentOfClass<juce::Viewport>();
+        EXPECT_NE(viewport, nullptr);
+        const auto middleOf = [&](int row) {
+            return viewport->getLocalPoint(&content, juce::Point<int>(0, editor->getRowBoundsForTest(row).getCentreY()))
+                .y;
+        };
+        const int pressed = viewport_drag_follow::firstRowClearOfTheEdges(
+            editor->getVisibleRowCountForTest(), viewport->getMaximumVisibleHeight(), middleOf,
+            [editor](int row) { return editor->getRowForTest(row)->isDraggable(); });
+        EXPECT_GE(pressed, 0);
+        // The drop rebuilds the rows, so the dragged one is found again by its key on every event.
+        const auto key = editor->getVisibleRowParamIdForTest(pressed);
+        const auto grip = [editor, key]() -> juce::Component* {
+            return editor->getRowDragHandleForTest(editor->findRowForTest(key));
+        };
+        viewport_drag_follow::DragTarget t;
+        t.keepAlive = rig;
+        t.viewport = viewport;
+        t.target = grip;
+        t.cross = (float)viewport->getLocalPoint(grip(), grip()->getLocalBounds().getCentre()).x;
+        t.pressAt = (float)middleOf(pressed);
+        t.draggedPosition = [editor, viewport, key, &content] {
+            const int row = editor->findRowForTest(key);
+            return (float)viewport
+                ->getLocalPoint(&content, juce::Point<int>(0, editor->getRowBoundsForTest(row).getY()))
+                .y;
+        };
+        t.commits = [r = rig.get()] { return r->canvas.undo.getEditSerial(); };
+        t.escape = [editor] { return editor->sendEscapeToRowDragForTest(); };
+        return viewport_drag_follow::surfaceOn(t);
+    });
 }
