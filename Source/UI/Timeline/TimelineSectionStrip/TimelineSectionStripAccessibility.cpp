@@ -38,7 +38,8 @@ private:
 
 // A child of the strip that only answers test-mode getState, so the strip's own header stays out of
 // TestModeStateSource.h. `sections` lists every placement as "name:startBeat:lengthBeats:ordinal/count" joined by ";"
-// in placement order; `selectedSection` is the selected placement's start beat, or empty; `variations` is the letter
+// in placement order; `selectedSection` is the selected placement's start beat, or empty; `selectedSections` is every
+// selected placement's start beat in placement order, joined by ";"; `variations` is the letter
 // each placement plays in the same order, with a "*" after it when its section has more than one variation
 // (`A*;B*;A*`); `sectionVariationCount` is how many variations the selected placement's section has (0 with nothing
 // selected).
@@ -93,6 +94,7 @@ void TimelineSectionStrip::addTestProbe() {
         juce::StringArray sections;
         juce::StringArray variations;
         juce::String selected;
+        juce::StringArray selectedAll;
         int selectedVariationCount = 0;
         const auto anchor = getSelectedPlacement();
         if (doc_ != nullptr) {
@@ -110,6 +112,8 @@ void TimelineSectionStrip::addTestProbe() {
                              juce::String(total[placement.section.value]));
                 const bool several = section->variations.size() > 1;
                 variations.add(synth::variationLetter(placement.variation) + (several ? "*" : ""));
+                if (isPlacementSelected(placement.id))
+                    selectedAll.add(juce::String(placement.startBeat, 3));
                 if (placement.id == anchor) {
                     selected = juce::String(placement.startBeat, 3);
                     selectedVariationCount = (int)section->variations.size();
@@ -118,6 +122,7 @@ void TimelineSectionStrip::addTestProbe() {
         }
         into.setProperty("sections", sections.joinIntoString(";"));
         into.setProperty("selectedSection", selected);
+        into.setProperty("selectedSections", selectedAll.joinIntoString(";"));
         into.setProperty("variations", variations.joinIntoString(";"));
         into.setProperty("sectionVariationCount", selectedVariationCount);
     });

@@ -133,7 +133,7 @@ open in the piano roll, and by the Settings toggle below.
   described with its tooltip and "Shift+F10: menu. V: variations." and offering the screen reader's show-menu action,
   which opens the variation menu. The chip is not a separate focus stop. Block tooltips read "Chorus - 8 bars - plays 3 times".
 - **Test mode:** a `timelineSections` probe publishes `sections` (`name:start:length:ordinal/count`, joined
-  by `;`) and `selectedSection`; `variations` lists the letter each placement plays (`A*;B*;A*`, the star only
+  by `;`), `selectedSection` and `selectedSections` (every selected block's start beat, joined by `;`); `variations` lists the letter each placement plays (`A*;B*;A*`, the star only
   when its section has more than one variation) and `sectionVariationCount` counts the selected block's section's
   variations (0 with nothing selected).
 
