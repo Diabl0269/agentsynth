@@ -10,6 +10,8 @@ on the piano roll. Shortcut table of the app-level commands: [`shortcuts.md`](sh
 |---|---|---|
 | Curve editor (`CurveEditorComponent`) | Envelope and LFO card curves, the Custom filter and LFO shape window | Free mode takes every key; a Fixed (envelope-shaped) curve has no insert, duplicate, paste or delete, and a pinned axis never moves. [`layout/visualizers.md`](../layout/visualizers.md) |
 | Automation and modulation lanes (`AutomationLaneEditor`) | Under each track | Points have a beat and a value; insert needs a next point. [`timeline/automation.md`](../timeline/automation.md) |
+| Mod curve editor (`ModCurveEditorView`, a `CurveEditorComponent` writing through its edit target) | The attenuverter's response curve | The curve editor's keys and mouse; a right-click on a point removes it at once, with no menu. |
+| EQ curve (`EQCurveComponent`) | The Parametric EQ card | Points are the enabled bands (frequency along the line, gain up it); one band is selected, Delete switches it off and the selection stays on it. A band has no copy. |
 
 **The exception: the morph map.** It is a 2D map with no left-to-right order, so it keeps its own keys: the arrows move
 the focused dot (Shift: a bigger step; held, they glide on; two held at once move it diagonally), and Tab steps to the
@@ -38,7 +40,7 @@ this point", "No room: the curve has the most points it can hold") in the shape 
 | Cmd+C / Cmd+V | Copy the selection; paste it at the cursor (the curve editor) or at the transport position (a lane) |
 | Cmd+D | Duplicate the selection; the copies become the selection (on the morph map: the focused dot's shape). Where they start is the Timeline preference Duplicate points: right after the last dot (default, one tick past it), one dot-spacing after, or the next grid line after the selection ([`timeline/automation-points.md`](../timeline/automation-points.md#duplicating)) |
 | Ctrl+T | Insert a new dot halfway between the cursor dot and the next one (value: the midpoint of the two); the new dot becomes the selection and the cursor. A curve's last dot has no room after it (the range ends there) and a lane's last point has no next one, so the key does nothing there |
-| Delete / Backspace | Remove the selection |
+| Delete / Backspace | Remove the selection; the point after it (else the last one left) becomes the selection, in a curve and in a lane (the EQ curve keeps the switched-off band selected) |
 | Cmd+Z | Undo. Every press above that changes something is exactly one undo step; a press that changes nothing (a clamped end, a pinned axis, a full curve) opens none |
 
 **Ctrl+T is the physical Control key.** On the Mac it is distinct from Cmd, so it never collides with the app's
@@ -138,3 +140,20 @@ the pen to the selected stretch.
 5. Run on the shared model (selection, group move, clipboard) with its own `PointSelectionRules`, add the editor to
    the tables above, an adapter to the shared suite's `PointEditorTypes` and an entry to `pointSurfaces()` in
    `PointMarkersFollowTheDotTests.cpp`.
+6. Add it to the behaviour matrix below, or the discovery test fails by name.
+
+## The behaviour matrix
+
+`PointEditorBehaviourMatrixTests.cpp` (`Tests/UI/Layout/PointEditing/`) drives every point editor through the same
+script with real key and mouse events: box select, Shift+Left/Right extend, Alt+arrows move (one undo step) and
+Up/Down value, held-key glide, two held arrows moving diagonally, Cmd+D duplicate, Delete moving the selection to the
+next point, double-click on empty space adding a point, right-click on a point opening a menu at it, and edge scroll
+(editors that scroll). A cell is a pass, listed `NotApplicable` with its reason, or listed in `kMissingBehaviours`
+with its ticket; that list only shrinks (a listed cell that now passes fails the test until it is removed). The
+grid is printed on every run.
+
+`PointEditorDiscoveryTests.cpp` finds the editors itself: every component class under `Source/UI` that derives from
+`juce::Component` and uses the shared model (`PointSelectionModel`, `LanePointSelection`, `PointBoxSelect`,
+`PointClipboard`, `pointKeyAction`), calls `addBreakpoint`, `addPointAt`, `dragBandTo` or `onAddAt`, or overrides
+`mouseDrag` and hit-tests dots, nodes, bands or points, must be a matrix row or be named in `kNotPointEditors` with the
+reason it edits no points.

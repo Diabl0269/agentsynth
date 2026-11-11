@@ -108,6 +108,14 @@ target_sources(Tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditingModelTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorSharedKeyTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorSharedMouseTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorBehaviourMatrixTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorDiscoveryTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixProbes.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixRows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixCurveRows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixShapeRows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixLaneRows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/UI/Layout/PointEditing/PointEditorMatrixEqRows.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/LanePointStretchTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesStretchTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/UI/Timeline/AutomationLanes/AutomationLanesSnappedHoldTests.cpp
