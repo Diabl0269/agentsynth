@@ -445,11 +445,12 @@ TEST(ParametricEQGolden, CatalogEntryKeepsEverythingTheFourBandModuleListed) {
 TEST(ParametricEQGolden, SchemaSectionKeepsEveryRowTheFourBandModuleHad) {
     const auto actual = eqgolden::schemaSection();
     const auto golden = eqgolden::goldenFile("schema-section.golden").loadFileAsString().replace("\r\n", "\n");
+    // The four bands' rows are listed once as the `bandN...` pattern (the catalog still carries every id).
     for (const auto& line : juce::StringArray::fromLines(golden))
-        if (line.isNotEmpty())
+        if (line.isNotEmpty() && !line.startsWith("| `band"))
             EXPECT_TRUE(actual.contains(line)) << "missing row: " << line.toStdString();
-    EXPECT_TRUE(actual.contains("`band24Gain`"));
-    EXPECT_TRUE(actual.contains("`band1Type`"));
+    for (const char* field : {"On", "Freq", "Gain", "Q", "Type", "Slope"})
+        EXPECT_TRUE(actual.contains("| `bandN" + juce::String(field) + "` |")) << field;
 }
 
 TEST(ParametricEQGolden, SavedStateOfTheFourBandModuleIsRecorded) {
