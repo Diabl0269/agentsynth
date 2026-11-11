@@ -30,3 +30,4 @@ sequencer-outline-undo 31r FRO1707 [sequencer] redo rewrites the pattern notes i
 toast-severity-icons 19 FRO1706 [toast] the toast appears in one frame
 toast-severity-icons 20 FRO1706 [toast] the toast appears in one frame
 key-menus-reopen 21 FRO1704 [layout] a small control under the canvas changes in one frame
+pluck-tab-mod-dots 50 FRO1705 [canvas] adding a module moves the canvas view in one frame
