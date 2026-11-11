@@ -12,20 +12,32 @@ vertical line in `theme.colors.accent` (literal cyan fallback with no themed LnF
 confinement contract, the paint-count test pattern it introduces, and why a third exception is not
 free are all in `docs/layout/animation.md` — read that before touching this component.
 
-## Two timers
+## Two frame sources
 
 One of them is borrowed:
 
 | Rate | Owner | What it does |
 |---|---|---|
 | 10 Hz | `MainComponent::timerCallback` (an existing timer, only while `timelinePanel.isVisible()`) | `TimelinePanelComponent::updateFromTransport(snapshot, outputLatencySeconds)` |
-| 30 Hz | `TimelinePlayheadOverlay`'s own `juce::Timer` | Re-reads the transport and requests the movement strip — **only while playing** |
+| Display rate | `TimelinePlayheadOverlay`'s own `juce::VBlankAttachment` | Re-reads the transport, extrapolates the position and requests the movement strips — **only while playing** (or a clip preview, or a locate glide) |
 
-The low-rate poll is the **sole** owner of the 30 Hz timer's lifecycle: it sees the play/stop
-transition and calls `startTimerHz` / `stopTimer`. The 30 Hz tick deliberately does *not* stop
-itself when it notices a stopped transport — one owner is easier to reason about, and a tick after
-playback stopped simply finds an unchanged x and requests nothing. Worst case the timer runs for
-one extra poll interval, repainting nothing.
+The low-rate poll is the **sole** owner of the frame source's lifecycle: it sees the play/stop
+transition and creates or drops the attachment. A frame deliberately does *not* stop
+itself when it notices a stopped transport — one owner is easier to reason about, and a frame after
+playback stopped simply finds an unchanged x and requests nothing. Worst case the frames run for
+one extra poll interval, repainting nothing. The one exception is a locate glide on a stopped
+transport: its frames end themselves when it lands.
+
+**Position between blocks.** The transport publishes its position once per audio block, together with the wall-clock time
+it was published at (`PositionSnapshot::publishedAtMs`). Every snapshot goes through `PlayheadExtrapolator`
+(`Source/UI/Timeline/PlayheadExtrapolator.h`) before the wrap compensation sees it: while playing the position is advanced by the
+time since it was published (at most 25 ms of beats, never past the loop end, never going back) so a display faster than the
+blocks still moves the line by about the same step each frame. A locate, a loop wrap, a loop change or a stop resets it to
+the published position. The origin of a Smooth follow stays on whole *logical* pixels (every timeline painter rounds to
+those), so the step per frame varies by at most one pixel.
+
+**Frame stats.** Test mode reads `frameCount` and `medianFrameIntervalMs` (the last 64 frames) of the current or last frame
+run from a hidden child of the overlay (id `timelinePlayhead`).
 
 ## What the low-rate poll also does
 
@@ -139,7 +151,7 @@ Follow has a mode, Page or Smooth (`FollowMode`, `Source/UI/Timeline/FollowPlayh
 - **Page** (the default, and what a missing setting means) is the page flip above.
 - **Smooth** scrolls the view so the playhead stays pinned at `pointPercent` of the visible width (50 by default, 10 to 90). Near
   the start of the song the origin stops at beat 0, so the playhead travels to the pin first. The panel moves the view from
-  the playhead overlay's own 30 Hz frames (`onDrawnBeat`, called before the line's x is read), not the 10 Hz poll, so the line
+  the playhead overlay's own display-rate frames (`onDrawnBeat`, called before the line's x is read), not the 10 Hz poll, so the line
   does not drift and snap; the 10 Hz poll runs the same function, which does nothing when the view is already there. The same four
   gates apply. The origin is snapped to a whole pixel (`snapOriginToWholePixels`), so every grid line and clip edge, each
   rounded to a pixel on its own, steps by the same whole number of pixels per frame; a fractional origin made them round at

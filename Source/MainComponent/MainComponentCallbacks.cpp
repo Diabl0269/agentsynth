@@ -319,7 +319,7 @@ void MainComponent::timerCallback() {
 
     // The timeline panel's low-rate transport poll, on the same existing timer — no new
     // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
-    // what it did before). This is what starts/stops the playhead's playing-only 30 Hz strip
+    // what it did before). This is what starts/stops the playhead's playing-only display-rate strip
     // repaint; see docs/layout/animation.md.
     //
     // isTimelineShowing() is the meters' isMixerShowing() shape: the Timeline tab of a showing dock, its

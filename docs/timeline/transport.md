@@ -341,6 +341,17 @@ and `timelineGlideForward`, resolved by `TimelinePanelComponent::keyPressed` lik
 
 There is no button, so there is no hint bubble; the actions appear in Settings > Shortcuts under Timeline.
 
+## Locate glide
+
+An explicit jump (Option+1 / Option+2 to the loop locators, Return to Start, Jump to Loop Start / End, Jump to Next / Previous
+Marker, a marker picked in the command palette) glides the *drawn* cursor from where it was to where the sound now is over
+160 ms (`easeOutCubic`, `PlayheadLocateGlide`); the audio jumps at once. The code that asks for the jump arms the glide
+(`TimelinePlayheadOverlay::armLocateGlide`) and the playhead overlay uses the arm on the next locate it sees; a locate nobody
+armed (the ruler scrub, the Cmd+Left / Right cursor glide, which locate every frame) jumps at once, and so does a jump under
+Reduce Motion or Animations Off, or with the panel off screen. While playing the glide lands on the cursor's held place (the line
+stays on a locate's target until the sound reaches it). With the transport stopped the overlay runs frames for the glide and
+then stops them. Page follow pages to the target at once; Smooth follow follows the drawn cursor, so the view glides with it.
+
 ## Right-click MIDI Learn (FRO133)
 
 Each of the four glyph buttons (`TimelineTransportBar::GlyphButton`) carries its own MIDI Learn

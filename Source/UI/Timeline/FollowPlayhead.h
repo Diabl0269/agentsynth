@@ -62,6 +62,8 @@ inline double followViewOrigin(FollowMode mode, int pointPercent, double playhea
 // `origin` moved to the nearest whole pixel at `pixelsPerBeat`. Every line is placed at round(beat * ppb - origin *
 // ppb); with a whole-pixel origin that is round(beat * ppb) minus a whole number, so all lines step together by the
 // same amount. A fractional origin lets each line round at a different frame, which reads as the grid shaking.
+// The origin is whole LOGICAL pixels, not device pixels: every timeline painter rounds x to a logical integer, so a
+// device-pixel origin (half a logical pixel on a Retina screen) would put the lines back on different rounding steps.
 inline double snapOriginToWholePixels(double origin, double pixelsPerBeat) noexcept {
     if (!std::isfinite(origin) || !(pixelsPerBeat > 0.0))
         return origin;
