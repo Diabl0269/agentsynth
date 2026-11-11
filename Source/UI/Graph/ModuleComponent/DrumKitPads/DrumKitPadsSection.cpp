@@ -115,6 +115,14 @@ DrumKitPadsSection::DrumKitPadsSection(const InstrumentChrome::Host& host, DrumK
         if (host_.rebindLearnable)
             host_.rebindLearnable(knob, param);
     };
+    controls_.onBeforeRebind = [this] {
+        if (host_.cableEndsMove)
+            host_.cableEndsMove();
+    };
+    if (host_.wireKnob)
+        for (auto which : {DrumKitModule::PadParam::Level, DrumKitModule::PadParam::Tune,
+                           DrumKitModule::PadParam::Decay, DrumKitModule::PadParam::Start})
+            host_.wireKnob(controls_.knob(which));
     host_.card->addAndMakeVisible(controls_);
     wireSoundControls();
 

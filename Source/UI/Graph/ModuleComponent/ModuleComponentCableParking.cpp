@@ -5,6 +5,7 @@
 // docs/layout/cables.md#knob-landing.
 
 #include "ModuleComponent.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/CardBody/CardBody.h"
 #include "UI/Graph/GraphEditor/CableEndGlide.h"
@@ -80,6 +81,13 @@ std::optional<juce::Point<float>> ModuleComponent::parkedCableEnd(int destChanne
         if (const auto* knob = tabbedKnobFor(target); knob != nullptr && !knob->isVisible())
             if (const auto* strip = cardBody_->tabStripOf(*knob); strip != nullptr && strip->isVisible())
                 y = strip->getBounds().getCentreY();
+        if (!y.has_value() && DrumKitModule::isPadParamId(target.paramId))
+            for (const auto& entry : midiLearnableRegistry_.entries())
+                if (!entry.hosted && DrumKitModule::isPadParamId(entry.paramId) && entry.component != nullptr)
+                    if (const auto* panel = entry.component->getParentComponent(); panel != nullptr && panel != this) {
+                        y = getLocalArea(panel, panel->getLocalBounds()).getY();
+                        break;
+                    }
         if (!y.has_value())
             return std::nullopt;
         const float lowest = juce::jmax((float)*y, (float)getHeight() - kParkedEndStep);

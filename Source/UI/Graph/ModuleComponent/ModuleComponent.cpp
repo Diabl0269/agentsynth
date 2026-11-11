@@ -12,6 +12,7 @@
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
+#include "Modules/ModSlotHost.h"
 #include "Modules/ModuleBase.h"
 #include "MorphShapesCard/MorphShapesCard.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
@@ -113,17 +114,28 @@ void ModuleComponent::addTestModeState(juce::DynamicObject& into) const {
     into.setProperty("cabledInputs", cabledInputs.joinIntoString(", "));
     // Where the first cable landing on this card ends, relative to the card ("x y", "" when none), whether it ends on
     // a knob's ring, and whether its end is gliding (a More row is folding or unfolding).
+    // Every end too ("x y", then " knob" when on one), so a scenario can tell several cables apart, and the names of
+    // the mod dots shown now.
     juce::String cableEnd;
     bool cableEndOnKnob = false;
+    juce::StringArray cableEnds, modDots;
     for (const auto& cable : owner.buildVisibleCables())
         if (cable.destNodeId == nodeId.uid) {
             const auto end = (cable.p2 - getPosition().toFloat()).roundToInt();
-            cableEnd = juce::String(end.x) + " " + juce::String(end.y);
-            cableEndOnKnob = cable.landsOnKnob;
-            break;
+            const auto text = juce::String(end.x) + " " + juce::String(end.y);
+            if (cableEnds.isEmpty()) {
+                cableEnd = text;
+                cableEndOnKnob = cable.landsOnKnob;
+            }
+            cableEnds.add(text + (cable.landsOnKnob ? " knob" : ""));
         }
+    for (auto* dot : modDotButtons_)
+        if (dot->isVisible())
+            modDots.add(dot->getTitle());
     into.setProperty("cableEnd", cableEnd);
     into.setProperty("cableEndOnKnob", cableEndOnKnob);
+    into.setProperty("cableEnds", cableEnds.joinIntoString("; "));
+    into.setProperty("modDots", modDots.joinIntoString("; "));
     into.setProperty("cableEndGliding", graph_editor_paint::CanvasMemo::of(owner) != nullptr &&
                                             graph_editor_paint::CanvasMemo::of(owner)->cableEndGlide().isLive());
 }
@@ -765,6 +777,11 @@ int ModuleComponent::destChannelForKnob(juce::RangedAudioParameter* param, const
     if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(module);
         hosted != nullptr && id.startsWith("hostedKnob:"))
         return hosted->modChannelForParam(id.fromFirstOccurrenceOf(":", false, false));
+    // A Drum Kit pad knob drives whichever pad is picked: its registry entry names that pad's parameter now.
+    if (auto* slots = dynamic_cast<synth::ModSlotHost*>(module))
+        for (const auto& entry : midiLearnableRegistry_.entries())
+            if (entry.component == &knob && !entry.hosted)
+                return slots->modChannelForParam(entry.paramId);
     return -1;
 }
 

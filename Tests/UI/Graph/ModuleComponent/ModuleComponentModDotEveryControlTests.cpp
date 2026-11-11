@@ -10,6 +10,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "ModCableExemptions.h"
+#include "Modules/DrumKit/DrumKitModule.h"
 #include "Modules/LFOModule.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -84,6 +85,9 @@ void forEachDotControl(const std::function<void(const DotControl&)>& visit) {
         {
             GraphEditor editor(engine);
             editor.setSize(1600, 1200);
+            // As the app wires it: a control whose right-click menu holds only MIDI Learn (a Drum Kit pad knob) has
+            // one.
+            editor.onMidiLearnRequested = [](juce::AudioProcessorGraph::NodeID, const juce::String&) {};
             auto& graph = engine.getGraph();
             auto moduleNode = graph.addNode(synth::AIStateMapper::createModule(typeName));
             auto* mb = moduleNode != nullptr ? dynamic_cast<ModuleBase*>(moduleNode->getProcessor()) : nullptr;
@@ -94,6 +98,11 @@ void forEachDotControl(const std::function<void(const DotControl&)>& visit) {
             auto lfo = graph.addNode(std::make_unique<LFOModule>());
             lfo->properties.set("x", 20);
             lfo->properties.set("y", 100);
+            // A Drum Kit pad knob is a target once a cable claims its slot: claim the picked pad's knobs, so a press on
+            // their dots is walked like any other control's.
+            if (auto* kit = dynamic_cast<DrumKitModule*>(mb))
+                for (const char* field : {"Level", "Tune", "Decay", "Start"})
+                    kit->bindModSlot(juce::String("pad1") + field);
             for (const auto& target : mb->getModulationTargets())
                 engine.addModRouting(lfo->nodeID, 0, moduleNode->nodeID, target.channelIndex);
             editor.updateComponents();
@@ -201,7 +210,9 @@ TEST_F(ModuleComponentTest, APressOnTheDotOfEveryModulatedControlOnEveryDefaultC
             clicked.size() == 1 && dot.card->getModTargetKnobAnchor(clicked.front()).has_value() &&
             dot.card->getModTargetKnobAnchor(clicked.front())->getDistanceFrom(dot.anchor) < 1.0f;
         if (clicked.size() == 1 && (clicked.front() == dot.channel || sharesTheSpot))
-            ++pressedPerKind[dot.kind];
+            ++pressedPerKind[dot.channel >= DrumKitModule::kPadModSlotBase && dot.typeName == "Drum Kit"
+                                 ? "drum pad knob"
+                                 : dot.kind];
         else
             unclaimed.push_back(dot.typeName + " / " + dot.targetName + " (" + dot.kind + ", pressed " +
                                 juce::String(typeid(*dot.hit).name()) + ")," + dot.geometry + ", clicks " +
@@ -211,6 +222,7 @@ TEST_F(ModuleComponentTest, APressOnTheDotOfEveryModulatedControlOnEveryDefaultC
     EXPECT_GT(pressedPerKind["knob"], 0) << "the sweep must reach knobs";
     EXPECT_GT(pressedPerKind["horizontal fader"], 0) << "the sweep must reach horizontal faders";
     EXPECT_GT(pressedPerKind["vertical fader"], 0) << "the sweep must reach vertical faders";
+    EXPECT_GE(pressedPerKind["drum pad knob"], 3) << "the sweep must reach the picked drum pad's knobs";
     EXPECT_TRUE(unclaimed.empty()) << "presses on a painted mod dot that no gesture claimed:\n"
                                    << juce::StringArray(unclaimed.data(), (int)unclaimed.size()).joinIntoString("\n");
 }
